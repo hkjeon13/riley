@@ -1,0 +1,1310 @@
+{
+  "source_archive_sha256": "f8669176c5e3ab86221f7f6d308d5b15f02ab69ed27de25bf059bd924ecc8154",
+  "source_files_sha256": {
+    "all-source-host-observations.json": "200ff25274242ed9780459ec90197ea0e22ccacca3b020507c80c61b36f5ace6",
+    "phase-bounded-host-observations.json": "6628159b6d4cea7d72805acc9a6a82229306f1acfd039385106f4920e949a053"
+  },
+  "all24_C32_lanes": [
+    {
+      "case": "c32-fixed-r0-candidate",
+      "whole_lane_host_samples": 9,
+      "retained_wholly_phase_bounded_samples": 0,
+      "retained_statistics": {},
+      "CPU_some_avg10_range": [
+        1.1,
+        1.84
+      ],
+      "IO_full_avg10_range": [
+        1.53,
+        2.35
+      ],
+      "SM_clock_MHz_range": [
+        435.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        54.0,
+        58.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-fixed-r0-v52",
+      "whole_lane_host_samples": 10,
+      "retained_wholly_phase_bounded_samples": 0,
+      "retained_statistics": {},
+      "CPU_some_avg10_range": [
+        1.93,
+        2.31
+      ],
+      "IO_full_avg10_range": [
+        0.61,
+        1.65
+      ],
+      "SM_clock_MHz_range": [
+        2595.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        54.0,
+        61.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-fixed-r0-vllm",
+      "whole_lane_host_samples": 20,
+      "retained_wholly_phase_bounded_samples": 1,
+      "retained_statistics": {
+        "CPU_some_avg10": {
+          "n": 1,
+          "mean": 1.68,
+          "median": 1.68,
+          "min": 1.68,
+          "max": 1.68,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "IO_full_avg10": {
+          "n": 1,
+          "mean": 2.03,
+          "median": 2.03,
+          "min": 2.03,
+          "max": 2.03,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "memory_full_avg10": {
+          "n": 1,
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "GPU_memory_MiB": {
+          "n": 1,
+          "mean": 8122.0,
+          "median": 8122.0,
+          "min": 8122.0,
+          "max": 8122.0,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "RSS_sum_MiB": {
+          "n": 1,
+          "mean": 3015.01953125,
+          "median": 3015.01953125,
+          "min": 3015.01953125,
+          "max": 3015.01953125,
+          "sample_sd": null,
+          "cv_percent": null
+        }
+      },
+      "CPU_some_avg10_range": [
+        1.04,
+        1.83
+      ],
+      "IO_full_avg10_range": [
+        1.49,
+        2.99
+      ],
+      "SM_clock_MHz_range": [
+        210.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        53.0,
+        58.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-fixed-r1-candidate",
+      "whole_lane_host_samples": 9,
+      "retained_wholly_phase_bounded_samples": 0,
+      "retained_statistics": {},
+      "CPU_some_avg10_range": [
+        1.47,
+        1.75
+      ],
+      "IO_full_avg10_range": [
+        1.57,
+        2.55
+      ],
+      "SM_clock_MHz_range": [
+        2595.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        54.0,
+        59.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-fixed-r1-v52",
+      "whole_lane_host_samples": 10,
+      "retained_wholly_phase_bounded_samples": 0,
+      "retained_statistics": {},
+      "CPU_some_avg10_range": [
+        1.48,
+        1.61
+      ],
+      "IO_full_avg10_range": [
+        0.97,
+        1.28
+      ],
+      "SM_clock_MHz_range": [
+        2595.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        54.0,
+        62.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-fixed-r1-vllm",
+      "whole_lane_host_samples": 20,
+      "retained_wholly_phase_bounded_samples": 0,
+      "retained_statistics": {},
+      "CPU_some_avg10_range": [
+        1.59,
+        2.32
+      ],
+      "IO_full_avg10_range": [
+        0.79,
+        1.58
+      ],
+      "SM_clock_MHz_range": [
+        210.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        53.0,
+        57.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-fixed-r2-candidate",
+      "whole_lane_host_samples": 10,
+      "retained_wholly_phase_bounded_samples": 0,
+      "retained_statistics": {},
+      "CPU_some_avg10_range": [
+        1.37,
+        1.69
+      ],
+      "IO_full_avg10_range": [
+        1.07,
+        1.56
+      ],
+      "SM_clock_MHz_range": [
+        2595.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        55.0,
+        62.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-fixed-r2-v52",
+      "whole_lane_host_samples": 10,
+      "retained_wholly_phase_bounded_samples": 0,
+      "retained_statistics": {},
+      "CPU_some_avg10_range": [
+        1.47,
+        1.87
+      ],
+      "IO_full_avg10_range": [
+        1.03,
+        1.11
+      ],
+      "SM_clock_MHz_range": [
+        2595.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        55.0,
+        61.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-fixed-r2-vllm",
+      "whole_lane_host_samples": 20,
+      "retained_wholly_phase_bounded_samples": 0,
+      "retained_statistics": {},
+      "CPU_some_avg10_range": [
+        0.77,
+        1.45
+      ],
+      "IO_full_avg10_range": [
+        1.67,
+        2.75
+      ],
+      "SM_clock_MHz_range": [
+        210.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        53.0,
+        60.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-fixed-r3-candidate",
+      "whole_lane_host_samples": 9,
+      "retained_wholly_phase_bounded_samples": 0,
+      "retained_statistics": {},
+      "CPU_some_avg10_range": [
+        1.33,
+        1.48
+      ],
+      "IO_full_avg10_range": [
+        1.37,
+        1.83
+      ],
+      "SM_clock_MHz_range": [
+        2595.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        55.0,
+        59.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-fixed-r3-v52",
+      "whole_lane_host_samples": 10,
+      "retained_wholly_phase_bounded_samples": 0,
+      "retained_statistics": {},
+      "CPU_some_avg10_range": [
+        1.22,
+        1.54
+      ],
+      "IO_full_avg10_range": [
+        1.11,
+        1.58
+      ],
+      "SM_clock_MHz_range": [
+        330.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        55.0,
+        62.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-fixed-r3-vllm",
+      "whole_lane_host_samples": 20,
+      "retained_wholly_phase_bounded_samples": 0,
+      "retained_statistics": {},
+      "CPU_some_avg10_range": [
+        1.09,
+        2.03
+      ],
+      "IO_full_avg10_range": [
+        1.35,
+        2.0
+      ],
+      "SM_clock_MHz_range": [
+        210.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        53.0,
+        58.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-natural-r0-candidate",
+      "whole_lane_host_samples": 12,
+      "retained_wholly_phase_bounded_samples": 2,
+      "retained_statistics": {
+        "CPU_some_avg10": {
+          "n": 2,
+          "mean": 1.61,
+          "median": 1.61,
+          "min": 1.61,
+          "max": 1.61,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "IO_full_avg10": {
+          "n": 2,
+          "mean": 0.94,
+          "median": 0.94,
+          "min": 0.94,
+          "max": 0.94,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "memory_full_avg10": {
+          "n": 2,
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "sample_sd": 0.0,
+          "cv_percent": null
+        },
+        "GPU_memory_MiB": {
+          "n": 2,
+          "mean": 1954.0,
+          "median": 1954.0,
+          "min": 1954.0,
+          "max": 1954.0,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "RSS_sum_MiB": {
+          "n": 2,
+          "mean": 758.599609375,
+          "median": 758.599609375,
+          "min": 758.39453125,
+          "max": 758.8046875,
+          "sample_sd": 0.2900242657210449,
+          "cv_percent": 0.038231533754676195
+        }
+      },
+      "CPU_some_avg10_range": [
+        1.35,
+        1.75
+      ],
+      "IO_full_avg10_range": [
+        0.77,
+        1.13
+      ],
+      "SM_clock_MHz_range": [
+        2595.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        56.0,
+        64.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-natural-r0-v52",
+      "whole_lane_host_samples": 12,
+      "retained_wholly_phase_bounded_samples": 2,
+      "retained_statistics": {
+        "CPU_some_avg10": {
+          "n": 2,
+          "mean": 1.48,
+          "median": 1.48,
+          "min": 1.43,
+          "max": 1.53,
+          "sample_sd": 0.07071067811865482,
+          "cv_percent": 4.777748521530731
+        },
+        "IO_full_avg10": {
+          "n": 2,
+          "mean": 1.26,
+          "median": 1.26,
+          "min": 1.23,
+          "max": 1.29,
+          "sample_sd": 0.04242640687119289,
+          "cv_percent": 3.367175148507372
+        },
+        "memory_full_avg10": {
+          "n": 2,
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "sample_sd": 0.0,
+          "cv_percent": null
+        },
+        "GPU_memory_MiB": {
+          "n": 2,
+          "mean": 1960.0,
+          "median": 1960.0,
+          "min": 1960.0,
+          "max": 1960.0,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "RSS_sum_MiB": {
+          "n": 2,
+          "mean": 759.201171875,
+          "median": 759.201171875,
+          "min": 759.0078125,
+          "max": 759.39453125,
+          "sample_sd": 0.27345145053698516,
+          "cv_percent": 0.03601831249306976
+        }
+      },
+      "CPU_some_avg10_range": [
+        1.34,
+        1.64
+      ],
+      "IO_full_avg10_range": [
+        1.23,
+        1.59
+      ],
+      "SM_clock_MHz_range": [
+        2595.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        55.0,
+        63.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-natural-r0-vllm",
+      "whole_lane_host_samples": 22,
+      "retained_wholly_phase_bounded_samples": 1,
+      "retained_statistics": {
+        "CPU_some_avg10": {
+          "n": 1,
+          "mean": 1.21,
+          "median": 1.21,
+          "min": 1.21,
+          "max": 1.21,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "IO_full_avg10": {
+          "n": 1,
+          "mean": 2.03,
+          "median": 2.03,
+          "min": 2.03,
+          "max": 2.03,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "memory_full_avg10": {
+          "n": 1,
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "GPU_memory_MiB": {
+          "n": 1,
+          "mean": 8122.0,
+          "median": 8122.0,
+          "min": 8122.0,
+          "max": 8122.0,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "RSS_sum_MiB": {
+          "n": 1,
+          "mean": 3032.66015625,
+          "median": 3032.66015625,
+          "min": 3032.66015625,
+          "max": 3032.66015625,
+          "sample_sd": null,
+          "cv_percent": null
+        }
+      },
+      "CPU_some_avg10_range": [
+        1.16,
+        1.73
+      ],
+      "IO_full_avg10_range": [
+        1.03,
+        2.34
+      ],
+      "SM_clock_MHz_range": [
+        210.0,
+        2700.0
+      ],
+      "temperature_C_range": [
+        55.0,
+        63.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-natural-r1-candidate",
+      "whole_lane_host_samples": 12,
+      "retained_wholly_phase_bounded_samples": 2,
+      "retained_statistics": {
+        "CPU_some_avg10": {
+          "n": 2,
+          "mean": 1.62,
+          "median": 1.62,
+          "min": 1.58,
+          "max": 1.66,
+          "sample_sd": 0.05656854249492369,
+          "cv_percent": 3.49188533919282
+        },
+        "IO_full_avg10": {
+          "n": 2,
+          "mean": 0.685,
+          "median": 0.685,
+          "min": 0.62,
+          "max": 0.75,
+          "sample_sd": 0.09192388155425119,
+          "cv_percent": 13.419544752445429
+        },
+        "memory_full_avg10": {
+          "n": 2,
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "sample_sd": 0.0,
+          "cv_percent": null
+        },
+        "GPU_memory_MiB": {
+          "n": 2,
+          "mean": 1954.0,
+          "median": 1954.0,
+          "min": 1954.0,
+          "max": 1954.0,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "RSS_sum_MiB": {
+          "n": 2,
+          "mean": 758.669921875,
+          "median": 758.669921875,
+          "min": 758.46484375,
+          "max": 758.875,
+          "sample_sd": 0.2900242657210449,
+          "cv_percent": 0.03822799050794976
+        }
+      },
+      "CPU_some_avg10_range": [
+        1.53,
+        1.79
+      ],
+      "IO_full_avg10_range": [
+        0.62,
+        0.92
+      ],
+      "SM_clock_MHz_range": [
+        2595.0,
+        2700.0
+      ],
+      "temperature_C_range": [
+        57.0,
+        64.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-natural-r1-v52",
+      "whole_lane_host_samples": 12,
+      "retained_wholly_phase_bounded_samples": 2,
+      "retained_statistics": {
+        "CPU_some_avg10": {
+          "n": 2,
+          "mean": 2.13,
+          "median": 2.13,
+          "min": 2.13,
+          "max": 2.13,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "IO_full_avg10": {
+          "n": 2,
+          "mean": 1.52,
+          "median": 1.52,
+          "min": 1.52,
+          "max": 1.52,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "memory_full_avg10": {
+          "n": 2,
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "sample_sd": 0.0,
+          "cv_percent": null
+        },
+        "GPU_memory_MiB": {
+          "n": 2,
+          "mean": 1960.0,
+          "median": 1960.0,
+          "min": 1960.0,
+          "max": 1960.0,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "RSS_sum_MiB": {
+          "n": 2,
+          "mean": 759.056640625,
+          "median": 759.056640625,
+          "min": 758.85546875,
+          "max": 759.2578125,
+          "sample_sd": 0.284499993993025,
+          "cv_percent": 0.03748073315830165
+        }
+      },
+      "CPU_some_avg10_range": [
+        1.49,
+        2.13
+      ],
+      "IO_full_avg10_range": [
+        0.75,
+        1.52
+      ],
+      "SM_clock_MHz_range": [
+        390.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        55.0,
+        61.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-natural-r1-vllm",
+      "whole_lane_host_samples": 23,
+      "retained_wholly_phase_bounded_samples": 2,
+      "retained_statistics": {
+        "CPU_some_avg10": {
+          "n": 2,
+          "mean": 1.69,
+          "median": 1.69,
+          "min": 1.69,
+          "max": 1.69,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "IO_full_avg10": {
+          "n": 2,
+          "mean": 0.92,
+          "median": 0.92,
+          "min": 0.92,
+          "max": 0.92,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "memory_full_avg10": {
+          "n": 2,
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "sample_sd": 0.0,
+          "cv_percent": null
+        },
+        "GPU_memory_MiB": {
+          "n": 2,
+          "mean": 8122.0,
+          "median": 8122.0,
+          "min": 8122.0,
+          "max": 8122.0,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "RSS_sum_MiB": {
+          "n": 2,
+          "mean": 3031.095703125,
+          "median": 3031.095703125,
+          "min": 3031.078125,
+          "max": 3031.11328125,
+          "sample_sd": 0.02485922277608956,
+          "cv_percent": 0.0008201398177715139
+        }
+      },
+      "CPU_some_avg10_range": [
+        0.91,
+        2.38
+      ],
+      "IO_full_avg10_range": [
+        0.75,
+        1.5
+      ],
+      "SM_clock_MHz_range": [
+        210.0,
+        2700.0
+      ],
+      "temperature_C_range": [
+        55.0,
+        62.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-natural-r2-candidate",
+      "whole_lane_host_samples": 12,
+      "retained_wholly_phase_bounded_samples": 1,
+      "retained_statistics": {
+        "CPU_some_avg10": {
+          "n": 1,
+          "mean": 1.42,
+          "median": 1.42,
+          "min": 1.42,
+          "max": 1.42,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "IO_full_avg10": {
+          "n": 1,
+          "mean": 1.37,
+          "median": 1.37,
+          "min": 1.37,
+          "max": 1.37,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "memory_full_avg10": {
+          "n": 1,
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "GPU_memory_MiB": {
+          "n": 1,
+          "mean": 1954.0,
+          "median": 1954.0,
+          "min": 1954.0,
+          "max": 1954.0,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "RSS_sum_MiB": {
+          "n": 1,
+          "mean": 758.54296875,
+          "median": 758.54296875,
+          "min": 758.54296875,
+          "max": 758.54296875,
+          "sample_sd": null,
+          "cv_percent": null
+        }
+      },
+      "CPU_some_avg10_range": [
+        1.16,
+        1.82
+      ],
+      "IO_full_avg10_range": [
+        1.06,
+        1.49
+      ],
+      "SM_clock_MHz_range": [
+        2595.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        51.0,
+        58.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-natural-r2-v52",
+      "whole_lane_host_samples": 12,
+      "retained_wholly_phase_bounded_samples": 2,
+      "retained_statistics": {
+        "CPU_some_avg10": {
+          "n": 2,
+          "mean": 1.935,
+          "median": 1.935,
+          "min": 1.93,
+          "max": 1.94,
+          "sample_sd": 0.007071067811865481,
+          "cv_percent": 0.36542986107831943
+        },
+        "IO_full_avg10": {
+          "n": 2,
+          "mean": 1.255,
+          "median": 1.255,
+          "min": 1.23,
+          "max": 1.28,
+          "sample_sd": 0.03535533905932741,
+          "cv_percent": 2.8171584907830605
+        },
+        "memory_full_avg10": {
+          "n": 2,
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "sample_sd": 0.0,
+          "cv_percent": null
+        },
+        "GPU_memory_MiB": {
+          "n": 2,
+          "mean": 1960.0,
+          "median": 1960.0,
+          "min": 1960.0,
+          "max": 1960.0,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "RSS_sum_MiB": {
+          "n": 2,
+          "mean": 759.208984375,
+          "median": 759.208984375,
+          "min": 758.99609375,
+          "max": 759.421875,
+          "sample_sd": 0.3010728091770847,
+          "cv_percent": 0.03965611779804416
+        }
+      },
+      "CPU_some_avg10_range": [
+        1.93,
+        2.25
+      ],
+      "IO_full_avg10_range": [
+        1.12,
+        1.28
+      ],
+      "SM_clock_MHz_range": [
+        360.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        53.0,
+        60.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-natural-r2-vllm",
+      "whole_lane_host_samples": 22,
+      "retained_wholly_phase_bounded_samples": 1,
+      "retained_statistics": {
+        "CPU_some_avg10": {
+          "n": 1,
+          "mean": 1.07,
+          "median": 1.07,
+          "min": 1.07,
+          "max": 1.07,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "IO_full_avg10": {
+          "n": 1,
+          "mean": 2.19,
+          "median": 2.19,
+          "min": 2.19,
+          "max": 2.19,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "memory_full_avg10": {
+          "n": 1,
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "GPU_memory_MiB": {
+          "n": 1,
+          "mean": 8122.0,
+          "median": 8122.0,
+          "min": 8122.0,
+          "max": 8122.0,
+          "sample_sd": null,
+          "cv_percent": null
+        },
+        "RSS_sum_MiB": {
+          "n": 1,
+          "mean": 3031.47265625,
+          "median": 3031.47265625,
+          "min": 3031.47265625,
+          "max": 3031.47265625,
+          "sample_sd": null,
+          "cv_percent": null
+        }
+      },
+      "CPU_some_avg10_range": [
+        1.06,
+        1.48
+      ],
+      "IO_full_avg10_range": [
+        1.04,
+        2.28
+      ],
+      "SM_clock_MHz_range": [
+        210.0,
+        2715.0
+      ],
+      "temperature_C_range": [
+        48.0,
+        54.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-natural-r3-candidate",
+      "whole_lane_host_samples": 12,
+      "retained_wholly_phase_bounded_samples": 2,
+      "retained_statistics": {
+        "CPU_some_avg10": {
+          "n": 2,
+          "mean": 1.46,
+          "median": 1.46,
+          "min": 1.46,
+          "max": 1.46,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "IO_full_avg10": {
+          "n": 2,
+          "mean": 1.54,
+          "median": 1.54,
+          "min": 1.54,
+          "max": 1.54,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "memory_full_avg10": {
+          "n": 2,
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "sample_sd": 0.0,
+          "cv_percent": null
+        },
+        "GPU_memory_MiB": {
+          "n": 2,
+          "mean": 1954.0,
+          "median": 1954.0,
+          "min": 1954.0,
+          "max": 1954.0,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "RSS_sum_MiB": {
+          "n": 2,
+          "mean": 758.666015625,
+          "median": 758.666015625,
+          "min": 758.47265625,
+          "max": 758.859375,
+          "sample_sd": 0.27345145053698516,
+          "cv_percent": 0.03604371948988804
+        }
+      },
+      "CPU_some_avg10_range": [
+        1.41,
+        1.7
+      ],
+      "IO_full_avg10_range": [
+        1.26,
+        1.79
+      ],
+      "SM_clock_MHz_range": [
+        2595.0,
+        2730.0
+      ],
+      "temperature_C_range": [
+        45.0,
+        52.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-natural-r3-v52",
+      "whole_lane_host_samples": 12,
+      "retained_wholly_phase_bounded_samples": 2,
+      "retained_statistics": {
+        "CPU_some_avg10": {
+          "n": 2,
+          "mean": 1.775,
+          "median": 1.775,
+          "min": 1.65,
+          "max": 1.9,
+          "sample_sd": 0.1767766952966369,
+          "cv_percent": 9.95925043924715
+        },
+        "IO_full_avg10": {
+          "n": 2,
+          "mean": 0.855,
+          "median": 0.855,
+          "min": 0.77,
+          "max": 0.94,
+          "sample_sd": 0.12020815280171303,
+          "cv_percent": 14.059433076223746
+        },
+        "memory_full_avg10": {
+          "n": 2,
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "sample_sd": 0.0,
+          "cv_percent": null
+        },
+        "GPU_memory_MiB": {
+          "n": 2,
+          "mean": 1960.0,
+          "median": 1960.0,
+          "min": 1960.0,
+          "max": 1960.0,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "RSS_sum_MiB": {
+          "n": 2,
+          "mean": 759.041015625,
+          "median": 759.041015625,
+          "min": 758.83203125,
+          "max": 759.25,
+          "sample_sd": 0.2955485374490648,
+          "cv_percent": 0.03893709712191349
+        }
+      },
+      "CPU_some_avg10_range": [
+        1.48,
+        1.9
+      ],
+      "IO_full_avg10_range": [
+        0.77,
+        1.14
+      ],
+      "SM_clock_MHz_range": [
+        2595.0,
+        2730.0
+      ],
+      "temperature_C_range": [
+        45.0,
+        51.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    },
+    {
+      "case": "c32-natural-r3-vllm",
+      "whole_lane_host_samples": 22,
+      "retained_wholly_phase_bounded_samples": 2,
+      "retained_statistics": {
+        "CPU_some_avg10": {
+          "n": 2,
+          "mean": 1.885,
+          "median": 1.885,
+          "min": 1.87,
+          "max": 1.9,
+          "sample_sd": 0.021213203435596288,
+          "cv_percent": 1.125368882525002
+        },
+        "IO_full_avg10": {
+          "n": 2,
+          "mean": 1.4,
+          "median": 1.4,
+          "min": 1.24,
+          "max": 1.56,
+          "sample_sd": 0.22627416997969524,
+          "cv_percent": 16.162440712835373
+        },
+        "memory_full_avg10": {
+          "n": 2,
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "sample_sd": 0.0,
+          "cv_percent": null
+        },
+        "GPU_memory_MiB": {
+          "n": 2,
+          "mean": 8122.0,
+          "median": 8122.0,
+          "min": 8122.0,
+          "max": 8122.0,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0
+        },
+        "RSS_sum_MiB": {
+          "n": 2,
+          "mean": 3032.716796875,
+          "median": 3032.716796875,
+          "min": 3032.59765625,
+          "max": 3032.8359375,
+          "sample_sd": 0.16849028770460703,
+          "cv_percent": 0.005555754097389652
+        }
+      },
+      "CPU_some_avg10_range": [
+        1.15,
+        2.49
+      ],
+      "IO_full_avg10_range": [
+        1.0,
+        1.56
+      ],
+      "SM_clock_MHz_range": [
+        210.0,
+        2730.0
+      ],
+      "temperature_C_range": [
+        45.0,
+        52.0
+      ],
+      "samples_above_admission_threshold": {
+        "CPU_some_avg10": 0,
+        "IO_full_avg10": 0,
+        "memory_full_avg10": 0
+      },
+      "epoch_timestamp_decreases": 0,
+      "all_three_admission_gates_passed": true
+    }
+  ],
+  "limits": [
+    "whole-lane samples include startup/gates/warmup; not serving-only hardware ranges",
+    "sparse monitoring leaves unclassified indices retained; zero wholly-bounded samples gives no phase inference",
+    "PSI avg10 is trailing global host pressure, not per-request host wait",
+    "no causal allocation of HTTP/scheduler/GPU time and no slow-sample exclusions"
+  ],
+  "goal_achieved": false
+}

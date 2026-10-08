@@ -1,0 +1,246 @@
+diff --git a/kernels/src/decode_shared32.cuh b/kernels/src/decode_shared32.cuh
+index 931e169a..47db5f4b 100644
+--- a/kernels/src/decode_shared32.cuh
++++ b/kernels/src/decode_shared32.cuh
+@@ -2,7 +2,29 @@
+ #include "decode_tiled.cuh"
+ // One MMA shares weights across up to thirty-two independent decode rows.
+ // Live rows are supplied by validated metadata; inactive rows never load/store.
+-template<int N,int K,int Interval,bool Tiled,bool Compact=false,int RowTiles=2>
++template<int RowTiles> struct Shared32ProjectionStage {
++ uint32_t a[RowTiles][4],a1[RowTiles][4],aa[RowTiles][4],a3[RowTiles][4],b[4],bb[4];
++};
++template<int K,bool Tiled,int RowTiles>
++__device__ __forceinline__ void load_shared32_projection_stage(
++ const __nv_bfloat16* xp,const __nv_bfloat16* wp,uint32_t rows,int begin,int end,int depth,Shared32ProjectionStage<RowTiles>& stage){
++ const int lane=threadIdx.x%32,g=lane/4;
++ #pragma unroll
++ for(int step=0;step<4;++step){
++  int offset=depth+step*16;bool valid=begin+offset<end;
++  #pragma unroll
++  for(int tile=0;tile<RowTiles;++tile){
++   const auto* p=xp+tile*16*K;int row=g+tile*16;
++   stage.a[tile][step]=valid&&row<rows?*reinterpret_cast<const uint32_t*>(p+offset):0;
++   stage.aa[tile][step]=valid&&row<rows?*reinterpret_cast<const uint32_t*>(p+offset+8):0;
++   stage.a1[tile][step]=valid&&row+8<rows?*reinterpret_cast<const uint32_t*>(p+8*K+offset):0;
++   stage.a3[tile][step]=valid&&row+8<rows?*reinterpret_cast<const uint32_t*>(p+8*K+offset+8):0;
++  }
++  if constexpr(Tiled){stage.b[step]=valid?*reinterpret_cast<const uint32_t*>(wp+(offset/16)*128):0;stage.bb[step]=valid?*reinterpret_cast<const uint32_t*>(wp+(offset/16)*128+64):0;}
++  else{stage.b[step]=valid?*reinterpret_cast<const uint32_t*>(wp+offset):0;stage.bb[step]=valid?*reinterpret_cast<const uint32_t*>(wp+offset+8):0;}
++ }
++}
++template<int N,int K,int Interval,bool Tiled,bool Compact=false,int RowTiles=2,bool Pipeline=false>
+ __device__ __forceinline__ void shared32_projection_compute(const __nv_bfloat16* x,const __nv_bfloat16* w,float* parts,__nv_bfloat16* out,const uint32_t* live_rows,int column,int chunk_index){
+  const uint32_t rows=*live_rows;if(rows<1||rows>32)return;
+  const int lane=threadIdx.x%32,g=lane/4,t=lane%4,base=column*8;
+@@ -10,6 +32,22 @@ __device__ __forceinline__ void shared32_projection_compute(const __nv_bfloat16*
+  int begin=chunk_index*Chunk,end=min(begin+Chunk,K);static_assert(RowTiles==1||RowTiles==2,"decode rows tile contract");float d[RowTiles][4]={};
+  const auto* xp=x+g*K+begin+2*t;
+  const auto* wp=Tiled?w+column*(K/16)*128+(begin/16)*128+lane*2:w+(base+g)*K+begin+2*t;
++ if constexpr(Pipeline){
++  // Prefetch the next K64 stage while current MMA fragments remain live.
++  // K16 recurrence, row masking and BF16 store boundaries are unchanged.
++  Shared32ProjectionStage<RowTiles> current{},next{};
++  load_shared32_projection_stage<K,Tiled,RowTiles>(xp,wp,rows,begin,end,0,current);
++  #pragma unroll 1
++  for(int depth=0;depth<Chunk;depth+=64){
++   if(depth+64<Chunk)load_shared32_projection_stage<K,Tiled,RowTiles>(xp,wp,rows,begin,end,depth+64,next);
++   #pragma unroll
++   for(int step=0;step<4;++step)if(begin+depth+step*16<end){
++    #pragma unroll
++    for(int tile=0;tile<RowTiles;++tile)riley_prefill_shape::mma(d[tile],current.a[tile][step],current.a1[tile][step],current.aa[tile][step],current.a3[tile][step],current.b[step],current.bb[step]);
++   }
++   if(depth+64<Chunk)current=next;
++  }
++ }else{
+  #pragma unroll 1
+  for(int depth=0;depth<Chunk;depth+=64){
+   uint32_t a[RowTiles][4],aa[RowTiles][4],a1[RowTiles][4],a3[RowTiles][4],b[4],bb[4];
+@@ -33,6 +71,7 @@ __device__ __forceinline__ void shared32_projection_compute(const __nv_bfloat16*
+    for(int tile=0;tile<RowTiles;++tile)riley_prefill_shape::mma(d[tile],a[tile][step],a1[tile][step],aa[tile][step],a3[tile][step],b[step],bb[step]);
+   }
+  }
++ }
+  #pragma unroll
+  for(int tile=0;tile<RowTiles;++tile)for(int half=0;half<2;++half){int row=tile*16+g+half*8;if(row>=rows)continue;
+   for(int j=0;j<2;++j){auto value=__float2bfloat16_rn(d[tile][half*2+j]);
+@@ -94,8 +133,8 @@ __global__ void shared32_gate_up_swiglu(const __nv_bfloat16* x,const __nv_bfloat
+  int warp=threadIdx.x/32;__shared__ __nv_bfloat16 partials[2][256];
+  // Gate and up retain their separate warps, K16 recurrence and BF16
+  // rounding. Only the unobserved inactive sixteen-row tile is omitted.
+- if(rows<=16)shared32_projection_compute<1536,576,0,Tiled,true,1>(x,warp?up:gate,nullptr,partials[warp],live,blockIdx.x,0);
+- else shared32_projection_compute<1536,576,0,Tiled,true>(x,warp?up:gate,nullptr,partials[warp],live,blockIdx.x,0);
++ if(rows<=16)shared32_projection_compute<1536,576,0,Tiled,true,1,true>(x,warp?up:gate,nullptr,partials[warp],live,blockIdx.x,0);
++ else shared32_projection_compute<1536,576,0,Tiled,true,2,true>(x,warp?up:gate,nullptr,partials[warp],live,blockIdx.x,0);
+  __syncthreads();
+  for(int i=threadIdx.x;i<256;i+=blockDim.x){int row=i/8,col=i%8;if(row<rows){float g=__bfloat162float(partials[0][i]);out[row*1536+blockIdx.x*8+col]=__float2bfloat16_rn((g/(1.F+expf(-g)))*__bfloat162float(partials[1][i]));}}
+ }
+diff --git a/kernels/src/prefill_fused_gate_v51.cuh b/kernels/src/prefill_fused_gate_v51.cuh
+index 631d8977..a1de3dd7 100644
+--- a/kernels/src/prefill_fused_gate_v51.cuh
++++ b/kernels/src/prefill_fused_gate_v51.cuh
+@@ -11,20 +11,32 @@ __global__ void gate_up(const __nv_bfloat16* x,const __nv_bfloat16* gate,const _
+  const int lane=threadIdx.x%32,warp=threadIdx.x/32,g=lane/4,t=lane%4;
+  const int first=blockIdx.y*16*Tiles+g,base=(blockIdx.x*Warps+warp)*8;
+  float gd[Tiles][4]={},ud[Tiles][4]={};
+- #pragma unroll 4
+- for(int depth=0;depth<576;depth+=16){
+-  int at=((base/8)*36+depth/16)*128+lane*2;
+-  uint32_t gb=*reinterpret_cast<const uint32_t*>(gate+at),gbb=*reinterpret_cast<const uint32_t*>(gate+at+64);
+-  uint32_t ub=*reinterpret_cast<const uint32_t*>(up+at),ubb=*reinterpret_cast<const uint32_t*>(up+at+64);
++ // Two K16 steps per stage keep the next fragments live across current MMA.
++ // Each gate/up accumulator still consumes K16 steps in the original order.
++ struct Stage {uint32_t a0[2],a1[2],a2[2],a3[2],gb[2],gbb[2],ub[2],ubb[2];};
++ Stage current{},next{};
++ auto load_stage=[&](int depth,Stage& stage){
+   #pragma unroll
+-  for(int tile=0;tile<Tiles;++tile){
+-   int row=first+tile*16,next=row+8;
+-   uint32_t a0=row<rows?*reinterpret_cast<const uint32_t*>(x+row*576+depth+2*t):0;
+-   uint32_t a1=next<rows?*reinterpret_cast<const uint32_t*>(x+next*576+depth+2*t):0;
+-   uint32_t a2=row<rows?*reinterpret_cast<const uint32_t*>(x+row*576+depth+2*t+8):0;
+-   uint32_t a3=next<rows?*reinterpret_cast<const uint32_t*>(x+next*576+depth+2*t+8):0;
+-   mma(gd[tile],a0,a1,a2,a3,gb,gbb);mma(ud[tile],a0,a1,a2,a3,ub,ubb);
++  for(int step=0;step<2;++step){
++   int offset=depth+step*16,at=((base/8)*36+offset/16)*128+lane*2;
++   stage.gb[step]=*reinterpret_cast<const uint32_t*>(gate+at);stage.gbb[step]=*reinterpret_cast<const uint32_t*>(gate+at+64);
++   stage.ub[step]=*reinterpret_cast<const uint32_t*>(up+at);stage.ubb[step]=*reinterpret_cast<const uint32_t*>(up+at+64);
++   stage.a0[step]=first<rows?*reinterpret_cast<const uint32_t*>(x+first*576+offset+2*t):0;
++   stage.a1[step]=first+8<rows?*reinterpret_cast<const uint32_t*>(x+(first+8)*576+offset+2*t):0;
++   stage.a2[step]=first<rows?*reinterpret_cast<const uint32_t*>(x+first*576+offset+2*t+8):0;
++   stage.a3[step]=first+8<rows?*reinterpret_cast<const uint32_t*>(x+(first+8)*576+offset+2*t+8):0;
+   }
++ };
++ load_stage(0,current);
++ #pragma unroll 1
++ for(int depth=0;depth<576;depth+=32){
++  if(depth+32<576)load_stage(depth+32,next);
++  #pragma unroll
++  for(int step=0;step<2;++step){
++   mma(gd[0],current.a0[step],current.a1[step],current.a2[step],current.a3[step],current.gb[step],current.gbb[step]);
++   mma(ud[0],current.a0[step],current.a1[step],current.a2[step],current.a3[step],current.ub[step],current.ubb[step]);
++  }
++  if(depth+32<576)current=next;
+  }
+  #pragma unroll
+  for(int tile=0;tile<Tiles;++tile)for(int j=0;j<4;++j){
+diff --git a/kernels/tests/kernel_batch05_correctness.cu b/kernels/tests/kernel_batch05_correctness.cu
+new file mode 100644
+index 00000000..0a4edea7
+--- /dev/null
++++ b/kernels/tests/kernel_batch05_correctness.cu
+@@ -0,0 +1,73 @@
++// Preserve the complete Batch04 byte-exact matrix, then qualify pipelined
++// prefill gate/up against the byte-preserved pre-candidate V51 implementation.
++#define main kernel_batch03_matrix_main
++#include "kernel_batch03_correctness.cu"
++#undef main
++#include "prefill_shape_pointwise.cuh"
++#include "decode_merge_norm_v56.cuh"
++int fusion_case(int seed,int mode) {
++ constexpr size_t N=32*576,Guard=16;
++ auto* parts=alloc<float>(5*N+2*Guard);
++ auto* merged=alloc<__nv_bfloat16>(N+2*Guard);
++ auto* skip_bf=alloc<__nv_bfloat16>(N);
++ auto* skip_fp=alloc<float>(N);
++ auto* weight=alloc<__nv_bfloat16>(576);
++ auto* a=alloc<__nv_bfloat16>(N+2*Guard);auto* b=alloc<__nv_bfloat16>(N+2*Guard);
++ auto* ra=alloc<float>(N+2*Guard);auto* rb=alloc<float>(N+2*Guard);
++ auto* ba=alloc<__nv_bfloat16>(N+2*Guard);auto* bb=alloc<__nv_bfloat16>(N+2*Guard);
++ auto* shape=alloc<uint32_t>(3);shape[0]=shape[1]=0;
++ fill_fp32(parts,5*N+2*Guard);
++ for(size_t i=0;i<5*N;++i) {
++  float x=seed==0?0.F:float((i*13+seed)%251)/257.F;
++  if(seed==99)x=(i/N==0?65536.F:i/N==1?-65536.F:x);
++  parts[Guard+i]=x;
++ }
++ for(size_t i=0;i<N;++i){skip_fp[i]=float(int((i*17+seed)%127)-63)/128;skip_bf[i]=__float2bfloat16_rn(skip_fp[i]);}
++ for(size_t i=0;i<576;++i)weight[i]=__float2bfloat16_rn(float((i+seed)%17+1)/16);
++ for(int rows=0;rows<=33;++rows) {
++  shape[2]=rows;fill_bf16(merged,N+2*Guard);fill_bf16(a,N+2*Guard);fill_bf16(b,N+2*Guard);
++  fill_fp32(ra,N+2*Guard);fill_fp32(rb,N+2*Guard);fill_bf16(ba,N+2*Guard);fill_bf16(bb,N+2*Guard);
++  const void* skip=mode==1?static_cast<void*>(skip_bf):static_cast<void*>(skip_fp);
++  void* ar=mode==1?static_cast<void*>(ra+Guard):static_cast<void*>(ba+Guard);
++  void* br=mode==1?static_cast<void*>(rb+Guard):static_cast<void*>(bb+Guard);
++  v52_reference::shared32_projection_merge_v52<576,576,128><<<72,256>>>(parts+Guard,merged+Guard,shape+2);
++  riley_prefill_pointwise::norm_rows<<<32,256>>>(merged+Guard,skip,weight,ar,a+Guard,mode,shape,32);
++  riley_merge_norm_v56::merge_norm<<<32,256>>>(parts+Guard,skip,weight,br,b+Guard,mode,shape,32);
++  OK(cudaGetLastError());OK(cudaDeviceSynchronize());compare(a,b,N+2*Guard,"fused normalized BF16 including guards/inactive",rows);
++  if(mode==1)compare(ra,rb,N+2*Guard,"fused FP32 residual including guards/inactive",rows);
++  else compare(ba,bb,N+2*Guard,"fused BF16 residual including guards/inactive",rows);
++ }
++ for(void* p:{(void*)parts,(void*)merged,(void*)skip_bf,(void*)skip_fp,(void*)weight,(void*)a,(void*)b,(void*)ra,(void*)rb,(void*)ba,(void*)bb,(void*)shape})OK(cudaFree(p));
++ return 34;
++}
++
++#include "prefill_fused_gate_v51.cuh"
++#define riley_prefill51 riley_prefill51_reference
++#include "reference/prefill_fused_gate_v51_reference.cuh"
++#undef riley_prefill51
++int prefill_gate_case(int seed){
++ constexpr uint32_t Capacity=512;constexpr size_t Output=Capacity*1536;
++ auto* x=alloc<__nv_bfloat16>(Capacity*576);auto* g=alloc<__nv_bfloat16>(1536*576);auto* u=alloc<__nv_bfloat16>(1536*576);
++ auto* gt=alloc<__nv_bfloat16>(1536*576);auto* ut=alloc<__nv_bfloat16>(1536*576);
++ auto* a=alloc<__nv_bfloat16>(Output+32);auto* b=alloc<__nv_bfloat16>(Output+32);auto* live=alloc<uint32_t>(1);
++ for(size_t i=0;i<Capacity*576;++i)x[i]=__float2bfloat16_rn(float((int(i)*17+seed)%127-63)/128);
++ weights<1536,576>(g,gt,seed);weights<1536,576>(u,ut,seed+11);
++ int count=0;
++ for(uint32_t rows:{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,31,32,33,127,128,129,255,256,257,511,512,513}){
++  *live=rows;fill_bf16(a,Output+32);fill_bf16(b,Output+32);
++  riley_prefill51_reference::gate_up<4><<<dim3(48,Capacity/16),128>>>(x,gt,ut,a+16,Capacity,live);
++  riley_prefill51::gate_up<4><<<dim3(48,Capacity/16),128>>>(x,gt,ut,b+16,Capacity,live);
++  OK(cudaGetLastError());OK(cudaDeviceSynchronize());compare(a,b,Output+32,"prefill pipelined gate BF16 including guards/inactive",rows);
++  for(int i=0;i<16;++i)if(__bfloat16_as_ushort(b[i])!=0x4123||__bfloat16_as_ushort(b[Output+16+i])!=0x4123)std::exit(4);
++  for(size_t i=(rows>=1&&rows<=Capacity?rows*1536:0);i<Output;++i)if(__bfloat16_as_ushort(b[16+i])!=0x4123)std::exit(4);
++  ++count;
++ }
++ for(void* p:{(void*)x,(void*)g,(void*)u,(void*)gt,(void*)ut,(void*)a,(void*)b,(void*)live})OK(cudaFree(p));
++ std::printf("prefill gate seed=%d rows0..512/tails/invalid513 exact\n",seed);return count;
++}
++int main(){
++ kernel_batch03_matrix_main();int cases=816;
++ for(int seed:{0,1,17,99})for(int mode:{1,2})cases+=fusion_case(seed,mode);
++ int prefill_cases=0;for(int seed:{0,1,17,99})prefill_cases+=prefill_gate_case(seed);cases+=prefill_cases;
++ OK(cudaDeviceSynchronize());std::printf("{\"passed\":true,\"cases\":%d,\"fusion_cases\":272,\"prefill_gate_cases\":%d,\"BF16_and_FP32_exact\":true,\"performance_claim_eligible\":false}\n",cases,prefill_cases);
++}
+diff --git a/kernels/tests/reference/prefill_fused_gate_v51_reference.cuh b/kernels/tests/reference/prefill_fused_gate_v51_reference.cuh
+new file mode 100644
+index 00000000..631d8977
+--- /dev/null
++++ b/kernels/tests/reference/prefill_fused_gate_v51_reference.cuh
+@@ -0,0 +1,35 @@
++#pragma once
++#include "prefill_shape_projection.cuh"
++namespace riley_prefill51 {
++__device__ __forceinline__ void mma(float* d,uint32_t a0,uint32_t a1,uint32_t a2,uint32_t a3,uint32_t b,uint32_t bb){
++ asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 {%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};": "+f"(d[0]),"+f"(d[1]),"+f"(d[2]),"+f"(d[3]):"r"(a0),"r"(a1),"r"(a2),"r"(a3),"r"(b),"r"(bb));
++}
++template<int Warps>
++__global__ void gate_up(const __nv_bfloat16* x,const __nv_bfloat16* gate,const __nv_bfloat16* up,__nv_bfloat16* out,uint32_t capacity,const uint32_t* live_rows){
++ constexpr int Tiles=1;
++ uint32_t rows=*live_rows;if(!rows||rows>capacity||blockIdx.y*16*Tiles>=rows)return;
++ const int lane=threadIdx.x%32,warp=threadIdx.x/32,g=lane/4,t=lane%4;
++ const int first=blockIdx.y*16*Tiles+g,base=(blockIdx.x*Warps+warp)*8;
++ float gd[Tiles][4]={},ud[Tiles][4]={};
++ #pragma unroll 4
++ for(int depth=0;depth<576;depth+=16){
++  int at=((base/8)*36+depth/16)*128+lane*2;
++  uint32_t gb=*reinterpret_cast<const uint32_t*>(gate+at),gbb=*reinterpret_cast<const uint32_t*>(gate+at+64);
++  uint32_t ub=*reinterpret_cast<const uint32_t*>(up+at),ubb=*reinterpret_cast<const uint32_t*>(up+at+64);
++  #pragma unroll
++  for(int tile=0;tile<Tiles;++tile){
++   int row=first+tile*16,next=row+8;
++   uint32_t a0=row<rows?*reinterpret_cast<const uint32_t*>(x+row*576+depth+2*t):0;
++   uint32_t a1=next<rows?*reinterpret_cast<const uint32_t*>(x+next*576+depth+2*t):0;
++   uint32_t a2=row<rows?*reinterpret_cast<const uint32_t*>(x+row*576+depth+2*t+8):0;
++   uint32_t a3=next<rows?*reinterpret_cast<const uint32_t*>(x+next*576+depth+2*t+8):0;
++   mma(gd[tile],a0,a1,a2,a3,gb,gbb);mma(ud[tile],a0,a1,a2,a3,ub,ubb);
++  }
++ }
++ #pragma unroll
++ for(int tile=0;tile<Tiles;++tile)for(int j=0;j<4;++j){
++  int row=first+tile*16+(j>=2?8:0),col=base+2*t+j%2;
++  if(row<rows){float gval=__bfloat162float(__float2bfloat16_rn(gd[tile][j]));float uval=__bfloat162float(__float2bfloat16_rn(ud[tile][j]));out[row*1536+col]=__float2bfloat16_rn((gval/(1.F+expf(-gval)))*uval);}
++ }
++}
++}

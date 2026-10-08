@@ -1,5 +1,10 @@
 # Serving optimization campaign — 2026-09-12
 
+Local storage cleanup (2026-09-16): request-level `*-retained-rows.json` evidence is
+preserved losslessly in a verified archive; regenerable Nsight SQLite exports were
+removed while the original reports remain. See [STORAGE_CLEANUP.md](STORAGE_CLEANUP.md)
+for the inventory and restoration commands before reading original raw paths.
+
 Status: active; a narrow c1 HTTP throughput win is established; the overall goal remains open. User goal authorizes implementation and remote measurement; supersedes the earlier plan-only status for this campaign.
 
 Target: same model/hardware/workload throughput >= vLLM (goal +15%), TTFT/TPOT <= vLLM (goal -10%), plus high-concurrency P95/P99 correctness and stability. The initial SmolLM2 c1/p128/o32 cell is diagnostic and cannot close the overall goal.

@@ -1,0 +1,271 @@
+{
+  "$defs": {
+    "binding": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "maximum": 17179869184,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "byte_length",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "dynamic_strategy": {
+      "additionalProperties": false,
+      "properties": {
+        "dynamic_loader_binding": {
+          "$ref": "#/$defs/binding"
+        },
+        "kind": {
+          "const": "same-object-dynamic-loader"
+        },
+        "loader_resolution_proof_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "pt_interp": {
+          "const": "reviewed-held-object"
+        },
+        "rejection_policy_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dynamic_loader_binding",
+        "kind",
+        "loader_resolution_proof_sha256",
+        "pt_interp",
+        "rejection_policy_sha256"
+      ],
+      "type": "object"
+    },
+    "static_strategy": {
+      "additionalProperties": false,
+      "properties": {
+        "dependency_resolution": {
+          "const": "none"
+        },
+        "kind": {
+          "const": "static-interpreter"
+        },
+        "pt_interp": {
+          "const": "absent"
+        },
+        "static_elf_inspection_policy_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dependency_resolution",
+        "kind",
+        "pt_interp",
+        "static_elf_inspection_policy_sha256"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authority": {
+      "const": "not-authoritative"
+    },
+    "bundle": {
+      "additionalProperties": false,
+      "properties": {
+        "bundle_schema_version": {
+          "const": "riley.rc3-gate-e-native-guardian-bundle.v2"
+        },
+        "execution_closure_sidecar": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/binding"
+            },
+            {
+              "properties": {
+                "byte_length": {
+                  "maximum": 65536
+                }
+              }
+            }
+          ]
+        },
+        "manifest": {
+          "additionalProperties": false,
+          "properties": {
+            "byte_length": {
+              "maximum": 65536,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "execution_closure_sidecar_byte_length": {
+              "maximum": 65536,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "execution_closure_sidecar_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "byte_length",
+            "execution_closure_sidecar_byte_length",
+            "execution_closure_sidecar_sha256",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        "v1_compatibility": {
+          "const": false
+        }
+      },
+      "required": [
+        "bundle_schema_version",
+        "execution_closure_sidecar",
+        "manifest",
+        "v1_compatibility"
+      ],
+      "type": "object"
+    },
+    "execution_strategy": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/static_strategy"
+        },
+        {
+          "$ref": "#/$defs/dynamic_strategy"
+        }
+      ]
+    },
+    "fd_abi": {
+      "additionalProperties": false,
+      "properties": {
+        "bootstrap_inherited_fds": {
+          "const": [
+            0,
+            1,
+            2,
+            31,
+            32
+          ]
+        },
+        "capabilities": {
+          "const": "cleared"
+        },
+        "core_fd": {
+          "const": 32
+        },
+        "environment": {
+          "const": "empty"
+        },
+        "no_new_privs": {
+          "const": true
+        },
+        "worker_inherited_fds": {
+          "const": [
+            0,
+            1,
+            2
+          ]
+        }
+      },
+      "required": [
+        "bootstrap_inherited_fds",
+        "capabilities",
+        "core_fd",
+        "environment",
+        "no_new_privs",
+        "worker_inherited_fds"
+      ],
+      "type": "object"
+    },
+    "installation_status": {
+      "const": "not-installed"
+    },
+    "operational_status": {
+      "const": "not-authorized"
+    },
+    "required_artifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "bundle_schema": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "cpu_hostile_path_matrix": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "fd_syscall_state_table": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "installed_no_gpu_acceptance_plan": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "static_build_recipe": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "static_elf_inspection_policy": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "threat_model": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "bundle_schema",
+        "cpu_hostile_path_matrix",
+        "fd_syscall_state_table",
+        "installed_no_gpu_acceptance_plan",
+        "static_build_recipe",
+        "static_elf_inspection_policy",
+        "threat_model"
+      ],
+      "type": "object"
+    },
+    "review_status": {
+      "const": "unapproved-design-input"
+    },
+    "schema_version": {
+      "const": "riley.rc3-gate-e-native-guardian-review.v1"
+    },
+    "scope": {
+      "const": "native-guardian-review-only"
+    }
+  },
+  "required": [
+    "authority",
+    "bundle",
+    "execution_strategy",
+    "fd_abi",
+    "installation_status",
+    "operational_status",
+    "required_artifacts",
+    "review_status",
+    "schema_version",
+    "scope"
+  ],
+  "title": "RC3 Gate E native guardian unapproved review input v1",
+  "type": "object"
+}

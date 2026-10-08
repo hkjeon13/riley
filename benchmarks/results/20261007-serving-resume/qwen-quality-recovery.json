@@ -1,0 +1,49 @@
+{
+  "source_path": "qwen3b-p2048-cacheon-m1-layer14-cublas-detail-gates-r1-20260918T103000Z/qwen3b-p2048-cache-on-m1-layer14-reference.json",
+  "quality_gate": {
+    "cache_on_full_forward_bf16_exact": false,
+    "cache_on_m1_decode_bf16_exact": false,
+    "candidate_exact_m1_layer_detail_stage_count": 0,
+    "corrected_cache_on_eligible": false,
+    "performance_claim_eligible": false,
+    "required_m1_layer_detail_stage_count": 17,
+    "selected_layer_m1_bf16_exact": false,
+    "serving_selector_eligible": false
+  },
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "contract": {
+    "checkpoint_receipt_filename": "riley-checkpoint.json",
+    "checkpoint_receipt_sha256": "f85648630f4aef16ddc62b04848ce082b577d08d6e14915c2ccd402fdbd377f8",
+    "detailed_layer_index": 14,
+    "hf_execution": "P2048 cache-building prefill followed by teacher-forced M1",
+    "model_id": "Qwen/Qwen2.5-3B-Instruct",
+    "model_revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+    "prefill_input_token_count": 2048,
+    "prefill_input_token_ids_le_u32_sha256": "56619bc156fb385345c12e523c71604fa9ef8ad3c52d9c913d0f6ff09f1c1fd9",
+    "riley_execution": "P2048 exact-prefill candidate plus source-bound M1 selected-layer trace",
+    "teacher_cache_on_sidecar_sha256": "d1c649d126d494b5d902fa14ff22fbab46f13feeed46df380b9f55f4e5ab4c39",
+    "teacher_decode_token_ids": [
+      304,
+      279
+    ],
+    "teacher_forced_artifact_sha256": "35d5d9b153d73b4badc67e5eedf2e8226ca2b55c7e30eb0970cfb741031edd35",
+    "teacher_full_token_ids_le_u32_sha256": "6030daf20e588f490e0d37ab69c93df8e19851d5c8114499e8388968c9347496",
+    "teacher_m1_token_id": 304,
+    "trace_stage_count": 17
+  },
+  "next": "source-bound first divergence diagnosis for M1 layer14; complete P2048 KV prefix oracle production and exact comparison before serving integration",
+  "full_forward_quality_gate": {
+    "cache_on_full_forward_bf16_exact": false,
+    "cache_on_m1_decode_bf16_exact": false,
+    "candidate_exact_m1_stage_count": 28,
+    "corrected_cache_on_eligible": false,
+    "performance_claim_eligible": false,
+    "required_m1_stage_count": 52,
+    "serving_selector_eligible": false
+  },
+  "first_divergent_boundary": {
+    "bf16_exact_stage_count": 28,
+    "first_non_exact_stage": "layer14.output.last",
+    "stage_count": 52
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "source_commit": "e42cc345a08913b2dc1f9a0ea618dd73e3390f8e",
+  "profiles_verified": 12,
+  "source_files_SHA_verified": 258,
+  "HTTP_requests_replayed": 2304,
+  "archive_sha256": "f086e2f45359aa7028106f8c4378f8c06ff820400df2fa5b0efb2d06a17d64a5",
+  "phase_analysis_sha256": "e0813ea65ef61c1a17cabb84130b40e30f4fbb559231b0c2ff3df780afe53023",
+  "CPU_analysis_sha256": "36970dab5b0a1a1bc866740b561c9f4a72154cdf7a8e39c6013fe95ee4af38f8",
+  "completed": true,
+  "serving_performance": "미실행; instrumented diagnostics only",
+  "capture_completeness": "unproven; collected counts reconcile, produced category gap unclassified",
+  "observations": [
+    {
+      "case": "c1-fixed-r0-v52",
+      "GPU_recorded_union_ms": 2110.885102,
+      "kernel_work_ms": {
+        "independent_values": 231.129635,
+        "mapped_attention": 38.955894
+      },
+      "CUDA_collection_warnings": []
+    },
+    {
+      "case": "c1-fixed-r0-candidate",
+      "GPU_recorded_union_ms": 1840.969133,
+      "kernel_work_ms": {
+        "independent_values": 257.397341,
+        "mapped_attention": 39.81271
+      },
+      "CUDA_collection_warnings": []
+    },
+    {
+      "case": "c1-fixed-r1-candidate",
+      "GPU_recorded_union_ms": 1838.79047,
+      "kernel_work_ms": {
+        "independent_values": 257.157435,
+        "mapped_attention": 39.802325
+      },
+      "CUDA_collection_warnings": []
+    },
+    {
+      "case": "c1-fixed-r1-v52",
+      "GPU_recorded_union_ms": 2110.379189,
+      "kernel_work_ms": {
+        "independent_values": 231.15858,
+        "mapped_attention": 38.936379
+      },
+      "CUDA_collection_warnings": []
+    },
+    {
+      "case": "c32-fixed-r0-v52",
+      "GPU_recorded_union_ms": 198.462786,
+      "kernel_work_ms": {
+        "independent_values": 6.483705,
+        "mapped_attention": 24.20619
+      },
+      "CUDA_collection_warnings": []
+    },
+    {
+      "case": "c32-fixed-r0-candidate",
+      "GPU_recorded_union_ms": 199.259342,
+      "kernel_work_ms": {
+        "independent_values": 6.620804,
+        "mapped_attention": 26.051039
+      },
+      "CUDA_collection_warnings": []
+    },
+    {
+      "case": "c32-fixed-r1-candidate",
+      "GPU_recorded_union_ms": 198.478448,
+      "kernel_work_ms": {
+        "independent_values": 6.827432,
+        "mapped_attention": 25.656169
+      },
+      "CUDA_collection_warnings": []
+    },
+    {
+      "case": "c32-fixed-r1-v52",
+      "GPU_recorded_union_ms": 200.745716,
+      "kernel_work_ms": {
+        "independent_values": 6.150409,
+        "mapped_attention": 25.425503
+      },
+      "CUDA_collection_warnings": []
+    },
+    {
+      "case": "c32-natural-r0-v52",
+      "GPU_recorded_union_ms": 596.036638,
+      "kernel_work_ms": {
+        "independent_values": 70.939012,
+        "mapped_attention": 84.019309
+      },
+      "CUDA_collection_warnings": []
+    },
+    {
+      "case": "c32-natural-r0-candidate",
+      "GPU_recorded_union_ms": 584.851672,
+      "kernel_work_ms": {
+        "independent_values": 85.668416,
+        "mapped_attention": 80.121165
+      },
+      "CUDA_collection_warnings": []
+    },
+    {
+      "case": "c32-natural-r1-candidate",
+      "GPU_recorded_union_ms": 592.52897,
+      "kernel_work_ms": {
+        "independent_values": 84.897492,
+        "mapped_attention": 86.627111
+      },
+      "CUDA_collection_warnings": []
+    },
+    {
+      "case": "c32-natural-r1-v52",
+      "GPU_recorded_union_ms": 602.342015,
+      "kernel_work_ms": {
+        "independent_values": 69.764659,
+        "mapped_attention": 88.950823
+      },
+      "CUDA_collection_warnings": []
+    }
+  ],
+  "next_candidate": "Batch07 paired output columns and paired mapped query tiles, GPU exact correctness pending",
+  "goal_achieved": false
+}

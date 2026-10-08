@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-261007/kernel-batch12-independent-analysis-attempt01/collect-and-verify.py", line 38, in <module>
+    assert terminal['failure'] is None and terminal['all_lanes_complete'] is True and len(terminal['records'])==96,'full96 failed; failed archive preserved without exclusions'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: full96 failed; failed archive preserved without exclusions

@@ -1,0 +1,373 @@
+{
+  "schema": "riley.batch11.root-process-tree-all8-profile32.v1",
+  "scope": "diagnostic32 all8 V52/candidate ABBA; run only after terminal full96 independent screen FAIL and terminal host analysis",
+  "baseline": "/data/riley-serving-261007/kernel-batch11-quiet-attempt02",
+  "engines": [
+    "v52",
+    "candidate"
+  ],
+  "concurrency": [
+    1,
+    8,
+    16,
+    32
+  ],
+  "workloads": [
+    "fixed",
+    "natural"
+  ],
+  "orders": [
+    [
+      "v52",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "v52"
+    ]
+  ],
+  "warmup": 96,
+  "retained": 96,
+  "startup_timeout_seconds": 300,
+  "tool": "/data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/bin/nsys",
+  "expected_tool_version": "NVIDIA Nsight Systems version 2025.5.2.266-255236693005v0",
+  "launch_trace": "cuda,osrt",
+  "sample": "process-tree",
+  "cpuctxsw": "process-tree",
+  "backtrace": "lbr",
+  "collection_policy": "profile full target lifetime from process launch through exact-target SIGTERM and profiler auto-stop; startup/warmup/retained/teardown preserved; no trim",
+  "clock_policy": "sandwiched perf_counter/epoch/monotonic/raw bridge at every phase boundary; exported GPU/HTTP clock mapping still must be independently checked before correlation",
+  "analysis_policy": "actual root process-tree CPU stacks/scheduling and CUDA spans; separate interval unions/intersections, no idle-gap causal attribution; profiling timings are diagnostic only",
+  "failure_policy": "preserve all artifacts and stop on errors, missing CUDA data, numerical/protocol mismatch or unreclaimed owned GPU resources; no slow sample removal",
+  "performance_claim_eligible": false,
+  "goal_achieved": false,
+  "method_reference": "https://docs.nvidia.com/nsight-systems/UserGuide/index.html",
+  "compatibility_pending": false,
+  "cpu_profiling": {
+    "state": "root environment check supports process-tree without changing kernel paranoid level4",
+    "environment_check": "kernel-batch05-root-cpu-profiling-environment-attempt01.txt",
+    "environment_check_sha256": "00b119559ed32a7d0494332cc47b76f4c8f28b17a8eade1a074841397857b5a7",
+    "host_setting_mutation": false,
+    "actual_CPU_stack_and_context_switch_capture": "unverified until real SQLite tables and diagnostics inspected"
+  },
+  "cuda_graph_trace": "node",
+  "reclamation_timeout_seconds": 40,
+  "graph_trace_recovery": "attempt02 default graph mode produced graph events but no kernel node table; installed CLI node option verified; node capture overhead is diagnostic only",
+  "tool_package_SHA256": "e818fefc62b1e6c3bd34eb92b4e412355afddb763b55e8d7bc3330c4e3da4d33",
+  "expected_baseline_binary_sha256": "6f424278437f82a462ee141c829914d02ccb8c02ed604fa166c70c3c70bb16f6",
+  "expected_candidate_binary_sha256": "a88081b769c3239e3f2f54c394fcedc4a55e34ce3115264b6b35deef53963da6",
+  "candidate_source_commit": "2fd37841e302fc2b34dc79567713dea6241b49ac",
+  "GPU_UUID": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+  "full_core_serving_adoption": false,
+  "capture_completeness_requirement": "Preserve all collected/not-all-collected diagnostics; event-count consistency does not establish trace completeness; no API/GPU additive timing or unaligned HTTP phase attribution.",
+  "cells": [
+    {
+      "concurrency": 1,
+      "workload": "fixed"
+    },
+    {
+      "concurrency": 1,
+      "workload": "natural"
+    },
+    {
+      "concurrency": 8,
+      "workload": "fixed"
+    },
+    {
+      "concurrency": 8,
+      "workload": "natural"
+    },
+    {
+      "concurrency": 16,
+      "workload": "fixed"
+    },
+    {
+      "concurrency": 16,
+      "workload": "natural"
+    },
+    {
+      "concurrency": 32,
+      "workload": "fixed"
+    },
+    {
+      "concurrency": 32,
+      "workload": "natural"
+    }
+  ],
+  "capture_range": "none",
+  "stop_on_exit": true,
+  "expected_lanes": 32,
+  "prior_diagnostic_warning_hypothesis": "whole-lifetime collection tests session boundary warnings; warning cause or trace completeness is not established",
+  "target_ownership_policy": "exact frozen argv including bind port; root UID0; pinned binary SHA; active CUDA PID; no profiler PGID assumption",
+  "expected_target_uid": 0,
+  "profiler_private_directories": "lane/profiler-private; HOME/config/cache/tmp isolated; target frozen HOME/PATH/CUDA/etc supplied with installed --env-var",
+  "binding_policy": "fill archive and raw-verification/source hashes only after terminal full96 independent verification; freeze completed plan before any profile launch",
+  "predeclared_time_ns": 1791413725500264225,
+  "previous_validated_GPU_capture": "Batch08 all32 profiles independently verified; completeness remains unproven",
+  "remaining_serving_gaps": [
+    {
+      "cell": "c1-fixed",
+      "mean_screen": false,
+      "absolute_means": {
+        "v52": {
+          "ttft_ms_p99": 6.055623,
+          "tpot_ms_median": 1.0621499172026314,
+          "throughput_tokens_s": 844.497331649237,
+          "e2e_ms_p99": 37.35599625,
+          "error_rate": 0,
+          "ttft_ms_median": 3.098041875,
+          "gpu_peak_observed_MiB": 1212.0,
+          "tpot_ms_p95": 1.0923765871635611,
+          "e2e_ms_median": 24.846899625,
+          "e2e_ms_p95": 36.49806875,
+          "ttft_ms_p95": 3.512212,
+          "tpot_ms_p99": 1.1436572023041474,
+          "cpu_process_group_peak_observed_RSS_MiB": 754.6259765625
+        },
+        "candidate": {
+          "ttft_ms_p99": 5.6161537500000005,
+          "tpot_ms_median": 0.9600921557971015,
+          "throughput_tokens_s": 917.459849732378,
+          "e2e_ms_p99": 34.307572,
+          "error_rate": 0,
+          "ttft_ms_median": 3.194641,
+          "gpu_peak_observed_MiB": 1206.0,
+          "tpot_ms_p95": 0.9842335854371201,
+          "e2e_ms_median": 22.548823125,
+          "e2e_ms_p95": 33.44439525,
+          "ttft_ms_p95": 3.55314125,
+          "tpot_ms_p99": 1.029716976190476,
+          "cpu_process_group_peak_observed_RSS_MiB": 754.2060546875
+        },
+        "vllm": {
+          "ttft_ms_p99": 18.3028355,
+          "tpot_ms_median": 0.8907579024427302,
+          "throughput_tokens_s": 759.2221641097112,
+          "e2e_ms_p99": 46.956281000000004,
+          "error_rate": 0,
+          "ttft_ms_median": 8.03161075,
+          "gpu_peak_observed_MiB": 8038.0,
+          "tpot_ms_p95": 1.0589183507914246,
+          "e2e_ms_median": 27.590531374999998,
+          "e2e_ms_p95": 39.512004,
+          "ttft_ms_p95": 13.885244,
+          "tpot_ms_p99": 1.2136059612836438,
+          "cpu_process_group_peak_observed_RSS_MiB": 3529.013671875
+        }
+      }
+    },
+    {
+      "cell": "c16-fixed",
+      "mean_screen": false,
+      "absolute_means": {
+        "v52": {
+          "ttft_ms_p99": 24.9348075,
+          "tpot_ms_median": 2.3238682679439657,
+          "throughput_tokens_s": 6204.866404605603,
+          "e2e_ms_p99": 87.70102,
+          "error_rate": 0,
+          "ttft_ms_median": 6.184205875,
+          "gpu_peak_observed_MiB": 1268.0,
+          "tpot_ms_p95": 2.5223399319775597,
+          "e2e_ms_median": 46.236704625,
+          "e2e_ms_p95": 82.17891374999999,
+          "ttft_ms_p95": 9.14060325,
+          "tpot_ms_p99": 2.6798688023809523,
+          "cpu_process_group_peak_observed_RSS_MiB": 756.248046875
+        },
+        "candidate": {
+          "ttft_ms_p99": 25.011646,
+          "tpot_ms_median": 2.3086060537216992,
+          "throughput_tokens_s": 6273.181629580262,
+          "e2e_ms_p99": 88.50733025,
+          "error_rate": 0,
+          "ttft_ms_median": 6.1533771250000004,
+          "gpu_peak_observed_MiB": 1262.0,
+          "tpot_ms_p95": 2.513330070430108,
+          "e2e_ms_median": 46.2116625,
+          "e2e_ms_p95": 81.08703175,
+          "ttft_ms_p95": 10.2587385,
+          "tpot_ms_p99": 2.637598647619048,
+          "cpu_process_group_peak_observed_RSS_MiB": 755.767578125
+        },
+        "vllm": {
+          "ttft_ms_p99": 86.733587,
+          "tpot_ms_median": 2.294891221971215,
+          "throughput_tokens_s": 4261.083874367706,
+          "e2e_ms_p99": 163.47296275,
+          "error_rate": 0,
+          "ttft_ms_median": 24.697214375,
+          "gpu_peak_observed_MiB": 8040.0,
+          "tpot_ms_p95": 3.9389502605289524,
+          "e2e_ms_median": 71.12716375,
+          "e2e_ms_p95": 135.6761925,
+          "ttft_ms_p95": 49.08359175,
+          "tpot_ms_p99": 5.358616116666667,
+          "cpu_process_group_peak_observed_RSS_MiB": 3355.30078125
+        }
+      }
+    },
+    {
+      "cell": "c16-natural",
+      "mean_screen": false,
+      "absolute_means": {
+        "v52": {
+          "ttft_ms_p99": 36.42316925,
+          "tpot_ms_median": 1.9516926575266802,
+          "throughput_tokens_s": 7664.991355145163,
+          "e2e_ms_p99": 275.3742145,
+          "error_rate": 0,
+          "ttft_ms_median": 7.475511375,
+          "gpu_peak_observed_MiB": 1568.0,
+          "tpot_ms_p95": 2.05617527547363,
+          "e2e_ms_median": 130.20888487500002,
+          "e2e_ms_p95": 265.41733275,
+          "ttft_ms_p95": 13.56718025,
+          "tpot_ms_p99": 2.1162801360545656,
+          "cpu_process_group_peak_observed_RSS_MiB": 756.29296875
+        },
+        "candidate": {
+          "ttft_ms_p99": 36.02269475,
+          "tpot_ms_median": 1.9466365290548358,
+          "throughput_tokens_s": 7718.845525498601,
+          "e2e_ms_p99": 268.8316945,
+          "error_rate": 0,
+          "ttft_ms_median": 7.21091375,
+          "gpu_peak_observed_MiB": 1562.0,
+          "tpot_ms_p95": 2.022538174681794,
+          "e2e_ms_median": 129.44324125,
+          "e2e_ms_p95": 262.05892274999997,
+          "ttft_ms_p95": 12.8328905,
+          "tpot_ms_p99": 2.0702750783410138,
+          "cpu_process_group_peak_observed_RSS_MiB": 755.8134765625
+        },
+        "vllm": {
+          "ttft_ms_p99": 51.03342725,
+          "tpot_ms_median": 1.922751403183977,
+          "throughput_tokens_s": 7037.332720966553,
+          "e2e_ms_p99": 328.279811,
+          "error_rate": 0,
+          "ttft_ms_median": 16.88016925,
+          "gpu_peak_observed_MiB": 8040.0,
+          "tpot_ms_p95": 2.454228448225222,
+          "e2e_ms_median": 139.57943625000001,
+          "e2e_ms_p95": 306.3395355,
+          "ttft_ms_p95": 36.060469499999996,
+          "tpot_ms_p99": 2.8129185136968764,
+          "cpu_process_group_peak_observed_RSS_MiB": 3280.5458984375
+        }
+      }
+    },
+    {
+      "cell": "c32-fixed",
+      "mean_screen": false,
+      "absolute_means": {
+        "v52": {
+          "ttft_ms_p99": 52.48857,
+          "tpot_ms_median": 3.56573880615942,
+          "throughput_tokens_s": 7958.727469499443,
+          "e2e_ms_p99": 156.23781725,
+          "error_rate": 0,
+          "ttft_ms_median": 8.676855,
+          "gpu_peak_observed_MiB": 1324.0,
+          "tpot_ms_p95": 3.9930380214285712,
+          "e2e_ms_median": 73.13267474999999,
+          "e2e_ms_p95": 127.48008975,
+          "ttft_ms_p95": 30.65952875,
+          "tpot_ms_p99": 4.3921235,
+          "cpu_process_group_peak_observed_RSS_MiB": 758.4013671875
+        },
+        "candidate": {
+          "ttft_ms_p99": 52.56741475,
+          "tpot_ms_median": 3.6394405812295467,
+          "throughput_tokens_s": 7931.463861941732,
+          "e2e_ms_p99": 146.63020125,
+          "error_rate": 0,
+          "ttft_ms_median": 8.46233975,
+          "gpu_peak_observed_MiB": 1318.0,
+          "tpot_ms_p95": 3.9834815182795698,
+          "e2e_ms_median": 73.664356125,
+          "e2e_ms_p95": 127.06397475,
+          "ttft_ms_p95": 30.27574,
+          "tpot_ms_p99": 4.342627523291926,
+          "cpu_process_group_peak_observed_RSS_MiB": 758.0234375
+        },
+        "vllm": {
+          "ttft_ms_p99": 66.82110375,
+          "tpot_ms_median": 2.9654571097826086,
+          "throughput_tokens_s": 6810.80529368811,
+          "e2e_ms_p99": 172.88119825,
+          "error_rate": 0,
+          "ttft_ms_median": 33.981446875,
+          "gpu_peak_observed_MiB": 8090.0,
+          "tpot_ms_p95": 5.2129117761904755,
+          "e2e_ms_median": 86.59750025000001,
+          "e2e_ms_p95": 152.93596775,
+          "ttft_ms_p95": 56.43664,
+          "tpot_ms_p99": 6.2108070714285715,
+          "cpu_process_group_peak_observed_RSS_MiB": 3272.5068359375
+        }
+      }
+    },
+    {
+      "cell": "c32-natural",
+      "mean_screen": false,
+      "absolute_means": {
+        "v52": {
+          "ttft_ms_p99": 75.17604374999999,
+          "tpot_ms_median": 2.9947355497694845,
+          "throughput_tokens_s": 10028.483495870794,
+          "e2e_ms_p99": 430.47167225,
+          "error_rate": 0,
+          "ttft_ms_median": 10.685934625000002,
+          "gpu_peak_observed_MiB": 1928.0,
+          "tpot_ms_p95": 3.137031203568304,
+          "e2e_ms_median": 199.62943,
+          "e2e_ms_p95": 404.72814700000004,
+          "ttft_ms_p95": 39.95629025,
+          "tpot_ms_p99": 3.221347703405018,
+          "cpu_process_group_peak_observed_RSS_MiB": 759.48828125
+        },
+        "candidate": {
+          "ttft_ms_p99": 78.16917275,
+          "tpot_ms_median": 3.0333426502982492,
+          "throughput_tokens_s": 9881.640983111356,
+          "e2e_ms_p99": 443.46051425,
+          "error_rate": 0,
+          "ttft_ms_median": 10.54732225,
+          "gpu_peak_observed_MiB": 1922.0,
+          "tpot_ms_p95": 3.161791794259589,
+          "e2e_ms_median": 202.20915250000002,
+          "e2e_ms_p95": 409.18482925,
+          "ttft_ms_p95": 49.195283,
+          "tpot_ms_p99": 3.2295895519713262,
+          "cpu_process_group_peak_observed_RSS_MiB": 759.087890625
+        },
+        "vllm": {
+          "ttft_ms_p99": 81.8280925,
+          "tpot_ms_median": 2.424032888312852,
+          "throughput_tokens_s": 10847.270051537851,
+          "e2e_ms_p99": 429.69495,
+          "error_rate": 0,
+          "ttft_ms_median": 28.377615249999998,
+          "gpu_peak_observed_MiB": 8090.0,
+          "tpot_ms_p95": 3.073527110736158,
+          "e2e_ms_median": 183.8291475,
+          "e2e_ms_p95": 389.53637675,
+          "ttft_ms_p95": 59.63401175,
+          "tpot_ms_p99": 3.565408496671787,
+          "cpu_process_group_peak_observed_RSS_MiB": 3271.849609375
+        }
+      }
+    }
+  ],
+  "baseline_source_file_shas": null,
+  "baseline_verification_file_sha256": null,
+  "verified_serving_archive_sha256": null,
+  "execution_state": "frozen before dispatch; all predecessor completions passed and GPU empty",
+  "nonoverlap_predecessor": {
+    "completion": "/data/riley-serving-261007/qwen-http-logit-trace-independent-analysis-attempt01/completion.json",
+    "terminal_observed_ns": 1791413725500263742
+  },
+  "status": "DRAFT_WAITING_VERIFIED_SERVING_RESULT"
+}

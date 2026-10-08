@@ -1,0 +1,173 @@
+diff --git a/crates/riley-cuda/build.rs b/crates/riley-cuda/build.rs
+index ff71b2d2..5a7912bb 100644
+--- a/crates/riley-cuda/build.rs
++++ b/crates/riley-cuda/build.rs
+@@ -209,6 +209,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
+         kernels_dir.join("src/decode_shared32.cuh"),
+         kernels_dir.join("src/decode_shared32_attention.cuh"),
+         kernels_dir.join("src/decode_gqa_attention_v50.cuh"),
++        kernels_dir.join("src/decode_merge_norm_v56.cuh"),
+         kernels_dir.join("src/decode_shared32_model.cuh"),
+         kernels_dir.join("src/decode_shared32_result.cuh"),
+ 
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index 2990bb07..a4ab53a3 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -2092,6 +2092,7 @@ include_bytes!("../../../../kernels/src/decode_shared16.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared32.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared32_attention.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_gqa_attention_v50.cuh").as_slice(),
++include_bytes!("../../../../kernels/src/decode_merge_norm_v56.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared32_model.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared32_result.cuh").as_slice(),
+ 
+diff --git a/kernels/src/decode_merge_norm_v56.cuh b/kernels/src/decode_merge_norm_v56.cuh
+new file mode 100644
+index 00000000..bcea133c
+--- /dev/null
++++ b/kernels/src/decode_merge_norm_v56.cuh
+@@ -0,0 +1,28 @@
++#pragma once
++#include <cuda_runtime.h>
++#include <cuda_bf16.h>
++#include <stdint.h>
++// Internal V3 pointwise operators; the retained owner validates parent extents.
++namespace riley_merge_norm_v56 {
++__global__ void merge_norm(const float* parts,const void* b,const __nv_bfloat16* w,void* residual,__nv_bfloat16* out,int mode,const uint32_t* shape,uint32_t capacity){
++ const uint32_t row=blockIdx.x,live=shape[2];if(capacity!=32||!live||live>capacity||row>=live)return;
++ parts+=row*576;out+=row*576;
++ if(mode==1){b=static_cast<const __nv_bfloat16*>(b)+row*576;residual=static_cast<float*>(residual)+row*576;}
++ if(mode==2){b=static_cast<const float*>(b)+row*576;residual=static_cast<__nv_bfloat16*>(residual)+row*576;}
++
++ __shared__ float sums[8];int tid=threadIdx.x,lane=tid%32;float x[4]={};
++ for(int j=0;j<4;++j){int i=tid*4+j;if(i<576){float value=0.F;
++  #pragma unroll
++  for(int chunk=0;chunk<5;++chunk)value+=parts[chunk*32*576+i];
++  x[j]=__bfloat162float(__float2bfloat16_rn(value));
++  if(mode==1)x[j]+=__bfloat162float(((const __nv_bfloat16*)b)[i]);if(mode==2)x[j]+=((const float*)b)[i];
++  if(mode==1)((float*)residual)[i]=x[j];if(mode==2)((__nv_bfloat16*)residual)[i]=__float2bfloat16_rn(x[j]);}}
++ float sum=x[1]*x[1];sum=fmaf(x[0],x[0],sum);sum=fmaf(x[2],x[2],sum);sum=fmaf(x[3],x[3],sum);
++ for(int step=16;step;step>>=1)sum+=__shfl_xor_sync(0xffffffff,sum,step);
++ if(lane==0)sums[tid/32]=sum;__syncthreads();
++ if(tid<32){sum=lane<8?sums[lane]:0.;for(int step=4;step;step>>=1)sum+=__shfl_xor_sync(0xffffffff,sum,step);if(lane==0)sums[0]=sum;}__syncthreads();
++ float mean=fmaf(sums[0],1.F/576.F,1e-5F),inv;
++ asm("rsqrt.approx.ftz.f32 %0, %1;":"=f"(inv):"f"(mean));
++ for(int j=0;j<4;++j){int i=tid*4+j;if(i<576)out[i]=__float2bfloat16_rn((x[j]*inv)*__bfloat162float(w[i]));}
++}
++}
+diff --git a/kernels/src/decode_shared32.cuh b/kernels/src/decode_shared32.cuh
+index ac0e1e7f..931e169a 100644
+--- a/kernels/src/decode_shared32.cuh
++++ b/kernels/src/decode_shared32.cuh
+@@ -80,11 +80,11 @@ __global__ void shared32_projection_merge(const float* parts,__nv_bfloat16* out,
+  for(int chunk=0;chunk<(K+Interval-1)/Interval;++chunk)value+=parts[chunk*32*N+i];
+  out[i]=__float2bfloat16_rn(value);
+ }
+-template<int N,int K,int Interval,bool Tiled>
++template<int N,int K,int Interval,bool Tiled,bool Merge=true>
+ inline void enqueue_shared32_projection(cudaStream_t stream,const __nv_bfloat16* x,const __nv_bfloat16* w,__nv_bfloat16* out,float* parts,const uint32_t* live_rows){
+  constexpr int chunk=Interval>0?Interval:K;
+  shared32_projection_parts<N,K,Interval,Tiled><<<dim3(N/8,(K+chunk-1)/chunk),32,0,stream>>>(x,w,parts,out,live_rows);
+- if constexpr(Interval>0)shared32_projection_merge<N,K,Interval><<<(32*N+255)/256,256,0,stream>>>(parts,out,live_rows);
++ if constexpr(Interval>0&&Merge)shared32_projection_merge<N,K,Interval><<<(32*N+255)/256,256,0,stream>>>(parts,out,live_rows);
+ }
+ 
+ // Two warps compute independent gate/up tiles, then share rounded results.
+diff --git a/kernels/src/decode_shared32_model.cuh b/kernels/src/decode_shared32_model.cuh
+index b6ab76e1..0db6f250 100644
+--- a/kernels/src/decode_shared32_model.cuh
++++ b/kernels/src/decode_shared32_model.cuh
+@@ -1,4 +1,5 @@
+ #pragma once
++#include "decode_merge_norm_v56.cuh"
+ #include "prefill_shape_model.cuh"
+ #include "decode_shared32.cuh"
+ #include "decode_shared32_attention.cuh"
+@@ -68,14 +69,25 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
+  qkv_merge_rope<<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
+  if(grouped_attention)riley_gqa50_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
+  else riley_shared32_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
++ if(grouped_attention){
++  enqueue_shared32_projection<576,576,128,false,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
++  riley_merge_norm_v56::merge_norm<<<32,256,0,stream>>>(static_cast<const float*>(scratch[7]),b(0),w(base+5),scratch[10],b(1),1,pointwise,32);
++ }else{
+  enqueue_shared32_projection<576,576,128,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
+  riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,pointwise,32);
++ }
+  if(tiled)shared32_gate_up_swiglu<true><<<192,64,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(11),active);
+  else shared32_gate_up_swiglu<false><<<192,64,0,stream>>>(b(1),w(base+6),w(base+7),b(11),active);
++ if(grouped_attention){
++  if(tiled)enqueue_shared32_projection<576,1536,320,true,false>(stream,b(11),w(273+layer*3+2),b(4),static_cast<float*>(scratch[7]),active);
++  else enqueue_shared32_projection<576,1536,320,false,false>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]),active);
++  riley_merge_norm_v56::merge_norm<<<32,256,0,stream>>>(static_cast<const float*>(scratch[7]),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,pointwise,32);
++ }else{
+  if(tiled)enqueue_shared32_projection<576,1536,320,true>(stream,b(11),w(273+layer*3+2),b(4),static_cast<float*>(scratch[7]),active);
+  else enqueue_shared32_projection<576,1536,320,false>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]),active);
+  riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(4),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,pointwise,32);
+  }
++ }
+  clear_inactive_hidden<<<32,256,0,stream>>>(b(1),active);
+  return cudaGetLastError();
+ }
+diff --git a/kernels/tests/kernel_batch03_correctness.cu b/kernels/tests/kernel_batch03_correctness.cu
+index c1d07003..f254694b 100644
+--- a/kernels/tests/kernel_batch03_correctness.cu
++++ b/kernels/tests/kernel_batch03_correctness.cu
+@@ -99,5 +99,5 @@ int main() {
+   cases+=projection<192,576,192,false>(seed);
+   cases+=gate<true>(seed);cases+=gate<false>(seed);
+  }
+- OK(cudaDeviceSynchronize());std::printf("{\"passed\":true,\"cases\":%d,\"seeds\":3,\"active_rows\":\"0..33\",\"performance_claim_eligible\":false}\n",cases);
++ OK(cudaDeviceSynchronize());std::printf("{\"passed\":true,\"cases\":%d,\"seeds\":3,\"active_rows\":\"0..33\",\"performance_claim_eligible\":false}\n",cases); return 0;
+ }
+diff --git a/kernels/tests/kernel_batch04_correctness.cu b/kernels/tests/kernel_batch04_correctness.cu
+new file mode 100644
+index 00000000..d3011995
+--- /dev/null
++++ b/kernels/tests/kernel_batch04_correctness.cu
+@@ -0,0 +1,44 @@
++// Retain all 816 projection/gate cases; compare fused residual and norm bytes
++// directly against the preserved V52 two-kernel sequence, including inactive
++// rows, invalid live counts, and both BF16/FP32 residual representations.
++#define main kernel_batch03_matrix_main
++#include "kernel_batch03_correctness.cu"
++#undef main
++#include "prefill_shape_pointwise.cuh"
++#include "decode_merge_norm_v56.cuh"
++int fusion_case(int seed,int mode) {
++ constexpr size_t N=32*576,Guard=16;
++ auto* parts=alloc<float>(5*N+2*Guard);
++ auto* merged=alloc<__nv_bfloat16>(N+2*Guard);
++ auto* skip_bf=alloc<__nv_bfloat16>(N);
++ auto* skip_fp=alloc<float>(N);
++ auto* weight=alloc<__nv_bfloat16>(576);
++ auto* a=alloc<__nv_bfloat16>(N+2*Guard);auto* b=alloc<__nv_bfloat16>(N+2*Guard);
++ auto* ra=alloc<float>(N+2*Guard);auto* rb=alloc<float>(N+2*Guard);
++ auto* ba=alloc<__nv_bfloat16>(N+2*Guard);auto* bb=alloc<__nv_bfloat16>(N+2*Guard);
++ auto* shape=alloc<uint32_t>(3);shape[0]=shape[1]=0;
++ fill_fp32(parts,5*N+2*Guard);
++ for(size_t i=0;i<5*N;++i) {
++  float x=seed==0?0.F:float((i*13+seed)%251)/257.F;
++  if(seed==99)x=(i/N==0?65536.F:i/N==1?-65536.F:x);
++  parts[Guard+i]=x;
++ }
++ for(size_t i=0;i<N;++i){skip_fp[i]=float(int((i*17+seed)%127)-63)/128;skip_bf[i]=__float2bfloat16_rn(skip_fp[i]);}
++ for(size_t i=0;i<576;++i)weight[i]=__float2bfloat16_rn(float((i+seed)%17+1)/16);
++ for(int rows=0;rows<=33;++rows) {
++  shape[2]=rows;fill_bf16(merged,N+2*Guard);fill_bf16(a,N+2*Guard);fill_bf16(b,N+2*Guard);
++  fill_fp32(ra,N+2*Guard);fill_fp32(rb,N+2*Guard);fill_bf16(ba,N+2*Guard);fill_bf16(bb,N+2*Guard);
++  const void* skip=mode==1?static_cast<void*>(skip_bf):static_cast<void*>(skip_fp);
++  void* ar=mode==1?static_cast<void*>(ra+Guard):static_cast<void*>(ba+Guard);
++  void* br=mode==1?static_cast<void*>(rb+Guard):static_cast<void*>(bb+Guard);
++  v52_reference::shared32_projection_merge_v52<576,576,128><<<72,256>>>(parts+Guard,merged+Guard,shape+2);
++  riley_prefill_pointwise::norm_rows<<<32,256>>>(merged+Guard,skip,weight,ar,a+Guard,mode,shape,32);
++  riley_merge_norm_v56::merge_norm<<<32,256>>>(parts+Guard,skip,weight,br,b+Guard,mode,shape,32);
++  OK(cudaGetLastError());OK(cudaDeviceSynchronize());compare(a,b,N+2*Guard,"fused normalized BF16 including guards/inactive",rows);
++  if(mode==1)compare(ra,rb,N+2*Guard,"fused FP32 residual including guards/inactive",rows);
++  else compare(ba,bb,N+2*Guard,"fused BF16 residual including guards/inactive",rows);
++ }
++ for(void* p:{(void*)parts,(void*)merged,(void*)skip_bf,(void*)skip_fp,(void*)weight,(void*)a,(void*)b,(void*)ra,(void*)rb,(void*)ba,(void*)bb,(void*)shape})OK(cudaFree(p));
++ return 34;
++}
++int main(){kernel_batch03_matrix_main();int cases=816;for(int seed:{0,1,17,99})for(int mode:{1,2})cases+=fusion_case(seed,mode);OK(cudaDeviceSynchronize());std::printf("{\"passed\":true,\"cases\":%d,\"fusion_cases\":272,\"BF16_and_FP32_exact\":true,\"performance_claim_eligible\":false}\n",cases);}

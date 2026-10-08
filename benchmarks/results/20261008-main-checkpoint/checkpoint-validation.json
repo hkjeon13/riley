@@ -1,0 +1,18 @@
+{
+  "cpu_command": "cargo test --locked --workspace --features riley-server/server --no-fail-fast",
+  "cpu_exit": 101,
+  "cpu_passed": 881,
+  "cpu_failed": 1,
+  "cpu_ignored": 28,
+  "failed_target": "riley-runtime::qwen_architecture_boundary",
+  "preexisting_failure_evidence": "preexisting-cpu-contract-failure.json",
+  "reference_command": "PYTHONPATH=tools/python/reference python3 -m unittest discover -s tools/python/reference/tests -p test_qwen3b_cache_on_prefill_kv_trace.py",
+  "reference_exit": 0,
+  "reference_tests": 4,
+  "log_sha256": {
+    "cpu-tests.log": "a3c99f984784d6e2a1164de311fe689f41c1a38074b1d76c920eae53ca6a35e0",
+    "cpu-tests-complete.log": "26b5eb86118261b0e2f38ed8e01e2a7878ac00e3646965047ab98f0808867650",
+    "reference-tests.log": "9813ed1bc3546437b1a1351846d32368b90bb7c263d3aa3da0893de4239c41e3"
+  },
+  "CUDA_or_serving_revalidated_on_main": false
+}

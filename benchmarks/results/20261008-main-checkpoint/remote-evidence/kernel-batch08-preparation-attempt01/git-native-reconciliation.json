@@ -1,0 +1,30 @@
+{
+  "revision": "f3389f3512c03f6185bf94a4daf140bf55a70a25",
+  "actual_git_blobs_verified": 1079,
+  "native_result": {
+    "passed": true,
+    "cases": 3161,
+    "decode_value_cases": 360,
+    "mapped_value_cases": 1593,
+    "BF16_and_FP32_exact": true,
+    "performance_claim_eligible": false
+  },
+  "compiler_resources": [
+    [
+      "ptxas info    : Compiling entry function '_ZN21riley_mixed_attention16mapped_attentionEPK13__nv_bfloat16S2_S2_PS0_jPKj' for 'sm_89'",
+      "ptxas info    : Function properties for _ZN21riley_mixed_attention16mapped_attentionEPK13__nv_bfloat16S2_S2_PS0_jPKj",
+      "    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads",
+      "ptxas info    : Used 127 registers, used 0 barriers, 12288 bytes smem, 400 bytes cmem[0], 8 bytes cmem[2]",
+      "ptxas info    : Compile time = 150.986 ms"
+    ],
+    [
+      "ptxas info    : Compiling entry function '_ZN21riley_gqa50_attention18independent_valuesEPKfPK13__nv_bfloat16PS2_PKjS7_S7_' for 'sm_89'",
+      "ptxas info    : Function properties for _ZN21riley_gqa50_attention18independent_valuesEPKfPK13__nv_bfloat16PS2_PKjS7_S7_",
+      "    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads",
+      "ptxas info    : Used 40 registers, used 0 barriers, 768 bytes smem, 400 bytes cmem[0], 8 bytes cmem[2]",
+      "ptxas info    : Compile time = 16.301 ms"
+    ]
+  ],
+  "server_status": "building; serving performance \ubbf8\uc2e4\ud589",
+  "adopted": false
+}

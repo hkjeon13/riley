@@ -1,0 +1,35 @@
+{
+  "failure": null,
+  "steps": [
+    {
+      "step": "raw-replay",
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.10/bin/python3",
+        "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/verify_kernel_batch07.py",
+        "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch07-terminal-collection-attempt01/kernel-batch07-quiet-attempt01.tar.gz",
+        "--fixtures",
+        "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch07-controller/fixtures.json",
+        "--output",
+        "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch07-independent-replay-attempt02/raw-replay.json"
+      ],
+      "exit": 0
+    },
+    {
+      "step": "all8-summary",
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.10/bin/python3",
+        "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/summarize_kernel_batch01.py",
+        "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch07-independent-replay-attempt02/raw-replay.json",
+        "--output",
+        "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch07-independent-replay-attempt02/summary.json"
+      ],
+      "exit": 0
+    },
+    {
+      "step": "launch-audit",
+      "exit": 0
+    }
+  ],
+  "adopted": false,
+  "goal_achieved": false
+}

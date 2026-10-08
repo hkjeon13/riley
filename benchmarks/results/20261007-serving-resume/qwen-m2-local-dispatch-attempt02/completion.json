@@ -1,0 +1,33 @@
+{
+  "failure": {
+    "type": "AssertionError",
+    "message": "remote exact104 job failed; all source/log/raw preserved"
+  },
+  "steps": [
+    {
+      "uploaded": "qwen-m2-bounded-source-attempt02.tar",
+      "sha256": "8108a39c6ee8fea84e5edc132ab1000d9366f5cd5e1a3158929b20c63a23f000"
+    },
+    {
+      "uploaded": "qwen-m2-bounded-commit-attempt02.pack",
+      "sha256": "e412725735580692b2485c1da3a578c5a926ff483e95c1efed9bbab8bc8c0101"
+    },
+    {
+      "uploaded": "qwen-m2-bounded-source-receipt-attempt02.json",
+      "sha256": "6dfe1ce91b0571e8c1d577bb31c7cb9c8217a06977c0372cf1abf3a250303aef"
+    },
+    {
+      "uploaded": "materialize_qwen_m2_source.py",
+      "sha256": "1846bf55b3ecd575082ae5069427ac50f21a5640e24d19606629ed9fdb5f10f5"
+    },
+    {
+      "uploaded": "run_qwen_m2_bounded_attempt02.py",
+      "sha256": "7ba071f0f6d1d56ef142f1c7db028530c043d38a3d52b7e4614cdfb47e886986"
+    },
+    {
+      "native_controller_exit": 1
+    }
+  ],
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "goal_achieved": false
+}

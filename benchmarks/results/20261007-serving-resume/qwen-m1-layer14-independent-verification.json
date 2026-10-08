@@ -1,0 +1,56 @@
+{
+  "HF_raw_stages_verified": 17,
+  "native_exact_stages": 7,
+  "exact_stages": [
+    "layer14.attention_scores.last",
+    "layer14.input_norm.last",
+    "layer14.k_proj.last",
+    "layer14.k_rope.last",
+    "layer14.q_proj.last",
+    "layer14.q_rope.last",
+    "layer14.v_proj.last"
+  ],
+  "first_non_exact_stage": "layer14.attention_probabilities.last",
+  "probabilities": {
+    "bf16_exact": false,
+    "cosine_similarity": 0.9999999578621671,
+    "element_count": 32784,
+    "hf_bf16_le_sha256": "d94a10fcc47627a8f4cbcebd39ae4258893969d40bf53cec6f983a977de5f76c",
+    "max_abs_bf16_as_f32": 1.9073486328125e-06,
+    "mean_abs_bf16_as_f32": 1.0588624059659438e-08,
+    "riley_bf16_le_sha256": "267c63db5618479c7203194b558e12b533c7ffa48435b76555bfb37f075145a4",
+    "unequal_element_count": 182
+  },
+  "layer_output": {
+    "bf16_exact": false,
+    "cosine_similarity": 0.9999999934402751,
+    "element_count": 2048,
+    "hf_bf16_le_sha256": "ef92292541b44b29ab5c7a3383553d8ec2288c2749f3a47f62635d9520182bb2",
+    "max_abs_bf16_as_f32": 0.0078125,
+    "mean_abs_bf16_as_f32": 6.61611557006836e-05,
+    "riley_bf16_le_sha256": "55f862b324887b86c68a403d2cb4137a5f83c07b004b88d7352ce97e163ad3e5",
+    "unequal_element_count": 78
+  },
+  "repeat_execution": {
+    "all_m1_layer_detail_tensors_bf16_identical": true,
+    "reused_prepared_owner": true,
+    "reused_trace_storage": true
+  },
+  "quality_gate": {
+    "attention_context_bf16_exact": false,
+    "attention_probabilities_bf16_exact": false,
+    "cache_on_full_forward_bf16_exact": false,
+    "cache_on_m1_decode_bf16_exact": false,
+    "candidate_exact_m1_layer_detail_stage_count": 7,
+    "corrected_cache_on_eligible": false,
+    "performance_claim_eligible": false,
+    "qk_scores_bf16_exact": true,
+    "qkv_projection_and_rope_bf16_exact": true,
+    "required_m1_layer_detail_stage_count": 17,
+    "selected_layer_m1_bf16_exact": false,
+    "serving_selector_eligible": false
+  },
+  "scope": "HF raw independently hashed; native equality and owner-repeat supplied by source-bound diagnostic; no native raw byte dump",
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "goal_achieved": false
+}

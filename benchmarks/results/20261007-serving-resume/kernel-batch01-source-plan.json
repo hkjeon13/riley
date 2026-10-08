@@ -1,0 +1,27 @@
+{
+  "base_revision": "06302d8d8396b8f2f4996fec8595bbfa1dcd7450",
+  "worktree": "/Users/psyche/PycharmProjects/riley-serving-kernel-batch01",
+  "branch": "codex/serving-kernel-batch01",
+  "profile_evidence": [
+    "c1-supported-node-profile-r0-v52-analysis.json",
+    "c1-natural-supported-r0-v52-analysis.json",
+    "c16-natural-supported-r0-v52-analysis.json",
+    "c32-natural-supported-r0-v52-analysis.json"
+  ],
+  "changes": [
+    "split-row gate/up/SwiGLU with preserved BF16 projection rounding and K16 MMA recurrence, copied from preserved post-v57 actual source",
+    "aligned32bit BF16 pair reads in QK score kernel",
+    "132-element shared row pitch for attention probability/exponential scratch; valid128 entries and arithmetic unchanged"
+  ],
+  "rejected_prior_scope": "V56 composite remains rejected; only isolated gate split-row component is retried; no merge-norm or KV packing imported",
+  "required_before_adoption": [
+    "BF16 primitive equality and guards for active0..33 and contexts1..4096",
+    "full HTTP correctness all8cells with frozen token reference",
+    "baseline/candidate/vLLM HTTP matrix four predeclared reversed orders at same conditions",
+    "quiet-host qualification and soak/cancel/re-request/reclamation"
+  ],
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "adopted": false,
+  "goal_achieved": false,
+  "reference_header_sha256": "e0d100e9219f3645c69067485e48ab91e10f0d281e2bf56fe918d7d24e66e9da"
+}

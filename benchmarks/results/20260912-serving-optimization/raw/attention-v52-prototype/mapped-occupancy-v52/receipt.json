@@ -1,0 +1,25 @@
+{
+  "scope": "synthetic P398 plus31decode metadata, production V51 mapped kernel. Diagnostic only, not serving timing.",
+  "ncu_exit_code": 1,
+  "ncu_command": [
+    "/data/cuda-12.8.1/bin/ncu",
+    "--section",
+    "LaunchStats",
+    "--section",
+    "Occupancy",
+    "--section",
+    "SpeedOfLight",
+    "--section",
+    "SchedulerStats",
+    "--section",
+    "WarpStateStats",
+    "--kernel-name",
+    "regex:mapped_attention",
+    "--launch-count",
+    "1",
+    "--export",
+    "/tmp/riley-opt-260912/mapped-occupancy-v52/baseline",
+    "/tmp/riley-opt-260912/mapped-occupancy-v52/probe"
+  ],
+  "probe_sha256": "935c94cf7b9bce40dc5ac97e296eb01571f2ffbb4671008718710bf93be7619c"
+}

@@ -1,0 +1,79 @@
+{
+  "scope": "C1 fixed r0 only; shared-host diagnostic; cannot qualify performance or adoption",
+  "raw_replay": "pending full archive",
+  "goal_achieved": false,
+  "engines": {
+    "v52": {
+      "throughput": 850.055380471603,
+      "TTFT": {
+        "samples": 384,
+        "median": 3.0791035,
+        "p95": 3.344145,
+        "p99": 3.60511,
+        "max": 3.715457
+      },
+      "TPOT": {
+        "samples": 384,
+        "median": 1.0603902857142855,
+        "p95": 1.0784295217391304,
+        "p99": 1.124754857142857,
+        "max": 1.1402405714285713
+      },
+      "E2E": {
+        "samples": 384,
+        "median": 23.6853975,
+        "p95": 36.212233,
+        "p99": 36.650197,
+        "max": 37.327282
+      },
+      "output_tokens": 7680,
+      "reference_matches": 384,
+      "GPU_peak_observed_MiB": 1136.0,
+      "CPU_process_group_peak_observed_RSS_MiB": 754.63671875,
+      "quiet_prephase_flags": {
+        "start": false,
+        "warmup": false,
+        "retained": false
+      }
+    },
+    "vllm": {
+      "throughput": 790.6979318647178,
+      "TTFT": {
+        "samples": 384,
+        "median": 7.5586055000000005,
+        "p95": 10.407086,
+        "p99": 17.268063,
+        "max": 92.055746
+      },
+      "TPOT": {
+        "samples": 384,
+        "median": 0.8846263,
+        "p95": 0.9410667741935483,
+        "p99": 1.0560005217391304,
+        "max": 1.2137734666666666
+      },
+      "E2E": {
+        "samples": 384,
+        "median": 27.391777,
+        "p95": 36.739582,
+        "p99": 43.567791,
+        "max": 112.190612
+      },
+      "output_tokens": 7680,
+      "reference_matches": 384,
+      "GPU_peak_observed_MiB": 7962.0,
+      "CPU_process_group_peak_observed_RSS_MiB": 3662.19140625,
+      "quiet_prephase_flags": {
+        "start": false,
+        "warmup": false,
+        "retained": false
+      }
+    }
+  },
+  "V52_vs_vLLM_percent": {
+    "throughput": 7.5069689972378395,
+    "TTFT": -59.2636035840209,
+    "TPOT": 19.86872713532093,
+    "E2E": -13.53099326122581
+  }
+}

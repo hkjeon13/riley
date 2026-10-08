@@ -1434,3 +1434,38 @@ Grouped QK와 같은CTA의 독립3warp values를 선택했다. 840개 primitive 
 ## V51 fusion batch frozen 및 Round58 실행
 
 Projection 재사용과 gate/up/SwiGLU fusion을비교해 M16fusion을선택했다. Primitive1728case·memcheck·실제모델16회귀·V7modelmemcheck·HTTP/fallback통과. Commita0536a5를고정하고 V50/V51/vLLM24lane matched serving실행중. [구현및증빙](PREFILL_FUSION_V51.md).
+
+
+## Round58 완료
+
+9,216요청실패0,Riley6,144기준일치. V51은V50대비네조건의처리량/TTFT/TPOT/tails가개선되어다음기준으로유지한다. vLLM대비C16fixed는처리량+33.81%,TPOT−5.18%이나다른조건격차및장기안정성검증이남아목표미달성이다. [최종serving결과](V51_SERVING_RESULTS.md).
+
+
+## V51 profile 완료 및 V52 prototype 검사
+
+V51trace288응답기준일치. Mapped attention20KBsharedmemory와4warp/SM정적상한을확인해querystate크기축소+score/exponential lifetime재사용을비교중이다. 초기정확성/memcheck통과,racecheck및timingcontroller실행중. [V52진행](ATTENTION_STATE_V52.md).
+
+
+## V52 shared state 통합 검증 중
+
+Prototype/racecheck/4096경계검증이통과했고V7mixed헤더에두개선을통합했다. Staticshared20KB→6KB,CUDAwarp/SM정적상한4→14. Build/modelGPU16통과,memcheck/HTTP/fallbackcontroller실행중. [상세증빙](ATTENTION_STATE_V52.md).
+
+
+## V52 frozen 및 Round59 실행
+
+Commit06302d8에서실제model/memcheck/HTTP/fallback검증이끝났다. V51/V52/vLLM24lane비교를시작했다. [현재실행및증빙](ATTENTION_STATE_V52.md).
+
+
+## Round59 및 V52 trace 완료
+
+9,216요청실패0,Riley6,144기준일치,별도trace288기준일치. C32fixed개선과C16일부손해가함께관찰되어V52전반승격은하지않는다. V51을일반기준으로보존하며V52는후속실험후보로유지한다. [최종결과](V52_SERVING_RESULTS.md).
+
+
+## V53 column parallelism prototype 검증 중
+
+V52최종결과는조건별tradeoff가있다. 출력열분할+warp CTA배치의네후보를비교중이며초기exact/memcheck통과,racecheck→timing실행중이다. Application은V52clean. [다음batch기록](ATTENTION_COLUMNS_V53.md).
+
+
+## V53 거절 및 V54 packed V prototype
+
+V53네후보모두30timing조건에서손해가있어통합하지않았다. 자료46파일검증보존. V54는Vcache배치/vectorpairload를비교하며원격prototype초기검사controller실행중이다. Application은V52그대로다. [V53판정](ATTENTION_COLUMNS_V53.md).

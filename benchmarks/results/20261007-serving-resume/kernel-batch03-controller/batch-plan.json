@@ -1,0 +1,76 @@
+{
+  "schema": "riley.kernel-batch03.matched96.v1",
+  "scope": "All eight cells with baseline/candidate/reconstructed vLLM; quiet and diagnostic attempts separate",
+  "workloads": [
+    "fixed",
+    "natural"
+  ],
+  "concurrency": [
+    1,
+    8,
+    16,
+    32
+  ],
+  "repeats": 4,
+  "orders": [
+    [
+      "v52",
+      "candidate",
+      "vllm"
+    ],
+    [
+      "vllm",
+      "candidate",
+      "v52"
+    ],
+    [
+      "v52",
+      "candidate",
+      "vllm"
+    ],
+    [
+      "vllm",
+      "candidate",
+      "v52"
+    ]
+  ],
+  "warmup": 96,
+  "retained": 384,
+  "token_budget": 512,
+  "chunk_tokens": {
+    "fixed": 128,
+    "natural": 512
+  },
+  "prefix_cache": false,
+  "sampling": "greedy temperature0, original EOS and original request max_tokens",
+  "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+  "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+  "gpu_operating_cap_bytes": 21474836480,
+  "vllm_gpu_memory_utilization": 0.3,
+  "host_start_gate": {
+    "timeout_seconds": 300,
+    "interval_seconds": 2,
+    "consecutive": 3,
+    "cpu_some_max": 5,
+    "io_full_max": 5,
+    "memory_full_max": 0.5
+  },
+  "exclusion_policy": "none; fail whole attempt, retain every sample and failed attempt",
+  "correctness_policy": "Riley exact frozen token/text/finish reference; all engine input/output counts and transport exact; cross-engine arithmetic differences recorded",
+  "completion": false,
+  "post_screen_required": [
+    "independent raw replay and all-cell comparison",
+    "sustained load",
+    "cancellation",
+    "re-request",
+    "resource reclamation"
+  ],
+  "host_gate_revision_reason": "Diagnostic only: record3 prephase observations and truthful quiet flag; do not abort solely on pressure; retain every measured row including slow rows. No pooling with admission-controlled attempts.",
+  "host_pressure_policy": "selected explicit mode; quiet requires original gate; diagnostic observes all and cannot qualify",
+  "performance_claim_eligible": false,
+  "startup_http_ready_timeout_seconds": 300,
+  "startup_timeout_scope": "cold initialization only; captured logs and host samples; excluded from serving timing by explicit warmup and retained phase envelopes",
+  "candidate_source_commit": "ab5486ebb6cd341bdd350f927807e7dd81590202",
+  "execution_state": "predeclared before launch; native816 and HTTP60 completed; performance unrun",
+  "candidate_binary_sha256": "5353e2ab9bc9f7510122b3cba570cf7c63766e5503c0ff36fb92d11d638a5939"
+}

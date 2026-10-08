@@ -1,0 +1,171 @@
+{
+  "plan": {
+    "schema": "riley.batch05-root-process-tree-cpu-capture-pilot.v1",
+    "scope": "pilot8 root process-tree CPU samples+context switches and CUDA full lifetime; all startup/warmup/retained/teardown preserved; diagnostic only; no serving scores",
+    "baseline": "/data/riley-serving-261007/kernel-batch05-quiet-attempt01",
+    "engines": [
+      "v52",
+      "candidate"
+    ],
+    "concurrency": [
+      1,
+      8,
+      16,
+      32
+    ],
+    "workloads": [
+      "fixed",
+      "natural"
+    ],
+    "orders": [
+      [
+        "v52",
+        "candidate"
+      ],
+      [
+        "candidate",
+        "v52"
+      ]
+    ],
+    "warmup": 96,
+    "retained": 96,
+    "startup_timeout_seconds": 300,
+    "tool": "/data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/bin/nsys",
+    "expected_tool_version": "NVIDIA Nsight Systems version 2025.5.2.266-255236693005v0",
+    "launch_trace": "cuda,osrt",
+    "sample": "process-tree",
+    "cpuctxsw": "process-tree",
+    "backtrace": "lbr",
+    "collection_policy": "profile full target lifetime from process launch through exact-target SIGTERM and profiler auto-stop; startup/warmup/retained/teardown preserved; no trim",
+    "clock_policy": "sandwiched perf_counter/epoch/monotonic/raw bridge at every phase boundary; exported GPU/HTTP clock mapping still must be independently checked before correlation",
+    "analysis_policy": "GPU kernel/memcpy/API and OSRT spans reported separately; derive interval unions and intersections without overlap sums; CPU sampling/context-switch unavailable; scheduler/HTTP attribution stays unmeasured until source instrumentation",
+    "failure_policy": "preserve all artifacts and stop on errors, missing CUDA data, numerical/protocol mismatch or unreclaimed owned GPU resources; no slow sample removal",
+    "performance_claim_eligible": false,
+    "goal_achieved": false,
+    "method_reference": "https://docs.nvidia.com/nsight-systems/UserGuide/index.html",
+    "compatibility_pending": false,
+    "cpu_profiling": {
+      "state": "root environment check supports process-tree without changing kernel paranoid level4",
+      "environment_check": "kernel-batch05-root-cpu-profiling-environment-attempt01.txt",
+      "environment_check_sha256": "00b119559ed32a7d0494332cc47b76f4c8f28b17a8eade1a074841397857b5a7",
+      "host_setting_mutation": false,
+      "actual_CPU_stack_and_context_switch_capture": "unverified until real SQLite tables and diagnostics inspected"
+    },
+    "cuda_graph_trace": "node",
+    "reclamation_timeout_seconds": 40,
+    "graph_trace_recovery": "attempt02 default graph mode produced graph events but no kernel node table; installed CLI node option verified; node capture overhead is diagnostic only",
+    "tool_package_SHA256": "e818fefc62b1e6c3bd34eb92b4e412355afddb763b55e8d7bc3330c4e3da4d33",
+    "baseline_source_file_shas": {
+      "c1-fixed-r0-v52-launch.json": "ef1f76bd7a427be63cf671be8c557b88b1acb383fec8a3f1945572e64e362a66",
+      "completion.json": "789d03041cd0d872f299f34a99b11253571588d1fbdd4ea83c6429c3613754bc",
+      "c32-natural-r0-candidate-launch.json": "4a8da05a98f50cb7be6ca0adebb9949bb2350297124ec6ce84563102043b0728",
+      "c32-natural-r0-v52-launch.json": "1b070d880c525cdc86375461b685548ca19997da55596d7de364c46e0425a4d4",
+      "c8-fixed-r0-v52-launch.json": "b2ba94541a9c0026950ac0278b70180c32691ddbce62e2d60d789cc4bad98ccd",
+      "c1-natural-r0-v52-launch.json": "bf6ae74155c279fa756f2c9cc5760420fa4ce8b9f108417eee8bf32aa13ac9d3",
+      "c16-natural-r0-v52-launch.json": "c434a036e26dfd8d27738b3719a34b1e0ea6d5d5491a01d25c14dd16e254e3e8",
+      "c32-fixed-r0-candidate-launch.json": "9c411e3a172a9bc1abff609399b30a8de9b72037649fab15cd29f1fe03d495ee",
+      "c16-natural-r0-candidate-launch.json": "9caa034f1791b032daa85a5a93fea1103a523259f011802105f3ad8c7693ddf8",
+      "c1-natural-r0-candidate-launch.json": "92855e2e05a6396a85204540a16ee4441d169cbff1cebada83007da8e66a2967",
+      "c32-fixed-r0-v52-launch.json": "9a60306f9bab978cee010842f6ba62fd225ce2d60765245894f0ee580a3a9284",
+      "preparation.json": "5cb26f7d371e194f8c66fadf4aa3fe29c6d3534d49fdb7700fe0106a3640809a",
+      "c16-fixed-r0-candidate-launch.json": "c948bbf3d854f64c8442f998e135a7a4ad0df0957f6b16e02d79969fae9c015f",
+      "c8-natural-r0-candidate-launch.json": "6f904623c6bbc603f8191da93f374f0f8a4c3669aaaa2245473c1b1a021fbdec",
+      "c16-fixed-r0-v52-launch.json": "d7e280e6913349f7603d774c04418e966e02173b5f10412f400fc8a08852d4e6",
+      "c8-natural-r0-v52-launch.json": "4a4dd51b1aef317464914842af9904190dd080776aa2981af1bc46ce6e841929",
+      "c1-fixed-r0-candidate-launch.json": "2bf3dcc3362cd793cfb1a97eff291f9a271905a9b34ecd37237539ab98eb6c4d",
+      "c8-fixed-r0-candidate-launch.json": "548a2fc35024135fc9d9efa5fe8b2aa2191c517dc291be483c3f3634e17a327c"
+    },
+    "baseline_verification_file_sha256": "2037661024dc96472eda17e87586731b4e3f98eadc29a0ebba4db040aea4c350",
+    "verified_serving_archive_sha256": "5485b9128c1208f555982c80b93b0bb05bda5c1ae8893b1caacf1f28f4f4a261",
+    "expected_baseline_binary_sha256": "6f424278437f82a462ee141c829914d02ccb8c02ed604fa166c70c3c70bb16f6",
+    "expected_candidate_binary_sha256": "23820eb2df5006c2a522625083a86247a46731f8312cee6072be35be1be26fd6",
+    "candidate_source_commit": "61402ebc42e9d0ea5bde4e6415a1a9c25e3db8a1",
+    "GPU_UUID": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "remaining_serving_gaps": "C1fixed TPOT+.822%; C32fixed TPOT+16.535%; C32natural throughput-4.740%/TPOT+19.342%/E2E P95+2.016%/P99+1.715%",
+    "full_core_serving_adoption": false,
+    "capture_completeness_requirement": "Preserve all collected/not-all-collected diagnostics; event-count consistency does not establish trace completeness; no API/GPU additive timing or unaligned HTTP phase attribution.",
+    "cells": [
+      {
+        "concurrency": 1,
+        "workload": "fixed"
+      },
+      {
+        "concurrency": 32,
+        "workload": "natural"
+      }
+    ],
+    "capture_range": "none",
+    "stop_on_exit": true,
+    "expected_lanes": 8,
+    "prior_diagnostic_warning_hypothesis": "whole-lifetime collection tests session boundary warnings; warning cause or trace completeness is not established",
+    "source_metadata_reconciliation_sha256": "9736ae084218bb9626b1300f0116d428cc4f7278df02f4d0b09d2947629a89ae",
+    "target_ownership_policy": "exact frozen argv including bind port; root UID0; pinned binary SHA; active CUDA PID; no profiler PGID assumption",
+    "expected_target_uid": 0,
+    "profiler_private_directories": "lane/profiler-private; HOME/config/cache/tmp isolated; target frozen HOME/PATH/CUDA/etc supplied with installed --env-var",
+    "previous_validated_GPU_capture": "8/8 source/pins/HTTP1536 exact and174 archive hashes verified; epoch anchored phase analysis diagnostic; produced category gap still unclassified"
+  },
+  "baseline_preparation_sha256": "5cb26f7d371e194f8c66fadf4aa3fe29c6d3534d49fdb7700fe0106a3640809a",
+  "baseline_verification_sha256": "2037661024dc96472eda17e87586731b4e3f98eadc29a0ebba4db040aea4c350",
+  "raw_archive_sha256": "5485b9128c1208f555982c80b93b0bb05bda5c1ae8893b1caacf1f28f4f4a261",
+  "baseline_completion_sha256": "789d03041cd0d872f299f34a99b11253571588d1fbdd4ea83c6429c3613754bc",
+  "pins": {
+    "/data/riley-serving-261007/v52-target/release/riley": "6f424278437f82a462ee141c829914d02ccb8c02ed604fa166c70c3c70bb16f6",
+    "/data/riley-serving-261007/kernel-batch05-target-attempt01/release/riley": "23820eb2df5006c2a522625083a86247a46731f8312cee6072be35be1be26fd6",
+    "/data/riley-serving-261007/vllm0271-venv/bin/vllm": "fe00035d5bd98fd57d20fe31aa6270907afbd68e92663dbc6ac9f793258e7e27",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/special_tokens_map.json": "e786b595b9a23148bf1630df78d9037a048ea671e48bfd3549a1e3c233742bb3",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/tokenizer.json": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/model.safetensors": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/generation_config.json": "2056c988e990b0d13670f63f2f3b87b3b6d07edaf7a3416998ba27dab2d8a059",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/riley-checkpoint.json": "01f3949cb54947416e66ee8cb162b96287ecc2f2e85ccfae0c20d0fa82ea34a0",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/tokenizer_config.json": "4bb9af56a342753d39374f4016a16574cab299fe088e896f425ce3c433f61424",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/config.json": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843",
+    "/data/riley-serving-261007/kernel-batch05-controller/serving_token_client_v2.py": "2bc9238265666b99654f4f4e456ca0bb10c45b8bed8f28493452b89c1f450fcf",
+    "/data/riley-serving-261007/kernel-batch05-controller/mixed_phase_v34.py": "c37408fb6d02f41ee7fb56d6bd41beda305dd2cf5bb4ef3a73879cb44401c96f",
+    "/data/riley-serving-261007/kernel-batch05-controller/run.py": "0d7439e0f990383815af4c3fcc5ce0607e91fd87e046a9e1aa80509fa4b431e9",
+    "/data/riley-serving-261007/kernel-batch05-controller/fixtures.json": "ae1f6f48a2acc1f7c0a6f084567bb96916cb005eeb727ae59aca815f1c5ab955",
+    "/data/riley-serving-261007/kernel-batch05-controller/batch-plan.json": "17727828d2870d7b2ad4748bddb7d0110bd11854a1fc86859cb18b6c103f3ed5",
+    "/data/riley-serving-261007/kernel-batch05-controller/kernel-batch05-native-http-independent-verification.json": "98a6e2f30c8453bbacb8fd3cbfce0546624d45e11798625c1ce9a24b7070bc86",
+    "/data/riley-serving-261007/vllm0271-packages.txt": "784965e0ac101c6469b50649c60ac31249ad1a5333bd6e0710824c25d1693182",
+    "/data/riley-serving-261007/curand-header-recovery.json": "b610c2031e95b8c1ce2017d3aac98cbb29cb71d408db9a9b081d2ea2a402823b",
+    "/data/riley-serving-261007/curand-only-include/curand.h": "2644c6c6500e1e11ee63cdfff3ce84284e8cae5a0785d6c587b6dda90e10369b",
+    "/data/riley-serving-261007/curand-only-include/curand_discrete.h": "daa0f706423adb65c4bb4e38e3054fec779890a031d118ebd870e1a94e1203b1",
+    "/data/riley-serving-261007/curand-only-include/curand_discrete2.h": "19eb7689a487259f141da87ccf6ebf3d662bed2aa68f98f4d7db24a4271e9901",
+    "/data/riley-serving-261007/curand-only-include/curand_globals.h": "6c44b52b1d0dac04d79350d178c324a96ac1d3ada73a7680a77f72db6c158975",
+    "/data/riley-serving-261007/curand-only-include/curand_kernel.h": "4a37c07a1d77c9b5c8c627a4720733cee6b4da4200a844e8a49291858bc26adf",
+    "/data/riley-serving-261007/curand-only-include/curand_lognormal.h": "696c73c82b499c9d4c999e0b56a067562bb98e33a175334820cbde3025bd03d3",
+    "/data/riley-serving-261007/curand-only-include/curand_mrg32k3a.h": "65555112318db09409fb7233659fcb286b46b5eb2589c6fc134025cb8f4128fb",
+    "/data/riley-serving-261007/curand-only-include/curand_mtgp32.h": "421ae6c74a47585f8fd94bb96cac1813dca6116ab773ba81cc221354c68a31f2",
+    "/data/riley-serving-261007/curand-only-include/curand_mtgp32_host.h": "497ab3992424cd32d2449e29a234e0fd33420b74fe1bcf477412be6e8483aabe",
+    "/data/riley-serving-261007/curand-only-include/curand_mtgp32_kernel.h": "6a36675ebe595e7404c4495fe8b3e98a0aeb28f4e630865b4724c49c9f810e1c",
+    "/data/riley-serving-261007/curand-only-include/curand_mtgp32dc_p_11213.h": "eff8066141f8ed4ba020012deb4bd81f99c56be414c13a43c121202e0f5c66db",
+    "/data/riley-serving-261007/curand-only-include/curand_normal.h": "60dc570c29f3671a6c7b721313254035aa74b5473ea3b9fbb77cf5f9c62effeb",
+    "/data/riley-serving-261007/curand-only-include/curand_normal_static.h": "e4ae224c2f40b925827b52d5c6e8ffd32dc1563b69d1bc4eea19ddbf6adb9a2c",
+    "/data/riley-serving-261007/curand-only-include/curand_philox4x32_x.h": "4f6d483fe45d837fed49553d25ee1d2cabb012a138a2f7f08bbaf584e63dd83c",
+    "/data/riley-serving-261007/curand-only-include/curand_poisson.h": "e67188aacbea2c56b5e623823e0470e35419e93b2bfc83b5d33d39f4f26c822d",
+    "/data/riley-serving-261007/curand-only-include/curand_precalc.h": "23a3597604f8d9f326f6a482b4ffab94e02ab7866caa06a5d1a8e4b5c3e611a9",
+    "/data/riley-serving-261007/curand-only-include/curand_uniform.h": "81a6fb0c65c6710b1994e13ad8899f122c647af204dae3030c116b01ec6f1bb4"
+  },
+  "controller_sha256": "92826516871e41e78715d6ab0766233f3945ae3bf7adf5f95434dad373ec0f88",
+  "plan_sha256": "89d0ba3510f6dd2e4e7b3246c9ae734c890a47d8c0021e767573efd095b30e97",
+  "nsys_version": "NVIDIA Nsight Systems version 2025.5.2.266-255236693005v0",
+  "host": {
+    "clocks": {
+      "realtime_ns": 1791375714414007251,
+      "monotonic_ns": 888341363424554,
+      "monotonic_raw_ns": 888328793381704,
+      "perf_counter_before_ns": 888341363423371,
+      "perf_counter_after_ns": 888341363426265,
+      "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+    },
+    "pressure": {
+      "cpu": "some avg10=2.29 avg60=2.81 avg300=2.92 total=13327060306\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+      "io": "some avg10=5.06 avg60=3.68 avg300=3.36 total=80076479797\nfull avg10=4.39 avg60=3.08 avg300=2.82 total=73176397973\n",
+      "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2056066206\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2007137734\n"
+    },
+    "compute_apps": "",
+    "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 39, 16.98 W, 210 MHz, 327 MiB"
+  },
+  "serving_performance_comparison": "\ubbf8\uc2e4\ud589; instrumented HTTP observations are diagnostic only",
+  "performance_claim_eligible": false,
+  "goal_achieved": false
+}

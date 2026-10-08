@@ -1,0 +1,17 @@
+{
+  "clocks": {
+    "realtime_ns": 1791413768778423297,
+    "monotonic_ns": 926395727840503,
+    "monotonic_raw_ns": 926382606435687,
+    "perf_counter_before_ns": 926395727839569,
+    "perf_counter_after_ns": 926395727842162,
+    "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+  },
+  "pressure": {
+    "cpu": "some avg10=0.36 avg60=0.43 avg300=0.41 total=14295771883\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+    "io": "some avg10=9.08 avg60=5.89 avg300=3.37 total=81756644594\nfull avg10=8.88 avg60=5.59 avg300=3.20 total=74631899363\n",
+    "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2137260262\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2086065908\n"
+  },
+  "compute_apps": "2242294, /data/riley-serving-261007/v52-target/release/riley, 924 MiB",
+  "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 44, 161.95 W, 2730 MHz, 1240 MiB"
+}

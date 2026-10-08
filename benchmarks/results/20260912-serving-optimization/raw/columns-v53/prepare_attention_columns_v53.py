@@ -1,0 +1,26 @@
+from pathlib import Path
+r=Path('/tmp/riley-opt-260912');d=r/'attention-columns-v53';d.mkdir(exist_ok=True)
+s=(r/'prefill-shapes-source-v11/kernels/src/mixed_attention_v49.cuh').read_text();(d/'baseline.cuh').write_text(s)
+s=s.replace('namespace riley_mixed_attention','namespace riley_attention_v53')
+s=s.replace('__device__ void single_query','template<int Columns,int Warps>\n__device__ void single_query')
+s=s.replace('template<int TileRows>','template<int TileRows,int Columns,int Warps>')
+s=s.replace('__global__ void mapped_attention','template<int Columns,int Warps>\n__global__ void mapped_attention')
+s=s.replace('single_query(q,','single_query<Columns,Warps>(q,').replace('attention_body<8>(','attention_body<8,Columns,Warps>(')
+s=s.replace('int lane=threadIdx.x%32,warp=0,group=lane/4,t=lane%4;','int lane=threadIdx.x%32,warp=0,group=lane/4,t=lane%4;\n const int column_first=(blockIdx.z*Warps+threadIdx.x/32)*(8/Columns);')
+s=s.replace('const int lane=threadIdx.x,group=lane/4,t=lane%4,qh=blockIdx.y,kvh=qh/3;','const int lane=threadIdx.x%32,group=lane/4,t=lane%4,qh=blockIdx.y,kvh=qh/3;\n const int column_first=(blockIdx.z*Warps+threadIdx.x/32)*(8/Columns);')
+s=s.replace('__shared__ float scores[TileRows][128];','__shared__ float scores_storage[Warps][TileRows][128];\n auto* scores=scores_storage[threadIdx.x/32];')
+s=s.replace('__shared__ __nv_bfloat16 probs[TileRows][128];','__shared__ __nv_bfloat16 probs_storage[Warps][TileRows][128];\n auto* probs=probs_storage[threadIdx.x/32];')
+s=s.replace('accum[8][4]','accum[8/Columns][4]').replace('block<8;','block<8/Columns;').replace('b<8;','b<8/Columns;')
+s=s.replace('dim=block*8+group','dim=(block+column_first)*8+group').replace('dim=b*8+group','dim=(b+column_first)*8+group')
+s=s.replace('out[qb+block*8+','out[qb+(block+column_first)*8+').replace('out[(qr[h]*9+qh)*64+b*8+','out[(qr[h]*9+qh)*64+(b+column_first)*8+')
+(d/'columns.cuh').write_text(s)
+p=(r/'attention-state-v52/probe.cu').read_text();a=p.index('#include "variant1.cuh"');b=p.index('#include <cstdio>',a);p=p[:a]+'#include "columns.cuh"\n'+p[b:]
+p=p.replace('variant:{0,1,2,3}','variant:{0,1,2,3,4}')
+for variant,C,W in [(1,2,1),(2,4,1),(3,2,2)]:
+ p=p.replace(f'riley_attention_v52_{variant}::mapped_attention<<<dim3(capacity,9),32>>>',f'riley_attention_v53::mapped_attention<{C},{W}><<<dim3(capacity,9,{C//W}),{32*W}>>>')
+ p=p.replace(f'riley_attention_v52_{variant}::mapped_attention<<<dim3(benchmark_capacity,9),32,0,stream>>>',f'riley_attention_v53::mapped_attention<{C},{W}><<<dim3(benchmark_capacity,9,{C//W}),{32*W},0,stream>>>')
+needle='  CK(cudaDeviceSynchronize());for(int i=0;i<capacity*576+16;++i)if('
+p=p.replace(needle,'  if(variant==4)riley_attention_v53::mapped_attention<4,4><<<dim3(capacity,9,1),128>>>(q,k,v,b,capacity,m);\n'+needle)
+p=p.replace('CK(cudaStreamEndCapture(stream,&graph[variant]))','if(variant==4)riley_attention_v53::mapped_attention<4,4><<<dim3(benchmark_capacity,9,1),128,0,stream>>>(q,k,v,b,benchmark_capacity,m);CK(cudaStreamEndCapture(stream,&graph[variant]))')
+p=p.replace('graph[4]','graph[5]').replace('exec[4]','exec[5]').replace('variant<4','variant<5').replace('order<4','order<5').replace('3-order','4-order').replace('i<4;++i){CK(cudaGraphExecDestroy','i<5;++i){CK(cudaGraphExecDestroy')
+p=p.replace('four_geometries_exact=true','five_variants_exact=true');(d/'probe.cu').write_text(p)

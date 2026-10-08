@@ -1,0 +1,214 @@
+{
+  "plan": {
+    "schema": "riley.batch11.root-process-tree-all8-profile32.v1",
+    "scope": "diagnostic32 all8 V52/candidate ABBA; run only after terminal full96 independent screen FAIL and terminal host analysis",
+    "baseline": "/data/riley-serving-261007/kernel-batch11-quiet-attempt02",
+    "engines": [
+      "v52",
+      "candidate"
+    ],
+    "concurrency": [
+      1,
+      8,
+      16,
+      32
+    ],
+    "workloads": [
+      "fixed",
+      "natural"
+    ],
+    "orders": [
+      [
+        "v52",
+        "candidate"
+      ],
+      [
+        "candidate",
+        "v52"
+      ]
+    ],
+    "warmup": 96,
+    "retained": 96,
+    "startup_timeout_seconds": 300,
+    "tool": "/data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/bin/nsys",
+    "expected_tool_version": "NVIDIA Nsight Systems version 2025.5.2.266-255236693005v0",
+    "launch_trace": "cuda,osrt",
+    "sample": "process-tree",
+    "cpuctxsw": "process-tree",
+    "backtrace": "lbr",
+    "collection_policy": "profile full target lifetime from process launch through exact-target SIGTERM and profiler auto-stop; startup/warmup/retained/teardown preserved; no trim",
+    "clock_policy": "sandwiched perf_counter/epoch/monotonic/raw bridge at every phase boundary; exported GPU/HTTP clock mapping still must be independently checked before correlation",
+    "analysis_policy": "actual root process-tree CPU stacks/scheduling and CUDA spans; separate interval unions/intersections, no idle-gap causal attribution; profiling timings are diagnostic only",
+    "failure_policy": "preserve all artifacts and stop on errors, missing CUDA data, numerical/protocol mismatch or unreclaimed owned GPU resources; no slow sample removal",
+    "performance_claim_eligible": false,
+    "goal_achieved": false,
+    "method_reference": "https://docs.nvidia.com/nsight-systems/UserGuide/index.html",
+    "compatibility_pending": false,
+    "cpu_profiling": {
+      "state": "root environment check supports process-tree without changing kernel paranoid level4",
+      "environment_check": "kernel-batch05-root-cpu-profiling-environment-attempt01.txt",
+      "environment_check_sha256": "00b119559ed32a7d0494332cc47b76f4c8f28b17a8eade1a074841397857b5a7",
+      "host_setting_mutation": false,
+      "actual_CPU_stack_and_context_switch_capture": "unverified until real SQLite tables and diagnostics inspected"
+    },
+    "cuda_graph_trace": "node",
+    "reclamation_timeout_seconds": 40,
+    "graph_trace_recovery": "attempt02 default graph mode produced graph events but no kernel node table; installed CLI node option verified; node capture overhead is diagnostic only",
+    "tool_package_SHA256": "e818fefc62b1e6c3bd34eb92b4e412355afddb763b55e8d7bc3330c4e3da4d33",
+    "expected_baseline_binary_sha256": "6f424278437f82a462ee141c829914d02ccb8c02ed604fa166c70c3c70bb16f6",
+    "expected_candidate_binary_sha256": "a88081b769c3239e3f2f54c394fcedc4a55e34ce3115264b6b35deef53963da6",
+    "candidate_source_commit": "2fd37841e302fc2b34dc79567713dea6241b49ac",
+    "GPU_UUID": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "full_core_serving_adoption": false,
+    "capture_completeness_requirement": "Preserve all collected/not-all-collected diagnostics; event-count consistency does not establish trace completeness; no API/GPU additive timing or unaligned HTTP phase attribution.",
+    "cells": [
+      {
+        "concurrency": 1,
+        "workload": "fixed"
+      },
+      {
+        "concurrency": 1,
+        "workload": "natural"
+      },
+      {
+        "concurrency": 8,
+        "workload": "fixed"
+      },
+      {
+        "concurrency": 8,
+        "workload": "natural"
+      },
+      {
+        "concurrency": 16,
+        "workload": "fixed"
+      },
+      {
+        "concurrency": 16,
+        "workload": "natural"
+      },
+      {
+        "concurrency": 32,
+        "workload": "fixed"
+      },
+      {
+        "concurrency": 32,
+        "workload": "natural"
+      }
+    ],
+    "capture_range": "none",
+    "stop_on_exit": true,
+    "expected_lanes": 32,
+    "prior_diagnostic_warning_hypothesis": "whole-lifetime collection tests session boundary warnings; warning cause or trace completeness is not established",
+    "target_ownership_policy": "exact frozen argv including bind port; root UID0; pinned binary SHA; active CUDA PID; no profiler PGID assumption",
+    "expected_target_uid": 0,
+    "profiler_private_directories": "lane/profiler-private; HOME/config/cache/tmp isolated; target frozen HOME/PATH/CUDA/etc supplied with installed --env-var",
+    "binding_policy": "all96 raw replay and launch/host audit completed; all4 repeats retained; profiler onlydiagnostic",
+    "predeclared_time_ns": 1791419372282122679,
+    "previous_validated_GPU_capture": "Batch08 all32 profiles independently verified; completeness remains unproven",
+    "remaining_serving_gaps": {
+      "c1-fixed": [
+        "tpot_ms_median"
+      ],
+      "c32-fixed": [
+        "tpot_ms_median"
+      ],
+      "c32-natural": [
+        "throughput_tokens_s",
+        "tpot_ms_median",
+        "tpot_ms_p95",
+        "e2e_ms_median",
+        "e2e_ms_p95",
+        "e2e_ms_p99"
+      ]
+    },
+    "baseline_source_file_shas": {
+      "preparation.json": "08aa72d8e300e90f8b881643d4413927cf0a0feb5ca367605be166b90df361e7",
+      "completion.json": "17a17aef2f0f51dd9623c4d1a19c82d5f4be4fa5a984eed978f384e441bc9ae5",
+      "c1-fixed-r0-v52-launch.json": "8de9c82c39a44416af259482687dd3ddc57829279739bdc2721506e0da3261d4",
+      "c1-fixed-r0-candidate-launch.json": "5e1c92b95d443759470c3dcdf23e96383e35993dec92079775d67fa6dc56ea27",
+      "c1-natural-r0-v52-launch.json": "332f1d5adab836bbb17526999d8d7c4298aebd0e0c2159e0cebeb4740df9348c",
+      "c1-natural-r0-candidate-launch.json": "37586ddcac2a82cdcaaa36c491908d4660d2f959774427a45585435176f5951d",
+      "c8-fixed-r0-v52-launch.json": "f4853c800f423898f43208693e6cb8785a2c0e5d022877dd89edefee7f989e73",
+      "c8-fixed-r0-candidate-launch.json": "e7336fad14d61d02ebfeb402ebfa7fc6f74d9e8700efc1d0665912e154a76780",
+      "c8-natural-r0-v52-launch.json": "b23cc8731979d45a1921a96cf994ac8db5dd026ec9f67a21cfe10061a1020977",
+      "c8-natural-r0-candidate-launch.json": "73dc5181ecadbfb266a214987378ce5e6a2ae8c199d492a10141f8f8f1af048f",
+      "c16-fixed-r0-v52-launch.json": "3771956d76561a430fd996c8a709f02e16845e17d15851746ab8afcca451de22",
+      "c16-fixed-r0-candidate-launch.json": "f5b36ccfad2ec27d8b07659bc823be20aeab16111e5df2e497cf73865ffa0ab2",
+      "c16-natural-r0-v52-launch.json": "6e6af315be4ad316630506c8b4c82da82c9b627c29673fcc695083a4e4efe43d",
+      "c16-natural-r0-candidate-launch.json": "2c33794310a5d70cec30387dec2bc7ebb790d3ae702986990b9aa24e6b81ae1a",
+      "c32-fixed-r0-v52-launch.json": "cbd6d5dffedd03f6c061d22feaa74b8fd80e2750c6b047746d2b690a1687706c",
+      "c32-fixed-r0-candidate-launch.json": "22d83ae424bbd4a2c75b0e8b5a2be774449dd29d4266a9ea508c718f1390e01b",
+      "c32-natural-r0-v52-launch.json": "4d03693aeabf0932c5b44ef2a99992e1c9f89d0ab206a3778a3b0fdf5fe78086",
+      "c32-natural-r0-candidate-launch.json": "a996bbaec4a176a2261bd8d83f9d99b32e7df11cbf9af62a723218bd9f441ed0"
+    },
+    "baseline_verification_file_sha256": "1dd83cc478b63f68b34653cbe87613bc0064aa32f1631424306e1e5e746b870a",
+    "verified_serving_archive_sha256": "e40008d2d02ffe5946aff1bc12143d260a0f6a692acdee2bd6e3e8fefb51600b",
+    "execution_state": "not launched; wait for isolated compile-only producer to terminate successfully",
+    "nonoverlap_predecessor": "/data/riley-serving-261007/kernel-batch11-source-owned-stability-preparation-attempt03/completion.json",
+    "status": "FROZEN_FOR_EXECUTION"
+  },
+  "baseline_preparation_sha256": "08aa72d8e300e90f8b881643d4413927cf0a0feb5ca367605be166b90df361e7",
+  "baseline_verification_sha256": "1dd83cc478b63f68b34653cbe87613bc0064aa32f1631424306e1e5e746b870a",
+  "raw_archive_sha256": "e40008d2d02ffe5946aff1bc12143d260a0f6a692acdee2bd6e3e8fefb51600b",
+  "baseline_completion_sha256": "17a17aef2f0f51dd9623c4d1a19c82d5f4be4fa5a984eed978f384e441bc9ae5",
+  "pins": {
+    "/data/riley-serving-261007/v52-target/release/riley": "6f424278437f82a462ee141c829914d02ccb8c02ed604fa166c70c3c70bb16f6",
+    "/data/riley-serving-261007/kernel-batch11-target-attempt02/release/riley": "a88081b769c3239e3f2f54c394fcedc4a55e34ce3115264b6b35deef53963da6",
+    "/data/riley-serving-261007/vllm0271-venv/bin/vllm": "fe00035d5bd98fd57d20fe31aa6270907afbd68e92663dbc6ac9f793258e7e27",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/special_tokens_map.json": "e786b595b9a23148bf1630df78d9037a048ea671e48bfd3549a1e3c233742bb3",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/tokenizer.json": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/model.safetensors": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/generation_config.json": "2056c988e990b0d13670f63f2f3b87b3b6d07edaf7a3416998ba27dab2d8a059",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/riley-checkpoint.json": "01f3949cb54947416e66ee8cb162b96287ecc2f2e85ccfae0c20d0fa82ea34a0",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/tokenizer_config.json": "4bb9af56a342753d39374f4016a16574cab299fe088e896f425ce3c433f61424",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/config.json": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843",
+    "/data/riley-serving-261007/kernel-batch11-controller-attempt02/serving_token_client_v2.py": "2bc9238265666b99654f4f4e456ca0bb10c45b8bed8f28493452b89c1f450fcf",
+    "/data/riley-serving-261007/kernel-batch11-controller-attempt02/mixed_phase_v34.py": "c37408fb6d02f41ee7fb56d6bd41beda305dd2cf5bb4ef3a73879cb44401c96f",
+    "/data/riley-serving-261007/kernel-batch11-controller-attempt02/run.py": "cac32eff1b4e853c7f844cd6f6775c2d143a9786747d5046ceed72388dc414aa",
+    "/data/riley-serving-261007/kernel-batch11-controller-attempt02/fixtures.json": "ae1f6f48a2acc1f7c0a6f084567bb96916cb005eeb727ae59aca815f1c5ab955",
+    "/data/riley-serving-261007/kernel-batch11-controller-attempt02/batch-plan.json": "09e190768cdad0d7ceb60cd25d8b3528f7638a8eccf427c88115d5ad4403f7cb",
+    "/data/riley-serving-261007/kernel-batch11-controller-attempt02/kernel-batch11-native-http-independent-verification-attempt02.json": "fdf59e20bf54f95987e88aa063b551fc168bb21230b9961e3330eb80fce6b575",
+    "/data/riley-serving-261007/vllm0271-packages.txt": "784965e0ac101c6469b50649c60ac31249ad1a5333bd6e0710824c25d1693182",
+    "/data/riley-serving-261007/curand-header-recovery.json": "b610c2031e95b8c1ce2017d3aac98cbb29cb71d408db9a9b081d2ea2a402823b",
+    "/data/riley-serving-261007/curand-only-include/curand.h": "2644c6c6500e1e11ee63cdfff3ce84284e8cae5a0785d6c587b6dda90e10369b",
+    "/data/riley-serving-261007/curand-only-include/curand_discrete.h": "daa0f706423adb65c4bb4e38e3054fec779890a031d118ebd870e1a94e1203b1",
+    "/data/riley-serving-261007/curand-only-include/curand_discrete2.h": "19eb7689a487259f141da87ccf6ebf3d662bed2aa68f98f4d7db24a4271e9901",
+    "/data/riley-serving-261007/curand-only-include/curand_globals.h": "6c44b52b1d0dac04d79350d178c324a96ac1d3ada73a7680a77f72db6c158975",
+    "/data/riley-serving-261007/curand-only-include/curand_kernel.h": "4a37c07a1d77c9b5c8c627a4720733cee6b4da4200a844e8a49291858bc26adf",
+    "/data/riley-serving-261007/curand-only-include/curand_lognormal.h": "696c73c82b499c9d4c999e0b56a067562bb98e33a175334820cbde3025bd03d3",
+    "/data/riley-serving-261007/curand-only-include/curand_mrg32k3a.h": "65555112318db09409fb7233659fcb286b46b5eb2589c6fc134025cb8f4128fb",
+    "/data/riley-serving-261007/curand-only-include/curand_mtgp32.h": "421ae6c74a47585f8fd94bb96cac1813dca6116ab773ba81cc221354c68a31f2",
+    "/data/riley-serving-261007/curand-only-include/curand_mtgp32_host.h": "497ab3992424cd32d2449e29a234e0fd33420b74fe1bcf477412be6e8483aabe",
+    "/data/riley-serving-261007/curand-only-include/curand_mtgp32_kernel.h": "6a36675ebe595e7404c4495fe8b3e98a0aeb28f4e630865b4724c49c9f810e1c",
+    "/data/riley-serving-261007/curand-only-include/curand_mtgp32dc_p_11213.h": "eff8066141f8ed4ba020012deb4bd81f99c56be414c13a43c121202e0f5c66db",
+    "/data/riley-serving-261007/curand-only-include/curand_normal.h": "60dc570c29f3671a6c7b721313254035aa74b5473ea3b9fbb77cf5f9c62effeb",
+    "/data/riley-serving-261007/curand-only-include/curand_normal_static.h": "e4ae224c2f40b925827b52d5c6e8ffd32dc1563b69d1bc4eea19ddbf6adb9a2c",
+    "/data/riley-serving-261007/curand-only-include/curand_philox4x32_x.h": "4f6d483fe45d837fed49553d25ee1d2cabb012a138a2f7f08bbaf584e63dd83c",
+    "/data/riley-serving-261007/curand-only-include/curand_poisson.h": "e67188aacbea2c56b5e623823e0470e35419e93b2bfc83b5d33d39f4f26c822d",
+    "/data/riley-serving-261007/curand-only-include/curand_precalc.h": "23a3597604f8d9f326f6a482b4ffab94e02ab7866caa06a5d1a8e4b5c3e611a9",
+    "/data/riley-serving-261007/curand-only-include/curand_uniform.h": "81a6fb0c65c6710b1994e13ad8899f122c647af204dae3030c116b01ec6f1bb4"
+  },
+  "controller_sha256": "23b3b2ecd7de25c369cde6f94a64ec014a0513826d7e0756dec5e0e7638a092b",
+  "plan_sha256": "8ef4e084b46e6ee54b3a769de2033bd661beded0028ec967f725d7c0914b6f3a",
+  "nsys_version": "NVIDIA Nsight Systems version 2025.5.2.266-255236693005v0",
+  "host": {
+    "clocks": {
+      "realtime_ns": 1791419374855551175,
+      "monotonic_ns": 932001804968652,
+      "monotonic_raw_ns": 931988601766932,
+      "perf_counter_before_ns": 932001804962746,
+      "perf_counter_after_ns": 932001804970727,
+      "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+    },
+    "pressure": {
+      "cpu": "some avg10=0.21 avg60=0.41 avg300=0.42 total=14347772880\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+      "io": "some avg10=8.55 avg60=6.57 avg300=5.44 total=82201714610\nfull avg10=8.01 avg60=6.09 avg300=5.03 total=75047820530\n",
+      "memory": "some avg10=0.00 avg60=0.04 avg300=0.00 total=2147813486\nfull avg10=0.00 avg60=0.04 avg300=0.00 total=2096204410\n"
+    },
+    "compute_apps": "",
+    "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 44, 17.72 W, 210 MHz, 359 MiB"
+  },
+  "serving_performance_comparison": "\ubbf8\uc2e4\ud589; instrumented HTTP observations are diagnostic only",
+  "performance_claim_eligible": false,
+  "goal_achieved": false
+}

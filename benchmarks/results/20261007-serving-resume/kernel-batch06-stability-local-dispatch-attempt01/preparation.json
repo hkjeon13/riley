@@ -1,0 +1,54 @@
+{
+  "wait_for": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch06-independent-replay-attempt02/completion.json",
+  "input_sha256": {
+    "run_serving_stability.py": "242c26f026095d4546f6e811d234bac71a34b15a79dedce1a64968b8c739466c",
+    "serving_token_client_v2.py": "2bc9238265666b99654f4f4e456ca0bb10c45b8bed8f28493452b89c1f450fcf",
+    "mixed_phase_v34.py": "c37408fb6d02f41ee7fb56d6bd41beda305dd2cf5bb4ef3a73879cb44401c96f",
+    "fixtures.json": "ae1f6f48a2acc1f7c0a6f084567bb96916cb005eeb727ae59aca815f1c5ab955"
+  },
+  "cells": [
+    {
+      "concurrency": 1,
+      "workload": "fixed"
+    },
+    {
+      "concurrency": 1,
+      "workload": "natural"
+    },
+    {
+      "concurrency": 8,
+      "workload": "fixed"
+    },
+    {
+      "concurrency": 8,
+      "workload": "natural"
+    },
+    {
+      "concurrency": 16,
+      "workload": "fixed"
+    },
+    {
+      "concurrency": 16,
+      "workload": "natural"
+    },
+    {
+      "concurrency": 32,
+      "workload": "fixed"
+    },
+    {
+      "concurrency": 32,
+      "workload": "natural"
+    }
+  ],
+  "steady_seconds_each": 600,
+  "cancel_cycles_each": 5,
+  "cancel_stages": [
+    "after_headers_before_consuming_tokens",
+    "after_first_token"
+  ],
+  "rerequest_wave_each": 96,
+  "scope": "source-owned live metrics plus every raw HTTP SSE; native/CPU mock results never substitute",
+  "minimum_trigger": "full96 independent source/model/launch audit, quiet all8 mean screen PASS",
+  "serving_performance": "unexecuted until branch actually launched",
+  "goal_achieved": false
+}

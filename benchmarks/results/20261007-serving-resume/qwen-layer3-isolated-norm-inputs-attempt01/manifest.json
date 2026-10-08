@@ -1,0 +1,87 @@
+{
+  "schema": "riley.qwen-layer3-isolated-norm-inputs.v1",
+  "source_commit": "de64579cdcbeb78cbe638fa76f3c2e0b944cc5cf",
+  "checkpoint_revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+  "tensor_name": "model.layers.3.post_attention_layernorm.weight",
+  "hidden_size": 2048,
+  "epsilon_FP32_bits": "0x358637bd",
+  "rows": [
+    {
+      "step": 108,
+      "files": [
+        {
+          "role": "input",
+          "name": "step108-input.bf16",
+          "bytes": 4096,
+          "sha256": "d561acb2e513ce9a69ad4bcf16da8c4f9724c4d6c2beeb956daca165e7322a87"
+        },
+        {
+          "role": "HF_output",
+          "name": "step108-HF_output.bf16",
+          "bytes": 4096,
+          "sha256": "fadb0adf0a2569890f41b658e9902f9c762c819c294c72d6e080eb049bec9897"
+        },
+        {
+          "role": "native_output",
+          "name": "step108-native_output.bf16",
+          "bytes": 4096,
+          "sha256": "fadb0adf0a2569890f41b658e9902f9c762c819c294c72d6e080eb049bec9897"
+        }
+      ]
+    },
+    {
+      "step": 109,
+      "files": [
+        {
+          "role": "input",
+          "name": "step109-input.bf16",
+          "bytes": 4096,
+          "sha256": "4d92b2bb7a1c5bc492334e33fc4f979c36f5e7da24c301d89de81be329f39227"
+        },
+        {
+          "role": "HF_output",
+          "name": "step109-HF_output.bf16",
+          "bytes": 4096,
+          "sha256": "e65d03769e8f45570c7bea256b7ceffeb69f3ba99dfc43db349fd6b53faedeed"
+        },
+        {
+          "role": "native_output",
+          "name": "step109-native_output.bf16",
+          "bytes": 4096,
+          "sha256": "db35c6b66e31759d1c6ab8d9da8af101c5c8b7565d9f065f152459456fbb7551"
+        }
+      ]
+    }
+  ],
+  "HF_producer": {
+    "implementation_id": "riley-python-qwen3b-hf-eager-cache-on-layer-stage-v1",
+    "runtime_dependency_class": "offline-python-reference",
+    "python_version": "3.12.3",
+    "python_executable_sha256": "a92f0f95e883390c7256b2e441484aac06b1002dbe1d924141a77c8d82f96223",
+    "python_platform_system": "linux",
+    "python_platform_machine": "x86_64",
+    "torch_version": "2.13.0+cu129",
+    "transformers_version": "5.16.1",
+    "safetensors_version": "0.8.0",
+    "selected_device": {
+      "requested": "cuda:0",
+      "resolved": "cuda:0",
+      "index": 0,
+      "name": "NVIDIA GeForce RTX 4090",
+      "compute_capability": "8.9",
+      "driver_version": "580.178.04",
+      "runtime_cuda_version": "12.9"
+    },
+    "transformers_model_source": {
+      "module": "transformers.models.qwen2.modeling_qwen2",
+      "filename": "modeling_qwen2.py",
+      "sha256": "34390fea7648b444d5727abef0b85acceba28f856aedec6c335d51253806bfee"
+    },
+    "transformers_qwen2_source": {
+      "path": "transformers/models/qwen2/modeling_qwen2.py",
+      "sha256": "34390fea7648b444d5727abef0b85acceba28f856aedec6c335d51253806bfee"
+    }
+  },
+  "paired_proof_sha256": "240fcf8cf2b5c8eff5393f716dbda49d463f1fe982c929c39ebe2b07b4ac630b",
+  "scope": "exact captured equal BF16 norm inputs and paired outputs; no new reference or performance claim"
+}

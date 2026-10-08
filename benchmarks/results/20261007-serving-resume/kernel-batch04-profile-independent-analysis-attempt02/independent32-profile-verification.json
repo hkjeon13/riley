@@ -1,0 +1,1163 @@
+{
+  "complete_profiles": 32,
+  "archived_files_sha_verified": 838,
+  "HTTP_requests_replayed": 6144,
+  "lanes": [
+    {
+      "case": "c1-fixed-r0-v52",
+      "kernel_events": 642240,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101828476/streams/pid_1828493_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t653664.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t7051.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t655627, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c1-fixed-r0-candidate",
+      "kernel_events": 532800,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101830987/streams/pid_1830998_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t544224.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t7259.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t546182, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c1-fixed-r1-candidate",
+      "kernel_events": 532800,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101833263/streams/pid_1833274_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t544224.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t6565.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t546182, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c1-fixed-r1-v52",
+      "kernel_events": 642240,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101835111/streams/pid_1835122_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t653664.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t6727.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t655627, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c1-natural-r0-v52",
+      "kernel_events": 2405568,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101837095/streams/pid_1837107_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t2448480.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t23509.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t2455786, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c1-natural-r0-candidate",
+      "kernel_events": 1981248,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101842833/streams/pid_1842846_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t2024160.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t17225.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t2031443, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c1-natural-r1-candidate",
+      "kernel_events": 1981248,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101848254/streams/pid_1848269_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t2024160.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t17593.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t2031443, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c1-natural-r1-v52",
+      "kernel_events": 2405568,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101852128/streams/pid_1852140_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t2448480.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t17330.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t2455785, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c8-fixed-r0-v52",
+      "kernel_events": 88032,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101856685/streams/pid_1856696_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t89578.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t5386.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t89858, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c8-fixed-r0-candidate",
+      "kernel_events": 75372,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101857918/streams/pid_1857930_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t76918.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t5374.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t77198, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c8-fixed-r1-candidate",
+      "kernel_events": 75222,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101859132/streams/pid_1859145_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t76773.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t5448.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t77053, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c8-fixed-r1-v52",
+      "kernel_events": 88188,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101860126/streams/pid_1860137_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t89734.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t5277.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t90015, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c8-natural-r0-v52",
+      "kernel_events": 325500,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101861455/streams/pid_1861470_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t331280.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t15982.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t332283, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c8-natural-r0-candidate",
+      "kernel_events": 271374,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101862844/streams/pid_1862855_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t277133.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t15811.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t278130, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c8-natural-r1-candidate",
+      "kernel_events": 271350,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101864265/streams/pid_1864276_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t277125.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t16029.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t278123, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c8-natural-r1-v52",
+      "kernel_events": 325380,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101865655/streams/pid_1865678_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t331156.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t16056.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t332157, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c16-fixed-r0-v52",
+      "kernel_events": 46704,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101867082/streams/pid_1867095_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t47512.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t5500.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t47669, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c16-fixed-r0-candidate",
+      "kernel_events": 41760,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101868287/streams/pid_1868298_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t42572.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t5367.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t42728, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c16-fixed-r1-candidate",
+      "kernel_events": 41640,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101869465/streams/pid_1869476_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t42456.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t5456.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t42612, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c16-fixed-r1-v52",
+      "kernel_events": 47310,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101870576/streams/pid_1870604_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t48133.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t5475.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t48291, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c16-natural-r0-v52",
+      "kernel_events": 173622,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101871526/streams/pid_1871538_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t176695.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t16378.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t177235, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c16-natural-r0-candidate",
+      "kernel_events": 146664,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101872940/streams/pid_1872955_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t149740.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t16546.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t150282, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c16-natural-r1-candidate",
+      "kernel_events": 146238,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101874155/streams/pid_1874166_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t149313.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t15940.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t149854, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c16-natural-r1-v52",
+      "kernel_events": 173898,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101875285/streams/pid_1875296_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t176975.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t15944.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t177516, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c32-fixed-r0-v52",
+      "kernel_events": 27792,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101876527/streams/pid_1876538_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t28266.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t6081.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t28364, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c32-fixed-r0-candidate",
+      "kernel_events": 25548,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101878190/streams/pid_1878207_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t26034.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t6541.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t26133, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c32-fixed-r1-candidate",
+      "kernel_events": 25026,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101879688/streams/pid_1879701_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t25499.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t6414.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t25596, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c32-fixed-r1-v52",
+      "kernel_events": 27672,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101880725/streams/pid_1880738_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t28142.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t6166.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t28240, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c32-natural-r0-v52",
+      "kernel_events": 100068,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101881841/streams/pid_1881852_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t101828.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t18810.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t102147, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c32-natural-r0-candidate",
+      "kernel_events": 85644,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101883201/streams/pid_1883212_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t87410.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t19016.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t87727, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c32-natural-r1-candidate",
+      "kernel_events": 85242,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101884393/streams/pid_1884404_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t86991.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t19261.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t87306, CUPTI buffers: 50."
+      ]
+    },
+    {
+      "case": "c32-natural-r1-v52",
+      "kernel_events": 99456,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101885629/streams/pid_1885640_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Profiling has started.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Number of CUDA events collected: \t101206.",
+        "Not all OS runtime libraries events might have been collected.",
+        "Number of OS runtime libraries events collected: \t18884.",
+        "Profiling has stopped.",
+        "Number of CUPTI events produced: \t101523, CUPTI buffers: 50."
+      ]
+    }
+  ],
+  "serving_performance": "\ubbf8\uc2e4\ud589; instrumented timings are not serving evidence",
+  "CPU_stacks_context_switches": "\ubbf8\uce21\uc815",
+  "HTTP_GPU_clock_correlation": "not established by this verifier",
+  "goal_achieved": false
+}

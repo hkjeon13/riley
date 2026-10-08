@@ -1,0 +1,2727 @@
+{
+  "independent_counter_raw_replay": "PASS8",
+  "source_commit": "7a8409177c9efc210b7271963e109a26a62022b8",
+  "native_binary_sha256": "a2538eb69c3e59d6f971c56ec098fdb019c8bdf64497da5ef1c0b6453b7c8c86",
+  "lanes": [
+    {
+      "label": "rows1-r0-v52",
+      "active_rows_from_source_order": 1,
+      "metrics": {
+        "GPU Speed Of Light Throughput::DRAM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "10.17",
+          "value": 10.17
+        },
+        "GPU Speed Of Light Throughput::SM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "2.70",
+          "value": 2.7
+        },
+        "GPU Speed Of Light Throughput::Elapsed Cycles": {
+          "unit": "cycle",
+          "raw_value": "13501",
+          "value": 13501.0
+        },
+        "GPU Speed Of Light Throughput::Memory Throughput": {
+          "unit": "%",
+          "raw_value": "16.84",
+          "value": 16.84
+        },
+        "GPU Speed Of Light Throughput::DRAM Throughput": {
+          "unit": "%",
+          "raw_value": "0.01",
+          "value": 0.01
+        },
+        "GPU Speed Of Light Throughput::Duration": {
+          "unit": "us",
+          "raw_value": "4.99",
+          "value": 4.99
+        },
+        "GPU Speed Of Light Throughput::L1/TEX Cache Throughput": {
+          "unit": "%",
+          "raw_value": "23.79",
+          "value": 23.79
+        },
+        "GPU Speed Of Light Throughput::L2 Cache Throughput": {
+          "unit": "%",
+          "raw_value": "14.39",
+          "value": 14.39
+        },
+        "GPU Speed Of Light Throughput::SM Active Cycles": {
+          "unit": "cycle",
+          "raw_value": "9519.55",
+          "value": 9519.55
+        },
+        "GPU Speed Of Light Throughput::Compute (SM) Throughput": {
+          "unit": "%",
+          "raw_value": "16.84",
+          "value": 16.84
+        },
+        "Memory Workload Analysis::Memory Throughput": {
+          "unit": "Mbyte/s",
+          "raw_value": "51.28",
+          "value": 51.28
+        },
+        "Memory Workload Analysis::Mem Busy": {
+          "unit": "%",
+          "raw_value": "14.39",
+          "value": 14.39
+        },
+        "Memory Workload Analysis::Max Bandwidth": {
+          "unit": "%",
+          "raw_value": "16.84",
+          "value": 16.84
+        },
+        "Memory Workload Analysis::L1/TEX Hit Rate": {
+          "unit": "%",
+          "raw_value": "16.78",
+          "value": 16.78
+        },
+        "Memory Workload Analysis::L2 Compression Success Rate": {
+          "unit": "%",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Ratio": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Input Sectors": {
+          "unit": "sector",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Hit Rate": {
+          "unit": "%",
+          "raw_value": "98.58",
+          "value": 98.58
+        },
+        "Memory Workload Analysis::Mem Pipes Busy": {
+          "unit": "%",
+          "raw_value": "16.84",
+          "value": 16.84
+        },
+        "Scheduler Statistics::One or More Eligible": {
+          "unit": "%",
+          "raw_value": "9.54",
+          "value": 9.54
+        },
+        "Scheduler Statistics::Issued Warp Per Scheduler": {
+          "unit": "",
+          "raw_value": "0.10",
+          "value": 0.1
+        },
+        "Scheduler Statistics::No Eligible": {
+          "unit": "%",
+          "raw_value": "90.46",
+          "value": 90.46
+        },
+        "Scheduler Statistics::Active Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "1.00",
+          "value": 1.0
+        },
+        "Scheduler Statistics::Eligible Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "0.10",
+          "value": 0.1
+        },
+        "Warp State Statistics::Warp Cycles Per Issued Instruction": {
+          "unit": "cycle",
+          "raw_value": "10.49",
+          "value": 10.49
+        },
+        "Warp State Statistics::Warp Cycles Per Executed Instruction": {
+          "unit": "cycle",
+          "raw_value": "10.65",
+          "value": 10.65
+        },
+        "Warp State Statistics::Avg. Active Threads Per Warp": {
+          "unit": "",
+          "raw_value": "31.71",
+          "value": 31.71
+        },
+        "Warp State Statistics::Avg. Not Predicated Off Threads Per Warp": {
+          "unit": "",
+          "raw_value": "20.97",
+          "value": 20.97
+        },
+        "Launch Statistics::Block Size": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Function Cache Configuration": {
+          "unit": "",
+          "raw_value": "CachePreferNone",
+          "value": null
+        },
+        "Launch Statistics::Grid Size": {
+          "unit": "",
+          "raw_value": "192",
+          "value": 192.0
+        },
+        "Launch Statistics::Registers Per Thread": {
+          "unit": "register/thread",
+          "raw_value": "36",
+          "value": 36.0
+        },
+        "Launch Statistics::Shared Memory Configuration Size": {
+          "unit": "Kbyte",
+          "raw_value": "65.54",
+          "value": 65.54
+        },
+        "Launch Statistics::Driver Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::Dynamic Shared Memory Per Block": {
+          "unit": "byte/block",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Static Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::# SMs": {
+          "unit": "SM",
+          "raw_value": "128",
+          "value": 128.0
+        },
+        "Launch Statistics::Stack Size": {
+          "unit": "",
+          "raw_value": "1024",
+          "value": 1024.0
+        },
+        "Launch Statistics::Threads": {
+          "unit": "thread",
+          "raw_value": "12288",
+          "value": 12288.0
+        },
+        "Launch Statistics::# TPCs": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Enabled TPC IDs": {
+          "unit": "",
+          "raw_value": "all",
+          "value": null
+        },
+        "Launch Statistics::Uses Green Context": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Waves Per SM": {
+          "unit": "",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "Occupancy::Block Limit SM": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Registers": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Shared Mem": {
+          "unit": "block",
+          "raw_value": "32",
+          "value": 32.0
+        },
+        "Occupancy::Block Limit Warps": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Theoretical Active Warps per SM": {
+          "unit": "warp",
+          "raw_value": "48",
+          "value": 48.0
+        },
+        "Occupancy::Theoretical Occupancy": {
+          "unit": "%",
+          "raw_value": "100",
+          "value": 100.0
+        },
+        "Occupancy::Achieved Occupancy": {
+          "unit": "%",
+          "raw_value": "6.15",
+          "value": 6.15
+        },
+        "Occupancy::Achieved Active Warps Per SM": {
+          "unit": "warp",
+          "raw_value": "2.95",
+          "value": 2.95
+        }
+      },
+      "rules": [
+        {
+          "Rule Name": "SOLBottleneck",
+          "Rule Type": "OPT",
+          "Rule Description": "This kernel grid is too small to fill the available resources on this device, resulting in only 0.1 full waves across all SMs. Look at Launch Statistics for more details."
+        },
+        {
+          "Rule Name": "IssueSlotUtilization",
+          "Rule Type": "OPT",
+          "Rule Description": "Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only issues an instruction every 10.5 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 12 warps per scheduler, this workload allocates an average of 1.00 active warps per scheduler, but only an average of 0.10 warps were eligible per cycle. Eligible warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no eligible warp results in no instruction being issued and the issue slot remains unused. To increase the number of eligible warps, reduce the time the active warps are stalled by inspecting the top stall reasons on the Warp State Statistics and Source Counters sections."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "WRN",
+          "Rule Description": "The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could enable the rule to provide more guidance."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "OPT",
+          "Rule Description": "On average, each warp of this workload spends 6.1 cycles being stalled waiting for a scoreboard dependency on a L1TEX (local, global, surface, texture) operation. Find the instruction producing the data being waited upon to identify the culprit. To reduce the number of cycles waiting on L1TEX data accesses verify the memory access patterns are optimal for the target architecture, attempt to increase cache hit rates by increasing data locality (coalescing), or by changing the cache configuration. Consider moving frequently used data to shared memory. This stall type represents about 57.7% of the total average of 10.5 cycles between issuing two instructions."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "INF",
+          "Rule Description": "Check the Warp Stall Sampling (All Samples) table for the top stall locations in your source based on sampling data. The Kernel Profiling Guide (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference) provides more details on each stall reason."
+        },
+        {
+          "Rule Name": "ThreadDivergence",
+          "Rule Type": "OPT",
+          "Rule Description": "Instructions are executed in warps, which are groups of 32 threads. Optimal instruction throughput is achieved if all 32 threads of a warp execute the same instruction. The chosen launch configuration, early thread completion, and divergent flow control can significantly lower the number of active threads in a warp per cycle. This workload achieves an average of 31.7 threads being active per cycle. This is further reduced to 21.0 threads per warp due to predication. The compiler may use predication to avoid an actual branch. Instead, all instructions are scheduled, but a per-thread condition code or predicate controls which threads execute the instructions. Try to avoid different execution paths within a warp when possible."
+        },
+        {
+          "Rule Name": "LaunchConfiguration",
+          "Rule Type": "OPT",
+          "Rule Description": "If you execute __syncthreads() to synchronize the threads of a block, it is recommended to have at least two blocks per multiprocessor (compared to the currently executed 1.5 blocks) This way, blocks that aren't waiting for __syncthreads() can keep the hardware busy."
+        },
+        {
+          "Rule Name": "AchievedOccupancy",
+          "Rule Type": "OPT",
+          "Rule Description": "The difference between calculated theoretical (100.0%) and measured achieved occupancy (6.2%) can be the result of warp scheduling overheads or workload imbalances during the kernel execution. Load imbalances can occur between warps within a block as well as across blocks of the same kernel. See the CUDA Best Practices Guide (https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#occupancy) for more details on optimizing occupancy."
+        }
+      ]
+    },
+    {
+      "label": "rows1-r0-candidate",
+      "active_rows_from_source_order": 1,
+      "metrics": {
+        "GPU Speed Of Light Throughput::DRAM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "10.10",
+          "value": 10.1
+        },
+        "GPU Speed Of Light Throughput::SM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "2.68",
+          "value": 2.68
+        },
+        "GPU Speed Of Light Throughput::Elapsed Cycles": {
+          "unit": "cycle",
+          "raw_value": "11681",
+          "value": 11681.0
+        },
+        "GPU Speed Of Light Throughput::Memory Throughput": {
+          "unit": "%",
+          "raw_value": "16.69",
+          "value": 16.69
+        },
+        "GPU Speed Of Light Throughput::DRAM Throughput": {
+          "unit": "%",
+          "raw_value": "0.28",
+          "value": 0.28
+        },
+        "GPU Speed Of Light Throughput::Duration": {
+          "unit": "us",
+          "raw_value": "4.35",
+          "value": 4.35
+        },
+        "GPU Speed Of Light Throughput::L1/TEX Cache Throughput": {
+          "unit": "%",
+          "raw_value": "17.39",
+          "value": 17.39
+        },
+        "GPU Speed Of Light Throughput::L2 Cache Throughput": {
+          "unit": "%",
+          "raw_value": "16.69",
+          "value": 16.69
+        },
+        "GPU Speed Of Light Throughput::SM Active Cycles": {
+          "unit": "cycle",
+          "raw_value": "7678.88",
+          "value": 7678.88
+        },
+        "GPU Speed Of Light Throughput::Compute (SM) Throughput": {
+          "unit": "%",
+          "raw_value": "11.54",
+          "value": 11.54
+        },
+        "Memory Workload Analysis::Memory Throughput": {
+          "unit": "Gbyte/s",
+          "raw_value": "2.74",
+          "value": 2.74
+        },
+        "Memory Workload Analysis::Mem Busy": {
+          "unit": "%",
+          "raw_value": "16.69",
+          "value": 16.69
+        },
+        "Memory Workload Analysis::Max Bandwidth": {
+          "unit": "%",
+          "raw_value": "16.33",
+          "value": 16.33
+        },
+        "Memory Workload Analysis::L1/TEX Hit Rate": {
+          "unit": "%",
+          "raw_value": "16.78",
+          "value": 16.78
+        },
+        "Memory Workload Analysis::L2 Compression Success Rate": {
+          "unit": "%",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Ratio": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Input Sectors": {
+          "unit": "sector",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Hit Rate": {
+          "unit": "%",
+          "raw_value": "98.18",
+          "value": 98.18
+        },
+        "Memory Workload Analysis::Mem Pipes Busy": {
+          "unit": "%",
+          "raw_value": "11.54",
+          "value": 11.54
+        },
+        "Scheduler Statistics::One or More Eligible": {
+          "unit": "%",
+          "raw_value": "7.49",
+          "value": 7.49
+        },
+        "Scheduler Statistics::Issued Warp Per Scheduler": {
+          "unit": "",
+          "raw_value": "0.07",
+          "value": 0.07
+        },
+        "Scheduler Statistics::No Eligible": {
+          "unit": "%",
+          "raw_value": "92.51",
+          "value": 92.51
+        },
+        "Scheduler Statistics::Active Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "1.00",
+          "value": 1.0
+        },
+        "Scheduler Statistics::Eligible Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "0.07",
+          "value": 0.07
+        },
+        "Warp State Statistics::Warp Cycles Per Issued Instruction": {
+          "unit": "cycle",
+          "raw_value": "13.31",
+          "value": 13.31
+        },
+        "Warp State Statistics::Warp Cycles Per Executed Instruction": {
+          "unit": "cycle",
+          "raw_value": "13.63",
+          "value": 13.63
+        },
+        "Warp State Statistics::Avg. Active Threads Per Warp": {
+          "unit": "",
+          "raw_value": "31.54",
+          "value": 31.54
+        },
+        "Warp State Statistics::Avg. Not Predicated Off Threads Per Warp": {
+          "unit": "",
+          "raw_value": "22.09",
+          "value": 22.09
+        },
+        "Launch Statistics::Block Size": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Function Cache Configuration": {
+          "unit": "",
+          "raw_value": "CachePreferNone",
+          "value": null
+        },
+        "Launch Statistics::Grid Size": {
+          "unit": "",
+          "raw_value": "192",
+          "value": 192.0
+        },
+        "Launch Statistics::Registers Per Thread": {
+          "unit": "register/thread",
+          "raw_value": "36",
+          "value": 36.0
+        },
+        "Launch Statistics::Shared Memory Configuration Size": {
+          "unit": "Kbyte",
+          "raw_value": "65.54",
+          "value": 65.54
+        },
+        "Launch Statistics::Driver Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::Dynamic Shared Memory Per Block": {
+          "unit": "byte/block",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Static Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::# SMs": {
+          "unit": "SM",
+          "raw_value": "128",
+          "value": 128.0
+        },
+        "Launch Statistics::Stack Size": {
+          "unit": "",
+          "raw_value": "1024",
+          "value": 1024.0
+        },
+        "Launch Statistics::Threads": {
+          "unit": "thread",
+          "raw_value": "12288",
+          "value": 12288.0
+        },
+        "Launch Statistics::# TPCs": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Enabled TPC IDs": {
+          "unit": "",
+          "raw_value": "all",
+          "value": null
+        },
+        "Launch Statistics::Uses Green Context": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Waves Per SM": {
+          "unit": "",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "Occupancy::Block Limit SM": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Registers": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Shared Mem": {
+          "unit": "block",
+          "raw_value": "32",
+          "value": 32.0
+        },
+        "Occupancy::Block Limit Warps": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Theoretical Active Warps per SM": {
+          "unit": "warp",
+          "raw_value": "48",
+          "value": 48.0
+        },
+        "Occupancy::Theoretical Occupancy": {
+          "unit": "%",
+          "raw_value": "100",
+          "value": 100.0
+        },
+        "Occupancy::Achieved Occupancy": {
+          "unit": "%",
+          "raw_value": "6.13",
+          "value": 6.13
+        },
+        "Occupancy::Achieved Active Warps Per SM": {
+          "unit": "warp",
+          "raw_value": "2.94",
+          "value": 2.94
+        }
+      },
+      "rules": [
+        {
+          "Rule Name": "SOLBottleneck",
+          "Rule Type": "OPT",
+          "Rule Description": "This kernel grid is too small to fill the available resources on this device, resulting in only 0.1 full waves across all SMs. Look at Launch Statistics for more details."
+        },
+        {
+          "Rule Name": "IssueSlotUtilization",
+          "Rule Type": "OPT",
+          "Rule Description": "Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only issues an instruction every 13.3 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 12 warps per scheduler, this workload allocates an average of 1.00 active warps per scheduler, which already limits the scheduler to less than a warp per instruction."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "WRN",
+          "Rule Description": "The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could enable the rule to provide more guidance."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "OPT",
+          "Rule Description": "On average, each warp of this workload spends 8.2 cycles being stalled waiting for a scoreboard dependency on a L1TEX (local, global, surface, texture) operation. Find the instruction producing the data being waited upon to identify the culprit. To reduce the number of cycles waiting on L1TEX data accesses verify the memory access patterns are optimal for the target architecture, attempt to increase cache hit rates by increasing data locality (coalescing), or by changing the cache configuration. Consider moving frequently used data to shared memory. This stall type represents about 61.6% of the total average of 13.3 cycles between issuing two instructions."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "INF",
+          "Rule Description": "Check the Warp Stall Sampling (All Samples) table for the top stall locations in your source based on sampling data. The Kernel Profiling Guide (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference) provides more details on each stall reason."
+        },
+        {
+          "Rule Name": "ThreadDivergence",
+          "Rule Type": "OPT",
+          "Rule Description": "Instructions are executed in warps, which are groups of 32 threads. Optimal instruction throughput is achieved if all 32 threads of a warp execute the same instruction. The chosen launch configuration, early thread completion, and divergent flow control can significantly lower the number of active threads in a warp per cycle. This workload achieves an average of 31.5 threads being active per cycle. This is further reduced to 22.1 threads per warp due to predication. The compiler may use predication to avoid an actual branch. Instead, all instructions are scheduled, but a per-thread condition code or predicate controls which threads execute the instructions. Try to avoid different execution paths within a warp when possible."
+        },
+        {
+          "Rule Name": "LaunchConfiguration",
+          "Rule Type": "OPT",
+          "Rule Description": "If you execute __syncthreads() to synchronize the threads of a block, it is recommended to have at least two blocks per multiprocessor (compared to the currently executed 1.5 blocks) This way, blocks that aren't waiting for __syncthreads() can keep the hardware busy."
+        },
+        {
+          "Rule Name": "AchievedOccupancy",
+          "Rule Type": "OPT",
+          "Rule Description": "The difference between calculated theoretical (100.0%) and measured achieved occupancy (6.1%) can be the result of warp scheduling overheads or workload imbalances during the kernel execution. Load imbalances can occur between warps within a block as well as across blocks of the same kernel. See the CUDA Best Practices Guide (https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#occupancy) for more details on optimizing occupancy."
+        }
+      ]
+    },
+    {
+      "label": "rows1-r1-candidate",
+      "active_rows_from_source_order": 1,
+      "metrics": {
+        "GPU Speed Of Light Throughput::DRAM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "10.19",
+          "value": 10.19
+        },
+        "GPU Speed Of Light Throughput::SM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "2.69",
+          "value": 2.69
+        },
+        "GPU Speed Of Light Throughput::Elapsed Cycles": {
+          "unit": "cycle",
+          "raw_value": "11487",
+          "value": 11487.0
+        },
+        "GPU Speed Of Light Throughput::Memory Throughput": {
+          "unit": "%",
+          "raw_value": "16.98",
+          "value": 16.98
+        },
+        "GPU Speed Of Light Throughput::DRAM Throughput": {
+          "unit": "%",
+          "raw_value": "0.09",
+          "value": 0.09
+        },
+        "GPU Speed Of Light Throughput::Duration": {
+          "unit": "us",
+          "raw_value": "4.26",
+          "value": 4.26
+        },
+        "GPU Speed Of Light Throughput::L1/TEX Cache Throughput": {
+          "unit": "%",
+          "raw_value": "17.39",
+          "value": 17.39
+        },
+        "GPU Speed Of Light Throughput::L2 Cache Throughput": {
+          "unit": "%",
+          "raw_value": "16.98",
+          "value": 16.98
+        },
+        "GPU Speed Of Light Throughput::SM Active Cycles": {
+          "unit": "cycle",
+          "raw_value": "7678.20",
+          "value": 7678.2
+        },
+        "GPU Speed Of Light Throughput::Compute (SM) Throughput": {
+          "unit": "%",
+          "raw_value": "11.59",
+          "value": 11.59
+        },
+        "Memory Workload Analysis::Memory Throughput": {
+          "unit": "Mbyte/s",
+          "raw_value": "872.18",
+          "value": 872.18
+        },
+        "Memory Workload Analysis::Mem Busy": {
+          "unit": "%",
+          "raw_value": "16.98",
+          "value": 16.98
+        },
+        "Memory Workload Analysis::Max Bandwidth": {
+          "unit": "%",
+          "raw_value": "16.60",
+          "value": 16.6
+        },
+        "Memory Workload Analysis::L1/TEX Hit Rate": {
+          "unit": "%",
+          "raw_value": "16.78",
+          "value": 16.78
+        },
+        "Memory Workload Analysis::L2 Compression Success Rate": {
+          "unit": "%",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Ratio": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Input Sectors": {
+          "unit": "sector",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Hit Rate": {
+          "unit": "%",
+          "raw_value": "98.06",
+          "value": 98.06
+        },
+        "Memory Workload Analysis::Mem Pipes Busy": {
+          "unit": "%",
+          "raw_value": "11.59",
+          "value": 11.59
+        },
+        "Scheduler Statistics::One or More Eligible": {
+          "unit": "%",
+          "raw_value": "7.52",
+          "value": 7.52
+        },
+        "Scheduler Statistics::Issued Warp Per Scheduler": {
+          "unit": "",
+          "raw_value": "0.08",
+          "value": 0.08
+        },
+        "Scheduler Statistics::No Eligible": {
+          "unit": "%",
+          "raw_value": "92.48",
+          "value": 92.48
+        },
+        "Scheduler Statistics::Active Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "1.00",
+          "value": 1.0
+        },
+        "Scheduler Statistics::Eligible Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "0.08",
+          "value": 0.08
+        },
+        "Warp State Statistics::Warp Cycles Per Issued Instruction": {
+          "unit": "cycle",
+          "raw_value": "13.31",
+          "value": 13.31
+        },
+        "Warp State Statistics::Warp Cycles Per Executed Instruction": {
+          "unit": "cycle",
+          "raw_value": "13.62",
+          "value": 13.62
+        },
+        "Warp State Statistics::Avg. Active Threads Per Warp": {
+          "unit": "",
+          "raw_value": "31.54",
+          "value": 31.54
+        },
+        "Warp State Statistics::Avg. Not Predicated Off Threads Per Warp": {
+          "unit": "",
+          "raw_value": "22.09",
+          "value": 22.09
+        },
+        "Launch Statistics::Block Size": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Function Cache Configuration": {
+          "unit": "",
+          "raw_value": "CachePreferNone",
+          "value": null
+        },
+        "Launch Statistics::Grid Size": {
+          "unit": "",
+          "raw_value": "192",
+          "value": 192.0
+        },
+        "Launch Statistics::Registers Per Thread": {
+          "unit": "register/thread",
+          "raw_value": "36",
+          "value": 36.0
+        },
+        "Launch Statistics::Shared Memory Configuration Size": {
+          "unit": "Kbyte",
+          "raw_value": "65.54",
+          "value": 65.54
+        },
+        "Launch Statistics::Driver Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::Dynamic Shared Memory Per Block": {
+          "unit": "byte/block",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Static Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::# SMs": {
+          "unit": "SM",
+          "raw_value": "128",
+          "value": 128.0
+        },
+        "Launch Statistics::Stack Size": {
+          "unit": "",
+          "raw_value": "1024",
+          "value": 1024.0
+        },
+        "Launch Statistics::Threads": {
+          "unit": "thread",
+          "raw_value": "12288",
+          "value": 12288.0
+        },
+        "Launch Statistics::# TPCs": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Enabled TPC IDs": {
+          "unit": "",
+          "raw_value": "all",
+          "value": null
+        },
+        "Launch Statistics::Uses Green Context": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Waves Per SM": {
+          "unit": "",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "Occupancy::Block Limit SM": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Registers": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Shared Mem": {
+          "unit": "block",
+          "raw_value": "32",
+          "value": 32.0
+        },
+        "Occupancy::Block Limit Warps": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Theoretical Active Warps per SM": {
+          "unit": "warp",
+          "raw_value": "48",
+          "value": 48.0
+        },
+        "Occupancy::Theoretical Occupancy": {
+          "unit": "%",
+          "raw_value": "100",
+          "value": 100.0
+        },
+        "Occupancy::Achieved Occupancy": {
+          "unit": "%",
+          "raw_value": "6.13",
+          "value": 6.13
+        },
+        "Occupancy::Achieved Active Warps Per SM": {
+          "unit": "warp",
+          "raw_value": "2.94",
+          "value": 2.94
+        }
+      },
+      "rules": [
+        {
+          "Rule Name": "SOLBottleneck",
+          "Rule Type": "OPT",
+          "Rule Description": "This kernel grid is too small to fill the available resources on this device, resulting in only 0.1 full waves across all SMs. Look at Launch Statistics for more details."
+        },
+        {
+          "Rule Name": "IssueSlotUtilization",
+          "Rule Type": "OPT",
+          "Rule Description": "Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only issues an instruction every 13.3 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 12 warps per scheduler, this workload allocates an average of 1.00 active warps per scheduler, but only an average of 0.08 warps were eligible per cycle. Eligible warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no eligible warp results in no instruction being issued and the issue slot remains unused. To increase the number of eligible warps, reduce the time the active warps are stalled by inspecting the top stall reasons on the Warp State Statistics and Source Counters sections."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "WRN",
+          "Rule Description": "The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could enable the rule to provide more guidance."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "OPT",
+          "Rule Description": "On average, each warp of this workload spends 8.2 cycles being stalled waiting for a scoreboard dependency on a L1TEX (local, global, surface, texture) operation. Find the instruction producing the data being waited upon to identify the culprit. To reduce the number of cycles waiting on L1TEX data accesses verify the memory access patterns are optimal for the target architecture, attempt to increase cache hit rates by increasing data locality (coalescing), or by changing the cache configuration. Consider moving frequently used data to shared memory. This stall type represents about 62.0% of the total average of 13.3 cycles between issuing two instructions."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "INF",
+          "Rule Description": "Check the Warp Stall Sampling (All Samples) table for the top stall locations in your source based on sampling data. The Kernel Profiling Guide (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference) provides more details on each stall reason."
+        },
+        {
+          "Rule Name": "ThreadDivergence",
+          "Rule Type": "OPT",
+          "Rule Description": "Instructions are executed in warps, which are groups of 32 threads. Optimal instruction throughput is achieved if all 32 threads of a warp execute the same instruction. The chosen launch configuration, early thread completion, and divergent flow control can significantly lower the number of active threads in a warp per cycle. This workload achieves an average of 31.5 threads being active per cycle. This is further reduced to 22.1 threads per warp due to predication. The compiler may use predication to avoid an actual branch. Instead, all instructions are scheduled, but a per-thread condition code or predicate controls which threads execute the instructions. Try to avoid different execution paths within a warp when possible."
+        },
+        {
+          "Rule Name": "LaunchConfiguration",
+          "Rule Type": "OPT",
+          "Rule Description": "If you execute __syncthreads() to synchronize the threads of a block, it is recommended to have at least two blocks per multiprocessor (compared to the currently executed 1.5 blocks) This way, blocks that aren't waiting for __syncthreads() can keep the hardware busy."
+        },
+        {
+          "Rule Name": "AchievedOccupancy",
+          "Rule Type": "OPT",
+          "Rule Description": "The difference between calculated theoretical (100.0%) and measured achieved occupancy (6.1%) can be the result of warp scheduling overheads or workload imbalances during the kernel execution. Load imbalances can occur between warps within a block as well as across blocks of the same kernel. See the CUDA Best Practices Guide (https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#occupancy) for more details on optimizing occupancy."
+        }
+      ]
+    },
+    {
+      "label": "rows1-r1-v52",
+      "active_rows_from_source_order": 1,
+      "metrics": {
+        "GPU Speed Of Light Throughput::DRAM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "10.13",
+          "value": 10.13
+        },
+        "GPU Speed Of Light Throughput::SM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "2.64",
+          "value": 2.64
+        },
+        "GPU Speed Of Light Throughput::Elapsed Cycles": {
+          "unit": "cycle",
+          "raw_value": "13477",
+          "value": 13477.0
+        },
+        "GPU Speed Of Light Throughput::Memory Throughput": {
+          "unit": "%",
+          "raw_value": "16.84",
+          "value": 16.84
+        },
+        "GPU Speed Of Light Throughput::DRAM Throughput": {
+          "unit": "%",
+          "raw_value": "0.05",
+          "value": 0.05
+        },
+        "GPU Speed Of Light Throughput::Duration": {
+          "unit": "us",
+          "raw_value": "5.09",
+          "value": 5.09
+        },
+        "GPU Speed Of Light Throughput::L1/TEX Cache Throughput": {
+          "unit": "%",
+          "raw_value": "23.78",
+          "value": 23.78
+        },
+        "GPU Speed Of Light Throughput::L2 Cache Throughput": {
+          "unit": "%",
+          "raw_value": "14.48",
+          "value": 14.48
+        },
+        "GPU Speed Of Light Throughput::SM Active Cycles": {
+          "unit": "cycle",
+          "raw_value": "9524.49",
+          "value": 9524.49
+        },
+        "GPU Speed Of Light Throughput::Compute (SM) Throughput": {
+          "unit": "%",
+          "raw_value": "16.84",
+          "value": 16.84
+        },
+        "Memory Workload Analysis::Memory Throughput": {
+          "unit": "Mbyte/s",
+          "raw_value": "477.99",
+          "value": 477.99
+        },
+        "Memory Workload Analysis::Mem Busy": {
+          "unit": "%",
+          "raw_value": "14.48",
+          "value": 14.48
+        },
+        "Memory Workload Analysis::Max Bandwidth": {
+          "unit": "%",
+          "raw_value": "16.84",
+          "value": 16.84
+        },
+        "Memory Workload Analysis::L1/TEX Hit Rate": {
+          "unit": "%",
+          "raw_value": "16.78",
+          "value": 16.78
+        },
+        "Memory Workload Analysis::L2 Compression Success Rate": {
+          "unit": "%",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Ratio": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Input Sectors": {
+          "unit": "sector",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Hit Rate": {
+          "unit": "%",
+          "raw_value": "97.98",
+          "value": 97.98
+        },
+        "Memory Workload Analysis::Mem Pipes Busy": {
+          "unit": "%",
+          "raw_value": "16.84",
+          "value": 16.84
+        },
+        "Scheduler Statistics::One or More Eligible": {
+          "unit": "%",
+          "raw_value": "9.51",
+          "value": 9.51
+        },
+        "Scheduler Statistics::Issued Warp Per Scheduler": {
+          "unit": "",
+          "raw_value": "0.10",
+          "value": 0.1
+        },
+        "Scheduler Statistics::No Eligible": {
+          "unit": "%",
+          "raw_value": "90.49",
+          "value": 90.49
+        },
+        "Scheduler Statistics::Active Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "1.00",
+          "value": 1.0
+        },
+        "Scheduler Statistics::Eligible Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "0.10",
+          "value": 0.1
+        },
+        "Warp State Statistics::Warp Cycles Per Issued Instruction": {
+          "unit": "cycle",
+          "raw_value": "10.50",
+          "value": 10.5
+        },
+        "Warp State Statistics::Warp Cycles Per Executed Instruction": {
+          "unit": "cycle",
+          "raw_value": "10.65",
+          "value": 10.65
+        },
+        "Warp State Statistics::Avg. Active Threads Per Warp": {
+          "unit": "",
+          "raw_value": "31.71",
+          "value": 31.71
+        },
+        "Warp State Statistics::Avg. Not Predicated Off Threads Per Warp": {
+          "unit": "",
+          "raw_value": "20.97",
+          "value": 20.97
+        },
+        "Launch Statistics::Block Size": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Function Cache Configuration": {
+          "unit": "",
+          "raw_value": "CachePreferNone",
+          "value": null
+        },
+        "Launch Statistics::Grid Size": {
+          "unit": "",
+          "raw_value": "192",
+          "value": 192.0
+        },
+        "Launch Statistics::Registers Per Thread": {
+          "unit": "register/thread",
+          "raw_value": "36",
+          "value": 36.0
+        },
+        "Launch Statistics::Shared Memory Configuration Size": {
+          "unit": "Kbyte",
+          "raw_value": "65.54",
+          "value": 65.54
+        },
+        "Launch Statistics::Driver Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::Dynamic Shared Memory Per Block": {
+          "unit": "byte/block",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Static Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::# SMs": {
+          "unit": "SM",
+          "raw_value": "128",
+          "value": 128.0
+        },
+        "Launch Statistics::Stack Size": {
+          "unit": "",
+          "raw_value": "1024",
+          "value": 1024.0
+        },
+        "Launch Statistics::Threads": {
+          "unit": "thread",
+          "raw_value": "12288",
+          "value": 12288.0
+        },
+        "Launch Statistics::# TPCs": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Enabled TPC IDs": {
+          "unit": "",
+          "raw_value": "all",
+          "value": null
+        },
+        "Launch Statistics::Uses Green Context": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Waves Per SM": {
+          "unit": "",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "Occupancy::Block Limit SM": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Registers": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Shared Mem": {
+          "unit": "block",
+          "raw_value": "32",
+          "value": 32.0
+        },
+        "Occupancy::Block Limit Warps": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Theoretical Active Warps per SM": {
+          "unit": "warp",
+          "raw_value": "48",
+          "value": 48.0
+        },
+        "Occupancy::Theoretical Occupancy": {
+          "unit": "%",
+          "raw_value": "100",
+          "value": 100.0
+        },
+        "Occupancy::Achieved Occupancy": {
+          "unit": "%",
+          "raw_value": "6.15",
+          "value": 6.15
+        },
+        "Occupancy::Achieved Active Warps Per SM": {
+          "unit": "warp",
+          "raw_value": "2.95",
+          "value": 2.95
+        }
+      },
+      "rules": [
+        {
+          "Rule Name": "SOLBottleneck",
+          "Rule Type": "OPT",
+          "Rule Description": "This kernel grid is too small to fill the available resources on this device, resulting in only 0.1 full waves across all SMs. Look at Launch Statistics for more details."
+        },
+        {
+          "Rule Name": "IssueSlotUtilization",
+          "Rule Type": "OPT",
+          "Rule Description": "Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only issues an instruction every 10.5 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 12 warps per scheduler, this workload allocates an average of 1.00 active warps per scheduler, which already limits the scheduler to less than a warp per instruction."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "WRN",
+          "Rule Description": "The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could enable the rule to provide more guidance."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "OPT",
+          "Rule Description": "On average, each warp of this workload spends 6.1 cycles being stalled waiting for a scoreboard dependency on a L1TEX (local, global, surface, texture) operation. Find the instruction producing the data being waited upon to identify the culprit. To reduce the number of cycles waiting on L1TEX data accesses verify the memory access patterns are optimal for the target architecture, attempt to increase cache hit rates by increasing data locality (coalescing), or by changing the cache configuration. Consider moving frequently used data to shared memory. This stall type represents about 58.0% of the total average of 10.5 cycles between issuing two instructions."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "INF",
+          "Rule Description": "Check the Warp Stall Sampling (All Samples) table for the top stall locations in your source based on sampling data. The Kernel Profiling Guide (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference) provides more details on each stall reason."
+        },
+        {
+          "Rule Name": "ThreadDivergence",
+          "Rule Type": "OPT",
+          "Rule Description": "Instructions are executed in warps, which are groups of 32 threads. Optimal instruction throughput is achieved if all 32 threads of a warp execute the same instruction. The chosen launch configuration, early thread completion, and divergent flow control can significantly lower the number of active threads in a warp per cycle. This workload achieves an average of 31.7 threads being active per cycle. This is further reduced to 21.0 threads per warp due to predication. The compiler may use predication to avoid an actual branch. Instead, all instructions are scheduled, but a per-thread condition code or predicate controls which threads execute the instructions. Try to avoid different execution paths within a warp when possible."
+        },
+        {
+          "Rule Name": "LaunchConfiguration",
+          "Rule Type": "OPT",
+          "Rule Description": "If you execute __syncthreads() to synchronize the threads of a block, it is recommended to have at least two blocks per multiprocessor (compared to the currently executed 1.5 blocks) This way, blocks that aren't waiting for __syncthreads() can keep the hardware busy."
+        },
+        {
+          "Rule Name": "AchievedOccupancy",
+          "Rule Type": "OPT",
+          "Rule Description": "The difference between calculated theoretical (100.0%) and measured achieved occupancy (6.2%) can be the result of warp scheduling overheads or workload imbalances during the kernel execution. Load imbalances can occur between warps within a block as well as across blocks of the same kernel. See the CUDA Best Practices Guide (https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#occupancy) for more details on optimizing occupancy."
+        }
+      ]
+    },
+    {
+      "label": "rows32-r0-v52",
+      "active_rows_from_source_order": 32,
+      "metrics": {
+        "GPU Speed Of Light Throughput::DRAM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "10.19",
+          "value": 10.19
+        },
+        "GPU Speed Of Light Throughput::SM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "2.57",
+          "value": 2.57
+        },
+        "GPU Speed Of Light Throughput::Elapsed Cycles": {
+          "unit": "cycle",
+          "raw_value": "21581",
+          "value": 21581.0
+        },
+        "GPU Speed Of Light Throughput::Memory Throughput": {
+          "unit": "%",
+          "raw_value": "33.94",
+          "value": 33.94
+        },
+        "GPU Speed Of Light Throughput::DRAM Throughput": {
+          "unit": "%",
+          "raw_value": "0.02",
+          "value": 0.02
+        },
+        "GPU Speed Of Light Throughput::Duration": {
+          "unit": "us",
+          "raw_value": "8.38",
+          "value": 8.38
+        },
+        "GPU Speed Of Light Throughput::L1/TEX Cache Throughput": {
+          "unit": "%",
+          "raw_value": "43.11",
+          "value": 43.11
+        },
+        "GPU Speed Of Light Throughput::L2 Cache Throughput": {
+          "unit": "%",
+          "raw_value": "27.66",
+          "value": 27.66
+        },
+        "GPU Speed Of Light Throughput::SM Active Cycles": {
+          "unit": "cycle",
+          "raw_value": "16839.91",
+          "value": 16839.91
+        },
+        "GPU Speed Of Light Throughput::Compute (SM) Throughput": {
+          "unit": "%",
+          "raw_value": "10.89",
+          "value": 10.89
+        },
+        "Memory Workload Analysis::Memory Throughput": {
+          "unit": "Mbyte/s",
+          "raw_value": "198.47",
+          "value": 198.47
+        },
+        "Memory Workload Analysis::Mem Busy": {
+          "unit": "%",
+          "raw_value": "33.94",
+          "value": 33.94
+        },
+        "Memory Workload Analysis::Max Bandwidth": {
+          "unit": "%",
+          "raw_value": "27.31",
+          "value": 27.31
+        },
+        "Memory Workload Analysis::L1/TEX Hit Rate": {
+          "unit": "%",
+          "raw_value": "73.62",
+          "value": 73.62
+        },
+        "Memory Workload Analysis::L2 Compression Success Rate": {
+          "unit": "%",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Ratio": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Input Sectors": {
+          "unit": "sector",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Hit Rate": {
+          "unit": "%",
+          "raw_value": "99.27",
+          "value": 99.27
+        },
+        "Memory Workload Analysis::Mem Pipes Busy": {
+          "unit": "%",
+          "raw_value": "10.89",
+          "value": 10.89
+        },
+        "Scheduler Statistics::One or More Eligible": {
+          "unit": "%",
+          "raw_value": "5.74",
+          "value": 5.74
+        },
+        "Scheduler Statistics::Issued Warp Per Scheduler": {
+          "unit": "",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "Scheduler Statistics::No Eligible": {
+          "unit": "%",
+          "raw_value": "94.26",
+          "value": 94.26
+        },
+        "Scheduler Statistics::Active Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "1.01",
+          "value": 1.01
+        },
+        "Scheduler Statistics::Eligible Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "Warp State Statistics::Warp Cycles Per Issued Instruction": {
+          "unit": "cycle",
+          "raw_value": "17.53",
+          "value": 17.53
+        },
+        "Warp State Statistics::Warp Cycles Per Executed Instruction": {
+          "unit": "cycle",
+          "raw_value": "17.77",
+          "value": 17.77
+        },
+        "Warp State Statistics::Avg. Active Threads Per Warp": {
+          "unit": "",
+          "raw_value": "32",
+          "value": 32.0
+        },
+        "Warp State Statistics::Avg. Not Predicated Off Threads Per Warp": {
+          "unit": "",
+          "raw_value": "31.73",
+          "value": 31.73
+        },
+        "Launch Statistics::Block Size": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Function Cache Configuration": {
+          "unit": "",
+          "raw_value": "CachePreferNone",
+          "value": null
+        },
+        "Launch Statistics::Grid Size": {
+          "unit": "",
+          "raw_value": "192",
+          "value": 192.0
+        },
+        "Launch Statistics::Registers Per Thread": {
+          "unit": "register/thread",
+          "raw_value": "36",
+          "value": 36.0
+        },
+        "Launch Statistics::Shared Memory Configuration Size": {
+          "unit": "Kbyte",
+          "raw_value": "65.54",
+          "value": 65.54
+        },
+        "Launch Statistics::Driver Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::Dynamic Shared Memory Per Block": {
+          "unit": "byte/block",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Static Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::# SMs": {
+          "unit": "SM",
+          "raw_value": "128",
+          "value": 128.0
+        },
+        "Launch Statistics::Stack Size": {
+          "unit": "",
+          "raw_value": "1024",
+          "value": 1024.0
+        },
+        "Launch Statistics::Threads": {
+          "unit": "thread",
+          "raw_value": "12288",
+          "value": 12288.0
+        },
+        "Launch Statistics::# TPCs": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Enabled TPC IDs": {
+          "unit": "",
+          "raw_value": "all",
+          "value": null
+        },
+        "Launch Statistics::Uses Green Context": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Waves Per SM": {
+          "unit": "",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "Occupancy::Block Limit SM": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Registers": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Shared Mem": {
+          "unit": "block",
+          "raw_value": "32",
+          "value": 32.0
+        },
+        "Occupancy::Block Limit Warps": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Theoretical Active Warps per SM": {
+          "unit": "warp",
+          "raw_value": "48",
+          "value": 48.0
+        },
+        "Occupancy::Theoretical Occupancy": {
+          "unit": "%",
+          "raw_value": "100",
+          "value": 100.0
+        },
+        "Occupancy::Achieved Occupancy": {
+          "unit": "%",
+          "raw_value": "6.26",
+          "value": 6.26
+        },
+        "Occupancy::Achieved Active Warps Per SM": {
+          "unit": "warp",
+          "raw_value": "3.00",
+          "value": 3.0
+        }
+      },
+      "rules": [
+        {
+          "Rule Name": "SOLBottleneck",
+          "Rule Type": "OPT",
+          "Rule Description": "This kernel grid is too small to fill the available resources on this device, resulting in only 0.1 full waves across all SMs. Look at Launch Statistics for more details."
+        },
+        {
+          "Rule Name": "IssueSlotUtilization",
+          "Rule Type": "OPT",
+          "Rule Description": "Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only issues an instruction every 17.4 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 12 warps per scheduler, this workload allocates an average of 1.01 active warps per scheduler, but only an average of 0.06 warps were eligible per cycle. Eligible warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no eligible warp results in no instruction being issued and the issue slot remains unused. To increase the number of eligible warps, reduce the time the active warps are stalled by inspecting the top stall reasons on the Warp State Statistics and Source Counters sections."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "WRN",
+          "Rule Description": "The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could enable the rule to provide more guidance."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "OPT",
+          "Rule Description": "On average, each warp of this workload spends 13.2 cycles being stalled waiting for a scoreboard dependency on a L1TEX (local, global, surface, texture) operation. Find the instruction producing the data being waited upon to identify the culprit. To reduce the number of cycles waiting on L1TEX data accesses verify the memory access patterns are optimal for the target architecture, attempt to increase cache hit rates by increasing data locality (coalescing), or by changing the cache configuration. Consider moving frequently used data to shared memory. This stall type represents about 75.2% of the total average of 17.5 cycles between issuing two instructions."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "INF",
+          "Rule Description": "Check the Warp Stall Sampling (All Samples) table for the top stall locations in your source based on sampling data. The Kernel Profiling Guide (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference) provides more details on each stall reason."
+        },
+        {
+          "Rule Name": "LaunchConfiguration",
+          "Rule Type": "OPT",
+          "Rule Description": "If you execute __syncthreads() to synchronize the threads of a block, it is recommended to have at least two blocks per multiprocessor (compared to the currently executed 1.5 blocks) This way, blocks that aren't waiting for __syncthreads() can keep the hardware busy."
+        },
+        {
+          "Rule Name": "AchievedOccupancy",
+          "Rule Type": "OPT",
+          "Rule Description": "The difference between calculated theoretical (100.0%) and measured achieved occupancy (6.3%) can be the result of warp scheduling overheads or workload imbalances during the kernel execution. Load imbalances can occur between warps within a block as well as across blocks of the same kernel. See the CUDA Best Practices Guide (https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#occupancy) for more details on optimizing occupancy."
+        }
+      ]
+    },
+    {
+      "label": "rows32-r0-candidate",
+      "active_rows_from_source_order": 32,
+      "metrics": {
+        "GPU Speed Of Light Throughput::DRAM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "10.17",
+          "value": 10.17
+        },
+        "GPU Speed Of Light Throughput::SM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "2.69",
+          "value": 2.69
+        },
+        "GPU Speed Of Light Throughput::Elapsed Cycles": {
+          "unit": "cycle",
+          "raw_value": "20375",
+          "value": 20375.0
+        },
+        "GPU Speed Of Light Throughput::Memory Throughput": {
+          "unit": "%",
+          "raw_value": "35.65",
+          "value": 35.65
+        },
+        "GPU Speed Of Light Throughput::DRAM Throughput": {
+          "unit": "%",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "GPU Speed Of Light Throughput::Duration": {
+          "unit": "us",
+          "raw_value": "7.55",
+          "value": 7.55
+        },
+        "GPU Speed Of Light Throughput::L1/TEX Cache Throughput": {
+          "unit": "%",
+          "raw_value": "46.27",
+          "value": 46.27
+        },
+        "GPU Speed Of Light Throughput::L2 Cache Throughput": {
+          "unit": "%",
+          "raw_value": "29.41",
+          "value": 29.41
+        },
+        "GPU Speed Of Light Throughput::SM Active Cycles": {
+          "unit": "cycle",
+          "raw_value": "15696.04",
+          "value": 15696.04
+        },
+        "GPU Speed Of Light Throughput::Compute (SM) Throughput": {
+          "unit": "%",
+          "raw_value": "11.43",
+          "value": 11.43
+        },
+        "Memory Workload Analysis::Memory Throughput": {
+          "unit": "Mbyte/s",
+          "raw_value": "559.32",
+          "value": 559.32
+        },
+        "Memory Workload Analysis::Mem Busy": {
+          "unit": "%",
+          "raw_value": "35.65",
+          "value": 35.65
+        },
+        "Memory Workload Analysis::Max Bandwidth": {
+          "unit": "%",
+          "raw_value": "28.56",
+          "value": 28.56
+        },
+        "Memory Workload Analysis::L1/TEX Hit Rate": {
+          "unit": "%",
+          "raw_value": "73.62",
+          "value": 73.62
+        },
+        "Memory Workload Analysis::L2 Compression Success Rate": {
+          "unit": "%",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Ratio": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Input Sectors": {
+          "unit": "sector",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Hit Rate": {
+          "unit": "%",
+          "raw_value": "98.77",
+          "value": 98.77
+        },
+        "Memory Workload Analysis::Mem Pipes Busy": {
+          "unit": "%",
+          "raw_value": "11.43",
+          "value": 11.43
+        },
+        "Scheduler Statistics::One or More Eligible": {
+          "unit": "%",
+          "raw_value": "6.07",
+          "value": 6.07
+        },
+        "Scheduler Statistics::Issued Warp Per Scheduler": {
+          "unit": "",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "Scheduler Statistics::No Eligible": {
+          "unit": "%",
+          "raw_value": "93.93",
+          "value": 93.93
+        },
+        "Scheduler Statistics::Active Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "1.00",
+          "value": 1.0
+        },
+        "Scheduler Statistics::Eligible Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "Warp State Statistics::Warp Cycles Per Issued Instruction": {
+          "unit": "cycle",
+          "raw_value": "16.41",
+          "value": 16.41
+        },
+        "Warp State Statistics::Warp Cycles Per Executed Instruction": {
+          "unit": "cycle",
+          "raw_value": "16.63",
+          "value": 16.63
+        },
+        "Warp State Statistics::Avg. Active Threads Per Warp": {
+          "unit": "",
+          "raw_value": "32",
+          "value": 32.0
+        },
+        "Warp State Statistics::Avg. Not Predicated Off Threads Per Warp": {
+          "unit": "",
+          "raw_value": "31.36",
+          "value": 31.36
+        },
+        "Launch Statistics::Block Size": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Function Cache Configuration": {
+          "unit": "",
+          "raw_value": "CachePreferNone",
+          "value": null
+        },
+        "Launch Statistics::Grid Size": {
+          "unit": "",
+          "raw_value": "192",
+          "value": 192.0
+        },
+        "Launch Statistics::Registers Per Thread": {
+          "unit": "register/thread",
+          "raw_value": "36",
+          "value": 36.0
+        },
+        "Launch Statistics::Shared Memory Configuration Size": {
+          "unit": "Kbyte",
+          "raw_value": "65.54",
+          "value": 65.54
+        },
+        "Launch Statistics::Driver Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::Dynamic Shared Memory Per Block": {
+          "unit": "byte/block",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Static Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::# SMs": {
+          "unit": "SM",
+          "raw_value": "128",
+          "value": 128.0
+        },
+        "Launch Statistics::Stack Size": {
+          "unit": "",
+          "raw_value": "1024",
+          "value": 1024.0
+        },
+        "Launch Statistics::Threads": {
+          "unit": "thread",
+          "raw_value": "12288",
+          "value": 12288.0
+        },
+        "Launch Statistics::# TPCs": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Enabled TPC IDs": {
+          "unit": "",
+          "raw_value": "all",
+          "value": null
+        },
+        "Launch Statistics::Uses Green Context": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Waves Per SM": {
+          "unit": "",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "Occupancy::Block Limit SM": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Registers": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Shared Mem": {
+          "unit": "block",
+          "raw_value": "32",
+          "value": 32.0
+        },
+        "Occupancy::Block Limit Warps": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Theoretical Active Warps per SM": {
+          "unit": "warp",
+          "raw_value": "48",
+          "value": 48.0
+        },
+        "Occupancy::Theoretical Occupancy": {
+          "unit": "%",
+          "raw_value": "100",
+          "value": 100.0
+        },
+        "Occupancy::Achieved Occupancy": {
+          "unit": "%",
+          "raw_value": "6.27",
+          "value": 6.27
+        },
+        "Occupancy::Achieved Active Warps Per SM": {
+          "unit": "warp",
+          "raw_value": "3.01",
+          "value": 3.01
+        }
+      },
+      "rules": [
+        {
+          "Rule Name": "SOLBottleneck",
+          "Rule Type": "OPT",
+          "Rule Description": "This kernel grid is too small to fill the available resources on this device, resulting in only 0.1 full waves across all SMs. Look at Launch Statistics for more details."
+        },
+        {
+          "Rule Name": "IssueSlotUtilization",
+          "Rule Type": "OPT",
+          "Rule Description": "Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only issues an instruction every 16.5 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 12 warps per scheduler, this workload allocates an average of 1.00 active warps per scheduler, which already limits the scheduler to less than a warp per instruction."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "WRN",
+          "Rule Description": "The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could enable the rule to provide more guidance."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "OPT",
+          "Rule Description": "On average, each warp of this workload spends 11.9 cycles being stalled waiting for a scoreboard dependency on a L1TEX (local, global, surface, texture) operation. Find the instruction producing the data being waited upon to identify the culprit. To reduce the number of cycles waiting on L1TEX data accesses verify the memory access patterns are optimal for the target architecture, attempt to increase cache hit rates by increasing data locality (coalescing), or by changing the cache configuration. Consider moving frequently used data to shared memory. This stall type represents about 72.8% of the total average of 16.4 cycles between issuing two instructions."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "INF",
+          "Rule Description": "Check the Warp Stall Sampling (All Samples) table for the top stall locations in your source based on sampling data. The Kernel Profiling Guide (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference) provides more details on each stall reason."
+        },
+        {
+          "Rule Name": "LaunchConfiguration",
+          "Rule Type": "OPT",
+          "Rule Description": "If you execute __syncthreads() to synchronize the threads of a block, it is recommended to have at least two blocks per multiprocessor (compared to the currently executed 1.5 blocks) This way, blocks that aren't waiting for __syncthreads() can keep the hardware busy."
+        },
+        {
+          "Rule Name": "AchievedOccupancy",
+          "Rule Type": "OPT",
+          "Rule Description": "The difference between calculated theoretical (100.0%) and measured achieved occupancy (6.3%) can be the result of warp scheduling overheads or workload imbalances during the kernel execution. Load imbalances can occur between warps within a block as well as across blocks of the same kernel. See the CUDA Best Practices Guide (https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#occupancy) for more details on optimizing occupancy."
+        }
+      ]
+    },
+    {
+      "label": "rows32-r1-candidate",
+      "active_rows_from_source_order": 32,
+      "metrics": {
+        "GPU Speed Of Light Throughput::DRAM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "10.16",
+          "value": 10.16
+        },
+        "GPU Speed Of Light Throughput::SM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "2.57",
+          "value": 2.57
+        },
+        "GPU Speed Of Light Throughput::Elapsed Cycles": {
+          "unit": "cycle",
+          "raw_value": "19219",
+          "value": 19219.0
+        },
+        "GPU Speed Of Light Throughput::Memory Throughput": {
+          "unit": "%",
+          "raw_value": "38.17",
+          "value": 38.17
+        },
+        "GPU Speed Of Light Throughput::DRAM Throughput": {
+          "unit": "%",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "GPU Speed Of Light Throughput::Duration": {
+          "unit": "us",
+          "raw_value": "7.46",
+          "value": 7.46
+        },
+        "GPU Speed Of Light Throughput::L1/TEX Cache Throughput": {
+          "unit": "%",
+          "raw_value": "50.51",
+          "value": 50.51
+        },
+        "GPU Speed Of Light Throughput::L2 Cache Throughput": {
+          "unit": "%",
+          "raw_value": "31.08",
+          "value": 31.08
+        },
+        "GPU Speed Of Light Throughput::SM Active Cycles": {
+          "unit": "cycle",
+          "raw_value": "14380.75",
+          "value": 14380.75
+        },
+        "GPU Speed Of Light Throughput::Compute (SM) Throughput": {
+          "unit": "%",
+          "raw_value": "12.23",
+          "value": 12.23
+        },
+        "Memory Workload Analysis::Memory Throughput": {
+          "unit": "Mbyte/s",
+          "raw_value": "566.52",
+          "value": 566.52
+        },
+        "Memory Workload Analysis::Mem Busy": {
+          "unit": "%",
+          "raw_value": "38.17",
+          "value": 38.17
+        },
+        "Memory Workload Analysis::Max Bandwidth": {
+          "unit": "%",
+          "raw_value": "30.28",
+          "value": 30.28
+        },
+        "Memory Workload Analysis::L1/TEX Hit Rate": {
+          "unit": "%",
+          "raw_value": "73.62",
+          "value": 73.62
+        },
+        "Memory Workload Analysis::L2 Compression Success Rate": {
+          "unit": "%",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Ratio": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Input Sectors": {
+          "unit": "sector",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Hit Rate": {
+          "unit": "%",
+          "raw_value": "99.13",
+          "value": 99.13
+        },
+        "Memory Workload Analysis::Mem Pipes Busy": {
+          "unit": "%",
+          "raw_value": "12.23",
+          "value": 12.23
+        },
+        "Scheduler Statistics::One or More Eligible": {
+          "unit": "%",
+          "raw_value": "6.67",
+          "value": 6.67
+        },
+        "Scheduler Statistics::Issued Warp Per Scheduler": {
+          "unit": "",
+          "raw_value": "0.07",
+          "value": 0.07
+        },
+        "Scheduler Statistics::No Eligible": {
+          "unit": "%",
+          "raw_value": "93.33",
+          "value": 93.33
+        },
+        "Scheduler Statistics::Active Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "1.00",
+          "value": 1.0
+        },
+        "Scheduler Statistics::Eligible Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "0.07",
+          "value": 0.07
+        },
+        "Warp State Statistics::Warp Cycles Per Issued Instruction": {
+          "unit": "cycle",
+          "raw_value": "15.04",
+          "value": 15.04
+        },
+        "Warp State Statistics::Warp Cycles Per Executed Instruction": {
+          "unit": "cycle",
+          "raw_value": "15.25",
+          "value": 15.25
+        },
+        "Warp State Statistics::Avg. Active Threads Per Warp": {
+          "unit": "",
+          "raw_value": "32",
+          "value": 32.0
+        },
+        "Warp State Statistics::Avg. Not Predicated Off Threads Per Warp": {
+          "unit": "",
+          "raw_value": "31.36",
+          "value": 31.36
+        },
+        "Launch Statistics::Block Size": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Function Cache Configuration": {
+          "unit": "",
+          "raw_value": "CachePreferNone",
+          "value": null
+        },
+        "Launch Statistics::Grid Size": {
+          "unit": "",
+          "raw_value": "192",
+          "value": 192.0
+        },
+        "Launch Statistics::Registers Per Thread": {
+          "unit": "register/thread",
+          "raw_value": "36",
+          "value": 36.0
+        },
+        "Launch Statistics::Shared Memory Configuration Size": {
+          "unit": "Kbyte",
+          "raw_value": "65.54",
+          "value": 65.54
+        },
+        "Launch Statistics::Driver Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::Dynamic Shared Memory Per Block": {
+          "unit": "byte/block",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Static Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::# SMs": {
+          "unit": "SM",
+          "raw_value": "128",
+          "value": 128.0
+        },
+        "Launch Statistics::Stack Size": {
+          "unit": "",
+          "raw_value": "1024",
+          "value": 1024.0
+        },
+        "Launch Statistics::Threads": {
+          "unit": "thread",
+          "raw_value": "12288",
+          "value": 12288.0
+        },
+        "Launch Statistics::# TPCs": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Enabled TPC IDs": {
+          "unit": "",
+          "raw_value": "all",
+          "value": null
+        },
+        "Launch Statistics::Uses Green Context": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Waves Per SM": {
+          "unit": "",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "Occupancy::Block Limit SM": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Registers": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Shared Mem": {
+          "unit": "block",
+          "raw_value": "32",
+          "value": 32.0
+        },
+        "Occupancy::Block Limit Warps": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Theoretical Active Warps per SM": {
+          "unit": "warp",
+          "raw_value": "48",
+          "value": 48.0
+        },
+        "Occupancy::Theoretical Occupancy": {
+          "unit": "%",
+          "raw_value": "100",
+          "value": 100.0
+        },
+        "Occupancy::Achieved Occupancy": {
+          "unit": "%",
+          "raw_value": "6.27",
+          "value": 6.27
+        },
+        "Occupancy::Achieved Active Warps Per SM": {
+          "unit": "warp",
+          "raw_value": "3.01",
+          "value": 3.01
+        }
+      },
+      "rules": [
+        {
+          "Rule Name": "SOLBottleneck",
+          "Rule Type": "OPT",
+          "Rule Description": "This kernel grid is too small to fill the available resources on this device, resulting in only 0.1 full waves across all SMs. Look at Launch Statistics for more details."
+        },
+        {
+          "Rule Name": "IssueSlotUtilization",
+          "Rule Type": "OPT",
+          "Rule Description": "Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only issues an instruction every 15.0 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 12 warps per scheduler, this workload allocates an average of 1.00 active warps per scheduler, but only an average of 0.07 warps were eligible per cycle. Eligible warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no eligible warp results in no instruction being issued and the issue slot remains unused. To increase the number of eligible warps, reduce the time the active warps are stalled by inspecting the top stall reasons on the Warp State Statistics and Source Counters sections."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "WRN",
+          "Rule Description": "The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could enable the rule to provide more guidance."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "OPT",
+          "Rule Description": "On average, each warp of this workload spends 10.7 cycles being stalled waiting for a scoreboard dependency on a L1TEX (local, global, surface, texture) operation. Find the instruction producing the data being waited upon to identify the culprit. To reduce the number of cycles waiting on L1TEX data accesses verify the memory access patterns are optimal for the target architecture, attempt to increase cache hit rates by increasing data locality (coalescing), or by changing the cache configuration. Consider moving frequently used data to shared memory. This stall type represents about 71.1% of the total average of 15.0 cycles between issuing two instructions."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "INF",
+          "Rule Description": "Check the Warp Stall Sampling (All Samples) table for the top stall locations in your source based on sampling data. The Kernel Profiling Guide (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference) provides more details on each stall reason."
+        },
+        {
+          "Rule Name": "LaunchConfiguration",
+          "Rule Type": "OPT",
+          "Rule Description": "If you execute __syncthreads() to synchronize the threads of a block, it is recommended to have at least two blocks per multiprocessor (compared to the currently executed 1.5 blocks) This way, blocks that aren't waiting for __syncthreads() can keep the hardware busy."
+        },
+        {
+          "Rule Name": "AchievedOccupancy",
+          "Rule Type": "OPT",
+          "Rule Description": "The difference between calculated theoretical (100.0%) and measured achieved occupancy (6.3%) can be the result of warp scheduling overheads or workload imbalances during the kernel execution. Load imbalances can occur between warps within a block as well as across blocks of the same kernel. See the CUDA Best Practices Guide (https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#occupancy) for more details on optimizing occupancy."
+        }
+      ]
+    },
+    {
+      "label": "rows32-r1-v52",
+      "active_rows_from_source_order": 32,
+      "metrics": {
+        "GPU Speed Of Light Throughput::DRAM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "10.19",
+          "value": 10.19
+        },
+        "GPU Speed Of Light Throughput::SM Frequency": {
+          "unit": "Ghz",
+          "raw_value": "2.70",
+          "value": 2.7
+        },
+        "GPU Speed Of Light Throughput::Elapsed Cycles": {
+          "unit": "cycle",
+          "raw_value": "20782",
+          "value": 20782.0
+        },
+        "GPU Speed Of Light Throughput::Memory Throughput": {
+          "unit": "%",
+          "raw_value": "35.14",
+          "value": 35.14
+        },
+        "GPU Speed Of Light Throughput::DRAM Throughput": {
+          "unit": "%",
+          "raw_value": "0.00",
+          "value": 0.0
+        },
+        "GPU Speed Of Light Throughput::Duration": {
+          "unit": "us",
+          "raw_value": "7.68",
+          "value": 7.68
+        },
+        "GPU Speed Of Light Throughput::L1/TEX Cache Throughput": {
+          "unit": "%",
+          "raw_value": "44.78",
+          "value": 44.78
+        },
+        "GPU Speed Of Light Throughput::L2 Cache Throughput": {
+          "unit": "%",
+          "raw_value": "28.72",
+          "value": 28.72
+        },
+        "GPU Speed Of Light Throughput::SM Active Cycles": {
+          "unit": "cycle",
+          "raw_value": "16215.52",
+          "value": 16215.52
+        },
+        "GPU Speed Of Light Throughput::Compute (SM) Throughput": {
+          "unit": "%",
+          "raw_value": "11.26",
+          "value": 11.26
+        },
+        "Memory Workload Analysis::Memory Throughput": {
+          "unit": "Mbyte/s",
+          "raw_value": "16.67",
+          "value": 16.67
+        },
+        "Memory Workload Analysis::Mem Busy": {
+          "unit": "%",
+          "raw_value": "35.14",
+          "value": 35.14
+        },
+        "Memory Workload Analysis::Max Bandwidth": {
+          "unit": "%",
+          "raw_value": "28.27",
+          "value": 28.27
+        },
+        "Memory Workload Analysis::L1/TEX Hit Rate": {
+          "unit": "%",
+          "raw_value": "73.62",
+          "value": 73.62
+        },
+        "Memory Workload Analysis::L2 Compression Success Rate": {
+          "unit": "%",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Ratio": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Compression Input Sectors": {
+          "unit": "sector",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Memory Workload Analysis::L2 Hit Rate": {
+          "unit": "%",
+          "raw_value": "99.38",
+          "value": 99.38
+        },
+        "Memory Workload Analysis::Mem Pipes Busy": {
+          "unit": "%",
+          "raw_value": "11.26",
+          "value": 11.26
+        },
+        "Scheduler Statistics::One or More Eligible": {
+          "unit": "%",
+          "raw_value": "5.89",
+          "value": 5.89
+        },
+        "Scheduler Statistics::Issued Warp Per Scheduler": {
+          "unit": "",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "Scheduler Statistics::No Eligible": {
+          "unit": "%",
+          "raw_value": "94.11",
+          "value": 94.11
+        },
+        "Scheduler Statistics::Active Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "1.00",
+          "value": 1.0
+        },
+        "Scheduler Statistics::Eligible Warps Per Scheduler": {
+          "unit": "warp",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "Warp State Statistics::Warp Cycles Per Issued Instruction": {
+          "unit": "cycle",
+          "raw_value": "16.89",
+          "value": 16.89
+        },
+        "Warp State Statistics::Warp Cycles Per Executed Instruction": {
+          "unit": "cycle",
+          "raw_value": "17.12",
+          "value": 17.12
+        },
+        "Warp State Statistics::Avg. Active Threads Per Warp": {
+          "unit": "",
+          "raw_value": "32",
+          "value": 32.0
+        },
+        "Warp State Statistics::Avg. Not Predicated Off Threads Per Warp": {
+          "unit": "",
+          "raw_value": "31.73",
+          "value": 31.73
+        },
+        "Launch Statistics::Block Size": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Function Cache Configuration": {
+          "unit": "",
+          "raw_value": "CachePreferNone",
+          "value": null
+        },
+        "Launch Statistics::Grid Size": {
+          "unit": "",
+          "raw_value": "192",
+          "value": 192.0
+        },
+        "Launch Statistics::Registers Per Thread": {
+          "unit": "register/thread",
+          "raw_value": "36",
+          "value": 36.0
+        },
+        "Launch Statistics::Shared Memory Configuration Size": {
+          "unit": "Kbyte",
+          "raw_value": "65.54",
+          "value": 65.54
+        },
+        "Launch Statistics::Driver Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::Dynamic Shared Memory Per Block": {
+          "unit": "byte/block",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Static Shared Memory Per Block": {
+          "unit": "Kbyte/block",
+          "raw_value": "1.02",
+          "value": 1.02
+        },
+        "Launch Statistics::# SMs": {
+          "unit": "SM",
+          "raw_value": "128",
+          "value": 128.0
+        },
+        "Launch Statistics::Stack Size": {
+          "unit": "",
+          "raw_value": "1024",
+          "value": 1024.0
+        },
+        "Launch Statistics::Threads": {
+          "unit": "thread",
+          "raw_value": "12288",
+          "value": 12288.0
+        },
+        "Launch Statistics::# TPCs": {
+          "unit": "",
+          "raw_value": "64",
+          "value": 64.0
+        },
+        "Launch Statistics::Enabled TPC IDs": {
+          "unit": "",
+          "raw_value": "all",
+          "value": null
+        },
+        "Launch Statistics::Uses Green Context": {
+          "unit": "",
+          "raw_value": "0",
+          "value": 0.0
+        },
+        "Launch Statistics::Waves Per SM": {
+          "unit": "",
+          "raw_value": "0.06",
+          "value": 0.06
+        },
+        "Occupancy::Block Limit SM": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Registers": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Block Limit Shared Mem": {
+          "unit": "block",
+          "raw_value": "32",
+          "value": 32.0
+        },
+        "Occupancy::Block Limit Warps": {
+          "unit": "block",
+          "raw_value": "24",
+          "value": 24.0
+        },
+        "Occupancy::Theoretical Active Warps per SM": {
+          "unit": "warp",
+          "raw_value": "48",
+          "value": 48.0
+        },
+        "Occupancy::Theoretical Occupancy": {
+          "unit": "%",
+          "raw_value": "100",
+          "value": 100.0
+        },
+        "Occupancy::Achieved Occupancy": {
+          "unit": "%",
+          "raw_value": "6.26",
+          "value": 6.26
+        },
+        "Occupancy::Achieved Active Warps Per SM": {
+          "unit": "warp",
+          "raw_value": "3.01",
+          "value": 3.01
+        }
+      },
+      "rules": [
+        {
+          "Rule Name": "SOLBottleneck",
+          "Rule Type": "OPT",
+          "Rule Description": "This kernel grid is too small to fill the available resources on this device, resulting in only 0.1 full waves across all SMs. Look at Launch Statistics for more details."
+        },
+        {
+          "Rule Name": "IssueSlotUtilization",
+          "Rule Type": "OPT",
+          "Rule Description": "Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only issues an instruction every 17.0 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 12 warps per scheduler, this workload allocates an average of 1.00 active warps per scheduler, which already limits the scheduler to less than a warp per instruction."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "WRN",
+          "Rule Description": "The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could enable the rule to provide more guidance."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "OPT",
+          "Rule Description": "On average, each warp of this workload spends 12.3 cycles being stalled waiting for a scoreboard dependency on a L1TEX (local, global, surface, texture) operation. Find the instruction producing the data being waited upon to identify the culprit. To reduce the number of cycles waiting on L1TEX data accesses verify the memory access patterns are optimal for the target architecture, attempt to increase cache hit rates by increasing data locality (coalescing), or by changing the cache configuration. Consider moving frequently used data to shared memory. This stall type represents about 72.7% of the total average of 16.9 cycles between issuing two instructions."
+        },
+        {
+          "Rule Name": "CPIStall",
+          "Rule Type": "INF",
+          "Rule Description": "Check the Warp Stall Sampling (All Samples) table for the top stall locations in your source based on sampling data. The Kernel Profiling Guide (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference) provides more details on each stall reason."
+        },
+        {
+          "Rule Name": "LaunchConfiguration",
+          "Rule Type": "OPT",
+          "Rule Description": "If you execute __syncthreads() to synchronize the threads of a block, it is recommended to have at least two blocks per multiprocessor (compared to the currently executed 1.5 blocks) This way, blocks that aren't waiting for __syncthreads() can keep the hardware busy."
+        },
+        {
+          "Rule Name": "AchievedOccupancy",
+          "Rule Type": "OPT",
+          "Rule Description": "The difference between calculated theoretical (100.0%) and measured achieved occupancy (6.3%) can be the result of warp scheduling overheads or workload imbalances during the kernel execution. Load imbalances can occur between warps within a block as well as across blocks of the same kernel. See the CUDA Best Practices Guide (https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#occupancy) for more details on optimizing occupancy."
+        }
+      ]
+    }
+  ],
+  "cells": [
+    {
+      "active_rows": 1,
+      "engine": "v52",
+      "statistics": {
+        "Launch Statistics::Registers Per Thread": {
+          "values": [
+            36.0,
+            36.0
+          ],
+          "mean": 36.0,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0,
+          "unit": "register/thread"
+        },
+        "Occupancy::Achieved Occupancy": {
+          "values": [
+            6.15,
+            6.15
+          ],
+          "mean": 6.15,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0,
+          "unit": "%"
+        },
+        "Scheduler Statistics::No Eligible": {
+          "values": [
+            90.46,
+            90.49
+          ],
+          "mean": 90.475,
+          "sample_sd": 0.02121320343559723,
+          "cv_percent": 0.023446480724616997,
+          "unit": "%"
+        },
+        "Scheduler Statistics::Eligible Warps Per Scheduler": {
+          "values": [
+            0.1,
+            0.1
+          ],
+          "mean": 0.1,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0,
+          "unit": "warp"
+        },
+        "Warp State Statistics::Warp Cycles Per Issued Instruction": {
+          "values": [
+            10.49,
+            10.5
+          ],
+          "mean": 10.495000000000001,
+          "sample_sd": 0.007071067811865324,
+          "cv_percent": 0.06737558658280442,
+          "unit": "cycle"
+        },
+        "Memory Workload Analysis::L2 Hit Rate": {
+          "values": [
+            98.58,
+            97.98
+          ],
+          "mean": 98.28,
+          "sample_sd": 0.42426406871192446,
+          "cv_percent": 0.43168912160350476,
+          "unit": "%"
+        },
+        "Memory Workload Analysis::Max Bandwidth": {
+          "values": [
+            16.84,
+            16.84
+          ],
+          "mean": 16.84,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0,
+          "unit": "%"
+        }
+      }
+    },
+    {
+      "active_rows": 1,
+      "engine": "candidate",
+      "statistics": {
+        "Launch Statistics::Registers Per Thread": {
+          "values": [
+            36.0,
+            36.0
+          ],
+          "mean": 36.0,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0,
+          "unit": "register/thread"
+        },
+        "Occupancy::Achieved Occupancy": {
+          "values": [
+            6.13,
+            6.13
+          ],
+          "mean": 6.13,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0,
+          "unit": "%"
+        },
+        "Scheduler Statistics::No Eligible": {
+          "values": [
+            92.51,
+            92.48
+          ],
+          "mean": 92.495,
+          "sample_sd": 0.02121320343559723,
+          "cv_percent": 0.022934432602407944,
+          "unit": "%"
+        },
+        "Scheduler Statistics::Eligible Warps Per Scheduler": {
+          "values": [
+            0.07,
+            0.08
+          ],
+          "mean": 0.07500000000000001,
+          "sample_sd": 0.007071067811865472,
+          "cv_percent": 9.428090415820629,
+          "unit": "warp"
+        },
+        "Warp State Statistics::Warp Cycles Per Issued Instruction": {
+          "values": [
+            13.31,
+            13.31
+          ],
+          "mean": 13.31,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0,
+          "unit": "cycle"
+        },
+        "Memory Workload Analysis::L2 Hit Rate": {
+          "values": [
+            98.18,
+            98.06
+          ],
+          "mean": 98.12,
+          "sample_sd": 0.08485281374238891,
+          "cv_percent": 0.0864786116412443,
+          "unit": "%"
+        },
+        "Memory Workload Analysis::Max Bandwidth": {
+          "values": [
+            16.33,
+            16.6
+          ],
+          "mean": 16.465,
+          "sample_sd": 0.19091883092037004,
+          "cv_percent": 1.1595434614052236,
+          "unit": "%"
+        }
+      }
+    },
+    {
+      "active_rows": 32,
+      "engine": "v52",
+      "statistics": {
+        "Launch Statistics::Registers Per Thread": {
+          "values": [
+            36.0,
+            36.0
+          ],
+          "mean": 36.0,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0,
+          "unit": "register/thread"
+        },
+        "Occupancy::Achieved Occupancy": {
+          "values": [
+            6.26,
+            6.26
+          ],
+          "mean": 6.26,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0,
+          "unit": "%"
+        },
+        "Scheduler Statistics::No Eligible": {
+          "values": [
+            94.26,
+            94.11
+          ],
+          "mean": 94.185,
+          "sample_sd": 0.10606601717798615,
+          "cv_percent": 0.11261455346178918,
+          "unit": "%"
+        },
+        "Scheduler Statistics::Eligible Warps Per Scheduler": {
+          "values": [
+            0.06,
+            0.06
+          ],
+          "mean": 0.06,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0,
+          "unit": "warp"
+        },
+        "Warp State Statistics::Warp Cycles Per Issued Instruction": {
+          "values": [
+            17.53,
+            16.89
+          ],
+          "mean": 17.21,
+          "sample_sd": 0.4525483399593908,
+          "cv_percent": 2.6295661822160996,
+          "unit": "cycle"
+        },
+        "Memory Workload Analysis::L2 Hit Rate": {
+          "values": [
+            99.27,
+            99.38
+          ],
+          "mean": 99.32499999999999,
+          "sample_sd": 0.07778174593051983,
+          "cv_percent": 0.07831034073045037,
+          "unit": "%"
+        },
+        "Memory Workload Analysis::Max Bandwidth": {
+          "values": [
+            27.31,
+            28.27
+          ],
+          "mean": 27.79,
+          "sample_sd": 0.6788225099390862,
+          "cv_percent": 2.442686253829026,
+          "unit": "%"
+        }
+      }
+    },
+    {
+      "active_rows": 32,
+      "engine": "candidate",
+      "statistics": {
+        "Launch Statistics::Registers Per Thread": {
+          "values": [
+            36.0,
+            36.0
+          ],
+          "mean": 36.0,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0,
+          "unit": "register/thread"
+        },
+        "Occupancy::Achieved Occupancy": {
+          "values": [
+            6.27,
+            6.27
+          ],
+          "mean": 6.27,
+          "sample_sd": 0.0,
+          "cv_percent": 0.0,
+          "unit": "%"
+        },
+        "Scheduler Statistics::No Eligible": {
+          "values": [
+            93.93,
+            93.33
+          ],
+          "mean": 93.63,
+          "sample_sd": 0.42426406871193456,
+          "cv_percent": 0.45312834424002413,
+          "unit": "%"
+        },
+        "Scheduler Statistics::Eligible Warps Per Scheduler": {
+          "values": [
+            0.06,
+            0.07
+          ],
+          "mean": 0.065,
+          "sample_sd": 0.007071067811865481,
+          "cv_percent": 10.878565864408433,
+          "unit": "warp"
+        },
+        "Warp State Statistics::Warp Cycles Per Issued Instruction": {
+          "values": [
+            16.41,
+            15.04
+          ],
+          "mean": 15.725,
+          "sample_sd": 0.9687362902255708,
+          "cv_percent": 6.160485152467859,
+          "unit": "cycle"
+        },
+        "Memory Workload Analysis::L2 Hit Rate": {
+          "values": [
+            98.77,
+            99.13
+          ],
+          "mean": 98.94999999999999,
+          "sample_sd": 0.2545584412271567,
+          "cv_percent": 0.25725966773841,
+          "unit": "%"
+        },
+        "Memory Workload Analysis::Max Bandwidth": {
+          "values": [
+            28.56,
+            30.28
+          ],
+          "mean": 29.42,
+          "sample_sd": 1.2162236636408634,
+          "cv_percent": 4.134002935556979,
+          "unit": "%"
+        }
+      }
+    }
+  ],
+  "archive_sha256": "41eecc6cfc35ecde3a4100f0ee1a981508b1f49c991218143475cc52e7b75e59",
+  "archive_files_verified": 61,
+  "cache_clock_scope": "native qualifier always launches V52 before candidate within each process; row1 V52 first-touch and candidate post-reference cache state differs; no kernel-duration or counter-derived serving gain comparison; use launch/resource/instruction diagnostics and actual HTTP profiles for experiment selection",
+  "unmeasured": [
+    "actual HTTP model-weight counter profile",
+    "instruction/source-level stall samples; optional PCSAMP missing"
+  ],
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "performance_claim_eligible": false,
+  "goal_achieved": false
+}

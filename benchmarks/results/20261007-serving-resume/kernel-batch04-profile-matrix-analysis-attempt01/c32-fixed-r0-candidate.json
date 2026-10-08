@@ -1,0 +1,2306 @@
+{
+  "sqlite_path": "/var/folders/vk/_qcwxfzx7m9c2zwf88m3cq8r0000gn/T/riley-matrix-profile-jossr2_s/trace.sqlite",
+  "schema": {
+    "TARGET_INFO_CUDA_CONTEXT_INFO": [
+      "nullStreamId",
+      "hwId",
+      "vmId",
+      "processId",
+      "deviceId",
+      "contextId",
+      "parentContextId",
+      "isGreenContext"
+    ],
+    "PROFILER_OVERHEAD": [
+      "start",
+      "end",
+      "globalTid",
+      "nameId",
+      "overheadType"
+    ],
+    "ENUM_NSYS_EVENT_CLASS": [
+      "id",
+      "name",
+      "label"
+    ],
+    "TARGET_INFO_SYSTEM_ENV": [
+      "globalVid",
+      "devStateName",
+      "name",
+      "nameEnum",
+      "value"
+    ],
+    "DIAGNOSTIC_EVENT": [
+      "timestamp",
+      "timestampType",
+      "source",
+      "severity",
+      "text",
+      "globalPid"
+    ],
+    "ENUM_CUDA_UNIF_MEM_MIGRATION": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_DIAGNOSTIC_SEVERITY_LEVEL": [
+      "id",
+      "name",
+      "label"
+    ],
+    "CUPTI_ACTIVITY_KIND_MEMCPY": [
+      "start",
+      "end",
+      "deviceId",
+      "contextId",
+      "greenContextId",
+      "streamId",
+      "correlationId",
+      "globalPid",
+      "bytes",
+      "copyKind",
+      "deprecatedSrcId",
+      "srcKind",
+      "dstKind",
+      "srcDeviceId",
+      "srcContextId",
+      "dstDeviceId",
+      "dstContextId",
+      "migrationCause",
+      "graphNodeId",
+      "virtualAddress",
+      "copyCount"
+    ],
+    "ENUM_CUDA_MEM_KIND": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ANALYSIS_DETAILS": [
+      "globalVid",
+      "duration",
+      "startTime",
+      "stopTime"
+    ],
+    "ENUM_DIAGNOSTIC_TIMESTAMP_SOURCE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_CUPTI_OVERHEAD_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "META_DATA_CAPTURE": [
+      "name",
+      "value"
+    ],
+    "ENUM_CUDA_MEMCPY_OPER": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_CUDA_KERNEL_LAUNCH_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "OSRT_API": [
+      "start",
+      "end",
+      "eventClass",
+      "globalTid",
+      "nameId",
+      "returnValue",
+      "nestingLevel",
+      "callchainId",
+      "argumentsId"
+    ],
+    "ENUM_CUDA_UNIF_MEM_ACCESS_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_NSYS_GENERIC_EVENT_FIELD_ETW_PROPERTY": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ProcessStreams": [
+      "globalPid",
+      "filenameId",
+      "contentId"
+    ],
+    "TARGET_INFO_CUDA_STREAM": [
+      "streamId",
+      "hwId",
+      "vmId",
+      "processId",
+      "contextId",
+      "priority",
+      "flag"
+    ],
+    "ENUM_NSYS_GENERIC_EVENT_FIELD_ETW_FLAGS": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_CUDA_MEMPOOL_OPER": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ANALYSIS_FILE": [
+      "id",
+      "filename",
+      "contentId",
+      "globalPid"
+    ],
+    "TARGET_INFO_CUDA_DEVICE": [
+      "gpuId",
+      "cudaId",
+      "pid"
+    ],
+    "TARGET_INFO_SESSION_START_TIME": [
+      "utcEpochNs",
+      "utcTime",
+      "localTime"
+    ],
+    "ENUM_NSYS_GENERIC_EVENT_SOURCE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "PROCESSES": [
+      "globalPid",
+      "pid",
+      "name"
+    ],
+    "ENUM_DIAGNOSTIC_SOURCE_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "StringIds": [
+      "id",
+      "value"
+    ],
+    "CUDA_GRAPH_NODE_EVENTS": [
+      "start",
+      "end",
+      "eventClass",
+      "globalTid",
+      "nameId",
+      "graphNodeId",
+      "originalGraphNodeId"
+    ],
+    "ENUM_NSYS_GENERIC_EVENT_FIELD_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_CUPTI_SYNC_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "OSRT_CALLCHAINS": [
+      "id",
+      "symbol",
+      "module",
+      "kernelMode",
+      "thumbCode",
+      "unresolved",
+      "specialEntry",
+      "originalIP",
+      "unwindMethod",
+      "stackDepth"
+    ],
+    "ENUM_NSYS_GENERIC_EVENT_GROUP": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_CUDA_FUNC_CACHE_CONFIG": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_STACK_UNWIND_METHOD": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_SCHEDULING_THREAD_BLOCK": [
+      "id",
+      "name",
+      "label"
+    ],
+    "CUPTI_ACTIVITY_KIND_MEMSET": [
+      "start",
+      "end",
+      "deviceId",
+      "contextId",
+      "greenContextId",
+      "streamId",
+      "correlationId",
+      "globalPid",
+      "value",
+      "bytes",
+      "graphNodeId",
+      "memKind"
+    ],
+    "ThreadNames": [
+      "nameId",
+      "priority",
+      "globalTid"
+    ],
+    "TARGET_INFO_GPU": [
+      "vmId",
+      "id",
+      "name",
+      "busLocation",
+      "isDiscrete",
+      "l2CacheSize",
+      "totalMemory",
+      "memoryBandwidth",
+      "clockRate",
+      "smCount",
+      "pwGpuId",
+      "uuid",
+      "luid",
+      "chipName",
+      "cuDevice",
+      "ctxswDevPath",
+      "ctrlDevPath",
+      "revision",
+      "nodeMask",
+      "constantMemory",
+      "maxIPC",
+      "maxRegistersPerBlock",
+      "maxShmemPerBlock",
+      "maxShmemPerBlockOptin",
+      "maxShmemPerSm",
+      "maxRegistersPerSm",
+      "threadsPerWarp",
+      "asyncEngines",
+      "maxWarpsPerSm",
+      "maxBlocksPerSm",
+      "maxThreadsPerBlock",
+      "maxBlockDimX",
+      "maxBlockDimY",
+      "maxBlockDimZ",
+      "maxGridDimX",
+      "maxGridDimY",
+      "maxGridDimZ",
+      "computeMajor",
+      "computeMinor",
+      "smMajor",
+      "smMinor"
+    ],
+    "ENUM_NSYS_GENERIC_EVENT_FIELD_ETW_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_CUDA_MEMPOOL_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_CUPTI_STREAM_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_NSYS_EVENT_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "CUPTI_ACTIVITY_KIND_SYNCHRONIZATION": [
+      "start",
+      "end",
+      "deviceId",
+      "contextId",
+      "greenContextId",
+      "streamId",
+      "correlationId",
+      "globalPid",
+      "deprecatedSyncType",
+      "syncType",
+      "eventId",
+      "eventSyncId"
+    ],
+    "META_DATA_EXPORT": [
+      "name",
+      "value"
+    ],
+    "ENUM_CUDA_DEV_MEM_EVENT_OPER": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_CUDA_SHARED_MEM_LIMIT_CONFIG": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_SAMPLING_THREAD_STATE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "CUPTI_ACTIVITY_KIND_KERNEL": [
+      "start",
+      "end",
+      "deviceId",
+      "contextId",
+      "greenContextId",
+      "streamId",
+      "correlationId",
+      "globalPid",
+      "demangledName",
+      "shortName",
+      "mangledName",
+      "launchType",
+      "cacheConfig",
+      "registersPerThread",
+      "gridX",
+      "gridY",
+      "gridZ",
+      "blockX",
+      "blockY",
+      "blockZ",
+      "staticSharedMemory",
+      "dynamicSharedMemory",
+      "localMemoryPerThread",
+      "localMemoryTotal",
+      "gridId",
+      "sharedMemoryExecuted",
+      "graphNodeId",
+      "sharedMemoryLimitConfig",
+      "qmdBulkReleaseDone",
+      "qmdPreexitDone",
+      "qmdLastCtaDone",
+      "graphId",
+      "clusterX",
+      "clusterY",
+      "clusterZ",
+      "clusterSchedulingPolicy",
+      "maxPotentialClusterSize",
+      "maxActiveClusters"
+    ],
+    "CUPTI_ACTIVITY_KIND_RUNTIME": [
+      "start",
+      "end",
+      "eventClass",
+      "globalTid",
+      "correlationId",
+      "nameId",
+      "returnValue",
+      "callchainId"
+    ]
+  },
+  "metadata": {
+    "META_DATA_CAPTURE": {
+      "columns": [
+        "name",
+        "value"
+      ],
+      "rows": [
+        [
+          "DEVICE_ID",
+          "Local (CLI)"
+        ],
+        [
+          "CAPTURE_EVENT_TYPE",
+          "OSRuntime"
+        ],
+        [
+          "CAPTURE_EVENT_TYPE",
+          "NvtxEvents"
+        ],
+        [
+          "CAPTURE_EVENT_TYPE",
+          "Cuda"
+        ],
+        [
+          "RATE_HZ",
+          "0"
+        ],
+        [
+          "START_TRIGGER",
+          "Delayed"
+        ],
+        [
+          "STOP_TRIGGER",
+          "Delayed"
+        ],
+        [
+          "THREAD_STATE_SCAN_FREQ",
+          "50"
+        ],
+        [
+          "POWER_RATE_SCAN_FREQ",
+          "50"
+        ],
+        [
+          "DEVICE_TYPE",
+          "Unix"
+        ],
+        [
+          "DEVICE_DISPLAY_NAME",
+          "psyche-MS-7D91"
+        ],
+        [
+          "OS_RUNTIME_OPTIONS:DURATION_THRESHOLD_NS",
+          "1000"
+        ],
+        [
+          "OS_RUNTIME_OPTIONS:COLLECT_BACKTRACES",
+          "true"
+        ],
+        [
+          "OS_RUNTIME_OPTIONS:BACKTRACES_THRESHOLD_NS",
+          "80000"
+        ],
+        [
+          "PROCESS_0:HOW_TO_ATTACH",
+          "LaunchAnother"
+        ],
+        [
+          "PROCESS_0:LAUNCH_AS_ROOT",
+          "false"
+        ],
+        [
+          "PROCESS_0:COMMAND",
+          "/data/riley-serving-261007/kernel-batch04-target-attempt01/release/riley"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_0",
+          "serve"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_1",
+          "--model"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_2",
+          "/data/riley-serving-260913-recovery/runtime-assets-20260915/model"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_3",
+          "--model-id"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_4",
+          "g04-smol"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_5",
+          "--bind"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_6",
+          "127.0.0.1:39395"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_7",
+          "--max-active-sequences"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_8",
+          "32"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_9",
+          "--max-waiting-requests"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_10",
+          "64"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_11",
+          "--batch-token-budget"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_12",
+          "512"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_13",
+          "--prefill-chunk-tokens"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_14",
+          "128"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_15",
+          "--max-sequence-tokens"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_16",
+          "160"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_17",
+          "--max-output-tokens"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_18",
+          "32"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_19",
+          "--kv-blocks"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_20",
+          "320"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_21",
+          "--residual-rmsnorm"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_22",
+          "separate"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_23",
+          "--execution-completion"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_24",
+          "iteration-batch"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_25",
+          "--metadata-transport"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_26",
+          "synchronous"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_27",
+          "--execution-graph-policy"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_28",
+          "require"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_29",
+          "--graph-numerics"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_30",
+          "variable-smol-v7"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_31",
+          "--sampling-backend"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_32",
+          "gpu-greedy"
+        ],
+        [
+          "PROCESS_0:WORKING_DIR",
+          "/home/psyche"
+        ],
+        [
+          "PROCESS_0:PID",
+          "0"
+        ],
+        [
+          "PROCESS_0:USER_NAME",
+          ""
+        ],
+        [
+          "PROCESS_0:COLLECT_NVTX_TRACE",
+          "true"
+        ],
+        [
+          "PROCESS_0:COLLECT_CUDA_TRACE",
+          "true"
+        ],
+        [
+          "PROCESS_0:COLLECT_CPU_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_NVMEDIA_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_VIDEO_API_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "LD_PRELOAD=\"{}\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "VLLM_BATCH_INVARIANT=\"0\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "LC_ALL=\"C.UTF-8\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "LD_LIBRARY_PATH=\"/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "CPATH=\"/data/riley-serving-261007/curand-only-include\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "LANG=\"C.UTF-8\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "CUDA_HOME=\"/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "CUDA_VISIBLE_DEVICES=\"0\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "PATH=\"/data/riley-serving-261007/vllm0271-venv/bin:/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin:/usr/bin:/bin\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "HOME=\"/home/psyche\""
+        ],
+        [
+          "PROCESS_0:COLLECT_BLOCK_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_BLOCK_PHASE_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_WARP_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_WARP_PHASE_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:CUDA_FLUSH_PERIODICALLY",
+          "true"
+        ],
+        [
+          "PROCESS_0:CUDA_FLUSH_PERIOD",
+          "0"
+        ],
+        [
+          "PROCESS_0:CUDA_SKIP_SOME_API_CALLS",
+          "true"
+        ],
+        [
+          "PROCESS_0:COLLECT_GPU_MEMORY_USAGE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_UVM_CPU_PAGE_FAULTS",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_UVM_GPU_PAGE_FAULTS",
+          "false"
+        ],
+        [
+          "PROCESS_0:CUDA_GRAPH_TRACE_OPTIONS:MODE",
+          "Node"
+        ],
+        [
+          "PROCESS_0:COLLECT_GL_WORKLOAD",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_DX12_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_DX11_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_VULKAN_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:CUDA_FLUSH_ON_CUDA_PROFILER_STOP",
+          "false"
+        ],
+        [
+          "PROFILING_SESSION_ID",
+          ""
+        ],
+        [
+          "PROFILING_SESSION_UUID",
+          "bcc09183-c2b6-4d2c-99e7-e684eedfdcd0"
+        ],
+        [
+          "APPLICATION_PID",
+          "0"
+        ],
+        [
+          "PACKAGE_NAME",
+          ""
+        ],
+        [
+          "RESUME",
+          "false"
+        ],
+        [
+          "SHOW_BACKTRACE",
+          "false"
+        ],
+        [
+          "START_DELAY_MS",
+          "0"
+        ],
+        [
+          "RUN_DURATION_MS",
+          "443"
+        ],
+        [
+          "HAS_ANNOTATIONS",
+          "false"
+        ],
+        [
+          "USE_UNWIND_TABLES",
+          "false"
+        ],
+        [
+          "USE_FRAME_POINTERS",
+          "false"
+        ],
+        [
+          "USE_DWARF",
+          "false"
+        ],
+        [
+          "BANDWIDTH_VERSION",
+          "0"
+        ],
+        [
+          "BANDWIDTH_RATE_HZ",
+          "0"
+        ],
+        [
+          "COLLECT_GPU_CTX_SW_TRACE",
+          "false"
+        ],
+        [
+          "TRACE_ALL_TASKS",
+          "false"
+        ],
+        [
+          "IN_APP_FREQ_MODE",
+          "false"
+        ],
+        [
+          "COLLECT_VSYNC",
+          "false"
+        ],
+        [
+          "COLLECT_THREAD_STATE_TRACE",
+          "false"
+        ],
+        [
+          "ALLOW_SEND_ONLY_MODE",
+          "false"
+        ],
+        [
+          "FORCE_ARCH_TIMER",
+          "false"
+        ],
+        [
+          "USE_LBRS",
+          "false"
+        ],
+        [
+          "INCLUDE_CHILDREN",
+          "true"
+        ],
+        [
+          "USE_LINUX_PERF",
+          "false"
+        ],
+        [
+          "DISABLE_TIME_SYNC",
+          "false"
+        ],
+        [
+          "LAUNCH_AS_ROOT",
+          "false"
+        ],
+        [
+          "TRACE_AFTER_FORK_BEFORE_EXEC",
+          "false"
+        ],
+        [
+          "COLLECT_SLI_EVENTS",
+          "false"
+        ],
+        [
+          "HOTKEY_ENABLED",
+          "false"
+        ],
+        [
+          "HOTKEY_VALUE",
+          "0"
+        ],
+        [
+          "COLLECT_WDDM_EVENTS",
+          "false"
+        ],
+        [
+          "NVTX_OPTIONS:TRACE_NVTX_RANGE_HOT_KEY",
+          "false"
+        ],
+        [
+          "NVTX_OPTIONS:TRACE_NVTX_RANGE_HOT_KEY_VALUE",
+          "0"
+        ],
+        [
+          "NVTX_OPTIONS:NVTX_DOMAIN_FILTER_STRING",
+          ""
+        ],
+        [
+          "NVTX_OPTIONS:NVTX_DOMAIN_FILTER_MODE_INCLUDE",
+          "false"
+        ],
+        [
+          "COLLECT_OPENSHMEM_TRACE",
+          "false"
+        ],
+        [
+          "START_FRAME_VALUE",
+          "0"
+        ],
+        [
+          "RUN_DURATION_FRAMES",
+          "0"
+        ],
+        [
+          "SYMBOL_RESOLUTION_OPTIONS:RESOLVE_SYMBOLS",
+          "true"
+        ],
+        [
+          "SAMPLE_ALL_TASKS",
+          "false"
+        ]
+      ],
+      "truncated": false
+    },
+    "META_DATA_EXPORT": {
+      "columns": [
+        "name",
+        "value"
+      ],
+      "rows": [
+        [
+          "EXPORT_PRODUCT_NAME",
+          "NVIDIA Nsight Systems"
+        ],
+        [
+          "EXPORT_PRODUCT_VERSION",
+          "2025.5.2.266"
+        ],
+        [
+          "EXPORT_PRODUCT_DATE",
+          "2025.5"
+        ],
+        [
+          "EXPORT_SCHEMA_VERSION",
+          "3.24.0"
+        ],
+        [
+          "EXPORT_SCHEMA_VERSION_MAJOR",
+          "3"
+        ],
+        [
+          "EXPORT_SCHEMA_VERSION_MINOR",
+          "24"
+        ],
+        [
+          "EXPORT_SCHEMA_VERSION_MICRO",
+          "0"
+        ],
+        [
+          "EXPORT_SCHEMA_VERSION_CKSUM",
+          "1638241493 169465"
+        ],
+        [
+          "EXPORT_PLATFORM",
+          "linux-desktop"
+        ],
+        [
+          "EXPORT_ARCH",
+          "x64"
+        ],
+        [
+          "EXPORT_TIME_UTC",
+          "2026-10-07T10:00:10"
+        ],
+        [
+          "EXPORT_TIME_LOCAL",
+          "2026-10-07T19:00:10 +0900 KST"
+        ],
+        [
+          "EXPORT_HOST",
+          "psyche-MS-7D91"
+        ],
+        [
+          "EXPORT_USER",
+          ""
+        ],
+        [
+          "EXPORT_PARAM_INPUT_FILE",
+          "trace.nsys-rep"
+        ],
+        [
+          "EXPORT_PARAM_OUTPUT_FILE",
+          "trace.sqlite"
+        ],
+        [
+          "EXPORT_PARAM_INPUT_PATH",
+          "/data/riley-serving-261007/kernel-batch04-profiling-attempt01/c32-fixed-r0-candidate/trace.nsys-rep"
+        ],
+        [
+          "EXPORT_PARAM_OUTPUT_PATH",
+          "/data/riley-serving-261007/kernel-batch04-profiling-attempt01/c32-fixed-r0-candidate/trace.sqlite"
+        ],
+        [
+          "EXPORT_PARAM_INPUT_PATH_ABS",
+          "/data/riley-serving-261007/kernel-batch04-profiling-attempt01/c32-fixed-r0-candidate/trace.nsys-rep"
+        ],
+        [
+          "EXPORT_PARAM_OUTPUT_PATH_ABS",
+          "/data/riley-serving-261007/kernel-batch04-profiling-attempt01/c32-fixed-r0-candidate/trace.sqlite"
+        ],
+        [
+          "EXPORT_PARAM_OVERWRITE",
+          "false"
+        ],
+        [
+          "EXPORT_PARAM_APPEND",
+          "false"
+        ],
+        [
+          "EXPORT_PARAM_LAZY",
+          "true"
+        ],
+        [
+          "EXPORT_PARAM_TIME_NORMALIZE",
+          "false"
+        ],
+        [
+          "EXPORT_PARAM_TIME_SHIFT",
+          "0"
+        ],
+        [
+          "EXPORT_PARAM_TABLES_TO_EXPORT",
+          ""
+        ],
+        [
+          "EXPORT_PARAM_TIMES_TO_EXPORT",
+          ""
+        ],
+        [
+          "EXPORT_CONFIG_TIME_SHIFT",
+          "0"
+        ],
+        [
+          "EXPORT_TIME",
+          "0.11 sec"
+        ]
+      ],
+      "truncated": false
+    },
+    "TARGET_INFO_CUDA_CONTEXT_INFO": {
+      "columns": [
+        "nullStreamId",
+        "hwId",
+        "vmId",
+        "processId",
+        "deviceId",
+        "contextId",
+        "parentContextId",
+        "isGreenContext"
+      ],
+      "rows": [
+        [
+          7,
+          0,
+          1,
+          1878207,
+          0,
+          1,
+          0,
+          0
+        ]
+      ],
+      "truncated": false
+    },
+    "TARGET_INFO_CUDA_DEVICE": {
+      "columns": [
+        "gpuId",
+        "cudaId",
+        "pid"
+      ],
+      "rows": [
+        [
+          0,
+          0,
+          1878207
+        ]
+      ],
+      "truncated": false
+    },
+    "TARGET_INFO_CUDA_STREAM": {
+      "columns": [
+        "streamId",
+        "hwId",
+        "vmId",
+        "processId",
+        "contextId",
+        "priority",
+        "flag"
+      ],
+      "rows": [
+        [
+          17,
+          0,
+          1,
+          1878207,
+          1,
+          0,
+          2
+        ],
+        [
+          16,
+          0,
+          1,
+          1878207,
+          1,
+          0,
+          2
+        ],
+        [
+          15,
+          0,
+          1,
+          1878207,
+          1,
+          0,
+          2
+        ],
+        [
+          14,
+          0,
+          1,
+          1878207,
+          1,
+          0,
+          2
+        ],
+        [
+          13,
+          0,
+          1,
+          1878207,
+          1,
+          0,
+          2
+        ],
+        [
+          6,
+          0,
+          1,
+          1878207,
+          1,
+          0,
+          1
+        ],
+        [
+          8,
+          0,
+          1,
+          1878207,
+          1,
+          0,
+          2
+        ],
+        [
+          18,
+          0,
+          1,
+          1878207,
+          1,
+          0,
+          2
+        ],
+        [
+          7,
+          0,
+          1,
+          1878207,
+          1,
+          0,
+          3
+        ],
+        [
+          9,
+          0,
+          1,
+          1878207,
+          1,
+          0,
+          2
+        ],
+        [
+          11,
+          0,
+          1,
+          1878207,
+          1,
+          0,
+          2
+        ],
+        [
+          10,
+          0,
+          1,
+          1878207,
+          1,
+          0,
+          2
+        ],
+        [
+          12,
+          0,
+          1,
+          1878207,
+          1,
+          4294967291,
+          1
+        ]
+      ],
+      "truncated": false
+    },
+    "TARGET_INFO_GPU": {
+      "columns": [
+        "vmId",
+        "id",
+        "name",
+        "busLocation",
+        "isDiscrete",
+        "l2CacheSize",
+        "totalMemory",
+        "memoryBandwidth",
+        "clockRate",
+        "smCount",
+        "pwGpuId",
+        "uuid",
+        "luid",
+        "chipName",
+        "cuDevice",
+        "ctxswDevPath",
+        "ctrlDevPath",
+        "revision",
+        "nodeMask",
+        "constantMemory",
+        "maxIPC",
+        "maxRegistersPerBlock",
+        "maxShmemPerBlock",
+        "maxShmemPerBlockOptin",
+        "maxShmemPerSm",
+        "maxRegistersPerSm",
+        "threadsPerWarp",
+        "asyncEngines",
+        "maxWarpsPerSm",
+        "maxBlocksPerSm",
+        "maxThreadsPerBlock",
+        "maxBlockDimX",
+        "maxBlockDimY",
+        "maxBlockDimZ",
+        "maxGridDimX",
+        "maxGridDimY",
+        "maxGridDimZ",
+        "computeMajor",
+        "computeMinor",
+        "smMajor",
+        "smMinor"
+      ],
+      "rows": [
+        [
+          281474976710656,
+          0,
+          "NVIDIA GeForce RTX 4090",
+          "0000:01:00.0",
+          1,
+          75497472,
+          25250627584,
+          1008096000000,
+          2595000000,
+          128,
+          0,
+          "9087e425-6aca-b722-b8c9-cc0423b39fb0",
+          0,
+          "AD102",
+          0,
+          "",
+          "",
+          161,
+          0,
+          65536,
+          4,
+          65536,
+          49152,
+          101376,
+          102400,
+          65536,
+          32,
+          2,
+          48,
+          24,
+          1024,
+          1024,
+          1024,
+          64,
+          2147483647,
+          65535,
+          65535,
+          8,
+          9,
+          8,
+          9
+        ]
+      ],
+      "truncated": false
+    },
+    "TARGET_INFO_SESSION_START_TIME": {
+      "columns": [
+        "utcEpochNs",
+        "utcTime",
+        "localTime"
+      ],
+      "rows": [
+        [
+          1791367203452536733,
+          "2026-10-07T10:00:03",
+          "2026-10-07T19:00:03"
+        ]
+      ],
+      "truncated": false
+    },
+    "TARGET_INFO_SYSTEM_ENV": {
+      "columns": [
+        "globalVid",
+        "devStateName",
+        "name",
+        "nameEnum",
+        "value"
+      ],
+      "rows": [
+        [
+          281474976710656,
+          "Local (CLI)",
+          "CpuCores",
+          1,
+          "24"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "CpuSpeedMhz",
+          2,
+          "5400"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "CpuArchitecture",
+          3,
+          "x86_64"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportedABIs",
+          5,
+          "x86_64,"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "Supported64BitABIs",
+          7,
+          "x86_64"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "CpuDescription",
+          13,
+          "13th Gen Intel(R) Core(TM) i7-13700K"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "CpuInfo",
+          14,
+          "{\"items\":[{\"cpuid\":0,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":1,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":2,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":3,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":4,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":5,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":6,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":7,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":8,\"socket\":0,\"maxfreqhz\":5400000000},{\"cpuid\":9,\"socket\":0,\"maxfreqhz\":5400000000},{\"cpuid\":10,\"socket\":0,\"maxfreqhz\":5400000000},{\"cpuid\":11,\"socket\":0,\"maxfreqhz\":5400000000},{\"cpuid\":12,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":13,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":14,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":15,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":16,\"socket\":0,\"maxfreqhz\":4200000000},{\"cpuid\":17,\"socket\":0,\"maxfreqhz\":4200000000},{\"cpuid\":18,\"socket\":0,\"maxfreqhz\":4200000000},{\"cpuid\":19,\"socket\":0,\"maxfreqhz\":4200000000},{\"cpuid\":20,\"socket\":0,\"maxfreqhz\":4200000000},{\"cpuid\":21,\"socket\":0,\"maxfreqhz\":4200000000},{\"cpuid\":22,\"socket\":0,\"maxfreqhz\":4200000000},{\"cpuid\":23,\"socket\":0,\"maxfreqhz\":4200000000}]}"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "CpuEmcSpeedMhz",
+          101,
+          "1600"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsXmcClients",
+          153,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "TargetInstallDir",
+          170,
+          "/data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasDiscreteGpu",
+          203,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "NvDriverVersion",
+          205,
+          "580.178.04"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "IsX86BasedDevice",
+          506,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HardwarePlatform",
+          600,
+          "x86_64"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SoftwarePlatform",
+          601,
+          "L4X"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "OsDescription",
+          605,
+          "Ubuntu 22.04.5 LTS"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "DeviceEnvironment",
+          610,
+          "HOME=/home/psyche;PATH=/data/riley-serving-261007/vllm0271-venv/bin:/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin:/usr/bin:/bin;CUDA_HOME=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13;LANG=C.UTF-8;CPATH=/data/riley-serving-261007/curand-only-include;LC_ALL=C.UTF-8;CUDA_VISIBLE_DEVICES=0;VLLM_BATCH_INVARIANT=0;LD_LIBRARY_PATH=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "CudaDriverVersion",
+          611,
+          "13000"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SoftwareReleaseVersion",
+          618,
+          "6.8.0-138-generic"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "Hostname",
+          619,
+          "psyche-MS-7D91"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "IsDevicePropsUpdated",
+          701,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "IsDeviceCapsUpdated",
+          702,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "IsPersistentDevice",
+          703,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SystemUID",
+          721,
+          "pid:[4026531836]"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasThreadStateEvents",
+          800,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasNvtxEvents",
+          809,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasCudaEvents",
+          812,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasGraphicsEvents",
+          813,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasOSRuntimeEvents",
+          815,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasCuDNNEvents",
+          816,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasOpenACCEvents",
+          819,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasNvMediaEvents",
+          820,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasCudaBacktraceEvents",
+          821,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasVideoEvents",
+          822,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsDX11",
+          838,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsDX12",
+          839,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsGpuCtxsw",
+          840,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsPmuCounters",
+          842,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsCpuFrequency",
+          844,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsVulkan",
+          845,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsMPI",
+          846,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsCpuCtxsw",
+          848,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsGpuMetrics",
+          849,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasBacktraces",
+          851,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasBacktracingAlgorithms",
+          852,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsSampling",
+          861,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsLinuxPerf",
+          862,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "dptiSupportsHES",
+          863,
+          "4"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "KernelVersion",
+          882,
+          "#138~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Aug  7 13:43:15 UTC "
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "EventLibSourcesInfo",
+          891,
+          "{\"BaseDir\":\"/sys/kernel/eventlib\"}"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsArchTimer",
+          892,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportedFTraceEvents",
+          894,
+          "{}"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "IsGameRecordingModeOn",
+          896,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "GpuInfo",
+          897,
+          "{\"Gpus\":[{\"Id\":0,\"Name\":\"NVIDIA GeForce RTX 4090\",\"BusLocation\":\"0000:01:00.0\",\"IsDiscrete\":true,\"Uuid\":\"9087e425-6aca-b722-b8c9-cc0423b39fb0\",\"ChipName\":\"AD102\",\"PwGpuId\":0,\"L2CacheSize\":75497472,\"TotalMemory\":\"25250627584\",\"MemoryBandwidth\":\"1008096000000\",\"ClockRate\":2595000000,\"SmCount\":128,\"CuDevice\":0,\"RmGpuId\":256,\"RmDevice\":0,\"RmSubDevice\":0,\"Revision\":161,\"ConstantMemory\":65536,\"MaxIPC\":4,\"MaxRegistersPerBlock\":65536,\"MaxShmemPerBlock\":49152,\"MaxShmemPerBlockOptin\":101376,\"MaxShmemPerSm\":102400,\"MaxRegistersPerSm\":65536,\"ThreadsPerWarp\":32,\"AsyncEngines\":2,\"MaxWarpsPerSm\":48,\"MaxBlocksPerSm\":24,\"MaxThreadsPerBlock\":1024,\"MaxBlockDimX\":1024,\"MaxBlockDimY\":1024,\"MaxBlockDimZ\":64,\"MaxGridDimX\":2147483647,\"MaxGridDimY\":65535,\"MaxGridDimZ\":65535,\"ComputeMajor\":8,\"ComputeMinor\":9,\"SmMajor\":8,\"SmMinor\":9,\"MigEnabled\":false,\"InConfidentialComputeMode\":false,\"Architecture\":\"Ada\",\"VideoEngineStatus\":0,\"GspFirmwareVersion\":\"580.178.04\"}]}"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasOpenMPEvents",
+          899,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsSli",
+          900,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsLBR",
+          901,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsOpenSHMEM",
+          903,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "ExportLevel",
+          904,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsUCX",
+          906,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsIsr",
+          907,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsSocMetrics",
+          908,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "NicInfo",
+          910,
+          "{}"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "OfedDriverVersion",
+          911,
+          ""
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "LinuxPerfInfo",
+          912,
+          "{\"samplingPeriodInfo\":{\"minSamplingPeriod\":331250},\"CpuCoreInfo\":{\"MaximumSimultaneousEvents\":0},\"OsInfo\":{}}"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsPythonBacktraceSampling",
+          913,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsNicMetrics",
+          914,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsVulkanSC",
+          917,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsOpenXR",
+          918,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "LinuxParanoidLevel",
+          919,
+          "4"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsSyscallTrace",
+          920,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SocInfo",
+          921,
+          ""
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "ArmCores",
+          923,
+          "{}"
+        ]
+      ],
+      "truncated": false
+    }
+  },
+  "interval_scopes": {
+    "kernel": {
+      "state": "measured",
+      "events": 25548,
+      "summed_event_duration_ns": 194264142,
+      "interval_union_ns": 194264142,
+      "overlap_duration_ns": 0,
+      "first_start_ns": 96076773,
+      "last_end_ns": 358337486
+    },
+    "memcpy": {
+      "state": "measured",
+      "events": 222,
+      "summed_event_duration_ns": 590054,
+      "interval_union_ns": 590054,
+      "overlap_duration_ns": 0,
+      "first_start_ns": 95713858,
+      "last_end_ns": 358339790
+    },
+    "memset": {
+      "state": "measured",
+      "events": 88,
+      "summed_event_duration_ns": 29184,
+      "interval_union_ns": 29184,
+      "overlap_duration_ns": 0,
+      "first_start_ns": 95724323,
+      "last_end_ns": 357211142
+    },
+    "cuda_api": {
+      "state": "measured",
+      "events": 176,
+      "summed_event_duration_ns": 214578039,
+      "interval_union_ns": 214578039,
+      "overlap_duration_ns": 0,
+      "first_start_ns": 95681827,
+      "last_end_ns": 358342438
+    },
+    "driver_api": {
+      "state": "unavailable",
+      "table": "CUPTI_ACTIVITY_KIND_DRIVER"
+    },
+    "osrt": {
+      "state": "measured",
+      "events": 6542,
+      "summed_event_duration_ns": 9256568704,
+      "interval_union_ns": 763315476,
+      "overlap_duration_ns": 8493253228,
+      "first_start_ns": 6417885,
+      "last_end_ns": 770824104
+    }
+  },
+  "diagnostics": [
+    {
+      "timestamp": -1753850979,
+      "timestampType": 1,
+      "source": 2,
+      "severity": 1,
+      "text": "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_101878190/streams/pid_1878207_stdout.log and stderr.log for program output",
+      "globalPid": 312986061242368
+    },
+    {
+      "timestamp": -1694293409,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "Common injection library initialized successfully.",
+      "globalPid": 312986061242368
+    },
+    {
+      "timestamp": -1683092451,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "OS runtime libraries injection initialized successfully.",
+      "globalPid": 312986061242368
+    },
+    {
+      "timestamp": -1386950128,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+      "globalPid": 312986061242368
+    },
+    {
+      "timestamp": -1380240578,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+      "globalPid": 312986061242368
+    },
+    {
+      "timestamp": -1243872611,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "CUDA injection initialized successfully.",
+      "globalPid": 312986061242368
+    },
+    {
+      "timestamp": 0,
+      "timestampType": 1,
+      "source": 3,
+      "severity": 1,
+      "text": "Profiling has started.",
+      "globalPid": -144115188075855872
+    },
+    {
+      "timestamp": 96081024,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+      "globalPid": -144115188075855872
+    },
+    {
+      "timestamp": 96138707,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "Not all NVTX events might have been collected.",
+      "globalPid": 312986061242368
+    },
+    {
+      "timestamp": 96140339,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "No NVTX events collected. Does the process use NVTX?",
+      "globalPid": 312986061242368
+    },
+    {
+      "timestamp": 96141504,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "Not all CUDA events might have been collected.",
+      "globalPid": 312986061242368
+    },
+    {
+      "timestamp": 96143053,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 1,
+      "text": "Number of CUDA events collected: \t26034.",
+      "globalPid": 312986061242368
+    },
+    {
+      "timestamp": 96144773,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "Not all OS runtime libraries events might have been collected.",
+      "globalPid": 312986061242368
+    },
+    {
+      "timestamp": 96145184,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 1,
+      "text": "Number of OS runtime libraries events collected: \t6541.",
+      "globalPid": 312986061242368
+    },
+    {
+      "timestamp": 442776975,
+      "timestampType": 1,
+      "source": 3,
+      "severity": 1,
+      "text": "Profiling has stopped.",
+      "globalPid": -144115188075855872
+    },
+    {
+      "timestamp": 450469790,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "Number of CUPTI events produced: \t26133, CUPTI buffers: 50.",
+      "globalPid": 312986061242368
+    }
+  ],
+  "calls_by_name": {
+    "cuda_api": [
+      {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 88,
+        "summed_event_duration_ns": 196358327,
+        "interval_union_ns": 196358327
+      },
+      {
+        "name": "cudaGraphLaunch_v10000",
+        "count": 88,
+        "summed_event_duration_ns": 18219712,
+        "interval_union_ns": 18219712
+      }
+    ],
+    "osrt": [
+      {
+        "name": "futex",
+        "count": 3697,
+        "summed_event_duration_ns": 7997561286,
+        "interval_union_ns": 434914386
+      },
+      {
+        "name": "poll",
+        "count": 80,
+        "summed_event_duration_ns": 628800256,
+        "interval_union_ns": 400682962
+      },
+      {
+        "name": "pthread_cond_timedwait",
+        "count": 1,
+        "summed_event_duration_ns": 500040481,
+        "interval_union_ns": 500040481
+      },
+      {
+        "name": "recv",
+        "count": 188,
+        "summed_event_duration_ns": 88728512,
+        "interval_union_ns": 37531928
+      },
+      {
+        "name": "send",
+        "count": 2208,
+        "summed_event_duration_ns": 39583828,
+        "interval_union_ns": 11815664
+      },
+      {
+        "name": "shutdown",
+        "count": 96,
+        "summed_event_duration_ns": 753072,
+        "interval_union_ns": 711267
+      },
+      {
+        "name": "accept4",
+        "count": 174,
+        "summed_event_duration_ns": 659457,
+        "interval_union_ns": 659457
+      },
+      {
+        "name": "close",
+        "count": 97,
+        "summed_event_duration_ns": 441812,
+        "interval_union_ns": 428375
+      },
+      {
+        "name": "[Unknown]",
+        "count": 1,
+        "summed_event_duration_ns": 0,
+        "interval_union_ns": 0
+      }
+    ]
+  },
+  "pairwise_overlap_ns": {
+    "kernel__memcpy": 0,
+    "kernel__memset": 0,
+    "kernel__osrt": 194264142,
+    "memcpy__memset": 0,
+    "memcpy__osrt": 590054,
+    "memset__osrt": 29184,
+    "cuda_api__kernel": 194215709,
+    "cuda_api__memcpy": 590054,
+    "cuda_api__memset": 29184,
+    "cuda_api__osrt": 214578039
+  },
+  "kernels_by_summed_work": [
+    {
+      "name": "void riley_prefill51::gate_up<(int)4>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+      "count": 1260,
+      "summed_event_duration_ns": 26779212,
+      "median_duration_ns": 20320.0,
+      "max_duration_ns": 32449,
+      "interval_union_ns": 26779212
+    },
+    {
+      "name": "void gemm_prefill_shape_vector<(int)576, (int)1536, (int)320, (int)2, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+      "count": 1260,
+      "summed_event_duration_ns": 26129140,
+      "median_duration_ns": 18337.0,
+      "max_duration_ns": 27297,
+      "interval_union_ns": 26129140
+    },
+    {
+      "name": "riley_mixed_attention::mapped_attention(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+      "count": 1260,
+      "summed_event_duration_ns": 23819605,
+      "median_duration_ns": 18912.0,
+      "max_duration_ns": 23808,
+      "interval_union_ns": 23819605
+    },
+    {
+      "name": "void gemm_prefill_shape_vector<(int)192, (int)576, (int)192, (int)1, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+      "count": 2520,
+      "summed_event_duration_ns": 20536797,
+      "median_duration_ns": 8192.0,
+      "max_duration_ns": 9568,
+      "interval_union_ns": 20536797
+    },
+    {
+      "name": "void gemm_prefill_shape_vector<(int)576, (int)576, (int)192, (int)2, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+      "count": 1260,
+      "summed_event_duration_ns": 14440372,
+      "median_duration_ns": 10352.5,
+      "max_duration_ns": 16353,
+      "interval_union_ns": 14440372
+    },
+    {
+      "name": "void gemm_prefill_shape_vector<(int)576, (int)576, (int)128, (int)2, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+      "count": 1260,
+      "summed_event_duration_ns": 13727875,
+      "median_duration_ns": 9696.0,
+      "max_duration_ns": 15840,
+      "interval_union_ns": 13727875
+    },
+    {
+      "name": "void shared32_gate_up_swiglu<(bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)",
+      "count": 1380,
+      "summed_event_duration_ns": 10582346,
+      "median_duration_ns": 7904.0,
+      "max_duration_ns": 8736,
+      "interval_union_ns": 10582346
+    },
+    {
+      "name": "mixed_rope_kv_v7(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *, unsigned int)",
+      "count": 1260,
+      "summed_event_duration_ns": 9990930,
+      "median_duration_ns": 8417.0,
+      "max_duration_ns": 16000,
+      "interval_union_ns": 9990930
+    },
+    {
+      "name": "riley_prefill_pointwise::norm_rows(const __nv_bfloat16 *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int, const unsigned int *, unsigned int)",
+      "count": 2608,
+      "summed_event_duration_ns": 7655200,
+      "median_duration_ns": 2832.0,
+      "max_duration_ns": 4864,
+      "interval_union_ns": 7655200
+    },
+    {
+      "name": "riley_gqa50_attention::independent_values(const float *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, const unsigned int *)",
+      "count": 1380,
+      "summed_event_duration_ns": 6719117,
+      "median_duration_ns": 4832.0,
+      "max_duration_ns": 6272,
+      "interval_union_ns": 6719117
+    },
+    {
+      "name": "void shared32_projection_parts<(int)576, (int)1536, (int)320, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const unsigned int *)",
+      "count": 1380,
+      "summed_event_duration_ns": 6542852,
+      "median_duration_ns": 4800.0,
+      "max_duration_ns": 6561,
+      "interval_union_ns": 6542852
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_32x32_32x1_tn_align8>(T1::Params)",
+      "count": 88,
+      "summed_event_duration_ns": 5909997,
+      "median_duration_ns": 66880.0,
+      "max_duration_ns": 72000,
+      "interval_union_ns": 5909997
+    },
+    {
+      "name": "shared32_qkv_parts(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)",
+      "count": 1380,
+      "summed_event_duration_ns": 5509298,
+      "median_duration_ns": 4096.5,
+      "max_duration_ns": 5152,
+      "interval_union_ns": 5509298
+    },
+    {
+      "name": "riley_merge_norm_v56::merge_norm(const float *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int, const unsigned int *, unsigned int)",
+      "count": 2760,
+      "summed_event_duration_ns": 4992866,
+      "median_duration_ns": 1792.0,
+      "max_duration_ns": 2048,
+      "interval_union_ns": 4992866
+    },
+    {
+      "name": "riley_gqa50_attention::scores(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *, const unsigned int *, const unsigned int *)",
+      "count": 1380,
+      "summed_event_duration_ns": 4113926,
+      "median_duration_ns": 2944.0,
+      "max_duration_ns": 5280,
+      "interval_union_ns": 4113926
+    },
+    {
+      "name": "void shared32_projection_parts<(int)576, (int)576, (int)128, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const unsigned int *)",
+      "count": 1380,
+      "summed_event_duration_ns": 3982906,
+      "median_duration_ns": 2912.0,
+      "max_duration_ns": 4000,
+      "interval_union_ns": 3982906
+    },
+    {
+      "name": "riley_shared32_model::qkv_merge_rope(const float *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *, const unsigned int *, const unsigned int *)",
+      "count": 1380,
+      "summed_event_duration_ns": 2057458,
+      "median_duration_ns": 1472.0,
+      "max_duration_ns": 2176,
+      "interval_union_ns": 2057458
+    },
+    {
+      "name": "void riley_compact_result::parts<(unsigned int)32>(const unsigned int *, const __nv_bfloat16 *, riley_compact_result::GreedyPartial *)",
+      "count": 88,
+      "summed_event_duration_ns": 306977,
+      "median_duration_ns": 3600.0,
+      "max_duration_ns": 3872,
+      "interval_union_ns": 306977
+    },
+    {
+      "name": "void riley_compact_result::finish<(unsigned int)32, (bool)1, (bool)1>(const unsigned int *, const riley_compact_result::GreedyPartial *, const unsigned int *, unsigned int *)",
+      "count": 88,
+      "summed_event_duration_ns": 224803,
+      "median_duration_ns": 2592.0,
+      "max_duration_ns": 2816,
+      "interval_union_ns": 224803
+    },
+    {
+      "name": "riley_prefill_pointwise::embedding_rows(const __nv_bfloat16 *, const unsigned int *, __nv_bfloat16 *, const unsigned int *, unsigned int, unsigned int, unsigned int *, const unsigned int *)",
+      "count": 42,
+      "summed_event_duration_ns": 71808,
+      "median_duration_ns": 1696.0,
+      "max_duration_ns": 1952,
+      "interval_union_ns": 71808
+    },
+    {
+      "name": "riley_shared32_model::embedding(const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, unsigned int *)",
+      "count": 46,
+      "summed_event_duration_ns": 68288,
+      "median_duration_ns": 1472.0,
+      "max_duration_ns": 1536,
+      "interval_union_ns": 68288
+    },
+    {
+      "name": "mixed_select_hidden_v7(const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, unsigned int, const unsigned int *, unsigned int *)",
+      "count": 42,
+      "summed_event_duration_ns": 61088,
+      "median_duration_ns": 1440.0,
+      "max_duration_ns": 1632,
+      "interval_union_ns": 61088
+    },
+    {
+      "name": "riley_shared32_model::clear_inactive_hidden(__nv_bfloat16 *, const unsigned int *)",
+      "count": 46,
+      "summed_event_duration_ns": 41281,
+      "median_duration_ns": 896.0,
+      "max_duration_ns": 928,
+      "interval_union_ns": 41281
+    }
+  ],
+  "gpu_recorded_intervals_union_ns": 194883380,
+  "gpu_recorded_categories": [
+    "kernel",
+    "memcpy",
+    "memset"
+  ],
+  "scope": "entire recorded trace; HTTP retained-envelope alignment is unverified until clock metadata is checked",
+  "attribution_limits": [
+    "event sums are work totals, not additive wall time",
+    "CUDA API/OSRT durations may overlap GPU execution and other threads",
+    "CPU stacks/context switches unavailable",
+    "unattributed gaps are not proof of host wait or HTTP cost"
+  ],
+  "serving_performance": "\ubbf8\uc2e4\ud589; profiler measurements are diagnostic only",
+  "goal_achieved": false,
+  "sqlite_sha256": "7f804035e6a27e0f6e06aa879b4f26baaa725ab81facbcef83385d504477cda2",
+  "archive_member": "kernel-batch04-profiling-attempt01/c32-fixed-r0-candidate/trace.sqlite"
+}

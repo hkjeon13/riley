@@ -1,0 +1,28 @@
+{
+  "source_commit": "2fd37841e302fc2b34dc79567713dea6241b49ac",
+  "argv": [
+    "cargo",
+    "build",
+    "--locked",
+    "--release",
+    "-p",
+    "riley-server",
+    "--features",
+    "cuda,server"
+  ],
+  "env": {
+    "HOME": "/home/psyche",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "PATH": "/home/psyche/.cargo/bin:/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin:/usr/bin:/bin",
+    "CUDA_HOME": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13",
+    "CUDAToolkit_ROOT": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13",
+    "CMAKE": "/data/cmake-3.31.12/bin/cmake",
+    "CMAKE_BUILD_PARALLEL_LEVEL": "4",
+    "CARGO_BUILD_JOBS": "4",
+    "CARGO_TARGET_DIR": "/data/riley-serving-261007/kernel-batch11-target-attempt02",
+    "LD_LIBRARY_PATH": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib",
+    "CUDA_VISIBLE_DEVICES": "0"
+  },
+  "scope": "native server build plus HTTP60 exact-token correctness; no serving timing claim"
+}

@@ -1,0 +1,37 @@
+{
+  "failure": null,
+  "records": [
+    {
+      "scope": "qwen-step109-hf-stage-validation-attempt01",
+      "archive": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/qwen-step109-localization-collection-attempt01/qwen-step109-hf-stage-validation-attempt01.tar.gz",
+      "archive_sha256": "ba0864b81b5f0f0892dc4c0f1d6e8bd8301f3d25b111e36c6dedd773faee9692",
+      "bytes": 900640,
+      "files_verified": 7,
+      "source_bytes": 1146444,
+      "completion": {
+        "failure": null,
+        "serving_performance": "\ubbf8\uc2e4\ud589",
+        "goal_achieved": false
+      }
+    },
+    {
+      "scope": "qwen-full128-validation-attempt02",
+      "archive": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/qwen-step109-localization-collection-attempt01/qwen-full128-validation-attempt02.tar.gz",
+      "archive_sha256": "dfddafb4cf93ad578495d7ece89f56a4be575bc6022390d8131292eb59723068",
+      "bytes": 31649850,
+      "files_verified": 13,
+      "source_bytes": 40288172,
+      "completion": {
+        "failure": {
+          "type": "AssertionError",
+          "message": "native qualifier nonzero; source/log preserved; inspect actual log before assigning a numerical failure"
+        },
+        "serving_performance": "\ubbf8\uc2e4\ud589",
+        "full128_generation": "unverified",
+        "goal_achieved": false
+      }
+    }
+  ],
+  "source_deleted": false,
+  "goal_achieved": false
+}

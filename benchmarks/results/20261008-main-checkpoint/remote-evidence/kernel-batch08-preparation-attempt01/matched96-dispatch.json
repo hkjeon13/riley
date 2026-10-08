@@ -1,0 +1,29 @@
+{
+  "previous_controller": {
+    "serving_token_client_v2.py": "2bc9238265666b99654f4f4e456ca0bb10c45b8bed8f28493452b89c1f450fcf",
+    "batch-plan.json": "db35b3f1a26cc7a1859e5297949516d472be9ff18e35cd9abbf80c15538313c8",
+    "fixtures.json": "ae1f6f48a2acc1f7c0a6f084567bb96916cb005eeb727ae59aca815f1c5ab955",
+    "mixed_phase_v34.py": "c37408fb6d02f41ee7fb56d6bd41beda305dd2cf5bb4ef3a73879cb44401c96f",
+    "run.py": "381b8420c549bdb7e9666fb864657b35c282b4500994cc352b314694ad44cf26",
+    "kernel-batch07-native-http-independent-verification.json": "ac1d2efe04349319c00247a876a2b68c793032adac93e35f6e711ef21004aaeb"
+  },
+  "new_controller": {
+    "serving_token_client_v2.py": "2bc9238265666b99654f4f4e456ca0bb10c45b8bed8f28493452b89c1f450fcf",
+    "batch-plan.json": "0fe264f663c4567a485087e3891ec0d5c0aa11497d6481720cce8041a60a5c50",
+    "fixtures.json": "ae1f6f48a2acc1f7c0a6f084567bb96916cb005eeb727ae59aca815f1c5ab955",
+    "mixed_phase_v34.py": "c37408fb6d02f41ee7fb56d6bd41beda305dd2cf5bb4ef3a73879cb44401c96f",
+    "run.py": "4c14a9f2b1bf2c6fe00a2e63ee649039d75e524226591b13ade983c4bd9bf4a8",
+    "kernel-batch08-native-http-independent-verification.json": "4631df9d84b7e1e5f5a97d6677751d47a49bbd622849398f40698803380931b1"
+  },
+  "unchanged_policy": "all8, 4 repeats ABC/CBA/ABC/CBA, warm96 retained384, original host gates, no sample exclusions",
+  "dispatch_time_ns": 1791387013937866277,
+  "pid": 3850243,
+  "argv": [
+    "/data/riley-serving-261007/vllm0271-venv/bin/python",
+    "/data/riley-serving-261007/kernel-batch08-controller/run.py",
+    "--attempt",
+    "1",
+    "--mode",
+    "quiet"
+  ]
+}

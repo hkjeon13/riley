@@ -1,0 +1,32 @@
+==WARNING== Note: Running with uncontrolled GPU caches. Profiling results may be inconsistent.
+==WARNING== Note: Running with unmodified GPU clocks. If not controlled otherwise, profiling results may be inconsistent.
+==PROF== Connected to process 2143529 (/data/riley-serving-261007/kernel-batch04-primitive-validation-attempt01/native1088)
+==PROF== Profiling "shared32_gate_up_swiglu_v52": 0%....50%....100% - 15 passes
+projection N=576 K=1536 interval=320 tiled=1 seed=1 active0..33 exact
+projection N=576 K=1536 interval=320 tiled=0 seed=1 active0..33 exact
+projection N=576 K=576 interval=128 tiled=0 seed=1 active0..33 exact
+projection N=576 K=1536 interval=512 tiled=1 seed=1 active0..33 exact
+projection N=576 K=576 interval=0 tiled=1 seed=1 active0..33 exact
+projection N=192 K=576 interval=192 tiled=0 seed=1 active0..33 exact
+gate tiled=1 seed=1 active0..33 exact
+gate tiled=0 seed=1 active0..33 exact
+projection N=576 K=1536 interval=320 tiled=1 seed=17 active0..33 exact
+projection N=576 K=1536 interval=320 tiled=0 seed=17 active0..33 exact
+projection N=576 K=576 interval=128 tiled=0 seed=17 active0..33 exact
+projection N=576 K=1536 interval=512 tiled=1 seed=17 active0..33 exact
+projection N=576 K=576 interval=0 tiled=1 seed=17 active0..33 exact
+projection N=192 K=576 interval=192 tiled=0 seed=17 active0..33 exact
+gate tiled=1 seed=17 active0..33 exact
+gate tiled=0 seed=17 active0..33 exact
+projection N=576 K=1536 interval=320 tiled=1 seed=99 active0..33 exact
+projection N=576 K=1536 interval=320 tiled=0 seed=99 active0..33 exact
+projection N=576 K=576 interval=128 tiled=0 seed=99 active0..33 exact
+projection N=576 K=1536 interval=512 tiled=1 seed=99 active0..33 exact
+projection N=576 K=576 interval=0 tiled=1 seed=99 active0..33 exact
+projection N=192 K=576 interval=192 tiled=0 seed=99 active0..33 exact
+gate tiled=1 seed=99 active0..33 exact
+gate tiled=0 seed=99 active0..33 exact
+{"passed":true,"cases":816,"seeds":3,"active_rows":"0..33","performance_claim_eligible":false}
+{"passed":true,"cases":1088,"fusion_cases":272,"BF16_and_FP32_exact":true,"performance_claim_eligible":false}
+==PROF== Disconnected from process 2143529
+==PROF== Report: /data/riley-serving-261007/kernel-batch04-gate-counters-attempt02/rows32-r0-v52/trace.ncu-rep

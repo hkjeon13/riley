@@ -1,0 +1,63 @@
+{
+  "time_ns": 1791416068712998874,
+  "source_commit": "2fd37841e302fc2b34dc79567713dea6241b49ac",
+  "production_binary_sha256": "a88081b769c3239e3f2f54c394fcedc4a55e34ce3115264b6b35deef53963da6",
+  "files": {
+    "crates/riley-server/src/main.rs": "6467161e111ee9c97320161fa691378d4fbca24bb95b79905fadee8318d8071a",
+    "crates/riley-server/src/service.rs": "5e1ab391690978a042ce4fb9203a464173ef8bfdac8e458d4b80e0859375c6b9",
+    "crates/riley-server/src/engine.rs": "3dd5bf3609a1af7547fc753d2a4fdd7547481ff8128e56f59c3733b5fd0c782a"
+  },
+  "facts": [
+    {
+      "file": "crates/riley-server/src/main.rs",
+      "lines": [
+        521,
+        523
+      ],
+      "fact": "CLI refuses C02 evidence configuration with variable graphs; adding C02 flags to matched launch cannot provide valid stability evidence."
+    },
+    {
+      "file": "crates/riley-server/src/main.rs",
+      "lines": [
+        1012,
+        1097
+      ],
+      "fact": "Matched runtime construction is available in actual source: scheduler budget512/chunk128 or512, variable metadata singleton, mixed execution, grouped attention and unchanged CLI policies."
+    },
+    {
+      "file": "crates/riley-server/src/service.rs",
+      "lines": [
+        1454,
+        1516
+      ],
+      "fact": "Existing /metrics snapshot exposes active/waiting and allocated KV blocks and live allocation counters; it does not expose reserved promises or outstanding iterations."
+    },
+    {
+      "file": "crates/riley-server/src/service.rs",
+      "lines": [
+        808,
+        821
+      ],
+      "fact": "In-process shutdown_with_metrics returns final snapshot after explicit backend native close."
+    },
+    {
+      "file": "crates/riley-server/src/service.rs",
+      "lines": [
+        833,
+        858
+      ],
+      "fact": "In-process shutdown_with_c02_evidence provides source-owned shutdown quiescence validation; no CLI mode requirement inferred for this public method."
+    },
+    {
+      "file": "crates/riley-server/src/engine.rs",
+      "lines": [
+        949,
+        1038
+      ],
+      "fact": "C02 source snapshot checks scheduler KV ownership partition and final active/reserved KV, completion outbox, outstanding iterations, device/pinned bytes and counts, acceptance flags."
+    }
+  ],
+  "matched_stability_executed": false,
+  "serving_performance": "not executed by this audit",
+  "next_implementation": "Independent in-process HTTP harness mirroring exact CLI construction and frozen corpus, sustained all8 traffic, cancellation followed by exact re-request, live worker-owned snapshots, shutdown source-owned quiescence; compile and GPU execution deferred until matched96 and collectors terminal. No production arithmetic or ownership change."
+}

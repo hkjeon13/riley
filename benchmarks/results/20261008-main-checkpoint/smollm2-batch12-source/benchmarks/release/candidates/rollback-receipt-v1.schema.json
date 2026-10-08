@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rollback-receipt-v1.schema.json",
+  "title": "Riley C02 prior-artifact rollback semantic receipt v1",
+  "description": "A raw receipt only names a drill. The CPU checker must replay Gate E and parse the full drain, atomic switch, prior-artifact restart, generation, and resource-zero timeline before it can emit a passed check report.",
+  "oneOf": [
+    { "$ref": "#/$defs/receipt" },
+    { "$ref": "#/$defs/drill" },
+    { "$ref": "#/$defs/checkReport" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{64}$" },
+        { "not": { "const": "0000000000000000000000000000000000000000000000000000000000000000" } }
+      ]
+    },
+    "image": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "relativeEvidencePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativeEvidencePath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["freeze_sha256", "base_release_candidate_report_sha256", "configuration_profile", "configuration_sha256"],
+      "properties": {
+        "freeze_sha256": { "$ref": "#/$defs/sha256" },
+        "base_release_candidate_report_sha256": { "$ref": "#/$defs/sha256" },
+        "configuration_profile": { "const": "stable-default" },
+        "configuration_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binary_sha256", "bundle_sha256", "image_id"],
+      "properties": {
+        "binary_sha256": { "$ref": "#/$defs/sha256" },
+        "bundle_sha256": { "$ref": "#/$defs/sha256" },
+        "image_id": { "$ref": "#/$defs/image" }
+      }
+    },
+    "modelIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_id", "model_revision", "config_sha256", "weights_sha256", "tokenizer_revision", "tokenizer_files_sha256"],
+      "properties": {
+        "model_id": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "model_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "config_sha256": { "$ref": "#/$defs/sha256" },
+        "weights_sha256": { "$ref": "#/$defs/sha256" },
+        "tokenizer_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "tokenizer_files_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "tokenIds": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "items": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+    },
+    "sampling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "temperature", "top_p"],
+      "properties": {
+        "mode": { "const": "greedy" },
+        "temperature": { "const": 0 },
+        "top_p": { "const": 1 }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["probe_id", "prompt_token_ids", "prompt_token_ids_sha256", "expected_output_token_ids", "expected_output_token_ids_sha256", "sampling", "correctness_golden_sha256"],
+      "properties": {
+        "probe_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+        "prompt_token_ids": { "$ref": "#/$defs/tokenIds" },
+        "prompt_token_ids_sha256": { "$ref": "#/$defs/sha256" },
+        "expected_output_token_ids": { "$ref": "#/$defs/tokenIds", "minItems": 4 },
+        "expected_output_token_ids_sha256": { "$ref": "#/$defs/sha256" },
+        "sampling": { "$ref": "#/$defs/sampling" },
+        "correctness_golden_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "candidate_id", "bindings", "drill"],
+      "properties": {
+        "schema_version": { "const": "riley.rc3-rollback-receipt.v1" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "drill": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "drill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "candidate_id", "bindings", "model", "candidate_artifacts", "rollback_artifacts", "probe", "events"],
+      "properties": {
+        "schema_version": { "const": "riley.rc3-rollback-drill.v1" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "model": { "$ref": "#/$defs/modelIdentity" },
+        "candidate_artifacts": { "$ref": "#/$defs/artifacts" },
+        "rollback_artifacts": { "$ref": "#/$defs/artifacts" },
+        "probe": { "$ref": "#/$defs/probe" },
+        "events": { "type": "array", "minItems": 8, "maxItems": 8, "items": { "type": "object" } }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "passed"],
+      "properties": {
+        "name": {
+          "enum": [
+            "freeze-binding",
+            "gate-e-replay",
+            "stable-default-arm-binding",
+            "candidate-and-rollback-artifact-binding",
+            "candidate-drain",
+            "atomic-switch",
+            "rollback-health-and-generation",
+            "candidate-resource-zero",
+            "worker-model-nonreuse"
+          ]
+        },
+        "passed": { "const": true }
+      }
+    },
+    "checkReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "passed", "candidate_id", "freeze_sha256", "base_release_candidate_report", "bindings", "receipt", "drill", "candidate_artifacts", "rollback_artifacts", "probe", "checks", "reason_codes"],
+      "properties": {
+        "schema_version": { "const": "riley.rc3-rollback-check.v1" },
+        "status": { "const": "passed" },
+        "passed": { "const": true },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "freeze_sha256": { "$ref": "#/$defs/sha256" },
+        "base_release_candidate_report": { "$ref": "#/$defs/descriptor" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "receipt": { "$ref": "#/$defs/descriptor" },
+        "drill": { "$ref": "#/$defs/descriptor" },
+        "candidate_artifacts": { "$ref": "#/$defs/artifacts" },
+        "rollback_artifacts": { "$ref": "#/$defs/artifacts" },
+        "probe": { "type": "object" },
+        "checks": { "type": "array", "minItems": 9, "maxItems": 9, "items": { "$ref": "#/$defs/check" } },
+        "reason_codes": { "const": [] }
+      }
+    }
+  }
+}

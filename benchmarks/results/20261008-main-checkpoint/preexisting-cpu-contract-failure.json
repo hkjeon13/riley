@@ -1,0 +1,17 @@
+{
+  "failure": "qwen_architecture_boundary::hot_execution_paths_do_not_dispatch_on_qwen_identity",
+  "baseline_main": "3d007e8a0262064f5ea60185bb454b9f894364ad",
+  "files": {
+    "crates/riley-runtime/src/llama/forward.rs": {
+      "baseline_sha256": "09e67092bce5f41f32d5e67449e41130649aef9251b1dc3edb85afc8dd71d783",
+      "current_sha256": "09e67092bce5f41f32d5e67449e41130649aef9251b1dc3edb85afc8dd71d783",
+      "unchanged": true
+    },
+    "crates/riley-runtime/tests/qwen_architecture_boundary.rs": {
+      "baseline_sha256": "f3924ea954253c151be50cc3c0893325fda5a77b2dea955dbafd154f6455dff5",
+      "current_sha256": "f3924ea954253c151be50cc3c0893325fda5a77b2dea955dbafd154f6455dff5",
+      "unchanged": true
+    }
+  },
+  "scope": "first reported failure is preexisting and both loaded forward source/test remain byte-identical; no test relaxation"
+}

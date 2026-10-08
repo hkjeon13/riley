@@ -1,0 +1,16 @@
+{
+  "parent": "3bf8c05e7b8b8ec192d8cf861623a11227075351",
+  "source": "/data/riley-serving-261007/kernel-batch10-source-attempt01",
+  "diagnostic_basis": "/data/riley-serving-261007/kernel-batch09-profile32-independent-analysis-attempt01/absolute-diagnostic-focus.json",
+  "diagnostic_sha256": "5bb8467ab9dc0b9bd4d9ea292e67a933cbd6be582bf929cccfac7fd570dca94e",
+  "changes": [
+    "parallel three-head softmax in three warps, matching original V52 recurrence",
+    "cooperative one-load shared V tile reuse across all head warps; barrier before read and before overwrite"
+  ],
+  "numerical_contract": "original scalar maximum/denominator/shuffle order and four K16 AV MMA recurrence, unrounded exponentials and BF16 probabilities; no tolerance or output-length change",
+  "untouched": "mapped attention, all Rust scheduler/HTTP/KV ownership code",
+  "validation": "native3161 exact, all8 HTTP60 exact, matched full96 only after correctness pass; no serving proof yet",
+  "adopted": false,
+  "goal_achieved": false,
+  "time_ns": 1791396446378337387
+}

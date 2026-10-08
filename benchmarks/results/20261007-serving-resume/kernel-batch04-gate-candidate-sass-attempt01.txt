@@ -1,0 +1,278 @@
+------------------ ------------------------------------------------------------
+Kernel Name        void shared32_gate_up_swiglu<(bool)1>(const __nv_bfloat16 *,
+                    const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16
+                    *, const unsigned int *)                                   
+------------------ ------------------------------------------------------------
+Address            Source                                                      
+0x7014bb28f800           IMAD.MOV.U32 R1, RZ, RZ, c[0x0][0x28]                 
+0x7014bb28f810           IMAD.MOV.U32 R28, RZ, RZ, c[0x0][0x180]               
+0x7014bb28f820           ULDC.64 UR4, c[0x0][0x118]                            
+0x7014bb28f830           IMAD.MOV.U32 R29, RZ, RZ, c[0x0][0x184]               
+0x7014bb28f840           LDG.E R28, [R28.64]                                   
+0x7014bb28f850           IADD3 R0, R28, -0x1, RZ                               
+0x7014bb28f860           ISETP.GT.U32.AND P0, PT, R0, 0x1f, PT                 
+0x7014bb28f870     @P0   EXIT                                                  
+0x7014bb28f880           S2R R3, SR_TID.X                                      
+0x7014bb28f890           ISETP.GE.U32.AND P1, PT, R28, 0x11, PT                
+0x7014bb28f8a0           IMAD.MOV.U32 R30, RZ, RZ, c[0x0][0x168]               
+0x7014bb28f8b0           BSSY B0, 0x7014bb290620                               
+0x7014bb28f8c0           S2R R0, SR_CTAID.X                                    
+0x7014bb28f8d0           IMAD.MOV.U32 R31, RZ, RZ, c[0x0][0x16c]               
+0x7014bb28f8e0           SHF.R.U32.HI R5, RZ, 0x5, R3                          
+0x7014bb28f8f0           IMAD.SHL.U32 R4, R3, 0x2, RZ                          
+0x7014bb28f900           LOP3.LUT R2, R3, 0x1f, RZ, 0xc0, !PT                  
+0x7014bb28f910           ISETP.NE.AND P0, PT, R5, RZ, PT                       
+0x7014bb28f920           LOP3.LUT R5, R4, 0x3e, RZ, 0xc0, !PT                  
+0x7014bb28f930           SHF.R.U32.HI R25, RZ, 0x2, R2                         
+0x7014bb28f940           LOP3.LUT R4, R4, 0x6, RZ, 0xc0, !PT                   
+0x7014bb28f950           IMAD R5, R0, 0x1200, R5                               
+0x7014bb28f960           SEL R30, R30, c[0x0][0x170], !P0                      
+0x7014bb28f970           SEL R31, R31, c[0x0][0x174], !P0                      
+0x7014bb28f980           IMAD R4, R25, 0x240, R4                               
+0x7014bb28f990           SHF.R.S32.HI R2, RZ, 0x1f, R5                         
+0x7014bb28f9a0     @!P1  BRA 0x7014bb290140                                    
+0x7014bb28f9b0           LEA R30, P2, R5, R30, 0x1                             
+0x7014bb28f9c0           CS2R R12, SRZ                                         
+0x7014bb28f9d0           LEA R4, P1, R4, c[0x0][0x160], 0x1                    
+0x7014bb28f9e0           CS2R R14, SRZ                                         
+0x7014bb28f9f0           LEA.HI.X R31, R5, R31, R2, 0x1, P2                    
+0x7014bb28fa00           IMAD.MOV.U32 R2, RZ, RZ, RZ                           
+0x7014bb28fa10           IADD3 R4, P2, R4, 0x4800, RZ                          
+0x7014bb28fa20           CS2R R20, SRZ                                         
+0x7014bb28fa30           ISETP.GE.U32.AND P0, PT, R25, R28, PT                 
+0x7014bb28fa40           CS2R R22, SRZ                                         
+0x7014bb28fa50           IADD3.X R5, RZ, c[0x0][0x164], RZ, P2, P1             
+0x7014bb28fa60           S2R R6, SR_TID.X                                      
+0x7014bb28fa70           CS2R R8, SRZ                                          
+0x7014bb28fa80           CS2R R10, SRZ                                         
+0x7014bb28fa90           IMAD.MOV.U32 R32, RZ, RZ, R4                          
+0x7014bb28faa0           ULDC.64 UR4, c[0x0][0x118]                            
+0x7014bb28fab0           IMAD.MOV.U32 R33, RZ, RZ, R5                          
+0x7014bb28fac0           LDG.E R4, [R30.64]                                    
+0x7014bb28fad0           LDG.E R5, [R30.64+0x80]                               
+0x7014bb28fae0     @!P0  LDG.E R8, [R32.64+-0x4800]                            
+0x7014bb28faf0     @!P0  LDG.E R10, [R32.64+-0x47f0]                           
+0x7014bb28fb00           LOP3.LUT R6, R6, 0x1f, RZ, 0xc0, !PT                  
+0x7014bb28fb10           SHF.R.U32.HI R6, RZ, 0x2, R6                          
+0x7014bb28fb20           IADD3 R7, R6, 0x8, RZ                                 
+0x7014bb28fb30           ISETP.GE.U32.AND P2, PT, R7, R28, PT                  
+0x7014bb28fb40           IADD3 R17, R6, 0x10, RZ                               
+0x7014bb28fb50           IADD3 R7, R6, 0x18, RZ                                
+0x7014bb28fb60     @!P2  LDG.E R9, [R32.64+-0x2400]                            
+0x7014bb28fb70     @!P2  LDG.E R11, [R32.64+-0x23f0]                           
+0x7014bb28fb80           ISETP.GE.U32.AND P3, PT, R17, R28, PT                 
+0x7014bb28fb90           ISETP.GE.U32.AND P4, PT, R7, R28, PT                  
+0x7014bb28fba0           CS2R R24, SRZ                                         
+0x7014bb28fbb0           CS2R R26, SRZ                                         
+0x7014bb28fbc0           LDG.E R6, [R30.64+0x100]                              
+0x7014bb28fbd0           LDG.E R7, [R30.64+0x180]                              
+0x7014bb28fbe0     @!P3  LDG.E R24, [R32.64]                                   
+0x7014bb28fbf0     @!P3  LDG.E R26, [R32.64+0x10]                              
+0x7014bb28fc00     @!P4  LDG.E R25, [R32.64+0x2400]                            
+0x7014bb28fc10     @!P4  LDG.E R27, [R32.64+0x2410]                            
+0x7014bb28fc20           CS2R R16, SRZ                                         
+0x7014bb28fc30           CS2R R18, SRZ                                         
+0x7014bb28fc40     @!P3  LDG.E R16, [R32.64+0x20]                              
+0x7014bb28fc50     @!P3  LDG.E R18, [R32.64+0x30]                              
+0x7014bb28fc60     @!P4  LDG.E R17, [R32.64+0x2420]                            
+0x7014bb28fc70     @!P4  LDG.E R19, [R32.64+0x2430]                            
+0x7014bb28fc80           HMMA.16816.F32.BF16 R12, R8, R4, R12                  
+0x7014bb28fc90           CS2R R8, SRZ                                          
+0x7014bb28fca0           CS2R R10, SRZ                                         
+0x7014bb28fcb0     @!P0  LDG.E R8, [R32.64+-0x47e0]                            
+0x7014bb28fcc0     @!P0  LDG.E R10, [R32.64+-0x47d0]                           
+0x7014bb28fcd0     @!P2  LDG.E R9, [R32.64+-0x23e0]                            
+0x7014bb28fce0     @!P2  LDG.E R11, [R32.64+-0x23d0]                           
+0x7014bb28fcf0           HMMA.16816.F32.BF16 R20, R24, R4, R20                 
+0x7014bb28fd00           LDG.E R4, [R30.64+0x200]                              
+0x7014bb28fd10           CS2R R24, SRZ                                         
+0x7014bb28fd20           CS2R R26, SRZ                                         
+0x7014bb28fd30           LDG.E R5, [R30.64+0x280]                              
+0x7014bb28fd40     @!P0  LDG.E R24, [R32.64+-0x47c0]                           
+0x7014bb28fd50     @!P0  LDG.E R26, [R32.64+-0x47b0]                           
+0x7014bb28fd60     @!P2  LDG.E R25, [R32.64+-0x23c0]                           
+0x7014bb28fd70     @!P2  LDG.E R27, [R32.64+-0x23b0]                           
+0x7014bb28fd80           HMMA.16816.F32.BF16 R16, R16, R6, R20                 
+0x7014bb28fd90           CS2R R20, SRZ                                         
+0x7014bb28fda0           CS2R R22, SRZ                                         
+0x7014bb28fdb0     @!P0  LDG.E R20, [R32.64+-0x47a0]                           
+0x7014bb28fdc0     @!P0  LDG.E R22, [R32.64+-0x4790]                           
+0x7014bb28fdd0     @!P2  LDG.E R21, [R32.64+-0x23a0]                           
+0x7014bb28fde0     @!P2  LDG.E R23, [R32.64+-0x2390]                           
+0x7014bb28fdf0           HMMA.16816.F32.BF16 R8, R8, R6, R12                   
+0x7014bb28fe00           LDG.E R6, [R30.64+0x300]                              
+0x7014bb28fe10           LDG.E R7, [R30.64+0x380]                              
+0x7014bb28fe20           CS2R R12, SRZ                                         
+0x7014bb28fe30           CS2R R14, SRZ                                         
+0x7014bb28fe40     @!P3  LDG.E R12, [R32.64+0x40]                              
+0x7014bb28fe50     @!P3  LDG.E R14, [R32.64+0x50]                              
+0x7014bb28fe60     @!P4  LDG.E R13, [R32.64+0x2440]                            
+0x7014bb28fe70     @!P4  LDG.E R15, [R32.64+0x2450]                            
+0x7014bb28fe80           HMMA.16816.F32.BF16 R24, R24, R4, R8                  
+0x7014bb28fe90           CS2R R8, SRZ                                          
+0x7014bb28fea0           CS2R R10, SRZ                                         
+0x7014bb28feb0     @!P3  LDG.E R8, [R32.64+0x60]                               
+0x7014bb28fec0     @!P3  LDG.E R10, [R32.64+0x70]                              
+0x7014bb28fed0     @!P4  LDG.E R9, [R32.64+0x2460]                             
+0x7014bb28fee0     @!P4  LDG.E R11, [R32.64+0x2470]                            
+0x7014bb28fef0           IADD3 R2, R2, 0x40, RZ                                
+0x7014bb28ff00           ISETP.GE.U32.AND P1, PT, R2, 0x240, PT                
+0x7014bb28ff10           IADD3 R30, P5, R30, 0x400, RZ                         
+0x7014bb28ff20           IMAD.X R31, RZ, RZ, R31, P5                           
+0x7014bb28ff30           HMMA.16816.F32.BF16 R16, R12, R4, R16                 
+0x7014bb28ff40           IADD3 R4, P6, R32, 0x80, RZ                           
+0x7014bb28ff50           HMMA.16816.F32.BF16 R12, R20, R6, R24                 
+0x7014bb28ff60           IMAD.X R5, RZ, RZ, R33, P6                            
+0x7014bb28ff70     @!UPT UIADD3 URZ, URZ, URZ, URZ                             
+0x7014bb28ff80           HMMA.16816.F32.BF16 R20, R8, R6, R16                  
+0x7014bb28ff90     @!P1  BRA 0x7014bb28fa60                                    
+0x7014bb28ffa0           NOP                                                   
+0x7014bb28ffb0           S2R R2, SR_TID.X                                      
+0x7014bb28ffc0     @!P0  F2FP.BF16.F32.PACK_AB R12, RZ, R12                    
+0x7014bb28ffd0     @!P0  F2FP.BF16.F32.PACK_AB R13, RZ, R13                    
+0x7014bb28ffe0     @!P2  F2FP.BF16.F32.PACK_AB R14, RZ, R14                    
+0x7014bb28fff0     @!P2  F2FP.BF16.F32.PACK_AB R15, RZ, R15                    
+0x7014bb290000     @!P3  F2FP.BF16.F32.PACK_AB R20, RZ, R20                    
+0x7014bb290010     @!P3  F2FP.BF16.F32.PACK_AB R21, RZ, R21                    
+0x7014bb290020           PRMT R12, R12, 0x5410, R13                            
+0x7014bb290030           PRMT R14, R14, 0x5410, R15                            
+0x7014bb290040           PRMT R20, R20, 0x5410, R21                            
+0x7014bb290050           IMAD.SHL.U32 R5, R2, 0x2, RZ                          
+0x7014bb290060           LOP3.LUT R4, R2, 0x1f, RZ, 0xc0, !PT                  
+0x7014bb290070           SHF.R.U32.HI R2, RZ, 0x5, R2                          
+0x7014bb290080           SHF.R.U32.HI R4, RZ, 0x2, R4                          
+0x7014bb290090           LOP3.LUT R5, R5, 0x6, RZ, 0xc0, !PT                   
+0x7014bb2900a0           IMAD R5, R4, 0x8, R5                                  
+0x7014bb2900b0           IMAD R2, R2, 0x100, R5                                
+0x7014bb2900c0           IMAD.SHL.U32 R5, R2, 0x2, RZ                          
+0x7014bb2900d0     @!P0  STS [R5], R12                                         
+0x7014bb2900e0     @!P2  STS [R5+0x80], R14                                    
+0x7014bb2900f0     @!P3  STS [R5+0x100], R20                                   
+0x7014bb290100     @P4   BRA 0x7014bb290610                                    
+0x7014bb290110           F2FP.BF16.F32.PACK_AB R22, R23, R22                   
+0x7014bb290120           STS [R5+0x180], R22                                   
+0x7014bb290130           BRA 0x7014bb290610                                    
+0x7014bb290140           LEA R30, P1, R5, R30, 0x1                             
+0x7014bb290150           CS2R R18, SRZ                                         
+0x7014bb290160           LEA R4, P2, R4, c[0x0][0x160], 0x1                    
+0x7014bb290170           CS2R R16, SRZ                                         
+0x7014bb290180           LEA.HI.X R31, R5, R31, R2, 0x1, P1                    
+0x7014bb290190           IMAD.MOV.U32 R2, RZ, RZ, RZ                           
+0x7014bb2901a0           IADD3 R4, P1, R4, 0x2470, RZ                          
+0x7014bb2901b0           ISETP.GE.U32.AND P0, PT, R25, R28, PT                 
+0x7014bb2901c0           IADD3 R25, R25, 0x8, RZ                               
+0x7014bb2901d0           IADD3.X R5, RZ, c[0x0][0x164], RZ, P1, P2             
+0x7014bb2901e0           ISETP.GE.U32.AND P4, PT, R25, R28, PT                 
+0x7014bb2901f0           CS2R R12, SRZ                                         
+0x7014bb290200           CS2R R14, SRZ                                         
+0x7014bb290210           IMAD.MOV.U32 R32, RZ, RZ, R4                          
+0x7014bb290220           ULDC.64 UR4, c[0x0][0x118]                            
+0x7014bb290230           IMAD.MOV.U32 R33, RZ, RZ, R5                          
+0x7014bb290240           LDG.E R26, [R30.64]                                   
+0x7014bb290250           LDG.E R27, [R30.64+0x80]                              
+0x7014bb290260     @!P0  LDG.E R12, [R32.64+-0x2470]                           
+0x7014bb290270     @!P0  LDG.E R14, [R32.64+-0x2460]                           
+0x7014bb290280     @!P4  LDG.E R13, [R32.64+-0x70]                             
+0x7014bb290290     @!P4  LDG.E R15, [R32.64+-0x60]                             
+0x7014bb2902a0           CS2R R8, SRZ                                          
+0x7014bb2902b0           CS2R R10, SRZ                                         
+0x7014bb2902c0           LDG.E R22, [R30.64+0x100]                             
+0x7014bb2902d0           LDG.E R23, [R30.64+0x180]                             
+0x7014bb2902e0     @!P0  LDG.E R8, [R32.64+-0x2450]                            
+0x7014bb2902f0     @!P0  LDG.E R10, [R32.64+-0x2440]                           
+0x7014bb290300     @!P4  LDG.E R9, [R32.64+-0x50]                              
+0x7014bb290310     @!P4  LDG.E R11, [R32.64+-0x40]                             
+0x7014bb290320           CS2R R4, SRZ                                          
+0x7014bb290330           CS2R R6, SRZ                                          
+0x7014bb290340           LDG.E R20, [R30.64+0x200]                             
+0x7014bb290350           LDG.E R21, [R30.64+0x280]                             
+0x7014bb290360     @!P0  LDG.E R4, [R32.64+-0x2430]                            
+0x7014bb290370     @!P0  LDG.E R6, [R32.64+-0x2420]                            
+0x7014bb290380     @!P4  LDG.E R5, [R32.64+-0x30]                              
+0x7014bb290390     @!P4  LDG.E R7, [R32.64+-0x20]                              
+0x7014bb2903a0           HMMA.16816.F32.BF16 R12, R12, R26, R16                
+0x7014bb2903b0           LDG.E R26, [R30.64+0x300]                             
+0x7014bb2903c0           LDG.E R27, [R30.64+0x380]                             
+0x7014bb2903d0           CS2R R16, SRZ                                         
+0x7014bb2903e0           CS2R R18, SRZ                                         
+0x7014bb2903f0     @!P0  LDG.E R16, [R32.64+-0x2410]                           
+0x7014bb290400     @!P0  LDG.E R18, [R32.64+-0x2400]                           
+0x7014bb290410     @!P4  LDG.E R17, [R32.64+-0x10]                             
+0x7014bb290420     @!P4  LDG.E R19, [R32.64]                                   
+0x7014bb290430           HMMA.16816.F32.BF16 R8, R8, R22, R12                  
+0x7014bb290440           IADD3 R2, R2, 0x40, RZ                                
+0x7014bb290450           ISETP.GE.U32.AND P1, PT, R2, 0x240, PT                
+0x7014bb290460     @!UPT UIADD3 URZ, URZ, URZ, URZ                             
+0x7014bb290470           HMMA.16816.F32.BF16 R4, R4, R20, R8                   
+0x7014bb290480           IADD3 R30, P2, R30, 0x400, RZ                         
+0x7014bb290490           IMAD.X R31, RZ, RZ, R31, P2                           
+0x7014bb2904a0     @!UPT UIADD3 URZ, URZ, URZ, URZ                             
+0x7014bb2904b0           HMMA.16816.F32.BF16 R16, R16, R26, R4                 
+0x7014bb2904c0           IADD3 R4, P3, R32, 0x80, RZ                           
+0x7014bb2904d0           IMAD.X R5, RZ, RZ, R33, P3                            
+0x7014bb2904e0     @!P1  BRA 0x7014bb2901e0                                    
+0x7014bb2904f0           NOP                                                   
+0x7014bb290500           S2R R2, SR_TID.X                                      
+0x7014bb290510     @!P0  F2FP.BF16.F32.PACK_AB R16, RZ, R16                    
+0x7014bb290520     @!P0  F2FP.BF16.F32.PACK_AB R17, RZ, R17                    
+0x7014bb290530     @!P4  F2FP.BF16.F32.PACK_AB R18, RZ, R18                    
+0x7014bb290540     @!P4  F2FP.BF16.F32.PACK_AB R19, RZ, R19                    
+0x7014bb290550           PRMT R16, R16, 0x5410, R17                            
+0x7014bb290560           PRMT R18, R18, 0x5410, R19                            
+0x7014bb290570           IMAD.SHL.U32 R5, R2, 0x2, RZ                          
+0x7014bb290580           LOP3.LUT R4, R2, 0x1f, RZ, 0xc0, !PT                  
+0x7014bb290590           SHF.R.U32.HI R2, RZ, 0x5, R2                          
+0x7014bb2905a0           SHF.R.U32.HI R4, RZ, 0x2, R4                          
+0x7014bb2905b0           LOP3.LUT R5, R5, 0x6, RZ, 0xc0, !PT                   
+0x7014bb2905c0           IMAD R5, R4, 0x8, R5                                  
+0x7014bb2905d0           IMAD R2, R2, 0x100, R5                                
+0x7014bb2905e0           IMAD.SHL.U32 R2, R2, 0x2, RZ                          
+0x7014bb2905f0     @!P0  STS [R2], R16                                         
+0x7014bb290600     @!P4  STS [R2+0x80], R18                                    
+0x7014bb290610           BSYNC B0                                              
+0x7014bb290620           BAR.SYNC.DEFER_BLOCKING 0x0                           
+0x7014bb290630           ISETP.GT.AND P0, PT, R3, 0xff, PT                     
+0x7014bb290640     @P0   EXIT                                                  
+0x7014bb290650           SHF.R.S32.HI R2, RZ, 0x1f, R3                         
+0x7014bb290660           BSSY B0, 0x7014bb290800                               
+0x7014bb290670           LEA.HI R5, R2, R3, RZ, 0x3                            
+0x7014bb290680           SHF.R.S32.HI R10, RZ, 0x3, R5                         
+0x7014bb290690           ISETP.GE.U32.AND P0, PT, R10, R28, PT                 
+0x7014bb2906a0     @P0   BRA 0x7014bb2907f0                                    
+0x7014bb2906b0           IMAD.SHL.U32 R4, R3, 0x2, RZ                          
+0x7014bb2906c0           ULDC.64 UR4, c[0x0][0x118]                            
+0x7014bb2906d0           LDS.U16 R2, [R4]                                      
+0x7014bb2906e0           LDS.U16 R9, [R4+0x200]                                
+0x7014bb2906f0           PRMT R6, RZ, 0x5410, R2                               
+0x7014bb290700           LOP3.LUT R2, R5, 0xfffffff8, RZ, 0xc0, !PT            
+0x7014bb290710           PRMT R9, RZ, 0x5410, R9                               
+0x7014bb290720           FMUL.FTZ R7, R6, -1.4426950216293334961               
+0x7014bb290730           IMAD.IADD R5, R3, 0x1, -R2                            
+0x7014bb290740           IMAD.MOV.U32 R2, RZ, RZ, 0x2                          
+0x7014bb290750           MUFU.EX2 R7, R7                                       
+0x7014bb290760           IMAD R5, R0, 0x8, R5                                  
+0x7014bb290770           IMAD R5, R10, 0x600, R5                               
+0x7014bb290780           IMAD.WIDE.U32 R4, R5, R2, c[0x0][0x178]               
+0x7014bb290790           FADD.FTZ R8, R7, 1                                    
+0x7014bb2907a0           MUFU.RCP R11, R8                                      
+0x7014bb2907b0           FMUL.FTZ R6, R6, R11                                  
+0x7014bb2907c0           FMUL.FTZ R6, R6, R9                                   
+0x7014bb2907d0           F2FP.BF16.F32.PACK_AB R6, RZ, R6                      
+0x7014bb2907e0           STG.E.U16 [R4.64], R6                                 
+0x7014bb2907f0           BSYNC B0                                              
+0x7014bb290800           IADD3 R3, R3, c[0x0][0x0], RZ                         
+0x7014bb290810           ISETP.GE.AND P0, PT, R3, 0x100, PT                    
+0x7014bb290820     @!P0  BRA 0x7014bb290650                                    
+0x7014bb290830           EXIT                                                  
+0x7014bb290840           BRA 0x7014bb290840                                    
+0x7014bb290850           NOP                                                   
+0x7014bb290860           NOP                                                   
+0x7014bb290870           NOP                                                   
+0x7014bb290880           NOP                                                   
+0x7014bb290890           NOP                                                   
+0x7014bb2908a0           NOP                                                   
+0x7014bb2908b0           NOP                                                   
+0x7014bb2908c0           NOP                                                   
+0x7014bb2908d0           NOP                                                   
+0x7014bb2908e0           NOP                                                   
+0x7014bb2908f0           NOP                                                   

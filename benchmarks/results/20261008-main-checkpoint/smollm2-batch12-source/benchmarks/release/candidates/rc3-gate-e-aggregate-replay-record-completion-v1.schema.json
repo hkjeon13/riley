@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rc3-gate-e-aggregate-replay-record-completion-v1.schema.json",
+  "title": "Riley RC3 Gate E aggregate replay record completion marker v1",
+  "description": "The paired .intent/.complete marker for one private aggregate-semantic-replay-only terminal record. A visible pair after a post-link durability error remains ambiguous and is not producer normal-return, actual capture, a semantic receipt, or qualification authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "artifact_filename", "artifact_sha256"],
+  "properties": {
+    "schema_version": {"const": "riley.rc3-gate-e-aggregate-replay-record-complete.v1"},
+    "artifact_filename": {"const": "rc3-gate-e-aggregate-replay-record-v1.json"},
+    "artifact_sha256": {
+      "type": "string",
+      "allOf": [
+        {"pattern": "^[0-9a-f]{64}$"},
+        {"not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}}
+      ]
+    }
+  }
+}

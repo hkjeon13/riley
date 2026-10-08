@@ -1,0 +1,41 @@
+CC ?= cc
+NM ?= nm
+CPPFLAGS ?= -D_GNU_SOURCE
+CFLAGS ?= -O2
+LDFLAGS ?=
+
+REQUIRED_CFLAGS = -std=c11 -Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow -Wformat=2 \
+	-Wstrict-prototypes -Wmissing-prototypes -Werror=vla \
+	-fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE
+REQUIRED_LDFLAGS = -pie -Wl,-z,relro,-z,now
+TOOL_DIRECTORY := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+
+.PHONY: test analyze
+
+test:
+	@set -eu; \
+	build_dir="$$(mktemp -d "$${TMPDIR:-/tmp}/riley-gate-e-sealed-leaf-snapshot.XXXXXX")"; \
+	test_binary="$$build_dir/test_gate_e_sealed_leaf_snapshot"; \
+	tool_object="$$build_dir/gate_e_sealed_leaf_snapshot.o"; \
+	undefined_symbols="$$build_dir/undefined-symbols.txt"; \
+	undefined_symbol_names="$$build_dir/undefined-symbol-names.txt"; \
+	cleanup() { rm -f "$$test_binary" "$$tool_object" "$$undefined_symbols" "$$undefined_symbol_names"; rmdir "$$build_dir"; }; \
+	trap cleanup EXIT HUP INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(REQUIRED_CFLAGS) "$(TOOL_DIRECTORY)test_gate_e_sealed_leaf_snapshot.c" -o "$$test_binary" $(LDFLAGS) $(REQUIRED_LDFLAGS); \
+	(cd "$(TOOL_DIRECTORY)" && "$$test_binary"); \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(REQUIRED_CFLAGS) -c "$(TOOL_DIRECTORY)gate_e_sealed_leaf_snapshot.c" -o "$$tool_object"; \
+	$(NM) --undefined-only "$$tool_object" >"$$undefined_symbols"; \
+	awk '{sub(/@.*/, "", $$NF); print $$NF}' "$$undefined_symbols" >"$$undefined_symbol_names"; \
+	for forbidden_symbol in execve execveat fexecve fork vfork clone clone3 posix_spawn system popen socket socketpair connect flock open openat creat mkdir unlink rename chmod chown setuid setgid mount umount2 ioctl kill tgkill write dlopen dlsym; do \
+		if grep -Fx "$$forbidden_symbol" "$$undefined_symbol_names" >/dev/null; then \
+			printf '%s\n' "forbidden undefined symbol: $$forbidden_symbol" >&2; exit 1; \
+		fi; \
+	done
+
+analyze:
+	@set -eu; \
+	build_dir="$$(mktemp -d "$${TMPDIR:-/tmp}/riley-gate-e-sealed-leaf-snapshot-analyze.XXXXXX")"; \
+	object_file="$$build_dir/gate_e_sealed_leaf_snapshot.o"; \
+	cleanup() { rm -f "$$object_file"; rmdir "$$build_dir"; }; \
+	trap cleanup EXIT HUP INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(REQUIRED_CFLAGS) -fanalyzer -c "$(TOOL_DIRECTORY)gate_e_sealed_leaf_snapshot.c" -o "$$object_file"

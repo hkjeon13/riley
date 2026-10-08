@@ -1,0 +1,44 @@
+{
+  "failure": null,
+  "steps": [
+    {
+      "label": "raw-replay",
+      "argv": [
+        "/data/riley-serving-261007/vllm0271-venv/bin/python",
+        "/data/riley-serving-261007/kernel-batch11-independent-analysis-attempt02/verify_kernel_batch11.py",
+        "/data/riley-serving-261007/kernel-batch11-independent-analysis-attempt02/kernel-batch11-quiet-attempt02.tar.gz",
+        "--fixtures",
+        "/data/riley-serving-261007/kernel-batch11-controller-attempt02/fixtures.json",
+        "--output",
+        "/data/riley-serving-261007/kernel-batch11-independent-analysis-attempt02/raw-replay.json"
+      ],
+      "exit": 0
+    },
+    {
+      "label": "launch-audit",
+      "argv": [
+        "/data/riley-serving-261007/vllm0271-venv/bin/python",
+        "/data/riley-serving-261007/kernel-batch11-independent-analysis-attempt02/audit_kernel_batch11_serving_contract.py",
+        "/data/riley-serving-261007/kernel-batch11-independent-analysis-attempt02/kernel-batch11-quiet-attempt02.tar.gz",
+        "--source-commit",
+        "2fd37841e302fc2b34dc79567713dea6241b49ac",
+        "--output",
+        "/data/riley-serving-261007/kernel-batch11-independent-analysis-attempt02/launch-audit.json"
+      ],
+      "exit": 0
+    },
+    {
+      "label": "summary",
+      "argv": [
+        "/data/riley-serving-261007/vllm0271-venv/bin/python",
+        "/data/riley-serving-261007/kernel-batch11-independent-analysis-attempt02/summarize_kernel_batch01.py",
+        "/data/riley-serving-261007/kernel-batch11-independent-analysis-attempt02/raw-replay.json",
+        "--output",
+        "/data/riley-serving-261007/kernel-batch11-independent-analysis-attempt02/summary.json"
+      ],
+      "exit": 0
+    }
+  ],
+  "adopted": false,
+  "goal_achieved": false
+}

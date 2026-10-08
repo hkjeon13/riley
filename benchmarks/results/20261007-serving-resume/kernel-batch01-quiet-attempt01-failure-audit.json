@@ -1,0 +1,40 @@
+{
+  "terminal_and_failed_gate_replay_passed": true,
+  "complete_matrix": false,
+  "completed_retained_lanes": 40,
+  "failed_phase": "c8-natural-r1-candidate-warmup",
+  "policy": {
+    "timeout_seconds": 300,
+    "interval_seconds": 2,
+    "consecutive": 3,
+    "cpu_some_max": 5,
+    "io_full_max": 5,
+    "memory_full_max": 0.5
+  },
+  "sample_count": 149,
+  "max_consecutive_quiet": 1,
+  "observed_span_seconds": 299.51619762,
+  "last3_pressure": [
+    {
+      "cpu_some": 0.37,
+      "io_full": 16.53,
+      "memory_full": 0.02
+    },
+    {
+      "cpu_some": 0.31,
+      "io_full": 15.53,
+      "memory_full": 0.02
+    },
+    {
+      "cpu_some": 0.25,
+      "io_full": 15.25,
+      "memory_full": 0.01
+    }
+  ],
+  "decision": "whole quiet attempt non-qualifying; every retained lane preserved remotely; no slow-sample exclusion or pooling with diagnostic",
+  "performance_metrics_independent_raw_replay": "pending; summary only is not proof",
+  "source_files": {
+    "kernel-batch01-quiet-attempt01-terminal.json": "46332217cf1bd88e139d1c39becbc398014d060577e9cc8ec2f6b37ea12ecf58",
+    "kernel-batch01-quiet-attempt01-failed-gate.json": "3b65dd705135e90a14c07956902ee52b050eecb47f5fc1d9d9686dd2c834bcf4"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "HF_raw_hashes_verified": 72,
+  "native_exact_tensor_count": 72,
+  "first_non_exact_tensor": null,
+  "same_owner_repeat": {
+    "all_prefill_kv_tensors_bf16_identical": true,
+    "prefill_last_logits_bf16_identical": true,
+    "reused_prepared_owner": true
+  },
+  "native_prefill_logits": {
+    "bf16_exact": true,
+    "element_count": 151936,
+    "hf_bf16_le_sha256": "66b5f0bb042e89497bac56e2b042f3018fec7c4c3f4710152a2c4adcffcfca9d",
+    "riley_bf16_le_sha256": "66b5f0bb042e89497bac56e2b042f3018fec7c4c3f4710152a2c4adcffcfca9d"
+  },
+  "scope": "HF raw bytes independently hashed; Riley hashes and owner reuse supplied by source-bound native test",
+  "serving_performance": "미실행",
+  "goal_achieved": false
+}

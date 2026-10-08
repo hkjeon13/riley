@@ -1,0 +1,60 @@
+{
+  "time_ns": 1791395002133338295,
+  "report": "/data/riley-serving-261007/kernel-batch09-independent-analysis-attempt01/absolute-metrics-report.json",
+  "report_sha256": "eb19dd4295948fc4a714c39d2b53b2f92abaeeaa7e928968798337a8fd32e377",
+  "terminal": {
+    "completion.json": {
+      "failure": null,
+      "steps": [
+        {
+          "label": "raw-replay",
+          "argv": [
+            "/data/riley-serving-261007/vllm0271-venv/bin/python",
+            "/data/riley-serving-261007/kernel-batch09-independent-analysis-attempt01/verify_kernel_batch09.py",
+            "/data/riley-serving-261007/kernel-batch09-independent-analysis-attempt01/kernel-batch09-quiet-attempt01.tar.gz",
+            "--fixtures",
+            "/data/riley-serving-261007/kernel-batch09-controller/fixtures.json",
+            "--output",
+            "/data/riley-serving-261007/kernel-batch09-independent-analysis-attempt01/raw-replay.json"
+          ],
+          "exit": 0
+        },
+        {
+          "label": "launch-audit",
+          "argv": [
+            "/data/riley-serving-261007/vllm0271-venv/bin/python",
+            "/data/riley-serving-261007/kernel-batch09-independent-analysis-attempt01/audit_kernel_batch09_serving_contract.py",
+            "/data/riley-serving-261007/kernel-batch09-independent-analysis-attempt01/kernel-batch09-quiet-attempt01.tar.gz",
+            "--source-commit",
+            "3bf8c05e7b8b8ec192d8cf861623a11227075351",
+            "--output",
+            "/data/riley-serving-261007/kernel-batch09-independent-analysis-attempt01/launch-audit.json"
+          ],
+          "exit": 0
+        },
+        {
+          "label": "summary",
+          "argv": [
+            "/data/riley-serving-261007/vllm0271-venv/bin/python",
+            "/data/riley-serving-261007/kernel-batch09-independent-analysis-attempt01/summarize_kernel_batch01.py",
+            "/data/riley-serving-261007/kernel-batch09-independent-analysis-attempt01/raw-replay.json",
+            "--output",
+            "/data/riley-serving-261007/kernel-batch09-independent-analysis-attempt01/summary.json"
+          ],
+          "exit": 0
+        }
+      ],
+      "adopted": false,
+      "goal_achieved": false
+    },
+    "decision.json": {
+      "all_core_minimum_mean_screen": false,
+      "all_core_challenge_mean_screen": false,
+      "adopted": false,
+      "stability": "미실행",
+      "serving_screen": "independently verified full96; stability and all-cell pass remain required",
+      "source_files_after_verified": 1080,
+      "goal_achieved": false
+    }
+  }
+}

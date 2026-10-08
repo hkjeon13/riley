@@ -1,0 +1,288 @@
+{
+  "scope": "C16/C32 matched serving screen; V50 grouped attention GPU32 versus V51 fused prefill GPU32 atC16/C32 versus vLLM; both Riley compact GPU greedy; all admission capacities match clients, budget512; two reversed orders, not long-term stability qualification",
+  "medians": {
+    "c16-fixed": {
+      "new": {
+        "throughput": 6437.5858965580355,
+        "ttft_ms": 6.05445825,
+        "tpot_ms": 2.235623471044547,
+        "e2e_p95_ms": 78.86004,
+        "e2e_p99_ms": 82.87179
+      },
+      "previous": {
+        "throughput": 5767.946227267905,
+        "ttft_ms": 6.98666575,
+        "tpot_ms": 2.4897272385928,
+        "e2e_p95_ms": 88.6591795,
+        "e2e_p99_ms": 95.3308195
+      },
+      "vllm": {
+        "throughput": 4810.934818996946,
+        "ttft_ms": 17.479224000000002,
+        "tpot_ms": 2.357857285764376,
+        "e2e_p95_ms": 106.95775649999999,
+        "e2e_p99_ms": 126.09088750000001
+      }
+    },
+    "c16-natural": {
+      "new": {
+        "throughput": 7697.4413019420845,
+        "ttft_ms": 7.22496375,
+        "tpot_ms": 1.9511070169666291,
+        "e2e_p95_ms": 262.988736,
+        "e2e_p99_ms": 271.746485
+      },
+      "previous": {
+        "throughput": 7430.723125141311,
+        "ttft_ms": 8.0599195,
+        "tpot_ms": 2.019359768685164,
+        "e2e_p95_ms": 272.562071,
+        "e2e_p99_ms": 275.7659985
+      },
+      "vllm": {
+        "throughput": 7781.162141142888,
+        "ttft_ms": 13.3323115,
+        "tpot_ms": 1.798818416071983,
+        "e2e_p95_ms": 261.430269,
+        "e2e_p99_ms": 302.1991995
+      }
+    },
+    "c32-fixed": {
+      "new": {
+        "throughput": 7783.474805136029,
+        "ttft_ms": 7.9715945,
+        "tpot_ms": 3.7686333812629402,
+        "e2e_p95_ms": 129.651631,
+        "e2e_p99_ms": 149.31273950000002
+      },
+      "previous": {
+        "throughput": 7020.4580382894765,
+        "ttft_ms": 8.9975845,
+        "tpot_ms": 4.203148318373072,
+        "e2e_p95_ms": 144.042165,
+        "e2e_p99_ms": 159.4769905
+      },
+      "vllm": {
+        "throughput": 7235.816159239326,
+        "ttft_ms": 29.055764,
+        "tpot_ms": 2.856951296633941,
+        "e2e_p95_ms": 139.566632,
+        "e2e_p99_ms": 175.115509
+      }
+    },
+    "c32-natural": {
+      "new": {
+        "throughput": 10199.769306297501,
+        "ttft_ms": 10.70138075,
+        "tpot_ms": 2.953177791991727,
+        "e2e_p95_ms": 396.33357,
+        "e2e_p99_ms": 423.631928
+      },
+      "previous": {
+        "throughput": 9691.255539026402,
+        "ttft_ms": 11.878990250000001,
+        "tpot_ms": 3.093082417385327,
+        "e2e_p95_ms": 419.0541565,
+        "e2e_p99_ms": 449.423217
+      },
+      "vllm": {
+        "throughput": 11375.320011645492,
+        "ttft_ms": 20.3214565,
+        "tpot_ms": 2.3624035842062083,
+        "e2e_p95_ms": 370.53498449999995,
+        "e2e_p99_ms": 396.441574
+      }
+    }
+  },
+  "new_relative_change_percent": {
+    "c16-fixed": {
+      "previous": {
+        "throughput": 11.609672540364823,
+        "ttft_ms": -13.342666349825027,
+        "tpot_ms": -10.206088587112582,
+        "e2e_p95_ms": -11.052594390409398,
+        "e2e_p99_ms": -13.069256684612895
+      },
+      "vllm": {
+        "throughput": 33.81153847975511,
+        "ttft_ms": -65.36197344916457,
+        "tpot_ms": -5.184105732684452,
+        "e2e_p95_ms": -26.26991947049674,
+        "e2e_p99_ms": -34.276146640652364
+      }
+    },
+    "c16-natural": {
+      "previous": {
+        "throughput": 3.589397321215637,
+        "ttft_ms": -10.359355946421056,
+        "tpot_ms": -3.3799203478722006,
+        "e2e_p95_ms": -3.5123504032958386,
+        "e2e_p99_ms": -1.4575812543474287
+      },
+      "vllm": {
+        "throughput": -1.0759426121983662,
+        "ttft_ms": -45.808618783021984,
+        "tpot_ms": 8.466035233683765,
+        "e2e_p95_ms": 0.5961310470900427,
+        "e2e_p99_ms": -10.07703347672171
+      }
+    },
+    "c32-fixed": {
+      "previous": {
+        "throughput": 10.868475570754367,
+        "ttft_ms": -11.402949313785271,
+        "tpot_ms": -10.337844496487358,
+        "e2e_p95_ms": -9.990501045301558,
+        "e2e_p99_ms": -6.373490600827447
+      },
+      "vllm": {
+        "throughput": 7.568719738649032,
+        "ttft_ms": -72.56449873422706,
+        "tpot_ms": 31.911012473441282,
+        "e2e_p95_ms": -7.104134317721433,
+        "e2e_p99_ms": -14.734714045230557
+      }
+    },
+    "c32-natural": {
+      "previous": {
+        "throughput": 5.247140220617741,
+        "ttft_ms": -9.913380474405232,
+        "tpot_ms": -4.523145733435241,
+        "e2e_p95_ms": -5.421873556813173,
+        "e2e_p99_ms": -5.738753145011644
+      },
+      "vllm": {
+        "throughput": -10.334220963845587,
+        "ttft_ms": -47.339499262762,
+        "tpot_ms": 25.00733624581022,
+        "e2e_p95_ms": 6.962523534670462,
+        "e2e_p99_ms": 6.858603078798198
+      }
+    }
+  },
+  "requests": 9216,
+  "reference_observations": [
+    {
+      "case": "c16-fixed-p0-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p0-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p0-vllm",
+      "reference_matches": 357,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p1-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p1-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p1-vllm",
+      "reference_matches": 355,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p0-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p0-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p0-vllm",
+      "reference_matches": 281,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p1-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p1-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p1-vllm",
+      "reference_matches": 285,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p0-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p0-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p0-vllm",
+      "reference_matches": 369,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p1-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p1-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p1-vllm",
+      "reference_matches": 365,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p0-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p0-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p0-vllm",
+      "reference_matches": 289,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p1-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p1-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p1-vllm",
+      "reference_matches": 292,
+      "requests": 384
+    }
+  ],
+  "goal_achieved": false,
+  "decision": "Assess fused prefill gate/up/SwiGLU against V50 and vLLM; broader concurrency and long-term stability remain unqualified"
+}

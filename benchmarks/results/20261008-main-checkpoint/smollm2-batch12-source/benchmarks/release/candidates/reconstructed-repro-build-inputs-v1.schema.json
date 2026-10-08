@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/reconstructed-repro-build-inputs-v1.schema.json",
+  "title": "Reconstructed PR16 reproducibility build inputs v1",
+  "description": "A create-only closure for two pre-existing PR16 reproducibility evidence archives and a replayed reviewed RC2 source-inputs v1 root. It validates source/archive, A/B binary and bundle equality, and independent build evidence, but establishes no runtime image assembly, OCI capture, rollback, freeze, or qualification claim.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "qualification_status",
+    "capture_scope",
+    "baseline_id",
+    "source_inputs",
+    "reproducibility_contract",
+    "builds",
+    "equality",
+    "binding_status",
+    "not_established"
+  ],
+  "properties": {
+    "schema_version": { "const": "riley.reconstructed-repro-build-inputs.v1" },
+    "status": { "const": "prepared" },
+    "qualification_status": { "const": "not-run" },
+    "capture_scope": { "const": "existing-pr16-a-b-reproducibility-evidence-inputs" },
+    "baseline_id": { "const": "reconstructed-riley-0.1.0-rc2" },
+    "source_inputs": { "$ref": "#/$defs/sourceInputs" },
+    "reproducibility_contract": { "$ref": "#/$defs/reproducibilityContract" },
+    "builds": { "$ref": "#/$defs/builds" },
+    "equality": { "$ref": "#/$defs/equality" },
+    "binding_status": { "$ref": "#/$defs/bindingStatus" },
+    "not_established": { "$ref": "#/$defs/notEstablished" }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{64}$" },
+        { "not": { "const": "0000000000000000000000000000000000000000000000000000000000000000" } }
+      ]
+    },
+    "gitSha1": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{40}$" },
+        { "not": { "const": "0000000000000000000000000000000000000000" } }
+      ]
+    },
+    "ociDigest": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^sha256:[0-9a-f]{64}$" },
+        { "not": { "const": "sha256:0000000000000000000000000000000000000000000000000000000000000000" } }
+      ]
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byte_length": { "type": "integer", "minimum": 1, "maximum": 8606711808 }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag_name", "tag_object", "tag_target", "archive"],
+      "properties": {
+        "tag_name": { "const": "riley-0.1.0-rc2" },
+        "tag_object": {
+          "allOf": [
+            { "$ref": "#/$defs/descriptor" },
+            { "properties": { "path": { "const": "source/git-tag-object.json" } } }
+          ]
+        },
+        "tag_target": {
+          "allOf": [
+            { "$ref": "#/$defs/descriptor" },
+            { "properties": { "path": { "const": "source/git-tag-target.json" } } }
+          ]
+        },
+        "archive": {
+          "allOf": [
+            { "$ref": "#/$defs/descriptor" },
+            { "properties": { "path": { "const": "source/riley-0.1.0-rc2.tar" } } }
+          ]
+        }
+      }
+    },
+    "gitIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag_ref", "tag_object_sha1", "target_commit_sha1"],
+      "properties": {
+        "tag_ref": { "const": "refs/tags/riley-0.1.0-rc2" },
+        "tag_object_sha1": { "const": "a3f5203c3a72122e9da818c1e441c2a789f7aa8c" },
+        "target_commit_sha1": { "const": "6093006ec2b01b784b01ba278296b676f2dfd03a" }
+      }
+    },
+    "sourceInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt", "expected_source_archive_sha256", "git_identity", "source"],
+      "properties": {
+        "receipt": {
+          "allOf": [
+            { "$ref": "#/$defs/descriptor" },
+            { "properties": { "path": { "const": "reconstructed-rc2-source-inputs.json" } } }
+          ]
+        },
+        "expected_source_archive_sha256": { "$ref": "#/$defs/sha256" },
+        "git_identity": { "$ref": "#/$defs/gitIdentity" },
+        "source": { "$ref": "#/$defs/source" }
+      }
+    },
+    "reproducibilityContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "gate_id", "source_revision", "source_date_epoch", "build_image_id", "platform", "network", "independent_clean_containers"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "gate_id": { "const": "pr16-release-build-reproducibility-v1" },
+        "source_revision": { "$ref": "#/$defs/gitSha1" },
+        "source_date_epoch": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "build_image_id": { "$ref": "#/$defs/ociDigest" },
+        "platform": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["os", "architecture"],
+          "properties": { "os": { "const": "linux" }, "architecture": { "const": "amd64" } }
+        },
+        "network": { "const": "none" },
+        "independent_clean_containers": { "const": 2 }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reconstruction_id", "evidence_build_id", "evidence_archive", "build_manifest", "binary", "bundle"],
+      "properties": {
+        "reconstruction_id": { "enum": ["a", "b"] },
+        "evidence_build_id": { "enum": ["A", "B"] },
+        "evidence_archive": { "$ref": "#/$defs/descriptor" },
+        "build_manifest": { "$ref": "#/$defs/descriptor" },
+        "binary": { "$ref": "#/$defs/descriptor" },
+        "bundle": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "builds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["a", "b"],
+      "properties": {
+        "a": {
+          "allOf": [
+            { "$ref": "#/$defs/build" },
+            {
+              "properties": {
+                "reconstruction_id": { "const": "a" },
+                "evidence_build_id": { "const": "A" },
+                "evidence_archive": { "properties": { "path": { "const": "repro-builds/a/repro-build-a.tar" } } },
+                "build_manifest": { "properties": { "path": { "const": "repro-builds/a/build.json" } } },
+                "binary": { "properties": { "path": { "const": "repro-builds/a/riley" } } },
+                "bundle": { "properties": { "path": { "const": "repro-builds/a/riley.tar.gz" } } }
+              }
+            }
+          ]
+        },
+        "b": {
+          "allOf": [
+            { "$ref": "#/$defs/build" },
+            {
+              "properties": {
+                "reconstruction_id": { "const": "b" },
+                "evidence_build_id": { "const": "B" },
+                "evidence_archive": { "properties": { "path": { "const": "repro-builds/b/repro-build-b.tar" } } },
+                "build_manifest": { "properties": { "path": { "const": "repro-builds/b/build.json" } } },
+                "binary": { "properties": { "path": { "const": "repro-builds/b/riley" } } },
+                "bundle": { "properties": { "path": { "const": "repro-builds/b/riley.tar.gz" } } }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "equalityArm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["a", "b", "sha256"],
+      "properties": {
+        "a": { "$ref": "#/$defs/descriptor" },
+        "b": { "$ref": "#/$defs/descriptor" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "equality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binary", "bundle"],
+      "properties": {
+        "binary": {
+          "allOf": [
+            { "$ref": "#/$defs/equalityArm" },
+            {
+              "properties": {
+                "a": { "properties": { "path": { "const": "repro-builds/a/riley" } } },
+                "b": { "properties": { "path": { "const": "repro-builds/b/riley" } } }
+              }
+            }
+          ]
+        },
+        "bundle": {
+          "allOf": [
+            { "$ref": "#/$defs/equalityArm" },
+            {
+              "properties": {
+                "a": { "properties": { "path": { "const": "repro-builds/a/riley.tar.gz" } } },
+                "b": { "properties": { "path": { "const": "repro-builds/b/riley.tar.gz" } } }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "bindingStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_inputs", "reproducibility_evidence", "source_archive", "binary_a_b", "bundle_a_b", "execution_independence"],
+      "properties": {
+        "source_inputs": { "const": "replayed-reviewed-rc2-source-inputs-v1" },
+        "reproducibility_evidence": { "const": "replayed-pr16-release-build-reproducibility-v1" },
+        "source_archive": { "const": "validated" },
+        "binary_a_b": { "const": "validated" },
+        "bundle_a_b": { "const": "validated" },
+        "execution_independence": { "const": "validated" }
+      }
+    },
+    "notEstablished": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime_image_assembly", "runtime_image_capture", "source_to_runtime_image", "bundle_to_runtime_image", "oci_content", "rollback", "freeze", "qualification"],
+      "properties": {
+        "runtime_image_assembly": { "const": "not-established" },
+        "runtime_image_capture": { "const": "not-established" },
+        "source_to_runtime_image": { "const": "not-established" },
+        "bundle_to_runtime_image": { "const": "not-established" },
+        "oci_content": { "const": "not-established" },
+        "rollback": { "const": "not-established" },
+        "freeze": { "const": "not-established" },
+        "qualification": { "const": "not-run" }
+      }
+    }
+  }
+}

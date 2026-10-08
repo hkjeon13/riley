@@ -1,0 +1,21 @@
+{
+  "scope": "instrumented whole capture; actual GPU/API interval intersection; no HTTP or scheduler attribution, no serving score",
+  "kernel_union_ns": 2103310506,
+  "runtime_api": {
+    "cudaGraphLaunch_v10000": {
+      "events": 1920,
+      "union_ns": 272504242,
+      "kernel_overlap_ns": 154258,
+      "API_time_without_recorded_kernel_overlap_ns": 272349984
+    },
+    "cudaStreamSynchronize_v3020": {
+      "events": 1920,
+      "union_ns": 2156138607,
+      "kernel_overlap_ns": 2103088749,
+      "API_time_without_recorded_kernel_overlap_ns": 53049858
+    }
+  },
+  "overlap_policy": "CUDA synchronize duration contains GPU work; do not add API and kernel durations; non-overlap does not identify a cause",
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "goal_achieved": false
+}

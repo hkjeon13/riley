@@ -1,0 +1,31 @@
+{
+  "actual_preserved_warmup_replay": {
+    "requests": 96,
+    "reference_matches": 96,
+    "used_for_serving_metrics": false
+  },
+  "mutations": {
+    "omitted_row": {
+      "rejected": true,
+      "reason": "warmup incomplete"
+    },
+    "wrong_phase": {
+      "rejected": true,
+      "reason": "warmup corpus/phase differs"
+    },
+    "missing_DONE": {
+      "rejected": true,
+      "reason": "incomplete SSE"
+    },
+    "changed_actual_prompt": {
+      "rejected": true,
+      "reason": "row/frames token mismatch"
+    }
+  },
+  "source_archive": "diagnostic-baseline-attempt01.tar.gz",
+  "row_bytes_sha256": "f5d0475889206b1f005174a6999be7a03ea0ff5fcb4c46713e5bb9f90260f7c8",
+  "account_bytes_sha256": "2754bc6c91e5e2ccf67aaf693d453302947ae959d623870397bd966beec9b4ec",
+  "verifier_sha256": "97207b8811e2cfb4fda95adfa9480ecd3b62c48a65da6371943b51bad7951bd2",
+  "scope": "one real recovered V52 HTTP warmup lane plus four corruption checks; batch01 complete-matrix replay remains pending",
+  "serving_performance": "미실행"
+}

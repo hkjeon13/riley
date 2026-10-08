@@ -1,0 +1,26 @@
+{
+  "independent_HF_raw_tensor_count": 156,
+  "native_M1_exact_stages": 52,
+  "all_raw_HF_hashes_bound": true,
+  "teacher_row1_sha256": "d4bb3effb2125dde0f10ccd5d8e9e2d97b56dd01cdf2d1179d02afbe5a138b05",
+  "source_commit": "4da970a7153ff615cc9f6b0e679d3bd0d7ce2064",
+  "quality_gate": {
+    "cache_on_full_forward_bf16_exact": true,
+    "cache_on_m1_decode_bf16_exact": true,
+    "candidate_exact_m1_stage_count": 52,
+    "corrected_cache_on_eligible": true,
+    "performance_claim_eligible": false,
+    "required_m1_stage_count": 52,
+    "serving_selector_eligible": false
+  },
+  "repeat_execution": {
+    "all_m1_trace_tensors_bf16_identical": true,
+    "reused_prepared_owner": true,
+    "reused_trace_storage": true
+  },
+  "scope": "Immutable HF bytes independently hashed; native candidate byte digests and repeat claims bound to actual source/test log. No independent native raw tensor dump.",
+  "M2_full128_generation": "unverified",
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "adopted": false,
+  "goal_achieved": false
+}

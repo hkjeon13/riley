@@ -1,0 +1,68 @@
+{
+  "argv": [
+    "/data/riley-serving-261007/v52-target/release/riley",
+    "serve",
+    "--model",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+    "--model-id",
+    "g04-smol",
+    "--bind",
+    "127.0.0.1:59577",
+    "--max-active-sequences",
+    "8",
+    "--max-waiting-requests",
+    "64",
+    "--batch-token-budget",
+    "512",
+    "--prefill-chunk-tokens",
+    "512",
+    "--max-sequence-tokens",
+    "1024",
+    "--max-output-tokens",
+    "128",
+    "--kv-blocks",
+    "512",
+    "--residual-rmsnorm",
+    "separate",
+    "--execution-completion",
+    "iteration-batch",
+    "--metadata-transport",
+    "synchronous",
+    "--execution-graph-policy",
+    "require",
+    "--graph-numerics",
+    "variable-smol-v7",
+    "--sampling-backend",
+    "gpu-greedy"
+  ],
+  "env": {
+    "HOME": "/home/psyche",
+    "PATH": "/data/riley-serving-261007/vllm0271-venv/bin:/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin:/usr/bin:/bin",
+    "CUDA_HOME": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13",
+    "LANG": "C.UTF-8",
+    "CPATH": "/data/riley-serving-261007/curand-only-include",
+    "LC_ALL": "C.UTF-8",
+    "CUDA_VISIBLE_DEVICES": "0",
+    "VLLM_BATCH_INVARIANT": "0",
+    "LD_LIBRARY_PATH": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib"
+  },
+  "host": {
+    "time_ns": 1791417569658927090,
+    "clocks": {
+      "perf_counter_before_ns": 930196608343464,
+      "perf_counter_after_ns": 930196608344616,
+      "epoch_ns": 1791417569658927090,
+      "monotonic_ns": 930196608344306,
+      "monotonic_raw_ns": 930183430764160,
+      "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+    },
+    "pressure": {
+      "cpu": "some avg10=0.38 avg60=0.56 avg300=0.50 total=14326850736\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+      "io": "some avg10=2.42 avg60=2.57 avg300=3.10 total=82106092623\nfull avg10=2.29 avg60=2.42 avg300=2.89 total=74959417172\n",
+      "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2144718901\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2093240375\n"
+    },
+    "loadavg": "6.60 6.29 5.95 5/8281 2613835\n",
+    "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 45, 40.82, 285, 359, 0"
+  },
+  "binary_sha256": "6f424278437f82a462ee141c829914d02ccb8c02ed604fa166c70c3c70bb16f6"
+}

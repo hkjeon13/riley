@@ -1,0 +1,119 @@
+{"torch": "2.13.0+cu130", "flashinfer": "0.6.16.post3", "gpu": "NVIDIA GeForce RTX 4090", "capability": [8, 9]}
+{"tensor_cores": false, "error": "[Errno 2] No such file or directory: 'ninja'"}
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/flashinfer-compatibility/probe.py", line 24, in <module>
+    w.plan(indptr,indices,last,9,3,64,16,pos_encoding_mode="NONE",q_data_type=torch.bfloat16,kv_data_type=torch.bfloat16)
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/decode.py", line 1347, in plan
+    return self._plan_impl(
+           ~~~~~~~~~~~~~~~^
+        indptr,
+        ^^^^^^^
+    ...<6 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    )
+    ^
+  File "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/decode.py", line 1700, in _plan_impl
+    self._cached_module = get_batch_decode_module(
+                          ~~~~~~~~~~~~~~~~~~~~~~~^
+        q_data_type,
+        ^^^^^^^^^^^^
+    ...<7 lines>...
+        logits_soft_cap > 0,  # use_logits_soft_cap
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/decode.py", line 292, in get_batch_decode_module
+    mod = gen_batch_decode_module(*args).build_and_load()
+  File "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/jit/core.py", line 320, in build_and_load
+    self.build()
+    ~~~~~~~~~~^^
+  File "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/jit/core.py", line 427, in build
+    run_ninja(self.build_dir, self.ninja_path, verbose)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/jit/cpp_ext.py", line 370, in run_ninja
+    subprocess.run(
+    ~~~~~~~~~~~~~~^
+        command,
+        ^^^^^^^^
+    ...<4 lines>...
+        text=True,
+        ^^^^^^^^^^
+    )
+    ^
+  File "/data/riley-vllm-interim.CfrT9T/python/cpython-3.13.15-linux-x86_64-gnu/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/riley-vllm-interim.CfrT9T/python/cpython-3.13.15-linux-x86_64-gnu/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/riley-vllm-interim.CfrT9T/python/cpython-3.13.15-linux-x86_64-gnu/lib/python3.13/subprocess.py", line 1991, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'ninja'
+{"tensor_cores": true, "error": "[Errno 2] No such file or directory: 'ninja'"}
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/flashinfer-compatibility/probe.py", line 24, in <module>
+    w.plan(indptr,indices,last,9,3,64,16,pos_encoding_mode="NONE",q_data_type=torch.bfloat16,kv_data_type=torch.bfloat16)
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/decode.py", line 1347, in plan
+    return self._plan_impl(
+           ~~~~~~~~~~~~~~~^
+        indptr,
+        ^^^^^^^
+    ...<6 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    )
+    ^
+  File "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/decode.py", line 1656, in _plan_impl
+    self._cached_module = get_batch_prefill_module(
+                          ~~~~~~~~~~~~~~~~~~~~~~~~^
+        self._backend,
+        ^^^^^^^^^^^^^^
+    ...<9 lines>...
+        False,  # use_fp16_qk_reduction
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/prefill.py", line 462, in get_batch_prefill_module
+    module = gen_batch_prefill_module(backend, *args).build_and_load()
+  File "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/jit/core.py", line 320, in build_and_load
+    self.build()
+    ~~~~~~~~~~^^
+  File "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/jit/core.py", line 427, in build
+    run_ninja(self.build_dir, self.ninja_path, verbose)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/jit/cpp_ext.py", line 370, in run_ninja
+    subprocess.run(
+    ~~~~~~~~~~~~~~^
+        command,
+        ^^^^^^^^
+    ...<4 lines>...
+        text=True,
+        ^^^^^^^^^^
+    )
+    ^
+  File "/data/riley-vllm-interim.CfrT9T/python/cpython-3.13.15-linux-x86_64-gnu/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/riley-vllm-interim.CfrT9T/python/cpython-3.13.15-linux-x86_64-gnu/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/riley-vllm-interim.CfrT9T/python/cpython-3.13.15-linux-x86_64-gnu/lib/python3.13/subprocess.py", line 1991, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'ninja'

@@ -1,0 +1,41 @@
+{
+  "state": {
+    "GPU": "",
+    "destination_exists": false
+  },
+  "source": "e42cc345a08913b2dc1f9a0ea618dd73e3390f8e",
+  "files": {
+    "batch-plan.json": "f296d67e0c9762cafb011a04428341011e6f6dcba4e17b0a206da1f254a30f9e",
+    "run.py": "a476b937660b92418026c3b660a782d4f9a6c4a667edf3a757babd8982eb6865",
+    "serving_token_client_v2.py": "2bc9238265666b99654f4f4e456ca0bb10c45b8bed8f28493452b89c1f450fcf",
+    "mixed_phase_v34.py": "c37408fb6d02f41ee7fb56d6bd41beda305dd2cf5bb4ef3a73879cb44401c96f",
+    "fixtures.json": "ae1f6f48a2acc1f7c0a6f084567bb96916cb005eeb727ae59aca815f1c5ab955",
+    "kernel-batch06-native-http-independent-verification.json": "09cb0f69813521e825a157dfccdf60e93799a898b2f46f36c7340b6a17ae61a8"
+  },
+  "created_ns": 1791377092791175000,
+  "expected_lanes": 96,
+  "repeats": 4,
+  "orders": [
+    [
+      "v52",
+      "candidate",
+      "vllm"
+    ],
+    [
+      "vllm",
+      "candidate",
+      "v52"
+    ],
+    [
+      "v52",
+      "candidate",
+      "vllm"
+    ],
+    [
+      "vllm",
+      "candidate",
+      "v52"
+    ]
+  ],
+  "no_exclusions": true
+}

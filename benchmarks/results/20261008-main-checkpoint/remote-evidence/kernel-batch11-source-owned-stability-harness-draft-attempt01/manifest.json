@@ -1,0 +1,25 @@
+{
+  "status": "draft; not compiled or executed",
+  "base_source_commit": "2fd37841e302fc2b34dc79567713dea6241b49ac",
+  "test_source_sha256": "35d9491732a74e051c505cdc6209cd5e096ff56cd5ad627ac9b9f56d1ab4c999",
+  "production_source_modified": false,
+  "production_binary_modified": false,
+  "constructor_source": {
+    "path": "/data/riley-serving-261007/kernel-batch11-source-attempt02/crates/riley-server/src/main.rs",
+    "scheduler_and_executor_lines": [
+      1012,
+      1097
+    ],
+    "engine_and_HTTP_lines": [
+      1156,
+      1209
+    ]
+  },
+  "scope": "All8 exact scheduler/numerics construction; existing worker-owned C02 snapshot; HTTP observation capture; final source-owned shutdown quiescence. Actual HTTP own/reference parity and cancellation phase tests remain required. No prefill-phase proof from missing visible first token.",
+  "remaining": [
+    "Review constructor equality against actual source and effective facts",
+    "Integrate as test-only file in isolated source-bound worktree after benchmark",
+    "Compile and verify actual HTTP parity before attributing source snapshot results",
+    "Preserve all failures; no adoption from harness alone"
+  ]
+}

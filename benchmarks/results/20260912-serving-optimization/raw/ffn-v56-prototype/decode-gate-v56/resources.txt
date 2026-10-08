@@ -1,0 +1,53 @@
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+ Function _ZN14riley_gate_v567gate_upILi1ELb1EEEvPK13__nv_bfloat16S3_S3_PS1_PKj:
+  REG:40 STACK:0 SHARED:0 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN14riley_gate_v567gate_upILi2ELb1EEEvPK13__nv_bfloat16S3_S3_PS1_PKj:
+  REG:44 STACK:0 SHARED:0 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN14riley_gate_v567gate_upILi2ELb0EEEvPK13__nv_bfloat16S3_S3_PS1_PKj:
+  REG:38 STACK:0 SHARED:0 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN14riley_gate_v567gate_upILi4ELb0EEEvPK13__nv_bfloat16S3_S3_PS1_PKj:
+  REG:44 STACK:0 SHARED:0 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN18riley_decode_shape6valuesEPKfPK13__nv_bfloat16PS2_PKjS7_:
+  REG:40 STACK:0 SHARED:256 LOCAL:0 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN18riley_decode_shape6scoresEPK13__nv_bfloat16S2_PfPKjS5_:
+  REG:38 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN19riley_prefill_shape15attention_shapeEPK13__nv_bfloat16S2_S2_PS0_iiPKiPKjS7_:
+  REG:80 STACK:0 SHARED:3840 LOCAL:0 CONSTANT[0]:416 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z23shared32_gate_up_swigluILb1EEvPK13__nv_bfloat16S2_S2_PS0_PKj:
+  REG:36 STACK:0 SHARED:1024 LOCAL:0 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z18shared32_qkv_mergePKfP13__nv_bfloat16S2_S2_PKj:
+  REG:14 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z18shared32_qkv_partsPK13__nv_bfloat16S1_S1_S1_PfPKj:
+  REG:59 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z16shared32_gate_upPK13__nv_bfloat16S1_S1_PS_S2_PKj:
+  REG:34 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 

@@ -1,0 +1,53 @@
+{
+  "schema_version": "riley.qwen-own-greedy-fixed128-plan.v1",
+  "created_ns": 1791371763050281000,
+  "source_commit": "d3fc3643f16f558a5a182f63f4fa7204e53b86a0",
+  "correctness_qualified_parent_commit": "2612208b9ac02ffa79b563b87f073c239b35da18",
+  "source_scope": "test only; singleton RMSNorm/runtime/CUDA unchanged",
+  "source_blob_verification": {
+    "source_commit": "d3fc3643f16f558a5a182f63f4fa7204e53b86a0",
+    "verified_source_files": 433,
+    "code_worktree_clean": true,
+    "excluded_nonbuild_files_skip_worktree": 18680,
+    "scope": "Cargo workspace and all tracked CUDA files verified against true Git blobs; excluded docs/results not materialized"
+  },
+  "artifact_sha256": {
+    "run_qwen_free_running_attempt01.py": "f697f68ca937be631a0379014945fa8d26d03c8fb6be0dcbd0117123eee55623",
+    "qwen-free-running-source-receipt-attempt01.json": "3528572fff11f57f1cdf9f4b28d49f8e69547d05bbcbf7a85496f3ddc79de741",
+    "qwen-free-running-source-attempt01.tar": "afbf89142629a6b1632cfe4aade13d63d2251c05ad879e46390a419ddd772433",
+    "qwen-free-running-commit-attempt01.pack": "f102c177169e15afd956b1f4eb43cbf2db2b6bf057d839b4b65d616cfdd145d9",
+    "qwen-free-running-source-attempt01.patch": "34bd8a56183d99d2188ca79e83c6515553e871da69aafc9dcae85e1f6d3fcdc8",
+    "qwen-addressable-greedy-path-audit-attempt01.json": "5a89529308af77e48bde4ce8be28a7c51de2a9c86d7dd7e8f449e3b93f87d807",
+    "qwen-free-running-selection-policy-cpu-attempt01.rs": "86de0f8168b2944e5e2ebdd1aa29cbedee4ad3f66d971ecbcae31114b4dab562",
+    "qwen-free-running-selection-policy-cpu-attempt01": "88447df7ae25aa50a90a0ba23bca3cd138194cd018de3b6748bda82b86d5a5f9"
+  },
+  "workload": {
+    "model_revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+    "prompt_token_count": 2048,
+    "prompt_sha256": "56619bc156fb385345c12e523c71604fa9ef8ad3c52d9c913d0f6ff09f1c1fd9",
+    "output_count": 128,
+    "batch_size": 1,
+    "owner_capacity": 2175,
+    "dtype": "BF16",
+    "addressable_token_count": 151665,
+    "sampling": "own numeric greedy logits; lowest token ID tie; signed zeros equal",
+    "eos": "fixed128 original oracle; configured EOS151645/151643 recorded; golden path selects neither",
+    "cache_on": true,
+    "repeat_order": "same owner generation, reset, re-prefill, generation",
+    "repeat_count": 2
+  },
+  "pass_gate": [
+    "actual native binary selection policy CPU test",
+    "own greedy128 selected IDs equal frozen HF teacher IDs",
+    "all128 raw logits BF16 byte-exact",
+    "same owner repeat IDs and logits identical",
+    "before-prefill and past-end reject without KV/trace mutation",
+    "owner close zero CUDA allocations; stream/context close",
+    "source433 true blobs and all immutable inputs unchanged"
+  ],
+  "execution_gate": "Batch05 actual controller terminal96, GPU idle, terminal raw archive and independent replay finished; no shared GPU/host IO overlap",
+  "native_gpu_execution": "미실행",
+  "serving_performance": "미실행",
+  "production_selector_eligible": false,
+  "goal_achieved": false
+}

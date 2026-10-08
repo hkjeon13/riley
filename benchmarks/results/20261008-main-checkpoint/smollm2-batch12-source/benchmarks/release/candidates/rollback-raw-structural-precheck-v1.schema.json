@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rollback-raw-structural-precheck-v1.schema.json",
+  "title": "Riley RC3 rollback raw-structural precheck v1",
+  "description": "Read-only structural admission for one completed terminal rollback provenance v4 manifest. It is not producer success, host rollback, lifecycle authority, a semantic receipt, or a candidate qualification result.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "qualification_status",
+    "authority",
+    "candidate_id",
+    "bindings",
+    "raw_manifest",
+    "raw_manifest_version",
+    "rollback_v3_manifest",
+    "atomic_transaction_session",
+    "checks",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "riley.rc3-rollback-raw-structural-precheck.v1"
+    },
+    "status": {
+      "const": "bound"
+    },
+    "qualification_status": {
+      "const": "not-run"
+    },
+    "authority": {
+      "const": "raw-structural-only"
+    },
+    "candidate_id": {
+      "$ref": "#/$defs/candidateId"
+    },
+    "bindings": {
+      "$ref": "#/$defs/bindings"
+    },
+    "raw_manifest": {
+      "$ref": "#/$defs/rootManifestDescriptor"
+    },
+    "raw_manifest_version": {
+      "const": "riley.rc3-rollback-terminal-provenance.v4"
+    },
+    "rollback_v3_manifest": {
+      "$ref": "#/$defs/rootManifestDescriptor"
+    },
+    "atomic_transaction_session": {
+      "$ref": "#/$defs/fixedTransactionDescriptor"
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/v4CompletedCheck"
+        },
+        {
+          "$ref": "#/$defs/headerDescriptorCheck"
+        }
+      ],
+      "items": false
+    },
+    "reason_codes": {
+      "const": []
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "not": {
+        "const": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    "rootJsonLeaf": {
+      "type": "string",
+      "minLength": 6,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.json$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "byte_length"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        }
+      }
+    },
+    "rootManifestDescriptor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/descriptor"
+        },
+        {
+          "properties": {
+            "path": {
+              "$ref": "#/$defs/rootJsonLeaf"
+            }
+          }
+        }
+      ]
+    },
+    "fixedTransactionDescriptor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/descriptor"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "rollback-v3-atomic-transaction/session.json"
+            }
+          }
+        }
+      ]
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "freeze_sha256",
+        "base_release_candidate_report_sha256",
+        "configuration_profile",
+        "configuration_sha256"
+      ],
+      "properties": {
+        "freeze_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "base_release_candidate_report_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "configuration_profile": {
+          "const": "stable-default"
+        },
+        "configuration_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "v4CompletedCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "bound"
+      ],
+      "properties": {
+        "name": {
+          "const": "completed-v4-rollback-raw-provenance"
+        },
+        "bound": {
+          "const": true
+        }
+      }
+    },
+    "headerDescriptorCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "bound"
+      ],
+      "properties": {
+        "name": {
+          "const": "header-to-completed-replay-descriptor-binding"
+        },
+        "bound": {
+          "const": true
+        }
+      }
+    }
+  }
+}

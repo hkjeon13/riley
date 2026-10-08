@@ -1,0 +1,6 @@
+error: invalid object 100644 1e2b4160c037ee9cc8032a6d3e63c97b84847aac for '.github/workflows/c03-routing-fuzz.yml'
+Traceback (most recent call last):
+  File "/data/riley-serving-261007/run_qwen_m2_bounded_attempt01.py", line 68, in <module>
+    assert p.returncode==0,'M1/M2 exact104 gate failed; numeric evidence retained'
+           ^^^^^^^^^^^^^^^
+AssertionError: M1/M2 exact104 gate failed; numeric evidence retained

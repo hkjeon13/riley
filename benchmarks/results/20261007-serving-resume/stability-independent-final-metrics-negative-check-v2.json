@@ -1,0 +1,21 @@
+{
+  "valid_zero_final_passed": true,
+  "nonzero_or_accepting_final_rejected": [
+    "request_states.active",
+    "request_states.pending_requests",
+    "kv_blocks.reserved",
+    "kv_blocks.active",
+    "quiescence.completion_outbox",
+    "quiescence.outstanding_iterations",
+    "allocation.device_live_count",
+    "allocation.device_live_bytes",
+    "allocation.pinned_live_count",
+    "allocation.pinned_live_bytes",
+    "quiescence.riley_owned_live_allocations",
+    "quiescence.worker_accepting",
+    "quiescence.scheduler_accepting"
+  ],
+  "count": 13,
+  "scope": "host-only verifier negative checks; GPU stability \ubbf8\uc2e4\ud589",
+  "goal_achieved": false
+}

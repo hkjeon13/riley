@@ -1,0 +1,129 @@
+{
+  "schema": "riley.batch07.root-process-tree-all8-profile32.v1",
+  "scope": "diagnostic32: all8 frozen conditions, V52/candidate ABBA; trigger only after full96 independent FAIL screen; no serving gain claims",
+  "baseline": "/data/riley-serving-261007/kernel-batch07-quiet-attempt01",
+  "engines": [
+    "v52",
+    "candidate"
+  ],
+  "concurrency": [
+    1,
+    8,
+    16,
+    32
+  ],
+  "workloads": [
+    "fixed",
+    "natural"
+  ],
+  "orders": [
+    [
+      "v52",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "v52"
+    ]
+  ],
+  "warmup": 96,
+  "retained": 96,
+  "startup_timeout_seconds": 300,
+  "tool": "/data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/bin/nsys",
+  "expected_tool_version": "NVIDIA Nsight Systems version 2025.5.2.266-255236693005v0",
+  "launch_trace": "cuda,osrt",
+  "sample": "process-tree",
+  "cpuctxsw": "process-tree",
+  "backtrace": "lbr",
+  "collection_policy": "profile full target lifetime from process launch through exact-target SIGTERM and profiler auto-stop; startup/warmup/retained/teardown preserved; no trim",
+  "clock_policy": "sandwiched perf_counter/epoch/monotonic/raw bridge at every phase boundary; exported GPU/HTTP clock mapping still must be independently checked before correlation",
+  "analysis_policy": "actual root process-tree CPU stacks/scheduling and CUDA spans; separate interval unions/intersections, no idle-gap causal attribution; profiling timings are diagnostic only",
+  "failure_policy": "preserve all artifacts and stop on errors, missing CUDA data, numerical/protocol mismatch or unreclaimed owned GPU resources; no slow sample removal",
+  "performance_claim_eligible": false,
+  "goal_achieved": false,
+  "method_reference": "https://docs.nvidia.com/nsight-systems/UserGuide/index.html",
+  "compatibility_pending": false,
+  "cpu_profiling": {
+    "state": "root environment check supports process-tree without changing kernel paranoid level4",
+    "environment_check": "kernel-batch05-root-cpu-profiling-environment-attempt01.txt",
+    "environment_check_sha256": "00b119559ed32a7d0494332cc47b76f4c8f28b17a8eade1a074841397857b5a7",
+    "host_setting_mutation": false,
+    "actual_CPU_stack_and_context_switch_capture": "unverified until real SQLite tables and diagnostics inspected"
+  },
+  "cuda_graph_trace": "node",
+  "reclamation_timeout_seconds": 40,
+  "graph_trace_recovery": "attempt02 default graph mode produced graph events but no kernel node table; installed CLI node option verified; node capture overhead is diagnostic only",
+  "tool_package_SHA256": "e818fefc62b1e6c3bd34eb92b4e412355afddb763b55e8d7bc3330c4e3da4d33",
+  "expected_baseline_binary_sha256": "6f424278437f82a462ee141c829914d02ccb8c02ed604fa166c70c3c70bb16f6",
+  "expected_candidate_binary_sha256": "be2d848f574c02b695a98e4c2f780b68bdf1b4d6b1f3ce1d31c3771cc3391f7c",
+  "candidate_source_commit": "73003e2d8f1ce797b4e669c813c43261b30a46a2",
+  "GPU_UUID": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+  "remaining_serving_gaps": "C1fixed TPOT+2.793%; C32fixed TPOT+13.763%; C32natural throughput-4.633%,TPOT+18.656%,E2E P95+2.645%,P99+1.060%",
+  "full_core_serving_adoption": false,
+  "capture_completeness_requirement": "Preserve all collected/not-all-collected diagnostics; event-count consistency does not establish trace completeness; no API/GPU additive timing or unaligned HTTP phase attribution.",
+  "cells": [
+    {
+      "concurrency": 1,
+      "workload": "fixed"
+    },
+    {
+      "concurrency": 1,
+      "workload": "natural"
+    },
+    {
+      "concurrency": 8,
+      "workload": "fixed"
+    },
+    {
+      "concurrency": 8,
+      "workload": "natural"
+    },
+    {
+      "concurrency": 16,
+      "workload": "fixed"
+    },
+    {
+      "concurrency": 16,
+      "workload": "natural"
+    },
+    {
+      "concurrency": 32,
+      "workload": "fixed"
+    },
+    {
+      "concurrency": 32,
+      "workload": "natural"
+    }
+  ],
+  "capture_range": "none",
+  "stop_on_exit": true,
+  "expected_lanes": 32,
+  "prior_diagnostic_warning_hypothesis": "whole-lifetime collection tests session boundary warnings; warning cause or trace completeness is not established",
+  "target_ownership_policy": "exact frozen argv including bind port; root UID0; pinned binary SHA; active CUDA PID; no profiler PGID assumption",
+  "expected_target_uid": 0,
+  "profiler_private_directories": "lane/profiler-private; HOME/config/cache/tmp isolated; target frozen HOME/PATH/CUDA/etc supplied with installed --env-var",
+  "previous_validated_GPU_capture": "Batch06 full-lifetime root CPU12 independently replayed2304 HTTP requests, collected CUDA tables reconciled; capture completeness unproven",
+  "binding_policy": "resolve only from terminal independently verified full96 archive manifest, before any profile launch; policy/order/source/bin frozen now",
+  "baseline_source_file_shas": {
+    "preparation.json": "b89ec41989ef90b6fef749308343e8fab43d37fa1aa62aa16d0435f9349501b2",
+    "completion.json": "fe6ecf1e4578e6f479a88e68bd1f997e5a74561dbc3f6088eaf1fe29df865516",
+    "c1-fixed-r0-v52-launch.json": "5f07b3233367939fdd192739269b41369a90d821ad1c1246d24d3113273b7220",
+    "c1-fixed-r0-candidate-launch.json": "215f554a64634b18c7d8323e1f092d23b8aeb4ac87641616d7b71683919ff96a",
+    "c1-natural-r0-v52-launch.json": "e8d0a7e1d21e68980422c8271653d0c09da1aa9a8daae6d1dc3b3a6461af19e3",
+    "c1-natural-r0-candidate-launch.json": "539d087fd0ca83c51fb63db563bd9056d2df58edad5071bba1152f413bfaf4f0",
+    "c8-fixed-r0-v52-launch.json": "582d5021b895298119548aaf97893fbf7642fd4c8fb7e8dbef7db73f74042881",
+    "c8-fixed-r0-candidate-launch.json": "c792f2e2c8991b20224afe6daa81989b50a16a674a5c7cd66fd212d41f014777",
+    "c8-natural-r0-v52-launch.json": "3f860ad4528d6e55e210a076f0a20959f253520c85930cb0108b4d4c62fac761",
+    "c8-natural-r0-candidate-launch.json": "3415dfb883ee4cb9ab97d4180912e529320e3cc211b9095ffafee9c66b5abc86",
+    "c16-fixed-r0-v52-launch.json": "137fdefd00d1231d3526fa74c8b0e6df34da26bdb210d3a3bec60bd7671c51f5",
+    "c16-fixed-r0-candidate-launch.json": "26f614a52119bfa2b7181ff7d920d079adb9f1e77424d86118178ca8bf3964d5",
+    "c16-natural-r0-v52-launch.json": "c6821640080bfb7f70b770ca21bc79eb31c4e5de6cd2e7baf3b56da474592ee1",
+    "c16-natural-r0-candidate-launch.json": "e1f6e6b16fd1b75dc4474b28f70f786f223646aaeeecab51fff964874235df65",
+    "c32-fixed-r0-v52-launch.json": "045d803a520f86d3bec19ad1dd418d31b59b6b23ed3f1a4a0ac643c456cdd9e9",
+    "c32-fixed-r0-candidate-launch.json": "e47cfb63b2b0893ae7c67414f4e4f129b724bff44c80ac61a97954f5014c734c",
+    "c32-natural-r0-v52-launch.json": "8a5b6e264f7afdee8b0eb3609f668d525bcf4ed20b0a4960377782442ecab6fc",
+    "c32-natural-r0-candidate-launch.json": "3d8867cc2d19159a1a3e8d21fef6e8326584d3cea40c9d6b291198f62db043b5"
+  },
+  "baseline_verification_file_sha256": "162006930d36545fce7a4a4e60e102bfecfd474974ea98b05f4e8e08748765ca",
+  "verified_serving_archive_sha256": "08815ba1aed98ed7d6aded01adf486015a52c6ee41dafc22f39581a79fc9ce61"
+}

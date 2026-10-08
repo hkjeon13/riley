@@ -1,0 +1,139 @@
+{
+  "source_commit": "de64579cdcbeb78cbe638fa76f3c2e0b944cc5cf",
+  "native_primitive_source_sha256": "8157bd3787a37d1a66e400290c1e1239edbd60bdefb6373ec8f1bc71c68c6197",
+  "rows": [
+    {
+      "step": 108,
+      "input_exact_BF16": true,
+      "input_sha256": "d561acb2e513ce9a69ad4bcf16da8c4f9724c4d6c2beeb956daca165e7322a87",
+      "source_warp32_four_register_variance_F32": 0.24441646039485931,
+      "source_warp32_variance_bits": "0x3e7a484f",
+      "FP64_fsum_variance_reference": 0.24441645858792072,
+      "rounded_FP64_reference_F32_bits": "0x3e7a484f",
+      "variance_F32_ULP_difference_from_rounded_FP64_reference": 0,
+      "all_nonzero_squared_inputs_FP32_normal": true,
+      "norm_output_unequal_elements": 0,
+      "norm_output_differences": []
+    },
+    {
+      "step": 109,
+      "input_exact_BF16": true,
+      "input_sha256": "4d92b2bb7a1c5bc492334e33fc4f979c36f5e7da24c301d89de81be329f39227",
+      "source_warp32_four_register_variance_F32": 0.22468680143356323,
+      "source_warp32_variance_bits": "0x3e66144c",
+      "FP64_fsum_variance_reference": 0.22468681722239126,
+      "rounded_FP64_reference_F32_bits": "0x3e66144d",
+      "variance_F32_ULP_difference_from_rounded_FP64_reference": -1,
+      "all_nonzero_squared_inputs_FP32_normal": true,
+      "norm_output_unequal_elements": 16,
+      "norm_output_differences": [
+        {
+          "index": 306,
+          "HF": -0.039306640625,
+          "native": -0.03955078125,
+          "absolute_difference": 0.000244140625
+        },
+        {
+          "index": 354,
+          "HF": -0.6875,
+          "native": -0.69140625,
+          "absolute_difference": 0.00390625
+        },
+        {
+          "index": 380,
+          "HF": 0.0048828125,
+          "native": 0.004913330078125,
+          "absolute_difference": 3.0517578125e-05
+        },
+        {
+          "index": 490,
+          "HF": 0.1474609375,
+          "native": 0.1484375,
+          "absolute_difference": 0.0009765625
+        },
+        {
+          "index": 645,
+          "HF": -0.28515625,
+          "native": -0.287109375,
+          "absolute_difference": 0.001953125
+        },
+        {
+          "index": 696,
+          "HF": -0.703125,
+          "native": -0.70703125,
+          "absolute_difference": 0.00390625
+        },
+        {
+          "index": 758,
+          "HF": 0.0203857421875,
+          "native": 0.0205078125,
+          "absolute_difference": 0.0001220703125
+        },
+        {
+          "index": 1276,
+          "HF": -0.6328125,
+          "native": -0.63671875,
+          "absolute_difference": 0.00390625
+        },
+        {
+          "index": 1288,
+          "HF": 0.29296875,
+          "native": 0.294921875,
+          "absolute_difference": 0.001953125
+        },
+        {
+          "index": 1466,
+          "HF": 0.2890625,
+          "native": 0.291015625,
+          "absolute_difference": 0.001953125
+        },
+        {
+          "index": 1595,
+          "HF": 0.1572265625,
+          "native": 0.158203125,
+          "absolute_difference": 0.0009765625
+        },
+        {
+          "index": 1777,
+          "HF": -0.65625,
+          "native": -0.66015625,
+          "absolute_difference": 0.00390625
+        },
+        {
+          "index": 1799,
+          "HF": 0.294921875,
+          "native": 0.296875,
+          "absolute_difference": 0.001953125
+        },
+        {
+          "index": 1865,
+          "HF": 0.1708984375,
+          "native": 0.171875,
+          "absolute_difference": 0.0009765625
+        },
+        {
+          "index": 1932,
+          "HF": -0.318359375,
+          "native": -0.3203125,
+          "absolute_difference": 0.001953125
+        },
+        {
+          "index": 2047,
+          "HF": -0.328125,
+          "native": -0.330078125,
+          "absolute_difference": 0.001953125
+        }
+      ]
+    }
+  ],
+  "scope": "CPU description of pinned native sum reduction and exact captured input/output; FP64 reference is diagnostic only, not a replacement numerical policy",
+  "unmeasured": [
+    "actual HF variance FP32 bits",
+    "actual native/HF rsqrt FP32 bits",
+    "standalone RMSNorm replay with freshly verified checkpoint weight"
+  ],
+  "cause": "RMSNorm boundary isolated; reduction/rsqrt/rounding cause remains unproven until actual same-input isolated operator replay",
+  "arithmetic_or_tolerance_change": false,
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "goal_achieved": false
+}

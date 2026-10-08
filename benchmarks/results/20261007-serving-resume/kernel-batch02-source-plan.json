@@ -1,0 +1,42 @@
+{
+  "base_commit": "06302d8d8396b8f2f4996fec8595bbfa1dcd7450",
+  "commit": "3e9c979feff54b0525e198e569885e0ac0988e7f",
+  "worktree": "/Users/psyche/PycharmProjects/riley-serving-kernel-batch02",
+  "independent_of_batch01": true,
+  "measured_evidence": "profile-matrix-analysis/summary.json; C32natural mapped_attention14.31/14.10 percent of kernel work in reversed orders",
+  "changes": [
+    "load aligned two-BF16 query/key words, unchanged MMA/reduction order",
+    "FP32 score/exponential row stride132 and BF16 probability stride136;128 logical columns unchanged"
+  ],
+  "bank_conflict_claim": "structural hypothesis based on within-warp row offsets, not yet measured bank conflict counters",
+  "build": "미실행",
+  "native_correctness": "미실행",
+  "HTTP_serving": "미실행",
+  "adopted": false,
+  "goal_achieved": false,
+  "required_before_benchmark": [
+    "baseline/candidate direct mapped owner test with exact BF16 and guards",
+    "owners0..33;short fallback and tile8;logical cache1..4096;nonfinite V fallback",
+    "frozen all8 HTTP correctness",
+    "predeclared all8 matched baseline/candidate/vLLM matrix, no pooling with batch01"
+  ],
+  "patch_only_commit": "1401c99974eecf9cee1142f7bdd20bbd0314f67b",
+  "correctness_driver": {
+    "source": "kernels/tests/kernel_batch02_correctness.cu",
+    "cases": 198,
+    "seeds": [
+      1,
+      17,
+      99
+    ],
+    "output_bit_equality_and_before_after_guards": true,
+    "execution": "queued; 미실행",
+    "includes": "short/tile8, owner0..33, context1..4096, nonfinite V fallback and invalid metadata"
+  },
+  "queue": {
+    "PID": 3697803,
+    "session": 18447,
+    "wait_for": 3630166,
+    "source_archive_pin": "kernel-batch02-source-receipt.json"
+  }
+}

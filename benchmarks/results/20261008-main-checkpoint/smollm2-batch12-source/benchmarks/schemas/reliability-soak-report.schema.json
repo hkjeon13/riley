@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.dev/schemas/reliability-soak-report-v2.schema.json",
+  "title": "riley reliability soak checker report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "passed", "bindings", "scenario_summaries", "observations", "checks", "errors"],
+  "properties": {
+    "schema_version": {"const": "riley.reliability-soak-report.v2"},
+    "status": {"enum": ["passed", "failed", "error"]},
+    "passed": {"type": "boolean"},
+    "bindings": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/bindings"}
+      ]
+    },
+    "scenario_summaries": {"type": "array"},
+    "observations": {"type": "object"},
+    "checks": {"type": "array"},
+    "errors": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitRevision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+    },
+    "trustedCorrectness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "correctness_gate_id",
+        "e2e_correctness_golden_sha256",
+        "generated_text_sha256",
+        "native_correctness_report_sha256"
+      ],
+      "properties": {
+        "correctness_gate_id": {"const": "smollm2-fp32-bf16-native-e0-v3"},
+        "e2e_correctness_golden_sha256": {"$ref": "#/$defs/sha256"},
+        "generated_text_sha256": {"$ref": "#/$defs/sha256"},
+        "native_correctness_report_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_commit",
+        "git_dirty",
+        "source_archive_sha256",
+        "binary_sha256",
+        "image_sha256",
+        "model_sha256",
+        "model_id",
+        "model_revision"
+      ],
+      "properties": {
+        "git_commit": {"$ref": "#/$defs/gitRevision"},
+        "git_dirty": {"const": false},
+        "source_archive_sha256": {"$ref": "#/$defs/sha256"},
+        "binary_sha256": {"$ref": "#/$defs/sha256"},
+        "image_sha256": {"$ref": "#/$defs/sha256"},
+        "model_sha256": {"$ref": "#/$defs/sha256"},
+        "model_id": {"type": "string", "minLength": 1},
+        "model_revision": {"type": "string", "minLength": 1}
+      }
+    },
+    "runtimeProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host_gpu_sha256",
+        "launcher_receipt_sha256",
+        "release_image_inspect_sha256",
+        "test_layer_image_inspect_sha256",
+        "container_inspect_pre_sha256",
+        "container_inspect_post_sha256",
+        "release_runtime_closure_sha256",
+        "run_json_sha256",
+        "events_jsonl_sha256",
+        "hostname",
+        "gpu_uuid",
+        "release_image_id",
+        "test_layer_image_id",
+        "container_id",
+        "container_name"
+      ],
+      "properties": {
+        "host_gpu_sha256": {"$ref": "#/$defs/sha256"},
+        "launcher_receipt_sha256": {"$ref": "#/$defs/sha256"},
+        "release_image_inspect_sha256": {"$ref": "#/$defs/sha256"},
+        "test_layer_image_inspect_sha256": {"$ref": "#/$defs/sha256"},
+        "container_inspect_pre_sha256": {"$ref": "#/$defs/sha256"},
+        "container_inspect_post_sha256": {"$ref": "#/$defs/sha256"},
+        "release_runtime_closure_sha256": {"$ref": "#/$defs/sha256"},
+        "run_json_sha256": {"$ref": "#/$defs/sha256"},
+        "events_jsonl_sha256": {"$ref": "#/$defs/sha256"},
+        "hostname": {"const": "psyche-MS-7D91"},
+        "gpu_uuid": {"const": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0"},
+        "release_image_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "test_layer_image_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "container_id": {"$ref": "#/$defs/sha256"},
+        "container_name": {
+          "type": "string",
+          "pattern": "^riley-soak-[0-9a-f]{12}-[0-9]{8}T[0-9]{6}Z$"
+        }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_id",
+        "reviewed_manifest_template_canonical_sha256",
+        "manifest_sha256",
+        "binding_sha256",
+        "trusted_correctness",
+        "runtime_provenance",
+        "source"
+      ],
+      "properties": {
+        "contract_id": {"type": "string", "minLength": 1},
+        "reviewed_manifest_template_canonical_sha256": {"$ref": "#/$defs/sha256"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "binding_sha256": {"$ref": "#/$defs/sha256"},
+        "trusted_correctness": {"$ref": "#/$defs/trustedCorrectness"},
+        "runtime_provenance": {"$ref": "#/$defs/runtimeProvenance"},
+        "source": {"$ref": "#/$defs/source"}
+      }
+    }
+  }
+}

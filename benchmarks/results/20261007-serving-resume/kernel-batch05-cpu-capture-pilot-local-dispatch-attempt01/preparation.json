@@ -1,0 +1,24 @@
+{
+  "pins": {
+    "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/run_kernel_batch05_cpu_capture_pilot_attempt01.py": "92826516871e41e78715d6ab0766233f3945ae3bf7adf5f95434dad373ec0f88",
+    "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch05-cpu-capture-pilot-plan-attempt01.json": "89d0ba3510f6dd2e4e7b3246c9ae734c890a47d8c0021e767573efd095b30e97",
+    "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch05-independent-replay-attempt02/kernel-batch05-quiet-attempt01-independent-replay.json": "2037661024dc96472eda17e87586731b4e3f98eadc29a0ebba4db040aea4c350"
+  },
+  "wait_for": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/qwen-free-running-dispatch-attempt02/completion.json",
+  "scope": "pilot8 CPU process-tree root with private profiler dirs after validated full-lifetime GPU pilot; no serving scores or host setting mutations",
+  "orders": [
+    [
+      "v52",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "v52"
+    ]
+  ],
+  "selected_cells": [
+    "c1-fixed",
+    "c32-natural"
+  ],
+  "expected_lanes": 8
+}

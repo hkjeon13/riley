@@ -1,0 +1,74 @@
+diff --git a/crates/riley-cuda/tests/primitives_gpu.rs b/crates/riley-cuda/tests/primitives_gpu.rs
+index 3be746bf..e41286c5 100644
+--- a/crates/riley-cuda/tests/primitives_gpu.rs
++++ b/crates/riley-cuda/tests/primitives_gpu.rs
+@@ -1274,3 +1274,69 @@ fn rope_and_explicit_cast_match_reference_at_long_position() -> TestResult {
+     stream.close()?;
+     close_context(context)
+ }
++
++#[test]
++#[ignore = "remote GPU; isolated captured Qwen RMSNorm input replay"]
++fn qwen_layer3_isolated_rms_norm_captured_input_replay() -> TestResult {
++    let input_root = std::path::PathBuf::from(std::env::var("RILEY_QWEN_ISOLATED_NORM_INPUTS")?);
++    let hf_root = std::path::PathBuf::from(std::env::var("RILEY_QWEN_ISOLATED_NORM_HF")?);
++    let output_root = std::path::PathBuf::from(std::env::var("RILEY_QWEN_ISOLATED_NORM_OUTPUT")?);
++    let weight_bytes = std::fs::read(hf_root.join("norm-weight.bf16"))?;
++    assert_eq!(weight_bytes.len(), 4096);
++    let (_runtime, device) = first_device()?;
++    let context = device.create_context()?;
++    let mut stream = context.create_stream()?;
++    let mut staging = context.allocate_pinned_host_buffer(2048 * 4096)?;
++    let weight = upload(&context, &mut stream, &mut staging, &weight_bytes)?;
++    for step in [108, 109] {
++        let input_row = std::fs::read(input_root.join(format!("step{step}-input.bf16")))?;
++        let native_expected =
++            std::fs::read(input_root.join(format!("step{step}-native_output.bf16")))?;
++        let hf_expected = std::fs::read(input_root.join(format!("step{step}-HF_output.bf16")))?;
++        assert_eq!(input_row.len(), 4096);
++        assert_eq!(native_expected.len(), 4096);
++        assert_eq!(hf_expected.len(), 4096);
++        for rows in [1_u64, 2048] {
++            let input_bytes = input_row.repeat(usize::try_from(rows)?);
++            let input = upload(&context, &mut stream, &mut staging, &input_bytes)?;
++            let byte_len = rows * 4096;
++            let mut output = context.allocate_device_buffer(byte_len)?;
++            let before = context.allocation_stats()?;
++            let mut params = RmsNormParams {
++                input: CudaBufferSpan::new(&input, CudaDType::BF16, 0, byte_len)?,
++                weight: CudaBufferSpan::new(&weight, CudaDType::BF16, 0, 4096)?,
++                output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, byte_len)?,
++                row_count: rows,
++                hidden_size: 2048,
++                epsilon: f32::from_bits(0x358637bd),
++            };
++            riley_cuda::hugging_face_qwen_p2051_rms_norm(&mut params, &mut stream)?;
++            let actual = download(&context, &mut stream, &mut output)?;
++            assert_eq!(context.allocation_stats()?, before);
++            assert_eq!(actual.len(), input_bytes.len());
++            for row in actual.chunks_exact(4096) {
++                assert_eq!(
++                    row, native_expected,
++                    "isolated native replay differs from full128 stage: step={step} rows={rows}"
++                );
++            }
++            let last = &actual[actual.len() - 4096..];
++            std::fs::write(
++                output_root.join(format!("step{step}-rows{rows}-native-output.bf16")),
++                last,
++            )?;
++            let unequal = last
++                .chunks_exact(2)
++                .zip(hf_expected.chunks_exact(2))
++                .filter(|(a, b)| a != b)
++                .count();
++            println!("QWEN_ISOLATED_NORM step={step} rows={rows} captured_native_exact=true HF_unequal_elements={unequal}");
++            input.close()?;
++            output.close()?;
++        }
++    }
++    weight.close()?;
++    staging.close()?;
++    stream.close()?;
++    close_context(context)
++}

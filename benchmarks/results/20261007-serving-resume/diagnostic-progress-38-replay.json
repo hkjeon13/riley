@@ -1,0 +1,1419 @@
+{
+  "raw_replay_passed": true,
+  "lanes": [
+    {
+      "case": "c1-fixed-r0-v52",
+      "metrics": {
+        "throughput_tokens_s": 850.055380471603,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 23.6853975,
+          "p95": 36.212233,
+          "p99": 36.650197,
+          "max": 37.327282
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 3.0791035,
+          "p95": 3.344145,
+          "p99": 3.60511,
+          "max": 3.715457
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.0603902857142855,
+          "p95": 1.0784295217391304,
+          "p99": 1.124754857142857,
+          "max": 1.1402405714285713
+        },
+        "gpu_peak_observed_MiB": 1136.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.63671875,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-fixed-r0-vllm",
+      "metrics": {
+        "throughput_tokens_s": 790.6979318647178,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 27.391777,
+          "p95": 36.739582,
+          "p99": 43.567791,
+          "max": 112.190612
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 7.5586055000000005,
+          "p95": 10.407086,
+          "p99": 17.268063,
+          "max": 92.055746
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 0.8846263,
+          "p95": 0.9410667741935483,
+          "p99": 1.0560005217391304,
+          "max": 1.2137734666666666
+        },
+        "gpu_peak_observed_MiB": 7962.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 3662.19140625,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-fixed-r1-v52",
+      "metrics": {
+        "throughput_tokens_s": 849.0933034660814,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 23.793802499999998,
+          "p95": 36.284775,
+          "p99": 37.04541,
+          "max": 37.221129
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 3.0744305,
+          "p95": 3.341239,
+          "p99": 3.813012,
+          "max": 5.553212
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.0619246479663393,
+          "p95": 1.0833288666666667,
+          "p99": 1.0996820869565218,
+          "max": 1.1216112666666667
+        },
+        "gpu_peak_observed_MiB": 1136.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.859375,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-fixed-r1-vllm",
+      "metrics": {
+        "throughput_tokens_s": 628.7933796141051,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 29.5821415,
+          "p95": 53.818579,
+          "p99": 60.068483,
+          "max": 404.808326
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 9.563085999999998,
+          "p95": 18.896752,
+          "p99": 19.858885,
+          "max": 377.047238
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 0.9037903387096774,
+          "p95": 1.3735147142857143,
+          "p99": 1.5503127826086955,
+          "max": 1.7483066956521738
+        },
+        "gpu_peak_observed_MiB": 7962.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 2978.19921875,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-fixed-r2-v52",
+      "metrics": {
+        "throughput_tokens_s": 852.337963683626,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 23.563299999999998,
+          "p95": 36.107007,
+          "p99": 36.226657,
+          "max": 37.201427
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 3.0504689999999997,
+          "p95": 3.194285,
+          "p99": 3.339588,
+          "max": 3.801701
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.0614390021505375,
+          "p95": 1.0666796956521738,
+          "p99": 1.0963977826086955,
+          "max": 1.1368952857142858
+        },
+        "gpu_peak_observed_MiB": 1136.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.828125,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-fixed-r2-vllm",
+      "metrics": {
+        "throughput_tokens_s": 783.5981371413741,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 27.492718500000002,
+          "p95": 37.222996,
+          "p99": 45.293142,
+          "max": 51.159457
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 7.6461845,
+          "p95": 13.243639,
+          "p99": 17.568397,
+          "max": 17.766651
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 0.889975415942029,
+          "p95": 1.0045979333333332,
+          "p99": 1.1489545333333335,
+          "max": 1.1900464285714287
+        },
+        "gpu_peak_observed_MiB": 7962.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 2977.75390625,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-fixed-r3-v52",
+      "metrics": {
+        "throughput_tokens_s": 851.7845697928873,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 23.465607,
+          "p95": 36.187616,
+          "p99": 36.424267,
+          "max": 37.114674
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 3.032211,
+          "p95": 3.192176,
+          "p99": 3.309443,
+          "max": 3.609949
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.0633491623188407,
+          "p95": 1.0723408695652172,
+          "p99": 1.0952647391304349,
+          "max": 1.1030350666666666
+        },
+        "gpu_peak_observed_MiB": 1136.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.7421875,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-fixed-r3-vllm",
+      "metrics": {
+        "throughput_tokens_s": 708.6976887068333,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 28.590457999999998,
+          "p95": 43.593118,
+          "p99": 52.631638,
+          "max": 58.94018
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 8.9232575,
+          "p95": 17.771049,
+          "p99": 19.350096,
+          "max": 22.2704
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 0.8943068190476191,
+          "p95": 1.1889814285714286,
+          "p99": 1.2754523225806451,
+          "max": 1.352067391304348
+        },
+        "gpu_peak_observed_MiB": 7962.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 3015.65625,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-natural-r0-v52",
+      "metrics": {
+        "throughput_tokens_s": 856.2072756423537,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 70.37326,
+          "p95": 156.81045,
+          "p99": 158.275614,
+          "max": 191.229737
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 3.139606,
+          "p95": 5.875307,
+          "p99": 6.313825,
+          "max": 9.342275
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.0663381746031746,
+          "p95": 1.187734157480315,
+          "p99": 1.1989578976377953,
+          "max": 1.4317141417322834
+        },
+        "gpu_peak_observed_MiB": 1156.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.8828125,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-natural-r0-vllm",
+      "metrics": {
+        "throughput_tokens_s": 886.9586153399953,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 256,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 71.8369775,
+          "p95": 143.037908,
+          "p99": 149.630793,
+          "max": 157.678012
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 7.7901635,
+          "p95": 11.189009,
+          "p99": 17.138862,
+          "max": 19.018515
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.0153633479262671,
+          "p95": 1.0694739032258065,
+          "p99": 1.1155435433070866,
+          "max": 1.190435380952381
+        },
+        "gpu_peak_observed_MiB": 7924.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 3077.1875,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-natural-r1-v52",
+      "metrics": {
+        "throughput_tokens_s": 859.8028010309116,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 70.2433985,
+          "p95": 155.76434,
+          "p99": 156.802358,
+          "max": 159.433489
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 3.1305709999999998,
+          "p95": 5.635715,
+          "p99": 5.835794,
+          "max": 6.466503
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.0644900317460317,
+          "p95": 1.1818507086614172,
+          "p99": 1.1905545354330709,
+          "max": 1.2040900393700789
+        },
+        "gpu_peak_observed_MiB": 1156.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.6796875,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-natural-r1-vllm",
+      "metrics": {
+        "throughput_tokens_s": 803.8026063595219,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 256,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 74.4694825,
+          "p95": 166.546084,
+          "p99": 269.191971,
+          "max": 342.884502
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 8.9107345,
+          "p95": 18.41911,
+          "p99": 213.61636,
+          "max": 259.619615
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.0299719724409448,
+          "p95": 1.3017908661417323,
+          "p99": 1.452086031496063,
+          "max": 2.4300778818897637
+        },
+        "gpu_peak_observed_MiB": 7984.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 2997.4140625,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-natural-r2-v52",
+      "metrics": {
+        "throughput_tokens_s": 858.5137556772008,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 70.255341,
+          "p95": 156.135095,
+          "p99": 157.389368,
+          "max": 169.161676
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 3.1392094999999998,
+          "p95": 5.790061,
+          "p99": 6.22706,
+          "max": 7.483091
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.0648923095238096,
+          "p95": 1.1845238661417323,
+          "p99": 1.1929253937007873,
+          "max": 1.2730597244094488
+        },
+        "gpu_peak_observed_MiB": 1156.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.8515625,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-natural-r2-vllm",
+      "metrics": {
+        "throughput_tokens_s": 817.3838845231053,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 256,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 71.6320335,
+          "p95": 146.599667,
+          "p99": 322.667882,
+          "max": 447.581266
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 7.710342499999999,
+          "p95": 15.412899,
+          "p99": 250.308731,
+          "max": 297.994117
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.0109409682539683,
+          "p95": 1.0870206456692912,
+          "p99": 1.2725238503937009,
+          "max": 3.4373599921259843
+        },
+        "gpu_peak_observed_MiB": 7984.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 2992.86328125,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-natural-r3-v52",
+      "metrics": {
+        "throughput_tokens_s": 860.7212412470266,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 70.1538595,
+          "p95": 155.685308,
+          "p99": 156.743995,
+          "max": 164.063645
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 3.1192245,
+          "p95": 5.622281,
+          "p99": 6.006595,
+          "max": 6.196896
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.0633039444444443,
+          "p95": 1.1816111968503937,
+          "p99": 1.1881043307086614,
+          "max": 1.2469497637795275
+        },
+        "gpu_peak_observed_MiB": 1156.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.9375,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c1-natural-r3-vllm",
+      "metrics": {
+        "throughput_tokens_s": 755.8418314060734,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 256,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 73.0637985,
+          "p95": 153.162809,
+          "p99": 444.873795,
+          "max": 1343.653924
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 8.166401,
+          "p95": 17.560177,
+          "p99": 318.130046,
+          "max": 1312.693705
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.016496437007874,
+          "p95": 1.1266673779527558,
+          "p99": 1.2493406456692913,
+          "max": 1.742268365079365
+        },
+        "gpu_peak_observed_MiB": 7984.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 2994.59375,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c16-fixed-r0-v52",
+      "metrics": {
+        "throughput_tokens_s": 6154.609517757904,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 47.028328,
+          "p95": 82.300394,
+          "p99": 88.791373,
+          "max": 94.775586
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 6.5794905,
+          "p95": 10.25863,
+          "p99": 24.086372,
+          "max": 26.457976
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 2.325152695238095,
+          "p95": 2.496843086956522,
+          "p99": 2.728258,
+          "max": 2.785289
+        },
+        "gpu_peak_observed_MiB": 1195.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 756.46875,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c16-fixed-r0-vllm",
+      "metrics": {
+        "throughput_tokens_s": 4122.383290435059,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 354,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 75.3709595,
+          "p95": 127.011853,
+          "p99": 148.428513,
+          "max": 157.059655
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 30.409806,
+          "p95": 49.064946,
+          "p99": 57.380864,
+          "max": 58.620515
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 2.2301928913043483,
+          "p95": 3.734120130434783,
+          "p99": 5.143492428571428,
+          "max": 7.381949714285715
+        },
+        "gpu_peak_observed_MiB": 7941.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 3088.55078125,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c16-fixed-r1-v52",
+      "metrics": {
+        "throughput_tokens_s": 5690.6478765781285,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 51.0899915,
+          "p95": 90.574699,
+          "p99": 94.875244,
+          "max": 100.880991
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 7.244182,
+          "p95": 12.262141,
+          "p99": 23.180098,
+          "max": 26.988979
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 2.488408950310559,
+          "p95": 2.8455250666666667,
+          "p99": 3.072955,
+          "max": 3.5577515714285712
+        },
+        "gpu_peak_observed_MiB": 1195.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 756.30078125,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c16-fixed-r1-vllm",
+      "metrics": {
+        "throughput_tokens_s": 4687.8993269615285,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 358,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 65.2207655,
+          "p95": 115.074701,
+          "p99": 166.669633,
+          "max": 174.017096
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 18.8743625,
+          "p95": 41.009276,
+          "p99": 75.606768,
+          "max": 79.386946
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 2.2462080714285717,
+          "p95": 3.5525505714285712,
+          "p99": 4.846874333333333,
+          "max": 6.347777142857143
+        },
+        "gpu_peak_observed_MiB": 7967.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 3022.6875,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c16-fixed-r2-v52",
+      "metrics": {
+        "throughput_tokens_s": 6005.632847263972,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 47.419724,
+          "p95": 83.889544,
+          "p99": 93.283928,
+          "max": 104.285567
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 6.8299389999999995,
+          "p95": 11.821249,
+          "p99": 25.625861,
+          "max": 29.118876
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 2.3654520619047616,
+          "p95": 2.6009964285714284,
+          "p99": 2.723495466666667,
+          "max": 2.830794285714286
+        },
+        "gpu_peak_observed_MiB": 1195.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 756.40234375,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c16-fixed-r2-vllm",
+      "metrics": {
+        "throughput_tokens_s": 4556.5743424905495,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 357,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 68.310889,
+          "p95": 111.091534,
+          "p99": 127.450711,
+          "max": 139.121959
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 23.704132,
+          "p95": 38.922728,
+          "p99": 42.146799,
+          "max": 46.760156
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 2.262577335403727,
+          "p95": 3.260208533333333,
+          "p99": 3.932605,
+          "max": 4.366409
+        },
+        "gpu_peak_observed_MiB": 7967.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 6341.08203125,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-fixed-r0-v52",
+      "metrics": {
+        "throughput_tokens_s": 4483.695084858553,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 33.950837,
+          "p95": 57.371573,
+          "p99": 60.389778,
+          "max": 67.725269
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 5.6341815,
+          "p95": 7.98526,
+          "p99": 12.469492,
+          "max": 14.868232
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.5283912419354837,
+          "p95": 1.7141340967741934,
+          "p99": 1.7908106774193548,
+          "max": 1.9273348000000001
+        },
+        "gpu_peak_observed_MiB": 1164.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.875,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-fixed-r0-vllm",
+      "metrics": {
+        "throughput_tokens_s": 3248.911856292872,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 351,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 49.0113505,
+          "p95": 78.637133,
+          "p99": 84.021979,
+          "max": 87.634309
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 12.7566715,
+          "p95": 18.949383,
+          "p99": 26.905557,
+          "max": 28.5926
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.8375269347826086,
+          "p95": 2.239168142857143,
+          "p99": 2.541665714285714,
+          "max": 2.718382
+        },
+        "gpu_peak_observed_MiB": 7952.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 3081.09375,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-fixed-r1-v52",
+      "metrics": {
+        "throughput_tokens_s": 4400.335542086343,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 34.8512235,
+          "p95": 57.825317,
+          "p99": 58.877457,
+          "max": 64.686868
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 5.6795145,
+          "p95": 7.979152,
+          "p99": 12.296932,
+          "max": 14.749764
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.6006364507246376,
+          "p95": 1.6911668709677419,
+          "p99": 1.7569175217391304,
+          "max": 1.789614739130435
+        },
+        "gpu_peak_observed_MiB": 1164.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.73046875,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-fixed-r1-vllm",
+      "metrics": {
+        "throughput_tokens_s": 2909.4875989896946,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 353,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 53.9098465,
+          "p95": 90.651889,
+          "p99": 106.090703,
+          "max": 111.71815
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 14.994537,
+          "p95": 25.824095,
+          "p99": 31.104052,
+          "max": 32.816318
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.9192932985507247,
+          "p95": 2.6938714285714287,
+          "p99": 3.061311133333333,
+          "max": 3.546205285714286
+        },
+        "gpu_peak_observed_MiB": 8012.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 2994.04296875,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-fixed-r2-v52",
+      "metrics": {
+        "throughput_tokens_s": 4493.219338860967,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 33.946589,
+          "p95": 56.362823,
+          "p99": 59.88956,
+          "max": 62.42313
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 5.775520500000001,
+          "p95": 7.936338,
+          "p99": 11.818166,
+          "max": 14.961708
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.5136519072463765,
+          "p95": 1.6792411304347827,
+          "p99": 1.7846290666666667,
+          "max": 1.9038302857142857
+        },
+        "gpu_peak_observed_MiB": 1164.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.73046875,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-fixed-r2-vllm",
+      "metrics": {
+        "throughput_tokens_s": 2984.5968697954527,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 350,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 53.1155625,
+          "p95": 86.487747,
+          "p99": 104.34418,
+          "max": 109.935376
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 13.392346,
+          "p95": 27.180275,
+          "p99": 34.238308,
+          "max": 34.711617
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.912726847826087,
+          "p95": 2.743614,
+          "p99": 3.089607285714286,
+          "max": 4.3169258571428575
+        },
+        "gpu_peak_observed_MiB": 8012.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 2993.98828125,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-fixed-r3-v52",
+      "metrics": {
+        "throughput_tokens_s": 4384.565696867169,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 32.248020999999994,
+          "p95": 58.353927,
+          "p99": 59.869323,
+          "max": 61.359472
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 5.4367365,
+          "p95": 7.932436,
+          "p99": 11.944993,
+          "max": 14.439005
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.6022592419354837,
+          "p95": 1.7272628387096773,
+          "p99": 1.7790873043478261,
+          "max": 1.7897818695652172
+        },
+        "gpu_peak_observed_MiB": 1164.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.71484375,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-fixed-r3-vllm",
+      "metrics": {
+        "throughput_tokens_s": 3259.7056487836467,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 351,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 48.601171,
+          "p95": 77.06656,
+          "p99": 84.221392,
+          "max": 98.321308
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 13.343651000000001,
+          "p95": 19.742512,
+          "p99": 28.577444,
+          "max": 35.696646
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.7996183161290324,
+          "p95": 2.1677794285714285,
+          "p99": 2.589740290322581,
+          "max": 2.8270617999999996
+        },
+        "gpu_peak_observed_MiB": 8012.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 2991.38671875,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-natural-r0-v52",
+      "metrics": {
+        "throughput_tokens_s": 4878.214790973395,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 103.96865500000001,
+          "p95": 209.749545,
+          "p99": 213.629236,
+          "max": 216.245532
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 7.2336785,
+          "p95": 13.302279,
+          "p99": 13.89465,
+          "max": 18.316637
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.527029440944882,
+          "p95": 1.6042811181102363,
+          "p99": 1.6541817096774194,
+          "max": 1.6953528387096772
+        },
+        "gpu_peak_observed_MiB": 1312.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.7578125,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-natural-r0-vllm",
+      "metrics": {
+        "throughput_tokens_s": 3988.167879832112,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 291,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 113.0568095,
+          "p95": 333.659449,
+          "p99": 462.388178,
+          "max": 590.452649
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 12.9406175,
+          "p95": 25.947463,
+          "p99": 260.118851,
+          "max": 393.076343
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.563592981965964,
+          "p95": 2.4227423015873017,
+          "p99": 6.822189047619047,
+          "max": 13.420216967741935
+        },
+        "gpu_peak_observed_MiB": 7952.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 3109.0625,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-natural-r1-v52",
+      "metrics": {
+        "throughput_tokens_s": 4982.724688267292,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 101.732576,
+          "p95": 204.110452,
+          "p99": 206.147681,
+          "max": 207.602894
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 7.6567095,
+          "p95": 13.198188,
+          "p99": 15.652157,
+          "max": 20.01558
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.496969157480315,
+          "p95": 1.5420157096774194,
+          "p99": 1.5612726451612904,
+          "max": 1.6626577419354838
+        },
+        "gpu_peak_observed_MiB": 1312.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.7265625,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-natural-r1-vllm",
+      "metrics": {
+        "throughput_tokens_s": 3580.9027764757357,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 303,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 135.5554135,
+          "p95": 302.440457,
+          "p99": 416.068176,
+          "max": 546.827486
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 16.045831999999997,
+          "p95": 33.125248,
+          "p99": 40.881374,
+          "max": 287.759549
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.8372487716535433,
+          "p95": 2.471343,
+          "p99": 4.998781111111111,
+          "max": 8.682752709677418
+        },
+        "gpu_peak_observed_MiB": 8012.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 3529.0078125,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-natural-r2-v52",
+      "metrics": {
+        "throughput_tokens_s": 4998.845841429084,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 101.3718575,
+          "p95": 203.112141,
+          "p99": 204.875642,
+          "max": 206.655463
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 8.5751565,
+          "p95": 13.175161,
+          "p99": 13.361472,
+          "max": 17.084688
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.49308987007874,
+          "p95": 1.5326681269841271,
+          "p99": 1.5449133543307088,
+          "max": 1.6212257096774194
+        },
+        "gpu_peak_observed_MiB": 1312.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.86328125,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-natural-r2-vllm",
+      "metrics": {
+        "throughput_tokens_s": 4520.3369826842645,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 311,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 111.4942645,
+          "p95": 228.949527,
+          "p99": 236.37579,
+          "max": 247.081492
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 11.0615395,
+          "p95": 19.45854,
+          "p99": 28.648769,
+          "max": 29.550516
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.5825127637795275,
+          "p95": 1.765566,
+          "p99": 1.909734580645161,
+          "max": 2.1279616129032255
+        },
+        "gpu_peak_observed_MiB": 8015.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 3010.1796875,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-natural-r3-v52",
+      "metrics": {
+        "throughput_tokens_s": 4921.25522801174,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 103.0361865,
+          "p95": 207.559862,
+          "p99": 212.095752,
+          "max": 218.477379
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 7.172174500000001,
+          "p95": 13.055436,
+          "p99": 13.865877,
+          "max": 17.191504
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.517884935483871,
+          "p95": 1.5795160157480315,
+          "p99": 1.611114188976378,
+          "max": 1.6250138709677417
+        },
+        "gpu_peak_observed_MiB": 1315.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 754.921875,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    },
+    {
+      "case": "c8-natural-r3-vllm",
+      "metrics": {
+        "throughput_tokens_s": 4646.020841980792,
+        "input_tokens": 69376,
+        "output_tokens": 28672,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 297,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 109.9505475,
+          "p95": 217.060057,
+          "p99": 220.463499,
+          "max": 222.662044
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 11.501924500000001,
+          "p95": 16.479893,
+          "p99": 23.13465,
+          "max": 23.845232
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.556609920890937,
+          "p95": 1.6313662903225805,
+          "p99": 1.6550578412698411,
+          "max": 1.8018057419354838
+        },
+        "gpu_peak_observed_MiB": 8015.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water",
+        "cpu_process_group_peak_observed_RSS_MiB": 3009.90625,
+        "cpu_memory_scope": "sampled instantaneous RSS sum; shared pages may be counted more than once"
+      }
+    }
+  ],
+  "expected_lanes": 64,
+  "matrix_complete": false,
+  "failure": null,
+  "performance_promoted": false,
+  "goal_achieved": false,
+  "pressure_policy": "observe_only",
+  "qualification_scope": "diagnosis only; full admission-controlled validation remains required",
+  "scope": "all preserved retained lanes; aborted attempt observations remain non-qualifying"
+}

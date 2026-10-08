@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/c02-lifecycle-supervisor-receipt-v1.schema.json",
+  "title": "Riley C02 lifecycle-supervisor raw receipt v1",
+  "description": "One completed narrow lifecycle sequence only. The receipt binds a completed v4 serial raw manifest, its one derived target, the configuration/serial/observation descriptor inventory, and the source-owned shutdown-v2 pair. It is raw evidence only and cannot qualify a candidate.",
+  "oneOf": [
+    { "$ref": "#/$defs/receipt" },
+    { "$ref": "#/$defs/completion" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativePath" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777216
+        }
+      }
+    },
+    "rootReceiptName": {
+      "type": "string",
+      "minLength": 6,
+      "maxLength": 246,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.json$"
+    },
+    "rootManifestDescriptor": {
+      "allOf": [
+        { "$ref": "#/$defs/descriptor" },
+        {
+          "properties": {
+            "path": { "$ref": "#/$defs/rootReceiptName" }
+          }
+        }
+      ]
+    },
+    "directSessionDescriptor": {
+      "allOf": [
+        { "$ref": "#/$defs/descriptor" },
+        {
+          "properties": {
+            "path": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/session\\.json$"
+            }
+          }
+        }
+      ]
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "freeze_sha256",
+        "base_release_candidate_report_sha256",
+        "configuration_profile",
+        "configuration_sha256"
+      ],
+      "properties": {
+        "freeze_sha256": { "$ref": "#/$defs/sha256" },
+        "base_release_candidate_report_sha256": { "$ref": "#/$defs/sha256" },
+        "configuration_profile": {
+          "enum": ["stable-default", "max-performance-exact"]
+        },
+        "configuration_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "server_pid",
+        "server_start_ticks",
+        "gpu_index",
+        "gpu_uuid"
+      ],
+      "properties": {
+        "server_pid": { "type": "integer", "minimum": 1 },
+        "server_start_ticks": { "type": "integer", "minimum": 1 },
+        "gpu_index": { "type": "integer", "minimum": 0 },
+        "gpu_uuid": { "type": "string", "pattern": "^GPU-[0-9A-Fa-f-]+$" }
+      }
+    },
+    "configurationEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "startup_artifact", "endpoint_observation"],
+      "properties": {
+        "endpoint": { "$ref": "#/$defs/descriptor" },
+        "startup_artifact": { "$ref": "#/$defs/descriptor" },
+        "endpoint_observation": { "$ref": "#/$defs/directSessionDescriptor" }
+      }
+    },
+    "scenarioEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario_id",
+        "capture_session",
+        "contract",
+        "request_ledger",
+        "runtime_event_log",
+        "generation_audit_index"
+      ],
+      "properties": {
+        "scenario_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!exact-backend-fallback$)[a-z0-9][a-z0-9-]*$"
+        },
+        "capture_session": { "$ref": "#/$defs/directSessionDescriptor" },
+        "contract": { "$ref": "#/$defs/descriptor" },
+        "request_ledger": { "$ref": "#/$defs/descriptor" },
+        "runtime_event_log": { "$ref": "#/$defs/descriptor" },
+        "generation_audit_index": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "observationEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session"],
+      "properties": {
+        "session": { "$ref": "#/$defs/directSessionDescriptor" }
+      }
+    },
+    "shutdownEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "completion_marker"],
+      "properties": {
+        "artifact": {
+          "allOf": [
+            { "$ref": "#/$defs/descriptor" },
+            { "properties": { "path": { "const": "source-audit/shutdown.json" } } }
+          ]
+        },
+        "completion_marker": {
+          "allOf": [
+            { "$ref": "#/$defs/descriptor" },
+            { "properties": { "path": { "const": "source-audit/shutdown.json.complete" } } }
+          ]
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "status",
+        "qualification_status",
+        "candidate_id",
+        "bindings",
+        "target",
+        "raw_manifest",
+        "configuration_evidence",
+        "scenario_evidence",
+        "observation_evidence",
+        "shutdown_evidence",
+        "reason_codes"
+      ],
+      "properties": {
+        "schema_version": { "const": "riley.c02-lifecycle-supervisor-receipt.v1" },
+        "status": { "const": "completed" },
+        "qualification_status": { "const": "not-run" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "target": { "$ref": "#/$defs/target" },
+        "raw_manifest": { "$ref": "#/$defs/rootManifestDescriptor" },
+        "configuration_evidence": { "$ref": "#/$defs/configurationEvidence" },
+        "scenario_evidence": { "$ref": "#/$defs/scenarioEvidence" },
+        "observation_evidence": { "$ref": "#/$defs/observationEvidence" },
+        "shutdown_evidence": { "$ref": "#/$defs/shutdownEvidence" },
+        "reason_codes": { "const": [] }
+      }
+    },
+    "completion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_filename", "artifact_sha256"],
+      "properties": {
+        "schema_version": {
+          "const": "riley.c02-lifecycle-supervisor-receipt-complete.v1"
+        },
+        "artifact_filename": { "$ref": "#/$defs/rootReceiptName" },
+        "artifact_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/verify_kernel_batch05.py", line 216, in <module>
+    result=verify(archive_files(args.archive),args.fixtures.read_bytes());args.output.write_text(json.dumps(result,indent=2)+'\n')
+  File "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/verify_kernel_batch05.py", line 125, in verify
+    require(binary_receipt['source_commit']==plan['candidate_source_commit']==prep['source_commits']['candidate'], 'candidate source identity differs')
+  File "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/verify_kernel_batch05.py", line 13, in require
+    if not ok: raise ValueError(message)
+ValueError: candidate source identity differs

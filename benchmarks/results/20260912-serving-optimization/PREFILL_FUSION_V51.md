@@ -28,3 +28,15 @@ V50 profile에서 fixedC32 graph span의77.33%가 prefill/mixed이고, gate/up �
 [통합 patch](raw/integration-v51/prefill-v51.patch), [통합manifest](raw/integration-v51-manifest.json). 33파일 SHA256 검증 완료, archive `d182cf3575a9044d72a6db927fb4e8620dab8c35d61d9c8784409afdc9e9a718`.
 
 Round58은 V50/V51/vLLM ×C16/C32 ×fixed/natural ×2역순의24lane, 각각96warmup+384retained다. 두 Riley V7/GPU-greedy/budget512/fixedchunk128/naturalchunk512 동일. Controller `serving_screen_round58.py`, log `serving-round58-controller.log`, 관찰session20981. 측정 중다른GPU작업이나무거운build/export를시작하지않는다. 완료후분석/export, 별도V51trace로다음병목선정. 목표달성은아직미검증이다.
+
+
+## Round58 C16 중간 관찰
+
+Controller PID825338/session20981이실행중임을직접확인했다. C16두역순완료: fixedV50/V51/vLLM처리량5767.946/6437.586/4810.935tok/s, TPOT2.490/2.236/2.358ms. Natural7430.723/7697.441/7781.162tok/s, TPOT2.019/1.951/1.799ms. C32측정이남아있어최종분석이나전체목표달성으로간주하지않는다.
+
+후속진단용 `mapped_occupancy_v52.cu`를원격ROOT에준비했다. 현재production mixed attention과61568byte metadata/mapoffset14368을사용해 P398+31decode의static shared memory/registers/occupancy를확인할예정이다. Benchmark중compile/GPU실행은하지않았다. 다음순서는Round58terminal확인→analyze/export→V51trace→필요시occupancy진단이다.
+
+
+## Round58 완료
+
+9,216요청실패0,Riley6,144기준일치. V51은V50대비네조건의처리량/TTFT/TPOT/tails가개선되어다음기준으로유지한다. vLLM대비C16fixed는처리량+33.81%,TPOT−5.18%이나다른조건격차및장기안정성검증이남아목표미달성이다. [최종serving결과](V51_SERVING_RESULTS.md).

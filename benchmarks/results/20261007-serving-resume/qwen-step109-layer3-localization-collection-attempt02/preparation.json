@@ -1,0 +1,13 @@
+{
+  "waits": {
+    "native": "run_qwen_full128_attempt04.py",
+    "HF": "run_qwen_step109_layer3_hf_stage_attempt02.py"
+  },
+  "scopes": [
+    "qwen-step109-layer3-hf-stage-validation-attempt02",
+    "qwen-full128-validation-attempt04"
+  ],
+  "script_sha256": "e12844a28c9f95c1d100b376bef1c9c874a6fbcdb67be62643117b9490517bea",
+  "compression": "remote tar plus gzip1 only after actual selected-layer3 HF and native terminals; all source preserved",
+  "scope": "paired selected-layer3 BF16 diagnostics; no serving performance claim"
+}

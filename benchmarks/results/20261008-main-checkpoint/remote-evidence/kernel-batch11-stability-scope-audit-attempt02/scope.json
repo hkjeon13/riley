@@ -1,0 +1,39 @@
+{
+  "source_commit": "2fd37841e302fc2b34dc79567713dea6241b49ac",
+  "existing_test": "/data/riley-serving-261007/kernel-batch11-source-attempt02/crates/riley-server/tests/api_gpu.rs",
+  "existing_test_sha256": "c693894c1af33c95304f2050c5e502d599890e3fa9c38f7e32eb76ed77a65a88",
+  "matched_serving_plan_sha256": "09e190768cdad0d7ceb60cd25d8b3528f7638a8eccf427c88115d5ad4403f7cb",
+  "existing_coverage": [
+    "actual loopback HTTP streaming/nonstream parity",
+    "prefill and decode disconnect cancellation",
+    "three requests with single active slot and queued reuse",
+    "active request shutdown503",
+    "final device/pinned allocation zero"
+  ],
+  "existing_test_policy": {
+    "max_active_sequences": 1,
+    "iteration_token_budget": 1,
+    "max_prefill_chunk_tokens": 1,
+    "parity_input_tokens": 128,
+    "parity_output_tokens": 32,
+    "residual_norm": "separate in graph path",
+    "graph_numerics": "PreparedLlamaForwardConfig default plus grouped ragged heads; not same required variable-smol-v7 route"
+  },
+  "coverage_limits": [
+    "not C1/C8/C16/C32 fixed/natural matched512-token-budget serving",
+    "queued reuse requests output4; cannot substitute shortened output for performance workloads",
+    "no sustained-load mean/tail/memory comparison against vLLM"
+  ],
+  "required_before_adoption": [
+    "actual matched all8 full96 independently verified throughput/TTFT/TPOT/E2E/P95/P99 and errors/memory",
+    "all8 sustained load with original input/output/EOS and cache policy",
+    "HTTP prefill/decode cancellation and subsequent exact re-requests under actual matched configuration",
+    "observe live internal KV ownership and allocation settlement after cancellation/reuse/close",
+    "actual server process/connection/port/GPU reclamation and stable allocation baseline"
+  ],
+  "test_state": "미실행",
+  "sustained_load_state": "미실행",
+  "adopted": false,
+  "goal_achieved": false,
+  "time_ns": 1791415790588012877
+}

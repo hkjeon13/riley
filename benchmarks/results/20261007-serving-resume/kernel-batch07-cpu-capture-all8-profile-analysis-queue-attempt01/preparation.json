@@ -1,0 +1,12 @@
+{
+  "source_pins": {
+    "collect_kernel_batch07_cpu_capture_all8_profile_raw_attempt01.py": "6e68d183d2114d7670ba2a7b18d748efa36a7c2bf84baa8bad831347afdecaf6",
+    "verify_kernel_batch07_cpu_capture_all8_profile_attempt01.py": "51b05c9372631702f016157862951e6d3b14e8317c234942ee6fab4dd6057d14",
+    "analyze_kernel_batch07_cpu_capture_all8_profile_phases_attempt01.py": "dfa2907c797d8940344e8eb1dfbe9bbd2baa201d6a81b1c29fa73e03433be91e",
+    "analyze_kernel_batch07_cpu_stacks_attempt01.py": "e4a36169c3f7cff6e82cc71446524402bdab9a41c1b6406544950c6833479f54"
+  },
+  "wait_for": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch07-cpu-capture-all8-profile-local-dispatch-attempt01/completion.json",
+  "expected_profiles": 32,
+  "expected_HTTP_requests": 6144,
+  "scope": "all original startup/warmup/retained/teardown and raw CPU/CUDA traces preserved; instrumented times never serving scores"
+}

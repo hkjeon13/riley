@@ -1,0 +1,63 @@
+{
+  "git_revision": "387102ca4ed137c2a894657d5af9b8f50c3f70f7",
+  "source_dirty": false,
+  "source_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "sources": {
+    "qwen_serving_oracle": {
+      "path": "tools/python/reference/riley_reference/qwen3b_serving_oracle.py",
+      "sha256": "c7564c5f07663c78c5355580f16772eeec5e9ba8a58ab611edd7fcb190938a2f"
+    },
+    "teacher_forced_generation": {
+      "path": "tools/python/reference/riley_reference/qwen3b_generation_trace.py",
+      "sha256": "3e9a1d9856efc6ded7f054d59653dc8e334a8e6afb213e648f7c891fbac5cbde"
+    },
+    "stage_trace_support": {
+      "path": "tools/python/reference/riley_reference/qwen3b_stage_trace.py",
+      "sha256": "bb698a85ffda432a943173e9b915c0502d36885f68c745e9985f804b73731cda"
+    },
+    "cache_free_layer_stage_trace": {
+      "path": "tools/python/reference/riley_reference/qwen3b_p2051_layer_stage_trace.py",
+      "sha256": "5b8c10696ccfcf4e1454c4248450e928171dd612262ce52983bdece14f43b275"
+    },
+    "cache_on_layer_stage_trace": {
+      "path": "tools/python/reference/riley_reference/qwen3b_cache_on_layer_stage_trace.py",
+      "sha256": "0c9f7d86a8a14a677e1c49ebf66e671c996ffee093042422011e3739b643895b"
+    },
+    "cache_on_layer_detail_trace": {
+      "path": "tools/python/reference/riley_reference/qwen3b_cache_on_layer_detail_trace.py",
+      "sha256": "f11af7d6635c3c26b89b7b62d6838574bcf598595038ccf5a812f29014fb2cc3"
+    },
+    "cache_on_prefill_kv_trace": {
+      "path": "tools/python/reference/riley_reference/qwen3b_cache_on_prefill_kv_trace.py",
+      "sha256": "4dc701d9ca2c935f0e33b4953f8642126639988750149a843f802752776b7fb6"
+    },
+    "hf_calibration": {
+      "path": "tools/python/reference/riley_reference/hf_calibration.py",
+      "sha256": "5c259e4fa4f81c6868508634ecd6cdb8a9e3e608e893affc36030974357a8768"
+    },
+    "rust_forward": {
+      "path": "crates/riley-runtime/src/llama/forward.rs",
+      "sha256": "09e67092bce5f41f32d5e67449e41130649aef9251b1dc3edb85afc8dd71d783"
+    },
+    "rust_decode": {
+      "path": "crates/riley-runtime/src/llama/decode.rs",
+      "sha256": "7fd5764896d964bd478e7df4c08a29cef14fbd9f8ee6587bdc79912459d0a609"
+    },
+    "rust_p2051_quality_gate": {
+      "path": "crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs",
+      "sha256": "1ff7240091bf248cbec8726b2f8e89df7f799d6bc613c7cb6fc42aa7625bf7bb"
+    },
+    "reference_project": {
+      "path": "tools/python/reference/pyproject.toml",
+      "sha256": "fc022a639751bedbe4292a6bbcebe14369f740a89168c9b1316a4b6c90fcbfd1"
+    },
+    "reference_lock": {
+      "path": "tools/python/reference/uv.lock",
+      "sha256": "4e2bb0dcc5a717a5e13fe718e15cda603b94388ef0e4ff71bc9bd073c55b163f"
+    },
+    "reference_python": {
+      "path": "tools/python/reference/.python-version",
+      "sha256": "861b3dd8083d28f336ef70f6755bc399538ddad627b1d095820ca34cb953cf14"
+    }
+  }
+}

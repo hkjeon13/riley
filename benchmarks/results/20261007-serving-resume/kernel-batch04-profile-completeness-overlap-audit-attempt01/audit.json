@@ -1,0 +1,1006 @@
+{
+  "source_sha256": {
+    "c1-fixed-r0-candidate.json": "dec05d524d01410cfbc11d5a41bed931e7526f0598cc2d6892d51b6aa9b8856a",
+    "c1-fixed-r0-v52.json": "9db0cdf8a423696e708bb74df992a68681b8a919460485c685b9812f5b5e5f30",
+    "c1-fixed-r1-candidate.json": "4794cf8228773b60579cb87932cfe6422be24cf16680bd1137630cf912a1b557",
+    "c1-fixed-r1-v52.json": "c34c667163a76823d3a1ddaf90617e8e579ab80ad3514086d480d1b315a09ad8",
+    "c1-natural-r0-candidate.json": "d2658406497368138294ceb952007e572124f6843e3c98a5903aa3dd80b685ba",
+    "c1-natural-r0-v52.json": "81bdd151d96894cfab7ef375e1dd1cebb964eaae6eafd16411b2ba7620d8cf25",
+    "c1-natural-r1-candidate.json": "2a8ebd6f561487faade13c1bc95f703884fb95f2264fec88b3483155bc88d758",
+    "c1-natural-r1-v52.json": "72baa4afd42725fa89ce56f73f2622eabe7d6628cf8421b4aba1b35e0cd20e43",
+    "c16-fixed-r0-candidate.json": "52a49157b9153e4bc7e562f834fbbee6d40dd8f79a6da505e4f0c655892c94dd",
+    "c16-fixed-r0-v52.json": "5b524bbdfcf9546d9585702981d367436d9777c36ee208d1bd8a2ee7789138d7",
+    "c16-fixed-r1-candidate.json": "63b17a0d1be6845335544d38466fd1826f357b5915e733ec2e5a6d2f5565890b",
+    "c16-fixed-r1-v52.json": "8fcc785925592f8a0e8d7f0f59066ced4bb7df904bf16751cbbd104ba2718b67",
+    "c16-natural-r0-candidate.json": "a600f2fcfa52748698c20f5bfe5c16548d0e64857c40003b75d53e220592175a",
+    "c16-natural-r0-v52.json": "c1e35dfa349b789ff27c02ed7d8c325b3dcff3b867a934fbe4dc888941b18dd4",
+    "c16-natural-r1-candidate.json": "882513135cd75e94415d5bbc8ce7f7f39d7e25a76b3cb80aa80dd19ea0ebdf54",
+    "c16-natural-r1-v52.json": "68577e84eb446259f4dae5dbe27664c77de795ea3556128b8c75dbb2189ecd03",
+    "c32-fixed-r0-candidate.json": "37b3289e128e562329e126698c95a3cefa6a4229c6cfb98ab0fc83f565c5699c",
+    "c32-fixed-r0-v52.json": "3fc6cd5579255b3e25a8de660d612c99bfaa341b15537519cad7e0679e1bd3db",
+    "c32-fixed-r1-candidate.json": "fbceb3acbd046676c384c0ea7c2883c9c38733f66b8fd44f3665b1169362f8f0",
+    "c32-fixed-r1-v52.json": "842defa5ee01888ef092ebea6c69d665b8ad1f60ccc950e4f8a48696567edd92",
+    "c32-natural-r0-candidate.json": "7d7127d6a7abcb7af4f62c3a4e8e97a151c7735cf87f30b94e4e2d4142d49995",
+    "c32-natural-r0-v52.json": "714528c4de669b271e0c2dc9cb4dc2f08103f3c47757c090f6d6da043270b3f2",
+    "c32-natural-r1-candidate.json": "2882ed837f700d13184108e511a1312c65bbdf25a5e93ac018b7d808210202cb",
+    "c32-natural-r1-v52.json": "8798db63c98a34a283688ec19c9d36fcb7c9e833681d47c3ab2ee5455c6b2614",
+    "c8-fixed-r0-candidate.json": "c9ef9f8711a9b04470ca57dbb3504980a903f9cb2d4af34e592a1cb0509c0145",
+    "c8-fixed-r0-v52.json": "7f428dda0c0850e940a3fd8867146fed4e8993f0c0fca13b1c68b3e6a660370a",
+    "c8-fixed-r1-candidate.json": "d319d9a149f0597b1e432b4bed95fd2371fc8b5f98b2d0fed64823c7286ce629",
+    "c8-fixed-r1-v52.json": "87b98baf61101d1dd318a5a77c81b62bb4d3351cef09d23e4c301420d0e7509b",
+    "c8-natural-r0-candidate.json": "ee8fbdb28d034f3ce16a19c7ad7ddde25f7548c86c01f965d14eacd4f5e2ab39",
+    "c8-natural-r0-v52.json": "8d16078e6861afc7602315048401e2376b9961c87634ef93237ccae8c4ae48ea",
+    "c8-natural-r1-candidate.json": "e3fda2a549273b717e3f4844c4573983982eeb458144e030b48918e080c4d830",
+    "c8-natural-r1-v52.json": "f7323d484b5ac593a3c152acb9fbc9cd80a02761800b6669e866e784946dc081"
+  },
+  "records": [
+    {
+      "case": "c1-fixed-r0-candidate",
+      "sqlite_sha256": "3b3bf82164d488aa449f8d9a817e67da61fdb130b89ab01c71c956934b4c1ce0",
+      "recorded_CUDA_table_events": 544224,
+      "diagnostic_CUDA_collected": 544224,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t546182, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 1864939063,
+      "kernel_union_ns": 1865896080,
+      "CUDA_API_union_ns": 2348060655,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.94871005892247,
+      "API_outside_kernel_ns": 483121592,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 1920,
+        "summed_event_duration_ns": 1912476301,
+        "interval_union_ns": 1912476301
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c1-fixed-r0-v52",
+      "sqlite_sha256": "c8a809fe8e2e901690a961ee2d2a16a006becb63247b84d44b1acb849ee1614b",
+      "recorded_CUDA_table_events": 653664,
+      "diagnostic_CUDA_collected": 653664,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t655627, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 2103275581,
+      "kernel_union_ns": 2104106943,
+      "CUDA_API_union_ns": 2631713659,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.96048860526002,
+      "API_outside_kernel_ns": 528438078,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 1920,
+        "summed_event_duration_ns": 2163644166,
+        "interval_union_ns": 2163644166
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c1-fixed-r1-candidate",
+      "sqlite_sha256": "0e21629d2a21b61965bae140793e48fd926b416f531a3d437f610ba17c3b8d41",
+      "recorded_CUDA_table_events": 544224,
+      "diagnostic_CUDA_collected": 544224,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t546182, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 1870364439,
+      "kernel_union_ns": 1870769550,
+      "CUDA_API_union_ns": 2236098697,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.97834522162283,
+      "API_outside_kernel_ns": 365734258,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 1920,
+        "summed_event_duration_ns": 1918909458,
+        "interval_union_ns": 1918909458
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c1-fixed-r1-v52",
+      "sqlite_sha256": "f7124ee60d09b48dbbc75de46516bb51627abed3d994197990b47361a8a5dd1d",
+      "recorded_CUDA_table_events": 653664,
+      "diagnostic_CUDA_collected": 653664,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t655627, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 2107151905,
+      "kernel_union_ns": 2107780444,
+      "CUDA_API_union_ns": 2579538248,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.97018005353503,
+      "API_outside_kernel_ns": 472386343,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 1920,
+        "summed_event_duration_ns": 2167476621,
+        "interval_union_ns": 2167476621
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c1-natural-r0-candidate",
+      "sqlite_sha256": "e094f050ea42f35c9b57e9bf92b3eefe0eacd5afdc9728e69f308ad8850845d1",
+      "recorded_CUDA_table_events": 2024160,
+      "diagnostic_CUDA_collected": 2024160,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t2031443, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 7066514183,
+      "kernel_union_ns": 7067167407,
+      "CUDA_API_union_ns": 8154931290,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.99075691911086,
+      "API_outside_kernel_ns": 1088417107,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 7168,
+        "summed_event_duration_ns": 7240952940,
+        "interval_union_ns": 7240952940
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c1-natural-r0-v52",
+      "sqlite_sha256": "21cde49c78ae723637dd175db5c548b84ba226e06bca21dfae1120a04f315874",
+      "recorded_CUDA_table_events": 2448480,
+      "diagnostic_CUDA_collected": 2448480,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t2455786, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 7997219763,
+      "kernel_union_ns": 8001813657,
+      "CUDA_API_union_ns": 10364293809,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.94258934040558,
+      "API_outside_kernel_ns": 2367074046,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 7168,
+        "summed_event_duration_ns": 8238086600,
+        "interval_union_ns": 8238086600
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c1-natural-r1-candidate",
+      "sqlite_sha256": "5a23ff839b534f78ad96f0b649e5076af9fd807e04e73c7e4c4ce285ebfb67d0",
+      "recorded_CUDA_table_events": 2024160,
+      "diagnostic_CUDA_collected": 2024160,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t2031443, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 7067113367,
+      "kernel_union_ns": 7067577113,
+      "CUDA_API_union_ns": 8186480813,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.99343840197871,
+      "API_outside_kernel_ns": 1119367446,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 7168,
+        "summed_event_duration_ns": 7257108322,
+        "interval_union_ns": 7257108322
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c1-natural-r1-v52",
+      "sqlite_sha256": "7284393a9194f02bdad2bf2fdc43cc256d85726df8f7b5f80f7e86f7f06c07e1",
+      "recorded_CUDA_table_events": 2448480,
+      "diagnostic_CUDA_collected": 2448480,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t2455785, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 8008228915,
+      "kernel_union_ns": 8008855327,
+      "CUDA_API_union_ns": 9346145241,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.99217850773395,
+      "API_outside_kernel_ns": 1337916326,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 7168,
+        "summed_event_duration_ns": 8211953591,
+        "interval_union_ns": 8211953591
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c16-fixed-r0-candidate",
+      "sqlite_sha256": "0a05d2d5a9606b0eb982386175a0524883ebb9aeee2643dbf223a882fb96bc54",
+      "recorded_CUDA_table_events": 42572,
+      "diagnostic_CUDA_collected": 42572,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t42728, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 258812630,
+      "kernel_union_ns": 258838094,
+      "CUDA_API_union_ns": 283498689,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.99016218995956,
+      "API_outside_kernel_ns": 24686059,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 145,
+        "summed_event_duration_ns": 262225125,
+        "interval_union_ns": 262225125
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c16-fixed-r0-v52",
+      "sqlite_sha256": "1caa311154cd9cdb1a64dd45530e68f5c6e4b8f1b0c1e398dd9c8b274177d5fd",
+      "recorded_CUDA_table_events": 47512,
+      "diagnostic_CUDA_collected": 47512,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t47669, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 267535696,
+      "kernel_union_ns": 267585314,
+      "CUDA_API_union_ns": 298694227,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.98145712884677,
+      "API_outside_kernel_ns": 31158531,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 144,
+        "summed_event_duration_ns": 271053907,
+        "interval_union_ns": 271053907
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c16-fixed-r1-candidate",
+      "sqlite_sha256": "c6efc63f769d2a0714f6fb7b1b08b447057c01951ebf335a1d5adbd11ba1aecc",
+      "recorded_CUDA_table_events": 42456,
+      "diagnostic_CUDA_collected": 42456,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t42612, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 253823416,
+      "kernel_union_ns": 253859450,
+      "CUDA_API_union_ns": 279371239,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.98580553136784,
+      "API_outside_kernel_ns": 25547823,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 145,
+        "summed_event_duration_ns": 257260746,
+        "interval_union_ns": 257260746
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c16-fixed-r1-v52",
+      "sqlite_sha256": "25165a3a9e1a47a198fa5849941852037849a53fad85a0a41d07c31b19207336",
+      "recorded_CUDA_table_events": 48133,
+      "diagnostic_CUDA_collected": 48133,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t48291, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 257726677,
+      "kernel_union_ns": 257763204,
+      "CUDA_API_union_ns": 287327914,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.98582924194254,
+      "API_outside_kernel_ns": 29601237,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 145,
+        "summed_event_duration_ns": 261234273,
+        "interval_union_ns": 261234273
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c16-natural-r0-candidate",
+      "sqlite_sha256": "495bd642ab7075ee2a9afa57fe6fb85b344f6c60855943284e271656c5bcb411",
+      "recorded_CUDA_table_events": 149740,
+      "diagnostic_CUDA_collected": 149740,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t150282, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 803593585,
+      "kernel_union_ns": 803648890,
+      "CUDA_API_union_ns": 886647135,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.99311826337494,
+      "API_outside_kernel_ns": 83053550,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 524,
+        "summed_event_duration_ns": 815730604,
+        "interval_union_ns": 815730604
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c16-natural-r0-v52",
+      "sqlite_sha256": "a03c721d195c8f7ccf7c78792d0864dd177ad5ed8b8d99770d03013c8bf18fdd",
+      "recorded_CUDA_table_events": 176695,
+      "diagnostic_CUDA_collected": 176695,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t177235, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 839841100,
+      "kernel_union_ns": 839898719,
+      "CUDA_API_union_ns": 934942191,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.99313976808196,
+      "API_outside_kernel_ns": 95101091,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 522,
+        "summed_event_duration_ns": 853207096,
+        "interval_union_ns": 853207096
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c16-natural-r1-candidate",
+      "sqlite_sha256": "7236f288d5ec0a305ba23ce804861ecab2161fd2d91c70fe2469f3c3fdd30457",
+      "recorded_CUDA_table_events": 149313,
+      "diagnostic_CUDA_collected": 149313,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t149854, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 791494090,
+      "kernel_union_ns": 791566019,
+      "CUDA_API_union_ns": 872944927,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.99091307632295,
+      "API_outside_kernel_ns": 81450837,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 523,
+        "summed_event_duration_ns": 803711304,
+        "interval_union_ns": 803711304
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c16-natural-r1-v52",
+      "sqlite_sha256": "73d3c955d7715665a1180e89ebc5e6c5f1b60b62c7c8f1588a29578d32826033",
+      "recorded_CUDA_table_events": 176975,
+      "diagnostic_CUDA_collected": 176975,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t177516, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 845830163,
+      "kernel_union_ns": 845904484,
+      "CUDA_API_union_ns": 941362483,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.99121401985617,
+      "API_outside_kernel_ns": 95532320,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 523,
+        "summed_event_duration_ns": 860254792,
+        "interval_union_ns": 860254792
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c32-fixed-r0-candidate",
+      "sqlite_sha256": "7f804035e6a27e0f6e06aa879b4f26baaa725ab81facbcef83385d504477cda2",
+      "recorded_CUDA_table_events": 26034,
+      "diagnostic_CUDA_collected": 26034,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t26133, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 194215709,
+      "kernel_union_ns": 194264142,
+      "CUDA_API_union_ns": 214578039,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.9750684817582,
+      "API_outside_kernel_ns": 20362330,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 88,
+        "summed_event_duration_ns": 196358327,
+        "interval_union_ns": 196358327
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c32-fixed-r0-v52",
+      "sqlite_sha256": "c0ca9519494376f03531309158c17e4030a54475e6e8b3d4c2189dc8fdc57648",
+      "recorded_CUDA_table_events": 28266,
+      "diagnostic_CUDA_collected": 28266,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t28364, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 203737949,
+      "kernel_union_ns": 203764710,
+      "CUDA_API_union_ns": 221022923,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.98686671504599,
+      "API_outside_kernel_ns": 17284974,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 87,
+        "summed_event_duration_ns": 205902891,
+        "interval_union_ns": 205902891
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c32-fixed-r1-candidate",
+      "sqlite_sha256": "ca4a712f05ea8e232d511260ee9384590bc4a2dd94d3a02bf94094f2e19b74b7",
+      "recorded_CUDA_table_events": 25499,
+      "diagnostic_CUDA_collected": 25499,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t25596, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 193967152,
+      "kernel_union_ns": 194011429,
+      "CUDA_API_union_ns": 216040368,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.97717814861309,
+      "API_outside_kernel_ns": 22073216,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 86,
+        "summed_event_duration_ns": 195972628,
+        "interval_union_ns": 195972628
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c32-fixed-r1-v52",
+      "sqlite_sha256": "d375c1de1db766dab53bd31fc1b90e3885bd2d8d643ef3c0a5b6af7402d3a03e",
+      "recorded_CUDA_table_events": 28142,
+      "diagnostic_CUDA_collected": 28142,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t28240, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 208108977,
+      "kernel_union_ns": 208141575,
+      "CUDA_API_union_ns": 225338803,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.98433854456997,
+      "API_outside_kernel_ns": 17229826,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 87,
+        "summed_event_duration_ns": 210271563,
+        "interval_union_ns": 210271563
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c32-natural-r0-candidate",
+      "sqlite_sha256": "aeb94438f99979c60bbfd8865d1929d8b344a4b74f2c9c03d6fffa722c1c88bf",
+      "recorded_CUDA_table_events": 87410,
+      "diagnostic_CUDA_collected": 87410,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t87727, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 578297815,
+      "kernel_union_ns": 578385043,
+      "CUDA_API_union_ns": 630171180,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.98491869714549,
+      "API_outside_kernel_ns": 51873365,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 304,
+        "summed_event_duration_ns": 585319113,
+        "interval_union_ns": 585319113
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c32-natural-r0-v52",
+      "sqlite_sha256": "fe9bfdff4353582ab7efbb78594ac7dfb386da36daf15367509c162364918983",
+      "recorded_CUDA_table_events": 101828,
+      "diagnostic_CUDA_collected": 101828,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t102147, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 597694185,
+      "kernel_union_ns": 597802954,
+      "CUDA_API_union_ns": 663267498,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.9818052086775,
+      "API_outside_kernel_ns": 65573313,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 303,
+        "summed_event_duration_ns": 605265108,
+        "interval_union_ns": 605265108
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c32-natural-r1-candidate",
+      "sqlite_sha256": "126aeb6249c4a05e229f5910cd9554cff5c6cebe2cfa255e863b6f752f025b54",
+      "recorded_CUDA_table_events": 86991,
+      "diagnostic_CUDA_collected": 86991,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t87306, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 588491700,
+      "kernel_union_ns": 588582819,
+      "CUDA_API_union_ns": 640908671,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.98451891610516,
+      "API_outside_kernel_ns": 52416971,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 302,
+        "summed_event_duration_ns": 595488770,
+        "interval_union_ns": 595488770
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c32-natural-r1-v52",
+      "sqlite_sha256": "cbce25877c09ccbaa11ef86aa56cad5616fccde6e76938d3e6a33b0d70f450c4",
+      "recorded_CUDA_table_events": 101206,
+      "diagnostic_CUDA_collected": 101206,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t101523, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 593212887,
+      "kernel_union_ns": 593307403,
+      "CUDA_API_union_ns": 653760562,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.98406964087721,
+      "API_outside_kernel_ns": 60547675,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 301,
+        "summed_event_duration_ns": 600781254,
+        "interval_union_ns": 600781254
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c8-fixed-r0-candidate",
+      "sqlite_sha256": "5a31ecb6fc67de28782636f2f9e054293070ec5fd50ddf9653b1bb81963bfdda",
+      "recorded_CUDA_table_events": 76918,
+      "diagnostic_CUDA_collected": 76918,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t77198, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 358482009,
+      "kernel_union_ns": 358531666,
+      "CUDA_API_union_ns": 405476767,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.98614989840256,
+      "API_outside_kernel_ns": 46994758,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 267,
+        "summed_event_duration_ns": 364747551,
+        "interval_union_ns": 364747551
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c8-fixed-r0-v52",
+      "sqlite_sha256": "1138d5c6420f9100eb8cd0309f9b0baa3e430b5fa1cfdc4c06ea2ebeecd680db",
+      "recorded_CUDA_table_events": 89578,
+      "diagnostic_CUDA_collected": 89578,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t89858, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 387289887,
+      "kernel_union_ns": 387341355,
+      "CUDA_API_union_ns": 441536606,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.9867124954938,
+      "API_outside_kernel_ns": 54246719,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 267,
+        "summed_event_duration_ns": 394119135,
+        "interval_union_ns": 394119135
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c8-fixed-r1-candidate",
+      "sqlite_sha256": "1974a980cafd94bc0575c6431718ba0d3b4e0fca056532c28c9b72cd4b431019",
+      "recorded_CUDA_table_events": 76773,
+      "diagnostic_CUDA_collected": 76773,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t77053, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 351618338,
+      "kernel_union_ns": 351653474,
+      "CUDA_API_union_ns": 396172130,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.9900083455453,
+      "API_outside_kernel_ns": 44553792,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 267,
+        "summed_event_duration_ns": 357949310,
+        "interval_union_ns": 357949310
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c8-fixed-r1-v52",
+      "sqlite_sha256": "870ed08f37d39d840bd161ee55fd375f69c7fdaf542c9f767864cf88c85e6998",
+      "recorded_CUDA_table_events": 89734,
+      "diagnostic_CUDA_collected": 89734,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t90015, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 396570766,
+      "kernel_union_ns": 396592787,
+      "CUDA_API_union_ns": 446913460,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.99444745322612,
+      "API_outside_kernel_ns": 50342694,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 268,
+        "summed_event_duration_ns": 403523080,
+        "interval_union_ns": 403523080
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c8-natural-r0-candidate",
+      "sqlite_sha256": "714c33af69b696975d0906a2dd8b17d764181532bb00c5c1ff27ac84fc5d81fc",
+      "recorded_CUDA_table_events": 277133,
+      "diagnostic_CUDA_collected": 277133,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t278130, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 1273341549,
+      "kernel_union_ns": 1273369202,
+      "CUDA_API_union_ns": 1415120427,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.9978283596025,
+      "API_outside_kernel_ns": 141778878,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 974,
+        "summed_event_duration_ns": 1296812308,
+        "interval_union_ns": 1296812308
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c8-natural-r0-v52",
+      "sqlite_sha256": "d1a267a80ba539d2deb03c82432add3403a2c5da68aef8e1ac608a3e8913187e",
+      "recorded_CUDA_table_events": 331280,
+      "diagnostic_CUDA_collected": 331280,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t332283, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 1361221054,
+      "kernel_union_ns": 1361266550,
+      "CUDA_API_union_ns": 1528822515,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.99665781841183,
+      "API_outside_kernel_ns": 167601461,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 975,
+        "summed_event_duration_ns": 1387060110,
+        "interval_union_ns": 1387060110
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c8-natural-r1-candidate",
+      "sqlite_sha256": "c2208fd4f26e34616048e805823ef7d6f7300a84292fdd091c134a3c8feaf31b",
+      "recorded_CUDA_table_events": 277125,
+      "diagnostic_CUDA_collected": 277125,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t278123, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 1251846040,
+      "kernel_union_ns": 1251913998,
+      "CUDA_API_union_ns": 1401643512,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.99457167184738,
+      "API_outside_kernel_ns": 149797472,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 975,
+        "summed_event_duration_ns": 1275623637,
+        "interval_union_ns": 1275623637
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    },
+    {
+      "case": "c8-natural-r1-v52",
+      "sqlite_sha256": "d13b55645714b3823a5584d73550bd77080fdf110761f12021a5ea6b20427085",
+      "recorded_CUDA_table_events": 331156,
+      "diagnostic_CUDA_collected": 331156,
+      "recorded_table_count_matches_collected": true,
+      "diagnostic_CUPTI_produced": [
+        "Number of CUPTI events produced: \t332157, CUPTI buffers: 50."
+      ],
+      "preserved_collection_warnings": [
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Not all NVTX events might have been collected.",
+        "No NVTX events collected. Does the process use NVTX?",
+        "Not all CUDA events might have been collected.",
+        "Not all OS runtime libraries events might have been collected."
+      ],
+      "recorded_API_kernel_overlap_ns": 1371321581,
+      "kernel_union_ns": 1371363220,
+      "CUDA_API_union_ns": 1540038870,
+      "API_kernel_overlap_fraction_of_kernel_percent": 99.9969636782296,
+      "API_outside_kernel_ns": 168717289,
+      "stream_synchronize_recorded": {
+        "name": "cudaStreamSynchronize_v3020",
+        "count": 975,
+        "summed_event_duration_ns": 1397112746,
+        "interval_union_ns": 1397112746
+      },
+      "unattributed_interval_limit": "API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT",
+      "no_additive_walltime": true
+    }
+  ],
+  "all_recorded_table_counts_match_collected": true,
+  "all_traces_have_collection_warnings": true,
+  "capture_completeness": "unproven; table-count reconciliation is internal consistency only; produced/collected event categories and warning cause not fully resolved",
+  "boundary_scope": "controller starts profiler before retained96 and stops after it; HTTP/perf-to-trace alignment remains unverified",
+  "next_attribution_evidence": "phase/iteration annotations and clock alignment required before identifying HTTP/scheduler/host wait; preserve diagnostics and original captures",
+  "serving_performance": "\ubbf8\uc2e4\ud589; diagnostic profiles only",
+  "goal_achieved": false,
+  "created_ns": 1791367556986766000
+}

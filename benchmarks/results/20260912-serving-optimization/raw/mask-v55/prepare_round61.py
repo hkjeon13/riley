@@ -1,0 +1,21 @@
+from pathlib import Path
+r=Path('/tmp/riley-opt-260912')
+s=(r/'serving_screen_round60.py').read_text().replace('round60','round61')
+s=s.replace("'variable-candidate-v54']","'variable-candidate-v54','variable-candidate-v55']")
+s=s.replace("root/'variable-candidate-v54/build.json'","root/'variable-candidate-v55/build.json'")
+s=s.replace("order=['anchor','previous','new','vllm']","order=['anchor','previous','packed','new','vllm']")
+s=s.replace("'new':'variable-candidate-v54/riley'","'packed':'variable-candidate-v54/riley','new':'variable-candidate-v55/riley'")
+s=s.replace('all three Riley','all four Riley').replace('V54 packed V','V54 packed versus V55 full-tile decode').replace('V54 new','V54 packed, V55 new')
+(r/'serving_screen_round61.py').write_text(s)
+s=(r/'analyze_serving_round60.py').read_text().replace('round60','round61').replace('len(raw)==32','len(raw)==40').replace('{"anchor","previous","new","vllm"}','{"anchor","previous","packed","new","vllm"}').replace('all three Riley','all four Riley').replace('V54 packed V','V54 packed versus V55 full-tile decode').replace('Assess packed V writes and vector reads against V51, V52 and vLLM','Assess full-tile and partial-tail decode loads against V51, V52, V54 and vLLM');(r/'analyze_serving_round61.py').write_text(s)
+s=(r/'export_round60.py').read_text().replace('round60','round61').replace('==32','==40').replace('==12288','==15360').replace('serving-round61-execution-receipt.json','serving-round61-controller.log').replace("'variable-candidate-v54/build.json'","'variable-candidate-v54/build.json','variable-candidate-v55/build.json'");(r/'export_round61.py').write_text(s)
+s=(r/'freeze_attention_v54.py').read_text().replace('v54','v55')
+a=s.index("for name in ['memcheck'");b=s.index("subprocess.run(['git','diff','--check']",a)
+s=s[:a]+'''assert 'cases=2688' in (r/'decode-mask-v55/correctness.log').read_text()
+assert 'ERROR SUMMARY: 0 errors' in (r/'decode-mask-v55/memcheck.log').read_text()
+assert '0 errors, 0 warnings' in (r/'decode-mask-v55/racecheck.log').read_text()
+'''+s[b:]
+a=s.index('paths=');b=s.index('\nassert {line',a);s=s[:a]+"paths=['kernels/src/decode_gqa_attention_v50.cuh']"+s[b:]
+s=s.replace('Pack V7 value cache for paired attention loads across mixed and decode','Separate full K16 decode value tiles from masked partial tails').replace('V7 packed V direct writes and paired reads','V7 packed V direct writes and paired reads with full-tile decode fast path and branchless tail mask')
+(r/'freeze_attention_v55.py').write_text(s)
+s=(r/'export_integration_v54.py').read_text().replace('v54','v55').replace('round60','round61');(r/'export_integration_v55.py').write_text(s)

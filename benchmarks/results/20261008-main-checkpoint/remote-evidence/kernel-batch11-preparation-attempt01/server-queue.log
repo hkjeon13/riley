@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-261007/kernel-batch11-preparation-attempt01/server-after-native.py", line 11, in <module>
+    assert json.loads((n/'completion.json').read_text())['failure'] is None
+AssertionError

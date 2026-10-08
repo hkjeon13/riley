@@ -1,0 +1,64 @@
+{
+  "status": "DRAFT_NOT_DISPATCHABLE_UNTIL_REVIEWED",
+  "cases": [
+    "c1-fixed",
+    "c1-natural",
+    "c8-fixed",
+    "c8-natural",
+    "c16-fixed",
+    "c16-natural",
+    "c32-fixed",
+    "c32-natural"
+  ],
+  "engines": [
+    "v52",
+    "candidate",
+    "vllm"
+  ],
+  "sustained_seconds": 300,
+  "cancellation_trials_each_mode": 20,
+  "pins": {
+    "/data/riley-serving-261007/kernel-batch11-stability-controller-draft-attempt02/stability.py": "0dda1aaa217ba58f4595331fdccebd98270922dfcdd3824f327171ebe98da137",
+    "/data/riley-serving-261007/kernel-batch11-stability-controller-draft-attempt02/frozen_helpers.py": "a8c0ea7c1735e3a942bf471304ad142c570ffa1ffb5fd3dbfc96bd8147ee2256",
+    "/data/riley-serving-261007/kernel-batch11-stability-controller-draft-attempt02/serving_token_client_v2.py": "2bc9238265666b99654f4f4e456ca0bb10c45b8bed8f28493452b89c1f450fcf",
+    "/data/riley-serving-261007/kernel-batch11-stability-controller-draft-attempt02/mixed_phase_v34.py": "c37408fb6d02f41ee7fb56d6bd41beda305dd2cf5bb4ef3a73879cb44401c96f",
+    "/data/riley-serving-261007/kernel-batch11-stability-controller-draft-attempt02/fixtures.json": "ae1f6f48a2acc1f7c0a6f084567bb96916cb005eeb727ae59aca815f1c5ab955"
+  },
+  "prerequisite_receipts": [
+    "/data/riley-serving-261007/kernel-batch11-quiet-attempt02/completion.json",
+    "/data/riley-serving-261007/kernel-batch11-independent-analysis-attempt02/completion.json",
+    "/data/riley-serving-261007/kernel-batch11-host-independent-analysis-attempt02/completion.json"
+  ],
+  "no_exclusions": true,
+  "performance_qualification": false,
+  "remaining_before_execution": [
+    "Pin complete replay and host receipts after matched96 terminal",
+    "Freeze dispatch source and two ABC/CBA repetitions per all8 cell",
+    "Source-owned prefill cancellation and reserved KV/outstanding iteration evidence still absent; driver remains supplemental stability scope"
+  ],
+  "orders": [
+    [
+      "v52",
+      "candidate",
+      "vllm"
+    ],
+    [
+      "vllm",
+      "candidate",
+      "v52"
+    ]
+  ],
+  "helper_API_review": {
+    "mixed_phase_positional": [
+      "client",
+      "request_one"
+    ],
+    "returns": [
+      "rows",
+      "accounting",
+      "summary"
+    ],
+    "exact_row_field": "reference_match",
+    "source_reviewed": "/data/riley-serving-261007/kernel-batch11-controller-attempt02"
+  }
+}

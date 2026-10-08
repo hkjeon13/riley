@@ -1,0 +1,38 @@
+{
+  "time_ns": 1791365912106474000,
+  "reason": "actual HF controller terminal failed at final names validation; native03 never launched; dependent old paired collection/profiling cannot satisfy prerequisites",
+  "actors": [
+    {
+      "pid": 9871,
+      "name": "collect_qwen_step109_layer3_localization_attempt01.py",
+      "signal": "SIGINT",
+      "role": "own dependent waiting-only actor; no GPU/measurement process interrupted"
+    },
+    {
+      "pid": 9872,
+      "name": "verify_qwen_step109_layer3_localization_attempt01.py",
+      "signal": "SIGINT",
+      "role": "own dependent waiting-only actor; no GPU/measurement process interrupted"
+    },
+    {
+      "pid": 12728,
+      "name": "dispatch_kernel_batch04_profile_after_qwen_layer3.py",
+      "signal": "SIGINT",
+      "role": "own dependent waiting-only actor; no GPU/measurement process interrupted"
+    },
+    {
+      "pid": 12992,
+      "name": "collect_kernel_batch04_profiles_attempt01.py",
+      "signal": "SIGINT",
+      "role": "own dependent waiting-only actor; no GPU/measurement process interrupted"
+    },
+    {
+      "pid": 12996,
+      "name": "verify_analyze_kernel_batch04_profiles_after_collection.py",
+      "signal": "SIGINT",
+      "role": "own dependent waiting-only actor; no GPU/measurement process interrupted"
+    }
+  ],
+  "old_source_and_logs_preserved": true,
+  "actual_GPU_failure_inferred_from": "actual controller-completion and container tracebacks, not SSH observation"
+}

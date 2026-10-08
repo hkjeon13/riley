@@ -1,0 +1,22 @@
+{
+  "status": "source prepared; correctness and serving unexecuted",
+  "changes": [
+    "Aligned bit-preserving packed loads for mapped tiled Q/K and BF16 probability fragments",
+    "Remove next-stage V lookahead from mapped tiled attention to reduce simultaneously live fragments"
+  ],
+  "evidence": "/data/riley-serving-261007/kernel-batch11-c32-retained-kernel-observations-attempt01/summary.json",
+  "hypothesis": "Measured mapped attention cost warrants testing fragment load/lifetime overhead; no claim of measured spills or causal host wait",
+  "unchanged_contract": [
+    "MMA recurrence",
+    "softmax arithmetic and reduction order",
+    "BF16 rounding",
+    "nonfinite fallback",
+    "row and page masks",
+    "tile metadata ABI",
+    "all HTTP parameters"
+  ],
+  "native_matrix": 3161,
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "adopted": false,
+  "goal_achieved": false
+}

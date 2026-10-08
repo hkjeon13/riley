@@ -1,0 +1,97 @@
+{
+  "failure": null,
+  "steps": [
+    {
+      "label": "primitive-build",
+      "argv": [
+        "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin/nvcc",
+        "-O3",
+        "-DNDEBUG",
+        "-std=c++17",
+        "-arch=sm_89",
+        "--use_fast_math",
+        "-I/data/riley-serving-261007/kernel-batch02-source/kernels/src",
+        "/data/riley-serving-261007/kernel-batch02-source/kernels/tests/kernel_batch02_correctness.cu",
+        "-o",
+        "/data/riley-serving-261007/kernel-batch02-validation-attempt01/primitive-check"
+      ],
+      "exit": 0,
+      "before": {
+        "time_ns": 1791348595355469480,
+        "compute_pids": "",
+        "pressure": {
+          "cpu": "some avg10=0.06 avg60=0.48 avg300=0.89 total=12622335891\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+          "io": "some avg10=6.68 avg60=6.16 avg300=8.85 total=78709726867\nfull avg10=6.46 avg60=5.69 avg300=8.12 total=72012536736\n",
+          "memory": "some avg10=0.00 avg60=0.20 avg300=0.14 total=1963694070\nfull avg10=0.00 avg60=0.18 avg300=0.12 total=1920733913\n"
+        }
+      },
+      "ended_ns": 1791348600827035213,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "primitive-correctness",
+      "argv": [
+        "/data/riley-serving-261007/kernel-batch02-validation-attempt01/primitive-check"
+      ],
+      "exit": 0,
+      "before": {
+        "time_ns": 1791348600864961208,
+        "compute_pids": "",
+        "pressure": {
+          "cpu": "some avg10=0.75 avg60=0.59 avg300=0.91 total=12622434790\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+          "io": "some avg10=8.88 avg60=6.65 avg300=8.91 total=78710416206\nfull avg10=8.43 avg60=6.17 avg300=8.17 total=72013188253\n",
+          "memory": "some avg10=0.00 avg60=0.18 avg300=0.13 total=1963711395\nfull avg10=0.00 avg60=0.16 avg300=0.12 total=1920751191\n"
+        }
+      },
+      "ended_ns": 1791348601827326595,
+      "log_sha256": "7a7dd9490aeba931661cedaaa1250fd2a94bfb02c337816badad9722afb93de9"
+    },
+    {
+      "label": "server-build",
+      "argv": [
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "-p",
+        "riley-server",
+        "--features",
+        "cuda,server"
+      ],
+      "exit": 0,
+      "before": {
+        "time_ns": 1791348601862092978,
+        "compute_pids": "",
+        "pressure": {
+          "cpu": "some avg10=0.80 avg60=0.61 avg300=0.91 total=12622446341\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+          "io": "some avg10=8.18 avg60=6.60 avg300=8.88 total=78710441054\nfull avg10=7.63 avg60=6.10 avg300=8.15 total=72013212211\n",
+          "memory": "some avg10=0.00 avg60=0.17 avg300=0.13 total=1963728786\nfull avg10=0.00 avg60=0.15 avg300=0.11 total=1920768177\n"
+        }
+      },
+      "ended_ns": 1791348623180607484,
+      "log_sha256": "7e80d21db8c837a96c383551c7f5890e787b7f43d6a0e3a7eb2f7eece11606a8"
+    },
+    {
+      "label": "http-correctness",
+      "argv": [
+        "/data/riley-serving-261007/vllm0271-venv/bin/python",
+        "/data/riley-serving-261007/controller/kernel_batch02_http_screen.py"
+      ],
+      "exit": 0,
+      "before": {
+        "time_ns": 1791348623239537397,
+        "compute_pids": "",
+        "pressure": {
+          "cpu": "some avg10=0.81 avg60=0.82 avg300=0.95 total=12622856009\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+          "io": "some avg10=4.73 avg60=5.88 avg300=8.55 total=78711377476\nfull avg10=3.93 avg60=5.26 avg300=7.81 total=72013995215\n",
+          "memory": "some avg10=0.00 avg60=0.12 avg300=0.12 total=1963766476\nfull avg10=0.00 avg60=0.11 avg300=0.10 total=1920805474\n"
+        }
+      },
+      "ended_ns": 1791348645889565465,
+      "log_sha256": "32395598bad98182fa7c1a437d62bc9cc78b778b0adc4ba016e07caec59c506f"
+    }
+  ],
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "adopted": false,
+  "goal_achieved": false
+}

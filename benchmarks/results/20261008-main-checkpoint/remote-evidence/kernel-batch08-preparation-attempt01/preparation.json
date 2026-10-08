@@ -1,0 +1,17 @@
+{
+  "parent": "73003e2d8f1ce797b4e669c813c43261b30a46a2",
+  "source": "/data/riley-serving-261007/kernel-batch08-source-attempt01",
+  "preserved_skip_paths": 610,
+  "changes": [
+    "decode AV: restore eight columns and distribute one exact head per 32-thread CTA",
+    "mapped attention: share one 12KiB allocation between exclusive Tile8/Tile16 branches"
+  ],
+  "arithmetic": "V52 per-output MMA recurrence, BF16 rounding and denominator order preserved; unverified until native tests",
+  "serving": "\ubbf8\uc2e4\ud589",
+  "adopted": false,
+  "files": {
+    "kernels/src/decode_gqa_attention_v50.cuh": "82a52b41bf10e7e35e1dee9f7d65e648b12b06eb9cbe2cb592fcd236005ed277",
+    "kernels/src/mixed_attention_v49.cuh": "d893006faea72d653616d3924fa5ce72761be657cdd0d6ba4ce7f53429b7e0a6",
+    "kernels/tests/kernel_batch08_correctness.cu": "40109af9f87dbd532fefe63844af6506f1c4c6705f2dcb844efbef273a654ea8"
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "before_time_ns": 1791415281465132780,
+  "after_time_ns": 1791415291519599877,
+  "top_observed_process_disk_bytes": [
+    {
+      "pid": "2262052",
+      "comm": "postgres",
+      "read_bytes_delta": 581468160,
+      "write_bytes_delta": 1302528
+    },
+    {
+      "pid": "2095399",
+      "comm": "postgres",
+      "read_bytes_delta": 444526592,
+      "write_bytes_delta": 1294336
+    },
+    {
+      "pid": "2237832",
+      "comm": "python3",
+      "read_bytes_delta": 0,
+      "write_bytes_delta": 10620928
+    },
+    {
+      "pid": "3184424",
+      "comm": "postgres",
+      "read_bytes_delta": 4382720,
+      "write_bytes_delta": 32768
+    },
+    {
+      "pid": "1929248",
+      "comm": "postgres",
+      "read_bytes_delta": 2732032,
+      "write_bytes_delta": 1286144
+    },
+    {
+      "pid": "3184427",
+      "comm": "postgres",
+      "read_bytes_delta": 0,
+      "write_bytes_delta": 3342336
+    },
+    {
+      "pid": "2266129",
+      "comm": "postgres",
+      "read_bytes_delta": 2195456,
+      "write_bytes_delta": 770048
+    },
+    {
+      "pid": "1760730",
+      "comm": "postgres",
+      "read_bytes_delta": 540672,
+      "write_bytes_delta": 1531904
+    },
+    {
+      "pid": "468",
+      "comm": "systemd-journal",
+      "read_bytes_delta": 0,
+      "write_bytes_delta": 1146880
+    },
+    {
+      "pid": "427",
+      "comm": "jbd2/nvme0n1p2-8",
+      "read_bytes_delta": 0,
+      "write_bytes_delta": 917504
+    },
+    {
+      "pid": "2147446",
+      "comm": "k3s-server",
+      "read_bytes_delta": 0,
+      "write_bytes_delta": 692224
+    },
+    {
+      "pid": "2392369",
+      "comm": "python3",
+      "read_bytes_delta": 0,
+      "write_bytes_delta": 438272
+    }
+  ],
+  "controller_live": true,
+  "controller_argv": "/data/riley-serving-261007/vllm0271-venv/bin/python /data/riley-serving-261007/kernel-batch11-controller-attempt02/run.py --attempt 2 --mode quiet ",
+  "gate": {
+    "io_full_max": 5,
+    "cpu_some_max": 5,
+    "memory_full_max": 0.5,
+    "consecutive": 3,
+    "interval_seconds": 2,
+    "timeout_seconds": 300
+  },
+  "measurement_scope": "host I/O counters/PSI observations only; no process intervention, no causality claim",
+  "goal_achieved": false
+}

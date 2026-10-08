@@ -1,0 +1,47 @@
+{
+  "schema": "riley.batch10.interim-av-cost-decision.v1",
+  "scope": "completed C1-fixed AB/BA four profile lanes only; full32 independent capture/replay pending",
+  "phase_summary_sha256": "99351afea806926c90e7c90d33910a71d6bf0467016bed3b2580e1177e8211a8",
+  "observations": [
+    {
+      "case": "c1-fixed-r0-v52",
+      "events": 54720,
+      "kernel_work_sum_ms": 230.874334,
+      "sqlite_sha256": "501ba2ea8970484d4ed2f93e0931b941202935b0fb22cbe0d3c9a9d3fa22e2ad"
+    },
+    {
+      "case": "c1-fixed-r0-candidate",
+      "events": 54720,
+      "kernel_work_sum_ms": 337.661528,
+      "sqlite_sha256": "99f85a9cf5201669c1ead1268d8f9b1a9e5194a5831e6718c2935d9ba88a34e4"
+    },
+    {
+      "case": "c1-fixed-r1-candidate",
+      "events": 54720,
+      "kernel_work_sum_ms": 337.541548,
+      "sqlite_sha256": "970983be7f56fa8f5bddb3cf232ac2517bdcbc84b793e336e8069768349106cc"
+    },
+    {
+      "case": "c1-fixed-r1-v52",
+      "events": 54720,
+      "kernel_work_sum_ms": 230.886737,
+      "sqlite_sha256": "3ca0c4e0369983d3738fcadb56ae7480e8f6efeafdd0c616cee505873bac0eff"
+    }
+  ],
+  "all_four_call_counts_equal": true,
+  "source_hashes_unchanged": true,
+  "conclusion": "Batch10 AV packed3 warp/shared-value candidate records higher AV kernel work than V52 in both C1-fixed repeats. This supports investigating restoration, not adoption or a full-workload performance claim.",
+  "next_candidate_preparation": {
+    "two_related_changes": [
+      "Restore V52 independent per-head CTA execution for AV, exact original FP32 softmax/BF16 probability/four K16 MMA recurrence",
+      "Remove Batch10 cooperative shared V tile and CTA barriers; restore original per-warp V loading without arithmetic changes"
+    ],
+    "entry_gate": "full32 raw archive, replay and phase/CPU analysis terminal; inspect all8 regressions before committing final batch scope",
+    "validation": "source/blob/binary pins; native3161 exact; ordinary HTTP all8 exact; frozen full96 V52/candidate/vLLM; all-core tails and correctness/stability gates",
+    "keep": "Batch09/10 source, binaries, all raw traces and rejection evidence; V52 remains baseline"
+  },
+  "serving_performance": "not derived from profiler",
+  "adopted": false,
+  "goal_achieved": false,
+  "time_ns": 1791414107006875363
+}

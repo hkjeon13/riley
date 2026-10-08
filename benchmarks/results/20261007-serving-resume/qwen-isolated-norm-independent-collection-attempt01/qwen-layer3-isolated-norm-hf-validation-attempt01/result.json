@@ -1,0 +1,128 @@
+{
+  "producer": {
+    "python_version": "3.12.3",
+    "python_executable_sha256": "a92f0f95e883390c7256b2e441484aac06b1002dbe1d924141a77c8d82f96223",
+    "torch_version": "2.13.0+cu129",
+    "transformers_version": "5.16.1",
+    "safetensors_version": "0.8.0"
+  },
+  "Qwen2_source_sha256": "34390fea7648b444d5727abef0b85acceba28f856aedec6c335d51253806bfee",
+  "Qwen2_norm_forward_source_sha256": "790fa612e4fa57acfcbea31da45f92ba91f9016f7260ef539f61c5530ba06a5f",
+  "input_manifest_sha256": "53824d24e1d5ecd2d97e83846f5c40c25bbb7031f95975ebb1f1d5832e0c6ef2",
+  "weight_tensor_name": "model.layers.3.post_attention_layernorm.weight",
+  "weight_sha256": "e8521c1cb46fcdc8500b24272568d80d6b5168720b606d17772fd43a016cf684",
+  "weight_file": "model-00001-of-00002.safetensors",
+  "weight_file_sha256": "67347b23fb4165b652eb6611f5e1f2a06dfcddba8e909df1b2b0b1857bee06c2",
+  "checkpoint_revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+  "rows": [
+    {
+      "step": 108,
+      "shapes": [
+        {
+          "rows": 1,
+          "shape": [
+            1,
+            1,
+            2048
+          ],
+          "variance_FP32_bits": "0x3e7a484f",
+          "variance_plus_epsilon_FP32_bits": "0x3e7a4892",
+          "inverse_RMS_FP32_bits": "0x4001741a",
+          "output_sha256": "fadb0adf0a2569890f41b658e9902f9c762c819c294c72d6e080eb049bec9897",
+          "captured_HF_exact": true,
+          "captured_native_exact": true,
+          "output_file": "step108-rows1-HF-output.bf16",
+          "all_replicated_rows_equal": true
+        },
+        {
+          "rows": 16,
+          "shape": [
+            1,
+            16,
+            2048
+          ],
+          "variance_FP32_bits": "0x3e7a484f",
+          "variance_plus_epsilon_FP32_bits": "0x3e7a4892",
+          "inverse_RMS_FP32_bits": "0x4001741a",
+          "output_sha256": "fadb0adf0a2569890f41b658e9902f9c762c819c294c72d6e080eb049bec9897",
+          "captured_HF_exact": true,
+          "captured_native_exact": true,
+          "output_file": "step108-rows16-HF-output.bf16",
+          "all_replicated_rows_equal": true
+        },
+        {
+          "rows": 2048,
+          "shape": [
+            1,
+            2048,
+            2048
+          ],
+          "variance_FP32_bits": "0x3e7a484f",
+          "variance_plus_epsilon_FP32_bits": "0x3e7a4892",
+          "inverse_RMS_FP32_bits": "0x4001741a",
+          "output_sha256": "fadb0adf0a2569890f41b658e9902f9c762c819c294c72d6e080eb049bec9897",
+          "captured_HF_exact": true,
+          "captured_native_exact": true,
+          "output_file": "step108-rows2048-HF-output.bf16",
+          "all_replicated_rows_equal": true
+        }
+      ]
+    },
+    {
+      "step": 109,
+      "shapes": [
+        {
+          "rows": 1,
+          "shape": [
+            1,
+            1,
+            2048
+          ],
+          "variance_FP32_bits": "0x3e66144e",
+          "variance_plus_epsilon_FP32_bits": "0x3e661491",
+          "inverse_RMS_FP32_bits": "0x4007047e",
+          "output_sha256": "e65d03769e8f45570c7bea256b7ceffeb69f3ba99dfc43db349fd6b53faedeed",
+          "captured_HF_exact": true,
+          "captured_native_exact": false,
+          "output_file": "step109-rows1-HF-output.bf16",
+          "all_replicated_rows_equal": true
+        },
+        {
+          "rows": 16,
+          "shape": [
+            1,
+            16,
+            2048
+          ],
+          "variance_FP32_bits": "0x3e66144c",
+          "variance_plus_epsilon_FP32_bits": "0x3e66148f",
+          "inverse_RMS_FP32_bits": "0x4007047f",
+          "output_sha256": "db35c6b66e31759d1c6ab8d9da8af101c5c8b7565d9f065f152459456fbb7551",
+          "captured_HF_exact": false,
+          "captured_native_exact": true,
+          "output_file": "step109-rows16-HF-output.bf16",
+          "all_replicated_rows_equal": true
+        },
+        {
+          "rows": 2048,
+          "shape": [
+            1,
+            2048,
+            2048
+          ],
+          "variance_FP32_bits": "0x3e66144c",
+          "variance_plus_epsilon_FP32_bits": "0x3e66148f",
+          "inverse_RMS_FP32_bits": "0x4007047f",
+          "output_sha256": "db35c6b66e31759d1c6ab8d9da8af101c5c8b7565d9f065f152459456fbb7551",
+          "captured_HF_exact": false,
+          "captured_native_exact": true,
+          "output_file": "step109-rows2048-HF-output.bf16",
+          "all_replicated_rows_equal": true
+        }
+      ]
+    }
+  ],
+  "arithmetic_policy": "actual pinned Qwen2RMSNorm class and FP32 Torch mean/rsqrt; BF16 normalization and weighted output boundaries unchanged",
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "goal_achieved": false
+}

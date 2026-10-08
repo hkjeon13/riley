@@ -1,0 +1,14 @@
+{
+  "pins": {
+    "/data/riley-serving-261007/qwen-full52-reviewed-attempt02.pack": "a6ec7407c657332b98283dcecf1c2afd87960c98aabb64d2eacc80cc1a12ff23",
+    "/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2048-cacheon-layer-stage-r7-20260917T141511Z/qwen3b-p2048-cache-on-layer-stage.json": "b2fc7301636ba618b904b554cd914ac35dd88c2f83e7c7736571353a4fd1fa4d",
+    "/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2048-cacheon-layer-stage-r7-20260917T141511Z/qwen3b-p2048-cache-on-layer-stage.safetensors": "5c12fc6f34cddfc73ef0ebc33b4903550ef7f632c722e53e158f1c715ffd70c9",
+    "/data/riley-serving-261007/qwen-m1-regular-candidate-source-receipt.json": "2805fc0187b1f702404722c6318079818f5e6bb3ebd996cd6599611be2e5feff",
+    "/data/riley-serving-261007/qwen-m1-regular-source-provenance.json": "26d1982315c35ee3812ac04743968ca46874b15016b88a61af07f28ce6c4ed80"
+  },
+  "wait_pid": 3697803,
+  "scope": "all52 M1 BF16 stages plus same-owner reset/re-prefill repeat; separate from selected-layer17 stage diagnostic",
+  "prefill_KV_all36_gate": "previous exact72/72 plus prefill logits; reuses9eeeeae9 code",
+  "M2_full128_generation": "not proven by this M1 test",
+  "serving_performance": "\ubbf8\uc2e4\ud589"
+}

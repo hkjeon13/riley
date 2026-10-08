@@ -1,0 +1,13 @@
+{
+  "pins": {
+    "qwen-m2-bounded-source-attempt03.tar": "88e8bdc7f032be00bf3318f54aee8a2aff83a1334aa6c87f3f00531329329723",
+    "qwen-m2-bounded-commit-attempt03.pack": "ca3f3ae7bd9877499c960cffbd73ecae9ab3e42386b17d04144d90fef8f66e10",
+    "qwen-m2-bounded-source-receipt-attempt03.json": "cd5adeefb4d175718046527c53ff1a5eddc9b2e68a33b1da9ca89b66563a3d76",
+    "materialize_qwen_m2_source.py": "1846bf55b3ecd575082ae5069427ac50f21a5640e24d19606629ed9fdb5f10f5",
+    "run_qwen_m2_bounded_attempt03.py": "270b812cdafd6a92a9a16d938dceb21915a1d6ebfb01640b5f78125111bbcac0"
+  },
+  "wait_pid": 270594,
+  "wait_process": "run_batch02_matched_after_batch03.py",
+  "scope": "M1/M2 exact104 correctness, no serving or full128 generation claim",
+  "source_upload": "only after both actual benchmark terminals and GPU empty"
+}

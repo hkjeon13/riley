@@ -1,0 +1,14 @@
+{
+  "predecessor_preserved": "/data/riley-serving-261007/kernel-batch11-stability-controller-draft-attempt01",
+  "syntax": "passed without imports or GPU execution",
+  "driver_sha256": "0dda1aaa217ba58f4595331fdccebd98270922dfcdd3824f327171ebe98da137",
+  "source_binary_unchanged": true,
+  "scope": "draft; not executed; full stability unproven",
+  "changes": [
+    "Fail closed on draft status",
+    "Correct actual mixed_phase two positional inputs and three return values",
+    "Preserve cancellation raw prefix on failure",
+    "Write failure receipt for every dispatched attempt exception",
+    "Retain full96 warmup before300second sustained traffic"
+  ]
+}

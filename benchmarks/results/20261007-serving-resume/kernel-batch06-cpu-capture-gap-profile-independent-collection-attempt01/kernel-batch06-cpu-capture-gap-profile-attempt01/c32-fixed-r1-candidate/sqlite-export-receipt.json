@@ -1,0 +1,28 @@
+{
+  "argv": [
+    "/data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/bin/nsys",
+    "export",
+    "--type=sqlite",
+    "--force-overwrite=false",
+    "--output=/data/riley-serving-261007/kernel-batch06-cpu-capture-gap-profile-attempt01/c32-fixed-r1-candidate/trace.sqlite",
+    "/data/riley-serving-261007/kernel-batch06-cpu-capture-gap-profile-attempt01/c32-fixed-r1-candidate/trace.nsys-rep"
+  ],
+  "exit": 0,
+  "start": {
+    "realtime_ns": 1791380913061411380,
+    "monotonic_ns": 893540010828732,
+    "monotonic_raw_ns": 893527360412070,
+    "perf_counter_before_ns": 893540010827646,
+    "perf_counter_after_ns": 893540010829376,
+    "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+  },
+  "end": {
+    "realtime_ns": 1791380913375687013,
+    "monotonic_ns": 893540325103956,
+    "monotonic_raw_ns": 893527674680995,
+    "perf_counter_before_ns": 893540325103210,
+    "perf_counter_after_ns": 893540325104828,
+    "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+  },
+  "log_sha256": "ce648ba7bff94dd7a5588fe201788e1162459229d57d613d732a3364b1e1602a"
+}

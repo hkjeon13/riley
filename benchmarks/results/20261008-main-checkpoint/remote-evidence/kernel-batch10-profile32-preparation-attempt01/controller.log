@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-261007/kernel-batch10-profile32-preparation-attempt01/run.py", line 246, in <module>
+    if __name__=='__main__':main()
+  File "/data/riley-serving-261007/kernel-batch10-profile32-preparation-attempt01/run.py", line 124, in main
+    assert os.getuid()==plan['expected_target_uid']==0,'root-only read-only CPU profiling environment required'
+AssertionError: root-only read-only CPU profiling environment required

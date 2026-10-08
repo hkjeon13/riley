@@ -1,0 +1,106 @@
+{
+  "qwen-step109-hf-stage-validation-attempt01": {
+    "state": "terminal",
+    "files": {
+      "completion.json": {
+        "sha256": "0d0392f2a77bd807c7c37fc5899e297b6044d2c3217d7e3ee218e94d3ab82efa",
+        "bytes": 95
+      },
+      "container.log": {
+        "sha256": "5014aaf5fcf3d8684c9d469bae4960be4f14f9c5dbed78cb675f3ea92e96d7b5",
+        "bytes": 1727
+      },
+      "controller-completion.json": {
+        "sha256": "0d0392f2a77bd807c7c37fc5899e297b6044d2c3217d7e3ee218e94d3ab82efa",
+        "bytes": 95
+      },
+      "preparation.json": {
+        "sha256": "247ae89778536edaae234bcc8e44b6ce8c07994824316c2bc94d46372b05a8f1",
+        "bytes": 2436
+      },
+      "producer.json": {
+        "sha256": "4a6783d0da605129dbe1f8d11db76631547b402687ac7c0b3de9ddb3991fd55f",
+        "bytes": 1081
+      },
+      "result.json": {
+        "sha256": "42260bcc3e4241bc26b658456dd659b2db948bfa1d410521e6e61ac8d5652337",
+        "bytes": 29458
+      },
+      "selected-stages.bf16": {
+        "sha256": "c3c72321f723a3ee5e3cbbdad3ca4ddc4f959a23d7e884ac81837f5bfc51dd0f",
+        "bytes": 1111552
+      }
+    },
+    "completion": {
+      "failure": null,
+      "serving_performance": "\ubbf8\uc2e4\ud589",
+      "goal_achieved": false
+    }
+  },
+  "qwen-full128-validation-attempt02": {
+    "state": "terminal",
+    "files": {
+      "build-launch.json": {
+        "sha256": "c5bcd678051ae2fc2dfd33960006435c0847ada26d9f5319a46f870e9419ea32",
+        "bytes": 2379
+      },
+      "build-process.json": {
+        "sha256": "5f82ff9e5a399ab5334efe9d37a68e538712174d34f7abf51844389ec5de10f3",
+        "bytes": 100
+      },
+      "build.log": {
+        "sha256": "0a8df40824f5e26ce6c62cdd1f5a8554ef4c12b8998faaca2c9139b54defc512",
+        "bytes": 56542
+      },
+      "completion.json": {
+        "sha256": "d8e8bb02e95067c7bc6476b29a973ca910decaf6697af62f49fbbdcf0dc96db9",
+        "bytes": 285
+      },
+      "native-launch.json": {
+        "sha256": "5fb7cf30af7a4d6668632d5d55e3627fa4c29641ef56854e5ee3a787e75ea5f7",
+        "bytes": 435
+      },
+      "native-process.json": {
+        "sha256": "50db3d9b8137d92c7a73941d978da00d276607e243ebfaa9ee3cd2eb1aa8b469",
+        "bytes": 59649
+      },
+      "native.log": {
+        "sha256": "28ec5665bc2d740fc04974692287f822c7959fb379cc2352028b648d481bcac0",
+        "bytes": 44709
+      },
+      "preparation.json": {
+        "sha256": "d993e1121a4378248830a455f3bf3d3c0d804970e7e016777af3f66939077a71",
+        "bytes": 4484
+      },
+      "qwen3b-p2048-cache-on-full128-native-result.bf16": {
+        "sha256": "773e59aaa15cece954e65e01e7c8b7a0dcf98e413203d054ad7d47b8214a22f7",
+        "bytes": 38895616
+      },
+      "qwen3b-p2048-cache-on-full128-native-result.json": {
+        "sha256": "3800cf735ce4a36200d87b9ba6eaa9454971c5a23d94afb1226375844209d38c",
+        "bytes": 56128
+      },
+      "qwen3b-p2048-cache-on-full128-native-result.stages.bf16": {
+        "sha256": "6971c9e4849af6822ad0a02f3530592d50398e91215835eafe31cb64d783b57c",
+        "bytes": 1111552
+      },
+      "source-git-receipt.json": {
+        "sha256": "f6bf26c9b7d0983fa5ad4068e942065ef6a617cf3aab241e08fd709f8122e6d8",
+        "bytes": 308
+      },
+      "source-integrity-after.json": {
+        "sha256": "d8e7023faf5eeced4062db397b14e1c551defe0158fa1926b2461af2e0f8e948",
+        "bytes": 55985
+      }
+    },
+    "completion": {
+      "failure": {
+        "type": "AssertionError",
+        "message": "native qualifier nonzero; source/log preserved; inspect actual log before assigning a numerical failure"
+      },
+      "serving_performance": "\ubbf8\uc2e4\ud589",
+      "full128_generation": "unverified",
+      "goal_achieved": false
+    }
+  }
+}

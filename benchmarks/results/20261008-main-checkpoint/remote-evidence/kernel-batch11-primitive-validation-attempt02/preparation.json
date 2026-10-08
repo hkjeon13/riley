@@ -1,0 +1,22 @@
+{
+  "source_commit": "2fd37841e302fc2b34dc79567713dea6241b49ac",
+  "source_manifest_sha256": "f66b6e04478710b973909d28e9b4b5a9a147ee3f420ea588fe8ca2254c9c2794",
+  "argv": [
+    "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin/nvcc",
+    "-O3",
+    "-DNDEBUG",
+    "-std=c++17",
+    "-arch=sm_89",
+    "--use_fast_math",
+    "--ptxas-options=-v",
+    "-I/data/riley-serving-261007/kernel-batch11-source-attempt02/kernels/src",
+    "/data/riley-serving-261007/kernel-batch11-source-attempt02/kernels/tests/kernel_batch11_correctness.cu",
+    "-o",
+    "/data/riley-serving-261007/kernel-batch11-primitive-validation-attempt02/native3161"
+  ],
+  "environment": {
+    "CUDA_HOME": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13",
+    "LD_LIBRARY_PATH": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib"
+  },
+  "serving_performance": "\ubbf8\uc2e4\ud589"
+}

@@ -1,0 +1,1445 @@
+{
+  "schema_version": "riley.qwen-addressable-greedy-path-audit.v1",
+  "oracle_sha256": "35d5d9b153d73b4badc67e5eedf2e8226ca2b55c7e30eb0970cfb741031edd35",
+  "teacher_logits_sha256": "d1c649d126d494b5d902fa14ff22fbab46f13feeed46df380b9f55f4e5ab4c39",
+  "contract": {
+    "addressable_token_count": 151665,
+    "vocabulary_size": 151936,
+    "tie_rule": "numeric maximum; lowest token ID; signed zeros equal",
+    "non_finite_policy": "reject in full vocabulary",
+    "output_token_count": 128,
+    "original_oracle_eos_policy": "fixed 128; no early stop"
+  },
+  "model_eos_policy_source": {
+    "config.json": {
+      "sha256": "eed00b17e22553979d090fa492e587e92885e328914c8e0b0b78f0a0d3576b3b",
+      "eos_token_id": 151645,
+      "bos_token_id": 151643,
+      "vocab_size": 151936
+    },
+    "generation_config.json": {
+      "sha256": "ea35dfb6fc5051b01114f9b995820d55dab01ed33ee490f6378b442af82c09f9",
+      "eos_token_id": [
+        151645,
+        151643
+      ],
+      "bos_token_id": 151643,
+      "vocab_size": null
+    }
+  },
+  "rows": [
+    {
+      "row": 0,
+      "selected_token_id": 304,
+      "teacher_token_id": 304,
+      "exact_token_match": true,
+      "maximum_logit": 14.0625,
+      "tie_token_ids": [
+        304
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 1,
+      "selected_token_id": 279,
+      "teacher_token_id": 279,
+      "exact_token_match": true,
+      "maximum_logit": 14.4375,
+      "tie_token_ids": [
+        279
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 2,
+      "selected_token_id": 198,
+      "teacher_token_id": 198,
+      "exact_token_match": true,
+      "maximum_logit": 16.0,
+      "tie_token_ids": [
+        198
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 3,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 10.9375,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 4,
+      "selected_token_id": 41233,
+      "teacher_token_id": 41233,
+      "exact_token_match": true,
+      "maximum_logit": 21.125,
+      "tie_token_ids": [
+        41233
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 5,
+      "selected_token_id": 13874,
+      "teacher_token_id": 13874,
+      "exact_token_match": true,
+      "maximum_logit": 17.625,
+      "tie_token_ids": [
+        13874
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 6,
+      "selected_token_id": 3989,
+      "teacher_token_id": 3989,
+      "exact_token_match": true,
+      "maximum_logit": 27.0,
+      "tie_token_ids": [
+        3989
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 7,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 15.75,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 8,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 18.875,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 9,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 20.0,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 10,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 18.375,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 11,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 17.25,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 12,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 17.5,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 13,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 19.0,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 14,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 20.75,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 15,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 20.0,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 16,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 19.5,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 17,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 19.625,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 18,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 20.5,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 19,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 21.875,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 20,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 22.625,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 21,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 21.875,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 22,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 21.0,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 23,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 22.375,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 24,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 23.125,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 25,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 25.125,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 26,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 25.0,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 27,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 23.375,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 28,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 22.0,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 29,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 24.0,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 30,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 25.5,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 31,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 27.5,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 32,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 26.875,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 33,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 24.375,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 34,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 23.375,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 35,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 24.25,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 36,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 26.375,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 37,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 28.75,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 38,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 27.375,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 39,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 24.5,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 40,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 23.5,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 41,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 24.125,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 42,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 26.625,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 43,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 28.875,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 44,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 27.625,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 45,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 24.375,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 46,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 23.625,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 47,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 24.5,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 48,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 26.875,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 49,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 29.125,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 50,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 27.625,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 51,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 24.5,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 52,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 23.5,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 53,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 24.375,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 54,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 27.0,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 55,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 29.25,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 56,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 27.75,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 57,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 24.375,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 58,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 23.625,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 59,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 24.25,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 60,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 26.875,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 61,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 28.875,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 62,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 27.5,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 63,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 24.0,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 64,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 23.625,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 65,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 24.0,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 66,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 27.125,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 67,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 29.125,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 68,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 27.375,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 69,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 23.75,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 70,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 23.875,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 71,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 24.375,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 72,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 27.375,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 73,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 29.25,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 74,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 27.25,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 75,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 23.75,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 76,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 23.75,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 77,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 24.75,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 78,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 27.25,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 79,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 29.125,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 80,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 27.25,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 81,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 23.75,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 82,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 24.0,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 83,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 24.75,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 84,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 27.125,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 85,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 29.0,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 86,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 26.875,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 87,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 24.0,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 88,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 24.0,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 89,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 24.75,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 90,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 27.125,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 91,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 29.0,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 92,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 26.875,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 93,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 24.25,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 94,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 23.75,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 95,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 25.125,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 96,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 27.0,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 97,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 28.875,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 98,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 26.5,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 99,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 24.125,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 100,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 23.875,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 101,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 25.375,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 102,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 27.0,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 103,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 28.75,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 104,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 26.75,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 105,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 24.25,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 106,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 24.0,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 107,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 25.625,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 108,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 27.0,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 109,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 28.875,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 110,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 26.75,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 111,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 24.5,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 112,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 24.375,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 113,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 25.625,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 114,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 26.625,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 115,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 28.625,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 116,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 26.5,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 117,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 24.75,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 118,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 24.625,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 119,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 25.5,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 120,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 26.75,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 121,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 28.625,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 122,
+      "selected_token_id": 17,
+      "teacher_token_id": 17,
+      "exact_token_match": true,
+      "maximum_logit": 26.875,
+      "tie_token_ids": [
+        17
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 123,
+      "selected_token_id": 13,
+      "teacher_token_id": 13,
+      "exact_token_match": true,
+      "maximum_logit": 24.75,
+      "tie_token_ids": [
+        13
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 124,
+      "selected_token_id": 715,
+      "teacher_token_id": 715,
+      "exact_token_match": true,
+      "maximum_logit": 24.875,
+      "tie_token_ids": [
+        715
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 125,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 25.5,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 126,
+      "selected_token_id": 220,
+      "teacher_token_id": 220,
+      "exact_token_match": true,
+      "maximum_logit": 26.625,
+      "tie_token_ids": [
+        220
+      ],
+      "selected_is_configured_eos": false
+    },
+    {
+      "row": 127,
+      "selected_token_id": 16,
+      "teacher_token_id": 16,
+      "exact_token_match": true,
+      "maximum_logit": 28.5,
+      "tie_token_ids": [
+        16
+      ],
+      "selected_is_configured_eos": false
+    }
+  ],
+  "teacher_greedy_matches": 128,
+  "eos_selected_rows": [],
+  "scope": "frozen HF oracle CPU audit only; native free-running generation unexecuted",
+  "serving_performance": "미실행",
+  "goal_achieved": false
+}

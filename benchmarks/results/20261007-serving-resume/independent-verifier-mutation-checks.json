@@ -1,0 +1,35 @@
+{
+  "real_archive_positive_pass": true,
+  "checks": [
+    {
+      "mutation": "forged_ttft",
+      "rejected": true,
+      "reason": "forged metric token_ttft_ns"
+    },
+    {
+      "mutation": "changed_output_ids",
+      "rejected": true,
+      "reason": "row/frames token mismatch"
+    },
+    {
+      "mutation": "dropped_slow_request",
+      "rejected": true,
+      "reason": "incomplete retained phase"
+    },
+    {
+      "mutation": "forged_p99",
+      "rejected": true,
+      "reason": "summary latency differs from raw"
+    },
+    {
+      "mutation": "wrong_admission",
+      "rejected": true,
+      "reason": "server admission differs"
+    },
+    {
+      "mutation": "false_quiet_gate",
+      "rejected": true,
+      "reason": "host gate falsely passed"
+    }
+  ]
+}

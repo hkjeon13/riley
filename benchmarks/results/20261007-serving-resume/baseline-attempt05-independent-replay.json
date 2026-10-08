@@ -1,0 +1,49 @@
+{
+  "raw_replay_passed": true,
+  "lanes": [
+    {
+      "case": "c1-fixed-r0-v52",
+      "metrics": {
+        "throughput_tokens_s": 852.712707044108,
+        "input_tokens": 49152,
+        "output_tokens": 7680,
+        "request_count": 384,
+        "errors": 0,
+        "error_rate": 0,
+        "reference_matches": 384,
+        "e2e_ms": {
+          "samples": 384,
+          "median": 23.491156,
+          "p95": 36.056612,
+          "p99": 36.610045,
+          "max": 37.185832
+        },
+        "ttft_ms": {
+          "samples": 384,
+          "median": 3.066798,
+          "p95": 3.205051,
+          "p99": 3.360105,
+          "max": 3.887329
+        },
+        "tpot_ms": {
+          "samples": 384,
+          "median": 1.0588524782608695,
+          "p95": 1.0658104,
+          "p99": 1.0945128709677419,
+          "max": 1.0967854838709679
+        },
+        "gpu_peak_observed_MiB": 1136.0,
+        "memory_scope": "sampled device-wide startup and measurement, not continuous high-water"
+      }
+    }
+  ],
+  "expected_lanes": 64,
+  "matrix_complete": false,
+  "failure": {
+    "type": "RuntimeError",
+    "message": "startup timeout or early exit"
+  },
+  "performance_promoted": false,
+  "goal_achieved": false,
+  "scope": "all preserved retained lanes; aborted attempt observations remain non-qualifying"
+}

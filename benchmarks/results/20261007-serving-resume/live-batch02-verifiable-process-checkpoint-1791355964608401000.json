@@ -1,0 +1,21 @@
+{
+  "time_ns": 1791355964604941755,
+  "actual_process_snapshot": "    PID     ELAPSED COMMAND\n 270594    01:09:27 /data/riley-serving-261007/vllm0271-venv/bin/python /data/riley-serving-261007/controller/run_batch02_matched_after_batch03.py\n 552211       27:01 /data/riley-serving-261007/vllm0271-venv/bin/python run.py --attempt 1 --mode quiet\n",
+  "completed_lane_log_count": 31,
+  "last_log_lines": [
+    "c8-fixed-r0-candidate complete",
+    "c8-fixed-r0-vllm complete",
+    "c8-fixed-r1-vllm complete",
+    "c8-fixed-r1-candidate complete",
+    "c8-fixed-r1-v52 complete",
+    "c8-fixed-r2-v52 complete"
+  ],
+  "batch02_terminal": false,
+  "batch03_terminal": true,
+  "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 0 %, 333 MiB, 53, 17.91 W\n",
+  "pressure": {
+    "cpu": "some avg10=1.52 avg60=1.52 avg300=1.75 total=12823739040\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+    "io": "some avg10=8.89 avg60=8.10 avg300=6.52 total=79147683206\nfull avg10=7.19 avg60=6.99 avg300=5.39 total=72357459365\n",
+    "memory": "some avg10=0.00 avg60=0.02 avg300=0.19 total=1996110352\nfull avg10=0.00 avg60=0.02 avg300=0.15 total=1949985713\n"
+  }
+}

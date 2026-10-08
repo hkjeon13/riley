@@ -1,0 +1,22 @@
+{
+  "created_ns": 1791373990817161000,
+  "script_sha256": "674aecba669903486fc6a7d18796fca53e94fcd657fdaa0def699774462b6d7d",
+  "input_pins": {
+    "qwen-free-running-source-attempt01.tar": "afbf89142629a6b1632cfe4aade13d63d2251c05ad879e46390a419ddd772433",
+    "qwen-free-running-commit-attempt01.pack": "f102c177169e15afd956b1f4eb43cbf2db2b6bf057d839b4b65d616cfdd145d9",
+    "qwen-free-running-source-receipt-attempt01.json": "3528572fff11f57f1cdf9f4b28d49f8e69547d05bbcbf7a85496f3ddc79de741",
+    "qwen-free-running-plan-attempt01.json": "1bf7b41feebb33cd6d481840fefbc81798dcbc82e9cabe47504776a2663ace9c",
+    "qwen-free-running-preparation-receipt-attempt01.json": "37d52d1a6137f95bd09d1ce72272bbf3928ad0932a967cd3566647dabc03571b",
+    "run_qwen_free_running_attempt01.py": "f697f68ca937be631a0379014945fa8d26d03c8fb6be0dcbd0117123eee55623",
+    "materialize_qwen_m2_source.py": "1846bf55b3ecd575082ae5069427ac50f21a5640e24d19606629ed9fdb5f10f5",
+    "verify_qwen_free_running_attempt01.py": "e10a81ff466acac5a5161ca34691ccab41f74542e4d13c522e1d851cddda5202",
+    "verify_kernel_batch05_attempt02.py": "08a19dae39ef67c183e4ed2fd2d8066b5f3a3ff0e64837a4dcc0abc6dbc21367",
+    "audit_kernel_batch05_serving_contract_attempt02.py": "fd78d2b5fc8ae3fee163a2601d799b76becdd2f0d9f37354fffaf161a3eaabc1",
+    "reconcile_kernel_batch05_source_metadata.py": "bfc7718a2f65696778b739962d34d4fa7d8f891dcbd379fd782b2b435a2e802b",
+    "kernel-batch05-source-metadata-reconciliation-attempt01.json": "9736ae084218bb9626b1300f0116d428cc4f7278df02f4d0b09d2947629a89ae",
+    "kernel-batch05-terminal-source-binary-reverification-attempt01.json": "e4f9bcf63b8352a97a814401f9286248ef19181451767cc7de43ef6deca10dba"
+  },
+  "wait_for": "Batch05 collection+replay terminal; actual controller absent; GPU idle",
+  "serving_performance": "미실행",
+  "goal_achieved": false
+}

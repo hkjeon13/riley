@@ -1,0 +1,58 @@
+{
+  "argv": [
+    "/data/riley-serving-261007/vllm0271-venv/bin/vllm",
+    "serve",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+    "--tokenizer",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+    "--served-model-name",
+    "g04-smol",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "42069",
+    "--dtype",
+    "bfloat16",
+    "--max-model-len",
+    "160",
+    "--max-num-seqs",
+    "8",
+    "--max-num-batched-tokens",
+    "512",
+    "--gpu-memory-utilization",
+    "0.3",
+    "--no-enable-prefix-caching",
+    "--seed",
+    "0"
+  ],
+  "env": {
+    "HOME": "/home/psyche",
+    "PATH": "/data/riley-serving-261007/vllm0271-venv/bin:/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin:/usr/bin:/bin",
+    "CUDA_HOME": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13",
+    "LANG": "C.UTF-8",
+    "CPATH": "/data/riley-serving-261007/curand-only-include",
+    "LC_ALL": "C.UTF-8",
+    "CUDA_VISIBLE_DEVICES": "0",
+    "VLLM_BATCH_INVARIANT": "0",
+    "LD_LIBRARY_PATH": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib"
+  },
+  "host": {
+    "time_ns": 1791392844368902147,
+    "clocks": {
+      "perf_counter_before_ns": 905471318318448,
+      "perf_counter_after_ns": 905471318319741,
+      "epoch_ns": 1791392844368902147,
+      "monotonic_ns": 905471318319296,
+      "monotonic_raw_ns": 905458490152026,
+      "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+    },
+    "pressure": {
+      "cpu": "some avg10=2.02 avg60=1.98 avg300=1.79 total=13976888151\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+      "io": "some avg10=4.22 avg60=2.35 avg300=2.12 total=80696666966\nfull avg10=3.41 avg60=2.00 avg300=1.88 total=73719839596\n",
+      "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2100875142\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2050785290\n"
+    },
+    "loadavg": "11.23 9.72 9.19 7/8194 241819\n",
+    "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 46, 33.12, 270, 263, 0"
+  },
+  "binary_sha256": "fe00035d5bd98fd57d20fe31aa6270907afbd68e92663dbc6ac9f793258e7e27"
+}

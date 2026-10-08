@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-261007/kernel-batch11-independent-analysis-attempt01/dispatch-after-matched-launch.py", line 9, in <module>
+    assert p.exists(),'serving producer gone before dispatch; inspect terminal failure, do not restart'
+AssertionError: serving producer gone before dispatch; inspect terminal failure, do not restart

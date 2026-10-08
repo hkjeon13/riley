@@ -1,0 +1,32 @@
+{
+  "source_commit": "73003e2d8f1ce797b4e669c813c43261b30a46a2",
+  "source_worktree_clean": true,
+  "native_build_log_sha256": "63c8d89259900f211c13b7c79a390f03bd46f8cb63d6da7f95e71c04b6a31d5b",
+  "kernels": [
+    {
+      "symbol": "_ZN21riley_mixed_attention16mapped_attentionEPK13__nv_bfloat16S2_S2_PS0_jPKj",
+      "registers": 127,
+      "stack_bytes": 0,
+      "spill_store_bytes": 0,
+      "spill_load_bytes": 0,
+      "shared_bytes": 18432
+    },
+    {
+      "symbol": "_ZN21riley_gqa50_attention18independent_valuesEPKfPK13__nv_bfloat16PS2_PKjS7_S7_",
+      "registers": 71,
+      "stack_bytes": 0,
+      "spill_store_bytes": 0,
+      "spill_load_bytes": 0,
+      "shared_bytes": 2304
+    }
+  ],
+  "serving_fixture_and_clients_byte_unchanged": true,
+  "lifecycle_source_pins": {
+    "dispatch_kernel_batch07_stability_after_screen_attempt01.py": "d48a40362552d4fa1dfb9ecbb20bd0fa7735a51878a0639f97db0188e4f9a4db",
+    "collect_verify_kernel_batch07_stability_attempt01.py": "0805f86480520719e02054039bf547f163e8c4e6dc55b3436daeedc898a23f4c",
+    "analyze_kernel_batch07_host_after_replay_attempt02.py": "533edd3c4cf38bd71855f7b7ae8f4c6e944825f292d43af58e3e10d39115f612"
+  },
+  "validation": "AST and byte pins only; real GPU lifecycle 미실행, guarded on independent full96 all8 minimum PASS",
+  "compile_resource_limits": "register/shared footprints are compiler diagnostics, not runtime occupancy or serving gain evidence",
+  "goal_achieved": false
+}

@@ -1,0 +1,19 @@
+{
+  "source_revision": "41b56d54b63b72ed6fdc84764202b7386ec4ff9a",
+  "source_path": "kernels/src/attention_cublaslt.cu",
+  "source_sha256": "10366d43c57a2f097f1f8dda3033f292eae097d3bf0138e65a8490c6f7286b2a",
+  "fragment_sha256": "3a8040d958dfe7de90100b2036c1f630865f4408be373f6219ff6e4e622bfca0",
+  "extraction": "actual unchanged native hf_block_reduce and hf_regular_softmax_kernel; not reconstructed from result prose",
+  "tensor_shape": [
+    16,
+    2049
+  ],
+  "files": {
+    "attention_probabilities.bf16": "d94a10fcc47627a8f4cbcebd39ae4258893969d40bf53cec6f983a977de5f76c",
+    "source-fragment.cuh": "3a8040d958dfe7de90100b2036c1f630865f4408be373f6219ff6e4e622bfca0",
+    "attention_scores.bf16": "1ff3ca2b8d93e40dbb1f119d2f8b016a11fedb922f7bb9ffc672e52df7c3df0a",
+    "probe.cu": "7af8e6b8928ea41f321cb375fd8df00e89f93613acc27ae7039951b8c39a74a9",
+    "plan.json": "84dbd4720acbbd8ae9cd4469301d40d0980587a3e3ae3ffddb9628019690a444"
+  },
+  "scope": "correctness-only arithmetic reproduction; no serving eligibility"
+}

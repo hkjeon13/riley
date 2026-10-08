@@ -1,0 +1,19 @@
+{
+  "scope": "reproduce full-model mismatch using actual native graph_numerics math flag",
+  "evidence": "actual CMake flags.make: debug -g stdc++17 sm89; graph_numerics --use_fast_math",
+  "compile": [
+    "/data/cuda-12.8.1/bin/nvcc",
+    "-g",
+    "-std=c++17",
+    "-arch=sm_89",
+    "--use_fast_math"
+  ],
+  "inputs": "identical immutable scores and HF probabilities from attempt01",
+  "expectation": {
+    "elements": 32784,
+    "unequal": 182
+  },
+  "failure_policy": "retain outputs even if reproduction fails; do not loosen tolerance",
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "full_M1_eligibility": false
+}

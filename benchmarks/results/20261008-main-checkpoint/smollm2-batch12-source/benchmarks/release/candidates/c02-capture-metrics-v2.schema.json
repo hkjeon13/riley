@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/schemas/c02-capture-metrics-v2.schema.json",
+  "title": "Riley C02 capture metrics v2",
+  "description": "Exact source-owned raw C02 metrics shape. This schema deliberately records facts only: it does not declare a C02 qualification result or impose a failure, KV, allocation, or quiescence threshold.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_states", "kv_blocks", "allocation", "quiescence"],
+  "properties": {
+    "schema_version": { "const": "riley.c02-capture-metrics.v2" },
+    "request_states": { "$ref": "#/$defs/requestStates" },
+    "kv_blocks": { "$ref": "#/$defs/kvBlocks" },
+    "allocation": { "$ref": "#/$defs/allocation" },
+    "quiescence": { "$ref": "#/$defs/quiescence" }
+  },
+  "$defs": {
+    "nonnegativeInteger": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "requestStates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["active", "pending_requests", "completed", "failed", "cancelled", "capacity_rejections"],
+      "properties": {
+        "active": { "$ref": "#/$defs/nonnegativeInteger" },
+        "pending_requests": { "$ref": "#/$defs/nonnegativeInteger" },
+        "completed": { "$ref": "#/$defs/nonnegativeInteger" },
+        "failed": { "$ref": "#/$defs/nonnegativeInteger" },
+        "cancelled": { "$ref": "#/$defs/nonnegativeInteger" },
+        "capacity_rejections": { "$ref": "#/$defs/nonnegativeInteger" }
+      }
+    },
+    "kvBlocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["free", "reserved", "active"],
+      "properties": {
+        "free": { "$ref": "#/$defs/nonnegativeInteger" },
+        "reserved": { "$ref": "#/$defs/nonnegativeInteger" },
+        "active": { "$ref": "#/$defs/nonnegativeInteger" }
+      }
+    },
+    "allocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device_live_count", "device_live_bytes", "pinned_live_count", "pinned_live_bytes"],
+      "properties": {
+        "device_live_count": { "$ref": "#/$defs/nonnegativeInteger" },
+        "device_live_bytes": { "$ref": "#/$defs/nonnegativeInteger" },
+        "pinned_live_count": { "$ref": "#/$defs/nonnegativeInteger" },
+        "pinned_live_bytes": { "$ref": "#/$defs/nonnegativeInteger" }
+      }
+    },
+    "quiescence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completion_outbox", "outstanding_iterations", "riley_owned_live_allocations", "worker_accepting", "scheduler_accepting"],
+      "properties": {
+        "completion_outbox": { "$ref": "#/$defs/nonnegativeInteger" },
+        "outstanding_iterations": { "$ref": "#/$defs/nonnegativeInteger" },
+        "riley_owned_live_allocations": { "$ref": "#/$defs/nonnegativeInteger" },
+        "worker_accepting": { "type": "boolean" },
+        "scheduler_accepting": { "type": "boolean" }
+      }
+    }
+  }
+}

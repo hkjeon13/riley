@@ -1,0 +1,97 @@
+{
+  "failure": null,
+  "steps": [
+    {
+      "label": "primitive-build",
+      "argv": [
+        "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin/nvcc",
+        "-O3",
+        "-DNDEBUG",
+        "-std=c++17",
+        "-arch=sm_89",
+        "--use_fast_math",
+        "-I/data/riley-serving-261007/kernel-batch03-source-attempt02/kernels/src",
+        "/data/riley-serving-261007/kernel-batch03-source-attempt02/kernels/tests/kernel_batch03_correctness.cu",
+        "-o",
+        "/data/riley-serving-261007/kernel-batch03-validation-attempt02/primitive-check"
+      ],
+      "exit": 0,
+      "before": {
+        "time_ns": 1791350642693465980,
+        "compute_pids": "",
+        "pressure": {
+          "cpu": "some avg10=0.72 avg60=1.11 avg300=1.91 total=12679570551\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+          "io": "some avg10=4.40 avg60=3.76 avg300=6.10 total=78880204162\nfull avg10=4.03 avg60=3.37 avg300=4.55 total=72140735904\n",
+          "memory": "some avg10=0.00 avg60=0.00 avg300=0.05 total=1970443442\nfull avg10=0.00 avg60=0.00 avg300=0.02 total=1926914601\n"
+        }
+      },
+      "ended_ns": 1791350648244755989,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "primitive-correctness",
+      "argv": [
+        "/data/riley-serving-261007/kernel-batch03-validation-attempt02/primitive-check"
+      ],
+      "exit": 0,
+      "before": {
+        "time_ns": 1791350648285508445,
+        "compute_pids": "",
+        "pressure": {
+          "cpu": "some avg10=1.11 avg60=1.16 avg300=1.92 total=12679697373\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+          "io": "some avg10=5.22 avg60=3.97 avg300=6.11 total=78880591739\nfull avg10=4.82 avg60=3.57 avg300=4.57 total=72141075127\n",
+          "memory": "some avg10=0.00 avg60=0.00 avg300=0.04 total=1970457026\nfull avg10=0.00 avg60=0.00 avg300=0.02 total=1926928026\n"
+        }
+      },
+      "ended_ns": 1791350649246178899,
+      "log_sha256": "3f870beb4401a0ce09c2cc8df73da1abc2a8a5c186bce858d6076bda7ccd1013"
+    },
+    {
+      "label": "server-build",
+      "argv": [
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "-p",
+        "riley-server",
+        "--features",
+        "cuda,server"
+      ],
+      "exit": 0,
+      "before": {
+        "time_ns": 1791350649280026800,
+        "compute_pids": "",
+        "pressure": {
+          "cpu": "some avg10=1.09 avg60=1.16 avg300=1.91 total=12679709861\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+          "io": "some avg10=4.82 avg60=3.94 avg300=6.09 total=78880612945\nfull avg10=4.49 avg60=3.55 avg300=4.56 total=72141094577\n",
+          "memory": "some avg10=0.00 avg60=0.00 avg300=0.04 total=1970499832\nfull avg10=0.00 avg60=0.00 avg300=0.02 total=1926970825\n"
+        }
+      },
+      "ended_ns": 1791350674441625503,
+      "log_sha256": "76508779cb4c4cd892db8ac65d236606a22370b5a465540b3c38929cce438f07"
+    },
+    {
+      "label": "http-correctness",
+      "argv": [
+        "/data/riley-serving-261007/vllm0271-venv/bin/python",
+        "/data/riley-serving-261007/controller/kernel_batch03_http_screen_attempt02.py"
+      ],
+      "exit": 0,
+      "before": {
+        "time_ns": 1791350674498409234,
+        "compute_pids": "",
+        "pressure": {
+          "cpu": "some avg10=1.77 avg60=1.60 avg300=1.97 total=12680509787\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+          "io": "some avg10=2.11 avg60=3.35 avg300=5.78 total=78881403430\nfull avg10=1.93 avg60=2.97 avg300=4.34 total=72141714743\n",
+          "memory": "some avg10=0.03 avg60=0.04 avg300=0.05 total=1970573335\nfull avg10=0.03 avg60=0.04 avg300=0.03 total=1927041612\n"
+        }
+      },
+      "ended_ns": 1791350699941583150,
+      "log_sha256": "32395598bad98182fa7c1a437d62bc9cc78b778b0adc4ba016e07caec59c506f"
+    }
+  ],
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "adopted": false,
+  "goal_achieved": false
+}

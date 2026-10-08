@@ -1,0 +1,65 @@
+{
+  "schema": "riley.serving-resume.predeclared.v2",
+  "scope": "recovered V52 versus reconstructed vLLM0.27.1 stack; historical stack drift recorded separately; no candidate improvement yet",
+  "workloads": [
+    "fixed",
+    "natural"
+  ],
+  "concurrency": [
+    1,
+    8,
+    16,
+    32
+  ],
+  "repeats": 4,
+  "orders": [
+    [
+      "v52",
+      "vllm"
+    ],
+    [
+      "vllm",
+      "v52"
+    ],
+    [
+      "v52",
+      "vllm"
+    ],
+    [
+      "vllm",
+      "v52"
+    ]
+  ],
+  "warmup": 96,
+  "retained": 384,
+  "token_budget": 512,
+  "chunk_tokens": {
+    "fixed": 128,
+    "natural": 512
+  },
+  "prefix_cache": false,
+  "sampling": "greedy temperature0, original EOS and original request max_tokens",
+  "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+  "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+  "gpu_operating_cap_bytes": 21474836480,
+  "vllm_gpu_memory_utilization": 0.3,
+  "host_start_gate": {
+    "timeout_seconds": 300,
+    "interval_seconds": 2,
+    "consecutive": 3,
+    "cpu_some_max": 5,
+    "io_full_max": 5,
+    "memory_full_max": 0.5
+  },
+  "exclusion_policy": "none; failure aborts whole attempt and preserves every row; no retries or slow sample removal",
+  "correctness_policy": "Riley exact frozen token/text/finish reference; all engine input/output counts and transport exact; cross-engine arithmetic differences recorded",
+  "completion": false,
+  "post_screen_required": [
+    "profiling without serving overlap",
+    "measured optimization batch of 2-5 related changes",
+    "full numerical/model/lifecycle checks",
+    "candidate matched HTTP matrix",
+    "sustained load,cancel,re-request,resource reclamation"
+  ],
+  "host_gate_revision_reason": "Before measured traffic: retain thresholds and3 consecutive quiet observations, allow300 seconds rather than60 for own startup I/O decay/shared host variability. Whole failed attempts1..6 remain preserved; no measured sample removed or pooled."
+}

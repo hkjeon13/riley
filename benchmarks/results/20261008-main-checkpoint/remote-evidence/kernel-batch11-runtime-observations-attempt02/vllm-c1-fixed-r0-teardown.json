@@ -1,0 +1,46 @@
+{
+  "source_log": "/data/riley-serving-261007/kernel-batch11-quiet-attempt02/c1-fixed-r0-vllm.log",
+  "source_log_sha256": "3ca28cf437e4edd3a4778e96f383ec64ce504019d2208108bc7c8a75a0ab6e87",
+  "warning_lines": [
+    "(APIServer pid=2401835) WARNING 10-08 08:25:51 [utils.py:637] [shutdown] Process manager: force killing remaining process EngineCore pid 2406134",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/python-extract-v2/python/lib/python3.13/multiprocessing/resource_tracker.py:479: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-501evj49'}"
+  ],
+  "exit_receipt": {
+    "exit": 0,
+    "host": {
+      "time_ns": 1791415552744974860,
+      "clocks": {
+        "perf_counter_before_ns": 928179694390966,
+        "perf_counter_after_ns": 928179694392650,
+        "epoch_ns": 1791415552744974860,
+        "monotonic_ns": 928179694392106,
+        "monotonic_raw_ns": 928166545220363,
+        "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+      },
+      "pressure": {
+        "cpu": "some avg10=0.39 avg60=0.22 avg300=0.15 total=14308396612\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "io": "some avg10=4.73 avg60=8.26 avg300=12.99 total=82000507502\nfull avg10=4.45 avg60=7.94 avg300=12.34 total=74860366897\n",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2143117769\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2091653985\n"
+      },
+      "loadavg": "5.12 5.85 5.90 4/8274 2418484\n",
+      "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 48, 87.18, 2715, 359, 0"
+    },
+    "before_stop_process_memory": {
+      "rss_KiB_by_pid": {
+        "2401835": 1072152,
+        "2406133": 14904,
+        "2406134": 1947156
+      },
+      "rss_sum_KiB": 3034212,
+      "scope": "instantaneous process-group RSS sum; shared pages may count more than once; sampled each second"
+    }
+  },
+  "observed_engine_PID_2406134_present": false,
+  "observed_API_PID_2401835_present": false,
+  "named_POSIX_semaphore_currently_present": false,
+  "observation_scope": "read-only terminal observation for this exact lane; not proof of general lifetime/KV reclamation",
+  "serving_samples_excluded": [],
+  "stability_gate": "\ubbf8\uc2e4\ud589",
+  "goal_achieved": false,
+  "time_ns": 1791415654061039252
+}

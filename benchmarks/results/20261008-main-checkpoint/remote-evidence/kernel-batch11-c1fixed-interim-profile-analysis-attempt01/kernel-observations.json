@@ -1,0 +1,101 @@
+{
+  "source_summary_sha256": "05cae7fb18d4ca6dfbc7368b9cda8f0283ab3750a91efe42a6152d585f7f5daa",
+  "four_completed_lanes_source_before_after_equal": true,
+  "recorded_retained_CUDA_only": [
+    {
+      "case": "c1-fixed-r0-v52",
+      "groups": {
+        "gate_up_swiglu": {
+          "events": 54720,
+          "recorded_work_sum_ms": 402.672104
+        },
+        "AV": {
+          "events": 54720,
+          "recorded_work_sum_ms": 231.49715
+        },
+        "merge_norm": {
+          "events": 0,
+          "recorded_work_sum_ms": 0.0
+        },
+        "QKV": {
+          "events": 54720,
+          "recorded_work_sum_ms": 188.40667
+        }
+      }
+    },
+    {
+      "case": "c1-fixed-r0-candidate",
+      "groups": {
+        "gate_up_swiglu": {
+          "events": 54720,
+          "recorded_work_sum_ms": 312.142441
+        },
+        "AV": {
+          "events": 54720,
+          "recorded_work_sum_ms": 230.744867
+        },
+        "merge_norm": {
+          "events": 109440,
+          "recorded_work_sum_ms": 201.695599
+        },
+        "QKV": {
+          "events": 54720,
+          "recorded_work_sum_ms": 188.487013
+        }
+      }
+    },
+    {
+      "case": "c1-fixed-r1-candidate",
+      "groups": {
+        "gate_up_swiglu": {
+          "events": 54720,
+          "recorded_work_sum_ms": 312.277931
+        },
+        "AV": {
+          "events": 54720,
+          "recorded_work_sum_ms": 230.696703
+        },
+        "merge_norm": {
+          "events": 109440,
+          "recorded_work_sum_ms": 201.78271
+        },
+        "QKV": {
+          "events": 54720,
+          "recorded_work_sum_ms": 188.749904
+        }
+      }
+    },
+    {
+      "case": "c1-fixed-r1-v52",
+      "groups": {
+        "gate_up_swiglu": {
+          "events": 54720,
+          "recorded_work_sum_ms": 402.332225
+        },
+        "AV": {
+          "events": 54720,
+          "recorded_work_sum_ms": 231.438597
+        },
+        "merge_norm": {
+          "events": 0,
+          "recorded_work_sum_ms": 0.0
+        },
+        "QKV": {
+          "events": 54720,
+          "recorded_work_sum_ms": 188.546984
+        }
+      }
+    }
+  ],
+  "observations": [
+    "AV event count equal54720 in all4 lanes, restored candidate AV recorded cost matches reviewed V52 range",
+    "Candidate gate/up/SwiGLU largest single recorded kernel family in these C1fixed lanes",
+    "C32 source-owned CPU/CUDA evidence still required; no C32 causal attribution from C1"
+  ],
+  "serving_performance": "not measured by this profile audit",
+  "adopted": false,
+  "goal_achieved": false,
+  "full32_capture_replay_pending": true,
+  "clock_and_capture_limits": "no request-to-kernel causal link; hidden clock steps and profiler UTC origin precision unmeasured; recorded counts reconcile with collected diagnostics; produced category gap unclassified; total completeness unproven",
+  "time_ns": 1791419730650152123
+}

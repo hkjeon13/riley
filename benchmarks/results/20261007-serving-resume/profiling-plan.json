@@ -1,0 +1,60 @@
+{
+  "schema": "riley.serving-profile.predeclared.v5",
+  "scope": "profile after full64lane diagnostic baseline; instrumented HTTP timing is not serving comparison",
+  "baseline": "/data/riley-serving-261007/diagnostic-baseline-attempt01",
+  "engines": [
+    "v52",
+    "vllm"
+  ],
+  "concurrency": [
+    1,
+    8,
+    16,
+    32
+  ],
+  "workloads": [
+    "fixed",
+    "natural"
+  ],
+  "orders": [
+    [
+      "v52",
+      "vllm"
+    ],
+    [
+      "vllm",
+      "v52"
+    ]
+  ],
+  "warmup": 96,
+  "retained": 96,
+  "startup_timeout_seconds": 300,
+  "tool": "/data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/bin/nsys",
+  "expected_tool_version": "NVIDIA Nsight Systems version 2025.5.2.266-255236693005v0",
+  "launch_trace": "cuda,nvtx,osrt",
+  "sample": "none",
+  "cpuctxsw": "none",
+  "backtrace": "none",
+  "collection_policy": "launch session -> same-condition warmup96 -> start recording -> retained96 -> stop recording -> graceful session shutdown; do not truncate/trim traces",
+  "clock_policy": "record realtime, monotonic and monotonic_raw pairs at phase boundaries; inspect exported clock metadata before correlating GPU and HTTP clocks",
+  "analysis_policy": "GPU kernel/memcpy/API and OSRT spans reported separately; derive interval unions and intersections without overlap sums; CPU sampling/context-switch unavailable; scheduler/HTTP attribution stays unmeasured until source instrumentation",
+  "failure_policy": "preserve all artifacts and stop on errors, missing CUDA data, numerical/protocol mismatch or unreclaimed owned GPU resources; no slow sample removal",
+  "performance_claim_eligible": false,
+  "goal_achieved": false,
+  "method_reference": "https://docs.nvidia.com/nsight-systems/UserGuide/index.html",
+  "compatibility_pending": "NVIDIA release announces CUDA13 support; installed CLI/version verified; supported-stack node capture remains pending",
+  "cpu_profiling": {
+    "state": "unavailable",
+    "environment_check": "nsys-environment-check.txt",
+    "environment_check_sha256": "4597da11f3abfc1b0395698e8a917896f85cf0a476e0dc2ab671cd06e9208fbd",
+    "cause": "perf_event_paranoid=4; perf_event_open and process-tree sampling fail",
+    "host_setting_mutation": false,
+    "cpu_stack_attribution": "미측정",
+    "context_switch_attribution": "미측정"
+  },
+  "launch_option_recovery": "attempt01 failed before server spawn: launch cpuctxsw unsupported; sample/cpuctxsw/backtrace applied only on start",
+  "cuda_graph_trace": "node",
+  "reclamation_timeout_seconds": 40,
+  "graph_trace_recovery": "attempt02 default graph mode produced graph events but no kernel node table; installed CLI node option verified; node capture overhead is diagnostic only",
+  "tool_package_SHA256": "e818fefc62b1e6c3bd34eb92b4e412355afddb763b55e8d7bc3330c4e3da4d33"
+}

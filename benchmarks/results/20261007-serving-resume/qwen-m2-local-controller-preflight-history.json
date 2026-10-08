@@ -1,0 +1,18 @@
+{
+  "time_ns": 1791352701325253000,
+  "scope": "local controller preflight only; no GPU execution or remote uploads",
+  "failed_checks": [
+    {
+      "script": "materialize_qwen_m2_source.py",
+      "failure": "relative path Git-C hash-object openCargo.lock exit128",
+      "preserved": "qwen-m2-local-git-preflight-attempt01-failure.json",
+      "repair": "resolve destination thenfreshattempt02"
+    },
+    {
+      "script": "run_qwen_m2_bounded_attempt01.py",
+      "failure": "py_compile SyntaxError atO.mkdir()+def line5; caught before dispatch",
+      "repair": "split declaration into two lines; py_compilePASS before queuedhashpin"
+    }
+  ],
+  "current_checks": "all3 queuedPython scripts parse; independentverifier parses; queuedhashpinsunchanged; localactualGit366bindingsPASS"
+}

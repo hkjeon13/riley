@@ -1,0 +1,383 @@
+# PR 02–05 native CI contract
+
+The mandatory lane is CPU-only. Native CUDA compilation is a separate
+nightly/manual lane, the cumulative PR 03 host-runtime and PR 04 memory GPU
+tests are an explicit self-hosted/manual lane, and the Python reference suite
+is an optional offline fake-backend lane. No CI lane loads a model or runs
+model inference. Only the opted-in GPU lane initializes a device: PR 03 launches
+the small fill smoke kernel, while PR 04 performs allocation and byte-copy
+lifecycle checks.
+
+## Production CPU gate
+
+Use the repository-pinned Rust 1.85.0 toolchain:
+
+```sh
+cargo fmt --all -- --check
+python3 ci/check_workspace_boundaries.py --locked
+python3 ci/check_extension_gates.py
+python3 -m unittest discover -s ci/tests -p 'test_*.py' -v
+cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
+cargo test --locked --workspace --all-targets --no-default-features
+ci/verify_python_free_model_loading.sh
+RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --no-deps --no-default-features
+ci/check_feature_matrix.sh
+ci/check_workspace_without_research_tools.sh
+```
+
+The boundary checker requires only Python 3.11 or newer and the standard
+library. Python is used to inspect Cargo metadata in CI; Cargo never invokes it
+and it is not part of a production artifact. The checker fails closed unless:
+
+- the workspace contains exactly seven production crates plus the non-default
+  `riley-native` development member, which owns exactly its library and
+  CUDA-gated calibration binary;
+- `tools/python`, `tools/native`, and `experiments/triton` remain excluded;
+- crate edges and feature ownership match `crates/README.md`;
+- `riley` remains the sole `server` production binary,
+  `riley-profile` requires exactly the non-default `bench,cuda` features,
+  and `riley-native` requires exactly its non-default `cuda` feature;
+- every crate inherits `publish = false`;
+- every crate inherits the exact workspace `MIT` SPDX expression and the root
+  `LICENSE` remains the reviewed MIT text for `Riley contributors`;
+- the only direct third-party Cargo dependencies are exact-version `serde`,
+  `serde_json`, and `sha2` requirements owned by `riley-model`; the same
+  reviewed `sha2` package used directly by `riley-runtime` and
+  `riley-server`; and optional `libc` owned by `riley-server` solely for
+  synchronous POSIX shutdown signal handling;
+- development-only dependency declarations match their own exact allowlist and
+  do not count as production edges, while their resolved registry packages
+  remain inside the exact lockfile closure below;
+- the complete resolved third-party graph exactly matches
+  `ci/approved_cargo_dependencies.toml`, including crates.io source, checksum,
+  license expression, MSRV, and dependency edges;
+- no git dependency is present, and every approved package's MSRV is at most
+  the workspace Rust 1.85 MSRV; and
+- no production or `riley-native` build script invokes Python or Triton; and
+- production plus `riley-native` crate sources do not launch external
+  processes. The only allowed `std::process` uses are the server's `ExitCode`
+  and evidence-directory PID.
+
+The approved dependency manifest is a reviewed allowlist, not a discovery
+output. Adding or upgrading a package requires updating its exact resolved
+closure and re-reviewing every changed checksum, license, and MSRV entry.
+
+The PR 17 extension checker is a second closed allowlist. Registry v1 lands
+empty by default; the checked-in `deploy/extensions/registry.json` is
+authoritative for the current count. Every non-empty entry binds one immutable
+proposal, deploy plan, and benchmark contract, while admission keeps
+`implementation_link_path` null. The standard-library-only checker rejects
+duplicate or unknown fields, unregistered artifacts, Git control/traversal/
+symlink paths, untracked reference/fallback/workload files, byte-hash drift,
+invalid track/class pairs, enabled defaults, and incomplete
+`reference`/`E0`/`E1`/`A1`/`M1` gates. Primary and quality metrics must be
+distinct scalar paths in the common result schema; each track has an exact
+required performance/resource set containing the primary, and quality is
+track/class-specific.
+E0 tolerances bind exactly to the comparison dtype, while query-aware A1 uses a
+bounded omitted-mass fraction. A1/E1/M1 paths without a suitable common-schema
+quality field fail closed pending a schema
+version, and v1 remains single-GPU.
+
+CI supplies `--base-revision` with the full pull-request base SHA or push-before
+SHA. Transition mode enforces bootstrap-empty, append-only entries, immutable
+admitted artifacts, and the no-rename registry+proposal+plan+contract admission
+diff. New experimental flag literals in production crates require one matching
+approved implementation link. A later
+experimental implementation link binds approved metadata, tracked source paths,
+the runtime-flag source, and non-empty `{path, sha256, test_id}` direct top-level
+workspace integration tests that cannot be hidden, ignored, or feature-gated out;
+reviewers still inspect actual default-off, flag-on, and stable-fallback control
+flow. Stable promotion, withdrawal, or contract mutation requires schema v2.
+Canonical semantic SHA-256 pins and mutation tests prevent portable JSON schema
+relaxation from silently diverging from the checker. The checker does not load a
+model or initialize a GPU. See `deploy/extensions/README.md`.
+
+The final shell check copies the current tree to a temporary directory without
+the excluded tool/research roots, then runs locked metadata and an all-targets
+CPU build there.
+
+The Python-free model-loading gate rejects process-launch code in the production
+model crate, builds one synthetic CPU-only integration test in an isolated Cargo
+target directory, inspects the resulting executable's dynamic dependencies, and
+then invokes that executable directly under `env -i`. Its only `PATH` entry is a
+newly created empty directory, so the test cannot discover Python, Pip, PyTorch,
+Transformers, or Triton executables. The fixture contains no real model weights
+and performs no CUDA or GPU operation.
+
+## Python-free CUDA compile and link
+
+The reproducible container lane is Linux/amd64 and pins both input images by
+immutable manifest digest:
+
+- Docker Official Image `rust:1.85.0-bookworm`;
+- NVIDIA `cuda:12.8.1-devel-ubuntu22.04`.
+
+The builder selects the installed
+`1.85.0-x86_64-unknown-linux-gnu` toolchain explicitly, so the repository
+directory override cannot trigger a rustup channel sync during an offline or
+read-only run. The networked image-preparation phase installs and version-checks
+the matching Clippy component before the Python-free CUDA gate executes.
+
+Compile for the RTX 4090's compute capability 8.9 without granting the
+container GPU access:
+
+```sh
+SOURCE_REVISION=$(git rev-parse HEAD)
+docker build \
+  --file ci/cuda/Dockerfile \
+  --build-arg RILEY_CUDA_ARCHITECTURES=89 \
+  --build-arg "RILEY_SOURCE_REVISION=${SOURCE_REVISION}" \
+  --progress plain \
+  --tag riley-native-cuda:local \
+  .
+```
+
+No `--gpus` flag is intentional: PR 02 validates AOT compilation and linking,
+not runtime device behavior. Since `.git` is deliberately excluded from the
+Docker context, the full lowercase source revision is a required build argument
+and is embedded into the release calibration producer. The container gate
+records or checks:
+
+1. exact Rust, Cargo, nvcc, toolkit root, and AOT architecture information;
+2. locked release build plus the plan's exact root command
+   `cargo build --release --features cuda,server`;
+3. the bench/CUDA-only native profile producer, the CUDA-gated Python-free
+   calibration producer, plus the host-only C ABI link test and ABI version 1;
+4. compile-only `host_runtime_gpu` and `memory_gpu` test binaries plus the
+   CUDA-backed `riley-tensor` surface, without device access;
+5. CUDA feature-on `riley-cuda`, `riley-tensor`, `riley-server`, and
+   `riley-native` Clippy across all targets with warnings denied;
+6. `riley --version` reporting the linked CUDA ABI;
+7. a clear failure for an explicit nonexistent CUDA toolkit root; and
+8. `ldd`, `readelf`, `nm`, and `Cargo.lock` evidence with no Python, PyTorch,
+   Transformers, or Triton runtime dependency, and an NVML `DT_NEEDED` edge
+   confined to `riley-native` rather than the production/profile binaries.
+
+PR 03부터 artifact는 CUDA Driver API를 link한다. GPU를 의도적으로 주지 않는 이
+compile-only image에는 실제 host driver가 없으므로, `abi_link`와 `--version`처럼
+device/context를 초기화하지 않는 metadata executable에 한해서 toolkit
+`libcuda.so` stub을 임시 SONAME alias로 사용한다. 이 경로는 artifact의
+RPATH/RUNPATH에 기록되지 않아야 한다. 별도 GPU gate는 NVIDIA Container Runtime이
+주입한 실제 `libcuda.so.1`을 `ldd`와 `ldconfig`로 다시 강제한다.
+
+On a host with CUDA 12.8.1 installed, the equivalent direct build contract is:
+
+```sh
+export CUDAToolkit_ROOT=/usr/local/cuda
+export CUDA_HOME=/usr/local/cuda
+export RILEY_CUDA_ARCHITECTURES=89
+cargo build --locked --release --features cuda,server
+cargo build --locked --release --package riley-native \
+  --no-default-features --features cuda --bin riley-native
+cargo test --locked -p riley-cuda --features cuda --test abi_link
+cargo test --locked -p riley-cuda --no-default-features --features cuda \
+  --test host_runtime_gpu --no-run
+cargo test --locked -p riley-cuda --no-default-features --features cuda \
+  --test memory_gpu --no-run
+cargo test --locked -p riley-tensor --no-default-features --features cuda --no-run
+./target/release/riley --version
+```
+
+`native-cuda.yml` runs the pinned container nightly or by manual dispatch. A
+CUDA base-image, Rust-image, toolkit, or architecture change is an explicit CI
+contract change and must update the digest and captured evidence together.
+
+## Python-free CUDA host-runtime and memory GPU gate
+
+The image build compiles both `host_runtime_gpu` and `memory_gpu` with
+`--no-run`, together with `riley-tensor --features cuda`. Execution is a
+separate operation and requires NVIDIA Container Toolkit GPU passthrough. On
+an authorized GPU host:
+
+```sh
+GPU_EVIDENCE_DIR=$(mktemp -d)
+SOURCE_ARCHIVE_PATH=$(mktemp)
+git archive --format=tar --output="${SOURCE_ARCHIVE_PATH}" HEAD
+SOURCE_REVISION=$(git rev-parse HEAD)
+SOURCE_ARCHIVE_SHA256=$(sha256sum "${SOURCE_ARCHIVE_PATH}" | cut -d ' ' -f 1)
+GPU_IMAGE_ID=$(docker image inspect --format '{{.Id}}' riley-native-cuda:local)
+docker run --rm \
+  --network none \
+  --gpus all \
+  --env NVIDIA_VISIBLE_DEVICES=all \
+  --env NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+  --env RILEY_CUDA_LEAK_ITERATIONS=128 \
+  --env RILEY_CUDA_COMPUTE_SANITIZER=0 \
+  --env RILEY_GPU_EVIDENCE_DIR=/evidence \
+  --env "RILEY_SOURCE_REVISION=${SOURCE_REVISION}" \
+  --env "RILEY_SOURCE_ARCHIVE_SHA256=${SOURCE_ARCHIVE_SHA256}" \
+  --env "RILEY_GPU_IMAGE_ID=${GPU_IMAGE_ID}" \
+  --volume "${GPU_EVIDENCE_DIR}:/evidence" \
+  riley-native-cuda:local \
+  ci/verify_python_free_gpu_runtime.sh
+```
+
+The verifier has no network and no Python executable. It records NVIDIA and
+Rust/CUDA metadata, lists both exact integration-test inventories, then
+executes each ignored target separately with
+`--ignored --test-threads=1 --nocapture`. Every GPU test is marked
+`#[ignore = "remote GPU"]`, so an ordinary Cargo test command cannot
+accidentally execute device work.
+
+The cumulative `host_runtime_gpu` target contains exactly eight tests covering:
+
+- device identity, compute capability, total memory, multiprocessor count,
+  driver version, and runtime version;
+- command-batch one-shot finish/drop lifecycle and subsequent stream reuse;
+- an invalid device ordinal;
+- explicit event ordering across two non-default streams;
+- async fill correctness after synchronization;
+- launch-time error staging for invalid launch parameters;
+- positive event elapsed timing; and
+- repeated context/stream/event create-drop leak smoke, controlled by
+  `RILEY_CUDA_LEAK_ITERATIONS` (32–4096, default 128).
+
+The additive PR 04 `memory_gpu` target is exactly five tests:
+
+- `allocation_accounting_returns_to_zero`;
+- `zero_byte_allocations_and_copies_are_logical_noops`;
+- `pinned_host_device_round_trip_is_exact`;
+- `two_stream_copy_handoff_prevents_early_reuse`; and
+- `copy_ranges_and_context_ownership_are_validated`.
+
+The PR 16 memory fault gate is compiled only with the explicit
+`cuda-test-fault-injection` feature. Its parent harness launches four fresh
+subprocesses for create rollback ambiguity, explicit close ambiguity, deferred
+copy errors after confirmed completion, and unconfirmed completion/context
+restoration. The intentional fail-closed leak cases are not run under the
+ordinary leak sanitizer. Production binaries are checked for absence of the
+test-only native symbol prefix. Each child now records its case and PID at
+start and pass, while the parent records the matching spawn and zero-exit join;
+the four child PIDs must be distinct.
+
+Its stable accounting marker must report all four values as zero:
+
+```text
+riley-cuda-memory-accounting device_live_bytes=0 device_live_allocations=0 pinned_host_live_bytes=0 pinned_host_live_allocations=0
+```
+
+Evidence consists of `environment.txt`, `nvidia-smi-list.txt`,
+`nvidia-smi-device-metadata.csv`, the existing `host-runtime-*` test/list/link
+logs, additive `memory-*` test/list/link logs, SHA-256 records for both exact
+test executables plus the fault harness, the injected CUDA driver/runtime
+library inventory, production release binary hash/ELF/`nm` evidence, and the
+top-level `SHA256SUMS` manifest. The ordinary GPU binaries receive independent
+`ldd`/`readelf`/`nm` inspection, including resolved `libcuda.so.1` and
+`libcudart.so` checks, no driver-stub RPATH/RUNPATH, and no Python, PyTorch,
+Transformers, or Triton dependency. Existing evidence is never overwritten.
+The workflow also binds this output to the checked-out revision, the SHA-256
+of `git archive --format=tar HEAD`, and the locally built GPU image ID.
+
+The GPU container does not self-attest these results. The CPU-only
+`ci/release/check_cuda_fault_evidence.py` checker verifies the closed raw
+inventory, source archive PAX revision, immutable build image, exact two-test
+inventory, all four PID-isolated child results, parent result, and the exact
+production binary before producing the deterministic raw tar and final
+release-gate attestation. See `ci/release/CUDA_FAULT_EVIDENCE.md`.
+
+Set `RILEY_CUDA_COMPUTE_SANITIZER=1` to repeat both ignored targets serially
+under `compute-sanitizer --tool memcheck --leak-check full`. The PR 03 output
+retains its existing `compute-sanitizer-memcheck.log` name, while PR 04 writes
+`compute-sanitizer-memory-memcheck.log`, so logs cannot collide. Each log must
+independently report `ERROR SUMMARY: 0 errors` and `LEAK SUMMARY: 0 bytes
+leaked`; both are included in `SHA256SUMS`. The seven-test target deliberately
+exercises one invalid launch; `--report-api-errors no` prevents that expected,
+already-asserted CUDA API status from polluting memcheck's error summary without
+suppressing memory-access or allocation-leak findings. This optional pass is
+also exposed as the manual workflow input `run_compute_sanitizer`.
+
+The GitHub GPU job is disabled unless a manual dispatch explicitly selects
+`run_gpu_tests`. It targets only `[self-hosted, linux, x64, rustinfer-gpu]`, so
+standard hosted runners never receive or wait on a GPU job. Scheduled runs
+continue to perform compile/link and feature-on compile validation only.
+
+## Release bundle and minimal runtime image
+
+The PR 16 release packaging contract lives under `ci/release`. Its CPU-only
+unit and static checks do not compile or initialize CUDA:
+
+```sh
+python3 -m unittest discover -s ci/release -p 'test_*.py' -v
+python3 ci/release/verify_runtime_dockerfile.py
+```
+
+`build_release_bundle.py` accepts an already-built Linux x86_64 CUDA release
+binary plus a full source revision and `SOURCE_DATE_EPOCH`. It emits a
+deterministic archive with a reviewed release/configuration/rollback manifest,
+an ELF-derived native dependency manifest, and closed `SHA256SUMS` coverage.
+`verify_release_bundle.py` treats the archive as hostile and rejects traversal,
+links, extra files, forbidden Python artifacts, unreviewed or mismatched ELF
+dependencies, non-canonical metadata, and checksum errors. Runtime dependency
+validation is derived from ELF `DT_NEEDED` entries and an exact allowlist;
+ordinary application strings such as model configuration keys are not treated
+as dependencies. The workspace boundary checker separately rejects external
+process launching from production crates and the native evidence producer.
+
+`ci/release/Dockerfile` separates the CUDA builder from a digest-pinned CUDA
+runtime stage and copies only the verified bundle payload. Its builder also
+selects the already-installed exact Rust toolchain instead of allowing a
+source-directory rustup sync. The final stage
+asserts that source, Python/Pip, Rust/CUDA compilers, and build tools are
+absent. See `docs/release/README.md` for the file layout and runtime contract.
+
+The long reliability lane uses the separately reviewed, Python-free
+`ci/release/ReliabilitySoak.Dockerfile` derivative and the remote-only
+`ci/run_remote_release_soak.sh` launcher. It preserves the release binary and
+production UID while adding only observation utilities. The derived-image
+build also requires the binary's resolved dynamic-loader path/target-byte
+closure to remain exactly unchanged across the no-upgrade package install and
+preserves that closure as replayed evidence. Build-time runtime-injected
+dependencies are retained as canonical `NOT_FOUND/-/-` rows rather than
+dropped; runtime validation separately checks the injected CUDA driver bytes. See
+`ci/release/RELIABILITY_SOAK_TEST_LAYER.md` for immutable image/golden/report
+bindings, namespace isolation, output ownership, and the authorized command.
+
+The five-run performance lane is likewise remote-only and shares the
+server-4096 GPU evidence lock with the soak lane. Its reviewed tool hashes,
+capability-less bind permissions, per-run GPU/process receipts, exact Docker
+contract, v3 manifest plus per-run execution/time/hash receipts, reviewed PR15
+request identity, and GPU-free remote permission probe are documented in
+`ci/release/RELEASE_PERFORMANCE_RUNNER.md`. Local verification is limited to
+the documented CPU/static tests.
+
+Release packaging fixes the reviewed license contract to the exact standard
+MIT text for `Copyright (c) 2026 Riley contributors`. Preflight and bundle
+production require `workspace.package.license = "MIT"` and
+`license.workspace = true` in every member; bundle verification requires the
+same byte-exact `LICENSE` and canonical embedded SPDX field.
+
+### Independent release build reproducibility
+
+`ci/run_release_reproducibility.sh` is the remote-only PR 16 A/B build driver.
+It resolves one content-addressed Linux/amd64 builder image, creates two
+separate `runc` containers with independent anonymous workspaces, disables the
+network, mounts the canonical Git source archive read-only, and runs the exact
+locked/offline CUDA release build in each. No GPU/device passthrough is used.
+
+`check_reproducible_build.py` consumes the two closed raw evidence tars and the
+selected final artifacts. It validates the embedded Git revision and
+`SOURCE_DATE_EPOCH`, daemon-produced Docker inspect receipts, toolchain and
+command logs, a trusted external source-archive digest, closed checksums,
+ELF-derived dependencies, and each deterministic release bundle. Builder-image
+environment and command arguments are closed, proxy variables are empty, and
+the pre-start receipts must prove distinct anonymous `NoCopy` workspaces. A
+matching post-run daemon receipt must prove each same container exited once
+with status zero, while the last in-container completion receipt binds that
+container and source to the hashes of every artifact and build log. It then
+requires the server binary, `riley-profile` binary, bundle, and native
+dependency manifest to be byte-identical across A, B, and final. See
+`ci/release/REPRODUCIBLE_BUILD.md` for the remote procedure and exact evidence
+inventory.
+
+The workspace boundary fixes the NVIDIA CUDA compile to
+`--objdir-as-tempdir` while retaining `strip=none`; each raw release ELF also
+rejects process-derived nvcc `tmpxft` file symbols before A/B byte equality is
+accepted.
+
+## Optional Python reference gate
+
+`python-reference.yml` runs only by manual dispatch. It installs no project
+dependencies, asserts that Torch, Transformers, and Triton are unavailable,
+and runs the standard-library fake-backend unit suite. Canonical reference or
+benchmark inference remains a separate remote-GPU workflow.

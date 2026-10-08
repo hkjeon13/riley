@@ -1,0 +1,18 @@
+{
+  "revision": "f3389f3512c03f6185bf94a4daf140bf55a70a25",
+  "native": {
+    "passed": true,
+    "cases": 3161,
+    "decode_value_cases": 360,
+    "mapped_value_cases": 1593,
+    "BF16_and_FP32_exact": true,
+    "performance_claim_eligible": false
+  },
+  "scripts": {
+    "/data/riley-serving-261007/controller/kernel_batch07_http_screen_attempt01.py": "194862a95be33ceeef2706478f44d549bdb27accc618a3fb6b25c11cf79123fd",
+    "/data/riley-serving-261007/controller/kernel_batch08_http_screen_attempt01.py": "2d63333a8e3b4deef3c5bde92ca52832c5bcfb29186f1a747cc146161f4f7afd",
+    "/data/riley-serving-261007/run_kernel_batch07_server_attempt01.py": "cdf769293beead44ddd71ba9cd9c220bba8cb65718c3ab00a2546633a41b3465",
+    "/data/riley-serving-261007/run_kernel_batch08_server_attempt01.py": "560492fad4639bc1cd9d4958a12ab3621c53ada2bcf77e966a1a5d86045d330f"
+  },
+  "scope": "same HTTP60 all8 frozen fixtures and launch settings, correctness only"
+}

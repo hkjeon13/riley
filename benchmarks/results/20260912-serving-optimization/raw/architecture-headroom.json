@@ -1,0 +1,28 @@
+{
+  "source_sha256": "d28d3349a575276c66bd3e6dcbb9880239fef642b96baaacc3c3a614eaf9ec03",
+  "scope": "Frozen trace GPU graph spans only; not serving forecast. Kernel total sums / graph span sums. Attention excludes RoPE/KV writes. No host gap estimate.",
+  "cases": {
+    "16": {
+      "graph_us": 758416.882,
+      "attention_us": 226091.02399999998,
+      "attention_fraction": 0.2981091657714444,
+      "graph_only_speedup_if_attention_2x": 1.1751635062460237,
+      "graph_only_speedup_if_attention_4x": 1.287965809833765,
+      "graph_only_speedup_if_attention_free": 1.4247229786083395
+    },
+    "32": {
+      "graph_us": 513018.931,
+      "attention_us": 160688.385,
+      "attention_fraction": 0.31322116064368005,
+      "graph_only_speedup_if_attention_2x": 1.1856918958997649,
+      "graph_only_speedup_if_attention_4x": 1.3070458024413465,
+      "graph_only_speedup_if_attention_free": 1.456072818051944
+    }
+  },
+  "c32_natural_serving_requirement": {
+    "throughput_gain_for_parity_pct": 14.537098509089997,
+    "throughput_gain_for_vllm_plus15_pct": 31.71766328545349,
+    "tpot_reduction_for_parity_pct": 20.006958942240782,
+    "tpot_reduction_for_vllm_minus10_pct": 28.0062630480167
+  }
+}

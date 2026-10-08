@@ -1,0 +1,20 @@
+{
+  "created_ns": 1791364884826425000,
+  "source_commit": "de64579cdcbeb78cbe638fa76f3c2e0b944cc5cf",
+  "tracked_worktree_clean": true,
+  "source_sha256": {
+    "crates/riley-runtime/src/llama/decode.rs": "b23dd13f6ffdf34e033efcdce6a6ebd4ccd8d2c991603d332947b8649ae119cb",
+    "crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs": "1540ebb2fd0b9e6b42c4ef181289ea25af32c8db23f9d8811ea99e25507d860e"
+  },
+  "actual_static_guards": {
+    "attention_detail_host_buffers_fixed_P2049": true,
+    "full128_rejects_attention_detail_owner_before_mutation": true,
+    "existing_KV_prefix_download_only_prefilled_P2048": true,
+    "queued_full128_layer3_observer_uses_ordinary_trace": true
+  },
+  "next_internal_diagnostic_requirement": "If selected3 stage evidence calls for attention internals/KV, add explicit full128-only geometry and logical-length guards, caller-owned buffers, exact data extents and same-owner cleanup evidence. Do not reuse P2049 detail or prefill-only download at row109.",
+  "arithmetic_or_serving_changes": false,
+  "GPU_validation": "\ubbf8\uc2e4\ud589 for selected3 followup; this receipt is static source inspection only",
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "goal_achieved": false
+}

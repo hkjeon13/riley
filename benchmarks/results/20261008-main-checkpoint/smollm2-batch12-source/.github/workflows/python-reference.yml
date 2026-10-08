@@ -1,0 +1,33 @@
+name: Optional Python reference checks
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-fakes:
+    name: Offline fake-backend unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13.15"
+
+      - name: Assert model libraries are not installed
+        run: |
+          python - <<'PY'
+          import importlib.util
+
+          for name in ("torch", "transformers", "triton"):
+              assert importlib.util.find_spec(name) is None, name
+          PY
+
+      - name: Run model-free reference tests
+        env:
+          PYTHONPATH: tools/python/reference
+        run: python -m unittest discover -s tools/python/reference/tests -t . -v

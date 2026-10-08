@@ -1,0 +1,67 @@
+{
+  "passed": true,
+  "policy": {
+    "timeout_seconds": 300,
+    "interval_seconds": 2,
+    "consecutive": 3,
+    "cpu_some_max": 5,
+    "io_full_max": 5,
+    "memory_full_max": 0.5
+  },
+  "samples": [
+    {
+      "time_ns": 1791398918272745817,
+      "clocks": {
+        "perf_counter_before_ns": 911545222162210,
+        "perf_counter_after_ns": 911545222163142,
+        "epoch_ns": 1791398918272745817,
+        "monotonic_ns": 911545222162753,
+        "monotonic_raw_ns": 911532303421693,
+        "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+      },
+      "pressure": {
+        "cpu": "some avg10=2.37 avg60=1.54 avg300=1.54 total=14102308012\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "io": "some avg10=2.10 avg60=2.96 avg300=3.34 total=80971361275\nfull avg10=1.53 avg60=2.36 avg300=2.65 total=73955722237\n",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2117137694\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2066835179\n"
+      },
+      "loadavg": "8.60 9.36 9.75 5/8357 853015\n",
+      "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 44, 74.15, 2595, 8036, 0"
+    },
+    {
+      "time_ns": 1791398920292515019,
+      "clocks": {
+        "perf_counter_before_ns": 911547241930397,
+        "perf_counter_after_ns": 911547241933499,
+        "epoch_ns": 1791398920292515019,
+        "monotonic_ns": 911547241932217,
+        "monotonic_raw_ns": 911534323161363,
+        "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+      },
+      "pressure": {
+        "cpu": "some avg10=2.12 avg60=1.52 avg300=1.53 total=14102347319\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "io": "some avg10=2.63 avg60=3.03 avg300=3.35 total=80971539545\nfull avg10=1.97 avg60=2.41 avg300=2.66 total=73955868295\n",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2117143530\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2066840873\n"
+      },
+      "loadavg": "8.60 9.36 9.75 14/8356 853112\n",
+      "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 44, 72.58, 2595, 8036, 0"
+    },
+    {
+      "time_ns": 1791398922308293736,
+      "clocks": {
+        "perf_counter_before_ns": 911549257708929,
+        "perf_counter_after_ns": 911549257712018,
+        "epoch_ns": 1791398922308293736,
+        "monotonic_ns": 911549257711005,
+        "monotonic_raw_ns": 911536338909541,
+        "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+      },
+      "pressure": {
+        "cpu": "some avg10=2.10 avg60=1.54 avg300=1.54 total=14102388635\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "io": "some avg10=3.24 avg60=3.13 avg300=3.37 total=80971605011\nfull avg10=2.52 avg60=2.50 avg300=2.68 total=73955929744\n",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2117150153\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2066847475\n"
+      },
+      "loadavg": "8.63 9.35 9.74 9/8356 853285\n",
+      "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 44, 72.54, 2595, 8036, 0"
+    }
+  ]
+}

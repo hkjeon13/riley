@@ -1,0 +1,236 @@
+commit 636376e67fdcc508552371628808fc21d2378c44
+Author:     Codex <codex@local>
+AuthorDate: Sun Sep 13 09:08:31 2026 +0900
+Commit:     Codex <codex@local>
+CommitDate: Sun Sep 13 09:08:31 2026 +0900
+
+    Pack V7 value cache for paired attention loads across mixed and decode
+
+diff --git a/crates/riley-cuda/build.rs b/crates/riley-cuda/build.rs
+index ff71b2d..396c57b 100644
+--- a/crates/riley-cuda/build.rs
++++ b/crates/riley-cuda/build.rs
+@@ -209,6 +209,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
+         kernels_dir.join("src/decode_shared32.cuh"),
+         kernels_dir.join("src/decode_shared32_attention.cuh"),
+         kernels_dir.join("src/decode_gqa_attention_v50.cuh"),
++        kernels_dir.join("src/packed_value_v54.cuh"),
+         kernels_dir.join("src/decode_shared32_model.cuh"),
+         kernels_dir.join("src/decode_shared32_result.cuh"),
+ 
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index 2990bb0..04fa409 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -2092,6 +2092,7 @@ include_bytes!("../../../../kernels/src/decode_shared16.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared32.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared32_attention.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_gqa_attention_v50.cuh").as_slice(),
++include_bytes!("../../../../kernels/src/packed_value_v54.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared32_model.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared32_result.cuh").as_slice(),
+ 
+diff --git a/kernels/src/decode_gqa_attention_v50.cuh b/kernels/src/decode_gqa_attention_v50.cuh
+index 16023a1..2bd80c2 100644
+--- a/kernels/src/decode_gqa_attention_v50.cuh
++++ b/kernels/src/decode_gqa_attention_v50.cuh
+@@ -1,4 +1,5 @@
+ #pragma once
++#include "packed_value_v54.cuh"
+ #include "decode_shape.cuh"
+ namespace riley_gqa50_attention {
+ 
+@@ -53,10 +54,10 @@ __global__ void independent_values(const float* scores,const __nv_bfloat16* v,__
+     int at=token+part*16,pi=at-begin;bool live=at<end;
+     pa[part]=live?riley_prefill_shape::pair(probs[pi+2*t],probs[pi+2*t+1]):0;
+     paa[part]=live?riley_prefill_shape::pair(probs[pi+2*t+8],probs[pi+2*t+9]):0;
+-    int dim=block*8+g;int value_base=live?((pages[at/16]*3+head/3)*16)*64+dim:0;
+-    auto val=[&](int pos){return pos<end&&live?v[value_base+(pos-at)*64]:zero;};
+-    vb[part]=riley_prefill_shape::pair(val(at+2*t),val(at+2*t+1));
+-    vbb[part]=riley_prefill_shape::pair(val(at+2*t+8),val(at+2*t+9));
++    // Each lane reads an aligned adjacent-token pair from the packed V tile.
++    int vi=live?(pages[at/16]*3+head/3)*1024+block*128:0;
++    vb[part]=live?riley_packed_value_v54::masked_pair(v+vi+lane*2,at+2*t,end):0;
++    vbb[part]=live?riley_packed_value_v54::masked_pair(v+vi+64+lane*2,at+2*t+8,end):0;
+    }
+    #pragma unroll
+    for(int part=0;part<4;++part)if(token+part*16<end)riley_prefill_shape::mma(accum,pa[part],pa[part],paa[part],paa[part],vb[part],vbb[part]);
+diff --git a/kernels/src/decode_shared32_model.cuh b/kernels/src/decode_shared32_model.cuh
+index b6ab76e..f3ed5cc 100644
+--- a/kernels/src/decode_shared32_model.cuh
++++ b/kernels/src/decode_shared32_model.cuh
+@@ -34,6 +34,7 @@ __global__ void shared_rope_kv(const __nv_bfloat16* q,const __nv_bfloat16* k,con
+ __device__ __forceinline__ __nv_bfloat16 qkv_rounded(const float* p,int n,int row,int col){
+  float value=0.;for(int chunk=0;chunk<3;++chunk)value+=p[chunk*32*n+row*n+col];return __float2bfloat16_rn(value);
+ }
++template<bool PackedValue=false>
+ __global__ void qkv_merge_rope(const float* parts,__nv_bfloat16* qo,__nv_bfloat16* keys,__nv_bfloat16* values,const float* cos,const float* sin,const uint32_t* pages,const uint32_t* shape,const uint32_t* active){
+  uint32_t rows=*active,row=blockIdx.y;if(rows<1||rows>32||row>=rows)return;
+  int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=384)return;
+@@ -43,7 +44,7 @@ __global__ void qkv_merge_rope(const float* parts,__nv_bfloat16* qo,__nv_bfloat1
+  float c=__bfloat162float(__float2bfloat16_rn(cos[pos*32+dim])),sn=__bfloat162float(__float2bfloat16_rn(sin[pos*32+dim]));
+  auto first=__float2bfloat16_rn(a*c-b*sn),second=__float2bfloat16_rn(b*c+a*sn);
+  if(head<9){qo[row*576+base+dim]=first;qo[row*576+base+dim+32]=second;}
+- else {uint32_t dst=((pages[pos/16]*3+head-9)*16+pos%16)*64+dim;keys[dst]=first;keys[dst+32]=second;const float* v=parts+3*32*(576+192);values[dst]=qkv_rounded(v,192,row,base+dim);values[dst+32]=qkv_rounded(v,192,row,base+dim+32);}
++ else {uint32_t dst=((pages[pos/16]*3+head-9)*16+pos%16)*64+dim;keys[dst]=first;keys[dst+32]=second;const float* v=parts+3*32*(576+192);uint32_t vd=PackedValue?riley_packed_value_v54::packed_index(pos,head-9,dim,pages):dst;values[vd]=qkv_rounded(v,192,row,base+dim);values[vd+(PackedValue?512:32)]=qkv_rounded(v,192,row,base+dim+32);}
+ }
+ // Fixed-capacity GEMM also reads inactive rows; initialize those inputs.
+ __global__ void clear_inactive_hidden(__nv_bfloat16* hidden,const uint32_t* active){
+@@ -65,7 +66,8 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
+  shared32_qkv_parts<<<dim3(120,3),32,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),active);
+  auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
+  auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
+- qkv_merge_rope<<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
++ if(grouped_attention)qkv_merge_rope<true><<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
++ else qkv_merge_rope<false><<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
+  if(grouped_attention)riley_gqa50_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
+  else riley_shared32_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
+  enqueue_shared32_projection<576,576,128,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
+diff --git a/kernels/src/mixed_attention_v49.cuh b/kernels/src/mixed_attention_v49.cuh
+index f792912..8fbaa26 100644
+--- a/kernels/src/mixed_attention_v49.cuh
++++ b/kernels/src/mixed_attention_v49.cuh
+@@ -1,4 +1,5 @@
+ #pragma once
++#include "packed_value_v54.cuh"
+ #include "prefill_shape_attention.cuh"
+ // Experimental only: exact ordered arithmetic against the independent row oracle.
+ namespace riley_mixed_attention {
+@@ -6,7 +7,10 @@ using riley_prefill_shape::pair;
+ using riley_prefill_shape::mma;
+ using riley_prefill_shape::cache_index;
+ using riley_prefill_shape::exponential;
++using riley_packed_value_v54::packed_index;
++using riley_packed_value_v54::masked_pair;
+ // Exceptional nonfinite V reuses the original per-query arithmetic and causal mask.
++template<bool Vector>
+ __device__ void single_query(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,int rows,int n,const uint32_t* blocks,int row,int qh,float (*scores)[128],__nv_bfloat16 (*probs)[128],float (*exponentials)[128]){
+  int lane=threadIdx.x%32,warp=0,group=lane/4,t=lane%4;
+  int kvh=qh/3,count=n-rows+row+1;
+@@ -56,9 +60,11 @@ __device__ void single_query(const __nv_bfloat16* q,const __nv_bfloat16* k,const
+    #pragma unroll
+    for(int block=0;block<8;++block){
+     int dim=block*8+group;
+-    auto val=[&](int pos){return pos<end?v[page_base+(pos-token)*(blocks?64:192)+dim]:zero;};
+-    uint32_t b=pair(val(token+2*t),val(token+2*t+1));
+-    uint32_t bb=pair(val(token+2*t+8),val(token+2*t+9));
++    auto val=[&](int pos){return pos<end?v[packed_index(pos,kvh,dim,blocks)]:zero;};
++    uint32_t b,bb;
++    if constexpr(Vector){int vi=((blocks?blocks[token/16]:token/16)*3+kvh)*1024+block*128;
++     b=masked_pair(v+vi+lane*2,token+2*t,end);bb=masked_pair(v+vi+64+lane*2,token+2*t+8,end);
++    }else{b=pair(val(token+2*t),val(token+2*t+1));bb=pair(val(token+2*t+8),val(token+2*t+9));}
+     mma(accum[block],a,a,aa,aa,b,bb);
+    }
+   }
+@@ -71,7 +77,7 @@ __device__ void single_query(const __nv_bfloat16* q,const __nv_bfloat16* k,const
+   out[qb+block*8+2*t+j]=__float2bfloat16_rn(accum[block][j]*inverse);
+ }
+ 
+-template<int TileRows>
++template<int TileRows,bool Vector>
+ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,int rows,int n,const int* dynamic_n,const uint32_t* blocks,const uint32_t* live_rows,uint32_t query_block){
+  static_assert(TileRows==8||TileRows==16,"query tile");
+  if(live_rows){uint32_t live=*live_rows;if(!live||live>static_cast<uint32_t>(rows))return;rows=live;}
+@@ -81,7 +87,7 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
+  __shared__ __nv_bfloat16 probs[TileRows][128];
+  // A small prefill has insufficient queries to amortize the larger tile state.
+  if(rows<32){
+-  if(query_block<static_cast<uint32_t>(rows))single_query(q,k,v,out,rows,n,blocks,query_block,blockIdx.y,scores,probs,exps);
++  if(query_block<static_cast<uint32_t>(rows))single_query<Vector>(q,k,v,out,rows,n,blocks,query_block,blockIdx.y,scores,probs,exps);
+   return;
+  }
+  const int first=query_block*TileRows;
+@@ -161,8 +167,11 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
+    #pragma unroll
+    for(int b=0;b<8;++b){
+     const int dim=b*8+group;
+-    auto val=[&](int pos){return pos<end?v[base+(pos-token)*(blocks?64:192)+dim]:__float2bfloat16_rn(0.F);};
+-    uint32_t vb=pair(val(token+2*t),val(token+2*t+1)),vhi=pair(val(token+2*t+8),val(token+2*t+9));
++    auto val=[&](int pos){return pos<end?v[packed_index(pos,kvh,dim,blocks)]:__float2bfloat16_rn(0.F);};
++    uint32_t vb,vhi;
++    if constexpr(Vector){int vi=((blocks?blocks[token/16]:token/16)*3+kvh)*1024+b*128;
++     vb=masked_pair(v+vi+lane*2,token+2*t,end);vhi=masked_pair(v+vi+64+lane*2,token+2*t+8,end);
++    }else{vb=pair(val(token+2*t),val(token+2*t+1));vhi=pair(val(token+2*t+8),val(token+2*t+9));}
+     nonfinite_value=nonfinite_value||((vb&0x7f80U)==0x7f80U)||((vb&0x7f800000U)==0x7f800000U)||((vhi&0x7f80U)==0x7f80U)||((vhi&0x7f800000U)==0x7f800000U);
+     float next[4];
+     #pragma unroll
+@@ -174,7 +183,7 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
+    if(__any_sync(0xffffffff,nonfinite_value)){
+     __syncwarp();
+     for(int row=first;row<min(first+TileRows,rows);++row){
+-     single_query(q,k,v,out,rows,n,blocks,row,qh,scores,probs,exps);
++     single_query<Vector>(q,k,v,out,rows,n,blocks,row,qh,scores,probs,exps);
+      __syncwarp();
+     }
+     return;
+@@ -190,13 +199,14 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
+   if(valid[h])for(int b=0;b<8;++b)for(int z=0;z<2;++z)out[(qr[h]*9+qh)*64+b*8+2*t+z]=__float2bfloat16_rn(accum[b][h*2+z]*inverse);
+  }
+ }
++template<bool Vector>
+ __global__ void mapped_attention(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,uint32_t capacity,const uint32_t* meta){
+  const uint32_t active=meta[5],total=meta[9],tiles=meta[24],tile=blockIdx.x;
+  if(!active||active>32||!total||total>capacity||!tiles||tiles>total||tile>=tiles)return;
+  const uint32_t entry=meta[32+32*416+1024+tile],owner=entry>>16,local=entry&0xffffU;
+  if(owner>=active)return;const uint32_t* shape=meta+32+owner*416;const uint32_t count=shape[2],offset=shape[16],nt=count<32?count:(count+7)/8;
+  if(!count||offset>total||count>total-offset||local>=nt)return;
+- attention_body<8>(q+offset*576,k,v,out+offset*576,capacity,0,reinterpret_cast<const int*>(shape+1),shape+32,shape+2,local);
++ attention_body<8,Vector>(q+offset*576,k,v,out+offset*576,capacity,0,reinterpret_cast<const int*>(shape+1),shape+32,shape+2,local);
+ }
+ 
+ }
+diff --git a/kernels/src/mixed_model_v49.cuh b/kernels/src/mixed_model_v49.cuh
+index 74ad391..12b3699 100644
+--- a/kernels/src/mixed_model_v49.cuh
++++ b/kernels/src/mixed_model_v49.cuh
+@@ -43,7 +43,7 @@ inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratc
+   auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
+   auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
+   mixed_rope_kv_v7<<<dim3(2,capacity),256,0,stream>>>(b(2),b(5),b(6),b(3),lk,lv,static_cast<const float*>(cos),static_cast<const float*>(sin),meta,capacity);
+-  riley_mixed_attention::mapped_attention<<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta);
++  riley_mixed_attention::mapped_attention<true><<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta);
+   if(capacity==1)enqueue_decode_projection<576,576,128>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]));
+   else gemm_prefill_shape_vector<576,576,128,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(4),w(base+4),b(2),capacity,shape+2);
+   riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,shape,capacity);
+diff --git a/kernels/src/mixed_rope_v49.cuh b/kernels/src/mixed_rope_v49.cuh
+index 9d20a06..93ee057 100644
+--- a/kernels/src/mixed_rope_v49.cuh
++++ b/kernels/src/mixed_rope_v49.cuh
+@@ -2,6 +2,7 @@
+ // Caller retains all parents and validates a unique logical-to-physical page map,
+ // its full extent, and allocation sizes before enqueue; no host publication here.
+ #pragma once
++#include "packed_value_v54.cuh"
+ #include <cuda_runtime.h>
+ #include <cuda_bf16.h>
+ #include <stdint.h>
+@@ -22,6 +23,7 @@ __global__ void mixed_rope_kv_v7(const __nv_bfloat16* q,const __nv_bfloat16* k,c
+  else{
+   uint32_t destination=((pages[pos/16]*3+head-9)*16+pos%16)*64+dim;
+   keys[destination]=first;keys[destination+32]=second;
+-  values[destination]=v[row*192+base+dim];values[destination+32]=v[row*192+base+dim+32];
++  uint32_t vd=riley_packed_value_v54::packed_index(pos,head-9,dim,pages);
++  values[vd]=v[row*192+base+dim];values[vd+512]=v[row*192+base+dim+32];
+  }
+ }
+\ No newline at end of file
+diff --git a/kernels/src/packed_value_v54.cuh b/kernels/src/packed_value_v54.cuh
+new file mode 100644
+index 0000000..b7b6f19
+--- /dev/null
++++ b/kernels/src/packed_value_v54.cuh
+@@ -0,0 +1,14 @@
++#pragma once
++#include <cuda_bf16.h>
++#include <stdint.h>
++// V7 owned sessions retain this page-local V layout across mixed and decode graphs.
++// Same pool extent as token-major BF16; K remains token-major.
++namespace riley_packed_value_v54 {
++__device__ __forceinline__ int packed_index(int pos,int head,int dim,const uint32_t* pages){
++ int page=pages?pages[pos/16]:pos/16,t=pos%16;
++ return (page*3+head)*1024+(dim/8)*128+(t/8)*64+(dim%8)*8+t%8;
++}
++__device__ __forceinline__ uint32_t masked_pair(const __nv_bfloat16* p,int pos,int end){
++ if(pos>=end)return 0;uint32_t bits=*reinterpret_cast<const uint32_t*>(p);return pos+1<end?bits:bits&0xffffU;
++}
++}

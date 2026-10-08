@@ -1,0 +1,32 @@
+{
+  "independent_scope": {
+    "profiles": 32,
+    "HTTP_requests_replayed": 6144,
+    "raw_files_SHA_verified": 678,
+    "source_archive_sha256": "7bb08f660d10a40a879759364d3a835b2a20d8d6a2590698a3a3b5d72d04a7ff",
+    "serving_performance": "\ubbf8\uc2e4\ud589; diagnostic only",
+    "goal_achieved": false
+  },
+  "phase_summary_sha256": "e683e7250f38f1f8ccacfde3c5a074e310f293280f07a5f442e8748b5b767927",
+  "CPU_summary_sha256": "59051b43bf4f85a5b527947c3e65db1f778bdc238d03f368ccc5cd04cb30bfd5",
+  "C32_observations_sha256": "906412926780460e08370a1fda97c647e76e37b02b48bd3db47773e7ff5717bd",
+  "native_compile_resource_observation": {
+    "kernel": "mapped_attention",
+    "batch11_registers": 178,
+    "batch12_registers": 161,
+    "spill_load_bytes_both": 0,
+    "spill_store_bytes_both": 0,
+    "scope": "native exact-test compilation only; not serving binary occupancy or runtime proof"
+  },
+  "native_build_log_sha256": {
+    "batch11": "261e6c324ac0179d59fa02af1965d96a6b5095c96ad70f449bba0d8bac7f2083",
+    "batch12": "545f1aed0ce94bb5d82a7ec150614c0f0ff2f185c4af43576acc926827b3cd5b"
+  },
+  "limits": [
+    "No serving improvement inferred from register count",
+    "CPU samples in libcuda are mainly unresolved addresses; no host wait/scheduler/HTTP causal duration inferred",
+    "Recorded kernel sums and overlapping interval unions are never added to serving wall time"
+  ],
+  "adopted": false,
+  "goal_achieved": false
+}

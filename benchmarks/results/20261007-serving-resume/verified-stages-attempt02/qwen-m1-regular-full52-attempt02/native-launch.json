@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "/home/psyche/.cargo/bin/cargo",
+    "test",
+    "--locked",
+    "-p",
+    "riley-runtime",
+    "--features",
+    "cuda,cuda-cublas-gemm-probe",
+    "--test",
+    "qwen3b_p2051_full_forward_gpu",
+    "--",
+    "--ignored",
+    "--exact",
+    "qwen3b_p2048_hf_compatible_cache_on_m1_cublas_qk_av_full_forward_candidate_trace",
+    "--nocapture"
+  ],
+  "source_revision": "4da970a7153ff615cc9f6b0e679d3bd0d7ce2064",
+  "serving_performance": "\ubbf8\uc2e4\ud589"
+}

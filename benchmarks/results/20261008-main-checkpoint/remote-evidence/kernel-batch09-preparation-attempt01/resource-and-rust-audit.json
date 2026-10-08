@@ -1,0 +1,23 @@
+{
+  "revision": "3bf8c05e7b8b8ec192d8cf861623a11227075351",
+  "rust_files_unchanged_vs_actual_parent": 293,
+  "resources": [
+    [
+      "ptxas info    : Compiling entry function '_ZN21riley_mixed_attention16mapped_attentionEPK13__nv_bfloat16S2_S2_PS0_jPKj' for 'sm_89'",
+      "ptxas info    : Function properties for _ZN21riley_mixed_attention16mapped_attentionEPK13__nv_bfloat16S2_S2_PS0_jPKj",
+      "    8 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads",
+      "ptxas info    : Used 178 registers, used 0 barriers, 8 bytes cumulative stack size, 12288 bytes smem, 400 bytes cmem[0], 8 bytes cmem[2]",
+      "ptxas info    : Compile time = 231.997 ms"
+    ],
+    [
+      "ptxas info    : Compiling entry function '_ZN21riley_gqa50_attention18independent_valuesEPKfPK13__nv_bfloat16PS2_PKjS7_S7_' for 'sm_89'",
+      "ptxas info    : Function properties for _ZN21riley_gqa50_attention18independent_valuesEPKfPK13__nv_bfloat16PS2_PKjS7_S7_",
+      "    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads",
+      "ptxas info    : Used 72 registers, used 0 barriers, 24 bytes cumulative stack size, 2304 bytes smem, 400 bytes cmem[0], 8 bytes cmem[2]",
+      "ptxas info    : Compile time = 33.765 ms"
+    ]
+  ],
+  "build_log_sha256": "7df19cc3956a6dfbeda36017b595f4d7e3ff71d9cd7e9e6c62adfd2be86ccde3",
+  "limits": "registers/shared/stack diagnostic only; no serving performance inference",
+  "time_ns": 1791391545253031939
+}

@@ -1,0 +1,20 @@
+{
+  "source_commit": "e42cc345a08913b2dc1f9a0ea618dd73e3390f8e",
+  "references": {
+    "kernels/tests/reference/decode_gqa_attention_v50_batch05_reference.cuh": {
+      "original_source": "kernels/src/decode_gqa_attention_v50.cuh",
+      "original_commit": "61402ebc42e9d0ea5bde4e6415a1a9c25e3db8a1",
+      "original_sha256": "e0d100e9219f3645c69067485e48ab91e10f0d281e2bf56fe918d7d24e66e9da",
+      "candidate_reference_sha256": "e0d100e9219f3645c69067485e48ab91e10f0d281e2bf56fe918d7d24e66e9da"
+    },
+    "kernels/tests/reference/mixed_attention_v49_batch05_reference.cuh": {
+      "original_source": "kernels/src/mixed_attention_v49.cuh",
+      "original_commit": "61402ebc42e9d0ea5bde4e6415a1a9c25e3db8a1",
+      "original_sha256": "1a5d86c062f6e70233b6e6c982b044fa7010de3dedb6af51c36fbcb4869a286a",
+      "candidate_reference_sha256": "1a5d86c062f6e70233b6e6c982b044fa7010de3dedb6af51c36fbcb4869a286a"
+    }
+  },
+  "byte_identical": true,
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "adopted": false
+}

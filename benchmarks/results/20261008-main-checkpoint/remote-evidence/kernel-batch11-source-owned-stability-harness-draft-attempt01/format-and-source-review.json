@@ -1,0 +1,25 @@
+{
+  "formatted_source_sha256": "8532aa5bdeb737f977b0cb0619dfa67ae472ac73619c7cadca1afa39195dd7d2",
+  "unformatted_original_sha256": "35d9491732a74e051c505cdc6209cd5e096ff56cd5ad627ac9b9f56d1ab4c999",
+  "rustfmt_parse_exit": 0,
+  "type_check": "not executed",
+  "GPU_execution": "not executed",
+  "source_checks": {
+    "crates/riley-runtime/src/llama/mod.rs": {
+      "exists": true,
+      "tokens": {
+        "LlamaReductionProfile": true
+      }
+    },
+    "crates/riley-runtime/src/llama/executor/config.rs": {
+      "exists": true,
+      "tokens": {
+        "with_mixed_execution": true,
+        "with_iteration_batch_completion": true,
+        "with_synchronous_metadata": true,
+        "with_fixed_maximum_shape": true
+      }
+    }
+  },
+  "production_source_unchanged": true
+}

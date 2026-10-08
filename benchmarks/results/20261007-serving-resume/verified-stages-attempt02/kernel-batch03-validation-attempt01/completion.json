@@ -1,0 +1,38 @@
+{
+  "failure": {
+    "type": "AssertionError",
+    "message": "primitive-build failed"
+  },
+  "steps": [
+    {
+      "label": "primitive-build",
+      "argv": [
+        "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin/nvcc",
+        "-O3",
+        "-DNDEBUG",
+        "-std=c++17",
+        "-arch=sm_89",
+        "--use_fast_math",
+        "-I/data/riley-serving-261007/kernel-batch03-source/kernels/src",
+        "/data/riley-serving-261007/kernel-batch03-source/kernels/tests/kernel_batch03_correctness.cu",
+        "-o",
+        "/data/riley-serving-261007/kernel-batch03-validation-attempt01/primitive-check"
+      ],
+      "exit": 2,
+      "before": {
+        "time_ns": 1791348715661536954,
+        "compute_pids": "",
+        "pressure": {
+          "cpu": "some avg10=0.52 avg60=0.73 avg300=0.89 total=12624018994\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+          "io": "some avg10=6.31 avg60=10.75 avg300=9.82 total=78724187761\nfull avg10=5.93 avg60=10.11 avg300=9.09 total=72026116534\n",
+          "memory": "some avg10=0.00 avg60=0.02 avg300=0.08 total=1963998087\nfull avg10=0.00 avg60=0.01 avg300=0.06 total=1921036094\n"
+        }
+      },
+      "ended_ns": 1791348715995461559,
+      "log_sha256": "ed52dddef058f0d84336265560614cea35ccf0eaae3faef5347a078dda80e632"
+    }
+  ],
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "adopted": false,
+  "goal_achieved": false
+}

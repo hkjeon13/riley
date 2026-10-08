@@ -1,0 +1,10 @@
+
+running 1 test
+QWEN_ISOLATED_NORM step=108 rows=1 captured_native_exact=true HF_unequal_elements=0
+QWEN_ISOLATED_NORM step=108 rows=2048 captured_native_exact=true HF_unequal_elements=0
+QWEN_ISOLATED_NORM step=109 rows=1 captured_native_exact=true HF_unequal_elements=16
+QWEN_ISOLATED_NORM step=109 rows=2048 captured_native_exact=true HF_unequal_elements=16
+test qwen_layer3_isolated_rms_norm_captured_input_replay ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.31s
+

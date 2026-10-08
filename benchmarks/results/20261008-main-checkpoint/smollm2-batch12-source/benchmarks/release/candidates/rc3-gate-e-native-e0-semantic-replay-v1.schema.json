@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rc3-gate-e-native-e0-semantic-replay-v1.schema.json",
+  "title": "Riley RC3 Gate E native E0 semantic component replay v1",
+  "description": "A held-FD replay of only canonical E0's native tensor evidence. A passed native component is neither aggregate Gate E pass, semantic receipt, qualification, nor deployment authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "scope",
+    "status",
+    "authority",
+    "candidate_status",
+    "qualification_status",
+    "native_e0_status",
+    "candidate_id",
+    "source_revision",
+    "gate_e_input_inventory",
+    "frozen_candidate_manifest",
+    "native_e0",
+    "checks",
+    "not_established",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {"const": "riley.rc3-gate-e-native-e0-semantic-replay.v1"},
+    "scope": {"const": "gate-e-native-e0-semantic-component-only"},
+    "status": {"const": "bound"},
+    "authority": {"const": "gate-e-native-e0-semantic-replay-only"},
+    "candidate_status": {"const": "frozen"},
+    "qualification_status": {"const": "not-run"},
+    "native_e0_status": {"const": "passed"},
+    "candidate_id": {"$ref": "#/$defs/candidateId"},
+    "source_revision": {"$ref": "#/$defs/gitRevision"},
+    "gate_e_input_inventory": {"$ref": "#/$defs/inventoryDescriptor"},
+    "frozen_candidate_manifest": {"$ref": "#/$defs/frozenManifestDescriptor"},
+    "native_e0": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report", "raw_evidence", "candidate_executable", "source_archive"],
+      "properties": {
+        "report": {"$ref": "#/$defs/directDescriptor"},
+        "raw_evidence": {"$ref": "#/$defs/nativeRawDescriptor"},
+        "candidate_executable": {"$ref": "#/$defs/directDescriptor"},
+        "source_archive": {"$ref": "#/$defs/descriptor"}
+      }
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "prefixItems": [
+        {"$ref": "#/$defs/checkStructuralBefore"},
+        {"$ref": "#/$defs/checkSource"},
+        {"$ref": "#/$defs/checkRaw"},
+        {"$ref": "#/$defs/checkBindings"},
+        {"$ref": "#/$defs/checkNoAggregate"}
+      ],
+      "items": false
+    },
+    "not_established": {"$ref": "#/$defs/notEstablished"},
+    "reason_codes": {"type": "array", "maxItems": 0}
+  },
+  "$defs": {
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "gitRevision": {
+      "type": "string",
+      "allOf": [
+        {"pattern": "^[0-9a-f]{40}$"},
+        {"not": {"const": "0000000000000000000000000000000000000000"}}
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        {"pattern": "^[0-9a-f]{64}$"},
+        {"not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}}
+      ]
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "byte_length": {"type": "integer", "minimum": 1, "maximum": 1099511627776}
+      }
+    },
+    "directDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {"properties": {"path": {"maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"}}}
+      ]
+    },
+    "nativeRawDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/directDescriptor"},
+        {"properties": {"byte_length": {"maximum": 17179869184}}}
+      ]
+    },
+    "inventoryDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/directDescriptor"},
+        {"properties": {"path": {"const": "gate-e-inputs.json"}}}
+      ]
+    },
+    "frozenManifestDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/directDescriptor"},
+        {"properties": {"path": {"const": "frozen-candidate.json"}}}
+      ]
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "satisfied"],
+      "properties": {"name": {"type": "string"}, "satisfied": {"const": true}}
+    },
+    "checkStructuralBefore": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "closed-gate-e-input-inventory-replayed-before-native-e0"}}}]},
+    "checkSource": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "frozen-source-archive-bound-to-native-e0"}}}]},
+    "checkRaw": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "native-e0-raw-tensor-evidence-replayed"}}}]},
+    "checkBindings": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "native-e0-report-and-executable-cross-bound"}}}]},
+    "checkNoAggregate": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "native-e0-component-does-not-aggregate-gate-e"}}}]},
+    "notEstablished": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["optimizer_e0", "python_free", "performance", "soak", "gate_e_pass", "semantic_receipt", "qualification", "deployment"],
+      "properties": {
+        "optimizer_e0": {"const": "not-established"},
+        "python_free": {"const": "not-established"},
+        "performance": {"const": "not-established"},
+        "soak": {"const": "not-established"},
+        "gate_e_pass": {"const": "not-established"},
+        "semantic_receipt": {"const": "not-established"},
+        "qualification": {"const": "not-established"},
+        "deployment": {"const": "not-established"}
+      }
+    }
+  }
+}

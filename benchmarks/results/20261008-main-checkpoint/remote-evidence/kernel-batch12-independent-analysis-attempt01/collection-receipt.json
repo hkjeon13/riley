@@ -1,0 +1,107 @@
+{
+  "source": "/data/riley-serving-261007/kernel-batch12-quiet-attempt01",
+  "source_before": {
+    "completion.json": {
+      "sha256": "f3d17ab0f51077bd5ff26e4d6bfd8cee4bb63844813646c883ec7b55b00e5978",
+      "bytes": 245
+    },
+    "plan-snapshot.json": {
+      "sha256": "a4484fa903bdecdde493df9e78a49597a2c2aefcbab514ee0b29d147461b5abf",
+      "bytes": 3322
+    },
+    "validation-snapshot.json": {
+      "sha256": "0c5018ebc8dc2456c1d1bd6256af17ea0ae589ec0ed53b399c4b95afd9c12922",
+      "bytes": 115
+    },
+    "binary-receipt-snapshot.json": {
+      "sha256": "e8bdeed1c85d6b6552a881048cef7e0918f65df92afcc067407f03d281cbaa45",
+      "bytes": 146
+    },
+    "preparation.json": {
+      "sha256": "6583e5eb0a88b5ce0b4555af18ffaa87d3b15683bb986e832161295a4b62f2f7",
+      "bytes": 14747
+    },
+    "primitive-validation-snapshot.json": {
+      "sha256": "0c5018ebc8dc2456c1d1bd6256af17ea0ae589ec0ed53b399c4b95afd9c12922",
+      "bytes": 115
+    },
+    "c1-fixed-r0-v52-start-host-gate.json": {
+      "sha256": "5eff2c3cbc3d42a1d0980946307dff3031aa05a82e8a2eded19548237f8f9398",
+      "bytes": 140079
+    },
+    "http-screen-snapshot.json": {
+      "sha256": "74fdfabef2e667fd3dca9296c6c41bb0ad40bcb1a1f07de1f77f8a13d1564b25",
+      "bytes": 962
+    },
+    "controller-snapshot.py": {
+      "sha256": "9e4498c49996ae951595f7f03a67fedb4a13b728f0746697d4139d3b4aadf5e2",
+      "bytes": 15365
+    },
+    "independent-correctness-snapshot.json": {
+      "sha256": "18fa0cd9c4ff246c18c54fec078c152a61d24421997f7b3092cdf71476081a52",
+      "bytes": 1139
+    },
+    "native-process-snapshot.json": {
+      "sha256": "11b70cfabccae491f3d796c79d174f5821b9bc162974325ebd7b1a342248fa72",
+      "bytes": 597
+    }
+  },
+  "source_after": {
+    "completion.json": {
+      "sha256": "f3d17ab0f51077bd5ff26e4d6bfd8cee4bb63844813646c883ec7b55b00e5978",
+      "bytes": 245
+    },
+    "plan-snapshot.json": {
+      "sha256": "a4484fa903bdecdde493df9e78a49597a2c2aefcbab514ee0b29d147461b5abf",
+      "bytes": 3322
+    },
+    "validation-snapshot.json": {
+      "sha256": "0c5018ebc8dc2456c1d1bd6256af17ea0ae589ec0ed53b399c4b95afd9c12922",
+      "bytes": 115
+    },
+    "binary-receipt-snapshot.json": {
+      "sha256": "e8bdeed1c85d6b6552a881048cef7e0918f65df92afcc067407f03d281cbaa45",
+      "bytes": 146
+    },
+    "preparation.json": {
+      "sha256": "6583e5eb0a88b5ce0b4555af18ffaa87d3b15683bb986e832161295a4b62f2f7",
+      "bytes": 14747
+    },
+    "primitive-validation-snapshot.json": {
+      "sha256": "0c5018ebc8dc2456c1d1bd6256af17ea0ae589ec0ed53b399c4b95afd9c12922",
+      "bytes": 115
+    },
+    "c1-fixed-r0-v52-start-host-gate.json": {
+      "sha256": "5eff2c3cbc3d42a1d0980946307dff3031aa05a82e8a2eded19548237f8f9398",
+      "bytes": 140079
+    },
+    "http-screen-snapshot.json": {
+      "sha256": "74fdfabef2e667fd3dca9296c6c41bb0ad40bcb1a1f07de1f77f8a13d1564b25",
+      "bytes": 962
+    },
+    "controller-snapshot.py": {
+      "sha256": "9e4498c49996ae951595f7f03a67fedb4a13b728f0746697d4139d3b4aadf5e2",
+      "bytes": 15365
+    },
+    "independent-correctness-snapshot.json": {
+      "sha256": "18fa0cd9c4ff246c18c54fec078c152a61d24421997f7b3092cdf71476081a52",
+      "bytes": 1139
+    },
+    "native-process-snapshot.json": {
+      "sha256": "11b70cfabccae491f3d796c79d174f5821b9bc162974325ebd7b1a342248fa72",
+      "bytes": 597
+    }
+  },
+  "archive_sha256": "e37c70a719388a4686b235502d968425657388e6798722b542731691f8ceabaf",
+  "archive_bytes": 30445,
+  "terminal": {
+    "records": [],
+    "failure": {
+      "type": "RuntimeError",
+      "message": "whole attempt aborted: host start gate timeout c1-fixed-r0-v52-start"
+    },
+    "all_lanes_complete": false,
+    "goal_achieved": false,
+    "performance_qualified": false
+  }
+}

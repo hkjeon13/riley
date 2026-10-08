@@ -1,0 +1,46 @@
+{
+  "schema": "riley.serving-profile.predeclared.v1",
+  "scope": "profile after full64lane diagnostic baseline; instrumented HTTP timing is not serving comparison",
+  "baseline": "/data/riley-serving-261007/diagnostic-baseline-attempt01",
+  "engines": [
+    "v52",
+    "vllm"
+  ],
+  "concurrency": [
+    1,
+    8,
+    16,
+    32
+  ],
+  "workloads": [
+    "fixed",
+    "natural"
+  ],
+  "orders": [
+    [
+      "v52",
+      "vllm"
+    ],
+    [
+      "vllm",
+      "v52"
+    ]
+  ],
+  "warmup": 96,
+  "retained": 96,
+  "startup_timeout_seconds": 300,
+  "tool": "/usr/local/cuda/bin/nsys",
+  "expected_tool_version": "2024.6.2.225-246235244400v0",
+  "launch_trace": "cuda,nvtx,osrt",
+  "sample": "process-tree",
+  "cpuctxsw": "process-tree",
+  "backtrace": "dwarf",
+  "collection_policy": "launch session -> same-condition warmup96 -> start recording -> retained96 -> stop recording -> graceful session shutdown; do not truncate/trim traces",
+  "clock_policy": "record realtime, monotonic and monotonic_raw pairs at phase boundaries; inspect exported clock metadata before correlating GPU and HTTP clocks",
+  "analysis_policy": "GPU kernel/memcpy/API spans reported separately; derive interval unions and intersections; do not add overlapping durations; CPU stack/OSRT are diagnostic estimates; unavailable scheduler/HTTP attribution stays unmeasured",
+  "failure_policy": "preserve all artifacts and stop on errors, missing CUDA data, numerical/protocol mismatch or unreclaimed owned GPU resources; no slow sample removal",
+  "performance_claim_eligible": false,
+  "goal_achieved": false,
+  "method_reference": "https://docs.nvidia.com/nsight-systems/UserGuide/index.html",
+  "compatibility_pending": "launch/start/stop flow verified in installed CLI help; actual CUDA13 collection and CPU sampling still unverified"
+}

@@ -1,0 +1,24 @@
+{
+  "pins": {
+    "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/run_kernel_batch05_capture_pilot_attempt02.py": "3f3c3be4c2494f9f6a9c35177a9cd7f867ca1f7daf6bbfd05d6fd99ec1256522",
+    "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch05-capture-pilot-plan-attempt02.json": "df90e91d4ff0897b51d99ffb65f7762aee1e737a5cbb02e9344433e8b355ab54",
+    "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch05-independent-replay-attempt02/kernel-batch05-quiet-attempt01-independent-replay.json": "2037661024dc96472eda17e87586731b4e3f98eadc29a0ebba4db040aea4c350"
+  },
+  "wait_for": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/qwen-free-running-dispatch-attempt02/completion.json",
+  "scope": "pilot8 whole-lifetime capture after actual Batch05 failed full96 and independent Qwen own-greedy terminal; no serving claim",
+  "orders": [
+    [
+      "v52",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "v52"
+    ]
+  ],
+  "selected_cells": [
+    "c1-fixed",
+    "c32-natural"
+  ],
+  "expected_lanes": 8
+}

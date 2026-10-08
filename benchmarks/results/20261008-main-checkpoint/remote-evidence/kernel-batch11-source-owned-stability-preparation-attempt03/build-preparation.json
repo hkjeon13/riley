@@ -1,0 +1,32 @@
+{
+  "argv": [
+    "cargo",
+    "test",
+    "--locked",
+    "--release",
+    "-p",
+    "riley-server",
+    "--features",
+    "cuda,server",
+    "--test",
+    "matched_all8_source_owned_http_gpu",
+    "--no-run",
+    "--message-format=json"
+  ],
+  "env": {
+    "HOME": "/home/psyche",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "PATH": "/home/psyche/.cargo/bin:/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin:/usr/bin:/bin",
+    "CUDA_HOME": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13",
+    "CUDAToolkit_ROOT": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13",
+    "CMAKE": "/data/cmake-3.31.12/bin/cmake",
+    "CMAKE_BUILD_PARALLEL_LEVEL": "4",
+    "CARGO_BUILD_JOBS": "4",
+    "CARGO_TARGET_DIR": "/data/riley-serving-261007/kernel-batch11-source-owned-stability-target-attempt03",
+    "LD_LIBRARY_PATH": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib",
+    "CUDA_VISIBLE_DEVICES": ""
+  },
+  "source_commit": "7a34d6f1f3cbafc5763c3c5d268aad38667d1a7c",
+  "scope": "compile only; noGPU/test execution, no serving performance result"
+}

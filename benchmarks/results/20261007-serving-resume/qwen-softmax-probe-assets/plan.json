@@ -1,0 +1,43 @@
+{
+  "scope": "correctness-only; baseline reproduction precedes any hypothesis; no serving speed claim",
+  "variants": [
+    {
+      "id": "native-cu128",
+      "toolchain": "/data/cuda-12.8.1",
+      "flags": [
+        "-O3",
+        "-std=c++17",
+        "-arch=sm_89"
+      ]
+    },
+    {
+      "id": "native-cu130",
+      "toolchain": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13",
+      "flags": [
+        "-O3",
+        "-std=c++17",
+        "-arch=sm_89"
+      ]
+    },
+    {
+      "id": "native-cu128-fmad-false",
+      "toolchain": "/data/cuda-12.8.1",
+      "flags": [
+        "-O3",
+        "-std=c++17",
+        "-arch=sm_89",
+        "--fmad=false"
+      ]
+    }
+  ],
+  "order": [
+    "native-cu128",
+    "native-cu130",
+    "native-cu128-fmad-false"
+  ],
+  "required_baseline_unequal": 182,
+  "required_elements": 32784,
+  "failure_policy": "retain all variant outputs; stop on baseline failing to reproduce182 mismatches, runtime error or resource leak; no tolerance",
+  "full_M1_admission": "still requires exact all-layer full-forward and ownership tests",
+  "GPU_serialization": "wait for profiling-attempt04 terminal and controller3443585 exit, then assert GPU empty"
+}

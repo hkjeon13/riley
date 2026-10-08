@@ -1,0 +1,139 @@
+{
+  "independent_raw_replay": "PASS",
+  "archives": [
+    {
+      "name": "qwen-layer3-isolated-norm-hf-validation-attempt01",
+      "archive_sha256": "d00e509ef279344c8cb0588f907035bfe423ef9adf330a1cd364b538b6fa8fe5",
+      "bytes": 23357,
+      "files_verified": 13
+    },
+    {
+      "name": "qwen-isolated-norm-native-validation-attempt02",
+      "archive_sha256": "e66b33c7a03835cb4eea7216fe9769c26f307331c2ae3df16347d2bf113e6f8b",
+      "bytes": 41962,
+      "files_verified": 15
+    }
+  ],
+  "source_commit": "2612208b9ac02ffa79b563b87f073c239b35da18",
+  "verified_source_files": 433,
+  "native_binary_sha256": "64610f349c3d75ca8207c094c51b04cebc6215070a86b8b582e9df8a15ddb989",
+  "weight_sha256": "e8521c1cb46fcdc8500b24272568d80d6b5168720b606d17772fd43a016cf684",
+  "rows": [
+    {
+      "step": 108,
+      "native_fresh_weight_replay_exact": true,
+      "captured_old_native_HF_unequal_BF16_elements": 0,
+      "candidate_singleton_HF_unequal_BF16_elements": 0,
+      "HF_actual_shapes": [
+        {
+          "rows": 1,
+          "shape": [
+            1,
+            1,
+            2048
+          ],
+          "variance_FP32_bits": "0x3e7a484f",
+          "variance_plus_epsilon_FP32_bits": "0x3e7a4892",
+          "inverse_RMS_FP32_bits": "0x4001741a",
+          "output_sha256": "fadb0adf0a2569890f41b658e9902f9c762c819c294c72d6e080eb049bec9897",
+          "captured_HF_exact": true,
+          "captured_native_exact": true,
+          "output_file": "step108-rows1-HF-output.bf16",
+          "all_replicated_rows_equal": true
+        },
+        {
+          "rows": 16,
+          "shape": [
+            1,
+            16,
+            2048
+          ],
+          "variance_FP32_bits": "0x3e7a484f",
+          "variance_plus_epsilon_FP32_bits": "0x3e7a4892",
+          "inverse_RMS_FP32_bits": "0x4001741a",
+          "output_sha256": "fadb0adf0a2569890f41b658e9902f9c762c819c294c72d6e080eb049bec9897",
+          "captured_HF_exact": true,
+          "captured_native_exact": true,
+          "output_file": "step108-rows16-HF-output.bf16",
+          "all_replicated_rows_equal": true
+        },
+        {
+          "rows": 2048,
+          "shape": [
+            1,
+            2048,
+            2048
+          ],
+          "variance_FP32_bits": "0x3e7a484f",
+          "variance_plus_epsilon_FP32_bits": "0x3e7a4892",
+          "inverse_RMS_FP32_bits": "0x4001741a",
+          "output_sha256": "fadb0adf0a2569890f41b658e9902f9c762c819c294c72d6e080eb049bec9897",
+          "captured_HF_exact": true,
+          "captured_native_exact": true,
+          "output_file": "step108-rows2048-HF-output.bf16",
+          "all_replicated_rows_equal": true
+        }
+      ]
+    },
+    {
+      "step": 109,
+      "native_fresh_weight_replay_exact": true,
+      "captured_old_native_HF_unequal_BF16_elements": 16,
+      "candidate_singleton_HF_unequal_BF16_elements": 0,
+      "HF_actual_shapes": [
+        {
+          "rows": 1,
+          "shape": [
+            1,
+            1,
+            2048
+          ],
+          "variance_FP32_bits": "0x3e66144e",
+          "variance_plus_epsilon_FP32_bits": "0x3e661491",
+          "inverse_RMS_FP32_bits": "0x4007047e",
+          "output_sha256": "e65d03769e8f45570c7bea256b7ceffeb69f3ba99dfc43db349fd6b53faedeed",
+          "captured_HF_exact": true,
+          "captured_native_exact": false,
+          "output_file": "step109-rows1-HF-output.bf16",
+          "all_replicated_rows_equal": true
+        },
+        {
+          "rows": 16,
+          "shape": [
+            1,
+            16,
+            2048
+          ],
+          "variance_FP32_bits": "0x3e66144c",
+          "variance_plus_epsilon_FP32_bits": "0x3e66148f",
+          "inverse_RMS_FP32_bits": "0x4007047f",
+          "output_sha256": "db35c6b66e31759d1c6ab8d9da8af101c5c8b7565d9f065f152459456fbb7551",
+          "captured_HF_exact": false,
+          "captured_native_exact": true,
+          "output_file": "step109-rows16-HF-output.bf16",
+          "all_replicated_rows_equal": true
+        },
+        {
+          "rows": 2048,
+          "shape": [
+            1,
+            2048,
+            2048
+          ],
+          "variance_FP32_bits": "0x3e66144c",
+          "variance_plus_epsilon_FP32_bits": "0x3e66148f",
+          "inverse_RMS_FP32_bits": "0x4007047f",
+          "output_sha256": "db35c6b66e31759d1c6ab8d9da8af101c5c8b7565d9f065f152459456fbb7551",
+          "captured_HF_exact": false,
+          "captured_native_exact": true,
+          "output_file": "step109-rows2048-HF-output.bf16",
+          "all_replicated_rows_equal": true
+        }
+      ]
+    }
+  ],
+  "finding": "step109 singleton Torch reduction produces variance0x3e66144e; multirow Torch produces0x3e66144c and exact captured native output; candidate singleton512 reduction with fresh checkpoint weight reproduces captured HF byteexact at108/109; prefill2048 retains old exact native output",
+  "limits": "two captured singleton rows corrected byteexact; full128 correction, bounded M1/M2 regression, free-running and serving remain unverified",
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "goal_achieved": false
+}

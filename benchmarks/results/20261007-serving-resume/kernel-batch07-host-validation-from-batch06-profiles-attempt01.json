@@ -1,0 +1,608 @@
+{
+  "candidate_source_commit": "73003e2d8f1ce797b4e669c813c43261b30a46a2",
+  "profile_candidate_source_commit": "e42cc345a08913b2dc1f9a0ea618dd73e3390f8e",
+  "Rust_crate_files_unchanged_SHA256": 342,
+  "source_files": {
+    "crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs": "c83201cc96ac98d2100bddb85792c31a6f67ae030ee1120439ca4a00d03b53e0",
+    "crates/riley-runtime/src/llama/variable_session.rs": "15fe396accdefb68ba8eeaff946c814872d3351cd212b174a3c2730512361804",
+    "crates/riley-scheduler/src/scheduler.rs": "7b48d0488b7890625fd0d7e58c83072bdad5500c6c827862644544ea6f6811d8"
+  },
+  "CPU_profiles": [
+    {
+      "case": "c1-fixed-r0-v52",
+      "sqlite_sha256": "0fa51a1d5e3ff9627a5e0e934741b0934bed9d1181367425c46aa64f293ba06d",
+      "retained_target_CPU_samples": 3699,
+      "distinct_samples_by_class": {
+        "btree_insert_or_search": {
+          "samples": 1,
+          "sample_presence_percent": 0.02703433360367667
+        },
+        "wire_validate": {
+          "samples": 3,
+          "sample_presence_percent": 0.08110300081103
+        },
+        "malloc_functions": {
+          "samples": 51,
+          "sample_presence_percent": 1.37875101378751
+        },
+        "scheduler_authorize_execution": {
+          "samples": 1,
+          "sample_presence_percent": 0.02703433360367667
+        }
+      },
+      "symbols": {
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmyE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 1,
+          "unique_leaf_samples": 1
+        },
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 3,
+          "unique_leaf_samples": 1
+        },
+        "__libc_malloc": {
+          "unique_inclusive_samples": 50,
+          "unique_leaf_samples": 37
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 14,
+          "unique_leaf_samples": 4
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 9,
+          "unique_leaf_samples": 8
+        },
+        "_RNvMsg_NtCsfmfNdES9xRX_15riley_scheduler9schedulerNtB5_9Scheduler19authorize_execution": {
+          "unique_inclusive_samples": 1,
+          "unique_leaf_samples": 1
+        }
+      }
+    },
+    {
+      "case": "c1-fixed-r0-candidate",
+      "sqlite_sha256": "9c9cffbdccdea9b291c7a483b0e7548a394f2c0dd972f6470cf802040e313f13",
+      "retained_target_CPU_samples": 3126,
+      "distinct_samples_by_class": {
+        "malloc_functions": {
+          "samples": 53,
+          "sample_presence_percent": 1.6954574536148432
+        },
+        "wire_validate": {
+          "samples": 1,
+          "sample_presence_percent": 0.03198976327575176
+        }
+      },
+      "symbols": {
+        "__libc_malloc": {
+          "unique_inclusive_samples": 52,
+          "unique_leaf_samples": 40
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 12,
+          "unique_leaf_samples": 8
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 5,
+          "unique_leaf_samples": 4
+        },
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 1,
+          "unique_leaf_samples": 0
+        }
+      }
+    },
+    {
+      "case": "c1-fixed-r1-candidate",
+      "sqlite_sha256": "75b7748846392340a24b7d4db4b2a0d917480e61400048e294e748024502ca13",
+      "retained_target_CPU_samples": 3116,
+      "distinct_samples_by_class": {
+        "malloc_functions": {
+          "samples": 49,
+          "sample_presence_percent": 1.5725288831835686
+        },
+        "wire_validate": {
+          "samples": 4,
+          "sample_presence_percent": 0.12836970474967907
+        },
+        "btree_insert_or_search": {
+          "samples": 1,
+          "sample_presence_percent": 0.03209242618741977
+        }
+      },
+      "symbols": {
+        "__libc_malloc": {
+          "unique_inclusive_samples": 48,
+          "unique_leaf_samples": 39
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 3,
+          "unique_leaf_samples": 2
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 10,
+          "unique_leaf_samples": 7
+        },
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 4,
+          "unique_leaf_samples": 0
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmyE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 1,
+          "unique_leaf_samples": 1
+        }
+      }
+    },
+    {
+      "case": "c1-fixed-r1-v52",
+      "sqlite_sha256": "a780d8ee1ce5402b8f621df417f0a9edb684029b89c3c4ccbbc9dc32d532642e",
+      "retained_target_CPU_samples": 3694,
+      "distinct_samples_by_class": {
+        "malloc_functions": {
+          "samples": 52,
+          "sample_presence_percent": 1.4076881429344883
+        },
+        "wire_validate": {
+          "samples": 1,
+          "sample_presence_percent": 0.02707092582566324
+        }
+      },
+      "symbols": {
+        "__libc_malloc": {
+          "unique_inclusive_samples": 50,
+          "unique_leaf_samples": 38
+        },
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 1,
+          "unique_leaf_samples": 0
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 14,
+          "unique_leaf_samples": 10
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 4,
+          "unique_leaf_samples": 4
+        }
+      }
+    },
+    {
+      "case": "c32-fixed-r0-v52",
+      "sqlite_sha256": "cf7b85b76a1f05e68ce2cc7ac2f5508210c00c9181cdb38fe7acf1f924a195b1",
+      "retained_target_CPU_samples": 350,
+      "distinct_samples_by_class": {
+        "scheduler_authorize_execution": {
+          "samples": 2,
+          "sample_presence_percent": 0.5714285714285714
+        },
+        "btree_insert_or_search": {
+          "samples": 3,
+          "sample_presence_percent": 0.8571428571428571
+        },
+        "wire_validate": {
+          "samples": 3,
+          "sample_presence_percent": 0.8571428571428571
+        },
+        "malloc_functions": {
+          "samples": 9,
+          "sample_presence_percent": 2.5714285714285716
+        }
+      },
+      "symbols": {
+        "_RNvMsg_NtCsfmfNdES9xRX_15riley_scheduler9schedulerNtB5_9Scheduler19authorize_execution": {
+          "unique_inclusive_samples": 2,
+          "unique_leaf_samples": 1
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmyE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 1,
+          "unique_leaf_samples": 0
+        },
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 3,
+          "unique_leaf_samples": 0
+        },
+        "__libc_malloc": {
+          "unique_inclusive_samples": 8,
+          "unique_leaf_samples": 6
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 3,
+          "unique_leaf_samples": 3
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 2,
+          "unique_leaf_samples": 1
+        }
+      }
+    },
+    {
+      "case": "c32-fixed-r0-candidate",
+      "sqlite_sha256": "9773614f375190f5ba9fd71c6a728581122a3f81480f5fdb76455423b22b9253",
+      "retained_target_CPU_samples": 338,
+      "distinct_samples_by_class": {
+        "btree_insert_or_search": {
+          "samples": 6,
+          "sample_presence_percent": 1.7751479289940828
+        },
+        "wire_validate": {
+          "samples": 9,
+          "sample_presence_percent": 2.662721893491124
+        },
+        "malloc_functions": {
+          "samples": 4,
+          "sample_presence_percent": 1.183431952662722
+        },
+        "scheduler_authorize_execution": {
+          "samples": 1,
+          "sample_presence_percent": 0.2958579881656805
+        }
+      },
+      "symbols": {
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 4,
+          "unique_leaf_samples": 4
+        },
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 9,
+          "unique_leaf_samples": 2
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmyE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 2,
+          "unique_leaf_samples": 2
+        },
+        "__libc_malloc": {
+          "unique_inclusive_samples": 3,
+          "unique_leaf_samples": 2
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 1,
+          "unique_leaf_samples": 1
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 2,
+          "unique_leaf_samples": 1
+        },
+        "_RNvMsg_NtCsfmfNdES9xRX_15riley_scheduler9schedulerNtB5_9Scheduler19authorize_execution": {
+          "unique_inclusive_samples": 1,
+          "unique_leaf_samples": 1
+        }
+      }
+    },
+    {
+      "case": "c32-fixed-r1-candidate",
+      "sqlite_sha256": "501d5d244033ae552ffd9098879c9fbced1ef0af0d6e4cb26ef24dbd33e157eb",
+      "retained_target_CPU_samples": 341,
+      "distinct_samples_by_class": {
+        "wire_validate": {
+          "samples": 10,
+          "sample_presence_percent": 2.932551319648094
+        },
+        "btree_insert_or_search": {
+          "samples": 6,
+          "sample_presence_percent": 1.7595307917888563
+        },
+        "malloc_functions": {
+          "samples": 8,
+          "sample_presence_percent": 2.346041055718475
+        },
+        "scheduler_authorize_execution": {
+          "samples": 1,
+          "sample_presence_percent": 0.2932551319648094
+        }
+      },
+      "symbols": {
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 10,
+          "unique_leaf_samples": 2
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 1,
+          "unique_leaf_samples": 1
+        },
+        "__libc_malloc": {
+          "unique_inclusive_samples": 8,
+          "unique_leaf_samples": 5
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 3,
+          "unique_leaf_samples": 2
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmyE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 4,
+          "unique_leaf_samples": 3
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapyNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 1,
+          "unique_leaf_samples": 1
+        },
+        "_RNvMsg_NtCsfmfNdES9xRX_15riley_scheduler9schedulerNtB5_9Scheduler19authorize_execution": {
+          "unique_inclusive_samples": 1,
+          "unique_leaf_samples": 0
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 1,
+          "unique_leaf_samples": 1
+        }
+      }
+    },
+    {
+      "case": "c32-fixed-r1-v52",
+      "sqlite_sha256": "abd19d7c04548a83657d7d46689fe9fcebd39eb31eaa9e62093e8825687e3a0c",
+      "retained_target_CPU_samples": 349,
+      "distinct_samples_by_class": {
+        "malloc_functions": {
+          "samples": 8,
+          "sample_presence_percent": 2.292263610315186
+        },
+        "btree_insert_or_search": {
+          "samples": 4,
+          "sample_presence_percent": 1.146131805157593
+        },
+        "wire_validate": {
+          "samples": 8,
+          "sample_presence_percent": 2.292263610315186
+        }
+      },
+      "symbols": {
+        "__libc_malloc": {
+          "unique_inclusive_samples": 7,
+          "unique_leaf_samples": 2
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmyE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 1,
+          "unique_leaf_samples": 1
+        },
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 8,
+          "unique_leaf_samples": 4
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 3,
+          "unique_leaf_samples": 3
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 4,
+          "unique_leaf_samples": 4
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 6,
+          "unique_leaf_samples": 2
+        }
+      }
+    },
+    {
+      "case": "c32-natural-r0-v52",
+      "sqlite_sha256": "9353b03d175ebf71bc5af8b1c31ff8d0676ea6cfd23d72c6a0ef826b8c474a9d",
+      "retained_target_CPU_samples": 1103,
+      "distinct_samples_by_class": {
+        "btree_insert_or_search": {
+          "samples": 46,
+          "sample_presence_percent": 4.170444242973708
+        },
+        "wire_validate": {
+          "samples": 62,
+          "sample_presence_percent": 5.621033544877607
+        },
+        "malloc_functions": {
+          "samples": 20,
+          "sample_presence_percent": 1.813236627379873
+        },
+        "scheduler_authorize_execution": {
+          "samples": 25,
+          "sample_presence_percent": 2.2665457842248413
+        }
+      },
+      "symbols": {
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmyE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 20,
+          "unique_leaf_samples": 17
+        },
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 62,
+          "unique_leaf_samples": 13
+        },
+        "__libc_malloc": {
+          "unique_inclusive_samples": 20,
+          "unique_leaf_samples": 11
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 26,
+          "unique_leaf_samples": 21
+        },
+        "_RNvMsg_NtCsfmfNdES9xRX_15riley_scheduler9schedulerNtB5_9Scheduler19authorize_execution": {
+          "unique_inclusive_samples": 25,
+          "unique_leaf_samples": 17
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 9,
+          "unique_leaf_samples": 6
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 2,
+          "unique_leaf_samples": 1
+        }
+      }
+    },
+    {
+      "case": "c32-natural-r0-candidate",
+      "sqlite_sha256": "2414d594ac7958e6c86a345c18a3289337d6df37a2c899650dfecbe844db8070",
+      "retained_target_CPU_samples": 1049,
+      "distinct_samples_by_class": {
+        "btree_insert_or_search": {
+          "samples": 37,
+          "sample_presence_percent": 3.5271687321258343
+        },
+        "wire_validate": {
+          "samples": 62,
+          "sample_presence_percent": 5.910390848427073
+        },
+        "scheduler_authorize_execution": {
+          "samples": 16,
+          "sample_presence_percent": 1.5252621544327931
+        },
+        "malloc_functions": {
+          "samples": 22,
+          "sample_presence_percent": 2.0972354623450906
+        }
+      },
+      "symbols": {
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmyE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 20,
+          "unique_leaf_samples": 12
+        },
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 62,
+          "unique_leaf_samples": 20
+        },
+        "_RNvMsg_NtCsfmfNdES9xRX_15riley_scheduler9schedulerNtB5_9Scheduler19authorize_execution": {
+          "unique_inclusive_samples": 16,
+          "unique_leaf_samples": 9
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 5,
+          "unique_leaf_samples": 4
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 12,
+          "unique_leaf_samples": 7
+        },
+        "__libc_malloc": {
+          "unique_inclusive_samples": 21,
+          "unique_leaf_samples": 10
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 17,
+          "unique_leaf_samples": 11
+        }
+      }
+    },
+    {
+      "case": "c32-natural-r1-candidate",
+      "sqlite_sha256": "f4452ae53f05c4deba5118d542e8ab072997f4f30be7b1bf4c51824d8090b479",
+      "retained_target_CPU_samples": 1094,
+      "distinct_samples_by_class": {
+        "btree_insert_or_search": {
+          "samples": 48,
+          "sample_presence_percent": 4.387568555758683
+        },
+        "wire_validate": {
+          "samples": 64,
+          "sample_presence_percent": 5.850091407678245
+        },
+        "scheduler_authorize_execution": {
+          "samples": 19,
+          "sample_presence_percent": 1.736745886654479
+        },
+        "malloc_functions": {
+          "samples": 18,
+          "sample_presence_percent": 1.6453382084095065
+        }
+      },
+      "symbols": {
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmyE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 21,
+          "unique_leaf_samples": 16
+        },
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 64,
+          "unique_leaf_samples": 12
+        },
+        "_RNvMsg_NtCsfmfNdES9xRX_15riley_scheduler9schedulerNtB5_9Scheduler19authorize_execution": {
+          "unique_inclusive_samples": 19,
+          "unique_leaf_samples": 15
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 24,
+          "unique_leaf_samples": 20
+        },
+        "__libc_malloc": {
+          "unique_inclusive_samples": 16,
+          "unique_leaf_samples": 11
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 7,
+          "unique_leaf_samples": 5
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapyNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 3,
+          "unique_leaf_samples": 1
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 1,
+          "unique_leaf_samples": 1
+        }
+      }
+    },
+    {
+      "case": "c32-natural-r1-v52",
+      "sqlite_sha256": "ac20032b432cb4642888803e5afb50b9c42d219248844335a34ca00e8b1b9173",
+      "retained_target_CPU_samples": 1090,
+      "distinct_samples_by_class": {
+        "scheduler_authorize_execution": {
+          "samples": 21,
+          "sample_presence_percent": 1.926605504587156
+        },
+        "wire_validate": {
+          "samples": 54,
+          "sample_presence_percent": 4.954128440366972
+        },
+        "btree_insert_or_search": {
+          "samples": 35,
+          "sample_presence_percent": 3.2110091743119265
+        },
+        "malloc_functions": {
+          "samples": 23,
+          "sample_presence_percent": 2.110091743119266
+        }
+      },
+      "symbols": {
+        "_RNvMsg_NtCsfmfNdES9xRX_15riley_scheduler9schedulerNtB5_9Scheduler19authorize_execution": {
+          "unique_inclusive_samples": 21,
+          "unique_leaf_samples": 17
+        },
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 54,
+          "unique_leaf_samples": 15
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 18,
+          "unique_leaf_samples": 14
+        },
+        "__libc_malloc": {
+          "unique_inclusive_samples": 23,
+          "unique_leaf_samples": 12
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 11,
+          "unique_leaf_samples": 7
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 4,
+          "unique_leaf_samples": 4
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapyNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 2,
+          "unique_leaf_samples": 1
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmyE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 15,
+          "unique_leaf_samples": 14
+        }
+      }
+    }
+  ],
+  "phase_analysis_sha256": "e0813ea65ef61c1a17cabb84130b40e30f4fbb559231b0c2ff3df780afe53023",
+  "source_contract_findings": [
+    "Request encoding validates authority before clearing/writing packet.",
+    "Production execute_rows owns Expectation in self.retained through replay/read_transfer; completion validators validate authority again before publication.",
+    "Validation constructs one ownership BTreeMap and four BTreeSets per call; ROWS supported8/16/32, pool bounded1..4096.",
+    "Invalid native execution/completion poisons session and retains owner; scheduler commit confirms exact completed iteration before releasing expectation."
+  ],
+  "next_experiment_if_full_screen_fails": "Measure bounded ownership lookup and duplicate-set allocation alternatives with unchanged validation order/errors/packet bytes; preserve all pre-submit/pre-publication/cancel/reuse guards. No candidate implemented or adopted by this audit.",
+  "limits": [
+    "Distinct sample presence is not execution time; classes overlap and are never added.",
+    "LBR stacks may be incomplete/unresolved; no CPU/GPU causal attribution or speedup estimate.",
+    "Root diagnostic profiling UID0 differs from actual serving UID1000.",
+    "All original raw traces and samples retained; sampling presence does not qualify serving performance."
+  ],
+  "serving_performance": "\ubbf8\uc2e4\ud589; source/profiling audit only",
+  "goal_achieved": false
+}

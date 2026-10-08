@@ -1,0 +1,69 @@
+{
+  "status": "DRAFT_NOT_DISPATCHABLE_UNTIL_ALL96_REPLAY_AND_SOURCE_OWNERSHIP",
+  "cases": [
+    "c1-fixed",
+    "c1-natural",
+    "c8-fixed",
+    "c8-natural",
+    "c16-fixed",
+    "c16-natural",
+    "c32-fixed",
+    "c32-natural"
+  ],
+  "engines": [
+    "v52",
+    "candidate",
+    "vllm"
+  ],
+  "sustained_seconds": 300,
+  "cancellation_trials_each_mode": 20,
+  "pins": {
+    "/data/riley-serving-261007/kernel-batch12-stability-controller-draft-attempt01/serving_token_client_v2.py": "2bc9238265666b99654f4f4e456ca0bb10c45b8bed8f28493452b89c1f450fcf",
+    "/data/riley-serving-261007/kernel-batch12-stability-controller-draft-attempt01/fixtures.json": "ae1f6f48a2acc1f7c0a6f084567bb96916cb005eeb727ae59aca815f1c5ab955",
+    "/data/riley-serving-261007/kernel-batch12-stability-controller-draft-attempt01/frozen_helpers.py": "630220484acaf86cd40e64ee9c5df32660d7e802cbb3b97971a318480446725a",
+    "/data/riley-serving-261007/kernel-batch12-stability-controller-draft-attempt01/stability.py": "aa2c55a67c222263673f9a4ee4c87b4becdc94a753388a3495bb5c8bbd4b7d2b",
+    "/data/riley-serving-261007/kernel-batch12-stability-controller-draft-attempt01/mixed_phase_v34.py": "c37408fb6d02f41ee7fb56d6bd41beda305dd2cf5bb4ef3a73879cb44401c96f"
+  },
+  "prerequisite_receipts": [
+    "/data/riley-serving-261007/kernel-batch12-quiet-attempt02/completion.json",
+    "/data/riley-serving-261007/kernel-batch12-independent-analysis-attempt02/completion.json",
+    "/data/riley-serving-261007/kernel-batch12-host-independent-analysis-attempt02/completion.json"
+  ],
+  "no_exclusions": true,
+  "performance_qualification": false,
+  "remaining_before_execution": [
+    "Pin complete replay and host receipts after matched96 terminal",
+    "Freeze dispatch source and two ABC/CBA repetitions per all8 cell",
+    "Source-owned prefill cancellation and reserved KV/outstanding iteration evidence still absent; driver remains supplemental stability scope",
+    "Independent cancellation counters, shutdown source-owned ownership and HTTP protocol replay must be verified before claiming full stability"
+  ],
+  "orders": [
+    [
+      "v52",
+      "candidate",
+      "vllm"
+    ],
+    [
+      "vllm",
+      "candidate",
+      "v52"
+    ]
+  ],
+  "helper_API_review": {
+    "mixed_phase_positional": [
+      "client",
+      "request_one"
+    ],
+    "returns": [
+      "rows",
+      "accounting",
+      "summary"
+    ],
+    "exact_row_field": "reference_match",
+    "source_reviewed": "/data/riley-serving-261007/kernel-batch12-controller-attempt01"
+  },
+  "all_predeclared_lanes": 48,
+  "repeats": 2,
+  "gpu_observed_memory_cap_MiB": 20480,
+  "correctness_policy": "All engine transport/protocol valid; Riley exact original frozen token/text/EOS; vLLM reference differences preserved in every row, not converted into engine faults or ignored transport errors."
+}

@@ -1,0 +1,28 @@
+{
+  "exit": 0,
+  "host": {
+    "time_ns": 1791398872273177744,
+    "clocks": {
+      "perf_counter_before_ns": 911499222594047,
+      "perf_counter_after_ns": 911499222595409,
+      "epoch_ns": 1791398872273177744,
+      "monotonic_ns": 911499222594917,
+      "monotonic_raw_ns": 911486304548077,
+      "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+    },
+    "pressure": {
+      "cpu": "some avg10=0.44 avg60=1.42 avg300=1.54 total=14101342150\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+      "io": "some avg10=4.32 avg60=3.68 avg300=3.50 total=80970084927\nfull avg10=4.12 avg60=2.96 avg300=2.78 total=73954618690\n",
+      "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2117009614\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2066709112\n"
+    },
+    "loadavg": "8.24 9.46 9.80 6/8227 848482\n",
+    "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 50, 204.54, 2715, 311, 72"
+  },
+  "before_stop_process_memory": {
+    "rss_KiB_by_pid": {
+      "847386": 774468
+    },
+    "rss_sum_KiB": 774468,
+    "scope": "instantaneous process-group RSS sum; shared pages may count more than once; sampled each second"
+  }
+}

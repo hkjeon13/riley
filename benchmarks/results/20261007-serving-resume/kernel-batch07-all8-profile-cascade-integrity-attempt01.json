@@ -1,0 +1,23 @@
+{
+  "created_ns": 1791382597191077000,
+  "policy_sha256": "0bb59ac03d693db695b1a9ef7de9fe522a87322ce08011f73412b5137dc67b59",
+  "source_sha256": {
+    "dispatch_kernel_batch07_cpu_capture_all8_profile_attempt01.py": "caec48af716dd9834ceac795a9898d5a6e022e88179f6aa7605b52e4eb13d9db",
+    "collect_verify_kernel_batch07_cpu_capture_all8_profile_attempt01.py": "e3165818a89dc08dd78d072e6aca8951da79fe67ef1fcc8f5eff24b34ad38ba0",
+    "run_kernel_batch07_cpu_capture_all8_profile_attempt01.py": "f06cbbb43b928f57479faf08eb5dfa4dc98e3b4f225547acba46862a60896180",
+    "verify_kernel_batch07_cpu_capture_all8_profile_attempt01.py": "51b05c9372631702f016157862951e6d3b14e8317c234942ee6fab4dd6057d14",
+    "collect_kernel_batch07_cpu_capture_all8_profile_raw_attempt01.py": "6e68d183d2114d7670ba2a7b18d748efa36a7c2bf84baa8bad831347afdecaf6",
+    "analyze_kernel_batch07_cpu_capture_all8_profile_phases_attempt01.py": "dfa2907c797d8940344e8eb1dfbe9bbd2baa201d6a81b1c29fa73e03433be91e",
+    "analyze_kernel_batch07_cpu_stacks_attempt01.py": "e4a36169c3f7cff6e82cc71446524402bdab9a41c1b6406544950c6833479f54",
+    "analyze_profile_intervals.py": "7743dafa285a9c528bf4b4a41419552b2e202b2078f9de7624d9f97e7200c6cb",
+    "verify_kernel_batch04.py": "0084af308c71dd3f270d9df5e7958e99a17cc8005319b553253edd6230c3a7e4",
+    "summarize_baseline.py": "4f8cd5708bf8c3bd739520298ed9612e692874be5ddabe89e32acf2ae76eae66"
+  },
+  "source_commit": "73003e2d8f1ce797b4e669c813c43261b30a46a2",
+  "binary_sha256": "be2d848f574c02b695a98e4c2f780b68bdf1b4d6b1f3ce1d31c3771cc3391f7c",
+  "profiles_expected": 32,
+  "HTTP_requests_expected": 6144,
+  "scope": "all8 ABBA diagnostic only, triggered on terminal independently verified full96 FAIL; real GPU profile remains 미실행",
+  "validation": "AST, source-policy equality and immutable native proof binding; no execution/completeness/serving claims",
+  "goal_achieved": false
+}

@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-261007/run_kernel_batch05_capture_pilot_attempt01.py", line 233, in <module>
+    if __name__=='__main__':main()
+                            ~~~~^^
+  File "/data/riley-serving-261007/run_kernel_batch05_capture_pilot_attempt01.py", line 206, in main
+    try:stop_session(lane,session,process,nsys,env,argv)
+        ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/riley-serving-261007/run_kernel_batch05_capture_pilot_attempt01.py", line 109, in stop_session
+    raise RuntimeError('full capture shutdown/reclamation failed: '+str(error))
+RuntimeError: full capture shutdown/reclamation failed: owned target selector is not unique

@@ -1,0 +1,1191 @@
+{
+  "schema": "riley.qwen-hf-step108-109-observer.v1",
+  "producer": {
+    "implementation_id": "riley-python-qwen3b-hf-eager-cache-on-layer-stage-v1",
+    "runtime_dependency_class": "offline-python-reference",
+    "python_version": "3.12.3",
+    "python_executable_sha256": "a92f0f95e883390c7256b2e441484aac06b1002dbe1d924141a77c8d82f96223",
+    "python_platform_system": "linux",
+    "python_platform_machine": "x86_64",
+    "torch_version": "2.13.0+cu129",
+    "transformers_version": "5.16.1",
+    "safetensors_version": "0.8.0",
+    "selected_device": {
+      "requested": "cuda:0",
+      "resolved": "cuda:0",
+      "index": 0,
+      "name": "NVIDIA GeForce RTX 4090",
+      "compute_capability": "8.9",
+      "driver_version": "580.178.04",
+      "runtime_cuda_version": "12.9"
+    },
+    "transformers_model_source": {
+      "module": "transformers.models.qwen2.modeling_qwen2",
+      "filename": "modeling_qwen2.py",
+      "sha256": "34390fea7648b444d5727abef0b85acceba28f856aedec6c335d51253806bfee"
+    },
+    "transformers_qwen2_source": {
+      "path": "transformers/models/qwen2/modeling_qwen2.py",
+      "sha256": "34390fea7648b444d5727abef0b85acceba28f856aedec6c335d51253806bfee"
+    }
+  },
+  "overlay_script_sha256": "e82446e473df479fd55c3cd35659f993b9a03a8bb426cd8425c6fb52a81269ab",
+  "original_HF_manifest_sha256": "b2fc7301636ba618b904b554cd914ac35dd88c2f83e7c7736571353a4fd1fa4d",
+  "teacher_manifest_sha256": "35d5d9b153d73b4badc67e5eedf2e8226ca2b55c7e30eb0970cfb741031edd35",
+  "teacher_sidecar_sha256": "d1c649d126d494b5d902fa14ff22fbab46f13feeed46df380b9f55f4e5ab4c39",
+  "source110_logits_all_exact": true,
+  "selected_stages": {
+    "decode_step_108.embedding.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        0,
+        4096
+      ],
+      "sha256": "7888ce225572476f49ac04f31598d5ad59a0e293bae00cbf9fb0c740bc85a90b"
+    },
+    "decode_step_108.layer0.input_norm.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        4096,
+        8192
+      ],
+      "sha256": "c96b9e0901b23868199768893aa93c211ede80a1551a7648d1e544b5d86358fc"
+    },
+    "decode_step_108.layer0.q_proj.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        8192,
+        12288
+      ],
+      "sha256": "98704c51fcf5683a770ec1f292d0e4f90c0a6dfab76f8cdcc27d1fa9fc0ccb8d"
+    },
+    "decode_step_108.layer0.k_proj.last": {
+      "shape": [
+        256
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        12288,
+        12800
+      ],
+      "sha256": "8b6ce2eaeb349a405c1acf42010b148d3ef4b88c521a00b488e4be2089ce76e0"
+    },
+    "decode_step_108.layer0.v_proj.last": {
+      "shape": [
+        256
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        12800,
+        13312
+      ],
+      "sha256": "62b03f7a15c96363307dbaca7ef3f8372960e477aecfbbe619bdac27d5881d24"
+    },
+    "decode_step_108.layer0.q_rope.last": {
+      "shape": [
+        16,
+        128
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        13312,
+        17408
+      ],
+      "sha256": "c5b45350a05158b25da8515eaf0a63dafedf8ce88f35c7c085eec806dbab444c"
+    },
+    "decode_step_108.layer0.k_rope.last": {
+      "shape": [
+        2,
+        128
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        17408,
+        17920
+      ],
+      "sha256": "4c7e91e88bfaa49723faec707013bc2feb2fed23decb891a3cb74f1293e8fc1b"
+    },
+    "decode_step_108.layer0.attention_context.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        17920,
+        22016
+      ],
+      "sha256": "15104e7982646828ed212f48684cb1084b70ecedf6fbc71b03e2bad7f730c002"
+    },
+    "decode_step_108.layer0.after_attention_residual.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        22016,
+        26112
+      ],
+      "sha256": "1422d51f311b158773c97c0c5c6e5f67218b826899f8c8a199ebc3b5ffac1075"
+    },
+    "decode_step_108.layer0.post_attention_norm.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        26112,
+        30208
+      ],
+      "sha256": "38edaafe9f706f6f5e9e9126683965b14fac672510917e284384db897e92be4c"
+    },
+    "decode_step_108.layer0.gate_proj.last": {
+      "shape": [
+        11008
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        30208,
+        52224
+      ],
+      "sha256": "39ccd569f6abdc800dce855b8ff92e872745031bbfc8f979a1b6d3a52b509d3a"
+    },
+    "decode_step_108.layer0.up_proj.last": {
+      "shape": [
+        11008
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        52224,
+        74240
+      ],
+      "sha256": "d62736f37295bdc928bf58fea5a20a1c1ca7a5ff2fa1f5c385f4b452655e6237"
+    },
+    "decode_step_108.layer0.gated.last": {
+      "shape": [
+        11008
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        74240,
+        96256
+      ],
+      "sha256": "09c308f6740ebe6088c798411c630a9c076a96a8a46a6e5969db9f6c7166c5e8"
+    },
+    "decode_step_108.layer0.down_proj.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        96256,
+        100352
+      ],
+      "sha256": "29ef46dc7f30f7ef0f93835af6ae2cdf24d331cc4f2437f6bbca94e983c69a4a"
+    },
+    "decode_step_108.layer0.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        100352,
+        104448
+      ],
+      "sha256": "a4e0b982630b7d0d8bb718cc5738dace8e2c4c6244fc9bd72fddb9925582bc21"
+    },
+    "decode_step_108.layer1.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        104448,
+        108544
+      ],
+      "sha256": "4752e2072318498fa30c34c934afb621283ab453e775f474e83c0c98da62cd63"
+    },
+    "decode_step_108.layer2.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        108544,
+        112640
+      ],
+      "sha256": "d044ee8b653b02efd01a036c9133fee21f5105bae43261db8edb6b67abd53818"
+    },
+    "decode_step_108.layer3.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        112640,
+        116736
+      ],
+      "sha256": "2b8b668b1ed36ded1be1998bbc8f50cbd93e9568a125ffc5500b1775cbf6ddc3"
+    },
+    "decode_step_108.layer4.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        116736,
+        120832
+      ],
+      "sha256": "7405e1c9951d12ae8e54674e67fefa577da474e5cf9689fecd9fb0a84f82e12a"
+    },
+    "decode_step_108.layer5.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        120832,
+        124928
+      ],
+      "sha256": "376a619597b62aeb82123c8a98cd03b43bcb1016a85242b8259eb17e82b2fe69"
+    },
+    "decode_step_108.layer6.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        124928,
+        129024
+      ],
+      "sha256": "273703ea0109a36f917588bc48bca86834e7b85bdd76e0f9c4dc065caa2c67e6"
+    },
+    "decode_step_108.layer7.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        129024,
+        133120
+      ],
+      "sha256": "bbe3f30df90142baf4ba627aa6df8c178927c316a319297aa15a292511d46e7b"
+    },
+    "decode_step_108.layer8.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        133120,
+        137216
+      ],
+      "sha256": "68cb8d71826a4db105db8dd7b2ff5343c6bf1a0350a31890a55935b165ae37f0"
+    },
+    "decode_step_108.layer9.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        137216,
+        141312
+      ],
+      "sha256": "427fa194300d37a475da51ea9aea88d1e515b018c10d3d76693b326e9703262d"
+    },
+    "decode_step_108.layer10.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        141312,
+        145408
+      ],
+      "sha256": "d1b59207146bcc3f544fc20b9996dfca975cd685588928569b0f586516258b0b"
+    },
+    "decode_step_108.layer11.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        145408,
+        149504
+      ],
+      "sha256": "985337ddc8dabef94dde7d350ce358f04fbaf295a739d345a8e5e100accd001f"
+    },
+    "decode_step_108.layer12.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        149504,
+        153600
+      ],
+      "sha256": "2cf3c2013be076a40706bc36c26ce73e2a07535ac7c2a24ef7ece8375dc26914"
+    },
+    "decode_step_108.layer13.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        153600,
+        157696
+      ],
+      "sha256": "8e4302d0f26bfb7dd3c56ef42584759e479de35bc17c1ba08638cb80f32401a8"
+    },
+    "decode_step_108.layer14.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        157696,
+        161792
+      ],
+      "sha256": "20c53775c0a7a2253102e50803b1681d5bddedf9254b5fdbb1c37087dc63b1f8"
+    },
+    "decode_step_108.layer15.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        161792,
+        165888
+      ],
+      "sha256": "237d2ab2ff23dd0dac66425264458891c5adfedcff33303202095d92ed05b0bf"
+    },
+    "decode_step_108.layer16.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        165888,
+        169984
+      ],
+      "sha256": "a3d1d023cb50b16db1bf95fdc1a00b9246edf8f9500071cced8590eb17f11459"
+    },
+    "decode_step_108.layer17.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        169984,
+        174080
+      ],
+      "sha256": "afe763cba94f9f21ba47fac9a9765044f80d5f5a15dbbb5a4f6a598eea221937"
+    },
+    "decode_step_108.layer18.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        174080,
+        178176
+      ],
+      "sha256": "0073f4dc136aba10a19ae5dee14410a71174e3585fb4d641fb67cd6ee0002bda"
+    },
+    "decode_step_108.layer19.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        178176,
+        182272
+      ],
+      "sha256": "f6be6de8e8a07eebcdef4549a766575922adb0ee6d72aea0c74396ee18deaf56"
+    },
+    "decode_step_108.layer20.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        182272,
+        186368
+      ],
+      "sha256": "9eddb90c0e1e8d2248819a465b5b2656670e7ed51103cfb993d2e8767a622cda"
+    },
+    "decode_step_108.layer21.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        186368,
+        190464
+      ],
+      "sha256": "33969488472b8dbb0e6d44c25f1c4683dad3769e0625a9f1320b5e50aca2d183"
+    },
+    "decode_step_108.layer22.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        190464,
+        194560
+      ],
+      "sha256": "d3a90e68fabc5adf130f7932c103bebf91cc2bc243ea30f996ad3ba175145022"
+    },
+    "decode_step_108.layer23.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        194560,
+        198656
+      ],
+      "sha256": "cb89fcb1b6d942ff39a1cd0aceeac64105e7fac3bb9c07d1ae8632a7910f1d4a"
+    },
+    "decode_step_108.layer24.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        198656,
+        202752
+      ],
+      "sha256": "c339f3a0f170d75abf0b34a0516b50bbf365e62366ff512341345b94512146ac"
+    },
+    "decode_step_108.layer25.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        202752,
+        206848
+      ],
+      "sha256": "4d5798cdec4859710bec425d03320a7d1bc60057ed9e399c3f2327578fc4c36f"
+    },
+    "decode_step_108.layer26.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        206848,
+        210944
+      ],
+      "sha256": "7be26d9ad44d1edb119a109e2369b73854df532244bcde42a682f7e0b361dc8b"
+    },
+    "decode_step_108.layer27.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        210944,
+        215040
+      ],
+      "sha256": "d306ce5d7e68eeefb2bff6b5ed208e9aa381e4363a6fcd9fcd9b592864356a3f"
+    },
+    "decode_step_108.layer28.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        215040,
+        219136
+      ],
+      "sha256": "dee134b63dc360430149065bb531641b9396dfd24d81f74d3f517973fa138d89"
+    },
+    "decode_step_108.layer29.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        219136,
+        223232
+      ],
+      "sha256": "4ca74ec2fa8ee5bb238dc2d19de9a872dac8d07508aba4dac161201b2f404eba"
+    },
+    "decode_step_108.layer30.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        223232,
+        227328
+      ],
+      "sha256": "161fdebda23a02e9df78616c12ff95dc0ffc5a4a73ffccb0e9d7feed5948e619"
+    },
+    "decode_step_108.layer31.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        227328,
+        231424
+      ],
+      "sha256": "bf1063ef81b91847fe32c5be588fbec4a858cae920fb6a754cf903802c92f5d7"
+    },
+    "decode_step_108.layer32.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        231424,
+        235520
+      ],
+      "sha256": "1f4e45d630fe483708a77b7b07188a22676ec5eb0c40a69d079b53f1f3134c58"
+    },
+    "decode_step_108.layer33.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        235520,
+        239616
+      ],
+      "sha256": "446574e6e905a65f7d58db86c21923a69ac5118a24664f726a7752938793dadb"
+    },
+    "decode_step_108.layer34.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        239616,
+        243712
+      ],
+      "sha256": "e8936e63376d41addafcca32ba8e8f413a1f61679729641fc0714d351ecae755"
+    },
+    "decode_step_108.layer35.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        243712,
+        247808
+      ],
+      "sha256": "c9e9fba7ef9dd18001ffa178f01aa4fa4e9b2a2cb629441950fb1434daf54c31"
+    },
+    "decode_step_108.final_norm.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        247808,
+        251904
+      ],
+      "sha256": "bc35e43a39c7c8c3cc11f1457fd3255b1ee72def9e48af3dc615a579d9ad1e51"
+    },
+    "decode_step_108.last_logits": {
+      "shape": [
+        151936
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        251904,
+        555776
+      ],
+      "sha256": "7e170a8fa3c24f5007b90c4e6379abb76ecd4f09252ee580b4dbd57b40967b0c"
+    },
+    "decode_step_109.embedding.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        555776,
+        559872
+      ],
+      "sha256": "7888ce225572476f49ac04f31598d5ad59a0e293bae00cbf9fb0c740bc85a90b"
+    },
+    "decode_step_109.layer0.input_norm.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        559872,
+        563968
+      ],
+      "sha256": "c96b9e0901b23868199768893aa93c211ede80a1551a7648d1e544b5d86358fc"
+    },
+    "decode_step_109.layer0.q_proj.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        563968,
+        568064
+      ],
+      "sha256": "98704c51fcf5683a770ec1f292d0e4f90c0a6dfab76f8cdcc27d1fa9fc0ccb8d"
+    },
+    "decode_step_109.layer0.k_proj.last": {
+      "shape": [
+        256
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        568064,
+        568576
+      ],
+      "sha256": "8b6ce2eaeb349a405c1acf42010b148d3ef4b88c521a00b488e4be2089ce76e0"
+    },
+    "decode_step_109.layer0.v_proj.last": {
+      "shape": [
+        256
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        568576,
+        569088
+      ],
+      "sha256": "62b03f7a15c96363307dbaca7ef3f8372960e477aecfbbe619bdac27d5881d24"
+    },
+    "decode_step_109.layer0.q_rope.last": {
+      "shape": [
+        16,
+        128
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        569088,
+        573184
+      ],
+      "sha256": "36b2a4b8b85ff5086dfcfa5a0731fc317680f2f1335b8ab84713811460672fa8"
+    },
+    "decode_step_109.layer0.k_rope.last": {
+      "shape": [
+        2,
+        128
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        573184,
+        573696
+      ],
+      "sha256": "3e596375dc89cbe9d7f8d64dc87f5a2f01441c2b68a2aad7efdb73f9c2a0024b"
+    },
+    "decode_step_109.layer0.attention_context.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        573696,
+        577792
+      ],
+      "sha256": "0a3c06f08d18a71b251db8c6a3972c751c33fba8521a0eb982ddb72f674ad200"
+    },
+    "decode_step_109.layer0.after_attention_residual.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        577792,
+        581888
+      ],
+      "sha256": "cef7f5ff2d37cfbaf4a4b606bfe624851d6a035878ed8388e602c998cc2e3697"
+    },
+    "decode_step_109.layer0.post_attention_norm.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        581888,
+        585984
+      ],
+      "sha256": "c84861cc715a7572dd765491cc273a2b483b3aee3018bc8f4e6f91a90be18a47"
+    },
+    "decode_step_109.layer0.gate_proj.last": {
+      "shape": [
+        11008
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        585984,
+        608000
+      ],
+      "sha256": "9ef9e5e291bb694d4f2ce937f3a43f35bc25ef88ecc533bd4c0a3fb2bac98784"
+    },
+    "decode_step_109.layer0.up_proj.last": {
+      "shape": [
+        11008
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        608000,
+        630016
+      ],
+      "sha256": "1e3b6c85dcf97b335bbd61c34336d12e935b5a12b7a4f86e8f5bd015fa12608f"
+    },
+    "decode_step_109.layer0.gated.last": {
+      "shape": [
+        11008
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        630016,
+        652032
+      ],
+      "sha256": "6893a2a52f099bdb479f1b2858f84875dbf15fa37dcd3a88552e6006d256fddd"
+    },
+    "decode_step_109.layer0.down_proj.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        652032,
+        656128
+      ],
+      "sha256": "9ef3a4e2c58f50a5c683db2f3e7f7b70c326a1331237b5f408a89309e86af1f9"
+    },
+    "decode_step_109.layer0.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        656128,
+        660224
+      ],
+      "sha256": "22873ffe40842102d2a79a49fd7bc75397c9500282841d8fbc604b5b2b911d83"
+    },
+    "decode_step_109.layer1.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        660224,
+        664320
+      ],
+      "sha256": "aaebb2fb2113b8b28ef54917f633bb50c93b73f73b7e0598e1914e0d07ac5f41"
+    },
+    "decode_step_109.layer2.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        664320,
+        668416
+      ],
+      "sha256": "88e474466bfbc14ce05a6a1bdc2b78a1dd9eb7b8534ce69a6637994a49f89651"
+    },
+    "decode_step_109.layer3.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        668416,
+        672512
+      ],
+      "sha256": "795e80117c8917fef174a8bb6ef3690df4b19680ef448a73e354985b08849374"
+    },
+    "decode_step_109.layer4.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        672512,
+        676608
+      ],
+      "sha256": "5af8320aefd7466ed3d7940b7ed30afa4ee2701b97ef534e318c3bc41fc20bc1"
+    },
+    "decode_step_109.layer5.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        676608,
+        680704
+      ],
+      "sha256": "f066287c103f3f84c99646fbb3f549267159c66e778d93f8b1cce30393541387"
+    },
+    "decode_step_109.layer6.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        680704,
+        684800
+      ],
+      "sha256": "de5934085e25f786815b549b9fce3796429dffce43874ce1e5c0a6214625ed6d"
+    },
+    "decode_step_109.layer7.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        684800,
+        688896
+      ],
+      "sha256": "d27faf0fcda7a488592acd89a0fe81acd02fbe39a174d91fe88526d71c4d8c23"
+    },
+    "decode_step_109.layer8.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        688896,
+        692992
+      ],
+      "sha256": "68af28ae8f70a5a3e6e7a9914380119f796cdca079677475e9ae821bbad11a84"
+    },
+    "decode_step_109.layer9.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        692992,
+        697088
+      ],
+      "sha256": "98a17b643f7dd171bd9d6dc1c7024945e9f884359a1dc6a99f21c6946a154e5a"
+    },
+    "decode_step_109.layer10.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        697088,
+        701184
+      ],
+      "sha256": "b029c9d46fd39503a747990ade3d8ce143eeca4db86ef5a778247f710451b1d4"
+    },
+    "decode_step_109.layer11.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        701184,
+        705280
+      ],
+      "sha256": "696cafa5f34f1efd97dba4cdbc7cd86cc9b78c4e08442e13cb0990ae22f59e28"
+    },
+    "decode_step_109.layer12.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        705280,
+        709376
+      ],
+      "sha256": "49de2c40cc07f600bb38d2999878dce7c5f92f681c858d567c98a3d36ee68990"
+    },
+    "decode_step_109.layer13.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        709376,
+        713472
+      ],
+      "sha256": "c60411e9424a7be70c46b64b3179d62372dfcf7fc0f74bac2d53cda396644e41"
+    },
+    "decode_step_109.layer14.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        713472,
+        717568
+      ],
+      "sha256": "55bf4a8f19e341ed7e7506ce99b94f2424dc219f03df3bff76698ae6e35fcf04"
+    },
+    "decode_step_109.layer15.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        717568,
+        721664
+      ],
+      "sha256": "90fe217c14dec248d7fe58620f86c7d19898d3cd9c9b0b2d0e4a0f195d2b12c5"
+    },
+    "decode_step_109.layer16.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        721664,
+        725760
+      ],
+      "sha256": "2ac53f55bac321deafa89159add1f02dc9fe69a55b5d165b4df7b17576e643ad"
+    },
+    "decode_step_109.layer17.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        725760,
+        729856
+      ],
+      "sha256": "4d75dd30d717a65109491b77eb052e598a58fc49730f022466286b49683a4fa1"
+    },
+    "decode_step_109.layer18.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        729856,
+        733952
+      ],
+      "sha256": "d1aff2dd72588f9bc760fa4ab630d813d48af7b9ca6b48da3ec6bd541fe60e83"
+    },
+    "decode_step_109.layer19.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        733952,
+        738048
+      ],
+      "sha256": "d25937020a0a31af6408d632cdbb2ec6d76118082d2c5511b11f6fd3e158b159"
+    },
+    "decode_step_109.layer20.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        738048,
+        742144
+      ],
+      "sha256": "b8a59bbabbe4aace5d8eefee674d0ea5d4f3ca1ef168c10533e37fe3a744da9c"
+    },
+    "decode_step_109.layer21.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        742144,
+        746240
+      ],
+      "sha256": "1f5f973296d59bf6afbfd7a9d5368a5d5d969db8eead26384ced1a6185c361c1"
+    },
+    "decode_step_109.layer22.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        746240,
+        750336
+      ],
+      "sha256": "305d526adc72ad0092aad276680c786e40ccc0b79b27205d378a42dc9ff8c258"
+    },
+    "decode_step_109.layer23.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        750336,
+        754432
+      ],
+      "sha256": "93675436068c06358ac56107a40bf3710d3583ab6fcd918223e2a829876ac585"
+    },
+    "decode_step_109.layer24.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        754432,
+        758528
+      ],
+      "sha256": "5da9f1d73c981c54d13757434649486457775be370556addd41b617bb380e493"
+    },
+    "decode_step_109.layer25.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        758528,
+        762624
+      ],
+      "sha256": "f2a10ef3fe50f0532ab1133d990f17cb2e160f3cfeacb5a2205e01db2cf772a6"
+    },
+    "decode_step_109.layer26.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        762624,
+        766720
+      ],
+      "sha256": "f4e52587145667b1138458f9bdfa610a4de4e252e67c84bd83fdb27ad85e27c0"
+    },
+    "decode_step_109.layer27.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        766720,
+        770816
+      ],
+      "sha256": "a9677354da5b85de5b1f54fc111f575e623f59b374a28fdf150c32a2986a77ec"
+    },
+    "decode_step_109.layer28.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        770816,
+        774912
+      ],
+      "sha256": "27e675b8547581f3c8b898b30610af84935f0dea3558b425feed2e0137d7baea"
+    },
+    "decode_step_109.layer29.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        774912,
+        779008
+      ],
+      "sha256": "0416f2dc246036164f7b261e42c242a3972d042df6505af847b45bb5a9801f1b"
+    },
+    "decode_step_109.layer30.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        779008,
+        783104
+      ],
+      "sha256": "f2e3714afa059c0e4caf8b4754e09502cb0af310ab0d6cdbc89d44708182209e"
+    },
+    "decode_step_109.layer31.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        783104,
+        787200
+      ],
+      "sha256": "9112e0828b3d00a55a108997199eda913483f61793e222098d6a455cf405cf71"
+    },
+    "decode_step_109.layer32.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        787200,
+        791296
+      ],
+      "sha256": "f47378146138e33803bf84cb9211fdab234bbe07b32342e9aac1a99f98fdc840"
+    },
+    "decode_step_109.layer33.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        791296,
+        795392
+      ],
+      "sha256": "c88c5f05fd799e887fa43d2acf9fbef4f1b0c67973dcc934dee8d88a77b40df3"
+    },
+    "decode_step_109.layer34.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        795392,
+        799488
+      ],
+      "sha256": "8c99e63dd6cfb7e95fea1348b2165c26f9d423d12880b8727e0b708f9e4e1038"
+    },
+    "decode_step_109.layer35.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        799488,
+        803584
+      ],
+      "sha256": "9a766ef20315a2cfe492429441e7e4b8313973d4624639dba55adff72d893358"
+    },
+    "decode_step_109.final_norm.output.last": {
+      "shape": [
+        2048
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        803584,
+        807680
+      ],
+      "sha256": "b2062fda6124c670ef6751e59dca041084a78af3aa6d235eb76095c9e2ba6381"
+    },
+    "decode_step_109.last_logits": {
+      "shape": [
+        151936
+      ],
+      "dtype": "BF16",
+      "raw_data_offsets": [
+        807680,
+        1111552
+      ],
+      "sha256": "991810c049b80b8bda40dd105642452f2866fc7e906e090dc4ca25d1f11c8b30"
+    }
+  },
+  "raw_sha256": "c3c72321f723a3ee5e3cbbdad3ca4ddc4f959a23d7e884ac81837f5bfc51dd0f",
+  "diagnostic_only": true,
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "goal_achieved": false
+}

@@ -1,0 +1,36 @@
+/data/riley-serving-261007/kernel-batch03-source/kernels/tests/reference/decode_shared32_v52.cuh(52): error: more than one instance of function template "v52_reference::shared32_projection_compute" matches the argument list:
+            function template "void shared32_projection_compute<N,K,Interval,Tiled,Compact,RowTiles>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const uint32_t *, int, int)" (declared at line 6 of /data/riley-serving-261007/kernel-batch03-source/kernels/src/decode_shared32.cuh)
+            function template "void v52_reference::shared32_projection_compute<N,K,Interval,Tiled,Compact>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const uint32_t *, int, int)" (declared at line 6)
+            argument types are: (const __nv_bfloat16 *, const __nv_bfloat16 *, std::nullptr_t, __nv_bfloat16 *, const uint32_t *, const unsigned int, int)
+   shared32_projection_compute<1536,576,0,true>(x,blockIdx.y?up:gate,nullptr,blockIdx.y?u:g,live,blockIdx.x,0);
+   ^
+
+/data/riley-serving-261007/kernel-batch03-source/kernels/tests/reference/decode_shared32_v52.cuh(56): error: more than one instance of function template "v52_reference::shared32_projection_compute" matches the argument list:
+            function template "void shared32_projection_compute<N,K,Interval,Tiled,Compact,RowTiles>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const uint32_t *, int, int)" (declared at line 6 of /data/riley-serving-261007/kernel-batch03-source/kernels/src/decode_shared32.cuh)
+            function template "void v52_reference::shared32_projection_compute<N,K,Interval,Tiled,Compact>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const uint32_t *, int, int)" (declared at line 6)
+            argument types are: (const __nv_bfloat16 *, const __nv_bfloat16 *, float *, std::nullptr_t, const uint32_t *, int, const unsigned int)
+   if(col<72)shared32_projection_compute<576,576,192,false>(x,q,parts,nullptr,live,col,blockIdx.y);
+             ^
+
+/data/riley-serving-261007/kernel-batch03-source/kernels/tests/reference/decode_shared32_v52.cuh(57): error: more than one instance of function template "v52_reference::shared32_projection_compute" matches the argument list:
+            function template "void shared32_projection_compute<N,K,Interval,Tiled,Compact,RowTiles>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const uint32_t *, int, int)" (declared at line 6 of /data/riley-serving-261007/kernel-batch03-source/kernels/src/decode_shared32.cuh)
+            function template "void v52_reference::shared32_projection_compute<N,K,Interval,Tiled,Compact>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const uint32_t *, int, int)" (declared at line 6)
+            argument types are: (const __nv_bfloat16 *, const __nv_bfloat16 *, float *, std::nullptr_t, const uint32_t *, int, const unsigned int)
+   else shared32_projection_compute<192,576,192,false>(x,col<96?k:v,parts+3*32*576+(col<96?0:3*32*192),nullptr,live,col<96?col-72:col-96,blockIdx.y);
+        ^
+
+/data/riley-serving-261007/kernel-batch03-source/kernels/tests/reference/decode_shared32_v52.cuh(68): error: more than one instance of function "v52_reference::shared32_qkv_parts" matches the argument list:
+            function "shared32_qkv_parts(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const uint32_t *)" (declared at line 57 of /data/riley-serving-261007/kernel-batch03-source/kernels/src/decode_shared32.cuh)
+            function "v52_reference::shared32_qkv_parts(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const uint32_t *)" (declared at line 54)
+            argument types are: (const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const uint32_t *)
+   shared32_qkv_parts<<<dim3(120,3),32,0,s>>>(x,qw,kw,vw,parts,active);
+   ^
+
+/data/riley-serving-261007/kernel-batch03-source/kernels/tests/reference/decode_shared32_v52.cuh(69): error: more than one instance of function "v52_reference::shared32_qkv_merge" matches the argument list:
+            function "shared32_qkv_merge(const float *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const uint32_t *)" (declared at line 62 of /data/riley-serving-261007/kernel-batch03-source/kernels/src/decode_shared32.cuh)
+            function "v52_reference::shared32_qkv_merge(const float *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const uint32_t *)" (declared at line 59)
+            argument types are: (float *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const uint32_t *)
+   shared32_qkv_merge<<<120,256,0,s>>>(parts,q,k,v,active);
+   ^
+
+5 errors detected in the compilation of "/data/riley-serving-261007/kernel-batch03-source/kernels/tests/kernel_batch03_correctness.cu".

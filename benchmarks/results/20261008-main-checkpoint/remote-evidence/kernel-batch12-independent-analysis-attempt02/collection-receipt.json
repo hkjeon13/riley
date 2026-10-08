@@ -1,0 +1,4604 @@
+{
+  "source": "/data/riley-serving-261007/kernel-batch12-quiet-attempt02",
+  "source_before": {
+    "c1-natural-r2-v52.log": {
+      "sha256": "42446297043e561961bd76e73aee93a2d1f879c37c1be0d2031981b0c1eb69e5",
+      "bytes": 260
+    },
+    "c1-fixed-r1-v52-retained-accounting.json": {
+      "sha256": "49721dcaa775163bf8d8c1958565f0f4077db965e449ccf701f2bcb66e0448b1",
+      "bytes": 1133
+    },
+    "c1-fixed-r0-v52-retained-host-gate.json": {
+      "sha256": "bbfb0f4f8f9f1c9974b15c0e682878abbc0958529bd5816f2bc5202088077105",
+      "bytes": 3022
+    },
+    "c1-fixed-r0-candidate.log": {
+      "sha256": "9729b09f66fd9f18b7f6b39be1a01ca1d80c05005d2cc91b114327a4aa07a748",
+      "bytes": 260
+    },
+    "c1-fixed-r0-candidate-retained-host-gate.json": {
+      "sha256": "f5fc706c39bb8712db11c41a7d17cc2c3c6008edf71b015c5f6ee133dd4845f7",
+      "bytes": 3021
+    },
+    "c1-natural-r1-candidate-warmup-host-gate.json": {
+      "sha256": "adaf14313a922146335691885b982be479f37febff8a921254d6e1c2817c982b",
+      "bytes": 4883
+    },
+    "c1-fixed-r3-v52-retained-rows.json": {
+      "sha256": "2eb81728897b6a3bd53145675c0bc9911d3e8fcea3a02bd982f350621fe26384",
+      "bytes": 5273007
+    },
+    "c1-fixed-r0-candidate-warmup-host-gate.json": {
+      "sha256": "4ca88a01fb7e35b5736f753ca64bad0aeda67f090bd0c53465e727df303b7acf",
+      "bytes": 16132
+    },
+    "c1-fixed-r2-candidate-retained-accounting.json": {
+      "sha256": "9c16772ab57a6fb24e0b32f8e9366bf5dc175627d9a8d50ffe0743e0ddb6eba9",
+      "bytes": 1133
+    },
+    "c1-natural-r1-candidate-retained-accounting.json": {
+      "sha256": "5662aaf93d1878f16d907bac6dc2c2fc668620dee7baa9f559fbacb0baa1a418",
+      "bytes": 803
+    },
+    "c1-fixed-r2-candidate-summary.json": {
+      "sha256": "f2fbad14a41060c056bc954d0ab4acafe0eb9f04802fa15b3d7a5f9cd2c5a98a",
+      "bytes": 2650
+    },
+    "c1-natural-r3-vllm-warmup-accounting.json": {
+      "sha256": "c1a2a0133ee221df8d191c584573c846b40fe1152698beb47f88005678b0e1c8",
+      "bytes": 792
+    },
+    "c1-natural-r1-v52-exit.json": {
+      "sha256": "739aad0daf6556a3f7bdd8cdc964e1f5a416d7fc50a45f9c99d517f397c47a0d",
+      "bytes": 1156
+    },
+    "c1-fixed-r2-v52-retained-host-gate.json": {
+      "sha256": "d25a6378380cdd6548572f2718d5e999caa24ea80ca750b3f41bdb7a4defffd1",
+      "bytes": 5821
+    },
+    "c1-fixed-r2-v52-exit.json": {
+      "sha256": "4648d9b3f81476dbff6455c578c4d4641992016e6e390f8c7e165257cad47c71",
+      "bytes": 1156
+    },
+    "c1-fixed-r2-v52.log": {
+      "sha256": "37a8820e8878be9d778718cebf1acc0d15e0f503b31871cc067669fc2b60f30f",
+      "bytes": 260
+    },
+    "c1-fixed-r0-v52.log": {
+      "sha256": "f040a6e3096c640ba0725bae1abb0f9f42bbd6b53d0746a426d9e30db535dcfb",
+      "bytes": 260
+    },
+    "c1-natural-r1-vllm-warmup-rows.json": {
+      "sha256": "9352733548371a71a5aa60a5fcf1938a7b46a2b1b95a2ecc0c57b1d245ab82ba",
+      "bytes": 3731064
+    },
+    "c1-natural-r2-candidate-host.json": {
+      "sha256": "76ac7295eac3a9a2a18ec1e0691e34d51eb5a188f70d53c240a19c56184f3cc2",
+      "bytes": 49092
+    },
+    "c1-fixed-r3-candidate-retained-host-gate.json": {
+      "sha256": "1293899a72cb0b2be4d0dd5667143103c5a368a60425c65d45bf190881b36c1d",
+      "bytes": 3015
+    },
+    "c1-natural-r1-vllm-warmup-host-gate.json": {
+      "sha256": "c509e998da70472d104f4c725439daccece5967a2f9c4811382941a723051c3d",
+      "bytes": 3013
+    },
+    "c1-natural-r2-vllm-start-host-gate.json": {
+      "sha256": "4c0309794d5b3c6849f4834e26ae74f7299bc0688554e73d621ecc303757e991",
+      "bytes": 3011
+    },
+    "c1-fixed-r1-candidate-retained-accounting.json": {
+      "sha256": "9c27546951107dfe56268ddbf25c003e7fb4abae5d30fa2a538882170e536796",
+      "bytes": 1133
+    },
+    "c1-fixed-r2-candidate-warmup-rows.json": {
+      "sha256": "6711f3bb500ddf665ae1ea287bfc9bbb5bb1a01cc06318581c2c58d2441e7f84",
+      "bytes": 1316137
+    },
+    "c1-fixed-r3-v52-host.json": {
+      "sha256": "5bc7ee8f39b52f3291a2dd6eed40758b170260e29ef0de849ad85bf29bc7b8e2",
+      "bytes": 39923
+    },
+    "c1-fixed-r0-candidate-warmup-rows.json": {
+      "sha256": "7d9d446cdc31988d79f03efd26022d7bfeec12a66a5d115226c0271e83ae9164",
+      "bytes": 1316146
+    },
+    "c1-natural-r1-vllm-summary.json": {
+      "sha256": "0e7e6c15c7780d46e2e9f3f0542f51fe950bfb17665378a2bf39293587fc4efc",
+      "bytes": 2337
+    },
+    "c1-natural-r2-v52-retained-accounting.json": {
+      "sha256": "3cdd7ca95ec6b69208ff314698150db1a33ac40d03b24eebc1d48cf82761d73a",
+      "bytes": 803
+    },
+    "c1-natural-r0-candidate.log": {
+      "sha256": "9d1bd5afbd1dfa3e3fde8a9bc9e902d6b66c65d66f1b52bc0b7c7227940d7259",
+      "bytes": 260
+    },
+    "c1-fixed-r3-vllm-start-host-gate.json": {
+      "sha256": "e667ccabb24c5a239e41d95577a0220f8b0f0d284172292a5badc013ccf7da50",
+      "bytes": 3012
+    },
+    "c1-fixed-r1-v52-warmup-rows.json": {
+      "sha256": "3e80b9183511c14c57ce26d1a859883a6d2bdb3256004af6b4b80157cac85ba4",
+      "bytes": 1318044
+    },
+    "c1-natural-r1-vllm-warmup-accounting.json": {
+      "sha256": "624a39162a94edcfab3737ac2260de7a8a3eeaf1d44e3f75686f4f342252bc69",
+      "bytes": 792
+    },
+    "c1-natural-r2-v52-host.json": {
+      "sha256": "7f3cf348ea783e8a727739dec7df3b689c4b417d4a81f92cce518bdfcfe0d4c8",
+      "bytes": 54800
+    },
+    "c1-natural-r3-v52-exit.json": {
+      "sha256": "bc29612d1a483bf90a554f9d1dfb6095278b1da88b1ee15fb66b6083ea3c873a",
+      "bytes": 1158
+    },
+    "c1-fixed-r3-vllm-warmup-accounting.json": {
+      "sha256": "71819859bbf86cb6cc77325f044da247ebca608108a02060d5c724ae340925ee",
+      "bytes": 1103
+    },
+    "c1-natural-r1-vllm-retained-host-gate.json": {
+      "sha256": "4e322bd669158102bf7dd753a876609e18d462736f81d378cd637b249d1aeef3",
+      "bytes": 3015
+    },
+    "c1-fixed-r1-vllm-launch.json": {
+      "sha256": "172be4de63d7cefb87dd5eb12f0c53435984e3c7f66b8f88084aa363a098315f",
+      "bytes": 2119
+    },
+    "c1-fixed-r0-v52-launch.json": {
+      "sha256": "b22e3b5713e88cd388abe81602b23a0665b5e184b20d1a3862a6d96348bd9f94",
+      "bytes": 2322
+    },
+    "c1-natural-r0-candidate-host.json": {
+      "sha256": "6e21b741fa947ed2cdc650d80d2b6445f93e701a280dcf7a2c8dc710f81bc46d",
+      "bytes": 49095
+    },
+    "c1-fixed-r1-candidate-host.json": {
+      "sha256": "fd2e3fc9f1341cc5d65b1de2f322cd36756220ea7a5198f326146a3e974d4038",
+      "bytes": 25109
+    },
+    "c1-natural-r2-candidate-warmup-rows.json": {
+      "sha256": "1c21a49a8295f3207726715e0f67c5a7a83f460bd756b5c42c660b77e1d9de32",
+      "bytes": 3416094
+    },
+    "c1-natural-r2-vllm-summary.json": {
+      "sha256": "fa86aa38c23351cbbc4db3180031b32b46065422d1859b5726fbfe668d619c18",
+      "bytes": 2374
+    },
+    "c1-natural-r1-candidate-retained-rows.json": {
+      "sha256": "5856f35469e6b4fa0baa5a4bc51d6c7f63a9bedd1df44b9dfa971ae92f460685",
+      "bytes": 13665486
+    },
+    "c1-fixed-r0-candidate-retained-accounting.json": {
+      "sha256": "8b09c76d4d63b923f18fd8fa6fb7d6281d5ec726814f857b57bc6ed441c202ed",
+      "bytes": 1133
+    },
+    "completion.json": {
+      "sha256": "5569f8693247ae479f442384a18017f15c62d237837ccd5212c126e9b903154e",
+      "bytes": 75102
+    },
+    "c1-fixed-r1-vllm.log": {
+      "sha256": "4f8111e020ccbd06c34f2c4a0d6a466f18d2fd12e5516cd5ec5a085966208190",
+      "bytes": 60408
+    },
+    "c1-fixed-r3-vllm.log": {
+      "sha256": "db6e45c09374647cb79267ec6a38d9d92ef83f65ebe8e78b9fcfdbf46174705a",
+      "bytes": 60409
+    },
+    "c1-natural-r1-v52-launch.json": {
+      "sha256": "9312ea40816f7109e5b6b2345e251c3688fc75e274b59165bb9e278a2dfc3901",
+      "bytes": 2321
+    },
+    "c1-fixed-r0-v52-warmup-accounting.json": {
+      "sha256": "7288e6caefc68287f61f06832293405938997390d5b5c922568cdc7067cd5ec7",
+      "bytes": 1103
+    },
+    "c1-natural-r2-vllm-retained-rows.json": {
+      "sha256": "eff6bd56609a4dcf90932f8c13fd2469fcb24ab7a801648f4701125c3ee483f7",
+      "bytes": 14929824
+    },
+    "c1-natural-r2-candidate-retained-host-gate.json": {
+      "sha256": "d278d56e26049d61e1e2bb05a1ae1f6bbceabd3e706bd79a777ea2770af400f5",
+      "bytes": 3015
+    },
+    "c1-fixed-r2-v52-host.json": {
+      "sha256": "136921af13d5a0034a8567cd50895772809417e052ba744aba528a36801805d5",
+      "bytes": 28524
+    },
+    "c1-fixed-r1-v52-summary.json": {
+      "sha256": "9f675fe986d709aa360acbe498bcdf7ee95580fb9942bb701e9158603797fd4d",
+      "bytes": 2654
+    },
+    "c1-fixed-r1-candidate-warmup-accounting.json": {
+      "sha256": "9113f76acce27fd0ef2d202f3b97e98f10ce2fcd93465c863feb5241dda961fb",
+      "bytes": 1103
+    },
+    "c1-natural-r3-v52-start-host-gate.json": {
+      "sha256": "bea388fa70135454e18342932eac988ac4b564113dc827f30fecd1bbec568656",
+      "bytes": 3011
+    },
+    "c1-fixed-r2-vllm-retained-rows.json": {
+      "sha256": "d72948780777612806ca95d32ef8d1af8ce9c407ef8a6dc1dd8ed02198b53874",
+      "bytes": 5531837
+    },
+    "c1-fixed-r2-vllm-warmup-accounting.json": {
+      "sha256": "ce4b2d8b2624b510baf3e38f5709e48cca6d55b8c9cb50dde13e5dff5f187410",
+      "bytes": 1103
+    },
+    "c1-fixed-r2-v52-start-host-gate.json": {
+      "sha256": "cd333ccb3572082897ef0229bb38218b7ff4dc15897ac2c7485ea53832064067",
+      "bytes": 3010
+    },
+    "c1-natural-r0-vllm-warmup-rows.json": {
+      "sha256": "28cf0ba76e565a400df8fb41d7410339b23d21ddb5346e14f7b08177d5d5691a",
+      "bytes": 3734052
+    },
+    "c1-fixed-r1-v52-start-host-gate.json": {
+      "sha256": "549368555c57f578b4356d038c75ff71f000700e1ec066d4efbfbbf53c5a7ce9",
+      "bytes": 3011
+    },
+    "c1-fixed-r3-v52-start-host-gate.json": {
+      "sha256": "cf8d62145e6764511c180ff6ad322ec7a08ed95bdf2aec6cf523006624a6ee56",
+      "bytes": 3010
+    },
+    "c1-fixed-r3-candidate-summary.json": {
+      "sha256": "500ae09e338e3f74f679c8f5ec0e357fe5e48c7e86581b782ef8705264e9f538",
+      "bytes": 2660
+    },
+    "c1-natural-r2-candidate-exit.json": {
+      "sha256": "47802f2fde7869d4cbb47f25331c1a212e491d19fbc7901695a1d0a759ad942f",
+      "bytes": 1156
+    },
+    "c1-fixed-r0-vllm-retained-accounting.json": {
+      "sha256": "5de90c5b34e6dd913a537f502795f3e7d8d6d2be07f64489d409aeacfbbea04d",
+      "bytes": 1133
+    },
+    "c1-natural-r0-vllm-exit.json": {
+      "sha256": "78fb1f4c23d37a768ad2f02b9b40d677d66cfb4778636ccd4e9dc27aae155ae6",
+      "bytes": 1207
+    },
+    "c1-natural-r0-v52-launch.json": {
+      "sha256": "2ef9f17857c9a0fd9ab00d8aaad6f9dc2ddd953723df0299fb12bf11720cf52d",
+      "bytes": 2321
+    },
+    "c1-fixed-r2-v52-retained-accounting.json": {
+      "sha256": "361665f446ee7f84eaba393329f13f53c1fe4456a2e40ea9f3d41c649170a141",
+      "bytes": 1133
+    },
+    "c1-natural-r2-vllm-host.json": {
+      "sha256": "72478d9a698aee8d6c1db8990732f1337ac48cc4fe69f795e8e2ace09ecc2e6f",
+      "bytes": 68177
+    },
+    "c1-fixed-r1-v52-retained-host-gate.json": {
+      "sha256": "d4203d430ef51c91573f1d9827ce2868e9082b1d42d1cb9953ff716854032187",
+      "bytes": 3015
+    },
+    "c1-natural-r3-candidate.log": {
+      "sha256": "a250bae93e15a5e326865a4a4000f86eeb745ca4344160d0f3c9dd3c0e701862",
+      "bytes": 260
+    },
+    "c1-natural-r2-vllm-retained-accounting.json": {
+      "sha256": "a1b48cf7c0cf80ac4a563486ed9b8e3a274b2488a2619f73c96890521b9dd2f7",
+      "bytes": 804
+    },
+    "c1-natural-r1-candidate-launch.json": {
+      "sha256": "92cdb00e0174c7880a45185190d8645780a86125e73558c7872bacb4bdf2085c",
+      "bytes": 2342
+    },
+    "c1-natural-r1-candidate-warmup-accounting.json": {
+      "sha256": "fdd7c5ff94a46e8c686b60ca28bb29a962090430d6d69d5003c0b2e14b4e4781",
+      "bytes": 791
+    },
+    "c1-fixed-r2-v52-warmup-accounting.json": {
+      "sha256": "f02cd1739bb688745326cee90f01d83f87fff5650baded6ca90e7b7fbd4af07a",
+      "bytes": 1103
+    },
+    "c1-natural-r2-vllm-launch.json": {
+      "sha256": "783c025e4427157912a6b053cd6b0966314eb0fe9c2ce591626cc042b428249b",
+      "bytes": 2118
+    },
+    "c1-natural-r0-candidate-warmup-accounting.json": {
+      "sha256": "c35bc62f608b7ce215732f17ce721f8df0d938839d23b09ae3d1f86835bbd191",
+      "bytes": 791
+    },
+    "c1-natural-r3-vllm-launch.json": {
+      "sha256": "918032f792b4ca9ec3bacc50ce285aaaea6995b08f4f5e6c1fe302788bfc278f",
+      "bytes": 2118
+    },
+    "c1-fixed-r1-candidate-exit.json": {
+      "sha256": "6ada5ca058e1aaa2cb74c984cca3cb1ed3a1f409c1bca5c11296c9b33995e9a5",
+      "bytes": 1156
+    },
+    "c1-natural-r3-vllm-warmup-rows.json": {
+      "sha256": "09feae8a04138a240523d1596e9152ed6961844c5217273ffc1ea95f10793ade",
+      "bytes": 3729731
+    },
+    "c1-natural-r1-v52-warmup-host-gate.json": {
+      "sha256": "2fccfb92ed3b625f0d8a15ab9817791c6c30205731ef0ef795f8c60d40df186b",
+      "bytes": 3012
+    },
+    "c1-fixed-r1-vllm-warmup-accounting.json": {
+      "sha256": "0918f46c5a07befba5098230cf398d835754908426766b4a186c56d9bb48a3df",
+      "bytes": 1103
+    },
+    "c1-natural-r3-v52-retained-rows.json": {
+      "sha256": "a38a63c3c24b61f080d379132fec2478490b65899bcd8d8b77310c9f0a167723",
+      "bytes": 13679483
+    },
+    "c1-fixed-r3-vllm-host.json": {
+      "sha256": "21ca505bbbfcb10520fababb267c66ec00e4642987ea77dc59ce6fa54ee13d1b",
+      "bytes": 47782
+    },
+    "c1-fixed-r0-v52-warmup-rows.json": {
+      "sha256": "3c9d40a5e59b1864412ba6fd2848476e4de97b69321dbb5c73d677fcd1d34c60",
+      "bytes": 1317961
+    },
+    "c1-natural-r0-candidate-retained-accounting.json": {
+      "sha256": "4688c7bd673dd0852271fd662e55feefc2e84f5e744666711c941a7d40a246fb",
+      "bytes": 803
+    },
+    "c1-fixed-r0-v52-retained-accounting.json": {
+      "sha256": "2d26d45e021751e3b368ea7954a759932b6b830875e0a9e7ada686bacd104202",
+      "bytes": 1133
+    },
+    "c1-fixed-r0-candidate-summary.json": {
+      "sha256": "1977ad4a3d3c092a617d47bdb05f681d354d8a4ffa01a4d7fcc1022f5f6cf870",
+      "bytes": 2672
+    },
+    "c1-fixed-r2-vllm-warmup-host-gate.json": {
+      "sha256": "b24760062131cbd7b0b941f9077f4485803d1cad572446099c396a705192c987",
+      "bytes": 3013
+    },
+    "c1-natural-r1-candidate-exit.json": {
+      "sha256": "6e2663c3fd92bccd2889cc5baeef60660e7582124495a195ab25c4d435ecf5a1",
+      "bytes": 1156
+    },
+    "c1-natural-r2-v52-retained-host-gate.json": {
+      "sha256": "92479702a61918926190229c870aed0d9c59150b1e4955381948b833d8997dac",
+      "bytes": 3015
+    },
+    "c1-natural-r0-v52-summary.json": {
+      "sha256": "83a2de8f01745ec8bda50e6a2ec62f60ec631e463147be97caa7ccf18dd2288a",
+      "bytes": 2347
+    },
+    "c1-fixed-r3-candidate-warmup-host-gate.json": {
+      "sha256": "b77e49d6d59783815d31dc1db66ccea149148d914b642f44c63417fca6958fd9",
+      "bytes": 5817
+    },
+    "c1-fixed-r3-candidate-exit.json": {
+      "sha256": "fa35a48632de40c31eb50e0dc45454b087a4a26dbd964370d071834b947a6860",
+      "bytes": 1156
+    },
+    "c1-fixed-r3-vllm-warmup-rows.json": {
+      "sha256": "c124279e397796f5144d2304842a9ae0464706a5146dae8fc13c409c962153c6",
+      "bytes": 1382835
+    },
+    "c1-natural-r0-vllm-summary.json": {
+      "sha256": "139018b9c7819bd6af9d1a0cb8bbe72e99b1789022709261ee1b28d087e985dc",
+      "bytes": 2338
+    },
+    "c1-natural-r2-vllm-exit.json": {
+      "sha256": "0b56223eee46d257f64511d0c4d9362bac3a016c4de911503225690187776d65",
+      "bytes": 1207
+    },
+    "c1-natural-r3-v52-retained-accounting.json": {
+      "sha256": "006bf168d69c1792232207530795f780e62525350b52c119a753f9d77e0617c7",
+      "bytes": 803
+    },
+    "c1-fixed-r0-vllm-retained-rows.json": {
+      "sha256": "2841d75c2620b5f0051f10b5cee086ef8063cc4d0fa1da303acdba9b6102a878",
+      "bytes": 5528791
+    },
+    "c8-fixed-r0-v52-start-host-gate.json": {
+      "sha256": "6c682d9d9950038281c6b1d8d676ba9ccb342981bc82c5a0716dc99ab504ff23",
+      "bytes": 139982
+    },
+    "c1-fixed-r2-candidate-retained-host-gate.json": {
+      "sha256": "3f3ad89022f6b76a53e2b21840b7fc55108e42aa34e5947e9eb3328fe6dfb6d5",
+      "bytes": 3015
+    },
+    "c1-fixed-r3-v52-warmup-host-gate.json": {
+      "sha256": "7da17dbff9116f6f3f7392ff543a4607f8502610c88334aa4500654a2a83e95e",
+      "bytes": 10492
+    },
+    "c1-natural-r1-candidate-host.json": {
+      "sha256": "8e1a677c602f308f65386a2d27714c75b3f6669004d7efefbc1fba4c65edbb65",
+      "bytes": 53656
+    },
+    "c1-fixed-r1-vllm-exit.json": {
+      "sha256": "a64fcc66556ca82c6771bebe956f51cec0ae577ffcf1e44cc74c455aa60572de",
+      "bytes": 1209
+    },
+    "c1-fixed-r2-candidate-warmup-host-gate.json": {
+      "sha256": "5a44a974e194d03dee6dd03cba3163add36e4eed6c827fea9b6d18da6d5f4d1c",
+      "bytes": 3013
+    },
+    "c1-natural-r1-candidate.log": {
+      "sha256": "ad40d03ad388eed0d3b5a8e64e326a7b112568bfddbcc03f374873edf75ad51f",
+      "bytes": 260
+    },
+    "c1-fixed-r2-candidate-start-host-gate.json": {
+      "sha256": "aabc96deb6f9522d088a16366107c56fad2b4359f18c6eee5bf9c15dcac13f46",
+      "bytes": 3011
+    },
+    "c1-natural-r0-v52-start-host-gate.json": {
+      "sha256": "1cf007b1868cac26bb178fb0107836bc8bab6b2def34ddfdf75fe3c34aa1e03f",
+      "bytes": 3011
+    },
+    "c1-fixed-r1-vllm-retained-host-gate.json": {
+      "sha256": "429caaeb3a5d33a7fc5d602ea82370999328108d154b7044891e9b8f159dc860",
+      "bytes": 3018
+    },
+    "c1-fixed-r2-v52-retained-rows.json": {
+      "sha256": "c6fd94a448430b4b1b4b7e729fd15ab41f64b8780f7fb9e2d2df0ad32474f064",
+      "bytes": 5273130
+    },
+    "c1-natural-r3-candidate-retained-accounting.json": {
+      "sha256": "b0a6efe6908cac46b7546042043ae223b4a6ad8b7d54832c73d0b304002f716d",
+      "bytes": 803
+    },
+    "c1-fixed-r0-v52-exit.json": {
+      "sha256": "bf46bca0281e19dc0e7197c0995b34a24b91a4aeaa0898fcb45ba85b40a65d89",
+      "bytes": 1158
+    },
+    "c1-fixed-r1-v52-host.json": {
+      "sha256": "9ec3fc4b30e39e546e03e3310c376e8424379f8c84b50b189ee5f2c9deb09556",
+      "bytes": 21684
+    },
+    "c1-fixed-r3-candidate-start-host-gate.json": {
+      "sha256": "97228e95387572c7bf329f20f72f6e9a77d30ac85cf3fb179ca07171053bc53b",
+      "bytes": 3944
+    },
+    "c1-natural-r3-candidate-retained-rows.json": {
+      "sha256": "e6cab8d9f5d02b2c9512620ab828657db0614343603cde77dd39fb972d7a1b30",
+      "bytes": 13666209
+    },
+    "c1-natural-r0-v52.log": {
+      "sha256": "a5d238fe9015e8b2c6ff13ed3833ecd5fbc6957244de451261a3aaea1dd215b2",
+      "bytes": 260
+    },
+    "c1-natural-r2-v52-retained-rows.json": {
+      "sha256": "d164a4cc6d7627fca4af86025eb093e91023ad7cdd807ca69dff7d9719c06712",
+      "bytes": 13679189
+    },
+    "c1-natural-r3-vllm-summary.json": {
+      "sha256": "4c89ba1acbe1e62ac8c304ff6f70ee4584443643970ae68b1bfbaad122771307",
+      "bytes": 2362
+    },
+    "c1-natural-r3-vllm-start-host-gate.json": {
+      "sha256": "83a3131b6f52239b5e2d80a7033ae754caa80c64f0112776f7d5e6c60a9ae59a",
+      "bytes": 3009
+    },
+    "c1-fixed-r3-v52-retained-host-gate.json": {
+      "sha256": "c9c9f13aa73a0225a5cd492b1fccdb42da4c240a85aac9f931c3ed1b2a74c9b0",
+      "bytes": 3015
+    },
+    "c1-fixed-r2-candidate.log": {
+      "sha256": "5c7f32104305a87e9dbaf1c0c41aaf00220f6519a8c0b7ad9db5e95698b8f864",
+      "bytes": 260
+    },
+    "c1-fixed-r2-v52-summary.json": {
+      "sha256": "4314f35ca523ebc1b88236a988df9ad8f4199800045baf46f11ffd472d77a11e",
+      "bytes": 2652
+    },
+    "c1-natural-r0-candidate-warmup-host-gate.json": {
+      "sha256": "c197481a62eb926cbcae5ba27be171ad16c86b950bec20b089906e560420bd03",
+      "bytes": 3013
+    },
+    "c1-fixed-r3-vllm-retained-host-gate.json": {
+      "sha256": "723f269acbde421492e4134af44652f56724f9dcd5ffedb5155f03ef7571046b",
+      "bytes": 3015
+    },
+    "c1-fixed-r2-candidate-exit.json": {
+      "sha256": "74bcf8fede5d718d593670c6c4173f60a6bd44cb4f39eb2101970340799125cf",
+      "bytes": 1156
+    },
+    "c1-natural-r0-v52-host.json": {
+      "sha256": "dac3631e05a5949c253d7c36fcf1e0b32fed9a7256bff24462078d15c7b24761",
+      "bytes": 54801
+    },
+    "c1-fixed-r1-vllm-host.json": {
+      "sha256": "c7e38dfae6ad856fe7f65ba96c1a78d66285194fc7291f52aa2b774b1b9e8037",
+      "bytes": 88541
+    },
+    "c1-fixed-r1-vllm-retained-accounting.json": {
+      "sha256": "c0366075bd62d91c2cffd324d0df8baa20fc049038300973d00dc82cfdfab0aa",
+      "bytes": 1133
+    },
+    "c1-fixed-r3-v52.log": {
+      "sha256": "eed7094bec19ae00119599318b7cc944242022fca355d5fb4d0847d424bcbf96",
+      "bytes": 260
+    },
+    "c1-fixed-r3-vllm-summary.json": {
+      "sha256": "b9496fedc89c1bb43d4f34cfc8029e22e0b294f5fe15323defbd83758f70ba9f",
+      "bytes": 2674
+    },
+    "c1-natural-r2-vllm-warmup-host-gate.json": {
+      "sha256": "917f49995b7e854f0ccf6b875a7328ad8cccbf240a01c901677add9e1285c1e4",
+      "bytes": 3013
+    },
+    "plan-snapshot.json": {
+      "sha256": "a4484fa903bdecdde493df9e78a49597a2c2aefcbab514ee0b29d147461b5abf",
+      "bytes": 3322
+    },
+    "c1-natural-r0-vllm-warmup-accounting.json": {
+      "sha256": "0f3402b3b101ddcea9299c6b5c3969ae0feed4623aaeeb9800785f8889e86120",
+      "bytes": 792
+    },
+    "c1-fixed-r0-candidate-warmup-accounting.json": {
+      "sha256": "227163328ef9c50204332f1240670fbb5c724ae691c00dd68c23381165756bee",
+      "bytes": 1103
+    },
+    "c1-fixed-r1-candidate.log": {
+      "sha256": "fea75be57783730f51cc4abbac2a50c5df32b497d2b8db816fec12c015b77461",
+      "bytes": 260
+    },
+    "c1-natural-r0-vllm-start-host-gate.json": {
+      "sha256": "206fa2c102b5b1269f1c18e10f7ba3bb0afe223b12cf1716fde5ea9e523dc2d3",
+      "bytes": 3011
+    },
+    "c1-fixed-r1-v52-launch.json": {
+      "sha256": "7744cfb7d4da6747759e9ab52dcedfc8179792572f494dde36f4fd07bb2a06ea",
+      "bytes": 2319
+    },
+    "c1-natural-r1-candidate-retained-host-gate.json": {
+      "sha256": "98f85baec676fff4565138672d5fd9bf006ade0a2ac1887569632e3d6fddf8fc",
+      "bytes": 3015
+    },
+    "validation-snapshot.json": {
+      "sha256": "0c5018ebc8dc2456c1d1bd6256af17ea0ae589ec0ed53b399c4b95afd9c12922",
+      "bytes": 115
+    },
+    "c1-fixed-r1-candidate-launch.json": {
+      "sha256": "b8eab3ba8af82736e29ee0529e2d4231462caf96c287910db1cc40719e76709e",
+      "bytes": 2341
+    },
+    "c1-natural-r0-candidate-launch.json": {
+      "sha256": "707fefe076de99cd4751b676a0a8a26eff338fde0fee3a28383c58654d21d93e",
+      "bytes": 2342
+    },
+    "c1-natural-r3-vllm-retained-accounting.json": {
+      "sha256": "400509f2b2a5263d3ca2959f869fe717634fd6f33a7bf3ae8797e4cadc28dd7b",
+      "bytes": 804
+    },
+    "c1-fixed-r3-vllm-launch.json": {
+      "sha256": "102f6795008bd92db6482629c331dc21f69d465a8484fc9c1f861f9d5caf8cc2",
+      "bytes": 2117
+    },
+    "c1-fixed-r0-candidate-retained-rows.json": {
+      "sha256": "da77515c0aee7911f0f925d89466fbc544fd4baa2c1bd69e584a53264d0b8d22",
+      "bytes": 5265469
+    },
+    "c1-natural-r2-vllm-warmup-rows.json": {
+      "sha256": "45c208b986e239a2f339ebecaea822e92b096cd4a17fa3363ded2a808a3941ba",
+      "bytes": 3734367
+    },
+    "progress.json": {
+      "sha256": "9cca3fdf712cbd9573e90a5bb7019df911b4e522af38ffbed5f2815088342869",
+      "bytes": 70490
+    },
+    "c1-fixed-r1-candidate-summary.json": {
+      "sha256": "0a325703060f22abe74d07062401b5c9c203b4c6ce18c013eef5c6fd388ecf06",
+      "bytes": 2662
+    },
+    "c1-natural-r1-v52-host.json": {
+      "sha256": "95983f8b427c988adf88ff3b4dda87f8f7758cee3dfaad6363544126d32b85ec",
+      "bytes": 54802
+    },
+    "c1-fixed-r2-vllm-warmup-rows.json": {
+      "sha256": "9a79976d322419606e885869ae412d30866a2a0ad8c212c2edaa384d960de3ba",
+      "bytes": 1382065
+    },
+    "c1-fixed-r2-candidate-host.json": {
+      "sha256": "e7a9191b514320ef2dc32850578dbbcb455598f73ef597913929992b9b0db671",
+      "bytes": 20543
+    },
+    "c1-natural-r0-v52-retained-rows.json": {
+      "sha256": "60ae3869f9fcdc86030e62319470c05fd95168e577cccb49d80d343cf6c65f84",
+      "bytes": 13679582
+    },
+    "c1-natural-r3-v52-retained-host-gate.json": {
+      "sha256": "bc1eb373c5abc574a932a22e28ca5469b7f793a9d55858a314710101d41abe2d",
+      "bytes": 3950
+    },
+    "c1-fixed-r1-vllm-summary.json": {
+      "sha256": "6711b43b72bda0e37cef36c76ec01439e7fa9c3650b50c3b4bc5c760536fb9be",
+      "bytes": 2651
+    },
+    "c1-natural-r1-vllm-retained-accounting.json": {
+      "sha256": "e2cf49202c3843dd90e3db72a7c53f5d94a6625b6125786f2008d8353452d31e",
+      "bytes": 804
+    },
+    "c1-natural-r2-v52-warmup-accounting.json": {
+      "sha256": "93650492a8bbba3eb547a1ef9a697753405c9592f6e1dc6dde8e1c1ac4d6bfaa",
+      "bytes": 791
+    },
+    "c1-fixed-r0-candidate-start-host-gate.json": {
+      "sha256": "977110f33a9e2209ddf4682d0266e860f7f543a9d185c41a4a7a1fa430be833e",
+      "bytes": 4887
+    },
+    "c1-fixed-r3-candidate-launch.json": {
+      "sha256": "7ad289db6e6a0ff44d68e35c1787db605792bf6d5acc61f01dac0fcdb524f4c5",
+      "bytes": 2340
+    },
+    "c1-fixed-r3-v52-retained-accounting.json": {
+      "sha256": "96b564209cbe1225978e7094f1184bb55a919f4e2c997db4b6e5791f8ccaf603",
+      "bytes": 1133
+    },
+    "c1-natural-r2-candidate-retained-rows.json": {
+      "sha256": "c7aa737b1e7fc398b2962b1847d5e2e83a4640ecfbf43eaa54c3afac48e4e6fb",
+      "bytes": 13665418
+    },
+    "c1-natural-r0-vllm-launch.json": {
+      "sha256": "e913e622e638d5bf54ad817a668b01ed3f3d4bd15b9bde43347efc867e467da6",
+      "bytes": 2118
+    },
+    "c1-natural-r3-vllm-retained-rows.json": {
+      "sha256": "854f07167789bc037d7c9df261349014c989d24b540c2248c1b37a1331e8d839",
+      "bytes": 14931529
+    },
+    "c1-natural-r1-vllm-exit.json": {
+      "sha256": "294837286d02d5bf3454b6a4e198b56b1c9ddf6572ef8049be53ef675d5c43aa",
+      "bytes": 1208
+    },
+    "c1-fixed-r1-vllm-warmup-host-gate.json": {
+      "sha256": "d8380b1bfb86a36ff97c97657777d709fcf7649eb27231964056cfd32d03c92a",
+      "bytes": 23614
+    },
+    "c1-natural-r1-v52-retained-accounting.json": {
+      "sha256": "03e8e0c3fdff7349f488106fa18a0d33ce0baa4eaf31b2d6a117d29065b8fa2c",
+      "bytes": 803
+    },
+    "c1-fixed-r2-candidate-warmup-accounting.json": {
+      "sha256": "351fe1527a4321a366af2887022ec38babdb1612cc2308d2a333cbc9a3dfb786",
+      "bytes": 1103
+    },
+    "c1-fixed-r1-v52-warmup-host-gate.json": {
+      "sha256": "188f2f4457cb9e9e87f931be6f0afa29161e6a0c41430b1537a1ddc61cf71346",
+      "bytes": 3014
+    },
+    "c1-fixed-r1-v52-retained-rows.json": {
+      "sha256": "d2258b29b8f6255fe00467a7c30e9aef599a932301dd902a5ec2457f0695e18b",
+      "bytes": 5273052
+    },
+    "c1-natural-r3-v52-summary.json": {
+      "sha256": "996caa5f6a40fe5e2c85ec3ed0b1d747960160f7cdd6b86b224e3786080bf989",
+      "bytes": 2334
+    },
+    "c1-natural-r2-candidate-launch.json": {
+      "sha256": "ae72837eb71df303dc813529faabcad47975e54f0b5cc70787470ce22afcd8fe",
+      "bytes": 2342
+    },
+    "c1-fixed-r3-candidate-warmup-rows.json": {
+      "sha256": "7f03a5c8cdf732deb595f3707ccaef7365613445507f3221989d832b1b9ee834",
+      "bytes": 1316146
+    },
+    "c1-natural-r3-candidate-summary.json": {
+      "sha256": "1bf44ab83b2966910ff9a84c106d5676238b89c0a5db472a6260c174cc0e3197",
+      "bytes": 2349
+    },
+    "c1-fixed-r2-vllm-host.json": {
+      "sha256": "8e98b3a3910b5bb441db6515df2c88d59299fd79e4d071865017dd4a4bacc5f2",
+      "bytes": 54792
+    },
+    "c1-natural-r0-v52-warmup-host-gate.json": {
+      "sha256": "5c0490bb21b1a99d2b3660f3ecf2703dee852ed02b698ac3a1f79ace2fd27914",
+      "bytes": 3012
+    },
+    "binary-receipt-snapshot.json": {
+      "sha256": "e8bdeed1c85d6b6552a881048cef7e0918f65df92afcc067407f03d281cbaa45",
+      "bytes": 146
+    },
+    "c1-natural-r0-candidate-warmup-rows.json": {
+      "sha256": "a42a52aa65b60060d36a6defb279edcbbf2c8fe1e6d40ac30858733cd59ca0bc",
+      "bytes": 3416348
+    },
+    "c1-fixed-r0-vllm-start-host-gate.json": {
+      "sha256": "a5b1988ffb6fb09bd0e49c555a14188763fe2b1ca508a64a946283a3247ca5ea",
+      "bytes": 31094
+    },
+    "c1-natural-r1-vllm-retained-rows.json": {
+      "sha256": "8851fc66fdd8034e3731b27be4d1c7bca2e7ce985c1f74f5b7918cca1ff35484",
+      "bytes": 14938642
+    },
+    "c1-natural-r0-candidate-start-host-gate.json": {
+      "sha256": "2e3f066d9a18aebcba98fb32c6026eb000115df597e53d6991dd2db557e5c24f",
+      "bytes": 3011
+    },
+    "c1-natural-r3-candidate-exit.json": {
+      "sha256": "e2a2285e68ad98b11e75eae8b73efa0ac51e46aead1304c7aaa1880b8288eda0",
+      "bytes": 1156
+    },
+    "c1-natural-r1-v52-start-host-gate.json": {
+      "sha256": "3925c2c74f143f2f4424a4dab6b31ffe373486e5e8725e97eea2e436653de07c",
+      "bytes": 3010
+    },
+    "c1-natural-r0-v52-warmup-rows.json": {
+      "sha256": "60058bfc1747fb3dac9a29d3e89da369ea0bf34b5596f9f16597124bb178dbdf",
+      "bytes": 3419604
+    },
+    "c1-natural-r0-candidate-retained-rows.json": {
+      "sha256": "fee874df957dc7be88f7742f878c1ba9d4911aff9ad103e745abbde7bdb9f913",
+      "bytes": 13666274
+    },
+    "c1-natural-r3-vllm.log": {
+      "sha256": "f8bda17e130620500b14be289e35bed915db9c05e1081f903b0a4977ae6e5f09",
+      "bytes": 60723
+    },
+    "c1-fixed-r0-v52-summary.json": {
+      "sha256": "2e629711f5013d5916092351ed74d47292e5127fc9f15ad9771eda7e4051b080",
+      "bytes": 2635
+    },
+    "c1-fixed-r2-candidate-retained-rows.json": {
+      "sha256": "25c09d14a5b5fe2d354c4d56758990eace66e4da47963f4bd9fdbb9052e9b4ad",
+      "bytes": 5265454
+    },
+    "c1-natural-r1-v52.log": {
+      "sha256": "6d8ed1923d081f4591a93b5f37009bf0d64baff69a44ab74453fae7d4b6318cb",
+      "bytes": 260
+    },
+    "c1-fixed-r3-vllm-retained-accounting.json": {
+      "sha256": "4c283c96ca37f9d9fe05f714d1da34fbeb9d34dcf9af02820ac167a145b96e4f",
+      "bytes": 1133
+    },
+    "preparation.json": {
+      "sha256": "415b3d82d434b44ef9233d365c6b95adc26b3f9d9eb2e5f60a7770a868fe65a4",
+      "bytes": 14745
+    },
+    "c1-fixed-r2-vllm-exit.json": {
+      "sha256": "1b1bdeb2fc48075224498e44815a9813c3a5a7b94a2e89586954fffd819b176f",
+      "bytes": 1208
+    },
+    "c1-natural-r3-vllm-warmup-host-gate.json": {
+      "sha256": "880e119ecb6e68034928449c5533419f9e00af8c41f850c65f6b4edf1fda968c",
+      "bytes": 3013
+    },
+    "c1-natural-r3-candidate-warmup-accounting.json": {
+      "sha256": "b659422e9e2a03918041871ff0ff95dad03b8b0286355445754c3a26275a1c6f",
+      "bytes": 791
+    },
+    "c1-fixed-r3-vllm-warmup-host-gate.json": {
+      "sha256": "bf0be38147309569e476c8d8acfe31c34e89e43d46280caffb825af4cb0f434e",
+      "bytes": 7688
+    },
+    "c1-natural-r0-vllm-host.json": {
+      "sha256": "8638636784cd6a0bf7b2f046edf79e92b22d31dfd03447cb561a08512746b862",
+      "bytes": 78943
+    },
+    "c1-fixed-r0-candidate-exit.json": {
+      "sha256": "300989ad6b723eebfd944537e6733b728f8caf74a1edb004b5be627376c5f536",
+      "bytes": 1158
+    },
+    "c1-fixed-r0-vllm-warmup-accounting.json": {
+      "sha256": "1f645a94665e7c4552b0c633b214682ad9a50bf184489bd075ddb682920c3c8c",
+      "bytes": 1103
+    },
+    "c1-natural-r2-vllm-warmup-accounting.json": {
+      "sha256": "3bb78c055bfc3a425e80754d62e92cd424f67150d0d97b17bfe0ddf19298df3f",
+      "bytes": 792
+    },
+    "c1-fixed-r1-v52.log": {
+      "sha256": "5a2dbd4142c7884ba211b3d66acaf1f6477586203eb4620e40af129e413c6a50",
+      "bytes": 260
+    },
+    "c1-fixed-r0-v52-host.json": {
+      "sha256": "efa5c4796ad3c727f1e561923237cd4c161ca22c4f35d7ccb12cf6127b5fbed2",
+      "bytes": 21728
+    },
+    "primitive-validation-snapshot.json": {
+      "sha256": "0c5018ebc8dc2456c1d1bd6256af17ea0ae589ec0ed53b399c4b95afd9c12922",
+      "bytes": 115
+    },
+    "c1-natural-r3-vllm-retained-host-gate.json": {
+      "sha256": "3d8d479672bc6e25042eaf069f6ec4a42e96ebce19bc9149c84a03e55961e1fb",
+      "bytes": 3015
+    },
+    "c1-fixed-r3-candidate-retained-accounting.json": {
+      "sha256": "e44f0610c5a016f57362dd1c8a0d7851e738de4fcbd940492da891929b5cbb97",
+      "bytes": 1133
+    },
+    "c1-natural-r2-candidate-retained-accounting.json": {
+      "sha256": "57d6d2b7258148eec90853ff21d1fd9223120d63b72e70f51e15c306462b2f3b",
+      "bytes": 803
+    },
+    "c1-fixed-r1-vllm-start-host-gate.json": {
+      "sha256": "b7dfaefc270f9654291d365a6c751fa577540f47d773e571c97f27acc700fca8",
+      "bytes": 4884
+    },
+    "c1-fixed-r0-v52-retained-rows.json": {
+      "sha256": "c4028043eeb2f7a2a179e30c7d90e4dcda56f695e6213f49512e2a1799f2bee8",
+      "bytes": 5273141
+    },
+    "c1-natural-r1-vllm-host.json": {
+      "sha256": "b02dc77d9e7c9fc3aab3b5d3c2889f0254257f2b2469b6a1b4c621d693275174",
+      "bytes": 68178
+    },
+    "c1-natural-r2-candidate-warmup-accounting.json": {
+      "sha256": "54d822735cabf6f523264f642f0763eb0115be8057d0810fa09c569716698211",
+      "bytes": 791
+    },
+    "c1-fixed-r1-vllm-warmup-rows.json": {
+      "sha256": "0016feb70df6f1f3caadbad7e78dfd175916ce824c2a51e2ca222a4a544a96da",
+      "bytes": 1382788
+    },
+    "c1-natural-r2-candidate.log": {
+      "sha256": "42320f9a509180dec3716bc5fa75a924bc089e8cc0ecf13a5f22ff38a5226065",
+      "bytes": 260
+    },
+    "c1-natural-r1-v52-warmup-accounting.json": {
+      "sha256": "36e1748a35a983d7ec1e5e1ba3c32fdb027b4a5c56d070f9029ba68609244b1d",
+      "bytes": 791
+    },
+    "c1-fixed-r0-vllm-warmup-rows.json": {
+      "sha256": "a1268abee92d3c35a3c89b674f17afeeb8ee255b84015cad71c8b915aefe572e",
+      "bytes": 1382734
+    },
+    "c1-fixed-r2-vllm-retained-accounting.json": {
+      "sha256": "f7537181917c5ab97bb74a447e84e6dbdccd590b8e190d7bfea19a7c16f6a812",
+      "bytes": 1133
+    },
+    "c1-fixed-r2-candidate-launch.json": {
+      "sha256": "246f7f9d0f04137f1accb71cd71d746314effdb02fce6672fded3097d2a5bfae",
+      "bytes": 2340
+    },
+    "c1-natural-r0-candidate-summary.json": {
+      "sha256": "d2fc820d6c5a90f07c125e2437ba2681f23eee814b8ca5651e66de682721e40d",
+      "bytes": 2332
+    },
+    "c1-natural-r1-vllm.log": {
+      "sha256": "de4b5a338bb10398571ca4bcb48905c01200582516655dabde9e8be4a8a73bcf",
+      "bytes": 60723
+    },
+    "c1-fixed-r3-v52-warmup-rows.json": {
+      "sha256": "a9a22605165f89789be1f7a4c06a59f0dfa27d47ae073cee16a01c6ae7844e39",
+      "bytes": 1318046
+    },
+    "c1-fixed-r1-candidate-retained-rows.json": {
+      "sha256": "c2ef6ee6acf8c001df7b20b09e1dc68b32db91fd27bfb837ba15b7bd9f2c3fa8",
+      "bytes": 5265445
+    },
+    "c1-natural-r0-vllm-retained-rows.json": {
+      "sha256": "5a01e96fdfde29301d7ebbd8ac71fe4db2556112eb2b10d5481471eb483db39b",
+      "bytes": 14933360
+    },
+    "c1-natural-r3-vllm-host.json": {
+      "sha256": "24c710c90a3e773add9db6475c9fd660c0706c345ab87c9eb4b130627c9ed3e7",
+      "bytes": 68181
+    },
+    "c1-fixed-r3-vllm-retained-rows.json": {
+      "sha256": "c642885eaf859c369878040f0fceffdda3e5d1cdb511652a6472c0cc16ee0670",
+      "bytes": 5528342
+    },
+    "c1-natural-r1-v52-warmup-rows.json": {
+      "sha256": "fce174a72ea0103833fc22b57d4ba4f9087decf017603ee3dff71abadce4a2b3",
+      "bytes": 3419541
+    },
+    "c1-natural-r2-v52-start-host-gate.json": {
+      "sha256": "dd0ea17503a175d9a16015de18b2c3752ab06891b163b930723b67c8b44bd423",
+      "bytes": 3011
+    },
+    "c1-natural-r0-v52-warmup-accounting.json": {
+      "sha256": "cee11fa67ffcd51f101eb4700f68bafce2d861a403c1f25b0b2830cc3ab037af",
+      "bytes": 791
+    },
+    "c1-natural-r3-v52-warmup-accounting.json": {
+      "sha256": "bef2dc1479187c7c4ae55b484bc74a0f2d95db2f13a8f6d2956b6a9d9cef55f8",
+      "bytes": 791
+    },
+    "c1-natural-r2-v52-exit.json": {
+      "sha256": "f3c7ecf10f4c4b7a8ad4e8723e4d3aa73b929084486136cb8a02a02bbbcf9336",
+      "bytes": 1156
+    },
+    "c1-fixed-r0-v52-start-host-gate.json": {
+      "sha256": "525d1bf628baeabb29abb648d0ddcf582492b947c9d5361fe0bc4517e4093a9b",
+      "bytes": 3018
+    },
+    "c1-fixed-r2-vllm.log": {
+      "sha256": "364fdefa17caa5eee31adab5baabf3f7f5d274af7a931bc3cc86a0334d214233",
+      "bytes": 60648
+    },
+    "c1-natural-r0-vllm-warmup-host-gate.json": {
+      "sha256": "f7ec28c2a0fbd86c48cbfef7a425ea5e86b8d8cb755ea0cc41f37708213dc451",
+      "bytes": 6753
+    },
+    "c1-fixed-r2-v52-warmup-rows.json": {
+      "sha256": "43ee7f3100a096d608168699bbbd9caebd7947a5e11f7c0fa9cb271346693093",
+      "bytes": 1318018
+    },
+    "c1-fixed-r1-v52-warmup-accounting.json": {
+      "sha256": "646c1c95af691b8c06a8f860372df83413a9f3455bf1a59e37b95251d0508123",
+      "bytes": 1103
+    },
+    "c1-natural-r0-vllm-retained-accounting.json": {
+      "sha256": "47882c9f68c469efa4d56b8f3dffa584ead6e9394aefb9e574a403c4bbcff018",
+      "bytes": 804
+    },
+    "c1-natural-r3-vllm-exit.json": {
+      "sha256": "e492bf8aa57999c2475aadf0e9fdecaf81a5c0150f27972926f9ae533f662c39",
+      "bytes": 1207
+    },
+    "http-screen-snapshot.json": {
+      "sha256": "74fdfabef2e667fd3dca9296c6c41bb0ad40bcb1a1f07de1f77f8a13d1564b25",
+      "bytes": 962
+    },
+    "c1-natural-r2-candidate-warmup-host-gate.json": {
+      "sha256": "ef0430976300f0df243e151266aa62fde363679cc3fbde9175aa1da3ea75ac02",
+      "bytes": 3012
+    },
+    "c1-fixed-r1-candidate-retained-host-gate.json": {
+      "sha256": "c69534fd75c7130ca361e50128d6bc21eecf21f5f71e354ae78c4b0efa5ac60a",
+      "bytes": 4886
+    },
+    "c1-natural-r1-v52-summary.json": {
+      "sha256": "0a63ec40305ca131bdbc041707507d86e854f4c062c9ef1b1ba2301a8d43250b",
+      "bytes": 2337
+    },
+    "c1-fixed-r3-candidate-host.json": {
+      "sha256": "5911d742f7b24981aee8a1323c4a77ea7c787da9110acfb975e9ee4144a53591",
+      "bytes": 27344
+    },
+    "c1-natural-r1-v52-retained-host-gate.json": {
+      "sha256": "c4f7bb708d0695eb332fa0e87766cf36ec0a1bc77a3a308f09a9a564ce5681b5",
+      "bytes": 3015
+    },
+    "c1-natural-r0-v52-retained-host-gate.json": {
+      "sha256": "ae9aafb0d441543c2a272139e2bf523408e456f1f0ab142a9ac7869eac875f39",
+      "bytes": 3015
+    },
+    "c1-fixed-r0-vllm-host.json": {
+      "sha256": "44dde9907de53d5b86cf78b077f00956da59cd95641723cc1d8c69b87805bb00",
+      "bytes": 179748
+    },
+    "c1-fixed-r1-v52-exit.json": {
+      "sha256": "547db45bc4d13a8cb46722e4ae8a730af8ebfb2601b0872f5c41919374136194",
+      "bytes": 1156
+    },
+    "c1-fixed-r3-v52-summary.json": {
+      "sha256": "4b247131afc534403710f49b1277ec3807cf92aa634affd0f15cd3b07a40e38b",
+      "bytes": 2646
+    },
+    "c1-natural-r2-vllm-retained-host-gate.json": {
+      "sha256": "056eede87e194f0e6cbf4737986fd2a0f0e9243bda15f98802e0168ecfabfa28",
+      "bytes": 3015
+    },
+    "c1-natural-r0-v52-exit.json": {
+      "sha256": "f14029890a6edc5684179dd3debdf754c4b4112c5d1a329777d8af64208e30fb",
+      "bytes": 1156
+    },
+    "c1-fixed-r0-vllm-launch.json": {
+      "sha256": "1bf3350bd2fe717cfd080087f727d596db435c7ea0d05314686c5d129ec528a0",
+      "bytes": 2119
+    },
+    "c1-natural-r1-candidate-start-host-gate.json": {
+      "sha256": "5a62141091ccbd278939e81fd242bd3363ee935c3283db79d9b699ac4b260ad7",
+      "bytes": 3010
+    },
+    "c1-fixed-r3-v52-warmup-accounting.json": {
+      "sha256": "678dc77db760c3209dc79cc916c36d7aab6e1aa22526b206937cb5b4fe870169",
+      "bytes": 1103
+    },
+    "c1-natural-r1-vllm-launch.json": {
+      "sha256": "cc2a93137d6234036227357cb925d9868f3165ccbeab0fd43dd41751e4b3d761",
+      "bytes": 2118
+    },
+    "c1-natural-r2-candidate-start-host-gate.json": {
+      "sha256": "ab06e1dfebca51f38aa2c0bc8713f7cdd59bf546cb9213e3b672b5076321bccd",
+      "bytes": 3011
+    },
+    "c1-fixed-r2-vllm-summary.json": {
+      "sha256": "7c7cd56837d4c206c135e1d7bd3e65bcb269ec05fb3c8037b65c3f04f07af17c",
+      "bytes": 2656
+    },
+    "c1-fixed-r2-vllm-launch.json": {
+      "sha256": "f7dd4787c8f9905e3e598368d0efe7d3ea1708830ce6005a6a48ed9a7618fa0a",
+      "bytes": 2117
+    },
+    "c1-fixed-r0-vllm.log": {
+      "sha256": "730f44f7e25bb02ba3dcb0b9cfd50592865299bc0cfffa8cde0822acee64b03d",
+      "bytes": 60843
+    },
+    "c1-natural-r3-candidate-start-host-gate.json": {
+      "sha256": "1d608472ff200704d86311d69667bc92fb54209d0d3f24d2194e84b32293d514",
+      "bytes": 3010
+    },
+    "c1-natural-r0-v52-retained-accounting.json": {
+      "sha256": "a5ccc910303216a8a3fff943cb75e99c3608792fb2cb8d806201d01dd203fa02",
+      "bytes": 803
+    },
+    "controller-snapshot.py": {
+      "sha256": "9e4498c49996ae951595f7f03a67fedb4a13b728f0746697d4139d3b4aadf5e2",
+      "bytes": 15365
+    },
+    "c1-fixed-r2-v52-warmup-host-gate.json": {
+      "sha256": "6173d6abc8e1151a13e658a52532d3397fb1b5d3ce907e79706175d95ee1a6be",
+      "bytes": 3013
+    },
+    "c1-natural-r0-candidate-retained-host-gate.json": {
+      "sha256": "dc5f2e62716c7e82bfc9b2e8d613c2689a45a8cfd4d4caa2a5827a80746f4f2b",
+      "bytes": 3015
+    },
+    "c1-fixed-r3-v52-launch.json": {
+      "sha256": "e8f2f6ee16eed77f9c4d9ace0e3b084eb009786f9324d332ae98b8490bd13e52",
+      "bytes": 2319
+    },
+    "c1-fixed-r2-v52-launch.json": {
+      "sha256": "eb8072316eb3a43a34eea68703854b758f31eddaaf39a41dd625b1be5abc330f",
+      "bytes": 2319
+    },
+    "c1-natural-r0-vllm.log": {
+      "sha256": "63feac0e3f03a428615d00c670004dc8c5d0f2ba5ace95cc032a6e82dffb9a9b",
+      "bytes": 60819
+    },
+    "c1-natural-r2-vllm.log": {
+      "sha256": "7c3777e5e2ec4c528a0884a0401e856664b3356a2e231b93a0d3438875f7d4ff",
+      "bytes": 61860
+    },
+    "c1-natural-r2-v52-warmup-host-gate.json": {
+      "sha256": "48dde59ef99f241288b99b3420905ee2380389adb0baceada33fbb84f9544dcc",
+      "bytes": 3012
+    },
+    "c1-natural-r3-v52.log": {
+      "sha256": "3e450eb5b9a0b328260173994b5d8c76f4b6fdaf420b2d6b1cc7cfc98783f277",
+      "bytes": 260
+    },
+    "c1-fixed-r1-candidate-start-host-gate.json": {
+      "sha256": "6a0b2f72f9bdc3a2d545da79fa8693935c4ac97a9909e3372627ad088a8302c4",
+      "bytes": 3014
+    },
+    "c1-fixed-r0-vllm-retained-host-gate.json": {
+      "sha256": "5e970320de94ee6bc60d49af840d7234c8c1bf70fd17d2096c85e6cf421c187a",
+      "bytes": 6778
+    },
+    "c1-fixed-r1-candidate-warmup-host-gate.json": {
+      "sha256": "5cb4f1f4dacc30a4ff9602ee41a975e5f47087c543834955afcb7bbec2a7607f",
+      "bytes": 3016
+    },
+    "c1-natural-r3-candidate-launch.json": {
+      "sha256": "0ac3fbd45651c6a385287d7017905926b17faa7452699c686d7ed64d3a88745c",
+      "bytes": 2342
+    },
+    "c1-natural-r1-candidate-warmup-rows.json": {
+      "sha256": "25ed6ecc86412ba8ff46cc23815bd6011eac080b60a568f7fdd7e0e21486b184",
+      "bytes": 3416100
+    },
+    "c1-natural-r3-candidate-warmup-host-gate.json": {
+      "sha256": "626a6883639b0dd6d2d8d584bc2302e1a32c19b4ca15d5839c73d981beefe759",
+      "bytes": 3014
+    },
+    "c1-fixed-r0-v52-warmup-host-gate.json": {
+      "sha256": "07b475c3ee4a213c1acdfe0b4f5c38d5eb6b15d046ebdc5c3187adb9739dc554",
+      "bytes": 3022
+    },
+    "c1-natural-r2-candidate-summary.json": {
+      "sha256": "3a750f5db00ea404b4a22978d3338621478e7dcde75000ae3e44c80b32311f29",
+      "bytes": 2331
+    },
+    "c1-natural-r2-v52-summary.json": {
+      "sha256": "2e2f401852e4b5c513dc1ad8cf90c17b67c12401e527662a2318e72b05eea890",
+      "bytes": 2323
+    },
+    "c1-fixed-r3-v52-exit.json": {
+      "sha256": "5cbd259cc0cb955ffdc9fce3a299ee278a70d2f0a7639621e95b952db1c0ee74",
+      "bytes": 1156
+    },
+    "c1-natural-r3-v52-launch.json": {
+      "sha256": "a272cbaea5f346a22811553b5c36804a675c6cf17801bf325a96d8f4ada855a1",
+      "bytes": 2321
+    },
+    "c1-natural-r1-candidate-summary.json": {
+      "sha256": "da4846abf8299420e42efe2015bd40fcecf75fee3fe7179874b1d4512c272980",
+      "bytes": 2354
+    },
+    "c1-fixed-r1-candidate-warmup-rows.json": {
+      "sha256": "0db3cac26d930d07f88bf2d8c0320a66de36632e4bfeb3d7fec4c1ef1ac4d3f7",
+      "bytes": 1316088
+    },
+    "c1-natural-r3-v52-warmup-host-gate.json": {
+      "sha256": "5d6e27c20e7a8c7730b621fc28a3a2f6282e33fddbff9a540afd0fcd86ca8370",
+      "bytes": 3012
+    },
+    "c1-fixed-r3-candidate-warmup-accounting.json": {
+      "sha256": "d0679fe7e1a2c5a6f32b087f889d1b7e81e42cedf51a54295e843cfd4c9c0e0a",
+      "bytes": 1103
+    },
+    "c1-fixed-r2-vllm-retained-host-gate.json": {
+      "sha256": "268ac1607416ab7544900a34451bd8799c1710339701f42ba92fd4d57c9c7c21",
+      "bytes": 9559
+    },
+    "c1-natural-r1-v52-retained-rows.json": {
+      "sha256": "4f6fd1a965607f50ba1b708fbe4c843839c993cf06e0d46e75869e4ff0fb083e",
+      "bytes": 13679281
+    },
+    "c1-fixed-r0-vllm-summary.json": {
+      "sha256": "8938563be0e4e5b0a7bd47486a44d9d5a3bf9f5c9ec6a309ee864cfc899494b7",
+      "bytes": 2657
+    },
+    "c1-fixed-r2-vllm-start-host-gate.json": {
+      "sha256": "e52e81500fd7c5ebbaa683eb7a6dd99f7a1426278b0e0386682950c2ef01102a",
+      "bytes": 3011
+    },
+    "independent-correctness-snapshot.json": {
+      "sha256": "18fa0cd9c4ff246c18c54fec078c152a61d24421997f7b3092cdf71476081a52",
+      "bytes": 1139
+    },
+    "c1-natural-r3-v52-host.json": {
+      "sha256": "247439d329d539e7043ccfd69ab6dbac9cf774d45579eb4560132b2933b7c26a",
+      "bytes": 57125
+    },
+    "c1-natural-r3-candidate-host.json": {
+      "sha256": "80794bd8820e99fe375b367de603bbbc012fc59ad71426b96f813f80df92fa0f",
+      "bytes": 82145
+    },
+    "c1-fixed-r0-candidate-launch.json": {
+      "sha256": "19744964caf7c61d90e6007ec768dbbce17ee657b60802b93691dd215a8a296f",
+      "bytes": 2342
+    },
+    "c1-fixed-r3-vllm-exit.json": {
+      "sha256": "5d5cc7ade0ee258806d5184eff4a26ada92b97f87b7a03bf958ba3cd3851af4a",
+      "bytes": 1208
+    },
+    "c1-natural-r0-vllm-retained-host-gate.json": {
+      "sha256": "b699e30d851b863e0bb8d07692771efbf6da6b82744ad2b518175506dc0bccfa",
+      "bytes": 3016
+    },
+    "c1-fixed-r0-vllm-warmup-host-gate.json": {
+      "sha256": "2ddd97880312a38380941d299f5d758c5670d30d2c0c50e3d659998fafe52904",
+      "bytes": 23687
+    },
+    "c1-natural-r1-vllm-start-host-gate.json": {
+      "sha256": "5f5779d275962dda843f2edac36fcd7ebfc03ce52272383ed0c5f498d722b130",
+      "bytes": 3011
+    },
+    "c1-natural-r2-v52-launch.json": {
+      "sha256": "1315d17734bb8612b290231771fedd23426d8ff337bf754876ab6e7acd42e23a",
+      "bytes": 2321
+    },
+    "c1-natural-r2-v52-warmup-rows.json": {
+      "sha256": "bf0e0002b2bb613b44e38799801adc51bb31f7406635a62e16c522022cacf2cc",
+      "bytes": 3419572
+    },
+    "c1-fixed-r0-candidate-host.json": {
+      "sha256": "d429c5a3931075b7a84caca98b265504a2852a5b88a605a3784f08c312f18198",
+      "bytes": 51399
+    },
+    "c1-natural-r3-candidate-warmup-rows.json": {
+      "sha256": "b31d4d4e3bcbc0b13fd57328ef213c204d1436767f7f6b5eb7e5e9de612d0cb1",
+      "bytes": 3416213
+    },
+    "native-process-snapshot.json": {
+      "sha256": "11b70cfabccae491f3d796c79d174f5821b9bc162974325ebd7b1a342248fa72",
+      "bytes": 597
+    },
+    "c1-natural-r3-candidate-retained-host-gate.json": {
+      "sha256": "b3b516ae03aa1bcac005b905f7c3900f627a33ee49b8169bcfba5cf3576bbd24",
+      "bytes": 17036
+    },
+    "c1-natural-r0-candidate-exit.json": {
+      "sha256": "05bbd122ed1d5813d5507f2818b344bcc2a64fcefeae3031e153b381e23f442b",
+      "bytes": 1156
+    },
+    "c1-fixed-r3-candidate.log": {
+      "sha256": "8a2a79617411877b073e3e1b999cff5be2a0036a2880b250d3587e549597579b",
+      "bytes": 260
+    },
+    "c1-natural-r3-v52-warmup-rows.json": {
+      "sha256": "8f508e5b13a478513a83e6d5ba2ec24e14dd42fa69366cf14dc57814ca772052",
+      "bytes": 3419618
+    },
+    "c1-fixed-r1-vllm-retained-rows.json": {
+      "sha256": "8a277aa5ebdb44d42adac99482786125cc53825374daa13a6db6a3fa40b5c5ca",
+      "bytes": 5532240
+    },
+    "c1-fixed-r0-vllm-exit.json": {
+      "sha256": "50dbd734667d7fa3ea52d7df592da0bd31edda820668022ea58d27641ac3b920",
+      "bytes": 1208
+    },
+    "c1-fixed-r3-candidate-retained-rows.json": {
+      "sha256": "9dc71f8eb27c0314e67faa6ccb12a3160779cb2f1d2eaf87b3ccf470d48c151e",
+      "bytes": 5265452
+    }
+  },
+  "source_after": {
+    "c1-natural-r2-v52.log": {
+      "sha256": "42446297043e561961bd76e73aee93a2d1f879c37c1be0d2031981b0c1eb69e5",
+      "bytes": 260
+    },
+    "c1-fixed-r1-v52-retained-accounting.json": {
+      "sha256": "49721dcaa775163bf8d8c1958565f0f4077db965e449ccf701f2bcb66e0448b1",
+      "bytes": 1133
+    },
+    "c1-fixed-r0-v52-retained-host-gate.json": {
+      "sha256": "bbfb0f4f8f9f1c9974b15c0e682878abbc0958529bd5816f2bc5202088077105",
+      "bytes": 3022
+    },
+    "c1-fixed-r0-candidate.log": {
+      "sha256": "9729b09f66fd9f18b7f6b39be1a01ca1d80c05005d2cc91b114327a4aa07a748",
+      "bytes": 260
+    },
+    "c1-fixed-r0-candidate-retained-host-gate.json": {
+      "sha256": "f5fc706c39bb8712db11c41a7d17cc2c3c6008edf71b015c5f6ee133dd4845f7",
+      "bytes": 3021
+    },
+    "c1-natural-r1-candidate-warmup-host-gate.json": {
+      "sha256": "adaf14313a922146335691885b982be479f37febff8a921254d6e1c2817c982b",
+      "bytes": 4883
+    },
+    "c1-fixed-r3-v52-retained-rows.json": {
+      "sha256": "2eb81728897b6a3bd53145675c0bc9911d3e8fcea3a02bd982f350621fe26384",
+      "bytes": 5273007
+    },
+    "c1-fixed-r0-candidate-warmup-host-gate.json": {
+      "sha256": "4ca88a01fb7e35b5736f753ca64bad0aeda67f090bd0c53465e727df303b7acf",
+      "bytes": 16132
+    },
+    "c1-fixed-r2-candidate-retained-accounting.json": {
+      "sha256": "9c16772ab57a6fb24e0b32f8e9366bf5dc175627d9a8d50ffe0743e0ddb6eba9",
+      "bytes": 1133
+    },
+    "c1-natural-r1-candidate-retained-accounting.json": {
+      "sha256": "5662aaf93d1878f16d907bac6dc2c2fc668620dee7baa9f559fbacb0baa1a418",
+      "bytes": 803
+    },
+    "c1-fixed-r2-candidate-summary.json": {
+      "sha256": "f2fbad14a41060c056bc954d0ab4acafe0eb9f04802fa15b3d7a5f9cd2c5a98a",
+      "bytes": 2650
+    },
+    "c1-natural-r3-vllm-warmup-accounting.json": {
+      "sha256": "c1a2a0133ee221df8d191c584573c846b40fe1152698beb47f88005678b0e1c8",
+      "bytes": 792
+    },
+    "c1-natural-r1-v52-exit.json": {
+      "sha256": "739aad0daf6556a3f7bdd8cdc964e1f5a416d7fc50a45f9c99d517f397c47a0d",
+      "bytes": 1156
+    },
+    "c1-fixed-r2-v52-retained-host-gate.json": {
+      "sha256": "d25a6378380cdd6548572f2718d5e999caa24ea80ca750b3f41bdb7a4defffd1",
+      "bytes": 5821
+    },
+    "c1-fixed-r2-v52-exit.json": {
+      "sha256": "4648d9b3f81476dbff6455c578c4d4641992016e6e390f8c7e165257cad47c71",
+      "bytes": 1156
+    },
+    "c1-fixed-r2-v52.log": {
+      "sha256": "37a8820e8878be9d778718cebf1acc0d15e0f503b31871cc067669fc2b60f30f",
+      "bytes": 260
+    },
+    "c1-fixed-r0-v52.log": {
+      "sha256": "f040a6e3096c640ba0725bae1abb0f9f42bbd6b53d0746a426d9e30db535dcfb",
+      "bytes": 260
+    },
+    "c1-natural-r1-vllm-warmup-rows.json": {
+      "sha256": "9352733548371a71a5aa60a5fcf1938a7b46a2b1b95a2ecc0c57b1d245ab82ba",
+      "bytes": 3731064
+    },
+    "c1-natural-r2-candidate-host.json": {
+      "sha256": "76ac7295eac3a9a2a18ec1e0691e34d51eb5a188f70d53c240a19c56184f3cc2",
+      "bytes": 49092
+    },
+    "c1-fixed-r3-candidate-retained-host-gate.json": {
+      "sha256": "1293899a72cb0b2be4d0dd5667143103c5a368a60425c65d45bf190881b36c1d",
+      "bytes": 3015
+    },
+    "c1-natural-r1-vllm-warmup-host-gate.json": {
+      "sha256": "c509e998da70472d104f4c725439daccece5967a2f9c4811382941a723051c3d",
+      "bytes": 3013
+    },
+    "c1-natural-r2-vllm-start-host-gate.json": {
+      "sha256": "4c0309794d5b3c6849f4834e26ae74f7299bc0688554e73d621ecc303757e991",
+      "bytes": 3011
+    },
+    "c1-fixed-r1-candidate-retained-accounting.json": {
+      "sha256": "9c27546951107dfe56268ddbf25c003e7fb4abae5d30fa2a538882170e536796",
+      "bytes": 1133
+    },
+    "c1-fixed-r2-candidate-warmup-rows.json": {
+      "sha256": "6711f3bb500ddf665ae1ea287bfc9bbb5bb1a01cc06318581c2c58d2441e7f84",
+      "bytes": 1316137
+    },
+    "c1-fixed-r3-v52-host.json": {
+      "sha256": "5bc7ee8f39b52f3291a2dd6eed40758b170260e29ef0de849ad85bf29bc7b8e2",
+      "bytes": 39923
+    },
+    "c1-fixed-r0-candidate-warmup-rows.json": {
+      "sha256": "7d9d446cdc31988d79f03efd26022d7bfeec12a66a5d115226c0271e83ae9164",
+      "bytes": 1316146
+    },
+    "c1-natural-r1-vllm-summary.json": {
+      "sha256": "0e7e6c15c7780d46e2e9f3f0542f51fe950bfb17665378a2bf39293587fc4efc",
+      "bytes": 2337
+    },
+    "c1-natural-r2-v52-retained-accounting.json": {
+      "sha256": "3cdd7ca95ec6b69208ff314698150db1a33ac40d03b24eebc1d48cf82761d73a",
+      "bytes": 803
+    },
+    "c1-natural-r0-candidate.log": {
+      "sha256": "9d1bd5afbd1dfa3e3fde8a9bc9e902d6b66c65d66f1b52bc0b7c7227940d7259",
+      "bytes": 260
+    },
+    "c1-fixed-r3-vllm-start-host-gate.json": {
+      "sha256": "e667ccabb24c5a239e41d95577a0220f8b0f0d284172292a5badc013ccf7da50",
+      "bytes": 3012
+    },
+    "c1-fixed-r1-v52-warmup-rows.json": {
+      "sha256": "3e80b9183511c14c57ce26d1a859883a6d2bdb3256004af6b4b80157cac85ba4",
+      "bytes": 1318044
+    },
+    "c1-natural-r1-vllm-warmup-accounting.json": {
+      "sha256": "624a39162a94edcfab3737ac2260de7a8a3eeaf1d44e3f75686f4f342252bc69",
+      "bytes": 792
+    },
+    "c1-natural-r2-v52-host.json": {
+      "sha256": "7f3cf348ea783e8a727739dec7df3b689c4b417d4a81f92cce518bdfcfe0d4c8",
+      "bytes": 54800
+    },
+    "c1-natural-r3-v52-exit.json": {
+      "sha256": "bc29612d1a483bf90a554f9d1dfb6095278b1da88b1ee15fb66b6083ea3c873a",
+      "bytes": 1158
+    },
+    "c1-fixed-r3-vllm-warmup-accounting.json": {
+      "sha256": "71819859bbf86cb6cc77325f044da247ebca608108a02060d5c724ae340925ee",
+      "bytes": 1103
+    },
+    "c1-natural-r1-vllm-retained-host-gate.json": {
+      "sha256": "4e322bd669158102bf7dd753a876609e18d462736f81d378cd637b249d1aeef3",
+      "bytes": 3015
+    },
+    "c1-fixed-r1-vllm-launch.json": {
+      "sha256": "172be4de63d7cefb87dd5eb12f0c53435984e3c7f66b8f88084aa363a098315f",
+      "bytes": 2119
+    },
+    "c1-fixed-r0-v52-launch.json": {
+      "sha256": "b22e3b5713e88cd388abe81602b23a0665b5e184b20d1a3862a6d96348bd9f94",
+      "bytes": 2322
+    },
+    "c1-natural-r0-candidate-host.json": {
+      "sha256": "6e21b741fa947ed2cdc650d80d2b6445f93e701a280dcf7a2c8dc710f81bc46d",
+      "bytes": 49095
+    },
+    "c1-fixed-r1-candidate-host.json": {
+      "sha256": "fd2e3fc9f1341cc5d65b1de2f322cd36756220ea7a5198f326146a3e974d4038",
+      "bytes": 25109
+    },
+    "c1-natural-r2-candidate-warmup-rows.json": {
+      "sha256": "1c21a49a8295f3207726715e0f67c5a7a83f460bd756b5c42c660b77e1d9de32",
+      "bytes": 3416094
+    },
+    "c1-natural-r2-vllm-summary.json": {
+      "sha256": "fa86aa38c23351cbbc4db3180031b32b46065422d1859b5726fbfe668d619c18",
+      "bytes": 2374
+    },
+    "c1-natural-r1-candidate-retained-rows.json": {
+      "sha256": "5856f35469e6b4fa0baa5a4bc51d6c7f63a9bedd1df44b9dfa971ae92f460685",
+      "bytes": 13665486
+    },
+    "c1-fixed-r0-candidate-retained-accounting.json": {
+      "sha256": "8b09c76d4d63b923f18fd8fa6fb7d6281d5ec726814f857b57bc6ed441c202ed",
+      "bytes": 1133
+    },
+    "completion.json": {
+      "sha256": "5569f8693247ae479f442384a18017f15c62d237837ccd5212c126e9b903154e",
+      "bytes": 75102
+    },
+    "c1-fixed-r1-vllm.log": {
+      "sha256": "4f8111e020ccbd06c34f2c4a0d6a466f18d2fd12e5516cd5ec5a085966208190",
+      "bytes": 60408
+    },
+    "c1-fixed-r3-vllm.log": {
+      "sha256": "db6e45c09374647cb79267ec6a38d9d92ef83f65ebe8e78b9fcfdbf46174705a",
+      "bytes": 60409
+    },
+    "c1-natural-r1-v52-launch.json": {
+      "sha256": "9312ea40816f7109e5b6b2345e251c3688fc75e274b59165bb9e278a2dfc3901",
+      "bytes": 2321
+    },
+    "c1-fixed-r0-v52-warmup-accounting.json": {
+      "sha256": "7288e6caefc68287f61f06832293405938997390d5b5c922568cdc7067cd5ec7",
+      "bytes": 1103
+    },
+    "c1-natural-r2-vllm-retained-rows.json": {
+      "sha256": "eff6bd56609a4dcf90932f8c13fd2469fcb24ab7a801648f4701125c3ee483f7",
+      "bytes": 14929824
+    },
+    "c1-natural-r2-candidate-retained-host-gate.json": {
+      "sha256": "d278d56e26049d61e1e2bb05a1ae1f6bbceabd3e706bd79a777ea2770af400f5",
+      "bytes": 3015
+    },
+    "c1-fixed-r2-v52-host.json": {
+      "sha256": "136921af13d5a0034a8567cd50895772809417e052ba744aba528a36801805d5",
+      "bytes": 28524
+    },
+    "c1-fixed-r1-v52-summary.json": {
+      "sha256": "9f675fe986d709aa360acbe498bcdf7ee95580fb9942bb701e9158603797fd4d",
+      "bytes": 2654
+    },
+    "c1-fixed-r1-candidate-warmup-accounting.json": {
+      "sha256": "9113f76acce27fd0ef2d202f3b97e98f10ce2fcd93465c863feb5241dda961fb",
+      "bytes": 1103
+    },
+    "c1-natural-r3-v52-start-host-gate.json": {
+      "sha256": "bea388fa70135454e18342932eac988ac4b564113dc827f30fecd1bbec568656",
+      "bytes": 3011
+    },
+    "c1-fixed-r2-vllm-retained-rows.json": {
+      "sha256": "d72948780777612806ca95d32ef8d1af8ce9c407ef8a6dc1dd8ed02198b53874",
+      "bytes": 5531837
+    },
+    "c1-fixed-r2-vllm-warmup-accounting.json": {
+      "sha256": "ce4b2d8b2624b510baf3e38f5709e48cca6d55b8c9cb50dde13e5dff5f187410",
+      "bytes": 1103
+    },
+    "c1-fixed-r2-v52-start-host-gate.json": {
+      "sha256": "cd333ccb3572082897ef0229bb38218b7ff4dc15897ac2c7485ea53832064067",
+      "bytes": 3010
+    },
+    "c1-natural-r0-vllm-warmup-rows.json": {
+      "sha256": "28cf0ba76e565a400df8fb41d7410339b23d21ddb5346e14f7b08177d5d5691a",
+      "bytes": 3734052
+    },
+    "c1-fixed-r1-v52-start-host-gate.json": {
+      "sha256": "549368555c57f578b4356d038c75ff71f000700e1ec066d4efbfbbf53c5a7ce9",
+      "bytes": 3011
+    },
+    "c1-fixed-r3-v52-start-host-gate.json": {
+      "sha256": "cf8d62145e6764511c180ff6ad322ec7a08ed95bdf2aec6cf523006624a6ee56",
+      "bytes": 3010
+    },
+    "c1-fixed-r3-candidate-summary.json": {
+      "sha256": "500ae09e338e3f74f679c8f5ec0e357fe5e48c7e86581b782ef8705264e9f538",
+      "bytes": 2660
+    },
+    "c1-natural-r2-candidate-exit.json": {
+      "sha256": "47802f2fde7869d4cbb47f25331c1a212e491d19fbc7901695a1d0a759ad942f",
+      "bytes": 1156
+    },
+    "c1-fixed-r0-vllm-retained-accounting.json": {
+      "sha256": "5de90c5b34e6dd913a537f502795f3e7d8d6d2be07f64489d409aeacfbbea04d",
+      "bytes": 1133
+    },
+    "c1-natural-r0-vllm-exit.json": {
+      "sha256": "78fb1f4c23d37a768ad2f02b9b40d677d66cfb4778636ccd4e9dc27aae155ae6",
+      "bytes": 1207
+    },
+    "c1-natural-r0-v52-launch.json": {
+      "sha256": "2ef9f17857c9a0fd9ab00d8aaad6f9dc2ddd953723df0299fb12bf11720cf52d",
+      "bytes": 2321
+    },
+    "c1-fixed-r2-v52-retained-accounting.json": {
+      "sha256": "361665f446ee7f84eaba393329f13f53c1fe4456a2e40ea9f3d41c649170a141",
+      "bytes": 1133
+    },
+    "c1-natural-r2-vllm-host.json": {
+      "sha256": "72478d9a698aee8d6c1db8990732f1337ac48cc4fe69f795e8e2ace09ecc2e6f",
+      "bytes": 68177
+    },
+    "c1-fixed-r1-v52-retained-host-gate.json": {
+      "sha256": "d4203d430ef51c91573f1d9827ce2868e9082b1d42d1cb9953ff716854032187",
+      "bytes": 3015
+    },
+    "c1-natural-r3-candidate.log": {
+      "sha256": "a250bae93e15a5e326865a4a4000f86eeb745ca4344160d0f3c9dd3c0e701862",
+      "bytes": 260
+    },
+    "c1-natural-r2-vllm-retained-accounting.json": {
+      "sha256": "a1b48cf7c0cf80ac4a563486ed9b8e3a274b2488a2619f73c96890521b9dd2f7",
+      "bytes": 804
+    },
+    "c1-natural-r1-candidate-launch.json": {
+      "sha256": "92cdb00e0174c7880a45185190d8645780a86125e73558c7872bacb4bdf2085c",
+      "bytes": 2342
+    },
+    "c1-natural-r1-candidate-warmup-accounting.json": {
+      "sha256": "fdd7c5ff94a46e8c686b60ca28bb29a962090430d6d69d5003c0b2e14b4e4781",
+      "bytes": 791
+    },
+    "c1-fixed-r2-v52-warmup-accounting.json": {
+      "sha256": "f02cd1739bb688745326cee90f01d83f87fff5650baded6ca90e7b7fbd4af07a",
+      "bytes": 1103
+    },
+    "c1-natural-r2-vllm-launch.json": {
+      "sha256": "783c025e4427157912a6b053cd6b0966314eb0fe9c2ce591626cc042b428249b",
+      "bytes": 2118
+    },
+    "c1-natural-r0-candidate-warmup-accounting.json": {
+      "sha256": "c35bc62f608b7ce215732f17ce721f8df0d938839d23b09ae3d1f86835bbd191",
+      "bytes": 791
+    },
+    "c1-natural-r3-vllm-launch.json": {
+      "sha256": "918032f792b4ca9ec3bacc50ce285aaaea6995b08f4f5e6c1fe302788bfc278f",
+      "bytes": 2118
+    },
+    "c1-fixed-r1-candidate-exit.json": {
+      "sha256": "6ada5ca058e1aaa2cb74c984cca3cb1ed3a1f409c1bca5c11296c9b33995e9a5",
+      "bytes": 1156
+    },
+    "c1-natural-r3-vllm-warmup-rows.json": {
+      "sha256": "09feae8a04138a240523d1596e9152ed6961844c5217273ffc1ea95f10793ade",
+      "bytes": 3729731
+    },
+    "c1-natural-r1-v52-warmup-host-gate.json": {
+      "sha256": "2fccfb92ed3b625f0d8a15ab9817791c6c30205731ef0ef795f8c60d40df186b",
+      "bytes": 3012
+    },
+    "c1-fixed-r1-vllm-warmup-accounting.json": {
+      "sha256": "0918f46c5a07befba5098230cf398d835754908426766b4a186c56d9bb48a3df",
+      "bytes": 1103
+    },
+    "c1-natural-r3-v52-retained-rows.json": {
+      "sha256": "a38a63c3c24b61f080d379132fec2478490b65899bcd8d8b77310c9f0a167723",
+      "bytes": 13679483
+    },
+    "c1-fixed-r3-vllm-host.json": {
+      "sha256": "21ca505bbbfcb10520fababb267c66ec00e4642987ea77dc59ce6fa54ee13d1b",
+      "bytes": 47782
+    },
+    "c1-fixed-r0-v52-warmup-rows.json": {
+      "sha256": "3c9d40a5e59b1864412ba6fd2848476e4de97b69321dbb5c73d677fcd1d34c60",
+      "bytes": 1317961
+    },
+    "c1-natural-r0-candidate-retained-accounting.json": {
+      "sha256": "4688c7bd673dd0852271fd662e55feefc2e84f5e744666711c941a7d40a246fb",
+      "bytes": 803
+    },
+    "c1-fixed-r0-v52-retained-accounting.json": {
+      "sha256": "2d26d45e021751e3b368ea7954a759932b6b830875e0a9e7ada686bacd104202",
+      "bytes": 1133
+    },
+    "c1-fixed-r0-candidate-summary.json": {
+      "sha256": "1977ad4a3d3c092a617d47bdb05f681d354d8a4ffa01a4d7fcc1022f5f6cf870",
+      "bytes": 2672
+    },
+    "c1-fixed-r2-vllm-warmup-host-gate.json": {
+      "sha256": "b24760062131cbd7b0b941f9077f4485803d1cad572446099c396a705192c987",
+      "bytes": 3013
+    },
+    "c1-natural-r1-candidate-exit.json": {
+      "sha256": "6e2663c3fd92bccd2889cc5baeef60660e7582124495a195ab25c4d435ecf5a1",
+      "bytes": 1156
+    },
+    "c1-natural-r2-v52-retained-host-gate.json": {
+      "sha256": "92479702a61918926190229c870aed0d9c59150b1e4955381948b833d8997dac",
+      "bytes": 3015
+    },
+    "c1-natural-r0-v52-summary.json": {
+      "sha256": "83a2de8f01745ec8bda50e6a2ec62f60ec631e463147be97caa7ccf18dd2288a",
+      "bytes": 2347
+    },
+    "c1-fixed-r3-candidate-warmup-host-gate.json": {
+      "sha256": "b77e49d6d59783815d31dc1db66ccea149148d914b642f44c63417fca6958fd9",
+      "bytes": 5817
+    },
+    "c1-fixed-r3-candidate-exit.json": {
+      "sha256": "fa35a48632de40c31eb50e0dc45454b087a4a26dbd964370d071834b947a6860",
+      "bytes": 1156
+    },
+    "c1-fixed-r3-vllm-warmup-rows.json": {
+      "sha256": "c124279e397796f5144d2304842a9ae0464706a5146dae8fc13c409c962153c6",
+      "bytes": 1382835
+    },
+    "c1-natural-r0-vllm-summary.json": {
+      "sha256": "139018b9c7819bd6af9d1a0cb8bbe72e99b1789022709261ee1b28d087e985dc",
+      "bytes": 2338
+    },
+    "c1-natural-r2-vllm-exit.json": {
+      "sha256": "0b56223eee46d257f64511d0c4d9362bac3a016c4de911503225690187776d65",
+      "bytes": 1207
+    },
+    "c1-natural-r3-v52-retained-accounting.json": {
+      "sha256": "006bf168d69c1792232207530795f780e62525350b52c119a753f9d77e0617c7",
+      "bytes": 803
+    },
+    "c1-fixed-r0-vllm-retained-rows.json": {
+      "sha256": "2841d75c2620b5f0051f10b5cee086ef8063cc4d0fa1da303acdba9b6102a878",
+      "bytes": 5528791
+    },
+    "c8-fixed-r0-v52-start-host-gate.json": {
+      "sha256": "6c682d9d9950038281c6b1d8d676ba9ccb342981bc82c5a0716dc99ab504ff23",
+      "bytes": 139982
+    },
+    "c1-fixed-r2-candidate-retained-host-gate.json": {
+      "sha256": "3f3ad89022f6b76a53e2b21840b7fc55108e42aa34e5947e9eb3328fe6dfb6d5",
+      "bytes": 3015
+    },
+    "c1-fixed-r3-v52-warmup-host-gate.json": {
+      "sha256": "7da17dbff9116f6f3f7392ff543a4607f8502610c88334aa4500654a2a83e95e",
+      "bytes": 10492
+    },
+    "c1-natural-r1-candidate-host.json": {
+      "sha256": "8e1a677c602f308f65386a2d27714c75b3f6669004d7efefbc1fba4c65edbb65",
+      "bytes": 53656
+    },
+    "c1-fixed-r1-vllm-exit.json": {
+      "sha256": "a64fcc66556ca82c6771bebe956f51cec0ae577ffcf1e44cc74c455aa60572de",
+      "bytes": 1209
+    },
+    "c1-fixed-r2-candidate-warmup-host-gate.json": {
+      "sha256": "5a44a974e194d03dee6dd03cba3163add36e4eed6c827fea9b6d18da6d5f4d1c",
+      "bytes": 3013
+    },
+    "c1-natural-r1-candidate.log": {
+      "sha256": "ad40d03ad388eed0d3b5a8e64e326a7b112568bfddbcc03f374873edf75ad51f",
+      "bytes": 260
+    },
+    "c1-fixed-r2-candidate-start-host-gate.json": {
+      "sha256": "aabc96deb6f9522d088a16366107c56fad2b4359f18c6eee5bf9c15dcac13f46",
+      "bytes": 3011
+    },
+    "c1-natural-r0-v52-start-host-gate.json": {
+      "sha256": "1cf007b1868cac26bb178fb0107836bc8bab6b2def34ddfdf75fe3c34aa1e03f",
+      "bytes": 3011
+    },
+    "c1-fixed-r1-vllm-retained-host-gate.json": {
+      "sha256": "429caaeb3a5d33a7fc5d602ea82370999328108d154b7044891e9b8f159dc860",
+      "bytes": 3018
+    },
+    "c1-fixed-r2-v52-retained-rows.json": {
+      "sha256": "c6fd94a448430b4b1b4b7e729fd15ab41f64b8780f7fb9e2d2df0ad32474f064",
+      "bytes": 5273130
+    },
+    "c1-natural-r3-candidate-retained-accounting.json": {
+      "sha256": "b0a6efe6908cac46b7546042043ae223b4a6ad8b7d54832c73d0b304002f716d",
+      "bytes": 803
+    },
+    "c1-fixed-r0-v52-exit.json": {
+      "sha256": "bf46bca0281e19dc0e7197c0995b34a24b91a4aeaa0898fcb45ba85b40a65d89",
+      "bytes": 1158
+    },
+    "c1-fixed-r1-v52-host.json": {
+      "sha256": "9ec3fc4b30e39e546e03e3310c376e8424379f8c84b50b189ee5f2c9deb09556",
+      "bytes": 21684
+    },
+    "c1-fixed-r3-candidate-start-host-gate.json": {
+      "sha256": "97228e95387572c7bf329f20f72f6e9a77d30ac85cf3fb179ca07171053bc53b",
+      "bytes": 3944
+    },
+    "c1-natural-r3-candidate-retained-rows.json": {
+      "sha256": "e6cab8d9f5d02b2c9512620ab828657db0614343603cde77dd39fb972d7a1b30",
+      "bytes": 13666209
+    },
+    "c1-natural-r0-v52.log": {
+      "sha256": "a5d238fe9015e8b2c6ff13ed3833ecd5fbc6957244de451261a3aaea1dd215b2",
+      "bytes": 260
+    },
+    "c1-natural-r2-v52-retained-rows.json": {
+      "sha256": "d164a4cc6d7627fca4af86025eb093e91023ad7cdd807ca69dff7d9719c06712",
+      "bytes": 13679189
+    },
+    "c1-natural-r3-vllm-summary.json": {
+      "sha256": "4c89ba1acbe1e62ac8c304ff6f70ee4584443643970ae68b1bfbaad122771307",
+      "bytes": 2362
+    },
+    "c1-natural-r3-vllm-start-host-gate.json": {
+      "sha256": "83a3131b6f52239b5e2d80a7033ae754caa80c64f0112776f7d5e6c60a9ae59a",
+      "bytes": 3009
+    },
+    "c1-fixed-r3-v52-retained-host-gate.json": {
+      "sha256": "c9c9f13aa73a0225a5cd492b1fccdb42da4c240a85aac9f931c3ed1b2a74c9b0",
+      "bytes": 3015
+    },
+    "c1-fixed-r2-candidate.log": {
+      "sha256": "5c7f32104305a87e9dbaf1c0c41aaf00220f6519a8c0b7ad9db5e95698b8f864",
+      "bytes": 260
+    },
+    "c1-fixed-r2-v52-summary.json": {
+      "sha256": "4314f35ca523ebc1b88236a988df9ad8f4199800045baf46f11ffd472d77a11e",
+      "bytes": 2652
+    },
+    "c1-natural-r0-candidate-warmup-host-gate.json": {
+      "sha256": "c197481a62eb926cbcae5ba27be171ad16c86b950bec20b089906e560420bd03",
+      "bytes": 3013
+    },
+    "c1-fixed-r3-vllm-retained-host-gate.json": {
+      "sha256": "723f269acbde421492e4134af44652f56724f9dcd5ffedb5155f03ef7571046b",
+      "bytes": 3015
+    },
+    "c1-fixed-r2-candidate-exit.json": {
+      "sha256": "74bcf8fede5d718d593670c6c4173f60a6bd44cb4f39eb2101970340799125cf",
+      "bytes": 1156
+    },
+    "c1-natural-r0-v52-host.json": {
+      "sha256": "dac3631e05a5949c253d7c36fcf1e0b32fed9a7256bff24462078d15c7b24761",
+      "bytes": 54801
+    },
+    "c1-fixed-r1-vllm-host.json": {
+      "sha256": "c7e38dfae6ad856fe7f65ba96c1a78d66285194fc7291f52aa2b774b1b9e8037",
+      "bytes": 88541
+    },
+    "c1-fixed-r1-vllm-retained-accounting.json": {
+      "sha256": "c0366075bd62d91c2cffd324d0df8baa20fc049038300973d00dc82cfdfab0aa",
+      "bytes": 1133
+    },
+    "c1-fixed-r3-v52.log": {
+      "sha256": "eed7094bec19ae00119599318b7cc944242022fca355d5fb4d0847d424bcbf96",
+      "bytes": 260
+    },
+    "c1-fixed-r3-vllm-summary.json": {
+      "sha256": "b9496fedc89c1bb43d4f34cfc8029e22e0b294f5fe15323defbd83758f70ba9f",
+      "bytes": 2674
+    },
+    "c1-natural-r2-vllm-warmup-host-gate.json": {
+      "sha256": "917f49995b7e854f0ccf6b875a7328ad8cccbf240a01c901677add9e1285c1e4",
+      "bytes": 3013
+    },
+    "plan-snapshot.json": {
+      "sha256": "a4484fa903bdecdde493df9e78a49597a2c2aefcbab514ee0b29d147461b5abf",
+      "bytes": 3322
+    },
+    "c1-natural-r0-vllm-warmup-accounting.json": {
+      "sha256": "0f3402b3b101ddcea9299c6b5c3969ae0feed4623aaeeb9800785f8889e86120",
+      "bytes": 792
+    },
+    "c1-fixed-r0-candidate-warmup-accounting.json": {
+      "sha256": "227163328ef9c50204332f1240670fbb5c724ae691c00dd68c23381165756bee",
+      "bytes": 1103
+    },
+    "c1-fixed-r1-candidate.log": {
+      "sha256": "fea75be57783730f51cc4abbac2a50c5df32b497d2b8db816fec12c015b77461",
+      "bytes": 260
+    },
+    "c1-natural-r0-vllm-start-host-gate.json": {
+      "sha256": "206fa2c102b5b1269f1c18e10f7ba3bb0afe223b12cf1716fde5ea9e523dc2d3",
+      "bytes": 3011
+    },
+    "c1-fixed-r1-v52-launch.json": {
+      "sha256": "7744cfb7d4da6747759e9ab52dcedfc8179792572f494dde36f4fd07bb2a06ea",
+      "bytes": 2319
+    },
+    "c1-natural-r1-candidate-retained-host-gate.json": {
+      "sha256": "98f85baec676fff4565138672d5fd9bf006ade0a2ac1887569632e3d6fddf8fc",
+      "bytes": 3015
+    },
+    "validation-snapshot.json": {
+      "sha256": "0c5018ebc8dc2456c1d1bd6256af17ea0ae589ec0ed53b399c4b95afd9c12922",
+      "bytes": 115
+    },
+    "c1-fixed-r1-candidate-launch.json": {
+      "sha256": "b8eab3ba8af82736e29ee0529e2d4231462caf96c287910db1cc40719e76709e",
+      "bytes": 2341
+    },
+    "c1-natural-r0-candidate-launch.json": {
+      "sha256": "707fefe076de99cd4751b676a0a8a26eff338fde0fee3a28383c58654d21d93e",
+      "bytes": 2342
+    },
+    "c1-natural-r3-vllm-retained-accounting.json": {
+      "sha256": "400509f2b2a5263d3ca2959f869fe717634fd6f33a7bf3ae8797e4cadc28dd7b",
+      "bytes": 804
+    },
+    "c1-fixed-r3-vllm-launch.json": {
+      "sha256": "102f6795008bd92db6482629c331dc21f69d465a8484fc9c1f861f9d5caf8cc2",
+      "bytes": 2117
+    },
+    "c1-fixed-r0-candidate-retained-rows.json": {
+      "sha256": "da77515c0aee7911f0f925d89466fbc544fd4baa2c1bd69e584a53264d0b8d22",
+      "bytes": 5265469
+    },
+    "c1-natural-r2-vllm-warmup-rows.json": {
+      "sha256": "45c208b986e239a2f339ebecaea822e92b096cd4a17fa3363ded2a808a3941ba",
+      "bytes": 3734367
+    },
+    "progress.json": {
+      "sha256": "9cca3fdf712cbd9573e90a5bb7019df911b4e522af38ffbed5f2815088342869",
+      "bytes": 70490
+    },
+    "c1-fixed-r1-candidate-summary.json": {
+      "sha256": "0a325703060f22abe74d07062401b5c9c203b4c6ce18c013eef5c6fd388ecf06",
+      "bytes": 2662
+    },
+    "c1-natural-r1-v52-host.json": {
+      "sha256": "95983f8b427c988adf88ff3b4dda87f8f7758cee3dfaad6363544126d32b85ec",
+      "bytes": 54802
+    },
+    "c1-fixed-r2-vllm-warmup-rows.json": {
+      "sha256": "9a79976d322419606e885869ae412d30866a2a0ad8c212c2edaa384d960de3ba",
+      "bytes": 1382065
+    },
+    "c1-fixed-r2-candidate-host.json": {
+      "sha256": "e7a9191b514320ef2dc32850578dbbcb455598f73ef597913929992b9b0db671",
+      "bytes": 20543
+    },
+    "c1-natural-r0-v52-retained-rows.json": {
+      "sha256": "60ae3869f9fcdc86030e62319470c05fd95168e577cccb49d80d343cf6c65f84",
+      "bytes": 13679582
+    },
+    "c1-natural-r3-v52-retained-host-gate.json": {
+      "sha256": "bc1eb373c5abc574a932a22e28ca5469b7f793a9d55858a314710101d41abe2d",
+      "bytes": 3950
+    },
+    "c1-fixed-r1-vllm-summary.json": {
+      "sha256": "6711b43b72bda0e37cef36c76ec01439e7fa9c3650b50c3b4bc5c760536fb9be",
+      "bytes": 2651
+    },
+    "c1-natural-r1-vllm-retained-accounting.json": {
+      "sha256": "e2cf49202c3843dd90e3db72a7c53f5d94a6625b6125786f2008d8353452d31e",
+      "bytes": 804
+    },
+    "c1-natural-r2-v52-warmup-accounting.json": {
+      "sha256": "93650492a8bbba3eb547a1ef9a697753405c9592f6e1dc6dde8e1c1ac4d6bfaa",
+      "bytes": 791
+    },
+    "c1-fixed-r0-candidate-start-host-gate.json": {
+      "sha256": "977110f33a9e2209ddf4682d0266e860f7f543a9d185c41a4a7a1fa430be833e",
+      "bytes": 4887
+    },
+    "c1-fixed-r3-candidate-launch.json": {
+      "sha256": "7ad289db6e6a0ff44d68e35c1787db605792bf6d5acc61f01dac0fcdb524f4c5",
+      "bytes": 2340
+    },
+    "c1-fixed-r3-v52-retained-accounting.json": {
+      "sha256": "96b564209cbe1225978e7094f1184bb55a919f4e2c997db4b6e5791f8ccaf603",
+      "bytes": 1133
+    },
+    "c1-natural-r2-candidate-retained-rows.json": {
+      "sha256": "c7aa737b1e7fc398b2962b1847d5e2e83a4640ecfbf43eaa54c3afac48e4e6fb",
+      "bytes": 13665418
+    },
+    "c1-natural-r0-vllm-launch.json": {
+      "sha256": "e913e622e638d5bf54ad817a668b01ed3f3d4bd15b9bde43347efc867e467da6",
+      "bytes": 2118
+    },
+    "c1-natural-r3-vllm-retained-rows.json": {
+      "sha256": "854f07167789bc037d7c9df261349014c989d24b540c2248c1b37a1331e8d839",
+      "bytes": 14931529
+    },
+    "c1-natural-r1-vllm-exit.json": {
+      "sha256": "294837286d02d5bf3454b6a4e198b56b1c9ddf6572ef8049be53ef675d5c43aa",
+      "bytes": 1208
+    },
+    "c1-fixed-r1-vllm-warmup-host-gate.json": {
+      "sha256": "d8380b1bfb86a36ff97c97657777d709fcf7649eb27231964056cfd32d03c92a",
+      "bytes": 23614
+    },
+    "c1-natural-r1-v52-retained-accounting.json": {
+      "sha256": "03e8e0c3fdff7349f488106fa18a0d33ce0baa4eaf31b2d6a117d29065b8fa2c",
+      "bytes": 803
+    },
+    "c1-fixed-r2-candidate-warmup-accounting.json": {
+      "sha256": "351fe1527a4321a366af2887022ec38babdb1612cc2308d2a333cbc9a3dfb786",
+      "bytes": 1103
+    },
+    "c1-fixed-r1-v52-warmup-host-gate.json": {
+      "sha256": "188f2f4457cb9e9e87f931be6f0afa29161e6a0c41430b1537a1ddc61cf71346",
+      "bytes": 3014
+    },
+    "c1-fixed-r1-v52-retained-rows.json": {
+      "sha256": "d2258b29b8f6255fe00467a7c30e9aef599a932301dd902a5ec2457f0695e18b",
+      "bytes": 5273052
+    },
+    "c1-natural-r3-v52-summary.json": {
+      "sha256": "996caa5f6a40fe5e2c85ec3ed0b1d747960160f7cdd6b86b224e3786080bf989",
+      "bytes": 2334
+    },
+    "c1-natural-r2-candidate-launch.json": {
+      "sha256": "ae72837eb71df303dc813529faabcad47975e54f0b5cc70787470ce22afcd8fe",
+      "bytes": 2342
+    },
+    "c1-fixed-r3-candidate-warmup-rows.json": {
+      "sha256": "7f03a5c8cdf732deb595f3707ccaef7365613445507f3221989d832b1b9ee834",
+      "bytes": 1316146
+    },
+    "c1-natural-r3-candidate-summary.json": {
+      "sha256": "1bf44ab83b2966910ff9a84c106d5676238b89c0a5db472a6260c174cc0e3197",
+      "bytes": 2349
+    },
+    "c1-fixed-r2-vllm-host.json": {
+      "sha256": "8e98b3a3910b5bb441db6515df2c88d59299fd79e4d071865017dd4a4bacc5f2",
+      "bytes": 54792
+    },
+    "c1-natural-r0-v52-warmup-host-gate.json": {
+      "sha256": "5c0490bb21b1a99d2b3660f3ecf2703dee852ed02b698ac3a1f79ace2fd27914",
+      "bytes": 3012
+    },
+    "binary-receipt-snapshot.json": {
+      "sha256": "e8bdeed1c85d6b6552a881048cef7e0918f65df92afcc067407f03d281cbaa45",
+      "bytes": 146
+    },
+    "c1-natural-r0-candidate-warmup-rows.json": {
+      "sha256": "a42a52aa65b60060d36a6defb279edcbbf2c8fe1e6d40ac30858733cd59ca0bc",
+      "bytes": 3416348
+    },
+    "c1-fixed-r0-vllm-start-host-gate.json": {
+      "sha256": "a5b1988ffb6fb09bd0e49c555a14188763fe2b1ca508a64a946283a3247ca5ea",
+      "bytes": 31094
+    },
+    "c1-natural-r1-vllm-retained-rows.json": {
+      "sha256": "8851fc66fdd8034e3731b27be4d1c7bca2e7ce985c1f74f5b7918cca1ff35484",
+      "bytes": 14938642
+    },
+    "c1-natural-r0-candidate-start-host-gate.json": {
+      "sha256": "2e3f066d9a18aebcba98fb32c6026eb000115df597e53d6991dd2db557e5c24f",
+      "bytes": 3011
+    },
+    "c1-natural-r3-candidate-exit.json": {
+      "sha256": "e2a2285e68ad98b11e75eae8b73efa0ac51e46aead1304c7aaa1880b8288eda0",
+      "bytes": 1156
+    },
+    "c1-natural-r1-v52-start-host-gate.json": {
+      "sha256": "3925c2c74f143f2f4424a4dab6b31ffe373486e5e8725e97eea2e436653de07c",
+      "bytes": 3010
+    },
+    "c1-natural-r0-v52-warmup-rows.json": {
+      "sha256": "60058bfc1747fb3dac9a29d3e89da369ea0bf34b5596f9f16597124bb178dbdf",
+      "bytes": 3419604
+    },
+    "c1-natural-r0-candidate-retained-rows.json": {
+      "sha256": "fee874df957dc7be88f7742f878c1ba9d4911aff9ad103e745abbde7bdb9f913",
+      "bytes": 13666274
+    },
+    "c1-natural-r3-vllm.log": {
+      "sha256": "f8bda17e130620500b14be289e35bed915db9c05e1081f903b0a4977ae6e5f09",
+      "bytes": 60723
+    },
+    "c1-fixed-r0-v52-summary.json": {
+      "sha256": "2e629711f5013d5916092351ed74d47292e5127fc9f15ad9771eda7e4051b080",
+      "bytes": 2635
+    },
+    "c1-fixed-r2-candidate-retained-rows.json": {
+      "sha256": "25c09d14a5b5fe2d354c4d56758990eace66e4da47963f4bd9fdbb9052e9b4ad",
+      "bytes": 5265454
+    },
+    "c1-natural-r1-v52.log": {
+      "sha256": "6d8ed1923d081f4591a93b5f37009bf0d64baff69a44ab74453fae7d4b6318cb",
+      "bytes": 260
+    },
+    "c1-fixed-r3-vllm-retained-accounting.json": {
+      "sha256": "4c283c96ca37f9d9fe05f714d1da34fbeb9d34dcf9af02820ac167a145b96e4f",
+      "bytes": 1133
+    },
+    "preparation.json": {
+      "sha256": "415b3d82d434b44ef9233d365c6b95adc26b3f9d9eb2e5f60a7770a868fe65a4",
+      "bytes": 14745
+    },
+    "c1-fixed-r2-vllm-exit.json": {
+      "sha256": "1b1bdeb2fc48075224498e44815a9813c3a5a7b94a2e89586954fffd819b176f",
+      "bytes": 1208
+    },
+    "c1-natural-r3-vllm-warmup-host-gate.json": {
+      "sha256": "880e119ecb6e68034928449c5533419f9e00af8c41f850c65f6b4edf1fda968c",
+      "bytes": 3013
+    },
+    "c1-natural-r3-candidate-warmup-accounting.json": {
+      "sha256": "b659422e9e2a03918041871ff0ff95dad03b8b0286355445754c3a26275a1c6f",
+      "bytes": 791
+    },
+    "c1-fixed-r3-vllm-warmup-host-gate.json": {
+      "sha256": "bf0be38147309569e476c8d8acfe31c34e89e43d46280caffb825af4cb0f434e",
+      "bytes": 7688
+    },
+    "c1-natural-r0-vllm-host.json": {
+      "sha256": "8638636784cd6a0bf7b2f046edf79e92b22d31dfd03447cb561a08512746b862",
+      "bytes": 78943
+    },
+    "c1-fixed-r0-candidate-exit.json": {
+      "sha256": "300989ad6b723eebfd944537e6733b728f8caf74a1edb004b5be627376c5f536",
+      "bytes": 1158
+    },
+    "c1-fixed-r0-vllm-warmup-accounting.json": {
+      "sha256": "1f645a94665e7c4552b0c633b214682ad9a50bf184489bd075ddb682920c3c8c",
+      "bytes": 1103
+    },
+    "c1-natural-r2-vllm-warmup-accounting.json": {
+      "sha256": "3bb78c055bfc3a425e80754d62e92cd424f67150d0d97b17bfe0ddf19298df3f",
+      "bytes": 792
+    },
+    "c1-fixed-r1-v52.log": {
+      "sha256": "5a2dbd4142c7884ba211b3d66acaf1f6477586203eb4620e40af129e413c6a50",
+      "bytes": 260
+    },
+    "c1-fixed-r0-v52-host.json": {
+      "sha256": "efa5c4796ad3c727f1e561923237cd4c161ca22c4f35d7ccb12cf6127b5fbed2",
+      "bytes": 21728
+    },
+    "primitive-validation-snapshot.json": {
+      "sha256": "0c5018ebc8dc2456c1d1bd6256af17ea0ae589ec0ed53b399c4b95afd9c12922",
+      "bytes": 115
+    },
+    "c1-natural-r3-vllm-retained-host-gate.json": {
+      "sha256": "3d8d479672bc6e25042eaf069f6ec4a42e96ebce19bc9149c84a03e55961e1fb",
+      "bytes": 3015
+    },
+    "c1-fixed-r3-candidate-retained-accounting.json": {
+      "sha256": "e44f0610c5a016f57362dd1c8a0d7851e738de4fcbd940492da891929b5cbb97",
+      "bytes": 1133
+    },
+    "c1-natural-r2-candidate-retained-accounting.json": {
+      "sha256": "57d6d2b7258148eec90853ff21d1fd9223120d63b72e70f51e15c306462b2f3b",
+      "bytes": 803
+    },
+    "c1-fixed-r1-vllm-start-host-gate.json": {
+      "sha256": "b7dfaefc270f9654291d365a6c751fa577540f47d773e571c97f27acc700fca8",
+      "bytes": 4884
+    },
+    "c1-fixed-r0-v52-retained-rows.json": {
+      "sha256": "c4028043eeb2f7a2a179e30c7d90e4dcda56f695e6213f49512e2a1799f2bee8",
+      "bytes": 5273141
+    },
+    "c1-natural-r1-vllm-host.json": {
+      "sha256": "b02dc77d9e7c9fc3aab3b5d3c2889f0254257f2b2469b6a1b4c621d693275174",
+      "bytes": 68178
+    },
+    "c1-natural-r2-candidate-warmup-accounting.json": {
+      "sha256": "54d822735cabf6f523264f642f0763eb0115be8057d0810fa09c569716698211",
+      "bytes": 791
+    },
+    "c1-fixed-r1-vllm-warmup-rows.json": {
+      "sha256": "0016feb70df6f1f3caadbad7e78dfd175916ce824c2a51e2ca222a4a544a96da",
+      "bytes": 1382788
+    },
+    "c1-natural-r2-candidate.log": {
+      "sha256": "42320f9a509180dec3716bc5fa75a924bc089e8cc0ecf13a5f22ff38a5226065",
+      "bytes": 260
+    },
+    "c1-natural-r1-v52-warmup-accounting.json": {
+      "sha256": "36e1748a35a983d7ec1e5e1ba3c32fdb027b4a5c56d070f9029ba68609244b1d",
+      "bytes": 791
+    },
+    "c1-fixed-r0-vllm-warmup-rows.json": {
+      "sha256": "a1268abee92d3c35a3c89b674f17afeeb8ee255b84015cad71c8b915aefe572e",
+      "bytes": 1382734
+    },
+    "c1-fixed-r2-vllm-retained-accounting.json": {
+      "sha256": "f7537181917c5ab97bb74a447e84e6dbdccd590b8e190d7bfea19a7c16f6a812",
+      "bytes": 1133
+    },
+    "c1-fixed-r2-candidate-launch.json": {
+      "sha256": "246f7f9d0f04137f1accb71cd71d746314effdb02fce6672fded3097d2a5bfae",
+      "bytes": 2340
+    },
+    "c1-natural-r0-candidate-summary.json": {
+      "sha256": "d2fc820d6c5a90f07c125e2437ba2681f23eee814b8ca5651e66de682721e40d",
+      "bytes": 2332
+    },
+    "c1-natural-r1-vllm.log": {
+      "sha256": "de4b5a338bb10398571ca4bcb48905c01200582516655dabde9e8be4a8a73bcf",
+      "bytes": 60723
+    },
+    "c1-fixed-r3-v52-warmup-rows.json": {
+      "sha256": "a9a22605165f89789be1f7a4c06a59f0dfa27d47ae073cee16a01c6ae7844e39",
+      "bytes": 1318046
+    },
+    "c1-fixed-r1-candidate-retained-rows.json": {
+      "sha256": "c2ef6ee6acf8c001df7b20b09e1dc68b32db91fd27bfb837ba15b7bd9f2c3fa8",
+      "bytes": 5265445
+    },
+    "c1-natural-r0-vllm-retained-rows.json": {
+      "sha256": "5a01e96fdfde29301d7ebbd8ac71fe4db2556112eb2b10d5481471eb483db39b",
+      "bytes": 14933360
+    },
+    "c1-natural-r3-vllm-host.json": {
+      "sha256": "24c710c90a3e773add9db6475c9fd660c0706c345ab87c9eb4b130627c9ed3e7",
+      "bytes": 68181
+    },
+    "c1-fixed-r3-vllm-retained-rows.json": {
+      "sha256": "c642885eaf859c369878040f0fceffdda3e5d1cdb511652a6472c0cc16ee0670",
+      "bytes": 5528342
+    },
+    "c1-natural-r1-v52-warmup-rows.json": {
+      "sha256": "fce174a72ea0103833fc22b57d4ba4f9087decf017603ee3dff71abadce4a2b3",
+      "bytes": 3419541
+    },
+    "c1-natural-r2-v52-start-host-gate.json": {
+      "sha256": "dd0ea17503a175d9a16015de18b2c3752ab06891b163b930723b67c8b44bd423",
+      "bytes": 3011
+    },
+    "c1-natural-r0-v52-warmup-accounting.json": {
+      "sha256": "cee11fa67ffcd51f101eb4700f68bafce2d861a403c1f25b0b2830cc3ab037af",
+      "bytes": 791
+    },
+    "c1-natural-r3-v52-warmup-accounting.json": {
+      "sha256": "bef2dc1479187c7c4ae55b484bc74a0f2d95db2f13a8f6d2956b6a9d9cef55f8",
+      "bytes": 791
+    },
+    "c1-natural-r2-v52-exit.json": {
+      "sha256": "f3c7ecf10f4c4b7a8ad4e8723e4d3aa73b929084486136cb8a02a02bbbcf9336",
+      "bytes": 1156
+    },
+    "c1-fixed-r0-v52-start-host-gate.json": {
+      "sha256": "525d1bf628baeabb29abb648d0ddcf582492b947c9d5361fe0bc4517e4093a9b",
+      "bytes": 3018
+    },
+    "c1-fixed-r2-vllm.log": {
+      "sha256": "364fdefa17caa5eee31adab5baabf3f7f5d274af7a931bc3cc86a0334d214233",
+      "bytes": 60648
+    },
+    "c1-natural-r0-vllm-warmup-host-gate.json": {
+      "sha256": "f7ec28c2a0fbd86c48cbfef7a425ea5e86b8d8cb755ea0cc41f37708213dc451",
+      "bytes": 6753
+    },
+    "c1-fixed-r2-v52-warmup-rows.json": {
+      "sha256": "43ee7f3100a096d608168699bbbd9caebd7947a5e11f7c0fa9cb271346693093",
+      "bytes": 1318018
+    },
+    "c1-fixed-r1-v52-warmup-accounting.json": {
+      "sha256": "646c1c95af691b8c06a8f860372df83413a9f3455bf1a59e37b95251d0508123",
+      "bytes": 1103
+    },
+    "c1-natural-r0-vllm-retained-accounting.json": {
+      "sha256": "47882c9f68c469efa4d56b8f3dffa584ead6e9394aefb9e574a403c4bbcff018",
+      "bytes": 804
+    },
+    "c1-natural-r3-vllm-exit.json": {
+      "sha256": "e492bf8aa57999c2475aadf0e9fdecaf81a5c0150f27972926f9ae533f662c39",
+      "bytes": 1207
+    },
+    "http-screen-snapshot.json": {
+      "sha256": "74fdfabef2e667fd3dca9296c6c41bb0ad40bcb1a1f07de1f77f8a13d1564b25",
+      "bytes": 962
+    },
+    "c1-natural-r2-candidate-warmup-host-gate.json": {
+      "sha256": "ef0430976300f0df243e151266aa62fde363679cc3fbde9175aa1da3ea75ac02",
+      "bytes": 3012
+    },
+    "c1-fixed-r1-candidate-retained-host-gate.json": {
+      "sha256": "c69534fd75c7130ca361e50128d6bc21eecf21f5f71e354ae78c4b0efa5ac60a",
+      "bytes": 4886
+    },
+    "c1-natural-r1-v52-summary.json": {
+      "sha256": "0a63ec40305ca131bdbc041707507d86e854f4c062c9ef1b1ba2301a8d43250b",
+      "bytes": 2337
+    },
+    "c1-fixed-r3-candidate-host.json": {
+      "sha256": "5911d742f7b24981aee8a1323c4a77ea7c787da9110acfb975e9ee4144a53591",
+      "bytes": 27344
+    },
+    "c1-natural-r1-v52-retained-host-gate.json": {
+      "sha256": "c4f7bb708d0695eb332fa0e87766cf36ec0a1bc77a3a308f09a9a564ce5681b5",
+      "bytes": 3015
+    },
+    "c1-natural-r0-v52-retained-host-gate.json": {
+      "sha256": "ae9aafb0d441543c2a272139e2bf523408e456f1f0ab142a9ac7869eac875f39",
+      "bytes": 3015
+    },
+    "c1-fixed-r0-vllm-host.json": {
+      "sha256": "44dde9907de53d5b86cf78b077f00956da59cd95641723cc1d8c69b87805bb00",
+      "bytes": 179748
+    },
+    "c1-fixed-r1-v52-exit.json": {
+      "sha256": "547db45bc4d13a8cb46722e4ae8a730af8ebfb2601b0872f5c41919374136194",
+      "bytes": 1156
+    },
+    "c1-fixed-r3-v52-summary.json": {
+      "sha256": "4b247131afc534403710f49b1277ec3807cf92aa634affd0f15cd3b07a40e38b",
+      "bytes": 2646
+    },
+    "c1-natural-r2-vllm-retained-host-gate.json": {
+      "sha256": "056eede87e194f0e6cbf4737986fd2a0f0e9243bda15f98802e0168ecfabfa28",
+      "bytes": 3015
+    },
+    "c1-natural-r0-v52-exit.json": {
+      "sha256": "f14029890a6edc5684179dd3debdf754c4b4112c5d1a329777d8af64208e30fb",
+      "bytes": 1156
+    },
+    "c1-fixed-r0-vllm-launch.json": {
+      "sha256": "1bf3350bd2fe717cfd080087f727d596db435c7ea0d05314686c5d129ec528a0",
+      "bytes": 2119
+    },
+    "c1-natural-r1-candidate-start-host-gate.json": {
+      "sha256": "5a62141091ccbd278939e81fd242bd3363ee935c3283db79d9b699ac4b260ad7",
+      "bytes": 3010
+    },
+    "c1-fixed-r3-v52-warmup-accounting.json": {
+      "sha256": "678dc77db760c3209dc79cc916c36d7aab6e1aa22526b206937cb5b4fe870169",
+      "bytes": 1103
+    },
+    "c1-natural-r1-vllm-launch.json": {
+      "sha256": "cc2a93137d6234036227357cb925d9868f3165ccbeab0fd43dd41751e4b3d761",
+      "bytes": 2118
+    },
+    "c1-natural-r2-candidate-start-host-gate.json": {
+      "sha256": "ab06e1dfebca51f38aa2c0bc8713f7cdd59bf546cb9213e3b672b5076321bccd",
+      "bytes": 3011
+    },
+    "c1-fixed-r2-vllm-summary.json": {
+      "sha256": "7c7cd56837d4c206c135e1d7bd3e65bcb269ec05fb3c8037b65c3f04f07af17c",
+      "bytes": 2656
+    },
+    "c1-fixed-r2-vllm-launch.json": {
+      "sha256": "f7dd4787c8f9905e3e598368d0efe7d3ea1708830ce6005a6a48ed9a7618fa0a",
+      "bytes": 2117
+    },
+    "c1-fixed-r0-vllm.log": {
+      "sha256": "730f44f7e25bb02ba3dcb0b9cfd50592865299bc0cfffa8cde0822acee64b03d",
+      "bytes": 60843
+    },
+    "c1-natural-r3-candidate-start-host-gate.json": {
+      "sha256": "1d608472ff200704d86311d69667bc92fb54209d0d3f24d2194e84b32293d514",
+      "bytes": 3010
+    },
+    "c1-natural-r0-v52-retained-accounting.json": {
+      "sha256": "a5ccc910303216a8a3fff943cb75e99c3608792fb2cb8d806201d01dd203fa02",
+      "bytes": 803
+    },
+    "controller-snapshot.py": {
+      "sha256": "9e4498c49996ae951595f7f03a67fedb4a13b728f0746697d4139d3b4aadf5e2",
+      "bytes": 15365
+    },
+    "c1-fixed-r2-v52-warmup-host-gate.json": {
+      "sha256": "6173d6abc8e1151a13e658a52532d3397fb1b5d3ce907e79706175d95ee1a6be",
+      "bytes": 3013
+    },
+    "c1-natural-r0-candidate-retained-host-gate.json": {
+      "sha256": "dc5f2e62716c7e82bfc9b2e8d613c2689a45a8cfd4d4caa2a5827a80746f4f2b",
+      "bytes": 3015
+    },
+    "c1-fixed-r3-v52-launch.json": {
+      "sha256": "e8f2f6ee16eed77f9c4d9ace0e3b084eb009786f9324d332ae98b8490bd13e52",
+      "bytes": 2319
+    },
+    "c1-fixed-r2-v52-launch.json": {
+      "sha256": "eb8072316eb3a43a34eea68703854b758f31eddaaf39a41dd625b1be5abc330f",
+      "bytes": 2319
+    },
+    "c1-natural-r0-vllm.log": {
+      "sha256": "63feac0e3f03a428615d00c670004dc8c5d0f2ba5ace95cc032a6e82dffb9a9b",
+      "bytes": 60819
+    },
+    "c1-natural-r2-vllm.log": {
+      "sha256": "7c3777e5e2ec4c528a0884a0401e856664b3356a2e231b93a0d3438875f7d4ff",
+      "bytes": 61860
+    },
+    "c1-natural-r2-v52-warmup-host-gate.json": {
+      "sha256": "48dde59ef99f241288b99b3420905ee2380389adb0baceada33fbb84f9544dcc",
+      "bytes": 3012
+    },
+    "c1-natural-r3-v52.log": {
+      "sha256": "3e450eb5b9a0b328260173994b5d8c76f4b6fdaf420b2d6b1cc7cfc98783f277",
+      "bytes": 260
+    },
+    "c1-fixed-r1-candidate-start-host-gate.json": {
+      "sha256": "6a0b2f72f9bdc3a2d545da79fa8693935c4ac97a9909e3372627ad088a8302c4",
+      "bytes": 3014
+    },
+    "c1-fixed-r0-vllm-retained-host-gate.json": {
+      "sha256": "5e970320de94ee6bc60d49af840d7234c8c1bf70fd17d2096c85e6cf421c187a",
+      "bytes": 6778
+    },
+    "c1-fixed-r1-candidate-warmup-host-gate.json": {
+      "sha256": "5cb4f1f4dacc30a4ff9602ee41a975e5f47087c543834955afcb7bbec2a7607f",
+      "bytes": 3016
+    },
+    "c1-natural-r3-candidate-launch.json": {
+      "sha256": "0ac3fbd45651c6a385287d7017905926b17faa7452699c686d7ed64d3a88745c",
+      "bytes": 2342
+    },
+    "c1-natural-r1-candidate-warmup-rows.json": {
+      "sha256": "25ed6ecc86412ba8ff46cc23815bd6011eac080b60a568f7fdd7e0e21486b184",
+      "bytes": 3416100
+    },
+    "c1-natural-r3-candidate-warmup-host-gate.json": {
+      "sha256": "626a6883639b0dd6d2d8d584bc2302e1a32c19b4ca15d5839c73d981beefe759",
+      "bytes": 3014
+    },
+    "c1-fixed-r0-v52-warmup-host-gate.json": {
+      "sha256": "07b475c3ee4a213c1acdfe0b4f5c38d5eb6b15d046ebdc5c3187adb9739dc554",
+      "bytes": 3022
+    },
+    "c1-natural-r2-candidate-summary.json": {
+      "sha256": "3a750f5db00ea404b4a22978d3338621478e7dcde75000ae3e44c80b32311f29",
+      "bytes": 2331
+    },
+    "c1-natural-r2-v52-summary.json": {
+      "sha256": "2e2f401852e4b5c513dc1ad8cf90c17b67c12401e527662a2318e72b05eea890",
+      "bytes": 2323
+    },
+    "c1-fixed-r3-v52-exit.json": {
+      "sha256": "5cbd259cc0cb955ffdc9fce3a299ee278a70d2f0a7639621e95b952db1c0ee74",
+      "bytes": 1156
+    },
+    "c1-natural-r3-v52-launch.json": {
+      "sha256": "a272cbaea5f346a22811553b5c36804a675c6cf17801bf325a96d8f4ada855a1",
+      "bytes": 2321
+    },
+    "c1-natural-r1-candidate-summary.json": {
+      "sha256": "da4846abf8299420e42efe2015bd40fcecf75fee3fe7179874b1d4512c272980",
+      "bytes": 2354
+    },
+    "c1-fixed-r1-candidate-warmup-rows.json": {
+      "sha256": "0db3cac26d930d07f88bf2d8c0320a66de36632e4bfeb3d7fec4c1ef1ac4d3f7",
+      "bytes": 1316088
+    },
+    "c1-natural-r3-v52-warmup-host-gate.json": {
+      "sha256": "5d6e27c20e7a8c7730b621fc28a3a2f6282e33fddbff9a540afd0fcd86ca8370",
+      "bytes": 3012
+    },
+    "c1-fixed-r3-candidate-warmup-accounting.json": {
+      "sha256": "d0679fe7e1a2c5a6f32b087f889d1b7e81e42cedf51a54295e843cfd4c9c0e0a",
+      "bytes": 1103
+    },
+    "c1-fixed-r2-vllm-retained-host-gate.json": {
+      "sha256": "268ac1607416ab7544900a34451bd8799c1710339701f42ba92fd4d57c9c7c21",
+      "bytes": 9559
+    },
+    "c1-natural-r1-v52-retained-rows.json": {
+      "sha256": "4f6fd1a965607f50ba1b708fbe4c843839c993cf06e0d46e75869e4ff0fb083e",
+      "bytes": 13679281
+    },
+    "c1-fixed-r0-vllm-summary.json": {
+      "sha256": "8938563be0e4e5b0a7bd47486a44d9d5a3bf9f5c9ec6a309ee864cfc899494b7",
+      "bytes": 2657
+    },
+    "c1-fixed-r2-vllm-start-host-gate.json": {
+      "sha256": "e52e81500fd7c5ebbaa683eb7a6dd99f7a1426278b0e0386682950c2ef01102a",
+      "bytes": 3011
+    },
+    "independent-correctness-snapshot.json": {
+      "sha256": "18fa0cd9c4ff246c18c54fec078c152a61d24421997f7b3092cdf71476081a52",
+      "bytes": 1139
+    },
+    "c1-natural-r3-v52-host.json": {
+      "sha256": "247439d329d539e7043ccfd69ab6dbac9cf774d45579eb4560132b2933b7c26a",
+      "bytes": 57125
+    },
+    "c1-natural-r3-candidate-host.json": {
+      "sha256": "80794bd8820e99fe375b367de603bbbc012fc59ad71426b96f813f80df92fa0f",
+      "bytes": 82145
+    },
+    "c1-fixed-r0-candidate-launch.json": {
+      "sha256": "19744964caf7c61d90e6007ec768dbbce17ee657b60802b93691dd215a8a296f",
+      "bytes": 2342
+    },
+    "c1-fixed-r3-vllm-exit.json": {
+      "sha256": "5d5cc7ade0ee258806d5184eff4a26ada92b97f87b7a03bf958ba3cd3851af4a",
+      "bytes": 1208
+    },
+    "c1-natural-r0-vllm-retained-host-gate.json": {
+      "sha256": "b699e30d851b863e0bb8d07692771efbf6da6b82744ad2b518175506dc0bccfa",
+      "bytes": 3016
+    },
+    "c1-fixed-r0-vllm-warmup-host-gate.json": {
+      "sha256": "2ddd97880312a38380941d299f5d758c5670d30d2c0c50e3d659998fafe52904",
+      "bytes": 23687
+    },
+    "c1-natural-r1-vllm-start-host-gate.json": {
+      "sha256": "5f5779d275962dda843f2edac36fcd7ebfc03ce52272383ed0c5f498d722b130",
+      "bytes": 3011
+    },
+    "c1-natural-r2-v52-launch.json": {
+      "sha256": "1315d17734bb8612b290231771fedd23426d8ff337bf754876ab6e7acd42e23a",
+      "bytes": 2321
+    },
+    "c1-natural-r2-v52-warmup-rows.json": {
+      "sha256": "bf0e0002b2bb613b44e38799801adc51bb31f7406635a62e16c522022cacf2cc",
+      "bytes": 3419572
+    },
+    "c1-fixed-r0-candidate-host.json": {
+      "sha256": "d429c5a3931075b7a84caca98b265504a2852a5b88a605a3784f08c312f18198",
+      "bytes": 51399
+    },
+    "c1-natural-r3-candidate-warmup-rows.json": {
+      "sha256": "b31d4d4e3bcbc0b13fd57328ef213c204d1436767f7f6b5eb7e5e9de612d0cb1",
+      "bytes": 3416213
+    },
+    "native-process-snapshot.json": {
+      "sha256": "11b70cfabccae491f3d796c79d174f5821b9bc162974325ebd7b1a342248fa72",
+      "bytes": 597
+    },
+    "c1-natural-r3-candidate-retained-host-gate.json": {
+      "sha256": "b3b516ae03aa1bcac005b905f7c3900f627a33ee49b8169bcfba5cf3576bbd24",
+      "bytes": 17036
+    },
+    "c1-natural-r0-candidate-exit.json": {
+      "sha256": "05bbd122ed1d5813d5507f2818b344bcc2a64fcefeae3031e153b381e23f442b",
+      "bytes": 1156
+    },
+    "c1-fixed-r3-candidate.log": {
+      "sha256": "8a2a79617411877b073e3e1b999cff5be2a0036a2880b250d3587e549597579b",
+      "bytes": 260
+    },
+    "c1-natural-r3-v52-warmup-rows.json": {
+      "sha256": "8f508e5b13a478513a83e6d5ba2ec24e14dd42fa69366cf14dc57814ca772052",
+      "bytes": 3419618
+    },
+    "c1-fixed-r1-vllm-retained-rows.json": {
+      "sha256": "8a277aa5ebdb44d42adac99482786125cc53825374daa13a6db6a3fa40b5c5ca",
+      "bytes": 5532240
+    },
+    "c1-fixed-r0-vllm-exit.json": {
+      "sha256": "50dbd734667d7fa3ea52d7df592da0bd31edda820668022ea58d27641ac3b920",
+      "bytes": 1208
+    },
+    "c1-fixed-r3-candidate-retained-rows.json": {
+      "sha256": "9dc71f8eb27c0314e67faa6ccb12a3160779cb2f1d2eaf87b3ccf470d48c151e",
+      "bytes": 5265452
+    }
+  },
+  "archive_sha256": "d05b563da1ede85cb1631a9ce68b0dee467ad34af22b6c20e73e8e489e47d7cb",
+  "archive_bytes": 28345678,
+  "terminal": {
+    "records": [
+      {
+        "case": "c1-fixed-r0-v52",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934178109100226,
+          "phase_finished_ns": 934187095772924,
+          "completed": true,
+          "expected_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "actual_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934178109153845,
+          "common_wall_finished_ns": 934187095475924,
+          "common_wall_ns": 8986322079,
+          "successful_output_tokens": 7680,
+          "observed_output_tokens_including_partial_failures": 7680,
+          "successful_output_tokens_per_wall_second": 854.63217682207,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 8986672698,
+          "successful_output_tokens_per_phase_wall_second": 854.5988329706497,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 23.39619,
+            "p95": 36.09927,
+            "p99": 36.922957,
+            "max": 37.143621
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.0353225,
+            "p95": 3.23497,
+            "p99": 3.495214,
+            "max": 6.47369
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 1.0590111619047617,
+            "p95": 1.0696407333333333,
+            "p99": 1.096407043478261,
+            "max": 1.117838
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.0353225,
+            "p95": 3.23497,
+            "p99": 3.495214,
+            "max": 6.47369
+          },
+          "token_itl_ms": {
+            "samples": 7296,
+            "median": 1.059291,
+            "p95": 1.086685,
+            "p99": 1.106896,
+            "max": 3.843656
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-fixed-r0-candidate",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934234775406281,
+          "phase_finished_ns": 934242611193531,
+          "completed": true,
+          "expected_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "actual_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934234775470687,
+          "common_wall_finished_ns": 934242610917025,
+          "common_wall_ns": 7835446338,
+          "successful_output_tokens": 7680,
+          "observed_output_tokens_including_partial_failures": 7680,
+          "successful_output_tokens_per_wall_second": 980.1611380775945,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 7835787250,
+          "successful_output_tokens_per_phase_wall_second": 980.1184941564104,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 20.5802435,
+            "p95": 31.085881,
+            "p99": 31.722043,
+            "max": 38.704746
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.0721455000000004,
+            "p95": 3.251592,
+            "p99": 3.664364,
+            "max": 6.948426
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 0.8989958333333333,
+            "p95": 0.9084549354838709,
+            "p99": 0.9253745333333333,
+            "max": 1.0291181304347825
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.0721455000000004,
+            "p95": 3.251592,
+            "p99": 3.664364,
+            "max": 6.948426
+          },
+          "token_itl_ms": {
+            "samples": 7296,
+            "median": 0.899633,
+            "p95": 0.922025,
+            "p99": 0.94991,
+            "max": 3.861884
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-fixed-r0-vllm",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934454525386150,
+          "phase_finished_ns": 934464098907170,
+          "completed": true,
+          "expected_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "actual_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934454525441617,
+          "common_wall_finished_ns": 934464098740040,
+          "common_wall_ns": 9573298423,
+          "successful_output_tokens": 7680,
+          "observed_output_tokens_including_partial_failures": 7680,
+          "successful_output_tokens_per_wall_second": 802.231337691164,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 9573521020,
+          "successful_output_tokens_per_phase_wall_second": 802.2126847536812,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 27.3318735,
+            "p95": 36.394262,
+            "p99": 41.9578,
+            "max": 45.355297
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 7.37771,
+            "p95": 8.820149,
+            "p99": 14.24761,
+            "max": 19.17193
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 0.8898906164095373,
+            "p95": 0.9723445483870967,
+            "p99": 1.1750858387096774,
+            "max": 2.330955142857143
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 7.37771,
+            "p95": 8.820149,
+            "p99": 14.24761,
+            "max": 19.17193
+          },
+          "token_itl_ms": {
+            "samples": 7296,
+            "median": 0.9089119999999999,
+            "p95": 1.074299,
+            "p99": 1.400745,
+            "max": 6.614277
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-fixed-r1-vllm",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934542116012598,
+          "phase_finished_ns": 934551777605655,
+          "completed": true,
+          "expected_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "actual_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934542116090382,
+          "common_wall_finished_ns": 934551777346774,
+          "common_wall_ns": 9661256392,
+          "successful_output_tokens": 7680,
+          "observed_output_tokens_including_partial_failures": 7680,
+          "successful_output_tokens_per_wall_second": 794.9276665879006,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 9661593057,
+          "successful_output_tokens_per_phase_wall_second": 794.8999667747029,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 27.4321185,
+            "p95": 36.47652,
+            "p99": 41.64638,
+            "max": 48.085091
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 7.4804745,
+            "p95": 10.873679,
+            "p99": 17.160161,
+            "max": 17.489068
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 0.8895363550724638,
+            "p95": 0.9744761428571428,
+            "p99": 1.0980190869565218,
+            "max": 1.1359238
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 7.4804745,
+            "p95": 10.873679,
+            "p99": 17.160161,
+            "max": 17.489068
+          },
+          "token_itl_ms": {
+            "samples": 7296,
+            "median": 0.9108335,
+            "p95": 1.041295,
+            "p99": 1.338696,
+            "max": 3.334583
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-fixed-r1-candidate",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934571416239344,
+          "phase_finished_ns": 934579257168809,
+          "completed": true,
+          "expected_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "actual_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934571416292211,
+          "common_wall_finished_ns": 934579256912320,
+          "common_wall_ns": 7840620109,
+          "successful_output_tokens": 7680,
+          "observed_output_tokens_including_partial_failures": 7680,
+          "successful_output_tokens_per_wall_second": 979.5143615215295,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 7840929465,
+          "successful_output_tokens_per_phase_wall_second": 979.4757157657966,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 20.57545,
+            "p95": 31.115867,
+            "p99": 32.040013,
+            "max": 32.764966
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.0817509999999997,
+            "p95": 3.296597,
+            "p99": 3.429454,
+            "max": 4.260911
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 0.8996864,
+            "p95": 0.9211276666666667,
+            "p99": 0.9345978064516128,
+            "max": 0.9652202857142856
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.0817509999999997,
+            "p95": 3.296597,
+            "p99": 3.429454,
+            "max": 4.260911
+          },
+          "token_itl_ms": {
+            "samples": 7296,
+            "median": 0.9002805,
+            "p95": 0.924463,
+            "p99": 0.94695,
+            "max": 3.623018
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-fixed-r1-v52",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934594831978973,
+          "phase_finished_ns": 934603825218163,
+          "completed": true,
+          "expected_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "actual_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934594832038631,
+          "common_wall_finished_ns": 934603824965782,
+          "common_wall_ns": 8992927151,
+          "successful_output_tokens": 7680,
+          "observed_output_tokens_including_partial_failures": 7680,
+          "successful_output_tokens_per_wall_second": 854.0044716303518,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 8993239190,
+          "successful_output_tokens_per_phase_wall_second": 853.9748401821391,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 23.425382,
+            "p95": 36.080945,
+            "p99": 36.225176,
+            "max": 37.224409
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.0495665,
+            "p95": 3.183505,
+            "p99": 3.313713,
+            "max": 4.501497
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 1.0600064032258065,
+            "p95": 1.0664696,
+            "p99": 1.0989353870967744,
+            "max": 1.150830142857143
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.0495665,
+            "p95": 3.183505,
+            "p99": 3.313713,
+            "max": 4.501497
+          },
+          "token_itl_ms": {
+            "samples": 7296,
+            "median": 1.0595539999999999,
+            "p95": 1.082515,
+            "p99": 1.110556,
+            "max": 3.384396
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-fixed-r2-v52",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934625477929311,
+          "phase_finished_ns": 934634471018094,
+          "completed": true,
+          "expected_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "actual_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934625477987111,
+          "common_wall_finished_ns": 934634470751799,
+          "common_wall_ns": 8992764688,
+          "successful_output_tokens": 7680,
+          "observed_output_tokens_including_partial_failures": 7680,
+          "successful_output_tokens_per_wall_second": 854.019900047895,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 8993088783,
+          "successful_output_tokens_per_phase_wall_second": 853.9891226824998,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 23.4087325,
+            "p95": 36.094507,
+            "p99": 36.674139,
+            "max": 39.253034
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.028597,
+            "p95": 3.178508,
+            "p99": 3.342855,
+            "max": 3.515097
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 1.0607032142857142,
+            "p95": 1.0731754285714286,
+            "p99": 1.0961763548387096,
+            "max": 1.1565297096774194
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.028597,
+            "p95": 3.178508,
+            "p99": 3.342855,
+            "max": 3.515097
+          },
+          "token_itl_ms": {
+            "samples": 7296,
+            "median": 1.060508,
+            "p95": 1.085456,
+            "p99": 1.108558,
+            "max": 3.725677
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-fixed-r2-candidate",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934649779753567,
+          "phase_finished_ns": 934657608943492,
+          "completed": true,
+          "expected_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "actual_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934649779809213,
+          "common_wall_finished_ns": 934657608699421,
+          "common_wall_ns": 7828890208,
+          "successful_output_tokens": 7680,
+          "observed_output_tokens_including_partial_failures": 7680,
+          "successful_output_tokens_per_wall_second": 980.9819522251244,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 7829189925,
+          "successful_output_tokens_per_phase_wall_second": 980.9443982801324,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 20.385582499999998,
+            "p95": 31.12256,
+            "p99": 31.539407,
+            "max": 31.958466
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.061388,
+            "p95": 3.181855,
+            "p99": 3.333563,
+            "max": 3.402942
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 0.9009584860215054,
+            "p95": 0.9104260645161291,
+            "p99": 0.9277415161290322,
+            "max": 0.9295598
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.061388,
+            "p95": 3.181855,
+            "p99": 3.333563,
+            "max": 3.402942
+          },
+          "token_itl_ms": {
+            "samples": 7296,
+            "median": 0.901377,
+            "p95": 0.922315,
+            "p99": 0.94176,
+            "max": 2.272288
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-fixed-r2-vllm",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934700650343680,
+          "phase_finished_ns": 934710313395357,
+          "completed": true,
+          "expected_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "actual_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934700650393554,
+          "common_wall_finished_ns": 934710313231460,
+          "common_wall_ns": 9662837906,
+          "successful_output_tokens": 7680,
+          "observed_output_tokens_including_partial_failures": 7680,
+          "successful_output_tokens_per_wall_second": 794.7975609971905,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 9663051677,
+          "successful_output_tokens_per_phase_wall_second": 794.7799780766918,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 27.349862,
+            "p95": 36.458298,
+            "p99": 42.409557,
+            "max": 45.912344
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 7.478831,
+            "p95": 10.032385,
+            "p99": 16.90226,
+            "max": 18.371212
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 0.8915569144927536,
+            "p95": 0.9477296956521739,
+            "p99": 1.0694945483870968,
+            "max": 1.2002408666666666
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 7.478831,
+            "p95": 10.032385,
+            "p99": 16.90226,
+            "max": 18.371212
+          },
+          "token_itl_ms": {
+            "samples": 7296,
+            "median": 0.912174,
+            "p95": 1.038313,
+            "p99": 1.346589,
+            "max": 4.801533
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-fixed-r3-vllm",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934746693646979,
+          "phase_finished_ns": 934756488391470,
+          "completed": true,
+          "expected_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "actual_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934746693686208,
+          "common_wall_finished_ns": 934756488163460,
+          "common_wall_ns": 9794477252,
+          "successful_output_tokens": 7680,
+          "observed_output_tokens_including_partial_failures": 7680,
+          "successful_output_tokens_per_wall_second": 784.11535423514,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 9794744491,
+          "successful_output_tokens_per_phase_wall_second": 784.0939604965546,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 27.660479000000002,
+            "p95": 37.120857,
+            "p99": 43.083015,
+            "max": 48.922906
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 7.622293,
+            "p95": 12.440257,
+            "p99": 17.173675,
+            "max": 18.064315
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 0.892748304347826,
+            "p95": 0.9878125483870968,
+            "p99": 1.1779677142857143,
+            "max": 2.1613529333333332
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 7.622293,
+            "p95": 12.440257,
+            "p99": 17.173675,
+            "max": 18.064315
+          },
+          "token_itl_ms": {
+            "samples": 7296,
+            "median": 0.9133260000000001,
+            "p95": 1.137297,
+            "p99": 1.456764,
+            "max": 4.942273
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-fixed-r3-candidate",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934780062266246,
+          "phase_finished_ns": 934787929946761,
+          "completed": true,
+          "expected_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "actual_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934780062315476,
+          "common_wall_finished_ns": 934787929752679,
+          "common_wall_ns": 7867437203,
+          "successful_output_tokens": 7680,
+          "observed_output_tokens_including_partial_failures": 7680,
+          "successful_output_tokens_per_wall_second": 976.1755704985447,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 7867680515,
+          "successful_output_tokens_per_phase_wall_second": 976.1453817752028,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 21.746866,
+            "p95": 31.216281,
+            "p99": 31.808753,
+            "max": 34.678273
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.0894079999999997,
+            "p95": 3.29495,
+            "p99": 3.855525,
+            "max": 6.169238
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 0.9013545086021506,
+            "p95": 0.9236792608695652,
+            "p99": 0.953051,
+            "max": 1.249402142857143
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.0894079999999997,
+            "p95": 3.29495,
+            "p99": 3.855525,
+            "max": 6.169238
+          },
+          "token_itl_ms": {
+            "samples": 7296,
+            "median": 0.9017815,
+            "p95": 0.928376,
+            "p99": 0.969186,
+            "max": 4.063239
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-fixed-r3-v52",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934819712030086,
+          "phase_finished_ns": 934828737724737,
+          "completed": true,
+          "expected_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "actual_corpus_counts": {
+            "summary": 32,
+            "python": 32,
+            "arithmetic": 32,
+            "planning": 32,
+            "comparison": 32,
+            "extraction": 32,
+            "science": 32,
+            "editing": 32,
+            "logic": 32,
+            "sql": 32,
+            "story": 32,
+            "classification": 32
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934819712076701,
+          "common_wall_finished_ns": 934828737443855,
+          "common_wall_ns": 9025367154,
+          "successful_output_tokens": 7680,
+          "observed_output_tokens_including_partial_failures": 7680,
+          "successful_output_tokens_per_wall_second": 850.9349114508057,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 9025694651,
+          "successful_output_tokens_per_phase_wall_second": 850.9040353086946,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 24.089517999999998,
+            "p95": 36.197381,
+            "p99": 36.834605,
+            "max": 37.257548
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.0524905,
+            "p95": 3.196471,
+            "p99": 3.724339,
+            "max": 4.003206
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 1.0634025927536235,
+            "p95": 1.0808502,
+            "p99": 1.1456624,
+            "max": 1.2511347142857143
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.0524905,
+            "p95": 3.196471,
+            "p99": 3.724339,
+            "max": 4.003206
+          },
+          "token_itl_ms": {
+            "samples": 7296,
+            "median": 1.0635535,
+            "p95": 1.091247,
+            "p99": 1.118906,
+            "max": 6.137585
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-natural-r0-v52",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934850467499051,
+          "phase_finished_ns": 934883926779584,
+          "completed": true,
+          "expected_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "actual_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934850467541575,
+          "common_wall_finished_ns": 934883926469914,
+          "common_wall_ns": 33458928339,
+          "successful_output_tokens": 28672,
+          "observed_output_tokens_including_partial_failures": 28672,
+          "successful_output_tokens_per_wall_second": 856.931211588737,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 33459280533,
+          "successful_output_tokens_per_phase_wall_second": 856.9221914894903,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 70.47587,
+            "p95": 156.530678,
+            "p99": 157.599623,
+            "max": 165.558568
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.1224325000000004,
+            "p95": 5.631789,
+            "p99": 5.958798,
+            "max": 9.042087
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 1.0684099841269843,
+            "p95": 1.1885399921259843,
+            "p99": 1.194681062992126,
+            "max": 1.2323154881889764
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.1224325000000004,
+            "p95": 5.631789,
+            "p99": 5.958798,
+            "max": 9.042087
+          },
+          "token_itl_ms": {
+            "samples": 28288,
+            "median": 1.166535,
+            "p95": 1.227248,
+            "p99": 1.243863,
+            "max": 4.505185
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-natural-r0-candidate",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934904522050205,
+          "phase_finished_ns": 934933365881041,
+          "completed": true,
+          "expected_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "actual_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934904522096578,
+          "common_wall_finished_ns": 934933365616952,
+          "common_wall_ns": 28843520374,
+          "successful_output_tokens": 28672,
+          "observed_output_tokens_including_partial_failures": 28672,
+          "successful_output_tokens_per_wall_second": 994.0534174824717,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 28843830836,
+          "successful_output_tokens_per_phase_wall_second": 994.0427179393405,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 60.2041445,
+            "p95": 135.718426,
+            "p99": 136.411655,
+            "max": 139.90165
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.1638025,
+            "p95": 5.767209,
+            "p99": 6.036119,
+            "max": 6.200486
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 0.9048616984126985,
+            "p95": 1.0231289133858268,
+            "p99": 1.0266421496062992,
+            "max": 1.0564267086614172
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.1638025,
+            "p95": 5.767209,
+            "p99": 6.036119,
+            "max": 6.200486
+          },
+          "token_itl_ms": {
+            "samples": 28288,
+            "median": 1.003214,
+            "p95": 1.063605,
+            "p99": 1.079264,
+            "max": 4.247367
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-natural-r0-vllm",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 934974620541268,
+          "phase_finished_ns": 935006798175282,
+          "completed": true,
+          "expected_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "actual_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 256,
+          "strict_reference_pass": false,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 934974620589539,
+          "common_wall_finished_ns": 935006797867081,
+          "common_wall_ns": 32177277542,
+          "successful_output_tokens": 28672,
+          "observed_output_tokens_including_partial_failures": 28672,
+          "successful_output_tokens_per_wall_second": 891.0635762324929,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 32177634014,
+          "successful_output_tokens_per_phase_wall_second": 891.0537048039408,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 71.372702,
+            "p95": 142.059581,
+            "p99": 152.752123,
+            "max": 180.876002
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 7.6361475,
+            "p95": 10.453929,
+            "p99": 17.467258,
+            "max": 17.840542
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 1.0104847222222222,
+            "p95": 1.0757445555555556,
+            "p99": 1.139204064516129,
+            "max": 1.3603877637795274
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 7.6361475,
+            "p95": 10.453929,
+            "p99": 17.467258,
+            "max": 17.840542
+          },
+          "token_itl_ms": {
+            "samples": 28288,
+            "median": 1.0178725,
+            "p95": 1.22573,
+            "p99": 1.445686,
+            "max": 4.970864
+          }
+        },
+        "strict_reference_pass": false
+      },
+      {
+        "case": "c1-natural-r1-vllm",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 935038786836339,
+          "phase_finished_ns": 935071127669004,
+          "completed": true,
+          "expected_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "actual_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 256,
+          "strict_reference_pass": false,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 935038786880242,
+          "common_wall_finished_ns": 935071127377943,
+          "common_wall_ns": 32340497701,
+          "successful_output_tokens": 28672,
+          "observed_output_tokens_including_partial_failures": 28672,
+          "successful_output_tokens_per_wall_second": 886.5664426405359,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 32340832665,
+          "successful_output_tokens_per_phase_wall_second": 886.5572601978645,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 71.647626,
+            "p95": 141.586286,
+            "p99": 149.242183,
+            "max": 227.242457
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 7.784547,
+            "p95": 12.125451,
+            "p99": 16.550163,
+            "max": 17.002069
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 1.0164614828469023,
+            "p95": 1.0744331181102362,
+            "p99": 1.1292161904761906,
+            "max": 1.717894464566929
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 7.784547,
+            "p95": 12.125451,
+            "p99": 16.550163,
+            "max": 17.002069
+          },
+          "token_itl_ms": {
+            "samples": 28288,
+            "median": 1.0200355,
+            "p95": 1.225171,
+            "p99": 1.459539,
+            "max": 9.443698
+          }
+        },
+        "strict_reference_pass": false
+      },
+      {
+        "case": "c1-natural-r1-candidate",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 935095946703505,
+          "phase_finished_ns": 935124715688076,
+          "completed": true,
+          "expected_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "actual_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 935095946756055,
+          "common_wall_finished_ns": 935124715361102,
+          "common_wall_ns": 28768605047,
+          "successful_output_tokens": 28672,
+          "observed_output_tokens_including_partial_failures": 28672,
+          "successful_output_tokens_per_wall_second": 996.6419975232662,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 28768984571,
+          "successful_output_tokens_per_phase_wall_second": 996.6288496988607,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 60.000009500000004,
+            "p95": 135.418885,
+            "p99": 136.703088,
+            "max": 138.071728
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.1418299999999997,
+            "p95": 5.736607,
+            "p99": 6.19818,
+            "max": 6.664228
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 0.901863238095238,
+            "p95": 1.020901787401575,
+            "p99": 1.0289502677165354,
+            "max": 1.0433895275590552
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.1418299999999997,
+            "p95": 5.736607,
+            "p99": 6.19818,
+            "max": 6.664228
+          },
+          "token_itl_ms": {
+            "samples": 28288,
+            "median": 1.0001595,
+            "p95": 1.0607,
+            "p99": 1.077314,
+            "max": 5.871436
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-natural-r1-v52",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 935146416719833,
+          "phase_finished_ns": 935179708625193,
+          "completed": true,
+          "expected_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "actual_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 935146416767141,
+          "common_wall_finished_ns": 935179708296578,
+          "common_wall_ns": 33291529437,
+          "successful_output_tokens": 28672,
+          "observed_output_tokens_including_partial_failures": 28672,
+          "successful_output_tokens_per_wall_second": 861.2400957504258,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 33291905360,
+          "successful_output_tokens_per_phase_wall_second": 861.2303708651417,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 70.0541015,
+            "p95": 155.816021,
+            "p99": 156.755785,
+            "max": 160.486584
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.116586,
+            "p95": 5.616601,
+            "p99": 6.002464,
+            "max": 6.07717
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 1.062373626984127,
+            "p95": 1.1822422283464569,
+            "p99": 1.1897911181102363,
+            "max": 1.2173447952755907
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.116586,
+            "p95": 5.616601,
+            "p99": 6.002464,
+            "max": 6.07717
+          },
+          "token_itl_ms": {
+            "samples": 28288,
+            "median": 1.1592695000000002,
+            "p95": 1.22136,
+            "p99": 1.239591,
+            "max": 9.284674
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-natural-r2-v52",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 935201404566812,
+          "phase_finished_ns": 935234690045970,
+          "completed": true,
+          "expected_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "actual_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 935201404629535,
+          "common_wall_finished_ns": 935234689699486,
+          "common_wall_ns": 33285069951,
+          "successful_output_tokens": 28672,
+          "observed_output_tokens_including_partial_failures": 28672,
+          "successful_output_tokens_per_wall_second": 861.4072327986378,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 33285479158,
+          "successful_output_tokens_per_phase_wall_second": 861.396642779253,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 70.036314,
+            "p95": 155.724251,
+            "p99": 156.46458,
+            "max": 163.988569
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.1142255,
+            "p95": 5.615459,
+            "p99": 5.97218,
+            "max": 6.151194
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 1.061876484126984,
+            "p95": 1.1816121181102361,
+            "p99": 1.1859208031496062,
+            "max": 1.2476521811023622
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.1142255,
+            "p95": 5.615459,
+            "p99": 5.97218,
+            "max": 6.151194
+          },
+          "token_itl_ms": {
+            "samples": 28288,
+            "median": 1.1592035,
+            "p95": 1.22212,
+            "p99": 1.240747,
+            "max": 4.15
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-natural-r2-candidate",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 935255259003950,
+          "phase_finished_ns": 935284015549287,
+          "completed": true,
+          "expected_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "actual_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 935255259060158,
+          "common_wall_finished_ns": 935284015214676,
+          "common_wall_ns": 28756154518,
+          "successful_output_tokens": 28672,
+          "observed_output_tokens_including_partial_failures": 28672,
+          "successful_output_tokens_per_wall_second": 997.0735128041086,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 28756545337,
+          "successful_output_tokens_per_phase_wall_second": 997.059961966599,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 59.989008,
+            "p95": 135.342621,
+            "p99": 136.470799,
+            "max": 138.545472
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.1700535,
+            "p95": 5.755006,
+            "p99": 6.213988,
+            "max": 6.638133
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 0.901640253968254,
+            "p95": 1.0201469921259843,
+            "p99": 1.0267127007874015,
+            "max": 1.0434784173228346
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.1700535,
+            "p95": 5.755006,
+            "p99": 6.213988,
+            "max": 6.638133
+          },
+          "token_itl_ms": {
+            "samples": 28288,
+            "median": 0.9998155,
+            "p95": 1.060836,
+            "p99": 1.074453,
+            "max": 3.570231
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-natural-r2-vllm",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 935315674224409,
+          "phase_finished_ns": 935348067814800,
+          "completed": true,
+          "expected_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "actual_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 256,
+          "strict_reference_pass": false,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 935315674281610,
+          "common_wall_finished_ns": 935348067604193,
+          "common_wall_ns": 32393322583,
+          "successful_output_tokens": 28672,
+          "observed_output_tokens_including_partial_failures": 28672,
+          "successful_output_tokens_per_wall_second": 885.1206888868835,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 32393590391,
+          "successful_output_tokens_per_phase_wall_second": 885.1133713157656,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 71.70124150000001,
+            "p95": 141.151263,
+            "p99": 151.079506,
+            "max": 165.436287
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 7.9124525000000006,
+            "p95": 10.846426,
+            "p99": 17.097693,
+            "max": 26.138808
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 1.0116244383827022,
+            "p95": 1.0937854566929133,
+            "p99": 1.2354923333333332,
+            "max": 2.171399129032258
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 7.9124525000000006,
+            "p95": 10.846426,
+            "p99": 17.097693,
+            "max": 26.138808
+          },
+          "token_itl_ms": {
+            "samples": 28288,
+            "median": 1.0168015000000001,
+            "p95": 1.235224,
+            "p99": 1.495982,
+            "max": 8.694609
+          }
+        },
+        "strict_reference_pass": false
+      },
+      {
+        "case": "c1-natural-r3-vllm",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 935380103049245,
+          "phase_finished_ns": 935412367849992,
+          "completed": true,
+          "expected_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "actual_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 256,
+          "strict_reference_pass": false,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 935380103095761,
+          "common_wall_finished_ns": 935412367479748,
+          "common_wall_ns": 32264383987,
+          "successful_output_tokens": 28672,
+          "observed_output_tokens_including_partial_failures": 28672,
+          "successful_output_tokens_per_wall_second": 888.6579087191794,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 32264800747,
+          "successful_output_tokens_per_phase_wall_second": 888.6464300470208,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 71.42863349999999,
+            "p95": 143.266902,
+            "p99": 149.062742,
+            "max": 175.214664
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 7.7030080000000005,
+            "p95": 11.663263,
+            "p99": 17.70172,
+            "max": 27.164833
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 1.0126014682539681,
+            "p95": 1.0770127619047618,
+            "p99": 1.1147550793650793,
+            "max": 1.1650467952755905
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 7.7030080000000005,
+            "p95": 11.663263,
+            "p99": 17.70172,
+            "max": 27.164833
+          },
+          "token_itl_ms": {
+            "samples": 28288,
+            "median": 1.01951,
+            "p95": 1.211534,
+            "p99": 1.407522,
+            "max": 8.045331
+          }
+        },
+        "strict_reference_pass": false
+      },
+      {
+        "case": "c1-natural-r3-candidate",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 935463421175948,
+          "phase_finished_ns": 935492235324560,
+          "completed": true,
+          "expected_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "actual_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 935463421225853,
+          "common_wall_finished_ns": 935492235100586,
+          "common_wall_ns": 28813874733,
+          "successful_output_tokens": 28672,
+          "observed_output_tokens_including_partial_failures": 28672,
+          "successful_output_tokens_per_wall_second": 995.0761661069654,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 28814148612,
+          "successful_output_tokens_per_phase_wall_second": 995.066707890137,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 60.073046500000004,
+            "p95": 135.680966,
+            "p99": 136.340041,
+            "max": 138.425812
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.158609,
+            "p95": 5.765047,
+            "p99": 6.241035,
+            "max": 16.242028
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 0.9029266111111112,
+            "p95": 1.022853748031496,
+            "p99": 1.0281904015748031,
+            "max": 1.0373617322834645
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.158609,
+            "p95": 5.765047,
+            "p99": 6.241035,
+            "max": 16.242028
+          },
+          "token_itl_ms": {
+            "samples": 28288,
+            "median": 1.0025339999999998,
+            "p95": 1.062107,
+            "p99": 1.077703,
+            "max": 3.981384
+          }
+        },
+        "strict_reference_pass": true
+      },
+      {
+        "case": "c1-natural-r3-v52",
+        "summary": {
+          "schema_version": "riley.mixed-p128-phase.v1",
+          "phase": "retained",
+          "requested": 384,
+          "attempted": 384,
+          "unresolved_attempts": 0,
+          "not_started": 0,
+          "succeeded": 384,
+          "failed": 0,
+          "phase_started_ns": 935515985779464,
+          "phase_finished_ns": 935549405749388,
+          "completed": true,
+          "expected_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "actual_corpus_counts": {
+            "natural-16": 128,
+            "natural-128": 128,
+            "natural-398": 128
+          },
+          "observed_max_request_in_flight": 1,
+          "reference_matches": 384,
+          "strict_reference_pass": true,
+          "worker_errors": [],
+          "performance_qualified": false,
+          "correctness_qualified": false,
+          "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+          "common_wall_started_ns": 935515985828585,
+          "common_wall_finished_ns": 935549405394340,
+          "common_wall_ns": 33419565755,
+          "successful_output_tokens": 28672,
+          "observed_output_tokens_including_partial_failures": 28672,
+          "successful_output_tokens_per_wall_second": 857.9405313101742,
+          "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+          "phase_wall_ns": 33419969924,
+          "successful_output_tokens_per_phase_wall_second": 857.930155688431,
+          "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+          "descriptive_statistics_only": true,
+          "timing_scope": "client delivery; incomplete phases are not comparable",
+          "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+          "e2e_ms": {
+            "samples": 384,
+            "median": 70.37829099999999,
+            "p95": 156.46124,
+            "p99": 157.946129,
+            "max": 162.66914
+          },
+          "token_ttft_ms": {
+            "samples": 384,
+            "median": 3.1283965,
+            "p95": 5.637679,
+            "p99": 6.01638,
+            "max": 6.476053
+          },
+          "token_tpot_ms": {
+            "samples": 384,
+            "median": 1.0671313095238095,
+            "p95": 1.1875440236220471,
+            "p99": 1.198475062992126,
+            "max": 1.2358577952755907
+          },
+          "first_text_ms": {
+            "samples": 384,
+            "median": 3.1283965,
+            "p95": 5.637679,
+            "p99": 6.01638,
+            "max": 6.476053
+          },
+          "token_itl_ms": {
+            "samples": 28288,
+            "median": 1.165264,
+            "p95": 1.226499,
+            "p99": 1.247791,
+            "max": 5.444026
+          }
+        },
+        "strict_reference_pass": true
+      }
+    ],
+    "failure": {
+      "type": "RuntimeError",
+      "message": "whole attempt aborted: host start gate timeout c8-fixed-r0-v52-start"
+    },
+    "all_lanes_complete": false,
+    "goal_achieved": false,
+    "performance_qualified": false
+  }
+}

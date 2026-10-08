@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rc3-gate-e-soak-semantic-replay-v1.schema.json",
+  "title": "Riley RC3 Gate E soak semantic component replay v1",
+  "description": "A held-FD replay of only the closed soak component. The raw archive is manually verified as canonical USTAR and its JSONL event stream is reduced in bounded passes. The raw-member and scratch limits bound retained raw bytes, not total Python JSON-object RSS. Caller-supplied image and golden digests are equality anchors, not independent review approvals. A passed component is neither aggregate Gate E pass, semantic receipt, qualification, deployment, nor proof that an actual GPU capture ran.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "scope",
+    "status",
+    "authority",
+    "candidate_status",
+    "qualification_status",
+    "soak_status",
+    "candidate_id",
+    "source_revision",
+    "expected_release_image_id",
+    "expected_correctness_golden_sha256",
+    "gate_e_input_inventory",
+    "frozen_candidate_manifest",
+    "soak",
+    "checks",
+    "not_established",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {"const": "riley.rc3-gate-e-soak-semantic-replay.v1"},
+    "scope": {"const": "gate-e-soak-semantic-component-only"},
+    "status": {"const": "bound"},
+    "authority": {"const": "gate-e-soak-semantic-replay-only"},
+    "candidate_status": {"const": "frozen"},
+    "qualification_status": {"const": "not-run"},
+    "soak_status": {"const": "passed"},
+    "candidate_id": {"$ref": "#/$defs/candidateId"},
+    "source_revision": {"$ref": "#/$defs/gitRevision"},
+    "expected_release_image_id": {"$ref": "#/$defs/imageId"},
+    "expected_correctness_golden_sha256": {"$ref": "#/$defs/sha256"},
+    "gate_e_input_inventory": {"$ref": "#/$defs/inventoryDescriptor"},
+    "frozen_candidate_manifest": {"$ref": "#/$defs/frozenManifestDescriptor"},
+    "soak": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "report",
+        "raw_evidence",
+        "correctness_golden",
+        "native_report",
+        "release_elf",
+        "source_archive",
+        "frozen_release_image_digest",
+        "model_tree_sha256",
+        "raw_stream_member_byte_limit",
+        "scratch_disk_byte_limit"
+      ],
+      "properties": {
+        "report": {"$ref": "#/$defs/soakReportDescriptor"},
+        "raw_evidence": {"$ref": "#/$defs/soakRawDescriptor"},
+        "correctness_golden": {"$ref": "#/$defs/correctnessGoldenDescriptor"},
+        "native_report": {"$ref": "#/$defs/nativeReportDescriptor"},
+        "release_elf": {"$ref": "#/$defs/releaseElfDescriptor"},
+        "source_archive": {"$ref": "#/$defs/sourceArchiveDescriptor"},
+        "frozen_release_image_digest": {"$ref": "#/$defs/imageId"},
+        "model_tree_sha256": {"$ref": "#/$defs/sha256"},
+        "raw_stream_member_byte_limit": {"const": 536870912},
+        "scratch_disk_byte_limit": {"const": 613556224}
+      }
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "prefixItems": [
+        {"$ref": "#/$defs/checkStructuralBefore"},
+        {"$ref": "#/$defs/checkAnchors"},
+        {"$ref": "#/$defs/checkFrozen"},
+        {"$ref": "#/$defs/checkHeldInputs"},
+        {"$ref": "#/$defs/checkRaw"},
+        {"$ref": "#/$defs/checkStreaming"},
+        {"$ref": "#/$defs/checkNoAggregate"}
+      ],
+      "items": false
+    },
+    "not_established": {"$ref": "#/$defs/notEstablished"},
+    "reason_codes": {"type": "array", "maxItems": 0}
+  },
+  "$defs": {
+    "candidateId": {"type": "string", "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"},
+    "gitRevision": {"type": "string", "allOf": [{"pattern": "^[0-9a-f]{40}$"}, {"not": {"const": "0000000000000000000000000000000000000000"}}]},
+    "imageId": {"type": "string", "allOf": [{"pattern": "^sha256:[0-9a-f]{64}$"}, {"not": {"const": "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}]},
+    "sha256": {"type": "string", "allOf": [{"pattern": "^[0-9a-f]{64}$"}, {"not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}}]},
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "byte_length": {"type": "integer", "minimum": 1, "maximum": 1099511627776}
+      }
+    },
+    "directDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {"properties": {"path": {"maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"}}}
+      ]
+    },
+    "soakRawDescriptor": {"allOf": [{"$ref": "#/$defs/directDescriptor"}, {"properties": {"byte_length": {"maximum": 613556224}}}]},
+    "soakReportDescriptor": {"allOf": [{"$ref": "#/$defs/directDescriptor"}, {"properties": {"byte_length": {"maximum": 16777216}}}]},
+    "correctnessGoldenDescriptor": {"allOf": [{"$ref": "#/$defs/directDescriptor"}, {"properties": {"byte_length": {"maximum": 65536}}}]},
+    "nativeReportDescriptor": {"allOf": [{"$ref": "#/$defs/directDescriptor"}, {"properties": {"byte_length": {"maximum": 16777216}}}]},
+    "releaseElfDescriptor": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"byte_length": {"maximum": 536870912}}}]},
+    "sourceArchiveDescriptor": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"byte_length": {"maximum": 4294967296}}}]},
+    "inventoryDescriptor": {"allOf": [{"$ref": "#/$defs/directDescriptor"}, {"properties": {"path": {"const": "gate-e-inputs.json"}}}]},
+    "frozenManifestDescriptor": {"allOf": [{"$ref": "#/$defs/directDescriptor"}, {"properties": {"path": {"const": "frozen-candidate.json"}}}]},
+    "check": {"type": "object", "additionalProperties": false, "required": ["name", "satisfied"], "properties": {"name": {"type": "string"}, "satisfied": {"const": true}}},
+    "checkStructuralBefore": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "closed-gate-e-input-inventory-replayed-before-soak"}}}]},
+    "checkAnchors": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "externally-supplied-release-image-and-golden-anchors-bound"}}}]},
+    "checkFrozen": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "frozen-source-release-and-model-identities-bound"}}}]},
+    "checkHeldInputs": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "held-soak-report-golden-and-native-report-consumed"}}}]},
+    "checkRaw": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "private-held-fd-soak-raw-replayed"}}}]},
+    "checkStreaming": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "bounded-streaming-raw-policy-applied-to-soak-raw-replay"}}}]},
+    "checkNoAggregate": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "soak-component-does-not-aggregate-gate-e"}}}]},
+    "notEstablished": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["native_e0", "optimizer_e0", "python_free", "performance", "release_image_review", "correctness_golden_review", "release_container_content", "model_mount_provenance", "producer_sidecar_equality", "source_archive_content", "actual_capture", "aggregate_gate_e", "gate_e_pass", "semantic_receipt", "qualification", "deployment"],
+      "properties": {
+        "native_e0": {"const": "not-established"},
+        "optimizer_e0": {"const": "not-established"},
+        "python_free": {"const": "not-established"},
+        "performance": {"const": "not-established"},
+        "release_image_review": {"const": "not-established"},
+        "correctness_golden_review": {"const": "not-established"},
+        "release_container_content": {"const": "not-established"},
+        "model_mount_provenance": {"const": "not-established"},
+        "producer_sidecar_equality": {"const": "not-established"},
+        "source_archive_content": {"const": "not-established"},
+        "actual_capture": {"const": "not-established"},
+        "aggregate_gate_e": {"const": "not-established"},
+        "gate_e_pass": {"const": "not-established"},
+        "semantic_receipt": {"const": "not-established"},
+        "qualification": {"const": "not-established"},
+        "deployment": {"const": "not-established"}
+      }
+    }
+  }
+}

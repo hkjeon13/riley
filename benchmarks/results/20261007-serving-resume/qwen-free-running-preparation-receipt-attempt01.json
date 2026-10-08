@@ -1,0 +1,29 @@
+{
+  "observed_ns": 1791371856807263000,
+  "source_commit": "d3fc3643f16f558a5a182f63f4fa7204e53b86a0",
+  "qualified_parent_commit": "2612208b9ac02ffa79b563b87f073c239b35da18",
+  "worktree": "/Users/psyche/.codex/worktrees/qwen-cache-free-running/riley",
+  "branch": "codex/qwen-cache-free-running",
+  "source_433_true_blobs": {
+    "source_commit": "d3fc3643f16f558a5a182f63f4fa7204e53b86a0",
+    "verified_source_files": 433,
+    "code_worktree_clean": true,
+    "excluded_nonbuild_files_skip_worktree": 18680,
+    "scope": "Cargo workspace and all tracked CUDA files verified against true Git blobs; excluded docs/results not materialized"
+  },
+  "native_source_scope": "only appended tests; original tests and runtime/CUDA byte-preserved",
+  "original_oracle_CPU_greedy_audit": {
+    "addressable_matches": 128,
+    "eos_selected_rows": [],
+    "receipt": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/qwen-addressable-greedy-path-audit-attempt01.json"
+  },
+  "selection_policy_CPU_test": "actual extracted Rust helper, rustc test passed 1/1; full CUDA crate build unexecuted",
+  "plan": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/qwen-free-running-plan-attempt01.json",
+  "driver": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/run_qwen_free_running_attempt01.py",
+  "independent_verifier": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/verify_qwen_free_running_attempt01.py",
+  "independent_verifier_sha256": "e10a81ff466acac5a5161ca34691ccab41f74542e4d13c522e1d851cddda5202",
+  "remote_upload": "not started; deferred until serving terminal archive/replay to avoid host/GPU overlap",
+  "native_GPU_execution": "미실행",
+  "serving_performance": "미실행",
+  "goal_achieved": false
+}

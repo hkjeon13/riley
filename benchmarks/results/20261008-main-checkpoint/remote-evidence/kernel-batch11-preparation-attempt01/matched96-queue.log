@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-261007/kernel-batch11-preparation-attempt01/matched96-after-HTTP.py", line 12, in <module>
+    assert json.loads((o/'server-queue-completion.json').read_text())['failure'] is None
+AssertionError

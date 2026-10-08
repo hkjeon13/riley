@@ -1,0 +1,248 @@
+{
+  "candidate_source_commit": "e42cc345a08913b2dc1f9a0ea618dd73e3390f8e",
+  "profile_candidate_source_commit": "61402ebc42e9d0ea5bde4e6415a1a9c25e3db8a1",
+  "Rust_crate_files_unchanged_SHA256": 342,
+  "source_files": {
+    "crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs": "c83201cc96ac98d2100bddb85792c31a6f67ae030ee1120439ca4a00d03b53e0",
+    "crates/riley-runtime/src/llama/variable_session.rs": "15fe396accdefb68ba8eeaff946c814872d3351cd212b174a3c2730512361804",
+    "crates/riley-scheduler/src/scheduler.rs": "7b48d0488b7890625fd0d7e58c83072bdad5500c6c827862644544ea6f6811d8"
+  },
+  "CPU_profiles": [
+    {
+      "case": "c32-natural-r0-v52",
+      "sqlite_sha256": "e6e12827b938812736bc4e20744cf551206b1136b67ac749eb7793dc54f90869",
+      "retained_target_CPU_samples": 1084,
+      "distinct_samples_by_class": {
+        "btree_insert_or_search": {
+          "samples": 35,
+          "sample_presence_percent": 3.2287822878228782
+        },
+        "wire_validate": {
+          "samples": 55,
+          "sample_presence_percent": 5.07380073800738
+        },
+        "scheduler_authorize_execution": {
+          "samples": 288,
+          "sample_presence_percent": 26.568265682656826
+        },
+        "malloc_functions": {
+          "samples": 28,
+          "sample_presence_percent": 2.5830258302583027
+        }
+      },
+      "symbols": {
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 18,
+          "unique_leaf_samples": 13
+        },
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 55,
+          "unique_leaf_samples": 14
+        },
+        "_RNvMsg_NtCsfmfNdES9xRX_15riley_scheduler9schedulerNtB5_9Scheduler19authorize_execution": {
+          "unique_inclusive_samples": 288,
+          "unique_leaf_samples": 12
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 15,
+          "unique_leaf_samples": 10
+        },
+        "__libc_malloc": {
+          "unique_inclusive_samples": 28,
+          "unique_leaf_samples": 13
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmyE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 17,
+          "unique_leaf_samples": 14
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 5,
+          "unique_leaf_samples": 5
+        }
+      }
+    },
+    {
+      "case": "c32-natural-r0-candidate",
+      "sqlite_sha256": "da21b586498bf6e4b7c69ee99c0efbaa2d51095c6eb72ee6727ee10ede3ac67e",
+      "retained_target_CPU_samples": 1041,
+      "distinct_samples_by_class": {
+        "scheduler_authorize_execution": {
+          "samples": 12,
+          "sample_presence_percent": 1.1527377521613833
+        },
+        "malloc_functions": {
+          "samples": 22,
+          "sample_presence_percent": 2.1133525456292026
+        },
+        "btree_insert_or_search": {
+          "samples": 40,
+          "sample_presence_percent": 3.8424591738712777
+        },
+        "wire_validate": {
+          "samples": 62,
+          "sample_presence_percent": 5.95581171950048
+        }
+      },
+      "symbols": {
+        "_RNvMsg_NtCsfmfNdES9xRX_15riley_scheduler9schedulerNtB5_9Scheduler19authorize_execution": {
+          "unique_inclusive_samples": 12,
+          "unique_leaf_samples": 10
+        },
+        "__libc_malloc": {
+          "unique_inclusive_samples": 22,
+          "unique_leaf_samples": 15
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmyE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 25,
+          "unique_leaf_samples": 20
+        },
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 62,
+          "unique_leaf_samples": 17
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 7,
+          "unique_leaf_samples": 4
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 13,
+          "unique_leaf_samples": 10
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 3,
+          "unique_leaf_samples": 2
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapyNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 2,
+          "unique_leaf_samples": 2
+        }
+      }
+    },
+    {
+      "case": "c32-natural-r1-candidate",
+      "sqlite_sha256": "140b488f4793325fdffa97afa2d01a6a0cb9b553a997f89bd0696e376a8eaff9",
+      "retained_target_CPU_samples": 1128,
+      "distinct_samples_by_class": {
+        "btree_insert_or_search": {
+          "samples": 49,
+          "sample_presence_percent": 4.343971631205674
+        },
+        "wire_validate": {
+          "samples": 64,
+          "sample_presence_percent": 5.673758865248227
+        },
+        "malloc_functions": {
+          "samples": 27,
+          "sample_presence_percent": 2.393617021276596
+        },
+        "scheduler_authorize_execution": {
+          "samples": 25,
+          "sample_presence_percent": 2.2163120567375887
+        }
+      },
+      "symbols": {
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 23,
+          "unique_leaf_samples": 15
+        },
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 64,
+          "unique_leaf_samples": 10
+        },
+        "__libc_malloc": {
+          "unique_inclusive_samples": 25,
+          "unique_leaf_samples": 9
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmyE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 23,
+          "unique_leaf_samples": 13
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 17,
+          "unique_leaf_samples": 12
+        },
+        "_RNvMsg_NtCsfmfNdES9xRX_15riley_scheduler9schedulerNtB5_9Scheduler19authorize_execution": {
+          "unique_inclusive_samples": 25,
+          "unique_leaf_samples": 20
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 2,
+          "unique_leaf_samples": 1
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapyNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 3,
+          "unique_leaf_samples": 2
+        }
+      }
+    },
+    {
+      "case": "c32-natural-r1-v52",
+      "sqlite_sha256": "17c6ea3896d046d3f7f7152ac66df85672969f21acbd7db594327d86dc09c4f2",
+      "retained_target_CPU_samples": 1053,
+      "distinct_samples_by_class": {
+        "wire_validate": {
+          "samples": 62,
+          "sample_presence_percent": 5.887939221272554
+        },
+        "malloc_functions": {
+          "samples": 20,
+          "sample_presence_percent": 1.899335232668566
+        },
+        "btree_insert_or_search": {
+          "samples": 45,
+          "sample_presence_percent": 4.273504273504273
+        },
+        "scheduler_authorize_execution": {
+          "samples": 17,
+          "sample_presence_percent": 1.6144349477682811
+        }
+      },
+      "symbols": {
+        "_RINvNtNtNtCsegt6khp6CVK_13riley_runtime5llama16multi_descriptor13variable_wire8validateKj20_ECsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 62,
+          "unique_leaf_samples": 15
+        },
+        "__libc_malloc": {
+          "unique_inclusive_samples": 20,
+          "unique_leaf_samples": 12
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmyE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 15,
+          "unique_leaf_samples": 11
+        },
+        "_RNvMsg_NtCsfmfNdES9xRX_15riley_scheduler9schedulerNtB5_9Scheduler19authorize_execution": {
+          "unique_inclusive_samples": 17,
+          "unique_leaf_samples": 13
+        },
+        "_int_malloc": {
+          "unique_inclusive_samples": 8,
+          "unique_leaf_samples": 6
+        },
+        "_RNvMsi_NtNtNtCscHgRw1M2fX5_5alloc11collections5btree3mapINtB5_8BTreeMapmNtNtB7_7set_val9SetValZSTE6insertCsgUzxfxB3BTS_12riley_server": {
+          "unique_inclusive_samples": 30,
+          "unique_leaf_samples": 24
+        },
+        "malloc_consolidate": {
+          "unique_inclusive_samples": 2,
+          "unique_leaf_samples": 1
+        }
+      }
+    }
+  ],
+  "phase_analysis_sha256": "726d06174e6313c7d85eb0421db9656632c831ead3871bb2da2c409f9b37a0c0",
+  "source_contract_findings": [
+    "Request encoding validates authority before clearing/writing packet.",
+    "Production execute_rows owns Expectation in self.retained through replay/read_transfer; completion validators validate authority again before publication.",
+    "Validation constructs one ownership BTreeMap and four BTreeSets per call; ROWS supported8/16/32, pool bounded1..4096.",
+    "Invalid native execution/completion poisons session and retains owner; scheduler commit confirms exact completed iteration before releasing expectation."
+  ],
+  "next_experiment_if_full_screen_fails": "Measure bounded ownership lookup and duplicate-set allocation alternatives with unchanged validation order/errors/packet bytes; preserve all pre-submit/pre-publication/cancel/reuse guards. No candidate implemented or adopted by this audit.",
+  "limits": [
+    "Distinct sample presence is not execution time; classes overlap and are never added.",
+    "LBR stacks may be incomplete/unresolved; no CPU/GPU causal attribution or speedup estimate.",
+    "Root diagnostic profiling UID0 differs from actual serving UID1000.",
+    "All original raw traces and samples retained; sampling presence does not qualify serving performance."
+  ],
+  "serving_performance": "\ubbf8\uc2e4\ud589; source/profiling audit only",
+  "goal_achieved": false
+}

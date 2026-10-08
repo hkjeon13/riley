@@ -1,0 +1,18 @@
+{
+  "created_ns": 1791366370983435000,
+  "original_final_validator_failure_reproduced": true,
+  "repaired_global_binding_validates_all_steps": 110,
+  "selected_tensors_per_step": 52,
+  "negative_guards_rejected": [
+    "names",
+    "shape",
+    "dtype",
+    "finite",
+    "alias"
+  ],
+  "observer_source_sha256": "96981af29ff311faef9a9d8eff26a58740c3e2303cc9e204a327e1dacde8452e",
+  "immutable_HF_validator_source_sha256": "0c9f7d86a8a14a677e1c49ebf66e671c996ffee093042422011e3739b643895b",
+  "scope": "metadata-only validation of original source function global lookup and exact observer validator; no numeric tensors, GPU inference or HF logits claim",
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "goal_achieved": false
+}

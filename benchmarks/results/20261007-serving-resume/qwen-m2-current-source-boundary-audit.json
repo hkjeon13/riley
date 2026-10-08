@@ -1,0 +1,51 @@
+{
+  "time_ns": 1791351797955353000,
+  "scope": "source audit of remaining M2/full128 correctness; no implementation, GPU or serving claim",
+  "source_commit": "4da970a7153ff615cc9f6b0e679d3bd0d7ce2064",
+  "findings": [
+    {
+      "path": "crates/riley-runtime/src/llama/decode.rs",
+      "line": 2912,
+      "finding": "M1 traced entry rejects logical_length other than2048; cannot currently traceM2 after2049 commit"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/decode.rs",
+      "line": 2412,
+      "finding": "device scaled-score buffer allocated for query_heads*(2048+1); M2 needs2050 slots perhead"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/decode.rs",
+      "line": 2441,
+      "finding": "repeated-key workspace sized toT2049; M2 QK/AV needs reviewed larger bounded workspace"
+    },
+    {
+      "path": "kernels/src/decode_attention.cu",
+      "line": 3217,
+      "finding": "native diagnostic QK exactlogicalT2049 only; M2T2050 rejected"
+    },
+    {
+      "path": "kernels/src/decode_attention.cu",
+      "line": 3468,
+      "finding": "native diagnostic AV exactlogicalT2049 only; M2T2050 rejected"
+    },
+    {
+      "path": "crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs",
+      "line": 3974,
+      "finding": "existing actual helper executes only teacher token304, compares decode_step_1, reset+re-prefill repeat; noM2 token279 execution"
+    }
+  ],
+  "next_required": [
+    "Preserve currentM1 source/52stage proof; add separately bounded source-reviewedM2 diagnostic API and workspace sizing",
+    "BindT2050 QK/AV entry to immutableHF M2 rows and exactsame BF16 regular reduction",
+    "RunM1+M2 sequentially on same committed KV owner; compare52M2 stages, teacher row2, logicallengths, repeat/cleanup",
+    "Do not claim128token generation or servingselector from two teacher-forcedsteps"
+  ],
+  "files": {
+    "crates/riley-runtime/src/llama/decode.rs": "7fd5764896d964bd478e7df4c08a29cef14fbd9f8ee6587bdc79912459d0a609",
+    "kernels/src/decode_attention.cu": "f6d381761a66270210d2357420da20c6f69df37cf50125a0a2a94229cd3711bd",
+    "kernels/src/decode_hf_regular_softmax.cuh": "8d8ebd8a5a2034d61fad0fbbbc7050e5cca4db42a67517451c0718185b21289d",
+    "crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs": "c5710039103d0a383b0b24ad219c22a72c6e7a9b9bd1b187a8bcee95cf4abbf0"
+  },
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "goal_achieved": false
+}

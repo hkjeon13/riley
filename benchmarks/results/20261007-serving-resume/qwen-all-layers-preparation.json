@@ -1,0 +1,24 @@
+{
+  "revision": "41b56d54b63b72ed6fdc84764202b7386ec4ff9a",
+  "worktree": "/Users/psyche/.codex/worktrees/qwen-cache-correctness/riley",
+  "source_dirty": false,
+  "layer_count": 36,
+  "tensor_count": 72,
+  "schema_version": "riley.qwen3b-hf-eager-p2048-cache-on-prefill-kv-trace.v2",
+  "archive_sha256": "5ee0ec1ec150545f143c900907c92f436f6267ccfdaccedbf33ec1234a27977f",
+  "tests": "4 offline tests passed including missing-layer/v1 rejection; git diff --check passed",
+  "HF_gpu_run": "\ubbf8\uc2e4\ud589",
+  "Rust_gpu_run": "\ubbf8\uc2e4\ud589",
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "goal_achieved": false,
+  "archive": "qwen-all-layers-code.tar",
+  "archive_pathspec": [
+    "Cargo.toml",
+    "Cargo.lock",
+    "rust-toolchain.toml",
+    "crates",
+    "tools/python/reference"
+  ],
+  "remote_prepared": false,
+  "discarded_upload": "owned full-repository upload stopped before completion; partial remote tar retained for audit; using source-only archive"
+}

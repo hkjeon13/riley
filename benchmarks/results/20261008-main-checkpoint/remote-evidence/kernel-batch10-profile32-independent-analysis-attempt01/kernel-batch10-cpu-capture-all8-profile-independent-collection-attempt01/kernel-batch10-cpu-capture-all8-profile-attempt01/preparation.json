@@ -1,0 +1,457 @@
+{
+  "plan": {
+    "schema": "riley.batch10.root-process-tree-all8-profile32.v1",
+    "scope": "diagnostic32 all8 V52/candidate ABBA; run only after terminal full96 independent screen FAIL and terminal host analysis",
+    "baseline": "/data/riley-serving-261007/kernel-batch10-quiet-attempt01",
+    "engines": [
+      "v52",
+      "candidate"
+    ],
+    "concurrency": [
+      1,
+      8,
+      16,
+      32
+    ],
+    "workloads": [
+      "fixed",
+      "natural"
+    ],
+    "orders": [
+      [
+        "v52",
+        "candidate"
+      ],
+      [
+        "candidate",
+        "v52"
+      ]
+    ],
+    "warmup": 96,
+    "retained": 96,
+    "startup_timeout_seconds": 300,
+    "tool": "/data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/bin/nsys",
+    "expected_tool_version": "NVIDIA Nsight Systems version 2025.5.2.266-255236693005v0",
+    "launch_trace": "cuda,osrt",
+    "sample": "process-tree",
+    "cpuctxsw": "process-tree",
+    "backtrace": "lbr",
+    "collection_policy": "profile full target lifetime from process launch through exact-target SIGTERM and profiler auto-stop; startup/warmup/retained/teardown preserved; no trim",
+    "clock_policy": "sandwiched perf_counter/epoch/monotonic/raw bridge at every phase boundary; exported GPU/HTTP clock mapping still must be independently checked before correlation",
+    "analysis_policy": "actual root process-tree CPU stacks/scheduling and CUDA spans; separate interval unions/intersections, no idle-gap causal attribution; profiling timings are diagnostic only",
+    "failure_policy": "preserve all artifacts and stop on errors, missing CUDA data, numerical/protocol mismatch or unreclaimed owned GPU resources; no slow sample removal",
+    "performance_claim_eligible": false,
+    "goal_achieved": false,
+    "method_reference": "https://docs.nvidia.com/nsight-systems/UserGuide/index.html",
+    "compatibility_pending": false,
+    "cpu_profiling": {
+      "state": "root environment check supports process-tree without changing kernel paranoid level4",
+      "environment_check": "kernel-batch05-root-cpu-profiling-environment-attempt01.txt",
+      "environment_check_sha256": "00b119559ed32a7d0494332cc47b76f4c8f28b17a8eade1a074841397857b5a7",
+      "host_setting_mutation": false,
+      "actual_CPU_stack_and_context_switch_capture": "unverified until real SQLite tables and diagnostics inspected"
+    },
+    "cuda_graph_trace": "node",
+    "reclamation_timeout_seconds": 40,
+    "graph_trace_recovery": "attempt02 default graph mode produced graph events but no kernel node table; installed CLI node option verified; node capture overhead is diagnostic only",
+    "tool_package_SHA256": "e818fefc62b1e6c3bd34eb92b4e412355afddb763b55e8d7bc3330c4e3da4d33",
+    "expected_baseline_binary_sha256": "6f424278437f82a462ee141c829914d02ccb8c02ed604fa166c70c3c70bb16f6",
+    "expected_candidate_binary_sha256": "1ba4c3c8f81b6969c6cd46c5c3c963779b1f2d9b2249afaee6f755320e75cd9e",
+    "candidate_source_commit": "63093106ff7c18ec0ba5cd0778f7bb8086d9eedd",
+    "GPU_UUID": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "full_core_serving_adoption": false,
+    "capture_completeness_requirement": "Preserve all collected/not-all-collected diagnostics; event-count consistency does not establish trace completeness; no API/GPU additive timing or unaligned HTTP phase attribution.",
+    "cells": [
+      {
+        "concurrency": 1,
+        "workload": "fixed"
+      },
+      {
+        "concurrency": 1,
+        "workload": "natural"
+      },
+      {
+        "concurrency": 8,
+        "workload": "fixed"
+      },
+      {
+        "concurrency": 8,
+        "workload": "natural"
+      },
+      {
+        "concurrency": 16,
+        "workload": "fixed"
+      },
+      {
+        "concurrency": 16,
+        "workload": "natural"
+      },
+      {
+        "concurrency": 32,
+        "workload": "fixed"
+      },
+      {
+        "concurrency": 32,
+        "workload": "natural"
+      }
+    ],
+    "capture_range": "none",
+    "stop_on_exit": true,
+    "expected_lanes": 32,
+    "prior_diagnostic_warning_hypothesis": "whole-lifetime collection tests session boundary warnings; warning cause or trace completeness is not established",
+    "target_ownership_policy": "exact frozen argv including bind port; root UID0; pinned binary SHA; active CUDA PID; no profiler PGID assumption",
+    "expected_target_uid": 0,
+    "profiler_private_directories": "lane/profiler-private; HOME/config/cache/tmp isolated; target frozen HOME/PATH/CUDA/etc supplied with installed --env-var",
+    "binding_policy": "fill archive and raw-verification/source hashes only after terminal full96 independent verification; freeze completed plan before any profile launch",
+    "predeclared_time_ns": 1791413725500264225,
+    "previous_validated_GPU_capture": "Batch08 all32 profiles independently verified; completeness remains unproven",
+    "remaining_serving_gaps": [
+      {
+        "cell": "c1-fixed",
+        "mean_screen": false,
+        "absolute_means": {
+          "v52": {
+            "ttft_ms_p99": 6.055623,
+            "tpot_ms_median": 1.0621499172026314,
+            "throughput_tokens_s": 844.497331649237,
+            "e2e_ms_p99": 37.35599625,
+            "error_rate": 0,
+            "ttft_ms_median": 3.098041875,
+            "gpu_peak_observed_MiB": 1212.0,
+            "tpot_ms_p95": 1.0923765871635611,
+            "e2e_ms_median": 24.846899625,
+            "e2e_ms_p95": 36.49806875,
+            "ttft_ms_p95": 3.512212,
+            "tpot_ms_p99": 1.1436572023041474,
+            "cpu_process_group_peak_observed_RSS_MiB": 754.6259765625
+          },
+          "candidate": {
+            "ttft_ms_p99": 5.6161537500000005,
+            "tpot_ms_median": 0.9600921557971015,
+            "throughput_tokens_s": 917.459849732378,
+            "e2e_ms_p99": 34.307572,
+            "error_rate": 0,
+            "ttft_ms_median": 3.194641,
+            "gpu_peak_observed_MiB": 1206.0,
+            "tpot_ms_p95": 0.9842335854371201,
+            "e2e_ms_median": 22.548823125,
+            "e2e_ms_p95": 33.44439525,
+            "ttft_ms_p95": 3.55314125,
+            "tpot_ms_p99": 1.029716976190476,
+            "cpu_process_group_peak_observed_RSS_MiB": 754.2060546875
+          },
+          "vllm": {
+            "ttft_ms_p99": 18.3028355,
+            "tpot_ms_median": 0.8907579024427302,
+            "throughput_tokens_s": 759.2221641097112,
+            "e2e_ms_p99": 46.956281000000004,
+            "error_rate": 0,
+            "ttft_ms_median": 8.03161075,
+            "gpu_peak_observed_MiB": 8038.0,
+            "tpot_ms_p95": 1.0589183507914246,
+            "e2e_ms_median": 27.590531374999998,
+            "e2e_ms_p95": 39.512004,
+            "ttft_ms_p95": 13.885244,
+            "tpot_ms_p99": 1.2136059612836438,
+            "cpu_process_group_peak_observed_RSS_MiB": 3529.013671875
+          }
+        }
+      },
+      {
+        "cell": "c16-fixed",
+        "mean_screen": false,
+        "absolute_means": {
+          "v52": {
+            "ttft_ms_p99": 24.9348075,
+            "tpot_ms_median": 2.3238682679439657,
+            "throughput_tokens_s": 6204.866404605603,
+            "e2e_ms_p99": 87.70102,
+            "error_rate": 0,
+            "ttft_ms_median": 6.184205875,
+            "gpu_peak_observed_MiB": 1268.0,
+            "tpot_ms_p95": 2.5223399319775597,
+            "e2e_ms_median": 46.236704625,
+            "e2e_ms_p95": 82.17891374999999,
+            "ttft_ms_p95": 9.14060325,
+            "tpot_ms_p99": 2.6798688023809523,
+            "cpu_process_group_peak_observed_RSS_MiB": 756.248046875
+          },
+          "candidate": {
+            "ttft_ms_p99": 25.011646,
+            "tpot_ms_median": 2.3086060537216992,
+            "throughput_tokens_s": 6273.181629580262,
+            "e2e_ms_p99": 88.50733025,
+            "error_rate": 0,
+            "ttft_ms_median": 6.1533771250000004,
+            "gpu_peak_observed_MiB": 1262.0,
+            "tpot_ms_p95": 2.513330070430108,
+            "e2e_ms_median": 46.2116625,
+            "e2e_ms_p95": 81.08703175,
+            "ttft_ms_p95": 10.2587385,
+            "tpot_ms_p99": 2.637598647619048,
+            "cpu_process_group_peak_observed_RSS_MiB": 755.767578125
+          },
+          "vllm": {
+            "ttft_ms_p99": 86.733587,
+            "tpot_ms_median": 2.294891221971215,
+            "throughput_tokens_s": 4261.083874367706,
+            "e2e_ms_p99": 163.47296275,
+            "error_rate": 0,
+            "ttft_ms_median": 24.697214375,
+            "gpu_peak_observed_MiB": 8040.0,
+            "tpot_ms_p95": 3.9389502605289524,
+            "e2e_ms_median": 71.12716375,
+            "e2e_ms_p95": 135.6761925,
+            "ttft_ms_p95": 49.08359175,
+            "tpot_ms_p99": 5.358616116666667,
+            "cpu_process_group_peak_observed_RSS_MiB": 3355.30078125
+          }
+        }
+      },
+      {
+        "cell": "c16-natural",
+        "mean_screen": false,
+        "absolute_means": {
+          "v52": {
+            "ttft_ms_p99": 36.42316925,
+            "tpot_ms_median": 1.9516926575266802,
+            "throughput_tokens_s": 7664.991355145163,
+            "e2e_ms_p99": 275.3742145,
+            "error_rate": 0,
+            "ttft_ms_median": 7.475511375,
+            "gpu_peak_observed_MiB": 1568.0,
+            "tpot_ms_p95": 2.05617527547363,
+            "e2e_ms_median": 130.20888487500002,
+            "e2e_ms_p95": 265.41733275,
+            "ttft_ms_p95": 13.56718025,
+            "tpot_ms_p99": 2.1162801360545656,
+            "cpu_process_group_peak_observed_RSS_MiB": 756.29296875
+          },
+          "candidate": {
+            "ttft_ms_p99": 36.02269475,
+            "tpot_ms_median": 1.9466365290548358,
+            "throughput_tokens_s": 7718.845525498601,
+            "e2e_ms_p99": 268.8316945,
+            "error_rate": 0,
+            "ttft_ms_median": 7.21091375,
+            "gpu_peak_observed_MiB": 1562.0,
+            "tpot_ms_p95": 2.022538174681794,
+            "e2e_ms_median": 129.44324125,
+            "e2e_ms_p95": 262.05892274999997,
+            "ttft_ms_p95": 12.8328905,
+            "tpot_ms_p99": 2.0702750783410138,
+            "cpu_process_group_peak_observed_RSS_MiB": 755.8134765625
+          },
+          "vllm": {
+            "ttft_ms_p99": 51.03342725,
+            "tpot_ms_median": 1.922751403183977,
+            "throughput_tokens_s": 7037.332720966553,
+            "e2e_ms_p99": 328.279811,
+            "error_rate": 0,
+            "ttft_ms_median": 16.88016925,
+            "gpu_peak_observed_MiB": 8040.0,
+            "tpot_ms_p95": 2.454228448225222,
+            "e2e_ms_median": 139.57943625000001,
+            "e2e_ms_p95": 306.3395355,
+            "ttft_ms_p95": 36.060469499999996,
+            "tpot_ms_p99": 2.8129185136968764,
+            "cpu_process_group_peak_observed_RSS_MiB": 3280.5458984375
+          }
+        }
+      },
+      {
+        "cell": "c32-fixed",
+        "mean_screen": false,
+        "absolute_means": {
+          "v52": {
+            "ttft_ms_p99": 52.48857,
+            "tpot_ms_median": 3.56573880615942,
+            "throughput_tokens_s": 7958.727469499443,
+            "e2e_ms_p99": 156.23781725,
+            "error_rate": 0,
+            "ttft_ms_median": 8.676855,
+            "gpu_peak_observed_MiB": 1324.0,
+            "tpot_ms_p95": 3.9930380214285712,
+            "e2e_ms_median": 73.13267474999999,
+            "e2e_ms_p95": 127.48008975,
+            "ttft_ms_p95": 30.65952875,
+            "tpot_ms_p99": 4.3921235,
+            "cpu_process_group_peak_observed_RSS_MiB": 758.4013671875
+          },
+          "candidate": {
+            "ttft_ms_p99": 52.56741475,
+            "tpot_ms_median": 3.6394405812295467,
+            "throughput_tokens_s": 7931.463861941732,
+            "e2e_ms_p99": 146.63020125,
+            "error_rate": 0,
+            "ttft_ms_median": 8.46233975,
+            "gpu_peak_observed_MiB": 1318.0,
+            "tpot_ms_p95": 3.9834815182795698,
+            "e2e_ms_median": 73.664356125,
+            "e2e_ms_p95": 127.06397475,
+            "ttft_ms_p95": 30.27574,
+            "tpot_ms_p99": 4.342627523291926,
+            "cpu_process_group_peak_observed_RSS_MiB": 758.0234375
+          },
+          "vllm": {
+            "ttft_ms_p99": 66.82110375,
+            "tpot_ms_median": 2.9654571097826086,
+            "throughput_tokens_s": 6810.80529368811,
+            "e2e_ms_p99": 172.88119825,
+            "error_rate": 0,
+            "ttft_ms_median": 33.981446875,
+            "gpu_peak_observed_MiB": 8090.0,
+            "tpot_ms_p95": 5.2129117761904755,
+            "e2e_ms_median": 86.59750025000001,
+            "e2e_ms_p95": 152.93596775,
+            "ttft_ms_p95": 56.43664,
+            "tpot_ms_p99": 6.2108070714285715,
+            "cpu_process_group_peak_observed_RSS_MiB": 3272.5068359375
+          }
+        }
+      },
+      {
+        "cell": "c32-natural",
+        "mean_screen": false,
+        "absolute_means": {
+          "v52": {
+            "ttft_ms_p99": 75.17604374999999,
+            "tpot_ms_median": 2.9947355497694845,
+            "throughput_tokens_s": 10028.483495870794,
+            "e2e_ms_p99": 430.47167225,
+            "error_rate": 0,
+            "ttft_ms_median": 10.685934625000002,
+            "gpu_peak_observed_MiB": 1928.0,
+            "tpot_ms_p95": 3.137031203568304,
+            "e2e_ms_median": 199.62943,
+            "e2e_ms_p95": 404.72814700000004,
+            "ttft_ms_p95": 39.95629025,
+            "tpot_ms_p99": 3.221347703405018,
+            "cpu_process_group_peak_observed_RSS_MiB": 759.48828125
+          },
+          "candidate": {
+            "ttft_ms_p99": 78.16917275,
+            "tpot_ms_median": 3.0333426502982492,
+            "throughput_tokens_s": 9881.640983111356,
+            "e2e_ms_p99": 443.46051425,
+            "error_rate": 0,
+            "ttft_ms_median": 10.54732225,
+            "gpu_peak_observed_MiB": 1922.0,
+            "tpot_ms_p95": 3.161791794259589,
+            "e2e_ms_median": 202.20915250000002,
+            "e2e_ms_p95": 409.18482925,
+            "ttft_ms_p95": 49.195283,
+            "tpot_ms_p99": 3.2295895519713262,
+            "cpu_process_group_peak_observed_RSS_MiB": 759.087890625
+          },
+          "vllm": {
+            "ttft_ms_p99": 81.8280925,
+            "tpot_ms_median": 2.424032888312852,
+            "throughput_tokens_s": 10847.270051537851,
+            "e2e_ms_p99": 429.69495,
+            "error_rate": 0,
+            "ttft_ms_median": 28.377615249999998,
+            "gpu_peak_observed_MiB": 8090.0,
+            "tpot_ms_p95": 3.073527110736158,
+            "e2e_ms_median": 183.8291475,
+            "e2e_ms_p95": 389.53637675,
+            "ttft_ms_p95": 59.63401175,
+            "tpot_ms_p99": 3.565408496671787,
+            "cpu_process_group_peak_observed_RSS_MiB": 3271.849609375
+          }
+        }
+      }
+    ],
+    "baseline_source_file_shas": {
+      "preparation.json": "bd6de738239e0be448a457f89bf1e1de24cf3db9ff40f57d4d6175dabdad13a5",
+      "completion.json": "4b7b70f9970e206d9f0cc03d63aa1e82ecf83b18ff69639b64ff9452cca37c4a",
+      "c1-fixed-r0-v52-launch.json": "e292cc2b4d1ea97f3ed9e332e652f96f6e3f1d3a1f13529dba05c937702b525b",
+      "c1-fixed-r0-candidate-launch.json": "b3e568379740686a97faff7114def514a628bd5d7b39ea91f7179aa01f855e2e",
+      "c1-natural-r0-v52-launch.json": "39fed545a959552f0a77dc5a53636eb4d074d02ec387838e27e82e148264174a",
+      "c1-natural-r0-candidate-launch.json": "06f417face692d8f12404cf9b14a295a8b74fc8bdba5934a032e64eaaa815e1f",
+      "c8-fixed-r0-v52-launch.json": "ea0cf41e6780518c0dff37696be1659b155bcbf2367329e7db59eb9397e07faf",
+      "c8-fixed-r0-candidate-launch.json": "a3d6c369d531610f1b3e958bdc42e865cf92737afecf14cce981d0cb560d798c",
+      "c8-natural-r0-v52-launch.json": "53ab055268ff3554aacb4bbc7a7e0a2f8ea936f938e6ab4de1bcdd20311386c8",
+      "c8-natural-r0-candidate-launch.json": "be62c4d679b15451a402a2de5226927214a4d9fea30e6a717583c2bbc18ae39b",
+      "c16-fixed-r0-v52-launch.json": "02663588a75f793d73b97c2e619f0c87499bff4d90652f21c6eb963ab432cc43",
+      "c16-fixed-r0-candidate-launch.json": "6aca84255f90f060c36ec0027c3b5d2b745d0b08acacd3f4718f7fcbf48382f3",
+      "c16-natural-r0-v52-launch.json": "b9d8dd81d9e653334e450b7b563e039889cde3377a9d0f3d28fc1b79fae11071",
+      "c16-natural-r0-candidate-launch.json": "cd3b599a44524c126be244193dab5fc85096afadda3a2795fc74aa8b857321a9",
+      "c32-fixed-r0-v52-launch.json": "e2fff85e7059471eb4221f216d59c651864a5973d62aace2172571141e3e33fb",
+      "c32-fixed-r0-candidate-launch.json": "b1611e70283f1445a2fa7924de7417aab7e75ceadd976fe256b57cf596640f5c",
+      "c32-natural-r0-v52-launch.json": "cab0aa4fca80e43032233bad78b686c6dcf297e5f8efe912e472e43c7a95b219",
+      "c32-natural-r0-candidate-launch.json": "06c45868f5d19ade4bd300349bc8b7b92716812fc800384d19ee2c661f9dc7f4"
+    },
+    "baseline_verification_file_sha256": "78ce7c363ae261ea8cfa5eb176aaa82f47a273ee44175fe9979f8c2e348b1118",
+    "verified_serving_archive_sha256": "1b9fc53147926da4ca7610e530bc6d19b01a323d14fbcb1126a59bb41d212756",
+    "execution_state": "frozen before dispatch; all predecessor completions passed and GPU empty",
+    "nonoverlap_predecessor": {
+      "completion": "/data/riley-serving-261007/qwen-http-logit-trace-independent-analysis-attempt01/completion.json",
+      "terminal_observed_ns": 1791413725500263742
+    }
+  },
+  "baseline_preparation_sha256": "bd6de738239e0be448a457f89bf1e1de24cf3db9ff40f57d4d6175dabdad13a5",
+  "baseline_verification_sha256": "78ce7c363ae261ea8cfa5eb176aaa82f47a273ee44175fe9979f8c2e348b1118",
+  "raw_archive_sha256": "1b9fc53147926da4ca7610e530bc6d19b01a323d14fbcb1126a59bb41d212756",
+  "baseline_completion_sha256": "4b7b70f9970e206d9f0cc03d63aa1e82ecf83b18ff69639b64ff9452cca37c4a",
+  "pins": {
+    "/data/riley-serving-261007/v52-target/release/riley": "6f424278437f82a462ee141c829914d02ccb8c02ed604fa166c70c3c70bb16f6",
+    "/data/riley-serving-261007/kernel-batch10-target-attempt01/release/riley": "1ba4c3c8f81b6969c6cd46c5c3c963779b1f2d9b2249afaee6f755320e75cd9e",
+    "/data/riley-serving-261007/vllm0271-venv/bin/vllm": "fe00035d5bd98fd57d20fe31aa6270907afbd68e92663dbc6ac9f793258e7e27",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/special_tokens_map.json": "e786b595b9a23148bf1630df78d9037a048ea671e48bfd3549a1e3c233742bb3",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/tokenizer.json": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/model.safetensors": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/generation_config.json": "2056c988e990b0d13670f63f2f3b87b3b6d07edaf7a3416998ba27dab2d8a059",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/riley-checkpoint.json": "01f3949cb54947416e66ee8cb162b96287ecc2f2e85ccfae0c20d0fa82ea34a0",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/tokenizer_config.json": "4bb9af56a342753d39374f4016a16574cab299fe088e896f425ce3c433f61424",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model/config.json": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843",
+    "/data/riley-serving-261007/kernel-batch10-controller/serving_token_client_v2.py": "2bc9238265666b99654f4f4e456ca0bb10c45b8bed8f28493452b89c1f450fcf",
+    "/data/riley-serving-261007/kernel-batch10-controller/mixed_phase_v34.py": "c37408fb6d02f41ee7fb56d6bd41beda305dd2cf5bb4ef3a73879cb44401c96f",
+    "/data/riley-serving-261007/kernel-batch10-controller/run.py": "80af01089d0b658b1f812086ed3f1fd3446f51d7b061a80cbcefd4ee51638757",
+    "/data/riley-serving-261007/kernel-batch10-controller/fixtures.json": "ae1f6f48a2acc1f7c0a6f084567bb96916cb005eeb727ae59aca815f1c5ab955",
+    "/data/riley-serving-261007/kernel-batch10-controller/batch-plan.json": "b284e031e0faa15d02447e79b5948ae69ebc4a70efb1d0e0d2eb6c76096a6acc",
+    "/data/riley-serving-261007/kernel-batch10-controller/kernel-batch10-native-http-independent-verification.json": "f0232eae9b969103096fdd70fca4440598ded212570a20feacf3f80fb3de9e1b",
+    "/data/riley-serving-261007/vllm0271-packages.txt": "784965e0ac101c6469b50649c60ac31249ad1a5333bd6e0710824c25d1693182",
+    "/data/riley-serving-261007/curand-header-recovery.json": "b610c2031e95b8c1ce2017d3aac98cbb29cb71d408db9a9b081d2ea2a402823b",
+    "/data/riley-serving-261007/curand-only-include/curand.h": "2644c6c6500e1e11ee63cdfff3ce84284e8cae5a0785d6c587b6dda90e10369b",
+    "/data/riley-serving-261007/curand-only-include/curand_discrete.h": "daa0f706423adb65c4bb4e38e3054fec779890a031d118ebd870e1a94e1203b1",
+    "/data/riley-serving-261007/curand-only-include/curand_discrete2.h": "19eb7689a487259f141da87ccf6ebf3d662bed2aa68f98f4d7db24a4271e9901",
+    "/data/riley-serving-261007/curand-only-include/curand_globals.h": "6c44b52b1d0dac04d79350d178c324a96ac1d3ada73a7680a77f72db6c158975",
+    "/data/riley-serving-261007/curand-only-include/curand_kernel.h": "4a37c07a1d77c9b5c8c627a4720733cee6b4da4200a844e8a49291858bc26adf",
+    "/data/riley-serving-261007/curand-only-include/curand_lognormal.h": "696c73c82b499c9d4c999e0b56a067562bb98e33a175334820cbde3025bd03d3",
+    "/data/riley-serving-261007/curand-only-include/curand_mrg32k3a.h": "65555112318db09409fb7233659fcb286b46b5eb2589c6fc134025cb8f4128fb",
+    "/data/riley-serving-261007/curand-only-include/curand_mtgp32.h": "421ae6c74a47585f8fd94bb96cac1813dca6116ab773ba81cc221354c68a31f2",
+    "/data/riley-serving-261007/curand-only-include/curand_mtgp32_host.h": "497ab3992424cd32d2449e29a234e0fd33420b74fe1bcf477412be6e8483aabe",
+    "/data/riley-serving-261007/curand-only-include/curand_mtgp32_kernel.h": "6a36675ebe595e7404c4495fe8b3e98a0aeb28f4e630865b4724c49c9f810e1c",
+    "/data/riley-serving-261007/curand-only-include/curand_mtgp32dc_p_11213.h": "eff8066141f8ed4ba020012deb4bd81f99c56be414c13a43c121202e0f5c66db",
+    "/data/riley-serving-261007/curand-only-include/curand_normal.h": "60dc570c29f3671a6c7b721313254035aa74b5473ea3b9fbb77cf5f9c62effeb",
+    "/data/riley-serving-261007/curand-only-include/curand_normal_static.h": "e4ae224c2f40b925827b52d5c6e8ffd32dc1563b69d1bc4eea19ddbf6adb9a2c",
+    "/data/riley-serving-261007/curand-only-include/curand_philox4x32_x.h": "4f6d483fe45d837fed49553d25ee1d2cabb012a138a2f7f08bbaf584e63dd83c",
+    "/data/riley-serving-261007/curand-only-include/curand_poisson.h": "e67188aacbea2c56b5e623823e0470e35419e93b2bfc83b5d33d39f4f26c822d",
+    "/data/riley-serving-261007/curand-only-include/curand_precalc.h": "23a3597604f8d9f326f6a482b4ffab94e02ab7866caa06a5d1a8e4b5c3e611a9",
+    "/data/riley-serving-261007/curand-only-include/curand_uniform.h": "81a6fb0c65c6710b1994e13ad8899f122c647af204dae3030c116b01ec6f1bb4"
+  },
+  "controller_sha256": "ace154e11850764f368ca7ed9b684bce390854ce98f531b41614263961c9c8b3",
+  "plan_sha256": "45ece823ceed373cddec819f54edde54b4ceef480dd2f9b1a1b496cd45a2e061",
+  "nsys_version": "NVIDIA Nsight Systems version 2025.5.2.266-255236693005v0",
+  "host": {
+    "clocks": {
+      "realtime_ns": 1791413758267631781,
+      "monotonic_ns": 926385217049308,
+      "monotonic_raw_ns": 926372095845691,
+      "perf_counter_before_ns": 926385217043292,
+      "perf_counter_after_ns": 926385217051963,
+      "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+    },
+    "pressure": {
+      "cpu": "some avg10=0.45 avg60=0.44 avg300=0.41 total=14295688812\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+      "io": "some avg10=8.30 avg60=5.10 avg300=3.13 total=81755700888\nfull avg10=7.76 avg60=4.75 avg300=2.95 total=74630971560\n",
+      "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2137242686\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2086048353\n"
+    },
+    "compute_apps": "",
+    "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 38, 16.17 W, 210 MHz, 311 MiB"
+  },
+  "serving_performance_comparison": "\ubbf8\uc2e4\ud589; instrumented HTTP observations are diagnostic only",
+  "performance_claim_eligible": false,
+  "goal_achieved": false
+}

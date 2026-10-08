@@ -1,0 +1,46 @@
+{
+  "predeclared_first_divergent_logit_row": 109,
+  "last_exact_row": 108,
+  "decode_step": 109,
+  "input_token_position": 2156,
+  "logical_cache_length_after": 2157,
+  "required_boundary_captures": [
+    "native steps108/109 same52 full-forward boundaries",
+    "HF original eager same52 boundaries through step109 with every captured logits row bound to immutable teacher"
+  ],
+  "immutable_r7_producer": {
+    "implementation_id": "riley-python-qwen3b-hf-eager-cache-on-layer-stage-v1",
+    "python_executable_sha256": "a92f0f95e883390c7256b2e441484aac06b1002dbe1d924141a77c8d82f96223",
+    "python_platform_machine": "x86_64",
+    "python_platform_system": "linux",
+    "python_version": "3.12.3",
+    "runtime_dependency_class": "offline-python-reference",
+    "safetensors_version": "0.8.0",
+    "selected_device": {
+      "compute_capability": "8.9",
+      "driver_version": "580.178.04",
+      "index": 0,
+      "name": "NVIDIA GeForce RTX 4090",
+      "requested": "cuda:0",
+      "resolved": "cuda:0",
+      "runtime_cuda_version": "12.9"
+    },
+    "torch_version": "2.13.0+cu129",
+    "transformers_model_source": {
+      "filename": "modeling_qwen2.py",
+      "module": "transformers.models.qwen2.modeling_qwen2",
+      "sha256": "34390fea7648b444d5727abef0b85acceba28f856aedec6c335d51253806bfee"
+    },
+    "transformers_qwen2_source": {
+      "path": "transformers/models/qwen2/modeling_qwen2.py",
+      "sha256": "34390fea7648b444d5727abef0b85acceba28f856aedec6c335d51253806bfee"
+    },
+    "transformers_version": "5.16.1"
+  },
+  "candidate_source": "96d187bfc34dfcea2a9115fee635c9db5f3f5bf6",
+  "no_tolerance_or_length_change": true,
+  "first_causal_boundary": "unmeasured; no rotary/attention/GEMM cause inferred",
+  "HF_reproduction_gate": "fresh producer environment/source hashes and first110 logits must match original teacher before accepting stage reference",
+  "serving_performance": "미실행",
+  "goal_achieved": false
+}

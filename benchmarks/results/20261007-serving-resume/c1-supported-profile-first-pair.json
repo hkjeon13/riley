@@ -1,0 +1,625 @@
+{
+  "scope": "instrumented C1fixed r0, unaligned whole-capture intervals; not serving throughput or host-wait attribution",
+  "engines": {
+    "v52": {
+      "kernel": {
+        "state": "measured",
+        "events": 642240,
+        "summed_event_duration_ns": 2103310570,
+        "interval_union_ns": 2103310506,
+        "overlap_duration_ns": 64,
+        "first_start_ns": 76794567,
+        "last_end_ns": 2652956860
+      },
+      "memcpy": {
+        "state": "measured",
+        "events": 5664,
+        "summed_event_duration_ns": 11562207,
+        "interval_union_ns": 11562207,
+        "overlap_duration_ns": 0,
+        "first_start_ns": 76433286,
+        "last_end_ns": 2652962684
+      },
+      "cuda_api": {
+        "state": "measured",
+        "events": 3840,
+        "summed_event_duration_ns": 2428642849,
+        "interval_union_ns": 2428642849,
+        "overlap_duration_ns": 0,
+        "first_start_ns": 76400835,
+        "last_end_ns": 2652964445
+      },
+      "leading_kernels": [
+        {
+          "name": "void shared32_gate_up_swiglu<(bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)",
+          "count": 54720,
+          "summed_event_duration_ns": 400066732,
+          "median_duration_ns": 7264.0,
+          "max_duration_ns": 8192,
+          "interval_union_ns": 400066732
+        },
+        {
+          "name": "void shared32_projection_parts<(int)576, (int)1536, (int)320, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const unsigned int *)",
+          "count": 54720,
+          "summed_event_duration_ns": 271187256,
+          "median_duration_ns": 4960.0,
+          "max_duration_ns": 5760,
+          "interval_union_ns": 271187256
+        },
+        {
+          "name": "riley_gqa50_attention::independent_values(const float *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, const unsigned int *)",
+          "count": 54720,
+          "summed_event_duration_ns": 231279283,
+          "median_duration_ns": 4192.0,
+          "max_duration_ns": 5152,
+          "interval_union_ns": 231279283
+        },
+        {
+          "name": "riley_prefill_pointwise::norm_rows(const __nv_bfloat16 *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int, const unsigned int *, unsigned int)",
+          "count": 117120,
+          "summed_event_duration_ns": 194065890,
+          "median_duration_ns": 1632.0,
+          "max_duration_ns": 2176,
+          "interval_union_ns": 194065890
+        },
+        {
+          "name": "shared32_qkv_parts(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)",
+          "count": 54720,
+          "summed_event_duration_ns": 189221415,
+          "median_duration_ns": 3456.0,
+          "max_duration_ns": 3968,
+          "interval_union_ns": 189221415
+        },
+        {
+          "name": "void shared32_projection_parts<(int)576, (int)576, (int)128, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const unsigned int *)",
+          "count": 54720,
+          "summed_event_duration_ns": 158615796,
+          "median_duration_ns": 2880.0,
+          "max_duration_ns": 3520,
+          "interval_union_ns": 158615796
+        },
+        {
+          "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_32x32_32x1_tn_align8>(T1::Params)",
+          "count": 1920,
+          "summed_event_duration_ns": 124301931,
+          "median_duration_ns": 64704.0,
+          "max_duration_ns": 68576,
+          "interval_union_ns": 124301931
+        },
+        {
+          "name": "riley_gqa50_attention::scores(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *, const unsigned int *, const unsigned int *)",
+          "count": 54720,
+          "summed_event_duration_ns": 123946132,
+          "median_duration_ns": 2272.0,
+          "max_duration_ns": 2656,
+          "interval_union_ns": 123946132
+        },
+        {
+          "name": "riley_shared32_model::qkv_merge_rope(const float *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *, const unsigned int *, const unsigned int *)",
+          "count": 54720,
+          "summed_event_duration_ns": 78755257,
+          "median_duration_ns": 1440.0,
+          "max_duration_ns": 2208,
+          "interval_union_ns": 78755257
+        },
+        {
+          "name": "void shared32_projection_merge<(int)576, (int)576, (int)128>(const float *, __nv_bfloat16 *, const unsigned int *)",
+          "count": 54720,
+          "summed_event_duration_ns": 55246140,
+          "median_duration_ns": 1024.0,
+          "max_duration_ns": 1056,
+          "interval_union_ns": 55246140
+        }
+      ],
+      "diagnostics": [
+        {
+          "timestamp": -11891820486,
+          "timestampType": 1,
+          "source": 2,
+          "severity": 1,
+          "text": "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_103445237/streams/pid_3445251_stdout.log and stderr.log for program output",
+          "globalPid": 339276696911872
+        },
+        {
+          "timestamp": -6101667341,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "Common injection library initialized successfully.",
+          "globalPid": 339276696911872
+        },
+        {
+          "timestamp": -6074357564,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "OS runtime libraries injection initialized successfully.",
+          "globalPid": 339276696911872
+        },
+        {
+          "timestamp": -5742158444,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+          "globalPid": 339276696911872
+        },
+        {
+          "timestamp": -5145927840,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+          "globalPid": 339276696911872
+        },
+        {
+          "timestamp": -5012742124,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "CUDA injection initialized successfully.",
+          "globalPid": 339276696911872
+        },
+        {
+          "timestamp": 0,
+          "timestampType": 1,
+          "source": 3,
+          "severity": 1,
+          "text": "Profiling has started.",
+          "globalPid": -144115188075855872
+        },
+        {
+          "timestamp": 976080238,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+          "globalPid": -144115188075855872
+        },
+        {
+          "timestamp": 976852833,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "Not all NVTX events might have been collected.",
+          "globalPid": 339276696911872
+        },
+        {
+          "timestamp": 976854969,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "No NVTX events collected. Does the process use NVTX?",
+          "globalPid": 339276696911872
+        },
+        {
+          "timestamp": 976856418,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "Not all CUDA events might have been collected.",
+          "globalPid": 339276696911872
+        },
+        {
+          "timestamp": 976857790,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 1,
+          "text": "Number of CUDA events collected: \t653664.",
+          "globalPid": 339276696911872
+        },
+        {
+          "timestamp": 976859240,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "Not all OS runtime libraries events might have been collected.",
+          "globalPid": 339276696911872
+        },
+        {
+          "timestamp": 976859692,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 1,
+          "text": "Number of OS runtime libraries events collected: \t5625.",
+          "globalPid": 339276696911872
+        },
+        {
+          "timestamp": 2734798758,
+          "timestampType": 1,
+          "source": 3,
+          "severity": 1,
+          "text": "Profiling has stopped.",
+          "globalPid": -144115188075855872
+        },
+        {
+          "timestamp": 2751648137,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "Number of CUPTI events produced: \t655627, CUPTI buffers: 50.",
+          "globalPid": 339276696911872
+        }
+      ]
+    },
+    "vllm": {
+      "kernel": {
+        "state": "measured",
+        "events": 619824,
+        "summed_event_duration_ns": 1770855343,
+        "interval_union_ns": 1770855087,
+        "overlap_duration_ns": 256,
+        "first_start_ns": 81606649,
+        "last_end_ns": 2887743761
+      },
+      "memcpy": {
+        "state": "measured",
+        "events": 64752,
+        "summed_event_duration_ns": 54853853,
+        "interval_union_ns": 54531291,
+        "overlap_duration_ns": 322562,
+        "first_start_ns": 81532441,
+        "last_end_ns": 2887749553
+      },
+      "cuda_api": {
+        "state": "measured",
+        "events": 176082,
+        "summed_event_duration_ns": 652921836,
+        "interval_union_ns": 652921836,
+        "overlap_duration_ns": 0,
+        "first_start_ns": 81454408,
+        "last_end_ns": 2887823917
+      },
+      "leading_kernels": [
+        {
+          "name": "std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, (bool)0, (bool)1, (bool)1, (bool)0, (int)7, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const __nv_bfloat16>, cublasGemvTensorStridedBatched<const __nv_bfloat16>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>>(T13)",
+          "count": 220800,
+          "summed_event_duration_ns": 931312817,
+          "median_duration_ns": 3328.0,
+          "max_duration_ns": 65537,
+          "interval_union_ns": 931312817
+        },
+        {
+          "name": "void flash::flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<(int)64, (int)64, (int)128, (int)4, (bool)0, (bool)0, cutlass::bfloat16_t, Flash_kernel_traits<(int)64, (int)64, (int)128, (int)4, cutlass::bfloat16_t>>, (bool)0, (bool)0, (bool)0, (bool)0, (bool)1, (bool)0, (bool)0, (bool)0>(flash::Flash_fwd_params)",
+          "count": 54720,
+          "summed_event_duration_ns": 339381465,
+          "median_duration_ns": 6144.0,
+          "max_duration_ns": 8000,
+          "interval_union_ns": 339381465
+        },
+        {
+          "name": "void vllm::reshape_and_cache_flash_kernel<__nv_bfloat16, __nv_bfloat16, (vllm::Fp8KVCacheDataType)0>(const T1 *, const T1 *, T2 *, T2 *, const long *, long, long, long, long, long, int, int, int, const float *, const float *, int)",
+          "count": 57600,
+          "summed_event_duration_ns": 84427243,
+          "median_duration_ns": 1440.0,
+          "max_duration_ns": 2112,
+          "interval_union_ns": 84427243
+        },
+        {
+          "name": "triton_poi_fused_3",
+          "count": 55680,
+          "summed_event_duration_ns": 67673957,
+          "median_duration_ns": 1216.0,
+          "max_duration_ns": 1408,
+          "interval_union_ns": 67673957
+        },
+        {
+          "name": "triton_per_fused_fused_add_rms_norm_2",
+          "count": 57600,
+          "summed_event_duration_ns": 65707649,
+          "median_duration_ns": 1120.0,
+          "max_duration_ns": 1569,
+          "interval_union_ns": 65707649
+        },
+        {
+          "name": "triton_per_fused_fused_add_rms_norm_0",
+          "count": 57600,
+          "summed_event_duration_ns": 64900382,
+          "median_duration_ns": 1120.0,
+          "max_duration_ns": 1568,
+          "interval_union_ns": 64900382
+        },
+        {
+          "name": "triton_poi_fused_mul_silu_slice_1",
+          "count": 57600,
+          "summed_event_duration_ns": 56694797,
+          "median_duration_ns": 960.0,
+          "max_duration_ns": 1376,
+          "interval_union_ns": 56694797
+        },
+        {
+          "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_tn_align8>(T1::Params)",
+          "count": 8640,
+          "summed_event_duration_ns": 48191204,
+          "median_duration_ns": 6304.0,
+          "max_duration_ns": 7104,
+          "interval_union_ns": 48191204
+        },
+        {
+          "name": "void flash::flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<(int)64, (int)64, (int)256, (int)4, (bool)0, (bool)0, cutlass::bfloat16_t, Flash_kernel_traits<(int)64, (int)64, (int)256, (int)4, cutlass::bfloat16_t>>, (bool)1, (bool)0, (bool)0, (bool)0, (bool)1, (bool)0, (bool)0, (bool)0>(flash::Flash_fwd_params)",
+          "count": 2880,
+          "summed_event_duration_ns": 21720582,
+          "median_duration_ns": 7552.0,
+          "max_duration_ns": 7712,
+          "interval_union_ns": 21720582
+        },
+        {
+          "name": "void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, (bool)0, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, (bool)1, (bool)0, (bool)0, (bool)0>(cublasLt::cublasSplitKParams<T6>, const T4 *, const T10 *, T9 *, T5 *, const T6 *, const T6 *, const T11 *, const T4 *, T11 *, void *, long, T6 *, int *, T6 *, T6 *, const T6 *, const T6 *, const T6 *, const T6 *, const T6 *)",
+          "count": 8640,
+          "summed_event_duration_ns": 12377082,
+          "median_duration_ns": 1440.0,
+          "max_duration_ns": 1536,
+          "interval_union_ns": 12377082
+        }
+      ],
+      "diagnostics": [
+        {
+          "timestamp": -227057028963,
+          "timestampType": 1,
+          "source": 2,
+          "severity": 1,
+          "text": "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_103449633/streams/pid_3449705_stdout.log and stderr.log for program output",
+          "globalPid": 339351422631936
+        },
+        {
+          "timestamp": -226961638444,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "Common injection library initialized successfully.",
+          "globalPid": 339351422631936
+        },
+        {
+          "timestamp": -226958956450,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "OS runtime libraries injection initialized successfully.",
+          "globalPid": 339351422631936
+        },
+        {
+          "timestamp": -80188791609,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "Common injection library initialized successfully.",
+          "globalPid": 339573502640128
+        },
+        {
+          "timestamp": -80188666421,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "Common injection library initialized successfully.",
+          "globalPid": 339573485862912
+        },
+        {
+          "timestamp": -80186075589,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "OS runtime libraries injection initialized successfully.",
+          "globalPid": 339573502640128
+        },
+        {
+          "timestamp": -80184855732,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "OS runtime libraries injection initialized successfully.",
+          "globalPid": 339573485862912
+        },
+        {
+          "timestamp": -70675564232,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+          "globalPid": 339573502640128
+        },
+        {
+          "timestamp": -70662861959,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+          "globalPid": 339573502640128
+        },
+        {
+          "timestamp": -70536349744,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "CUDA injection initialized successfully.",
+          "globalPid": 339573502640128
+        },
+        {
+          "timestamp": -46838256037,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "NVTX injection initialized successfully.",
+          "globalPid": 339573502640128
+        },
+        {
+          "timestamp": 0,
+          "timestampType": 1,
+          "source": 3,
+          "severity": 1,
+          "text": "Profiling has started.",
+          "globalPid": -144115188075855872
+        },
+        {
+          "timestamp": 2972266850,
+          "timestampType": 1,
+          "source": 3,
+          "severity": 1,
+          "text": "Profiling has stopped.",
+          "globalPid": -144115188075855872
+        },
+        {
+          "timestamp": 2988933924,
+          "timestampType": 1,
+          "source": 1,
+          "severity": 1,
+          "text": "Number of CUPTI events produced: \t889802, CUPTI buffers: 50.",
+          "globalPid": 339573502640128
+        },
+        {
+          "timestamp": 15311989774,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+          "globalPid": -144115188075855872
+        },
+        {
+          "timestamp": 15312041460,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "Not all NVTX events might have been collected.",
+          "globalPid": 339573485862912
+        },
+        {
+          "timestamp": 15312042587,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "No NVTX events collected. Does the process use NVTX?",
+          "globalPid": 339573485862912
+        },
+        {
+          "timestamp": 15312043071,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "Not all NVTX events might have been collected.",
+          "globalPid": 339351422631936
+        },
+        {
+          "timestamp": 15312043610,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "No NVTX events collected. Does the process use NVTX?",
+          "globalPid": 339351422631936
+        },
+        {
+          "timestamp": 15312044008,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "Not all NVTX events might have been collected.",
+          "globalPid": 339573502640128
+        },
+        {
+          "timestamp": 15312044401,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "No NVTX events collected. Does the process use NVTX?",
+          "globalPid": 339573502640128
+        },
+        {
+          "timestamp": 15312045286,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "CUDA profiling might have not been started correctly.",
+          "globalPid": 339573485862912
+        },
+        {
+          "timestamp": 15312046004,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "No CUDA events collected. Does the process use CUDA?",
+          "globalPid": 339573485862912
+        },
+        {
+          "timestamp": 15312046324,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "CUDA profiling might have not been started correctly.",
+          "globalPid": 339351422631936
+        },
+        {
+          "timestamp": 15312046559,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "No CUDA events collected. Does the process use CUDA?",
+          "globalPid": 339351422631936
+        },
+        {
+          "timestamp": 15312046821,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "Not all CUDA events might have been collected.",
+          "globalPid": 339573502640128
+        },
+        {
+          "timestamp": 15312048050,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 1,
+          "text": "Number of CUDA events collected: \t860658.",
+          "globalPid": 339573502640128
+        },
+        {
+          "timestamp": 15312049238,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "Not all OS runtime libraries events might have been collected.",
+          "globalPid": 339573485862912
+        },
+        {
+          "timestamp": 15312049797,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "No OS runtime libraries events collected. Does the process use OS runtime libraries?",
+          "globalPid": 339573485862912
+        },
+        {
+          "timestamp": 15312050405,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "Not all OS runtime libraries events might have been collected.",
+          "globalPid": 339351422631936
+        },
+        {
+          "timestamp": 15312050725,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 1,
+          "text": "Number of OS runtime libraries events collected: \t10529.",
+          "globalPid": 339351422631936
+        },
+        {
+          "timestamp": 15312051260,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 2,
+          "text": "Not all OS runtime libraries events might have been collected.",
+          "globalPid": 339573502640128
+        },
+        {
+          "timestamp": 15312051696,
+          "timestampType": 2,
+          "source": 3,
+          "severity": 1,
+          "text": "Number of OS runtime libraries events collected: \t39404.",
+          "globalPid": 339573502640128
+        }
+      ]
+    }
+  },
+  "goal_achieved": false,
+  "serving_performance": "\ubbf8\uc2e4\ud589"
+}

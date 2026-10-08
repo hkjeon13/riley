@@ -1,0 +1,93 @@
+{
+  "failure": null,
+  "records": [
+    {
+      "scope": "kernel-batch04-primitive-validation-attempt01",
+      "archive": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch04-correctness-collection-attempt01/kernel-batch04-primitive-validation-attempt01.tar.gz",
+      "archive_sha256": "59996a2441f38906c055983520ad2a1e01476502af86aba5ea11d0264f8b0d0f",
+      "bytes": 465519,
+      "files_verified": 8,
+      "source_bytes": 1367451,
+      "completion": {
+        "failure": null,
+        "serving_performance": "\ubbf8\uc2e4\ud589",
+        "adopted": false,
+        "goal_achieved": false
+      }
+    },
+    {
+      "scope": "kernel-batch04-server-validation-attempt01",
+      "archive": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch04-correctness-collection-attempt01/kernel-batch04-server-validation-attempt01.tar.gz",
+      "archive_sha256": "704b0e2648405b53950f087eb9e98afbda0035208b87ff5b6d551c7785937f83",
+      "bytes": 2686,
+      "files_verified": 5,
+      "source_bytes": 7261,
+      "completion": {
+        "failure": null,
+        "serving_performance": "\ubbf8\uc2e4\ud589",
+        "adopted": false,
+        "goal_achieved": false
+      }
+    },
+    {
+      "scope": "kernel-batch04-http-screen-attempt01",
+      "archive": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch04-correctness-collection-attempt01/kernel-batch04-http-screen-attempt01.tar.gz",
+      "archive_sha256": "df6fbf0f3012eb9d5714f39445e586ec71dedccc4ad546f0b80f5f5e5fcd2225",
+      "bytes": 139388,
+      "files_verified": 33,
+      "source_bytes": 1089564,
+      "completion": {
+        "records": [
+          {
+            "case": "c1-fixed",
+            "passed": 12,
+            "strict_reference_pass": true
+          },
+          {
+            "case": "c1-natural",
+            "passed": 3,
+            "strict_reference_pass": true
+          },
+          {
+            "case": "c8-fixed",
+            "passed": 12,
+            "strict_reference_pass": true
+          },
+          {
+            "case": "c8-natural",
+            "passed": 3,
+            "strict_reference_pass": true
+          },
+          {
+            "case": "c16-fixed",
+            "passed": 12,
+            "strict_reference_pass": true
+          },
+          {
+            "case": "c16-natural",
+            "passed": 3,
+            "strict_reference_pass": true
+          },
+          {
+            "case": "c32-fixed",
+            "passed": 12,
+            "strict_reference_pass": true
+          },
+          {
+            "case": "c32-natural",
+            "passed": 3,
+            "strict_reference_pass": true
+          }
+        ],
+        "failure": null,
+        "requests": 60,
+        "correctness_only": true,
+        "serving_performance": "\ubbf8\uc2e4\ud589",
+        "performance_qualified": false,
+        "goal_achieved": false
+      }
+    }
+  ],
+  "source_deleted": false,
+  "goal_achieved": false
+}

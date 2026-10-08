@@ -1,0 +1,12 @@
+{
+  "source_pins": {
+    "kernel-batch07-cpu-capture-all8-profile-policy-attempt01.json": "0bb59ac03d693db695b1a9ef7de9fe522a87322ce08011f73412b5137dc67b59",
+    "run_kernel_batch07_cpu_capture_all8_profile_attempt01.py": "f06cbbb43b928f57479faf08eb5dfa4dc98e3b4f225547acba46862a60896180"
+  },
+  "wait_for": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch07-independent-replay-attempt02/completion.json",
+  "expected_profiles": 32,
+  "warmup_each": 96,
+  "retained_each": 96,
+  "no_exclusions": true,
+  "trigger": "terminal full96 independent source/launch/raw audit and all8 minimum screen FAIL; otherwise no profile GPU launch"
+}

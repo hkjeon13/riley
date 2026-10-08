@@ -1,0 +1,1070 @@
+{
+  "profiles": 32,
+  "rows": [
+    {
+      "case": "c1-fixed-r0-v52",
+      "analysis_file_sha256": "5e554bba9a1208add744d0d301274695982e954d0d8560f9f2a42af1bbd1ed45",
+      "sqlite_sha256": "d0412d340ebd35a847f7018ffb30224617150bdc8d56551a69fe7d8b9b24c347",
+      "GPU_recorded_union_ns": 2115524203,
+      "GPU_event_envelope_ns": 2576529398,
+      "no_recorded_GPU_event_inside_envelope_ns": 461005195,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 2428642849,
+      "CUDA_API_GPU_recorded_overlap_ns": 2115456704,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 313186145,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 1920,
+          "summed_event_duration_ns": 2156138607,
+          "interval_union_ns": 2156138607
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 1920,
+          "summed_event_duration_ns": 272504242,
+          "interval_union_ns": 272504242
+        }
+      ]
+    },
+    {
+      "case": "c1-fixed-r0-vllm",
+      "analysis_file_sha256": "d5299fd0be1ee918199e9bc7ad2b9169e9456385a621533917ae00c7d018d199",
+      "sqlite_sha256": "3f8111287daa26b7084b17ddf785f3ff8a1d6d1d7c8994c0428c8f391905f153",
+      "GPU_recorded_union_ns": 1824102625,
+      "GPU_event_envelope_ns": 2806217112,
+      "no_recorded_GPU_event_inside_envelope_ns": 982114487,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 1283753
+      },
+      "CUDA_API_union_ns": 652921836,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 1824,
+          "summed_event_duration_ns": 292423438,
+          "interval_union_ns": 292423438
+        },
+        {
+          "name": "cudaEventSynchronize_v3020",
+          "count": 1920,
+          "summed_event_duration_ns": 100762500,
+          "interval_union_ns": 100762500
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 27840,
+          "summed_event_duration_ns": 89326089,
+          "interval_union_ns": 89326089
+        }
+      ]
+    },
+    {
+      "case": "c1-fixed-r1-v52",
+      "analysis_file_sha256": "017aa13c3a5b89bc51a6cdff467c05f4e56d791be1c40cda2c952f33c08039c0",
+      "sqlite_sha256": "ef656a4097b07f3e1d11ed96c069999cf0551a795c8fc142d8ddd13238075e0c",
+      "GPU_recorded_union_ns": 2113068563,
+      "GPU_event_envelope_ns": 2581173147,
+      "no_recorded_GPU_event_inside_envelope_ns": 468104584,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 2426424946,
+      "CUDA_API_GPU_recorded_overlap_ns": 2113003710,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 313421236,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 1920,
+          "summed_event_duration_ns": 2152564229,
+          "interval_union_ns": 2152564229
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 1920,
+          "summed_event_duration_ns": 273860717,
+          "interval_union_ns": 273860717
+        }
+      ]
+    },
+    {
+      "case": "c1-fixed-r1-vllm",
+      "analysis_file_sha256": "e7cdb3a96fdc5c01d81dc721d82906797ec376692229ef6b79c2dae3f26c5dcd",
+      "sqlite_sha256": "e8203b055e8468afcb53606e2a280c29e0db483113c9a6d9935b36d76754f375",
+      "GPU_recorded_union_ns": 1822666545,
+      "GPU_event_envelope_ns": 2807298771,
+      "no_recorded_GPU_event_inside_envelope_ns": 984632226,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 1228803
+      },
+      "CUDA_API_union_ns": 640575741,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 1824,
+          "summed_event_duration_ns": 289955010,
+          "interval_union_ns": 289955010
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 27840,
+          "summed_event_duration_ns": 91212101,
+          "interval_union_ns": 91212101
+        },
+        {
+          "name": "cudaEventSynchronize_v3020",
+          "count": 1920,
+          "summed_event_duration_ns": 88372592,
+          "interval_union_ns": 88372592
+        }
+      ]
+    },
+    {
+      "case": "c1-natural-r0-v52",
+      "analysis_file_sha256": "9e225f1682ca21301a30bd4047674f0d9bcb9ecfa7bceb5c92a62db1b45540e3",
+      "sqlite_sha256": "e1d4c2a26ccf35ce9c8af9869b64e68f492146e146662888308e7cc22579f035",
+      "GPU_recorded_union_ns": 8034427783,
+      "GPU_event_envelope_ns": 9477561878,
+      "no_recorded_GPU_event_inside_envelope_ns": 1443134095,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 9154001176,
+      "CUDA_API_GPU_recorded_overlap_ns": 8034329515,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 1119671661,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 7168,
+          "summed_event_duration_ns": 8179627777,
+          "interval_union_ns": 8179627777
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 7168,
+          "summed_event_duration_ns": 974373399,
+          "interval_union_ns": 974373399
+        }
+      ]
+    },
+    {
+      "case": "c1-natural-r0-vllm",
+      "analysis_file_sha256": "953b83c8f13bdadd625835c7a4180fff99470e93bfeec9ebd9d91d560e7aa24d",
+      "sqlite_sha256": "0432d60fb4df838bff9fbf1b5f13c080948c1ddf2ee8777045b7227337525bb5",
+      "GPU_recorded_union_ns": 7486840728,
+      "GPU_event_envelope_ns": 8931362513,
+      "no_recorded_GPU_event_inside_envelope_ns": 1444521785,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 4894741
+      },
+      "CUDA_API_union_ns": 2681213339,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 7072,
+          "summed_event_duration_ns": 1253523584,
+          "interval_union_ns": 1253523584
+        },
+        {
+          "name": "cudaEventSynchronize_v3020",
+          "count": 7168,
+          "summed_event_duration_ns": 663272118,
+          "interval_union_ns": 663272118
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 81280,
+          "summed_event_duration_ns": 294504974,
+          "interval_union_ns": 294504974
+        }
+      ]
+    },
+    {
+      "case": "c1-natural-r1-v52",
+      "analysis_file_sha256": "c7d1c643d5495164cbf825f9797e09e41a81061c566ba7db9f7eb2c87fbb6f70",
+      "sqlite_sha256": "34d1e9473f1b253f81c82b4d80934c5cd164cfa55926e58ed818f824fa458bf5",
+      "GPU_recorded_union_ns": 8037185068,
+      "GPU_event_envelope_ns": 9500736920,
+      "no_recorded_GPU_event_inside_envelope_ns": 1463551852,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 9175583948,
+      "CUDA_API_GPU_recorded_overlap_ns": 8037080582,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 1138503366,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 7168,
+          "summed_event_duration_ns": 8181834503,
+          "interval_union_ns": 8181834503
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 7168,
+          "summed_event_duration_ns": 993749445,
+          "interval_union_ns": 993749445
+        }
+      ]
+    },
+    {
+      "case": "c1-natural-r1-vllm",
+      "analysis_file_sha256": "0f93f8f34e11cc5d3bad332e8f36d881fccdb20e9cc818e43b4727debd542529",
+      "sqlite_sha256": "149a8a717b453424ec1bb8c8b8ec7ee2550f106e97b8a7c1e467248ab7d9f1ca",
+      "GPU_recorded_union_ns": 7485929993,
+      "GPU_event_envelope_ns": 8922628856,
+      "no_recorded_GPU_event_inside_envelope_ns": 1436698863,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 4910467
+      },
+      "CUDA_API_union_ns": 2608258822,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 7072,
+          "summed_event_duration_ns": 1267337616,
+          "interval_union_ns": 1267337616
+        },
+        {
+          "name": "cudaEventSynchronize_v3020",
+          "count": 7168,
+          "summed_event_duration_ns": 585360358,
+          "interval_union_ns": 585360358
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 81280,
+          "summed_event_duration_ns": 288575795,
+          "interval_union_ns": 288575795
+        }
+      ]
+    },
+    {
+      "case": "c16-fixed-r0-v52",
+      "analysis_file_sha256": "a580e33d52d23cafa13dbd9b13a7b28ef6f9b396ba97fb434795ea0bcf364e9b",
+      "sqlite_sha256": "7d2ff3cc040d84fcb7723f100f13233b9d14a74736fb6fd1ff1ac1927b76fabd",
+      "GPU_recorded_union_ns": 260564264,
+      "GPU_event_envelope_ns": 333815313,
+      "no_recorded_GPU_event_inside_envelope_ns": 73251049,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 287531771,
+      "CUDA_API_GPU_recorded_overlap_ns": 260537652,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 26994119,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 145,
+          "summed_event_duration_ns": 263789972,
+          "interval_union_ns": 263789972
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 145,
+          "summed_event_duration_ns": 23741799,
+          "interval_union_ns": 23741799
+        }
+      ]
+    },
+    {
+      "case": "c16-fixed-r0-vllm",
+      "analysis_file_sha256": "475b57e1a53b95df2f894b9e193eafbf439cb7998177df221dba4b21c1e3fc5c",
+      "sqlite_sha256": "6693f75bee8e33cb063d89ff8b9cd443ccdef24a52623fab9edcc6612c54d6eb",
+      "GPU_recorded_union_ns": 231871406,
+      "GPU_event_envelope_ns": 495334090,
+      "no_recorded_GPU_event_inside_envelope_ns": 263462684,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 116832
+      },
+      "CUDA_API_union_ns": 90977032,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 126,
+          "summed_event_duration_ns": 26934614,
+          "interval_union_ns": 26934614
+        },
+        {
+          "name": "cuLaunchKernel",
+          "count": 9449,
+          "summed_event_duration_ns": 19029632,
+          "interval_union_ns": 19029632
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 6219,
+          "summed_event_duration_ns": 17946336,
+          "interval_union_ns": 17946336
+        }
+      ]
+    },
+    {
+      "case": "c16-fixed-r1-v52",
+      "analysis_file_sha256": "124981d11ddc39d15fbe804bfa987bbe5c8cd961bd1cde52770c5f13f9626380",
+      "sqlite_sha256": "90981b42946274c176a5f88582897c84dda5042d9f081a37127ed3de8aa5229a",
+      "GPU_recorded_union_ns": 269680725,
+      "GPU_event_envelope_ns": 341856284,
+      "no_recorded_GPU_event_inside_envelope_ns": 72175559,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 296285226,
+      "CUDA_API_GPU_recorded_overlap_ns": 269654919,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 26630307,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 146,
+          "summed_event_duration_ns": 272318018,
+          "interval_union_ns": 272318018
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 146,
+          "summed_event_duration_ns": 23967208,
+          "interval_union_ns": 23967208
+        }
+      ]
+    },
+    {
+      "case": "c16-fixed-r1-vllm",
+      "analysis_file_sha256": "f13675a5f1ff104500c28cd9adf8c16f3357307ba2fab5e8f74f69ba0a1abf79",
+      "sqlite_sha256": "c480afadeb783b41eb59c19528e214e2cc294a44a05a3a6db8850f27466bc97f",
+      "GPU_recorded_union_ns": 222462820,
+      "GPU_event_envelope_ns": 489188531,
+      "no_recorded_GPU_event_inside_envelope_ns": 266725711,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 97666
+      },
+      "CUDA_API_union_ns": 90660248,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 111,
+          "summed_event_duration_ns": 22617482,
+          "interval_union_ns": 22617482
+        },
+        {
+          "name": "cuLaunchKernel",
+          "count": 10679,
+          "summed_event_duration_ns": 19921777,
+          "interval_union_ns": 19921777
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 6374,
+          "summed_event_duration_ns": 16931416,
+          "interval_union_ns": 16931416
+        }
+      ]
+    },
+    {
+      "case": "c16-natural-r0-v52",
+      "analysis_file_sha256": "32d04731de56829a7b67c838c58f0880074ecf51b586b571393f5f56725cd963",
+      "sqlite_sha256": "ed7cdbb0b330612751631e085aab8f242cfbb5ad06f6c2336dd9375f1af4dd45",
+      "GPU_recorded_union_ns": 847215458,
+      "GPU_event_envelope_ns": 1062523157,
+      "no_recorded_GPU_event_inside_envelope_ns": 215307699,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 941926553,
+      "CUDA_API_GPU_recorded_overlap_ns": 847136428,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 94790125,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 523,
+          "summed_event_duration_ns": 857604256,
+          "interval_union_ns": 857604256
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 523,
+          "summed_event_duration_ns": 84322297,
+          "interval_union_ns": 84322297
+        }
+      ]
+    },
+    {
+      "case": "c16-natural-r0-vllm",
+      "analysis_file_sha256": "af2c7f56483cbc331125ffa88e6b56074763d7a7367e144677955f27b064ff0f",
+      "sqlite_sha256": "8cafe164bc607c6abc12dd7f1f5fa02e7ffab4b95a173af5405cae04e621d2ae",
+      "GPU_recorded_union_ns": 776881165,
+      "GPU_event_envelope_ns": 1140455070,
+      "no_recorded_GPU_event_inside_envelope_ns": 363573905,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 421956
+      },
+      "CUDA_API_union_ns": 294119657,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 787,
+          "summed_event_duration_ns": 103638041,
+          "interval_union_ns": 103638041
+        },
+        {
+          "name": "cudaEventSynchronize_v3020",
+          "count": 544,
+          "summed_event_duration_ns": 82120010,
+          "interval_union_ns": 82120010
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 11756,
+          "summed_event_duration_ns": 36728805,
+          "interval_union_ns": 36728805
+        }
+      ]
+    },
+    {
+      "case": "c16-natural-r1-v52",
+      "analysis_file_sha256": "13fa9f85cee25ca5e979556f60224f164a91664da105cba1c856a3a1cdce9755",
+      "sqlite_sha256": "99e6cb3a7b02d2fedc146087395d57a952320795049f1ba0899dd7cdcbdde991",
+      "GPU_recorded_union_ns": 853370927,
+      "GPU_event_envelope_ns": 1056847122,
+      "no_recorded_GPU_event_inside_envelope_ns": 203476195,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 943686298,
+      "CUDA_API_GPU_recorded_overlap_ns": 853322855,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 90363443,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 524,
+          "summed_event_duration_ns": 863242608,
+          "interval_union_ns": 863242608
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 524,
+          "summed_event_duration_ns": 80443690,
+          "interval_union_ns": 80443690
+        }
+      ]
+    },
+    {
+      "case": "c16-natural-r1-vllm",
+      "analysis_file_sha256": "23ba8a6b526f6983c34d1b0973e56062fc6b1ca8f71b7145a2f177a88f90ea0a",
+      "sqlite_sha256": "a3e6259c38194f0fb89fcd22c2c84d8441787e24d272d06500fc7b0d77adc30f",
+      "GPU_recorded_union_ns": 774306826,
+      "GPU_event_envelope_ns": 1113473306,
+      "no_recorded_GPU_event_inside_envelope_ns": 339166480,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 438625
+      },
+      "CUDA_API_union_ns": 303937950,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaEventSynchronize_v3020",
+          "count": 540,
+          "summed_event_duration_ns": 103386222,
+          "interval_union_ns": 103386222
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 905,
+          "summed_event_duration_ns": 97865335,
+          "interval_union_ns": 97865335
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 11755,
+          "summed_event_duration_ns": 36704871,
+          "interval_union_ns": 36704871
+        }
+      ]
+    },
+    {
+      "case": "c32-fixed-r0-v52",
+      "analysis_file_sha256": "954ffafbc5ab8ad9f5b0103b91b970eed2dd01591d872d0f941eeb8a041b9797",
+      "sqlite_sha256": "6d16e534168f694b5a639fdd97a65bed0daff0c996b7fa1a6963889373f9d471",
+      "GPU_recorded_union_ns": 202299600,
+      "GPU_event_envelope_ns": 264422231,
+      "no_recorded_GPU_event_inside_envelope_ns": 62122631,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 221003780,
+      "CUDA_API_GPU_recorded_overlap_ns": 202261138,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 18742642,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 87,
+          "summed_event_duration_ns": 204181144,
+          "interval_union_ns": 204181144
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 87,
+          "summed_event_duration_ns": 16822636,
+          "interval_union_ns": 16822636
+        }
+      ]
+    },
+    {
+      "case": "c32-fixed-r0-vllm",
+      "analysis_file_sha256": "526d6a4609b1290889fe177d09ddf7257a0d54a40066277332ebf455626bb9d4",
+      "sqlite_sha256": "1a9e88f3bbec4cf0822450c33105e0fdad9c547c92aa982ca4258b50e8b65a0e",
+      "GPU_recorded_union_ns": 171309977,
+      "GPU_event_envelope_ns": 354172935,
+      "no_recorded_GPU_event_inside_envelope_ns": 182862958,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 76544
+      },
+      "CUDA_API_union_ns": 68875418,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 81,
+          "summed_event_duration_ns": 17466758,
+          "interval_union_ns": 17466758
+        },
+        {
+          "name": "cuLaunchKernel",
+          "count": 6895,
+          "summed_event_duration_ns": 13734178,
+          "interval_union_ns": 13734178
+        },
+        {
+          "name": "cudaEventSynchronize_v3020",
+          "count": 114,
+          "summed_event_duration_ns": 13277009,
+          "interval_union_ns": 13277009
+        }
+      ]
+    },
+    {
+      "case": "c32-fixed-r1-v52",
+      "analysis_file_sha256": "20c6d2f794a302d583a461f8c3d7c84cb0f8e014f07362a7ca1ad7fd6af39e8f",
+      "sqlite_sha256": "d7c8a726b1d2bc5185e69544311cfab046d5e4be70909c4b25265588fb142217",
+      "GPU_recorded_union_ns": 203729655,
+      "GPU_event_envelope_ns": 259553698,
+      "no_recorded_GPU_event_inside_envelope_ns": 55824043,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 219396784,
+      "CUDA_API_GPU_recorded_overlap_ns": 203703895,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 15692889,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 87,
+          "summed_event_duration_ns": 205413151,
+          "interval_union_ns": 205413151
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 87,
+          "summed_event_duration_ns": 13983633,
+          "interval_union_ns": 13983633
+        }
+      ]
+    },
+    {
+      "case": "c32-fixed-r1-vllm",
+      "analysis_file_sha256": "74c3f2f76ae960aab342c6acc1a36f387d690f398f9f5f5a628c48d893f040c9",
+      "sqlite_sha256": "cac0cba3ad399f3f2921a94092b96f1a107a0c96352f2a55596e9a31c137d7b9",
+      "GPU_recorded_union_ns": 152181334,
+      "GPU_event_envelope_ns": 324831355,
+      "no_recorded_GPU_event_inside_envelope_ns": 172650021,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 53152
+      },
+      "CUDA_API_union_ns": 59037462,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 70,
+          "summed_event_duration_ns": 14766455,
+          "interval_union_ns": 14766455
+        },
+        {
+          "name": "cuLaunchKernel",
+          "count": 6945,
+          "summed_event_duration_ns": 14055323,
+          "interval_union_ns": 14055323
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 4070,
+          "summed_event_duration_ns": 11525492,
+          "interval_union_ns": 11525492
+        }
+      ]
+    },
+    {
+      "case": "c32-natural-r0-v52",
+      "analysis_file_sha256": "aa11e24fdecee9a832951205eb1ade9b633cbd3909cd3c67fbaaf062f29f4e92",
+      "sqlite_sha256": "a50a6089332b7273fe4faece28ef4c42065d4da13cc08fc788744df7927df0b7",
+      "GPU_recorded_union_ns": 599332560,
+      "GPU_event_envelope_ns": 786567144,
+      "no_recorded_GPU_event_inside_envelope_ns": 187234584,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 653467425,
+      "CUDA_API_GPU_recorded_overlap_ns": 599256727,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 54210698,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 303,
+          "summed_event_duration_ns": 604771638,
+          "interval_union_ns": 604771638
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 303,
+          "summed_event_duration_ns": 48695787,
+          "interval_union_ns": 48695787
+        }
+      ]
+    },
+    {
+      "case": "c32-natural-r0-vllm",
+      "analysis_file_sha256": "f45d07b5c85c0064c6ae8449bf0872e01274810e260f2d8cf3ac4d27bc257d86",
+      "sqlite_sha256": "e613efdcc72feb89271e18622300f44e0d7d4988a07d341802009b7078c80606",
+      "GPU_recorded_union_ns": 506966183,
+      "GPU_event_envelope_ns": 746981758,
+      "no_recorded_GPU_event_inside_envelope_ns": 240015575,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 239393,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 188153839,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 420,
+          "summed_event_duration_ns": 60056721,
+          "interval_union_ns": 60056721
+        },
+        {
+          "name": "cudaEventSynchronize_v3020",
+          "count": 316,
+          "summed_event_duration_ns": 57864688,
+          "interval_union_ns": 57864688
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 7926,
+          "summed_event_duration_ns": 22978484,
+          "interval_union_ns": 22978484
+        }
+      ]
+    },
+    {
+      "case": "c32-natural-r1-v52",
+      "analysis_file_sha256": "a39e993b7ca4618654ae2566e0f116729132a6280cd9da0247cc6e805b65a340",
+      "sqlite_sha256": "d14345aef036f44a32fc40b0a89f986f1e1dc3b744b7ed20c26d9cc1b71eb803",
+      "GPU_recorded_union_ns": 596995980,
+      "GPU_event_envelope_ns": 788040126,
+      "no_recorded_GPU_event_inside_envelope_ns": 191044146,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 656483430,
+      "CUDA_API_GPU_recorded_overlap_ns": 596892714,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 59590716,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 302,
+          "summed_event_duration_ns": 602300152,
+          "interval_union_ns": 602300152
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 302,
+          "summed_event_duration_ns": 54183278,
+          "interval_union_ns": 54183278
+        }
+      ]
+    },
+    {
+      "case": "c32-natural-r1-vllm",
+      "analysis_file_sha256": "f86ace47c0f6b2cbfc15ee3bdec9232c14b1b495160ee05fcf412a0b969caa9f",
+      "sqlite_sha256": "e130709122f40c9a062de963fd98d9b089cfbf29a3f2289e02f696c8673220c4",
+      "GPU_recorded_union_ns": 504316661,
+      "GPU_event_envelope_ns": 743293843,
+      "no_recorded_GPU_event_inside_envelope_ns": 238977182,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 254945,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 193210805,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaEventSynchronize_v3020",
+          "count": 314,
+          "summed_event_duration_ns": 65712580,
+          "interval_union_ns": 65712580
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 356,
+          "summed_event_duration_ns": 57554778,
+          "interval_union_ns": 57554778
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 8440,
+          "summed_event_duration_ns": 23511729,
+          "interval_union_ns": 23511729
+        }
+      ]
+    },
+    {
+      "case": "c8-fixed-r0-v52",
+      "analysis_file_sha256": "13cdaefdedf191792acc3d975229a6b4dcf93824b86941fdf82668a98a84a3ef",
+      "sqlite_sha256": "dbe365bf6e833064e53c4cdb76275647ce10e194a3c281f2e16b9f1081a8acbc",
+      "GPU_recorded_union_ns": 393280067,
+      "GPU_event_envelope_ns": 482907234,
+      "no_recorded_GPU_event_inside_envelope_ns": 89627167,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 436710161,
+      "CUDA_API_GPU_recorded_overlap_ns": 393270591,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 43439570,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 268,
+          "summed_event_duration_ns": 398564969,
+          "interval_union_ns": 398564969
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 268,
+          "summed_event_duration_ns": 38145192,
+          "interval_union_ns": 38145192
+        }
+      ]
+    },
+    {
+      "case": "c8-fixed-r0-vllm",
+      "analysis_file_sha256": "2fd9cede31dd00d9281b3925d1ca744389432d0865d49ff752da044b0ff7b8a8",
+      "sqlite_sha256": "754ee969320b4e8555a47a0c5fe1bedba9e13f98e555b4c8d1f8bdc8c7204c09",
+      "GPU_recorded_union_ns": 385624852,
+      "GPU_event_envelope_ns": 694806118,
+      "no_recorded_GPU_event_inside_envelope_ns": 309181266,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 206882
+      },
+      "CUDA_API_union_ns": 149266441,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 238,
+          "summed_event_duration_ns": 46885498,
+          "interval_union_ns": 46885498
+        },
+        {
+          "name": "cudaEventSynchronize_v3020",
+          "count": 303,
+          "summed_event_duration_ns": 27602209,
+          "interval_union_ns": 27602209
+        },
+        {
+          "name": "cuLaunchKernel",
+          "count": 13588,
+          "summed_event_duration_ns": 24400318,
+          "interval_union_ns": 24400318
+        }
+      ]
+    },
+    {
+      "case": "c8-fixed-r1-v52",
+      "analysis_file_sha256": "820dd0f96e085bb7b4bc4c086a4bc250c3e96209715ce62517b7f40a2598adbb",
+      "sqlite_sha256": "1936560db56dad5339f88faf35b33eca9510d92385722d10939ea41a1cb5234a",
+      "GPU_recorded_union_ns": 395841986,
+      "GPU_event_envelope_ns": 484722498,
+      "no_recorded_GPU_event_inside_envelope_ns": 88880512,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 438984720,
+      "CUDA_API_GPU_recorded_overlap_ns": 395837937,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 43146783,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 268,
+          "summed_event_duration_ns": 401243562,
+          "interval_union_ns": 401243562
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 268,
+          "summed_event_duration_ns": 37741158,
+          "interval_union_ns": 37741158
+        }
+      ]
+    },
+    {
+      "case": "c8-fixed-r1-vllm",
+      "analysis_file_sha256": "8a99bf88cb558f8fd717b03a03b3ad49302b5645fb2e3e6c32dec1cf26154377",
+      "sqlite_sha256": "7ca7da052eeda128297e48b425c197aafd502511d4686904d14f461b42ffbefc",
+      "GPU_recorded_union_ns": 390115121,
+      "GPU_event_envelope_ns": 857627234,
+      "no_recorded_GPU_event_inside_envelope_ns": 467512113,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 190754
+      },
+      "CUDA_API_union_ns": 160034777,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 334,
+          "summed_event_duration_ns": 56012055,
+          "interval_union_ns": 56012055
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 9071,
+          "summed_event_duration_ns": 32318802,
+          "interval_union_ns": 32318802
+        },
+        {
+          "name": "cuLaunchKernel",
+          "count": 13290,
+          "summed_event_duration_ns": 27844724,
+          "interval_union_ns": 27844724
+        }
+      ]
+    },
+    {
+      "case": "c8-natural-r0-v52",
+      "analysis_file_sha256": "9e96ca15aefaff01487235f6372282f44513993391efdb2b1057211b57dfd10e",
+      "sqlite_sha256": "62b659c1b2494ef0e8270321b2d8017af892731cfc799be6685a77867a10e314",
+      "GPU_recorded_union_ns": 1377217253,
+      "GPU_event_envelope_ns": 1639578852,
+      "no_recorded_GPU_event_inside_envelope_ns": 262361599,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 1531797813,
+      "CUDA_API_GPU_recorded_overlap_ns": 1377200167,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 154597646,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 974,
+          "summed_event_duration_ns": 1396389954,
+          "interval_union_ns": 1396389954
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 974,
+          "summed_event_duration_ns": 135407859,
+          "interval_union_ns": 135407859
+        }
+      ]
+    },
+    {
+      "case": "c8-natural-r0-vllm",
+      "analysis_file_sha256": "6a36f70dab11f48516494b8110ef78fcbe7c1beb4243b3313ff0a26ada252c63",
+      "sqlite_sha256": "2e0444cb6d9fefa557f6d567f82806344264f385b8fe97492732e06ea26312ef",
+      "GPU_recorded_union_ns": 1359290502,
+      "GPU_event_envelope_ns": 1924570403,
+      "no_recorded_GPU_event_inside_envelope_ns": 565279901,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 805411
+      },
+      "CUDA_API_union_ns": 535035644,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 923,
+          "summed_event_duration_ns": 197515680,
+          "interval_union_ns": 197515680
+        },
+        {
+          "name": "cudaEventSynchronize_v3020",
+          "count": 1007,
+          "summed_event_duration_ns": 153202639,
+          "interval_union_ns": 153202639
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 18677,
+          "summed_event_duration_ns": 63123793,
+          "interval_union_ns": 63123793
+        }
+      ]
+    },
+    {
+      "case": "c8-natural-r1-v52",
+      "analysis_file_sha256": "5616737c5c13120ae799d9fa357ec34f58162cca13e073f644fcfd0d2a1c6bc8",
+      "sqlite_sha256": "a6ebd5255309967eff9394b671fc97c1861c6e018006a691832e6fc59d6e5e66",
+      "GPU_recorded_union_ns": 1395291084,
+      "GPU_event_envelope_ns": 1659017012,
+      "no_recorded_GPU_event_inside_envelope_ns": 263725928,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 0,
+        "kernel__memset": 0,
+        "memcpy__memset": 0
+      },
+      "CUDA_API_union_ns": 1550359981,
+      "CUDA_API_GPU_recorded_overlap_ns": 1395282382,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": 155077599,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "count": 975,
+          "summed_event_duration_ns": 1414568903,
+          "interval_union_ns": 1414568903
+        },
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 975,
+          "summed_event_duration_ns": 135791078,
+          "interval_union_ns": 135791078
+        }
+      ]
+    },
+    {
+      "case": "c8-natural-r1-vllm",
+      "analysis_file_sha256": "979aad07b099954f0ea48cd29df575a6f9e1d5394faac53bc47655d9c8a92bfc",
+      "sqlite_sha256": "6ea0e3e25993e865d6c2c38a906786723fd0cee3683801c79113a58c022e3101",
+      "GPU_recorded_union_ns": 1356614515,
+      "GPU_event_envelope_ns": 1848089220,
+      "no_recorded_GPU_event_inside_envelope_ns": 491474705,
+      "GPU_category_mutual_overlap_ns": {
+        "kernel__memcpy": 847492
+      },
+      "CUDA_API_union_ns": 531615080,
+      "CUDA_API_GPU_recorded_overlap_ns": null,
+      "CUDA_API_intervals_without_recorded_GPU_activity_ns": null,
+      "derivation": "API/GPU overlap sum is exact only after all GPU category unions proved mutually disjoint; otherwise uncomputed",
+      "top_API_counts": [
+        {
+          "name": "cudaGraphLaunch_v10000",
+          "count": 955,
+          "summed_event_duration_ns": 187371316,
+          "interval_union_ns": 187371316
+        },
+        {
+          "name": "cudaEventSynchronize_v3020",
+          "count": 1006,
+          "summed_event_duration_ns": 168439191,
+          "interval_union_ns": 168439191
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "count": 18363,
+          "summed_event_duration_ns": 59340913,
+          "interval_union_ns": 59340913
+        }
+      ]
+    }
+  ],
+  "scope": "whole original Nsight traces; independent serving HTTP performance remains separate; no alignment to retained envelope",
+  "interpretation": "no-recorded-GPU gaps and API-only intervals do not identify host wait, scheduler or HTTP costs; API overlaps GPU and is never added to kernel/transfer times",
+  "serving_performance": "\ubbf8\uc2e4\ud589; profiler diagnostic derivation only",
+  "adopted": false,
+  "goal_achieved": false
+}

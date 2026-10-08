@@ -1,0 +1,14 @@
+"""Audit recorded profiler diagnostics and API/GPU overlap without attributing gaps."""
+import json,re,hashlib,time
+from pathlib import Path
+R=Path(__file__).resolve().parent;S=R/'kernel-batch04-profile-matrix-analysis-attempt01';O=R/'kernel-batch04-profile-completeness-overlap-audit-attempt01';O.mkdir();rows=[];pins={}
+sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
+for p in sorted(S.glob('c*-*.json')):
+ pins[p.name]=sha(p);j=json.loads(p.read_bytes());scopes=j['interval_scopes'];texts=[x['text'] for x in j['diagnostics']];observed=sum(scopes[k].get('events',0) for k in ['kernel','memcpy','memset','cuda_api','driver_api']);collected=[int(re.search(r'Number of CUDA events collected:\s*(\d+)',t)[1]) for t in texts if 'Number of CUDA events collected:' in t];assert len(collected)==1
+ warnings=[t for t in texts if 'might have' in t or 'absent' in t or 'No NVTX' in t]
+ api=scopes['cuda_api']['interval_union_ns'];kernel=scopes['kernel']['interval_union_ns'];overlap=j['pairwise_overlap_ns']['cuda_api__kernel'];assert 0<=overlap<=min(api,kernel)
+ names=j['calls_by_name']['cuda_api'];sync=next((n for n in names if n['name'].startswith('cudaStreamSynchronize')),None)
+ rows.append({'case':p.stem,'sqlite_sha256':j['sqlite_sha256'],'recorded_CUDA_table_events':observed,'diagnostic_CUDA_collected':collected[0],'recorded_table_count_matches_collected':observed==collected[0],'diagnostic_CUPTI_produced':[t for t in texts if 'Number of CUPTI events produced:' in t],'preserved_collection_warnings':warnings,'recorded_API_kernel_overlap_ns':overlap,'kernel_union_ns':kernel,'CUDA_API_union_ns':api,'API_kernel_overlap_fraction_of_kernel_percent':100*overlap/kernel,'API_outside_kernel_ns':api-overlap,'stream_synchronize_recorded':sync,'unattributed_interval_limit':'API outside kernel can overlap transfers and includes launch/runtime overhead; not host wait, HTTP, scheduler or serving TPOT','no_additive_walltime':True})
+assert len(rows)==32
+report={'source_sha256':pins,'records':rows,'all_recorded_table_counts_match_collected':all(x['recorded_table_count_matches_collected'] for x in rows),'all_traces_have_collection_warnings':all(x['preserved_collection_warnings'] for x in rows),'capture_completeness':'unproven; table-count reconciliation is internal consistency only; produced/collected event categories and warning cause not fully resolved','boundary_scope':'controller starts profiler before retained96 and stops after it; HTTP/perf-to-trace alignment remains unverified','next_attribution_evidence':'phase/iteration annotations and clock alignment required before identifying HTTP/scheduler/host wait; preserve diagnostics and original captures','serving_performance':'미실행; diagnostic profiles only','goal_achieved':False,'created_ns':time.time_ns()}
+(O/'audit.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({k:v for k,v in report.items() if k not in ['source_sha256','records']}))

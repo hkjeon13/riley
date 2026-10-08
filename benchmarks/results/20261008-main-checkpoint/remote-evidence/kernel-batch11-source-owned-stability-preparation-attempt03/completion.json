@@ -1,0 +1,54 @@
+{
+  "failure": null,
+  "steps": [
+    {
+      "label": "git-add",
+      "argv": [
+        "git",
+        "add",
+        "crates/riley-server/Cargo.toml",
+        "crates/riley-server/tests/matched_all8_source_owned_http_gpu.rs"
+      ],
+      "cwd": "/data/riley-serving-261007/kernel-batch11-source-owned-stability-source-attempt01",
+      "exit": 0
+    },
+    {
+      "label": "git-commit",
+      "argv": [
+        "git",
+        "-c",
+        "user.name=Codex",
+        "-c",
+        "user.email=codex@local",
+        "commit",
+        "-m",
+        "test: capture matched serving ownership and shutdown evidence"
+      ],
+      "cwd": "/data/riley-serving-261007/kernel-batch11-source-owned-stability-source-attempt01",
+      "exit": 0
+    },
+    {
+      "label": "compile-only",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--release",
+        "-p",
+        "riley-server",
+        "--features",
+        "cuda,server",
+        "--test",
+        "matched_all8_source_owned_http_gpu",
+        "--no-run",
+        "--message-format=json"
+      ],
+      "cwd": "/data/riley-serving-261007/kernel-batch11-source-owned-stability-source-attempt01",
+      "exit": 0
+    }
+  ],
+  "GPU_execution": "not executed",
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "stability_passed": false,
+  "goal_achieved": false
+}

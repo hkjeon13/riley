@@ -1,0 +1,6 @@
+error: invalid object 100644 1e2b4160c037ee9cc8032a6d3e63c97b84847aac for '.github/workflows/c03-routing-fuzz.yml'
+Traceback (most recent call last):
+  File "/data/riley-serving-261007/run_qwen_m2_bounded_attempt02.py", line 68, in <module>
+    assert p.returncode==0,'native qualifier nonzero; source/log preserved; inspect actual log before assigning a numerical failure'
+           ^^^^^^^^^^^^^^^
+AssertionError: native qualifier nonzero; source/log preserved; inspect actual log before assigning a numerical failure

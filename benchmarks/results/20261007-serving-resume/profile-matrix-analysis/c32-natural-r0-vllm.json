@@ -1,0 +1,4418 @@
+{
+  "sqlite_path": "/var/folders/vk/_qcwxfzx7m9c2zwf88m3cq8r0000gn/T/riley-matrix-profile-lxietcey/trace.sqlite",
+  "schema": {
+    "ENUM_NSYS_GENERIC_EVENT_FIELD_ETW_FLAGS": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ANALYSIS_FILE": [
+      "id",
+      "filename",
+      "contentId",
+      "globalPid"
+    ],
+    "ENUM_SAMPLING_THREAD_STATE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ProcessStreams": [
+      "globalPid",
+      "filenameId",
+      "contentId"
+    ],
+    "TARGET_INFO_SESSION_START_TIME": [
+      "utcEpochNs",
+      "utcTime",
+      "localTime"
+    ],
+    "META_DATA_EXPORT": [
+      "name",
+      "value"
+    ],
+    "ENUM_DIAGNOSTIC_SEVERITY_LEVEL": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_CUDA_DEV_MEM_EVENT_OPER": [
+      "id",
+      "name",
+      "label"
+    ],
+    "CUPTI_ACTIVITY_KIND_SYNCHRONIZATION": [
+      "start",
+      "end",
+      "deviceId",
+      "contextId",
+      "greenContextId",
+      "streamId",
+      "correlationId",
+      "globalPid",
+      "deprecatedSyncType",
+      "syncType",
+      "eventId",
+      "eventSyncId"
+    ],
+    "ENUM_SCHEDULING_THREAD_BLOCK": [
+      "id",
+      "name",
+      "label"
+    ],
+    "CUDA_GRAPH_NODE_EVENTS": [
+      "start",
+      "end",
+      "eventClass",
+      "globalTid",
+      "nameId",
+      "graphNodeId",
+      "originalGraphNodeId"
+    ],
+    "DIAGNOSTIC_EVENT": [
+      "timestamp",
+      "timestampType",
+      "source",
+      "severity",
+      "text",
+      "globalPid"
+    ],
+    "PROFILER_OVERHEAD": [
+      "start",
+      "end",
+      "globalTid",
+      "nameId",
+      "overheadType"
+    ],
+    "ENUM_CUPTI_SYNC_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "TARGET_INFO_GPU": [
+      "vmId",
+      "id",
+      "name",
+      "busLocation",
+      "isDiscrete",
+      "l2CacheSize",
+      "totalMemory",
+      "memoryBandwidth",
+      "clockRate",
+      "smCount",
+      "pwGpuId",
+      "uuid",
+      "luid",
+      "chipName",
+      "cuDevice",
+      "ctxswDevPath",
+      "ctrlDevPath",
+      "revision",
+      "nodeMask",
+      "constantMemory",
+      "maxIPC",
+      "maxRegistersPerBlock",
+      "maxShmemPerBlock",
+      "maxShmemPerBlockOptin",
+      "maxShmemPerSm",
+      "maxRegistersPerSm",
+      "threadsPerWarp",
+      "asyncEngines",
+      "maxWarpsPerSm",
+      "maxBlocksPerSm",
+      "maxThreadsPerBlock",
+      "maxBlockDimX",
+      "maxBlockDimY",
+      "maxBlockDimZ",
+      "maxGridDimX",
+      "maxGridDimY",
+      "maxGridDimZ",
+      "computeMajor",
+      "computeMinor",
+      "smMajor",
+      "smMinor"
+    ],
+    "META_DATA_CAPTURE": [
+      "name",
+      "value"
+    ],
+    "CUPTI_ACTIVITY_KIND_CUDA_EVENT": [
+      "timestamp",
+      "deviceId",
+      "contextId",
+      "greenContextId",
+      "streamId",
+      "correlationId",
+      "globalPid",
+      "eventId",
+      "eventSyncId"
+    ],
+    "ENUM_CUDA_MEMPOOL_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "PROCESSES": [
+      "globalPid",
+      "pid",
+      "name"
+    ],
+    "TARGET_INFO_CUDA_STREAM": [
+      "streamId",
+      "hwId",
+      "vmId",
+      "processId",
+      "contextId",
+      "priority",
+      "flag"
+    ],
+    "StringIds": [
+      "id",
+      "value"
+    ],
+    "ENUM_CUDA_FUNC_CACHE_CONFIG": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_CUDA_KERNEL_LAUNCH_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "CUPTI_ACTIVITY_KIND_MEMSET": [
+      "start",
+      "end",
+      "deviceId",
+      "contextId",
+      "greenContextId",
+      "streamId",
+      "correlationId",
+      "globalPid",
+      "value",
+      "bytes",
+      "graphNodeId",
+      "memKind"
+    ],
+    "NVTX_EVENTS": [
+      "start",
+      "end",
+      "eventType",
+      "rangeId",
+      "category",
+      "color",
+      "text",
+      "globalTid",
+      "endGlobalTid",
+      "textId",
+      "domainId",
+      "uint64Value",
+      "int64Value",
+      "doubleValue",
+      "uint32Value",
+      "int32Value",
+      "floatValue",
+      "jsonTextId",
+      "jsonText",
+      "binaryData"
+    ],
+    "ENUM_CUDA_MEMCPY_OPER": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_DIAGNOSTIC_TIMESTAMP_SOURCE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_NSYS_GENERIC_EVENT_SOURCE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "TARGET_INFO_CUDA_DEVICE": [
+      "gpuId",
+      "cudaId",
+      "pid"
+    ],
+    "ENUM_CUDA_SHARED_MEM_LIMIT_CONFIG": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_NSYS_GENERIC_EVENT_FIELD_ETW_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_NSYS_GENERIC_EVENT_FIELD_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "CUPTI_ACTIVITY_KIND_MEMCPY": [
+      "start",
+      "end",
+      "deviceId",
+      "contextId",
+      "greenContextId",
+      "streamId",
+      "correlationId",
+      "globalPid",
+      "bytes",
+      "copyKind",
+      "deprecatedSrcId",
+      "srcKind",
+      "dstKind",
+      "srcDeviceId",
+      "srcContextId",
+      "dstDeviceId",
+      "dstContextId",
+      "migrationCause",
+      "graphNodeId",
+      "virtualAddress",
+      "copyCount"
+    ],
+    "ENUM_NSYS_EVENT_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_NSYS_EVENT_CLASS": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_STACK_UNWIND_METHOD": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_CUPTI_OVERHEAD_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_CUDA_UNIF_MEM_ACCESS_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_CUDA_MEM_KIND": [
+      "id",
+      "name",
+      "label"
+    ],
+    "OSRT_CALLCHAINS": [
+      "id",
+      "symbol",
+      "module",
+      "kernelMode",
+      "thumbCode",
+      "unresolved",
+      "specialEntry",
+      "originalIP",
+      "unwindMethod",
+      "stackDepth"
+    ],
+    "ENUM_NSYS_GENERIC_EVENT_FIELD_ETW_PROPERTY": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ThreadNames": [
+      "nameId",
+      "priority",
+      "globalTid"
+    ],
+    "ENUM_CUDA_UNIF_MEM_MIGRATION": [
+      "id",
+      "name",
+      "label"
+    ],
+    "TARGET_INFO_SYSTEM_ENV": [
+      "globalVid",
+      "devStateName",
+      "name",
+      "nameEnum",
+      "value"
+    ],
+    "OSRT_API": [
+      "start",
+      "end",
+      "eventClass",
+      "globalTid",
+      "nameId",
+      "returnValue",
+      "nestingLevel",
+      "callchainId",
+      "argumentsId"
+    ],
+    "ENUM_CUDA_MEMPOOL_OPER": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_CUPTI_STREAM_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ENUM_DIAGNOSTIC_SOURCE_TYPE": [
+      "id",
+      "name",
+      "label"
+    ],
+    "CUPTI_ACTIVITY_KIND_RUNTIME": [
+      "start",
+      "end",
+      "eventClass",
+      "globalTid",
+      "correlationId",
+      "nameId",
+      "returnValue",
+      "callchainId"
+    ],
+    "CUPTI_ACTIVITY_KIND_KERNEL": [
+      "start",
+      "end",
+      "deviceId",
+      "contextId",
+      "greenContextId",
+      "streamId",
+      "correlationId",
+      "globalPid",
+      "demangledName",
+      "shortName",
+      "mangledName",
+      "launchType",
+      "cacheConfig",
+      "registersPerThread",
+      "gridX",
+      "gridY",
+      "gridZ",
+      "blockX",
+      "blockY",
+      "blockZ",
+      "staticSharedMemory",
+      "dynamicSharedMemory",
+      "localMemoryPerThread",
+      "localMemoryTotal",
+      "gridId",
+      "sharedMemoryExecuted",
+      "graphNodeId",
+      "sharedMemoryLimitConfig",
+      "qmdBulkReleaseDone",
+      "qmdPreexitDone",
+      "qmdLastCtaDone",
+      "graphId",
+      "clusterX",
+      "clusterY",
+      "clusterZ",
+      "clusterSchedulingPolicy",
+      "maxPotentialClusterSize",
+      "maxActiveClusters"
+    ],
+    "TARGET_INFO_CUDA_CONTEXT_INFO": [
+      "nullStreamId",
+      "hwId",
+      "vmId",
+      "processId",
+      "deviceId",
+      "contextId",
+      "parentContextId",
+      "isGreenContext"
+    ],
+    "ENUM_NSYS_GENERIC_EVENT_GROUP": [
+      "id",
+      "name",
+      "label"
+    ],
+    "ANALYSIS_DETAILS": [
+      "globalVid",
+      "duration",
+      "startTime",
+      "stopTime"
+    ]
+  },
+  "metadata": {
+    "META_DATA_CAPTURE": {
+      "columns": [
+        "name",
+        "value"
+      ],
+      "rows": [
+        [
+          "DEVICE_ID",
+          "Local (CLI)"
+        ],
+        [
+          "CAPTURE_EVENT_TYPE",
+          "OSRuntime"
+        ],
+        [
+          "CAPTURE_EVENT_TYPE",
+          "NvtxEvents"
+        ],
+        [
+          "CAPTURE_EVENT_TYPE",
+          "Cuda"
+        ],
+        [
+          "RATE_HZ",
+          "0"
+        ],
+        [
+          "START_TRIGGER",
+          "Delayed"
+        ],
+        [
+          "STOP_TRIGGER",
+          "Delayed"
+        ],
+        [
+          "THREAD_STATE_SCAN_FREQ",
+          "50"
+        ],
+        [
+          "POWER_RATE_SCAN_FREQ",
+          "50"
+        ],
+        [
+          "DEVICE_TYPE",
+          "Unix"
+        ],
+        [
+          "DEVICE_DISPLAY_NAME",
+          "psyche-MS-7D91"
+        ],
+        [
+          "OS_RUNTIME_OPTIONS:DURATION_THRESHOLD_NS",
+          "1000"
+        ],
+        [
+          "OS_RUNTIME_OPTIONS:COLLECT_BACKTRACES",
+          "true"
+        ],
+        [
+          "OS_RUNTIME_OPTIONS:BACKTRACES_THRESHOLD_NS",
+          "80000"
+        ],
+        [
+          "PROCESS_0:HOW_TO_ATTACH",
+          "LaunchAnother"
+        ],
+        [
+          "PROCESS_0:LAUNCH_AS_ROOT",
+          "false"
+        ],
+        [
+          "PROCESS_0:COMMAND",
+          "/data/riley-serving-261007/vllm0271-venv/bin/vllm"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_0",
+          "serve"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_1",
+          "/data/riley-serving-260913-recovery/runtime-assets-20260915/model"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_2",
+          "--tokenizer"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_3",
+          "/data/riley-serving-260913-recovery/runtime-assets-20260915/model"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_4",
+          "--served-model-name"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_5",
+          "g04-smol"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_6",
+          "--host"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_7",
+          "127.0.0.1"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_8",
+          "--port"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_9",
+          "49663"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_10",
+          "--dtype"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_11",
+          "bfloat16"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_12",
+          "--max-model-len"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_13",
+          "1024"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_14",
+          "--max-num-seqs"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_15",
+          "32"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_16",
+          "--max-num-batched-tokens"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_17",
+          "512"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_18",
+          "--gpu-memory-utilization"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_19",
+          "0.3"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_20",
+          "--no-enable-prefix-caching"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_21",
+          "--seed"
+        ],
+        [
+          "PROCESS_0:ARGUMENT_22",
+          "0"
+        ],
+        [
+          "PROCESS_0:WORKING_DIR",
+          "/home/psyche"
+        ],
+        [
+          "PROCESS_0:PID",
+          "0"
+        ],
+        [
+          "PROCESS_0:USER_NAME",
+          ""
+        ],
+        [
+          "PROCESS_0:COLLECT_NVTX_TRACE",
+          "true"
+        ],
+        [
+          "PROCESS_0:COLLECT_CUDA_TRACE",
+          "true"
+        ],
+        [
+          "PROCESS_0:COLLECT_CPU_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_NVMEDIA_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_VIDEO_API_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "LD_PRELOAD=\"{}\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "VLLM_BATCH_INVARIANT=\"0\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "LC_ALL=\"C.UTF-8\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "LD_LIBRARY_PATH=\"/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "CPATH=\"/data/riley-serving-261007/curand-only-include\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "LANG=\"C.UTF-8\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "CUDA_HOME=\"/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "CUDA_VISIBLE_DEVICES=\"0\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "PATH=\"/data/riley-serving-261007/vllm0271-venv/bin:/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin:/usr/bin:/bin\""
+        ],
+        [
+          "PROCESS_0:ENVIRONMENT_VARIABLE",
+          "HOME=\"/home/psyche\""
+        ],
+        [
+          "PROCESS_0:COLLECT_BLOCK_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_BLOCK_PHASE_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_WARP_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_WARP_PHASE_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:CUDA_FLUSH_PERIODICALLY",
+          "true"
+        ],
+        [
+          "PROCESS_0:CUDA_FLUSH_PERIOD",
+          "0"
+        ],
+        [
+          "PROCESS_0:CUDA_SKIP_SOME_API_CALLS",
+          "true"
+        ],
+        [
+          "PROCESS_0:COLLECT_GPU_MEMORY_USAGE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_UVM_CPU_PAGE_FAULTS",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_UVM_GPU_PAGE_FAULTS",
+          "false"
+        ],
+        [
+          "PROCESS_0:CUDA_GRAPH_TRACE_OPTIONS:MODE",
+          "Node"
+        ],
+        [
+          "PROCESS_0:COLLECT_GL_WORKLOAD",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_DX12_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_DX11_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:COLLECT_VULKAN_TRACE",
+          "false"
+        ],
+        [
+          "PROCESS_0:CUDA_FLUSH_ON_CUDA_PROFILER_STOP",
+          "false"
+        ],
+        [
+          "PROFILING_SESSION_ID",
+          ""
+        ],
+        [
+          "PROFILING_SESSION_UUID",
+          "97ea2b4d-70cf-4f7c-9ccf-50c587702bbf"
+        ],
+        [
+          "APPLICATION_PID",
+          "0"
+        ],
+        [
+          "PACKAGE_NAME",
+          ""
+        ],
+        [
+          "RESUME",
+          "false"
+        ],
+        [
+          "SHOW_BACKTRACE",
+          "false"
+        ],
+        [
+          "START_DELAY_MS",
+          "0"
+        ],
+        [
+          "RUN_DURATION_MS",
+          "934"
+        ],
+        [
+          "HAS_ANNOTATIONS",
+          "false"
+        ],
+        [
+          "USE_UNWIND_TABLES",
+          "false"
+        ],
+        [
+          "USE_FRAME_POINTERS",
+          "false"
+        ],
+        [
+          "USE_DWARF",
+          "false"
+        ],
+        [
+          "BANDWIDTH_VERSION",
+          "0"
+        ],
+        [
+          "BANDWIDTH_RATE_HZ",
+          "0"
+        ],
+        [
+          "COLLECT_GPU_CTX_SW_TRACE",
+          "false"
+        ],
+        [
+          "TRACE_ALL_TASKS",
+          "false"
+        ],
+        [
+          "IN_APP_FREQ_MODE",
+          "false"
+        ],
+        [
+          "COLLECT_VSYNC",
+          "false"
+        ],
+        [
+          "COLLECT_THREAD_STATE_TRACE",
+          "false"
+        ],
+        [
+          "ALLOW_SEND_ONLY_MODE",
+          "false"
+        ],
+        [
+          "FORCE_ARCH_TIMER",
+          "false"
+        ],
+        [
+          "USE_LBRS",
+          "false"
+        ],
+        [
+          "INCLUDE_CHILDREN",
+          "true"
+        ],
+        [
+          "USE_LINUX_PERF",
+          "false"
+        ],
+        [
+          "DISABLE_TIME_SYNC",
+          "false"
+        ],
+        [
+          "LAUNCH_AS_ROOT",
+          "false"
+        ],
+        [
+          "TRACE_AFTER_FORK_BEFORE_EXEC",
+          "false"
+        ],
+        [
+          "COLLECT_SLI_EVENTS",
+          "false"
+        ],
+        [
+          "HOTKEY_ENABLED",
+          "false"
+        ],
+        [
+          "HOTKEY_VALUE",
+          "0"
+        ],
+        [
+          "COLLECT_WDDM_EVENTS",
+          "false"
+        ],
+        [
+          "NVTX_OPTIONS:TRACE_NVTX_RANGE_HOT_KEY",
+          "false"
+        ],
+        [
+          "NVTX_OPTIONS:TRACE_NVTX_RANGE_HOT_KEY_VALUE",
+          "0"
+        ],
+        [
+          "NVTX_OPTIONS:NVTX_DOMAIN_FILTER_STRING",
+          ""
+        ],
+        [
+          "NVTX_OPTIONS:NVTX_DOMAIN_FILTER_MODE_INCLUDE",
+          "false"
+        ],
+        [
+          "COLLECT_OPENSHMEM_TRACE",
+          "false"
+        ],
+        [
+          "START_FRAME_VALUE",
+          "0"
+        ],
+        [
+          "RUN_DURATION_FRAMES",
+          "0"
+        ],
+        [
+          "SYMBOL_RESOLUTION_OPTIONS:RESOLVE_SYMBOLS",
+          "true"
+        ],
+        [
+          "SAMPLE_ALL_TASKS",
+          "false"
+        ]
+      ],
+      "truncated": false
+    },
+    "META_DATA_EXPORT": {
+      "columns": [
+        "name",
+        "value"
+      ],
+      "rows": [
+        [
+          "EXPORT_PRODUCT_NAME",
+          "NVIDIA Nsight Systems"
+        ],
+        [
+          "EXPORT_PRODUCT_VERSION",
+          "2025.5.2.266"
+        ],
+        [
+          "EXPORT_PRODUCT_DATE",
+          "2025.5"
+        ],
+        [
+          "EXPORT_SCHEMA_VERSION",
+          "3.24.0"
+        ],
+        [
+          "EXPORT_SCHEMA_VERSION_MAJOR",
+          "3"
+        ],
+        [
+          "EXPORT_SCHEMA_VERSION_MINOR",
+          "24"
+        ],
+        [
+          "EXPORT_SCHEMA_VERSION_MICRO",
+          "0"
+        ],
+        [
+          "EXPORT_SCHEMA_VERSION_CKSUM",
+          "1638241493 169465"
+        ],
+        [
+          "EXPORT_PLATFORM",
+          "linux-desktop"
+        ],
+        [
+          "EXPORT_ARCH",
+          "x64"
+        ],
+        [
+          "EXPORT_TIME_UTC",
+          "2026-10-07T03:12:26"
+        ],
+        [
+          "EXPORT_TIME_LOCAL",
+          "2026-10-07T12:12:26 +0900 KST"
+        ],
+        [
+          "EXPORT_HOST",
+          "psyche-MS-7D91"
+        ],
+        [
+          "EXPORT_USER",
+          ""
+        ],
+        [
+          "EXPORT_PARAM_INPUT_FILE",
+          "trace.nsys-rep"
+        ],
+        [
+          "EXPORT_PARAM_OUTPUT_FILE",
+          "trace.sqlite"
+        ],
+        [
+          "EXPORT_PARAM_INPUT_PATH",
+          "/data/riley-serving-261007/profiling-attempt04/c32-natural-r0-vllm/trace.nsys-rep"
+        ],
+        [
+          "EXPORT_PARAM_OUTPUT_PATH",
+          "/data/riley-serving-261007/profiling-attempt04/c32-natural-r0-vllm/trace.sqlite"
+        ],
+        [
+          "EXPORT_PARAM_INPUT_PATH_ABS",
+          "/data/riley-serving-261007/profiling-attempt04/c32-natural-r0-vllm/trace.nsys-rep"
+        ],
+        [
+          "EXPORT_PARAM_OUTPUT_PATH_ABS",
+          "/data/riley-serving-261007/profiling-attempt04/c32-natural-r0-vllm/trace.sqlite"
+        ],
+        [
+          "EXPORT_PARAM_OVERWRITE",
+          "false"
+        ],
+        [
+          "EXPORT_PARAM_APPEND",
+          "false"
+        ],
+        [
+          "EXPORT_PARAM_LAZY",
+          "true"
+        ],
+        [
+          "EXPORT_PARAM_TIME_NORMALIZE",
+          "false"
+        ],
+        [
+          "EXPORT_PARAM_TIME_SHIFT",
+          "0"
+        ],
+        [
+          "EXPORT_PARAM_TABLES_TO_EXPORT",
+          ""
+        ],
+        [
+          "EXPORT_PARAM_TIMES_TO_EXPORT",
+          ""
+        ],
+        [
+          "EXPORT_CONFIG_TIME_SHIFT",
+          "0"
+        ],
+        [
+          "EXPORT_TIME",
+          "0.57 sec"
+        ]
+      ],
+      "truncated": false
+    },
+    "TARGET_INFO_CUDA_CONTEXT_INFO": {
+      "columns": [
+        "nullStreamId",
+        "hwId",
+        "vmId",
+        "processId",
+        "deviceId",
+        "contextId",
+        "parentContextId",
+        "isGreenContext"
+      ],
+      "rows": [
+        [
+          7,
+          0,
+          1,
+          3545408,
+          0,
+          1,
+          0,
+          0
+        ]
+      ],
+      "truncated": false
+    },
+    "TARGET_INFO_CUDA_DEVICE": {
+      "columns": [
+        "gpuId",
+        "cudaId",
+        "pid"
+      ],
+      "rows": [
+        [
+          0,
+          0,
+          3545408
+        ]
+      ],
+      "truncated": false
+    },
+    "TARGET_INFO_CUDA_STREAM": {
+      "columns": [
+        "streamId",
+        "hwId",
+        "vmId",
+        "processId",
+        "contextId",
+        "priority",
+        "flag"
+      ],
+      "rows": [
+        [
+          487,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          485,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          482,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          479,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          477,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          476,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          474,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          472,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          470,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          468,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          467,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          465,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          463,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          462,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          461,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          460,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          459,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          457,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          454,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          453,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          451,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          450,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          449,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          445,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          443,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          441,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          444,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          440,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          439,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          452,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          437,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          435,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          429,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          427,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          426,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          424,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          423,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          420,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          416,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          415,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          412,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          408,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          407,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          404,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          486,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          403,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          402,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          393,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          392,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          390,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          388,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          471,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          448,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          419,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          387,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          386,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          384,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          385,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          381,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          399,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          380,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          379,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          378,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          374,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          442,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          373,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          369,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          370,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          365,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          363,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          362,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          361,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          359,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          357,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          355,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          414,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          354,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          376,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          351,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          413,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          350,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          411,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          346,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          368,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          345,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          344,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          446,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          432,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          389,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          343,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          342,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          340,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          338,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          447,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          337,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          333,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          366,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          330,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          383,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          329,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          327,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          326,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          322,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          321,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          458,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          320,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          319,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          318,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          317,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          315,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          313,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          311,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          310,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          305,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          303,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          301,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          300,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          298,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          297,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          294,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          293,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          292,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          291,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          287,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          286,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          283,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          469,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          347,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          282,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          280,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          401,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          279,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          277,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          274,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          273,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          271,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          314,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          270,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          268,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          265,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          421,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          263,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          281,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          132,
+          0,
+          1,
+          3545408,
+          1,
+          4294967293,
+          2
+        ],
+        [
+          217,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          466,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          131,
+          0,
+          1,
+          3545408,
+          1,
+          4294967294,
+          2
+        ],
+        [
+          181,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          232,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          339,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          130,
+          0,
+          1,
+          3545408,
+          1,
+          4294967295,
+          2
+        ],
+        [
+          125,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          57,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          177,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          316,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          112,
+          0,
+          1,
+          3545408,
+          1,
+          4294967293,
+          2
+        ],
+        [
+          306,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          117,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          115,
+          0,
+          1,
+          3545408,
+          1,
+          4294967294,
+          2
+        ],
+        [
+          114,
+          0,
+          1,
+          3545408,
+          1,
+          4294967295,
+          2
+        ],
+        [
+          302,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          108,
+          0,
+          1,
+          3545408,
+          1,
+          4294967293,
+          2
+        ],
+        [
+          160,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          224,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          106,
+          0,
+          1,
+          3545408,
+          1,
+          4294967295,
+          2
+        ],
+        [
+          104,
+          0,
+          1,
+          3545408,
+          1,
+          4294967293,
+          2
+        ],
+        [
+          103,
+          0,
+          1,
+          3545408,
+          1,
+          4294967294,
+          2
+        ],
+        [
+          127,
+          0,
+          1,
+          3545408,
+          1,
+          4294967294,
+          2
+        ],
+        [
+          246,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          99,
+          0,
+          1,
+          3545408,
+          1,
+          4294967294,
+          2
+        ],
+        [
+          431,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          289,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          109,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          266,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          77,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          186,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          258,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          98,
+          0,
+          1,
+          3545408,
+          1,
+          4294967295,
+          2
+        ],
+        [
+          348,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          299,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          97,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          96,
+          0,
+          1,
+          3545408,
+          1,
+          4294967293,
+          2
+        ],
+        [
+          51,
+          0,
+          1,
+          3545408,
+          1,
+          4294967294,
+          2
+        ],
+        [
+          395,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          95,
+          0,
+          1,
+          3545408,
+          1,
+          4294967294,
+          2
+        ],
+        [
+          93,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          156,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          195,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          335,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          222,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          92,
+          0,
+          1,
+          3545408,
+          1,
+          4294967293,
+          2
+        ],
+        [
+          10,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          38,
+          0,
+          1,
+          3545408,
+          1,
+          4294967295,
+          2
+        ],
+        [
+          135,
+          0,
+          1,
+          3545408,
+          1,
+          4294967294,
+          2
+        ],
+        [
+          91,
+          0,
+          1,
+          3545408,
+          1,
+          4294967294,
+          2
+        ],
+        [
+          201,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          328,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ],
+        [
+          86,
+          0,
+          1,
+          3545408,
+          1,
+          4294967295,
+          2
+        ],
+        [
+          122,
+          0,
+          1,
+          3545408,
+          1,
+          4294967295,
+          2
+        ],
+        [
+          141,
+          0,
+          1,
+          3545408,
+          1,
+          0,
+          2
+        ]
+      ],
+      "truncated": true
+    },
+    "TARGET_INFO_GPU": {
+      "columns": [
+        "vmId",
+        "id",
+        "name",
+        "busLocation",
+        "isDiscrete",
+        "l2CacheSize",
+        "totalMemory",
+        "memoryBandwidth",
+        "clockRate",
+        "smCount",
+        "pwGpuId",
+        "uuid",
+        "luid",
+        "chipName",
+        "cuDevice",
+        "ctxswDevPath",
+        "ctrlDevPath",
+        "revision",
+        "nodeMask",
+        "constantMemory",
+        "maxIPC",
+        "maxRegistersPerBlock",
+        "maxShmemPerBlock",
+        "maxShmemPerBlockOptin",
+        "maxShmemPerSm",
+        "maxRegistersPerSm",
+        "threadsPerWarp",
+        "asyncEngines",
+        "maxWarpsPerSm",
+        "maxBlocksPerSm",
+        "maxThreadsPerBlock",
+        "maxBlockDimX",
+        "maxBlockDimY",
+        "maxBlockDimZ",
+        "maxGridDimX",
+        "maxGridDimY",
+        "maxGridDimZ",
+        "computeMajor",
+        "computeMinor",
+        "smMajor",
+        "smMinor"
+      ],
+      "rows": [
+        [
+          281474976710656,
+          0,
+          "NVIDIA GeForce RTX 4090",
+          "0000:01:00.0",
+          1,
+          75497472,
+          25250627584,
+          1008096000000,
+          2595000000,
+          128,
+          0,
+          "9087e425-6aca-b722-b8c9-cc0423b39fb0",
+          0,
+          "AD102",
+          0,
+          "",
+          "",
+          161,
+          0,
+          65536,
+          4,
+          65536,
+          49152,
+          101376,
+          102400,
+          65536,
+          32,
+          2,
+          48,
+          24,
+          1024,
+          1024,
+          1024,
+          64,
+          2147483647,
+          65535,
+          65535,
+          8,
+          9,
+          8,
+          9
+        ]
+      ],
+      "truncated": false
+    },
+    "TARGET_INFO_SESSION_START_TIME": {
+      "columns": [
+        "utcEpochNs",
+        "utcTime",
+        "localTime"
+      ],
+      "rows": [
+        [
+          1791342737614568883,
+          "2026-10-07T03:12:17",
+          "2026-10-07T12:12:17"
+        ]
+      ],
+      "truncated": false
+    },
+    "TARGET_INFO_SYSTEM_ENV": {
+      "columns": [
+        "globalVid",
+        "devStateName",
+        "name",
+        "nameEnum",
+        "value"
+      ],
+      "rows": [
+        [
+          281474976710656,
+          "Local (CLI)",
+          "CpuCores",
+          1,
+          "24"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "CpuSpeedMhz",
+          2,
+          "5400"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "CpuArchitecture",
+          3,
+          "x86_64"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportedABIs",
+          5,
+          "x86_64,"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "Supported64BitABIs",
+          7,
+          "x86_64"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "CpuDescription",
+          13,
+          "13th Gen Intel(R) Core(TM) i7-13700K"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "CpuInfo",
+          14,
+          "{\"items\":[{\"cpuid\":0,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":1,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":2,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":3,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":4,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":5,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":6,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":7,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":8,\"socket\":0,\"maxfreqhz\":5400000000},{\"cpuid\":9,\"socket\":0,\"maxfreqhz\":5400000000},{\"cpuid\":10,\"socket\":0,\"maxfreqhz\":5400000000},{\"cpuid\":11,\"socket\":0,\"maxfreqhz\":5400000000},{\"cpuid\":12,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":13,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":14,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":15,\"socket\":0,\"maxfreqhz\":5300000000},{\"cpuid\":16,\"socket\":0,\"maxfreqhz\":4200000000},{\"cpuid\":17,\"socket\":0,\"maxfreqhz\":4200000000},{\"cpuid\":18,\"socket\":0,\"maxfreqhz\":4200000000},{\"cpuid\":19,\"socket\":0,\"maxfreqhz\":4200000000},{\"cpuid\":20,\"socket\":0,\"maxfreqhz\":4200000000},{\"cpuid\":21,\"socket\":0,\"maxfreqhz\":4200000000},{\"cpuid\":22,\"socket\":0,\"maxfreqhz\":4200000000},{\"cpuid\":23,\"socket\":0,\"maxfreqhz\":4200000000}]}"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "CpuEmcSpeedMhz",
+          101,
+          "1600"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsXmcClients",
+          153,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "TargetInstallDir",
+          170,
+          "/data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasDiscreteGpu",
+          203,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "NvDriverVersion",
+          205,
+          "580.178.04"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "IsX86BasedDevice",
+          506,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HardwarePlatform",
+          600,
+          "x86_64"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SoftwarePlatform",
+          601,
+          "L4X"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "OsDescription",
+          605,
+          "Ubuntu 22.04.5 LTS"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "DeviceEnvironment",
+          610,
+          "HOME=/home/psyche;PATH=/data/riley-serving-261007/vllm0271-venv/bin:/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin:/usr/bin:/bin;CUDA_HOME=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13;LANG=C.UTF-8;CPATH=/data/riley-serving-261007/curand-only-include;LC_ALL=C.UTF-8;CUDA_VISIBLE_DEVICES=0;VLLM_BATCH_INVARIANT=0;LD_LIBRARY_PATH=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "CudaDriverVersion",
+          611,
+          "13000"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SoftwareReleaseVersion",
+          618,
+          "6.8.0-138-generic"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "Hostname",
+          619,
+          "psyche-MS-7D91"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "IsDevicePropsUpdated",
+          701,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "IsDeviceCapsUpdated",
+          702,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "IsPersistentDevice",
+          703,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SystemUID",
+          721,
+          "pid:[4026531836]"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasThreadStateEvents",
+          800,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasNvtxEvents",
+          809,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasCudaEvents",
+          812,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasGraphicsEvents",
+          813,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasOSRuntimeEvents",
+          815,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasCuDNNEvents",
+          816,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasOpenACCEvents",
+          819,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasNvMediaEvents",
+          820,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasCudaBacktraceEvents",
+          821,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasVideoEvents",
+          822,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsDX11",
+          838,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsDX12",
+          839,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsGpuCtxsw",
+          840,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsPmuCounters",
+          842,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsCpuFrequency",
+          844,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsVulkan",
+          845,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsMPI",
+          846,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsCpuCtxsw",
+          848,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsGpuMetrics",
+          849,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasBacktraces",
+          851,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasBacktracingAlgorithms",
+          852,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsSampling",
+          861,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsLinuxPerf",
+          862,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "dptiSupportsHES",
+          863,
+          "4"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "KernelVersion",
+          882,
+          "#138~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Aug  7 13:43:15 UTC "
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "EventLibSourcesInfo",
+          891,
+          "{\"BaseDir\":\"/sys/kernel/eventlib\"}"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsArchTimer",
+          892,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportedFTraceEvents",
+          894,
+          "{}"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "IsGameRecordingModeOn",
+          896,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "GpuInfo",
+          897,
+          "{\"Gpus\":[{\"Id\":0,\"Name\":\"NVIDIA GeForce RTX 4090\",\"BusLocation\":\"0000:01:00.0\",\"IsDiscrete\":true,\"Uuid\":\"9087e425-6aca-b722-b8c9-cc0423b39fb0\",\"ChipName\":\"AD102\",\"PwGpuId\":0,\"L2CacheSize\":75497472,\"TotalMemory\":\"25250627584\",\"MemoryBandwidth\":\"1008096000000\",\"ClockRate\":2595000000,\"SmCount\":128,\"CuDevice\":0,\"RmGpuId\":256,\"RmDevice\":0,\"RmSubDevice\":0,\"Revision\":161,\"ConstantMemory\":65536,\"MaxIPC\":4,\"MaxRegistersPerBlock\":65536,\"MaxShmemPerBlock\":49152,\"MaxShmemPerBlockOptin\":101376,\"MaxShmemPerSm\":102400,\"MaxRegistersPerSm\":65536,\"ThreadsPerWarp\":32,\"AsyncEngines\":2,\"MaxWarpsPerSm\":48,\"MaxBlocksPerSm\":24,\"MaxThreadsPerBlock\":1024,\"MaxBlockDimX\":1024,\"MaxBlockDimY\":1024,\"MaxBlockDimZ\":64,\"MaxGridDimX\":2147483647,\"MaxGridDimY\":65535,\"MaxGridDimZ\":65535,\"ComputeMajor\":8,\"ComputeMinor\":9,\"SmMajor\":8,\"SmMinor\":9,\"MigEnabled\":false,\"InConfidentialComputeMode\":false,\"Architecture\":\"Ada\",\"VideoEngineStatus\":0,\"GspFirmwareVersion\":\"580.178.04\"}]}"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "HasOpenMPEvents",
+          899,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsSli",
+          900,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsLBR",
+          901,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsOpenSHMEM",
+          903,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "ExportLevel",
+          904,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsUCX",
+          906,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsIsr",
+          907,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsSocMetrics",
+          908,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "NicInfo",
+          910,
+          "{}"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "OfedDriverVersion",
+          911,
+          ""
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "LinuxPerfInfo",
+          912,
+          "{\"samplingPeriodInfo\":{\"minSamplingPeriod\":331250},\"CpuCoreInfo\":{\"MaximumSimultaneousEvents\":0},\"OsInfo\":{}}"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsPythonBacktraceSampling",
+          913,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsNicMetrics",
+          914,
+          "1"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsVulkanSC",
+          917,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsOpenXR",
+          918,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "LinuxParanoidLevel",
+          919,
+          "4"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SupportsSyscallTrace",
+          920,
+          "0"
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "SocInfo",
+          921,
+          ""
+        ],
+        [
+          281474976710656,
+          "Local (CLI)",
+          "ArmCores",
+          923,
+          "{}"
+        ]
+      ],
+      "truncated": false
+    }
+  },
+  "interval_scopes": {
+    "kernel": {
+      "state": "measured",
+      "events": 139796,
+      "summed_event_duration_ns": 505659614,
+      "interval_union_ns": 505659614,
+      "overlap_duration_ns": 0,
+      "first_start_ns": 90330040,
+      "last_end_ns": 837233910
+    },
+    "memcpy": {
+      "state": "measured",
+      "events": 2081,
+      "summed_event_duration_ns": 1588426,
+      "interval_union_ns": 1529930,
+      "overlap_duration_ns": 58496,
+      "first_start_ns": 90254136,
+      "last_end_ns": 837235894
+    },
+    "memset": {
+      "state": "measured",
+      "events": 30,
+      "summed_event_duration_ns": 16032,
+      "interval_union_ns": 16032,
+      "overlap_duration_ns": 0,
+      "first_start_ns": 319033650,
+      "last_end_ns": 324000438
+    },
+    "cuda_api": {
+      "state": "measured",
+      "events": 47065,
+      "summed_event_duration_ns": 188153839,
+      "interval_union_ns": 188153839,
+      "overlap_duration_ns": 0,
+      "first_start_ns": 90174263,
+      "last_end_ns": 837299838
+    },
+    "driver_api": {
+      "state": "unavailable",
+      "table": "CUPTI_ACTIVITY_KIND_DRIVER"
+    },
+    "osrt": {
+      "state": "measured",
+      "events": 17829,
+      "summed_event_duration_ns": 20862855697,
+      "interval_union_ns": 1663973932,
+      "overlap_duration_ns": 19198881765,
+      "first_start_ns": 324461,
+      "last_end_ns": 1671746333
+    }
+  },
+  "diagnostics": [
+    {
+      "timestamp": -13008089821,
+      "timestampType": 1,
+      "source": 2,
+      "severity": 1,
+      "text": "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_103544849/streams/pid_3544861_stdout.log and stderr.log for program output",
+      "globalPid": 340947875397632
+    },
+    {
+      "timestamp": -12994169250,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "Common injection library initialized successfully.",
+      "globalPid": 340947875397632
+    },
+    {
+      "timestamp": -12991484173,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "OS runtime libraries injection initialized successfully.",
+      "globalPid": 340947875397632
+    },
+    {
+      "timestamp": -9078108509,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "Common injection library initialized successfully.",
+      "globalPid": 340957035757568
+    },
+    {
+      "timestamp": -9078018455,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "Common injection library initialized successfully.",
+      "globalPid": 340957052534784
+    },
+    {
+      "timestamp": -9074354475,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "OS runtime libraries injection initialized successfully.",
+      "globalPid": 340957052534784
+    },
+    {
+      "timestamp": -9074248540,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "OS runtime libraries injection initialized successfully.",
+      "globalPid": 340957035757568
+    },
+    {
+      "timestamp": -5660455085,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+      "globalPid": 340957052534784
+    },
+    {
+      "timestamp": -5647431771,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+      "globalPid": 340957052534784
+    },
+    {
+      "timestamp": -5516798987,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "CUDA injection initialized successfully.",
+      "globalPid": 340957052534784
+    },
+    {
+      "timestamp": -3828258614,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "NVTX injection initialized successfully.",
+      "globalPid": 340957052534784
+    },
+    {
+      "timestamp": 0,
+      "timestampType": 1,
+      "source": 3,
+      "severity": 1,
+      "text": "Profiling has started.",
+      "globalPid": -144115188075855872
+    },
+    {
+      "timestamp": 933198843,
+      "timestampType": 1,
+      "source": 3,
+      "severity": 1,
+      "text": "Profiling has stopped.",
+      "globalPid": -144115188075855872
+    },
+    {
+      "timestamp": 945265185,
+      "timestampType": 1,
+      "source": 1,
+      "severity": 1,
+      "text": "Number of CUPTI events produced: \t195134, CUPTI buffers: 50.",
+      "globalPid": 340957052534784
+    },
+    {
+      "timestamp": 2512118830,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+      "globalPid": -144115188075855872
+    },
+    {
+      "timestamp": 2512168815,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "Not all NVTX events might have been collected.",
+      "globalPid": 340957052534784
+    },
+    {
+      "timestamp": 2512170193,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "No NVTX events collected. Does the process use NVTX?",
+      "globalPid": 340957052534784
+    },
+    {
+      "timestamp": 2512170711,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "Not all NVTX events might have been collected.",
+      "globalPid": 340957035757568
+    },
+    {
+      "timestamp": 2512171261,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "No NVTX events collected. Does the process use NVTX?",
+      "globalPid": 340957035757568
+    },
+    {
+      "timestamp": 2512171516,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "Not all NVTX events might have been collected.",
+      "globalPid": 340947875397632
+    },
+    {
+      "timestamp": 2512171918,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "No NVTX events collected. Does the process use NVTX?",
+      "globalPid": 340947875397632
+    },
+    {
+      "timestamp": 2512172922,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "Not all CUDA events might have been collected.",
+      "globalPid": 340957052534784
+    },
+    {
+      "timestamp": 2512174333,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 1,
+      "text": "Number of CUDA events collected: \t188972.",
+      "globalPid": 340957052534784
+    },
+    {
+      "timestamp": 2512175230,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "CUDA profiling might have not been started correctly.",
+      "globalPid": 340957035757568
+    },
+    {
+      "timestamp": 2512175734,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "No CUDA events collected. Does the process use CUDA?",
+      "globalPid": 340957035757568
+    },
+    {
+      "timestamp": 2512176188,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "CUDA profiling might have not been started correctly.",
+      "globalPid": 340947875397632
+    },
+    {
+      "timestamp": 2512176619,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "No CUDA events collected. Does the process use CUDA?",
+      "globalPid": 340947875397632
+    },
+    {
+      "timestamp": 2512177277,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "Not all OS runtime libraries events might have been collected.",
+      "globalPid": 340957052534784
+    },
+    {
+      "timestamp": 2512177772,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 1,
+      "text": "Number of OS runtime libraries events collected: \t8095.",
+      "globalPid": 340957052534784
+    },
+    {
+      "timestamp": 2512178151,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "Not all OS runtime libraries events might have been collected.",
+      "globalPid": 340957035757568
+    },
+    {
+      "timestamp": 2512178372,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "No OS runtime libraries events collected. Does the process use OS runtime libraries?",
+      "globalPid": 340957035757568
+    },
+    {
+      "timestamp": 2512178960,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 2,
+      "text": "Not all OS runtime libraries events might have been collected.",
+      "globalPid": 340947875397632
+    },
+    {
+      "timestamp": 2512179194,
+      "timestampType": 2,
+      "source": 3,
+      "severity": 1,
+      "text": "Number of OS runtime libraries events collected: \t9731.",
+      "globalPid": 340947875397632
+    }
+  ],
+  "calls_by_name": {
+    "cuda_api": [
+      {
+        "name": "cudaGraphLaunch_v10000",
+        "count": 420,
+        "summed_event_duration_ns": 60056721,
+        "interval_union_ns": 60056721
+      },
+      {
+        "name": "cudaEventSynchronize_v3020",
+        "count": 316,
+        "summed_event_duration_ns": 57864688,
+        "interval_union_ns": 57864688
+      },
+      {
+        "name": "cudaLaunchKernel_v7000",
+        "count": 7926,
+        "summed_event_duration_ns": 22978484,
+        "interval_union_ns": 22978484
+      },
+      {
+        "name": "cuLaunchKernel",
+        "count": 9535,
+        "summed_event_duration_ns": 18592189,
+        "interval_union_ns": 18592189
+      },
+      {
+        "name": "cuLaunchKernelEx",
+        "count": 2635,
+        "summed_event_duration_ns": 8260303,
+        "interval_union_ns": 8260303
+      },
+      {
+        "name": "cudaMemcpyAsync_v3020",
+        "count": 1636,
+        "summed_event_duration_ns": 7506796,
+        "interval_union_ns": 7506796
+      },
+      {
+        "name": "cudaLaunchKernelExC_v11060",
+        "count": 1830,
+        "summed_event_duration_ns": 3742517,
+        "interval_union_ns": 3742517
+      },
+      {
+        "name": "cudaEventRecordWithFlags_v11010",
+        "count": 2268,
+        "summed_event_duration_ns": 2548785,
+        "interval_union_ns": 2548785
+      },
+      {
+        "name": "cudaEventQuery_v3020",
+        "count": 2774,
+        "summed_event_duration_ns": 2105530,
+        "interval_union_ns": 2105530
+      },
+      {
+        "name": "cuKernelGetFunction",
+        "count": 3969,
+        "summed_event_duration_ns": 1098045,
+        "interval_union_ns": 1098045
+      },
+      {
+        "name": "cudaStreamIsCapturing_v10000",
+        "count": 4220,
+        "summed_event_duration_ns": 1053355,
+        "interval_union_ns": 1053355
+      },
+      {
+        "name": "cuKernelGetName",
+        "count": 7926,
+        "summed_event_duration_ns": 830285,
+        "interval_union_ns": 830285
+      },
+      {
+        "name": "cudaEventCreateWithFlags_v3020",
+        "count": 632,
+        "summed_event_duration_ns": 555776,
+        "interval_union_ns": 555776
+      },
+      {
+        "name": "cudaStreamWaitEvent_v3020",
+        "count": 316,
+        "summed_event_duration_ns": 478910,
+        "interval_union_ns": 478910
+      },
+      {
+        "name": "cudaEventDestroy_v3020",
+        "count": 632,
+        "summed_event_duration_ns": 418590,
+        "interval_union_ns": 418590
+      },
+      {
+        "name": "cudaMemsetAsync_v3020",
+        "count": 30,
+        "summed_event_duration_ns": 62865,
+        "interval_union_ns": 62865
+      }
+    ],
+    "osrt": [
+      {
+        "name": "pthread_cond_timedwait",
+        "count": 5156,
+        "summed_event_duration_ns": 8405984660,
+        "interval_union_ns": 1598143099
+      },
+      {
+        "name": "epoll_wait",
+        "count": 1374,
+        "summed_event_duration_ns": 8119523857,
+        "interval_union_ns": 934595412
+      },
+      {
+        "name": "epoll_pwait",
+        "count": 388,
+        "summed_event_duration_ns": 1608497547,
+        "interval_union_ns": 1404327824
+      },
+      {
+        "name": "poll",
+        "count": 579,
+        "summed_event_duration_ns": 1451141500,
+        "interval_union_ns": 904650466
+      },
+      {
+        "name": "sem_wait",
+        "count": 563,
+        "summed_event_duration_ns": 1222746425,
+        "interval_union_ns": 710371440
+      },
+      {
+        "name": "write",
+        "count": 8185,
+        "summed_event_duration_ns": 48657429,
+        "interval_union_ns": 48640324
+      },
+      {
+        "name": "pthread_mutex_lock",
+        "count": 267,
+        "summed_event_duration_ns": 1318824,
+        "interval_union_ns": 1317371
+      },
+      {
+        "name": "send",
+        "count": 398,
+        "summed_event_duration_ns": 1123164,
+        "interval_union_ns": 1120050
+      },
+      {
+        "name": "recv",
+        "count": 403,
+        "summed_event_duration_ns": 1052142,
+        "interval_union_ns": 1050819
+      },
+      {
+        "name": "clock_nanosleep",
+        "count": 1,
+        "summed_event_duration_ns": 1051476,
+        "interval_union_ns": 1051476
+      },
+      {
+        "name": "pthread_rwlock_wrlock",
+        "count": 4,
+        "summed_event_duration_ns": 421508,
+        "interval_union_ns": 421508
+      },
+      {
+        "name": "pthread_cond_signal",
+        "count": 190,
+        "summed_event_duration_ns": 361270,
+        "interval_union_ns": 361270
+      },
+      {
+        "name": "accept4",
+        "count": 91,
+        "summed_event_duration_ns": 321569,
+        "interval_union_ns": 321569
+      },
+      {
+        "name": "pthread_rwlock_rdlock",
+        "count": 4,
+        "summed_event_duration_ns": 259962,
+        "interval_union_ns": 259962
+      },
+      {
+        "name": "epoll_ctl",
+        "count": 119,
+        "summed_event_duration_ns": 241749,
+        "interval_union_ns": 241749
+      },
+      {
+        "name": "read",
+        "count": 104,
+        "summed_event_duration_ns": 152615,
+        "interval_union_ns": 152615
+      },
+      {
+        "name": "[Unknown]",
+        "count": 3,
+        "summed_event_duration_ns": 0,
+        "interval_union_ns": 0
+      }
+    ]
+  },
+  "pairwise_overlap_ns": {
+    "kernel__memcpy": 239393,
+    "kernel__memset": 0,
+    "kernel__osrt": 505659614,
+    "memcpy__memset": 0,
+    "memcpy__osrt": 1529930,
+    "memset__osrt": 16032,
+    "cuda_api__kernel": 151433952,
+    "cuda_api__memcpy": 1020245,
+    "cuda_api__memset": 6611,
+    "cuda_api__osrt": 188153839
+  },
+  "kernels_by_summed_work": [
+    {
+      "name": "void flash::flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<(int)64, (int)64, (int)256, (int)4, (bool)0, (bool)0, cutlass::bfloat16_t, Flash_kernel_traits<(int)64, (int)64, (int)256, (int)4, cutlass::bfloat16_t>>, (bool)0, (bool)0, (bool)0, (bool)0, (bool)1, (bool)0, (bool)1, (bool)0>(flash::Flash_fwd_params)",
+      "count": 7950,
+      "summed_event_duration_ns": 96966967,
+      "median_duration_ns": 13008.0,
+      "max_duration_ns": 19040,
+      "interval_union_ns": 96966967
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_16x16_128x1_tn_align8>(T1::Params)",
+      "count": 13950,
+      "summed_event_duration_ns": 79303960,
+      "median_duration_ns": 5984.0,
+      "max_duration_ns": 10048,
+      "interval_union_ns": 79303960
+    },
+    {
+      "name": "void flash::flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<(int)64, (int)64, (int)256, (int)4, (bool)0, (bool)0, cutlass::bfloat16_t, Flash_kernel_traits<(int)64, (int)64, (int)256, (int)4, cutlass::bfloat16_t>>, (bool)1, (bool)0, (bool)0, (bool)0, (bool)1, (bool)0, (bool)0, (bool)0>(flash::Flash_fwd_params)",
+      "count": 1530,
+      "summed_event_duration_ns": 44526606,
+      "median_duration_ns": 29472.0,
+      "max_duration_ns": 41409,
+      "interval_union_ns": 44526606
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_64x64_ldg8_f2f_stages_64x5_tn",
+      "count": 7470,
+      "summed_event_duration_ns": 37175060,
+      "median_duration_ns": 4672.0,
+      "max_duration_ns": 8064,
+      "interval_union_ns": 37175060
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_tn_align8>(T1::Params)",
+      "count": 2331,
+      "summed_event_duration_ns": 36669302,
+      "median_duration_ns": 14560,
+      "max_duration_ns": 74145,
+      "interval_union_ns": 36669302
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_16x16_128x2_tn_align8>(T1::Params)",
+      "count": 6348,
+      "summed_event_duration_ns": 33844457,
+      "median_duration_ns": 4736.0,
+      "max_duration_ns": 70849,
+      "interval_union_ns": 33844457
+    },
+    {
+      "name": "void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 12)]::operator ()() const::[lambda(c10::BFloat16) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)",
+      "count": 15540,
+      "summed_event_duration_ns": 25675994,
+      "median_duration_ns": 1632.0,
+      "max_duration_ns": 2816,
+      "interval_union_ns": 25675994
+    },
+    {
+      "name": "void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, (bool)0, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, (bool)1, (bool)0, (bool)0, (bool)0>(cublasLt::cublasSplitKParams<T6>, const T4 *, const T10 *, T9 *, T5 *, const T6 *, const T6 *, const T11 *, const T4 *, T11 *, void *, long, T6 *, int *, T6 *, T6 *, const T6 *, const T6 *, const T6 *, const T6 *, const T6 *)",
+      "count": 15240,
+      "summed_event_duration_ns": 21047371,
+      "median_duration_ns": 1344.0,
+      "max_duration_ns": 2272,
+      "interval_union_ns": 21047371
+    },
+    {
+      "name": "void flash::flash_fwd_splitkv_combine_kernel<Flash_fwd_kernel_traits<(int)64, (int)64, (int)256, (int)4, (bool)0, (bool)0, cutlass::bfloat16_t, Flash_kernel_traits<(int)64, (int)64, (int)256, (int)4, cutlass::bfloat16_t>>, (int)8, (int)1, (bool)1>(flash::Flash_fwd_params)",
+      "count": 5550,
+      "summed_event_duration_ns": 15468357,
+      "median_duration_ns": 2784.0,
+      "max_duration_ns": 2880,
+      "interval_union_ns": 15468357
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_16x16_64x1_tn_align8>(T1::Params)",
+      "count": 5550,
+      "summed_event_duration_ns": 14621356,
+      "median_duration_ns": 2624.0,
+      "max_duration_ns": 3168,
+      "interval_union_ns": 14621356
+    },
+    {
+      "name": "void vllm::reshape_and_cache_flash_kernel<__nv_bfloat16, __nv_bfloat16, (vllm::Fp8KVCacheDataType)0>(const T1 *, const T1 *, T2 *, T2 *, const long *, long, long, long, long, long, int, int, int, const float *, const float *, int)",
+      "count": 9480,
+      "summed_event_duration_ns": 14190378,
+      "median_duration_ns": 1440.0,
+      "max_duration_ns": 2080,
+      "interval_union_ns": 14190378
+    },
+    {
+      "name": "triton_poi_fused_3",
+      "count": 9164,
+      "summed_event_duration_ns": 12225172,
+      "median_duration_ns": 1312.0,
+      "max_duration_ns": 1601,
+      "interval_union_ns": 12225172
+    },
+    {
+      "name": "triton_per_fused_fused_add_rms_norm_2",
+      "count": 9480,
+      "summed_event_duration_ns": 11499537,
+      "median_duration_ns": 1120.0,
+      "max_duration_ns": 1984,
+      "interval_union_ns": 11499537
+    },
+    {
+      "name": "triton_per_fused_fused_add_rms_norm_0",
+      "count": 9480,
+      "summed_event_duration_ns": 11461563,
+      "median_duration_ns": 1152.0,
+      "max_duration_ns": 1824,
+      "interval_union_ns": 11461563
+    },
+    {
+      "name": "triton_poi_fused_mul_silu_slice_1",
+      "count": 9480,
+      "summed_event_duration_ns": 11154449,
+      "median_duration_ns": 1088.0,
+      "max_duration_ns": 1953,
+      "interval_union_ns": 11154449
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x128_32x6_tn_align8>(T1::Params)",
+      "count": 840,
+      "summed_event_duration_ns": 8544994,
+      "median_duration_ns": 10176.0,
+      "max_duration_ns": 10368,
+      "interval_union_ns": 8544994
+    },
+    {
+      "name": "void flash::flash_fwd_splitkv_combine_kernel<Flash_fwd_kernel_traits<(int)64, (int)64, (int)256, (int)4, (bool)0, (bool)0, cutlass::bfloat16_t, Flash_kernel_traits<(int)64, (int)64, (int)256, (int)4, cutlass::bfloat16_t>>, (int)8, (int)2, (bool)1>(flash::Flash_fwd_params)",
+      "count": 2400,
+      "summed_event_duration_ns": 7254292,
+      "median_duration_ns": 3008.0,
+      "max_duration_ns": 3073,
+      "interval_union_ns": 7254292
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_32x32_64x1_tn_align8>(T1::Params)",
+      "count": 570,
+      "summed_event_duration_ns": 4353094,
+      "median_duration_ns": 7296.0,
+      "max_duration_ns": 9728,
+      "interval_union_ns": 4353094
+    },
+    {
+      "name": "std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, (bool)0, (bool)1, (bool)1, (bool)0, (int)7, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const __nv_bfloat16>, cublasGemvTensorStridedBatched<const __nv_bfloat16>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>>(T13)",
+      "count": 727,
+      "summed_event_duration_ns": 3082196,
+      "median_duration_ns": 3328,
+      "max_duration_ns": 63969,
+      "interval_union_ns": 3082196
+    },
+    {
+      "name": "_gumbel_sample_kernel",
+      "count": 316,
+      "summed_event_duration_ns": 2376146,
+      "median_duration_ns": 7776.0,
+      "max_duration_ns": 10080,
+      "interval_union_ns": 2376146
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_16x16_64x2_tn_align8>(T1::Params)",
+      "count": 330,
+      "summed_event_duration_ns": 1825773,
+      "median_duration_ns": 5536.0,
+      "max_duration_ns": 6017,
+      "interval_union_ns": 1825773
+    },
+    {
+      "name": "_apply_write_kernel",
+      "count": 372,
+      "summed_event_duration_ns": 1121612,
+      "median_duration_ns": 3008.0,
+      "max_duration_ns": 3968,
+      "interval_union_ns": 1121612
+    },
+    {
+      "name": "void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<float, at::native::ArgMaxOps<float>, unsigned int, long, (int)4, (int)4>>(T3)",
+      "count": 316,
+      "summed_event_duration_ns": 1050597,
+      "median_duration_ns": 3360.0,
+      "max_duration_ns": 3584,
+      "interval_union_ns": 1050597
+    },
+    {
+      "name": "_gather_block_tables_kernel",
+      "count": 316,
+      "summed_event_duration_ns": 984837,
+      "median_duration_ns": 3104.0,
+      "max_duration_ns": 3552,
+      "interval_union_ns": 984837
+    },
+    {
+      "name": "_post_update_kernel",
+      "count": 316,
+      "summed_event_duration_ns": 925351,
+      "median_duration_ns": 2944.0,
+      "max_duration_ns": 3137,
+      "interval_union_ns": 925351
+    },
+    {
+      "name": "_get_num_sampled_and_rejected_kernel",
+      "count": 316,
+      "summed_event_duration_ns": 844230,
+      "median_duration_ns": 2688.0,
+      "max_duration_ns": 2976,
+      "interval_union_ns": 844230
+    },
+    {
+      "name": "_combine_sampled_and_draft_tokens_kernel",
+      "count": 316,
+      "summed_event_duration_ns": 832838,
+      "median_duration_ns": 2624.0,
+      "max_duration_ns": 3040,
+      "interval_union_ns": 832838
+    },
+    {
+      "name": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)8>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)",
+      "count": 316,
+      "summed_event_duration_ns": 662118,
+      "median_duration_ns": 2080.0,
+      "max_duration_ns": 2304,
+      "interval_union_ns": 662118
+    },
+    {
+      "name": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)4>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)",
+      "count": 316,
+      "summed_event_duration_ns": 654277,
+      "median_duration_ns": 2080.0,
+      "max_duration_ns": 2272,
+      "interval_union_ns": 654277
+    },
+    {
+      "name": "_compute_slot_mappings_kernel",
+      "count": 316,
+      "summed_event_duration_ns": 627203,
+      "median_duration_ns": 1984.0,
+      "max_duration_ns": 2112,
+      "interval_union_ns": 627203
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_32x6_tn",
+      "count": 60,
+      "summed_event_duration_ns": 605699,
+      "median_duration_ns": 10080.0,
+      "max_duration_ns": 10176,
+      "interval_union_ns": 605699
+    },
+    {
+      "name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::FillFunctor<int>, std::array<char *, (unsigned long)1>>(int, T2, T3)",
+      "count": 632,
+      "summed_event_duration_ns": 546086,
+      "median_duration_ns": 864.0,
+      "max_duration_ns": 897,
+      "interval_union_ns": 546086
+    },
+    {
+      "name": "void at::native::_scatter_gather_elementwise_kernel<(int)128, (int)8, void at::native::_cuda_scatter_gather_internal_kernel<(bool)0, at::native::OpaqueType<(int)8>, long>::operator ()<at::native::TensorAssign>(at::TensorIterator &, long, long, long, const T1 &)::[lambda(int) (instance 1)]>(int, T3)",
+      "count": 316,
+      "summed_event_duration_ns": 542146,
+      "median_duration_ns": 1728.0,
+      "max_duration_ns": 1920,
+      "interval_union_ns": 542146
+    },
+    {
+      "name": "triton_per_fused__to_copy_embedding_rms_norm_0",
+      "count": 316,
+      "summed_event_duration_ns": 529314,
+      "median_duration_ns": 1664.0,
+      "max_duration_ns": 2080,
+      "interval_union_ns": 529314
+    },
+    {
+      "name": "triton_poi_fused_1",
+      "count": 316,
+      "summed_event_duration_ns": 507936,
+      "median_duration_ns": 1600.0,
+      "max_duration_ns": 1888,
+      "interval_union_ns": 507936
+    },
+    {
+      "name": "void at::native::vectorized_gather_kernel<(int)16, long>(char *, char *, T2 *, int, long, long, long, long, bool)",
+      "count": 309,
+      "summed_event_duration_ns": 484706,
+      "median_duration_ns": 1632,
+      "max_duration_ns": 1888,
+      "interval_union_ns": 484706
+    },
+    {
+      "name": "_prepare_pos_seq_lens_kernel",
+      "count": 316,
+      "summed_event_duration_ns": 357442,
+      "median_duration_ns": 1120.0,
+      "max_duration_ns": 1376,
+      "interval_union_ns": 357442
+    },
+    {
+      "name": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::FillFunctor<bool>, std::array<char *, (unsigned long)1>>(int, T2, T3)",
+      "count": 326,
+      "summed_event_duration_ns": 302273,
+      "median_duration_ns": 928.0,
+      "max_duration_ns": 1024,
+      "interval_union_ns": 302273
+    },
+    {
+      "name": "void <unnamed>::elementwise_kernel_with_index<int, at::native::arange_cuda_out(const c10::Scalar &, const c10::Scalar &, const c10::Scalar &, at::Tensor &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(long) (instance 1)]>(T1, T2, function_traits<T2>::result_type *)",
+      "count": 316,
+      "summed_event_duration_ns": 273058,
+      "median_duration_ns": 864.0,
+      "max_duration_ns": 897,
+      "interval_union_ns": 273058
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_32x32_32x1_tn_align8>(T1::Params)",
+      "count": 60,
+      "summed_event_duration_ns": 226880,
+      "median_duration_ns": 3776.0,
+      "max_duration_ns": 4160,
+      "interval_union_ns": 226880
+    },
+    {
+      "name": "_prepare_prefill_inputs_kernel",
+      "count": 51,
+      "summed_event_duration_ns": 168194,
+      "median_duration_ns": 3296,
+      "max_duration_ns": 3808,
+      "interval_union_ns": 168194
+    },
+    {
+      "name": "void at::native::unrolled_elementwise_kernel<at::native::FillFunctor<bool>, std::array<char *, (unsigned long)1>, (int)4, TrivialOffsetCalculator<(int)0, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast>(int, T1, T2, T4, T5, T6, T7)",
+      "count": 100,
+      "summed_event_duration_ns": 82976,
+      "median_duration_ns": 832.0,
+      "max_duration_ns": 864,
+      "interval_union_ns": 82976
+    },
+    {
+      "name": "void at::native::vectorized_elementwise_kernel<(int)2, at::native::FillFunctor<bool>, std::array<char *, (unsigned long)1>>(int, T2, T3)",
+      "count": 45,
+      "summed_event_duration_ns": 41504,
+      "median_duration_ns": 928,
+      "max_duration_ns": 928,
+      "interval_union_ns": 41504
+    },
+    {
+      "name": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)2>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)",
+      "count": 7,
+      "summed_event_duration_ns": 21313,
+      "median_duration_ns": 3040,
+      "max_duration_ns": 3232,
+      "interval_union_ns": 21313
+    }
+  ],
+  "gpu_recorded_intervals_union_ns": 506966183,
+  "gpu_recorded_categories": [
+    "kernel",
+    "memcpy",
+    "memset"
+  ],
+  "scope": "entire recorded trace; HTTP retained-envelope alignment is unverified until clock metadata is checked",
+  "attribution_limits": [
+    "event sums are work totals, not additive wall time",
+    "CUDA API/OSRT durations may overlap GPU execution and other threads",
+    "CPU stacks/context switches unavailable",
+    "unattributed gaps are not proof of host wait or HTTP cost"
+  ],
+  "serving_performance": "\ubbf8\uc2e4\ud589; profiler measurements are diagnostic only",
+  "goal_achieved": false,
+  "sqlite_sha256": "e613efdcc72feb89271e18622300f44e0d7d4988a07d341802009b7078c80606",
+  "archive_member": "profiling-attempt04/c32-natural-r0-vllm/trace.sqlite"
+}

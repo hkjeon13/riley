@@ -1,0 +1,23 @@
+{
+  "recorded_ns": 1791354755051970000,
+  "scope": "read-only observation during gate wait; no attribution proof",
+  "disk_df_h": {
+    "root_available": "330G",
+    "data_available": "981G"
+  },
+  "readable_process_IO_two_second_delta": [
+    {
+      "pid": 3244375,
+      "name": "minio",
+      "write_bytes": 4030464,
+      "read_bytes": 0
+    },
+    {
+      "pid": 535487,
+      "name": "java",
+      "write_bytes": 16384,
+      "read_bytes": 1159168
+    }
+  ],
+  "source": "actual SSH df and proc IO counter observation; no commands/credentials captured"
+}

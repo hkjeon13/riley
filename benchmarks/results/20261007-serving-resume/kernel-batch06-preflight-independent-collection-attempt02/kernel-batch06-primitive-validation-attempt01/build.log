@@ -1,0 +1,16 @@
+In file included from /data/riley-serving-261007/kernel-batch06-source-attempt01/kernels/tests/kernel_batch06_correctness.cu:3:
+/data/riley-serving-261007/kernel-batch06-source-attempt01/kernels/tests/kernel_batch05_correctness.cu:3: warning: "main" redefined
+    3 | #define main kernel_batch03_matrix_main
+      | 
+/data/riley-serving-261007/kernel-batch06-source-attempt01/kernels/tests/kernel_batch06_correctness.cu:2: note: this is the location of the previous definition
+    2 | #define main kernel_batch05_matrix_main
+      | 
+/data/riley-serving-261007/kernel-batch06-source-attempt01/kernels/tests/kernel_batch06_correctness.cu(64): error: function "main" has already been defined (previous definition at line 68 of /data/riley-serving-261007/kernel-batch06-source-attempt01/kernels/tests/kernel_batch05_correctness.cu)
+  int main(){kernel_batch05_matrix_main();int decode=0,mapped=0;for(int seed:{1,17,99}){decode+=decode_values_cases(seed);mapped+=mapped_values_cases(seed);}do { auto e=(cudaDeviceSynchronize()); if(e!=cudaSuccess) { std::fprintf(
+      ^
+
+/data/riley-serving-261007/kernel-batch06-source-attempt01/kernels/tests/kernel_batch06_correctness.cu(64): error: identifier "kernel_batch05_matrix_main" is undefined
+  int main(){kernel_batch05_matrix_main();int decode=0,mapped=0;for(int seed:{1,17,99}){decode+=decode_values_cases(seed);mapped+=mapped_values_cases(seed);}do { auto e=(cudaDeviceSynchronize()); if(e!=cudaSuccess) { std::fprintf(
+             ^
+
+2 errors detected in the compilation of "/data/riley-serving-261007/kernel-batch06-source-attempt01/kernels/tests/kernel_batch06_correctness.cu".

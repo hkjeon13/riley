@@ -1,0 +1,39 @@
+{
+  "rows": [
+    {
+      "row": 108,
+      "max_absolute_logit_error": 0.0,
+      "mean_absolute_logit_error": 0.0,
+      "non_finite_native": 0,
+      "native_cpu_argmax": 220,
+      "HF_cpu_argmax": 220
+    },
+    {
+      "row": 109,
+      "max_absolute_logit_error": 0.23046875,
+      "mean_absolute_logit_error": 0.04559842200138509,
+      "non_finite_native": 0,
+      "native_cpu_argmax": 16,
+      "HF_cpu_argmax": 16
+    },
+    {
+      "row": 110,
+      "max_absolute_logit_error": 0.2578125,
+      "mean_absolute_logit_error": 0.043619767690929505,
+      "non_finite_native": 0,
+      "native_cpu_argmax": 17,
+      "HF_cpu_argmax": 17
+    },
+    {
+      "row": 127,
+      "max_absolute_logit_error": 0.25,
+      "mean_absolute_logit_error": 0.042308926249665174,
+      "non_finite_native": 0,
+      "native_cpu_argmax": 16,
+      "HF_cpu_argmax": 16
+    }
+  ],
+  "native_raw_sha256": "773e59aaa15cece954e65e01e7c8b7a0dcf98e413203d054ad7d47b8214a22f7",
+  "teacher_sidecar_sha256": "d1c649d126d494b5d902fa14ff22fbab46f13feeed46df380b9f55f4e5ab4c39",
+  "scope": "descriptive mismatch severity only; CPU argmax is not serving-selector/free-running proof; exact BF16 gate remains failed"
+}

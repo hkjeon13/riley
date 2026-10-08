@@ -1,0 +1,118 @@
+{
+  "source_commit": "b3fde5c7",
+  "tests": [
+    {
+      "test": "engine::tests::drop_guard_cancels_without_relying_on_command_capacity",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "riley-server",
+        "--features",
+        "server",
+        "--lib",
+        "engine::tests::drop_guard_cancels_without_relying_on_command_capacity",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "passed": true,
+      "started_ns": 1791344909215320000,
+      "ended_ns": 1791344919959525000
+    },
+    {
+      "test": "service::tests::disconnect_after_invisible_token_cancels_source",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "riley-server",
+        "--features",
+        "server",
+        "--lib",
+        "service::tests::disconnect_after_invisible_token_cancels_source",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "passed": true,
+      "started_ns": 1791344919960536000,
+      "ended_ns": 1791344920078736000
+    },
+    {
+      "test": "service::tests::request_timeout_and_client_disconnect_cancel_backend_work",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "riley-server",
+        "--features",
+        "server",
+        "--lib",
+        "service::tests::request_timeout_and_client_disconnect_cancel_backend_work",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "passed": true,
+      "started_ns": 1791344920078979000,
+      "ended_ns": 1791344920341878000
+    },
+    {
+      "test": "service::tests::shutdown_metrics_fail_closed_without_post_close_backend_evidence",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "riley-server",
+        "--features",
+        "server",
+        "--lib",
+        "service::tests::shutdown_metrics_fail_closed_without_post_close_backend_evidence",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "passed": true,
+      "started_ns": 1791344920342369000,
+      "ended_ns": 1791344920485891000
+    },
+    {
+      "test": "service::tests::graceful_shutdown_stops_admission_cancels_active_and_joins",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "riley-server",
+        "--features",
+        "server",
+        "--lib",
+        "service::tests::graceful_shutdown_stops_admission_cancels_active_and_joins",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "passed": true,
+      "started_ns": 1791344920486120000,
+      "ended_ns": 1791344920618674000
+    }
+  ],
+  "scope": "CPU/mock backend lifecycle only; real CUDA/HTTP soak unverified",
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "goal_achieved": false
+}

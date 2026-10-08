@@ -1,0 +1,55 @@
+{
+  "source_commit": "7a8409177c9efc210b7271963e109a26a62022b8",
+  "binary": "/data/riley-serving-261007/kernel-batch04-primitive-validation-attempt01/native1088",
+  "binary_sha256": "a2538eb69c3e59d6f971c56ec098fdb019c8bdf64497da5ef1c0b6453b7c8c86",
+  "tool": "/data/cuda-12.8.1/bin/ncu",
+  "expected_tool_version": "2025.1.1.0",
+  "GPU_UUID": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+  "active_rows": [
+    1,
+    32
+  ],
+  "orders": [
+    [
+      "v52",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "v52"
+    ]
+  ],
+  "seed": 1,
+  "tiled": true,
+  "launch_skip_by_rows": {
+    "1": 1,
+    "32": 32
+  },
+  "kernel_filter_by_engine": {
+    "v52": "regex:.*shared32_gate_up_swiglu_v52$",
+    "candidate": "regex:.*shared32_gate_up_swiglu$"
+  },
+  "kernel_name_base": "function",
+  "launch_count": 1,
+  "sections": [
+    "LaunchStats",
+    "Occupancy",
+    "SpeedOfLight",
+    "MemoryWorkloadAnalysis",
+    "WarpStateStats",
+    "SchedulerStats"
+  ],
+  "clock_control": "none",
+  "cache_control": "none",
+  "graph_profiling": "node",
+  "replay_mode": "kernel",
+  "timeout_seconds": 180,
+  "scope": "source-bound synthetic primitive hardware-counter diagnostic; HTTP measured work-share already established separately; not serving performance",
+  "serving_performance": "미실행",
+  "performance_claim_eligible": false,
+  "goal_achieved": false,
+  "temporary_directory": "/data/riley-serving-261007/kernel-batch04-gate-counters-attempt02/tmp",
+  "previous_attempt": "attempt01 failed InterprocessLockFailed opening preserved user-owned /tmp lock; no successful measurement",
+  "cache_state_limit": "native qualifier always launches V52 before candidate within each process; row1 V52 first-touch and candidate post-reference cache state differs; no kernel-duration or counter-derived serving gain comparison; use launch/resource/instruction diagnostics and actual HTTP profiles for experiment selection",
+  "recovery_reference": "https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#faq"
+}

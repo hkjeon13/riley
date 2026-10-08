@@ -1,0 +1,16 @@
+{
+  "rows": [
+    {
+      "step": 108,
+      "source_512_thread_variance_bits": "0x3e7a484f",
+      "actual_pinned_HF_variance_exact": true
+    },
+    {
+      "step": 109,
+      "source_512_thread_variance_bits": "0x3e66144e",
+      "actual_pinned_HF_variance_exact": true
+    }
+  ],
+  "scope": "CPU source order inference checked against actual pinned GPU variance; rsqrt and final BF16 output require actual native replay",
+  "serving_performance": "\ubbf8\uc2e4\ud589"
+}

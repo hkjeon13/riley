@@ -1,0 +1,21 @@
+{
+  "controller_sha256": "41a6f8538d3da687eed74fe35a8cc85d23e5894f5cfeeec602bb675788c8bebe",
+  "results": [
+    {
+      "stage": "after_headers_before_consuming_tokens",
+      "closed_owned_connection": true,
+      "peer_reset_observed": true
+    },
+    {
+      "stage": "after_first_token",
+      "closed_owned_connection": true,
+      "peer_reset_observed": true
+    }
+  ],
+  "scope": "local HTTP Connection:close SSE ownership/RST smoke only; not Riley backend cancellation or GPU reclamation",
+  "first_fixture_attempt": "mock did not consume whole request body; received leftover157 bytes; fixture corrected before passing run",
+  "serving_performance": "미실행",
+  "current_controller_sha256": "242c26f026095d4546f6e811d234bac71a34b15a79dedce1a64968b8c739466c",
+  "cancel_request_sha256": "438b4d8c8f52627ea1aea449963c5e3ee3dc27733592ddfe6b3efd71d0d10452",
+  "revision_link": "same cancellation function as tested; later changes add source/model/package input recheck and GPU host telemetry; those new checks are prepared/unrun"
+}

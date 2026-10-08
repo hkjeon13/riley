@@ -1,0 +1,1070 @@
+{
+  "complete_profiles": 8,
+  "archived_files_sha_verified": 174,
+  "HTTP_requests_replayed": 1536,
+  "lanes": [
+    {
+      "case": "c1-fixed-r0-v52",
+      "kernel_events": 1284484,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Profiling has started.",
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_102655549/streams/pid_2655560_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Number of CUDA events collected: \t1314940.",
+        "Number of OS runtime libraries events collected: \t13595.",
+        "Number of CUPTI events produced: \t1320507, CUPTI buffers: 50.",
+        "Profiling has stopped."
+      ],
+      "owned_target": {
+        "owned_pids": [
+          2655560
+        ],
+        "GPU_processes_observed": [
+          {
+            "pid": 2655560,
+            "argv": [
+              "/data/riley-serving-261007/v52-target/release/riley",
+              "serve",
+              "--model",
+              "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+              "--model-id",
+              "g04-smol",
+              "--bind",
+              "127.0.0.1:34995",
+              "--max-active-sequences",
+              "1",
+              "--max-waiting-requests",
+              "64",
+              "--batch-token-budget",
+              "512",
+              "--prefill-chunk-tokens",
+              "128",
+              "--max-sequence-tokens",
+              "160",
+              "--max-output-tokens",
+              "32",
+              "--kv-blocks",
+              "10",
+              "--residual-rmsnorm",
+              "separate",
+              "--execution-completion",
+              "iteration-batch",
+              "--metadata-transport",
+              "synchronous",
+              "--execution-graph-policy",
+              "require",
+              "--graph-numerics",
+              "variable-smol-v7",
+              "--sampling-backend",
+              "gpu-greedy"
+            ],
+            "uid": 1000,
+            "pgid": 2655560,
+            "process_start_ticks": "88741427"
+          }
+        ],
+        "process_group": 2655513,
+        "target_argv": [
+          "/data/riley-serving-261007/v52-target/release/riley",
+          "serve",
+          "--model",
+          "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+          "--model-id",
+          "g04-smol",
+          "--bind",
+          "127.0.0.1:34995",
+          "--max-active-sequences",
+          "1",
+          "--max-waiting-requests",
+          "64",
+          "--batch-token-budget",
+          "512",
+          "--prefill-chunk-tokens",
+          "128",
+          "--max-sequence-tokens",
+          "160",
+          "--max-output-tokens",
+          "32",
+          "--kv-blocks",
+          "10",
+          "--residual-rmsnorm",
+          "separate",
+          "--execution-completion",
+          "iteration-batch",
+          "--metadata-transport",
+          "synchronous",
+          "--execution-graph-policy",
+          "require",
+          "--graph-numerics",
+          "variable-smol-v7",
+          "--sampling-backend",
+          "gpu-greedy"
+        ],
+        "clock": {
+          "realtime_ns": 1791374794130476786,
+          "monotonic_ns": 887421079893967,
+          "monotonic_raw_ns": 887408519522570,
+          "perf_counter_before_ns": 887421079892961,
+          "perf_counter_after_ns": 887421079894922,
+          "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+        },
+        "ownership_basis": "exact argv including unique bind port, same UID, pinned binary SHA, active CUDA PID; profiler PGID not assumed",
+        "policy": "SIGTERM exact target only; profiler auto-stop on exit"
+      }
+    },
+    {
+      "case": "c1-fixed-r0-candidate",
+      "kernel_events": 1065604,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Profiling has started.",
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_102657383/streams/pid_2657394_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Number of CUDA events collected: \t1095819.",
+        "Number of OS runtime libraries events collected: \t13740.",
+        "Number of CUPTI events produced: \t1101316, CUPTI buffers: 50.",
+        "Profiling has stopped."
+      ],
+      "owned_target": {
+        "owned_pids": [
+          2657394
+        ],
+        "GPU_processes_observed": [
+          {
+            "pid": 2657394,
+            "argv": [
+              "/data/riley-serving-261007/kernel-batch05-target-attempt01/release/riley",
+              "serve",
+              "--model",
+              "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+              "--model-id",
+              "g04-smol",
+              "--bind",
+              "127.0.0.1:47579",
+              "--max-active-sequences",
+              "1",
+              "--max-waiting-requests",
+              "64",
+              "--batch-token-budget",
+              "512",
+              "--prefill-chunk-tokens",
+              "128",
+              "--max-sequence-tokens",
+              "160",
+              "--max-output-tokens",
+              "32",
+              "--kv-blocks",
+              "10",
+              "--residual-rmsnorm",
+              "separate",
+              "--execution-completion",
+              "iteration-batch",
+              "--metadata-transport",
+              "synchronous",
+              "--execution-graph-policy",
+              "require",
+              "--graph-numerics",
+              "variable-smol-v7",
+              "--sampling-backend",
+              "gpu-greedy"
+            ],
+            "uid": 1000,
+            "pgid": 2657394,
+            "process_start_ticks": "88743413"
+          }
+        ],
+        "process_group": 2657372,
+        "target_argv": [
+          "/data/riley-serving-261007/kernel-batch05-target-attempt01/release/riley",
+          "serve",
+          "--model",
+          "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+          "--model-id",
+          "g04-smol",
+          "--bind",
+          "127.0.0.1:47579",
+          "--max-active-sequences",
+          "1",
+          "--max-waiting-requests",
+          "64",
+          "--batch-token-budget",
+          "512",
+          "--prefill-chunk-tokens",
+          "128",
+          "--max-sequence-tokens",
+          "160",
+          "--max-output-tokens",
+          "32",
+          "--kv-blocks",
+          "10",
+          "--residual-rmsnorm",
+          "separate",
+          "--execution-completion",
+          "iteration-batch",
+          "--metadata-transport",
+          "synchronous",
+          "--execution-graph-policy",
+          "require",
+          "--graph-numerics",
+          "variable-smol-v7",
+          "--sampling-backend",
+          "gpu-greedy"
+        ],
+        "clock": {
+          "realtime_ns": 1791374813396603582,
+          "monotonic_ns": 887440346020710,
+          "monotonic_raw_ns": 887427785515317,
+          "perf_counter_before_ns": 887440346019757,
+          "perf_counter_after_ns": 887440346021627,
+          "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+        },
+        "ownership_basis": "exact argv including unique bind port, same UID, pinned binary SHA, active CUDA PID; profiler PGID not assumed",
+        "policy": "SIGTERM exact target only; profiler auto-stop on exit"
+      }
+    },
+    {
+      "case": "c1-fixed-r1-candidate",
+      "kernel_events": 1065604,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Profiling has started.",
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_102658950/streams/pid_2658961_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Number of CUDA events collected: \t1095819.",
+        "Number of OS runtime libraries events collected: \t13694.",
+        "Number of CUPTI events produced: \t1101316, CUPTI buffers: 50.",
+        "Profiling has stopped."
+      ],
+      "owned_target": {
+        "owned_pids": [
+          2658961
+        ],
+        "GPU_processes_observed": [
+          {
+            "pid": 2658961,
+            "argv": [
+              "/data/riley-serving-261007/kernel-batch05-target-attempt01/release/riley",
+              "serve",
+              "--model",
+              "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+              "--model-id",
+              "g04-smol",
+              "--bind",
+              "127.0.0.1:33343",
+              "--max-active-sequences",
+              "1",
+              "--max-waiting-requests",
+              "64",
+              "--batch-token-budget",
+              "512",
+              "--prefill-chunk-tokens",
+              "128",
+              "--max-sequence-tokens",
+              "160",
+              "--max-output-tokens",
+              "32",
+              "--kv-blocks",
+              "10",
+              "--residual-rmsnorm",
+              "separate",
+              "--execution-completion",
+              "iteration-batch",
+              "--metadata-transport",
+              "synchronous",
+              "--execution-graph-policy",
+              "require",
+              "--graph-numerics",
+              "variable-smol-v7",
+              "--sampling-backend",
+              "gpu-greedy"
+            ],
+            "uid": 1000,
+            "pgid": 2658961,
+            "process_start_ticks": "88745108"
+          }
+        ],
+        "process_group": 2658938,
+        "target_argv": [
+          "/data/riley-serving-261007/kernel-batch05-target-attempt01/release/riley",
+          "serve",
+          "--model",
+          "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+          "--model-id",
+          "g04-smol",
+          "--bind",
+          "127.0.0.1:33343",
+          "--max-active-sequences",
+          "1",
+          "--max-waiting-requests",
+          "64",
+          "--batch-token-budget",
+          "512",
+          "--prefill-chunk-tokens",
+          "128",
+          "--max-sequence-tokens",
+          "160",
+          "--max-output-tokens",
+          "32",
+          "--kv-blocks",
+          "10",
+          "--residual-rmsnorm",
+          "separate",
+          "--execution-completion",
+          "iteration-batch",
+          "--metadata-transport",
+          "synchronous",
+          "--execution-graph-policy",
+          "require",
+          "--graph-numerics",
+          "variable-smol-v7",
+          "--sampling-backend",
+          "gpu-greedy"
+        ],
+        "clock": {
+          "realtime_ns": 1791374830163420594,
+          "monotonic_ns": 887457112837787,
+          "monotonic_raw_ns": 887444552211828,
+          "perf_counter_before_ns": 887457112836699,
+          "perf_counter_after_ns": 887457112839006,
+          "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+        },
+        "ownership_basis": "exact argv including unique bind port, same UID, pinned binary SHA, active CUDA PID; profiler PGID not assumed",
+        "policy": "SIGTERM exact target only; profiler auto-stop on exit"
+      }
+    },
+    {
+      "case": "c1-fixed-r1-v52",
+      "kernel_events": 1284484,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Profiling has started.",
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_102660464/streams/pid_2660478_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Number of CUDA events collected: \t1314940.",
+        "Number of OS runtime libraries events collected: \t13999.",
+        "Number of CUPTI events produced: \t1320507, CUPTI buffers: 50.",
+        "Profiling has stopped."
+      ],
+      "owned_target": {
+        "owned_pids": [
+          2660478
+        ],
+        "GPU_processes_observed": [
+          {
+            "pid": 2660478,
+            "argv": [
+              "/data/riley-serving-261007/v52-target/release/riley",
+              "serve",
+              "--model",
+              "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+              "--model-id",
+              "g04-smol",
+              "--bind",
+              "127.0.0.1:56351",
+              "--max-active-sequences",
+              "1",
+              "--max-waiting-requests",
+              "64",
+              "--batch-token-budget",
+              "512",
+              "--prefill-chunk-tokens",
+              "128",
+              "--max-sequence-tokens",
+              "160",
+              "--max-output-tokens",
+              "32",
+              "--kv-blocks",
+              "10",
+              "--residual-rmsnorm",
+              "separate",
+              "--execution-completion",
+              "iteration-batch",
+              "--metadata-transport",
+              "synchronous",
+              "--execution-graph-policy",
+              "require",
+              "--graph-numerics",
+              "variable-smol-v7",
+              "--sampling-backend",
+              "gpu-greedy"
+            ],
+            "uid": 1000,
+            "pgid": 2660478,
+            "process_start_ticks": "88746774"
+          }
+        ],
+        "process_group": 2660454,
+        "target_argv": [
+          "/data/riley-serving-261007/v52-target/release/riley",
+          "serve",
+          "--model",
+          "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+          "--model-id",
+          "g04-smol",
+          "--bind",
+          "127.0.0.1:56351",
+          "--max-active-sequences",
+          "1",
+          "--max-waiting-requests",
+          "64",
+          "--batch-token-budget",
+          "512",
+          "--prefill-chunk-tokens",
+          "128",
+          "--max-sequence-tokens",
+          "160",
+          "--max-output-tokens",
+          "32",
+          "--kv-blocks",
+          "10",
+          "--residual-rmsnorm",
+          "separate",
+          "--execution-completion",
+          "iteration-batch",
+          "--metadata-transport",
+          "synchronous",
+          "--execution-graph-policy",
+          "require",
+          "--graph-numerics",
+          "variable-smol-v7",
+          "--sampling-backend",
+          "gpu-greedy"
+        ],
+        "clock": {
+          "realtime_ns": 1791374847800006853,
+          "monotonic_ns": 887474749424077,
+          "monotonic_raw_ns": 887462188667411,
+          "perf_counter_before_ns": 887474749423231,
+          "perf_counter_after_ns": 887474749425183,
+          "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+        },
+        "ownership_basis": "exact argv including unique bind port, same UID, pinned binary SHA, active CUDA PID; profiler PGID not assumed",
+        "policy": "SIGTERM exact target only; profiler auto-stop on exit"
+      }
+    },
+    {
+      "case": "c32-natural-r0-v52",
+      "kernel_events": 199834,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Profiling has started.",
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_102662326/streams/pid_2662337_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Number of CUDA events collected: \t210957.",
+        "Number of OS runtime libraries events collected: \t38271.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Number of CUPTI events produced: \t213072, CUPTI buffers: 50.",
+        "Profiling has stopped."
+      ],
+      "owned_target": {
+        "owned_pids": [
+          2662337
+        ],
+        "GPU_processes_observed": [
+          {
+            "pid": 2662337,
+            "argv": [
+              "/data/riley-serving-261007/v52-target/release/riley",
+              "serve",
+              "--model",
+              "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+              "--model-id",
+              "g04-smol",
+              "--bind",
+              "127.0.0.1:56497",
+              "--max-active-sequences",
+              "32",
+              "--max-waiting-requests",
+              "64",
+              "--batch-token-budget",
+              "512",
+              "--prefill-chunk-tokens",
+              "512",
+              "--max-sequence-tokens",
+              "1024",
+              "--max-output-tokens",
+              "128",
+              "--kv-blocks",
+              "2048",
+              "--residual-rmsnorm",
+              "separate",
+              "--execution-completion",
+              "iteration-batch",
+              "--metadata-transport",
+              "synchronous",
+              "--execution-graph-policy",
+              "require",
+              "--graph-numerics",
+              "variable-smol-v7",
+              "--sampling-backend",
+              "gpu-greedy"
+            ],
+            "uid": 1000,
+            "pgid": 2662337,
+            "process_start_ticks": "88748714"
+          }
+        ],
+        "process_group": 2662316,
+        "target_argv": [
+          "/data/riley-serving-261007/v52-target/release/riley",
+          "serve",
+          "--model",
+          "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+          "--model-id",
+          "g04-smol",
+          "--bind",
+          "127.0.0.1:56497",
+          "--max-active-sequences",
+          "32",
+          "--max-waiting-requests",
+          "64",
+          "--batch-token-budget",
+          "512",
+          "--prefill-chunk-tokens",
+          "512",
+          "--max-sequence-tokens",
+          "1024",
+          "--max-output-tokens",
+          "128",
+          "--kv-blocks",
+          "2048",
+          "--residual-rmsnorm",
+          "separate",
+          "--execution-completion",
+          "iteration-batch",
+          "--metadata-transport",
+          "synchronous",
+          "--execution-graph-policy",
+          "require",
+          "--graph-numerics",
+          "variable-smol-v7",
+          "--sampling-backend",
+          "gpu-greedy"
+        ],
+        "clock": {
+          "realtime_ns": 1791374863298946234,
+          "monotonic_ns": 887490248363478,
+          "monotonic_raw_ns": 887477687489013,
+          "perf_counter_before_ns": 887490248362412,
+          "perf_counter_after_ns": 887490248364198,
+          "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+        },
+        "ownership_basis": "exact argv including unique bind port, same UID, pinned binary SHA, active CUDA PID; profiler PGID not assumed",
+        "policy": "SIGTERM exact target only; profiler auto-stop on exit"
+      }
+    },
+    {
+      "case": "c32-natural-r0-candidate",
+      "kernel_events": 170008,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Profiling has started.",
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_102663124/streams/pid_2663135_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Number of CUDA events collected: \t180889.",
+        "Number of OS runtime libraries events collected: \t38815.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Number of CUPTI events produced: \t182998, CUPTI buffers: 50.",
+        "Profiling has stopped."
+      ],
+      "owned_target": {
+        "owned_pids": [
+          2663135
+        ],
+        "GPU_processes_observed": [
+          {
+            "pid": 2663135,
+            "argv": [
+              "/data/riley-serving-261007/kernel-batch05-target-attempt01/release/riley",
+              "serve",
+              "--model",
+              "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+              "--model-id",
+              "g04-smol",
+              "--bind",
+              "127.0.0.1:50159",
+              "--max-active-sequences",
+              "32",
+              "--max-waiting-requests",
+              "64",
+              "--batch-token-budget",
+              "512",
+              "--prefill-chunk-tokens",
+              "512",
+              "--max-sequence-tokens",
+              "1024",
+              "--max-output-tokens",
+              "128",
+              "--kv-blocks",
+              "2048",
+              "--residual-rmsnorm",
+              "separate",
+              "--execution-completion",
+              "iteration-batch",
+              "--metadata-transport",
+              "synchronous",
+              "--execution-graph-policy",
+              "require",
+              "--graph-numerics",
+              "variable-smol-v7",
+              "--sampling-backend",
+              "gpu-greedy"
+            ],
+            "uid": 1000,
+            "pgid": 2663135,
+            "process_start_ticks": "88749389"
+          }
+        ],
+        "process_group": 2663114,
+        "target_argv": [
+          "/data/riley-serving-261007/kernel-batch05-target-attempt01/release/riley",
+          "serve",
+          "--model",
+          "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+          "--model-id",
+          "g04-smol",
+          "--bind",
+          "127.0.0.1:50159",
+          "--max-active-sequences",
+          "32",
+          "--max-waiting-requests",
+          "64",
+          "--batch-token-budget",
+          "512",
+          "--prefill-chunk-tokens",
+          "512",
+          "--max-sequence-tokens",
+          "1024",
+          "--max-output-tokens",
+          "128",
+          "--kv-blocks",
+          "2048",
+          "--residual-rmsnorm",
+          "separate",
+          "--execution-completion",
+          "iteration-batch",
+          "--metadata-transport",
+          "synchronous",
+          "--execution-graph-policy",
+          "require",
+          "--graph-numerics",
+          "variable-smol-v7",
+          "--sampling-backend",
+          "gpu-greedy"
+        ],
+        "clock": {
+          "realtime_ns": 1791374870000838230,
+          "monotonic_ns": 887496950255530,
+          "monotonic_raw_ns": 887484389329125,
+          "perf_counter_before_ns": 887496950254437,
+          "perf_counter_after_ns": 887496950256248,
+          "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+        },
+        "ownership_basis": "exact argv including unique bind port, same UID, pinned binary SHA, active CUDA PID; profiler PGID not assumed",
+        "policy": "SIGTERM exact target only; profiler auto-stop on exit"
+      }
+    },
+    {
+      "case": "c32-natural-r1-candidate",
+      "kernel_events": 170806,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Profiling has started.",
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_102663916/streams/pid_2663927_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Number of CUDA events collected: \t181706.",
+        "Number of OS runtime libraries events collected: \t39147.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Number of CUPTI events produced: \t183818, CUPTI buffers: 50.",
+        "Profiling has stopped."
+      ],
+      "owned_target": {
+        "owned_pids": [
+          2663927
+        ],
+        "GPU_processes_observed": [
+          {
+            "pid": 2663927,
+            "argv": [
+              "/data/riley-serving-261007/kernel-batch05-target-attempt01/release/riley",
+              "serve",
+              "--model",
+              "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+              "--model-id",
+              "g04-smol",
+              "--bind",
+              "127.0.0.1:43673",
+              "--max-active-sequences",
+              "32",
+              "--max-waiting-requests",
+              "64",
+              "--batch-token-budget",
+              "512",
+              "--prefill-chunk-tokens",
+              "512",
+              "--max-sequence-tokens",
+              "1024",
+              "--max-output-tokens",
+              "128",
+              "--kv-blocks",
+              "2048",
+              "--residual-rmsnorm",
+              "separate",
+              "--execution-completion",
+              "iteration-batch",
+              "--metadata-transport",
+              "synchronous",
+              "--execution-graph-policy",
+              "require",
+              "--graph-numerics",
+              "variable-smol-v7",
+              "--sampling-backend",
+              "gpu-greedy"
+            ],
+            "uid": 1000,
+            "pgid": 2663927,
+            "process_start_ticks": "88750033"
+          }
+        ],
+        "process_group": 2663886,
+        "target_argv": [
+          "/data/riley-serving-261007/kernel-batch05-target-attempt01/release/riley",
+          "serve",
+          "--model",
+          "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+          "--model-id",
+          "g04-smol",
+          "--bind",
+          "127.0.0.1:43673",
+          "--max-active-sequences",
+          "32",
+          "--max-waiting-requests",
+          "64",
+          "--batch-token-budget",
+          "512",
+          "--prefill-chunk-tokens",
+          "512",
+          "--max-sequence-tokens",
+          "1024",
+          "--max-output-tokens",
+          "128",
+          "--kv-blocks",
+          "2048",
+          "--residual-rmsnorm",
+          "separate",
+          "--execution-completion",
+          "iteration-batch",
+          "--metadata-transport",
+          "synchronous",
+          "--execution-graph-policy",
+          "require",
+          "--graph-numerics",
+          "variable-smol-v7",
+          "--sampling-backend",
+          "gpu-greedy"
+        ],
+        "clock": {
+          "realtime_ns": 1791374876426267175,
+          "monotonic_ns": 887503375684352,
+          "monotonic_raw_ns": 887490814707738,
+          "perf_counter_before_ns": 887503375683375,
+          "perf_counter_after_ns": 887503375685035,
+          "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+        },
+        "ownership_basis": "exact argv including unique bind port, same UID, pinned binary SHA, active CUDA PID; profiler PGID not assumed",
+        "policy": "SIGTERM exact target only; profiler auto-stop on exit"
+      }
+    },
+    {
+      "case": "c32-natural-r1-v52",
+      "kernel_events": 200386,
+      "phases": [
+        {
+          "phase": "warmup",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        },
+        {
+          "phase": "retained",
+          "requests": 96,
+          "reference_matches": 96,
+          "errors": 0
+        }
+      ],
+      "trace_diagnostics": [
+        "Profiling has started.",
+        "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_102664708/streams/pid_2664719_stdout.log and stderr.log for program output",
+        "Common injection library initialized successfully.",
+        "OS runtime libraries injection initialized successfully.",
+        "Scheduling information is absent. The thread activity is deduced based on OS runtime libraries traces. This is inaccurate and does not take into account asynchronous interrupts and exception faults.",
+        "Number of CUDA events collected: \t211517.",
+        "Number of OS runtime libraries events collected: \t39548.",
+        "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+        "Loaded CUPTI library: /data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/target-linux-x64/libcupti.so.13.1",
+        "CUDA injection initialized successfully.",
+        "Number of CUPTI events produced: \t213634, CUPTI buffers: 50.",
+        "Profiling has stopped."
+      ],
+      "owned_target": {
+        "owned_pids": [
+          2664719
+        ],
+        "GPU_processes_observed": [
+          {
+            "pid": 2664719,
+            "argv": [
+              "/data/riley-serving-261007/v52-target/release/riley",
+              "serve",
+              "--model",
+              "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+              "--model-id",
+              "g04-smol",
+              "--bind",
+              "127.0.0.1:59621",
+              "--max-active-sequences",
+              "32",
+              "--max-waiting-requests",
+              "64",
+              "--batch-token-budget",
+              "512",
+              "--prefill-chunk-tokens",
+              "512",
+              "--max-sequence-tokens",
+              "1024",
+              "--max-output-tokens",
+              "128",
+              "--kv-blocks",
+              "2048",
+              "--residual-rmsnorm",
+              "separate",
+              "--execution-completion",
+              "iteration-batch",
+              "--metadata-transport",
+              "synchronous",
+              "--execution-graph-policy",
+              "require",
+              "--graph-numerics",
+              "variable-smol-v7",
+              "--sampling-backend",
+              "gpu-greedy"
+            ],
+            "uid": 1000,
+            "pgid": 2664719,
+            "process_start_ticks": "88750676"
+          }
+        ],
+        "process_group": 2664697,
+        "target_argv": [
+          "/data/riley-serving-261007/v52-target/release/riley",
+          "serve",
+          "--model",
+          "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+          "--model-id",
+          "g04-smol",
+          "--bind",
+          "127.0.0.1:59621",
+          "--max-active-sequences",
+          "32",
+          "--max-waiting-requests",
+          "64",
+          "--batch-token-budget",
+          "512",
+          "--prefill-chunk-tokens",
+          "512",
+          "--max-sequence-tokens",
+          "1024",
+          "--max-output-tokens",
+          "128",
+          "--kv-blocks",
+          "2048",
+          "--residual-rmsnorm",
+          "separate",
+          "--execution-completion",
+          "iteration-batch",
+          "--metadata-transport",
+          "synchronous",
+          "--execution-graph-policy",
+          "require",
+          "--graph-numerics",
+          "variable-smol-v7",
+          "--sampling-backend",
+          "gpu-greedy"
+        ],
+        "clock": {
+          "realtime_ns": 1791374882960773344,
+          "monotonic_ns": 887509910190565,
+          "monotonic_raw_ns": 887497349162410,
+          "perf_counter_before_ns": 887509910189461,
+          "perf_counter_after_ns": 887509910191305,
+          "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+        },
+        "ownership_basis": "exact argv including unique bind port, same UID, pinned binary SHA, active CUDA PID; profiler PGID not assumed",
+        "policy": "SIGTERM exact target only; profiler auto-stop on exit"
+      }
+    }
+  ],
+  "serving_performance": "\ubbf8\uc2e4\ud589; instrumented timings are not serving evidence",
+  "collection_CUDA_warnings": [
+    {
+      "case": "c1-fixed-r0-v52",
+      "messages": []
+    },
+    {
+      "case": "c1-fixed-r0-candidate",
+      "messages": []
+    },
+    {
+      "case": "c1-fixed-r1-candidate",
+      "messages": []
+    },
+    {
+      "case": "c1-fixed-r1-v52",
+      "messages": []
+    },
+    {
+      "case": "c32-natural-r0-v52",
+      "messages": []
+    },
+    {
+      "case": "c32-natural-r0-candidate",
+      "messages": []
+    },
+    {
+      "case": "c32-natural-r1-candidate",
+      "messages": []
+    },
+    {
+      "case": "c32-natural-r1-v52",
+      "messages": []
+    }
+  ],
+  "capture_completeness": "not proven by absence of warnings; produced and collected categories require independent SQLite audit",
+  "CPU_stacks_context_switches": "\ubbf8\uce21\uc815",
+  "HTTP_GPU_clock_correlation": "not established by this verifier",
+  "goal_achieved": false
+}

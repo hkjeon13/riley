@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/collect_qwen_step109_layer3_localization_attempt01.py", line 52, in <module>
+    state=json.loads(remote(probe));write('wait-state.json',state)
+  File "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/collect_qwen_step109_layer3_localization_attempt01.py", line 13, in remote
+    def remote(code):return subprocess.check_output(['ssh','-o','ServerAliveInterval=20','-o','ServerAliveCountMax=6','ai-assistant','python3 -c '+shlex.quote(code)],text=True)
+  File "/Library/Frameworks/Python.framework/Versions/3.10/lib/python3.10/subprocess.py", line 421, in check_output
+    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,
+  File "/Library/Frameworks/Python.framework/Versions/3.10/lib/python3.10/subprocess.py", line 505, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+  File "/Library/Frameworks/Python.framework/Versions/3.10/lib/python3.10/subprocess.py", line 1141, in communicate
+    stdout = self.stdout.read()
+KeyboardInterrupt

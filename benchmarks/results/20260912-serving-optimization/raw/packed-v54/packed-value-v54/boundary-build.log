@@ -1,0 +1,14 @@
+/tmp/riley-opt-260912/packed-value-v54/packed.cuh(169): warning #177-D: variable "base" was declared but never referenced
+     const int base=blocks?((blocks[token/16]*3+kvh)*16)*64:(token*3+kvh)*64;
+               ^
+          detected during instantiation of "void riley_attention_v54::mapped_attention<Vector>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, uint32_t, const uint32_t *) [with Vector=false]" at line 20 of /tmp/riley-opt-260912/packed-value-v54/boundary.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/tmp/riley-opt-260912/packed-value-v54/packed.cuh(63): warning #177-D: variable "page_base" was declared but never referenced
+     int page_base=blocks?((blocks[token/16]*3+kvh)*16)*64:(token*3+kvh)*64;
+         ^
+          detected during:
+            instantiation of "void riley_attention_v54::attention_body<TileRows,Vector>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, int, int, const int *, const uint32_t *, const uint32_t *, uint32_t) [with TileRows=8, Vector=false]" at line 213
+            instantiation of "void riley_attention_v54::mapped_attention<Vector>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, uint32_t, const uint32_t *) [with Vector=false]" at line 20 of /tmp/riley-opt-260912/packed-value-v54/boundary.cu
+

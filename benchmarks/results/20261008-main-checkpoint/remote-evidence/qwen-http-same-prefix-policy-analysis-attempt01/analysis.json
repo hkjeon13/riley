@@ -1,0 +1,368 @@
+{
+  "source_commit": "8a43885a4c2f26ef2be1e4c0b057f6e6c7af7dea",
+  "source_file_sha256": {
+    "crates/riley-runtime/src/llama/forward.rs": "09e67092bce5f41f32d5e67449e41130649aef9251b1dc3edb85afc8dd71d783",
+    "crates/riley-runtime/src/llama/executor/dispatch.rs": "cbe2b6cb070b36cd700a78805fb224e52cef1ca07bfafb444c0f4ec0db32823f",
+    "crates/riley-server/tests/qwen3b_ordinary_c1_own_chosen128_logit_trace_gpu.rs": "0e9988ca08b8be0da63f416ed37b30ff57002dfab603b19ad6ca9cba1433db4c"
+  },
+  "independent_proof_sha256": "4d91b76d0ad9b506476c83ca4a3025d3e11064a6f995cf0b543ff2bf2a74faec",
+  "HF_sidecar_sha256": "d1c649d126d494b5d902fa14ff22fbab46f13feeed46df380b9f55f4e5ab4c39",
+  "ordinary_route": {
+    "rmsnorm": "Canonical: forward.rs 1387-1417 and 1454-1471",
+    "rope": "CpuLibm for Qwen automatic selection: forward.rs 1420-1452",
+    "features": "cuda,server; cuda-cublas-gemm-probe absent"
+  },
+  "native_exact_route_distinct": {
+    "feature_gated_Qwen_RMSNorm_and_RoPE_selections": "forward.rs 1350-1404,1426-1443",
+    "promotion_eligible": false
+  },
+  "same_input_rows": [
+    {
+      "step": 0,
+      "same_input_prefix": true,
+      "raw_sha256": "5a006eae137562aac2aa0a2b487033fea339b2d577b641efc9889f94be23ed77",
+      "HF_row_sha256": "66b5f0bb042e89497bac56e2b042f3018fec7c4c3f4710152a2c4adcffcfca9d",
+      "ours_top8": [
+        304,
+        11,
+        374,
+        369,
+        284,
+        25,
+        330,
+        13
+      ],
+      "HF_top8": [
+        304,
+        11,
+        374,
+        369,
+        284,
+        25,
+        2019,
+        13
+      ],
+      "ours_top2_margin": 0.125,
+      "HF_top2_margin": 0.125,
+      "selected_pair_logits": {
+        "11": {
+          "ours": 13.6875,
+          "HF": 13.9375,
+          "difference": -0.25
+        },
+        "13": {
+          "ours": 12.375,
+          "HF": 12.5625,
+          "difference": -0.1875
+        },
+        "25": {
+          "ours": 12.625,
+          "HF": 12.75,
+          "difference": -0.125
+        },
+        "284": {
+          "ours": 12.75,
+          "HF": 13.0,
+          "difference": -0.25
+        },
+        "304": {
+          "ours": 13.8125,
+          "HF": 14.0625,
+          "difference": -0.25
+        },
+        "330": {
+          "ours": 12.5625,
+          "HF": 12.5625,
+          "difference": 0.0
+        },
+        "369": {
+          "ours": 13.125,
+          "HF": 13.1875,
+          "difference": -0.0625
+        },
+        "374": {
+          "ours": 13.5625,
+          "HF": 13.75,
+          "difference": -0.1875
+        },
+        "2019": {
+          "ours": 12.375,
+          "HF": 12.6875,
+          "difference": -0.3125
+        }
+      },
+      "numerical_difference": {
+        "unequal_BF16_elements": 148177,
+        "max_absolute_logit_error": 0.84375
+      }
+    },
+    {
+      "step": 1,
+      "same_input_prefix": true,
+      "raw_sha256": "de2f7d45e30684bf6dee4a7cdfd9ae3da05401ff38d62d9afc292dde0a04dd7f",
+      "HF_row_sha256": "d4bb3effb2125dde0f10ccd5d8e9e2d97b56dd01cdf2d1179d02afbe5a138b05",
+      "ours_top8": [
+        279,
+        220,
+        264,
+        25,
+        419,
+        825,
+        198,
+        304
+      ],
+      "HF_top8": [
+        279,
+        25,
+        264,
+        220,
+        330,
+        198,
+        825,
+        510
+      ],
+      "ours_top2_margin": 0.6875,
+      "HF_top2_margin": 0.25,
+      "selected_pair_logits": {
+        "25": {
+          "ours": 11.875,
+          "HF": 14.1875,
+          "difference": -2.3125
+        },
+        "198": {
+          "ours": 11.375,
+          "HF": 12.3125,
+          "difference": -0.9375
+        },
+        "220": {
+          "ours": 13.0625,
+          "HF": 12.9375,
+          "difference": 0.125
+        },
+        "264": {
+          "ours": 13.0625,
+          "HF": 13.25,
+          "difference": -0.1875
+        },
+        "279": {
+          "ours": 13.75,
+          "HF": 14.4375,
+          "difference": -0.6875
+        },
+        "304": {
+          "ours": 11.25,
+          "HF": 11.25,
+          "difference": 0.0
+        },
+        "330": {
+          "ours": 11.25,
+          "HF": 12.75,
+          "difference": -1.5
+        },
+        "419": {
+          "ours": 11.875,
+          "HF": 11.875,
+          "difference": 0.0
+        },
+        "510": {
+          "ours": 10.4375,
+          "HF": 12.0625,
+          "difference": -1.625
+        },
+        "825": {
+          "ours": 11.5625,
+          "HF": 12.25,
+          "difference": -0.6875
+        }
+      },
+      "numerical_difference": {
+        "unequal_BF16_elements": 151612,
+        "max_absolute_logit_error": 7.21875
+      }
+    },
+    {
+      "step": 2,
+      "same_input_prefix": true,
+      "raw_sha256": "1c81b8aad11a99c479e9298d6cf4e5bbc49918de0e330757a2e95b71dfb2b09f",
+      "HF_row_sha256": "d29a9448095751ef36e484c2546ea779346188a3f2f9d4a3ab56b3ed641b43fe",
+      "ours_top8": [
+        198,
+        220,
+        271,
+        4226,
+        330,
+        1372,
+        3409,
+        1852
+      ],
+      "HF_top8": [
+        198,
+        220,
+        271,
+        4226,
+        330,
+        1372,
+        1852,
+        3405
+      ],
+      "ours_top2_margin": 0.5625,
+      "HF_top2_margin": 0.625,
+      "selected_pair_logits": {
+        "198": {
+          "ours": 15.9375,
+          "HF": 16.0,
+          "difference": -0.0625
+        },
+        "220": {
+          "ours": 15.375,
+          "HF": 15.375,
+          "difference": 0.0
+        },
+        "271": {
+          "ours": 15.1875,
+          "HF": 15.3125,
+          "difference": -0.125
+        },
+        "330": {
+          "ours": 14.375,
+          "HF": 14.5625,
+          "difference": -0.1875
+        },
+        "1372": {
+          "ours": 14.125,
+          "HF": 14.4375,
+          "difference": -0.3125
+        },
+        "1852": {
+          "ours": 13.6875,
+          "HF": 14.25,
+          "difference": -0.5625
+        },
+        "3405": {
+          "ours": 13.6875,
+          "HF": 14.0625,
+          "difference": -0.375
+        },
+        "3409": {
+          "ours": 14.125,
+          "HF": 13.9375,
+          "difference": 0.1875
+        },
+        "4226": {
+          "ours": 14.5,
+          "HF": 14.6875,
+          "difference": -0.1875
+        }
+      },
+      "numerical_difference": {
+        "unequal_BF16_elements": 149258,
+        "max_absolute_logit_error": 0.75
+      }
+    },
+    {
+      "step": 3,
+      "same_input_prefix": true,
+      "raw_sha256": "5d37887feae0b33d31a04e05462c0b7656debfee81c9be63fbba76d9909cef23",
+      "HF_row_sha256": "6fbc5c0cdc723a8eebe6aaebb58f207149611cf97a584d2921c99c99c8793e58",
+      "ours_top8": [
+        16,
+        13,
+        271,
+        382,
+        198,
+        624,
+        1940,
+        785
+      ],
+      "HF_top8": [
+        13,
+        785,
+        32,
+        271,
+        382,
+        25,
+        1986,
+        2132
+      ],
+      "ours_top2_margin": 0.3125,
+      "HF_top2_margin": 0.5625,
+      "selected_pair_logits": {
+        "13": {
+          "ours": 10.1875,
+          "HF": 10.9375,
+          "difference": -0.75
+        },
+        "16": {
+          "ours": 10.5,
+          "HF": 9.5,
+          "difference": 1.0
+        },
+        "25": {
+          "ours": 8.875,
+          "HF": 9.9375,
+          "difference": -1.0625
+        },
+        "32": {
+          "ours": 8.8125,
+          "HF": 10.25,
+          "difference": -1.4375
+        },
+        "198": {
+          "ours": 10.0,
+          "HF": 9.4375,
+          "difference": 0.5625
+        },
+        "271": {
+          "ours": 10.125,
+          "HF": 10.25,
+          "difference": -0.125
+        },
+        "382": {
+          "ours": 10.0625,
+          "HF": 10.25,
+          "difference": -0.1875
+        },
+        "624": {
+          "ours": 9.6875,
+          "HF": 9.6875,
+          "difference": 0.0
+        },
+        "785": {
+          "ours": 9.625,
+          "HF": 10.375,
+          "difference": -0.75
+        },
+        "1940": {
+          "ours": 9.6875,
+          "HF": 9.75,
+          "difference": -0.0625
+        },
+        "1986": {
+          "ours": 8.8125,
+          "HF": 9.9375,
+          "difference": -1.125
+        },
+        "2132": {
+          "ours": 8.6875,
+          "HF": 9.8125,
+          "difference": -1.125
+        }
+      },
+      "numerical_difference": {
+        "unequal_BF16_elements": 151063,
+        "max_absolute_logit_error": 4.5234375
+      }
+    }
+  ],
+  "conclusion": "Raw numerical divergence exists before output prefix divergence. Policy selection differences are verified source facts; these logits alone do not identify the first divergent internal stage or establish any single policy as cause.",
+  "next_experiment": {
+    "scope": "Trace ordinary scheduler execution stages for prefill and decode steps0-3; retain full128 own-chosen output correctness gate",
+    "controls": "same source/model/BF16/input/shape/C1/per-operation/strict bias and nativeD128; compare stage rows only under same history; compare traced vs untraced output/raw hashes before attribution",
+    "no_substitute": "dense2051 or native full2048 exact probe is not ordinary32-chunk/M1 HTTP evidence",
+    "overlap": "run GPU experiment only after profile32 and independent archive/analysis terminate"
+  },
+  "originals_preserved": true,
+  "serving_performance": "미실행 (Qwen)",
+  "goal_achieved": false,
+  "time_ns": 1791413927843635653
+}

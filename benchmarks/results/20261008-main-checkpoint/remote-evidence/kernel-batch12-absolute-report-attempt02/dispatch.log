@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-261007/kernel-batch12-absolute-report-attempt02/after-replay-report.py", line 21, in <module>
+    assert json.loads(p.read_text())['failure'] is None,str(p)
+AssertionError: /data/riley-serving-261007/kernel-batch12-quiet-attempt02/completion.json

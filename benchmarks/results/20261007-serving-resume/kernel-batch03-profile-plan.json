@@ -1,0 +1,88 @@
+{
+  "schema": "riley.experimental-batch03-profile.predeclared.v1",
+  "scope": "after independently verified full96 quiet matrix failed minimum; V52 versus unadopted Batch03 diagnostic profiling only; all8 cells two predeclared AB/BA orders; no serving scores",
+  "baseline": "/data/riley-serving-261007/kernel-batch03-quiet-attempt01",
+  "engines": [
+    "v52",
+    "candidate"
+  ],
+  "concurrency": [
+    1,
+    8,
+    16,
+    32
+  ],
+  "workloads": [
+    "fixed",
+    "natural"
+  ],
+  "orders": [
+    [
+      "v52",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "v52"
+    ]
+  ],
+  "warmup": 96,
+  "retained": 96,
+  "startup_timeout_seconds": 300,
+  "tool": "/data/riley-serving-261007/nsight2025-assets/extracted/opt/nvidia/nsight-systems/2025.5.2/bin/nsys",
+  "expected_tool_version": "NVIDIA Nsight Systems version 2025.5.2.266-255236693005v0",
+  "launch_trace": "cuda,nvtx,osrt",
+  "sample": "none",
+  "cpuctxsw": "none",
+  "backtrace": "none",
+  "collection_policy": "launch session -> same-condition warmup96 -> start recording -> retained96 -> stop recording -> graceful session shutdown; do not truncate/trim traces",
+  "clock_policy": "sandwiched perf_counter/epoch/monotonic/raw bridge at every phase boundary; exported GPU/HTTP clock mapping still must be independently checked before correlation",
+  "analysis_policy": "GPU kernel/memcpy/API and OSRT spans reported separately; derive interval unions and intersections without overlap sums; CPU sampling/context-switch unavailable; scheduler/HTTP attribution stays unmeasured until source instrumentation",
+  "failure_policy": "preserve all artifacts and stop on errors, missing CUDA data, numerical/protocol mismatch or unreclaimed owned GPU resources; no slow sample removal",
+  "performance_claim_eligible": false,
+  "goal_achieved": false,
+  "method_reference": "https://docs.nvidia.com/nsight-systems/UserGuide/index.html",
+  "compatibility_pending": false,
+  "cpu_profiling": {
+    "state": "unavailable",
+    "environment_check": "nsys-environment-check.txt",
+    "environment_check_sha256": "4597da11f3abfc1b0395698e8a917896f85cf0a476e0dc2ab671cd06e9208fbd",
+    "cause": "perf_event_paranoid=4; perf_event_open and process-tree sampling fail",
+    "host_setting_mutation": false,
+    "cpu_stack_attribution": "\ubbf8\uce21\uc815",
+    "context_switch_attribution": "\ubbf8\uce21\uc815"
+  },
+  "launch_option_recovery": "attempt01 failed before server spawn: launch cpuctxsw unsupported; sample/cpuctxsw/backtrace applied only on start",
+  "cuda_graph_trace": "node",
+  "reclamation_timeout_seconds": 40,
+  "graph_trace_recovery": "attempt02 default graph mode produced graph events but no kernel node table; installed CLI node option verified; node capture overhead is diagnostic only",
+  "tool_package_SHA256": "e818fefc62b1e6c3bd34eb92b4e412355afddb763b55e8d7bc3330c4e3da4d33",
+  "baseline_source_file_shas": {
+    "completion.json": "7c5847387b07dddac93a93430257a664115d8e3747cb9c88ac109b851b9ebd39",
+    "preparation.json": "5f1cbcacbaf85385aab4702d93c60bdd021ca95450972c4bd73d2598a6b8f748",
+    "c1-fixed-r0-v52-launch.json": "356f57d6206a12ddb052a700fe5bbf71a8fcd251a67cb523bd3b41d9de74f43b",
+    "c1-fixed-r0-candidate-launch.json": "9765925fd8de09673fe95a992398c56ed79c0336d6d05e95934ab7f662643f9d",
+    "c1-natural-r0-v52-launch.json": "fa0a6df8e9215c786aa10ef49bc398a97184d6a01831489a41514b651ae9b129",
+    "c1-natural-r0-candidate-launch.json": "8b899e5adc7022d867b6cfffc63fe249f7e456179aabe44ccedc94e06c30f873",
+    "c8-fixed-r0-v52-launch.json": "ac8c62663d758a53760a9af512fe7dc915d941e9a1befaabd8eeee8cd773e0c6",
+    "c8-fixed-r0-candidate-launch.json": "03b3f4d95cbf123e894e4d794c0bf3672e83b3b3e3b8317b4de88cc68b144db6",
+    "c8-natural-r0-v52-launch.json": "b241b93c744197911900c2a4eecaa007ddf644d7b5a8f3aa97070eedb30e982c",
+    "c8-natural-r0-candidate-launch.json": "aca1ad387e240b462da307a2241a68e1ce92a0e1f8048bf47d9d27edf4264d8c",
+    "c16-fixed-r0-v52-launch.json": "0c736ef04058399bf945279cc0c6eb639c6a9643c48e2ca97bad25adc9f80834",
+    "c16-fixed-r0-candidate-launch.json": "f7dc0eab1e1e86bdcc66b71df44779ac7c3b50dff153cc5d7145d9d5089af7d5",
+    "c16-natural-r0-v52-launch.json": "12fc3a97f9dd0d16c4d4053582848be9658cd2f9f34456345c8be76a815e8800",
+    "c16-natural-r0-candidate-launch.json": "eb4c06ff48388363f5c3d98c92239cd48aee1e174b22cb6ac326c70bd0e3ab24",
+    "c32-fixed-r0-v52-launch.json": "6599025fa33105a919b66ad81370b467ed7e1f7419cb5bea019f718670614ae3",
+    "c32-fixed-r0-candidate-launch.json": "5686ef78aa2b87b22ee897a23b7a16c20864721fd6730fbb691594cfa92e9b59",
+    "c32-natural-r0-v52-launch.json": "891b5c839be8bf57405df4acccee6b9171c0c2ee0488c7deedd297385d84ce05",
+    "c32-natural-r0-candidate-launch.json": "84a549360f2ca93f3a7bfa327c52b96e82af0a1a498095be7a8cdbef2b890a35"
+  },
+  "baseline_verification_file_sha256": "8cd8a52caa28bc40c784e25b057ae44a09ca670f81fbae1b2b01b7e264225390",
+  "verified_serving_archive_sha256": "6bffef57dc5000154d845e5155eb0aaab1dc9e435b4ad3151ebe19c7b44583f6",
+  "expected_baseline_binary_sha256": "6f424278437f82a462ee141c829914d02ccb8c02ed604fa166c70c3c70bb16f6",
+  "expected_candidate_binary_sha256": "5353e2ab9bc9f7510122b3cba570cf7c63766e5503c0ff36fb92d11d638a5939",
+  "candidate_source_commit": "ab5486ebb6cd341bdd350f927807e7dd81590202",
+  "GPU_UUID": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+  "remaining_serving_gaps": "C1fixed TPOT9.56%, C16fixed3.86%, C16natural1.05%, C32fixed14.40% vs rebuilt vLLM0.27.1; unchanged complete96 measurements retained",
+  "full_core_serving_adoption": false
+}

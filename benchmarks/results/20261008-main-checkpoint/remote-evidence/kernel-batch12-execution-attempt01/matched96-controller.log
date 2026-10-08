@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-261007/kernel-batch12-controller-attempt01/run.py", line 168, in <module>
+    host_gate(prefix+'-start')
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/data/riley-serving-261007/kernel-batch12-controller-attempt01/run.py", line 106, in host_gate
+    return quiet_host_gate(prefix) if args.mode=='quiet' else observed_host_gate(prefix)
+           ~~~~~~~~~~~~~~~^^^^^^^^
+  File "/data/riley-serving-261007/kernel-batch12-controller-attempt01/run.py", line 103, in quiet_host_gate
+    raise RuntimeError('whole attempt aborted: host start gate timeout '+prefix)
+RuntimeError: whole attempt aborted: host start gate timeout c1-fixed-r0-v52-start

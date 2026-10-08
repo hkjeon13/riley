@@ -1,0 +1,9 @@
+{
+  "actual_commit": "030c207565eda3ec45533a166e6d9a201c8d1831",
+  "merge_norm_source_sha256": "ec4c8725236aed2985a7e731cd82b2b0e97aa27fbada02d9d69fdc0c9a8ebbca",
+  "model_sequence_source_sha256": "97dfb18bb3a7d036d514924723fc8b7bf3f74af39bd25bc6d1d46c146fa5cc10",
+  "finding": "projection-merge plus residual normalization fusion already exists in actual V56 code alongside split_rows<4> gate change; do not reconstruct from docs or blindly repeat the combined rejected candidate",
+  "historical_failure": "round62 C32natural throughput -12.69%, TPOT +25.04%, P99 +16.34%; historical dependency/host parity unproven; kept as rejected full candidate evidence",
+  "attribution": "the historical combined candidate does not isolate either change; no new fusion candidate or performance result claimed",
+  "next": "finish independent Batch02/03 serving replay, then profile remaining decode/host boundaries and isolate only evidence-supported changes"
+}

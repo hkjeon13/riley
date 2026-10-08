@@ -1,0 +1,103 @@
+diff --git a/crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs b/crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs
+index bb32e2f2..242e5817 100644
+--- a/crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs
++++ b/crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs
+@@ -5748,6 +5748,56 @@ fn qwen3b_p2048_cache_on_m1_m2_bounded_full_forward_quality_gate() -> TestResult
+     Ok(())
+ }
+ 
++/// Collect actual selected-layer names alongside every global layer output.
++/// This observer changes neither native arithmetic nor the decode selector.
++fn collect_full128_selected_layer_trace(
++    trace: &PreparedLlamaDecodeM1Trace,
++) -> TestResult<BTreeMap<String, Vec<u8>>> {
++    if !trace.is_complete() {
++        return Err("full128 selected trace incomplete".into());
++    }
++    let selected = trace.detailed_layer_index();
++    let mut observed = BTreeMap::new();
++    observed.insert(
++        "embedding.last".to_owned(),
++        canonical_bf16_le(trace.embedding().ok_or("embedding missing")?)?,
++    );
++    for stage in LlamaLastTokenLayerStage::ALL {
++        observed.insert(
++            format!("layer{selected}.{}.last", stage.name()),
++            canonical_bf16_le(
++                trace
++                    .detailed_layer(stage)
++                    .ok_or("selected stage missing")?,
++            )?,
++        );
++    }
++    for layer in 0..QWEN3B_LAYER_COUNT {
++        let name = format!("layer{layer}.output.last");
++        let row = canonical_bf16_le(
++            trace
++                .layer_output(layer)
++                .ok_or("global layer output missing")?,
++        )?;
++        if layer == selected && observed.get(&name) != Some(&row) {
++            return Err("selected residual disagrees with global layer output".into());
++        }
++        observed.insert(name, row);
++    }
++    observed.insert(
++        "final_norm.output.last".to_owned(),
++        canonical_bf16_le(trace.final_norm_output().ok_or("final norm missing")?)?,
++    );
++    observed.insert(
++        "last_logits".to_owned(),
++        canonical_bf16_le(trace.logits().ok_or("logits missing")?)?,
++    );
++    if observed.len() != 52 {
++        return Err("selected full128 stage count differs".into());
++    }
++    Ok(observed)
++}
++
+ #[test]
+ #[ignore = "remote-only full128 Qwen cache-on byte-exact logits diagnostic"]
+ fn qwen3b_p2048_cache_on_full128_logits_quality_gate() -> TestResult {
+@@ -5801,7 +5851,7 @@ fn qwen3b_p2048_cache_on_full128_logits_quality_gate() -> TestResult {
+     };
+     let mut selected_stages = BTreeMap::new();
+     let execution = (|| -> TestResult<Vec<u8>> {
+-        let mut trace = decode.prepare_hf_eager_qwen_p2048_cache_on_m1_trace()?;
++        let mut trace = decode.prepare_hf_eager_qwen_p2048_cache_on_m1_trace_for_layer(3)?;
+         if decode
+             .decode_hf_eager_qwen_p2048_cache_on_full128_traced(tokens[0], &mut trace, &mut stream)
+             .is_ok()
+@@ -5831,12 +5881,12 @@ fn qwen3b_p2048_cache_on_full128_logits_quality_gate() -> TestResult {
+                     &mut stream,
+                 )?;
+                 if repetition == 0 && matches!(step, 108 | 109) {
+-                    for (name, bytes) in collect_cache_on_m1_trace(&trace)? {
++                    for (name, bytes) in collect_full128_selected_layer_trace(&trace)? {
+                         selected_stages.insert(format!("decode_step_{step}.{name}"), bytes);
+                     }
+                 }
+             }
+-            let last_trace = collect_cache_on_m1_trace(&trace)?;
++            let last_trace = collect_full128_selected_layer_trace(&trace)?;
+             if decode
+                 .decode_hf_eager_qwen_p2048_cache_on_full128_traced(
+                     tokens[127],
+@@ -5845,7 +5895,7 @@ fn qwen3b_p2048_cache_on_full128_logits_quality_gate() -> TestResult {
+                 )
+                 .is_ok()
+                 || decode.logical_length() != 2175
+-                || collect_cache_on_m1_trace(&trace)? != last_trace
++                || collect_full128_selected_layer_trace(&trace)? != last_trace
+             {
+                 return Err("full128 past-end guard mutated KV or trace".into());
+             }
+@@ -5906,7 +5956,7 @@ fn qwen3b_p2048_cache_on_full128_logits_quality_gate() -> TestResult {
+         "contract":{"model_revision":QWEN3B_REVISION,"prompt_tokens":2048,"prompt_ids_sha256":QWEN3B_PROMPT_TOKEN_SHA256,"teacher_ids_sha256":teacher.full_teacher_token_ids_sha256,"teacher_sidecar_sha256":teacher.cache_on_sidecar_sha256,"output_logit_rows":128,"decode_steps":127,"maximum_logical_length":2175,"dtype":"BF16","comparison":"byte-exact; no tolerance"},
+         "candidate_raw_sidecar":{"path":raw_path,"bytes":actual.len(),"sha256":sha256_hex(&actual)},
+         "rows":rows,"first_non_exact_row":first_non_exact,
+-        "selected_stage_raw_sidecar":{"path":selected_path,"bytes":selected_raw.len(),"sha256":sha256_hex(&selected_raw)},"selected_stages":selected_metadata,
++        "selected_stage_raw_sidecar":{"path":selected_path,"bytes":selected_raw.len(),"sha256":sha256_hex(&selected_raw)},"selected_stages":selected_metadata,"selected_layer_index":3,
+         "repeat_execution":{"same_owner":true,"all128_rows_identical":true},
+         "invalid_position_guards":{"before_prefill":true,"after_decode_step127":true},
+         "cleanup":"owner closed; CUDA allocation accounting zero; stream/context closed",

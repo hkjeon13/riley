@@ -1,0 +1,20 @@
+{
+  "scope": "correctness-only actual direct-QK decode route; previous attempts used prefill kernel and are invalid route reproduction",
+  "native_source": "decode_attention.cu execute_hf_eager_cublas_qk trace -> decode_softmax_reference_kernel",
+  "baseline_compile": [
+    "nvcc",
+    "-g",
+    "-std=c++17",
+    "-arch=sm_89"
+  ],
+  "required_baseline_unequal": 182,
+  "elements": 32784,
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "full_M1_eligibility": false,
+  "files": {
+    "attention_probabilities.bf16": "d94a10fcc47627a8f4cbcebd39ae4258893969d40bf53cec6f983a977de5f76c",
+    "source-fragment.cuh": "20f0e737ca3a7ddef357bae91b396e83b97b127f36392473ace3c1fc497b34b1",
+    "attention_scores.bf16": "1ff3ca2b8d93e40dbb1f119d2f8b016a11fedb922f7bb9ffc672e52df7c3df0a",
+    "probe.cu": "2a09ecec48a80d7a79a0351262139e0b84b8e8cb92c1a3ff854b522d270465e8"
+  }
+}

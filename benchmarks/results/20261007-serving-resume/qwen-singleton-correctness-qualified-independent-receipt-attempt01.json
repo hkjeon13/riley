@@ -1,0 +1,61 @@
+{
+  "source_commit": "2612208b9ac02ffa79b563b87f073c239b35da18",
+  "correctness_only_qualified": true,
+  "full128_exact_rows": 128,
+  "bounded_M1_M2_exact_stages": 104,
+  "selected108_109_exact_stages": 104,
+  "proof_files": {
+    "full128-independent-proof.json": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/qwen-singleton-candidate-full-bounded-collection-attempt01/full128-independent-proof.json",
+      "sha256": "680c2ce30774c61db22e6fe1f70799b670ba22db9ba09225c6c4681f6f79de37"
+    },
+    "bounded-independent-proof.json": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/qwen-singleton-candidate-full-bounded-collection-attempt01/bounded-independent-proof.json",
+      "sha256": "125579277620dab40adcb219b43a8b07d89fae9feb859df896db1d1787e19eb9"
+    },
+    "selected104-independent-proof.json": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/qwen-singleton-candidate-full-bounded-collection-attempt01/selected104-independent-proof.json",
+      "sha256": "0a5e7bec9e0b5b1c5df4095ea9d6c9d79f3dbe5c7186c7800b479b882d24d377"
+    }
+  },
+  "archives": [
+    {
+      "scope": "qwen-full128-validation-attempt05",
+      "archive": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/qwen-singleton-candidate-full-bounded-collection-attempt01/qwen-full128-validation-attempt05.tar.gz",
+      "sha256": "72c83826db24a7b83ce8a5700a2cc9968ccf053727e6dc398bc5b5436556ba92",
+      "bytes": 31313724,
+      "files_verified": 13,
+      "source_before_after_equal": true,
+      "source_preserved": true
+    },
+    {
+      "scope": "qwen-m2-bounded-validation-attempt04",
+      "archive": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/qwen-singleton-candidate-full-bounded-collection-attempt01/qwen-m2-bounded-validation-attempt04.tar.gz",
+      "sha256": "07af4bc186a4f64e426cee6e8a8f06f4c9db76866eb2d48b903e5711bd365f8d",
+      "bytes": 931373,
+      "files_verified": 12,
+      "source_before_after_equal": true,
+      "source_preserved": true
+    }
+  ],
+  "arithmetic_contract": "FP32 square/add/mean/rsqrt; BF16 normalization before BF16 weight/output round; row_count1 uses pinned Torch512 reduction, original prefill32x16 unchanged",
+  "owner_repeat_position_guards_zero_allocation_close": "actual native tests and independent source/log verification PASS",
+  "free_running_generation": "unverified",
+  "HTTP_cancel_re_request_reclamation": "미실행",
+  "serving_performance": {
+    "throughput": "미실행",
+    "TTFT": "미실행",
+    "TPOT": "미실행",
+    "E2E": "미실행",
+    "P95": "미실행",
+    "P99": "미실행",
+    "HTTP_error_rate": "미실행",
+    "HTTP_memory": "미실행",
+    "HTTP_repeat_variation": "미실행"
+  },
+  "serving_selector_eligible": false,
+  "adopted_for_serving": false,
+  "Smol_candidate": "V52 retained; Batch04 unadopted full mean screen failed",
+  "next": "Smol C1 gate/up and C32 prefill/attention measured cost followup; counter profiler must keep clock/cache controls none and bind captures to actual active-row HTTP phases. Qwen free-running/HTTP cache-on lifecycle remain separately unverified.",
+  "goal_achieved": false
+}

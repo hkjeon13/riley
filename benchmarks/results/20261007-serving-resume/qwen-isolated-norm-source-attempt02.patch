@@ -1,0 +1,101 @@
+diff --git a/crates/riley-cuda/tests/primitives_gpu.rs b/crates/riley-cuda/tests/primitives_gpu.rs
+index e41286c5..6f26cc37 100644
+--- a/crates/riley-cuda/tests/primitives_gpu.rs
++++ b/crates/riley-cuda/tests/primitives_gpu.rs
+@@ -1314,10 +1314,11 @@ fn qwen_layer3_isolated_rms_norm_captured_input_replay() -> TestResult {
+             let actual = download(&context, &mut stream, &mut output)?;
+             assert_eq!(context.allocation_stats()?, before);
+             assert_eq!(actual.len(), input_bytes.len());
++            let expected = if rows == 1 { &hf_expected } else { &native_expected };
+             for row in actual.chunks_exact(4096) {
+                 assert_eq!(
+-                    row, native_expected,
+-                    "isolated native replay differs from full128 stage: step={step} rows={rows}"
++                    row, expected,
++                    "isolated RMSNorm differs from shape-matched captured oracle: step={step} rows={rows}"
+                 );
+             }
+             let last = &actual[actual.len() - 4096..];
+@@ -1330,7 +1331,7 @@ fn qwen_layer3_isolated_rms_norm_captured_input_replay() -> TestResult {
+                 .zip(hf_expected.chunks_exact(2))
+                 .filter(|(a, b)| a != b)
+                 .count();
+-            println!("QWEN_ISOLATED_NORM step={step} rows={rows} captured_native_exact=true HF_unequal_elements={unequal}");
++            println!("QWEN_ISOLATED_NORM step={step} rows={rows} shape_matched_oracle_exact=true HF_unequal_elements={unequal}");
+             input.close()?;
+             output.close()?;
+         }
+diff --git a/kernels/src/primitives.cu b/kernels/src/primitives.cu
+index 436980cf..3a949eb0 100644
+--- a/kernels/src/primitives.cu
++++ b/kernels/src/primitives.cu
+@@ -631,6 +631,55 @@ void hugging_face_qwen_p2051_rms_norm_kernel(
+   }
+ }
+ 
++// Pinned PyTorch Reduce.cuh selects block=(512,1) for a single contiguous
++// 2048-wide FP32 mean: one float4 per thread, shared reductions at
++// 256/128/64/32, then decreasing warp shuffles. Prefill uses (32,16)
++// and its independently qualified kernel remains unchanged.
++__global__ __launch_bounds__(512)
++void hugging_face_qwen_singleton_rms_norm_kernel(
++    const __nv_bfloat16* input, const __nv_bfloat16* weight,
++    __nv_bfloat16* output, float epsilon) {
++  const uint32_t thread = threadIdx.x;
++  const uint32_t first = thread * 4;
++  float sum = 0.0F;
++  #pragma unroll
++  for (uint32_t element = 0; element < 4; ++element) {
++    const float value = __bfloat162float(input[first + element]);
++    sum = __fadd_rn(sum, __fmul_rn(value, value));
++  }
++  __shared__ float partials[512];
++  __shared__ float inverse_rms;
++  partials[thread] = sum;
++  for (uint32_t offset = 256; offset >= 32; offset /= 2) {
++    __syncthreads();
++    if (thread < offset) {
++      sum = __fadd_rn(sum, partials[thread + offset]);
++      partials[thread] = sum;
++    }
++  }
++  __syncthreads();
++  if (thread < 32) {
++    for (uint32_t offset = 16; offset != 0; offset /= 2) {
++      sum = __fadd_rn(sum, __shfl_down_sync(0xffff'ffffU, sum, offset));
++    }
++    if (thread == 0) {
++      const float variance = __fmul_rn(sum, 1.0F / 2048.0F);
++      inverse_rms = rsqrtf(__fadd_rn(variance, epsilon));
++    }
++  }
++  __syncthreads();
++  #pragma unroll
++  for (uint32_t element = 0; element < 4; ++element) {
++    const uint32_t column = first + element;
++    const float normalized =
++        __fmul_rn(__bfloat162float(input[column]), inverse_rms);
++    const __nv_bfloat16 normalized_bf16 = __float2bfloat16_rn(normalized);
++    const float weighted = __fmul_rn(
++        __bfloat162float(normalized_bf16), __bfloat162float(weight[column]));
++    output[column] = __float2bfloat16_rn(weighted);
++  }
++}
++
+ template <bool kResidual>
+ __global__ void hugging_face_smollm2_rms_norm_kernel(
+     const __nv_bfloat16* left, const __nv_bfloat16* right,
+@@ -963,6 +1012,13 @@ void launch_hugging_face_qwen_p2051_rms_norm(
+     const ResolvedSpan& input, const ResolvedSpan& weight,
+     const ResolvedSpan& output, uint64_t row_count, float epsilon,
+     cudaStream_t stream) {
++  if (row_count == 1) {
++    hugging_face_qwen_singleton_rms_norm_kernel<<<1, 512, 0, stream>>>(
++        reinterpret_cast<const __nv_bfloat16*>(input.data),
++        reinterpret_cast<const __nv_bfloat16*>(weight.data),
++        reinterpret_cast<__nv_bfloat16*>(output.data), epsilon);
++    return;
++  }
+   const dim3 block(kHuggingFaceQwenP2051Lanes,
+                    kHuggingFaceQwenP2051RowsPerBlock, 1);
+   const uint32_t blocks = static_cast<uint32_t>(

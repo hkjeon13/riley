@@ -1,0 +1,288 @@
+{
+  "scope": "C16/C32 matched serving screen; V51 fused prefill GPU32 versus V52 compact attention state GPU32 atC16/C32 versus vLLM; both Riley compact GPU greedy; all admission capacities match clients, budget512; two reversed orders, not long-term stability qualification",
+  "medians": {
+    "c16-fixed": {
+      "new": {
+        "throughput": 6366.638694581565,
+        "ttft_ms": 6.1735644999999995,
+        "tpot_ms": 2.2662728390603086,
+        "e2e_p95_ms": 79.556691,
+        "e2e_p99_ms": 83.4810185
+      },
+      "previous": {
+        "throughput": 6531.431374939599,
+        "ttft_ms": 6.1600410000000005,
+        "tpot_ms": 2.196681920757363,
+        "e2e_p95_ms": 77.93847450000001,
+        "e2e_p99_ms": 83.9055755
+      },
+      "vllm": {
+        "throughput": 5114.778845144143,
+        "ttft_ms": 16.80447125,
+        "tpot_ms": 2.2115833544880785,
+        "e2e_p95_ms": 99.6615385,
+        "e2e_p99_ms": 120.71242649999999
+      }
+    },
+    "c16-natural": {
+      "new": {
+        "throughput": 7744.402084915305,
+        "ttft_ms": 7.12352325,
+        "tpot_ms": 1.941580514935633,
+        "e2e_p95_ms": 262.82969049999997,
+        "e2e_p99_ms": 269.1441695
+      },
+      "previous": {
+        "throughput": 7792.419732258559,
+        "ttft_ms": 7.21438125,
+        "tpot_ms": 1.9288324103942651,
+        "e2e_p95_ms": 259.96502399999997,
+        "e2e_p99_ms": 264.501406
+      },
+      "vllm": {
+        "throughput": 7767.045385546404,
+        "ttft_ms": 13.3893265,
+        "tpot_ms": 1.8063701267462533,
+        "e2e_p95_ms": 263.458974,
+        "e2e_p99_ms": 287.2635245
+      }
+    },
+    "c32-fixed": {
+      "new": {
+        "throughput": 8157.152446461239,
+        "ttft_ms": 7.93683525,
+        "tpot_ms": 3.5519617471949507,
+        "e2e_p95_ms": 123.5373305,
+        "e2e_p99_ms": 138.3152455
+      },
+      "previous": {
+        "throughput": 7833.8962778576515,
+        "ttft_ms": 7.766593499999999,
+        "tpot_ms": 3.7501652023809524,
+        "e2e_p95_ms": 128.3768675,
+        "e2e_p99_ms": 150.302595
+      },
+      "vllm": {
+        "throughput": 7076.5882211839835,
+        "ttft_ms": 29.95787,
+        "tpot_ms": 2.921208692997395,
+        "e2e_p95_ms": 146.331446,
+        "e2e_p99_ms": 162.61845749999998
+      }
+    },
+    "c32-natural": {
+      "new": {
+        "throughput": 10314.133515363803,
+        "ttft_ms": 10.483739250000001,
+        "tpot_ms": 2.923684262498438,
+        "e2e_p95_ms": 390.76309349999997,
+        "e2e_p99_ms": 411.01468950000003
+      },
+      "previous": {
+        "throughput": 10246.642580116943,
+        "ttft_ms": 10.74208525,
+        "tpot_ms": 2.9463608447421894,
+        "e2e_p95_ms": 394.932488,
+        "e2e_p99_ms": 422.039738
+      },
+      "vllm": {
+        "throughput": 11575.511739683001,
+        "ttft_ms": 20.290236,
+        "tpot_ms": 2.367568356553213,
+        "e2e_p95_ms": 352.069139,
+        "e2e_p99_ms": 365.95793249999997
+      }
+    }
+  },
+  "new_relative_change_percent": {
+    "c16-fixed": {
+      "previous": {
+        "throughput": -2.523071450927672,
+        "ttft_ms": 0.21953587646574846,
+        "tpot_ms": 3.1680015957409102,
+        "e2e_p95_ms": 2.0762742796563094,
+        "e2e_p99_ms": -0.5059937882197052
+      },
+      "vllm": {
+        "throughput": 24.475346585628223,
+        "ttft_ms": -63.262369829101296,
+        "tpot_ms": 2.472865626395948,
+        "e2e_p95_ms": -20.17312576405792,
+        "e2e_p99_ms": -30.843061546774553
+      }
+    },
+    "c16-natural": {
+      "previous": {
+        "throughput": -0.616209713966942,
+        "ttft_ms": -1.2594011440690056,
+        "tpot_ms": 0.6609233893348998,
+        "e2e_p95_ms": 1.101943044461251,
+        "e2e_p99_ms": 1.7552887790698524
+      },
+      "vllm": {
+        "throughput": -0.29153042768663706,
+        "ttft_ms": -46.79700095445428,
+        "tpot_ms": 7.4851984201559585,
+        "e2e_p95_ms": -0.23885445632990665,
+        "e2e_p99_ms": -6.307572474277023
+      }
+    },
+    "c32-fixed": {
+      "previous": {
+        "throughput": 4.126377949594051,
+        "ttft_ms": 2.1919745123779144,
+        "tpot_ms": -5.285192637918024,
+        "e2e_p95_ms": -3.7697889769743864,
+        "e2e_p99_ms": -7.9754774027687265
+      },
+      "vllm": {
+        "throughput": 15.26956481716082,
+        "ttft_ms": -73.50667704346137,
+        "tpot_ms": 21.592194207472115,
+        "e2e_p95_ms": -15.577045210091068,
+        "e2e_p99_ms": -14.944928376288392
+      }
+    },
+    "c32-natural": {
+      "previous": {
+        "throughput": 0.6586638961899816,
+        "ttft_ms": -2.4049892919998928,
+        "tpot_ms": -0.7696471490998169,
+        "e2e_p95_ms": -1.0557233518859066,
+        "e2e_p99_ms": -2.6123247427473184
+      },
+      "vllm": {
+        "throughput": -10.896954300473471,
+        "ttft_ms": -48.331112314317096,
+        "tpot_ms": 23.488906007970023,
+        "e2e_p95_ms": 10.99044199383803,
+        "e2e_p99_ms": 12.312004467890603
+      }
+    }
+  },
+  "requests": 9216,
+  "reference_observations": [
+    {
+      "case": "c16-fixed-p0-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p0-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p0-vllm",
+      "reference_matches": 359,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p1-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p1-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p1-vllm",
+      "reference_matches": 357,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p0-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p0-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p0-vllm",
+      "reference_matches": 304,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p1-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p1-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p1-vllm",
+      "reference_matches": 285,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p0-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p0-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p0-vllm",
+      "reference_matches": 365,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p1-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p1-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p1-vllm",
+      "reference_matches": 363,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p0-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p0-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p0-vllm",
+      "reference_matches": 284,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p1-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p1-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p1-vllm",
+      "reference_matches": 278,
+      "requests": 384
+    }
+  ],
+  "goal_achieved": false,
+  "decision": "Assess compact mixed attention shared state against V51 and vLLM; broader concurrency and long-term stability remain unqualified"
+}

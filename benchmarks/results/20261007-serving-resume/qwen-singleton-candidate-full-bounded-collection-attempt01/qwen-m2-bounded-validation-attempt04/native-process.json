@@ -1,0 +1,1840 @@
+{
+  "exit": 0,
+  "log_sha256": "0c58db8a05c3c015331f240f724439c1e1d050558b984a5bc596dcb5d5c20e0a",
+  "binary_sha256_after": "f5cea491dfa6e30b5dbabaf639a5941beaaa53a666767c48270b87f36a7d1366",
+  "result": {
+    "candidate_raw_sidecar": {
+      "bytes": 1111552,
+      "path": "/data/riley-serving-261007/qwen-m2-bounded-validation-attempt04/qwen3b-p2048-cache-on-m1-m2-native-result.bf16",
+      "sha256": "8698a7c62883eea5a5b888727a351f3e95644801f63b36806e35d1bcf9219e3e"
+    },
+    "cleanup": "owner closed; CUDA allocation accounting zero; stream/context closed",
+    "contract": {
+      "comparison": "byte-exact; no tolerance",
+      "dtype": "BF16",
+      "logical_lengths": [
+        2049,
+        2050
+      ],
+      "model_revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+      "prompt_ids_sha256": "56619bc156fb385345c12e523c71604fa9ef8ad3c52d9c913d0f6ff09f1c1fd9",
+      "prompt_tokens": 2048,
+      "teacher_sidecar_sha256": "d1c649d126d494b5d902fa14ff22fbab46f13feeed46df380b9f55f4e5ab4c39",
+      "teacher_token_ids": [
+        304,
+        279
+      ]
+    },
+    "created_at_unix_seconds": 1791369262,
+    "hf_stage_artifact": {
+      "manifest_sha256": "b2fc7301636ba618b904b554cd914ac35dd88c2f83e7c7736571353a4fd1fa4d",
+      "sidecar_sha256": "5c12fc6f34cddfc73ef0ebc33b4903550ef7f632c722e53e158f1c715ffd70c9"
+    },
+    "invalid_position_guards": {
+      "after_M2": true,
+      "before_M1": true,
+      "before_prefill": true
+    },
+    "performance_claim_eligible": false,
+    "quality_gate": {
+      "M1_M2_bf16_exact": true,
+      "full128_generation_eligible": false,
+      "serving_selector_eligible": false,
+      "teacher_rows1_2_exact": [
+        true,
+        true
+      ]
+    },
+    "repeat_execution": {
+      "all104_tensors_identical": true,
+      "same_owner_and_trace_storage": true
+    },
+    "schema_version": "riley.qwen3b-cache-on-m1-m2-bounded-exact104.v1",
+    "serving_performance": "\ubbf8\uc2e4\ud589",
+    "source_commit": "2612208b9ac02ffa79b563b87f073c239b35da18",
+    "source_sha256": {
+      "native_decode_attention": "0db2265d98f302103a93d271f27e778cff1264376746ccb7f85dd904165cab96",
+      "rust_decode": "b23dd13f6ffdf34e033efcdce6a6ebd4ccd8d2c991603d332947b8649ae119cb",
+      "test": "1540ebb2fd0b9e6b42c4ef181289ea25af32c8db23f9d8811ea99e25507d860e"
+    },
+    "stages": {
+      "decode_step_1.embedding.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "fcecfa927826d63faf242a02ee02b727b7cbbfcc2fb664759316c3475a9f62a1",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          0,
+          4096
+        ],
+        "riley_bf16_le_sha256": "fcecfa927826d63faf242a02ee02b727b7cbbfcc2fb664759316c3475a9f62a1",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.final_norm.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "44efff253f9f4940bc783ab39f840e129c937436e433c64ec4574d2f3f8858c1",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          247808,
+          251904
+        ],
+        "riley_bf16_le_sha256": "44efff253f9f4940bc783ab39f840e129c937436e433c64ec4574d2f3f8858c1",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.last_logits": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 151936,
+        "hf_bf16_le_sha256": "d4bb3effb2125dde0f10ccd5d8e9e2d97b56dd01cdf2d1179d02afbe5a138b05",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          251904,
+          555776
+        ],
+        "riley_bf16_le_sha256": "d4bb3effb2125dde0f10ccd5d8e9e2d97b56dd01cdf2d1179d02afbe5a138b05",
+        "shape": [
+          151936
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer0.after_attention_residual.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "ca9d5bac012f7773b863b05adc3fa1279ef16495fe46739176708c0c9c84ce7a",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          22016,
+          26112
+        ],
+        "riley_bf16_le_sha256": "ca9d5bac012f7773b863b05adc3fa1279ef16495fe46739176708c0c9c84ce7a",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer0.attention_context.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999998,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "0b8352c4036153853d1024b3d682a6e7f8c868674779ca3f103b8eb748a4c873",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          17920,
+          22016
+        ],
+        "riley_bf16_le_sha256": "0b8352c4036153853d1024b3d682a6e7f8c868674779ca3f103b8eb748a4c873",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer0.down_proj.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "2a150d5f8726ec85ba9744d408045f17fe438e5bb314e9a17b0034e117b16d46",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          96256,
+          100352
+        ],
+        "riley_bf16_le_sha256": "2a150d5f8726ec85ba9744d408045f17fe438e5bb314e9a17b0034e117b16d46",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer0.gate_proj.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 11008,
+        "hf_bf16_le_sha256": "315485d3bef43bb54bc5f7e678dfdd3099310c14d2a80873d1e89eb324b410e7",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          30208,
+          52224
+        ],
+        "riley_bf16_le_sha256": "315485d3bef43bb54bc5f7e678dfdd3099310c14d2a80873d1e89eb324b410e7",
+        "shape": [
+          11008
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer0.gated.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 11008,
+        "hf_bf16_le_sha256": "b185479109f91497a6ab62ef98719d0a8e1f056239ba56e33e9945481289d4ce",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          74240,
+          96256
+        ],
+        "riley_bf16_le_sha256": "b185479109f91497a6ab62ef98719d0a8e1f056239ba56e33e9945481289d4ce",
+        "shape": [
+          11008
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer0.input_norm.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "a6499eefb906dee6e19ff08bf3c3edf0e54aa0752eedd6c6f8fcb5812781661a",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          4096,
+          8192
+        ],
+        "riley_bf16_le_sha256": "a6499eefb906dee6e19ff08bf3c3edf0e54aa0752eedd6c6f8fcb5812781661a",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer0.k_proj.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 256,
+        "hf_bf16_le_sha256": "769491d52b192a7ebc6d1ba84eac7c776e60e761a80086a15b980aae5372767f",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          12288,
+          12800
+        ],
+        "riley_bf16_le_sha256": "769491d52b192a7ebc6d1ba84eac7c776e60e761a80086a15b980aae5372767f",
+        "shape": [
+          256
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer0.k_rope.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 256,
+        "hf_bf16_le_sha256": "2183da6b0f3d3ff08301686a144999d0a1405b7e4c7715bd23b032b716d365be",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          17408,
+          17920
+        ],
+        "riley_bf16_le_sha256": "2183da6b0f3d3ff08301686a144999d0a1405b7e4c7715bd23b032b716d365be",
+        "shape": [
+          2,
+          128
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer0.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "e0d710e238ce43f08826a888227dcf61fcd70f5f113a8ba3fda87a204bc99dda",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          100352,
+          104448
+        ],
+        "riley_bf16_le_sha256": "e0d710e238ce43f08826a888227dcf61fcd70f5f113a8ba3fda87a204bc99dda",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer0.post_attention_norm.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "97dcea9635197e26ce90d9e97bbf0eeb9f08e88beb7ddafdd9ab8f17ae87aeaa",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          26112,
+          30208
+        ],
+        "riley_bf16_le_sha256": "97dcea9635197e26ce90d9e97bbf0eeb9f08e88beb7ddafdd9ab8f17ae87aeaa",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer0.q_proj.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "8873c5ec14fb49cd092b08f7b7c29a36e154bdf490dced4135e01a78415a77c3",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          8192,
+          12288
+        ],
+        "riley_bf16_le_sha256": "8873c5ec14fb49cd092b08f7b7c29a36e154bdf490dced4135e01a78415a77c3",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer0.q_rope.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "370c78fdd5efdeb61a9987321cbd2501ecbe178ef41e677c67bd628c8875909c",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          13312,
+          17408
+        ],
+        "riley_bf16_le_sha256": "370c78fdd5efdeb61a9987321cbd2501ecbe178ef41e677c67bd628c8875909c",
+        "shape": [
+          16,
+          128
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer0.up_proj.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 11008,
+        "hf_bf16_le_sha256": "107e0b08651d740a4ceadc2576fe2e24609d5eb06b1622901648053b39f9b9db",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          52224,
+          74240
+        ],
+        "riley_bf16_le_sha256": "107e0b08651d740a4ceadc2576fe2e24609d5eb06b1622901648053b39f9b9db",
+        "shape": [
+          11008
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer0.v_proj.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 256,
+        "hf_bf16_le_sha256": "e1c78c10cd41a2af3789aa1b3f6e449899907a147c8203a8f805237a081c8142",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          12800,
+          13312
+        ],
+        "riley_bf16_le_sha256": "e1c78c10cd41a2af3789aa1b3f6e449899907a147c8203a8f805237a081c8142",
+        "shape": [
+          256
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer1.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "03d6061dd2e5bcbc0a2380fbe5d1aafef7cd141140b69e089b1f24dddc11ef92",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          104448,
+          108544
+        ],
+        "riley_bf16_le_sha256": "03d6061dd2e5bcbc0a2380fbe5d1aafef7cd141140b69e089b1f24dddc11ef92",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer10.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "d29e8fb9e15c5cd81e2ad59460bc7813d539c43b392199ef5b06fb9e12457865",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          141312,
+          145408
+        ],
+        "riley_bf16_le_sha256": "d29e8fb9e15c5cd81e2ad59460bc7813d539c43b392199ef5b06fb9e12457865",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer11.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "f9821e6afa3cc4dea415e0a840c8e16b08a1adaafc9f4de5d9115477097f4b19",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          145408,
+          149504
+        ],
+        "riley_bf16_le_sha256": "f9821e6afa3cc4dea415e0a840c8e16b08a1adaafc9f4de5d9115477097f4b19",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer12.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "cddfdb4959fe6b7909ecd63803a3332bbb0a152bc9226c4ed037d395b90af7f9",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          149504,
+          153600
+        ],
+        "riley_bf16_le_sha256": "cddfdb4959fe6b7909ecd63803a3332bbb0a152bc9226c4ed037d395b90af7f9",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer13.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "25cb5ad617008ebabf2752896a51662535c3b47989e64dbef9d3c9d68cd02315",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          153600,
+          157696
+        ],
+        "riley_bf16_le_sha256": "25cb5ad617008ebabf2752896a51662535c3b47989e64dbef9d3c9d68cd02315",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer14.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "ef92292541b44b29ab5c7a3383553d8ec2288c2749f3a47f62635d9520182bb2",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          157696,
+          161792
+        ],
+        "riley_bf16_le_sha256": "ef92292541b44b29ab5c7a3383553d8ec2288c2749f3a47f62635d9520182bb2",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer15.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "1d01ac6c8aa2e968b6e6ffd8c978263e5024b9c8f560d02ebba2a92864ea4101",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          161792,
+          165888
+        ],
+        "riley_bf16_le_sha256": "1d01ac6c8aa2e968b6e6ffd8c978263e5024b9c8f560d02ebba2a92864ea4101",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer16.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999998,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "1ecf7a225f860a85078c6ecfb412cd2220fc38c24bdbfaa88b085cb0b859539b",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          165888,
+          169984
+        ],
+        "riley_bf16_le_sha256": "1ecf7a225f860a85078c6ecfb412cd2220fc38c24bdbfaa88b085cb0b859539b",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer17.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "3a68e524fcb302c6b9ab164054741a4d6f49f81a1c29f8f3bdfb71e17f83074e",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          169984,
+          174080
+        ],
+        "riley_bf16_le_sha256": "3a68e524fcb302c6b9ab164054741a4d6f49f81a1c29f8f3bdfb71e17f83074e",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer18.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "5ddf355a70039aad047abc7508e8b82d93404c4e6156c195d58a136f1db12dda",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          174080,
+          178176
+        ],
+        "riley_bf16_le_sha256": "5ddf355a70039aad047abc7508e8b82d93404c4e6156c195d58a136f1db12dda",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer19.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "0a8f35abdabbf94fa128facaea4b97238d2a6a2dcf2bcafdbfedf171435dbf4c",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          178176,
+          182272
+        ],
+        "riley_bf16_le_sha256": "0a8f35abdabbf94fa128facaea4b97238d2a6a2dcf2bcafdbfedf171435dbf4c",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer2.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "4b8fbd253ff8f5461a455628df4b41ace92aca14aafc650d1d49131e1cbef579",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          108544,
+          112640
+        ],
+        "riley_bf16_le_sha256": "4b8fbd253ff8f5461a455628df4b41ace92aca14aafc650d1d49131e1cbef579",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer20.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "e4f2935f7f6c0e4eb8560aaa53f599d5150d5a5de19966d83e122713210022b7",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          182272,
+          186368
+        ],
+        "riley_bf16_le_sha256": "e4f2935f7f6c0e4eb8560aaa53f599d5150d5a5de19966d83e122713210022b7",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer21.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "fd45d0f9c223858afe16968bb22725ec82a1dddc1a4f325d76283743dc0a1021",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          186368,
+          190464
+        ],
+        "riley_bf16_le_sha256": "fd45d0f9c223858afe16968bb22725ec82a1dddc1a4f325d76283743dc0a1021",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer22.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "3e50164b6c6b54b094bbd29cafb1e22d99e49169a934176936e63b479f5f75b9",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          190464,
+          194560
+        ],
+        "riley_bf16_le_sha256": "3e50164b6c6b54b094bbd29cafb1e22d99e49169a934176936e63b479f5f75b9",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer23.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "8c606bc9cb7f35ce12e3b389087cbd8165a896f0e808642ff1e90ac040a4a96f",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          194560,
+          198656
+        ],
+        "riley_bf16_le_sha256": "8c606bc9cb7f35ce12e3b389087cbd8165a896f0e808642ff1e90ac040a4a96f",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer24.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "70517ef5a3e83daa2f7bf0b5527a3a5cd5ae6c5c527bfa4615dc6a28d22af3c6",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          198656,
+          202752
+        ],
+        "riley_bf16_le_sha256": "70517ef5a3e83daa2f7bf0b5527a3a5cd5ae6c5c527bfa4615dc6a28d22af3c6",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer25.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "0aaac1cdbc389c78787c5783573ed9654f65e10678f8d0c2e1130a2f2d90cfe9",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          202752,
+          206848
+        ],
+        "riley_bf16_le_sha256": "0aaac1cdbc389c78787c5783573ed9654f65e10678f8d0c2e1130a2f2d90cfe9",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer26.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "779678e58498d56092713f2482674963f60c805e68c95bf5ca2c7be9ace738dd",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          206848,
+          210944
+        ],
+        "riley_bf16_le_sha256": "779678e58498d56092713f2482674963f60c805e68c95bf5ca2c7be9ace738dd",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer27.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "4996ec22f91f84d6a86d600565cc67c0eddb71ec6262271b2482492169fe04f4",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          210944,
+          215040
+        ],
+        "riley_bf16_le_sha256": "4996ec22f91f84d6a86d600565cc67c0eddb71ec6262271b2482492169fe04f4",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer28.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "8af8973761391e47815826a212e35eb28eec8270c76231b61adb6cd25dfe7456",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          215040,
+          219136
+        ],
+        "riley_bf16_le_sha256": "8af8973761391e47815826a212e35eb28eec8270c76231b61adb6cd25dfe7456",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer29.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "a627ced6efd887838971ba292879f84947ea322c4fdb2dff928889dee5f65dd9",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          219136,
+          223232
+        ],
+        "riley_bf16_le_sha256": "a627ced6efd887838971ba292879f84947ea322c4fdb2dff928889dee5f65dd9",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer3.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "5e5b24ad728e13242efbed54ffd9b5c3c4e707567eb406d8cd50bcdbca2a140f",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          112640,
+          116736
+        ],
+        "riley_bf16_le_sha256": "5e5b24ad728e13242efbed54ffd9b5c3c4e707567eb406d8cd50bcdbca2a140f",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer30.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "9c5f7a5550417be7b4af823f3a725084cd6403c96ada550288b1e28d5e641ffa",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          223232,
+          227328
+        ],
+        "riley_bf16_le_sha256": "9c5f7a5550417be7b4af823f3a725084cd6403c96ada550288b1e28d5e641ffa",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer31.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "c6c8cfdd1825d14505e432b981d0079eb40428d6aa7430f9c1bcd040ccece96b",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          227328,
+          231424
+        ],
+        "riley_bf16_le_sha256": "c6c8cfdd1825d14505e432b981d0079eb40428d6aa7430f9c1bcd040ccece96b",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer32.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "2a78aa796b9c9fc5bc9e76dcaacc7f544f1f7f3c281b1b52a3da9bac41085408",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          231424,
+          235520
+        ],
+        "riley_bf16_le_sha256": "2a78aa796b9c9fc5bc9e76dcaacc7f544f1f7f3c281b1b52a3da9bac41085408",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer33.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "2a6ca9a443d3deec24aefeafbe1104c02d00c19e5011977b2a43cddf5fa586e8",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          235520,
+          239616
+        ],
+        "riley_bf16_le_sha256": "2a6ca9a443d3deec24aefeafbe1104c02d00c19e5011977b2a43cddf5fa586e8",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer34.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "05a1cd5af97d9569386fa7a1450a06620a5a20336d090053470384fc8dfaf05e",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          239616,
+          243712
+        ],
+        "riley_bf16_le_sha256": "05a1cd5af97d9569386fa7a1450a06620a5a20336d090053470384fc8dfaf05e",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer35.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "04478731215d9ff912cc2b65f210aaabfe87d02f8bb687b49577bf5bf18d1ea0",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          243712,
+          247808
+        ],
+        "riley_bf16_le_sha256": "04478731215d9ff912cc2b65f210aaabfe87d02f8bb687b49577bf5bf18d1ea0",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer4.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "33c996c7c783a00263f56736a3b6e1abe23ca878e8c11329cf218b4936747ca8",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          116736,
+          120832
+        ],
+        "riley_bf16_le_sha256": "33c996c7c783a00263f56736a3b6e1abe23ca878e8c11329cf218b4936747ca8",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer5.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "7b79ff207dec97ce4563296f87350ac76f35c94f8a89dc64bdd95d85d02307b0",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          120832,
+          124928
+        ],
+        "riley_bf16_le_sha256": "7b79ff207dec97ce4563296f87350ac76f35c94f8a89dc64bdd95d85d02307b0",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer6.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "b280bcda232c812a8c837ef292087a7bf2b24aea3598f23484df870027f55af7",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          124928,
+          129024
+        ],
+        "riley_bf16_le_sha256": "b280bcda232c812a8c837ef292087a7bf2b24aea3598f23484df870027f55af7",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer7.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "342e3b1ed46e150ac67db2ec16ad1ee28775669dbc371eae857900038c8a3d98",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          129024,
+          133120
+        ],
+        "riley_bf16_le_sha256": "342e3b1ed46e150ac67db2ec16ad1ee28775669dbc371eae857900038c8a3d98",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer8.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "f8e6d04432f0f729cc7482874c180210057a1ebbfbe47b86d728f8aaec6fbe16",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          133120,
+          137216
+        ],
+        "riley_bf16_le_sha256": "f8e6d04432f0f729cc7482874c180210057a1ebbfbe47b86d728f8aaec6fbe16",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_1.layer9.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "1c89ee7e9b112db3e95fdce848110143969cd0b994544684b5f9e84449218f3e",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          137216,
+          141312
+        ],
+        "riley_bf16_le_sha256": "1c89ee7e9b112db3e95fdce848110143969cd0b994544684b5f9e84449218f3e",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.embedding.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "ba3ca2abc9ecba4d6968d8f626445b40e57ccc2609d782eafca44363325cfd4d",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          555776,
+          559872
+        ],
+        "riley_bf16_le_sha256": "ba3ca2abc9ecba4d6968d8f626445b40e57ccc2609d782eafca44363325cfd4d",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.final_norm.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "53d5dfaf6972d94ab647ce246b793a2e1280185289e9da6287d18ff03f91269b",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          803584,
+          807680
+        ],
+        "riley_bf16_le_sha256": "53d5dfaf6972d94ab647ce246b793a2e1280185289e9da6287d18ff03f91269b",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.last_logits": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 151936,
+        "hf_bf16_le_sha256": "d29a9448095751ef36e484c2546ea779346188a3f2f9d4a3ab56b3ed641b43fe",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          807680,
+          1111552
+        ],
+        "riley_bf16_le_sha256": "d29a9448095751ef36e484c2546ea779346188a3f2f9d4a3ab56b3ed641b43fe",
+        "shape": [
+          151936
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer0.after_attention_residual.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "c55682f15390020c62b2c5b663de319a0ff46de5ceb8f50a28c7e2f9d96ed99d",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          577792,
+          581888
+        ],
+        "riley_bf16_le_sha256": "c55682f15390020c62b2c5b663de319a0ff46de5ceb8f50a28c7e2f9d96ed99d",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer0.attention_context.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "33e02db6262d8b736cfb9dfb5cbd3cd3abceccfaa3b0d888729824c1a7b09cd7",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          573696,
+          577792
+        ],
+        "riley_bf16_le_sha256": "33e02db6262d8b736cfb9dfb5cbd3cd3abceccfaa3b0d888729824c1a7b09cd7",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer0.down_proj.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "af0af3f67e3394371b11a76b3e848937869903111eb94a8dd4dbde78db134d68",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          652032,
+          656128
+        ],
+        "riley_bf16_le_sha256": "af0af3f67e3394371b11a76b3e848937869903111eb94a8dd4dbde78db134d68",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer0.gate_proj.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 11008,
+        "hf_bf16_le_sha256": "f53c38b833074734607896e081e209e380297bd3a0a88540e495d91cd223b6ff",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          585984,
+          608000
+        ],
+        "riley_bf16_le_sha256": "f53c38b833074734607896e081e209e380297bd3a0a88540e495d91cd223b6ff",
+        "shape": [
+          11008
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer0.gated.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 11008,
+        "hf_bf16_le_sha256": "2143443569582da38611fa78e0bc63be3cc77c4ff12c697076868faa57a4a9de",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          630016,
+          652032
+        ],
+        "riley_bf16_le_sha256": "2143443569582da38611fa78e0bc63be3cc77c4ff12c697076868faa57a4a9de",
+        "shape": [
+          11008
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer0.input_norm.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "fbed804ce5d2c7f63bdc262e6d731e35870bb7286e82c43fe77d304e1bfde521",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          559872,
+          563968
+        ],
+        "riley_bf16_le_sha256": "fbed804ce5d2c7f63bdc262e6d731e35870bb7286e82c43fe77d304e1bfde521",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer0.k_proj.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 256,
+        "hf_bf16_le_sha256": "a4ac705e51417b7b3de67e227a3f9b9021ad59653c4200f4728a1364b1c8e2a9",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          568064,
+          568576
+        ],
+        "riley_bf16_le_sha256": "a4ac705e51417b7b3de67e227a3f9b9021ad59653c4200f4728a1364b1c8e2a9",
+        "shape": [
+          256
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer0.k_rope.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 256,
+        "hf_bf16_le_sha256": "deda1f17bc38f8b80a92220fbbff9b7aa38e43d9afc515fd6c9070c93339f974",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          573184,
+          573696
+        ],
+        "riley_bf16_le_sha256": "deda1f17bc38f8b80a92220fbbff9b7aa38e43d9afc515fd6c9070c93339f974",
+        "shape": [
+          2,
+          128
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer0.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "f039b9a070fe078963d8f2b50106cb0de15fe4c8e215695566bb334d542998a6",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          656128,
+          660224
+        ],
+        "riley_bf16_le_sha256": "f039b9a070fe078963d8f2b50106cb0de15fe4c8e215695566bb334d542998a6",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer0.post_attention_norm.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "f25b3010fa311dd6be8d675fb16aa8fa80d8b68bef05315b7bb803cb8107ccd2",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          581888,
+          585984
+        ],
+        "riley_bf16_le_sha256": "f25b3010fa311dd6be8d675fb16aa8fa80d8b68bef05315b7bb803cb8107ccd2",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer0.q_proj.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "888d9ed69fa8c9c947a31ed3c70886c0e880c6b99904601ae110f31ea0279888",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          563968,
+          568064
+        ],
+        "riley_bf16_le_sha256": "888d9ed69fa8c9c947a31ed3c70886c0e880c6b99904601ae110f31ea0279888",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer0.q_rope.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "ffb6cbe590df7c05fdb3dfb73dcffccd0046c2e5cb0234eff5ea2b97b82f1133",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          569088,
+          573184
+        ],
+        "riley_bf16_le_sha256": "ffb6cbe590df7c05fdb3dfb73dcffccd0046c2e5cb0234eff5ea2b97b82f1133",
+        "shape": [
+          16,
+          128
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer0.up_proj.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 11008,
+        "hf_bf16_le_sha256": "260296e2d00d3a9cbcb06a529421ac8d2430f66cbf51540493f924764a06ccd8",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          608000,
+          630016
+        ],
+        "riley_bf16_le_sha256": "260296e2d00d3a9cbcb06a529421ac8d2430f66cbf51540493f924764a06ccd8",
+        "shape": [
+          11008
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer0.v_proj.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 256,
+        "hf_bf16_le_sha256": "6f91c10966690f74f06da50bdcd46621e9f95aec79d5414ec0dc10f84ac392fe",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          568576,
+          569088
+        ],
+        "riley_bf16_le_sha256": "6f91c10966690f74f06da50bdcd46621e9f95aec79d5414ec0dc10f84ac392fe",
+        "shape": [
+          256
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer1.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "3f72a2bc7000f626e0ffea1b48b871241021e3e658e6e8eb98b7f1d141e8f2d1",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          660224,
+          664320
+        ],
+        "riley_bf16_le_sha256": "3f72a2bc7000f626e0ffea1b48b871241021e3e658e6e8eb98b7f1d141e8f2d1",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer10.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "75d0fa0050367dd88bd120da99ffeb48b9f6c5da8b691fe980b45ebd3ff884f1",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          697088,
+          701184
+        ],
+        "riley_bf16_le_sha256": "75d0fa0050367dd88bd120da99ffeb48b9f6c5da8b691fe980b45ebd3ff884f1",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer11.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "0448021f7a8a8670328bf48efcac1921183fce5f376f929f9d2a92eb3095c2bb",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          701184,
+          705280
+        ],
+        "riley_bf16_le_sha256": "0448021f7a8a8670328bf48efcac1921183fce5f376f929f9d2a92eb3095c2bb",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer12.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "dcb2fdfbb2a2c11bf633c49757db56ce11d3a7c0591128e0573fe2d70711e4ab",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          705280,
+          709376
+        ],
+        "riley_bf16_le_sha256": "dcb2fdfbb2a2c11bf633c49757db56ce11d3a7c0591128e0573fe2d70711e4ab",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer13.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "58467d6f1271305867dc7df05442cbf85552929a63ed7c5a3fd4972634c7d414",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          709376,
+          713472
+        ],
+        "riley_bf16_le_sha256": "58467d6f1271305867dc7df05442cbf85552929a63ed7c5a3fd4972634c7d414",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer14.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "b622b6b430b1c24bc07d9e4340d3528db74f504ca4cc3bbd09cd50d1b0e80fdc",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          713472,
+          717568
+        ],
+        "riley_bf16_le_sha256": "b622b6b430b1c24bc07d9e4340d3528db74f504ca4cc3bbd09cd50d1b0e80fdc",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer15.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "68c335b2912dae2ffbcbdabc95459a724f7202dbd3b70e9bca5fbba04cf4ae98",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          717568,
+          721664
+        ],
+        "riley_bf16_le_sha256": "68c335b2912dae2ffbcbdabc95459a724f7202dbd3b70e9bca5fbba04cf4ae98",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer16.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "3ae4636ab5fd4b415b51b68015a5991e532a1d327586002528311e6aa0f3f5f5",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          721664,
+          725760
+        ],
+        "riley_bf16_le_sha256": "3ae4636ab5fd4b415b51b68015a5991e532a1d327586002528311e6aa0f3f5f5",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer17.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999998,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "1a5ae31af90ab84c6e7f03ef86b1c1ca47c3ea17b7b67718e7f15dc80bc8430e",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          725760,
+          729856
+        ],
+        "riley_bf16_le_sha256": "1a5ae31af90ab84c6e7f03ef86b1c1ca47c3ea17b7b67718e7f15dc80bc8430e",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer18.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "c8ef3137c8d432a621580f72f2688ed6c61334f5e700c80f1f9017e30ec5f8c6",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          729856,
+          733952
+        ],
+        "riley_bf16_le_sha256": "c8ef3137c8d432a621580f72f2688ed6c61334f5e700c80f1f9017e30ec5f8c6",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer19.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "a94a18d276969cf7d0c54e67bf7310d8ad0483598dcc6c0e02cb486bddefb808",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          733952,
+          738048
+        ],
+        "riley_bf16_le_sha256": "a94a18d276969cf7d0c54e67bf7310d8ad0483598dcc6c0e02cb486bddefb808",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer2.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "883e964f128ab1e12517f5afdb4fe3f1e145a1c60b4de7468e58b1ca7613397d",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          664320,
+          668416
+        ],
+        "riley_bf16_le_sha256": "883e964f128ab1e12517f5afdb4fe3f1e145a1c60b4de7468e58b1ca7613397d",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer20.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "8ad0b171825a5e001deda15548ef3b23b9bdf51d273eeebf8cecca74e68ead79",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          738048,
+          742144
+        ],
+        "riley_bf16_le_sha256": "8ad0b171825a5e001deda15548ef3b23b9bdf51d273eeebf8cecca74e68ead79",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer21.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "b656325ea9f7ac6268f42d6ef5044f55fce1f99f8661284c82987391a7152901",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          742144,
+          746240
+        ],
+        "riley_bf16_le_sha256": "b656325ea9f7ac6268f42d6ef5044f55fce1f99f8661284c82987391a7152901",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer22.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999998,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "eb8e83169cd0a6eef6f123da02542ed62d6d4b0d0b4221ce886c2674ead7f8b3",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          746240,
+          750336
+        ],
+        "riley_bf16_le_sha256": "eb8e83169cd0a6eef6f123da02542ed62d6d4b0d0b4221ce886c2674ead7f8b3",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer23.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "ba3ce4bcecf0311a03f7aa13c3e521308bfe65423b52d78c685edfefeae3a2a2",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          750336,
+          754432
+        ],
+        "riley_bf16_le_sha256": "ba3ce4bcecf0311a03f7aa13c3e521308bfe65423b52d78c685edfefeae3a2a2",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer24.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "6f5a494baff0e6d3e29443c930ca40d9276652ad6e01a395a3b1ae60bd15dac5",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          754432,
+          758528
+        ],
+        "riley_bf16_le_sha256": "6f5a494baff0e6d3e29443c930ca40d9276652ad6e01a395a3b1ae60bd15dac5",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer25.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "6e47deba259b8c236979874e5c011f5b7a754ee63a1899602c61a507c79f1900",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          758528,
+          762624
+        ],
+        "riley_bf16_le_sha256": "6e47deba259b8c236979874e5c011f5b7a754ee63a1899602c61a507c79f1900",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer26.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "f679f990a95fc3dc96c612e24c2e04eda1efc9127bcb8cdefc18078908c26ce3",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          762624,
+          766720
+        ],
+        "riley_bf16_le_sha256": "f679f990a95fc3dc96c612e24c2e04eda1efc9127bcb8cdefc18078908c26ce3",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer27.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "4ccc80135fa165c529cd88d1db91ffae65536657991613acd2bf8158cba44624",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          766720,
+          770816
+        ],
+        "riley_bf16_le_sha256": "4ccc80135fa165c529cd88d1db91ffae65536657991613acd2bf8158cba44624",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer28.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "9c872a5e605c998925be66c55a6a88086febe09a47941446b09459d70d842818",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          770816,
+          774912
+        ],
+        "riley_bf16_le_sha256": "9c872a5e605c998925be66c55a6a88086febe09a47941446b09459d70d842818",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer29.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "608b1e6a7e88cf782aebea9fe61584fd8f70b981c1740208fd14971445819fd8",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          774912,
+          779008
+        ],
+        "riley_bf16_le_sha256": "608b1e6a7e88cf782aebea9fe61584fd8f70b981c1740208fd14971445819fd8",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer3.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "64e8a5e5b71450db2bed5b2d8972ab66766fe2a9db9872999c9530f937d53140",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          668416,
+          672512
+        ],
+        "riley_bf16_le_sha256": "64e8a5e5b71450db2bed5b2d8972ab66766fe2a9db9872999c9530f937d53140",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer30.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "8bd78a43c30133213c8b39472a69a5ae3163fb4aecfa6665154ef57e056bea7a",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          779008,
+          783104
+        ],
+        "riley_bf16_le_sha256": "8bd78a43c30133213c8b39472a69a5ae3163fb4aecfa6665154ef57e056bea7a",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer31.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "4ae9cf7234b3b48e340ff73ed24689d3d2a7024375f359f93a211154812d14f0",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          783104,
+          787200
+        ],
+        "riley_bf16_le_sha256": "4ae9cf7234b3b48e340ff73ed24689d3d2a7024375f359f93a211154812d14f0",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer32.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "0e6d0529fa052da1e8e0fae32d794081ef6e2729c82b9c50bbc57356a0dbd37f",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          787200,
+          791296
+        ],
+        "riley_bf16_le_sha256": "0e6d0529fa052da1e8e0fae32d794081ef6e2729c82b9c50bbc57356a0dbd37f",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer33.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "eda13835e76f50be2852aa31e518bca7df2ff2d0678ba7bf579d209d55b85747",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          791296,
+          795392
+        ],
+        "riley_bf16_le_sha256": "eda13835e76f50be2852aa31e518bca7df2ff2d0678ba7bf579d209d55b85747",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer34.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "c7a39eb104ac2d96dcfb8dc313683b4adb644755ee32e347d1ce600560647cbc",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          795392,
+          799488
+        ],
+        "riley_bf16_le_sha256": "c7a39eb104ac2d96dcfb8dc313683b4adb644755ee32e347d1ce600560647cbc",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer35.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 0.9999999999999999,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "6e36c81bb7c3dbce21d739948dc2c9e64233ee67472ad2b2abb568e8dc92809c",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          799488,
+          803584
+        ],
+        "riley_bf16_le_sha256": "6e36c81bb7c3dbce21d739948dc2c9e64233ee67472ad2b2abb568e8dc92809c",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer4.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "dcce351e522fff025ca510365198757e7bd49e8f1d6c8767ee3ff6b3a8ee8fe3",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          672512,
+          676608
+        ],
+        "riley_bf16_le_sha256": "dcce351e522fff025ca510365198757e7bd49e8f1d6c8767ee3ff6b3a8ee8fe3",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer5.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "1aa4febe7aabdafba8e291e81515710f68d2c8a31192adba8af170f8ea00c33a",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          676608,
+          680704
+        ],
+        "riley_bf16_le_sha256": "1aa4febe7aabdafba8e291e81515710f68d2c8a31192adba8af170f8ea00c33a",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer6.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "19f0bf8a3b693ee49117ac9270c231ee1c9bf137226b6d33d5d970a791012e70",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          680704,
+          684800
+        ],
+        "riley_bf16_le_sha256": "19f0bf8a3b693ee49117ac9270c231ee1c9bf137226b6d33d5d970a791012e70",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer7.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0000000000000002,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "8f51dc3164754b9ec1735a75b4b199c430fe5707b869fc43d2a1e5d2fbfa443e",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          684800,
+          688896
+        ],
+        "riley_bf16_le_sha256": "8f51dc3164754b9ec1735a75b4b199c430fe5707b869fc43d2a1e5d2fbfa443e",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer8.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "2fd3d51d77ffcf2efc2d2bde59e5a7f984f80537ee6374f0b01dc07543ed8092",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          688896,
+          692992
+        ],
+        "riley_bf16_le_sha256": "2fd3d51d77ffcf2efc2d2bde59e5a7f984f80537ee6374f0b01dc07543ed8092",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      },
+      "decode_step_2.layer9.output.last": {
+        "bf16_exact": true,
+        "cosine_similarity": 1.0,
+        "element_count": 2048,
+        "hf_bf16_le_sha256": "eda0aea7c7579980a35986f1f47a1112664be75ccc08ed37de82b69fbbaccf2f",
+        "max_abs_bf16_as_f32": 0.0,
+        "mean_abs_bf16_as_f32": 0.0,
+        "raw_data_offsets": [
+          692992,
+          697088
+        ],
+        "riley_bf16_le_sha256": "eda0aea7c7579980a35986f1f47a1112664be75ccc08ed37de82b69fbbaccf2f",
+        "shape": [
+          2048
+        ],
+        "unequal_element_count": 0
+      }
+    },
+    "summary": {
+      "bf16_exact_stage_count": 104,
+      "first_non_exact_stage": null,
+      "stage_count": 104
+    }
+  }
+}

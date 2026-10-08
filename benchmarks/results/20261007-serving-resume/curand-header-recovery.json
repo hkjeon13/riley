@@ -1,0 +1,74 @@
+{
+  "reason": "keep original CUDA13 compiler/runtime headers; add only existing cuRAND component headers",
+  "headers": {
+    "curand.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand.h",
+      "sha256": "2644c6c6500e1e11ee63cdfff3ce84284e8cae5a0785d6c587b6dda90e10369b"
+    },
+    "curand_discrete.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_discrete.h",
+      "sha256": "daa0f706423adb65c4bb4e38e3054fec779890a031d118ebd870e1a94e1203b1"
+    },
+    "curand_discrete2.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_discrete2.h",
+      "sha256": "19eb7689a487259f141da87ccf6ebf3d662bed2aa68f98f4d7db24a4271e9901"
+    },
+    "curand_globals.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_globals.h",
+      "sha256": "6c44b52b1d0dac04d79350d178c324a96ac1d3ada73a7680a77f72db6c158975"
+    },
+    "curand_kernel.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_kernel.h",
+      "sha256": "4a37c07a1d77c9b5c8c627a4720733cee6b4da4200a844e8a49291858bc26adf"
+    },
+    "curand_lognormal.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_lognormal.h",
+      "sha256": "696c73c82b499c9d4c999e0b56a067562bb98e33a175334820cbde3025bd03d3"
+    },
+    "curand_mrg32k3a.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_mrg32k3a.h",
+      "sha256": "65555112318db09409fb7233659fcb286b46b5eb2589c6fc134025cb8f4128fb"
+    },
+    "curand_mtgp32.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_mtgp32.h",
+      "sha256": "421ae6c74a47585f8fd94bb96cac1813dca6116ab773ba81cc221354c68a31f2"
+    },
+    "curand_mtgp32_host.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_mtgp32_host.h",
+      "sha256": "497ab3992424cd32d2449e29a234e0fd33420b74fe1bcf477412be6e8483aabe"
+    },
+    "curand_mtgp32_kernel.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_mtgp32_kernel.h",
+      "sha256": "6a36675ebe595e7404c4495fe8b3e98a0aeb28f4e630865b4724c49c9f810e1c"
+    },
+    "curand_mtgp32dc_p_11213.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_mtgp32dc_p_11213.h",
+      "sha256": "eff8066141f8ed4ba020012deb4bd81f99c56be414c13a43c121202e0f5c66db"
+    },
+    "curand_normal.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_normal.h",
+      "sha256": "60dc570c29f3671a6c7b721313254035aa74b5473ea3b9fbb77cf5f9c62effeb"
+    },
+    "curand_normal_static.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_normal_static.h",
+      "sha256": "e4ae224c2f40b925827b52d5c6e8ffd32dc1563b69d1bc4eea19ddbf6adb9a2c"
+    },
+    "curand_philox4x32_x.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_philox4x32_x.h",
+      "sha256": "4f6d483fe45d837fed49553d25ee1d2cabb012a138a2f7f08bbaf584e63dd83c"
+    },
+    "curand_poisson.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_poisson.h",
+      "sha256": "e67188aacbea2c56b5e623823e0470e35419e93b2bfc83b5d33d39f4f26c822d"
+    },
+    "curand_precalc.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_precalc.h",
+      "sha256": "23a3597604f8d9f326f6a482b4ffab94e02ab7866caa06a5d1a8e4b5c3e611a9"
+    },
+    "curand_uniform.h": {
+      "source": "/data/riley-serving-261007/vllm0271-venv/lib/python3.13/site-packages/nvidia/cu13/include/curand_uniform.h",
+      "sha256": "81a6fb0c65c6710b1994e13ad8899f122c647af204dae3030c116b01ec6f1bb4"
+    }
+  },
+  "include": "/data/riley-serving-261007/curand-only-include"
+}

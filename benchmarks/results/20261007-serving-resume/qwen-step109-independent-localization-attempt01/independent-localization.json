@@ -1,0 +1,557 @@
+{
+  "full128_replay": {
+    "independent_native_logit_rows": 128,
+    "exact_rows": 109,
+    "first_non_exact_row": 109,
+    "full128_teacher_forced_logits_qualified": false,
+    "source_commit": "095674e9fedd91770f022fc38fa7ae2a867391e8",
+    "native_binary_sha256": "f4ce8e9d9e215e0df99bb93ca56123a7d034ad7f3d01cd719aac0abf30201442",
+    "lifecycle_scope": "two same-owner runs, invalid-position guards and zero-allocation close bound to actual source/log; not HTTP cancellation proof",
+    "free_running_generation": "unverified",
+    "serving_selector": "unverified",
+    "serving_performance": "\ubbf8\uc2e4\ud589",
+    "adopted": false,
+    "goal_achieved": false
+  },
+  "selected104_raw_stages_verified": 104,
+  "HF_source110_logits_exact": true,
+  "steps": [
+    {
+      "step": 108,
+      "exact_stages": 52,
+      "first_non_exact_boundary": null,
+      "rows": [
+        {
+          "stage": "decode_step_108.embedding.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer0.input_norm.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer0.q_proj.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer0.k_proj.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer0.v_proj.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer0.q_rope.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer0.k_rope.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer0.attention_context.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer0.after_attention_residual.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer0.post_attention_norm.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer0.gate_proj.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer0.up_proj.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer0.gated.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer0.down_proj.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer0.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer1.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer2.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer3.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer4.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer5.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer6.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer7.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer8.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer9.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer10.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer11.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer12.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer13.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer14.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer15.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer16.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer17.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer18.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer19.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer20.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer21.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer22.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer23.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer24.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer25.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer26.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer27.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer28.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer29.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer30.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer31.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer32.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer33.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer34.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.layer35.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.final_norm.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_108.last_logits",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        }
+      ]
+    },
+    {
+      "step": 109,
+      "exact_stages": 17,
+      "first_non_exact_boundary": "decode_step_109.layer3.output.last",
+      "rows": [
+        {
+          "stage": "decode_step_109.embedding.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer0.input_norm.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer0.q_proj.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer0.k_proj.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer0.v_proj.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer0.q_rope.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer0.k_rope.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer0.attention_context.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer0.after_attention_residual.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer0.post_attention_norm.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer0.gate_proj.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer0.up_proj.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer0.gated.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer0.down_proj.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer0.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer1.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer2.output.last",
+          "bf16_exact": true,
+          "unequal_elements": 0
+        },
+        {
+          "stage": "decode_step_109.layer3.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 122
+        },
+        {
+          "stage": "decode_step_109.layer4.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1052
+        },
+        {
+          "stage": "decode_step_109.layer5.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1328
+        },
+        {
+          "stage": "decode_step_109.layer6.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1518
+        },
+        {
+          "stage": "decode_step_109.layer7.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1589
+        },
+        {
+          "stage": "decode_step_109.layer8.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1635
+        },
+        {
+          "stage": "decode_step_109.layer9.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1588
+        },
+        {
+          "stage": "decode_step_109.layer10.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1633
+        },
+        {
+          "stage": "decode_step_109.layer11.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1688
+        },
+        {
+          "stage": "decode_step_109.layer12.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1684
+        },
+        {
+          "stage": "decode_step_109.layer13.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1711
+        },
+        {
+          "stage": "decode_step_109.layer14.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1669
+        },
+        {
+          "stage": "decode_step_109.layer15.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1710
+        },
+        {
+          "stage": "decode_step_109.layer16.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1730
+        },
+        {
+          "stage": "decode_step_109.layer17.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1699
+        },
+        {
+          "stage": "decode_step_109.layer18.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1785
+        },
+        {
+          "stage": "decode_step_109.layer19.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1802
+        },
+        {
+          "stage": "decode_step_109.layer20.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1788
+        },
+        {
+          "stage": "decode_step_109.layer21.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1797
+        },
+        {
+          "stage": "decode_step_109.layer22.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1825
+        },
+        {
+          "stage": "decode_step_109.layer23.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1821
+        },
+        {
+          "stage": "decode_step_109.layer24.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1832
+        },
+        {
+          "stage": "decode_step_109.layer25.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1801
+        },
+        {
+          "stage": "decode_step_109.layer26.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1809
+        },
+        {
+          "stage": "decode_step_109.layer27.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1822
+        },
+        {
+          "stage": "decode_step_109.layer28.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1835
+        },
+        {
+          "stage": "decode_step_109.layer29.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1824
+        },
+        {
+          "stage": "decode_step_109.layer30.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1811
+        },
+        {
+          "stage": "decode_step_109.layer31.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1818
+        },
+        {
+          "stage": "decode_step_109.layer32.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1804
+        },
+        {
+          "stage": "decode_step_109.layer33.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1823
+        },
+        {
+          "stage": "decode_step_109.layer34.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1803
+        },
+        {
+          "stage": "decode_step_109.layer35.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1804
+        },
+        {
+          "stage": "decode_step_109.final_norm.output.last",
+          "bf16_exact": false,
+          "unequal_elements": 1830
+        },
+        {
+          "stage": "decode_step_109.last_logits",
+          "bf16_exact": false,
+          "unequal_elements": 141087
+        }
+      ]
+    }
+  ],
+  "scope": "first observed causal boundary only; finer internal operation remains unmeasured where not captured",
+  "serving_performance": "\ubbf8\uc2e4\ud589",
+  "goal_achieved": false
+}

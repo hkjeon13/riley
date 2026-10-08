@@ -1,0 +1,61 @@
+{
+  "kernel-batch06-quiet-attempt01": {
+    "state": "terminal",
+    "files": {
+      "binary-receipt-snapshot.json": {
+        "sha256": "610daf8450866102fe38056120b4888023a1a65752f29ab5f7d1bb5e6fa6bc57",
+        "bytes": 146
+      },
+      "c1-fixed-r0-v52-start-host-gate.json": {
+        "sha256": "449fecb168d6eafaf73fd4aa4c4d62f2ba879fbe4516363828a4da6750fed8d3",
+        "bytes": 139393
+      },
+      "completion.json": {
+        "sha256": "f3d17ab0f51077bd5ff26e4d6bfd8cee4bb63844813646c883ec7b55b00e5978",
+        "bytes": 245
+      },
+      "controller-snapshot.py": {
+        "sha256": "a476b937660b92418026c3b660a782d4f9a6c4a667edf3a757babd8982eb6865",
+        "bytes": 15322
+      },
+      "http-screen-snapshot.json": {
+        "sha256": "74fdfabef2e667fd3dca9296c6c41bb0ad40bcb1a1f07de1f77f8a13d1564b25",
+        "bytes": 962
+      },
+      "independent-correctness-snapshot.json": {
+        "sha256": "09cb0f69813521e825a157dfccdf60e93799a898b2f46f36c7340b6a17ae61a8",
+        "bytes": 851
+      },
+      "native-process-snapshot.json": {
+        "sha256": "9580268a57f52dee758710aef09ed200ce5002ae0fffa13a90b72bbe4cc572d0",
+        "bytes": 193
+      },
+      "plan-snapshot.json": {
+        "sha256": "f296d67e0c9762cafb011a04428341011e6f6dcba4e17b0a206da1f254a30f9e",
+        "bytes": 3209
+      },
+      "preparation.json": {
+        "sha256": "7a1ca783186cb09b8b85e485ecc32d192324e601a134cd39ffaa9ddba82d79f0",
+        "bytes": 14536
+      },
+      "primitive-validation-snapshot.json": {
+        "sha256": "0c5018ebc8dc2456c1d1bd6256af17ea0ae589ec0ed53b399c4b95afd9c12922",
+        "bytes": 115
+      },
+      "validation-snapshot.json": {
+        "sha256": "0c5018ebc8dc2456c1d1bd6256af17ea0ae589ec0ed53b399c4b95afd9c12922",
+        "bytes": 115
+      }
+    },
+    "completion": {
+      "records": [],
+      "failure": {
+        "type": "RuntimeError",
+        "message": "whole attempt aborted: host start gate timeout c1-fixed-r0-v52-start"
+      },
+      "all_lanes_complete": false,
+      "goal_achieved": false,
+      "performance_qualified": false
+    }
+  }
+}

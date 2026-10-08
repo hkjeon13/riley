@@ -1,0 +1,42 @@
+{
+  "argv": [
+    "/home/psyche/.cargo/bin/cargo",
+    "test",
+    "--locked",
+    "-p",
+    "riley-runtime",
+    "--features",
+    "cuda,cuda-cublas-gemm-probe",
+    "--test",
+    "qwen3b_p2051_full_forward_gpu",
+    "--no-run",
+    "--message-format=json"
+  ],
+  "env": {
+    "HOME": "/home/psyche",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "PATH": "/home/psyche/.cargo/bin:/data/cuda-12.8.1/bin:/usr/bin:/bin",
+    "CUDA_HOME": "/data/cuda-12.8.1",
+    "CUDAToolkit_ROOT": "/data/cuda-12.8.1",
+    "CUDACXX": "/data/cuda-12.8.1/bin/nvcc",
+    "CMAKE": "/data/cmake-3.31.12/bin/cmake",
+    "CARGO_BUILD_JOBS": "1",
+    "CMAKE_BUILD_PARALLEL_LEVEL": "1",
+    "CARGO_TARGET_DIR": "/data/riley-serving-261007/qwen-full128-target-attempt02",
+    "RUSTUP_TOOLCHAIN": "1.85.0",
+    "LD_LIBRARY_PATH": "/data/cuda-12.8.1/lib64",
+    "CUDA_VISIBLE_DEVICES": "0",
+    "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+    "RILEY_QWEN_SERVING_WORKLOAD": "/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/inputs/qwen3b-c8-p2048-o128.json",
+    "RILEY_QWEN_HF_TEACHER_FORCED_ORACLE": "/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-hf-eager-teacher-forced-r1-20260916T002940Z/teacher-forced-oracle.json",
+    "RILEY_QWEN_HF_CACHE_OFF_SIDECAR": "/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-hf-eager-teacher-forced-r1-20260916T002940Z/cache-off-logits.safetensors",
+    "RILEY_QWEN_HF_CACHE_ON_SIDECAR": "/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-hf-eager-teacher-forced-r1-20260916T002940Z/cache-on-logits.safetensors",
+    "RILEY_QWEN3B_CHECKPOINT": "/data/riley-models/Qwen2.5-3B-Instruct-aa8e72537993ba99e69dfaafa59ed015b17504d1",
+    "RILEY_QWEN3B_P2048_CACHE_ON_STAGE_MANIFEST": "/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2048-cacheon-layer-stage-r7-20260917T141511Z/qwen3b-p2048-cache-on-layer-stage.json",
+    "RILEY_QWEN3B_P2048_CACHE_ON_STAGE_SIDECAR": "/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2048-cacheon-layer-stage-r7-20260917T141511Z/qwen3b-p2048-cache-on-layer-stage.safetensors",
+    "RILEY_QWEN3B_P2048_CACHE_ON_FULL128_OUTPUT": "/data/riley-serving-261007/qwen-full128-validation-attempt02/qwen3b-p2048-cache-on-full128-native-result.json"
+  },
+  "source_revision": "095674e9fedd91770f022fc38fa7ae2a867391e8",
+  "serving_performance": "\ubbf8\uc2e4\ud589"
+}

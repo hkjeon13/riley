@@ -1,0 +1,158 @@
+16 {'cudaGraphLaunch': {'count': 417, 'median_us': 150.849, 'p95_us': 181.237}, 'cudaStreamSynchronize': {'count': 418, 'median_us': 1362.144, 'p95_us': 4571.169}}
+prefill_or_mixed 65 {'graph_us': 3727.371, 'kernel_us': 3537.642, 'copy_us': 4.896, 'd2h_us': 0.928, 'h2d_us': 3.84, 'memset_us': 0.32, 'idle_gap_us': 164.992, 'kernel_span_us': 3554.186, 'kernel_count': 306}
+[
+  {
+    "kernel": "void riley_mixed_attention::mapped_attention<(bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+    "count": 1590,
+    "mean_us": 44.40663396226415,
+    "total_ms": 70.60654799999999
+  },
+  {
+    "kernel": "void gemm_prefill_shape_vector<(int)576, (int)1536, (int)320, (int)2, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+    "count": 1590,
+    "mean_us": 20.678267924528303,
+    "total_ms": 32.878446000000004
+  },
+  {
+    "kernel": "void riley_prefill51::gate_up<(int)4>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+    "count": 1590,
+    "mean_us": 18.855582389937105,
+    "total_ms": 29.980376
+  },
+  {
+    "kernel": "void gemm_prefill_shape_vector<(int)192, (int)576, (int)192, (int)1, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+    "count": 3180,
+    "mean_us": 8.104664150943396,
+    "total_ms": 25.772832
+  },
+  {
+    "kernel": "void gemm_prefill_shape_vector<(int)576, (int)576, (int)192, (int)2, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+    "count": 1590,
+    "mean_us": 11.207172327044026,
+    "total_ms": 17.819404
+  },
+  {
+    "kernel": "void gemm_prefill_shape_vector<(int)576, (int)576, (int)128, (int)2, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+    "count": 1590,
+    "mean_us": 10.590377987421384,
+    "total_ms": 16.838701
+  }
+]
+decode 458 {'graph_us': 1504.613, 'kernel_us': 1321.475, 'copy_us': 5.664, 'd2h_us': 0.896, 'h2d_us': 3.84, 'memset_us': 0.32, 'idle_gap_us': 164.192, 'kernel_span_us': 1339.94, 'kernel_count': 336}
+[
+  {
+    "kernel": "riley_gqa50_attention::independent_values(const float *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, const unsigned int *)",
+    "count": 10950,
+    "mean_us": 10.425910684931507,
+    "total_ms": 114.163722
+  },
+  {
+    "kernel": "void shared32_gate_up_swiglu<(bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)",
+    "count": 10950,
+    "mean_us": 7.797073789954338,
+    "total_ms": 85.37795799999999
+  },
+  {
+    "kernel": "void shared32_projection_parts<(int)576, (int)1536, (int)320, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const unsigned int *)",
+    "count": 10950,
+    "mean_us": 5.4005465753424655,
+    "total_ms": 59.135985
+  },
+  {
+    "kernel": "shared32_qkv_parts(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)",
+    "count": 10950,
+    "mean_us": 4.053600182648402,
+    "total_ms": 44.386922
+  },
+  {
+    "kernel": "riley_gqa50_attention::scores(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *, const unsigned int *, const unsigned int *)",
+    "count": 10950,
+    "mean_us": 4.017074977168949,
+    "total_ms": 43.986971
+  },
+  {
+    "kernel": "riley_prefill_pointwise::norm_rows(const __nv_bfloat16 *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int, const unsigned int *, unsigned int)",
+    "count": 22265,
+    "mean_us": 1.5999628115876938,
+    "total_ms": 35.623172
+  }
+]
+32 {'cudaGraphLaunch': {'count': 241, 'median_us': 157.685, 'p95_us': 185.256}, 'cudaStreamSynchronize': {'count': 242, 'median_us': 1510.8355, 'p95_us': 4925.684}}
+prefill_or_mixed 64 {'graph_us': 3810.299, 'kernel_us': 3634.331, 'copy_us': 6.736, 'd2h_us': 1.088, 'h2d_us': 5.632, 'memset_us': 0.32, 'idle_gap_us': 163.776, 'kernel_span_us': 3650.315, 'kernel_count': 306.0}
+[
+  {
+    "kernel": "void riley_mixed_attention::mapped_attention<(bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+    "count": 1500,
+    "mean_us": 44.640972,
+    "total_ms": 66.961458
+  },
+  {
+    "kernel": "void gemm_prefill_shape_vector<(int)576, (int)1536, (int)320, (int)2, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+    "count": 1500,
+    "mean_us": 20.357462,
+    "total_ms": 30.536193
+  },
+  {
+    "kernel": "void riley_prefill51::gate_up<(int)4>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+    "count": 1500,
+    "mean_us": 18.783266666666666,
+    "total_ms": 28.1749
+  },
+  {
+    "kernel": "void gemm_prefill_shape_vector<(int)192, (int)576, (int)192, (int)1, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+    "count": 3000,
+    "mean_us": 8.061560666666667,
+    "total_ms": 24.184682000000002
+  },
+  {
+    "kernel": "void gemm_prefill_shape_vector<(int)576, (int)576, (int)192, (int)2, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+    "count": 1500,
+    "mean_us": 11.054286666666666,
+    "total_ms": 16.58143
+  },
+  {
+    "kernel": "void gemm_prefill_shape_vector<(int)576, (int)576, (int)128, (int)2, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)",
+    "count": 1500,
+    "mean_us": 10.432240666666667,
+    "total_ms": 15.648361000000001
+  }
+]
+decode 239 {'graph_us': 1653.717, 'kernel_us': 1465.7804999999998, 'copy_us': 7.136, 'd2h_us': 0.992, 'h2d_us': 5.216, 'memset_us': 0.32, 'idle_gap_us': 169.6, 'kernel_span_us': 1484.581, 'kernel_count': 336.0}
+[
+  {
+    "kernel": "riley_gqa50_attention::independent_values(const float *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, const unsigned int *)",
+    "count": 5760,
+    "mean_us": 10.87591875,
+    "total_ms": 62.645292
+  },
+  {
+    "kernel": "void shared32_gate_up_swiglu<(bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)",
+    "count": 5760,
+    "mean_us": 8.31219861111111,
+    "total_ms": 47.878264
+  },
+  {
+    "kernel": "void shared32_projection_parts<(int)576, (int)1536, (int)320, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const unsigned int *)",
+    "count": 5760,
+    "mean_us": 5.922959201388889,
+    "total_ms": 34.116245
+  },
+  {
+    "kernel": "riley_gqa50_attention::scores(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *, const unsigned int *, const unsigned int *)",
+    "count": 5760,
+    "mean_us": 5.624016840277778,
+    "total_ms": 32.394337
+  },
+  {
+    "kernel": "shared32_qkv_parts(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)",
+    "count": 5760,
+    "mean_us": 4.155351215277778,
+    "total_ms": 23.934823
+  },
+  {
+    "kernel": "void shared32_projection_parts<(int)576, (int)576, (int)128, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const unsigned int *)",
+    "count": 5760,
+    "mean_us": 3.417389236111111,
+    "total_ms": 19.684162
+  }
+]

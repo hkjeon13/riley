@@ -1,0 +1,19 @@
+{
+  "pid": 483918,
+  "argv": [
+    "/usr/bin/python3",
+    "/data/riley-serving-261007/kernel-batch09-profile32-preparation-attempt01/run.py",
+    "--attempt",
+    "1",
+    "--plan",
+    "/data/riley-serving-261007/kernel-batch09-profile32-preparation-attempt01/plan.json",
+    "--verified-baseline",
+    "/data/riley-serving-261007/kernel-batch09-independent-analysis-attempt01/raw-replay.json"
+  ],
+  "uid": 0,
+  "time_ns": 1791395260682219462,
+  "controller_sha256": "da03690973bdccf01bce943f4dca7784a1dcfca65451543bb866195f4421b702",
+  "plan_sha256": "536a893d8c81e894f0182cdbd9e063ac1ec05737fac50adbf618db7ff779816d",
+  "Qwen_terminal_failure_preserved": "Traceback (most recent call last):\n  File \"/data/riley-serving-261007/qwen-ordinary-http-validation-preparation-attempt01/run.py\", line 55, in <module>\n    else:raise RuntimeError('ordinary HTTP startup failed/timeout')\nRuntimeError: ordinary HTTP startup failed/timeout\n",
+  "GPU_before_empty": true
+}

@@ -1,0 +1,104 @@
+{
+  "state": "prepared_unrun_not_queued",
+  "source_commit": "3e9c979feff54b0525e198e569885e0ac0988e7f",
+  "serving_performance": "미실행",
+  "gpu_overlap": "none: local files only",
+  "qualification": "requires native198/build/HTTP60 completion and exact binary receipt before launch",
+  "plan": {
+    "schema": "riley.kernel-batch02.matched96.v1",
+    "scope": "All eight cells with baseline/candidate/reconstructed vLLM; quiet and diagnostic attempts separate",
+    "workloads": [
+      "fixed",
+      "natural"
+    ],
+    "concurrency": [
+      1,
+      8,
+      16,
+      32
+    ],
+    "repeats": 4,
+    "orders": [
+      [
+        "v52",
+        "candidate",
+        "vllm"
+      ],
+      [
+        "vllm",
+        "candidate",
+        "v52"
+      ],
+      [
+        "v52",
+        "candidate",
+        "vllm"
+      ],
+      [
+        "vllm",
+        "candidate",
+        "v52"
+      ]
+    ],
+    "warmup": 96,
+    "retained": 384,
+    "token_budget": 512,
+    "chunk_tokens": {
+      "fixed": 128,
+      "natural": 512
+    },
+    "prefix_cache": false,
+    "sampling": "greedy temperature0, original EOS and original request max_tokens",
+    "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "gpu_operating_cap_bytes": 21474836480,
+    "vllm_gpu_memory_utilization": 0.3,
+    "host_start_gate": {
+      "timeout_seconds": 300,
+      "interval_seconds": 2,
+      "consecutive": 3,
+      "cpu_some_max": 5,
+      "io_full_max": 5,
+      "memory_full_max": 0.5
+    },
+    "exclusion_policy": "none; fail whole attempt, retain every sample and failed attempt",
+    "correctness_policy": "Riley exact frozen token/text/finish reference; all engine input/output counts and transport exact; cross-engine arithmetic differences recorded",
+    "completion": false,
+    "post_screen_required": [
+      "independent raw replay and all-cell comparison",
+      "sustained load",
+      "cancellation",
+      "re-request",
+      "resource reclamation"
+    ],
+    "host_gate_revision_reason": "Diagnostic only: record3 prephase observations and truthful quiet flag; do not abort solely on pressure; retain every measured row including slow rows. No pooling with admission-controlled attempts.",
+    "host_pressure_policy": "selected explicit mode; quiet requires original gate; diagnostic observes all and cannot qualify",
+    "performance_claim_eligible": false,
+    "startup_http_ready_timeout_seconds": 300,
+    "startup_timeout_scope": "cold initialization only; captured logs and host samples; excluded from serving timing by explicit warmup and retained phase envelopes",
+    "candidate_source_commit": "3e9c979feff54b0525e198e569885e0ac0988e7f",
+    "execution_state": "prepared; not launched; requires source-bound native198 and HTTP60 completion"
+  },
+  "files": {
+    "batch-plan.json": {
+      "sha256": "10124d4a8649b64a7e97a642b01e069e77a2592b93c1bc160d6a899aee244256",
+      "bytes": 2382
+    },
+    "fixtures.json": {
+      "sha256": "ae1f6f48a2acc1f7c0a6f084567bb96916cb005eeb727ae59aca815f1c5ab955",
+      "bytes": 96151
+    },
+    "mixed_phase_v34.py": {
+      "sha256": "c37408fb6d02f41ee7fb56d6bd41beda305dd2cf5bb4ef3a73879cb44401c96f",
+      "bytes": 3112
+    },
+    "run.py": {
+      "sha256": "e31a6ad48c2cde358a50cb44206ce11437e5c8b60ea6afa37527108ce59c0564",
+      "bytes": 13518
+    },
+    "serving_token_client_v2.py": {
+      "sha256": "2bc9238265666b99654f4f4e456ca0bb10c45b8bed8f28493452b89c1f450fcf",
+      "bytes": 35275
+    }
+  }
+}

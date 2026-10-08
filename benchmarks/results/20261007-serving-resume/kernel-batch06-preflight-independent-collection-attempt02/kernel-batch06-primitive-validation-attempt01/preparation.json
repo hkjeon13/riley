@@ -1,0 +1,24 @@
+{
+  "source": {
+    "source_commit": "309a601c297ea8db1e6852aa0cb8502023f0b1e2",
+    "verified_source_files": 434,
+    "code_worktree_clean": true,
+    "excluded_nonbuild_files_skip_worktree": 643,
+    "scope": "Cargo workspace and all tracked CUDA files verified against true Git blobs; excluded docs/results not materialized"
+  },
+  "argv": [
+    "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin/nvcc",
+    "-O3",
+    "-DNDEBUG",
+    "-std=c++17",
+    "-arch=sm_89",
+    "--use_fast_math",
+    "--ptxas-options=-v",
+    "-I/data/riley-serving-261007/kernel-batch06-source-attempt01/kernels/src",
+    "/data/riley-serving-261007/kernel-batch06-source-attempt01/kernels/tests/kernel_batch06_correctness.cu",
+    "-o",
+    "/data/riley-serving-261007/kernel-batch06-primitive-validation-attempt01/native2081"
+  ],
+  "GPU_execution": "unexecuted before compilation",
+  "serving_performance": "\ubbf8\uc2e4\ud589"
+}

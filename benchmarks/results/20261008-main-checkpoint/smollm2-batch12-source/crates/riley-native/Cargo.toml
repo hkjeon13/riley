@@ -1,0 +1,38 @@
+[package]
+name = "riley-native"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Development-only native calibration contract owner for Riley"
+build = "build.rs"
+
+[features]
+default = []
+cuda = [
+    "dep:riley-cuda",
+    "dep:riley-model",
+    "dep:riley-runtime",
+    "riley-cuda/cuda",
+    "riley-cuda/nvml",
+    "riley-runtime/cuda",
+]
+
+[dependencies]
+riley-cuda = { path = "../riley-cuda", optional = true }
+riley-model = { path = "../riley-model", optional = true }
+riley-runtime = { path = "../riley-runtime", optional = true }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.145"
+sha2 = { version = "=0.11.0", default-features = false }
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "riley-native"
+path = "src/main.rs"
+required-features = ["cuda"]

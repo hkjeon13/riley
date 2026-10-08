@@ -1,0 +1,57 @@
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+ Function _ZN24riley_shared32_attention6valuesEPKfPK13__nv_bfloat16PS2_PKjS7_S7_:
+  REG:40 STACK:0 SHARED:768 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN24riley_shared32_attention6scoresEPK13__nv_bfloat16S2_PfPKjS5_S5_:
+  REG:39 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN18riley_decode_v57_318independent_valuesEPKfPK13__nv_bfloat16PS2_PKjS7_S7_:
+  REG:40 STACK:0 SHARED:2304 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN18riley_decode_v57_36scoresEPK13__nv_bfloat16S2_PfPKjS5_S5_:
+  REG:42 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN18riley_decode_v57_218independent_valuesEPKfPK13__nv_bfloat16PS2_PKjS7_S7_:
+  REG:40 STACK:0 SHARED:2304 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN18riley_decode_v57_26scoresEPK13__nv_bfloat16S2_PfPKjS5_S5_:
+  REG:39 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN18riley_decode_v57_118independent_valuesEPKfPK13__nv_bfloat16PS2_PKjS7_S7_:
+  REG:40 STACK:0 SHARED:2304 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN18riley_decode_v57_16scoresEPK13__nv_bfloat16S2_PfPKjS5_S5_:
+  REG:42 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN23riley_gqa_reference_v5718independent_valuesEPKfPK13__nv_bfloat16PS2_PKjS7_S7_:
+  REG:40 STACK:0 SHARED:2304 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN23riley_gqa_reference_v576scoresEPK13__nv_bfloat16S2_PfPKjS5_S5_:
+  REG:39 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN18riley_decode_shape6valuesEPKfPK13__nv_bfloat16PS2_PKjS7_:
+  REG:40 STACK:0 SHARED:256 LOCAL:0 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN18riley_decode_shape6scoresEPK13__nv_bfloat16S2_PfPKjS5_:
+  REG:38 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN19riley_prefill_shape15attention_shapeEPK13__nv_bfloat16S2_S2_PS0_iiPKiPKjS7_:
+  REG:80 STACK:0 SHARED:3840 LOCAL:0 CONSTANT[0]:416 TEXTURE:0 SURFACE:0 SAMPLER:0
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 

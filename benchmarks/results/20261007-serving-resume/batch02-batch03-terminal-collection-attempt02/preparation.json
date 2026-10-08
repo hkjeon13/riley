@@ -1,0 +1,14 @@
+{
+  "waits": {
+    "183749": "Batch03 controller",
+    "270594": "serialized Batch02 controller"
+  },
+  "scopes": [
+    "kernel-batch03-quiet-attempt01",
+    "kernel-batch02-quiet-attempt01",
+    "kernel-batch02-matched-queue-attempt01"
+  ],
+  "script_sha256": "d1b9794dcad8cbca080517d77d125eb8ef5c6b2a0bb580ded32eacd54b7e90c1",
+  "compression": "remote tar plus gzip1 only after both actual serving terminals; source and partial attempt01 preserved",
+  "scope": "all raw samples, including failed whole attempts; source preserved; may overlap untimed Qwen correctness only"
+}

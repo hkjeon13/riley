@@ -1,0 +1,13 @@
+
+running 1 test
+test qwen3b_p2048_cache_on_m1_m2_bounded_full_forward_quality_gate has been running for over 60 seconds
+Error: Cuda { site: ExecutionSite { layer: Some(0), op: DecodeAttention }, source: CudaError { kind: InvalidArgument, domain: Rust, stage: Validation, native_code: 0, operation: "hf_eager_qwen_p2048_m1_cublas_qk", message: "candidate supports only Qwen P2048-to-M1 T=2049 QH=16 KVH=2 D=128" } }
+test qwen3b_p2048_cache_on_m1_m2_bounded_full_forward_quality_gate ... FAILED
+
+failures:
+
+failures:
+    qwen3b_p2048_cache_on_m1_m2_bounded_full_forward_quality_gate
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 196.83s
+

@@ -1,0 +1,13 @@
+{
+  "predecessor_preserved": "/data/riley-serving-261007/kernel-batch11-stability-controller-draft-attempt02",
+  "syntax_passed": true,
+  "driver_sha256": "a091b6a0a13981d99865795f32a61c24ad977887324db75402e5aa792ff508d8",
+  "no_GPU_execution": true,
+  "changes": [
+    "Two predeclared repeats are explicit CLI inputs and distinct output paths",
+    "Stop failure still terminates observer and preserves host samples",
+    "Monitor failures are recorded and fail qualification",
+    "All re-request exceptions are retained as rows instead of losing pool output",
+    "Decode cancellation requires actualHTTP200; early cancellation phase remains unproven"
+  ]
+}

@@ -1,0 +1,18 @@
+[
+  {
+    "scope": "qwen-step109-layer3-hf-stage-validation-attempt01",
+    "archive": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/qwen-step109-layer3-failed-HF-collection-attempt01/qwen-step109-layer3-hf-stage-validation-attempt01.tar.gz",
+    "archive_sha256": "fd7f37e061f112797500d5a88b69bc383166555582fdcc328dfbdb1a891aa313",
+    "bytes": 4004,
+    "files_verified": 5,
+    "source_bytes": 12685,
+    "completion": {
+      "failure": {
+        "type": "Qwen3BCacheOnLayerStageTraceError",
+        "message": "trace tensor names differ"
+      },
+      "serving_performance": "\ubbf8\uc2e4\ud589",
+      "goal_achieved": false
+    }
+  }
+]

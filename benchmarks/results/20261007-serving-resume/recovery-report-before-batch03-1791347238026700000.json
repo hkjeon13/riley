@@ -1,0 +1,1248 @@
+{
+  "schema": "riley.resume.recovery-report.v1",
+  "goal_achieved": false,
+  "historical_baselines": {
+    "51": {
+      "source_commit": "a0536a5a3d7aebf721b7a41d9bd39897c60ddde5",
+      "binaries": {
+        "/tmp/riley-opt-260912/variable-candidate-v51/riley": "03262d945a3c2f31589d5525318b175c43e38001a45be7dcc9cceea22288018d"
+      },
+      "build_log_sha256": "b07dc38b613864484737db17364b184fb6140d21c326f7f8dedea9858db397c7",
+      "sampling_backend": "gpu-greedy; V7 mixed rows with fused prefill gate up SwiGLU and grouped decode attention; full-logit fallback supported"
+    },
+    "52": {
+      "source_commit": "06302d8d8396b8f2f4996fec8595bbfa1dcd7450",
+      "binaries": {
+        "/tmp/riley-opt-260912/variable-candidate-v52/riley": "d24783e7aab9e5ffbf7489e720a54122b967c5274131b385c3c0f405b3fbe07d"
+      },
+      "build_log_sha256": "c64d74c704c10ced7c2a7e3d2505ba82780cb3e4a214451d29fe3b2441ae876b",
+      "sampling_backend": "gpu-greedy; V7 mixed rows with compact shared attention state, fused prefill and grouped decode; full-logit fallback supported"
+    },
+    "56": {
+      "source_commit": "030c207565eda3ec45533a166e6d9a201c8d1831",
+      "binaries": {
+        "/tmp/riley-opt-260912/variable-candidate-v56/riley": "08cd627049f948b94e4426d933b7aeab883c93a385e3f2d603efe1e6a2fb54a8"
+      },
+      "build_log_sha256": "8da582cc145389ec79360ca0b59434c975e10845fdb42efb58dbf93afebd0b3f",
+      "sampling_backend": "gpu-greedy; V7 token-major V, fused gate/up row warps and projection merge residual normalization; full-logit fallback supported"
+    }
+  },
+  "latest_original_workload_screen": "V56 Round62, not promoted; V51 general reference, V52 frozen experimental reference",
+  "post_v57_remote_source_commit": "0fa5a4c02415d3bef2ac46aaf4afb20557891ae6",
+  "post_v57_code_cargo_files_exact": 507,
+  "post_v57_binary_drift": {
+    "observed": "3b2ebf01179305a425ca31ee7dc28245c05843f3597ff9e5c88e4e4d361312e3",
+    "historical_split_ffn_best": "658c00b7b99b57d54a12dd345dd44a3ba705fdffa6749687eed9a8e1a04306cc",
+    "admitted_as_frozen_best": false
+  },
+  "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+  "model_manifest_files_match": true,
+  "recovered_v52_binary": "6f424278437f82a462ee141c829914d02ccb8c02ed604fa166c70c3c70bb16f6",
+  "new_v52_qualification": {
+    "build": "passed",
+    "HTTP_correctness": {
+      "records": [
+        {
+          "case": "c1-fixed",
+          "passed": 12,
+          "strict_reference_pass": true
+        },
+        {
+          "case": "c1-natural",
+          "passed": 3,
+          "strict_reference_pass": true
+        },
+        {
+          "case": "c16-fixed",
+          "passed": 12,
+          "strict_reference_pass": true
+        },
+        {
+          "case": "c16-natural",
+          "passed": 3,
+          "strict_reference_pass": true
+        },
+        {
+          "case": "c32-fixed",
+          "passed": 12,
+          "strict_reference_pass": true
+        },
+        {
+          "case": "c32-natural",
+          "passed": 3,
+          "strict_reference_pass": true
+        }
+      ],
+      "failure": null,
+      "requests": 45,
+      "correctness_only": true,
+      "serving_performance": "미실행",
+      "performance_qualified": false,
+      "goal_achieved": false
+    },
+    "serving_performance": "미실행"
+  },
+  "historical_round62_metrics": {
+    "scope": "C16/C32 matched serving screen; V51 anchor versus V52 previous versus V56 FFN fusion with token-major V atC16/C32 versus vLLM; all three Riley compact GPU greedy; all admission capacities match clients, budget512; two reversed orders, not long-term stability qualification",
+    "medians": {
+      "c16-fixed": {
+        "anchor": {
+          "throughput": 6146.358314828239,
+          "ttft_ms": 6.2737205,
+          "tpot_ms": 2.3640267548387097,
+          "e2e_p95_ms": 82.254463,
+          "e2e_p99_ms": 85.068059
+        },
+        "new": {
+          "throughput": 6155.3948865964285,
+          "ttft_ms": 6.23833825,
+          "tpot_ms": 2.3616914782608696,
+          "e2e_p95_ms": 82.224565,
+          "e2e_p99_ms": 85.62806950000001
+        },
+        "previous": {
+          "throughput": 6267.935934271159,
+          "ttft_ms": 6.361735,
+          "tpot_ms": 2.292934078050491,
+          "e2e_p95_ms": 80.1782225,
+          "e2e_p99_ms": 84.0735195
+        },
+        "vllm": {
+          "throughput": 5120.110603013831,
+          "ttft_ms": 17.22519175,
+          "tpot_ms": 2.2184101686535764,
+          "e2e_p95_ms": 99.006464,
+          "e2e_p99_ms": 113.726694
+        }
+      },
+      "c16-natural": {
+        "anchor": {
+          "throughput": 7805.28373775114,
+          "ttft_ms": 7.123535500000001,
+          "tpot_ms": 1.9237917033969545,
+          "e2e_p95_ms": 260.0350565,
+          "e2e_p99_ms": 265.4757535
+        },
+        "new": {
+          "throughput": 7847.702414248577,
+          "ttft_ms": 7.17279575,
+          "tpot_ms": 1.9083219606934214,
+          "e2e_p95_ms": 257.33597499999996,
+          "e2e_p99_ms": 261.985289
+        },
+        "previous": {
+          "throughput": 7740.380013860398,
+          "ttft_ms": 7.0062215,
+          "tpot_ms": 1.9459313899129542,
+          "e2e_p95_ms": 261.52797,
+          "e2e_p99_ms": 266.03827
+        },
+        "vllm": {
+          "throughput": 7794.130703686875,
+          "ttft_ms": 12.926574500000001,
+          "tpot_ms": 1.809523058627752,
+          "e2e_p95_ms": 266.651409,
+          "e2e_p99_ms": 277.16414299999997
+        }
+      },
+      "c32-fixed": {
+        "anchor": {
+          "throughput": 7971.408254315324,
+          "ttft_ms": 8.29176475,
+          "tpot_ms": 3.6032581189641353,
+          "e2e_p95_ms": 125.890091,
+          "e2e_p99_ms": 147.7507695
+        },
+        "new": {
+          "throughput": 8140.939917792527,
+          "ttft_ms": 7.8890205,
+          "tpot_ms": 3.561453450724638,
+          "e2e_p95_ms": 123.734756,
+          "e2e_p99_ms": 141.8755355
+        },
+        "previous": {
+          "throughput": 8218.023639801524,
+          "ttft_ms": 8.09245175,
+          "tpot_ms": 3.506132152524544,
+          "e2e_p95_ms": 123.20687699999999,
+          "e2e_p99_ms": 143.0359515
+        },
+        "vllm": {
+          "throughput": 7412.664101947627,
+          "ttft_ms": 27.733663749999998,
+          "tpot_ms": 2.8037268731182796,
+          "e2e_p95_ms": 138.8334935,
+          "e2e_p99_ms": 167.28834899999998
+        }
+      },
+      "c32-natural": {
+        "anchor": {
+          "throughput": 10193.116590371836,
+          "ttft_ms": 10.797740999999998,
+          "tpot_ms": 2.9491154866871483,
+          "e2e_p95_ms": 397.5336955,
+          "e2e_p99_ms": 419.31405700000005
+        },
+        "new": {
+          "throughput": 10433.828880312161,
+          "ttft_ms": 10.554179000000001,
+          "tpot_ms": 2.8740553993442353,
+          "e2e_p95_ms": 388.260353,
+          "e2e_p99_ms": 405.39128900000003
+        },
+        "previous": {
+          "throughput": 10285.684837108281,
+          "ttft_ms": 10.52424975,
+          "tpot_ms": 2.9150453304768353,
+          "e2e_p95_ms": 393.36706100000004,
+          "e2e_p99_ms": 415.5161405
+        },
+        "vllm": {
+          "throughput": 11950.604801640628,
+          "ttft_ms": 19.150215,
+          "tpot_ms": 2.2985280131384784,
+          "e2e_p95_ms": 335.52876549999996,
+          "e2e_p99_ms": 348.4485975
+        }
+      }
+    },
+    "new_relative_change_percent": {
+      "c16-fixed": {
+        "anchor": {
+          "throughput": 0.1470231851987691,
+          "ttft_ms": -0.5639755548561554,
+          "tpot_ms": -0.0987838472242486,
+          "e2e_p95_ms": -0.03634817967264059,
+          "e2e_p99_ms": 0.6583087783865071
+        },
+        "previous": {
+          "throughput": -1.7955041157869833,
+          "ttft_ms": -1.9396713317986425,
+          "tpot_ms": 2.9986645001516044,
+          "e2e_p95_ms": 2.5522422874864725,
+          "e2e_p99_ms": 1.8490364257915948
+        },
+        "vllm": {
+          "throughput": 20.219959369104302,
+          "ttft_ms": -63.7836353839138,
+          "tpot_ms": 6.4587384078867105,
+          "e2e_p95_ms": -16.950306396156112,
+          "e2e_p99_ms": -24.70714966883675
+        }
+      },
+      "c16-natural": {
+        "anchor": {
+          "throughput": 0.5434610441164889,
+          "ttft_ms": 0.6915140662947294,
+          "tpot_ms": -0.8041277377492162,
+          "e2e_p95_ms": -1.0379683171680476,
+          "e2e_p99_ms": -1.31479596685653
+        },
+        "previous": {
+          "throughput": 1.3865262454298088,
+          "ttft_ms": 2.3775190379008215,
+          "tpot_ms": -1.9327212364468438,
+          "e2e_p95_ms": -1.6028859169441856,
+          "e2e_p99_ms": -1.5234578844615099
+        },
+        "vllm": {
+          "throughput": 0.6873340029615038,
+          "ttft_ms": -44.51124116447092,
+          "tpot_ms": 5.45994159038754,
+          "e2e_p95_ms": -3.4934876342618715,
+          "e2e_p99_ms": -5.476485462984271
+        }
+      },
+      "c32-fixed": {
+        "anchor": {
+          "throughput": 2.12674671862938,
+          "ttft_ms": -4.85715962937806,
+          "tpot_ms": -1.1601907734413275,
+          "e2e_p95_ms": -1.7120767670268822,
+          "e2e_p99_ms": -3.9764490025210875
+        },
+        "previous": {
+          "throughput": -0.9379836976333933,
+          "ttft_ms": -2.51383951717723,
+          "tpot_ms": 1.5778440684347972,
+          "e2e_p95_ms": 0.4284492983293475,
+          "e2e_p99_ms": -0.8112757581788754
+        },
+        "vllm": {
+          "throughput": 9.824751342146332,
+          "ttft_ms": -71.5543515234261,
+          "tpot_ms": 27.025691584702095,
+          "e2e_p95_ms": -10.875428629907669,
+          "e2e_p99_ms": -15.191024151956912
+        }
+      },
+      "c32-natural": {
+        "anchor": {
+          "throughput": 2.361518067670265,
+          "ttft_ms": -2.2556755158324115,
+          "tpot_ms": -2.5451728724001477,
+          "e2e_p95_ms": -2.33271861101898,
+          "e2e_p99_ms": -3.320367578328054
+        },
+        "previous": {
+          "throughput": 1.440293432571571,
+          "ttft_ms": 0.2843836920537024,
+          "tpot_ms": -1.4061507278823382,
+          "e2e_p95_ms": -1.2982042744041578,
+          "e2e_p99_ms": -2.4366927089321977
+        },
+        "vllm": {
+          "throughput": -12.692043176929735,
+          "ttft_ms": -44.88741249119135,
+          "tpot_ms": 25.03895462295953,
+          "e2e_p95_ms": 15.715966236581892,
+          "e2e_p99_ms": 16.34177663751395
+        }
+      }
+    },
+    "requests": 12288,
+    "reference_observations": [
+      {
+        "case": "c16-fixed-p0-anchor",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c16-fixed-p0-new",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c16-fixed-p0-previous",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c16-fixed-p0-vllm",
+        "reference_matches": 356,
+        "requests": 384
+      },
+      {
+        "case": "c16-fixed-p1-anchor",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c16-fixed-p1-new",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c16-fixed-p1-previous",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c16-fixed-p1-vllm",
+        "reference_matches": 353,
+        "requests": 384
+      },
+      {
+        "case": "c16-natural-p0-anchor",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c16-natural-p0-new",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c16-natural-p0-previous",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c16-natural-p0-vllm",
+        "reference_matches": 284,
+        "requests": 384
+      },
+      {
+        "case": "c16-natural-p1-anchor",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c16-natural-p1-new",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c16-natural-p1-previous",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c16-natural-p1-vllm",
+        "reference_matches": 295,
+        "requests": 384
+      },
+      {
+        "case": "c32-fixed-p0-anchor",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c32-fixed-p0-new",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c32-fixed-p0-previous",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c32-fixed-p0-vllm",
+        "reference_matches": 362,
+        "requests": 384
+      },
+      {
+        "case": "c32-fixed-p1-anchor",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c32-fixed-p1-new",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c32-fixed-p1-previous",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c32-fixed-p1-vllm",
+        "reference_matches": 363,
+        "requests": 384
+      },
+      {
+        "case": "c32-natural-p0-anchor",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c32-natural-p0-new",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c32-natural-p0-previous",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c32-natural-p0-vllm",
+        "reference_matches": 279,
+        "requests": 384
+      },
+      {
+        "case": "c32-natural-p1-anchor",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c32-natural-p1-new",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c32-natural-p1-previous",
+        "reference_matches": 384,
+        "requests": 384
+      },
+      {
+        "case": "c32-natural-p1-vllm",
+        "reference_matches": 280,
+        "requests": 384
+      }
+    ],
+    "goal_achieved": false,
+    "decision": "Assess decode FFN and projection normalization fusion against V51, V52 and vLLM; broader concurrency and long-term stability remain unqualified"
+  },
+  "historical_limits": [
+    "two reversed-order screening repeats only",
+    "not sustained-load qualification",
+    "memory and errors must be taken from raw launch/accounting, not inferred",
+    "vLLM numerical outputs are not all byte-identical to Riley references"
+  ],
+  "next": [
+    "finish independent matched96 serving replay and summarize baseline/candidate/vLLM all8 cells with complete tails and repeat variance",
+    "run Qwen M1 all-stage/full-logit/owner repeat against immutable oracle for9eeeeae9 after serving controller terminal and GPU empty",
+    "run sustained load/cancellation/re-request/resource reclamation only after meaningful full-core screen improvement",
+    "do not adopt on microbenchmark or diagnostic shared-host throughput alone"
+  ],
+  "external_observation": {
+    "io_full_PSI_avg10_percent": 27.74,
+    "riley_loader_wchan": "folio_wait_bit_common",
+    "effect": "read stalls during asset preparation; no serving claims; no slow sample removal"
+  },
+  "vllm0271_restoration": {
+    "installation_exit": 0,
+    "pip_check": "No broken requirements found.",
+    "package_freeze_sha256": "784965e0ac101c6469b50649c60ac31249ad1a5333bd6e0710824c25d1693182",
+    "historical_resolved_dependency_parity": "not established; new stack locked by full freeze; historical results not pooled"
+  },
+  "baseline_attempt": "attempt04 running; check live process and completion/progress",
+  "baseline_attempts": [
+    {
+      "attempt": 1,
+      "complete_lanes": 0,
+      "failure": {
+        "type": "RuntimeError",
+        "message": "whole attempt aborted: host start gate timeout c1-fixed-r0-v52-start"
+      },
+      "host_gate_samples": 30,
+      "archive_sha256": "62df2ebdadf6a36a98397ca2e70657031d703c569a214f54906d12086083b6fd"
+    },
+    {
+      "attempt": 2,
+      "status": "terminated",
+      "complete_lanes": 1,
+      "failure": "vLLM startup could not find ninja on controlled PATH; startup failure; no valid engine comparison",
+      "archive_sha256": "ba2e661a3f57342d830c26450d52232e3fcfb3ab08f98e1a2c40831d748df8bb",
+      "independent_raw_replay": "baseline-attempt02-independent-replay.json"
+    },
+    {
+      "attempt": 3,
+      "status": "terminated",
+      "complete_lanes": 0,
+      "failure": "post-load warmup host start gate timeout; no new retained serving samples",
+      "archive_sha256": "de9bab7bbb5bb9710d05216f43c63515edb33fbd5d022d6a8710046a16e6fe95"
+    },
+    {
+      "attempt": 4,
+      "status": "running after Qwen correctness completed and GPU resources reclaimed; ninja PATH corrected; all previous attempts retained"
+    }
+  ],
+  "qwen_kv_resume": {
+    "controller": "run_qwen_kv.py",
+    "path": "/data/riley-serving-261007/qwen-kv-attempt01",
+    "status": "completed; HF produce/validate and Rust gate exit0",
+    "source_revision": "3d007e8a0262064f5ea60185bb454b9f894364ad",
+    "performance": "미실행",
+    "scope": "immutable teacher logit binding -> HF DynamicCache prefix -> Rust byte equality and same-owner repeat",
+    "HF_produce": "exit0; original teacher row BF16 byte equality retained",
+    "HF_validate": "exit0; sidecar SHA256 75361b89a3165f5e8da557b8579e9080f114470dc1c71288173d1c1c7f717809",
+    "native_build": "passed Rust1.85/CUDA12.8, actual CUDA execution completed",
+    "gate": {
+      "cache_on_full_forward_bf16_exact": false,
+      "cache_on_m1_decode_bf16_exact": false,
+      "cache_on_prefill_kv_bf16_exact": true,
+      "candidate_exact_cache_tensor_count": 28,
+      "corrected_cache_on_eligible": false,
+      "performance_claim_eligible": false,
+      "prefill_last_token_bf16_exact": true,
+      "required_cache_tensor_count": 28,
+      "serving_selector_eligible": false
+    },
+    "summary": {
+      "bf16_exact_tensor_count": 28,
+      "first_non_exact_tensor": null,
+      "tensor_count": 28
+    },
+    "repeat": {
+      "all_prefill_kv_tensors_bf16_identical": true,
+      "reused_prepared_owner": true
+    },
+    "remaining": "M1 full-forward still not exact (historical 28/52, first layer14.output.last); current gate covers prefill K/V layers0..13 only; all-layer prefix and candidate M1 layer14 need separate source-bound comparisons",
+    "native_binary_sha256": "5de0347fc597a9801f42c0a936b26ee509376b40c7fd8b5c7ea2182924f255fe"
+  },
+  "aborted_attempt02_partial_metrics": {
+    "case": "c1-fixed-r0-v52",
+    "metrics": {
+      "throughput_tokens_s": 856.1108114510854,
+      "input_tokens": 49152,
+      "output_tokens": 7680,
+      "request_count": 384,
+      "errors": 0,
+      "error_rate": 0,
+      "reference_matches": 384,
+      "e2e_ms": {
+        "samples": 384,
+        "median": 23.3259825,
+        "p95": 35.941166,
+        "p99": 36.17972,
+        "max": 37.056957
+      },
+      "ttft_ms": {
+        "samples": 384,
+        "median": 3.0384504999999997,
+        "p95": 3.183545,
+        "p99": 3.314031,
+        "max": 3.4971
+      },
+      "tpot_ms": {
+        "samples": 384,
+        "median": 1.0558349285714286,
+        "p95": 1.0642272857142856,
+        "p99": 1.0883540666666667,
+        "max": 1.0923184838709679
+      },
+      "gpu_peak_observed_MiB": 1136.0,
+      "memory_scope": "sampled device-wide startup and measurement, not continuous high-water"
+    },
+    "eligibility": "descriptive incomplete attempt; no successful vLLM lane; no comparison, no promotion"
+  },
+  "independent_serving_verifier": {
+    "source": "verify_baseline.py",
+    "positive_real_archive": "baseline-attempt02-independent-replay.json",
+    "mutation_checks": "independent-verifier-mutation-checks.json",
+    "rejected_cases": 6,
+    "failure_samples_filtered": false
+  },
+  "baseline_resume_attempt04": {
+    "state": "terminal-failed",
+    "complete_retained_lanes": 1,
+    "failure": "vLLM FlashInfer sampling JIT missing curand.h",
+    "archive": "baseline-attempt04.tar.gz",
+    "independent_replay": "baseline-attempt04-independent-replay.json",
+    "matrix_complete": false,
+    "sample_exclusions": 0
+  },
+  "baseline_resume_attempt05": {
+    "state": "terminal-failed",
+    "change": "CPATH points at existing pinned vllm0271-venv nvidia/cu13/include; no package/version/model/workload change",
+    "controller_snapshot": "run_baseline.py",
+    "performance_qualified": false,
+    "additional_host_event": "Owned upload overlapped only startup host admission before retained lanes; upload interrupted and partial tar preserved. Host-gate raw records retained.",
+    "failure": "FlashInfer JIT mixed CUDA nvcc and CPATH runtime headers: __cudaLaunch macro arity mismatch",
+    "archive": "baseline-attempt05.tar.gz",
+    "independent_replay": "baseline-attempt05-independent-replay.json",
+    "complete_retained_lanes": 1,
+    "matrix_complete": false,
+    "sample_exclusions": 0
+  },
+  "qwen_all_layers_next": {
+    "revision": "41b56d54b63b72ed6fdc84764202b7386ec4ff9a",
+    "worktree": "/Users/psyche/.codex/worktrees/qwen-cache-correctness/riley",
+    "source_dirty": false,
+    "layer_count": 36,
+    "tensor_count": 72,
+    "schema_version": "riley.qwen3b-hf-eager-p2048-cache-on-prefill-kv-trace.v2",
+    "archive_sha256": "5ee0ec1ec150545f143c900907c92f436f6267ccfdaccedbf33ec1234a27977f",
+    "tests": "4 offline tests passed including missing-layer/v1 rejection; git diff --check passed",
+    "HF_gpu_run": "미실행",
+    "Rust_gpu_run": "미실행",
+    "serving_performance": "미실행",
+    "goal_achieved": false,
+    "archive": "qwen-all-layers-code.tar",
+    "archive_pathspec": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "rust-toolchain.toml",
+      "crates",
+      "tools/python/reference"
+    ],
+    "remote_prepared": true,
+    "discarded_upload": "owned full-repository upload stopped before completion; partial remote tar retained for audit; using source-only archive",
+    "run_after": "baseline attempt05 terminal and owned GPU resources reclaimed",
+    "state": "attempt02 launched after restoring exact kernels directory from source commit",
+    "source_revision": "41b56d54b63b72ed6fdc84764202b7386ec4ff9a",
+    "kernels_archive": "qwen-all-layers-kernels.tar",
+    "kernels_sha256": "34a9aa66469a59cba90ff15af43770a3e94b121f47d4606d19730782e6096f7a"
+  },
+  "next_environment_fix": "resolved sampling JIT build via isolated cuRAND headers; serving validation pending",
+  "cuda_header_recovery": {
+    "isolated_headers": "curand-header-recovery.json",
+    "preflight": "flashinfer-sampling-preflight01.log",
+    "result": "SAMPLING_JIT_PASS; subprocess exit0; GPU compute empty",
+    "sampling_so_sha256": "7ca342c75063216ad1387620fc4b87631092303a4eefebf0c434acfa81b0a5de",
+    "remaining": "actual vLLM HTTP startup and workload execution; preflight is not serving proof"
+  },
+  "qwen_all_layers_attempt01": {
+    "HF_produce": "exit0",
+    "HF_validate": "exit0",
+    "native": "build failed due omitted kernels directory; no GPU Rust comparison executed",
+    "archive": "qwen-kv-all-layers-attempt01.tar.gz",
+    "serving_performance": "미실행"
+  },
+  "qwen_all_layers_attempt02": {
+    "HF_produce": "exit0",
+    "HF_validate": "exit0",
+    "native": "CMake cached previous source root; build failed before GPU comparison",
+    "archive": "qwen-kv-all-layers-attempt02.tar.gz"
+  },
+  "qwen_all_layers_attempt03": {
+    "state": "terminal-pass",
+    "HF": "reuse attempt02 immutable manifest/sidecar after fresh validation",
+    "target": "fresh qwen-all-layers-target avoids original target/source cache coupling",
+    "serving_performance": "미실행",
+    "verification": {
+      "HF_raw_hashes_verified": 72,
+      "native_exact_tensor_count": 72,
+      "first_non_exact_tensor": null,
+      "same_owner_repeat": {
+        "all_prefill_kv_tensors_bf16_identical": true,
+        "reused_prepared_owner": true
+      },
+      "scope": "HF raw bytes independently hashed; Riley hashes and owner reuse supplied by source-bound native test",
+      "serving_performance": "미실행",
+      "goal_achieved": false
+    },
+    "binary_sha256": "44204ba4c3a423603428d371a91c41fe198ae5d76e5e237e651fa314408a39d4",
+    "archive": "qwen-kv-all-layers-attempt03.tar.gz",
+    "remaining": "M1 full-forward direct QK/AV mismatch remains; selected-layer14 candidate trace next; no serving eligibility",
+    "audit_limit": "Native KV discriminator reports prefill_last_token_bf16_exact=true as a literal; it does not download native prefill logits. This flag is excluded from new proof. Verified result is all72 K/V tensors and same-owner repeat; HF producer golden prefill logits exact is separate."
+  },
+  "profiling_tool": {
+    "path": "/usr/local/cuda/bin/nsys",
+    "version": "2024.6.2.225-246235244400v0",
+    "actual_trace": "미실행",
+    "plan": "profiling-plan.json",
+    "controller": "run_serving_profile.py",
+    "compatibility": "installed CLI verified, actual CUDA13 collection and CPU sampling pending; serving performance from instrumented traces is 미실행",
+    "environment_check": "nsys-environment-check.txt",
+    "CPU_sampling": "unavailable: perf_event_paranoid=4, perf_event_open denied",
+    "context_switch": "미측정",
+    "plan_schema": "riley.serving-profile.predeclared.v2"
+  },
+  "qwen_layer14_next": {
+    "controller": "run_qwen_m1_layer14_qkav.py",
+    "source_provenance": "qwen-layer14-source-provenance.json",
+    "purpose": "diagnose historical direct-QK/AV full-forward first divergence layer14.output.last; no serving claim",
+    "state": "prepared locally; GPU run pending full HTTP matrix and profiling serialization"
+  },
+  "baseline_resume_attempt06": {
+    "state": "terminal-failed",
+    "change": "isolated17 cuRAND headers; FlashInfer JIT build preflight passed; pins include all headers and receipt",
+    "comparison_conditions": "same predeclared workload/repeat/order/version/model/cache policies",
+    "performance_qualified": false,
+    "failure": "c1-fixed-r0-vllm warmup host gate: shared host io_full avg10 >5; 60second wait exhausted before any vLLM traffic",
+    "archive": "baseline-attempt06.tar.gz",
+    "independent_replay": "baseline-attempt06-independent-replay.json",
+    "vLLM_HTTP_startup": "PASS /v1/models200; sampling JIT issue resolved",
+    "complete_retained_lanes": 1,
+    "sample_exclusions": 0
+  },
+  "baseline_resume_attempt07": {
+    "state": "terminal-failed",
+    "predeclared_host_gate_wait_seconds": 300,
+    "change": "premeasurement wait only; thresholds/repeats/orders/workloads/software unchanged",
+    "matrix_lanes": 64,
+    "source": "V52 recovered actual source06302d8; rebuilt binary6f424278",
+    "serving_qualification": false,
+    "failure": "io_full avg10 >5 prevented3 consecutive quiet admissions across300 seconds; c1-fixed-r0-vllm-start failed",
+    "archive": "baseline-attempt07.tar.gz",
+    "independent_replay": "baseline-attempt07-independent-replay.json",
+    "complete_retained_lanes": 1,
+    "sample_exclusions": 0
+  },
+  "qwen_prefill_logits_followup": {
+    "source_revision": "387102ca4ed137c2a894657d5af9b8f50c3f70f7",
+    "archive": "qwen-prefill-logits-attempt01.tar.gz",
+    "archive_sha256": "100006139d22ab6ff1cf89297d95b71ba85636b6b5d2349b7afe2756f141cc7b",
+    "result_schema": "KV comparison.v3",
+    "changes": [
+      "bind producer prefill-logit hash to actual immutable teacher row0 bytes",
+      "download native prefill logits and compare BF16 byte hash",
+      "require identical logits after same-owner reset and re-prefill",
+      "derive quality flag from actual comparison and fail mismatch"
+    ],
+    "checks": "rustfmt/diff checks, native build and GPU run passed; 72 KV tensors and actual native prefill logits independently verified",
+    "serving_performance": "미실행",
+    "state": "terminal-pass",
+    "independent_verification": {
+      "HF_raw_hashes_verified": 72,
+      "native_exact_tensor_count": 72,
+      "first_non_exact_tensor": null,
+      "same_owner_repeat": {
+        "all_prefill_kv_tensors_bf16_identical": true,
+        "prefill_last_logits_bf16_identical": true,
+        "reused_prepared_owner": true
+      },
+      "native_prefill_logits": {
+        "bf16_exact": true,
+        "element_count": 151936,
+        "hf_bf16_le_sha256": "66b5f0bb042e89497bac56e2b042f3018fec7c4c3f4710152a2c4adcffcfca9d",
+        "riley_bf16_le_sha256": "66b5f0bb042e89497bac56e2b042f3018fec7c4c3f4710152a2c4adcffcfca9d"
+      },
+      "scope": "HF raw bytes independently hashed; Riley hashes and owner reuse supplied by source-bound native test",
+      "serving_performance": "미실행",
+      "goal_achieved": false
+    },
+    "native_binary_sha256": "a3aa6cc4477fe34f731e4fce37cd4fec3e4209db86b40031589b0474971bba14",
+    "remaining": "M1 decode/full-forward still false; no serving eligibility",
+    "verification_scope": "All36-layer72 K/V tensors and native prefill logits151936 BF16 elements; actual immutable teacher row0 bytes extracted and hashed; same-owner reset/re-prefill identical. M1/full-forward remains not passed."
+  },
+  "serving_external_constraint": {
+    "cause": "shared host I/O full pressure exceeds predeclared <=5 avg10 admission threshold",
+    "resume_condition": "3 consecutive observations2 seconds apart satisfy cpu_some<=5, io_full<=5, memory_full<=0.5; quiet startup/warmup/retained admission for complete64lane matrix",
+    "action": "Do not modify unrelated shared-host workloads; no performance promotion; preserve all failed attempts"
+  },
+  "diagnostic_baseline_attempt01": {
+    "state": "terminal-pass-diagnostic",
+    "plan": "diagnostic-plan.json",
+    "controller": "run_diagnostic_baseline.py",
+    "purpose": "full64lane actual HTTP baseline for profiling under recorded shared-host pressure; cannot qualify goal or candidate adoption",
+    "all_workloads": "C1/C8/C16/C32 fixed/natural;4 repeats AB BA AB BA, warmup96 retained384",
+    "pressure_policy": "3 observations each prephase with truthful quiet flag; observation-only, no after-the-fact row exclusion",
+    "memory": "GPU device samples plus process-group RSS sum each second; shared CPU pages may be double counted",
+    "primary_remaining": "unchanged full quiet-admission baseline/candidate matrices, accuracy, sustained load/cancel/re-request/resource reclamation",
+    "first_pair": {
+      "summary": "diagnostic-first-pair-summary.json",
+      "scope": "C1 fixed repeat0; all384 requests/7680 output tokens/reference384 identical in both engines",
+      "V52_vs_vLLM_percent": {
+        "throughput": 7.5069689972378395,
+        "TTFT": -59.2636035840209,
+        "TPOT": 19.86872713532093,
+        "E2E": -13.53099326122581
+      },
+      "qualification": "none; shared-host pressure flags all false; full raw replay pending; not completed64lane matrix"
+    },
+    "last_observed_completed_lanes": 64,
+    "last_observed_case": "c32-fixed-r2-vllm",
+    "partial_raw_archive": "diagnostic-progress-38.tar.gz",
+    "partial_raw_replay": "diagnostic-progress-38-replay.json",
+    "partial_repeat_summary": "diagnostic-progress-38-summary.json",
+    "partial_replay_verified_lanes": 38,
+    "complete_four_repeat_cells": [
+      "c1-fixed",
+      "c1-natural",
+      "c8-fixed",
+      "c8-natural"
+    ],
+    "remaining_regressions": {
+      "scope": "mean of four per-repeat medians/tails; descriptive under shared host pressure",
+      "c1-fixed_tpot_percent": 18.88,
+      "c1-natural_tpot_percent": 4.57,
+      "c1-natural_e2e_p95_percent": 2.47,
+      "adoption": false,
+      "c32_natural_throughput_percent": -10.85,
+      "c32_natural_tpot_percent": 23.28,
+      "c32_natural_e2e_p95_percent": 12.96,
+      "c32_natural_e2e_p99_percent": 14.65,
+      "c16_fixed_tpot_percent": 5.26,
+      "c32_fixed_tpot_percent": 8.38
+    },
+    "shutdown_observation": "vLLM internal force-kill of EngineCore and multiprocessing semaphore cleanup warning observed; controller GPU reclamation recorded per lane; stability qualification remains open",
+    "low_concurrency_delivery_diagnostic": "c1-delivery-diagnostic.json",
+    "all_lanes_complete": true,
+    "archive": "diagnostic-baseline-attempt01.tar.gz",
+    "raw_replay": "diagnostic-baseline-local-replay.json",
+    "repeat_summary": "diagnostic-baseline-summary.json",
+    "raw_verified_lanes": 64,
+    "sample_exclusions": 0,
+    "performance_qualified": false,
+    "actual_HTTP_correctness": {
+      "v52_requests": 12288,
+      "v52_errors": 0,
+      "v52_frozen_reference_matches": 12288,
+      "vllm_requests": 12288,
+      "vllm_errors": 0,
+      "vllm_frozen_reference_matches": 10359,
+      "vllm_reference_mismatches": 1929,
+      "scope": "raw SSE transport/actual input and output counts verified in all lanes; frozen reference is the recovered fixture; vLLM numerical differences retained, not excluded",
+      "adoption": false
+    }
+  },
+  "baseline_to_profile_continuation": {
+    "state": "running; waits on verified baseline PID3083990",
+    "remote_path": "/data/riley-serving-261007/baseline-to-profile-continuation01",
+    "controller": "continue_after_baseline.py",
+    "policy": "wait for terminal64lane success and baseline process exit; archive raw; independent full replay; assert GPU empty; then serial32lane HTTP profiling",
+    "failure_policy": "stop and retain artifacts on baseline/replay/profiler failure; never restart original baseline on polling timeout",
+    "goal_achieved": false
+  },
+  "profiling_attempt01": {
+    "state": "terminal-failed",
+    "cause": "unsupported launch cpuctxsw option; no target server spawned",
+    "archive": "profiling-attempt01.tar.gz",
+    "adopted": false
+  },
+  "profiling_attempt02": {
+    "state": "terminal-failed",
+    "cause": "immediate resource check saw438MiB target GPU allocation after successful nsys shutdown; later PID/GPU gone",
+    "trace_produced": true,
+    "followup_sqlite_export": "passed",
+    "serving_performance": "미실행",
+    "adopted": false,
+    "actual_trace_scope": "CUDA graph-level events and CUDA API/OSRT measured; default graph mode omits kernel node activities",
+    "archive": "profiling-attempt02.tar.gz",
+    "analysis": "first-c1-profile-interval-analysis.json"
+  },
+  "profiling_attempt03": {
+    "state": "terminal-interrupted",
+    "plan_schema": "riley.serving-profile.predeclared.v4",
+    "cuda_graph_trace": "node",
+    "reclamation_wait_seconds": 40,
+    "resource_observations": "retain all until empty or timeout; no foreign process kill",
+    "purpose": "kernel-node diagnosis only; instrumentation time never serving score",
+    "completed_lanes": 1,
+    "interruption_reason": "CUDA driver13 unsupported by Nsight2024.6; diagnostic events warn collection may be incomplete; interrupted own controller3383844 via SIGINT with owned shutdown/GPU reclamation",
+    "raw_archive": "profiling-attempt03.tar.gz",
+    "diagnostic_analysis": "c1-node-profile-r0-v52-diagnostic-analysis.json",
+    "kernel_events": 642240,
+    "kernel_interval_union_ns": 2102538927,
+    "serving_performance": "미실행",
+    "bottleneck_qualification": false
+  },
+  "profile_interval_analyzer": {
+    "source": "analyze_profile_intervals.py",
+    "checks": "profile-interval-overlap-check.json",
+    "GPU_missing_evidence": "null, not zero"
+  },
+  "nsight_recovery": {
+    "state": "SHA256-verified and extracted; installed CLI/version checked",
+    "official_package": "nsight-systems-2025.5.2",
+    "expected_SHA256": "e818fefc62b1e6c3bd34eb92b4e412355afddb763b55e8d7bc3330c4e3da4d33",
+    "remote_assets": "/data/riley-serving-261007/nsight2025-assets",
+    "system_installation": false,
+    "serving_environment_mutation": false,
+    "extraction_receipt": "nsight2025-extraction-receipt.json",
+    "version": "2025.5.2.266-255236693005v0"
+  },
+  "qwen_m1_layer14_attempt01": {
+    "state": "terminal-process-pass-quality-failed",
+    "controller_pid": 3400885,
+    "source_revision": "41b56d54b63b72ed6fdc84764202b7386ec4ff9a",
+    "purpose": "strict immutable-teacher-bound layer14 M1 direct QK/AV and same-owner native diagnostic",
+    "serving_performance": "미실행",
+    "HF_producer_exit": 0,
+    "HF_validator_exit": 0,
+    "native_M1": "failed BF16 quality gate; diagnostic test process success is not quality success",
+    "native_process_exit": 0,
+    "raw_archive": "qwen-m1-layer14-qkav-attempt01-verified-source.tar.gz",
+    "independent_verification": "qwen-m1-layer14-independent-verification.json",
+    "native_binary_SHA256": "44204ba4c3a423603428d371a91c41fe198ae5d76e5e237e651fa314408a39d4",
+    "first_non_exact_stage": "layer14.attention_probabilities.last",
+    "unequal_probability_elements": 182,
+    "probability_element_count": 32784,
+    "exact_stages": 7,
+    "required_stages": 17
+  },
+  "qwen_to_profile_continuation": {
+    "state": "running; waiting on verified Qwen PID3400885",
+    "controller": "profile_after_qwen.py",
+    "supported_stack_attempt": 4,
+    "GPU_serialization": true,
+    "primary_admission_controlled_serving_qualification": "still required"
+  },
+  "profiling_attempt04": {
+    "state": "complete",
+    "controller_pid": 3443585,
+    "verified_wait_parent": 3439465,
+    "completed_profile_lanes_last_observed": 13,
+    "first_supported_analysis": "c1-supported-node-profile-r0-v52-analysis.json",
+    "CUDA_driver_unsupported_warning": false,
+    "kernel_attribution_scope": "instrumented C1 fixed r0 only; C32natural and paired vLLM pending; no serving score",
+    "first_pair_analysis": "c1-supported-profile-first-pair.json",
+    "attribution": "whole-capture kernel union V52 2.103310506s, vLLM 1.770855087s; API/OSRT overlaps not added; retained-clock envelope unverified; not serving score",
+    "api_kernel_overlap_analysis": "c1-supported-api-kernel-intersection.json",
+    "CPU_wait_accounting": "cudaStreamSynchronize union2.156138607s overlaps kernel2.103088749s; do not add overlapping durations; nonoverlap is not HTTP attribution",
+    "completed": 32,
+    "expected": 32,
+    "failure": null,
+    "serving_performance_claim_eligible": false,
+    "raw_archive": "profiling-attempt04.tar.gz",
+    "independent_full_profile_transport_replay": {
+      "passed": true,
+      "profiles": 32,
+      "file_hashes": 812,
+      "HTTP_requests": 6144,
+      "receipt": "profiling-attempt04-independent-replay.json",
+      "archive_sha256": "d9d4f02b061ef310efce22a6a709c9064fa31eb0a3454b7a353aee481968a0a1",
+      "serving_performance": "미실행; diagnostic instrumented captures"
+    }
+  },
+  "qwen_softmax_source_audit": {
+    "installed_torch_git_revision": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+    "source_receipt": "torch-softmax-source-receipt.json",
+    "status": "superseded by actual decode-route audit; prior prefill kernel inference inapplicable to M1 direct-QK"
+  },
+  "qwen_softmax_probe": {
+    "state": "queued and live waiting; PID3507405",
+    "assets": "qwen-softmax-probe-assets",
+    "source": "exact native hf_regular_softmax kernel and block reducer extracted from unchanged source41b56d54; full-source/fragment/input hashes pinned",
+    "variants": [
+      "native-cu128",
+      "native-cu130",
+      "native-cu128-fmad-false"
+    ],
+    "required_baseline_reproduction": "182/32784 mismatches before variants",
+    "GPU_serialization": "wait on profiling PID3443585 terminal/receipt and GPU empty",
+    "serving_performance": "미실행",
+    "full_M1_eligibility": false
+  },
+  "qwen_softmax_source_audit_correction": {
+    "old_audit": "prefill regular kernel inspected instead of actual decode kernel; superseded",
+    "actual_route": "decode_attention.cu bounded direct cuBLAS QK M1 API -> decode_softmax_reference_kernel sequential FP32 sum",
+    "attempt01": "regular prefill kernel yielded exact BF16; stopped because182 expected mismatches not reproduced",
+    "attempt02": "graph_numerics fast_math hypothesis inapplicable to actual decode TU; exact0 preserved",
+    "attempt03": "actual route probe build failed missing math_constants include; retained",
+    "attempt04": {
+      "actual_native_unequal": 182,
+      "max_abs": 1.9073486328125e-06,
+      "observed_sha256": "267c63db5618479c7203194b558e12b533c7ffa48435b76555bfb37f075145a4",
+      "matches_original_full_model_native_hash": true
+    },
+    "serving_performance": "미실행"
+  },
+  "kernel_batch01": {
+    "source_commit": "b3fde5c7ec37f3cbdb8951f5299c22da13e46a47",
+    "base": "06302d8d8396b8f2f4996fec8595bbfa1dcd7450",
+    "changes": [
+      "preserved split-row gate component only",
+      "aligned two-BF16 QK word loads",
+      "132-element attention scratch bank pitch"
+    ],
+    "build": "locked release CUDA13 identical V52 toolchain",
+    "binary_sha256": "7a2b53ad33bbd106f3e140c6b750e8f78a5f5c46f696d61a0e0e1a334eeb3c6f",
+    "primitive_correctness": {
+      "passed": true,
+      "seeds": [
+        1,
+        17,
+        99
+      ],
+      "active_rows": "0..33",
+      "contexts": "mixed1..4096",
+      "BF16_outputs": "bit exact",
+      "FP32_QK_scores": "bit exact",
+      "inactive_output_canaries": "pass"
+    },
+    "HTTP_screen": {
+      "state": "passed8/8 capacities/workloads",
+      "concurrent_load": "not this screen",
+      "serving_performance": "미실행"
+    },
+    "matched_HTTP_benchmark": {
+      "state": "running quiet-attempt01; first baseline C1fixed complete",
+      "lanes": 96,
+      "orders": [
+        [
+          "v52",
+          "candidate",
+          "vllm"
+        ],
+        [
+          "vllm",
+          "candidate",
+          "v52"
+        ],
+        [
+          "v52",
+          "candidate",
+          "vllm"
+        ],
+        [
+          "vllm",
+          "candidate",
+          "v52"
+        ]
+      ],
+      "all_workloads_required": true,
+      "diagnostic_fallback": "separate attempt only if quiet attempt aborts; no pooling",
+      "stability_soak_cancellation_re_request": "pending"
+    },
+    "adopted": false,
+    "goal_achieved": false,
+    "independent_SSE_verifier": {
+      "source": "verify_kernel_batch01.py",
+      "checks": "actual preserved SSE pass; missing DONE, forged TPOT, altered input, false reference flag rejected",
+      "receipt": "kernel-batch01-SSE-verifier-check.json"
+    },
+    "result_report_tool": {
+      "source": "summarize_kernel_batch01.py",
+      "scope": "all8 cells all4 repeats, all3 engines; throughput/TTFT/TPOT/E2E/allP95P99/memory/variance; null screen results for incomplete cells; no exclusions",
+      "adoption": "requires complete matrix and remaining correctness/stability gates"
+    }
+  },
+  "qwen_m1_regular_candidate": {
+    "source_commit": "9eeeeae90cb92eda6dbb3a291dfceda8100a5889",
+    "scope": "queued selected-layer14 detail17 and final-logits diagnostic; not full52 all-layer gate",
+    "native_full_model": "미실행",
+    "serving_performance": "미실행",
+    "adopted": false,
+    "state": "queued after entire current serving wrapper",
+    "waiting_controller_pid": 3630166,
+    "waiting_for_pid": 3605799,
+    "queued_controller": "run_qwen_after_kernel_batch01.py",
+    "native_input_immutable_check": "archive and all reference source hash check before extraction/build",
+    "result": "pending",
+    "full52_followup": {
+      "controller": "run_qwen_full52_after_batch02.py",
+      "wait_for": 3697803,
+      "state": "queued after batch02 correctness",
+      "test": "qwen3b_p2048_hf_compatible_cache_on_m1_cublas_qk_av_full_forward_candidate_trace",
+      "oracle": "immutable156 tensor r7 cache-on stage artifact, M1 compares52 tensors",
+      "Git_binding": "actual filtered commit/tree history + exact code blobs; sparse checkout locally clean; remote2.34 metadata test pending",
+      "M2_and128_generation": "unverified",
+      "serving_performance": "미실행"
+    }
+  },
+  "profile_matrix_analysis": {
+    "completed": 32,
+    "summary": "profile-matrix-analysis/summary.json",
+    "all_two_order_cells": true,
+    "C32_natural_mapped_attention_work_share_percent": [
+      14.31391291344257,
+      14.096652625872226
+    ],
+    "C32_natural_independent_values_work_share_percent": [
+      11.919426418967086,
+      11.977084142036999
+    ],
+    "C1_natural_gate_work_share_percent": [
+      19.573692924595715,
+      19.55106309083097
+    ],
+    "work_share_scope": "summed recorded kernel work; not serving wall-time or potential speedup",
+    "overlap_policy": "interval unions/intersections retained; API wait never added to GPU work",
+    "CPU_stacks_context_switches": "미측정",
+    "HTTP_scheduler_attribution": "미측정",
+    "serving_performance": "미실행"
+  },
+  "kernel_batch02": {
+    "base_commit": "06302d8d8396b8f2f4996fec8595bbfa1dcd7450",
+    "commit": "3e9c979feff54b0525e198e569885e0ac0988e7f",
+    "worktree": "/Users/psyche/PycharmProjects/riley-serving-kernel-batch02",
+    "independent_of_batch01": true,
+    "measured_evidence": "profile-matrix-analysis/summary.json; C32natural mapped_attention14.31/14.10 percent of kernel work in reversed orders",
+    "changes": [
+      "load aligned two-BF16 query/key words, unchanged MMA/reduction order",
+      "FP32 score/exponential row stride132 and BF16 probability stride136;128 logical columns unchanged"
+    ],
+    "bank_conflict_claim": "structural hypothesis based on within-warp row offsets, not yet measured bank conflict counters",
+    "build": "미실행",
+    "native_correctness": "미실행",
+    "HTTP_serving": "미실행",
+    "adopted": false,
+    "goal_achieved": false,
+    "required_before_benchmark": [
+      "baseline/candidate direct mapped owner test with exact BF16 and guards",
+      "owners0..33;short fallback and tile8;logical cache1..4096;nonfinite V fallback",
+      "frozen all8 HTTP correctness",
+      "predeclared all8 matched baseline/candidate/vLLM matrix, no pooling with batch01"
+    ],
+    "patch_only_commit": "1401c99974eecf9cee1142f7bdd20bbd0314f67b",
+    "correctness_driver": {
+      "source": "kernels/tests/kernel_batch02_correctness.cu",
+      "cases": 198,
+      "seeds": [
+        1,
+        17,
+        99
+      ],
+      "output_bit_equality_and_before_after_guards": true,
+      "execution": "queued; 미실행",
+      "includes": "short/tile8, owner0..33, context1..4096, nonfinite V fallback and invalid metadata"
+    },
+    "queue": {
+      "PID": 3697803,
+      "session": 18447,
+      "wait_for": 3630166,
+      "source_archive_pin": "kernel-batch02-source-receipt.json"
+    }
+  },
+  "host_lifecycle_tests": {
+    "receipt": "host-lifecycle-tests-attempt01/completion.json",
+    "passed": 5,
+    "source_commit": "b3fde5c7",
+    "scope": "local CPU/mock backend only",
+    "real_GPU_soak": "미실행"
+  },
+  "real_serving_stability_controller": {
+    "source": "run_serving_stability.py",
+    "execution": "미실행; not queued until independently verified quiet full-core candidate screen passes",
+    "cases": "eachC1/C8/C16/C32 fixed/natural must be run separately",
+    "sustained_seconds_per_case": 600,
+    "continuous_refill": true,
+    "raw_evidence": "gzip JSONL all HTTP response frames, no samples omitted; writer failures stop and preserve emergency rows",
+    "cancel_cycles": 5,
+    "cancel_stages": [
+      "after headers before consuming tokens",
+      "after first token"
+    ],
+    "post_cancel": "96 balanced exact-reference re-requests then idle native allocation equality",
+    "ownership_evidence": "source-owned C02 active/pending, KV active/reserved, completion outbox, outstanding iterations; scheduler-cancel delta separately from service disconnect count",
+    "native_shutdown_evidence": "C02 final zero allocations and nonaccepting flags plus SHA-bound completion marker and GPU compute reclamation",
+    "socket_smoke": "stability-cancellation-socket-smoke.json; both Connection:close RST stages passed",
+    "serving_performance": "미실행",
+    "adopted": false,
+    "source_model_software_pins": "streamed SHA256 recheck of every recorded matched-screen input before process launch; prepared/unrun",
+    "GPU_host_observations": "per-second device UUID, temperature, power, clocks, memory, utilization plus compute ownership and PSI",
+    "socket_smoke_revision_link": "cancellation function unchanged; current source hash/function hash linked in socket smoke receipt; identity/telemetry additions unrun"
+  },
+  "kernel_batch02_matched_serving_plan": {
+    "receipt": "kernel-batch02-matched-plan-receipt.json",
+    "state": "prepared_unrun_not_queued",
+    "serving_performance": "미실행",
+    "prerequisites": "native198, release build, HTTP60 all pass; exact source commit and validated binary receipt",
+    "matrix": "8 cells x4 predeclared ABC/CBA repeats x3 engines =96; frozen original input/output lengths and quiet host gates; diagnostic separate",
+    "independent_replay": "verify_kernel_batch01.py now resolves recorded controller fixture location and checks batch02 preflight snapshots"
+  },
+  "live_controller_checkpoint": {
+    "observed_ns": 1791345777273162000,
+    "kernel_batch01_quiet": {
+      "completed_lanes": 40,
+      "expected_lanes": 96,
+      "terminal": true,
+      "failure": {
+        "type": "RuntimeError",
+        "message": "whole attempt aborted: host start gate timeout c8-natural-r1-candidate-warmup"
+      },
+      "independent_failure_audit": "kernel-batch01-quiet-attempt01-failure-audit.json",
+      "promotion": false
+    },
+    "kernel_batch01_diagnostic": {
+      "state": "started separately after quiet failure",
+      "qualified_for_goal": false,
+      "raw_replay": "pending completion",
+      "PID": 3839806,
+      "last_verified_completed_lanes": 17,
+      "last_case": "c1-natural-r1-candidate",
+      "matrix_complete": false,
+      "watch_session": 96270,
+      "observed_ns": 1791346369320790878
+    },
+    "queued_correctness": [
+      "Qwen layer14 17-stage plus final logits",
+      "SmolLM2 batch02 native198/build/HTTP60",
+      "Qwen all-layer M1 full52"
+    ],
+    "goal_achieved": false
+  },
+  "batch01_verifier_revision": "diagnostic gate mode accepts exact recorded diagnostic label or historical observe_only; still requires performance_claim_eligible false and recomputes truth from all recorded samples",
+  "independent_warmup_replay_revision": {
+    "source": "verify_kernel_batch01.py",
+    "coverage": "each completed lane retained384 plus warmup96 full SSE reconstruction; warmup remains excluded from serving metrics",
+    "actual_check": "kernel-batch-warmup-verifier-check.json",
+    "verified_real_requests": 96,
+    "corruption_rejected": [
+      "omitted request",
+      "wrong phase",
+      "missing DONE",
+      "changed actual prompt"
+    ],
+    "full_batch_replay": "pending terminal archives"
+  },
+  "terminal_evidence_archiver": {
+    "PID": 3860060,
+    "session_id": 26788,
+    "state": "live waiting for batch01 and queued GPU correctness jobs; no compression during those jobs",
+    "source": "archive_after_full52.py",
+    "preparation": "terminal-evidence-archive-attempt01-preparation.json",
+    "preservation": "separate archives and full file SHA manifests; existing raw sources/archives retained; terminal source required; no deletion"
+  },
+  "batch01_quiet_controller_summary_observations": {
+    "file": "kernel-batch01-quiet40-controller-summary-observations.json",
+    "independent_raw_SSE_verified": false,
+    "whole_attempt_qualified": false,
+    "complete_collected_cells": [
+      "c1-fixed",
+      "c1-natural",
+      "c8-fixed"
+    ],
+    "remaining_cells_present_as_incomplete": true,
+    "low_concurrency_observation": "candidate versus V52 mean throughput -3.26/-3.06 percent and TPOT +3.63/+3.74 percent; provisional controller summary only",
+    "decision": "no adoption; finish full diagnostic and independent raw replay before attributing component effects or rejecting/promoting a candidate",
+    "raw_archival": "queued after serialized GPU jobs; avoid additional host I/O during serving comparison"
+  }
+}

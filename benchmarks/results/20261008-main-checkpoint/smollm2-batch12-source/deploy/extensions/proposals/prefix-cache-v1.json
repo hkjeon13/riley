@@ -1,0 +1,55 @@
+{
+  "$schema": "../proposal.schema.json",
+  "schema_version": "riley.extension-proposal.v1",
+  "extension_id": "prefix-cache-v1",
+  "status": "approved-for-implementation",
+  "track": "prefix-cache",
+  "title": "Tenant-safe exact prefix cache",
+  "semantic_class": "reference",
+  "problem_statement": "Repeated long prompts need an exact prefill reuse path that never crosses execution identity or tenant sharing-domain boundaries.",
+  "implementation_boundary": "core",
+  "reference_path": "benchmarks/reference/smollm2-135m-bf16.json",
+  "reference_sha256": "57b41e8faf7cc044e9eeb235011109224cb6cddfd19719920641a1662cc41fd3",
+  "fallback_path": "crates/riley-runtime/src/paged_kv.rs",
+  "fallback_sha256": "aaa9eacc472e5055bdbbea4919cef0d8bcacc3dd5916a5e9885ff007c9b4c838",
+  "primary_metric": "requests[].ttft_ms",
+  "required_metrics": [
+    "metrics.output_tokens_per_second",
+    "metrics.peak_vram_bytes",
+    "requests[].ttft_ms"
+  ],
+  "quality_or_error_metric": "failure_count",
+  "runtime_flag": "RILEY_EXPERIMENTAL_PREFIX_CACHE_V1",
+  "default_enabled": false,
+  "stable_default": false,
+  "result_disclosure": "This admission records no benchmark result or performance claim; a later implementation must disclose the required cache-off and cache-on fallback comparisons.",
+  "rollback": "Keep the experimental flag false by default; a later implementation rollback disables the flag and reverts cache metadata and scheduler integration together.",
+  "deploy_document_path": "deploy/extensions/plans/prefix-cache-v1.md",
+  "benchmark_contract_path": "benchmarks/extensions/contracts/prefix-cache-v1.json",
+  "class_gate": {
+    "kind": "reference",
+    "behavioral_parity": true,
+    "token_parity": true,
+    "stable_fallback": true,
+    "lifetime_resource_regression": true
+  },
+  "approval_answers": {
+    "user_workload_bottleneck": "Repeated long prompts need an exact prefill reuse path that does not cross tenant or execution identities.",
+    "semantic_class_rationale": "Prefix reuse changes no token or model semantics when every identity, complete block, and lifetime check passes, so it remains a reference-class systems change.",
+    "existing_ir_expression": {
+      "disposition": "additive-ir-change",
+      "rationale": "Existing paged KV ownership has no prefix-cache identity, sharing-domain, or immutable cache-lifecycle representation."
+    },
+    "implementation_location_rationale": "A future core runtime and scheduler addition is required because the cache must bind KV block ownership, admission, and exact fallback behavior.",
+    "correctness_reference": "benchmarks/reference/smollm2-135m-bf16.json",
+    "error_or_distribution_contract": "The reference-class contract requires behavioral parity, token parity, stable fallback, and lifetime/resource regression coverage; no approximation is admitted.",
+    "memory_and_operational_complexity": "Cache metadata and pins must remain bounded by configured block and byte budgets; this admission makes no hot-path allocation claim.",
+    "fallback_and_rollback": "With the flag false or on any identity or lifetime validation failure, use the current exact prefill path; rollback disables the flag and reverts the later implementation as one unit.",
+    "expected_resource_reduction": [
+      "flops",
+      "hbm-traffic",
+      "serial-depth"
+    ],
+    "end_to_end_benefit_hypothesis": "For same-domain exact prefix hits, avoiding already-computed prefill work is hypothesized to lower TTFT while miss behavior stays within the declared fallback comparison."
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "time_ns": 1791378476871159699,
+  "controller_observation": {
+    "exit": 0,
+    "text": "    PID     ELAPSED STAT COMMAND\n2907566       16:47 Ssl  /data/riley-serving-261007/vllm0271-venv/bin/python /data/riley-serving-261007/kernel-batch06-controller/run.py --attempt 2 --mode quiet\n"
+  },
+  "completed_cases": [
+    "c1-fixed-r0-v52",
+    "c1-fixed-r0-candidate",
+    "c1-fixed-r0-vllm",
+    "c1-fixed-r1-vllm",
+    "c1-fixed-r1-candidate",
+    "c1-fixed-r1-v52",
+    "c1-fixed-r2-v52",
+    "c1-fixed-r2-candidate",
+    "c1-fixed-r2-vllm",
+    "c1-fixed-r3-vllm",
+    "c1-fixed-r3-candidate",
+    "c1-fixed-r3-v52",
+    "c1-natural-r0-v52",
+    "c1-natural-r0-candidate",
+    "c1-natural-r0-vllm",
+    "c1-natural-r1-vllm",
+    "c1-natural-r1-candidate",
+    "c1-natural-r1-v52"
+  ],
+  "strict_reference_pass": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    false,
+    false,
+    true,
+    true
+  ],
+  "completion": null,
+  "GPU_compute": "3004706, /data/riley-serving-261007/v52-target/release/riley, 916 MiB"
+}

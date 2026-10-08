@@ -1,0 +1,68 @@
+{
+  "argv": [
+    "/data/riley-serving-261007/kernel-batch05-target-attempt01/release/riley",
+    "serve",
+    "--model",
+    "/data/riley-serving-260913-recovery/runtime-assets-20260915/model",
+    "--model-id",
+    "g04-smol",
+    "--bind",
+    "127.0.0.1:36455",
+    "--max-active-sequences",
+    "32",
+    "--max-waiting-requests",
+    "64",
+    "--batch-token-budget",
+    "512",
+    "--prefill-chunk-tokens",
+    "512",
+    "--max-sequence-tokens",
+    "1024",
+    "--max-output-tokens",
+    "128",
+    "--kv-blocks",
+    "2048",
+    "--residual-rmsnorm",
+    "separate",
+    "--execution-completion",
+    "iteration-batch",
+    "--metadata-transport",
+    "synchronous",
+    "--execution-graph-policy",
+    "require",
+    "--graph-numerics",
+    "variable-smol-v7",
+    "--sampling-backend",
+    "gpu-greedy"
+  ],
+  "env": {
+    "HOME": "/home/psyche",
+    "PATH": "/data/riley-serving-261007/vllm0271-venv/bin:/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin:/usr/bin:/bin",
+    "CUDA_HOME": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13",
+    "LANG": "C.UTF-8",
+    "CPATH": "/data/riley-serving-261007/curand-only-include",
+    "LC_ALL": "C.UTF-8",
+    "CUDA_VISIBLE_DEVICES": "0",
+    "VLLM_BATCH_INVARIANT": "0",
+    "LD_LIBRARY_PATH": "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib"
+  },
+  "host": {
+    "time_ns": 1791373348792132246,
+    "clocks": {
+      "perf_counter_before_ns": 885975741548236,
+      "perf_counter_after_ns": 885975741550001,
+      "epoch_ns": 1791373348792132246,
+      "monotonic_ns": 885975741549511,
+      "monotonic_raw_ns": 885963199868636,
+      "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+    },
+    "pressure": {
+      "cpu": "some avg10=2.74 avg60=2.79 avg300=2.76 total=13250475435\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+      "io": "some avg10=1.56 avg60=1.94 avg300=2.12 total=79977854851\nfull avg10=1.31 avg60=1.70 avg300=1.85 total=73088698253\n",
+      "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2049520639\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2000776875\n"
+    },
+    "loadavg": "8.43 9.60 9.82 9/8148 2517104\n",
+    "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 46, 40.39, 285, 327, 0"
+  },
+  "binary_sha256": "23820eb2df5006c2a522625083a86247a46731f8312cee6072be35be1be26fd6"
+}

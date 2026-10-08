@@ -1,0 +1,23 @@
+{
+  "awaited_controller_pid": 121025,
+  "confirmed_cmdline": [
+    "/data/riley-serving-261007/vllm0271-venv/bin/python",
+    "/data/riley-serving-261007/kernel-batch09-controller/run.py",
+    "--attempt",
+    "1",
+    "--mode",
+    "quiet"
+  ],
+  "scripts": {
+    "verify_kernel_batch09.py.patch": "7c5d58b38b90add7adb7ec6275b17a13cce33703661803c5d7ca2e898fa4963b",
+    "collect-and-verify.py.patch": "3370176bc25c84e3d45dd3b62d032f7984a0b1f3849888debbbaa52c3e7173cf",
+    "collect-and-verify.py": "dcb346683a27d08e68e1251f10377f3eba193b82a80db58d61ebfaf4fb30ad91",
+    "audit_kernel_batch09_serving_contract.py": "530c613b803aa54fa96f9cdf0c1f4c719d884db59dd2023ae6276375bbea246a",
+    "audit_kernel_batch09_serving_contract.py.patch": "380619b1c7e2ea39d99cebbd5129c3b560f30e75fadfb138dc643418ffa32d95",
+    "summarize_kernel_batch01.py": "c69a6c905100b591908703dff4fb66fc72f78b6af5248a18c11418bfd9855f37",
+    "verify_kernel_batch09.py": "109846d0cb1a8759292474314a61a9741088ba11b7ae2be366277b335f7e9a22",
+    "summarize_baseline.py": "4f8cd5708bf8c3bd739520298ed9612e692874be5ddabe89e32acf2ae76eae66"
+  },
+  "change_scope": "exact candidate revision/path/digest and binary_after field retained; all raw request, latency, concurrency, pin, CLI and exclusion checks unchanged",
+  "time_ns": 1791391743789147122
+}

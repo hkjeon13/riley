@@ -1,0 +1,25 @@
+{
+  "pins": {
+    "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/run_kernel_batch06_cpu_capture_gap_profile_attempt01.py": "a166448767ff127d7d715b711ff8ba8096aab0901e04f70b9ee0724376e7ece1",
+    "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch06-cpu-capture-gap-profile-plan-attempt01.json": "6b62ac3ab94e5946e88683a0a8c8ce2d3d2144595217a8fa2f96a403e6b2a51b",
+    "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/kernel-batch06-independent-replay-attempt02/raw-replay.json": "de7f3d8e7118c174b1f7712dd79a0b6ca851a5eb26cced86e7c42e8d249adf13"
+  },
+  "wait_for": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20261007-serving-resume/qwen-free-running-dispatch-attempt02/completion.json",
+  "scope": "pilot8 CPU process-tree root with private profiler dirs after validated full-lifetime GPU pilot; no serving scores or host setting mutations",
+  "orders": [
+    [
+      "v52",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "v52"
+    ]
+  ],
+  "selected_cells": [
+    "c1-fixed",
+    "c32-fixed",
+    "c32-natural"
+  ],
+  "expected_lanes": 12
+}

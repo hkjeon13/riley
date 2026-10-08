@@ -1,0 +1,36 @@
+{
+  "argv": [
+    "/home/psyche/.cargo/bin/cargo",
+    "test",
+    "--locked",
+    "-p",
+    "riley-cuda",
+    "--features",
+    "cuda",
+    "--test",
+    "primitives_gpu",
+    "--no-run",
+    "--message-format=json"
+  ],
+  "env": {
+    "HOME": "/home/psyche",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "PATH": "/home/psyche/.cargo/bin:/data/cuda-12.8.1/bin:/usr/bin:/bin",
+    "CUDA_HOME": "/data/cuda-12.8.1",
+    "CUDAToolkit_ROOT": "/data/cuda-12.8.1",
+    "CUDACXX": "/data/cuda-12.8.1/bin/nvcc",
+    "CMAKE": "/data/cmake-3.31.12/bin/cmake",
+    "CARGO_BUILD_JOBS": "1",
+    "CMAKE_BUILD_PARALLEL_LEVEL": "1",
+    "CARGO_TARGET_DIR": "/data/riley-serving-261007/qwen-isolated-norm-target-attempt02",
+    "RUSTUP_TOOLCHAIN": "1.85.0",
+    "LD_LIBRARY_PATH": "/data/cuda-12.8.1/lib64",
+    "CUDA_VISIBLE_DEVICES": "0",
+    "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+    "RILEY_QWEN_ISOLATED_NORM_INPUTS": "/data/riley-serving-261007/qwen-layer3-isolated-norm-inputs-attempt01",
+    "RILEY_QWEN_ISOLATED_NORM_HF": "/data/riley-serving-261007/qwen-layer3-isolated-norm-hf-validation-attempt01",
+    "RILEY_QWEN_ISOLATED_NORM_OUTPUT": "/data/riley-serving-261007/qwen-isolated-norm-native-validation-attempt02"
+  },
+  "source_revision": "2612208b9ac02ffa79b563b87f073c239b35da18"
+}

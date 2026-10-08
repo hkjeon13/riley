@@ -1,0 +1,35 @@
+{
+  "qwen-step109-layer3-hf-stage-validation-attempt01": {
+    "state": "terminal",
+    "files": {
+      "completion.json": {
+        "sha256": "4d5ff01be3b45120f6c9b8e4d06e80b1f73dc7d43be1a2e09cd778db6603759e",
+        "bytes": 188
+      },
+      "container.log": {
+        "sha256": "093465feefef421a56f428aadc1bf11b16bc5017abc62e8df15af497f0fd1e75",
+        "bytes": 8741
+      },
+      "controller-completion.json": {
+        "sha256": "99daef1fe06bc80009510a555f58c34e348cd2d83c37e854dd6ce69736ea014c",
+        "bytes": 218
+      },
+      "preparation.json": {
+        "sha256": "cb872b1a3b38745afeea0eb1686065cecea6cb845593d0b367a4df3dd17db734",
+        "bytes": 2457
+      },
+      "producer.json": {
+        "sha256": "4a6783d0da605129dbe1f8d11db76631547b402687ac7c0b3de9ddb3991fd55f",
+        "bytes": 1081
+      }
+    },
+    "completion": {
+      "failure": {
+        "type": "Qwen3BCacheOnLayerStageTraceError",
+        "message": "trace tensor names differ"
+      },
+      "serving_performance": "\ubbf8\uc2e4\ud589",
+      "goal_achieved": false
+    }
+  }
+}

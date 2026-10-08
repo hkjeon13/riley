@@ -1,0 +1,234 @@
+//! Source-level boundary contract for C07's exact C05 primitive evidence.
+
+const EVIDENCE_SOURCE: &str =
+    include_str!("../src/llama/graph_decode_c05_capture_capability_evidence.rs");
+const INVENTORY_SOURCE: &str = include_str!("../src/llama/graph_decode_capture_inventory.rs");
+const LLAMA_MODULE_SOURCE: &str = include_str!("../src/llama/mod.rs");
+const EXECUTION_SOURCES: &[(&str, &str)] = &[
+    (
+        "batch executor",
+        include_str!("../src/llama/batch_executor.rs"),
+    ),
+    ("decode", include_str!("../src/llama/decode.rs")),
+    ("forward", include_str!("../src/llama/forward.rs")),
+    ("generation", include_str!("../src/llama/generation.rs")),
+    (
+        "executor dispatch",
+        include_str!("../src/llama/executor/dispatch.rs"),
+    ),
+    (
+        "generic graph policy",
+        include_str!("../src/llama/executor/graph.rs"),
+    ),
+    (
+        "generic registry dispatcher",
+        include_str!("../src/llama/executor/graph_registry_dispatch.rs"),
+    ),
+    (
+        "C06 registry dispatcher",
+        include_str!("../src/llama/graph_decode_c06_registry_dispatch.rs"),
+    ),
+    (
+        "C05 metadata owner",
+        include_str!("../src/llama/graph_decode_c05_h2d_metadata_owner.rs"),
+    ),
+    (
+        "C05 fill resolver",
+        include_str!("../src/llama/graph_decode_c05_owned_exec_resolver.rs"),
+    ),
+    (
+        "C05 H2D resolver",
+        include_str!("../src/llama/graph_decode_c05_owned_h2d_exec_resolver.rs"),
+    ),
+];
+
+const REQUIRED_PRODUCTION_TOKENS: &[&str] = &[
+    "CudaGraphCaptureOperation::H2D",
+    "CudaGraphCaptureOperation::CanonicalRmsNormBf16",
+    "CudaGraphCaptureOperation::IndexedRopeBf16",
+    "CudaGraphCaptureOperation::RaggedPagedKvCacheWriteBf16",
+    "CudaGraphCaptureOperation::SiluBf16",
+    "CudaGraphCaptureOperation::GatedMultiplyBf16",
+    "CudaGraphCaptureOperation::ResidualAddBf16",
+    "CudaGraphCaptureCapability::Unknown",
+    "CudaGraphCaptureCapability::Unsupported",
+    "CudaGraphCaptureCapability::Supported",
+    "PureDecodeGraphV1CaptureOperation::MetadataH2d",
+    "PureDecodeGraphV1CaptureOperation::Norm",
+    "PureDecodeGraphV1CaptureOperation::Rope",
+    "PureDecodeGraphV1CaptureOperation::KvWrite",
+    "PureDecodeGraphV1CaptureOperation::MlpSiluBf16",
+    "PureDecodeGraphV1CaptureOperation::MlpGatedMultiply",
+    "PureDecodeGraphV1CaptureOperation::Residual",
+    "PureDecodeGraphV1CaptureCapabilityInventory::default()",
+    "fn map_exact_c05_capability",
+    "pub(crate) fn pure_decode_graph_v1_c05_capture_capability_evidence",
+    "CudaResult<PureDecodeGraphV1CaptureCapabilityInventory>",
+];
+
+const FORBIDDEN_PRODUCTION_TOKENS: &[&str] = &[
+    "CudaRuntime",
+    "CudaContext",
+    "CudaStream",
+    "CudaDevice",
+    "CudaPinnedHostBuffer",
+    "OwnedGraph",
+    "begin_graph_capture",
+    ".enqueue_silu_bf16(",
+    ".end(",
+    ".instantiate(",
+    ".launch(",
+    "launch_with_source",
+    "GraphRegistry",
+    "select_registered_execution_graph",
+    "select_execution_graph",
+    "GraphDispatchRequest",
+    "GraphDispatchEligibility",
+    "GraphDispatchMetrics",
+    "unsafe",
+    "extern \"C\"",
+    "Vec",
+    "Box",
+    "Arc",
+    "Mutex",
+    "pub use",
+];
+
+const EXECUTION_WIRING_TOKENS: &[&str] = &[
+    "graph_decode_c05_capture_capability_evidence",
+    "pure_decode_graph_v1_c05_capture_capability_evidence",
+];
+
+fn production_source() -> &'static str {
+    EVIDENCE_SOURCE
+        .split("#[cfg(test)]\nmod tests")
+        .next()
+        .expect("C07-29 evidence adapter must retain its unit-test boundary")
+}
+
+fn query_body() -> &'static str {
+    production_source()
+        .split("pub(crate) fn pure_decode_graph_v1_c05_capture_capability_evidence")
+        .nth(1)
+        .expect("C07-29 must retain its native capability query boundary")
+}
+
+#[test]
+fn c05_capture_capability_evidence_stays_exact_private_and_cold() {
+    let source = production_source();
+    for token in REQUIRED_PRODUCTION_TOKENS {
+        assert!(
+            source.contains(token),
+            "C07-29 capability evidence omitted required token {token:?}",
+        );
+    }
+    for token in FORBIDDEN_PRODUCTION_TOKENS {
+        assert!(
+            !source.contains(token),
+            "C07-29 capability evidence crossed its read-only boundary with {token:?}",
+        );
+    }
+    for &(name, execution_source) in EXECUTION_SOURCES {
+        for token in EXECUTION_WIRING_TOKENS {
+            assert!(
+                !execution_source.contains(token),
+                "C07-29 capability evidence must not wire into {name} through {token:?}",
+            );
+        }
+    }
+
+    let body = query_body();
+    assert!(
+        !body.contains("CudaGraphCaptureOperation::FillF32"),
+        "C05 fill evidence has no semantically identical C07 decode slot"
+    );
+    assert!(
+        body.contains("CudaGraphCaptureOperation::H2D.capture_capability()?"),
+        "metadata H2D must be queried through the exact C05 operation"
+    );
+    assert!(
+        body.contains("CudaGraphCaptureOperation::CanonicalRmsNormBf16.capture_capability()?"),
+        "per-layer norm must be queried through the exact C05 canonical BF16 RMSNorm operation"
+    );
+    assert!(
+        body.contains("CudaGraphCaptureOperation::IndexedRopeBf16.capture_capability()?"),
+        "decode RoPE must be queried through the exact C05 indexed BF16 RoPE operation"
+    );
+    assert!(
+        body.contains(
+            "CudaGraphCaptureOperation::RaggedPagedKvCacheWriteBf16.capture_capability()?"
+        ),
+        "decode K/V write must be queried through the exact C05 ragged paged BF16 operation"
+    );
+    assert!(
+        body.contains("CudaGraphCaptureOperation::SiluBf16.capture_capability()?"),
+        "MLP SiLU must be queried through the exact C05 operation"
+    );
+    assert!(
+        body.contains("CudaGraphCaptureOperation::GatedMultiplyBf16.capture_capability()?"),
+        "MLP gated multiply must be queried through the exact C05 operation"
+    );
+    assert!(
+        body.contains("CudaGraphCaptureOperation::ResidualAddBf16.capture_capability()?"),
+        "residual addition must be queried through the exact C05 operation"
+    );
+    assert!(
+        body.contains(".with_capability(PureDecodeGraphV1CaptureOperation::Norm, norm)"),
+        "C05 canonical BF16 RMSNorm evidence must map only to the matching C07 norm operation"
+    );
+    assert!(
+        body.contains(".with_capability(PureDecodeGraphV1CaptureOperation::Rope, rope)"),
+        "C05 indexed BF16 RoPE evidence must map only to the matching C07 RoPE operation"
+    );
+    assert!(
+        body.contains(".with_capability(PureDecodeGraphV1CaptureOperation::KvWrite, kv_write)"),
+        "C05 ragged paged BF16 K/V-write evidence must map only to the matching C07 K/V-write operation"
+    );
+    assert!(
+        body.contains(
+            ".with_capability(\n            PureDecodeGraphV1CaptureOperation::MlpGatedMultiply,\n            mlp_gated_multiply,\n        )"
+        ),
+        "C05 gated-multiply evidence must map only to the matching C07 MLP operation"
+    );
+    assert!(
+        body.contains(".with_capability(PureDecodeGraphV1CaptureOperation::Residual, residual)"),
+        "C05 residual-add evidence must map only to the matching C07 residual operation"
+    );
+    assert_eq!(
+        body.matches("capture_capability()?").count(),
+        7,
+        "C07-35 must query exactly its seven reviewed C05 primitives"
+    );
+    for unmapped in [
+        "CudaGraphCaptureOperation::FillF32",
+        "CudaGraphCaptureOperation::Bf16Argmax",
+        "CudaGraphCaptureOperation::Bf16RowGather",
+        "CudaGraphCaptureOperation::Bf16RowGatherArgmax",
+        "CudaGraphCaptureOperation::Bf16RowGatherArgmaxD2H",
+    ] {
+        assert!(
+            !body.contains(unmapped),
+            "C07-34 must not broaden exact C05 evidence through {unmapped}"
+        );
+    }
+
+    assert!(
+        INVENTORY_SOURCE.contains("Norm")
+            && INVENTORY_SOURCE.contains("Rope")
+            && INVENTORY_SOURCE.contains("KvWrite")
+            && INVENTORY_SOURCE.contains("MlpSiluBf16")
+            && INVENTORY_SOURCE.contains("MlpGatedMultiply")
+            && INVENTORY_SOURCE.contains("Residual"),
+        "C07 inventory must keep the canonical norm, RoPE, K/V-write, SiLU, gated-multiply, and residual operations distinct",
+    );
+    assert!(
+        LLAMA_MODULE_SOURCE.contains(
+            "#[cfg(feature = \"cuda\")]\n#[allow(dead_code)] // C07-35 maps seven exact reviewed C05 primitives into that cold inventory.\nmod graph_decode_c05_capture_capability_evidence;"
+        ),
+        "C07-29 evidence must remain a private CUDA-gated module",
+    );
+    assert!(
+        !LLAMA_MODULE_SOURCE.contains("pub use graph_decode_c05_capture_capability_evidence"),
+        "C07-29 evidence must not become a public runtime API",
+    );
+}

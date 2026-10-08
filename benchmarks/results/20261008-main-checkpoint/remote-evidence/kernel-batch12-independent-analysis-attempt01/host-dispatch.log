@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-261007/kernel-batch12-independent-analysis-attempt01/host-after-replay.py", line 21, in <module>
+    assert terminal['failure'] is None and all(x['exit']==0 for x in terminal['steps'])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

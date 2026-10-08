@@ -1,0 +1,9 @@
+primitive-build exit2
+Traceback (most recent call last):
+  File "/data/riley-serving-261007/run_kernel_batch03_after_archive.py", line 39, in <module>
+    run('primitive-build',[str(tool/'bin/nvcc'),'-O3','-DNDEBUG','-std=c++17','-arch=sm_89','--use_fast_math','-I'+str(source/'kernels/src'),str(source/'kernels/tests/kernel_batch03_correctness.cu'),'-o',str(primitive)],env,source)
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/riley-serving-261007/run_kernel_batch03_after_archive.py", line 17, in run
+    assert p.returncode==0,label+' failed'
+           ^^^^^^^^^^^^^^^
+AssertionError: primitive-build failed

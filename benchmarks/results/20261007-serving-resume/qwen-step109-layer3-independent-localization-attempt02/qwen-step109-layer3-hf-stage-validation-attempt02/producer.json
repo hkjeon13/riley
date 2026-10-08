@@ -1,0 +1,29 @@
+{
+  "implementation_id": "riley-python-qwen3b-hf-eager-cache-on-layer-stage-v1",
+  "runtime_dependency_class": "offline-python-reference",
+  "python_version": "3.12.3",
+  "python_executable_sha256": "a92f0f95e883390c7256b2e441484aac06b1002dbe1d924141a77c8d82f96223",
+  "python_platform_system": "linux",
+  "python_platform_machine": "x86_64",
+  "torch_version": "2.13.0+cu129",
+  "transformers_version": "5.16.1",
+  "safetensors_version": "0.8.0",
+  "selected_device": {
+    "requested": "cuda:0",
+    "resolved": "cuda:0",
+    "index": 0,
+    "name": "NVIDIA GeForce RTX 4090",
+    "compute_capability": "8.9",
+    "driver_version": "580.178.04",
+    "runtime_cuda_version": "12.9"
+  },
+  "transformers_model_source": {
+    "module": "transformers.models.qwen2.modeling_qwen2",
+    "filename": "modeling_qwen2.py",
+    "sha256": "34390fea7648b444d5727abef0b85acceba28f856aedec6c335d51253806bfee"
+  },
+  "transformers_qwen2_source": {
+    "path": "transformers/models/qwen2/modeling_qwen2.py",
+    "sha256": "34390fea7648b444d5727abef0b85acceba28f856aedec6c335d51253806bfee"
+  }
+}

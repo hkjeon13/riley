@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/schemas/c02-shutdown-quiescence-v2.schema.json",
+  "title": "Riley C02 shutdown quiescence v2",
+  "description": "Create-only source-owned C02 shutdown evidence. It binds the running Linux PID and start ticks to final raw C02 metrics after shutdown. It is raw captured/not-run evidence, never a candidate, freeze, Gate E, semantic-receipt, pass/fail, or rollback verdict.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "capture_status", "qualification_status", "server_pid", "server_start_ticks", "worker_ready", "final_metrics"],
+  "properties": {
+    "schema_version": { "const": "riley.c02-shutdown-quiescence.v2" },
+    "capture_status": { "const": "captured" },
+    "qualification_status": { "const": "not-run" },
+    "server_pid": { "type": "integer", "minimum": 1 },
+    "server_start_ticks": { "type": "integer", "minimum": 1 },
+    "worker_ready": { "const": false },
+    "final_metrics": { "$ref": "c02-capture-metrics-v2.schema.json" }
+  }
+}

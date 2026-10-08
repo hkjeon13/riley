@@ -1,0 +1,87 @@
+{
+  "schema": "riley.kernel-batch05.matched96.v1",
+  "scope": "All eight cells with baseline/candidate/reconstructed vLLM; quiet and diagnostic attempts separate",
+  "workloads": [
+    "fixed",
+    "natural"
+  ],
+  "concurrency": [
+    1,
+    8,
+    16,
+    32
+  ],
+  "repeats": 4,
+  "orders": [
+    [
+      "v52",
+      "candidate",
+      "vllm"
+    ],
+    [
+      "vllm",
+      "candidate",
+      "v52"
+    ],
+    [
+      "v52",
+      "candidate",
+      "vllm"
+    ],
+    [
+      "vllm",
+      "candidate",
+      "v52"
+    ]
+  ],
+  "warmup": 96,
+  "retained": 384,
+  "token_budget": 512,
+  "chunk_tokens": {
+    "fixed": 128,
+    "natural": 512
+  },
+  "prefix_cache": false,
+  "sampling": "greedy temperature0, original EOS and original request max_tokens",
+  "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+  "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+  "gpu_operating_cap_bytes": 21474836480,
+  "vllm_gpu_memory_utilization": 0.3,
+  "host_start_gate": {
+    "timeout_seconds": 300,
+    "interval_seconds": 2,
+    "consecutive": 3,
+    "cpu_some_max": 5,
+    "io_full_max": 5,
+    "memory_full_max": 0.5
+  },
+  "exclusion_policy": "none; fail whole attempt, retain every sample and failed attempt",
+  "correctness_policy": "Riley exact frozen token/text/finish reference; all engine input/output counts and transport exact; cross-engine arithmetic differences recorded",
+  "completion": false,
+  "post_screen_required": [
+    "independent raw replay and all-cell comparison",
+    "sustained load",
+    "cancellation",
+    "re-request",
+    "resource reclamation"
+  ],
+  "host_gate_revision_reason": "original admission gates retained in quiet mode; diagnostics are separate and cannot qualify",
+  "host_pressure_policy": "selected explicit mode; quiet requires original gate; diagnostic observes all and cannot qualify",
+  "performance_claim_eligible": false,
+  "startup_http_ready_timeout_seconds": 300,
+  "startup_timeout_scope": "cold initialization only; captured logs and host samples; excluded from serving timing by explicit warmup and retained phase envelopes",
+  "candidate_source_commit": "61402ebc42e9d0ea5bde4e6415a1a9c25e3db8a1",
+  "execution_state": "predeclared before launch; independent native1088 and HTTP60 passed; performance unrun",
+  "host_clock_bridge": "every host sample sandwiches epoch and CLOCK_MONOTONIC_RAW between perf_counter calls; request clock remains unchanged",
+  "batch_changes": [
+    "decode gate/up next K64 stage register prefetch; existing K16 recurrence/row tiles/BF16 boundaries",
+    "prefill gate/up next K32 stage register prefetch; original K16 gate/up accumulator order/BF16 boundaries"
+  ],
+  "measured_motivation": {
+    "serving_profile": "kernel-batch04-profile-matrix-analysis-attempt01/summary.json",
+    "counter_diagnostic": "kernel-batch04-gate-counter-independent-collection-attempt01/independent-analysis.json",
+    "limits": "synthetic hardware counters; uncontrolled clocks/cache and V52-before-candidate within each process; not serving gain or source-instruction stall attribution"
+  },
+  "candidate_binary_sha256": "23820eb2df5006c2a522625083a86247a46731f8312cee6072be35be1be26fd6",
+  "independent_correctness_sha256": "98a6e2f30c8453bbacb8fd3cbfce0546624d45e11798625c1ce9a24b7070bc86"
+}

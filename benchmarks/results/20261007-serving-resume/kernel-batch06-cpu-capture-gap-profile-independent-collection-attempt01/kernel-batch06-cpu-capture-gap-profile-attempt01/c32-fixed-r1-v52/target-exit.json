@@ -1,0 +1,41 @@
+{
+  "launcher_exit": 0,
+  "shutdown_error": null,
+  "host": {
+    "clocks": {
+      "realtime_ns": 1791380917564613315,
+      "monotonic_ns": 893544514030525,
+      "monotonic_raw_ns": 893531863524650,
+      "perf_counter_before_ns": 893544514029384,
+      "perf_counter_after_ns": 893544514032475,
+      "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+    },
+    "pressure": {
+      "cpu": "some avg10=4.06 avg60=3.66 avg300=3.68 total=13536781520\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+      "io": "some avg10=1.53 avg60=2.35 avg300=1.99 total=80323380409\nfull avg10=1.32 avg60=1.96 avg300=1.70 total=73388384320\n",
+      "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2069365380\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2020104918\n"
+    },
+    "compute_apps": "",
+    "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 46, 84.19 W, 2730 MHz, 247 MiB"
+  },
+  "reclamation_observations": [
+    {
+      "clocks": {
+        "realtime_ns": 1791380917564613315,
+        "monotonic_ns": 893544514030525,
+        "monotonic_raw_ns": 893531863524650,
+        "perf_counter_before_ns": 893544514029384,
+        "perf_counter_after_ns": 893544514032475,
+        "perf_counter_implementation": "clock_gettime(CLOCK_MONOTONIC)"
+      },
+      "pressure": {
+        "cpu": "some avg10=4.06 avg60=3.66 avg300=3.68 total=13536781520\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "io": "some avg10=1.53 avg60=2.35 avg300=1.99 total=80323380409\nfull avg10=1.32 avg60=1.96 avg300=1.70 total=73388384320\n",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2069365380\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2020104918\n"
+      },
+      "compute_apps": "",
+      "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 46, 84.19 W, 2730 MHz, 247 MiB"
+    }
+  ],
+  "reclamation_timeout_seconds": 40
+}
