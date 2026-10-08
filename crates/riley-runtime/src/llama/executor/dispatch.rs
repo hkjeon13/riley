@@ -17,7 +17,7 @@ use riley_cuda::{
     ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams, deterministic_bf16_argmax,
     deterministic_bf16_argmax_bounded, embedding, fixed37_ragged_paged_attention, gated_multiply,
     grouped_ragged_paged_attention, indexed_rope,
-    native_bf16_ragged_paged_split_gqa_d128_two_stage, ragged_paged_attention,
+    native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, ragged_paged_attention,
     ragged_paged_kv_cache_write, residual_add, row_gather, silu,
 };
 
@@ -906,7 +906,9 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 scale: 1.0 / (head_size as f32).sqrt(),
                 reduction_order: DecodePartialReductionOrder::LogicalAscending,
             };
-            native_bf16_ragged_paged_split_gqa_d128_two_stage(&mut params, stream)
+            // Shared-KV producer geometry: bit-identical states, one K/V read
+            // per KV head instead of one per query head.
+            native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv(&mut params, stream)
                 .map_err(|source| batch_cuda(attention_site, source))?;
         } else {
             let mut params = RaggedPagedAttentionParams {

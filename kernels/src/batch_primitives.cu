@@ -2895,6 +2895,143 @@ native_bf16_ragged_paged_split_gqa_d128_partial_state_kernel(
   partial_states[state_base + 2 + lane + 3 * kWarpSize] = numerator3;
 }
 
+// Shared-KV launch geometry for the D128 partial-state producer. One CTA owns
+// a `(logical_block, key_value_head, row)` page and has one warp per query
+// head of that KV head. The page's immutable BF16 K/V tile is read from global
+// memory once and staged in shared memory with its exact storage bits; every
+// warp then executes the same per-head score reduction, staged rounding,
+// online token order, and numerator updates as the one-warp producer above,
+// and writes the identical `[m, l, n[128]]` state.
+constexpr uint32_t kNativeBf16RaggedPagedSplitGqaD128SharedKvWarps =
+    static_cast<uint32_t>(kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount /
+                          kNativeBf16RaggedPagedSplitGqaD128KeyValueHeadCount);
+constexpr uint32_t kNativeBf16RaggedPagedSplitGqaD128SharedKvThreads =
+    kNativeBf16RaggedPagedSplitGqaD128SharedKvWarps * kWarpSize;
+constexpr uint32_t kNativeBf16RaggedPagedSplitGqaD128TileElements =
+    static_cast<uint32_t>(RILEY_CUDA_PAGED_KV_BLOCK_SIZE *
+                          kNativeBf16RaggedPagedSplitGqaD128HeadSize);
+
+__global__ __launch_bounds__(kNativeBf16RaggedPagedSplitGqaD128SharedKvThreads)
+void native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_kernel(
+    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
+    const __nv_bfloat16* value_pool, float* partial_states,
+    DeviceBatch batch, uint64_t partial_state_capacity, float scale) {
+  const uint32_t lane = threadIdx.x % kWarpSize;
+  const uint32_t warp = threadIdx.x / kWarpSize;
+  const uint64_t logical_block = blockIdx.x;
+  const uint64_t key_value_head = blockIdx.y;
+  const uint64_t row = blockIdx.z;
+  // Every exit before the barrier below depends only on CTA-uniform values.
+  if (row >= batch.active_row_count ||
+      key_value_head >= kNativeBf16RaggedPagedSplitGqaD128KeyValueHeadCount) {
+    return;
+  }
+  const uint64_t logical_token_count =
+      static_cast<uint64_t>(batch.row_positions[row]) + 1;
+  const uint64_t partial_state_count =
+      ((logical_token_count - 1) / RILEY_CUDA_PAGED_KV_BLOCK_SIZE) + 1;
+  if (logical_block >= partial_state_count ||
+      logical_block >= partial_state_capacity) {
+    return;
+  }
+
+  const uint64_t query_head =
+      key_value_head * kNativeBf16RaggedPagedSplitGqaD128SharedKvWarps + warp;
+  const uint64_t query_base =
+      (row * kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount + query_head) *
+      kNativeBf16RaggedPagedSplitGqaD128HeadSize;
+  uint64_t block_head_base = 0;
+  uint64_t token_count = 0;
+  const bool valid_block = resolve_ragged_partial_block(
+      batch, row, logical_block, key_value_head, &block_head_base,
+      &token_count);
+
+  __shared__ __nv_bfloat16
+      shared_keys[kNativeBf16RaggedPagedSplitGqaD128TileElements];
+  __shared__ __nv_bfloat16
+      shared_values[kNativeBf16RaggedPagedSplitGqaD128TileElements];
+  if (valid_block) {
+    const uint32_t tile_elements = static_cast<uint32_t>(
+        token_count * kNativeBf16RaggedPagedSplitGqaD128HeadSize);
+    for (uint32_t element = threadIdx.x; element < tile_elements;
+         element += kNativeBf16RaggedPagedSplitGqaD128SharedKvThreads) {
+      shared_keys[element] = key_pool[block_head_base + element];
+      shared_values[element] = value_pool[block_head_base + element];
+    }
+  }
+  __syncthreads();
+
+  const float query0 = __bfloat162float(query[query_base + lane]);
+  const float query1 =
+      __bfloat162float(query[query_base + lane + kWarpSize]);
+  const float query2 =
+      __bfloat162float(query[query_base + lane + 2 * kWarpSize]);
+  const float query3 =
+      __bfloat162float(query[query_base + lane + 3 * kWarpSize]);
+  float maximum = valid_block ? -CUDART_INF_F : CUDART_NAN_F;
+  float denominator = valid_block ? 0.0F : CUDART_NAN_F;
+  float numerator0 = valid_block ? 0.0F : CUDART_NAN_F;
+  float numerator1 = valid_block ? 0.0F : CUDART_NAN_F;
+  float numerator2 = valid_block ? 0.0F : CUDART_NAN_F;
+  float numerator3 = valid_block ? 0.0F : CUDART_NAN_F;
+  if (valid_block) {
+    for (uint64_t token_in_block = 0; token_in_block < token_count;
+         ++token_in_block) {
+      const uint32_t tile_base = static_cast<uint32_t>(
+          token_in_block * kNativeBf16RaggedPagedSplitGqaD128HeadSize);
+      const float key0 = __bfloat162float(shared_keys[tile_base + lane]);
+      const float key1 =
+          __bfloat162float(shared_keys[tile_base + lane + kWarpSize]);
+      const float key2 =
+          __bfloat162float(shared_keys[tile_base + lane + 2 * kWarpSize]);
+      const float key3 =
+          __bfloat162float(shared_keys[tile_base + lane + 3 * kWarpSize]);
+      float score = fmaf(query0, key0, query1 * key1);
+      score = fmaf(query2, key2, score);
+      score = fmaf(query3, key3, score);
+      score = warp_sum(score);
+      score = staged_attention_score(
+          __shfl_sync(kFullWarpMask, score, 0), scale);
+
+      float alpha = 0.0F;
+      float beta = 0.0F;
+      if (lane == 0) {
+        update_online_state(score, &maximum, &denominator, &alpha, &beta);
+      }
+      alpha = __shfl_sync(kFullWarpMask, alpha, 0);
+      beta = __shfl_sync(kFullWarpMask, beta, 0);
+      numerator0 = update_numerator(
+          numerator0, __bfloat162float(shared_values[tile_base + lane]),
+          alpha, beta);
+      numerator1 = update_numerator(
+          numerator1,
+          __bfloat162float(shared_values[tile_base + lane + kWarpSize]),
+          alpha, beta);
+      numerator2 = update_numerator(
+          numerator2,
+          __bfloat162float(shared_values[tile_base + lane + 2 * kWarpSize]),
+          alpha, beta);
+      numerator3 = update_numerator(
+          numerator3,
+          __bfloat162float(shared_values[tile_base + lane + 3 * kWarpSize]),
+          alpha, beta);
+    }
+  }
+  const uint64_t state_base =
+      (((row * partial_state_capacity + logical_block) *
+            kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount +
+        query_head) *
+       kNativeBf16RaggedPagedSplitGqaD128StateStride);
+  if (lane == 0) {
+    partial_states[state_base] = maximum;
+    partial_states[state_base + 1] = denominator;
+  }
+  partial_states[state_base + 2 + lane] = numerator0;
+  partial_states[state_base + 2 + lane + kWarpSize] = numerator1;
+  partial_states[state_base + 2 + lane + 2 * kWarpSize] = numerator2;
+  partial_states[state_base + 2 + lane + 3 * kWarpSize] = numerator3;
+}
+
 __device__ __forceinline__ NativeBf16RaggedPartialTransitionV2
 merge_ragged_partial_metadata_v2(float other_maximum, float other_denominator,
                                  float* maximum, float* denominator) {
@@ -3216,7 +3353,7 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
   params = &stable_params;
   if (params->format_version !=
           RILEY_CUDA_NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_V3_VERSION ||
-      !reserved_is_zero(params->reserved, 4)) {
+      params->reserved[0] > 1 || !reserved_is_zero(params->reserved + 1, 3)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "native ragged D128 V3 version or reserved fields are invalid");
@@ -3385,14 +3522,32 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
         static_cast<uint32_t>(params->launch_partial_state_count),
         static_cast<uint32_t>(params->query_head_count),
         static_cast<uint32_t>(params->batch.active_row_count));
-    native_bf16_ragged_paged_split_gqa_d128_partial_state_kernel<<<
-        producer_grid, kWarpSize, 0, stream->stream>>>(
-        reinterpret_cast<const __nv_bfloat16*>(query.data),
-        reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
-        reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
-        reinterpret_cast<float*>(partial_states.data),
-        device_batch(params->batch, batch), params->partial_state_capacity,
-        params->scale);
+    // reserved[0] selects the producer launch geometry only; both producers
+    // write bit-identical partial states.
+    if (params->reserved[0] == 1) {
+      const dim3 shared_kv_grid(
+          static_cast<uint32_t>(params->launch_partial_state_count),
+          static_cast<uint32_t>(params->key_value_head_count),
+          static_cast<uint32_t>(params->batch.active_row_count));
+      native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_kernel<<<
+          shared_kv_grid, kNativeBf16RaggedPagedSplitGqaD128SharedKvThreads, 0,
+          stream->stream>>>(
+          reinterpret_cast<const __nv_bfloat16*>(query.data),
+          reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+          reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+          reinterpret_cast<float*>(partial_states.data),
+          device_batch(params->batch, batch), params->partial_state_capacity,
+          params->scale);
+    } else {
+      native_bf16_ragged_paged_split_gqa_d128_partial_state_kernel<<<
+          producer_grid, kWarpSize, 0, stream->stream>>>(
+          reinterpret_cast<const __nv_bfloat16*>(query.data),
+          reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+          reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+          reinterpret_cast<float*>(partial_states.data),
+          device_batch(params->batch, batch), params->partial_state_capacity,
+          params->scale);
+    }
     status = launch_status(error, kOperation);
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {

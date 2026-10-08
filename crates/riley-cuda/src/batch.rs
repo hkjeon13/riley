@@ -802,6 +802,36 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_two_stage<S: CudaExecutionStream 
     params: &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams<'_>,
     stream: &mut S,
 ) -> CudaResult<()> {
+    execute_native_bf16_ragged_d128_two_stage(params, stream, D128_PRODUCER_PER_QUERY_HEAD)
+}
+
+/// Same operation and numerical contract as
+/// [`native_bf16_ragged_paged_split_gqa_d128_two_stage`], with the partial-state
+/// producer launched as one CTA per `(page, KV head, row)` whose query-head
+/// warps share a single staged K/V tile. Partial states, transitions,
+/// normalizers, and output are bit-identical to the per-query-head launch.
+///
+/// # Errors
+///
+/// Identical to [`native_bf16_ragged_paged_split_gqa_d128_two_stage`].
+pub fn native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv<
+    S: CudaExecutionStream + ?Sized,
+>(
+    params: &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    execute_native_bf16_ragged_d128_two_stage(params, stream, D128_PRODUCER_SHARED_KV)
+}
+
+const D128_PRODUCER_PER_QUERY_HEAD: u64 = 0;
+const D128_PRODUCER_SHARED_KV: u64 = 1;
+
+#[allow(clippy::too_many_lines)]
+fn execute_native_bf16_ragged_d128_two_stage<S: CudaExecutionStream + ?Sized>(
+    params: &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams<'_>,
+    stream: &mut S,
+    producer_layout: u64,
+) -> CudaResult<()> {
     const OPERATION: &str = "native_bf16_ragged_paged_split_gqa_d128_two_stage";
     let stream = execution_stream_mut(stream);
     let launch_partial_state_count =
@@ -835,12 +865,13 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_two_stage<S: CudaExecutionStream 
             launch_partial_state_count,
             params.scale,
             reduction_order,
+            producer_layout,
             &mut stream.native,
         )
     }
     #[cfg(not(feature = "cuda"))]
     {
-        let _ = (params, launch_partial_state_count);
+        let _ = (params, launch_partial_state_count, producer_layout);
         Err(CudaError::unavailable(OPERATION))
     }
 }
