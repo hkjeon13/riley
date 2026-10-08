@@ -1273,14 +1273,33 @@ __global__ void decode_av_reference_kernel(
     const uint64_t depth = index % head_size;
     const uint64_t query_head = index / head_size;
     const uint64_t key_value_head = query_head / group_size;
-    const uint64_t probability_base = query_head * logical_token_count;
+    // Loads are hoisted four tokens ahead of the reduction. The fused
+    // multiply-add chain itself keeps its strict ascending token order, so
+    // every output element is bit-identical to the one-load-per-step loop.
+    const __nv_bfloat16* probability =
+        probabilities + query_head * logical_token_count;
+    const __nv_bfloat16* value =
+        value_cache + key_value_head * maximum_token_count * head_size + depth;
     float accumulator = 0.0F;
-    for (uint64_t token = 0; token < logical_token_count; ++token) {
-      const uint64_t value_index =
-          (key_value_head * maximum_token_count + token) * head_size + depth;
-      accumulator = fmaf(
-          __bfloat162float(probabilities[probability_base + token]),
-          __bfloat162float(value_cache[value_index]), accumulator);
+    uint64_t token = 0;
+    for (; token + 4 <= logical_token_count; token += 4) {
+      const float p0 = __bfloat162float(probability[token]);
+      const float p1 = __bfloat162float(probability[token + 1]);
+      const float p2 = __bfloat162float(probability[token + 2]);
+      const float p3 = __bfloat162float(probability[token + 3]);
+      const float v0 = __bfloat162float(value[token * head_size]);
+      const float v1 = __bfloat162float(value[(token + 1) * head_size]);
+      const float v2 = __bfloat162float(value[(token + 2) * head_size]);
+      const float v3 = __bfloat162float(value[(token + 3) * head_size]);
+      accumulator = fmaf(p0, v0, accumulator);
+      accumulator = fmaf(p1, v1, accumulator);
+      accumulator = fmaf(p2, v2, accumulator);
+      accumulator = fmaf(p3, v3, accumulator);
+    }
+    for (; token < logical_token_count; ++token) {
+      accumulator = fmaf(__bfloat162float(probability[token]),
+                         __bfloat162float(value[token * head_size]),
+                         accumulator);
     }
     output[index] = __float2bfloat16_rn(accumulator);
   }
