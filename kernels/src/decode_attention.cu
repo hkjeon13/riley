@@ -1273,7 +1273,7 @@ __global__ void decode_av_reference_kernel(
     const uint64_t depth = index % head_size;
     const uint64_t query_head = index / head_size;
     const uint64_t key_value_head = query_head / group_size;
-    // Loads are hoisted four tokens ahead of the reduction. The fused
+    // Loads are hoisted sixteen tokens ahead of the reduction. The fused
     // multiply-add chain itself keeps its strict ascending token order, so
     // every output element is bit-identical to the one-load-per-step loop.
     const __nv_bfloat16* probability =
@@ -1282,19 +1282,17 @@ __global__ void decode_av_reference_kernel(
         value_cache + key_value_head * maximum_token_count * head_size + depth;
     float accumulator = 0.0F;
     uint64_t token = 0;
-    for (; token + 4 <= logical_token_count; token += 4) {
-      const float p0 = __bfloat162float(probability[token]);
-      const float p1 = __bfloat162float(probability[token + 1]);
-      const float p2 = __bfloat162float(probability[token + 2]);
-      const float p3 = __bfloat162float(probability[token + 3]);
-      const float v0 = __bfloat162float(value[token * head_size]);
-      const float v1 = __bfloat162float(value[(token + 1) * head_size]);
-      const float v2 = __bfloat162float(value[(token + 2) * head_size]);
-      const float v3 = __bfloat162float(value[(token + 3) * head_size]);
-      accumulator = fmaf(p0, v0, accumulator);
-      accumulator = fmaf(p1, v1, accumulator);
-      accumulator = fmaf(p2, v2, accumulator);
-      accumulator = fmaf(p3, v3, accumulator);
+    constexpr uint64_t kAhead = 16;
+    for (; token + kAhead <= logical_token_count; token += kAhead) {
+      float p[kAhead];
+      float v[kAhead];
+      for (uint64_t ahead = 0; ahead < kAhead; ++ahead) {
+        p[ahead] = __bfloat162float(probability[token + ahead]);
+        v[ahead] = __bfloat162float(value[(token + ahead) * head_size]);
+      }
+      for (uint64_t ahead = 0; ahead < kAhead; ++ahead) {
+        accumulator = fmaf(p[ahead], v[ahead], accumulator);
+      }
     }
     for (; token < logical_token_count; ++token) {
       accumulator = fmaf(__bfloat162float(probability[token]),
