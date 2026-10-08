@@ -4,7 +4,7 @@ use riley_cuda::{
     BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE, BF16_ARGMAX_STATUS_SUCCESS,
     Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice,
     CudaDeviceBuffer, CudaErrorKind, CudaPinnedHostBuffer, CudaRuntime, CudaStream,
-    ResidualAddParams, deterministic_bf16_argmax, residual_add,
+    ResidualAddParams, deterministic_bf16_argmax, deterministic_bf16_argmax_bounded, residual_add,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -374,4 +374,140 @@ fn deterministic_bf16_argmax_validation_fails_before_result_mutation() -> TestRe
     foreign_stream.close()?;
     close_context(context)?;
     close_context(foreign_context)
+}
+
+/// Independent oracle for the bounded contract: any non-finite column fails
+/// the row, and only token IDs below `bound` can win (lowest ID on ties).
+fn cpu_bounded_argmax(bits: &[u16], vocabulary: usize, bound: usize) -> Vec<u8> {
+    let mut words = Vec::new();
+    for row in bits.chunks_exact(vocabulary) {
+        let value = |bits: u16| f32::from_bits(u32::from(bits) << 16);
+        if row.iter().any(|&bits| !value(bits).is_finite()) {
+            words.extend([BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE]);
+            continue;
+        }
+        let mut winner = 0;
+        for token in 1..bound {
+            if value(row[token]) > value(row[winner]) {
+                winner = token;
+            }
+        }
+        words.extend([u32::try_from(winner).unwrap(), BF16_ARGMAX_STATUS_SUCCESS]);
+    }
+    words.iter().flat_map(|word| word.to_ne_bytes()).collect()
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn bounded_argmax_matches_cpu_oracle_and_ignores_columns_past_the_bound() -> TestResult {
+    const ROW_COUNT: usize = 6;
+    const VOCABULARY_SIZE: usize = 1_031;
+    const BOUND: usize = 1_000;
+    let mut logits_bits = vec![0xbf80_u16; ROW_COUNT * VOCABULARY_SIZE]; // -1.0
+    let index = |row: usize, token: usize| row * VOCABULARY_SIZE + token;
+    // Row 0: the global maximum lies past the bound and must not win.
+    logits_bits[index(0, 1_020)] = 0x4120; // 10.0
+    logits_bits[index(0, 37)] = 0x4000; // 2.0
+    // Row 1: the best in-bound value is the last candidate.
+    logits_bits[index(1, BOUND - 1)] = 0x4040; // 3.0
+    logits_bits[index(1, BOUND)] = 0x4080; // 4.0, first excluded column
+    // Row 2: ties inside the bound keep the lowest ID; signed zeros are equal.
+    logits_bits[index(2, 400)] = 0x0000;
+    logits_bits[index(2, 90)] = 0x8000;
+    logits_bits[index(2, 1_005)] = 0x3f80;
+    // Row 3: a non-finite value past the bound still fails the row.
+    logits_bits[index(3, 5)] = 0x4000;
+    logits_bits[index(3, 1_030)] = 0x7fc1; // NaN
+    // Row 4: a non-finite value inside the bound fails the row.
+    logits_bits[index(4, 2)] = 0x7f80;
+    // Row 5: every candidate equal; token 0 wins.
+    let expected = cpu_bounded_argmax(&logits_bits, VOCABULARY_SIZE, BOUND);
+    let word = |token: u32, status: u32| [token, status];
+    let pinned: Vec<u8> = [
+        word(37, BF16_ARGMAX_STATUS_SUCCESS),
+        word(999, BF16_ARGMAX_STATUS_SUCCESS),
+        word(90, BF16_ARGMAX_STATUS_SUCCESS),
+        word(BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE),
+        word(BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE),
+        word(0, BF16_ARGMAX_STATUS_SUCCESS),
+    ]
+    .iter()
+    .flatten()
+    .flat_map(|value| value.to_ne_bytes())
+    .collect();
+    assert_eq!(
+        expected, pinned,
+        "the CPU oracle must pin every token/status word"
+    );
+
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let logits_bytes = bf16_bit_bytes(&logits_bits);
+    let mut staging = context.allocate_pinned_host_buffer(u64::try_from(logits_bytes.len())?)?;
+    let logits = upload(&context, &mut stream, &mut staging, &logits_bytes)?;
+    let result_byte_len = u64::try_from(ROW_COUNT * 8)?;
+    let sentinel = vec![0xa5; usize::try_from(result_byte_len)?];
+    let mut results = upload(&context, &mut stream, &mut staging, &sentinel)?;
+    for bound in [0_u64, u64::try_from(VOCABULARY_SIZE)? + 1] {
+        let mut params = Bf16ArgmaxParams {
+            logits: CudaBufferSpan::new(&logits, CudaDType::BF16, 0, logits.byte_len())?,
+            results: CudaBufferSpanMut::new(&mut results, CudaDType::U32, 0, result_byte_len)?,
+            row_count: u64::try_from(ROW_COUNT)?,
+            vocabulary_size: u64::try_from(VOCABULARY_SIZE)?,
+        };
+        let error = deterministic_bf16_argmax_bounded(&mut params, bound, &mut stream)
+            .expect_err("a bound outside 1..=vocabulary must be rejected");
+        assert_eq!(error.kind(), CudaErrorKind::InvalidArgument);
+    }
+    assert_eq!(download(&context, &mut stream, &mut results)?, sentinel);
+    {
+        let mut params = Bf16ArgmaxParams {
+            logits: CudaBufferSpan::new(&logits, CudaDType::BF16, 0, logits.byte_len())?,
+            results: CudaBufferSpanMut::new(&mut results, CudaDType::U32, 0, result_byte_len)?,
+            row_count: u64::try_from(ROW_COUNT)?,
+            vocabulary_size: u64::try_from(VOCABULARY_SIZE)?,
+        };
+        deterministic_bf16_argmax_bounded(&mut params, u64::try_from(BOUND)?, &mut stream)?;
+    }
+    assert_eq!(
+        download(&context, &mut stream, &mut results)?,
+        expected,
+        "bounded device token/status bytes differ from the CPU oracle"
+    );
+    // A bound equal to the vocabulary is the unbounded contract.
+    {
+        let mut params = Bf16ArgmaxParams {
+            logits: CudaBufferSpan::new(&logits, CudaDType::BF16, 0, logits.byte_len())?,
+            results: CudaBufferSpanMut::new(&mut results, CudaDType::U32, 0, result_byte_len)?,
+            row_count: u64::try_from(ROW_COUNT)?,
+            vocabulary_size: u64::try_from(VOCABULARY_SIZE)?,
+        };
+        deterministic_bf16_argmax_bounded(
+            &mut params,
+            u64::try_from(VOCABULARY_SIZE)?,
+            &mut stream,
+        )?;
+    }
+    let full = download(&context, &mut stream, &mut results)?;
+    {
+        let mut params = Bf16ArgmaxParams {
+            logits: CudaBufferSpan::new(&logits, CudaDType::BF16, 0, logits.byte_len())?,
+            results: CudaBufferSpanMut::new(&mut results, CudaDType::U32, 0, result_byte_len)?,
+            row_count: u64::try_from(ROW_COUNT)?,
+            vocabulary_size: u64::try_from(VOCABULARY_SIZE)?,
+        };
+        deterministic_bf16_argmax(&mut params, &mut stream)?;
+    }
+    assert_eq!(download(&context, &mut stream, &mut results)?, full);
+    assert_eq!(
+        full,
+        cpu_bounded_argmax(&logits_bits, VOCABULARY_SIZE, VOCABULARY_SIZE)
+    );
+
+    logits.close()?;
+    results.close()?;
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
 }
