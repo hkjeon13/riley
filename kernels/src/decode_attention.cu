@@ -743,6 +743,23 @@ RileyCudaStatus complete_execution(ExclusiveUses* uses,
 }
 
 #if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+// Creating a cuBLAS handle allocates and frees device memory, so one handle
+// per call dominated every cache-on decode layer. The stream keeps one; each
+// call still binds its own stream and workspace before use.
+cublasStatus_t stream_cublas_handle(RileyCudaStream* stream,
+                                    cublasHandle_t* handle) noexcept {
+  if (stream->probe_cublas_handle == nullptr) {
+    cublasHandle_t created = nullptr;
+    const cublasStatus_t result = cublasCreate(&created);
+    if (result != CUBLAS_STATUS_SUCCESS) {
+      return result;
+    }
+    stream->probe_cublas_handle = created;
+  }
+  *handle = static_cast<cublasHandle_t>(stream->probe_cublas_handle);
+  return CUBLAS_STATUS_SUCCESS;
+}
+
 RileyCudaStatus complete_hf_eager_cublas_qk_execution(
     ExclusiveUses* uses, CurrentContext* scope, RileyCudaStream* stream,
     RileyCudaStatus operation_status, bool launch_attempted,
@@ -758,15 +775,8 @@ RileyCudaStatus complete_hf_eager_cublas_qk_execution(
                              RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE, operation);
     }
   }
-  if (handle != nullptr) {
-    const cublasStatus_t destroy_result = cublasDestroy(handle);
-    if (status == RILEY_CUDA_STATUS_SUCCESS &&
-        destroy_result != CUBLAS_STATUS_SUCCESS) {
-      status = cublas_qk_error(destroy_result, error,
-                               RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
-                               operation);
-    }
-  }
+  // The handle belongs to the stream and outlives this call.
+  (void)handle;
   status = scope->leave(status, error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                         operation);
   const bool restoration_confirmed =
@@ -3349,7 +3359,7 @@ riley_cuda_hf_eager_qwen_p2048_m1_cublas_qk_execute_scaled_scores_trace(
     }
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
-    status = cublas_qk_error(cublasCreate(&handle), error,
+    status = cublas_qk_error(stream_cublas_handle(stream, &handle), error,
                              RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
@@ -3588,7 +3598,7 @@ riley_cuda_hf_eager_qwen_p2048_m1_cublas_av_execute(
     }
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
-    status = cublas_qk_error(cublasCreate(&handle), error,
+    status = cublas_qk_error(stream_cublas_handle(stream, &handle), error,
                              RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {

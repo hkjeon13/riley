@@ -140,6 +140,9 @@ struct RileyCudaStream {
 
   RileyCudaContext* owner;
   cudaStream_t stream;
+  // cuBLAS handle of the HF-eager decode attention probe, created on first
+  // use and destroyed with the stream. Null in builds without the probe.
+  void* probe_cublas_handle = nullptr;
   // One exclusive asynchronous-use lease covers copies and synchronously
   // completing primitives. A stuck value is an intentional fail-closed leak.
   std::atomic<uint32_t> active_uses;

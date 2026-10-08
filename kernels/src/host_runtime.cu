@@ -1,4 +1,7 @@
 #include "ffi_internal.hpp"
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+#include <cublas_v2.h>
+#endif
 
 #include <climits>
 #if defined(RILEY_CUDA_ENABLE_NVML_PROBE)
@@ -313,6 +316,18 @@ RileyCudaStatus stream_close_impl(
   RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                                         kOperation, capture_owner);
   bool destroy_attempted = false;
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+  if (status == RILEY_CUDA_STATUS_SUCCESS &&
+      (*stream)->probe_cublas_handle != nullptr) {
+    if (cublasDestroy(static_cast<cublasHandle_t>(
+            (*stream)->probe_cublas_handle)) != CUBLAS_STATUS_SUCCESS) {
+      status = internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                              "probe cuBLAS handle could not be destroyed");
+    } else {
+      (*stream)->probe_cublas_handle = nullptr;
+    }
+  }
+#endif
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     destroy_attempted = true;
     status = runtime_error(cudaStreamDestroy((*stream)->stream), error,
