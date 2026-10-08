@@ -512,22 +512,21 @@ impl HfExactBackend {
                 .get_mut(masked)
                 .ok_or_else(|| internal("masked token ID is outside vocabulary"))? = false;
         }
-        let distribution = self
+        // Admission only accepts greedy requests, so the one-pass selection
+        // always applies; it returns what the full pipeline would.
+        let sample = self
             .sampling
-            .process_bf16_native(
+            .greedy_bf16_native(
                 &self.logits,
                 TokenConstraints::AllowedMask(&self.allowed_tokens),
                 request.state.history_token_ids(),
                 request.state.request().sampling_params,
             )
-            .map_err(|source| internal(format!("sampling failed: {source}")))?;
-        let sample = distribution
-            .sample(
-                request
-                    .state
-                    .sampling_rng()
-                    .map_err(|source| internal(format!("sampling RNG failed: {source}")))?,
-            )
+            .map_err(|source| internal(format!("sampling failed: {source}")))?
+            .ok_or_else(|| internal("exact route admitted a non-greedy request"))?;
+        request
+            .state
+            .pre_step()
             .map_err(|source| internal(format!("sampling RNG failed: {source}")))?;
         let token_id = sample.token_id();
         let needs_decoding = request

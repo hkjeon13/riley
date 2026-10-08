@@ -494,6 +494,88 @@ impl SamplingWorkspace {
         distribution.sample(rng).map_err(SamplingFailure::Rng)
     }
 
+    /// Greedy selection in one pass over the row, for requests whose
+    /// distribution nobody reads. It returns exactly what
+    /// [`Self::process_bf16_native`] followed by `sample` returns at
+    /// temperature zero without a repetition penalty: the same validation
+    /// errors in the same precedence, the largest allowed logit, and the
+    /// lowest token ID on ties. `None` means the request needs the full path.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Self::process_bf16_native`].
+    #[allow(clippy::float_cmp)]
+    pub fn greedy_bf16_native(
+        &self,
+        logits_bf16_native: &[u8],
+        constraints: TokenConstraints<'_>,
+        unique_history: &[u32],
+        params: SamplingParams,
+    ) -> Result<Option<SamplingResult>, SamplingError> {
+        if params.temperature != 0.0 || params.repetition_penalty != 1.0 {
+            return Ok(None);
+        }
+        params.validate(self.vocabulary_size())?;
+        let expected_bytes = self.vocabulary_size().checked_mul(BF16_BYTES).ok_or(
+            SamplingError::VocabularyTooLarge {
+                vocabulary_size: self.vocabulary_size(),
+            },
+        )?;
+        if logits_bf16_native.len() != expected_bytes {
+            return Err(SamplingError::LogitsLength {
+                expected_bytes,
+                actual_bytes: logits_bf16_native.len(),
+            });
+        }
+        let allowed_mask = match constraints {
+            TokenConstraints::AllowAll => None,
+            TokenConstraints::AllowedMask(mask) => {
+                if mask.len() != self.vocabulary_size() {
+                    return Err(SamplingError::ConstraintLength {
+                        expected_tokens: self.vocabulary_size(),
+                        actual_tokens: mask.len(),
+                    });
+                }
+                Some(mask)
+            }
+        };
+        for &token_id in unique_history {
+            if usize::try_from(token_id).map_or(true, |index| index >= self.vocabulary_size()) {
+                return Err(SamplingError::HistoryTokenOutOfRange {
+                    token_id,
+                    vocabulary_size: self.vocabulary_size(),
+                });
+            }
+        }
+        let mut winner: Option<(usize, f32)> = None;
+        for (token_id, bytes) in logits_bf16_native.chunks_exact(BF16_BYTES).enumerate() {
+            let bits = u16::from_ne_bytes([bytes[0], bytes[1]]);
+            let value = f32::from_bits(u32::from(bits) << 16);
+            if !value.is_finite() {
+                return Err(SamplingError::NonFiniteLogit {
+                    token_id: u32::try_from(token_id).map_err(|_| {
+                        SamplingError::VocabularyTooLarge {
+                            vocabulary_size: self.vocabulary_size(),
+                        }
+                    })?,
+                    bf16_bits: bits,
+                });
+            }
+            // Ascending IDs with a strict comparison keep the lowest ID on ties.
+            if allowed_mask.is_none_or(|mask| mask[token_id])
+                && winner.is_none_or(|(_, current)| value > current)
+            {
+                winner = Some((token_id, value));
+            }
+        }
+        let (winner, _) = winner.ok_or(SamplingError::AllMasked)?;
+        Ok(Some(SamplingResult {
+            token_id: u32::try_from(winner).unwrap_or(u32::MAX),
+            probability: 1.0,
+            log_probability: 0.0,
+        }))
+    }
+
     fn validate_inputs(
         &self,
         logits_bf16_native: &[u8],
@@ -1229,5 +1311,57 @@ mod tests {
         workspace
             .process_bf16_native(&bf16_bytes(values), TokenConstraints::AllowAll, &[], params)
             .unwrap_err()
+    }
+
+    #[test]
+    fn greedy_fast_path_matches_the_full_pipeline() {
+        let vocabulary = 257;
+        let mut workspace = SamplingWorkspace::new(vocabulary).expect("workspace");
+        let params = SamplingParams {
+            temperature: 0.0,
+            top_k: None,
+            top_p: Some(1.0),
+            repetition_penalty: 1.0,
+        };
+        let mut state = 0x2545_f491_4f6c_dd1d_u64;
+        for case in 0..400 {
+            let mut logits = Vec::with_capacity(vocabulary * 2);
+            let mut mask = vec![false; vocabulary];
+            for (token, allowed) in mask.iter_mut().enumerate() {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                // A small value alphabet forces ties, signed zeros included.
+                let value = [-2.5_f32, -0.0, 0.0, 1.25, 3.0][(state % 5) as usize];
+                let bits = (value.to_bits() >> 16) as u16;
+                logits.extend_from_slice(&bits.to_ne_bytes());
+                *allowed = case % 7 == 0 || (state >> 9) % 3 != 0 || token == case % vocabulary;
+            }
+            for constraints in [
+                TokenConstraints::AllowAll,
+                TokenConstraints::AllowedMask(&mask),
+            ] {
+                let fast = workspace
+                    .greedy_bf16_native(&logits, constraints, &[3, 5], params)
+                    .expect("fast path")
+                    .expect("greedy request");
+                let mut rng = NeverRng { calls: 0 };
+                let full = workspace
+                    .sample_bf16_native(&logits, constraints, &[3, 5], params, &mut rng)
+                    .expect("full path");
+                assert_eq!(fast, full);
+            }
+        }
+        let penalized = SamplingParams {
+            repetition_penalty: 1.5,
+            ..params
+        };
+        let logits = vec![0_u8; vocabulary * 2];
+        assert_eq!(
+            workspace
+                .greedy_bf16_native(&logits, TokenConstraints::AllowAll, &[], penalized)
+                .expect("declined"),
+            None
+        );
     }
 }

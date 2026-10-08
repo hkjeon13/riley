@@ -2755,21 +2755,38 @@ mod cuda_backend {
                             .ok_or_else(|| internal("masked token ID is outside vocabulary"))?;
                         *allowed = false;
                     }
-                    let distribution = self
+                    // Greedy rows skip the vocabulary-sized distribution; the
+                    // selection and its errors are those of the full path.
+                    let greedy = self
                         .sampling
-                        .process_bf16_native(
+                        .greedy_bf16_native(
                             logits,
                             TokenConstraints::AllowedMask(&self.allowed_tokens),
                             request.state.history_token_ids(),
                             request.state.request().sampling_params,
                         )
                         .map_err(|source| internal(format!("sampling failed: {source}")))?;
-                    let sample =
+                    let sample = if let Some(sample) = greedy {
+                        request.state.pre_step().map_err(|source| {
+                            internal(format!("sampling RNG failed: {source}"))
+                        })?;
+                        sample
+                    } else {
+                        let distribution = self
+                            .sampling
+                            .process_bf16_native(
+                                logits,
+                                TokenConstraints::AllowedMask(&self.allowed_tokens),
+                                request.state.history_token_ids(),
+                                request.state.request().sampling_params,
+                            )
+                            .map_err(|source| internal(format!("sampling failed: {source}")))?;
                         distribution
                             .sample(request.state.sampling_rng().map_err(|source| {
                                 internal(format!("sampling RNG failed: {source}"))
                             })?)
-                            .map_err(|source| internal(format!("sampling RNG failed: {source}")))?;
+                            .map_err(|source| internal(format!("sampling RNG failed: {source}")))?
+                    };
                     (sample.token_id(), sample.token_logprob())
                 };
                 let needs_decoding = request
