@@ -1598,6 +1598,11 @@ fn run_serve(
     let server_config = ServerConfig {
         bind_address,
         request_limits,
+        // A streaming response holds its worker for the whole generation, so
+        // fewer workers than active sequences would cap real concurrency.
+        worker_threads: options
+            .max_active_sequences
+            .max(ServerConfig::default().worker_threads),
         ..ServerConfig::default()
     };
     let backend: Arc<dyn CompletionBackend> = engine;
