@@ -46,6 +46,7 @@ constexpr uint64_t kNativeBf16RaggedPagedSplitGqaD128StateStride =
     kNativeBf16RaggedPagedSplitGqaD128HeadSize + 2;
 constexpr uint64_t kNativeBf16RaggedPagedSplitGqaD128TransitionWidth = 2;
 constexpr uint32_t kNativeBf16RaggedPagedSplitGqaD128ReductionThreads = 128;
+constexpr uint32_t kNativeBf16RaggedD128ReplayLookahead = 4;
 constexpr uint32_t kRaggedAttentionSharedTileTokens =
     RILEY_CUDA_PAGED_KV_BLOCK_SIZE;
 constexpr uint64_t kFixed37RaggedMaximumTokenCount = 8192;
@@ -3122,7 +3123,48 @@ native_bf16_ragged_paged_split_gqa_d128_transition_kernel(
   }
   float maximum = -CUDART_INF_F;
   float denominator = 0.0F;
-  for (uint64_t ordinal = 0; ordinal < partial_state_count; ++ordinal) {
+  const uint64_t pair_base =
+      row * partial_state_capacity *
+      kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount + query_head;
+  uint64_t ordinal = 0;
+  // The scalar merge chain is strictly ordered, but its inputs are not. Issue
+  // the next four `(m, l)` loads together so their memory latency overlaps;
+  // the merges below still run one partition at a time in the same order.
+  for (; ordinal + kNativeBf16RaggedD128ReplayLookahead <= partial_state_count;
+       ordinal += kNativeBf16RaggedD128ReplayLookahead) {
+    float other_maximum[kNativeBf16RaggedD128ReplayLookahead];
+    float other_denominator[kNativeBf16RaggedD128ReplayLookahead];
+    uint64_t pair_index[kNativeBf16RaggedD128ReplayLookahead];
+#pragma unroll
+    for (uint32_t ahead = 0; ahead < kNativeBf16RaggedD128ReplayLookahead;
+         ++ahead) {
+      const uint64_t partition =
+          reduction_order == RILEY_CUDA_DECODE_REDUCTION_ASCENDING
+              ? ordinal + ahead
+              : partial_state_count - 1 - (ordinal + ahead);
+      pair_index[ahead] =
+          pair_base +
+          partition * kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount;
+      const uint64_t state_base =
+          pair_index[ahead] * kNativeBf16RaggedPagedSplitGqaD128StateStride;
+      other_maximum[ahead] = partial_states[state_base];
+      other_denominator[ahead] = partial_states[state_base + 1];
+    }
+#pragma unroll
+    for (uint32_t ahead = 0; ahead < kNativeBf16RaggedD128ReplayLookahead;
+         ++ahead) {
+      const NativeBf16RaggedPartialTransitionV2 transition =
+          merge_ragged_partial_metadata_v2(
+              other_maximum[ahead], other_denominator[ahead], &maximum,
+              &denominator);
+      const uint64_t transition_base =
+          pair_index[ahead] *
+          kNativeBf16RaggedPagedSplitGqaD128TransitionWidth;
+      reduction_steps[transition_base] = transition.left_scale;
+      reduction_steps[transition_base + 1] = transition.right_scale;
+    }
+  }
+  for (; ordinal < partial_state_count; ++ordinal) {
     const uint64_t partition =
         reduction_order == RILEY_CUDA_DECODE_REDUCTION_ASCENDING
             ? ordinal
@@ -3178,7 +3220,62 @@ native_bf16_ragged_paged_split_gqa_d128_transition_reduce_kernel(
     return;
   }
   float numerator = 0.0F;
-  for (uint64_t ordinal = 0; ordinal < partial_state_count; ++ordinal) {
+  const uint64_t pair_base =
+      row * partial_state_capacity *
+      kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount + query_head;
+  uint64_t ordinal = 0;
+  bool poisoned = false;
+  // Same replay order as the scalar loop below; only the loads of the next
+  // four partitions are issued together. The `+Inf` probe reads the state
+  // maximum unconditionally (always in bounds) instead of on demand.
+  for (; !poisoned &&
+         ordinal + kNativeBf16RaggedD128ReplayLookahead <= partial_state_count;
+       ordinal += kNativeBf16RaggedD128ReplayLookahead) {
+    float left_scale[kNativeBf16RaggedD128ReplayLookahead];
+    float right_scale[kNativeBf16RaggedD128ReplayLookahead];
+    float other_numerator[kNativeBf16RaggedD128ReplayLookahead];
+    float other_maximum[kNativeBf16RaggedD128ReplayLookahead];
+#pragma unroll
+    for (uint32_t ahead = 0; ahead < kNativeBf16RaggedD128ReplayLookahead;
+         ++ahead) {
+      const uint64_t partition =
+          reduction_order == RILEY_CUDA_DECODE_REDUCTION_ASCENDING
+              ? ordinal + ahead
+              : partial_state_count - 1 - (ordinal + ahead);
+      const uint64_t pair_index =
+          pair_base +
+          partition * kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount;
+      const uint64_t state_base =
+          pair_index * kNativeBf16RaggedPagedSplitGqaD128StateStride;
+      const uint64_t transition_base =
+          pair_index * kNativeBf16RaggedPagedSplitGqaD128TransitionWidth;
+      left_scale[ahead] = reduction_steps[transition_base];
+      right_scale[ahead] = reduction_steps[transition_base + 1];
+      other_numerator[ahead] = partial_states[state_base + 2 + depth];
+      other_maximum[ahead] = partial_states[state_base];
+    }
+#pragma unroll
+    for (uint32_t ahead = 0; ahead < kNativeBf16RaggedD128ReplayLookahead;
+         ++ahead) {
+      if (poisoned) {
+        continue;
+      }
+      const NativeBf16RaggedPartialTransitionV2 transition{
+          left_scale[ahead], right_scale[ahead]};
+      if (isnan(transition.left_scale) || isnan(transition.right_scale)) {
+        numerator = CUDART_NAN_F;
+        poisoned = true;
+        continue;
+      }
+      const bool both_positive_infinity =
+          transition.left_scale == 1.0F && transition.right_scale == 1.0F &&
+          isinf(other_maximum[ahead]) && other_maximum[ahead] > 0.0F;
+      numerator = apply_ragged_partial_transition_v2(
+          numerator, other_numerator[ahead], transition,
+          both_positive_infinity);
+    }
+  }
+  for (; !poisoned && ordinal < partial_state_count; ++ordinal) {
     const uint64_t partition =
         reduction_order == RILEY_CUDA_DECODE_REDUCTION_ASCENDING
             ? ordinal
