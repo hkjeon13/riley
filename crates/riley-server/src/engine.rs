@@ -3571,6 +3571,31 @@ mod cuda_backend {
 #[cfg(feature = "cuda")]
 pub use cuda_backend::{CudaBackendConfig, CudaEffectiveRuntimeFacts, CudaEngineResources};
 
+/// Receives every logit row an exact-profile backend publishes, before the
+/// row's token is sampled. An error fails the backend instead of being dropped.
+#[cfg(feature = "hf-exact-probe")]
+pub trait LogitObservationSink: Send + Sync {
+    /// Observes the BF16 native-endian logits that select `generated_index`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a private diagnostic when the row cannot be recorded.
+    fn observe(
+        &self,
+        request_id: &str,
+        generated_index: usize,
+        logits_bf16_native: &[u8],
+    ) -> Result<(), String>;
+}
+
+#[cfg(feature = "hf-exact-probe")]
+#[path = "hf_exact_backend.rs"]
+mod hf_exact_backend;
+#[cfg(feature = "hf-exact-probe")]
+pub use hf_exact_backend::{
+    HF_EXACT_MAX_OUTPUT_TOKENS, HF_EXACT_PROFILE_ID, HF_EXACT_PROMPT_TOKENS, HfExactEngineResources,
+};
+
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, VecDeque};

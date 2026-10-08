@@ -15,6 +15,9 @@ cuda = ["riley-runtime/cuda", "riley-scheduler/cuda"]
 server = ["dep:libc", "dep:serde", "dep:serde_json", "dep:sha2"]
 bench = ["dep:serde", "dep:serde_json"]
 experimental = []
+# Serves the source-bound HF-eager-exact Qwen P2048 cache-on route. It links
+# the direct cuBLAS probe and is not part of ordinary CUDA serving builds.
+hf-exact-probe = ["cuda", "riley-runtime/cuda-cublas-gemm-probe"]
 
 [dependencies]
 riley-core = { path = "../riley-core" }
@@ -61,3 +64,8 @@ required-features = ["server", "cuda"]
 name = "qwen3b_ordinary_c1_own_chosen128_logit_trace_gpu"
 path = "tests/qwen3b_ordinary_c1_own_chosen128_logit_trace_gpu.rs"
 required-features = ["server", "cuda"]
+
+[[test]]
+name = "qwen3b_http_hf_exact_c1_gpu"
+path = "tests/qwen3b_http_hf_exact_c1_gpu.rs"
+required-features = ["server", "hf-exact-probe"]

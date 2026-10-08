@@ -69,6 +69,10 @@ serve options:
   --decode-attention-backend MODE existing or native-bf16-paged-split-gqa-d128-two-stage (default: existing)
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
+  --numerics-profile ID          existing or hf-eager-qwen-p2048-o128-probe-v1 (default: existing);
+                                 the HF-exact profile needs an hf-exact-probe build and
+                                 --max-active-sequences 1, and serves only P2048/O<=128 greedy
+  --logit-observation-dir DIR    with the HF-exact profile, write each published logit row to DIR
   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648; native D128: 8589934592)
   --c02-candidate-id ID          release candidate identity for C02 evidence mode
   --c02-configuration-profile ID stable-default or max-performance-exact
@@ -108,6 +112,8 @@ struct ServeOptions {
     projection_bias_backend: ProjectionBiasBackendMode,
     decode_attention_backend: DecodeAttentionBackendMode,
     reduction_profile: ReductionProfileMode,
+    numerics_profile: NumericsProfileMode,
+    logit_observation_dir: Option<PathBuf>,
     vllm_smol_p128_graph: bool,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
@@ -150,6 +156,16 @@ enum MetadataTransportMode {
 enum ReductionProfileMode {
     CanonicalV1,
     FixedContiguous37BalancedV1,
+}
+
+/// Whole-route numerics selection. The HF-exact profile replaces the scheduler
+/// and batch executor with the source-bound exact decode owner and serves only
+/// its qualified geometry.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum NumericsProfileMode {
+    #[default]
+    Existing,
+    HfEagerQwenP2048O128ProbeV1,
 }
 
 /// Explicit server-level Q/K/V projection-bias selection.
@@ -315,6 +331,8 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut projection_bias_backend = None;
     let mut decode_attention_backend = None;
     let mut reduction_profile = None;
+    let mut numerics_profile = None;
+    let mut logit_observation_dir = None;
     let mut max_weight_bytes = None;
     let mut shutdown_on_stdin = false;
     let mut c02_candidate_id = None;
@@ -488,6 +506,16 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 parse_reduction_profile(next_value(&mut arguments, "--reduction-profile")?)?,
                 "--reduction-profile",
             )?,
+            "--numerics-profile" => set_once(
+                &mut numerics_profile,
+                parse_numerics_profile(next_value(&mut arguments, "--numerics-profile")?)?,
+                "--numerics-profile",
+            )?,
+            "--logit-observation-dir" => set_once(
+                &mut logit_observation_dir,
+                PathBuf::from(next_value(&mut arguments, "--logit-observation-dir")?),
+                "--logit-observation-dir",
+            )?,
             "--max-weight-bytes" => set_once(
                 &mut max_weight_bytes,
                 parse_number(
@@ -591,6 +619,26 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let projection_bias_backend = projection_bias_backend.unwrap_or_default();
     let decode_attention_backend = decode_attention_backend.unwrap_or_default();
     let reduction_profile = reduction_profile.unwrap_or(ReductionProfileMode::CanonicalV1);
+    let numerics_profile = numerics_profile.unwrap_or_default();
+    if numerics_profile == NumericsProfileMode::HfEagerQwenP2048O128ProbeV1 {
+        if !cfg!(feature = "hf-exact-probe") {
+            return Err(
+                "--numerics-profile hf-eager-qwen-p2048-o128-probe-v1 requires a build with the hf-exact-probe feature"
+                    .to_owned(),
+            );
+        }
+        if max_active_sequences != Some(1) {
+            return Err(
+                "--numerics-profile hf-eager-qwen-p2048-o128-probe-v1 requires --max-active-sequences 1"
+                    .to_owned(),
+            );
+        }
+    } else if logit_observation_dir.is_some() {
+        return Err(
+            "--logit-observation-dir requires --numerics-profile hf-eager-qwen-p2048-o128-probe-v1"
+                .to_owned(),
+        );
+    }
     let max_active_sequences = max_active_sequences.unwrap_or(8);
     let max_weight_bytes = max_weight_bytes.unwrap_or_else(|| {
         if decode_attention_backend
@@ -703,6 +751,8 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         projection_bias_backend,
         decode_attention_backend,
         reduction_profile,
+        numerics_profile,
+        logit_observation_dir,
         vllm_smol_p128_graph,
         max_weight_bytes,
         shutdown_on_stdin,
@@ -809,6 +859,16 @@ fn parse_decode_attention_backend(value: OsString) -> Result<DecodeAttentionBack
         _ => Err(
             "--decode-attention-backend requires existing or native-bf16-paged-split-gqa-d128-two-stage"
                 .to_owned(),
+        ),
+    }
+}
+
+fn parse_numerics_profile(value: OsString) -> Result<NumericsProfileMode, String> {
+    match parse_utf8(value, "--numerics-profile")?.as_str() {
+        "existing" => Ok(NumericsProfileMode::Existing),
+        "hf-eager-qwen-p2048-o128-probe-v1" => Ok(NumericsProfileMode::HfEagerQwenP2048O128ProbeV1),
+        _ => Err(
+            "--numerics-profile requires existing or hf-eager-qwen-p2048-o128-probe-v1".to_owned(),
         ),
     }
 }
@@ -1409,6 +1469,30 @@ fn run_serve(
         context_window_tokens: max_sequence_tokens,
         max_output_tokens,
     };
+    #[cfg(all(feature = "hf-exact-probe", unix))]
+    if options.numerics_profile == NumericsProfileMode::HfEagerQwenP2048O128ProbeV1 {
+        if c02_runtime_config.is_some()
+            || c02_audit_root.is_some()
+            || c02_shutdown_artifact.is_some()
+        {
+            return Err(
+                "C02 evidence mode is not available with the HF-exact numerics profile".to_owned(),
+            );
+        }
+        return run_serve_hf_exact(HfExactServe {
+            metadata,
+            model,
+            device_ordinal: options.device_ordinal,
+            max_waiting_requests: options.max_waiting_requests,
+            maximum_live_requests,
+            max_output_tokens,
+            bind_address,
+            shutdown_on_stdin: options.shutdown_on_stdin,
+            logit_observation_dir: options.logit_observation_dir,
+            shutdown_signals,
+            shutdown_metrics_path,
+        });
+    }
     let resources = CudaEngineResources::prepare(
         metadata,
         model,
@@ -1563,6 +1647,147 @@ fn run_serve(
             .shutdown()
             .map_err(|error| format!("graceful shutdown failed: {error}")),
         (Some(_), Some(_)) => Err("internal shutdown artifact configuration conflict".to_owned()),
+    }
+}
+
+#[cfg(all(feature = "hf-exact-probe", unix))]
+struct HfExactServe {
+    metadata: riley_server::domain::ModelMetadata,
+    model: riley_model::LoadedModel,
+    device_ordinal: u32,
+    max_waiting_requests: usize,
+    maximum_live_requests: usize,
+    max_output_tokens: usize,
+    bind_address: std::net::SocketAddr,
+    shutdown_on_stdin: bool,
+    logit_observation_dir: Option<PathBuf>,
+    shutdown_signals: std::sync::Arc<signal::ShutdownSignals>,
+    shutdown_metrics_path: Option<PathBuf>,
+}
+
+/// Serves the HF-exact numerics profile through the ordinary HTTP service and
+/// engine worker. Only the backend differs from the scheduler route.
+#[cfg(all(feature = "hf-exact-probe", unix))]
+fn run_serve_hf_exact(serve: HfExactServe) -> Result<(), String> {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use riley_server::domain::RequestLimits;
+    use riley_server::engine::{
+        EngineConfig, HF_EXACT_PROFILE_ID, HfExactEngineResources, InferenceEngine,
+    };
+    use riley_server::service::{CompletionBackend, ServerConfig, start_server_with_c02_metrics};
+
+    let mut resources = HfExactEngineResources::prepare(
+        serve.metadata,
+        serve.model,
+        serve.device_ordinal,
+        serve.max_waiting_requests,
+    )
+    .map_err(|error| format!("HF-exact backend preparation failed: {error}"))?;
+    if let Some(directory) = serve.logit_observation_dir {
+        resources =
+            resources.with_logit_observation(Arc::new(LogitObservationDirectory::open(directory)?));
+    }
+    let engine = Arc::new(
+        InferenceEngine::start_hf_exact(
+            resources,
+            EngineConfig {
+                command_queue_capacity: serve.max_waiting_requests,
+                event_channel_capacity: 32,
+                max_inflight_requests: serve.maximum_live_requests,
+                admission_timeout: Duration::from_secs(30),
+                idle_poll_interval: Duration::from_millis(1),
+            },
+        )
+        .map_err(|error| format!("inference engine startup failed: {error}"))?,
+    );
+    let server_config = ServerConfig {
+        bind_address: serve.bind_address,
+        request_limits: RequestLimits {
+            max_output_tokens: serve.max_output_tokens,
+            ..RequestLimits::default()
+        },
+        ..ServerConfig::default()
+    };
+    let backend: Arc<dyn CompletionBackend> = engine;
+    let server = start_server_with_c02_metrics(server_config, backend, None, false)
+        .map_err(|error| format!("HTTP server startup failed: {error}"))?;
+    eprintln!(
+        "riley numerics profile {HF_EXACT_PROFILE_ID}: single-pass P2048 prefill, contiguous KV, singleton cache-on decode, direct cuBLAS; scheduler=none; requests outside P2048/O<=128 greedy are rejected"
+    );
+    println!(
+        "riley listening on http://{} (graceful_signals=SIGINT,SIGTERM graceful_stdin_shutdown={})",
+        server.local_address(),
+        serve.shutdown_on_stdin
+    );
+    let trigger = wait_for_shutdown(Arc::clone(&serve.shutdown_signals), serve.shutdown_on_stdin)?;
+    println!("riley graceful shutdown requested by {trigger}");
+    match serve.shutdown_metrics_path {
+        Some(path) => {
+            let snapshot = server
+                .shutdown_with_metrics()
+                .map_err(|error| format!("graceful shutdown failed: {error}"))?;
+            write_shutdown_metrics(&path, &snapshot)?;
+            println!(
+                "riley wrote verified shutdown metrics to {}",
+                path.display()
+            );
+            Ok(())
+        }
+        None => server
+            .shutdown()
+            .map_err(|error| format!("graceful shutdown failed: {error}")),
+    }
+}
+
+/// Writes each observed logit row to its own never-replaced file.
+#[cfg(all(feature = "hf-exact-probe", unix))]
+struct LogitObservationDirectory {
+    root: PathBuf,
+}
+
+#[cfg(all(feature = "hf-exact-probe", unix))]
+impl LogitObservationDirectory {
+    fn open(root: PathBuf) -> Result<Self, String> {
+        if !root.is_absolute() || !root.is_dir() {
+            return Err(
+                "--logit-observation-dir must be an existing absolute directory".to_owned(),
+            );
+        }
+        Ok(Self { root })
+    }
+}
+
+#[cfg(all(feature = "hf-exact-probe", unix))]
+impl riley_server::engine::LogitObservationSink for LogitObservationDirectory {
+    fn observe(
+        &self,
+        request_id: &str,
+        generated_index: usize,
+        logits_bf16_native: &[u8],
+    ) -> Result<(), String> {
+        use std::fs::OpenOptions;
+        use std::io::Write;
+
+        if request_id.is_empty()
+            || !request_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        {
+            return Err("request identifier cannot name an observation file".to_owned());
+        }
+        let path = self
+            .root
+            .join(format!("{request_id}-{generated_index:03}.bf16"));
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map_err(|error| format!("could not create {}: {error}", path.display()))?;
+        file.write_all(logits_bf16_native)
+            .and_then(|()| file.sync_all())
+            .map_err(|error| format!("could not write {}: {error}", path.display()))
     }
 }
 
@@ -3247,8 +3472,8 @@ mod tests {
         C02ShutdownArtifactOptions, CliCommand, DEFAULT_MAX_WEIGHT_BYTES,
         DecodeAttentionBackendMode, ExecutionCompletionMode, FIXED37_MAX_SEQUENCE_TOKENS,
         MetadataTransportMode, NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_RAGGED_BACKEND_ID,
-        ProjectionBiasBackendMode, ReductionProfileMode, ResidualRmsNormMode, SamplingBackendMode,
-        ServeOptions, USAGE, c02_canonical_json_bytes, c02_endpoint_receipt,
+        NumericsProfileMode, ProjectionBiasBackendMode, ReductionProfileMode, ResidualRmsNormMode,
+        SamplingBackendMode, ServeOptions, USAGE, c02_canonical_json_bytes, c02_endpoint_receipt,
         c02_generation_audit_completion_basename, c02_generation_audit_completion_marker_bytes,
         c02_generation_audit_record_basename, c02_native_fallback_event_basename,
         c02_native_fallback_event_bytes, c02_native_fallback_event_completion_basename,
@@ -4208,6 +4433,8 @@ mod tests {
                 decode_attention_backend: DecodeAttentionBackendMode::Existing,
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
+                numerics_profile: NumericsProfileMode::Existing,
+                logit_observation_dir: None,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
@@ -4597,6 +4824,8 @@ mod tests {
                 decode_attention_backend: DecodeAttentionBackendMode::Existing,
                 sampling_backend: SamplingBackendMode::GpuGreedy,
                 reduction_profile: ReductionProfileMode::FixedContiguous37BalancedV1,
+                numerics_profile: NumericsProfileMode::Existing,
+                logit_observation_dir: None,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
@@ -4753,6 +4982,8 @@ mod tests {
                 decode_attention_backend: DecodeAttentionBackendMode::Existing,
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
+                numerics_profile: NumericsProfileMode::Existing,
+                logit_observation_dir: None,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
@@ -5150,6 +5381,8 @@ mod tests {
                 decode_attention_backend: DecodeAttentionBackendMode::Existing,
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
+                numerics_profile: NumericsProfileMode::Existing,
+                logit_observation_dir: None,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
