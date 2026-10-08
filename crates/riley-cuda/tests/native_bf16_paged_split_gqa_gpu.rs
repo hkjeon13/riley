@@ -1650,6 +1650,10 @@ fn native_bf16_ragged_paged_d128_two_stage_v3_c2048_b8_matches_v1_prefix_reducer
     for generic in generic_outputs {
         generic.close()?;
     }
+    shared_output.close()?;
+    shared_reduction_normalizers.close()?;
+    shared_reduction_steps.close()?;
+    shared_partial_states.close()?;
     output.close()?;
     reduction_normalizers.close()?;
     reduction_steps.close()?;
