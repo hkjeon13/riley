@@ -5502,7 +5502,24 @@ pub(super) fn prepare_gemms(
         };
         match reduction_profile {
             LlamaReductionProfile::CanonicalV1 => match anchor {
-                None => context.prepare_gemm(config).map(PreparedLlamaGemm::Canonical),
+                None => match policies.heuristic_anchor_rows() {
+                    Some(rows) if m > rows => {
+                        // Select at the anchor row count, then bind this
+                        // shape to that algorithm without a heuristic fallback.
+                        let selection = CudaGemmConfig::new(rows, n, k, workspace_cap)
+                            .map_err(|source| LlamaForwardError::cuda(site, source))?
+                            .with_reduction_policy(policy);
+                        let selection = context
+                            .prepare_gemm(selection)
+                            .map_err(|source| LlamaForwardError::cuda(site, source))?;
+                        let prepared = context.prepare_gemm_anchored(config, &selection);
+                        let closed = selection.close();
+                        prepared
+                            .and_then(|prepared| closed.map(|()| prepared))
+                            .map(PreparedLlamaGemm::Canonical)
+                    }
+                    _ => context.prepare_gemm(config).map(PreparedLlamaGemm::Canonical),
+                },
                 Some(PreparedLlamaGemm::Canonical(anchor)) => context
                     .prepare_gemm_anchored(config, anchor)
                     .map(PreparedLlamaGemm::Canonical),

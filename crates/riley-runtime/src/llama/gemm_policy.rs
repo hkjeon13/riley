@@ -24,10 +24,12 @@ pub(super) struct LlamaGemmReductionPolicies {
     intermediate: CudaGemmReductionPolicy,
     down: CudaGemmReductionPolicy,
     lm_head: CudaGemmReductionPolicy,
+    heuristic_anchor_rows: Option<u64>,
 }
 
 impl LlamaGemmReductionPolicies {
     const STRICT: Self = Self {
+        heuristic_anchor_rows: None,
         hidden: CudaGemmReductionPolicy::StrictNoSplitV1,
         key_value: CudaGemmReductionPolicy::StrictNoSplitV1,
         intermediate: CudaGemmReductionPolicy::StrictNoSplitV1,
@@ -36,6 +38,7 @@ impl LlamaGemmReductionPolicies {
     };
 
     const REVIEWED_LLAMA: Self = Self {
+        heuristic_anchor_rows: None,
         hidden: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
         key_value: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
         intermediate: CudaGemmReductionPolicy::StrictNoSplitV1,
@@ -44,12 +47,26 @@ impl LlamaGemmReductionPolicies {
     };
 
     const FIRST_HEURISTIC: Self = Self {
+        heuristic_anchor_rows: Some(Self::FIRST_HEURISTIC_ANCHOR_ROWS),
         hidden: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
         key_value: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
         intermediate: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
         down: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
         lm_head: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
     };
+
+    // Every shape bucket reuses one algorithm so a request's arithmetic does
+    // not depend on batch size. Asking the heuristic at the maximum row count
+    // tunes that algorithm for the rare widest prefill; at 128 rows the first
+    // heuristic measured near the memory floor from 1 to 32 rows and no slower
+    // at 256 on the 2048/11008-wide projections.
+    const FIRST_HEURISTIC_ANCHOR_ROWS: u64 = 128;
+
+    /// Row count at which the heuristic is asked, when it is not the plan's own.
+    #[must_use]
+    pub(super) const fn heuristic_anchor_rows(self) -> Option<u64> {
+        self.heuristic_anchor_rows
+    }
 
     #[must_use]
     pub(super) const fn strict() -> Self {
