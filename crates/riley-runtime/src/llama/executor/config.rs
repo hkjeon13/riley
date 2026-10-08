@@ -149,6 +149,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     vllm_smol_p128_graph: bool,
     shape_policy: LlamaBatchShapePolicy,
     shape_buckets: LlamaBatchShapeBuckets,
+    greedy_candidate_count: Option<usize>,
 }
 
 impl PreparedLlamaBatchExecutorConfig {
@@ -168,7 +169,22 @@ impl PreparedLlamaBatchExecutorConfig {
             vllm_smol_p128_graph: false,
             shape_policy: LlamaBatchShapePolicy::FixedMaximum,
             shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
+            greedy_candidate_count: None,
         }
+    }
+
+    /// Restricts device-side greedy selection to token IDs below `count`, for
+    /// a tokenizer that addresses fewer IDs than the logit row holds.
+    #[must_use]
+    pub const fn with_greedy_candidate_count(mut self, count: usize) -> Self {
+        self.greedy_candidate_count = Some(count);
+        self
+    }
+
+    /// Device-side greedy candidate bound, when one is configured.
+    #[must_use]
+    pub const fn greedy_candidate_count(self) -> Option<usize> {
+        self.greedy_candidate_count
     }
 
     /// Selects the explicit VllmSmolP128V1 owned graph. Eager fallback is forbidden.

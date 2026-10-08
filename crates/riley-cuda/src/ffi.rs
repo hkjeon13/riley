@@ -7328,6 +7328,7 @@ pub(super) fn bf16_argmax_execute(
     results: RawBufferSpan,
     row_count: u64,
     vocabulary_size: u64,
+    candidate_count: u64,
     stream: &mut StreamHandle,
 ) -> CudaResult<()> {
     let params = RawBf16ArgmaxParams {
@@ -7337,7 +7338,8 @@ pub(super) fn bf16_argmax_execute(
         results,
         row_count,
         vocabulary_size,
-        reserved: [0; 4],
+        // Zero keeps the unbounded contract.
+        reserved: [candidate_count, 0, 0, 0],
     };
     primitive_status(
         "execute deterministic CUDA BF16 argmax",

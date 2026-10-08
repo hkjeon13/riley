@@ -2219,8 +2219,19 @@ mod cuda_backend {
             let mut stream = context
                 .create_stream()
                 .map_err(|source| internal(format!("CUDA stream creation failed: {source}")))?;
+            // A tokenizer that addresses fewer IDs than the logit row holds
+            // keeps device-side greedy selection by bounding its candidates.
+            let addressable = model.tokenizer().addressable_token_count();
+            let executor_config = if config.gpu_greedy
+                && addressable != 0
+                && addressable < model.spec().lm_head().vocabulary_size()
+            {
+                config.executor.with_greedy_candidate_count(addressable)
+            } else {
+                config.executor
+            };
             let executor =
-                PreparedLlamaBatchExecutor::prepare(&model, &context, &mut stream, config.executor)
+                PreparedLlamaBatchExecutor::prepare(&model, &context, &mut stream, executor_config)
                     .map_err(|source| {
                         internal(format!("batch executor preparation failed: {source}"))
                     })?;
@@ -2293,9 +2304,10 @@ mod cuda_backend {
         }
 
         fn effective_sampling_backend(&self) -> &'static str {
+            let addressable = self.model.tokenizer().addressable_token_count();
             if self.gpu_greedy
-                && self.model.tokenizer().addressable_token_count()
-                    == self.executor.vocabulary_size()
+                && (addressable == self.executor.vocabulary_size()
+                    || self.executor.config().greedy_candidate_count() == Some(addressable))
             {
                 "gpu-greedy"
             } else {
@@ -2847,7 +2859,12 @@ mod cuda_backend {
             };
             let static_ineligibility = gpu_greedy_ineligibility(
                 self.gpu_greedy,
-                self.addressable_tokens == self.sampling.vocabulary_size(),
+                self.addressable_tokens == self.sampling.vocabulary_size()
+                    || self
+                        .executor
+                        .as_ref()
+                        .and_then(|executor| executor.config().greedy_candidate_count())
+                        == Some(self.addressable_tokens),
                 0.0,
                 1.0,
                 false,

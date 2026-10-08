@@ -1572,6 +1572,37 @@ pub fn deterministic_bf16_argmax<S: CudaExecutionStream + ?Sized>(
     params: &mut Bf16ArgmaxParams<'_>,
     stream: &mut S,
 ) -> CudaResult<()> {
+    bf16_argmax(params, 0, stream)
+}
+
+/// [`deterministic_bf16_argmax`] restricted to token IDs below
+/// `candidate_count`. Every column of a row is still checked for finiteness;
+/// columns at or past the bound can never be selected. This serves models
+/// whose logit row is wider than the tokenizer's addressable vocabulary.
+///
+/// # Errors
+///
+/// As [`deterministic_bf16_argmax`], plus invalid-argument for a zero bound
+/// or one past `vocabulary_size`.
+pub fn deterministic_bf16_argmax_bounded<S: CudaExecutionStream + ?Sized>(
+    params: &mut Bf16ArgmaxParams<'_>,
+    candidate_count: u64,
+    stream: &mut S,
+) -> CudaResult<()> {
+    if candidate_count == 0 || candidate_count > params.vocabulary_size {
+        return Err(CudaError::invalid_argument(
+            "deterministic_bf16_argmax_bounded",
+            "candidate_count must be within 1..=vocabulary_size",
+        ));
+    }
+    bf16_argmax(params, candidate_count, stream)
+}
+
+fn bf16_argmax<S: CudaExecutionStream + ?Sized>(
+    params: &mut Bf16ArgmaxParams<'_>,
+    candidate_count: u64,
+    stream: &mut S,
+) -> CudaResult<()> {
     const OPERATION: &str = "deterministic_bf16_argmax";
     let stream = execution_stream_mut(stream);
     validate_bf16_argmax_descriptor(
@@ -1594,12 +1625,13 @@ pub fn deterministic_bf16_argmax<S: CudaExecutionStream + ?Sized>(
             params.results.raw(),
             params.row_count,
             params.vocabulary_size,
+            candidate_count,
             &mut stream.native,
         )
     }
     #[cfg(not(feature = "cuda"))]
     {
-        let _ = params;
+        let _ = (params, candidate_count);
         Err(CudaError::unavailable(OPERATION))
     }
 }

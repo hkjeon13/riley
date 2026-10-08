@@ -154,11 +154,11 @@ pub use primitives::{
     HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT, HUGGING_FACE_SMOLLM2_RMS_NORM_EPSILON_BITS,
     HUGGING_FACE_SMOLLM2_RMS_NORM_HIDDEN_SIZE, HUGGING_FACE_SMOLLM2_RMS_NORM_MAX_ROWS,
     ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RopeParams, RopeTableParams,
-    RowBiasAddInPlaceParams, SiluParams, cast, deterministic_bf16_argmax, embedding,
-    fixed37_log_softmax, fixed37_residual_rms_norm, fixed37_rms_norm, gated_multiply,
-    hugging_face_qwen_p2051_rms_norm, hugging_face_smollm2_residual_rms_norm,
-    hugging_face_smollm2_rms_norm, residual_add, residual_rms_norm, rms_norm, rope, rope_table,
-    row_bias_add_in_place, silu,
+    RowBiasAddInPlaceParams, SiluParams, cast, deterministic_bf16_argmax,
+    deterministic_bf16_argmax_bounded, embedding, fixed37_log_softmax, fixed37_residual_rms_norm,
+    fixed37_rms_norm, gated_multiply, hugging_face_qwen_p2051_rms_norm,
+    hugging_face_smollm2_residual_rms_norm, hugging_face_smollm2_rms_norm, residual_add,
+    residual_rms_norm, rms_norm, rope, rope_table, row_bias_add_in_place, silu,
 };
 pub use runtime::{
     CudaCommandBatch, CudaCommandStream, CudaContext, CudaDevice, CudaEvent, CudaExecutionStream,

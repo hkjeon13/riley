@@ -15,8 +15,9 @@ use riley_cuda::{
     NativeBf16RaggedPagedSplitGqaD128TwoStageParams, PackedBatchHostV1, PackedBatchV1,
     RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
     ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams, deterministic_bf16_argmax,
-    embedding, fixed37_ragged_paged_attention, gated_multiply, grouped_ragged_paged_attention,
-    indexed_rope, native_bf16_ragged_paged_split_gqa_d128_two_stage, ragged_paged_attention,
+    deterministic_bf16_argmax_bounded, embedding, fixed37_ragged_paged_attention, gated_multiply,
+    grouped_ragged_paged_attention, indexed_rope,
+    native_bf16_ragged_paged_split_gqa_d128_two_stage, ragged_paged_attention,
     ragged_paged_kv_cache_write, residual_add, row_gather, silu,
 };
 
@@ -109,6 +110,7 @@ pub(in crate::llama) struct OutputPrimitiveDispatch<'a> {
     pub(in crate::llama) gathered_logits: &'a mut Option<CudaDeviceBuffer>,
     pub(in crate::llama) greedy_results: &'a mut Option<CudaDeviceBuffer>,
     pub(in crate::llama) produce_greedy_tokens: bool,
+    pub(in crate::llama) greedy_candidate_count: Option<usize>,
 }
 
 /// Runs output row gather and, when requested, exact deterministic argmax.
@@ -130,6 +132,7 @@ pub(in crate::llama) fn dispatch_output_primitives<S: CudaExecutionStream + ?Siz
         gathered_logits,
         greedy_results,
         produce_greedy_tokens,
+        greedy_candidate_count,
     } = dispatch;
     let output_indices = output_indices.ok_or(LlamaBatchExecutorError::InvalidConfiguration {
         field: "output_token_indices",
@@ -196,8 +199,15 @@ pub(in crate::llama) fn dispatch_output_primitives<S: CudaExecutionStream + ?Siz
             row_count: usize_u64(output_count, LlamaBatchExecutorResource::GreedyResults)?,
             vocabulary_size: usize_u64(vocabulary_size, LlamaBatchExecutorResource::GreedyResults)?,
         };
-        deterministic_bf16_argmax(&mut argmax, stream)
-            .map_err(|source| dispatch_cuda(site, source))?;
+        match greedy_candidate_count {
+            Some(count) => deterministic_bf16_argmax_bounded(
+                &mut argmax,
+                usize_u64(count, LlamaBatchExecutorResource::GreedyResults)?,
+                stream,
+            ),
+            None => deterministic_bf16_argmax(&mut argmax, stream),
+        }
+        .map_err(|source| dispatch_cuda(site, source))?;
     }
     Ok(())
 }
@@ -411,6 +421,7 @@ pub(in crate::llama) fn execute_packed(
                     gathered_logits,
                     greedy_results,
                     produce_greedy_tokens: produce_greedy_tokens,
+                    greedy_candidate_count: config.greedy_candidate_count(),
                 },
                 stream,
             )?;

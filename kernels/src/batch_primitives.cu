@@ -969,7 +969,7 @@ __device__ __forceinline__ void reduce_argmax_warp(
 
 __global__ void bf16_argmax_kernel(
     const __nv_bfloat16* logits, RileyCudaBf16ArgmaxResult* results,
-    uint64_t row_count, uint64_t vocabulary_size) {
+    uint64_t row_count, uint64_t vocabulary_size, uint64_t candidate_count) {
   constexpr uint32_t kWarpCount = kThreads / kWarpSize;
   __shared__ float warp_values[kWarpCount];
   __shared__ uint32_t warp_tokens[kWarpCount];
@@ -987,6 +987,11 @@ __global__ void bf16_argmax_kernel(
       const float value = __bfloat162float(logits[row_base + column]);
       if (!isfinite(value)) {
         non_finite = 1;
+        continue;
+      }
+      // Columns past the candidate bound are still checked for finiteness
+      // but can never be selected.
+      if (column >= candidate_count) {
         continue;
       }
       const uint32_t token = static_cast<uint32_t>(column);
@@ -2025,10 +2030,13 @@ extern "C" RileyCudaStatus riley_cuda_bf16_argmax_execute(
   }
   const RileyCudaBf16ArgmaxParams stable_params = *params;
   params = &stable_params;
-  if (params->reserved0 != 0 || !reserved_is_zero(params->reserved, 4)) {
+  // reserved[0] is the optional candidate bound: zero selects among every
+  // column, otherwise only token IDs below it can win.
+  if (params->reserved0 != 0 || !reserved_is_zero(params->reserved + 1, 3) ||
+      params->reserved[0] > params->vocabulary_size) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
-                            "params reserved fields must be zero");
+                            "params reserved fields must be zero and the candidate bound within the vocabulary");
   }
   if (params->logits.dtype != RILEY_CUDA_DTYPE_BF16 ||
       params->results.dtype != RILEY_CUDA_DTYPE_U32) {
@@ -2122,7 +2130,9 @@ extern "C" RileyCudaStatus riley_cuda_bf16_argmax_execute(
     bf16_argmax_kernel<<<blocks, kThreads, 0, stream->stream>>>(
         reinterpret_cast<const __nv_bfloat16*>(logits.data),
         reinterpret_cast<RileyCudaBf16ArgmaxResult*>(results.data),
-        params->row_count, params->vocabulary_size);
+        params->row_count, params->vocabulary_size,
+        params->reserved[0] != 0 ? params->reserved[0]
+                                 : params->vocabulary_size);
     status = launch_status(error, kOperation);
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
@@ -3506,6 +3516,6 @@ cudaError_t riley_cuda_internal::enqueue_decode_kv_attention(cudaStream_t stream
 }
 
 cudaError_t riley_cuda_internal::enqueue_decode_argmax(cudaStream_t stream,const void* logits,void* output,uint64_t vocab) noexcept {
-  bf16_argmax_kernel<<<1,kThreads,0,stream>>>(static_cast<const __nv_bfloat16*>(logits),static_cast<RileyCudaBf16ArgmaxResult*>(output),1,vocab);
+  bf16_argmax_kernel<<<1,kThreads,0,stream>>>(static_cast<const __nv_bfloat16*>(logits),static_cast<RileyCudaBf16ArgmaxResult*>(output),1,vocab,vocab);
   return cudaGetLastError();
 }
