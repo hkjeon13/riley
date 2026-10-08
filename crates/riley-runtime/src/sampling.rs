@@ -547,28 +547,66 @@ impl SamplingWorkspace {
                 });
             }
         }
-        let mut winner: Option<(usize, f32)> = None;
-        for (token_id, bytes) in logits_bf16_native.chunks_exact(BF16_BYTES).enumerate() {
-            let bits = u16::from_ne_bytes([bytes[0], bytes[1]]);
-            let value = f32::from_bits(u32::from(bits) << 16);
-            if !value.is_finite() {
-                return Err(SamplingError::NonFiniteLogit {
-                    token_id: u32::try_from(token_id).map_err(|_| {
-                        SamplingError::VocabularyTooLarge {
-                            vocabulary_size: self.vocabulary_size(),
-                        }
-                    })?,
-                    bf16_bits: bits,
-                });
-            }
-            // Ascending IDs with a strict comparison keep the lowest ID on ties.
-            if allowed_mask.is_none_or(|mask| mask[token_id])
-                && winner.is_none_or(|(_, current)| value > current)
-            {
-                winner = Some((token_id, value));
+        // BF16 values order like their bit patterns once the sign is folded
+        // in, so the scan runs on integer keys in branch-free passes: a
+        // finiteness check, a maximum, then the first allowed index holding
+        // it. Negative zero is keyed as positive zero, matching `==` on f32.
+        const fn order_key(bits: u16) -> u16 {
+            let bits = if bits == 0x8000 { 0 } else { bits };
+            if bits & 0x8000 == 0 {
+                bits | 0x8000
+            } else {
+                !bits
             }
         }
-        let (winner, _) = winner.ok_or(SamplingError::AllMasked)?;
+        let bits_at = |token_id: usize| {
+            u16::from_ne_bytes([
+                logits_bf16_native[token_id * BF16_BYTES],
+                logits_bf16_native[token_id * BF16_BYTES + 1],
+            ])
+        };
+        let mut non_finite = false;
+        for bytes in logits_bf16_native.chunks_exact(BF16_BYTES) {
+            non_finite |= u16::from_ne_bytes([bytes[0], bytes[1]]) & 0x7f80 == 0x7f80;
+        }
+        if non_finite {
+            let token_id = (0..self.vocabulary_size())
+                .find(|&token_id| bits_at(token_id) & 0x7f80 == 0x7f80)
+                .unwrap_or(0);
+            return Err(SamplingError::NonFiniteLogit {
+                token_id: u32::try_from(token_id).map_err(|_| {
+                    SamplingError::VocabularyTooLarge {
+                        vocabulary_size: self.vocabulary_size(),
+                    }
+                })?,
+                bf16_bits: bits_at(token_id),
+            });
+        }
+        // Finite values never key to zero, so zero marks "not allowed".
+        let mut maximum = 0_u16;
+        match allowed_mask {
+            None => {
+                for bytes in logits_bf16_native.chunks_exact(BF16_BYTES) {
+                    maximum = maximum.max(order_key(u16::from_ne_bytes([bytes[0], bytes[1]])));
+                }
+            }
+            Some(mask) => {
+                for (bytes, &allowed) in logits_bf16_native.chunks_exact(BF16_BYTES).zip(mask) {
+                    let key = order_key(u16::from_ne_bytes([bytes[0], bytes[1]]));
+                    maximum = maximum.max(if allowed { key } else { 0 });
+                }
+            }
+        }
+        if maximum == 0 {
+            return Err(SamplingError::AllMasked);
+        }
+        // Ascending IDs keep the lowest token ID on ties.
+        let winner = (0..self.vocabulary_size())
+            .find(|&token_id| {
+                allowed_mask.is_none_or(|mask| mask[token_id])
+                    && order_key(bits_at(token_id)) == maximum
+            })
+            .ok_or(SamplingError::AllMasked)?;
         Ok(Some(SamplingResult {
             token_id: u32::try_from(winner).unwrap_or(u32::MAX),
             probability: 1.0,
@@ -1352,6 +1390,44 @@ mod tests {
                 assert_eq!(fast, full);
             }
         }
+        // A non-finite logit is reported identically, even when it is masked.
+        let mut logits = vec![0_u8; vocabulary * 2];
+        logits[2 * 9..2 * 9 + 2].copy_from_slice(&0x7f80_u16.to_ne_bytes());
+        logits[2 * 40..2 * 40 + 2].copy_from_slice(&0xffc1_u16.to_ne_bytes());
+        let mut mask = vec![true; vocabulary];
+        mask[9] = false;
+        let fast = workspace
+            .greedy_bf16_native(&logits, TokenConstraints::AllowedMask(&mask), &[], params)
+            .expect_err("non-finite row");
+        let full = workspace
+            .process_bf16_native(&logits, TokenConstraints::AllowedMask(&mask), &[], params)
+            .map(|_| ())
+            .expect_err("non-finite row");
+        assert_eq!(format!("{fast:?}"), format!("{full:?}"));
+        let all_masked = vec![false; vocabulary];
+        let zeros = vec![0_u8; vocabulary * 2];
+        assert_eq!(
+            format!(
+                "{:?}",
+                workspace.greedy_bf16_native(
+                    &zeros,
+                    TokenConstraints::AllowedMask(&all_masked),
+                    &[],
+                    params
+                )
+            ),
+            format!(
+                "{:?}",
+                workspace
+                    .process_bf16_native(
+                        &zeros,
+                        TokenConstraints::AllowedMask(&all_masked),
+                        &[],
+                        params
+                    )
+                    .map(|_| None::<super::SamplingResult>)
+            )
+        );
         let penalized = SamplingParams {
             repetition_penalty: 1.5,
             ..params
