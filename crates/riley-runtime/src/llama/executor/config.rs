@@ -512,6 +512,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         vllm_smol_p128_graph: config.vllm_smol_p128_graph,
         shape_policy: config.shape_policy,
         shape_buckets: config.shape_buckets,
+        greedy_candidate_count: config.greedy_candidate_count,
     }
 }
 
