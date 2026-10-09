@@ -606,13 +606,6 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let batch_shape_policy = batch_shape_policy.unwrap_or(BatchShapePolicyMode::FixedMaximum);
     let batch_token_budget = batch_token_budget.unwrap_or(512);
     let metadata_transport = metadata_transport.unwrap_or(MetadataTransportMode::Synchronous);
-    if residual_rmsnorm == ResidualRmsNormMode::Fused
-        && execution_completion == ExecutionCompletionMode::IterationBatch
-    {
-        return Err(
-            "fused residual RMSNorm may only be used with per-operation completion".to_owned(),
-        );
-    }
     if metadata_transport == MetadataTransportMode::PackedAsync
         && execution_completion != ExecutionCompletionMode::IterationBatch
     {
@@ -734,6 +727,19 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     .to_owned(),
             );
         }
+    }
+    // The fused kernel rounds the residual at the same BF16 boundary as the
+    // separate path. Its iteration-batch use is qualified (byte-identical
+    // serving outputs) only for the native D128 route.
+    if residual_rmsnorm == ResidualRmsNormMode::Fused
+        && execution_completion == ExecutionCompletionMode::IterationBatch
+        && decode_attention_backend
+            != DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+    {
+        return Err(
+            "fused residual RMSNorm with iteration-batch completion requires the native D128 decode attention backend"
+                .to_owned(),
+        );
     }
     if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
         && execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Disabled
