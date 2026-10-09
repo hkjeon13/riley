@@ -373,8 +373,16 @@ impl PreparedLlamaBatchOwner {
         )?;
         let native_d128_two_stage_workspace = if config.native_bf16_paged_split_gqa_d128_two_stage()
         {
+            // A row never has more pages than the longest sequence the
+            // scheduler admits; without a declared bound, fall back to the
+            // checkpoint context.
+            let workspace_sequence_tokens = config
+                .serving_sequence_token_bound()
+                .map_or(spec.max_sequence_length(), |bound| {
+                    bound.clamp(1, spec.max_sequence_length())
+                });
             let partial_state_capacity =
-                native_d128_partial_state_capacity(spec.max_sequence_length())?;
+                native_d128_partial_state_capacity(workspace_sequence_tokens)?;
             let workspace_layout = NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::new(
                 usize_u64(
                     bounds.max_input_tokens(),

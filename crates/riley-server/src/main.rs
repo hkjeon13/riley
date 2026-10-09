@@ -1548,7 +1548,9 @@ fn run_serve(
             }
         }
         DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage => {
-            let executor = executor.with_native_bf16_paged_split_gqa_d128_two_stage();
+            let executor = executor
+                .with_native_bf16_paged_split_gqa_d128_two_stage()
+                .with_serving_sequence_token_bound(max_sequence_tokens);
             if options.d128_global_merge {
                 executor.with_d128_global_merge()
             } else {

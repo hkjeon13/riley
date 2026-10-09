@@ -151,6 +151,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     shape_buckets: LlamaBatchShapeBuckets,
     greedy_candidate_count: Option<usize>,
     d128_global_merge: bool,
+    serving_sequence_token_bound: Option<usize>,
 }
 
 impl PreparedLlamaBatchExecutorConfig {
@@ -172,7 +173,24 @@ impl PreparedLlamaBatchExecutorConfig {
             shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
             greedy_candidate_count: None,
             d128_global_merge: false,
+            serving_sequence_token_bound: None,
         }
+    }
+
+    /// Declares the largest sequence (prompt plus output tokens) the serving
+    /// scheduler will ever admit. Per-row workspaces sized by sequence length,
+    /// such as the native D128 partial-state workspace, then use this bound
+    /// instead of the checkpoint's maximum context.
+    #[must_use]
+    pub const fn with_serving_sequence_token_bound(mut self, tokens: usize) -> Self {
+        self.serving_sequence_token_bound = Some(tokens);
+        self
+    }
+
+    /// The declared serving sequence bound, when one was given.
+    #[must_use]
+    pub const fn serving_sequence_token_bound(self) -> Option<usize> {
+        self.serving_sequence_token_bound
     }
 
     /// Merges the native D128 per-page attention states with the single
@@ -538,6 +556,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         shape_buckets: config.shape_buckets,
         greedy_candidate_count: config.greedy_candidate_count,
         d128_global_merge: config.d128_global_merge,
+        serving_sequence_token_bound: config.serving_sequence_token_bound,
     }
 }
 
