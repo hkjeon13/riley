@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicU8, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{
     self, Receiver, RecvError, RecvTimeoutError, SyncSender, TryRecvError, TrySendError,
 };
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -280,6 +280,30 @@ pub trait EngineBackend: 'static {
         request: &GenerationRequest,
     ) -> Result<(), BackendError>;
 
+    /// Immutable tokenizer that submitters may run before admission, keeping
+    /// prompt encoding off the engine thread.
+    #[must_use]
+    fn prompt_tokenizer(&self) -> Option<Arc<dyn riley_model::Tokenizer>> {
+        None
+    }
+
+    /// Admits a request whose prompt was already encoded by `prompt_tokenizer`
+    /// with the options `admit` uses.
+    ///
+    /// # Errors
+    ///
+    /// Same as `admit`.
+    fn admit_tokenized(
+        &mut self,
+        request_id: EngineRequestId,
+        metadata: &RequestMetadata,
+        request: &GenerationRequest,
+        prompt_token_ids: Vec<u32>,
+    ) -> Result<(), BackendError> {
+        let _ = prompt_token_ids;
+        self.admit(request_id, metadata, request)
+    }
+
     /// Cancels queued or active work at a safe iteration boundary.
     ///
     /// Returned events are published in vector order.
@@ -354,6 +378,7 @@ enum Command {
         cancellation: Arc<AtomicU8>,
         events: SyncSender<GenerationEvent>,
         admitted: SyncSender<Result<(), EngineError>>,
+        prompt_token_ids: Option<Vec<u32>>,
     },
     Metrics {
         response: SyncSender<Result<EngineMetricsSnapshot, EngineError>>,
@@ -422,6 +447,7 @@ struct EngineInner {
     next_request_id: AtomicU64,
     stats: Arc<EngineStats>,
     worker: Mutex<Option<JoinHandle<()>>>,
+    prompt_tokenizer: Arc<OnceLock<Arc<dyn riley_model::Tokenizer>>>,
 }
 
 struct EngineStats {
@@ -1086,6 +1112,8 @@ impl InferenceEngine {
         let worker_lifecycle = Arc::clone(&lifecycle);
         let stats = Arc::new(EngineStats::default());
         let worker_stats = Arc::clone(&stats);
+        let prompt_tokenizer = Arc::new(OnceLock::new());
+        let worker_tokenizer = Arc::clone(&prompt_tokenizer);
         let worker = thread::Builder::new()
             .name("riley-engine".to_owned())
             .spawn(move || {
@@ -1097,6 +1125,10 @@ impl InferenceEngine {
                         return;
                     }
                 };
+                // Published before the worker reports ready.
+                if let Some(tokenizer) = backend.prompt_tokenizer() {
+                    let _ = worker_tokenizer.set(tokenizer);
+                }
                 worker_main(
                     backend,
                     config,
@@ -1114,6 +1146,7 @@ impl InferenceEngine {
             next_request_id: AtomicU64::new(1),
             stats,
             worker: Mutex::new(Some(worker)),
+            prompt_tokenizer,
         });
         let engine = Self { inner };
         if !engine
@@ -1263,6 +1296,22 @@ impl InferenceEngine {
         let cancellation = Arc::new(AtomicU8::new(REQUEST_LIVE));
         let (event_tx, event_rx) = mpsc::sync_channel(self.inner.config.event_channel_capacity);
         let (admitted_tx, admitted_rx) = mpsc::sync_channel(1);
+        // Encode on the submitting thread while the engine is serving others,
+        // so admission does not stall their decode rows; an idle engine encodes
+        // itself. A failure is left for admission to reproduce, so request
+        // validation order and errors are unchanged.
+        let engine_busy = self.inner.stats.active_requests.load(Ordering::Acquire) != 0;
+        let prompt_tokenizer = self.inner.prompt_tokenizer.get().filter(|_| engine_busy);
+        let prompt_token_ids = prompt_tokenizer.and_then(|tokenizer| {
+            tokenizer
+                .encode(
+                    &request.prompt,
+                    riley_model::EncodeOptions {
+                        add_special_tokens: true,
+                    },
+                )
+                .ok()
+        });
         let command = Command::Submit {
             request_id,
             metadata: metadata.clone(),
@@ -1270,6 +1319,7 @@ impl InferenceEngine {
             cancellation: Arc::clone(&cancellation),
             events: event_tx,
             admitted: admitted_tx,
+            prompt_token_ids,
         };
         self.inner
             .stats
@@ -1662,6 +1712,7 @@ fn process_command<B: EngineBackend>(
         cancellation,
         events,
         admitted,
+        prompt_token_ids,
     } = command
     else {
         if let Command::Metrics { response } = command {
@@ -1690,7 +1741,11 @@ fn process_command<B: EngineBackend>(
         let _ = admitted.try_send(Err(EngineError::InvalidRequest));
         return;
     }
-    match backend.admit(request_id, &metadata, &request) {
+    let admission = match prompt_token_ids {
+        Some(ids) => backend.admit_tokenized(request_id, &metadata, &request, ids),
+        None => backend.admit(request_id, &metadata, &request),
+    };
+    match admission {
         Ok(()) => {
             let replaced = requests.insert(
                 request_id,
@@ -3200,6 +3255,30 @@ mod cuda_backend {
                     },
                 )
                 .map_err(|_| private_request_error("prompt tokenization failed"))?;
+            self.admit_tokenized(request_id, metadata, request, prompt_token_ids)
+        }
+
+        fn prompt_tokenizer(&self) -> Option<Arc<dyn riley_model::Tokenizer>> {
+            Some(self.model.shared_tokenizer())
+        }
+
+        fn admit_tokenized(
+            &mut self,
+            request_id: EngineRequestId,
+            metadata: &RequestMetadata,
+            request: &GenerationRequest,
+            prompt_token_ids: Vec<u32>,
+        ) -> Result<(), BackendError> {
+            if request.model_id != self.metadata.model_id {
+                return Err(private_request_error("request selected a different model"));
+            }
+            if request.max_new_tokens == 0
+                || request.max_new_tokens > self.metadata.max_output_tokens
+            {
+                return Err(private_request_error(
+                    "requested output token count is outside server bounds",
+                ));
+            }
             if let Some(graph) = &self.decode_graph {
                 graph
                     .validate_request_shape(prompt_token_ids.len(), request.max_new_tokens)

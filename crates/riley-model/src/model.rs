@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::artifact::VerifiedArtifactSession;
 use crate::{
@@ -25,7 +26,7 @@ pub const TOKENIZER_CONFIG_FILENAME: &str = "tokenizer_config.json";
 pub struct LoadedModel {
     config: ModelConfig,
     spec: ModelSpec,
-    tokenizer: Box<dyn Tokenizer>,
+    tokenizer: Arc<dyn Tokenizer>,
     qwen2_tokenizer_config: Option<Qwen2TokenizerConfig>,
     weights: LoadedWeights,
     verified_files: BTreeSet<PathBuf>,
@@ -63,7 +64,7 @@ impl LoadedModel {
             "tokenizer.json",
         )?;
         let (tokenizer, qwen2_tokenizer_config): (
-            Box<dyn Tokenizer>,
+            Arc<dyn Tokenizer>,
             Option<Qwen2TokenizerConfig>,
         ) = match &config {
             ModelConfig::Llama(llama_config) => {
@@ -72,7 +73,7 @@ impl LoadedModel {
                     limits,
                 )?;
                 validate_dense_tokenizer_coherence(&spec, &tokenizer, llama_config.pad_token_id())?;
-                (Box::new(tokenizer), None)
+                (Arc::new(tokenizer), None)
             }
             ModelConfig::Qwen2(_) => {
                 let tokenizer = Qwen2Tokenizer::from_json_slice_with_limits(
@@ -91,7 +92,7 @@ impl LoadedModel {
                 )?;
                 tokenizer_config.validate_tokenizer(&tokenizer)?;
                 validate_qwen_context_bound(&spec, &tokenizer_config)?;
-                (Box::new(tokenizer), Some(tokenizer_config))
+                (Arc::new(tokenizer), Some(tokenizer_config))
             }
         };
 
@@ -118,6 +119,13 @@ impl LoadedModel {
     #[must_use]
     pub const fn spec(&self) -> &ModelSpec {
         &self.spec
+    }
+
+    /// Returns a shared handle to the same immutable tokenizer, so prompts can
+    /// be encoded off the thread that owns the model.
+    #[must_use]
+    pub fn shared_tokenizer(&self) -> Arc<dyn Tokenizer> {
+        Arc::clone(&self.tokenizer)
     }
 
     /// Returns the Rust-native tokenizer backend.

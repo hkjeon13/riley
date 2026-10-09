@@ -8,7 +8,7 @@ use crate::ir::{
     Activation, AttentionBiasSpec, AttentionSpec, DecoderBlockSpec, EmbeddingSpec, GatedMlpSpec,
     LmHeadSpec, ModelSpec, NormSpec, RopeSpec, SpecialTokenSpec,
 };
-use crate::{strict_json, ArtifactKind, LoadLimits, ModelError, ModelResult};
+use crate::{ArtifactKind, LoadLimits, ModelError, ModelResult, strict_json};
 
 /// Supported source-model families recognized at the cold configuration boundary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
