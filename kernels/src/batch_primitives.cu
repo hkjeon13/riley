@@ -3312,6 +3312,121 @@ native_bf16_ragged_paged_split_gqa_d128_transition_reduce_kernel(
   output[output_base + depth] = __float2bfloat16_rn(numerator * inverse_denominator);
 }
 
+// Global-max merge of the per-page partial states: one kernel in place of the
+// ordered transition + replay pair. For each `(row, query_head)` it takes the
+// maximum page maximum `M`, weights every page by `exp(m_p - M)`, and divides
+// the weighted numerator sum by the weighted denominator sum. The denominator
+// is reduced with a fixed adjacent tree over pages; each output depth folds
+// pages in ascending order. The result depends only on the row's own pages,
+// so it is deterministic and independent of the batch. It is mathematically
+// the same softmax merge as the ordered pair but rounds differently, so it is
+// a separately selected numerical mode. Non-finite page maxima (other than
+// the `-Inf` of an empty page) yield NaN outputs.
+constexpr uint32_t kNativeBf16RaggedD128GlobalMergeThreads = 128;
+constexpr uint64_t kNativeBf16RaggedD128GlobalMergeMaximumPages = 128;
+
+__device__ __forceinline__ float native_d128_nan_propagating_max(float left,
+                                                                 float right) {
+  return (isnan(left) || isnan(right)) ? CUDART_NAN_F : fmaxf(left, right);
+}
+
+__global__ __launch_bounds__(kNativeBf16RaggedD128GlobalMergeThreads) void
+native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
+    const float* partial_states, const uint32_t* row_positions,
+    __nv_bfloat16* output, uint64_t active_row_count,
+    uint64_t partial_state_capacity, uint64_t launch_partial_state_count) {
+  __shared__ float page_weights[kNativeBf16RaggedD128GlobalMergeMaximumPages];
+  __shared__ float reduction[kNativeBf16RaggedD128GlobalMergeThreads];
+  const uint64_t query_head = blockIdx.x;
+  const uint64_t row = blockIdx.y;
+  const uint32_t depth = threadIdx.x;
+  const uint64_t output_base =
+      (row * kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount + query_head) *
+      kNativeBf16RaggedPagedSplitGqaD128HeadSize;
+  // Every early exit below depends only on CTA-uniform values.
+  if (row >= active_row_count) {
+    output[output_base + depth] = __float2bfloat16_rn(0.0F);
+    return;
+  }
+  const uint64_t page_count =
+      static_cast<uint64_t>(row_positions[row]) /
+          RILEY_CUDA_PAGED_KV_BLOCK_SIZE + 1;
+  if (page_count > partial_state_capacity ||
+      page_count > launch_partial_state_count ||
+      page_count > kNativeBf16RaggedD128GlobalMergeMaximumPages) {
+    output[output_base + depth] = __float2bfloat16_rn(CUDART_NAN_F);
+    return;
+  }
+  const uint64_t page_stride =
+      kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount *
+      kNativeBf16RaggedPagedSplitGqaD128StateStride;
+  const float* const states =
+      partial_states +
+      (row * partial_state_capacity *
+           kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount +
+       query_head) *
+          kNativeBf16RaggedPagedSplitGqaD128StateStride;
+
+  // One thread owns at most one page here because page_count <= 128.
+  const bool owns_page = depth < page_count;
+  const float page_maximum =
+      owns_page ? states[depth * page_stride] : -CUDART_INF_F;
+  const float page_denominator =
+      owns_page ? states[depth * page_stride + 1] : 0.0F;
+  reduction[depth] = page_maximum;
+  __syncthreads();
+  for (uint32_t offset = kNativeBf16RaggedD128GlobalMergeThreads / 2;
+       offset != 0; offset /= 2) {
+    if (depth < offset) {
+      reduction[depth] = native_d128_nan_propagating_max(
+          reduction[depth], reduction[depth + offset]);
+    }
+    __syncthreads();
+  }
+  const float maximum = reduction[0];
+  __syncthreads();
+  const float weight = owns_page ? expf(page_maximum - maximum) : 0.0F;
+  if (owns_page) {
+    page_weights[depth] = weight;
+  }
+  reduction[depth] = owns_page ? weight * page_denominator : 0.0F;
+  __syncthreads();
+  for (uint32_t offset = kNativeBf16RaggedD128GlobalMergeThreads / 2;
+       offset != 0; offset /= 2) {
+    if (depth < offset) {
+      reduction[depth] += reduction[depth + offset];
+    }
+    __syncthreads();
+  }
+  const float denominator = reduction[0];
+  const float inverse_denominator =
+      isnan(denominator)
+          ? CUDART_NAN_F
+          : (denominator > 0.0F ? 1.0F / denominator : 0.0F);
+
+  const float* const numerators = states + 2 + depth;
+  float numerator = 0.0F;
+  uint64_t page = 0;
+  // Ascending page order; the next four inputs are loaded together so their
+  // memory latency overlaps.
+  for (; page + 4 <= page_count; page += 4) {
+    const float value0 = numerators[page * page_stride];
+    const float value1 = numerators[(page + 1) * page_stride];
+    const float value2 = numerators[(page + 2) * page_stride];
+    const float value3 = numerators[(page + 3) * page_stride];
+    numerator = fmaf(page_weights[page], value0, numerator);
+    numerator = fmaf(page_weights[page + 1], value1, numerator);
+    numerator = fmaf(page_weights[page + 2], value2, numerator);
+    numerator = fmaf(page_weights[page + 3], value3, numerator);
+  }
+  for (; page < page_count; ++page) {
+    numerator =
+        fmaf(page_weights[page], numerators[page * page_stride], numerator);
+  }
+  output[output_base + depth] =
+      __float2bfloat16_rn(numerator * inverse_denominator);
+}
+
 struct NativeBf16RaggedPagedSplitGqaD128ByteCounts {
   uint64_t query_bytes;
   uint64_t pool_bytes;
@@ -3450,7 +3565,8 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
   params = &stable_params;
   if (params->format_version !=
           RILEY_CUDA_NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_V3_VERSION ||
-      params->reserved[0] > 1 || !reserved_is_zero(params->reserved + 1, 3)) {
+      params->reserved[0] > 1 || params->reserved[1] > 1 ||
+      !reserved_is_zero(params->reserved + 2, 2)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "native ragged D128 V3 version or reserved fields are invalid");
@@ -3494,6 +3610,14 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "native ragged D128 reduction order is unsupported");
+  }
+  if (params->reserved[1] == 1 &&
+      (params->reduction_order != RILEY_CUDA_DECODE_REDUCTION_ASCENDING ||
+       params->partial_state_capacity >
+           kNativeBf16RaggedD128GlobalMergeMaximumPages)) {
+    return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "native ragged D128 global merge requires ascending order and at most 128 pages per row");
   }
 
   NativeBf16RaggedPagedSplitGqaD128ByteCounts bytes{};
@@ -3647,7 +3771,22 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
     }
     status = launch_status(error, kOperation);
   }
-  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+  // reserved[1] selects the page-merge stage: 0 keeps the ordered transition +
+  // replay pair, 1 runs the single global-max merge kernel.
+  if (status == RILEY_CUDA_STATUS_SUCCESS && params->reserved[1] == 1) {
+    const dim3 merge_grid(static_cast<uint32_t>(params->query_head_count),
+                          static_cast<uint32_t>(params->output_row_count), 1);
+    native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel<<<
+        merge_grid, kNativeBf16RaggedD128GlobalMergeThreads, 0,
+        stream->stream>>>(
+        reinterpret_cast<const float*>(partial_states.data),
+        reinterpret_cast<const uint32_t*>(batch.row_positions.data),
+        reinterpret_cast<__nv_bfloat16*>(output.data),
+        params->batch.active_row_count, params->partial_state_capacity,
+        params->launch_partial_state_count);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS && params->reserved[1] == 0) {
     const dim3 transition_grid(
         static_cast<uint32_t>(params->query_head_count),
         static_cast<uint32_t>(params->batch.active_row_count), 1);
@@ -3661,7 +3800,7 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
         params->reduction_order);
     status = launch_status(error, kOperation);
   }
-  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS && params->reserved[1] == 0) {
     const dim3 reduce_grid(static_cast<uint32_t>(params->query_head_count),
                            static_cast<uint32_t>(params->output_row_count),
                            1);

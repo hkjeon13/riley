@@ -150,6 +150,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     shape_policy: LlamaBatchShapePolicy,
     shape_buckets: LlamaBatchShapeBuckets,
     greedy_candidate_count: Option<usize>,
+    d128_global_merge: bool,
 }
 
 impl PreparedLlamaBatchExecutorConfig {
@@ -170,7 +171,24 @@ impl PreparedLlamaBatchExecutorConfig {
             shape_policy: LlamaBatchShapePolicy::FixedMaximum,
             shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
             greedy_candidate_count: None,
+            d128_global_merge: false,
         }
+    }
+
+    /// Merges the native D128 per-page attention states with the single
+    /// global-max kernel instead of the ordered transition + replay pair. This
+    /// is a separately selected numerical mode: deterministic and independent
+    /// of batch composition, but not bit-identical to the ordered merge.
+    #[must_use]
+    pub const fn with_d128_global_merge(mut self) -> Self {
+        self.d128_global_merge = true;
+        self
+    }
+
+    /// Whether the native D128 route uses the global-max page merge.
+    #[must_use]
+    pub const fn d128_global_merge(self) -> bool {
+        self.d128_global_merge
     }
 
     /// Restricts device-side greedy selection to token IDs below `count`, for
@@ -519,6 +537,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         shape_policy: config.shape_policy,
         shape_buckets: config.shape_buckets,
         greedy_candidate_count: config.greedy_candidate_count,
+        d128_global_merge: config.d128_global_merge,
     }
 }
 

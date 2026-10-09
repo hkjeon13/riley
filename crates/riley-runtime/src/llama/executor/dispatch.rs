@@ -17,6 +17,7 @@ use riley_cuda::{
     ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams,
     deterministic_bf16_argmax, deterministic_bf16_argmax_bounded, embedding,
     fixed37_ragged_paged_attention, gated_multiply, grouped_ragged_paged_attention, indexed_rope,
+    native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, qkv_split_bias,
     ragged_paged_attention, ragged_paged_kv_cache_write, residual_add, row_gather, silu,
 };
@@ -396,6 +397,7 @@ pub(in crate::llama) fn execute_packed(
             rms_norm_profile,
             config.ragged_attention_reduction_profile(),
             config.ragged_attention_implementation(),
+            config.d128_global_merge(),
             native_d128_two_stage_workspace.as_deref_mut(),
             layout,
             key_cache,
@@ -564,6 +566,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     rms_norm_profile: LlamaRmsNormProfile,
     attention_reduction_profile: AttentionReductionProfile,
     attention_implementation: RaggedAttentionImplementation,
+    d128_global_merge: bool,
     mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
     layout: KvLayout,
     key_cache: &mut CudaDeviceBuffer,
@@ -974,8 +977,12 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             };
             // Shared-KV producer geometry: bit-identical states, one K/V read
             // per KV head instead of one per query head.
-            native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv(&mut params, stream)
-                .map_err(|source| batch_cuda(attention_site, source))?;
+            if d128_global_merge {
+                native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge(&mut params, stream)
+            } else {
+                native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv(&mut params, stream)
+            }
+            .map_err(|source| batch_cuda(attention_site, source))?;
         } else {
             let mut params = RaggedPagedAttentionParams {
                 query: span(

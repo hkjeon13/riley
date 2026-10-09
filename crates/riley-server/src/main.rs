@@ -71,6 +71,8 @@ serve options:
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
   --gemm-reduction-policy ID     canonical or first-heuristic-split-k-v1 (default: canonical)
+  --decode-attention-merge ID    ordered-v1 or global-max-v1 page merge for the native D128
+                                 backend (default: ordered-v1)
   --numerics-profile ID          existing or hf-eager-qwen-p2048-o128-probe-v1 (default: existing);
                                  the HF-exact profile needs an hf-exact-probe build and
                                  --max-active-sequences 1, and serves only P2048/O<=128 greedy
@@ -117,6 +119,7 @@ struct ServeOptions {
     numerics_profile: NumericsProfileMode,
     logit_observation_dir: Option<PathBuf>,
     first_heuristic_gemm_reductions: bool,
+    d128_global_merge: bool,
     vllm_smol_p128_graph: bool,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
@@ -339,6 +342,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut reduction_profile = None;
     let mut numerics_profile = None;
     let mut gemm_reduction_policy = None;
+    let mut decode_attention_merge = None;
     let mut logit_observation_dir = None;
     let mut max_weight_bytes = None;
     let mut shutdown_on_stdin = false;
@@ -512,6 +516,25 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 &mut reduction_profile,
                 parse_reduction_profile(next_value(&mut arguments, "--reduction-profile")?)?,
                 "--reduction-profile",
+            )?,
+            "--decode-attention-merge" => set_once(
+                &mut decode_attention_merge,
+                match parse_utf8(
+                    next_value(&mut arguments, "--decode-attention-merge")?,
+                    "--decode-attention-merge",
+                )?
+                .as_str()
+                {
+                    "ordered-v1" => false,
+                    "global-max-v1" => true,
+                    _ => {
+                        return Err(
+                            "--decode-attention-merge requires ordered-v1 or global-max-v1"
+                                .to_owned(),
+                        );
+                    }
+                },
+                "--decode-attention-merge",
             )?,
             "--gemm-reduction-policy" => set_once(
                 &mut gemm_reduction_policy,
@@ -741,6 +764,24 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 .to_owned(),
         );
     }
+    let d128_global_merge = decode_attention_merge.unwrap_or(false);
+    if d128_global_merge {
+        if decode_attention_backend
+            != DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+        {
+            return Err(
+                "--decode-attention-merge global-max-v1 requires the native D128 decode attention backend"
+                    .to_owned(),
+            );
+        }
+        // The merge kernel holds one page weight per thread.
+        if max_sequence_tokens.is_none_or(|tokens| tokens > 2048) {
+            return Err(
+                "--decode-attention-merge global-max-v1 requires --max-sequence-tokens of at most 2048"
+                    .to_owned(),
+            );
+        }
+    }
     if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
         && execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Disabled
     {
@@ -805,6 +846,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         numerics_profile,
         logit_observation_dir,
         first_heuristic_gemm_reductions: gemm_reduction_policy.unwrap_or(false),
+        d128_global_merge,
         vllm_smol_p128_graph,
         max_weight_bytes,
         shutdown_on_stdin,
@@ -1513,7 +1555,12 @@ fn run_serve(
             }
         }
         DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage => {
-            executor.with_native_bf16_paged_split_gqa_d128_two_stage()
+            let executor = executor.with_native_bf16_paged_split_gqa_d128_two_stage();
+            if options.d128_global_merge {
+                executor.with_d128_global_merge()
+            } else {
+                executor
+            }
         }
     };
     let model_id = options
@@ -4502,6 +4549,7 @@ mod tests {
                 numerics_profile: NumericsProfileMode::Existing,
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
+                d128_global_merge: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
@@ -4894,6 +4942,7 @@ mod tests {
                 numerics_profile: NumericsProfileMode::Existing,
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
+                d128_global_merge: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
@@ -5053,6 +5102,7 @@ mod tests {
                 numerics_profile: NumericsProfileMode::Existing,
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
+                d128_global_merge: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
@@ -5453,6 +5503,7 @@ mod tests {
                 numerics_profile: NumericsProfileMode::Existing,
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
+                d128_global_merge: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,

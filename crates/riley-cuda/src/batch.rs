@@ -802,7 +802,12 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_two_stage<S: CudaExecutionStream 
     params: &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams<'_>,
     stream: &mut S,
 ) -> CudaResult<()> {
-    execute_native_bf16_ragged_d128_two_stage(params, stream, D128_PRODUCER_PER_QUERY_HEAD)
+    execute_native_bf16_ragged_d128_two_stage(
+        params,
+        stream,
+        D128_PRODUCER_PER_QUERY_HEAD,
+        D128_MERGE_ORDERED,
+    )
 }
 
 /// Same operation and numerical contract as
@@ -820,17 +825,53 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv<
     params: &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams<'_>,
     stream: &mut S,
 ) -> CudaResult<()> {
-    execute_native_bf16_ragged_d128_two_stage(params, stream, D128_PRODUCER_SHARED_KV)
+    execute_native_bf16_ragged_d128_two_stage(
+        params,
+        stream,
+        D128_PRODUCER_SHARED_KV,
+        D128_MERGE_ORDERED,
+    )
+}
+
+/// Shared-KV producer followed by the single global-max page merge instead of
+/// the ordered transition + replay pair.
+///
+/// The merge weights every page by `exp(m_page - max_page m)` and folds pages
+/// in ascending order. It is deterministic and depends only on each row's own
+/// pages, but it rounds differently from the ordered merge, so its output is
+/// not bit-identical to the other entry points. `reduction_steps` and
+/// `reduction_normalizers` are left untouched. Requires ascending order and a
+/// per-row capacity of at most 128 pages.
+///
+/// # Errors
+///
+/// As [`native_bf16_ragged_paged_split_gqa_d128_two_stage`], plus an
+/// unsupported error for descending order or a larger page capacity.
+pub fn native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge<
+    S: CudaExecutionStream + ?Sized,
+>(
+    params: &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    execute_native_bf16_ragged_d128_two_stage(
+        params,
+        stream,
+        D128_PRODUCER_SHARED_KV,
+        D128_MERGE_GLOBAL_MAX,
+    )
 }
 
 const D128_PRODUCER_PER_QUERY_HEAD: u64 = 0;
 const D128_PRODUCER_SHARED_KV: u64 = 1;
+const D128_MERGE_ORDERED: u64 = 0;
+const D128_MERGE_GLOBAL_MAX: u64 = 1;
 
 #[allow(clippy::too_many_lines)]
 fn execute_native_bf16_ragged_d128_two_stage<S: CudaExecutionStream + ?Sized>(
     params: &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams<'_>,
     stream: &mut S,
     producer_layout: u64,
+    merge_layout: u64,
 ) -> CudaResult<()> {
     const OPERATION: &str = "native_bf16_ragged_paged_split_gqa_d128_two_stage";
     let stream = execution_stream_mut(stream);
@@ -866,12 +907,18 @@ fn execute_native_bf16_ragged_d128_two_stage<S: CudaExecutionStream + ?Sized>(
             params.scale,
             reduction_order,
             producer_layout,
+            merge_layout,
             &mut stream.native,
         )
     }
     #[cfg(not(feature = "cuda"))]
     {
-        let _ = (params, launch_partial_state_count, producer_layout);
+        let _ = (
+            params,
+            launch_partial_state_count,
+            producer_layout,
+            merge_layout,
+        );
         Err(CudaError::unavailable(OPERATION))
     }
 }

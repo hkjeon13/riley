@@ -12,6 +12,7 @@ use riley_cuda::{
     PackedBatchHostV1, PackedBatchV1, PagedDecodeAttentionParams, PagedDecodeAttentionRequest,
     PagedKvBlockTableHostV1, PagedKvBlockTableV1, PagedKvCacheAppendParams,
     PreparedPagedDecodeAttention, decode_partial_states_reduce,
+    native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_two_stage,
     native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, paged_kv_cache_append,
 };
@@ -1356,6 +1357,121 @@ fn native_bf16_ragged_paged_d128_two_stage_v3_c2048_b8_matches_v1_prefix_reducer
         encode_bf16(&vec![OUTPUT_SENTINEL; output_elements]),
         "the shared-KV launch must have written its output"
     );
+    // The shared-KV producer geometry must reproduce every workspace byte of
+    // the per-query-head launch, including untouched capacity-tail sentinels.
+    let mut merged_partial_states = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_f32(&vec![
+            STATE_SENTINEL;
+            usize::try_from(layout.partial_state_bytes() / 4)?
+        ]),
+    )?;
+    let mut merged_reduction_steps = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_f32(&vec![
+            STATE_SENTINEL;
+            usize::try_from(layout.reduction_step_bytes() / 4)?
+        ]),
+    )?;
+    let mut merged_reduction_normalizers = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_f32(&vec![
+            STATE_SENTINEL;
+            usize::try_from(
+                layout.reduction_normalizer_bytes() / 4
+            )?
+        ]),
+    )?;
+    let mut merged_output = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&vec![OUTPUT_SENTINEL; output_elements]),
+    )?;
+    native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge(
+        &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams {
+            query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+            key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
+            value_pool: CudaBufferSpan::new(
+                &value_pool,
+                CudaDType::BF16,
+                0,
+                value_pool.byte_len(),
+            )?,
+            partial_states: CudaBufferSpanMut::new(
+                &mut merged_partial_states,
+                CudaDType::F32,
+                0,
+                partial_state_len,
+            )?,
+            reduction_steps: CudaBufferSpanMut::new(
+                &mut merged_reduction_steps,
+                CudaDType::F32,
+                0,
+                reduction_step_len,
+            )?,
+            reduction_normalizers: CudaBufferSpanMut::new(
+                &mut merged_reduction_normalizers,
+                CudaDType::F32,
+                0,
+                normalizer_len,
+            )?,
+            output: CudaBufferSpanMut::new(&mut merged_output, CudaDType::BF16, 0, output_len)?,
+            batch,
+            query_head_count: u64::try_from(QUERY_HEADS)?,
+            key_value_head_count: u64::try_from(KEY_VALUE_HEADS)?,
+            head_size: u64::try_from(HEAD_SIZE)?,
+            output_row_count: u64::try_from(OUTPUT_ROWS)?,
+            partial_state_capacity: u64::try_from(PARTIAL_CAPACITY)?,
+            scale: SCALE,
+            reduction_order: DecodePartialReductionOrder::LogicalAscending,
+        },
+        &mut stream,
+    )?;
+    stream.synchronize()?;
+    let ordered_bytes = download(&context, &mut stream, &mut output)?;
+    let merged_bytes = download(&context, &mut stream, &mut merged_output)?;
+    let active_bytes = ACTIVE_ROWS * QUERY_HEADS * HEAD_SIZE * 2;
+    assert_eq!(
+        &merged_bytes[active_bytes..],
+        &ordered_bytes[active_bytes..],
+        "global merge must zero inactive rows exactly like the ordered merge"
+    );
+    let ordered_values = decode_bf16(&ordered_bytes[..active_bytes]);
+    let merged_values = decode_bf16(&merged_bytes[..active_bytes]);
+    let mut identical = 0_usize;
+    for (index, (&merged, &ordered)) in merged_values.iter().zip(&ordered_values).enumerate() {
+        assert_eq!(
+            merged.is_nan(),
+            ordered.is_nan(),
+            "NaN placement differs at element {index}"
+        );
+        if merged.to_bits() == ordered.to_bits() {
+            identical += 1;
+        } else if !merged.is_nan() {
+            // One BF16 step is 2^-7 relative at most.
+            assert!(
+                (merged - ordered).abs() <= ordered.abs() / 64.0 + 1.0e-6,
+                "global merge differs from the ordered merge by more than one BF16 step at {index}: {merged} vs {ordered}"
+            );
+        }
+    }
+    assert!(
+        identical * 1000 >= merged_values.len() * 999,
+        "global merge matched only {identical} of {} elements",
+        merged_values.len()
+    );
+    assert_ne!(
+        merged_bytes,
+        encode_bf16(&vec![OUTPUT_SENTINEL; output_elements]),
+        "the global merge must have written its output"
+    );
 
     let row_state_bytes = layout.partial_state_bytes() / u64::try_from(OUTPUT_ROWS)?;
     let mut generic_outputs = Vec::with_capacity(ACTIVE_ROWS);
@@ -1650,6 +1766,10 @@ fn native_bf16_ragged_paged_d128_two_stage_v3_c2048_b8_matches_v1_prefix_reducer
     for generic in generic_outputs {
         generic.close()?;
     }
+    merged_output.close()?;
+    merged_reduction_normalizers.close()?;
+    merged_reduction_steps.close()?;
+    merged_partial_states.close()?;
     shared_output.close()?;
     shared_reduction_normalizers.close()?;
     shared_reduction_steps.close()?;
