@@ -3681,6 +3681,198 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
                             error, kOperation);
 }
 
+namespace {
+
+__global__ void qkv_split_bias_kernel(
+    const __nv_bfloat16* merged, const __nv_bfloat16* query_bias,
+    const __nv_bfloat16* key_bias, const __nv_bfloat16* value_bias,
+    __nv_bfloat16* query, __nv_bfloat16* key, __nv_bfloat16* value,
+    uint64_t query_width, uint64_t key_value_width, uint64_t element_count) {
+  const uint64_t merged_width = query_width + 2 * key_value_width;
+  const uint64_t first =
+      static_cast<uint64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t index = first; index < element_count; index += stride) {
+    const uint64_t row = index / merged_width;
+    const uint64_t column = index % merged_width;
+    const float projected = __bfloat162float(merged[index]);
+    if (column < query_width) {
+      query[row * query_width + column] = __float2bfloat16_rn(
+          __fadd_rn(projected, __bfloat162float(query_bias[column])));
+    } else if (column < query_width + key_value_width) {
+      const uint64_t local = column - query_width;
+      key[row * key_value_width + local] = __float2bfloat16_rn(
+          __fadd_rn(projected, __bfloat162float(key_bias[local])));
+    } else {
+      const uint64_t local = column - query_width - key_value_width;
+      value[row * key_value_width + local] = __float2bfloat16_rn(
+          __fadd_rn(projected, __bfloat162float(value_bias[local])));
+    }
+  }
+}
+
+}  // namespace
+
+extern "C" RileyCudaStatus riley_cuda_qkv_split_bias_execute(
+    const RileyCudaQkvSplitBiasParams* params, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "execute merged QKV split with bias";
+  clear_error(error);
+  if (params == nullptr || params->struct_size < sizeof(*params)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params is null or has an incompatible struct_size");
+  }
+  const RileyCudaQkvSplitBiasParams stable_params = *params;
+  params = &stable_params;
+  if (params->reserved0 != 0 || !reserved_is_zero(params->reserved, 4)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params reserved fields must be zero");
+  }
+  if (params->query_width == 0 || params->key_value_width == 0) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "query_width and key_value_width must be non-zero");
+  }
+  uint64_t two_key_value = 0;
+  uint64_t merged_width = 0;
+  uint64_t merged_elements = 0;
+  uint64_t query_elements = 0;
+  uint64_t key_value_elements = 0;
+  if (!checked_multiply(params->key_value_width, 2, &two_key_value) ||
+      params->query_width > UINT64_MAX - two_key_value) {
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "merged QKV width overflows uint64_t");
+  }
+  merged_width = params->query_width + two_key_value;
+  uint64_t merged_bytes = 0;
+  uint64_t query_bytes = 0;
+  uint64_t key_value_bytes = 0;
+  uint64_t query_bias_bytes = 0;
+  uint64_t key_value_bias_bytes = 0;
+  if (!checked_multiply(params->row_count, merged_width, &merged_elements) ||
+      !checked_multiply(params->row_count, params->query_width,
+                        &query_elements) ||
+      !checked_multiply(params->row_count, params->key_value_width,
+                        &key_value_elements) ||
+      !checked_multiply(merged_elements, sizeof(__nv_bfloat16),
+                        &merged_bytes) ||
+      !checked_multiply(query_elements, sizeof(__nv_bfloat16), &query_bytes) ||
+      !checked_multiply(key_value_elements, sizeof(__nv_bfloat16),
+                        &key_value_bytes) ||
+      !checked_multiply(params->query_width, sizeof(__nv_bfloat16),
+                        &query_bias_bytes) ||
+      !checked_multiply(params->key_value_width, sizeof(__nv_bfloat16),
+                        &key_value_bias_bytes)) {
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "merged QKV shape product overflows uint64_t");
+  }
+
+  ResolvedSpan merged{};
+  ResolvedSpan query_bias{};
+  ResolvedSpan key_bias{};
+  ResolvedSpan value_bias{};
+  ResolvedSpan query{};
+  ResolvedSpan key{};
+  ResolvedSpan value{};
+  RileyCudaStatus status =
+      resolve_span(params->merged, RILEY_CUDA_DTYPE_BF16, merged_bytes,
+                   &merged, error, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->query_bias, RILEY_CUDA_DTYPE_BF16,
+                          query_bias_bytes, &query_bias, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->key_bias, RILEY_CUDA_DTYPE_BF16,
+                          key_value_bias_bytes, &key_bias, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->value_bias, RILEY_CUDA_DTYPE_BF16,
+                          key_value_bias_bytes, &value_bias, error,
+                          kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->query, RILEY_CUDA_DTYPE_BF16, query_bytes,
+                          &query, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->key, RILEY_CUDA_DTYPE_BF16, key_value_bytes,
+                          &key, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->value, RILEY_CUDA_DTYPE_BF16,
+                          key_value_bytes, &value, error, kOperation);
+  }
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  const ResolvedSpan inputs[] = {merged, query_bias, key_bias, value_bias};
+  const ResolvedSpan writable[] = {query, key, value};
+  for (size_t writable_index = 0;
+       status == RILEY_CUDA_STATUS_SUCCESS && writable_index < 3;
+       ++writable_index) {
+    for (size_t input_index = 0;
+         status == RILEY_CUDA_STATUS_SUCCESS && input_index < 4;
+         ++input_index) {
+      status = reject_overlap(writable[writable_index], inputs[input_index],
+                              false, error, kOperation);
+    }
+    for (size_t prior_index = 0;
+         status == RILEY_CUDA_STATUS_SUCCESS && prior_index < writable_index;
+         ++prior_index) {
+      status = reject_overlap(writable[writable_index],
+                              writable[prior_index], false, error,
+                              kOperation);
+    }
+  }
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  const ResolvedSpan spans[] = {merged, query_bias, key_bias, value_bias,
+                                query,  key,        value};
+  status = validate_contexts(stream, spans, 7, error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  ExclusiveUses uses(stream);
+  for (size_t index = 0; index < 7; ++index) {
+    if (!uses.add(spans[index].buffer)) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kOperation, "merged QKV buffer set overflow");
+    }
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  bool launch_attempted = false;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = prior_launch_status(error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS && merged_elements != 0) {
+    launch_attempted = true;
+    qkv_split_bias_kernel<<<block_count(merged_elements), kThreads, 0,
+                            stream->stream>>>(
+        reinterpret_cast<const __nv_bfloat16*>(merged.data),
+        reinterpret_cast<const __nv_bfloat16*>(query_bias.data),
+        reinterpret_cast<const __nv_bfloat16*>(key_bias.data),
+        reinterpret_cast<const __nv_bfloat16*>(value_bias.data),
+        reinterpret_cast<__nv_bfloat16*>(query.data),
+        reinterpret_cast<__nv_bfloat16*>(key.data),
+        reinterpret_cast<__nv_bfloat16*>(value.data), params->query_width,
+        params->key_value_width, merged_elements);
+    status = launch_status(error, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
 cudaError_t riley_cuda_internal::enqueue_qkv_rope(cudaStream_t stream,
     const void* q, const void* k, void* qr, void* kr, const void* cos,
     const void* sin, const void* positions, uint64_t q_heads, uint64_t kv_heads,

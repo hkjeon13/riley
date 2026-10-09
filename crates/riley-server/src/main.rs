@@ -65,7 +65,8 @@ serve options:
   --metadata-transport MODE      synchronous or packed-async (default: synchronous)
   --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
   --graph-numerics existing|vllm-smol-p128-v1  explicit bounded arithmetic (default: existing)
-  --projection-bias-backend MODE strict-staged-v1 or cublaslt-bias-epilogue-experimental-v1 (default: strict-staged-v1)
+  --projection-bias-backend MODE strict-staged-v1, cublaslt-bias-epilogue-experimental-v1, or
+                                 merged-qkv-strict-staged-v1 (default: strict-staged-v1)
   --decode-attention-backend MODE existing or native-bf16-paged-split-gqa-d128-two-stage (default: existing)
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
@@ -180,6 +181,8 @@ enum ProjectionBiasBackendMode {
     #[default]
     StrictStagedV1,
     CublasLtBiasEpilogueExperimentalV1,
+    /// One merged Q|K|V GEMM followed by the staged bias split.
+    MergedQkvStrictStagedV1,
 }
 
 impl ProjectionBiasBackendMode {
@@ -187,6 +190,7 @@ impl ProjectionBiasBackendMode {
         match self {
             Self::StrictStagedV1 => "strict-staged-v1",
             Self::CublasLtBiasEpilogueExperimentalV1 => "cublaslt-bias-epilogue-experimental-v1",
+            Self::MergedQkvStrictStagedV1 => "merged-qkv-strict-staged-v1",
         }
     }
 }
@@ -712,6 +716,25 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 .to_owned(),
         );
     }
+    if projection_bias_backend == ProjectionBiasBackendMode::MergedQkvStrictStagedV1 {
+        if execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Disabled {
+            return Err(
+                "merged-qkv-strict-staged-v1 is eager-only and requires --execution-graph-policy disabled"
+                    .to_owned(),
+            );
+        }
+        if reduction_profile != ReductionProfileMode::CanonicalV1 {
+            return Err(
+                "merged-qkv-strict-staged-v1 requires --reduction-profile canonical-v1".to_owned(),
+            );
+        }
+        if c02_runtime_config.is_some() {
+            return Err(
+                "merged-qkv-strict-staged-v1 uses separate numerical qualification, not C02 exact-change artifacts"
+                    .to_owned(),
+            );
+        }
+    }
     if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
         && execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Disabled
     {
@@ -866,6 +889,7 @@ fn parse_projection_bias_backend(value: OsString) -> Result<ProjectionBiasBacken
         "cublaslt-bias-epilogue-experimental-v1" => {
             Ok(ProjectionBiasBackendMode::CublasLtBiasEpilogueExperimentalV1)
         }
+        "merged-qkv-strict-staged-v1" => Ok(ProjectionBiasBackendMode::MergedQkvStrictStagedV1),
         _ => Err(
             "--projection-bias-backend requires strict-staged-v1 or cublaslt-bias-epilogue-experimental-v1"
                 .to_owned(),
@@ -1424,6 +1448,9 @@ fn run_serve(
         ProjectionBiasBackendMode::StrictStagedV1 => PreparedLlamaForwardConfig::default(),
         ProjectionBiasBackendMode::CublasLtBiasEpilogueExperimentalV1 => {
             PreparedLlamaForwardConfig::default().with_cublaslt_bias_epilogue_projection_bias()
+        }
+        ProjectionBiasBackendMode::MergedQkvStrictStagedV1 => {
+            PreparedLlamaForwardConfig::default().with_merged_qkv_projection()
         }
     };
     let forward = if options.first_heuristic_gemm_reductions {

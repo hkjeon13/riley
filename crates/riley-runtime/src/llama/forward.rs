@@ -961,6 +961,7 @@ impl PreparedLlamaForward {
             intermediate,
             down,
             lm_head,
+            merged_qkv,
             projection_bias_epilogue,
             #[cfg(feature = "cuda-cublas-gemm-probe")]
             output_projection_direct_cublas,
@@ -1008,6 +1009,13 @@ impl PreparedLlamaForward {
             LlamaForwardResource::LmHeadGemm,
             lm_head.close(),
         );
+        if let Some(merged_qkv) = merged_qkv {
+            record_close(
+                &mut first,
+                LlamaForwardResource::HiddenGemm,
+                merged_qkv.close(),
+            );
+        }
         if let Some(ProjectionBiasEpilogueGemmPlans { query, key_value }) = projection_bias_epilogue
         {
             record_close(
@@ -2118,6 +2126,11 @@ pub enum LlamaProjectionBiasMode {
     StrictStagedV1,
     /// Use the qualified cuBLASLt BIAS epilogue for Q/K/V projections only.
     CublasLtBiasEpilogueExperimentalV1,
+    /// Run Q, K, and V as one GEMM over concatenated weights, then split the
+    /// result into the three outputs with the established staged BF16 bias
+    /// add. Bias arithmetic is unchanged; only the GEMM launch (and therefore
+    /// possibly its accumulation order) differs from three separate GEMMs.
+    MergedQkvStrictStagedV1,
     /// Use the source-bound Hugging Face-compatible cuBLASLt BIAS profile.
     ///
     /// This diagnostic-only variant preserves the split-K reduction topology
@@ -2136,9 +2149,16 @@ impl LlamaProjectionBiasMode {
         match self {
             Self::StrictStagedV1 => "strict-staged-v1",
             Self::CublasLtBiasEpilogueExperimentalV1 => "cublaslt-bias-epilogue-experimental-v1",
+            Self::MergedQkvStrictStagedV1 => "merged-qkv-strict-staged-v1",
             #[cfg(feature = "cuda-cublas-gemm-probe")]
             Self::HfCompatibleBiasEpilogueProbeV1 => "hf-compatible-bias-epilogue-probe-v1",
         }
+    }
+
+    /// Whether Q, K, and V run as one merged GEMM.
+    #[must_use]
+    pub const fn merges_qkv(self) -> bool {
+        matches!(self, Self::MergedQkvStrictStagedV1)
     }
 
     const fn requires_qkv_bias_epilogue(self) -> bool {
@@ -2405,6 +2425,15 @@ impl PreparedLlamaForwardConfig {
     /// arithmetic is the qualified fused-Hugging-Face contract, rather than
     /// the established staged BF16 compatibility contract.
     #[must_use]
+    /// Selects one merged Q|K|V GEMM followed by the staged bias split.
+    #[must_use]
+    pub const fn with_merged_qkv_projection(mut self) -> Self {
+        self.projection_bias_mode = LlamaProjectionBiasMode::MergedQkvStrictStagedV1;
+        self
+    }
+
+    /// Selects the projection bias mode explicitly.
+    #[must_use]
     pub const fn with_projection_bias_mode(mut self, mode: LlamaProjectionBiasMode) -> Self {
         self.projection_bias_mode = mode;
         self
@@ -2621,6 +2650,14 @@ impl PreparedLlamaForwardConfig {
                 reason: "cuBLASLt bias epilogue requires canonical-v1 reductions",
             });
         }
+        if self.projection_bias_mode.merges_qkv()
+            && self.reduction_profile != LlamaReductionProfile::CanonicalV1
+        {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "projection_bias_mode",
+                reason: "merged QKV projection requires canonical-v1 reductions",
+            });
+        }
         #[cfg(feature = "cuda-cublas-gemm-probe")]
         if self.has_hf_eager_qwen_p2048_cache_on_component()
             && !self.is_hf_eager_qwen_p2048_cache_on_prefill_profile()
@@ -2821,6 +2858,7 @@ pub(super) struct GemmPlans {
     pub(super) intermediate: PreparedLlamaGemm,
     pub(super) down: PreparedLlamaGemm,
     pub(super) lm_head: PreparedLlamaGemm,
+    merged_qkv: Option<PreparedLlamaGemm>,
     projection_bias_epilogue: Option<ProjectionBiasEpilogueGemmPlans>,
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     output_projection_direct_cublas: Option<CudaPreparedCublasGemmProbe>,
@@ -2837,6 +2875,10 @@ impl GemmPlans {
             || self.intermediate.is_poisoned()
             || self.down.is_poisoned()
             || self.lm_head.is_poisoned()
+            || self
+                .merged_qkv
+                .as_ref()
+                .is_some_and(PreparedLlamaGemm::is_poisoned)
             || self
                 .projection_bias_epilogue
                 .as_ref()
@@ -2879,11 +2921,19 @@ impl GemmPlans {
             self.intermediate.workspace_bytes(),
             self.down.workspace_bytes(),
             self.lm_head.workspace_bytes(),
+            self.merged_qkv
+                .as_ref()
+                .map_or(0, PreparedLlamaGemm::workspace_bytes),
             projection_bias_workspace,
         ]
         .into_iter()
         .max()
         .unwrap_or(0)
+    }
+
+    /// The merged Q|K|V plan, when the merged projection mode is selected.
+    pub(super) fn merged_qkv_plan(&mut self) -> Option<&mut PreparedLlamaGemm> {
+        self.merged_qkv.as_mut()
     }
 
     pub(super) fn query_projection_plans(
@@ -2931,6 +2981,7 @@ impl GemmPlans {
             intermediate,
             down,
             lm_head,
+            merged_qkv,
             projection_bias_epilogue,
             #[cfg(feature = "cuda-cublas-gemm-probe")]
             output_projection_direct_cublas,
@@ -2957,6 +3008,13 @@ impl GemmPlans {
             LlamaForwardResource::LmHeadGemm,
             lm_head.close(),
         );
+        if let Some(merged_qkv) = merged_qkv {
+            record_close(
+                &mut first,
+                LlamaForwardResource::HiddenGemm,
+                merged_qkv.close(),
+            );
+        }
         if let Some(ProjectionBiasEpilogueGemmPlans { query, key_value }) = projection_bias_epilogue
         {
             record_close(
@@ -3118,7 +3176,7 @@ impl PreparedLlamaForward {
             sequence_length,
         );
 
-        let weights = CudaUploadedWeights::upload(
+        let mut weights = CudaUploadedWeights::upload(
             model.weights(),
             context,
             stream,
@@ -3126,6 +3184,17 @@ impl PreparedLlamaForward {
         )
         .map_err(|source| LlamaForwardError::Weight { site: None, source })?;
         let plan = LlamaExecutionPlan::prepare(model.spec(), &weights, sequence_length)?;
+        if config.projection_bias_mode.merges_qkv() {
+            weights
+                .upload_merged_qkv(
+                    model.weights(),
+                    plan.layers().len(),
+                    context,
+                    stream,
+                    config.upload_staging_bytes,
+                )
+                .map_err(|source| LlamaForwardError::Weight { site: None, source })?;
+        }
         let workspace = plan.workspace_spec();
         let attention_preference = canonical_prefill_attention_preference(
             model.config(),
@@ -5577,6 +5646,38 @@ pub(super) fn prepare_gemms(
         anchors.map(|value| &value.lm_head),
     )?;
 
+    let merged_qkv_plan = if projection_bias_mode.merges_qkv() {
+        if plan.layers().iter().any(|layer| {
+            layer.query_bias().is_none()
+                || layer.key_bias().is_none()
+                || layer.value_bias().is_none()
+        }) {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "projection_bias_mode",
+                reason: "merged QKV projection requires Q/K/V biases in every decoder layer",
+            });
+        }
+        let anchor = match anchors {
+            None => None,
+            Some(value) => Some(value.merged_qkv.as_ref().ok_or(
+                LlamaForwardError::InvalidConfiguration {
+                    field: "gemm_anchor",
+                    reason: "merged QKV shape variants require a merged maximum-shape anchor",
+                },
+            )?),
+        };
+        Some(prepare(
+            sequence,
+            hidden + 2 * key_value,
+            hidden,
+            policies.hidden(),
+            ExecutionSite::layer(0, LlamaOp::QueryProjection),
+            anchor,
+        )?)
+    } else {
+        None
+    };
+
     let projection_bias_epilogue = if projection_bias_mode.requires_qkv_bias_epilogue() {
         let first_layer = plan
             .layers()
@@ -5822,6 +5923,7 @@ pub(super) fn prepare_gemms(
         intermediate: intermediate_plan,
         down: down_plan,
         lm_head: lm_head_plan,
+        merged_qkv: merged_qkv_plan,
         projection_bias_epilogue,
         #[cfg(feature = "cuda-cublas-gemm-probe")]
         output_projection_direct_cublas,

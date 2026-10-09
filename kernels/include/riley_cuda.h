@@ -399,6 +399,27 @@ typedef struct RileyCudaFixed37LogSoftmaxParams {
   uint64_t reserved[5];
 } RileyCudaFixed37LogSoftmaxParams;
 
+// Splits one contiguous BF16 [row_count, query_width + 2 * key_value_width]
+// merged Q|K|V projection matrix into three contiguous BF16 outputs and adds
+// the matching per-column BF16 bias to each element. Each pair is expanded to
+// F32, added once, then rounded to BF16 with round-to-nearest-even, exactly
+// like the row-bias add. Widths must be non-zero; row_count may be zero.
+typedef struct RileyCudaQkvSplitBiasParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RileyCudaBufferSpan merged;
+  RileyCudaBufferSpan query_bias;
+  RileyCudaBufferSpan key_bias;
+  RileyCudaBufferSpan value_bias;
+  RileyCudaBufferSpan query;
+  RileyCudaBufferSpan key;
+  RileyCudaBufferSpan value;
+  uint64_t row_count;
+  uint64_t query_width;
+  uint64_t key_value_width;
+  uint64_t reserved[4];
+} RileyCudaQkvSplitBiasParams;
+
 // Adds one BF16 [column_count] bias vector to every row of a contiguous BF16
 // [row_count, column_count] matrix in place. Each pair is expanded to F32,
 // added once, then rounded to BF16 with round-to-nearest-even. column_count
@@ -2354,6 +2375,13 @@ RileyCudaStatus riley_cuda_fixed37_residual_rms_norm_execute(
 // be non-zero and no canonical implementation is selected as a fallback.
 RileyCudaStatus riley_cuda_fixed37_log_softmax_execute(
     const RileyCudaFixed37LogSoftmaxParams* params,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// BF16-only merged Q|K|V split with row-wise bias addition. query, key, and
+// value are the outputs; no output may overlap another span.
+RileyCudaStatus riley_cuda_qkv_split_bias_execute(
+    const RileyCudaQkvSplitBiasParams* params,
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 

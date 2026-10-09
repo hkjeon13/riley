@@ -13,12 +13,12 @@ use riley_cuda::{
     CudaCommandStream, CudaDType, CudaDeviceBuffer, CudaExecutionStream, CudaStream,
     DecodePartialReductionOrder, EmbeddingParams, GatedMultiplyParams, IndexedRopeParams,
     NativeBf16RaggedPagedSplitGqaD128TwoStageParams, PackedBatchHostV1, PackedBatchV1,
-    RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
-    ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams, deterministic_bf16_argmax,
-    deterministic_bf16_argmax_bounded, embedding, fixed37_ragged_paged_attention, gated_multiply,
-    grouped_ragged_paged_attention, indexed_rope,
-    native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, ragged_paged_attention,
-    ragged_paged_kv_cache_write, residual_add, row_gather, silu,
+    QkvSplitBiasParams, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams,
+    ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams,
+    deterministic_bf16_argmax, deterministic_bf16_argmax_bounded, embedding,
+    fixed37_ragged_paged_attention, gated_multiply, grouped_ragged_paged_attention, indexed_rope,
+    native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, qkv_split_bias,
+    ragged_paged_attention, ragged_paged_kv_cache_write, residual_add, row_gather, silu,
 };
 
 use super::super::batch::LlamaPackedBatchMetadata;
@@ -679,54 +679,120 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 .map_err(|source| batch_cuda(input_norm_site, source))?;
         }
 
-        let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
-        let (strict, fused) = gemms.query_projection_plans();
-        execute_projection_with_optional_bias_epilogue(
-            strict,
-            fused,
-            weights,
-            layer.query_bias(),
-            &buffers.hidden_norm,
-            weight_span(weights, layer.query_weight(), query_site)?,
-            hidden_projection,
-            &mut buffers.gemm_workspace,
-            dense_rows,
-            hidden,
-            stream,
-            query_site,
-        )?;
-        let key_site = ExecutionSite::layer(layer_index, LlamaOp::KeyProjection);
-        let (strict, fused) = gemms.key_value_projection_plans();
-        execute_projection_with_optional_bias_epilogue(
-            strict,
-            fused,
-            weights,
-            layer.key_bias(),
-            &buffers.hidden_norm,
-            weight_span(weights, layer.key_weight(), key_site)?,
-            &mut buffers.key_raw,
-            &mut buffers.gemm_workspace,
-            dense_rows,
-            key_value_width,
-            stream,
-            key_site,
-        )?;
-        let value_site = ExecutionSite::layer(layer_index, LlamaOp::ValueProjection);
-        let (strict, fused) = gemms.key_value_projection_plans();
-        execute_projection_with_optional_bias_epilogue(
-            strict,
-            fused,
-            weights,
-            layer.value_bias(),
-            &buffers.hidden_norm,
-            weight_span(weights, layer.value_weight(), value_site)?,
-            &mut buffers.value_raw,
-            &mut buffers.gemm_workspace,
-            dense_rows,
-            key_value_width,
-            stream,
-            value_site,
-        )?;
+        if gemms.merged_qkv_plan().is_some() {
+            // One GEMM over the concatenated Q|K|V weights. `gate_raw` is idle
+            // until the MLP and is wide enough to hold the merged rows.
+            let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
+            let merged_width = hidden + 2 * key_value_width;
+            let merged_bytes = dense_rows * merged_width * 2;
+            let merged_weight =
+                weights
+                    .merged_qkv(layer_index)
+                    .ok_or(LlamaForwardError::InvalidConfiguration {
+                        field: "projection_bias_mode",
+                        reason: "merged QKV weights were not uploaded for this layer",
+                    })?;
+            let merged_weight =
+                CudaBufferSpan::new(merged_weight, CudaDType::BF16, 0, merged_weight.byte_len())
+                    .map_err(|source| batch_cuda(query_site, source))?;
+            let missing_bias = LlamaForwardError::InvalidConfiguration {
+                field: "projection_bias_mode",
+                reason: "merged QKV projection requires Q/K/V biases",
+            };
+            let (Some(query_bias), Some(key_bias), Some(value_bias)) =
+                (layer.query_bias(), layer.key_bias(), layer.value_bias())
+            else {
+                return Err(missing_bias.into());
+            };
+            if let Some(plan) = gemms.merged_qkv_plan() {
+                execute_gemm(
+                    plan,
+                    &buffers.hidden_norm,
+                    merged_weight,
+                    &mut buffers.gate_raw,
+                    &mut buffers.gemm_workspace,
+                    stream,
+                    query_site,
+                )?;
+            }
+            let mut params = QkvSplitBiasParams {
+                merged: span(&buffers.gate_raw, CudaDType::BF16, merged_bytes, query_site)?,
+                query_bias: weight_span(weights, query_bias, query_site)?,
+                key_bias: weight_span(weights, key_bias, query_site)?,
+                value_bias: weight_span(weights, value_bias, query_site)?,
+                query: span_mut(
+                    hidden_projection,
+                    CudaDType::BF16,
+                    dense_rows * hidden * 2,
+                    query_site,
+                )?,
+                key: span_mut(
+                    &mut buffers.key_raw,
+                    CudaDType::BF16,
+                    dense_rows * key_value_width * 2,
+                    query_site,
+                )?,
+                value: span_mut(
+                    &mut buffers.value_raw,
+                    CudaDType::BF16,
+                    dense_rows * key_value_width * 2,
+                    query_site,
+                )?,
+                row_count: dense_rows,
+                query_width: hidden,
+                key_value_width,
+            };
+            qkv_split_bias(&mut params, stream).map_err(|source| batch_cuda(query_site, source))?;
+        } else {
+            let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
+            let (strict, fused) = gemms.query_projection_plans();
+            execute_projection_with_optional_bias_epilogue(
+                strict,
+                fused,
+                weights,
+                layer.query_bias(),
+                &buffers.hidden_norm,
+                weight_span(weights, layer.query_weight(), query_site)?,
+                hidden_projection,
+                &mut buffers.gemm_workspace,
+                dense_rows,
+                hidden,
+                stream,
+                query_site,
+            )?;
+            let key_site = ExecutionSite::layer(layer_index, LlamaOp::KeyProjection);
+            let (strict, fused) = gemms.key_value_projection_plans();
+            execute_projection_with_optional_bias_epilogue(
+                strict,
+                fused,
+                weights,
+                layer.key_bias(),
+                &buffers.hidden_norm,
+                weight_span(weights, layer.key_weight(), key_site)?,
+                &mut buffers.key_raw,
+                &mut buffers.gemm_workspace,
+                dense_rows,
+                key_value_width,
+                stream,
+                key_site,
+            )?;
+            let value_site = ExecutionSite::layer(layer_index, LlamaOp::ValueProjection);
+            let (strict, fused) = gemms.key_value_projection_plans();
+            execute_projection_with_optional_bias_epilogue(
+                strict,
+                fused,
+                weights,
+                layer.value_bias(),
+                &buffers.hidden_norm,
+                weight_span(weights, layer.value_weight(), value_site)?,
+                &mut buffers.value_raw,
+                &mut buffers.gemm_workspace,
+                dense_rows,
+                key_value_width,
+                stream,
+                value_site,
+            )?;
+        }
 
         let query_rope_site = ExecutionSite::layer(layer_index, LlamaOp::QueryRope);
         {

@@ -66,6 +66,7 @@ const FIXED37_LOG_SOFTMAX_PARAMS_SIZE: u32 = 152;
 const RESIDUAL_ADD_PARAMS_SIZE: u32 = 200;
 const RESIDUAL_RMS_NORM_PARAMS_SIZE: u32 = 304;
 const ROW_BIAS_ADD_IN_PLACE_PARAMS_SIZE: u32 = 152;
+const QKV_SPLIT_BIAS_PARAMS_SIZE: u32 = 400;
 const SILU_PARAMS_SIZE: u32 = 152;
 const GATED_MULTIPLY_PARAMS_SIZE: u32 = 200;
 const ROPE_TABLE_PARAMS_SIZE: u32 = 152;
@@ -550,6 +551,25 @@ struct RawResidualRmsNormParams {
     reserved1: u32,
     reserved: [u64; 4],
 }
+
+#[repr(C)]
+struct RawQkvSplitBiasParams {
+    struct_size: u32,
+    reserved0: u32,
+    merged: RawBufferSpan,
+    query_bias: RawBufferSpan,
+    key_bias: RawBufferSpan,
+    value_bias: RawBufferSpan,
+    query: RawBufferSpan,
+    key: RawBufferSpan,
+    value: RawBufferSpan,
+    row_count: u64,
+    query_width: u64,
+    key_value_width: u64,
+    reserved: [u64; 4],
+}
+
+const _: () = assert!(size_of::<RawQkvSplitBiasParams>() == QKV_SPLIT_BIAS_PARAMS_SIZE as usize);
 
 #[repr(C)]
 struct RawRowBiasAddInPlaceParams {
@@ -2213,6 +2233,11 @@ unsafe extern "C" {
     ) -> i32;
     fn riley_cuda_fixed37_log_softmax_execute(
         params: *const RawFixed37LogSoftmaxParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_qkv_split_bias_execute(
+        params: *const RawQkvSplitBiasParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -7105,6 +7130,46 @@ pub(super) fn fixed37_log_softmax_execute(
             // SAFETY: the descriptor and disjoint typed spans remain live for
             // the synchronously completing native operation.
             unsafe { riley_cuda_fixed37_log_softmax_execute(&params, stream, error) }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn qkv_split_bias_execute(
+    merged: RawBufferSpan,
+    query_bias: RawBufferSpan,
+    key_bias: RawBufferSpan,
+    value_bias: RawBufferSpan,
+    query: RawBufferSpan,
+    key: RawBufferSpan,
+    value: RawBufferSpan,
+    row_count: u64,
+    query_width: u64,
+    key_value_width: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawQkvSplitBiasParams {
+        struct_size: QKV_SPLIT_BIAS_PARAMS_SIZE,
+        reserved0: 0,
+        merged,
+        query_bias,
+        key_bias,
+        value_bias,
+        query,
+        key,
+        value,
+        row_count,
+        query_width,
+        key_value_width,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute CUDA merged QKV split with bias",
+        stream,
+        |stream, error| {
+            // SAFETY: the descriptor and all borrowed opaque buffers remain
+            // live for the synchronously completing native operation.
+            unsafe { riley_cuda_qkv_split_bias_execute(&params, stream, error) }
         },
     )
 }

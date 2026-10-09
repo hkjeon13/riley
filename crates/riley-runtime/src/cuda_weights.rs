@@ -214,6 +214,9 @@ pub struct CudaUploadedWeights {
     physical: Vec<CudaUploadedTensor>,
     slots: BTreeMap<WeightSlot, usize>,
     total_physical_bytes: u64,
+    /// Optional per-layer `Q|K|V` projection weights concatenated along the
+    /// output axis for the merged-QKV projection mode.
+    merged_qkv: Vec<CudaDeviceBuffer>,
 }
 
 impl CudaUploadedWeights {
@@ -284,7 +287,70 @@ impl CudaUploadedWeights {
             physical,
             slots,
             total_physical_bytes,
+            merged_qkv: Vec::new(),
         })
+    }
+
+    /// Uploads, for each decoder layer, one additional device tensor holding
+    /// the query, key, and value projection weights concatenated along the
+    /// output axis (`[query_width + 2 * key_value_width, hidden]`). The bytes
+    /// are the unmodified checkpoint bytes of the three tensors in that order.
+    ///
+    /// # Errors
+    ///
+    /// Returns a model lookup, length, allocation, copy, or staging-close
+    /// error. Already merged weights are left untouched.
+    pub(crate) fn upload_merged_qkv(
+        &mut self,
+        weights: &LoadedWeights,
+        layer_count: usize,
+        context: &CudaContext,
+        stream: &mut CudaStream,
+        staging_capacity_bytes: u64,
+    ) -> CudaWeightUploadResult<()> {
+        if !self.merged_qkv.is_empty() {
+            return Ok(());
+        }
+        if staging_capacity_bytes == 0 {
+            return Err(CudaWeightUploadError::EmptyStagingCapacity);
+        }
+        let mut staging = context.allocate_pinned_host_buffer(staging_capacity_bytes)?;
+        let mut merged = Vec::with_capacity(layer_count);
+        for layer in 0..layer_count {
+            let parts = [
+                riley_model::DecoderWeight::QueryWeight,
+                riley_model::DecoderWeight::KeyWeight,
+                riley_model::DecoderWeight::ValueWeight,
+            ];
+            let mut total = 0_u64;
+            for parameter in parts {
+                let slot = WeightSlot::Decoder { layer, parameter };
+                let bytes = weights.view(slot)?.view().storage().len();
+                total = u64::try_from(bytes)
+                    .ok()
+                    .and_then(|bytes| total.checked_add(bytes))
+                    .ok_or(CudaWeightUploadError::TotalLengthOverflow)?;
+            }
+            let mut buffer = context.allocate_device_buffer(total)?;
+            let mut offset = 0_u64;
+            for parameter in parts {
+                let slot = WeightSlot::Decoder { layer, parameter };
+                let bound = weights.view(slot)?;
+                let bytes = bound.view().storage();
+                buffer.upload_from_slice(offset, bytes, &mut staging, stream)?;
+                offset += u64::try_from(bytes.len())
+                    .map_err(|_| CudaWeightUploadError::HostLengthOverflow { slot })?;
+            }
+            merged.push(buffer);
+        }
+        staging.close()?;
+        self.merged_qkv = merged;
+        Ok(())
+    }
+
+    /// The merged `Q|K|V` projection weight of one layer, when uploaded.
+    pub(crate) fn merged_qkv(&self, layer: usize) -> Option<&CudaDeviceBuffer> {
+        self.merged_qkv.get(layer)
     }
 
     /// Number of unique physical CUDA allocations.
@@ -408,6 +474,13 @@ impl CudaUploadedWeights {
         let mut first_error = None;
         for tensor in self.physical {
             if let Err(error) = tensor.buffer.close() {
+                if first_error.is_none() {
+                    first_error = Some(error);
+                }
+            }
+        }
+        for buffer in self.merged_qkv {
+            if let Err(error) = buffer.close() {
                 if first_error.is_none() {
                     first_error = Some(error);
                 }

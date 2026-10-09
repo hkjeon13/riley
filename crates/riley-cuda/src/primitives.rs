@@ -1205,6 +1205,142 @@ pub fn row_bias_add_in_place<S: CudaExecutionStream + ?Sized>(
     }
 }
 
+/// A merged BF16 `Q|K|V` projection matrix, its three biases, and the three
+/// contiguous outputs it is split into.
+#[derive(Debug)]
+pub struct QkvSplitBiasParams<'a> {
+    /// Immutable `[row_count, query_width + 2 * key_value_width]` BF16 matrix.
+    pub merged: CudaBufferSpan<'a>,
+    /// Immutable `[query_width]` BF16 bias.
+    pub query_bias: CudaBufferSpan<'a>,
+    /// Immutable `[key_value_width]` BF16 key bias.
+    pub key_bias: CudaBufferSpan<'a>,
+    /// Immutable `[key_value_width]` BF16 value bias.
+    pub value_bias: CudaBufferSpan<'a>,
+    /// `[row_count, query_width]` BF16 output.
+    pub query: CudaBufferSpanMut<'a>,
+    /// `[row_count, key_value_width]` BF16 key output.
+    pub key: CudaBufferSpanMut<'a>,
+    /// `[row_count, key_value_width]` BF16 value output.
+    pub value: CudaBufferSpanMut<'a>,
+    /// Number of matrix rows. Zero rows are a validated no-op.
+    pub row_count: u64,
+    /// Query projection width. This must be non-zero.
+    pub query_width: u64,
+    /// Key and value projection width. This must be non-zero.
+    pub key_value_width: u64,
+}
+
+/// Splits a merged `Q|K|V` BF16 projection into its three outputs while adding
+/// each output's per-column BF16 bias.
+///
+/// Every element is expanded to FP32, added to its bias once, and narrowed
+/// with BF16 round-to-nearest-even: the same arithmetic as
+/// [`row_bias_add_in_place`] applied to each output separately.
+///
+/// # Errors
+///
+/// Returns a dtype, zero-width, checked shape/byte overflow, span-capacity,
+/// overlap, context, launch, or synchronization error.
+pub fn qkv_split_bias<S: CudaExecutionStream + ?Sized>(
+    params: &mut QkvSplitBiasParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "qkv_split_bias";
+    let stream = execution_stream_mut(stream);
+    require_nonzero(OPERATION, "query_width", params.query_width)?;
+    require_nonzero(OPERATION, "key_value_width", params.key_value_width)?;
+    for (name, dtype) in [
+        ("merged", params.merged.dtype),
+        ("query_bias", params.query_bias.dtype),
+        ("key_bias", params.key_bias.dtype),
+        ("value_bias", params.value_bias.dtype),
+        ("query", params.query.dtype),
+        ("key", params.key.dtype),
+        ("value", params.value.dtype),
+    ] {
+        require_dtype(OPERATION, name, dtype, CudaDType::BF16)?;
+    }
+    let merged_width = params
+        .key_value_width
+        .checked_mul(2)
+        .and_then(|width| width.checked_add(params.query_width))
+        .ok_or_else(|| CudaError::out_of_range(OPERATION, "merged QKV width overflows u64"))?;
+    let merged_bytes =
+        required_matrix_bytes(OPERATION, params.row_count, merged_width, CudaDType::BF16)?;
+    let query_bytes = required_matrix_bytes(
+        OPERATION,
+        params.row_count,
+        params.query_width,
+        CudaDType::BF16,
+    )?;
+    let key_value_bytes = required_matrix_bytes(
+        OPERATION,
+        params.row_count,
+        params.key_value_width,
+        CudaDType::BF16,
+    )?;
+    let query_bias_bytes = required_vector_bytes(OPERATION, params.query_width, CudaDType::BF16)?;
+    let key_value_bias_bytes =
+        required_vector_bytes(OPERATION, params.key_value_width, CudaDType::BF16)?;
+    require_capacity(OPERATION, "merged", params.merged.byte_len, merged_bytes)?;
+    require_capacity(
+        OPERATION,
+        "query_bias",
+        params.query_bias.byte_len,
+        query_bias_bytes,
+    )?;
+    require_capacity(
+        OPERATION,
+        "key_bias",
+        params.key_bias.byte_len,
+        key_value_bias_bytes,
+    )?;
+    require_capacity(
+        OPERATION,
+        "value_bias",
+        params.value_bias.byte_len,
+        key_value_bias_bytes,
+    )?;
+    require_capacity(OPERATION, "query", params.query.byte_len, query_bytes)?;
+    require_capacity(OPERATION, "key", params.key.byte_len, key_value_bytes)?;
+    require_capacity(OPERATION, "value", params.value.byte_len, key_value_bytes)?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.merged.buffer,
+            params.query_bias.buffer,
+            params.key_bias.buffer,
+            params.value_bias.buffer,
+            params.query.buffer,
+            params.key.buffer,
+            params.value.buffer,
+        ],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::qkv_split_bias_execute(
+            params.merged.raw(),
+            params.query_bias.raw(),
+            params.key_bias.raw(),
+            params.value_bias.raw(),
+            params.query.raw(),
+            params.key.raw(),
+            params.value.raw(),
+            params.row_count,
+            params.query_width,
+            params.key_value_width,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
 /// Inputs for elementwise `SiLU` activation.
 #[derive(Debug)]
 pub struct SiluParams<'a> {

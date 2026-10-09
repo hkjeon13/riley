@@ -2,8 +2,8 @@ use std::error::Error;
 
 use riley_cuda::{
     CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice, CudaDeviceBuffer,
-    CudaErrorKind, CudaPinnedHostBuffer, CudaRuntime, CudaStream, RowBiasAddInPlaceParams,
-    row_bias_add_in_place,
+    CudaErrorKind, CudaPinnedHostBuffer, CudaRuntime, CudaStream, QkvSplitBiasParams,
+    RowBiasAddInPlaceParams, qkv_split_bias, row_bias_add_in_place,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -270,6 +270,226 @@ fn bf16_row_bias_rejects_overflow_capacity_and_foreign_context_before_write() ->
     foreign_stream.close()?;
     close_context(foreign_context)?;
     matrix.close()?;
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+/// The merged split must equal, byte for byte, slicing the merged matrix on
+/// the host and running the established row-bias add on each slice.
+#[test]
+#[ignore = "remote GPU"]
+fn merged_qkv_split_bias_matches_separate_row_bias_adds() -> TestResult {
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let mut staging = context.allocate_pinned_host_buffer(1 << 16)?;
+    for (rows, query_width, key_value_width) in
+        [(1_usize, 1_usize, 1_usize), (5, 7, 3), (33, 64, 8)]
+    {
+        let merged_width = query_width + 2 * key_value_width;
+        let mut state = 0x9e37_79b9_u32 ^ u32::try_from(rows * 131 + merged_width)?;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            // Finite BF16 patterns of mixed sign and magnitude.
+            let bits = u16::try_from(state >> 16)?;
+            Ok::<u16, Box<dyn Error>>(if bits & 0x7f80 == 0x7f80 {
+                bits & 0xbfff
+            } else {
+                bits
+            })
+        };
+        let mut merged_bits = Vec::with_capacity(rows * merged_width);
+        for _ in 0..rows * merged_width {
+            merged_bits.push(next()?);
+        }
+        // Special values: signed zeros, infinities, and a NaN in each output.
+        if rows >= 5 {
+            merged_bits[0] = 0x8000;
+            merged_bits[merged_width + query_width] = 0x7f80;
+            merged_bits[2 * merged_width + query_width + key_value_width] = 0xff80;
+            merged_bits[3 * merged_width + 1] = 0x7fc0;
+            merged_bits[4 * merged_width + merged_width - 1] = 0x0000;
+        }
+        let mut bias = |width: usize| -> TestResult<Vec<u16>> {
+            let mut values = Vec::with_capacity(width);
+            for _ in 0..width {
+                values.push(next()?);
+            }
+            Ok(values)
+        };
+        let query_bias_bits = bias(query_width)?;
+        let key_bias_bits = bias(key_value_width)?;
+        let value_bias_bits = bias(key_value_width)?;
+        let slice = |begin: usize, width: usize| -> Vec<u16> {
+            merged_bits
+                .chunks_exact(merged_width)
+                .flat_map(|row| row[begin..begin + width].iter().copied())
+                .collect()
+        };
+        let parts = [
+            (slice(0, query_width), &query_bias_bits, query_width),
+            (
+                slice(query_width, key_value_width),
+                &key_bias_bits,
+                key_value_width,
+            ),
+            (
+                slice(query_width + key_value_width, key_value_width),
+                &value_bias_bits,
+                key_value_width,
+            ),
+        ];
+
+        // Established path: three separate in-place row-bias adds.
+        let mut separate = Vec::new();
+        for (matrix_bits, bias_bits, width) in &parts {
+            assert_eq!(
+                reference_row_bias(matrix_bits, bias_bits, *width).len(),
+                rows * width
+            );
+            let mut matrix = upload(
+                &context,
+                &mut stream,
+                &mut staging,
+                &bf16_bytes(matrix_bits),
+            )?;
+            let bias = upload(&context, &mut stream, &mut staging, &bf16_bytes(bias_bits))?;
+            {
+                let matrix_len = matrix.byte_len();
+                let mut params = RowBiasAddInPlaceParams {
+                    matrix: CudaBufferSpanMut::new(&mut matrix, CudaDType::BF16, 0, matrix_len)?,
+                    bias: CudaBufferSpan::new(&bias, CudaDType::BF16, 0, bias.byte_len())?,
+                    row_count: u64::try_from(rows)?,
+                    column_count: u64::try_from(*width)?,
+                };
+                row_bias_add_in_place(&mut params, &mut stream)?;
+            }
+            separate.push(download(&context, &mut stream, &mut matrix)?);
+            matrix.close()?;
+            bias.close()?;
+        }
+
+        let merged = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &bf16_bytes(&merged_bits),
+        )?;
+        let query_bias = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &bf16_bytes(&query_bias_bits),
+        )?;
+        let key_bias = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &bf16_bytes(&key_bias_bits),
+        )?;
+        let value_bias = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &bf16_bytes(&value_bias_bits),
+        )?;
+        let sentinel = |elements: usize| bf16_bytes(&vec![0x5a5a_u16; elements]);
+        let mut query = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &sentinel(rows * query_width),
+        )?;
+        let mut key = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &sentinel(rows * key_value_width),
+        )?;
+        let mut value = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &sentinel(rows * key_value_width),
+        )?;
+        {
+            let (query_len, key_len, value_len) =
+                (query.byte_len(), key.byte_len(), value.byte_len());
+            let mut params = QkvSplitBiasParams {
+                merged: CudaBufferSpan::new(&merged, CudaDType::BF16, 0, merged.byte_len())?,
+                query_bias: CudaBufferSpan::new(
+                    &query_bias,
+                    CudaDType::BF16,
+                    0,
+                    query_bias.byte_len(),
+                )?,
+                key_bias: CudaBufferSpan::new(&key_bias, CudaDType::BF16, 0, key_bias.byte_len())?,
+                value_bias: CudaBufferSpan::new(
+                    &value_bias,
+                    CudaDType::BF16,
+                    0,
+                    value_bias.byte_len(),
+                )?,
+                query: CudaBufferSpanMut::new(&mut query, CudaDType::BF16, 0, query_len)?,
+                key: CudaBufferSpanMut::new(&mut key, CudaDType::BF16, 0, key_len)?,
+                value: CudaBufferSpanMut::new(&mut value, CudaDType::BF16, 0, value_len)?,
+                row_count: u64::try_from(rows)?,
+                query_width: u64::try_from(query_width)?,
+                key_value_width: u64::try_from(key_value_width)?,
+            };
+            qkv_split_bias(&mut params, &mut stream)?;
+        }
+        let split = [
+            download(&context, &mut stream, &mut query)?,
+            download(&context, &mut stream, &mut key)?,
+            download(&context, &mut stream, &mut value)?,
+        ];
+        for (index, name) in ["query", "key", "value"].iter().enumerate() {
+            assert!(
+                split[index] == separate[index],
+                "merged split {name} bytes differ from the separate row-bias add for rows={rows} widths=({query_width}, {key_value_width})"
+            );
+        }
+
+        // Zero-width outputs are rejected before any write.
+        {
+            let (query_len, key_len, value_len) =
+                (query.byte_len(), key.byte_len(), value.byte_len());
+            let mut params = QkvSplitBiasParams {
+                merged: CudaBufferSpan::new(&merged, CudaDType::BF16, 0, merged.byte_len())?,
+                query_bias: CudaBufferSpan::new(
+                    &query_bias,
+                    CudaDType::BF16,
+                    0,
+                    query_bias.byte_len(),
+                )?,
+                key_bias: CudaBufferSpan::new(&key_bias, CudaDType::BF16, 0, key_bias.byte_len())?,
+                value_bias: CudaBufferSpan::new(
+                    &value_bias,
+                    CudaDType::BF16,
+                    0,
+                    value_bias.byte_len(),
+                )?,
+                query: CudaBufferSpanMut::new(&mut query, CudaDType::BF16, 0, query_len)?,
+                key: CudaBufferSpanMut::new(&mut key, CudaDType::BF16, 0, key_len)?,
+                value: CudaBufferSpanMut::new(&mut value, CudaDType::BF16, 0, value_len)?,
+                row_count: u64::try_from(rows)?,
+                query_width: u64::try_from(query_width)?,
+                key_value_width: 0,
+            };
+            let error = qkv_split_bias(&mut params, &mut stream)
+                .expect_err("a zero key/value width must be rejected");
+            assert_eq!(error.kind(), CudaErrorKind::InvalidArgument);
+        }
+        assert_eq!(download(&context, &mut stream, &mut query)?, split[0]);
+
+        for buffer in [merged, query_bias, key_bias, value_bias, query, key, value] {
+            buffer.close()?;
+        }
+    }
     staging.close()?;
     stream.close()?;
     close_context(context)

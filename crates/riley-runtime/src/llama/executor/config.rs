@@ -421,6 +421,12 @@ impl PreparedLlamaBatchExecutorConfig {
                 reason: "native D128 two-stage attention is eager-only and cannot use the D64 graph",
             });
         }
+        if self.forward.projection_bias_mode().merges_qkv() && self.vllm_smol_p128_graph {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "vllm-smol-p128-v1",
+                reason: "merged QKV projection is eager-only and cannot use the graph",
+            });
+        }
         if self.forward.projection_bias_mode()
             == LlamaProjectionBiasMode::CublasLtBiasEpilogueExperimentalV1
             && self.vllm_smol_p128_graph
