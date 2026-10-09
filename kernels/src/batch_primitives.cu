@@ -817,7 +817,12 @@ DeviceBatch device_batch(const RileyCudaPackedBatchV1& batch,
       reinterpret_cast<const uint32_t*>(resolved.row_sequence_slots.data),
       reinterpret_cast<const uint32_t*>(resolved.row_positions.data),
       batch.sequence_count,
-      batch.block_count,
+      // The block count is only an upper bound for the CSR offsets read on the
+      // device. A recorded step must not freeze this step's value, so it uses
+      // the widest bound; the host validates the offsets of every step.
+      riley_cuda_internal::thread_has_active_step_capture()
+          ? static_cast<uint64_t>(UINT32_MAX)
+          : batch.block_count,
       batch.active_row_count,
       batch.physical_block_count,
   };
@@ -3610,6 +3615,7 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
                             "native ragged D128 workspace capacity, launch extent, or output rows are invalid");
   }
   if (params->launch_partial_state_count > kMaximumGridX ||
+      params->partial_state_capacity > kMaximumGridX ||
       params->output_row_count > kMaximumGridYOrZ ||
       params->batch.active_row_count > kMaximumGridYOrZ) {
     return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
@@ -3745,6 +3751,13 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
     return status;
   }
 
+  // A recorded step launches the producer over the full per-row capacity:
+  // pages beyond a row's own count exit immediately, and the extent then does
+  // not depend on this step's longest row.
+  const uint64_t launch_extent =
+      riley_cuda_internal::thread_has_active_step_capture()
+          ? params->partial_state_capacity
+          : params->launch_partial_state_count;
   bool launch_attempted = false;
   CurrentContext scope(stream->owner);
   status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
@@ -3754,14 +3767,14 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
     const dim3 producer_grid(
-        static_cast<uint32_t>(params->launch_partial_state_count),
+        static_cast<uint32_t>(launch_extent),
         static_cast<uint32_t>(params->query_head_count),
         static_cast<uint32_t>(params->batch.active_row_count));
     // reserved[0] selects the producer launch geometry only; both producers
     // write bit-identical partial states.
     if (params->reserved[0] == 1) {
       const dim3 shared_kv_grid(
-          static_cast<uint32_t>(params->launch_partial_state_count),
+          static_cast<uint32_t>(launch_extent),
           static_cast<uint32_t>(params->key_value_head_count),
           static_cast<uint32_t>(params->batch.active_row_count));
       native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_kernel<<<
@@ -3797,7 +3810,7 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
         reinterpret_cast<const uint32_t*>(batch.row_positions.data),
         reinterpret_cast<__nv_bfloat16*>(output.data),
         params->batch.active_row_count, params->partial_state_capacity,
-        params->launch_partial_state_count);
+        launch_extent);
     status = launch_status(error, kOperation);
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS && params->reserved[1] == 0) {
@@ -3810,7 +3823,7 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
         reinterpret_cast<float*>(reduction_steps.data),
         reinterpret_cast<float*>(reduction_normalizers.data),
         reinterpret_cast<const uint32_t*>(batch.row_positions.data),
-        params->partial_state_capacity, params->launch_partial_state_count,
+        params->partial_state_capacity, launch_extent,
         params->reduction_order);
     status = launch_status(error, kOperation);
   }
@@ -3827,7 +3840,7 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
         reinterpret_cast<const uint32_t*>(batch.row_positions.data),
         reinterpret_cast<__nv_bfloat16*>(output.data),
         params->batch.active_row_count, params->partial_state_capacity,
-        params->launch_partial_state_count, params->reduction_order);
+        launch_extent, params->reduction_order);
     status = launch_status(error, kOperation);
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,

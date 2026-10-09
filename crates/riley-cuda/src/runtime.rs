@@ -765,6 +765,129 @@ impl Drop for CudaCommandBatch<'_> {
     }
 }
 
+/// One iteration step recorded from a command batch as a CUDA graph.
+///
+/// Every device pointer, launch extent, and by-value argument of the recorded
+/// operations is frozen. The owner must replay it only on the stream it was
+/// recorded on, for a step that uses the same buffers and launch shape, and
+/// must drop it before releasing any buffer or plan the step used.
+pub struct CudaStepGraph {
+    #[cfg(feature = "cuda")]
+    native: ffi::StepGraphHandle,
+    // Declared after native so the graph is destroyed before the context.
+    _context: Arc<ContextInner>,
+    _not_sync: PhantomData<Cell<()>>,
+}
+
+impl CudaStepGraph {
+    /// Destroys the recorded graph and reports the native result.
+    ///
+    /// # Errors
+    ///
+    /// Returns the translated native destroy error.
+    pub fn close(mut self) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.destroy()
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self;
+            Ok(())
+        }
+    }
+}
+
+/// Starts recording the operations subsequently enqueued on this command
+/// batch into a CUDA graph instead of executing them.
+///
+/// Only operations without their own synchronization or host readback may be
+/// recorded. Nothing recorded has run until [`launch_step_graph`] replays the
+/// graph returned by [`end_step_capture`].
+///
+/// # Errors
+///
+/// Returns invalid-state unless `stream` is a command batch owned by this
+/// thread with no other capture active, or a native capture error.
+pub fn begin_step_capture<S: CudaExecutionStream + ?Sized>(stream: &mut S) -> CudaResult<()> {
+    let stream = execution_stream_mut(stream);
+    #[cfg(feature = "cuda")]
+    {
+        stream.native.step_capture_begin()
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = stream;
+        Err(CudaError::unavailable("begin_step_capture"))
+    }
+}
+
+/// Ends the active step capture and instantiates its graph.
+///
+/// # Errors
+///
+/// Returns a native capture or instantiation error; the capture is over in
+/// either case.
+pub fn end_step_capture<S: CudaExecutionStream + ?Sized>(
+    stream: &mut S,
+) -> CudaResult<CudaStepGraph> {
+    let stream = execution_stream_mut(stream);
+    #[cfg(feature = "cuda")]
+    {
+        let native = stream.native.step_capture_end()?;
+        Ok(CudaStepGraph {
+            native,
+            _context: Arc::clone(&stream.context),
+            _not_sync: PhantomData,
+        })
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = stream;
+        Err(CudaError::unavailable("end_step_capture"))
+    }
+}
+
+/// Discards an unfinished step capture. A no-op when none is active.
+///
+/// # Errors
+///
+/// Returns a native error when the capture cannot be ended.
+pub fn abort_step_capture<S: CudaExecutionStream + ?Sized>(stream: &mut S) -> CudaResult<()> {
+    let stream = execution_stream_mut(stream);
+    #[cfg(feature = "cuda")]
+    {
+        stream.native.step_capture_abort()
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = stream;
+        Err(CudaError::unavailable("abort_step_capture"))
+    }
+}
+
+/// Enqueues one replay of a recorded step on this command batch.
+///
+/// # Errors
+///
+/// Returns invalid-argument when the graph was recorded on another stream, or
+/// a native launch error.
+pub fn launch_step_graph<S: CudaExecutionStream + ?Sized>(
+    stream: &mut S,
+    graph: &CudaStepGraph,
+) -> CudaResult<()> {
+    let stream = execution_stream_mut(stream);
+    #[cfg(feature = "cuda")]
+    {
+        stream.native.step_graph_launch(&graph.native)
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = (stream, graph);
+        Err(CudaError::unavailable("launch_step_graph"))
+    }
+}
+
 /// Timing-enabled CUDA event.
 ///
 /// Events are `Send` but deliberately `!Sync`. Drop is best-effort; explicit

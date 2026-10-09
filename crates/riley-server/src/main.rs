@@ -73,6 +73,8 @@ serve options:
   --gemm-reduction-policy ID     canonical or first-heuristic-split-k-v1 (default: canonical)
   --decode-attention-merge ID    ordered-v1 or global-max-v1 page merge for the native D128
                                  backend (default: ordered-v1)
+  --decode-step-graph MODE       disabled or capture-v1: record pure-decode steps of the native
+                                 D128 route as CUDA graphs and replay them (default: disabled)
   --numerics-profile ID          existing or hf-eager-qwen-p2048-o128-probe-v1 (default: existing);
                                  the HF-exact profile needs an hf-exact-probe build and
                                  --max-active-sequences 1, and serves only P2048/O<=128 greedy
@@ -120,6 +122,7 @@ struct ServeOptions {
     logit_observation_dir: Option<PathBuf>,
     first_heuristic_gemm_reductions: bool,
     d128_global_merge: bool,
+    decode_step_capture: bool,
     vllm_smol_p128_graph: bool,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
@@ -343,6 +346,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut numerics_profile = None;
     let mut gemm_reduction_policy = None;
     let mut decode_attention_merge = None;
+    let mut decode_step_graph = None;
     let mut logit_observation_dir = None;
     let mut max_weight_bytes = None;
     let mut shutdown_on_stdin = false;
@@ -516,6 +520,24 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 &mut reduction_profile,
                 parse_reduction_profile(next_value(&mut arguments, "--reduction-profile")?)?,
                 "--reduction-profile",
+            )?,
+            "--decode-step-graph" => set_once(
+                &mut decode_step_graph,
+                match parse_utf8(
+                    next_value(&mut arguments, "--decode-step-graph")?,
+                    "--decode-step-graph",
+                )?
+                .as_str()
+                {
+                    "disabled" => false,
+                    "capture-v1" => true,
+                    _ => {
+                        return Err(
+                            "--decode-step-graph requires disabled or capture-v1".to_owned()
+                        );
+                    }
+                },
+                "--decode-step-graph",
             )?,
             "--decode-attention-merge" => set_once(
                 &mut decode_attention_merge,
@@ -764,6 +786,25 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 .to_owned(),
         );
     }
+    let decode_step_capture = decode_step_graph.unwrap_or(false);
+    if decode_step_capture {
+        if decode_attention_backend
+            != DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+        {
+            return Err(
+                "--decode-step-graph capture-v1 requires the native D128 decode attention backend"
+                    .to_owned(),
+            );
+        }
+        if execution_completion != ExecutionCompletionMode::IterationBatch
+            || metadata_transport != MetadataTransportMode::Synchronous
+        {
+            return Err(
+                "--decode-step-graph capture-v1 requires iteration-batch completion and synchronous metadata transport"
+                    .to_owned(),
+            );
+        }
+    }
     let d128_global_merge = decode_attention_merge.unwrap_or(false);
     if d128_global_merge {
         if decode_attention_backend
@@ -840,6 +881,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         logit_observation_dir,
         first_heuristic_gemm_reductions: gemm_reduction_policy.unwrap_or(false),
         d128_global_merge,
+        decode_step_capture,
         vllm_smol_p128_graph,
         max_weight_bytes,
         shutdown_on_stdin,
@@ -1551,8 +1593,13 @@ fn run_serve(
             let executor = executor
                 .with_native_bf16_paged_split_gqa_d128_two_stage()
                 .with_serving_sequence_token_bound(max_sequence_tokens);
-            if options.d128_global_merge {
+            let executor = if options.d128_global_merge {
                 executor.with_d128_global_merge()
+            } else {
+                executor
+            };
+            if options.decode_step_capture {
+                executor.with_decode_step_capture()
             } else {
                 executor
             }
@@ -4545,6 +4592,7 @@ mod tests {
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
                 d128_global_merge: false,
+                decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
@@ -4938,6 +4986,7 @@ mod tests {
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
                 d128_global_merge: false,
+                decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
@@ -5098,6 +5147,7 @@ mod tests {
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
                 d128_global_merge: false,
+                decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
@@ -5499,6 +5549,7 @@ mod tests {
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
                 d128_global_merge: false,
+                decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,

@@ -389,6 +389,12 @@ struct RawGraphLaunch {
 }
 
 #[repr(C)]
+struct RawStepGraph {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
+#[repr(C)]
 struct RawEvent {
     _private: [u8; 0],
     _not_send_sync: PhantomData<*mut ()>,
@@ -1537,6 +1543,25 @@ unsafe extern "C" {
     fn riley_cuda_stream_synchronize(stream: *mut RawStream, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_stream_command_batch_begin(stream: *mut RawStream, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_stream_command_batch_end(stream: *mut RawStream, error: *mut ErrorInfo) -> i32;
+    fn riley_cuda_stream_command_batch_step_capture_begin(
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_stream_command_batch_step_capture_end(
+        stream: *mut RawStream,
+        out_graph: *mut *mut RawStepGraph,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_stream_command_batch_step_capture_abort(
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_stream_command_batch_step_graph_launch(
+        stream: *mut RawStream,
+        graph: *mut RawStepGraph,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_step_graph_destroy(graph: *mut RawStepGraph, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_graph_capture_query_capability(
         operation: u32,
         out_capability: *mut u32,
@@ -3066,6 +3091,60 @@ impl StreamHandle {
         // call owns completion and any fail-closed post-error lifecycle state.
         let status = unsafe { riley_cuda_stream_command_batch_end(self.as_ptr(), &mut error) };
         status_result(status, "end CUDA stream command batch", &error)
+    }
+
+    pub(super) fn step_capture_begin(&mut self) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: self uniquely owns the live stream handle; the native
+        // boundary validates the owning command batch before capturing.
+        let status = unsafe {
+            riley_cuda_stream_command_batch_step_capture_begin(self.as_ptr(), &mut error)
+        };
+        status_result(status, "begin command-batch step capture", &error)
+    }
+
+    pub(super) fn step_capture_end(&mut self) -> CudaResult<StepGraphHandle> {
+        const OPERATION: &str = "end command-batch step capture";
+        let mut pointer = ptr::null_mut::<RawStepGraph>();
+        let mut error = ErrorInfo::new();
+        // SAFETY: self uniquely owns the live stream handle and both outputs
+        // are writable. A non-null output transfers one native graph owner.
+        let status = unsafe {
+            riley_cuda_stream_command_batch_step_capture_end(
+                self.as_ptr(),
+                &mut pointer,
+                &mut error,
+            )
+        };
+        status_result(status, OPERATION, &error)?;
+        let pointer = NonNull::new(pointer)
+            .ok_or_else(|| missing_output(OPERATION, "native step graph handle is null"))?;
+        Ok(StepGraphHandle {
+            pointer: Some(pointer),
+        })
+    }
+
+    pub(super) fn step_capture_abort(&mut self) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: self uniquely owns the live stream handle.
+        let status = unsafe {
+            riley_cuda_stream_command_batch_step_capture_abort(self.as_ptr(), &mut error)
+        };
+        status_result(status, "abort command-batch step capture", &error)
+    }
+
+    pub(super) fn step_graph_launch(&mut self, graph: &StepGraphHandle) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: both handles are live; the native boundary checks that the
+        // graph was recorded on this stream and that its batch is active.
+        let status = unsafe {
+            riley_cuda_stream_command_batch_step_graph_launch(
+                self.as_ptr(),
+                graph.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "launch command-batch step graph", &error)
     }
 
     pub(super) fn begin_graph_capture(&mut self, mode: u32) -> CudaResult<GraphCaptureHandle> {
@@ -6366,6 +6445,37 @@ fn settle_unreturned_graph_launch(
                 "native graph launch failed ({launch_error}) and mandatory completion recovery also failed ({completion_error}); the graph exec is retained fail-closed"
             ),
         )),
+    }
+}
+
+pub(super) struct StepGraphHandle {
+    pointer: Option<NonNull<RawStepGraph>>,
+}
+
+// SAFETY: the recorded graph is only replayed or destroyed through `&mut`
+// stream access or by value; the safe wrapper is intentionally !Sync.
+unsafe impl Send for StepGraphHandle {}
+
+impl StepGraphHandle {
+    fn as_ptr(&self) -> *mut RawStepGraph {
+        self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr)
+    }
+
+    pub(super) fn destroy(&mut self) -> CudaResult<()> {
+        let Some(pointer) = self.pointer.take() else {
+            return Ok(());
+        };
+        let mut error = ErrorInfo::new();
+        // SAFETY: the pointer came from a successful capture end and is
+        // consumed exactly once here.
+        let status = unsafe { riley_cuda_step_graph_destroy(pointer.as_ptr(), &mut error) };
+        status_result(status, "destroy command-batch step graph", &error)
+    }
+}
+
+impl Drop for StepGraphHandle {
+    fn drop(&mut self) {
+        let _ = self.destroy();
     }
 }
 

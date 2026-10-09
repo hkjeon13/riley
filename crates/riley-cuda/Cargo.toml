@@ -86,6 +86,11 @@ path = "tests/row_bias_gpu.rs"
 required-features = ["cuda"]
 
 [[test]]
+name = "step_capture_gpu"
+path = "tests/step_capture_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
 name = "gemm_gpu"
 path = "tests/gemm_gpu.rs"
 required-features = ["cuda"]

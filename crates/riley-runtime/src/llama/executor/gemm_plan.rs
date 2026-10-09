@@ -20,10 +20,16 @@ pub(in crate::llama) struct PreparedLlamaBatchShape {
     pub(in crate::llama) dense_rows: usize,
     pub(in crate::llama) plan: LlamaExecutionPlan,
     pub(in crate::llama) gemms: GemmPlans,
+    /// Recorded pure-decode steps for this dense-row shape, keyed by the
+    /// number of active rows (which fixes every recorded launch extent).
+    /// Empty unless step capture is enabled.
+    pub(in crate::llama) captured_steps: Vec<(usize, riley_cuda::CudaStepGraph)>,
 }
 
 impl PreparedLlamaBatchShape {
     pub(in crate::llama) fn close(self) -> LlamaBatchExecutorResult<()> {
+        // The recorded step references the plans; destroy it first.
+        drop(self.captured_steps);
         self.gemms.close().map_err(LlamaBatchExecutorError::Forward)
     }
 }
@@ -76,6 +82,7 @@ pub(in crate::llama) fn prepare_shape_variants(
             dense_rows,
             plan,
             gemms,
+            captured_steps: Vec::new(),
         });
     }
     Ok(variants.into_boxed_slice())

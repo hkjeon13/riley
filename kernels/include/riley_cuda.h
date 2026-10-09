@@ -1385,6 +1385,33 @@ RileyCudaStatus riley_cuda_stream_command_batch_begin(
 RileyCudaStatus riley_cuda_stream_command_batch_end(
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Step capture: records the operations a command batch enqueues after this
+// call into a CUDA graph instead of executing them. capture_end instantiates
+// the graph and returns its owner; nothing recorded has run until the graph is
+// launched. Only operations without their own synchronization or host readback
+// may be recorded. Every recorded pointer and by-value argument is frozen, so
+// the caller must replay the graph only for steps with the same buffers and
+// launch shape. capture_abort discards an unfinished capture.
+typedef struct RileyCudaStepGraph RileyCudaStepGraph;
+RileyCudaStatus riley_cuda_stream_command_batch_step_capture_begin(
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_stream_command_batch_step_capture_end(
+    RileyCudaStream* stream,
+    RileyCudaStepGraph** out_graph,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_stream_command_batch_step_capture_abort(
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues one replay of a recorded step on the stream's active command batch.
+RileyCudaStatus riley_cuda_stream_command_batch_step_graph_launch(
+    RileyCudaStream* stream,
+    RileyCudaStepGraph* graph,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Destroys a recorded step. The stream it was recorded on must be idle.
+RileyCudaStatus riley_cuda_step_graph_destroy(
+    RileyCudaStepGraph* graph,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // Begins one thread-local CUDA Graph capture and returns a native capture owner
 // only when the stream lease, CUDA begin call, and current-context restoration
 // are all known to have succeeded. out_capture is required and is initialized

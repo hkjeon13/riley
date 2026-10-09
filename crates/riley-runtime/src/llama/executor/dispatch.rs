@@ -10,16 +10,18 @@ use std::mem;
 
 use riley_cuda::{
     AttentionReductionProfile, Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut,
-    CudaCommandStream, CudaDType, CudaDeviceBuffer, CudaExecutionStream, CudaStream,
+    CudaCommandStream, CudaDType, CudaDeviceBuffer, CudaExecutionStream, CudaStepGraph, CudaStream,
     DecodePartialReductionOrder, EmbeddingParams, GatedMultiplyParams, IndexedRopeParams,
     NativeBf16RaggedPagedSplitGqaD128TwoStageParams, PackedBatchHostV1, PackedBatchV1,
     QkvSplitBiasParams, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams,
     ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams,
-    deterministic_bf16_argmax, deterministic_bf16_argmax_bounded, embedding,
-    fixed37_ragged_paged_attention, gated_multiply, grouped_ragged_paged_attention, indexed_rope,
+    abort_step_capture, begin_step_capture, deterministic_bf16_argmax,
+    deterministic_bf16_argmax_bounded, embedding, end_step_capture, fixed37_ragged_paged_attention,
+    gated_multiply, grouped_ragged_paged_attention, indexed_rope, launch_step_graph,
     native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, qkv_split_bias,
     ragged_paged_attention, ragged_paged_kv_cache_write, residual_add, row_gather, silu,
+    validate_replayed_decode_step,
 };
 
 use super::super::batch::LlamaPackedBatchMetadata;
@@ -363,9 +365,22 @@ pub(in crate::llama) fn execute_packed(
         }
     };
 
+    // A step is recordable when every active row is one decode token whose
+    // output is selected on the device. The active row count fixes every
+    // launch extent of such a step, so it keys the recorded graphs.
+    let active_rows = packed.row_count();
+    let step_capture_eligible = config.decode_step_capture()
+        && produce_greedy_tokens
+        && active_rows != 0
+        && active_rows <= dense_rows
+        && packed.prefill_row_count() == 0
+        && packed.decode_row_count() == active_rows
+        && packed.total_input_tokens() == active_rows
+        && packed.output_count() == active_rows;
     let mut execute_iteration_body = |batch: PackedBatchV1<'_>,
                                       token_ids: Option<CudaBufferSpan<'_>>,
                                       output_indices: Option<CudaBufferSpan<'_>>,
+                                      in_command_batch: bool,
                                       stream: &mut dyn CudaExecutionStream|
      -> LlamaBatchExecutorResult<()> {
         let rms_norm_profile = forward.rms_norm_profile();
@@ -376,8 +391,8 @@ pub(in crate::llama) fn execute_packed(
             buffers,
             ..
         } = forward;
-        let (plan, gemms) = if dense_rows == maximum_plan.sequence_length() {
-            (&*maximum_plan, maximum_gemms)
+        let (plan, gemms, mut captured_steps) = if dense_rows == maximum_plan.sequence_length() {
+            (&*maximum_plan, maximum_gemms, None)
         } else {
             let shape = shape_variants
                 .iter_mut()
@@ -386,9 +401,29 @@ pub(in crate::llama) fn execute_packed(
                     field: "shape_variants",
                     reason: "selected dense-row bucket was not prepared",
                 })?;
-            (&shape.plan, &mut shape.gemms)
+            (
+                &shape.plan,
+                &mut shape.gemms,
+                Some(&mut shape.captured_steps),
+            )
         };
-        execute_fixed_graph(
+        if !(step_capture_eligible && in_command_batch) {
+            captured_steps = None;
+        }
+        let recorded = captured_steps.as_deref().and_then(|steps| {
+            steps
+                .iter()
+                .find(|(rows, _)| *rows == active_rows)
+                .map(|(_, graph)| graph)
+        });
+        let replaying = recorded.is_some();
+        let capturing = captured_steps.is_some() && !replaying;
+        let step_capture = match recorded {
+            Some(graph) => StepCaptureMode::Replay(graph, packed.output_token_indices()),
+            None if capturing => StepCaptureMode::Capture,
+            None => StepCaptureMode::Disabled,
+        };
+        let fixed = execute_fixed_graph(
             plan,
             weights,
             gemms,
@@ -407,10 +442,20 @@ pub(in crate::llama) fn execute_packed(
             token_ids,
             batch,
             packed.position_ids(),
+            step_capture,
             stream,
-        )?;
+        );
+        if replaying {
+            return fixed;
+        }
+        if let Err(error) = fixed {
+            if capturing {
+                let _ = abort_step_capture(stream);
+            }
+            return Err(error);
+        }
 
-        if packed.output_count() != 0 {
+        let outputs = if packed.output_count() != 0 {
             dispatch_output_primitives(
                 OutputPrimitiveDispatch {
                     logits: &buffers.logits,
@@ -426,7 +471,24 @@ pub(in crate::llama) fn execute_packed(
                     greedy_candidate_count: config.greedy_candidate_count(),
                 },
                 stream,
-            )?;
+            )
+        } else {
+            Ok(())
+        };
+        if !capturing {
+            return outputs;
+        }
+        // Nothing recorded has run yet: finish the capture, then launch it
+        // for this step and keep it for later ones.
+        let capture_site = ExecutionSite::global(LlamaOp::IterationCompletion);
+        if let Err(error) = outputs {
+            let _ = abort_step_capture(stream);
+            return Err(error);
+        }
+        let graph = end_step_capture(stream).map_err(|source| batch_cuda(capture_site, source))?;
+        launch_step_graph(stream, &graph).map_err(|source| batch_cuda(capture_site, source))?;
+        if let Some(steps) = captured_steps {
+            steps.push((active_rows, graph));
         }
         Ok(())
     };
@@ -447,6 +509,7 @@ pub(in crate::llama) fn execute_packed(
                 views.batch,
                 views.token_ids,
                 views.output_token_indices,
+                false,
                 stream,
             )
         }
@@ -466,6 +529,7 @@ pub(in crate::llama) fn execute_packed(
                     views.batch,
                     views.token_ids,
                     views.output_token_indices,
+                    true,
                     commands,
                 )
             })
@@ -528,6 +592,7 @@ pub(in crate::llama) fn execute_packed(
                                         views.batch,
                                         views.token_ids,
                                         views.output_token_indices,
+                                        false,
                                         commands,
                                     ),
                                 }
@@ -557,6 +622,21 @@ pub(in crate::llama) fn execute_packed(
     clippy::large_types_passed_by_value,
     clippy::similar_names
 )]
+/// How one iteration relates to a recorded pure-decode step.
+#[derive(Clone, Copy)]
+enum StepCaptureMode<'a> {
+    /// Run every operation eagerly.
+    Disabled,
+    /// Run the embedding eagerly, then start recording the remaining
+    /// operations; the caller ends the capture and launches the graph.
+    Capture,
+    /// Run the embedding eagerly, then replay the recorded remainder.
+    ///
+    /// Carries the host mirror of the output row indices, which the replay
+    /// validates in place of the skipped per-operation wrappers.
+    Replay(&'a CudaStepGraph, &'a [u32]),
+}
+
 fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     plan: &LlamaExecutionPlan,
     weights: &CudaUploadedWeights,
@@ -576,6 +656,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     token_ids: Option<CudaBufferSpan<'_>>,
     batch: PackedBatchV1<'_>,
     positions_host: &[u32],
+    step_capture: StepCaptureMode<'_>,
     stream: &mut S,
 ) -> LlamaBatchExecutorResult<()> {
     let dense_rows = usize_u64(
@@ -648,6 +729,31 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 source,
             })
         })?;
+    }
+
+    // The embedding reads its error report back on the host, so it always
+    // runs eagerly; everything after it is recordable.
+    let capture_site = ExecutionSite::global(LlamaOp::IterationCompletion);
+    match step_capture {
+        StepCaptureMode::Disabled => {}
+        StepCaptureMode::Capture => {
+            begin_step_capture(stream).map_err(|source| batch_cuda(capture_site, source))?;
+        }
+        StepCaptureMode::Replay(graph, output_indices_host) => {
+            validate_replayed_decode_step(
+                batch,
+                positions_host,
+                max_positions,
+                output_indices_host,
+                dense_rows,
+                native_d128_two_stage_workspace
+                    .as_deref()
+                    .map(|workspace| workspace.partial_state_capacity),
+            )
+            .map_err(|source| batch_cuda(capture_site, source))?;
+            return launch_step_graph(stream, graph)
+                .map_err(|source| batch_cuda(capture_site, source));
+        }
     }
 
     for (ordinal, layer) in plan.layers().iter().enumerate() {

@@ -1556,6 +1556,38 @@ fn sequence_logical_length(
 
 /// Validates the host mirror required by eager and fixed-address graph indexed
 /// RoPE before either path enters native CUDA.
+/// Host-side input checks for a step replayed from a recorded graph.
+///
+/// A replay launches no per-operation wrapper, so the checks those wrappers
+/// run on every eager step are repeated here: every row position must be
+/// inside the RoPE table, every output index must name a distinct dense row,
+/// and, when the native D128 attention is used, every row's page prefix must
+/// fit both its sequence's block range and the per-row workspace capacity.
+///
+/// # Errors
+///
+/// Returns the same out-of-range or invalid-argument errors the eager
+/// wrappers would have returned.
+pub fn validate_replayed_decode_step(
+    batch: PackedBatchV1<'_>,
+    positions_host: &[u32],
+    table_position_count: u64,
+    output_indices_host: &[u32],
+    input_row_count: u64,
+    native_d128_partial_state_capacity: Option<u64>,
+) -> CudaResult<()> {
+    validate_indexed_positions(positions_host, table_position_count)?;
+    validate_gather_indices(output_indices_host, input_row_count)?;
+    if let Some(capacity) = native_d128_partial_state_capacity {
+        native_bf16_ragged_launch_partial_state_count(
+            "replayed native D128 decode step",
+            batch.host(),
+            capacity,
+        )?;
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_indexed_positions(
     positions: &[u32],
     table_position_count: u64,

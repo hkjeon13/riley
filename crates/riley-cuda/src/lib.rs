@@ -48,7 +48,7 @@ pub use batch::{
     native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_two_stage,
     native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, ragged_paged_attention,
-    ragged_paged_kv_cache_write, row_gather,
+    ragged_paged_kv_cache_write, row_gather, validate_replayed_decode_step,
 };
 pub use decode::{
     DECODE_PARTIAL_STATE_VERSION, DecodeAttentionBackend, DecodeAttentionBackendAvailability,
@@ -164,7 +164,8 @@ pub use primitives::{
 };
 pub use runtime::{
     CudaCommandBatch, CudaCommandStream, CudaContext, CudaDevice, CudaEvent, CudaExecutionStream,
-    CudaKernel, CudaPendingFill, CudaRuntime, CudaStream, DeviceProperties,
+    CudaKernel, CudaPendingFill, CudaRuntime, CudaStepGraph, CudaStream, DeviceProperties,
+    abort_step_capture, begin_step_capture, end_step_capture, launch_step_graph,
 };
 
 /// The crate's responsibility in the production dependency graph.

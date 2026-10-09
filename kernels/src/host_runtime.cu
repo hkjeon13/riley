@@ -4,6 +4,7 @@
 #endif
 
 #include <climits>
+#include <new>
 #if defined(RILEY_CUDA_ENABLE_NVML_PROBE)
 #include <nvml.h>
 #endif
@@ -11,6 +12,8 @@
 namespace {
 
 using riley_cuda_internal::AllocationStatsGuard;
+using riley_cuda_internal::thread_has_active_step_capture;
+using riley_cuda_internal::thread_step_capture_active;
 using riley_cuda_internal::CaptureDeferredCloseEnqueueResult;
 using riley_cuda_internal::CaptureDomainControlLease;
 using riley_cuda_internal::CurrentContext;
@@ -1205,6 +1208,15 @@ extern "C" RileyCudaStatus riley_cuda_stream_command_batch_end(
   RileyCudaStatus status = scope.enter(
       error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE, kOperation);
   bool completion_confirmed = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS && thread_has_active_step_capture()) {
+    // An unfinished step capture cannot be synchronized; discard it.
+    thread_step_capture_active() = false;
+    cudaGraph_t abandoned = nullptr;
+    (void)cudaStreamEndCapture(stream->stream, &abandoned);
+    if (abandoned != nullptr) {
+      (void)cudaGraphDestroy(abandoned);
+    }
+  }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     const cudaError_t synchronize_result =
         cudaStreamSynchronize(stream->stream);
@@ -1263,6 +1275,202 @@ extern "C" RileyCudaStatus riley_cuda_stream_command_batch_end(
                           "thread-local command-batch counter was corrupted");
   }
   return RILEY_CUDA_STATUS_SUCCESS;
+}
+
+struct RileyCudaStepGraph {
+  RileyCudaContext* owner;
+  cudaStream_t stream;
+  cudaGraph_t graph;
+  cudaGraphExec_t exec;
+};
+
+namespace {
+
+RileyCudaStatus require_owned_command_batch(RileyCudaStream* stream,
+                                            RileyCudaErrorInfo* error,
+                                            const char* operation) noexcept {
+  if (stream == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "stream is null");
+  }
+  if (stream->command_batch_owner.load(std::memory_order_acquire) !=
+      command_batch_thread_token()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
+        "step capture requires a command batch owned by this thread");
+  }
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
+
+}  // namespace
+
+extern "C" RileyCudaStatus riley_cuda_stream_command_batch_step_capture_begin(
+    RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "begin command-batch step capture";
+  clear_error(error);
+  RileyCudaStatus status =
+      require_owned_command_batch(stream, error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  if (thread_has_active_step_capture() || thread_has_active_graph_capture()) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "this thread already has an active capture");
+  }
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = runtime_error(
+        cudaStreamBeginCapture(stream->stream,
+                               cudaStreamCaptureModeThreadLocal),
+        error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      thread_step_capture_active() = true;
+    }
+  }
+  return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+}
+
+extern "C" RileyCudaStatus riley_cuda_stream_command_batch_step_capture_end(
+    RileyCudaStream* stream, RileyCudaStepGraph** out_graph,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "end command-batch step capture";
+  clear_error(error);
+  if (out_graph == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "out_graph is null");
+  }
+  *out_graph = nullptr;
+  RileyCudaStatus status =
+      require_owned_command_batch(stream, error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  if (!thread_has_active_step_capture()) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "no step capture is active on this thread");
+  }
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  cudaGraph_t graph = nullptr;
+  cudaGraphExec_t exec = nullptr;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    // The capture ends here whatever the result is.
+    thread_step_capture_active() = false;
+    status = runtime_error(cudaStreamEndCapture(stream->stream, &graph), error,
+                           RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+    if (status == RILEY_CUDA_STATUS_SUCCESS && graph == nullptr) {
+      status = internal_error(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation,
+                              "step capture produced no graph");
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      status = runtime_error(cudaGraphInstantiate(&exec, graph, 0), error,
+                             RILEY_CUDA_ERROR_STAGE_CREATE, kOperation);
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      RileyCudaStepGraph* owner = new (std::nothrow) RileyCudaStepGraph{
+          stream->owner, stream->stream, graph, exec};
+      if (owner == nullptr) {
+        status = internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                                kOperation, "step graph allocation failed");
+      } else {
+        *out_graph = owner;
+      }
+    }
+    if (status != RILEY_CUDA_STATUS_SUCCESS) {
+      if (exec != nullptr) {
+        (void)cudaGraphExecDestroy(exec);
+      }
+      if (graph != nullptr) {
+        (void)cudaGraphDestroy(graph);
+      }
+    }
+  }
+  return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+}
+
+extern "C" RileyCudaStatus riley_cuda_stream_command_batch_step_capture_abort(
+    RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "abort command-batch step capture";
+  clear_error(error);
+  RileyCudaStatus status =
+      require_owned_command_batch(stream, error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  if (!thread_has_active_step_capture()) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    thread_step_capture_active() = false;
+    cudaGraph_t graph = nullptr;
+    status = runtime_error(cudaStreamEndCapture(stream->stream, &graph), error,
+                           RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+    if (graph != nullptr) {
+      (void)cudaGraphDestroy(graph);
+    }
+  }
+  return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+}
+
+extern "C" RileyCudaStatus riley_cuda_stream_command_batch_step_graph_launch(
+    RileyCudaStream* stream, RileyCudaStepGraph* graph,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "launch command-batch step graph";
+  clear_error(error);
+  RileyCudaStatus status =
+      require_owned_command_batch(stream, error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  if (graph == nullptr || graph->owner != stream->owner ||
+      graph->stream != stream->stream) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "step graph is null or was recorded on another stream");
+  }
+  if (thread_has_active_step_capture()) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "a step capture is still active on this thread");
+  }
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = runtime_error(cudaGraphLaunch(graph->exec, stream->stream), error,
+                           RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  }
+  return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+}
+
+extern "C" RileyCudaStatus riley_cuda_step_graph_destroy(
+    RileyCudaStepGraph* graph, RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "destroy command-batch step graph";
+  clear_error(error);
+  if (graph == nullptr) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  CurrentContext scope(graph->owner);
+  RileyCudaStatus status =
+      scope.enter(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const cudaError_t exec_result = cudaGraphExecDestroy(graph->exec);
+    const cudaError_t graph_result = cudaGraphDestroy(graph->graph);
+    status = runtime_error(exec_result != cudaSuccess ? exec_result
+                                                      : graph_result,
+                           error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation);
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation);
+  delete graph;
+  return status;
 }
 
 extern "C" RileyCudaStatus riley_cuda_stream_query(

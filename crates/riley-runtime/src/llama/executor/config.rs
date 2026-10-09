@@ -152,6 +152,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     greedy_candidate_count: Option<usize>,
     d128_global_merge: bool,
     serving_sequence_token_bound: Option<usize>,
+    decode_step_capture: bool,
 }
 
 impl PreparedLlamaBatchExecutorConfig {
@@ -174,7 +175,25 @@ impl PreparedLlamaBatchExecutorConfig {
             greedy_candidate_count: None,
             d128_global_merge: false,
             serving_sequence_token_bound: None,
+            decode_step_capture: false,
         }
+    }
+
+    /// Records the first pure-decode step of each dense-row shape as a CUDA
+    /// graph and replays it for later pure-decode steps that fill the same
+    /// shape. The recorded operations and their arithmetic are the eager ones;
+    /// only their launch mechanism changes. Requires iteration-batch
+    /// completion and device-side greedy selection.
+    #[must_use]
+    pub const fn with_decode_step_capture(mut self) -> Self {
+        self.decode_step_capture = true;
+        self
+    }
+
+    /// Whether pure-decode steps are recorded and replayed as CUDA graphs.
+    #[must_use]
+    pub const fn decode_step_capture(self) -> bool {
+        self.decode_step_capture
     }
 
     /// Declares the largest sequence (prompt plus output tokens) the serving
@@ -557,6 +576,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         greedy_candidate_count: config.greedy_candidate_count,
         d128_global_merge: config.d128_global_merge,
         serving_sequence_token_bound: config.serving_sequence_token_bound,
+        decode_step_capture: config.decode_step_capture,
     }
 }
 

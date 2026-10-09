@@ -1670,6 +1670,19 @@ inline bool thread_has_active_graph_capture() noexcept {
   return thread_graph_capture_owner() != nullptr;
 }
 
+// A command batch may record the launches of one iteration step into a CUDA
+// graph ("step capture"). While it is active on this thread, operations whose
+// launch extents normally follow the step's data use fixed capacity extents so
+// the recorded graph stays valid for later steps of the same shape.
+inline bool& thread_step_capture_active() noexcept {
+  static thread_local bool active = false;
+  return active;
+}
+
+inline bool thread_has_active_step_capture() noexcept {
+  return thread_step_capture_active();
+}
+
 inline bool try_publish_thread_graph_capture(
     RileyCudaGraphCapture* capture) noexcept {
   if (capture == nullptr || thread_has_active_graph_capture()) {
