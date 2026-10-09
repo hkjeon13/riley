@@ -3316,8 +3316,8 @@ native_bf16_ragged_paged_split_gqa_d128_transition_reduce_kernel(
 // ordered transition + replay pair. For each `(row, query_head)` it takes the
 // maximum page maximum `M`, weights every page by `exp(m_p - M)`, and divides
 // the weighted numerator sum by the weighted denominator sum. The denominator
-// is reduced with a fixed adjacent tree over pages; each output depth folds
-// pages in ascending order. The result depends only on the row's own pages,
+// is reduced with a fixed stride-128 fold and adjacent tree; each output depth
+// folds pages in ascending order. The result depends only on the row's own pages,
 // so it is deterministic and independent of the batch. It is mathematically
 // the same softmax merge as the ordered pair but rounds differently, so it is
 // a separately selected numerical mode. Non-finite page maxima (other than
@@ -3352,8 +3352,7 @@ native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
       static_cast<uint64_t>(row_positions[row]) /
           RILEY_CUDA_PAGED_KV_BLOCK_SIZE + 1;
   if (page_count > partial_state_capacity ||
-      page_count > launch_partial_state_count ||
-      page_count > kNativeBf16RaggedD128GlobalMergeMaximumPages) {
+      page_count > launch_partial_state_count) {
     output[output_base + depth] = __float2bfloat16_rn(CUDART_NAN_F);
     return;
   }
@@ -3367,13 +3366,15 @@ native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
        query_head) *
           kNativeBf16RaggedPagedSplitGqaD128StateStride;
 
-  // One thread owns at most one page here because page_count <= 128.
-  const bool owns_page = depth < page_count;
-  const float page_maximum =
-      owns_page ? states[depth * page_stride] : -CUDART_INF_F;
-  const float page_denominator =
-      owns_page ? states[depth * page_stride + 1] : 0.0F;
-  reduction[depth] = page_maximum;
+  // Thread `depth` folds pages `depth, depth + 128, ...` in ascending order;
+  // with at most 128 pages each thread owns at most one page.
+  float local_maximum = -CUDART_INF_F;
+  for (uint64_t page = depth; page < page_count;
+       page += kNativeBf16RaggedD128GlobalMergeThreads) {
+    local_maximum = native_d128_nan_propagating_max(
+        local_maximum, states[page * page_stride]);
+  }
+  reduction[depth] = local_maximum;
   __syncthreads();
   for (uint32_t offset = kNativeBf16RaggedD128GlobalMergeThreads / 2;
        offset != 0; offset /= 2) {
@@ -3385,11 +3386,17 @@ native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
   }
   const float maximum = reduction[0];
   __syncthreads();
-  const float weight = owns_page ? expf(page_maximum - maximum) : 0.0F;
-  if (owns_page) {
-    page_weights[depth] = weight;
+  float local_denominator = 0.0F;
+  for (uint64_t page = depth; page < page_count;
+       page += kNativeBf16RaggedD128GlobalMergeThreads) {
+    const float weight = expf(states[page * page_stride] - maximum);
+    if (page < kNativeBf16RaggedD128GlobalMergeMaximumPages) {
+      page_weights[page] = weight;
+    }
+    local_denominator =
+        fmaf(weight, states[page * page_stride + 1], local_denominator);
   }
-  reduction[depth] = owns_page ? weight * page_denominator : 0.0F;
+  reduction[depth] = local_denominator;
   __syncthreads();
   for (uint32_t offset = kNativeBf16RaggedD128GlobalMergeThreads / 2;
        offset != 0; offset /= 2) {
@@ -3407,9 +3414,13 @@ native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
   const float* const numerators = states + 2 + depth;
   float numerator = 0.0F;
   uint64_t page = 0;
+  const uint64_t cached_pages =
+      page_count < kNativeBf16RaggedD128GlobalMergeMaximumPages
+          ? page_count
+          : kNativeBf16RaggedD128GlobalMergeMaximumPages;
   // Ascending page order; the next four inputs are loaded together so their
   // memory latency overlaps.
-  for (; page + 4 <= page_count; page += 4) {
+  for (; page + 4 <= cached_pages; page += 4) {
     const float value0 = numerators[page * page_stride];
     const float value1 = numerators[(page + 1) * page_stride];
     const float value2 = numerators[(page + 2) * page_stride];
@@ -3419,9 +3430,14 @@ native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
     numerator = fmaf(page_weights[page + 2], value2, numerator);
     numerator = fmaf(page_weights[page + 3], value3, numerator);
   }
-  for (; page < page_count; ++page) {
+  for (; page < cached_pages; ++page) {
     numerator =
         fmaf(page_weights[page], numerators[page * page_stride], numerator);
+  }
+  // Pages beyond the cached weights recompute the identical weight value.
+  for (; page < page_count; ++page) {
+    numerator = fmaf(expf(states[page * page_stride] - maximum),
+                     numerators[page * page_stride], numerator);
   }
   output[output_base + depth] =
       __float2bfloat16_rn(numerator * inverse_denominator);
@@ -3612,12 +3628,10 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
                             "native ragged D128 reduction order is unsupported");
   }
   if (params->reserved[1] == 1 &&
-      (params->reduction_order != RILEY_CUDA_DECODE_REDUCTION_ASCENDING ||
-       params->partial_state_capacity >
-           kNativeBf16RaggedD128GlobalMergeMaximumPages)) {
+      params->reduction_order != RILEY_CUDA_DECODE_REDUCTION_ASCENDING) {
     return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
-                            "native ragged D128 global merge requires ascending order and at most 128 pages per row");
+                            "native ragged D128 global merge requires ascending order");
   }
 
   NativeBf16RaggedPagedSplitGqaD128ByteCounts bytes{};

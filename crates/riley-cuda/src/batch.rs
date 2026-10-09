@@ -840,13 +840,12 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv<
 /// in ascending order. It is deterministic and depends only on each row's own
 /// pages, but it rounds differently from the ordered merge, so its output is
 /// not bit-identical to the other entry points. `reduction_steps` and
-/// `reduction_normalizers` are left untouched. Requires ascending order and a
-/// per-row capacity of at most 128 pages.
+/// `reduction_normalizers` are left untouched. Requires ascending order.
 ///
 /// # Errors
 ///
 /// As [`native_bf16_ragged_paged_split_gqa_d128_two_stage`], plus an
-/// unsupported error for descending order or a larger page capacity.
+/// unsupported error for descending order.
 pub fn native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge<
     S: CudaExecutionStream + ?Sized,
 >(

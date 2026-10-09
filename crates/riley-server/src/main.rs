@@ -774,13 +774,6 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     .to_owned(),
             );
         }
-        // The merge kernel holds one page weight per thread.
-        if max_sequence_tokens.is_none_or(|tokens| tokens > 2048) {
-            return Err(
-                "--decode-attention-merge global-max-v1 requires --max-sequence-tokens of at most 2048"
-                    .to_owned(),
-            );
-        }
     }
     if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
         && execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Disabled
