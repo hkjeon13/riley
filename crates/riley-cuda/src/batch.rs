@@ -823,28 +823,8 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv<
     execute_native_bf16_ragged_d128_two_stage(params, stream, D128_PRODUCER_SHARED_KV)
 }
 
-/// Same operation and numerical contract as
-/// [`native_bf16_ragged_paged_split_gqa_d128_two_stage`], with the partial-state
-/// producer launched as one warp per `(page, KV head, row)` in which four lanes
-/// serve each query head. It uses an eighth of the threads of the other
-/// launches, which matters once a step has more states than the device can
-/// run at once. All workspace bytes and the output are bit-identical.
-///
-/// # Errors
-///
-/// Identical to [`native_bf16_ragged_paged_split_gqa_d128_two_stage`].
-pub fn native_bf16_ragged_paged_split_gqa_d128_two_stage_packed_heads<
-    S: CudaExecutionStream + ?Sized,
->(
-    params: &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams<'_>,
-    stream: &mut S,
-) -> CudaResult<()> {
-    execute_native_bf16_ragged_d128_two_stage(params, stream, D128_PRODUCER_PACKED_HEADS)
-}
-
 const D128_PRODUCER_PER_QUERY_HEAD: u64 = 0;
 const D128_PRODUCER_SHARED_KV: u64 = 1;
-const D128_PRODUCER_PACKED_HEADS: u64 = 2;
 
 #[allow(clippy::too_many_lines)]
 fn execute_native_bf16_ragged_d128_two_stage<S: CudaExecutionStream + ?Sized>(

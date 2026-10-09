@@ -13,7 +13,6 @@ use riley_cuda::{
     PagedKvBlockTableHostV1, PagedKvBlockTableV1, PagedKvCacheAppendParams,
     PreparedPagedDecodeAttention, decode_partial_states_reduce,
     native_bf16_ragged_paged_split_gqa_d128_two_stage,
-    native_bf16_ragged_paged_split_gqa_d128_two_stage_packed_heads,
     native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, paged_kv_cache_append,
 };
 
@@ -1357,113 +1356,6 @@ fn native_bf16_ragged_paged_d128_two_stage_v3_c2048_b8_matches_v1_prefix_reducer
         encode_bf16(&vec![OUTPUT_SENTINEL; output_elements]),
         "the shared-KV launch must have written its output"
     );
-    // Likewise for the packed-heads (four lanes per query head) geometry.
-    let mut packed_partial_states = upload(
-        &context,
-        &mut stream,
-        &mut staging,
-        &encode_f32(&vec![
-            STATE_SENTINEL;
-            usize::try_from(layout.partial_state_bytes() / 4)?
-        ]),
-    )?;
-    let mut packed_reduction_steps = upload(
-        &context,
-        &mut stream,
-        &mut staging,
-        &encode_f32(&vec![
-            STATE_SENTINEL;
-            usize::try_from(layout.reduction_step_bytes() / 4)?
-        ]),
-    )?;
-    let mut packed_reduction_normalizers = upload(
-        &context,
-        &mut stream,
-        &mut staging,
-        &encode_f32(&vec![
-            STATE_SENTINEL;
-            usize::try_from(
-                layout.reduction_normalizer_bytes() / 4
-            )?
-        ]),
-    )?;
-    let mut packed_output = upload(
-        &context,
-        &mut stream,
-        &mut staging,
-        &encode_bf16(&vec![OUTPUT_SENTINEL; output_elements]),
-    )?;
-    native_bf16_ragged_paged_split_gqa_d128_two_stage_packed_heads(
-        &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams {
-            query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
-            key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
-            value_pool: CudaBufferSpan::new(
-                &value_pool,
-                CudaDType::BF16,
-                0,
-                value_pool.byte_len(),
-            )?,
-            partial_states: CudaBufferSpanMut::new(
-                &mut packed_partial_states,
-                CudaDType::F32,
-                0,
-                partial_state_len,
-            )?,
-            reduction_steps: CudaBufferSpanMut::new(
-                &mut packed_reduction_steps,
-                CudaDType::F32,
-                0,
-                reduction_step_len,
-            )?,
-            reduction_normalizers: CudaBufferSpanMut::new(
-                &mut packed_reduction_normalizers,
-                CudaDType::F32,
-                0,
-                normalizer_len,
-            )?,
-            output: CudaBufferSpanMut::new(&mut packed_output, CudaDType::BF16, 0, output_len)?,
-            batch,
-            query_head_count: u64::try_from(QUERY_HEADS)?,
-            key_value_head_count: u64::try_from(KEY_VALUE_HEADS)?,
-            head_size: u64::try_from(HEAD_SIZE)?,
-            output_row_count: u64::try_from(OUTPUT_ROWS)?,
-            partial_state_capacity: u64::try_from(PARTIAL_CAPACITY)?,
-            scale: SCALE,
-            reduction_order: DecodePartialReductionOrder::LogicalAscending,
-        },
-        &mut stream,
-    )?;
-    stream.synchronize()?;
-    for (label, per_head, shared) in [
-        (
-            "partial states",
-            &mut partial_states,
-            &mut packed_partial_states,
-        ),
-        (
-            "reduction steps",
-            &mut reduction_steps,
-            &mut packed_reduction_steps,
-        ),
-        (
-            "reduction normalizers",
-            &mut reduction_normalizers,
-            &mut packed_reduction_normalizers,
-        ),
-        ("output", &mut output, &mut packed_output),
-    ] {
-        let per_head_bytes = download(&context, &mut stream, per_head)?;
-        let packed_bytes = download(&context, &mut stream, shared)?;
-        assert!(
-            per_head_bytes == packed_bytes,
-            "packed-heads producer {label} bytes differ from the per-query-head launch"
-        );
-    }
-    assert_ne!(
-        download(&context, &mut stream, &mut packed_output)?,
-        encode_bf16(&vec![OUTPUT_SENTINEL; output_elements]),
-        "the packed-heads launch must have written its output"
-    );
 
     let row_state_bytes = layout.partial_state_bytes() / u64::try_from(OUTPUT_ROWS)?;
     let mut generic_outputs = Vec::with_capacity(ACTIVE_ROWS);
@@ -1758,10 +1650,6 @@ fn native_bf16_ragged_paged_d128_two_stage_v3_c2048_b8_matches_v1_prefix_reducer
     for generic in generic_outputs {
         generic.close()?;
     }
-    packed_output.close()?;
-    packed_reduction_normalizers.close()?;
-    packed_reduction_steps.close()?;
-    packed_partial_states.close()?;
     shared_output.close()?;
     shared_reduction_normalizers.close()?;
     shared_reduction_steps.close()?;

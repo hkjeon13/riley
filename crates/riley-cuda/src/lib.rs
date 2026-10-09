@@ -46,7 +46,6 @@ pub use batch::{
     RaggedPagedKvCacheWriteParams, RowGatherParams, fixed37_ragged_paged_attention,
     grouped_ragged_paged_attention, indexed_rope,
     native_bf16_ragged_paged_split_gqa_d128_two_stage,
-    native_bf16_ragged_paged_split_gqa_d128_two_stage_packed_heads,
     native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, ragged_paged_attention,
     ragged_paged_kv_cache_write, row_gather,
 };
