@@ -511,7 +511,7 @@ pub struct EngineAllocationMetrics {
 ///
 /// This mirrors the runtime executor's fixed inline capacity without making
 /// the no-CUDA server API depend on CUDA-only runtime types.
-pub const ENGINE_BATCH_SHAPE_BUCKET_CAPACITY: usize = 10;
+pub const ENGINE_BATCH_SHAPE_BUCKET_CAPACITY: usize = 24;
 
 /// Backend selected for one scheduler-committed sampling operation.
 ///

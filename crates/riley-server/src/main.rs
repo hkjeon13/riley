@@ -15,7 +15,7 @@ use sha2::Digest;
 mod signal;
 
 const DEFAULT_MAX_WEIGHT_BYTES: u64 = 2 * 1_024 * 1_024 * 1_024;
-const MAX_BATCH_SHAPE_BUCKETS: usize = 10;
+const MAX_BATCH_SHAPE_BUCKETS: usize = 24;
 // Must stay aligned with the native runtime owner's qualified eager workspace
 // envelope. Keeping this parser-side fact prevents the default 512-token
 // batch budget from reaching CUDA preparation only to fail there.

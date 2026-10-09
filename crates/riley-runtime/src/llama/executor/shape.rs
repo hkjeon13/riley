@@ -10,8 +10,10 @@ use super::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
 const ACTIVE_ROW_BUCKETS: [usize; 9] = [1, 2, 4, 8, 16, 32, 64, 128, 256];
 
 /// Maximum number of cold-prepared dense-row shapes, including the configured
-/// maximum catch-all shape.
-pub const MAX_LLAMA_BATCH_SHAPE_BUCKETS: usize = ACTIVE_ROW_BUCKETS.len() + 1;
+/// maximum catch-all shape. Custom lists may be finer than the automatic
+/// power-of-two set so mixed prefill/decode steps pad fewer rows.
+pub const MAX_LLAMA_BATCH_SHAPE_BUCKETS: usize = 24;
+const _: () = assert!(MAX_LLAMA_BATCH_SHAPE_BUCKETS > ACTIVE_ROW_BUCKETS.len());
 
 pub(crate) const fn batch_shape_policy_id(policy: LlamaBatchShapePolicy) -> &'static str {
     match policy {
