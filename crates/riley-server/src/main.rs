@@ -83,6 +83,9 @@ serve options:
   --mlp-residual-norm ID         separate-v1 or fused-next-norm-v1: fuse the MLP residual add with
                                  the following norm; needs --residual-rmsnorm fused
                                  (default: separate-v1)
+  --lm-head-rows ID              dense-v1 or output-rows-v1: in steps that mix prefill and decode,
+                                 run the LM head on output rows only, bit-identical
+                                 (default: dense-v1)
   --decode-step-graph MODE       disabled or capture-v1: record pure-decode steps of the native
                                  D128 route as CUDA graphs and replay them (default: disabled)
   --numerics-profile ID          existing or hf-eager-qwen-p2048-o128-probe-v1 (default: existing);
@@ -136,6 +139,7 @@ struct ServeOptions {
     fused_silu_multiply: bool,
     fused_qkv_rope: bool,
     fused_mlp_residual_norm: bool,
+    output_row_lm_head: bool,
     decode_step_capture: bool,
     vllm_smol_p128_graph: bool,
     max_weight_bytes: u64,
@@ -364,6 +368,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut mlp_activation = None;
     let mut query_key_rope = None;
     let mut mlp_residual_norm = None;
+    let mut lm_head_rows = None;
     let mut decode_step_graph = None;
     let mut logit_observation_dir = None;
     let mut max_weight_bytes = None;
@@ -556,6 +561,22 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     }
                 },
                 "--decode-step-graph",
+            )?,
+            "--lm-head-rows" => set_once(
+                &mut lm_head_rows,
+                match parse_utf8(
+                    next_value(&mut arguments, "--lm-head-rows")?,
+                    "--lm-head-rows",
+                )?
+                .as_str()
+                {
+                    "dense-v1" => false,
+                    "output-rows-v1" => true,
+                    _ => {
+                        return Err("--lm-head-rows requires dense-v1 or output-rows-v1".to_owned());
+                    }
+                },
+                "--lm-head-rows",
             )?,
             "--mlp-residual-norm" => set_once(
                 &mut mlp_residual_norm,
@@ -1000,6 +1021,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         fused_silu_multiply: mlp_activation.unwrap_or(false),
         fused_qkv_rope,
         fused_mlp_residual_norm,
+        output_row_lm_head: lm_head_rows.unwrap_or(false),
         decode_step_capture,
         vllm_smol_p128_graph,
         max_weight_bytes,
@@ -1712,6 +1734,11 @@ fn run_serve(
     };
     let executor = if options.fused_mlp_residual_norm {
         executor.with_fused_mlp_residual_norm()
+    } else {
+        executor
+    };
+    let executor = if options.output_row_lm_head {
+        executor.with_output_row_lm_head()
     } else {
         executor
     };
@@ -4735,6 +4762,7 @@ mod tests {
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
                 fused_mlp_residual_norm: false,
+                output_row_lm_head: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
@@ -5133,6 +5161,7 @@ mod tests {
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
                 fused_mlp_residual_norm: false,
+                output_row_lm_head: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: 4096,
@@ -5298,6 +5327,7 @@ mod tests {
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
                 fused_mlp_residual_norm: false,
+                output_row_lm_head: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
@@ -5704,6 +5734,7 @@ mod tests {
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
                 fused_mlp_residual_norm: false,
+                output_row_lm_head: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,

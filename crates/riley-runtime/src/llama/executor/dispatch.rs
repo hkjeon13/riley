@@ -27,7 +27,7 @@ use riley_cuda::{
 use super::super::batch::LlamaPackedBatchMetadata;
 use super::super::forward::{
     ForwardBuffers, GemmPlans, LlamaForwardError, LlamaRmsNormProfile, PreparedLlamaForward,
-    execute_gemm, execute_profile_residual_rms_norm, execute_profile_rms_norm,
+    PreparedLlamaGemm, execute_gemm, execute_profile_residual_rms_norm, execute_profile_rms_norm,
     execute_projection_bias, execute_projection_with_optional_bias_epilogue, poison_for_cuda_error,
     span, span_mut, weight_span,
 };
@@ -114,6 +114,17 @@ pub(in crate::llama) struct OutputPrimitiveDispatch<'a> {
     pub(in crate::llama) greedy_results: &'a mut Option<CudaDeviceBuffer>,
     pub(in crate::llama) produce_greedy_tokens: bool,
     pub(in crate::llama) greedy_candidate_count: Option<usize>,
+    /// The LM head already wrote the output rows into `gathered_logits`.
+    pub(in crate::llama) logits_already_gathered: bool,
+}
+
+/// Output-row LM head of a mixed step: where the output rows' normalized
+/// hidden states come from and which anchored plan computes their logits.
+pub(in crate::llama) struct OutputRowLmHead<'a> {
+    pub(in crate::llama) gemm: &'a mut PreparedLlamaGemm,
+    pub(in crate::llama) output_indices: CudaBufferSpan<'a>,
+    pub(in crate::llama) output_indices_host: &'a [u32],
+    pub(in crate::llama) gathered_logits: &'a mut CudaDeviceBuffer,
 }
 
 /// Runs output row gather and, when requested, exact deterministic argmax.
@@ -136,13 +147,14 @@ pub(in crate::llama) fn dispatch_output_primitives<S: CudaExecutionStream + ?Siz
         greedy_results,
         produce_greedy_tokens,
         greedy_candidate_count,
+        logits_already_gathered,
     } = dispatch;
     let output_indices = output_indices.ok_or(LlamaBatchExecutorError::InvalidConfiguration {
         field: "output_token_indices",
         reason: "non-empty output has no cold-prepared device index buffer",
     })?;
     let site = ExecutionSite::global(LlamaOp::OutputGather);
-    {
+    if !logits_already_gathered {
         let output =
             gathered_logits
                 .as_mut()
@@ -391,21 +403,75 @@ pub(in crate::llama) fn execute_packed(
             buffers,
             ..
         } = forward;
-        let (plan, gemms, mut captured_steps) = if dense_rows == maximum_plan.sequence_length() {
-            (&*maximum_plan, maximum_gemms, None)
+        // A mixed step's output rows are fewer than its dense rows. Their LM
+        // head can run on the smallest prepared bucket that holds them (and
+        // fits the gathered-logits buffer) instead of on every dense row.
+        let output_rows_index = if config.output_row_lm_head()
+            && !step_capture_eligible
+            && packed.output_count() != 0
+            && packed.output_count() < dense_rows
+        {
+            shape_variants
+                .iter()
+                .enumerate()
+                .filter(|(_, shape)| {
+                    shape.dense_rows >= packed.output_count()
+                        && shape.dense_rows < dense_rows
+                        && shape.dense_rows <= bounds.max_output_slots()
+                })
+                .min_by_key(|(_, shape)| shape.dense_rows)
+                .map(|(index, _)| index)
         } else {
-            let shape = shape_variants
-                .iter_mut()
-                .find(|shape| shape.dense_rows == dense_rows)
-                .ok_or(LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "shape_variants",
-                    reason: "selected dense-row bucket was not prepared",
-                })?;
-            (
-                &shape.plan,
-                &mut shape.gemms,
-                Some(&mut shape.captured_steps),
-            )
+            None
+        };
+        let (plan, gemms, mut captured_steps, output_lm_head) =
+            if dense_rows == maximum_plan.sequence_length() {
+                let output_lm_head = match output_rows_index {
+                    Some(index) => Some(&mut shape_variants[index].gemms.lm_head),
+                    None => None,
+                };
+                (&*maximum_plan, maximum_gemms, None, output_lm_head)
+            } else {
+                let current_index = shape_variants
+                    .iter()
+                    .position(|shape| shape.dense_rows == dense_rows)
+                    .ok_or(LlamaBatchExecutorError::InvalidConfiguration {
+                        field: "shape_variants",
+                        reason: "selected dense-row bucket was not prepared",
+                    })?;
+                let (shape, output_lm_head) = match output_rows_index {
+                    Some(index) if index < current_index => {
+                        let (lower, upper) = shape_variants.split_at_mut(current_index);
+                        (&mut upper[0], Some(&mut lower[index].gemms.lm_head))
+                    }
+                    Some(index) if index > current_index => {
+                        let (lower, upper) = shape_variants.split_at_mut(index);
+                        (&mut lower[current_index], Some(&mut upper[0].gemms.lm_head))
+                    }
+                    _ => (&mut shape_variants[current_index], None),
+                };
+                (
+                    &shape.plan,
+                    &mut shape.gemms,
+                    Some(&mut shape.captured_steps),
+                    output_lm_head,
+                )
+            };
+        let logits_already_gathered = output_lm_head.is_some();
+        let output_row_lm_head = match (output_lm_head, output_indices, gathered_logits.as_mut()) {
+            (Some(gemm), Some(output_indices), Some(gathered_logits)) => Some(OutputRowLmHead {
+                gemm,
+                output_indices,
+                output_indices_host: packed.output_token_indices(),
+                gathered_logits,
+            }),
+            (Some(_), _, _) => {
+                return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                    field: "gathered_logits",
+                    reason: "output-row LM head has no cold-prepared output buffers",
+                });
+            }
+            (None, _, _) => None,
         };
         if !(step_capture_eligible && in_command_batch) {
             captured_steps = None;
@@ -446,6 +512,7 @@ pub(in crate::llama) fn execute_packed(
             batch,
             packed.position_ids(),
             step_capture,
+            output_row_lm_head,
             stream,
         );
         if replaying {
@@ -472,6 +539,7 @@ pub(in crate::llama) fn execute_packed(
                     greedy_results,
                     produce_greedy_tokens: produce_greedy_tokens,
                     greedy_candidate_count: config.greedy_candidate_count(),
+                    logits_already_gathered,
                 },
                 stream,
             )
@@ -663,6 +731,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     batch: PackedBatchV1<'_>,
     positions_host: &[u32],
     step_capture: StepCaptureMode<'_>,
+    output_row_lm_head: Option<OutputRowLmHead<'_>>,
     stream: &mut S,
 ) -> LlamaBatchExecutorResult<()> {
     let dense_rows = usize_u64(
@@ -1482,6 +1551,49 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             .map_err(|source| batch_cuda(final_norm_site, source))?;
     }
     let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
+    if let Some(output_rows) = output_row_lm_head {
+        // `hidden_rotary` is idle after the last layer: it receives the output
+        // rows' normalized hidden states in output order. Rows past the output
+        // count keep earlier contents; their logits are never read.
+        let gather_site = ExecutionSite::global(LlamaOp::OutputGather);
+        let gathered_rows = u64::try_from(output_rows.output_indices_host.len()).map_err(|_| {
+            LlamaBatchExecutorError::InvalidConfiguration {
+                field: "output_token_indices",
+                reason: "output row count does not fit u64",
+            }
+        })?;
+        {
+            let mut params = RowGatherParams {
+                input: span(
+                    &buffers.hidden_norm,
+                    CudaDType::BF16,
+                    plan.workspace_spec().hidden_buffer_bytes(),
+                    gather_site,
+                )?,
+                row_indices: output_rows.output_indices,
+                row_indices_host: output_rows.output_indices_host,
+                output: span_mut(
+                    &mut buffers.hidden_rotary,
+                    CudaDType::BF16,
+                    gathered_rows * hidden * 2,
+                    gather_site,
+                )?,
+                input_row_count: dense_rows,
+                column_count: hidden,
+            };
+            row_gather(&mut params, stream).map_err(|source| batch_cuda(gather_site, source))?;
+        }
+        execute_gemm(
+            output_rows.gemm,
+            &buffers.hidden_rotary,
+            weight_span(weights, plan.lm_head_weight(), lm_head_site)?,
+            output_rows.gathered_logits,
+            &mut buffers.gemm_workspace,
+            stream,
+            lm_head_site,
+        )?;
+        return Ok(());
+    }
     execute_gemm(
         &mut gemms.lm_head,
         &buffers.hidden_norm,

@@ -154,6 +154,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     fused_silu_multiply: bool,
     fused_qkv_rope: bool,
     fused_mlp_residual_norm: bool,
+    output_row_lm_head: bool,
     serving_sequence_token_bound: Option<usize>,
     decode_step_capture: bool,
 }
@@ -180,6 +181,7 @@ impl PreparedLlamaBatchExecutorConfig {
             fused_silu_multiply: false,
             fused_qkv_rope: false,
             fused_mlp_residual_norm: false,
+            output_row_lm_head: false,
             serving_sequence_token_bound: None,
             decode_step_capture: false,
         }
@@ -270,6 +272,23 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn fused_mlp_residual_norm(self) -> bool {
         self.fused_mlp_residual_norm
+    }
+
+    /// In a step whose output rows are fewer than its dense rows (prefill
+    /// mixed with decode), gathers the normalized output rows first and runs
+    /// the LM head only on them, with the anchored plan of the smallest
+    /// prepared row bucket that holds them. Logits of the output rows are
+    /// bit-identical to the full-sequence LM head.
+    #[must_use]
+    pub const fn with_output_row_lm_head(mut self) -> Self {
+        self.output_row_lm_head = true;
+        self
+    }
+
+    /// Whether mixed steps run the LM head on output rows only.
+    #[must_use]
+    pub const fn output_row_lm_head(self) -> bool {
+        self.output_row_lm_head
     }
 
     /// Whether SiLU and the gate multiply run as one kernel.
@@ -628,6 +647,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         fused_silu_multiply: config.fused_silu_multiply,
         fused_qkv_rope: config.fused_qkv_rope,
         fused_mlp_residual_norm: config.fused_mlp_residual_norm,
+        output_row_lm_head: config.output_row_lm_head,
         serving_sequence_token_bound: config.serving_sequence_token_bound,
         decode_step_capture: config.decode_step_capture,
     }
