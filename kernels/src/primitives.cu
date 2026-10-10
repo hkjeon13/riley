@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <type_traits>
 
 namespace {
 
@@ -817,6 +818,139 @@ __global__ void residual_rms_norm_kernel(
   }
 }
 
+// Wide-block forms of rms_norm_kernel / residual_rms_norm_kernel for BF16 rows
+// of exactly 2048 columns. The 256-thread kernels make every thread wait on
+// eight sequential global loads; here 1024 threads load two columns each, stage
+// the values in shared memory, and the first 256 threads then run the original
+// per-thread accumulation (columns t, t + 256, ... in ascending order) and the
+// original pairwise tree. Every arithmetic statement and its order match the
+// 256-thread kernels, so the outputs are bit-identical.
+constexpr uint32_t kWideRmsNormHiddenSize = 2048;
+constexpr uint32_t kWideRmsNormThreads = 1024;
+constexpr uint32_t kWideRmsNormLanes = 256;
+constexpr uint32_t kWideRmsNormColumnsPerLane =
+    kWideRmsNormHiddenSize / kWideRmsNormLanes;
+
+__global__ __launch_bounds__(kWideRmsNormThreads) void wide_bf16_rms_norm_kernel(
+    const __nv_bfloat16* input, const __nv_bfloat16* weight,
+    __nv_bfloat16* output, uint64_t row_count, float epsilon) {
+  __shared__ float staged[kWideRmsNormColumnsPerLane][kWideRmsNormLanes];
+  __shared__ float partial_sums[kWideRmsNormLanes];
+  const uint64_t row = blockIdx.x;
+  if (row >= row_count) {
+    return;
+  }
+  const uint64_t base = row * kWideRmsNormHiddenSize;
+  const uint32_t lane = threadIdx.x % kWideRmsNormLanes;
+  const uint32_t pair = threadIdx.x / kWideRmsNormLanes;
+  const uint32_t column0 = lane + kWideRmsNormLanes * (2 * pair);
+  const uint32_t column1 = column0 + kWideRmsNormLanes;
+  const float value0 = __bfloat162float(input[base + column0]);
+  const float value1 = __bfloat162float(input[base + column1]);
+  staged[2 * pair][lane] = value0;
+  staged[2 * pair + 1][lane] = value1;
+  __syncthreads();
+  if (threadIdx.x < kWideRmsNormLanes) {
+    float sum = 0.0F;
+    for (uint32_t index = 0; index < kWideRmsNormColumnsPerLane; ++index) {
+      const float value = staged[index][lane];
+      sum += value * value;
+    }
+    partial_sums[lane] = sum;
+  }
+  __syncthreads();
+  for (uint32_t offset = kWideRmsNormLanes / 2; offset != 0; offset /= 2) {
+    if (threadIdx.x < offset) {
+      partial_sums[threadIdx.x] += partial_sums[threadIdx.x + offset];
+    }
+    __syncthreads();
+  }
+  const float inverse_rms = rsqrtf(
+      partial_sums[0] / static_cast<float>(kWideRmsNormHiddenSize) + epsilon);
+  {
+    const float normalized = value0 * inverse_rms;
+    const float normalized_for_weight =
+        round_to_storage<__nv_bfloat16>(normalized);
+    output[base + column0] = __float2bfloat16_rn(
+        normalized_for_weight * __bfloat162float(weight[column0]));
+  }
+  {
+    const float normalized = value1 * inverse_rms;
+    const float normalized_for_weight =
+        round_to_storage<__nv_bfloat16>(normalized);
+    output[base + column1] = __float2bfloat16_rn(
+        normalized_for_weight * __bfloat162float(weight[column1]));
+  }
+}
+
+__global__ __launch_bounds__(kWideRmsNormThreads)
+void wide_bf16_residual_rms_norm_kernel(
+    const __nv_bfloat16* left, const __nv_bfloat16* right,
+    const __nv_bfloat16* weight, __nv_bfloat16* residual_output,
+    __nv_bfloat16* normalized_output, uint64_t row_count, float epsilon) {
+  __shared__ float staged[kWideRmsNormColumnsPerLane][kWideRmsNormLanes];
+  __shared__ float partial_sums[kWideRmsNormLanes];
+  const uint64_t row = blockIdx.x;
+  if (row >= row_count) {
+    return;
+  }
+  const uint64_t base = row * kWideRmsNormHiddenSize;
+  const uint32_t lane = threadIdx.x % kWideRmsNormLanes;
+  const uint32_t pair = threadIdx.x / kWideRmsNormLanes;
+  const uint32_t column0 = lane + kWideRmsNormLanes * (2 * pair);
+  const uint32_t column1 = column0 + kWideRmsNormLanes;
+  const float residual0 = round_to_storage<__nv_bfloat16>(
+      __bfloat162float(left[base + column0]) +
+      __bfloat162float(right[base + column0]));
+  const float residual1 = round_to_storage<__nv_bfloat16>(
+      __bfloat162float(left[base + column1]) +
+      __bfloat162float(right[base + column1]));
+  residual_output[base + column0] = __float2bfloat16_rn(residual0);
+  residual_output[base + column1] = __float2bfloat16_rn(residual1);
+  staged[2 * pair][lane] = residual0;
+  staged[2 * pair + 1][lane] = residual1;
+  __syncthreads();
+  if (threadIdx.x < kWideRmsNormLanes) {
+    float sum = 0.0F;
+    for (uint32_t index = 0; index < kWideRmsNormColumnsPerLane; ++index) {
+      const float residual = staged[index][lane];
+      sum += residual * residual;
+    }
+    partial_sums[lane] = sum;
+  }
+  __syncthreads();
+  for (uint32_t offset = kWideRmsNormLanes / 2; offset != 0; offset /= 2) {
+    if (threadIdx.x < offset) {
+      partial_sums[threadIdx.x] += partial_sums[threadIdx.x + offset];
+    }
+    __syncthreads();
+  }
+  const float inverse_rms = rsqrtf(
+      partial_sums[0] / static_cast<float>(kWideRmsNormHiddenSize) + epsilon);
+  {
+    const float normalized = residual0 * inverse_rms;
+    const float normalized_for_weight =
+        round_to_storage<__nv_bfloat16>(normalized);
+    normalized_output[base + column0] = __float2bfloat16_rn(
+        normalized_for_weight * __bfloat162float(weight[column0]));
+  }
+  {
+    const float normalized = residual1 * inverse_rms;
+    const float normalized_for_weight =
+        round_to_storage<__nv_bfloat16>(normalized);
+    normalized_output[base + column1] = __float2bfloat16_rn(
+        normalized_for_weight * __bfloat162float(weight[column1]));
+  }
+}
+
+// The wide forms measured faster up to 128 rows and equal at 256.
+template <typename T>
+bool use_wide_rms_norm(uint64_t row_count, uint64_t hidden_size) noexcept {
+  return std::is_same<T, __nv_bfloat16>::value &&
+         hidden_size == kWideRmsNormHiddenSize && row_count != 0 &&
+         row_count <= 256;
+}
+
 __global__ void row_bias_add_in_place_kernel(__nv_bfloat16* matrix,
                                              const __nv_bfloat16* bias,
                                              uint64_t column_count,
@@ -993,6 +1127,14 @@ void launch_rms_norm(const ResolvedSpan& input, const ResolvedSpan& weight,
                      const ResolvedSpan& output, uint64_t row_count,
                      uint64_t hidden_size, float epsilon,
                      cudaStream_t stream) {
+  if (use_wide_rms_norm<T>(row_count, hidden_size)) {
+    wide_bf16_rms_norm_kernel
+        <<<static_cast<uint32_t>(row_count), kWideRmsNormThreads, 0, stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(input.data),
+            reinterpret_cast<const __nv_bfloat16*>(weight.data),
+            reinterpret_cast<__nv_bfloat16*>(output.data), row_count, epsilon);
+    return;
+  }
   const uint32_t blocks = static_cast<uint32_t>(
       row_count < kMaximumBlocks ? row_count : kMaximumBlocks);
   rms_norm_kernel<T><<<blocks, kThreads, kThreads * sizeof(float), stream>>>(
@@ -1065,6 +1207,17 @@ void launch_residual_rms_norm(
     const ResolvedSpan& weight, const ResolvedSpan& residual_output,
     const ResolvedSpan& normalized_output, uint64_t row_count,
     uint64_t hidden_size, float epsilon, cudaStream_t stream) {
+  if (use_wide_rms_norm<T>(row_count, hidden_size)) {
+    wide_bf16_residual_rms_norm_kernel
+        <<<static_cast<uint32_t>(row_count), kWideRmsNormThreads, 0, stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(left.data),
+            reinterpret_cast<const __nv_bfloat16*>(right.data),
+            reinterpret_cast<const __nv_bfloat16*>(weight.data),
+            reinterpret_cast<__nv_bfloat16*>(residual_output.data),
+            reinterpret_cast<__nv_bfloat16*>(normalized_output.data),
+            row_count, epsilon);
+    return;
+  }
   const uint32_t blocks = static_cast<uint32_t>(
       row_count < kMaximumBlocks ? row_count : kMaximumBlocks);
   residual_rms_norm_kernel<T>

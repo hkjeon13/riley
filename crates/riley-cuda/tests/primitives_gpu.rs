@@ -1341,3 +1341,117 @@ fn qwen_layer3_isolated_rms_norm_captured_input_replay() -> TestResult {
     stream.close()?;
     close_context(context)
 }
+
+// BF16 rows of 2048 columns use the wide-block kernels up to 256 rows and the
+// 256-thread kernels beyond that. Running the same rows through a 300-row call
+// (256-thread kernels) and through 256-row and 44-row calls (wide kernels) must
+// give identical bytes for both the plain and the fused residual RMSNorm.
+#[test]
+#[ignore = "remote GPU"]
+fn wide_bf16_rms_norm_kernels_match_the_256_thread_kernels() -> TestResult {
+    const HIDDEN: usize = 2048;
+    const ROWS: usize = 300;
+    const SPLIT: usize = 256;
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let total = ROWS * HIDDEN;
+    let total_bytes = u64::try_from(total * 2)?;
+    let mut staging = context.allocate_pinned_host_buffer(total_bytes)?;
+    let left = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &lcg_bf16_bytes(total, 1_664_525, 1_013_904_223, 0x78, 12, false),
+    )?;
+    let right = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &lcg_bf16_bytes(total, 22_695_477, 1, 0x78, 12, false),
+    )?;
+    let weight = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &lcg_bf16_bytes(HIDDEN, 134_775_813, 7, 0x7c, 4, false),
+    )?;
+    let weight_bytes = u64::try_from(HIDDEN * 2)?;
+    let epsilon = 1.0e-6_f32;
+    let mut outputs = Vec::new();
+    // (first row, row count) per call: one 256-thread call, then two wide calls.
+    for calls in [vec![(0, ROWS)], vec![(0, SPLIT), (SPLIT, ROWS - SPLIT)]] {
+        let mut norm = context.allocate_device_buffer(total_bytes)?;
+        let mut residual = context.allocate_device_buffer(total_bytes)?;
+        let mut fused = context.allocate_device_buffer(total_bytes)?;
+        for (first, rows) in calls {
+            let offset = u64::try_from(first * HIDDEN * 2)?;
+            let bytes = u64::try_from(rows * HIDDEN * 2)?;
+            {
+                let mut params = RmsNormParams {
+                    input: CudaBufferSpan::new(&left, CudaDType::BF16, offset, bytes)?,
+                    weight: CudaBufferSpan::new(&weight, CudaDType::BF16, 0, weight_bytes)?,
+                    output: CudaBufferSpanMut::new(&mut norm, CudaDType::BF16, offset, bytes)?,
+                    row_count: u64::try_from(rows)?,
+                    hidden_size: u64::try_from(HIDDEN)?,
+                    epsilon,
+                };
+                rms_norm(&mut params, &mut stream)?;
+            }
+            {
+                let mut params = ResidualRmsNormParams {
+                    left: CudaBufferSpan::new(&left, CudaDType::BF16, offset, bytes)?,
+                    right: CudaBufferSpan::new(&right, CudaDType::BF16, offset, bytes)?,
+                    weight: CudaBufferSpan::new(&weight, CudaDType::BF16, 0, weight_bytes)?,
+                    residual_output: CudaBufferSpanMut::new(
+                        &mut residual,
+                        CudaDType::BF16,
+                        offset,
+                        bytes,
+                    )?,
+                    normalized_output: CudaBufferSpanMut::new(
+                        &mut fused,
+                        CudaDType::BF16,
+                        offset,
+                        bytes,
+                    )?,
+                    row_count: u64::try_from(rows)?,
+                    hidden_size: u64::try_from(HIDDEN)?,
+                    epsilon,
+                };
+                residual_rms_norm(&mut params, &mut stream)?;
+            }
+        }
+        outputs.push((
+            download(&context, &mut stream, &mut norm)?,
+            download(&context, &mut stream, &mut residual)?,
+            download(&context, &mut stream, &mut fused)?,
+        ));
+        norm.close()?;
+        residual.close()?;
+        fused.close()?;
+    }
+    let count = |left: &[u8], right: &[u8]| {
+        left.chunks_exact(2)
+            .zip(right.chunks_exact(2))
+            .filter(|(a, b)| a != b)
+            .count()
+    };
+    let norm_differing = count(&outputs[0].0, &outputs[1].0);
+    let residual_differing = count(&outputs[0].1, &outputs[1].1);
+    let fused_differing = count(&outputs[0].2, &outputs[1].2);
+    println!(
+        "wide-rms-norm rows={ROWS} hidden={HIDDEN} norm_differing={norm_differing} \
+residual_differing={residual_differing} fused_differing={fused_differing}"
+    );
+    assert_eq!(norm_differing, 0);
+    assert_eq!(residual_differing, 0);
+    assert_eq!(fused_differing, 0);
+
+    left.close()?;
+    right.close()?;
+    weight.close()?;
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}

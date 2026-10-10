@@ -973,10 +973,15 @@ __device__ __forceinline__ void reduce_argmax_warp(
   }
 }
 
-__global__ void bf16_argmax_kernel(
+// One 1024-thread block per row: each thread scans a quarter of the columns a
+// 256-thread block would, and the selection (largest value, lowest token on
+// ties) does not depend on how the columns are partitioned.
+constexpr uint32_t kArgmaxThreads = 1024;
+
+__global__ __launch_bounds__(kArgmaxThreads) void bf16_argmax_kernel(
     const __nv_bfloat16* logits, RileyCudaBf16ArgmaxResult* results,
     uint64_t row_count, uint64_t vocabulary_size, uint64_t candidate_count) {
-  constexpr uint32_t kWarpCount = kThreads / kWarpSize;
+  constexpr uint32_t kWarpCount = kArgmaxThreads / kWarpSize;
   __shared__ float warp_values[kWarpCount];
   __shared__ uint32_t warp_tokens[kWarpCount];
   __shared__ uint32_t warp_non_finite[kWarpCount];
@@ -2133,7 +2138,7 @@ extern "C" RileyCudaStatus riley_cuda_bf16_argmax_execute(
     const uint32_t blocks = static_cast<uint32_t>(
         params->row_count < kMaximumBlocks ? params->row_count
                                            : kMaximumBlocks);
-    bf16_argmax_kernel<<<blocks, kThreads, 0, stream->stream>>>(
+    bf16_argmax_kernel<<<blocks, kArgmaxThreads, 0, stream->stream>>>(
         reinterpret_cast<const __nv_bfloat16*>(logits.data),
         reinterpret_cast<RileyCudaBf16ArgmaxResult*>(results.data),
         params->row_count, params->vocabulary_size,
@@ -4269,6 +4274,6 @@ cudaError_t riley_cuda_internal::enqueue_decode_kv_attention(cudaStream_t stream
 }
 
 cudaError_t riley_cuda_internal::enqueue_decode_argmax(cudaStream_t stream,const void* logits,void* output,uint64_t vocab) noexcept {
-  bf16_argmax_kernel<<<1,kThreads,0,stream>>>(static_cast<const __nv_bfloat16*>(logits),static_cast<RileyCudaBf16ArgmaxResult*>(output),1,vocab,vocab);
+  bf16_argmax_kernel<<<1,kArgmaxThreads,0,stream>>>(static_cast<const __nv_bfloat16*>(logits),static_cast<RileyCudaBf16ArgmaxResult*>(output),1,vocab,vocab);
   return cudaGetLastError();
 }
