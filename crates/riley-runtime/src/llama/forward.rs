@@ -955,6 +955,7 @@ impl PreparedLlamaForward {
             output_ready: _,
             poisoned: _,
             captured_steps,
+            captured_step_budget: _,
         } = self;
         // Recorded steps reference the plans and buffers closed below.
         drop(captured_steps);
@@ -1134,6 +1135,9 @@ fn record_close(
         }
     }
 }
+
+/// Upper bound on recorded steps per prepared forward owner.
+pub(super) const MAX_RECORDED_STEPS: usize = 32;
 
 /// Prepared GEMM implementation bound to one whole-runtime reduction profile.
 pub(super) enum PreparedLlamaGemm {
@@ -3124,6 +3128,10 @@ pub struct PreparedLlamaForward {
     /// Recorded steps of the maximum dense shape (see the batch executor's
     /// shape variants, which hold their own). Destroyed before the plans.
     pub(super) captured_steps: Vec<(usize, riley_cuda::CudaStepGraph)>,
+    /// How many more steps may be recorded across every dense shape. Each
+    /// recorded step keeps several MiB of host and device memory, so the
+    /// total is bounded; shapes met after the budget is spent run eagerly.
+    pub(super) captured_step_budget: usize,
 }
 
 impl fmt::Debug for PreparedLlamaForward {
@@ -3332,6 +3340,7 @@ impl PreparedLlamaForward {
             output_ready: false,
             poisoned: false,
             captured_steps: Vec::new(),
+            captured_step_budget: MAX_RECORDED_STEPS,
         })
     }
 

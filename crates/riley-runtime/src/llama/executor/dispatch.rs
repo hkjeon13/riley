@@ -433,6 +433,7 @@ pub(in crate::llama) fn execute_packed(
             gemms: maximum_gemms,
             buffers,
             captured_steps: maximum_captured_steps,
+            captured_step_budget,
             ..
         } = forward;
         // A mixed step's output rows are fewer than its dense rows. Their LM
@@ -542,7 +543,7 @@ pub(in crate::llama) fn execute_packed(
                 .map(|(_, graph)| graph)
         });
         let replaying = recorded.is_some();
-        let capturing = captured_steps.is_some() && !replaying;
+        let capturing = captured_steps.is_some() && !replaying && *captured_step_budget != 0;
         let step_capture = match (recorded, step_counts) {
             (Some(graph), _) => StepCaptureMode::Replay(graph, packed.output_token_indices()),
             (None, Some(counts)) if capturing => StepCaptureMode::Capture {
@@ -622,6 +623,7 @@ pub(in crate::llama) fn execute_packed(
         launch_step_graph(stream, &graph).map_err(|source| batch_cuda(capture_site, source))?;
         if let Some(steps) = captured_steps {
             steps.push((capture_key, graph));
+            *captured_step_budget -= 1;
         }
         Ok(())
     };
