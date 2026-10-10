@@ -339,8 +339,8 @@ pub(in crate::llama) fn execute_packed(
                 metadata_site,
             )?;
             if config.decode_step_capture() {
-                // Recorded steps read these two counts on the device.
-                let mut counts = [0_u8; STEP_COUNT_WORDS * U32_BYTES];
+                // Recorded steps read these two counts on the device. They
+                // are copied only when they differ from the device's copy.
                 let active_count = u32::try_from(active).map_err(|_| {
                     LlamaBatchExecutorError::InvalidConfiguration {
                         field: "row_positions",
@@ -353,17 +353,23 @@ pub(in crate::llama) fn execute_packed(
                         reason: "output row count does not fit u32",
                     }
                 })?;
-                counts[..U32_BYTES].copy_from_slice(&active_count.to_ne_bytes());
-                counts[U32_BYTES..].copy_from_slice(&output_count.to_ne_bytes());
-                device
-                    .row_positions
-                    .upload_from_slice(
-                        (bounds.max_input_tokens() * U32_BYTES) as u64,
-                        &counts,
-                        &mut forward.io_staging,
-                        stream,
-                    )
-                    .map_err(|source| batch_cuda(metadata_site, source))?;
+                let step_counts = [active_count, output_count];
+                if host.uploaded_step_counts != Some(step_counts) {
+                    host.uploaded_step_counts = None;
+                    let mut counts = [0_u8; STEP_COUNT_WORDS * U32_BYTES];
+                    counts[..U32_BYTES].copy_from_slice(&active_count.to_ne_bytes());
+                    counts[U32_BYTES..].copy_from_slice(&output_count.to_ne_bytes());
+                    device
+                        .row_positions
+                        .upload_from_slice(
+                            (bounds.max_input_tokens() * U32_BYTES) as u64,
+                            &counts,
+                            &mut forward.io_staging,
+                            stream,
+                        )
+                        .map_err(|source| batch_cuda(metadata_site, source))?;
+                    host.uploaded_step_counts = Some(step_counts);
+                }
             }
             if packed.output_count() != 0 {
                 let output_indices = device.output_token_indices.as_mut().ok_or(

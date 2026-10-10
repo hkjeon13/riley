@@ -43,6 +43,9 @@ pub(crate) struct PerOperationHostWorkspace {
     pub(crate) row_sequence_slots: Box<[u8]>,
     pub(crate) row_positions: Box<[u8]>,
     pub(crate) output_token_indices: Box<[u8]>,
+    /// Step counts last written to the device (active rows, output rows);
+    /// a step with the same counts skips that copy.
+    pub(crate) uploaded_step_counts: Option<[u32; STEP_COUNT_WORDS]>,
 }
 
 pub(crate) struct IterationBatchHostWorkspace {
@@ -86,6 +89,7 @@ pub(crate) fn allocate_synchronous_host_input(
         row_sequence_slots: allocate_zeroed_host_bytes(bounds.max_input_tokens(), U32_BYTES)?,
         row_positions: allocate_zeroed_host_bytes(bounds.max_input_tokens(), U32_BYTES)?,
         output_token_indices: allocate_zeroed_host_bytes(bounds.max_output_slots(), U32_BYTES)?,
+        uploaded_step_counts: None,
     }))
 }
 
