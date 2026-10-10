@@ -75,6 +75,8 @@ serve options:
                                  backend (default: ordered-v1)
   --mlp-activation ID            separate-v1 or fused-silu-multiply-v1: one kernel for SiLU and
                                  the gate multiply, bit-identical (default: separate-v1)
+  --query-key-rope ID            separate-v1 or fused-split-v1: apply RoPE inside the merged QKV
+                                 split kernel, bit-identical (default: separate-v1)
   --decode-step-graph MODE       disabled or capture-v1: record pure-decode steps of the native
                                  D128 route as CUDA graphs and replay them (default: disabled)
   --numerics-profile ID          existing or hf-eager-qwen-p2048-o128-probe-v1 (default: existing);
@@ -125,6 +127,7 @@ struct ServeOptions {
     first_heuristic_gemm_reductions: bool,
     d128_global_merge: bool,
     fused_silu_multiply: bool,
+    fused_qkv_rope: bool,
     decode_step_capture: bool,
     vllm_smol_p128_graph: bool,
     max_weight_bytes: u64,
@@ -350,6 +353,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut gemm_reduction_policy = None;
     let mut decode_attention_merge = None;
     let mut mlp_activation = None;
+    let mut query_key_rope = None;
     let mut decode_step_graph = None;
     let mut logit_observation_dir = None;
     let mut max_weight_bytes = None;
@@ -542,6 +546,24 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     }
                 },
                 "--decode-step-graph",
+            )?,
+            "--query-key-rope" => set_once(
+                &mut query_key_rope,
+                match parse_utf8(
+                    next_value(&mut arguments, "--query-key-rope")?,
+                    "--query-key-rope",
+                )?
+                .as_str()
+                {
+                    "separate-v1" => false,
+                    "fused-split-v1" => true,
+                    _ => {
+                        return Err(
+                            "--query-key-rope requires separate-v1 or fused-split-v1".to_owned()
+                        );
+                    }
+                },
+                "--query-key-rope",
             )?,
             "--mlp-activation" => set_once(
                 &mut mlp_activation,
@@ -828,6 +850,15 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             );
         }
     }
+    let fused_qkv_rope = query_key_rope.unwrap_or(false);
+    if fused_qkv_rope
+        && projection_bias_backend != ProjectionBiasBackendMode::MergedQkvStrictStagedV1
+    {
+        return Err(
+            "--query-key-rope fused-split-v1 requires --projection-bias-backend merged-qkv-strict-staged-v1"
+                .to_owned(),
+        );
+    }
     let d128_global_merge = decode_attention_merge.unwrap_or(false);
     if d128_global_merge {
         if decode_attention_backend
@@ -905,6 +936,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         first_heuristic_gemm_reductions: gemm_reduction_policy.unwrap_or(false),
         d128_global_merge,
         fused_silu_multiply: mlp_activation.unwrap_or(false),
+        fused_qkv_rope,
         decode_step_capture,
         vllm_smol_p128_graph,
         max_weight_bytes,
@@ -1602,6 +1634,11 @@ fn run_serve(
     };
     let executor = if options.fused_silu_multiply {
         executor.with_fused_silu_multiply()
+    } else {
+        executor
+    };
+    let executor = if options.fused_qkv_rope {
+        executor.with_fused_qkv_rope()
     } else {
         executor
     };
@@ -4622,6 +4659,7 @@ mod tests {
                 first_heuristic_gemm_reductions: false,
                 d128_global_merge: false,
                 fused_silu_multiply: false,
+                fused_qkv_rope: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
@@ -5017,6 +5055,7 @@ mod tests {
                 first_heuristic_gemm_reductions: false,
                 d128_global_merge: false,
                 fused_silu_multiply: false,
+                fused_qkv_rope: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: 4096,
@@ -5179,6 +5218,7 @@ mod tests {
                 first_heuristic_gemm_reductions: false,
                 d128_global_merge: false,
                 fused_silu_multiply: false,
+                fused_qkv_rope: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
@@ -5582,6 +5622,7 @@ mod tests {
                 first_heuristic_gemm_reductions: false,
                 d128_global_merge: false,
                 fused_silu_multiply: false,
+                fused_qkv_rope: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,

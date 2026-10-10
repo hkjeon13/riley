@@ -152,6 +152,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     greedy_candidate_count: Option<usize>,
     d128_global_merge: bool,
     fused_silu_multiply: bool,
+    fused_qkv_rope: bool,
     serving_sequence_token_bound: Option<usize>,
     decode_step_capture: bool,
 }
@@ -176,6 +177,7 @@ impl PreparedLlamaBatchExecutorConfig {
             greedy_candidate_count: None,
             d128_global_merge: false,
             fused_silu_multiply: false,
+            fused_qkv_rope: false,
             serving_sequence_token_bound: None,
             decode_step_capture: false,
         }
@@ -236,6 +238,21 @@ impl PreparedLlamaBatchExecutorConfig {
     pub const fn with_fused_silu_multiply(mut self) -> Self {
         self.fused_silu_multiply = true;
         self
+    }
+
+    /// Applies the query and key `RoPE` inside the merged QKV split kernel.
+    /// Only the merged QKV projection uses it; results are bit-identical to
+    /// the split followed by the two `RoPE` kernels.
+    #[must_use]
+    pub const fn with_fused_qkv_rope(mut self) -> Self {
+        self.fused_qkv_rope = true;
+        self
+    }
+
+    /// Whether the merged QKV split also applies `RoPE`.
+    #[must_use]
+    pub const fn fused_qkv_rope(self) -> bool {
+        self.fused_qkv_rope
     }
 
     /// Whether SiLU and the gate multiply run as one kernel.
@@ -592,6 +609,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         greedy_candidate_count: config.greedy_candidate_count,
         d128_global_merge: config.d128_global_merge,
         fused_silu_multiply: config.fused_silu_multiply,
+        fused_qkv_rope: config.fused_qkv_rope,
         serving_sequence_token_bound: config.serving_sequence_token_bound,
         decode_step_capture: config.decode_step_capture,
     }

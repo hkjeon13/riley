@@ -13,15 +13,15 @@ use riley_cuda::{
     CudaCommandStream, CudaDType, CudaDeviceBuffer, CudaExecutionStream, CudaStepGraph, CudaStream,
     DecodePartialReductionOrder, EmbeddingParams, GatedMultiplyParams, IndexedRopeParams,
     NativeBf16RaggedPagedSplitGqaD128TwoStageParams, PackedBatchHostV1, PackedBatchV1,
-    QkvSplitBiasParams, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams,
+    QkvRopeParams, QkvSplitBiasParams, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams,
     ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams,
     abort_step_capture, begin_step_capture, deterministic_bf16_argmax,
     deterministic_bf16_argmax_bounded, embedding, end_step_capture, fixed37_ragged_paged_attention,
     gated_multiply, grouped_ragged_paged_attention, indexed_rope, launch_step_graph,
     native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, qkv_split_bias,
-    ragged_paged_attention, ragged_paged_kv_cache_write, residual_add, row_gather, silu,
-    silu_gated_multiply, validate_replayed_decode_step,
+    qkv_split_bias_rope, ragged_paged_attention, ragged_paged_kv_cache_write, residual_add,
+    row_gather, silu, silu_gated_multiply, validate_replayed_decode_step,
 };
 
 use super::super::batch::LlamaPackedBatchMetadata;
@@ -434,6 +434,7 @@ pub(in crate::llama) fn execute_packed(
             config.ragged_attention_implementation(),
             config.d128_global_merge(),
             config.fused_silu_multiply(),
+            config.fused_qkv_rope(),
             native_d128_two_stage_workspace.as_deref_mut(),
             layout,
             key_cache,
@@ -649,6 +650,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     attention_implementation: RaggedAttentionImplementation,
     d128_global_merge: bool,
     fused_silu_multiply: bool,
+    fused_qkv_rope: bool,
     mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
     layout: KvLayout,
     key_cache: &mut CudaDeviceBuffer,
@@ -790,6 +792,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 .map_err(|source| batch_cuda(input_norm_site, source))?;
         }
 
+        let rope_in_split = fused_qkv_rope && gemms.merged_qkv_plan().is_some();
         if gemms.merged_qkv_plan().is_some() {
             // One GEMM over the concatenated Q|K|V weights. `gate_raw` is idle
             // until the MLP and is wide enough to hold the merged rows.
@@ -832,13 +835,21 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 key_bias: weight_span(weights, key_bias, query_site)?,
                 value_bias: weight_span(weights, value_bias, query_site)?,
                 query: span_mut(
-                    hidden_projection,
+                    if fused_qkv_rope {
+                        &mut buffers.hidden_rotary
+                    } else {
+                        &mut *hidden_projection
+                    },
                     CudaDType::BF16,
                     dense_rows * hidden * 2,
                     query_site,
                 )?,
                 key: span_mut(
-                    &mut buffers.key_raw,
+                    if fused_qkv_rope {
+                        &mut buffers.key_rotary
+                    } else {
+                        &mut buffers.key_raw
+                    },
                     CudaDType::BF16,
                     dense_rows * key_value_width * 2,
                     query_site,
@@ -853,7 +864,23 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 query_width: hidden,
                 key_value_width,
             };
-            qkv_split_bias(&mut params, stream).map_err(|source| batch_cuda(query_site, source))?;
+            if fused_qkv_rope {
+                let rope = QkvRopeParams {
+                    cos: CudaBufferSpan::new(rope_cos, CudaDType::F32, 0, rope_cos.byte_len())
+                        .map_err(|source| batch_cuda(query_site, source))?,
+                    sin: CudaBufferSpan::new(rope_sin, CudaDType::F32, 0, rope_sin.byte_len())
+                        .map_err(|source| batch_cuda(query_site, source))?,
+                    positions: batch.device_row_positions(),
+                    positions_host,
+                    head_size,
+                    table_position_count: max_positions,
+                };
+                qkv_split_bias_rope(&mut params, &rope, stream)
+                    .map_err(|source| batch_cuda(query_site, source))?;
+            } else {
+                qkv_split_bias(&mut params, stream)
+                    .map_err(|source| batch_cuda(query_site, source))?;
+            }
         } else {
             let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
             let (strict, fused) = gemms.query_projection_plans();
@@ -906,7 +933,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         }
 
         let query_rope_site = ExecutionSite::layer(layer_index, LlamaOp::QueryRope);
-        {
+        if !rope_in_split {
             let mut params = IndexedRopeParams {
                 input: span(
                     hidden_projection,
@@ -935,7 +962,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 .map_err(|source| batch_cuda(query_rope_site, source))?;
         }
         let key_rope_site = ExecutionSite::layer(layer_index, LlamaOp::KeyRope);
-        {
+        if !rope_in_split {
             let mut params = IndexedRopeParams {
                 input: span(
                     &buffers.key_raw,

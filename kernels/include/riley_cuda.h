@@ -417,7 +417,18 @@ typedef struct RileyCudaQkvSplitBiasParams {
   uint64_t row_count;
   uint64_t query_width;
   uint64_t key_value_width;
+  // reserved[0] == 1 additionally applies the indexed BF16 RoPE (rotary
+  // dimension == rope_head_size) to the biased query and key outputs in the
+  // same kernel, bit-identical to the split followed by two indexed RoPE
+  // launches. In that mode reserved[1] is the number of leading rows that are
+  // rotated (rows beyond it get only their value output), and rope_positions
+  // holds that many positions. The rope_* fields are read only in that mode.
   uint64_t reserved[4];
+  RileyCudaBufferSpan rope_cos;
+  RileyCudaBufferSpan rope_sin;
+  RileyCudaBufferSpan rope_positions;
+  uint64_t rope_head_size;
+  uint64_t rope_table_position_count;
 } RileyCudaQkvSplitBiasParams;
 
 // Adds one BF16 [column_count] bias vector to every row of a contiguous BF16

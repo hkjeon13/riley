@@ -91,6 +91,11 @@ path = "tests/silu_gated_multiply_gpu.rs"
 required-features = ["cuda"]
 
 [[test]]
+name = "qkv_split_rope_gpu"
+path = "tests/qkv_split_rope_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
 name = "step_capture_gpu"
 path = "tests/step_capture_gpu.rs"
 required-features = ["cuda"]

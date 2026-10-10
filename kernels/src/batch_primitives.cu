@@ -3877,6 +3877,81 @@ __global__ void qkv_split_bias_kernel(
   }
 }
 
+// Split + bias + indexed RoPE in one kernel. Each thread owns one rotary pair
+// of a query or key head (or one value element): it forms the two biased BF16
+// elements exactly as qkv_split_bias_kernel stores them and rotates them with
+// the arithmetic of indexed_rope_kernel<__nv_bfloat16>.
+__global__ void qkv_split_bias_rope_kernel(
+    const __nv_bfloat16* merged, const __nv_bfloat16* query_bias,
+    const __nv_bfloat16* key_bias, const __nv_bfloat16* value_bias,
+    const float* cos, const float* sin, const uint32_t* positions,
+    __nv_bfloat16* query, __nv_bfloat16* key, __nv_bfloat16* value,
+    uint64_t query_width, uint64_t key_value_width, uint64_t head_size,
+    uint64_t table_position_count, uint64_t rotated_row_count,
+    uint64_t work_item_count) {
+  const uint64_t half = head_size / 2;
+  const uint64_t merged_width = query_width + 2 * key_value_width;
+  // Work columns per row: one per rotary pair of Q and K, one per V element.
+  const uint64_t query_pairs = query_width / 2;
+  const uint64_t key_pairs = key_value_width / 2;
+  const uint64_t work_width = query_pairs + key_pairs + key_value_width;
+  const uint64_t first =
+      static_cast<uint64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t work = first; work < work_item_count; work += stride) {
+    const uint64_t row = work / work_width;
+    const uint64_t column = work - row * work_width;
+    const uint64_t merged_row = row * merged_width;
+    if (column >= query_pairs + key_pairs) {
+      const uint64_t local = column - query_pairs - key_pairs;
+      const float projected = __bfloat162float(
+          merged[merged_row + query_width + key_value_width + local]);
+      value[row * key_value_width + local] = __float2bfloat16_rn(
+          __fadd_rn(projected, __bfloat162float(value_bias[local])));
+      continue;
+    }
+    if (row >= rotated_row_count) {
+      continue;
+    }
+    const bool is_query = column < query_pairs;
+    const uint64_t pair = is_query ? column : column - query_pairs;
+    const uint64_t unit = pair % half;
+    const uint64_t first_local = (pair / half) * head_size + unit;
+    const uint64_t second_local = first_local + half;
+    const uint64_t section = is_query ? 0 : query_width;
+    const __nv_bfloat16* bias = is_query ? query_bias : key_bias;
+    __nv_bfloat16* output = is_query ? query : key;
+    const uint64_t output_row = row * (is_query ? query_width : key_value_width);
+    const uint64_t position = positions[row];
+    if (position >= table_position_count) {
+      output[output_row + first_local] = __float2bfloat16_rn(CUDART_NAN_F);
+      output[output_row + second_local] = __float2bfloat16_rn(CUDART_NAN_F);
+      continue;
+    }
+    const float first_value = __bfloat162float(__float2bfloat16_rn(__fadd_rn(
+        __bfloat162float(merged[merged_row + section + first_local]),
+        __bfloat162float(bias[first_local]))));
+    const float second_value = __bfloat162float(__float2bfloat16_rn(__fadd_rn(
+        __bfloat162float(merged[merged_row + section + second_local]),
+        __bfloat162float(bias[second_local]))));
+    const uint64_t table_index = position * half + unit;
+    const float cosine = round_to_storage<__nv_bfloat16>(cos[table_index]);
+    const float sine = round_to_storage<__nv_bfloat16>(sin[table_index]);
+    const float first_cosine =
+        multiply_in_storage<__nv_bfloat16>(first_value, cosine);
+    const float second_sine =
+        multiply_in_storage<__nv_bfloat16>(second_value, sine);
+    const float second_cosine =
+        multiply_in_storage<__nv_bfloat16>(second_value, cosine);
+    const float first_sine =
+        multiply_in_storage<__nv_bfloat16>(first_value, sine);
+    output[output_row + first_local] =
+        __float2bfloat16_rn(first_cosine - second_sine);
+    output[output_row + second_local] =
+        __float2bfloat16_rn(second_cosine + first_sine);
+  }
+}
+
 }  // namespace
 
 extern "C" RileyCudaStatus riley_cuda_qkv_split_bias_execute(
@@ -3891,7 +3966,11 @@ extern "C" RileyCudaStatus riley_cuda_qkv_split_bias_execute(
   }
   const RileyCudaQkvSplitBiasParams stable_params = *params;
   params = &stable_params;
-  if (params->reserved0 != 0 || !reserved_is_zero(params->reserved, 4)) {
+  const bool with_rope = params->reserved[0] == 1;
+  if (params->reserved0 != 0 || params->reserved[0] > 1 ||
+      (!with_rope && params->reserved[1] != 0) ||
+      (with_rope && params->reserved[1] > params->row_count) ||
+      !reserved_is_zero(params->reserved + 2, 2)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "params reserved fields must be zero");
@@ -3900,6 +3979,15 @@ extern "C" RileyCudaStatus riley_cuda_qkv_split_bias_execute(
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "query_width and key_value_width must be non-zero");
+  }
+  if (with_rope &&
+      (params->rope_head_size == 0 || params->rope_head_size % 2 != 0 ||
+       params->query_width % params->rope_head_size != 0 ||
+       params->key_value_width % params->rope_head_size != 0 ||
+       params->rope_table_position_count == 0)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "rope_head_size must be even and divide both widths, with a non-empty table");
   }
   uint64_t two_key_value = 0;
   uint64_t merged_width = 0;
@@ -3972,16 +4060,46 @@ extern "C" RileyCudaStatus riley_cuda_qkv_split_bias_execute(
     status = resolve_span(params->value, RILEY_CUDA_DTYPE_BF16,
                           key_value_bytes, &value, error, kOperation);
   }
+  ResolvedSpan rope_cos{};
+  ResolvedSpan rope_sin{};
+  ResolvedSpan rope_positions{};
+  if (status == RILEY_CUDA_STATUS_SUCCESS && with_rope) {
+    uint64_t table_elements = 0;
+    uint64_t table_bytes = 0;
+    uint64_t position_bytes = 0;
+    if (!checked_multiply(params->rope_table_position_count,
+                          params->rope_head_size / 2, &table_elements) ||
+        !checked_multiply(table_elements, sizeof(float), &table_bytes) ||
+        !checked_multiply(params->reserved[1], sizeof(uint32_t),
+                          &position_bytes)) {
+      return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                              RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                              "merged QKV RoPE table product overflows uint64_t");
+    }
+    status = resolve_span(params->rope_cos, RILEY_CUDA_DTYPE_F32, table_bytes,
+                          &rope_cos, error, kOperation);
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      status = resolve_span(params->rope_sin, RILEY_CUDA_DTYPE_F32,
+                            table_bytes, &rope_sin, error, kOperation);
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      status = resolve_span(params->rope_positions, RILEY_CUDA_DTYPE_U32,
+                            position_bytes, &rope_positions, error,
+                            kOperation);
+    }
+  }
   if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
-  const ResolvedSpan inputs[] = {merged, query_bias, key_bias, value_bias};
+  const ResolvedSpan inputs[] = {merged,   query_bias, key_bias, value_bias,
+                                 rope_cos, rope_sin,   rope_positions};
+  const size_t input_count = with_rope ? 7 : 4;
   const ResolvedSpan writable[] = {query, key, value};
   for (size_t writable_index = 0;
        status == RILEY_CUDA_STATUS_SUCCESS && writable_index < 3;
        ++writable_index) {
     for (size_t input_index = 0;
-         status == RILEY_CUDA_STATUS_SUCCESS && input_index < 4;
+         status == RILEY_CUDA_STATUS_SUCCESS && input_index < input_count;
          ++input_index) {
       status = reject_overlap(writable[writable_index], inputs[input_index],
                               false, error, kOperation);
@@ -3997,14 +4115,17 @@ extern "C" RileyCudaStatus riley_cuda_qkv_split_bias_execute(
   if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
-  const ResolvedSpan spans[] = {merged, query_bias, key_bias, value_bias,
-                                query,  key,        value};
-  status = validate_contexts(stream, spans, 7, error, kOperation);
+  const ResolvedSpan spans[] = {merged,   query_bias, key_bias,
+                                value_bias, query,    key,
+                                value,    rope_cos,   rope_sin,
+                                rope_positions};
+  const size_t span_count = with_rope ? 10 : 7;
+  status = validate_contexts(stream, spans, span_count, error, kOperation);
   if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   ExclusiveUses uses(stream);
-  for (size_t index = 0; index < 7; ++index) {
+  for (size_t index = 0; index < span_count; ++index) {
     if (!uses.add(spans[index].buffer)) {
       return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kOperation, "merged QKV buffer set overflow");
@@ -4021,7 +4142,29 @@ extern "C" RileyCudaStatus riley_cuda_qkv_split_bias_execute(
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = prior_launch_status(error, kOperation);
   }
-  if (status == RILEY_CUDA_STATUS_SUCCESS && merged_elements != 0) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS && merged_elements != 0 &&
+      with_rope) {
+    launch_attempted = true;
+    const uint64_t work_items =
+        params->row_count * (params->query_width / 2 +
+                             params->key_value_width / 2 +
+                             params->key_value_width);
+    qkv_split_bias_rope_kernel<<<block_count(work_items), kThreads, 0,
+                                 stream->stream>>>(
+        reinterpret_cast<const __nv_bfloat16*>(merged.data),
+        reinterpret_cast<const __nv_bfloat16*>(query_bias.data),
+        reinterpret_cast<const __nv_bfloat16*>(key_bias.data),
+        reinterpret_cast<const __nv_bfloat16*>(value_bias.data),
+        reinterpret_cast<const float*>(rope_cos.data),
+        reinterpret_cast<const float*>(rope_sin.data),
+        reinterpret_cast<const uint32_t*>(rope_positions.data),
+        reinterpret_cast<__nv_bfloat16*>(query.data),
+        reinterpret_cast<__nv_bfloat16*>(key.data),
+        reinterpret_cast<__nv_bfloat16*>(value.data), params->query_width,
+        params->key_value_width, params->rope_head_size,
+        params->rope_table_position_count, params->reserved[1], work_items);
+    status = launch_status(error, kOperation);
+  } else if (status == RILEY_CUDA_STATUS_SUCCESS && merged_elements != 0) {
     launch_attempted = true;
     qkv_split_bias_kernel<<<block_count(merged_elements), kThreads, 0,
                             stream->stream>>>(

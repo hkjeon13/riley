@@ -66,7 +66,7 @@ const FIXED37_LOG_SOFTMAX_PARAMS_SIZE: u32 = 152;
 const RESIDUAL_ADD_PARAMS_SIZE: u32 = 200;
 const RESIDUAL_RMS_NORM_PARAMS_SIZE: u32 = 304;
 const ROW_BIAS_ADD_IN_PLACE_PARAMS_SIZE: u32 = 152;
-const QKV_SPLIT_BIAS_PARAMS_SIZE: u32 = 400;
+const QKV_SPLIT_BIAS_PARAMS_SIZE: u32 = 560;
 const SILU_PARAMS_SIZE: u32 = 152;
 const GATED_MULTIPLY_PARAMS_SIZE: u32 = 200;
 const ROPE_TABLE_PARAMS_SIZE: u32 = 152;
@@ -573,9 +573,24 @@ struct RawQkvSplitBiasParams {
     query_width: u64,
     key_value_width: u64,
     reserved: [u64; 4],
+    rope_cos: RawBufferSpan,
+    rope_sin: RawBufferSpan,
+    rope_positions: RawBufferSpan,
+    rope_head_size: u64,
+    rope_table_position_count: u64,
 }
 
 const _: () = assert!(size_of::<RawQkvSplitBiasParams>() == QKV_SPLIT_BIAS_PARAMS_SIZE as usize);
+
+/// `RoPE` inputs of the split + bias + `RoPE` mode of the merged QKV split.
+pub(super) struct RawQkvRope {
+    pub(super) cos: RawBufferSpan,
+    pub(super) sin: RawBufferSpan,
+    pub(super) positions: RawBufferSpan,
+    pub(super) head_size: u64,
+    pub(super) table_position_count: u64,
+    pub(super) rotated_row_count: u64,
+}
 
 #[repr(C)]
 struct RawRowBiasAddInPlaceParams {
@@ -7256,8 +7271,25 @@ pub(super) fn qkv_split_bias_execute(
     row_count: u64,
     query_width: u64,
     key_value_width: u64,
+    rope: Option<RawQkvRope>,
     stream: &mut StreamHandle,
 ) -> CudaResult<()> {
+    // Without RoPE the trailing spans are never read; they carry the merged
+    // span only so every descriptor field stays initialized.
+    let (mode, rope) = match rope {
+        Some(rope) => (1, rope),
+        None => (
+            0,
+            RawQkvRope {
+                cos: merged,
+                sin: merged,
+                positions: merged,
+                head_size: 0,
+                table_position_count: 0,
+                rotated_row_count: 0,
+            },
+        ),
+    };
     let params = RawQkvSplitBiasParams {
         struct_size: QKV_SPLIT_BIAS_PARAMS_SIZE,
         reserved0: 0,
@@ -7271,7 +7303,12 @@ pub(super) fn qkv_split_bias_execute(
         row_count,
         query_width,
         key_value_width,
-        reserved: [0; 4],
+        reserved: [mode, rope.rotated_row_count, 0, 0],
+        rope_cos: rope.cos,
+        rope_sin: rope.sin,
+        rope_positions: rope.positions,
+        rope_head_size: rope.head_size,
+        rope_table_position_count: rope.table_position_count,
     };
     primitive_status(
         "execute CUDA merged QKV split with bias",

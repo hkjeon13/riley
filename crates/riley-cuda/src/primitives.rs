@@ -1246,8 +1246,92 @@ pub fn qkv_split_bias<S: CudaExecutionStream + ?Sized>(
     params: &mut QkvSplitBiasParams<'_>,
     stream: &mut S,
 ) -> CudaResult<()> {
+    qkv_split_bias_impl(params, None, stream)
+}
+
+/// `RoPE` inputs for [`qkv_split_bias_rope`].
+#[derive(Debug)]
+pub struct QkvRopeParams<'a> {
+    /// Immutable F32 cosine table `[table_position_count, head_size / 2]`.
+    pub cos: CudaBufferSpan<'a>,
+    /// Immutable F32 sine table with the cosine table's shape.
+    pub sin: CudaBufferSpan<'a>,
+    /// Immutable U32 device positions, one per row.
+    pub positions: CudaBufferSpan<'a>,
+    /// Host copy of the positions of the leading rows that are rotated,
+    /// validated against the table. Rows beyond it get only their value output.
+    pub positions_host: &'a [u32],
+    /// Head width; the whole head is rotary. Must be even and divide both widths.
+    pub head_size: u64,
+    /// Number of positions in the tables.
+    pub table_position_count: u64,
+}
+
+/// [`qkv_split_bias`] with the indexed BF16 `RoPE` of the query and key outputs
+/// applied in the same kernel. `query` and `key` receive the rotated values,
+/// bit-identical to the split followed by two indexed `RoPE` calls.
+///
+/// # Errors
+///
+/// Returns the errors of [`qkv_split_bias`], or an invalid head size, table
+/// capacity, or out-of-table position error.
+pub fn qkv_split_bias_rope<S: CudaExecutionStream + ?Sized>(
+    params: &mut QkvSplitBiasParams<'_>,
+    rope: &QkvRopeParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    qkv_split_bias_impl(params, Some(rope), stream)
+}
+
+fn qkv_split_bias_impl<S: CudaExecutionStream + ?Sized>(
+    params: &mut QkvSplitBiasParams<'_>,
+    rope: Option<&QkvRopeParams<'_>>,
+    stream: &mut S,
+) -> CudaResult<()> {
     const OPERATION: &str = "qkv_split_bias";
     let stream = execution_stream_mut(stream);
+    if let Some(rope) = rope {
+        require_nonzero(OPERATION, "head_size", rope.head_size)?;
+        require_nonzero(OPERATION, "table_position_count", rope.table_position_count)?;
+        if rope.head_size % 2 != 0
+            || params.query_width % rope.head_size != 0
+            || params.key_value_width % rope.head_size != 0
+        {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "head_size must be even and divide the query and key widths",
+            ));
+        }
+        if u64::try_from(rope.positions_host.len()).map_or(true, |rows| rows > params.row_count) {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "positions_host must not hold more positions than rows",
+            ));
+        }
+        crate::batch::validate_indexed_positions(rope.positions_host, rope.table_position_count)?;
+        require_dtype(OPERATION, "cos", rope.cos.dtype, CudaDType::F32)?;
+        require_dtype(OPERATION, "sin", rope.sin.dtype, CudaDType::F32)?;
+        require_dtype(OPERATION, "positions", rope.positions.dtype, CudaDType::U32)?;
+        let table_bytes = required_matrix_bytes(
+            OPERATION,
+            rope.table_position_count,
+            rope.head_size / 2,
+            CudaDType::F32,
+        )?;
+        require_capacity(OPERATION, "cos", rope.cos.byte_len, table_bytes)?;
+        require_capacity(OPERATION, "sin", rope.sin.byte_len, table_bytes)?;
+        require_capacity(
+            OPERATION,
+            "positions",
+            rope.positions.byte_len,
+            required_vector_bytes(OPERATION, rope.positions_host.len() as u64, CudaDType::U32)?,
+        )?;
+        validate_resources(
+            OPERATION,
+            stream,
+            &[rope.cos.buffer, rope.sin.buffer, rope.positions.buffer],
+        )?;
+    }
     require_nonzero(OPERATION, "query_width", params.query_width)?;
     require_nonzero(OPERATION, "key_value_width", params.key_value_width)?;
     for (name, dtype) in [
@@ -1331,12 +1415,20 @@ pub fn qkv_split_bias<S: CudaExecutionStream + ?Sized>(
             params.row_count,
             params.query_width,
             params.key_value_width,
+            rope.map(|rope| ffi::RawQkvRope {
+                cos: rope.cos.raw(),
+                sin: rope.sin.raw(),
+                positions: rope.positions.raw(),
+                head_size: rope.head_size,
+                table_position_count: rope.table_position_count,
+                rotated_row_count: rope.positions_host.len() as u64,
+            }),
             &mut stream.native,
         )
     }
     #[cfg(not(feature = "cuda"))]
     {
-        let _ = params;
+        let _ = (params, rope);
         Err(CudaError::unavailable(OPERATION))
     }
 }
