@@ -844,8 +844,8 @@ fn deterministic_bf16_gemm_matches_f32_reference_for_odd_smollm2_and_qwen_shapes
 
 #[test]
 #[ignore = "remote GPU"]
-fn qwen2_5_3b_shape_synthetic_bf16_projection_control_is_deterministic_and_allocation_stable(
-) -> TestResult {
+fn qwen2_5_3b_shape_synthetic_bf16_projection_control_is_deterministic_and_allocation_stable()
+-> TestResult {
     let (_runtime, device) = first_device()?;
     let expected_compute_capability = device.properties().compute_capability();
     let context = device.create_context()?;
@@ -1023,5 +1023,115 @@ fn anchored_maximum_algorithms_preserve_smollm2_active_row_gemm_bytes() -> TestR
 active_buckets=1,2,4,8,16,32,64,128 geometries=hidden,key-value,intermediate,down,lm-head \
 heuristic_fallbacks=0 first_row_byte_mismatches=0 status=passed"
     );
+    Ok(())
+}
+
+fn varied_bf16_bytes(element_count: u64, seed: u64, exponent_base: u64) -> TestResult<Vec<u8>> {
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(usize::try_from(
+        element_count.checked_mul(2).ok_or("byte overflow")?,
+    )?)?;
+    let mut state = seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
+    for _ in 0..element_count {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        let bits = state >> 20;
+        let value =
+            ((bits >> 40 & 1) << 15) | ((exponent_base + (bits >> 8) % 6) << 7) | (bits & 0x7f);
+        bytes.extend_from_slice(&u16::try_from(value & 0xffff)?.to_ne_bytes());
+    }
+    Ok(bytes)
+}
+
+// The bit-equivalent selection may bind a different cuBLASLt configuration to
+// a row bucket, but every output byte must match the plain anchored plan.
+#[test]
+#[ignore = "remote GPU"]
+fn bit_equivalent_selection_preserves_qwen_projection_bytes_for_every_bucket() -> TestResult {
+    const SHAPES: [(&str, u64, u64); 4] = [
+        ("merged-qkv", 2560, 2048),
+        ("output", 2048, 2048),
+        ("gate-up", 11008, 2048),
+        ("down", 2048, 11008),
+    ];
+    const BUCKETS: [u64; 12] = [1, 2, 8, 24, 32, 48, 64, 96, 128, 160, 208, 256];
+    let policy = CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1;
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let mut upload_staging = context.allocate_pinned_host_buffer(UPLOAD_STAGING_BYTES)?;
+    let mut replaced = 0_usize;
+    let mut compared = 0_usize;
+
+    for (shape_index, &(label, n, k)) in SHAPES.iter().enumerate() {
+        let seed = u64::try_from(shape_index)? + 11;
+        let anchor = context.prepare_gemm(
+            CudaGemmConfig::new(ANCHOR_ROWS, n, k, PRODUCTION_MAX_WORKSPACE_BYTES)?
+                .with_reduction_policy(policy),
+        )?;
+        let weight = upload(
+            &context,
+            &mut stream,
+            &mut upload_staging,
+            &varied_bf16_bytes(n.checked_mul(k).ok_or("weight overflow")?, seed, 0x76)?,
+        )?;
+        for &rows in &BUCKETS {
+            let config = CudaGemmConfig::new(rows, n, k, PRODUCTION_MAX_WORKSPACE_BYTES)?
+                .with_reduction_policy(policy);
+            let mut plain = context.prepare_gemm_anchored(config, &anchor)?;
+            let mut selected = context
+                .prepare_gemm_anchored(config.with_bit_equivalent_selection(true), &anchor)?;
+            let plain_metadata = plain.algorithm_metadata();
+            let selected_metadata = selected.algorithm_metadata();
+            let differs = plain_metadata.algorithm_id() != selected_metadata.algorithm_id()
+                || plain_metadata.tile_id() != selected_metadata.tile_id()
+                || plain_metadata.stages_id() != selected_metadata.stages_id()
+                || plain_metadata.split_k() != selected_metadata.split_k();
+            let input = upload(
+                &context,
+                &mut stream,
+                &mut upload_staging,
+                &varied_bf16_bytes(
+                    rows.checked_mul(k).ok_or("input overflow")?,
+                    seed.wrapping_mul(131).wrapping_add(rows),
+                    0x7c,
+                )?,
+            )?;
+            let expected =
+                execute_prepared_plan(&context, &mut stream, &mut plain, &input, &weight)?;
+            let actual =
+                execute_prepared_plan(&context, &mut stream, &mut selected, &input, &weight)?;
+            let differing = expected
+                .chunks_exact(2)
+                .zip(actual.chunks_exact(2))
+                .filter(|(left, right)| left != right)
+                .count();
+            println!(
+                "bit-equivalent-gemm shape={label} rows={rows} replaced={differs} algorithm={}/{}/{}/{} differing={differing}",
+                selected_metadata.algorithm_id(),
+                selected_metadata.tile_id(),
+                selected_metadata.stages_id(),
+                selected_metadata.split_k(),
+            );
+            assert_eq!(
+                differing, 0,
+                "{label} M={rows}: bit-equivalent selection changed output bytes"
+            );
+            compared += 1;
+            replaced += usize::from(differs);
+            plain.close()?;
+            selected.close()?;
+            input.close()?;
+        }
+        anchor.close()?;
+        weight.close()?;
+    }
+    println!("bit-equivalent-gemm compared={compared} replaced={replaced}");
+
+    upload_staging.close()?;
+    stream.close()?;
+    context.synchronize()?;
+    context.close()?;
     Ok(())
 }
