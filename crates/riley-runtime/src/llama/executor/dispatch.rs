@@ -122,9 +122,7 @@ pub(in crate::llama) struct OutputPrimitiveDispatch<'a> {
 /// Output-row LM head of a mixed step: where the output rows' normalized
 /// hidden states come from and which anchored plan computes their logits.
 pub(in crate::llama) struct OutputRowLmHead<'a> {
-    /// The anchored LM head of another prepared row bucket, or `None` to use
-    /// this step's own LM head (output rows fill the same bucket).
-    pub(in crate::llama) gemm: Option<&'a mut PreparedLlamaGemm>,
+    pub(in crate::llama) gemm: &'a mut PreparedLlamaGemm,
     pub(in crate::llama) output_indices: CudaBufferSpan<'a>,
     pub(in crate::llama) output_indices_host: &'a [u32],
     pub(in crate::llama) gathered_logits: &'a mut CudaDeviceBuffer,
@@ -438,19 +436,20 @@ pub(in crate::llama) fn execute_packed(
             captured_step_budget,
             ..
         } = forward;
-        // The LM head runs on the gathered output rows, with the smallest
-        // prepared bucket that holds them (and fits the gathered-logits
-        // buffer), and writes the gathered logits directly: a mixed step skips
-        // the logits of its prefill rows, and every step skips the separate
-        // logits gather.
+        // A mixed step's output rows are fewer than its dense rows. Their LM
+        // head can run on the smallest prepared bucket that holds them (and
+        // fits the gathered-logits buffer) instead of on every dense row.
         let mut output_rows_bucket = 0_usize;
-        let output_rows_index = if config.output_row_lm_head() && packed.output_count() != 0 {
+        let output_rows_index = if config.output_row_lm_head()
+            && packed.output_count() != 0
+            && packed.output_count() < dense_rows
+        {
             shape_variants
                 .iter()
                 .enumerate()
                 .filter(|(_, shape)| {
                     shape.dense_rows >= packed.output_count()
-                        && shape.dense_rows <= dense_rows
+                        && shape.dense_rows < dense_rows
                         && shape.dense_rows <= bounds.max_output_slots()
                 })
                 .min_by_key(|(_, shape)| shape.dense_rows)
@@ -464,7 +463,7 @@ pub(in crate::llama) fn execute_packed(
         let (plan, gemms, mut captured_steps, output_lm_head) =
             if dense_rows == maximum_plan.sequence_length() {
                 let output_lm_head = match output_rows_index {
-                    Some(index) => Some(Some(&mut shape_variants[index].gemms.lm_head)),
+                    Some(index) => Some(&mut shape_variants[index].gemms.lm_head),
                     None => None,
                 };
                 (
@@ -484,18 +483,13 @@ pub(in crate::llama) fn execute_packed(
                 let (shape, output_lm_head) = match output_rows_index {
                     Some(index) if index < current_index => {
                         let (lower, upper) = shape_variants.split_at_mut(current_index);
-                        (&mut upper[0], Some(Some(&mut lower[index].gemms.lm_head)))
+                        (&mut upper[0], Some(&mut lower[index].gemms.lm_head))
                     }
                     Some(index) if index > current_index => {
                         let (lower, upper) = shape_variants.split_at_mut(index);
-                        (
-                            &mut lower[current_index],
-                            Some(Some(&mut upper[0].gemms.lm_head)),
-                        )
+                        (&mut lower[current_index], Some(&mut upper[0].gemms.lm_head))
                     }
-                    // The output rows fill this step's own bucket.
-                    Some(_) => (&mut shape_variants[current_index], Some(None)),
-                    None => (&mut shape_variants[current_index], None),
+                    _ => (&mut shape_variants[current_index], None),
                 };
                 (
                     &shape.plan,
@@ -1685,10 +1679,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             row_gather(&mut params, stream).map_err(|source| batch_cuda(gather_site, source))?;
         }
         execute_gemm(
-            match output_rows.gemm {
-                Some(gemm) => gemm,
-                None => &mut gemms.lm_head,
-            },
+            output_rows.gemm,
             &buffers.hidden_rotary,
             weight_span(weights, plan.lm_head_weight(), lm_head_site)?,
             output_rows.gathered_logits,
