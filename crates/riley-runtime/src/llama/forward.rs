@@ -954,7 +954,10 @@ impl PreparedLlamaForward {
             tokens_ready: _,
             output_ready: _,
             poisoned: _,
+            captured_steps,
         } = self;
+        // Recorded steps reference the plans and buffers closed below.
+        drop(captured_steps);
         let GemmPlans {
             hidden,
             key_value,
@@ -3118,6 +3121,9 @@ pub struct PreparedLlamaForward {
     pub(super) tokens_ready: bool,
     pub(super) output_ready: bool,
     pub(super) poisoned: bool,
+    /// Recorded steps of the maximum dense shape (see the batch executor's
+    /// shape variants, which hold their own). Destroyed before the plans.
+    pub(super) captured_steps: Vec<(usize, riley_cuda::CudaStepGraph)>,
 }
 
 impl fmt::Debug for PreparedLlamaForward {
@@ -3325,6 +3331,7 @@ impl PreparedLlamaForward {
             tokens_ready: false,
             output_ready: false,
             poisoned: false,
+            captured_steps: Vec::new(),
         })
     }
 

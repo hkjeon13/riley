@@ -426,6 +426,7 @@ pub(in crate::llama) fn execute_packed(
             weights,
             gemms: maximum_gemms,
             buffers,
+            captured_steps: maximum_captured_steps,
             ..
         } = forward;
         // A mixed step's output rows are fewer than its dense rows. Their LM
@@ -458,7 +459,12 @@ pub(in crate::llama) fn execute_packed(
                     Some(index) => Some(&mut shape_variants[index].gemms.lm_head),
                     None => None,
                 };
-                (&*maximum_plan, maximum_gemms, None, output_lm_head)
+                (
+                    &*maximum_plan,
+                    maximum_gemms,
+                    Some(maximum_captured_steps),
+                    output_lm_head,
+                )
             } else {
                 let current_index = shape_variants
                     .iter()
