@@ -1113,6 +1113,15 @@ __device__ __forceinline__ float warp_sum(float value) {
   return value;
 }
 
+// Same pairwise tree as warp_sum on lane 0, with the result on every lane.
+__device__ __forceinline__ float warp_sum_all_lanes(float value) {
+#pragma unroll
+  for (uint32_t offset = kWarpSize / 2; offset != 0; offset /= 2) {
+    value += __shfl_xor_sync(kFullWarpMask, value, offset);
+  }
+  return value;
+}
+
 __device__ __forceinline__ float staged_attention_score(float dot_product,
                                                          float scale) {
   // Preserve the established BF16 attention-score contract: the reference,
@@ -2957,17 +2966,20 @@ void native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_kernel(
       batch, row, logical_block, key_value_head, &block_head_base,
       &token_count);
 
-  __shared__ __nv_bfloat16
-      shared_keys[kNativeBf16RaggedPagedSplitGqaD128TileElements];
-  __shared__ __nv_bfloat16
+  // The tiles are staged already widened to FP32 (an exact conversion), so
+  // the per-token loop reads them without converting again in every warp.
+  __shared__ float shared_keys[kNativeBf16RaggedPagedSplitGqaD128TileElements];
+  __shared__ float
       shared_values[kNativeBf16RaggedPagedSplitGqaD128TileElements];
   if (valid_block) {
     const uint32_t tile_elements = static_cast<uint32_t>(
         token_count * kNativeBf16RaggedPagedSplitGqaD128HeadSize);
     for (uint32_t element = threadIdx.x; element < tile_elements;
          element += kNativeBf16RaggedPagedSplitGqaD128SharedKvThreads) {
-      shared_keys[element] = key_pool[block_head_base + element];
-      shared_values[element] = value_pool[block_head_base + element];
+      shared_keys[element] =
+          __bfloat162float(key_pool[block_head_base + element]);
+      shared_values[element] =
+          __bfloat162float(value_pool[block_head_base + element]);
     }
   }
   __syncthreads();
@@ -2990,42 +3002,44 @@ void native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_kernel(
          ++token_in_block) {
       const uint32_t tile_base = static_cast<uint32_t>(
           token_in_block * kNativeBf16RaggedPagedSplitGqaD128HeadSize);
-      const float key0 = __bfloat162float(shared_keys[tile_base + lane]);
-      const float key1 =
-          __bfloat162float(shared_keys[tile_base + lane + kWarpSize]);
-      const float key2 =
-          __bfloat162float(shared_keys[tile_base + lane + 2 * kWarpSize]);
-      const float key3 =
-          __bfloat162float(shared_keys[tile_base + lane + 3 * kWarpSize]);
+      const float key0 = shared_keys[tile_base + lane];
+      const float key1 = shared_keys[tile_base + lane + kWarpSize];
+      const float key2 = shared_keys[tile_base + lane + 2 * kWarpSize];
+      const float key3 = shared_keys[tile_base + lane + 3 * kWarpSize];
       float score = fmaf(query0, key0, query1 * key1);
       score = fmaf(query2, key2, score);
       score = fmaf(query3, key3, score);
-      score = warp_sum(score);
-      score = staged_attention_score(
-          __shfl_sync(kFullWarpMask, score, 0), scale);
+      // An xor butterfly adds, at every level, the same two subtree sums the
+      // shfl_down tree adds on lane 0, so every lane ends with lane 0's bits.
+      // Each lane then runs the scalar online update itself and no score,
+      // alpha, or beta broadcast is needed.
+      score = staged_attention_score(warp_sum_all_lanes(score), scale);
 
       float alpha = 0.0F;
       float beta = 0.0F;
-      if (lane == 0) {
-        update_online_state(score, &maximum, &denominator, &alpha, &beta);
+      update_online_state(score, &maximum, &denominator, &alpha, &beta);
+      const float value0 = shared_values[tile_base + lane];
+      const float value1 = shared_values[tile_base + lane + kWarpSize];
+      const float value2 = shared_values[tile_base + lane + 2 * kWarpSize];
+      const float value3 = shared_values[tile_base + lane + 3 * kWarpSize];
+      // update_numerator's cases, selected once per token: alpha and beta are
+      // uniform across the warp.
+      if (beta == 0.0F) {
+        numerator0 = alpha * numerator0;
+        numerator1 = alpha * numerator1;
+        numerator2 = alpha * numerator2;
+        numerator3 = alpha * numerator3;
+      } else if (alpha == 0.0F) {
+        numerator0 = beta * value0;
+        numerator1 = beta * value1;
+        numerator2 = beta * value2;
+        numerator3 = beta * value3;
+      } else {
+        numerator0 = fmaf(beta, value0, alpha * numerator0);
+        numerator1 = fmaf(beta, value1, alpha * numerator1);
+        numerator2 = fmaf(beta, value2, alpha * numerator2);
+        numerator3 = fmaf(beta, value3, alpha * numerator3);
       }
-      alpha = __shfl_sync(kFullWarpMask, alpha, 0);
-      beta = __shfl_sync(kFullWarpMask, beta, 0);
-      numerator0 = update_numerator(
-          numerator0, __bfloat162float(shared_values[tile_base + lane]),
-          alpha, beta);
-      numerator1 = update_numerator(
-          numerator1,
-          __bfloat162float(shared_values[tile_base + lane + kWarpSize]),
-          alpha, beta);
-      numerator2 = update_numerator(
-          numerator2,
-          __bfloat162float(shared_values[tile_base + lane + 2 * kWarpSize]),
-          alpha, beta);
-      numerator3 = update_numerator(
-          numerator3,
-          __bfloat162float(shared_values[tile_base + lane + 3 * kWarpSize]),
-          alpha, beta);
     }
   }
   const uint64_t state_base =
