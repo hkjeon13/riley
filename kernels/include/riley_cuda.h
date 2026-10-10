@@ -1234,6 +1234,9 @@ typedef struct RileyCudaGemmConfig {
   uint32_t deterministic;
   uint32_t reserved0;
   uint64_t max_workspace_bytes;
+  // reserved[0] == 1: an anchored plan may replace the anchor algorithm with a
+  // listed configuration that reproduces the anchor's output bits for this
+  // exact shape (verified on a probe at preparation). Other words are zero.
   uint64_t reserved[3];
 } RileyCudaGemmConfig;
 

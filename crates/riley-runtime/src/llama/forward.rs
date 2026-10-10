@@ -2325,6 +2325,7 @@ pub struct PreparedLlamaForwardConfig {
     rope_table_selection: LlamaRopeTableSelection,
     rms_norm_selection: LlamaRmsNormSelection,
     first_heuristic_gemm_reductions: bool,
+    bit_equivalent_gemm_selection: bool,
 }
 
 impl PreparedLlamaForwardConfig {
@@ -2349,6 +2350,7 @@ impl PreparedLlamaForwardConfig {
             rope_table_selection: LlamaRopeTableSelection::Automatic,
             rms_norm_selection: LlamaRmsNormSelection::Automatic,
             first_heuristic_gemm_reductions: false,
+            bit_equivalent_gemm_selection: false,
         }
     }
 
@@ -2409,6 +2411,15 @@ impl PreparedLlamaForwardConfig {
     #[must_use]
     pub const fn with_first_heuristic_gemm_reductions(mut self) -> Self {
         self.first_heuristic_gemm_reductions = true;
+        self
+    }
+
+    /// With the first-heuristic reductions, lets each row bucket use a listed
+    /// algorithm that the native layer verified to be bit-identical to the
+    /// anchor algorithm for that exact shape. Outputs do not change.
+    #[must_use]
+    pub const fn with_bit_equivalent_gemm_selection(mut self) -> Self {
+        self.bit_equivalent_gemm_selection = true;
         self
     }
 
@@ -3166,6 +3177,9 @@ impl PreparedLlamaForward {
             model,
             config.reduction_profile,
             config.first_heuristic_gemm_reductions,
+        )
+        .with_bit_equivalent_selection(
+            config.first_heuristic_gemm_reductions && config.bit_equivalent_gemm_selection,
         );
         let rms_norm_profile =
             resolve_rms_norm_profile(model, config.reduction_profile, config.rms_norm_selection);
@@ -5566,7 +5580,9 @@ pub(super) fn prepare_gemms(
         let config = CudaGemmConfig::new(m, n, k, workspace_cap)
             .map_err(|source| LlamaForwardError::cuda(site, source))?;
         let config = match reduction_profile {
-            LlamaReductionProfile::CanonicalV1 => config.with_reduction_policy(policy),
+            LlamaReductionProfile::CanonicalV1 => config
+                .with_reduction_policy(policy)
+                .with_bit_equivalent_selection(policies.bit_equivalent_selection()),
             LlamaReductionProfile::FixedContiguous37BalancedV1 => config,
         };
         match reduction_profile {

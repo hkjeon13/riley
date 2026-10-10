@@ -142,6 +142,7 @@ pub struct CudaGemmConfig {
     k: u64,
     max_workspace_bytes: u64,
     reduction_policy: CudaGemmReductionPolicy,
+    bit_equivalent_selection: bool,
     input_bytes: u64,
     weight_bytes: u64,
     output_bytes: u64,
@@ -189,6 +190,7 @@ impl CudaGemmConfig {
             k,
             max_workspace_bytes,
             reduction_policy: CudaGemmReductionPolicy::StrictNoSplitV1,
+            bit_equivalent_selection: false,
             input_bytes,
             weight_bytes,
             output_bytes,
@@ -230,6 +232,22 @@ impl CudaGemmConfig {
     #[must_use]
     pub const fn reduction_policy(self) -> CudaGemmReductionPolicy {
         self.reduction_policy
+    }
+
+    /// Lets an anchored plan replace the anchor algorithm with a listed
+    /// configuration that reproduces the anchor's output bits for this exact
+    /// shape. The native layer verifies the equality on a probe input during
+    /// preparation and keeps the anchor algorithm otherwise.
+    #[must_use]
+    pub const fn with_bit_equivalent_selection(mut self, enabled: bool) -> Self {
+        self.bit_equivalent_selection = enabled;
+        self
+    }
+
+    /// Whether anchored preparation may pick a verified bit-equivalent algorithm.
+    #[must_use]
+    pub const fn bit_equivalent_selection(self) -> bool {
+        self.bit_equivalent_selection
     }
 
     /// Exact required bytes for row-major BF16 `X[M, K]`.
@@ -750,6 +768,7 @@ impl CudaContext {
                 config.k,
                 config.max_workspace_bytes,
                 config.reduction_policy.abi_flags(),
+                config.bit_equivalent_selection,
                 &anchor.native,
             )?;
             let algorithm = CudaGemmAlgorithmMetadata::from_native(config, native.info()?)?;

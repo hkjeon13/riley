@@ -71,6 +71,9 @@ serve options:
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
   --gemm-reduction-policy ID     canonical or first-heuristic-split-k-v1 (default: canonical)
+  --gemm-algorithm-selection ID  anchor-v1 or bit-equivalent-table-v1: per-row-count algorithms
+                                 verified bit-identical to the anchor; needs the first-heuristic
+                                 policy (default: anchor-v1)
   --decode-attention-merge ID    ordered-v1 or global-max-v1 page merge for the native D128
                                  backend (default: ordered-v1)
   --mlp-activation ID            separate-v1 or fused-silu-multiply-v1: one kernel for SiLU and
@@ -128,6 +131,7 @@ struct ServeOptions {
     numerics_profile: NumericsProfileMode,
     logit_observation_dir: Option<PathBuf>,
     first_heuristic_gemm_reductions: bool,
+    bit_equivalent_gemm_selection: bool,
     d128_global_merge: bool,
     fused_silu_multiply: bool,
     fused_qkv_rope: bool,
@@ -355,6 +359,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut reduction_profile = None;
     let mut numerics_profile = None;
     let mut gemm_reduction_policy = None;
+    let mut gemm_algorithm_selection = None;
     let mut decode_attention_merge = None;
     let mut mlp_activation = None;
     let mut query_key_rope = None;
@@ -627,6 +632,25 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 },
                 "--decode-attention-merge",
             )?,
+            "--gemm-algorithm-selection" => set_once(
+                &mut gemm_algorithm_selection,
+                match parse_utf8(
+                    next_value(&mut arguments, "--gemm-algorithm-selection")?,
+                    "--gemm-algorithm-selection",
+                )?
+                .as_str()
+                {
+                    "anchor-v1" => false,
+                    "bit-equivalent-table-v1" => true,
+                    _ => {
+                        return Err(
+                            "--gemm-algorithm-selection requires anchor-v1 or bit-equivalent-table-v1"
+                                .to_owned(),
+                        );
+                    }
+                },
+                "--gemm-algorithm-selection",
+            )?,
             "--gemm-reduction-policy" => set_once(
                 &mut gemm_reduction_policy,
                 match parse_utf8(
@@ -874,6 +898,13 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             );
         }
     }
+    let bit_equivalent_gemm_selection = gemm_algorithm_selection.unwrap_or(false);
+    if bit_equivalent_gemm_selection && !gemm_reduction_policy.unwrap_or(false) {
+        return Err(
+            "--gemm-algorithm-selection bit-equivalent-table-v1 requires --gemm-reduction-policy first-heuristic-split-k-v1"
+                .to_owned(),
+        );
+    }
     let fused_mlp_residual_norm = mlp_residual_norm.unwrap_or(false);
     if fused_mlp_residual_norm && residual_rmsnorm != ResidualRmsNormMode::Fused {
         return Err(
@@ -964,6 +995,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         numerics_profile,
         logit_observation_dir,
         first_heuristic_gemm_reductions: gemm_reduction_policy.unwrap_or(false),
+        bit_equivalent_gemm_selection,
         d128_global_merge,
         fused_silu_multiply: mlp_activation.unwrap_or(false),
         fused_qkv_rope,
@@ -1625,6 +1657,11 @@ fn run_serve(
     };
     let forward = if options.first_heuristic_gemm_reductions {
         forward.with_first_heuristic_gemm_reductions()
+    } else {
+        forward
+    };
+    let forward = if options.bit_equivalent_gemm_selection {
+        forward.with_bit_equivalent_gemm_selection()
     } else {
         forward
     };
@@ -4693,6 +4730,7 @@ mod tests {
                 numerics_profile: NumericsProfileMode::Existing,
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
+                bit_equivalent_gemm_selection: false,
                 d128_global_merge: false,
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
@@ -5090,6 +5128,7 @@ mod tests {
                 numerics_profile: NumericsProfileMode::Existing,
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
+                bit_equivalent_gemm_selection: false,
                 d128_global_merge: false,
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
@@ -5254,6 +5293,7 @@ mod tests {
                 numerics_profile: NumericsProfileMode::Existing,
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
+                bit_equivalent_gemm_selection: false,
                 d128_global_merge: false,
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
@@ -5659,6 +5699,7 @@ mod tests {
                 numerics_profile: NumericsProfileMode::Existing,
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
+                bit_equivalent_gemm_selection: false,
                 d128_global_merge: false,
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,

@@ -1,5 +1,8 @@
 #include "ffi_internal.hpp"
 
+#include <vector>
+#include <cstdio>
+#include <algorithm>
 #include <cublasLt.h>
 
 #include <atomic>
@@ -212,9 +215,10 @@ RileyCudaStatus validate_config_for_epilogue(
   constexpr uint32_t kKnownGemmFlags =
       RILEY_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K |
       RILEY_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K;
+  // reserved[0] == 1 requests bit-equivalent selection on anchored plans.
   if ((config->flags & ~kKnownGemmFlags) != 0 ||
-      config->reserved0 != 0 ||
-      !reserved_is_zero(config->reserved, 3)) {
+      config->reserved0 != 0 || config->reserved[0] > 1 ||
+      !reserved_is_zero(config->reserved + 1, 2)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "validate cuBLASLt GEMM config",
@@ -646,6 +650,205 @@ RileyCudaStatus select_bias_deterministic_algorithm(
       "no deterministic checked bias-epilogue algorithm satisfies the workspace and 256-byte alignment contract");
 }
 
+// Bit-equivalent selection (config.reserved[0] == 1, anchored plans only).
+// The table lists cuBLASLt configurations that a standalone search found
+// bit-identical to the 128-row first-heuristic anchor of the same projection
+// and faster in a row-count range. A listed configuration replaces the anchor
+// algorithm only after it passes AlgoCheck, the deterministic recording
+// contract, and reproduces the anchor algorithm's output bits on a probe
+// input of this exact shape; otherwise the anchor algorithm is kept. Tile and
+// stage ids are library-specific, so the probe is what establishes equality.
+struct EquivalentCandidate {
+  uint64_t k;
+  uint64_t n;
+  uint64_t min_m;
+  uint64_t max_m;
+  int32_t id;
+  uint32_t tile;
+  uint32_t stages;
+  uint32_t split_k;
+  uint32_t reduction;
+};
+constexpr EquivalentCandidate kEquivalentCandidates[] = {
+    // merged Q|K|V 2048 -> 2560
+    {2048, 2560, 1, 32, 21, 5, 13, 3, 4},
+    {2048, 2560, 33, 80, 21, 11, 13, 3, 4},
+    {2048, 2560, 81, 128, 23, 18, 15, 3, 4},
+    {2048, 2560, 129, 192, 21, 15, 12, 3, 4},
+    {2048, 2560, 193, 256, 6, 20, 15, 3, 4},
+    // output projection 2048 -> 2048
+    {2048, 2048, 1, 32, 21, 5, 13, 4, 4},
+    {2048, 2048, 33, 96, 21, 11, 13, 4, 4},
+    {2048, 2048, 97, 128, 23, 18, 15, 4, 4},
+    {2048, 2048, 129, 192, 21, 15, 12, 4, 4},
+    {2048, 2048, 193, 256, 21, 20, 10, 4, 4},
+    // gate / up 2048 -> 11008 (129..256 rows keep the anchor, so buckets
+    // without an entry inherit the original anchor from the widest plan)
+    {2048, 11008, 1, 32, 21, 11, 19, 1, 0},
+    {2048, 11008, 33, 64, 21, 11, 20, 1, 0},
+    {2048, 11008, 65, 112, 21, 15, 18, 1, 0},
+    {2048, 11008, 113, 128, 21, 15, 25, 1, 0},
+    // down 11008 -> 2048 (193..256 rows keep the anchor)
+    {11008, 2048, 1, 32, 21, 5, 19, 4, 4},
+    {11008, 2048, 33, 64, 21, 11, 19, 4, 4},
+    {11008, 2048, 65, 112, 6, 18, 12, 4, 4},
+    {11008, 2048, 113, 192, 21, 15, 12, 4, 4},
+};
+
+bool equivalent_probe_output(RileyCudaGemmPlan* plan,
+                             const cublasLtMatmulAlgo_t& algorithm,
+                             const void* weight, const void* input,
+                             void* output, void* workspace,
+                             size_t workspace_bytes,
+                             std::vector<uint16_t>* host) noexcept {
+  const float alpha = 1.0F;
+  const float beta = 0.0F;
+  const size_t elements =
+      static_cast<size_t>(plan->config.n) * static_cast<size_t>(plan->config.m);
+  if (cudaMemset(output, 0, elements * 2) != cudaSuccess ||
+      cublasLtMatmul(plan->handle, plan->operation, &alpha, weight,
+                     plan->weight_layout, input, plan->input_layout, &beta,
+                     output, plan->output_layout, output, plan->output_layout,
+                     &algorithm, workspace, workspace_bytes,
+                     nullptr) != CUBLAS_STATUS_SUCCESS ||
+      cudaDeviceSynchronize() != cudaSuccess) {
+    (void)cudaGetLastError();
+    return false;
+  }
+  host->resize(elements);
+  return cudaMemcpy(host->data(), output, elements * 2,
+                    cudaMemcpyDeviceToHost) == cudaSuccess;
+}
+
+bool select_equivalent_candidate(RileyCudaGemmPlan* plan,
+                                 const cublasLtMatmulAlgo_t& anchor_algorithm,
+                                 cublasLtMatmulAlgo_t* selected,
+                                 size_t* selected_workspace) noexcept {
+  if (plan->config.reserved[0] != 1) {
+    return false;
+  }
+  const EquivalentCandidate* candidate = nullptr;
+  for (const EquivalentCandidate& entry : kEquivalentCandidates) {
+    if (entry.k == plan->config.k && entry.n == plan->config.n &&
+        plan->config.m >= entry.min_m && plan->config.m <= entry.max_m) {
+      candidate = &entry;
+      break;
+    }
+  }
+  if (candidate == nullptr) {
+    return false;
+  }
+  cublasLtMatmulAlgo_t algorithm{};
+  if (cublasLtMatmulAlgoInit(plan->handle, CUBLAS_COMPUTE_32F, CUDA_R_32F,
+                             CUDA_R_16BF, CUDA_R_16BF, CUDA_R_16BF,
+                             CUDA_R_16BF, candidate->id,
+                             &algorithm) != CUBLAS_STATUS_SUCCESS ||
+      cublasLtMatmulAlgoConfigSetAttribute(
+          &algorithm, CUBLASLT_ALGO_CONFIG_TILE_ID, &candidate->tile,
+          sizeof(candidate->tile)) != CUBLAS_STATUS_SUCCESS ||
+      cublasLtMatmulAlgoConfigSetAttribute(
+          &algorithm, CUBLASLT_ALGO_CONFIG_STAGES_ID, &candidate->stages,
+          sizeof(candidate->stages)) != CUBLAS_STATUS_SUCCESS ||
+      cublasLtMatmulAlgoConfigSetAttribute(
+          &algorithm, CUBLASLT_ALGO_CONFIG_SPLITK_NUM, &candidate->split_k,
+          sizeof(candidate->split_k)) != CUBLAS_STATUS_SUCCESS ||
+      cublasLtMatmulAlgoConfigSetAttribute(
+          &algorithm, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME,
+          &candidate->reduction,
+          sizeof(candidate->reduction)) != CUBLAS_STATUS_SUCCESS) {
+    return false;
+  }
+  cublasLtMatmulHeuristicResult_t checked{};
+  cublasLtMatmulHeuristicResult_t anchor_checked{};
+  if (cublasLtMatmulAlgoCheck(plan->handle, plan->operation,
+                              plan->weight_layout, plan->input_layout,
+                              plan->output_layout, plan->output_layout,
+                              &algorithm, &checked) != CUBLAS_STATUS_SUCCESS ||
+      checked.state != CUBLAS_STATUS_SUCCESS ||
+      checked.workspaceSize > plan->config.max_workspace_bytes ||
+      cublasLtMatmulAlgoCheck(plan->handle, plan->operation,
+                              plan->weight_layout, plan->input_layout,
+                              plan->output_layout, plan->output_layout,
+                              &anchor_algorithm,
+                              &anchor_checked) != CUBLAS_STATUS_SUCCESS ||
+      anchor_checked.state != CUBLAS_STATUS_SUCCESS) {
+    return false;
+  }
+  const size_t k = static_cast<size_t>(plan->config.k);
+  const size_t n = static_cast<size_t>(plan->config.n);
+  const size_t m = static_cast<size_t>(plan->config.m);
+  const size_t workspace_bytes =
+      std::max(checked.workspaceSize, anchor_checked.workspaceSize);
+  void* weight = nullptr;
+  void* input = nullptr;
+  void* output = nullptr;
+  void* workspace = nullptr;
+  bool same = false;
+  {
+    std::vector<uint16_t> host_weight;
+    std::vector<uint16_t> host_input;
+    host_weight.resize(k * n);
+    host_input.resize(k * m);
+    uint64_t state = 0x9e3779b97f4a7c15ULL ^ (k * 1315423911ULL + n);
+    // BF16 patterns with exponents spread over a few binades, both signs.
+    auto next = [&state](uint32_t exponent_base, uint32_t exponent_span) {
+      state ^= state << 13;
+      state ^= state >> 7;
+      state ^= state << 17;
+      const uint32_t bits = static_cast<uint32_t>(state >> 24);
+      return static_cast<uint16_t>(((bits >> 31) << 15) |
+                                   ((exponent_base + (bits >> 8) % exponent_span) << 7) |
+                                   (bits & 0x7fU));
+    };
+    for (uint16_t& value : host_weight) {
+      value = next(0x76, 5);
+    }
+    for (uint16_t& value : host_input) {
+      value = next(0x7c, 6);
+    }
+    if (cudaMalloc(&weight, k * n * 2) == cudaSuccess &&
+        cudaMalloc(&input, k * m * 2) == cudaSuccess &&
+        cudaMalloc(&output, n * m * 2) == cudaSuccess &&
+        (workspace_bytes == 0 ||
+         cudaMalloc(&workspace, workspace_bytes) == cudaSuccess) &&
+        cudaMemcpy(weight, host_weight.data(), k * n * 2,
+                   cudaMemcpyHostToDevice) == cudaSuccess &&
+        cudaMemcpy(input, host_input.data(), k * m * 2,
+                   cudaMemcpyHostToDevice) == cudaSuccess) {
+      std::vector<uint16_t> reference;
+      std::vector<uint16_t> actual;
+      same = equivalent_probe_output(plan, anchor_algorithm, weight, input,
+                                     output, workspace, workspace_bytes,
+                                     &reference) &&
+             equivalent_probe_output(plan, algorithm, weight, input, output,
+                                     workspace, workspace_bytes, &actual) &&
+             reference == actual;
+    }
+  }
+  (void)cudaGetLastError();
+  if (weight != nullptr) cudaFree(weight);
+  if (input != nullptr) cudaFree(input);
+  if (output != nullptr) cudaFree(output);
+  if (workspace != nullptr) cudaFree(workspace);
+  const bool recorded =
+      same && record_algorithm(plan, algorithm, checked.workspaceSize);
+  if (std::getenv("RILEY_GEMM_EQUIVALENT_LOG") != nullptr) {
+    std::fprintf(stderr,
+                 "GEMMEQUIV m=%llu n=%llu k=%llu id=%d tile=%u stages=%u splitk=%u red=%u same=%d recorded=%d\n",
+                 static_cast<unsigned long long>(m),
+                 static_cast<unsigned long long>(n),
+                 static_cast<unsigned long long>(k), candidate->id,
+                 candidate->tile, candidate->stages, candidate->split_k,
+                 candidate->reduction, same ? 1 : 0, recorded ? 1 : 0);
+  }
+  if (!recorded) {
+    return false;
+  }
+  *selected = algorithm;
+  *selected_workspace = checked.workspaceSize;
+  return true;
+}
+
 RileyCudaStatus select_anchored_deterministic_algorithm(
     RileyCudaGemmPlan* plan, const RileyCudaGemmPlan* anchor,
     RileyCudaErrorInfo* error) noexcept {
@@ -654,6 +857,15 @@ RileyCudaStatus select_anchored_deterministic_algorithm(
                             RILEY_CUDA_ERROR_STAGE_PREPARE,
                             "prepare anchored cuBLASLt GEMM plan",
                             "anchor GEMM plan is null or has no prepared algorithm");
+  }
+
+  {
+    cublasLtMatmulAlgo_t equivalent{};
+    size_t equivalent_workspace = 0;
+    if (select_equivalent_candidate(plan, anchor->algorithm, &equivalent,
+                                    &equivalent_workspace)) {
+      return RILEY_CUDA_STATUS_SUCCESS;
+    }
   }
 
   const cublasLtMatmulAlgo_t algorithm = anchor->algorithm;

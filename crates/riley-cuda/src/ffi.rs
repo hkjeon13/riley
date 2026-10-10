@@ -9381,6 +9381,7 @@ impl GemmPlanHandle {
         k: u64,
         max_workspace_bytes: u64,
         flags: u32,
+        bit_equivalent_selection: bool,
         anchor: &Self,
     ) -> CudaResult<Self> {
         if flags & !(GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K | GEMM_FLAG_ALLOW_INPLACE_SPLIT_K) != 0 {
@@ -9389,7 +9390,8 @@ impl GemmPlanHandle {
                 "unknown GEMM reduction-policy flags",
             ));
         }
-        let config = RawGemmConfig::new(flags, m, n, k, max_workspace_bytes);
+        let mut config = RawGemmConfig::new(flags, m, n, k, max_workspace_bytes);
+        config.reserved[0] = u64::from(bit_equivalent_selection);
         let anchor = anchor.pointer.ok_or_else(|| {
             CudaError::invalid_state(
                 "prepare anchored CUDA GEMM plan",

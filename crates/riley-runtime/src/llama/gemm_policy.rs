@@ -25,11 +25,13 @@ pub(super) struct LlamaGemmReductionPolicies {
     down: CudaGemmReductionPolicy,
     lm_head: CudaGemmReductionPolicy,
     heuristic_anchor_rows: Option<u64>,
+    bit_equivalent_selection: bool,
 }
 
 impl LlamaGemmReductionPolicies {
     const STRICT: Self = Self {
         heuristic_anchor_rows: None,
+        bit_equivalent_selection: false,
         hidden: CudaGemmReductionPolicy::StrictNoSplitV1,
         key_value: CudaGemmReductionPolicy::StrictNoSplitV1,
         intermediate: CudaGemmReductionPolicy::StrictNoSplitV1,
@@ -39,6 +41,7 @@ impl LlamaGemmReductionPolicies {
 
     const REVIEWED_LLAMA: Self = Self {
         heuristic_anchor_rows: None,
+        bit_equivalent_selection: false,
         hidden: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
         key_value: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
         intermediate: CudaGemmReductionPolicy::StrictNoSplitV1,
@@ -48,6 +51,7 @@ impl LlamaGemmReductionPolicies {
 
     const FIRST_HEURISTIC: Self = Self {
         heuristic_anchor_rows: Some(Self::FIRST_HEURISTIC_ANCHOR_ROWS),
+        bit_equivalent_selection: false,
         hidden: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
         key_value: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
         intermediate: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
@@ -80,6 +84,20 @@ impl LlamaGemmReductionPolicies {
     #[must_use]
     pub(super) const fn first_heuristic() -> Self {
         Self::FIRST_HEURISTIC
+    }
+
+    /// Lets each row bucket use a verified bit-equivalent algorithm in place
+    /// of the anchor algorithm. Outputs are unchanged by construction.
+    #[must_use]
+    pub(super) const fn with_bit_equivalent_selection(mut self, enabled: bool) -> Self {
+        self.bit_equivalent_selection = enabled;
+        self
+    }
+
+    /// Whether anchored plans may pick a verified bit-equivalent algorithm.
+    #[must_use]
+    pub(super) const fn bit_equivalent_selection(self) -> bool {
+        self.bit_equivalent_selection
     }
 
     #[must_use]
