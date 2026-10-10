@@ -1421,7 +1421,8 @@ RileyCudaStatus riley_cuda_stream_command_batch_step_capture_begin(
 // current step's counts whenever the recorded graph is launched.
 RileyCudaStatus riley_cuda_stream_command_batch_step_capture_dynamic_counts(
     RileyCudaStream* stream, const RileyCudaBufferSpan* counts,
-    uint64_t dense_rows, uint64_t output_rows, RileyCudaErrorInfo* error);
+    uint64_t dense_rows, uint64_t output_rows,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_stream_command_batch_step_capture_end(
     RileyCudaStream* stream,
     RileyCudaStepGraph** out_graph,
