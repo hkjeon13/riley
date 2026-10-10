@@ -822,6 +822,37 @@ pub fn begin_step_capture<S: CudaExecutionStream + ?Sized>(stream: &mut S) -> Cu
     }
 }
 
+/// Makes the active step capture dynamic.
+///
+/// The recorded kernels then read the step's active row count (`counts[0]`)
+/// and output row count (`counts[1]`) from the two-element U32 device span and
+/// launch over `dense_rows` and `output_rows`, so one recorded graph serves
+/// every step of that dense shape. The caller must keep the span alive and
+/// write the current counts into it before every launch of the graph.
+///
+/// # Errors
+///
+/// Returns invalid-state without an active step capture, or a span error.
+pub fn set_step_capture_dynamic_counts<S: CudaExecutionStream + ?Sized>(
+    stream: &mut S,
+    counts: crate::CudaBufferSpan<'_>,
+    dense_rows: u64,
+    output_rows: u64,
+) -> CudaResult<()> {
+    let stream = execution_stream_mut(stream);
+    #[cfg(feature = "cuda")]
+    {
+        stream
+            .native
+            .step_capture_dynamic_counts(counts.raw(), dense_rows, output_rows)
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = (stream, counts, dense_rows, output_rows);
+        Err(CudaError::unavailable("set_step_capture_dynamic_counts"))
+    }
+}
+
 /// Ends the active step capture and instantiates its graph.
 ///
 /// # Errors

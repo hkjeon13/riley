@@ -21,7 +21,8 @@ use riley_cuda::{
     native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, qkv_split_bias,
     qkv_split_bias_rope, ragged_paged_attention, ragged_paged_kv_cache_write, residual_add,
-    row_gather, silu, silu_gated_multiply, validate_replayed_decode_step,
+    row_gather, set_step_capture_dynamic_counts, silu, silu_gated_multiply,
+    validate_replayed_decode_step,
 };
 
 use super::super::batch::LlamaPackedBatchMetadata;
@@ -32,7 +33,7 @@ use super::super::forward::{
     span, span_mut, weight_span,
 };
 use super::super::{ExecutionSite, LlamaExecutionPlan, LlamaOp};
-use super::buffers::{BatchDeviceInput, BatchHostInput, U16_BYTES, U32_BYTES};
+use super::buffers::{BatchDeviceInput, BatchHostInput, STEP_COUNT_WORDS, U16_BYTES, U32_BYTES};
 use super::config::{
     BatchMetadataTransport, ExecutionCompletionImplementation, PreparedLlamaBatchExecutorConfig,
     RaggedAttentionImplementation, ResidualNormImplementation,
@@ -337,6 +338,33 @@ pub(in crate::llama) fn execute_packed(
                 stream,
                 metadata_site,
             )?;
+            if config.decode_step_capture() {
+                // Recorded steps read these two counts on the device.
+                let mut counts = [0_u8; STEP_COUNT_WORDS * U32_BYTES];
+                let active_count = u32::try_from(active).map_err(|_| {
+                    LlamaBatchExecutorError::InvalidConfiguration {
+                        field: "row_positions",
+                        reason: "active row count does not fit u32",
+                    }
+                })?;
+                let output_count = u32::try_from(packed.output_count()).map_err(|_| {
+                    LlamaBatchExecutorError::InvalidConfiguration {
+                        field: "output_token_indices",
+                        reason: "output row count does not fit u32",
+                    }
+                })?;
+                counts[..U32_BYTES].copy_from_slice(&active_count.to_ne_bytes());
+                counts[U32_BYTES..].copy_from_slice(&output_count.to_ne_bytes());
+                device
+                    .row_positions
+                    .upload_from_slice(
+                        (bounds.max_input_tokens() * U32_BYTES) as u64,
+                        &counts,
+                        &mut forward.io_staging,
+                        stream,
+                    )
+                    .map_err(|source| batch_cuda(metadata_site, source))?;
+            }
             if packed.output_count() != 0 {
                 let output_indices = device.output_token_indices.as_mut().ok_or(
                     LlamaBatchExecutorError::InvalidConfiguration {
@@ -377,22 +405,19 @@ pub(in crate::llama) fn execute_packed(
         }
     };
 
-    // A step is recordable when every active row is one decode token whose
-    // output is selected on the device. The active row count fixes every
-    // launch extent of such a step, so it keys the recorded graphs.
-    let active_rows = packed.row_count();
+    // A step is recordable when its outputs are selected on the device. The
+    // recorded kernels read the active and output row counts from the device,
+    // so one graph per (dense shape, output LM-head shape) serves decode-only
+    // and prefill-mixed steps alike.
     let step_capture_eligible = config.decode_step_capture()
         && produce_greedy_tokens
-        && active_rows != 0
-        && active_rows <= dense_rows
-        && packed.prefill_row_count() == 0
-        && packed.decode_row_count() == active_rows
-        && packed.total_input_tokens() == active_rows
-        && packed.output_count() == active_rows;
+        && active != 0
+        && active <= dense_rows;
     let mut execute_iteration_body = |batch: PackedBatchV1<'_>,
                                       token_ids: Option<CudaBufferSpan<'_>>,
                                       output_indices: Option<CudaBufferSpan<'_>>,
                                       in_command_batch: bool,
+                                      step_counts: Option<CudaBufferSpan<'_>>,
                                       stream: &mut dyn CudaExecutionStream|
      -> LlamaBatchExecutorResult<()> {
         let rms_norm_profile = forward.rms_norm_profile();
@@ -406,8 +431,8 @@ pub(in crate::llama) fn execute_packed(
         // A mixed step's output rows are fewer than its dense rows. Their LM
         // head can run on the smallest prepared bucket that holds them (and
         // fits the gathered-logits buffer) instead of on every dense row.
+        let mut output_rows_bucket = 0_usize;
         let output_rows_index = if config.output_row_lm_head()
-            && !step_capture_eligible
             && packed.output_count() != 0
             && packed.output_count() < dense_rows
         {
@@ -420,7 +445,10 @@ pub(in crate::llama) fn execute_packed(
                         && shape.dense_rows <= bounds.max_output_slots()
                 })
                 .min_by_key(|(_, shape)| shape.dense_rows)
-                .map(|(index, _)| index)
+                .map(|(index, shape)| {
+                    output_rows_bucket = shape.dense_rows;
+                    index
+                })
         } else {
             None
         };
@@ -458,6 +486,14 @@ pub(in crate::llama) fn execute_packed(
                 )
             };
         let logits_already_gathered = output_lm_head.is_some();
+        let output_rows_extent = output_rows_index.and_then(|index| {
+            if logits_already_gathered {
+                Some(output_rows_bucket)
+            } else {
+                let _ = index;
+                None
+            }
+        });
         let output_row_lm_head = match (output_lm_head, output_indices, gathered_logits.as_mut()) {
             (Some(gemm), Some(output_indices), Some(gathered_logits)) => Some(OutputRowLmHead {
                 gemm,
@@ -473,21 +509,35 @@ pub(in crate::llama) fn execute_packed(
             }
             (None, _, _) => None,
         };
-        if !(step_capture_eligible && in_command_batch) {
+        if !(step_capture_eligible && in_command_batch && step_counts.is_some()) {
             captured_steps = None;
         }
+        // The recorded launch extents depend on the dense shape (this plan)
+        // and on where the LM head runs: nowhere read (no outputs), on every
+        // dense row, or on one output-row bucket.
+        let (capture_key, output_extent_rows) = if packed.output_count() == 0 {
+            (0_usize, 1_usize)
+        } else {
+            match output_rows_extent {
+                Some(rows) => (rows + 1, rows),
+                None => (1, dense_rows),
+            }
+        };
         let recorded = captured_steps.as_deref().and_then(|steps| {
             steps
                 .iter()
-                .find(|(rows, _)| *rows == active_rows)
+                .find(|(key, _)| *key == capture_key)
                 .map(|(_, graph)| graph)
         });
         let replaying = recorded.is_some();
         let capturing = captured_steps.is_some() && !replaying;
-        let step_capture = match recorded {
-            Some(graph) => StepCaptureMode::Replay(graph, packed.output_token_indices()),
-            None if capturing => StepCaptureMode::Capture,
-            None => StepCaptureMode::Disabled,
+        let step_capture = match (recorded, step_counts) {
+            (Some(graph), _) => StepCaptureMode::Replay(graph, packed.output_token_indices()),
+            (None, Some(counts)) if capturing => StepCaptureMode::Capture {
+                counts,
+                output_rows: output_extent_rows,
+            },
+            _ => StepCaptureMode::Disabled,
         };
         let fixed = execute_fixed_graph(
             plan,
@@ -559,7 +609,7 @@ pub(in crate::llama) fn execute_packed(
         let graph = end_step_capture(stream).map_err(|source| batch_cuda(capture_site, source))?;
         launch_step_graph(stream, &graph).map_err(|source| batch_cuda(capture_site, source))?;
         if let Some(steps) = captured_steps {
-            steps.push((active_rows, graph));
+            steps.push((capture_key, graph));
         }
         Ok(())
     };
@@ -581,6 +631,7 @@ pub(in crate::llama) fn execute_packed(
                 views.token_ids,
                 views.output_token_indices,
                 false,
+                None,
                 stream,
             )
         }
@@ -595,12 +646,26 @@ pub(in crate::llama) fn execute_packed(
                 });
             };
             let views = per_operation_device_views(host_batch, device, &packed, metadata_site)?;
+            let step_counts = if config.decode_step_capture() {
+                Some(
+                    CudaBufferSpan::new(
+                        &device.row_positions,
+                        CudaDType::U32,
+                        (bounds.max_input_tokens() * U32_BYTES) as u64,
+                        (STEP_COUNT_WORDS * U32_BYTES) as u64,
+                    )
+                    .map_err(|source| batch_cuda(metadata_site, source))?,
+                )
+            } else {
+                None
+            };
             execute_iteration_command_batch(stream, dispatch_disposition, |commands| {
                 execute_iteration_body(
                     views.batch,
                     views.token_ids,
                     views.output_token_indices,
                     true,
+                    step_counts,
                     commands,
                 )
             })
@@ -664,6 +729,7 @@ pub(in crate::llama) fn execute_packed(
                                         views.token_ids,
                                         views.output_token_indices,
                                         false,
+                                        None,
                                         commands,
                                     ),
                                 }
@@ -699,8 +765,13 @@ enum StepCaptureMode<'a> {
     /// Run every operation eagerly.
     Disabled,
     /// Run the embedding eagerly, then start recording the remaining
-    /// operations; the caller ends the capture and launches the graph.
-    Capture,
+    /// operations; the caller ends the capture and launches the graph. The
+    /// recorded kernels read the step's row counts from `counts` and launch
+    /// over this plan's dense rows and `output_rows`.
+    Capture {
+        counts: CudaBufferSpan<'a>,
+        output_rows: usize,
+    },
     /// Run the embedding eagerly, then replay the recorded remainder.
     ///
     /// Carries the host mirror of the output row indices, which the replay
@@ -811,8 +882,18 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     let capture_site = ExecutionSite::global(LlamaOp::IterationCompletion);
     match step_capture {
         StepCaptureMode::Disabled => {}
-        StepCaptureMode::Capture => {
+        StepCaptureMode::Capture {
+            counts,
+            output_rows,
+        } => {
             begin_step_capture(stream).map_err(|source| batch_cuda(capture_site, source))?;
+            let output_rows = usize_u64(output_rows, LlamaBatchExecutorResource::HostWorkspace)?;
+            if let Err(source) =
+                set_step_capture_dynamic_counts(stream, counts, dense_rows, output_rows)
+            {
+                let _ = abort_step_capture(stream);
+                return Err(batch_cuda(capture_site, source));
+            }
         }
         StepCaptureMode::Replay(graph, output_indices_host) => {
             validate_replayed_decode_step(

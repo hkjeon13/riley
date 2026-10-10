@@ -298,7 +298,15 @@ struct DeviceBatch {
   uint64_t block_count;
   uint64_t active_row_count;
   uint64_t physical_block_count;
+  // Non-null in a dynamic step capture: `[0]` is the step's active row count.
+  const uint32_t* dynamic_counts;
 };
+
+__device__ __forceinline__ uint64_t active_rows(const DeviceBatch& batch) {
+  return batch.dynamic_counts != nullptr
+             ? static_cast<uint64_t>(batch.dynamic_counts[0])
+             : batch.active_row_count;
+}
 
 bool checked_add(uint64_t left, uint64_t right, uint64_t* output) noexcept {
   if (output == nullptr ||
@@ -816,7 +824,11 @@ DeviceBatch device_batch(const RileyCudaPackedBatchV1& batch,
       reinterpret_cast<const uint16_t*>(resolved.valid_tokens.data),
       reinterpret_cast<const uint32_t*>(resolved.row_sequence_slots.data),
       reinterpret_cast<const uint32_t*>(resolved.row_positions.data),
-      batch.sequence_count,
+      // Like the block count below, the sequence count only bounds indices the
+      // host validates every step; a recorded step must not freeze it.
+      riley_cuda_internal::thread_has_active_step_capture()
+          ? static_cast<uint64_t>(UINT32_MAX)
+          : batch.sequence_count,
       // The block count is only an upper bound for the CSR offsets read on the
       // device. A recorded step must not freeze this step's value, so it uses
       // the widest bound; the host validates the offsets of every step.
@@ -825,6 +837,7 @@ DeviceBatch device_batch(const RileyCudaPackedBatchV1& batch,
           : batch.block_count,
       batch.active_row_count,
       batch.physical_block_count,
+      riley_cuda_internal::thread_step_capture_dynamic().counts,
   };
 }
 
@@ -925,7 +938,13 @@ template <typename T>
 __global__ void row_gather_kernel(const T* input, const uint32_t* row_indices,
                                   T* output, uint64_t input_row_count,
                                   uint64_t column_count,
-                                  uint64_t output_element_count) {
+                                  uint64_t output_element_count,
+                                  const uint32_t* dynamic_counts) {
+  // In a dynamic step capture the output row count is read on the device.
+  if (dynamic_counts != nullptr) {
+    output_element_count =
+        static_cast<uint64_t>(dynamic_counts[1]) * column_count;
+  }
   const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
                          threadIdx.x;
   const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
@@ -980,8 +999,13 @@ constexpr uint32_t kArgmaxThreads = 1024;
 
 __global__ __launch_bounds__(kArgmaxThreads) void bf16_argmax_kernel(
     const __nv_bfloat16* logits, RileyCudaBf16ArgmaxResult* results,
-    uint64_t row_count, uint64_t vocabulary_size, uint64_t candidate_count) {
+    uint64_t row_count, uint64_t vocabulary_size, uint64_t candidate_count,
+    const uint32_t* dynamic_counts) {
   constexpr uint32_t kWarpCount = kArgmaxThreads / kWarpSize;
+  // In a dynamic step capture the output row count is read on the device.
+  if (dynamic_counts != nullptr) {
+    row_count = dynamic_counts[1];
+  }
   __shared__ float warp_values[kWarpCount];
   __shared__ uint32_t warp_tokens[kWarpCount];
   __shared__ uint32_t warp_non_finite[kWarpCount];
@@ -1048,7 +1072,7 @@ __device__ __forceinline__ bool resolve_row_cache_base(
     const DeviceBatch& batch, uint64_t row, uint64_t logical_position,
     uint64_t key_value_head, uint64_t key_value_head_count,
     uint64_t head_size, uint64_t* output) {
-  if (output == nullptr || row >= batch.active_row_count) {
+  if (output == nullptr || row >= active_rows(batch)) {
     return false;
   }
   const uint64_t sequence = batch.row_sequence_slots[row];
@@ -1196,7 +1220,7 @@ __global__ __launch_bounds__(kWarpSize) void ragged_paged_attention_kernel(
   const uint64_t query_head = blockIdx.y;
   const uint64_t output_base =
       (row * query_head_count + query_head) * kAttentionHeadSize;
-  if (row >= batch.active_row_count) {
+  if (row >= active_rows(batch)) {
     const __nv_bfloat16 zero = __float2bfloat16_rn(0.0F);
     output[output_base + lane] = zero;
     output[output_base + lane + kWarpSize] = zero;
@@ -1282,7 +1306,7 @@ void ragged_paged_attention_grouped_heads_kernel(
   }
   const uint64_t output_base =
       (row * query_head_count + query_head) * kAttentionHeadSize;
-  if (row >= batch.active_row_count) {
+  if (row >= active_rows(batch)) {
     const __nv_bfloat16 zero = __float2bfloat16_rn(0.0F);
     output[output_base + lane] = zero;
     output[output_base + lane + kWarpSize] = zero;
@@ -1371,7 +1395,7 @@ void ragged_paged_attention_gqa_shared_kv_kernel(
   const uint64_t query_head = key_value_head * warps_per_block + warp;
   const uint64_t output_base =
       (row * query_head_count + query_head) * kAttentionHeadSize;
-  if (row >= batch.active_row_count) {
+  if (row >= active_rows(batch)) {
     const __nv_bfloat16 zero = __float2bfloat16_rn(0.0F);
     output[output_base + lane] = zero;
     output[output_base + lane + kWarpSize] = zero;
@@ -1523,7 +1547,7 @@ void fixed37_ragged_paged_attention_two_pass_kernel(
   const uint64_t query_head = blockIdx.y;
   const uint64_t output_base =
       (row * query_head_count + query_head) * kAttentionHeadSize;
-  if (row >= batch.active_row_count) {
+  if (row >= active_rows(batch)) {
     const __nv_bfloat16 zero = __float2bfloat16_rn(0.0F);
     for (uint64_t depth = threadIdx.x; depth < kAttentionHeadSize;
          depth += blockDim.x) {
@@ -2017,20 +2041,27 @@ extern "C" RileyCudaStatus riley_cuda_row_gather_execute(
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
+    // A dynamic step capture launches over the output row extent; the kernel
+    // reads the step's output row count on the device.
+    const auto& dynamic = riley_cuda_internal::thread_step_capture_dynamic();
+    const uint64_t launch_elements =
+        dynamic.counts != nullptr ? dynamic.output_rows * params->column_count
+                                  : output_elements;
     if (params->input.dtype == RILEY_CUDA_DTYPE_F32) {
       row_gather_kernel<float>
-          <<<block_count(output_elements), kThreads, 0, stream->stream>>>(
+          <<<block_count(launch_elements), kThreads, 0, stream->stream>>>(
               reinterpret_cast<const float*>(input.data),
               reinterpret_cast<const uint32_t*>(row_indices.data),
               reinterpret_cast<float*>(output.data), params->input_row_count,
-              params->column_count, output_elements);
+              params->column_count, output_elements, dynamic.counts);
     } else {
       row_gather_kernel<__nv_bfloat16>
-          <<<block_count(output_elements), kThreads, 0, stream->stream>>>(
+          <<<block_count(launch_elements), kThreads, 0, stream->stream>>>(
               reinterpret_cast<const __nv_bfloat16*>(input.data),
               reinterpret_cast<const uint32_t*>(row_indices.data),
               reinterpret_cast<__nv_bfloat16*>(output.data),
-              params->input_row_count, params->column_count, output_elements);
+              params->input_row_count, params->column_count, output_elements,
+              dynamic.counts);
     }
     status = launch_status(error, kOperation);
   }
@@ -2144,15 +2175,18 @@ extern "C" RileyCudaStatus riley_cuda_bf16_argmax_execute(
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
+    const auto& dynamic = riley_cuda_internal::thread_step_capture_dynamic();
+    const uint64_t launch_rows =
+        dynamic.counts != nullptr ? dynamic.output_rows : params->row_count;
     const uint32_t blocks = static_cast<uint32_t>(
-        params->row_count < kMaximumBlocks ? params->row_count
-                                           : kMaximumBlocks);
+        launch_rows < kMaximumBlocks ? launch_rows : kMaximumBlocks);
     bf16_argmax_kernel<<<blocks, kArgmaxThreads, 0, stream->stream>>>(
         reinterpret_cast<const __nv_bfloat16*>(logits.data),
         reinterpret_cast<RileyCudaBf16ArgmaxResult*>(results.data),
         params->row_count, params->vocabulary_size,
         params->reserved[0] != 0 ? params->reserved[0]
-                                 : params->vocabulary_size);
+                                 : params->vocabulary_size,
+        dynamic.counts);
     status = launch_status(error, kOperation);
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
@@ -2297,14 +2331,22 @@ riley_cuda_ragged_paged_kv_cache_write_execute(
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
+    // A dynamic step capture covers every dense row; rows at or beyond the
+    // device-side active count resolve to no cache slot and are skipped.
+    const auto& dynamic = riley_cuda_internal::thread_step_capture_dynamic();
+    const uint64_t launch_elements =
+        dynamic.counts != nullptr
+            ? dynamic.dense_rows * params->key_value_head_count *
+                  params->head_size
+            : source_elements;
     ragged_paged_kv_cache_write_kernel
-        <<<block_count(source_elements), kThreads, 0, stream->stream>>>(
+        <<<block_count(launch_elements), kThreads, 0, stream->stream>>>(
             reinterpret_cast<const __nv_bfloat16*>(key_source.data),
             reinterpret_cast<const __nv_bfloat16*>(value_source.data),
             reinterpret_cast<__nv_bfloat16*>(key_pool.data),
             reinterpret_cast<__nv_bfloat16*>(value_pool.data),
             device_batch(params->batch, batch), params->key_value_head_count,
-            params->head_size, source_elements);
+            params->head_size, launch_elements);
     status = launch_status(error, kOperation);
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
@@ -2765,7 +2807,7 @@ __device__ __forceinline__ bool resolve_ragged_partial_block(
     uint64_t key_value_head, uint64_t* block_head_base,
     uint64_t* token_count) {
   if (block_head_base == nullptr || token_count == nullptr ||
-      row >= batch.active_row_count) {
+      row >= active_rows(batch)) {
     return false;
   }
   const uint64_t sequence = batch.row_sequence_slots[row];
@@ -2815,7 +2857,7 @@ native_bf16_ragged_paged_split_gqa_d128_partial_state_kernel(
   const uint64_t logical_block = blockIdx.x;
   const uint64_t query_head = blockIdx.y;
   const uint64_t row = blockIdx.z;
-  if (row >= batch.active_row_count ||
+  if (row >= active_rows(batch) ||
       query_head >= kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount) {
     return;
   }
@@ -2942,7 +2984,7 @@ void native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_kernel(
   const uint64_t key_value_head = blockIdx.y;
   const uint64_t row = blockIdx.z;
   // Every exit before the barrier below depends only on CTA-uniform values.
-  if (row >= batch.active_row_count ||
+  if (row >= active_rows(batch) ||
       key_value_head >= kNativeBf16RaggedPagedSplitGqaD128KeyValueHeadCount) {
     return;
   }
@@ -3358,8 +3400,12 @@ __global__ __launch_bounds__(kNativeBf16RaggedD128GlobalMergeThreads) void
 native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
     const float* partial_states, const uint32_t* row_positions,
     __nv_bfloat16* output, uint64_t active_row_count,
-    uint64_t partial_state_capacity, uint64_t launch_partial_state_count) {
+    uint64_t partial_state_capacity, uint64_t launch_partial_state_count,
+    const uint32_t* dynamic_counts) {
   __shared__ float page_weights[kNativeBf16RaggedD128GlobalMergeMaximumPages];
+  if (dynamic_counts != nullptr) {
+    active_row_count = dynamic_counts[0];
+  }
   __shared__ float reduction[kNativeBf16RaggedD128GlobalMergeThreads];
   const uint64_t query_head = blockIdx.x;
   const uint64_t row = blockIdx.y;
@@ -3777,6 +3823,21 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
       riley_cuda_internal::thread_has_active_step_capture()
           ? params->partial_state_capacity
           : params->launch_partial_state_count;
+  // A dynamic step capture launches the producer over every dense row; rows
+  // at or beyond the device-side active count exit immediately. Only the
+  // shared-KV producer with the global-max merge supports it.
+  const auto& dynamic = riley_cuda_internal::thread_step_capture_dynamic();
+  if (dynamic.counts != nullptr &&
+      (params->reserved[0] != 1 || params->reserved[1] != 1 ||
+       dynamic.dense_rows > params->output_row_count ||
+       dynamic.dense_rows > kMaximumGridYOrZ)) {
+    return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "a dynamic step capture requires the shared-KV producer, the global-max merge, and dense rows within the output rows");
+  }
+  const uint64_t launch_rows = dynamic.counts != nullptr
+                                   ? dynamic.dense_rows
+                                   : params->batch.active_row_count;
   bool launch_attempted = false;
   CurrentContext scope(stream->owner);
   status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
@@ -3788,14 +3849,14 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
     const dim3 producer_grid(
         static_cast<uint32_t>(launch_extent),
         static_cast<uint32_t>(params->query_head_count),
-        static_cast<uint32_t>(params->batch.active_row_count));
+        static_cast<uint32_t>(launch_rows));
     // reserved[0] selects the producer launch geometry only; both producers
     // write bit-identical partial states.
     if (params->reserved[0] == 1) {
       const dim3 shared_kv_grid(
           static_cast<uint32_t>(launch_extent),
           static_cast<uint32_t>(params->key_value_head_count),
-          static_cast<uint32_t>(params->batch.active_row_count));
+          static_cast<uint32_t>(launch_rows));
       native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_kernel<<<
           shared_kv_grid, kNativeBf16RaggedPagedSplitGqaD128SharedKvThreads, 0,
           stream->stream>>>(
@@ -3829,7 +3890,7 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
         reinterpret_cast<const uint32_t*>(batch.row_positions.data),
         reinterpret_cast<__nv_bfloat16*>(output.data),
         params->batch.active_row_count, params->partial_state_capacity,
-        launch_extent);
+        launch_extent, dynamic.counts);
     status = launch_status(error, kOperation);
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS && params->reserved[1] == 0) {
@@ -3907,7 +3968,10 @@ __global__ void qkv_split_bias_rope_kernel(
     __nv_bfloat16* query, __nv_bfloat16* key, __nv_bfloat16* value,
     uint64_t query_width, uint64_t key_value_width, uint64_t head_size,
     uint64_t table_position_count, uint64_t rotated_row_count,
-    uint64_t work_item_count) {
+    uint64_t work_item_count, const uint32_t* dynamic_counts) {
+  if (dynamic_counts != nullptr) {
+    rotated_row_count = dynamic_counts[0];
+  }
   const uint64_t half = head_size / 2;
   const uint64_t merged_width = query_width + 2 * key_value_width;
   // Work columns per row: one per rotary pair of Q and K, one per V element.
@@ -3972,6 +4036,45 @@ __global__ void qkv_split_bias_rope_kernel(
 }
 
 }  // namespace
+
+extern "C" RileyCudaStatus
+riley_cuda_stream_command_batch_step_capture_dynamic_counts(
+    RileyCudaStream* stream, const RileyCudaBufferSpan* counts,
+    uint64_t dense_rows, uint64_t output_rows,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "set step capture dynamic counts";
+  clear_error(error);
+  if (stream == nullptr || counts == nullptr || dense_rows == 0 ||
+      output_rows == 0 || dense_rows > UINT32_MAX ||
+      output_rows > UINT32_MAX) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "stream or counts is null, or a row extent is zero or too large");
+  }
+  if (!riley_cuda_internal::thread_has_active_step_capture()) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "this thread has no active step capture");
+  }
+  ResolvedSpan resolved{};
+  const RileyCudaStatus status =
+      resolve_span(*counts, RILEY_CUDA_DTYPE_U32, 2 * sizeof(uint32_t),
+                   &resolved, error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  const ResolvedSpan spans[] = {resolved};
+  const RileyCudaStatus context_status =
+      validate_contexts(stream, spans, 1, error, kOperation);
+  if (context_status != RILEY_CUDA_STATUS_SUCCESS) {
+    return context_status;
+  }
+  auto& dynamic = riley_cuda_internal::thread_step_capture_dynamic();
+  dynamic.counts = reinterpret_cast<const uint32_t*>(resolved.data);
+  dynamic.dense_rows = dense_rows;
+  dynamic.output_rows = output_rows;
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
 
 extern "C" RileyCudaStatus riley_cuda_qkv_split_bias_execute(
     const RileyCudaQkvSplitBiasParams* params, RileyCudaStream* stream,
@@ -4181,7 +4284,8 @@ extern "C" RileyCudaStatus riley_cuda_qkv_split_bias_execute(
         reinterpret_cast<__nv_bfloat16*>(key.data),
         reinterpret_cast<__nv_bfloat16*>(value.data), params->query_width,
         params->key_value_width, params->rope_head_size,
-        params->rope_table_position_count, params->reserved[1], work_items);
+        params->rope_table_position_count, params->reserved[1], work_items,
+        riley_cuda_internal::thread_step_capture_dynamic().counts);
     status = launch_status(error, kOperation);
   } else if (status == RILEY_CUDA_STATUS_SUCCESS && merged_elements != 0) {
     launch_attempted = true;
@@ -4288,6 +4392,6 @@ cudaError_t riley_cuda_internal::enqueue_decode_kv_attention(cudaStream_t stream
 }
 
 cudaError_t riley_cuda_internal::enqueue_decode_argmax(cudaStream_t stream,const void* logits,void* output,uint64_t vocab) noexcept {
-  bf16_argmax_kernel<<<1,kArgmaxThreads,0,stream>>>(static_cast<const __nv_bfloat16*>(logits),static_cast<RileyCudaBf16ArgmaxResult*>(output),1,vocab,vocab);
+  bf16_argmax_kernel<<<1,kArgmaxThreads,0,stream>>>(static_cast<const __nv_bfloat16*>(logits),static_cast<RileyCudaBf16ArgmaxResult*>(output),1,vocab,vocab,nullptr);
   return cudaGetLastError();
 }

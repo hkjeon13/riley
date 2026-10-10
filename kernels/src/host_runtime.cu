@@ -1211,6 +1211,7 @@ extern "C" RileyCudaStatus riley_cuda_stream_command_batch_end(
   if (status == RILEY_CUDA_STATUS_SUCCESS && thread_has_active_step_capture()) {
     // An unfinished step capture cannot be synchronized; discard it.
     thread_step_capture_active() = false;
+    riley_cuda_internal::thread_step_capture_dynamic() = {};
     cudaGraph_t abandoned = nullptr;
     (void)cudaStreamEndCapture(stream->stream, &abandoned);
     if (abandoned != nullptr) {
@@ -1329,6 +1330,7 @@ extern "C" RileyCudaStatus riley_cuda_stream_command_batch_step_capture_begin(
         error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
     if (status == RILEY_CUDA_STATUS_SUCCESS) {
       thread_step_capture_active() = true;
+      riley_cuda_internal::thread_step_capture_dynamic() = {};
     }
   }
   return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
@@ -1362,6 +1364,7 @@ extern "C" RileyCudaStatus riley_cuda_stream_command_batch_step_capture_end(
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     // The capture ends here whatever the result is.
     thread_step_capture_active() = false;
+    riley_cuda_internal::thread_step_capture_dynamic() = {};
     status = runtime_error(cudaStreamEndCapture(stream->stream, &graph), error,
                            RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
     if (status == RILEY_CUDA_STATUS_SUCCESS && graph == nullptr) {
@@ -1410,6 +1413,7 @@ extern "C" RileyCudaStatus riley_cuda_stream_command_batch_step_capture_abort(
   status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     thread_step_capture_active() = false;
+    riley_cuda_internal::thread_step_capture_dynamic() = {};
     cudaGraph_t graph = nullptr;
     status = runtime_error(cudaStreamEndCapture(stream->stream, &graph), error,
                            RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);

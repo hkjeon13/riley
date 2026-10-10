@@ -1683,6 +1683,22 @@ inline bool thread_has_active_step_capture() noexcept {
   return thread_step_capture_active();
 }
 
+// A step capture may be "dynamic": the recorded kernels then read the step's
+// active row count (`counts[0]`) and output row count (`counts[1]`) from a
+// device buffer instead of from launch arguments, and their grids cover the
+// dense row extent (`dense_rows`) and the output row extent (`output_rows`).
+// One recorded graph then serves every step of the same dense shape.
+struct StepCaptureDynamicCounts {
+  const uint32_t* counts = nullptr;
+  uint64_t dense_rows = 0;
+  uint64_t output_rows = 0;
+};
+
+inline StepCaptureDynamicCounts& thread_step_capture_dynamic() noexcept {
+  static thread_local StepCaptureDynamicCounts dynamic;
+  return dynamic;
+}
+
 inline bool try_publish_thread_graph_capture(
     RileyCudaGraphCapture* capture) noexcept {
   if (capture == nullptr || thread_has_active_graph_capture()) {

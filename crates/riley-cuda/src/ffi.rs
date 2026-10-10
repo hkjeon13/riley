@@ -1562,6 +1562,13 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_stream_command_batch_step_capture_dynamic_counts(
+        stream: *mut RawStream,
+        counts: *const RawBufferSpan,
+        dense_rows: u64,
+        output_rows: u64,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_stream_command_batch_step_capture_end(
         stream: *mut RawStream,
         out_graph: *mut *mut RawStepGraph,
@@ -3116,6 +3123,28 @@ impl StreamHandle {
             riley_cuda_stream_command_batch_step_capture_begin(self.as_ptr(), &mut error)
         };
         status_result(status, "begin command-batch step capture", &error)
+    }
+
+    pub(super) fn step_capture_dynamic_counts(
+        &mut self,
+        counts: RawBufferSpan,
+        dense_rows: u64,
+        output_rows: u64,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: self uniquely owns the live stream handle and the borrowed
+        // span outlives this synchronous call; the native boundary validates
+        // the active capture and the span before recording its address.
+        let status = unsafe {
+            riley_cuda_stream_command_batch_step_capture_dynamic_counts(
+                self.as_ptr(),
+                &counts,
+                dense_rows,
+                output_rows,
+                &mut error,
+            )
+        };
+        status_result(status, "set step capture dynamic counts", &error)
     }
 
     pub(super) fn step_capture_end(&mut self) -> CudaResult<StepGraphHandle> {

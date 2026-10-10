@@ -167,6 +167,7 @@ pub use runtime::{
     CudaCommandBatch, CudaCommandStream, CudaContext, CudaDevice, CudaEvent, CudaExecutionStream,
     CudaKernel, CudaPendingFill, CudaRuntime, CudaStepGraph, CudaStream, DeviceProperties,
     abort_step_capture, begin_step_capture, end_step_capture, launch_step_graph,
+    set_step_capture_dynamic_counts,
 };
 
 /// The crate's responsibility in the production dependency graph.

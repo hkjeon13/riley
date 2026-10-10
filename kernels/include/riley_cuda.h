@@ -1413,6 +1413,15 @@ typedef struct RileyCudaStepGraph RileyCudaStepGraph;
 RileyCudaStatus riley_cuda_stream_command_batch_step_capture_begin(
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Makes the active step capture dynamic: recorded kernels read the step's
+// active row count (counts[0]) and output row count (counts[1]) from the U32
+// device span instead of from launch arguments, and their grids cover
+// `dense_rows` and `output_rows`. The span must stay valid and hold the
+// current step's counts whenever the recorded graph is launched.
+RileyCudaStatus riley_cuda_stream_command_batch_step_capture_dynamic_counts(
+    RileyCudaStream* stream, const RileyCudaBufferSpan* counts,
+    uint64_t dense_rows, uint64_t output_rows, RileyCudaErrorInfo* error);
 RileyCudaStatus riley_cuda_stream_command_batch_step_capture_end(
     RileyCudaStream* stream,
     RileyCudaStepGraph** out_graph,

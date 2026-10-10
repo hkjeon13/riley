@@ -18,6 +18,9 @@ use super::metadata::sequence_block_offset_count;
 pub(crate) const U32_BYTES: usize = 4;
 pub(crate) const U16_BYTES: usize = 2;
 
+/// Trailing U32 words of the device row-position buffer: active rows, output rows.
+pub(crate) const STEP_COUNT_WORDS: usize = 2;
+
 pub(crate) struct PerOperationDeviceMetadata {
     pub(crate) sequence_block_offsets: CudaDeviceBuffer,
     pub(crate) physical_block_ids: CudaDeviceBuffer,
@@ -216,8 +219,10 @@ fn allocate_per_operation_device_metadata(
             U32_BYTES,
             LlamaBatchExecutorResource::RowSequenceSlots,
         )?,
+        // Two trailing U32 words hold the step's active row count and output
+        // row count for recorded steps that read them on the device.
         row_positions: allocate(
-            bounds.max_input_tokens(),
+            bounds.max_input_tokens() + STEP_COUNT_WORDS,
             U32_BYTES,
             LlamaBatchExecutorResource::RowPositions,
         )?,
