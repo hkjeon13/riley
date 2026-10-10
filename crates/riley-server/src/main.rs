@@ -73,6 +73,8 @@ serve options:
   --gemm-reduction-policy ID     canonical or first-heuristic-split-k-v1 (default: canonical)
   --decode-attention-merge ID    ordered-v1 or global-max-v1 page merge for the native D128
                                  backend (default: ordered-v1)
+  --mlp-activation ID            separate-v1 or fused-silu-multiply-v1: one kernel for SiLU and
+                                 the gate multiply, bit-identical (default: separate-v1)
   --decode-step-graph MODE       disabled or capture-v1: record pure-decode steps of the native
                                  D128 route as CUDA graphs and replay them (default: disabled)
   --numerics-profile ID          existing or hf-eager-qwen-p2048-o128-probe-v1 (default: existing);
@@ -122,6 +124,7 @@ struct ServeOptions {
     logit_observation_dir: Option<PathBuf>,
     first_heuristic_gemm_reductions: bool,
     d128_global_merge: bool,
+    fused_silu_multiply: bool,
     decode_step_capture: bool,
     vllm_smol_p128_graph: bool,
     max_weight_bytes: u64,
@@ -346,6 +349,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut numerics_profile = None;
     let mut gemm_reduction_policy = None;
     let mut decode_attention_merge = None;
+    let mut mlp_activation = None;
     let mut decode_step_graph = None;
     let mut logit_observation_dir = None;
     let mut max_weight_bytes = None;
@@ -538,6 +542,25 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     }
                 },
                 "--decode-step-graph",
+            )?,
+            "--mlp-activation" => set_once(
+                &mut mlp_activation,
+                match parse_utf8(
+                    next_value(&mut arguments, "--mlp-activation")?,
+                    "--mlp-activation",
+                )?
+                .as_str()
+                {
+                    "separate-v1" => false,
+                    "fused-silu-multiply-v1" => true,
+                    _ => {
+                        return Err(
+                            "--mlp-activation requires separate-v1 or fused-silu-multiply-v1"
+                                .to_owned(),
+                        );
+                    }
+                },
+                "--mlp-activation",
             )?,
             "--decode-attention-merge" => set_once(
                 &mut decode_attention_merge,
@@ -881,6 +904,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         logit_observation_dir,
         first_heuristic_gemm_reductions: gemm_reduction_policy.unwrap_or(false),
         d128_global_merge,
+        fused_silu_multiply: mlp_activation.unwrap_or(false),
         decode_step_capture,
         vllm_smol_p128_graph,
         max_weight_bytes,
@@ -1573,6 +1597,11 @@ fn run_serve(
     };
     let executor = if options.vllm_smol_p128_graph {
         executor.with_vllm_smol_p128_graph()
+    } else {
+        executor
+    };
+    let executor = if options.fused_silu_multiply {
+        executor.with_fused_silu_multiply()
     } else {
         executor
     };
@@ -4592,6 +4621,7 @@ mod tests {
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
                 d128_global_merge: false,
+                fused_silu_multiply: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
@@ -4986,6 +5016,7 @@ mod tests {
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
                 d128_global_merge: false,
+                fused_silu_multiply: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: 4096,
@@ -5147,6 +5178,7 @@ mod tests {
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
                 d128_global_merge: false,
+                fused_silu_multiply: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
@@ -5549,6 +5581,7 @@ mod tests {
                 logit_observation_dir: None,
                 first_heuristic_gemm_reductions: false,
                 d128_global_merge: false,
+                fused_silu_multiply: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,

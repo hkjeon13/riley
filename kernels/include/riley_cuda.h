@@ -445,6 +445,9 @@ typedef struct RileyCudaSiluParams {
 
 // activated_gate is already SiLU-activated. This operation is deliberately a
 // plain multiply; SiLU+multiply fusion is outside ABI v1's PR 06 path.
+// reserved[0] == 1 (BF16 only) instead treats activated_gate as the raw gate
+// projection and applies SiLU in the same kernel, bit-identical to the
+// separate SiLU followed by this multiply.
 typedef struct RileyCudaGatedMultiplyParams {
   uint32_t struct_size;
   uint32_t reserved0;

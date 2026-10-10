@@ -7337,6 +7337,7 @@ pub(super) fn gated_multiply_execute(
     up: RawBufferSpan,
     output: RawBufferSpan,
     element_count: u64,
+    raw_gate: bool,
     stream: &mut StreamHandle,
 ) -> CudaResult<()> {
     let params = RawGatedMultiplyParams {
@@ -7346,7 +7347,7 @@ pub(super) fn gated_multiply_execute(
         up,
         output,
         element_count,
-        reserved: [0; 5],
+        reserved: [u64::from(raw_gate), 0, 0, 0, 0],
     };
     primitive_status("execute CUDA gated multiply", stream, |stream, error| {
         // SAFETY: params and the borrowed opaque resources outlive the

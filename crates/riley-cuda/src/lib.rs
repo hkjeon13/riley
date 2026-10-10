@@ -161,6 +161,7 @@ pub use primitives::{
     fixed37_rms_norm, gated_multiply, hugging_face_qwen_p2051_rms_norm,
     hugging_face_smollm2_residual_rms_norm, hugging_face_smollm2_rms_norm, qkv_split_bias,
     residual_add, residual_rms_norm, rms_norm, rope, rope_table, row_bias_add_in_place, silu,
+    silu_gated_multiply,
 };
 pub use runtime::{
     CudaCommandBatch, CudaCommandStream, CudaContext, CudaDevice, CudaEvent, CudaExecutionStream,

@@ -21,7 +21,7 @@ use riley_cuda::{
     native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, qkv_split_bias,
     ragged_paged_attention, ragged_paged_kv_cache_write, residual_add, row_gather, silu,
-    validate_replayed_decode_step,
+    silu_gated_multiply, validate_replayed_decode_step,
 };
 
 use super::super::batch::LlamaPackedBatchMetadata;
@@ -433,6 +433,7 @@ pub(in crate::llama) fn execute_packed(
             config.ragged_attention_reduction_profile(),
             config.ragged_attention_implementation(),
             config.d128_global_merge(),
+            config.fused_silu_multiply(),
             native_d128_two_stage_workspace.as_deref_mut(),
             layout,
             key_cache,
@@ -647,6 +648,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     attention_reduction_profile: AttentionReductionProfile,
     attention_implementation: RaggedAttentionImplementation,
     d128_global_merge: bool,
+    fused_silu_multiply: bool,
     mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
     layout: KvLayout,
     key_cache: &mut CudaDeviceBuffer,
@@ -1277,7 +1279,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             up_site,
         )?;
         let silu_site = ExecutionSite::layer(layer_index, LlamaOp::Silu);
-        {
+        if !fused_silu_multiply {
             let mut params = SiluParams {
                 input: span(
                     &buffers.gate_raw,
@@ -1299,7 +1301,11 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         {
             let mut params = GatedMultiplyParams {
                 activated_gate: span(
-                    &buffers.gate_activated,
+                    if fused_silu_multiply {
+                        &buffers.gate_raw
+                    } else {
+                        &buffers.gate_activated
+                    },
                     CudaDType::BF16,
                     plan.workspace_spec().intermediate_buffer_bytes(),
                     gated_site,
@@ -1318,7 +1324,13 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 )?,
                 element_count: intermediate_elements,
             };
-            gated_multiply(&mut params, stream).map_err(|source| batch_cuda(gated_site, source))?;
+            if fused_silu_multiply {
+                silu_gated_multiply(&mut params, stream)
+                    .map_err(|source| batch_cuda(gated_site, source))?;
+            } else {
+                gated_multiply(&mut params, stream)
+                    .map_err(|source| batch_cuda(gated_site, source))?;
+            }
         }
         let down_site = ExecutionSite::layer(layer_index, LlamaOp::DownProjection);
         execute_gemm(

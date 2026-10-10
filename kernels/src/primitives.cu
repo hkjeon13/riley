@@ -856,6 +856,25 @@ __global__ void gated_multiply_kernel(const T* activated_gate, const T* up,
   }
 }
 
+// Raw-gate variant of the gated multiply: applies SiLU, rounds the activation
+// to BF16 exactly as silu_kernel stores it, then multiplies by the up branch
+// exactly as gated_multiply_kernel does. Bit-identical to running both.
+__global__ void silu_gated_multiply_bf16_kernel(const __nv_bfloat16* raw_gate,
+                                                const __nv_bfloat16* up,
+                                                __nv_bfloat16* output,
+                                                uint64_t element_count) {
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         threadIdx.x;
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t index = first; index < element_count; index += stride) {
+    const float value = __bfloat162float(raw_gate[index]);
+    const float activated = __bfloat162float(
+        __float2bfloat16_rn(value / (1.0F + expf(-value))));
+    output[index] =
+        __float2bfloat16_rn(activated * __bfloat162float(up[index]));
+  }
+}
+
 __global__ void rope_table_sin_kernel(const float* angles, float* sin,
                                       uint64_t element_count) {
   const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
@@ -2051,10 +2070,15 @@ extern "C" RileyCudaStatus riley_cuda_gated_multiply_execute(
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "params is null or has an incompatible struct_size");
   }
-  if (params->reserved0 != 0 || !reserved_is_zero(params->reserved, 5)) {
+  // reserved[0] == 1 selects the raw-gate variant (BF16 only): the gate span
+  // holds the unactivated projection and SiLU is applied in the same kernel.
+  const bool raw_gate = params->reserved[0] == 1;
+  if (params->reserved0 != 0 || params->reserved[0] > 1 ||
+      !reserved_is_zero(params->reserved + 1, 4) ||
+      (raw_gate && params->activated_gate.dtype != RILEY_CUDA_DTYPE_BF16)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
-                            "params reserved fields must be zero");
+                            "params reserved fields must be zero, or reserved[0] 1 with BF16 spans");
   }
   if (!arithmetic_dtype(params->activated_gate.dtype) ||
       params->up.dtype != params->activated_gate.dtype ||
@@ -2123,7 +2147,14 @@ extern "C" RileyCudaStatus riley_cuda_gated_multiply_execute(
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
-    if (params->activated_gate.dtype == RILEY_CUDA_DTYPE_F32) {
+    if (raw_gate) {
+      silu_gated_multiply_bf16_kernel
+          <<<block_count(params->element_count), kThreads, 0, stream->stream>>>(
+              reinterpret_cast<const __nv_bfloat16*>(activated_gate.data),
+              reinterpret_cast<const __nv_bfloat16*>(up.data),
+              reinterpret_cast<__nv_bfloat16*>(output.data),
+              params->element_count);
+    } else if (params->activated_gate.dtype == RILEY_CUDA_DTYPE_F32) {
       launch_gated_multiply<float>(activated_gate, up, output,
                                    params->element_count, stream->stream);
     } else {

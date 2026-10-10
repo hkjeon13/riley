@@ -1411,6 +1411,27 @@ pub fn gated_multiply<S: CudaExecutionStream + ?Sized>(
     params: &mut GatedMultiplyParams<'_>,
     stream: &mut S,
 ) -> CudaResult<()> {
+    gated_multiply_impl(params, stream, false)
+}
+
+/// Executes `silu(raw_gate) * up` in one BF16 kernel, bit-identical to [`silu`]
+/// followed by [`gated_multiply`]; `activated_gate` carries the raw gate.
+///
+/// # Errors
+///
+/// Returns a descriptor, dtype, range, launch, or synchronization error.
+pub fn silu_gated_multiply<S: CudaExecutionStream + ?Sized>(
+    params: &mut GatedMultiplyParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    gated_multiply_impl(params, stream, true)
+}
+
+fn gated_multiply_impl<S: CudaExecutionStream + ?Sized>(
+    params: &mut GatedMultiplyParams<'_>,
+    stream: &mut S,
+    raw_gate: bool,
+) -> CudaResult<()> {
     const OPERATION: &str = "gated_multiply";
     let stream = execution_stream_mut(stream);
     validate_matching_elementwise(
@@ -1436,12 +1457,13 @@ pub fn gated_multiply<S: CudaExecutionStream + ?Sized>(
             params.up.raw(),
             params.output.raw(),
             params.element_count,
+            raw_gate,
             &mut stream.native,
         )
     }
     #[cfg(not(feature = "cuda"))]
     {
-        let _ = params;
+        let _ = (params, raw_gate);
         Err(CudaError::unavailable(OPERATION))
     }
 }

@@ -151,6 +151,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     shape_buckets: LlamaBatchShapeBuckets,
     greedy_candidate_count: Option<usize>,
     d128_global_merge: bool,
+    fused_silu_multiply: bool,
     serving_sequence_token_bound: Option<usize>,
     decode_step_capture: bool,
 }
@@ -174,6 +175,7 @@ impl PreparedLlamaBatchExecutorConfig {
             shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
             greedy_candidate_count: None,
             d128_global_merge: false,
+            fused_silu_multiply: false,
             serving_sequence_token_bound: None,
             decode_step_capture: false,
         }
@@ -226,6 +228,20 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn d128_global_merge(self) -> bool {
         self.d128_global_merge
+    }
+
+    /// Runs the MLP activation and gate multiply as one BF16 kernel. The
+    /// result is bit-identical to the separate SiLU and multiply kernels.
+    #[must_use]
+    pub const fn with_fused_silu_multiply(mut self) -> Self {
+        self.fused_silu_multiply = true;
+        self
+    }
+
+    /// Whether SiLU and the gate multiply run as one kernel.
+    #[must_use]
+    pub const fn fused_silu_multiply(self) -> bool {
+        self.fused_silu_multiply
     }
 
     /// Restricts device-side greedy selection to token IDs below `count`, for
@@ -575,6 +591,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         shape_buckets: config.shape_buckets,
         greedy_candidate_count: config.greedy_candidate_count,
         d128_global_merge: config.d128_global_merge,
+        fused_silu_multiply: config.fused_silu_multiply,
         serving_sequence_token_bound: config.serving_sequence_token_bound,
         decode_step_capture: config.decode_step_capture,
     }
