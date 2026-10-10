@@ -435,6 +435,7 @@ pub(in crate::llama) fn execute_packed(
             config.d128_global_merge(),
             config.fused_silu_multiply(),
             config.fused_qkv_rope(),
+            config.fused_mlp_residual_norm(),
             native_d128_two_stage_workspace.as_deref_mut(),
             layout,
             key_cache,
@@ -651,6 +652,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     d128_global_merge: bool,
     fused_silu_multiply: bool,
     fused_qkv_rope: bool,
+    fused_mlp_residual_norm: bool,
     mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
     layout: KvLayout,
     key_cache: &mut CudaDeviceBuffer,
@@ -760,6 +762,9 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         }
     }
 
+    let norm_after_mlp = fused_mlp_residual_norm
+        && residual_norm_implementation == ResidualNormImplementation::Fused
+        && !plan.layers().is_empty();
     for (ordinal, layer) in plan.layers().iter().enumerate() {
         let (hidden_current, hidden_projection) = layer_hidden_roles(
             ordinal,
@@ -769,7 +774,9 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         let layer_index = layer.index();
         let input_norm_site = ExecutionSite::layer(layer_index, LlamaOp::InputNorm);
         let input_norm_weight = weight_span(weights, layer.input_norm_weight(), input_norm_site)?;
-        {
+        // With the fused MLP residual norm the previous layer already wrote
+        // this layer's normalized input.
+        if !(norm_after_mlp && ordinal > 0) {
             let mut params = RmsNormParams {
                 input: span(
                     hidden_current,
@@ -1370,7 +1377,54 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             down_site,
         )?;
         let mlp_residual_site = ExecutionSite::layer(layer_index, LlamaOp::MlpResidual);
-        {
+        if norm_after_mlp {
+            // The norm that follows this residual: the next layer's input norm,
+            // or the final norm after the last layer.
+            let (next_weight, next_epsilon, next_site) = match plan.layers().get(ordinal + 1) {
+                Some(next) => (
+                    next.input_norm_weight(),
+                    next.input_norm_epsilon(),
+                    ExecutionSite::layer(next.index(), LlamaOp::InputNorm),
+                ),
+                None => (
+                    plan.final_norm_weight(),
+                    plan.final_norm_epsilon(),
+                    ExecutionSite::global(LlamaOp::FinalNorm),
+                ),
+            };
+            let mut fused = ResidualRmsNormParams {
+                left: span(
+                    &buffers.hidden_rotary,
+                    CudaDType::BF16,
+                    plan.workspace_spec().hidden_buffer_bytes(),
+                    mlp_residual_site,
+                )?,
+                right: span(
+                    hidden_current,
+                    CudaDType::BF16,
+                    plan.workspace_spec().hidden_buffer_bytes(),
+                    mlp_residual_site,
+                )?,
+                weight: weight_span(weights, next_weight, next_site)?,
+                residual_output: span_mut(
+                    hidden_projection,
+                    CudaDType::BF16,
+                    plan.workspace_spec().hidden_buffer_bytes(),
+                    mlp_residual_site,
+                )?,
+                normalized_output: span_mut(
+                    &mut buffers.hidden_norm,
+                    CudaDType::BF16,
+                    plan.workspace_spec().hidden_buffer_bytes(),
+                    next_site,
+                )?,
+                row_count: dense_rows,
+                hidden_size: hidden,
+                epsilon: next_epsilon,
+            };
+            execute_profile_residual_rms_norm(rms_norm_profile, &mut fused, stream)
+                .map_err(|source| batch_cuda(next_site, source))?;
+        } else {
             let mut params = ResidualAddParams {
                 left: span(
                     &buffers.hidden_rotary,
@@ -1405,7 +1459,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     }
 
     let final_norm_site = ExecutionSite::global(LlamaOp::FinalNorm);
-    {
+    if !norm_after_mlp {
         let mut params = RmsNormParams {
             input: span(
                 &buffers.hidden_current,

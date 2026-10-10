@@ -153,6 +153,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     d128_global_merge: bool,
     fused_silu_multiply: bool,
     fused_qkv_rope: bool,
+    fused_mlp_residual_norm: bool,
     serving_sequence_token_bound: Option<usize>,
     decode_step_capture: bool,
 }
@@ -178,6 +179,7 @@ impl PreparedLlamaBatchExecutorConfig {
             d128_global_merge: false,
             fused_silu_multiply: false,
             fused_qkv_rope: false,
+            fused_mlp_residual_norm: false,
             serving_sequence_token_bound: None,
             decode_step_capture: false,
         }
@@ -253,6 +255,21 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn fused_qkv_rope(self) -> bool {
         self.fused_qkv_rope
+    }
+
+    /// Runs each layer's MLP residual add together with the following norm
+    /// (the next layer's input norm, or the final norm) as one fused
+    /// residual + `RMSNorm` kernel. Requires the fused residual norm.
+    #[must_use]
+    pub const fn with_fused_mlp_residual_norm(mut self) -> Self {
+        self.fused_mlp_residual_norm = true;
+        self
+    }
+
+    /// Whether the MLP residual add is fused with the following norm.
+    #[must_use]
+    pub const fn fused_mlp_residual_norm(self) -> bool {
+        self.fused_mlp_residual_norm
     }
 
     /// Whether SiLU and the gate multiply run as one kernel.
@@ -610,6 +627,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         d128_global_merge: config.d128_global_merge,
         fused_silu_multiply: config.fused_silu_multiply,
         fused_qkv_rope: config.fused_qkv_rope,
+        fused_mlp_residual_norm: config.fused_mlp_residual_norm,
         serving_sequence_token_bound: config.serving_sequence_token_bound,
         decode_step_capture: config.decode_step_capture,
     }

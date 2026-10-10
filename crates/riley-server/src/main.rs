@@ -77,6 +77,9 @@ serve options:
                                  the gate multiply, bit-identical (default: separate-v1)
   --query-key-rope ID            separate-v1 or fused-split-v1: apply RoPE inside the merged QKV
                                  split kernel, bit-identical (default: separate-v1)
+  --mlp-residual-norm ID         separate-v1 or fused-next-norm-v1: fuse the MLP residual add with
+                                 the following norm; needs --residual-rmsnorm fused
+                                 (default: separate-v1)
   --decode-step-graph MODE       disabled or capture-v1: record pure-decode steps of the native
                                  D128 route as CUDA graphs and replay them (default: disabled)
   --numerics-profile ID          existing or hf-eager-qwen-p2048-o128-probe-v1 (default: existing);
@@ -128,6 +131,7 @@ struct ServeOptions {
     d128_global_merge: bool,
     fused_silu_multiply: bool,
     fused_qkv_rope: bool,
+    fused_mlp_residual_norm: bool,
     decode_step_capture: bool,
     vllm_smol_p128_graph: bool,
     max_weight_bytes: u64,
@@ -354,6 +358,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut decode_attention_merge = None;
     let mut mlp_activation = None;
     let mut query_key_rope = None;
+    let mut mlp_residual_norm = None;
     let mut decode_step_graph = None;
     let mut logit_observation_dir = None;
     let mut max_weight_bytes = None;
@@ -546,6 +551,25 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     }
                 },
                 "--decode-step-graph",
+            )?,
+            "--mlp-residual-norm" => set_once(
+                &mut mlp_residual_norm,
+                match parse_utf8(
+                    next_value(&mut arguments, "--mlp-residual-norm")?,
+                    "--mlp-residual-norm",
+                )?
+                .as_str()
+                {
+                    "separate-v1" => false,
+                    "fused-next-norm-v1" => true,
+                    _ => {
+                        return Err(
+                            "--mlp-residual-norm requires separate-v1 or fused-next-norm-v1"
+                                .to_owned(),
+                        );
+                    }
+                },
+                "--mlp-residual-norm",
             )?,
             "--query-key-rope" => set_once(
                 &mut query_key_rope,
@@ -850,6 +874,12 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             );
         }
     }
+    let fused_mlp_residual_norm = mlp_residual_norm.unwrap_or(false);
+    if fused_mlp_residual_norm && residual_rmsnorm != ResidualRmsNormMode::Fused {
+        return Err(
+            "--mlp-residual-norm fused-next-norm-v1 requires --residual-rmsnorm fused".to_owned(),
+        );
+    }
     let fused_qkv_rope = query_key_rope.unwrap_or(false);
     if fused_qkv_rope
         && projection_bias_backend != ProjectionBiasBackendMode::MergedQkvStrictStagedV1
@@ -937,6 +967,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         d128_global_merge,
         fused_silu_multiply: mlp_activation.unwrap_or(false),
         fused_qkv_rope,
+        fused_mlp_residual_norm,
         decode_step_capture,
         vllm_smol_p128_graph,
         max_weight_bytes,
@@ -1639,6 +1670,11 @@ fn run_serve(
     };
     let executor = if options.fused_qkv_rope {
         executor.with_fused_qkv_rope()
+    } else {
+        executor
+    };
+    let executor = if options.fused_mlp_residual_norm {
+        executor.with_fused_mlp_residual_norm()
     } else {
         executor
     };
@@ -4660,6 +4696,7 @@ mod tests {
                 d128_global_merge: false,
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
+                fused_mlp_residual_norm: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
@@ -5056,6 +5093,7 @@ mod tests {
                 d128_global_merge: false,
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
+                fused_mlp_residual_norm: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: 4096,
@@ -5219,6 +5257,7 @@ mod tests {
                 d128_global_merge: false,
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
+                fused_mlp_residual_norm: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
@@ -5623,6 +5662,7 @@ mod tests {
                 d128_global_merge: false,
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
+                fused_mlp_residual_norm: false,
                 decode_step_capture: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
