@@ -693,9 +693,9 @@ constexpr EquivalentCandidate kEquivalentCandidates[] = {
     {11008, 2048, 33, 64, 21, 11, 19, 4, 4},
     {11008, 2048, 65, 112, 6, 18, 12, 4, 4},
     {11008, 2048, 113, 192, 21, 15, 12, 4, 4},
-    // LM head 2048 -> 151936
-    {2048, 151936, 1, 64, 31, 15, 17, 1, 0},
-    {2048, 151936, 65, 128, 31, 17, 15, 1, 0},
+    // The LM head (2048 -> 151936) also has faster in-class configurations
+    // (about 35 us per step), but its probe needs a 620 MiB temporary weight
+    // at start-up, so it is deliberately not listed.
 };
 
 bool equivalent_probe_output(RileyCudaGemmPlan* plan,
