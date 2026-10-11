@@ -1437,6 +1437,21 @@ fn native_bf16_ragged_paged_d128_two_stage_v3_c2048_b8_matches_v1_prefix_reducer
     stream.synchronize()?;
     let ordered_bytes = download(&context, &mut stream, &mut output)?;
     let merged_bytes = download(&context, &mut stream, &mut merged_output)?;
+    // The global-max merge is pinned bit for bit: its reductions may be
+    // re-expressed only with the same pairing.
+    let merged_digest = merged_bytes
+        .iter()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, &byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
+        });
+    println!(
+        "global-merge output fnv1a64={merged_digest:#018x} bytes={}",
+        merged_bytes.len()
+    );
+    assert_eq!(
+        merged_digest, 0x58b5_d6a7_240b_930f,
+        "global-max merge output bytes changed"
+    );
     let active_bytes = ACTIVE_ROWS * QUERY_HEADS * HEAD_SIZE * 2;
     assert_eq!(
         &merged_bytes[active_bytes..],
