@@ -423,6 +423,11 @@ typedef struct RileyCudaQkvSplitBiasParams {
   // launches. In that mode reserved[1] is the number of leading rows that are
   // rotated (rows beyond it get only their value output), and rope_positions
   // holds that many positions. The rope_* fields are read only in that mode.
+  // reserved[2] == 1 (RoPE mode only, inside a command batch) defers the
+  // launch: the next riley_cuda_ragged_paged_kv_cache_write_execute on the same
+  // stream, whose key and value sources must be this call's key and value
+  // outputs, runs the split and the cache write in one kernel with the same
+  // stored bytes. A command batch must not end with a deferred split pending.
   uint64_t reserved[4];
   RileyCudaBufferSpan rope_cos;
   RileyCudaBufferSpan rope_sin;

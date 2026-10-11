@@ -153,6 +153,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     d128_global_merge: bool,
     fused_silu_multiply: bool,
     fused_qkv_rope: bool,
+    fused_kv_write: bool,
     fused_mlp_residual_norm: bool,
     output_row_lm_head: bool,
     serving_sequence_token_bound: Option<usize>,
@@ -180,6 +181,7 @@ impl PreparedLlamaBatchExecutorConfig {
             d128_global_merge: false,
             fused_silu_multiply: false,
             fused_qkv_rope: false,
+            fused_kv_write: false,
             fused_mlp_residual_norm: false,
             output_row_lm_head: false,
             serving_sequence_token_bound: None,
@@ -257,6 +259,19 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn fused_qkv_rope(self) -> bool {
         self.fused_qkv_rope
+    }
+
+    /// Runs the KV cache write inside the merged QKV split kernel. Requires
+    /// the fused split `RoPE`; the stored bytes are unchanged.
+    #[must_use]
+    pub const fn with_fused_kv_write(mut self) -> Self {
+        self.fused_kv_write = true;
+        self
+    }
+
+    #[must_use]
+    pub const fn fused_kv_write(self) -> bool {
+        self.fused_kv_write
     }
 
     /// Runs each layer's MLP residual add together with the following norm
@@ -646,6 +661,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         d128_global_merge: config.d128_global_merge,
         fused_silu_multiply: config.fused_silu_multiply,
         fused_qkv_rope: config.fused_qkv_rope,
+        fused_kv_write: config.fused_kv_write,
         fused_mlp_residual_norm: config.fused_mlp_residual_norm,
         output_row_lm_head: config.output_row_lm_head,
         serving_sequence_token_bound: config.serving_sequence_token_bound,

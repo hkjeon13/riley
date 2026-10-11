@@ -590,6 +590,7 @@ pub(super) struct RawQkvRope {
     pub(super) head_size: u64,
     pub(super) table_position_count: u64,
     pub(super) rotated_row_count: u64,
+    pub(super) defer_for_kv_write: bool,
 }
 
 #[repr(C)]
@@ -7316,6 +7317,7 @@ pub(super) fn qkv_split_bias_execute(
                 head_size: 0,
                 table_position_count: 0,
                 rotated_row_count: 0,
+                defer_for_kv_write: false,
             },
         ),
     };
@@ -7332,7 +7334,12 @@ pub(super) fn qkv_split_bias_execute(
         row_count,
         query_width,
         key_value_width,
-        reserved: [mode, rope.rotated_row_count, 0, 0],
+        reserved: [
+            mode,
+            rope.rotated_row_count,
+            u64::from(rope.defer_for_kv_write),
+            0,
+        ],
         rope_cos: rope.cos,
         rope_sin: rope.sin,
         rope_positions: rope.positions,

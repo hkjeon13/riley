@@ -1699,6 +1699,37 @@ inline StepCaptureDynamicCounts& thread_step_capture_dynamic() noexcept {
   return dynamic;
 }
 
+// A merged-QKV split (with RoPE) whose launch was deferred so that the KV cache
+// write that follows it in the same command batch runs both in one kernel.
+// The split operation has already validated and retained every buffer named
+// here. The record is cleared when the write consumes it and whenever a
+// command batch begins or ends.
+struct DeferredQkvSplit {
+  bool armed = false;
+  cudaStream_t stream = nullptr;
+  const void* merged = nullptr;
+  const void* query_bias = nullptr;
+  const void* key_bias = nullptr;
+  const void* value_bias = nullptr;
+  const void* cos = nullptr;
+  const void* sin = nullptr;
+  const void* positions = nullptr;
+  void* query = nullptr;
+  void* key = nullptr;
+  void* value = nullptr;
+  uint64_t row_count = 0;
+  uint64_t query_width = 0;
+  uint64_t key_value_width = 0;
+  uint64_t head_size = 0;
+  uint64_t table_position_count = 0;
+  uint64_t rotated_row_count = 0;
+};
+
+inline DeferredQkvSplit& thread_deferred_qkv_split() noexcept {
+  thread_local DeferredQkvSplit value;
+  return value;
+}
+
 inline bool try_publish_thread_graph_capture(
     RileyCudaGraphCapture* capture) noexcept {
   if (capture == nullptr || thread_has_active_graph_capture()) {

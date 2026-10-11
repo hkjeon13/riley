@@ -564,6 +564,7 @@ pub(in crate::llama) fn execute_packed(
             config.d128_global_merge(),
             config.fused_silu_multiply(),
             config.fused_qkv_rope(),
+            config.fused_kv_write(),
             config.fused_mlp_residual_norm(),
             native_d128_two_stage_workspace.as_deref_mut(),
             layout,
@@ -805,6 +806,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     d128_global_merge: bool,
     fused_silu_multiply: bool,
     fused_qkv_rope: bool,
+    fused_kv_write: bool,
     fused_mlp_residual_norm: bool,
     mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
     layout: KvLayout,
@@ -1045,6 +1047,8 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                     positions_host,
                     head_size,
                     table_position_count: max_positions,
+                    // The KV cache write below consumes the deferred split.
+                    defer_for_kv_write: fused_kv_write,
                 };
                 qkv_split_bias_rope(&mut params, &rope, stream)
                     .map_err(|source| batch_cuda(query_site, source))?;

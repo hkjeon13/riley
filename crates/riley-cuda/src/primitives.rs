@@ -1265,6 +1265,11 @@ pub struct QkvRopeParams<'a> {
     pub head_size: u64,
     /// Number of positions in the tables.
     pub table_position_count: u64,
+    /// Defers the launch to the `ragged_paged_kv_cache_write` that follows in
+    /// the same command batch, which then runs the split and the cache write
+    /// in one kernel with the same stored bytes. That write must take this
+    /// call's key and value outputs as its sources.
+    pub defer_for_kv_write: bool,
 }
 
 /// [`qkv_split_bias`] with the indexed BF16 `RoPE` of the query and key outputs
@@ -1422,6 +1427,7 @@ fn qkv_split_bias_impl<S: CudaExecutionStream + ?Sized>(
                 head_size: rope.head_size,
                 table_position_count: rope.table_position_count,
                 rotated_row_count: rope.positions_host.len() as u64,
+                defer_for_kv_write: rope.defer_for_kv_write,
             }),
             &mut stream.native,
         )

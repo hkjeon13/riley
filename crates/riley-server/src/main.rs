@@ -80,6 +80,9 @@ serve options:
                                  the gate multiply, bit-identical (default: separate-v1)
   --query-key-rope ID            separate-v1 or fused-split-v1: apply RoPE inside the merged QKV
                                  split kernel, bit-identical (default: separate-v1)
+  --kv-cache-write ID            separate-v1 or fused-split-v1: write the KV cache inside the merged
+                                 QKV split kernel, same stored bytes; needs --query-key-rope
+                                 fused-split-v1 (default: separate-v1)
   --mlp-residual-norm ID         separate-v1 or fused-next-norm-v1: fuse the MLP residual add with
                                  the following norm; needs --residual-rmsnorm fused
                                  (default: separate-v1)
@@ -138,6 +141,7 @@ struct ServeOptions {
     d128_global_merge: bool,
     fused_silu_multiply: bool,
     fused_qkv_rope: bool,
+    fused_kv_write: bool,
     fused_mlp_residual_norm: bool,
     output_row_lm_head: bool,
     decode_step_capture: bool,
@@ -367,6 +371,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut decode_attention_merge = None;
     let mut mlp_activation = None;
     let mut query_key_rope = None;
+    let mut kv_cache_write = None;
     let mut mlp_residual_norm = None;
     let mut lm_head_rows = None;
     let mut decode_step_graph = None;
@@ -614,6 +619,24 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     }
                 },
                 "--query-key-rope",
+            )?,
+            "--kv-cache-write" => set_once(
+                &mut kv_cache_write,
+                match parse_utf8(
+                    next_value(&mut arguments, "--kv-cache-write")?,
+                    "--kv-cache-write",
+                )?
+                .as_str()
+                {
+                    "separate-v1" => false,
+                    "fused-split-v1" => true,
+                    _ => {
+                        return Err(
+                            "--kv-cache-write requires separate-v1 or fused-split-v1".to_owned()
+                        );
+                    }
+                },
+                "--kv-cache-write",
             )?,
             "--mlp-activation" => set_once(
                 &mut mlp_activation,
@@ -933,6 +956,12 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         );
     }
     let fused_qkv_rope = query_key_rope.unwrap_or(false);
+    let fused_kv_write = kv_cache_write.unwrap_or(false);
+    if fused_kv_write && !fused_qkv_rope {
+        return Err(
+            "--kv-cache-write fused-split-v1 requires --query-key-rope fused-split-v1".to_owned(),
+        );
+    }
     if fused_qkv_rope
         && projection_bias_backend != ProjectionBiasBackendMode::MergedQkvStrictStagedV1
     {
@@ -1020,6 +1049,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         d128_global_merge,
         fused_silu_multiply: mlp_activation.unwrap_or(false),
         fused_qkv_rope,
+        fused_kv_write,
         fused_mlp_residual_norm,
         output_row_lm_head: lm_head_rows.unwrap_or(false),
         decode_step_capture,
@@ -1729,6 +1759,11 @@ fn run_serve(
     };
     let executor = if options.fused_qkv_rope {
         executor.with_fused_qkv_rope()
+    } else {
+        executor
+    };
+    let executor = if options.fused_kv_write {
+        executor.with_fused_kv_write()
     } else {
         executor
     };
@@ -4761,6 +4796,7 @@ mod tests {
                 d128_global_merge: false,
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
+                fused_kv_write: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
@@ -5160,6 +5196,7 @@ mod tests {
                 d128_global_merge: false,
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
+                fused_kv_write: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
@@ -5326,6 +5363,7 @@ mod tests {
                 d128_global_merge: false,
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
+                fused_kv_write: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
@@ -5733,6 +5771,7 @@ mod tests {
                 d128_global_merge: false,
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
+                fused_kv_write: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,

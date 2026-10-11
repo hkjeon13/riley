@@ -1158,6 +1158,101 @@ __global__ void ragged_paged_kv_cache_write_kernel(
   }
 }
 
+// qkv_split_bias_rope_kernel and ragged_paged_kv_cache_write_kernel in one
+// launch. Every thread forms its query, key or value elements exactly as the
+// split kernel does and stores them to the same workspace outputs; a key or
+// value element of a row that resolves to a cache slot is also stored there,
+// which is the copy the separate write kernel would make from the workspace.
+__global__ void qkv_split_bias_rope_kv_write_kernel(
+    const __nv_bfloat16* merged, const __nv_bfloat16* query_bias,
+    const __nv_bfloat16* key_bias, const __nv_bfloat16* value_bias,
+    const float* cos, const float* sin, const uint32_t* positions,
+    __nv_bfloat16* query, __nv_bfloat16* key, __nv_bfloat16* value,
+    __nv_bfloat16* key_pool, __nv_bfloat16* value_pool, DeviceBatch batch,
+    uint64_t key_value_head_count, uint64_t query_width,
+    uint64_t key_value_width, uint64_t head_size,
+    uint64_t table_position_count, uint64_t rotated_row_count,
+    uint64_t work_item_count, const uint32_t* dynamic_counts) {
+  if (dynamic_counts != nullptr) {
+    rotated_row_count = dynamic_counts[0];
+  }
+  const uint64_t half = head_size / 2;
+  const uint64_t merged_width = query_width + 2 * key_value_width;
+  const uint64_t query_pairs = query_width / 2;
+  const uint64_t key_pairs = key_value_width / 2;
+  const uint64_t work_width = query_pairs + key_pairs + key_value_width;
+  const uint64_t first =
+      static_cast<uint64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t work = first; work < work_item_count; work += stride) {
+    const uint64_t row = work / work_width;
+    const uint64_t column = work - row * work_width;
+    const uint64_t merged_row = row * merged_width;
+    if (column >= query_pairs + key_pairs) {
+      const uint64_t local = column - query_pairs - key_pairs;
+      const float projected = __bfloat162float(
+          merged[merged_row + query_width + key_value_width + local]);
+      const __nv_bfloat16 stored = __float2bfloat16_rn(
+          __fadd_rn(projected, __bfloat162float(value_bias[local])));
+      value[row * key_value_width + local] = stored;
+      uint64_t cache_base = 0;
+      if (resolve_row_cache_base(batch, row, batch.row_positions[row],
+                                 local / head_size, key_value_head_count,
+                                 head_size, &cache_base)) {
+        value_pool[cache_base + local % head_size] = stored;
+      }
+      continue;
+    }
+    if (row >= rotated_row_count) {
+      continue;
+    }
+    const bool is_query = column < query_pairs;
+    const uint64_t pair = is_query ? column : column - query_pairs;
+    const uint64_t unit = pair % half;
+    const uint64_t first_local = (pair / half) * head_size + unit;
+    const uint64_t second_local = first_local + half;
+    const uint64_t section = is_query ? 0 : query_width;
+    const __nv_bfloat16* bias = is_query ? query_bias : key_bias;
+    __nv_bfloat16* output = is_query ? query : key;
+    const uint64_t output_row = row * (is_query ? query_width : key_value_width);
+    const uint64_t position = positions[row];
+    __nv_bfloat16 first_output = __float2bfloat16_rn(CUDART_NAN_F);
+    __nv_bfloat16 second_output = __float2bfloat16_rn(CUDART_NAN_F);
+    if (position < table_position_count) {
+      const float first_value = __bfloat162float(__float2bfloat16_rn(__fadd_rn(
+          __bfloat162float(merged[merged_row + section + first_local]),
+          __bfloat162float(bias[first_local]))));
+      const float second_value = __bfloat162float(__float2bfloat16_rn(__fadd_rn(
+          __bfloat162float(merged[merged_row + section + second_local]),
+          __bfloat162float(bias[second_local]))));
+      const uint64_t table_index = position * half + unit;
+      const float cosine = round_to_storage<__nv_bfloat16>(cos[table_index]);
+      const float sine = round_to_storage<__nv_bfloat16>(sin[table_index]);
+      const float first_cosine =
+          multiply_in_storage<__nv_bfloat16>(first_value, cosine);
+      const float second_sine =
+          multiply_in_storage<__nv_bfloat16>(second_value, sine);
+      const float second_cosine =
+          multiply_in_storage<__nv_bfloat16>(second_value, cosine);
+      const float first_sine =
+          multiply_in_storage<__nv_bfloat16>(first_value, sine);
+      first_output = __float2bfloat16_rn(first_cosine - second_sine);
+      second_output = __float2bfloat16_rn(second_cosine + first_sine);
+    }
+    output[output_row + first_local] = first_output;
+    output[output_row + second_local] = second_output;
+    if (!is_query) {
+      uint64_t cache_base = 0;
+      if (resolve_row_cache_base(batch, row, batch.row_positions[row],
+                                 pair / half, key_value_head_count, head_size,
+                                 &cache_base)) {
+        key_pool[cache_base + unit] = first_output;
+        key_pool[cache_base + unit + half] = second_output;
+      }
+    }
+  }
+}
+
 __device__ __forceinline__ float warp_sum(float value) {
 #pragma unroll
   for (uint32_t offset = kWarpSize / 2; offset != 0; offset /= 2) {
@@ -2368,6 +2463,48 @@ riley_cuda_ragged_paged_kv_cache_write_execute(
             ? dynamic.dense_rows * params->key_value_head_count *
                   params->head_size
             : source_elements;
+    auto& deferred = riley_cuda_internal::thread_deferred_qkv_split();
+    if (deferred.armed) {
+      // The split that produced these sources deferred its launch: run the
+      // split and this write in one kernel.
+      const riley_cuda_internal::DeferredQkvSplit split = deferred;
+      deferred = {};
+      if (split.stream != stream->stream || split.key != key_source.data ||
+          split.value != value_source.data ||
+          split.head_size != params->head_size ||
+          split.key_value_width !=
+              params->key_value_head_count * params->head_size) {
+        status = validation_error(
+            error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+            "KV cache write does not match the deferred merged QKV split");
+      } else {
+        const uint64_t work_items =
+            split.row_count * (split.query_width / 2 +
+                               split.key_value_width / 2 +
+                               split.key_value_width);
+        qkv_split_bias_rope_kv_write_kernel
+            <<<block_count(work_items), kThreads, 0, stream->stream>>>(
+                static_cast<const __nv_bfloat16*>(split.merged),
+                static_cast<const __nv_bfloat16*>(split.query_bias),
+                static_cast<const __nv_bfloat16*>(split.key_bias),
+                static_cast<const __nv_bfloat16*>(split.value_bias),
+                static_cast<const float*>(split.cos),
+                static_cast<const float*>(split.sin),
+                static_cast<const uint32_t*>(split.positions),
+                static_cast<__nv_bfloat16*>(split.query),
+                static_cast<__nv_bfloat16*>(split.key),
+                static_cast<__nv_bfloat16*>(split.value),
+                reinterpret_cast<__nv_bfloat16*>(key_pool.data),
+                reinterpret_cast<__nv_bfloat16*>(value_pool.data),
+                device_batch(params->batch, batch),
+                params->key_value_head_count, split.query_width,
+                split.key_value_width, split.head_size,
+                split.table_position_count, split.rotated_row_count,
+                work_items, dynamic.counts);
+        status = launch_status(error, kOperation);
+      }
+    } else {
     ragged_paged_kv_cache_write_kernel
         <<<block_count(launch_elements), kThreads, 0, stream->stream>>>(
             reinterpret_cast<const __nv_bfloat16*>(key_source.data),
@@ -2377,6 +2514,7 @@ riley_cuda_ragged_paged_kv_cache_write_execute(
             device_batch(params->batch, batch), params->key_value_head_count,
             params->head_size, launch_elements);
     status = launch_status(error, kOperation);
+    }
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
                             error, kOperation);
@@ -4118,10 +4256,14 @@ extern "C" RileyCudaStatus riley_cuda_qkv_split_bias_execute(
   const RileyCudaQkvSplitBiasParams stable_params = *params;
   params = &stable_params;
   const bool with_rope = params->reserved[0] == 1;
+  // reserved[2] == 1 (RoPE mode, inside a command batch) defers the launch
+  // to the KV cache write that follows; see DeferredQkvSplit.
+  const bool deferred_launch = params->reserved[2] == 1;
   if (params->reserved0 != 0 || params->reserved[0] > 1 ||
       (!with_rope && params->reserved[1] != 0) ||
       (with_rope && params->reserved[1] > params->row_count) ||
-      !reserved_is_zero(params->reserved + 2, 2)) {
+      params->reserved[2] > 1 || (deferred_launch && !with_rope) ||
+      params->reserved[3] != 0) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "params reserved fields must be zero");
@@ -4293,7 +4435,34 @@ extern "C" RileyCudaStatus riley_cuda_qkv_split_bias_execute(
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = prior_launch_status(error, kOperation);
   }
-  if (status == RILEY_CUDA_STATUS_SUCCESS && merged_elements != 0 &&
+  if (status == RILEY_CUDA_STATUS_SUCCESS && deferred_launch) {
+    auto& deferred = riley_cuda_internal::thread_deferred_qkv_split();
+    if (!uses.command_batch() || deferred.armed || merged_elements == 0) {
+      status = validation_error(
+          error, RILEY_CUDA_STATUS_INVALID_STATE,
+          RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+          "a deferred merged QKV split needs a command batch, a non-empty input and no pending deferred split");
+    } else {
+      deferred.armed = true;
+      deferred.stream = stream->stream;
+      deferred.merged = merged.data;
+      deferred.query_bias = query_bias.data;
+      deferred.key_bias = key_bias.data;
+      deferred.value_bias = value_bias.data;
+      deferred.cos = rope_cos.data;
+      deferred.sin = rope_sin.data;
+      deferred.positions = rope_positions.data;
+      deferred.query = query.data;
+      deferred.key = key.data;
+      deferred.value = value.data;
+      deferred.row_count = params->row_count;
+      deferred.query_width = params->query_width;
+      deferred.key_value_width = params->key_value_width;
+      deferred.head_size = params->rope_head_size;
+      deferred.table_position_count = params->rope_table_position_count;
+      deferred.rotated_row_count = params->reserved[1];
+    }
+  } else if (status == RILEY_CUDA_STATUS_SUCCESS && merged_elements != 0 &&
       with_rope) {
     launch_attempted = true;
     const uint64_t work_items =
