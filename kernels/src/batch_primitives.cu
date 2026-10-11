@@ -993,8 +993,9 @@ __device__ __forceinline__ void reduce_argmax_warp(
 }
 
 // One 1024-thread block per row: each thread scans a quarter of the columns a
-// 256-thread block would, and the selection (largest value, lowest token on
-// ties) does not depend on how the columns are partitioned.
+// 256-thread block would, eight logits per load, and the selection (largest
+// value, lowest token on ties) does not depend on how the columns are
+// partitioned.
 constexpr uint32_t kArgmaxThreads = 1024;
 
 __global__ __launch_bounds__(kArgmaxThreads) void bf16_argmax_kernel(
@@ -1017,21 +1018,49 @@ __global__ __launch_bounds__(kArgmaxThreads) void bf16_argmax_kernel(
     uint32_t selected_token = RILEY_CUDA_BF16_ARGMAX_INVALID_TOKEN_ID;
     uint32_t non_finite = 0;
     const uint64_t row_base = row * vocabulary_size;
-    for (uint64_t column = threadIdx.x; column < vocabulary_size;
-         column += blockDim.x) {
-      const float value = __bfloat162float(logits[row_base + column]);
+    const auto consider = [&](uint64_t column, __nv_bfloat16 logit) {
+      const float value = __bfloat162float(logit);
       if (!isfinite(value)) {
         non_finite = 1;
-        continue;
+        return;
       }
       // Columns past the candidate bound are still checked for finiteness
       // but can never be selected.
       if (column >= candidate_count) {
-        continue;
+        return;
       }
-      const uint32_t token = static_cast<uint32_t>(column);
-      select_argmax_candidate(value, token, &selected_value,
-                              &selected_token);
+      select_argmax_candidate(value, static_cast<uint32_t>(column),
+                              &selected_value, &selected_token);
+    };
+    // The selection does not depend on the order columns are visited in, so
+    // the 16-byte-aligned middle of the row is read eight logits per load;
+    // the unaligned head and the tail are read one logit at a time.
+    const __nv_bfloat16* row_logits = logits + row_base;
+    const uint64_t misaligned =
+        ((16 - (reinterpret_cast<uintptr_t>(row_logits) & 15)) & 15) / 2;
+    const uint64_t head =
+        misaligned < vocabulary_size ? misaligned : vocabulary_size;
+    const uint64_t group_count = (vocabulary_size - head) / 8;
+    const uint64_t tail_begin = head + group_count * 8;
+    const uint64_t single_count = head + (vocabulary_size - tail_begin);
+    for (uint64_t single = threadIdx.x; single < single_count;
+         single += blockDim.x) {
+      const uint64_t column =
+          single < head ? single : tail_begin + (single - head);
+      consider(column, row_logits[column]);
+    }
+    for (uint64_t group = threadIdx.x; group < group_count;
+         group += blockDim.x) {
+      const uint64_t first_column = head + group * 8;
+      const uint4 packed =
+          *reinterpret_cast<const uint4*>(row_logits + first_column);
+      const uint32_t words[4] = {packed.x, packed.y, packed.z, packed.w};
+#pragma unroll
+      for (uint32_t element = 0; element < 8; ++element) {
+        const uint16_t bits = static_cast<uint16_t>(
+            words[element / 2] >> (16 * (element % 2)));
+        consider(first_column + element, __ushort_as_bfloat16(bits));
+      }
     }
 
     reduce_argmax_warp(&selected_value, &selected_token, &non_finite);
