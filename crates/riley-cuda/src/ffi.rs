@@ -8777,6 +8777,7 @@ pub(super) fn native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
     reduction_order: u32,
     producer_layout: u64,
     merge_layout: u64,
+    prompt_row_kinds: u64,
     stream: &mut StreamHandle,
 ) -> CudaResult<()> {
     let params = RawNativeBf16RaggedPagedSplitGqaParamsV3 {
@@ -8798,7 +8799,7 @@ pub(super) fn native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
         launch_partial_state_count,
         scale,
         reduction_order,
-        reserved: [producer_layout, merge_layout, 0, 0],
+        reserved: [producer_layout, merge_layout, prompt_row_kinds, 0],
     };
     primitive_status(
         "execute CUDA native BF16 ragged paged split-GQA D128 two-stage V3",

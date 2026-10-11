@@ -807,6 +807,7 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_two_stage<S: CudaExecutionStream 
         stream,
         D128_PRODUCER_PER_QUERY_HEAD,
         D128_MERGE_ORDERED,
+        0,
     )
 }
 
@@ -830,6 +831,7 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv<
         stream,
         D128_PRODUCER_SHARED_KV,
         D128_MERGE_ORDERED,
+        0,
     )
 }
 
@@ -857,6 +859,45 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge<
         stream,
         D128_PRODUCER_SHARED_KV,
         D128_MERGE_GLOBAL_MAX,
+        0,
+    )
+}
+
+/// [`native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge`] with the
+/// prompt rows produced by the tensor-core prefill kernel.
+///
+/// `row_kinds_first_word` is the index of the first U32 row-kind word inside
+/// the buffer that holds `batch`'s row positions; there is one word per
+/// launched row and the value `1` marks a token of a request's prompt. A
+/// prompt row's partial states are folded four pages at a time with
+/// tensor-core arithmetic, so its output differs in rounding from the
+/// shared-KV producer; it depends only on the row's own query and context,
+/// not on the rows it is batched with or the chunk it arrives in. Rows of
+/// every other kind are produced exactly as without this option.
+///
+/// # Errors
+///
+/// As [`native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge`], plus
+/// an out-of-range error when the row kinds lie outside the buffer.
+pub fn native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma<
+    S: CudaExecutionStream + ?Sized,
+>(
+    params: &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams<'_>,
+    row_kinds_first_word: u64,
+    stream: &mut S,
+) -> CudaResult<()> {
+    let prompt_row_kinds = row_kinds_first_word.checked_add(1).ok_or_else(|| {
+        CudaError::out_of_range(
+            "native_bf16_ragged_paged_split_gqa_d128_two_stage",
+            "row kind offset overflows u64",
+        )
+    })?;
+    execute_native_bf16_ragged_d128_two_stage(
+        params,
+        stream,
+        D128_PRODUCER_SHARED_KV,
+        D128_MERGE_GLOBAL_MAX,
+        prompt_row_kinds,
     )
 }
 
@@ -871,6 +912,7 @@ fn execute_native_bf16_ragged_d128_two_stage<S: CudaExecutionStream + ?Sized>(
     stream: &mut S,
     producer_layout: u64,
     merge_layout: u64,
+    prompt_row_kinds: u64,
 ) -> CudaResult<()> {
     const OPERATION: &str = "native_bf16_ragged_paged_split_gqa_d128_two_stage";
     let stream = execution_stream_mut(stream);
@@ -907,6 +949,7 @@ fn execute_native_bf16_ragged_d128_two_stage<S: CudaExecutionStream + ?Sized>(
             reduction_order,
             producer_layout,
             merge_layout,
+            prompt_row_kinds,
             &mut stream.native,
         )
     }
@@ -917,6 +960,7 @@ fn execute_native_bf16_ragged_d128_two_stage<S: CudaExecutionStream + ?Sized>(
             launch_partial_state_count,
             producer_layout,
             merge_layout,
+            prompt_row_kinds,
         );
         Err(CudaError::unavailable(OPERATION))
     }
