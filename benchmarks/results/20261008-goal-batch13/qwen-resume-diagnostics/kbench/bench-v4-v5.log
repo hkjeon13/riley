@@ -1,0 +1,17 @@
+C1 decode ctx 40                                           rows   1 page-evals     3 | paged   6.72 | A   4.65 | B   4.84 us | A vs B differing elements 0 | A vs paged differing 0 of 2048
+C1 decode ctx 140                                          rows   1 page-evals     9 | paged   6.80 | A   8.01 | B   8.59 us | A vs B differing elements 0 | A vs paged differing 0 of 2048
+C1 decode ctx 270                                          rows   1 page-evals    17 | paged   7.01 | A  11.17 | B  12.17 us | A vs B differing elements 0 | A vs paged differing 1 of 2048
+C1 decode ctx 400                                          rows   1 page-evals    25 | paged   7.01 | A  14.61 | B  16.16 us | A vs B differing elements 0 | A vs paged differing 0 of 2048
+C1 decode ctx 500                                          rows   1 page-evals    32 | paged   6.90 | A  16.08 | B  18.79 us | A vs B differing elements 0 | A vs paged differing 4 of 2048
+C1 decode ctx 1000                                         rows   1 page-evals    63 | paged   8.20 | A  29.44 | B  34.13 us | A vs B differing elements 0 | A vs paged differing 0 of 2048
+C8 fixed decode                                            rows   8 page-evals    76 | paged   7.72 | A   7.80 | B   8.40 us | A vs B differing elements 0 | A vs paged differing 2 of 16384
+C8 natural decode                                          rows   8 page-evals   101 | paged  12.45 | A  15.37 | B  17.32 us | A vs B differing elements 0 | A vs paged differing 2 of 16384
+C16 natural decode                                         rows  16 page-evals   220 | paged  15.38 | A  17.92 | B  20.50 us | A vs B differing elements 0 | A vs paged differing 4 of 32768
+C32 fixed decode                                           rows  32 page-evals   306 | paged  16.55 | A  11.10 | B  11.69 us | A vs B differing elements 0 | A vs paged differing 18 of 65536
+C32 natural decode                                         rows  32 page-evals   450 | paged  21.51 | A  19.03 | B  21.45 us | A vs B differing elements 0 | A vs paged differing 16 of 65536
+c16-fixed mixed: 15 decode + 126 prompt                    rows 141 page-evals   703 | paged  25.81 | A  16.30 | B  17.48 us | A vs B differing elements 0 | A vs paged differing 165 of 288768
+c32-fixed mixed: 30 decode + 126 + 100 prompt              rows 256 page-evals  1211 | paged  40.26 | A  20.97 | B  22.21 us | A vs B differing elements 0 | A vs paged differing 100 of 524288
+c32-natural mixed: 30 decode + 128 + 16 + 82 prompt        rows 256 page-evals  1280 | paged  50.92 | A  29.42 | B  32.57 us | A vs B differing elements 0 | A vs paged differing 131 of 524288
+c32-natural mixed: 30 decode + 174(82..255) + 52 prompt    rows 256 page-evals  2472 | paged  80.08 | A  35.86 | B  39.66 us | A vs B differing elements 0 | A vs paged differing 123 of 524288
+c1-natural prefill 256 rows at 0                           rows 256 page-evals  2176 | paged  70.73 | A  25.35 | B  27.30 us | A vs B differing elements 0 | A vs paged differing 112 of 524288
+c1-natural prefill 142 rows at 256                         rows 142 page-evals  2974 | paged  87.16 | A  38.60 | B  42.11 us | A vs B differing elements 0 | A vs paged differing 143 of 290816

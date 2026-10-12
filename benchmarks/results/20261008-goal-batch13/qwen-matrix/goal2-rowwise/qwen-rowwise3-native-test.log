@@ -1,0 +1,182 @@
+   Compiling riley-cuda v0.1.0 (/data/riley-serving-261007/qwen-http-exact-source-attempt01/crates/riley-cuda)
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: constant `NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V2_SIZE` is never used
+  --> crates/riley-cuda/src/ffi.rs:98:7
+   |
+98 | const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V2_SIZE: u32 = 744;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: struct `RawNativeBf16RaggedPagedSplitGqaParamsV2` is never constructed
+    --> crates/riley-cuda/src/ffi.rs:1173:8
+     |
+1173 | struct RawNativeBf16RaggedPagedSplitGqaParamsV2 {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+     --> crates/riley-cuda/src/ffi.rs:11301:19
+      |
+11300 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+11301 |     pub(super) fn record_mlp(
+      |                   ^^^^^^^^^^
+...
+11311 |     pub(super) fn record_mlp_with_norm(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:11605:19
+      |
+11604 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+11605 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+11616 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+11628 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1807:8
+     |
+1807 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 5 warnings
+    Finished `release` profile [optimized + debuginfo] target(s) in 23.54s
+     Running tests/rowwise_attention_gpu.rs (/data/riley-serving-261007/qwen-http-exact-target-attempt01/release/deps/rowwise_attention_gpu-2ea9aa8f51522f3a)
+
+running 1 test
+test rowwise_outputs_are_independent_of_batching_order_and_chunking ... rowwise rows=108 elements=221184 identical_to_paged=221134 max_abs_difference=0.0009765625 rearranged_rows=108 chunked_rows=108
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: constant `NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V2_SIZE` is never used
+  --> crates/riley-cuda/src/ffi.rs:98:7
+   |
+98 | const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V2_SIZE: u32 = 744;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: struct `RawNativeBf16RaggedPagedSplitGqaParamsV2` is never constructed
+    --> crates/riley-cuda/src/ffi.rs:1173:8
+     |
+1173 | struct RawNativeBf16RaggedPagedSplitGqaParamsV2 {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+     --> crates/riley-cuda/src/ffi.rs:11301:19
+      |
+11300 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+11301 |     pub(super) fn record_mlp(
+      |                   ^^^^^^^^^^
+...
+11311 |     pub(super) fn record_mlp_with_norm(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:11605:19
+      |
+11604 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+11605 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+11616 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+11628 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1807:8
+     |
+1807 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 5 warnings
+   Compiling riley-cuda v0.1.0 (/data/riley-serving-261007/qwen-http-exact-source-attempt01/crates/riley-cuda)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2.44s
+     Running tests/prompt_mma_attention_gpu.rs (/data/riley-serving-261007/qwen-http-exact-target-attempt01/release/deps/prompt_mma_attention_gpu-558595473054d81c)
+
+running 1 test
+test prompt_rows_are_independent_of_batching_alignment_and_chunking ... prompt-mma rows=78 prompt_elements=153600 identical_to_shared_kv=137257 max_abs_difference=0.00390625 rearranged_rows=78 chunked_rows=75
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: constant `NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V2_SIZE` is never used
+  --> crates/riley-cuda/src/ffi.rs:98:7
+   |
+98 | const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V2_SIZE: u32 = 744;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: struct `RawNativeBf16RaggedPagedSplitGqaParamsV2` is never constructed
+    --> crates/riley-cuda/src/ffi.rs:1173:8
+     |
+1173 | struct RawNativeBf16RaggedPagedSplitGqaParamsV2 {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+     --> crates/riley-cuda/src/ffi.rs:11301:19
+      |
+11300 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+11301 |     pub(super) fn record_mlp(
+      |                   ^^^^^^^^^^
+...
+11311 |     pub(super) fn record_mlp_with_norm(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:11605:19
+      |
+11604 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+11605 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+11616 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+11628 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1807:8
+     |
+1807 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 5 warnings
+   Compiling riley-cuda v0.1.0 (/data/riley-serving-261007/qwen-http-exact-source-attempt01/crates/riley-cuda)
+    Finished `release` profile [optimized + debuginfo] target(s) in 3.14s
+     Running tests/native_bf16_paged_split_gqa_gpu.rs (/data/riley-serving-261007/qwen-http-exact-target-attempt01/release/deps/native_bf16_paged_split_gqa_gpu-60f7108cda74ac58)
+
+running 1 test
+test native_bf16_ragged_paged_d128_two_stage_v3_c2048_b8_matches_v1_prefix_reducer_per_row ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.85s
+

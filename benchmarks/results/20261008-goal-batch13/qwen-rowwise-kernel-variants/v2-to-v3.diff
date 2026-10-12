@@ -1,0 +1,91 @@
+6c6,7
+< // The arithmetic follows the order of an eager BF16 attention:
+---
+> // The arithmetic keeps the paged producers' rounding points: BF16 scores,
+> // FP32 softmax weights, one BF16 rounding of the output.
+9,10c10
+< //      pairwise tree), with the paged producers' two BF16 roundings. Tokens
+< //      past the page's valid count score -Inf.
+---
+> //      pairwise tree). Tokens past the page's valid count score -Inf.
+14,17c14,18
+< //   3. p = BF16(e / S): the normalized probability is rounded to BF16 and is
+< //      not renormalized afterwards.
+< //   4. out = BF16(sum of p * v): eight MMAs per page (depth x heads over
+< //      tokens), pages in ascending order per warp, warps in ascending order.
+---
+> //   3. N = sum of e * v with the full FP32 weight: e is split exactly into
+> //      three BF16 pieces (e = high + middle + low) and each piece is one
+> //      MMA operand (depth x heads over tokens), so no weight bit is dropped.
+> //      Pages in ascending order per warp, warps in ascending order.
+> //   4. out = BF16(N * (1 / S)).
+217c218
+<   // 3 and 4. BF16 probabilities and the probability-weighted values.
+---
+>   // 3. Weighted values; the weight operand is e in three exact BF16 pieces.
+248,265c249,277
+<     // Probability operand B[k = token][n = head group].
+<     const uint32_t low_tokens =
+<         pack_bf16_pair(weight[0] / sum0, weight[1] / sum1);
+<     const uint32_t high_tokens =
+<         pack_bf16_pair(weight[2] / sum0, weight[3] / sum1);
+<     const uint32_t even_low =
+<         __shfl_sync(kFullWarpMask, low_tokens, source_even);
+<     const uint32_t even_high =
+<         __shfl_sync(kFullWarpMask, high_tokens, source_even);
+<     const uint32_t odd_low = __shfl_sync(kFullWarpMask, low_tokens, source_odd);
+<     const uint32_t odd_high =
+<         __shfl_sync(kFullWarpMask, high_tokens, source_odd);
+<     const uint32_t probability_operand0 =
+<         ((even_low >> source_shift) & 0xffffU) |
+<         (((odd_low >> source_shift) & 0xffffU) << 16);
+<     const uint32_t probability_operand1 =
+<         ((even_high >> source_shift) & 0xffffU) |
+<         (((odd_high >> source_shift) & 0xffffU) << 16);
+---
+>     // Weight operands B[k = token][n = head group], one per BF16 piece. Each
+>     // subtraction below is exact, and the third piece holds what is left.
+>     uint32_t weight_operand[3][2];
+> #pragma unroll
+>     for (uint32_t piece = 0; piece < 3; ++piece) {
+>       float rounded[4];
+> #pragma unroll
+>       for (uint32_t element = 0; element < 4; ++element) {
+>         rounded[element] =
+>             __bfloat162float(__float2bfloat16_rn(weight[element]));
+>         weight[element] -= rounded[element];
+>       }
+>       const uint32_t low_tokens = pack_bf16_pair(rounded[0], rounded[1]);
+>       const uint32_t high_tokens = pack_bf16_pair(rounded[2], rounded[3]);
+>       const uint32_t even_low =
+>           __shfl_sync(kFullWarpMask, low_tokens, source_even);
+>       const uint32_t even_high =
+>           __shfl_sync(kFullWarpMask, high_tokens, source_even);
+>       const uint32_t odd_low =
+>           __shfl_sync(kFullWarpMask, low_tokens, source_odd);
+>       const uint32_t odd_high =
+>           __shfl_sync(kFullWarpMask, high_tokens, source_odd);
+>       weight_operand[piece][0] =
+>           ((even_low >> source_shift) & 0xffffU) |
+>           (((odd_low >> source_shift) & 0xffffU) << 16);
+>       weight_operand[piece][1] =
+>           ((even_high >> source_shift) & 0xffffU) |
+>           (((odd_high >> source_shift) & 0xffffU) << 16);
+>     }
+300,301c312,316
+<       mma_m16n8k16_bf16(numerator[step], value0, value1, value2, value3,
+<                         probability_operand0, probability_operand1);
+---
+> #pragma unroll
+>       for (uint32_t piece = 0; piece < 3; ++piece) {
+>         mma_m16n8k16_bf16(numerator[step], value0, value1, value2, value3,
+>                           weight_operand[piece][0], weight_operand[piece][1]);
+>       }
+328,329c343,346
+<     row_output[index] =
+<         __float2bfloat16_rn(isnan(row_sum) ? CUDART_NAN_F : merged);
+---
+>     const float inverse_sum =
+>         isnan(row_sum) ? CUDART_NAN_F
+>                        : (row_sum > 0.0F ? 1.0F / row_sum : 0.0F);
+>     row_output[index] = __float2bfloat16_rn(merged * inverse_sum);

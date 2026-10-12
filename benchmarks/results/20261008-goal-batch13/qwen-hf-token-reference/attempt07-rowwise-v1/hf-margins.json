@@ -1,0 +1,152 @@
+[
+ {
+  "workload": "fixed",
+  "id": "planning",
+  "index": 25,
+  "hf_token": 6978,
+  "riley_token": 22711,
+  "hf_top5_ids": [
+   6978,
+   22711,
+   5671,
+   3082,
+   7089
+  ],
+  "hf_top5_logits": [
+   22.0,
+   22.0,
+   21.75,
+   21.5,
+   21.125
+  ],
+  "top1_minus_top2": 0.0,
+  "riley_token_rank_in_hf": 0,
+  "riley_token_logit_gap": 0.0,
+  "bf16_step_at_top1": 0.0859375
+ },
+ {
+  "workload": "fixed",
+  "id": "editing",
+  "index": 28,
+  "hf_token": 1039,
+  "riley_token": 264,
+  "hf_top5_ids": [
+   1039,
+   264,
+   279,
+   458,
+   1790
+  ],
+  "hf_top5_logits": [
+   34.25,
+   34.0,
+   31.0,
+   30.625,
+   29.25
+  ],
+  "top1_minus_top2": 0.25,
+  "riley_token_rank_in_hf": 1,
+  "riley_token_logit_gap": 0.25,
+  "bf16_step_at_top1": 0.1337890625
+ },
+ {
+  "workload": "fixed",
+  "id": "sql",
+  "index": 4,
+  "hf_token": 8420,
+  "riley_token": 1249,
+  "hf_top5_ids": [
+   1249,
+   8420,
+   14374,
+   334,
+   785
+  ],
+  "hf_top5_logits": [
+   24.125,
+   24.125,
+   23.75,
+   22.625,
+   22.375
+  ],
+  "top1_minus_top2": 0.0,
+  "riley_token_rank_in_hf": 0,
+  "riley_token_logit_gap": 0.0,
+  "bf16_step_at_top1": 0.09423828125
+ },
+ {
+  "workload": "fixed",
+  "id": "classification",
+  "index": 26,
+  "hf_token": 35490,
+  "riley_token": 86433,
+  "hf_top5_ids": [
+   86433,
+   35490,
+   18783,
+   85040,
+   26573
+  ],
+  "hf_top5_logits": [
+   21.75,
+   21.5,
+   21.25,
+   21.125,
+   20.875
+  ],
+  "top1_minus_top2": 0.25,
+  "riley_token_rank_in_hf": 0,
+  "riley_token_logit_gap": 0.0,
+  "bf16_step_at_top1": 0.0849609375
+ },
+ {
+  "workload": "natural",
+  "id": "natural-16",
+  "index": 29,
+  "hf_token": 271,
+  "riley_token": 10856,
+  "hf_top5_ids": [
+   10856,
+   382,
+   271,
+   624,
+   198
+  ],
+  "hf_top5_logits": [
+   24.875,
+   24.75,
+   24.75,
+   24.625,
+   24.5
+  ],
+  "top1_minus_top2": 0.125,
+  "riley_token_rank_in_hf": 0,
+  "riley_token_logit_gap": 0.0,
+  "bf16_step_at_top1": 0.09716796875
+ },
+ {
+  "workload": "natural",
+  "id": "natural-398",
+  "index": 36,
+  "hf_token": 6534,
+  "riley_token": 323,
+  "hf_top5_ids": [
+   6534,
+   323,
+   15048,
+   3364,
+   15274
+  ],
+  "hf_top5_logits": [
+   23.125,
+   23.0,
+   21.75,
+   21.5,
+   20.875
+  ],
+  "top1_minus_top2": 0.125,
+  "riley_token_rank_in_hf": 1,
+  "riley_token_logit_gap": 0.125,
+  "bf16_step_at_top1": 0.09033203125
+ }
+]
