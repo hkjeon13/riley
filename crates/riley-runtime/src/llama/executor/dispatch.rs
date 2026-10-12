@@ -20,6 +20,7 @@ use riley_cuda::{
     gated_multiply, grouped_ragged_paged_attention, indexed_rope, launch_step_graph,
     native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma,
     native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge,
+    native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, qkv_split_bias,
     qkv_split_bias_rope, ragged_paged_attention, ragged_paged_kv_cache_write, residual_add,
     row_gather, set_step_capture_dynamic_counts, silu, silu_gated_multiply,
@@ -593,6 +594,7 @@ pub(in crate::llama) fn execute_packed(
             config.ragged_attention_reduction_profile(),
             config.ragged_attention_implementation(),
             config.d128_global_merge(),
+            config.d128_tensor_core_producer(),
             prompt_rows_in_step
                 .then(|| (bounds.max_input_tokens() + STEP_COUNT_WORDS) as u64),
             config.fused_silu_multiply(),
@@ -837,6 +839,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     attention_reduction_profile: AttentionReductionProfile,
     attention_implementation: RaggedAttentionImplementation,
     d128_global_merge: bool,
+    d128_tensor_core_producer: bool,
     prompt_row_kinds_first_word: Option<u64>,
     fused_silu_multiply: bool,
     fused_qkv_rope: bool,
@@ -1321,7 +1324,14 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             };
             // Shared-KV producer geometry: bit-identical states, one K/V read
             // per KV head instead of one per query head.
-            if let (true, Some(first_word)) = (d128_global_merge, prompt_row_kinds_first_word) {
+            if d128_global_merge && d128_tensor_core_producer {
+                native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge(
+                    &mut params,
+                    stream,
+                )
+            } else if let (true, Some(first_word)) =
+                (d128_global_merge, prompt_row_kinds_first_word)
+            {
                 native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma(
                     &mut params,
                     first_word,
