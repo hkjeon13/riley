@@ -83,6 +83,10 @@ serve options:
   --kv-cache-write ID            separate-v1 or fused-split-v1: write the KV cache inside the merged
                                  QKV split kernel, same stored bytes; needs --query-key-rope
                                  fused-split-v1 (default: separate-v1)
+  --prompt-attention ID          shared-kv-v1 or tensor-core-v1: produce the attention of prompt
+                                 tokens with the tensor-core prefill kernel (different rounding for
+                                 prompt tokens, identical in every batch and chunk); needs
+                                 --decode-attention-merge global-max-v1 (default: shared-kv-v1)
   --mlp-residual-norm ID         separate-v1 or fused-next-norm-v1: fuse the MLP residual add with
                                  the following norm; needs --residual-rmsnorm fused
                                  (default: separate-v1)
@@ -142,6 +146,7 @@ struct ServeOptions {
     fused_silu_multiply: bool,
     fused_qkv_rope: bool,
     fused_kv_write: bool,
+    prompt_attention_mma: bool,
     fused_mlp_residual_norm: bool,
     output_row_lm_head: bool,
     decode_step_capture: bool,
@@ -372,6 +377,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut mlp_activation = None;
     let mut query_key_rope = None;
     let mut kv_cache_write = None;
+    let mut prompt_attention = None;
     let mut mlp_residual_norm = None;
     let mut lm_head_rows = None;
     let mut decode_step_graph = None;
@@ -619,6 +625,24 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     }
                 },
                 "--query-key-rope",
+            )?,
+            "--prompt-attention" => set_once(
+                &mut prompt_attention,
+                match parse_utf8(
+                    next_value(&mut arguments, "--prompt-attention")?,
+                    "--prompt-attention",
+                )?
+                .as_str()
+                {
+                    "shared-kv-v1" => false,
+                    "tensor-core-v1" => true,
+                    _ => {
+                        return Err(
+                            "--prompt-attention requires shared-kv-v1 or tensor-core-v1".to_owned()
+                        );
+                    }
+                },
+                "--prompt-attention",
             )?,
             "--kv-cache-write" => set_once(
                 &mut kv_cache_write,
@@ -957,6 +981,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     }
     let fused_qkv_rope = query_key_rope.unwrap_or(false);
     let fused_kv_write = kv_cache_write.unwrap_or(false);
+    let prompt_attention_mma = prompt_attention.unwrap_or(false);
     if fused_kv_write && !fused_qkv_rope {
         return Err(
             "--kv-cache-write fused-split-v1 requires --query-key-rope fused-split-v1".to_owned(),
@@ -1050,6 +1075,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         fused_silu_multiply: mlp_activation.unwrap_or(false),
         fused_qkv_rope,
         fused_kv_write,
+        prompt_attention_mma,
         fused_mlp_residual_norm,
         output_row_lm_head: lm_head_rows.unwrap_or(false),
         decode_step_capture,
@@ -1764,6 +1790,11 @@ fn run_serve(
     };
     let executor = if options.fused_kv_write {
         executor.with_fused_kv_write()
+    } else {
+        executor
+    };
+    let executor = if options.prompt_attention_mma {
+        executor.with_prompt_attention_mma()
     } else {
         executor
     };
@@ -4797,6 +4828,7 @@ mod tests {
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
                 fused_kv_write: false,
+                prompt_attention_mma: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
@@ -5197,6 +5229,7 @@ mod tests {
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
                 fused_kv_write: false,
+                prompt_attention_mma: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
@@ -5364,6 +5397,7 @@ mod tests {
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
                 fused_kv_write: false,
+                prompt_attention_mma: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
@@ -5772,6 +5806,7 @@ mod tests {
                 fused_silu_multiply: false,
                 fused_qkv_rope: false,
                 fused_kv_write: false,
+                prompt_attention_mma: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,

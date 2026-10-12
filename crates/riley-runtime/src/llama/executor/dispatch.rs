@@ -18,6 +18,7 @@ use riley_cuda::{
     abort_step_capture, begin_step_capture, deterministic_bf16_argmax,
     deterministic_bf16_argmax_bounded, embedding, end_step_capture, fixed37_ragged_paged_attention,
     gated_multiply, grouped_ragged_paged_attention, indexed_rope, launch_step_graph,
+    native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma,
     native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, qkv_split_bias,
     qkv_split_bias_rope, ragged_paged_attention, ragged_paged_kv_cache_write, residual_add,
@@ -25,7 +26,7 @@ use riley_cuda::{
     validate_replayed_decode_step,
 };
 
-use super::super::batch::LlamaPackedBatchMetadata;
+use super::super::batch::{LlamaBatchRowKind, LlamaPackedBatchMetadata};
 use super::super::forward::{
     ForwardBuffers, GemmPlans, LlamaForwardError, LlamaRmsNormProfile, PreparedLlamaForward,
     PreparedLlamaGemm, execute_gemm, execute_profile_residual_rms_norm, execute_profile_rms_norm,
@@ -371,6 +372,31 @@ pub(in crate::llama) fn execute_packed(
                     host.uploaded_step_counts = Some(step_counts);
                 }
             }
+            if config.prompt_attention_mma() {
+                // One kind word per launched token row, after the positions and
+                // the step counts: 1 marks a prompt token that takes the
+                // tensor-core producer. Only a step with such rows reads the
+                // kinds, so only such a step copies them.
+                let row_kinds_offset =
+                    ((bounds.max_input_tokens() + STEP_COUNT_WORDS) * U32_BYTES) as u64;
+                if has_tensor_core_prompt_rows(&packed) {
+                    for row in 0..active {
+                        host.row_kinds[row * U32_BYTES..(row + 1) * U32_BYTES].copy_from_slice(
+                            &u32::from(is_tensor_core_prompt_row(&packed, row)).to_ne_bytes(),
+                        );
+                    }
+                    host.row_kinds[active * U32_BYTES..dense_rows * U32_BYTES].fill(0);
+                    device
+                        .row_positions
+                        .upload_from_slice(
+                            row_kinds_offset,
+                            &host.row_kinds[..dense_rows * U32_BYTES],
+                            &mut forward.io_staging,
+                            stream,
+                        )
+                        .map_err(|source| batch_cuda(metadata_site, source))?;
+                }
+            }
             if packed.output_count() != 0 {
                 let output_indices = device.output_token_indices.as_mut().ok_or(
                     LlamaBatchExecutorError::InvalidConfiguration {
@@ -536,6 +562,11 @@ pub(in crate::llama) fn execute_packed(
                 None => (1, dense_rows),
             }
         };
+        // A step without prompt rows does not launch the tensor-core prompt
+        // producer at all, so it is recorded separately from one that does.
+        let prompt_rows_in_step =
+            config.prompt_attention_mma() && has_tensor_core_prompt_rows(&packed);
+        let capture_key = capture_key * 2 + usize::from(prompt_rows_in_step);
         let recorded = captured_steps.as_deref().and_then(|steps| {
             steps
                 .iter()
@@ -562,6 +593,8 @@ pub(in crate::llama) fn execute_packed(
             config.ragged_attention_reduction_profile(),
             config.ragged_attention_implementation(),
             config.d128_global_merge(),
+            prompt_rows_in_step
+                .then(|| (bounds.max_input_tokens() + STEP_COUNT_WORDS) as u64),
             config.fused_silu_multiply(),
             config.fused_qkv_rope(),
             config.fused_kv_write(),
@@ -804,6 +837,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     attention_reduction_profile: AttentionReductionProfile,
     attention_implementation: RaggedAttentionImplementation,
     d128_global_merge: bool,
+    prompt_row_kinds_first_word: Option<u64>,
     fused_silu_multiply: bool,
     fused_qkv_rope: bool,
     fused_kv_write: bool,
@@ -1287,7 +1321,13 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             };
             // Shared-KV producer geometry: bit-identical states, one K/V read
             // per KV head instead of one per query head.
-            if d128_global_merge {
+            if let (true, Some(first_word)) = (d128_global_merge, prompt_row_kinds_first_word) {
+                native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma(
+                    &mut params,
+                    first_word,
+                    stream,
+                )
+            } else if d128_global_merge {
                 native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge(&mut params, stream)
             } else {
                 native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv(&mut params, stream)
@@ -1703,6 +1743,27 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         lm_head_site,
     )?;
     Ok(())
+}
+
+/// First position whose prompt token takes the tensor-core attention producer.
+/// The split is by the token's own position, so a token takes the same path in
+/// every batch and chunk. Below it the shared-KV producer is the cheaper one
+/// for the few rows of a prompt that barely crosses the bound, and a step
+/// whose prompt rows all sit below it launches nothing extra.
+const TENSOR_CORE_PROMPT_MIN_POSITION: u32 = 256;
+
+fn is_tensor_core_prompt_row(packed: &LlamaPackedBatchMetadata<'_>, row: usize) -> bool {
+    let slot = packed.row_sequence_slots()[row] as usize;
+    packed
+        .row_kind_codes()
+        .get(slot)
+        .is_some_and(|code| *code == LlamaBatchRowKind::Prefill.code())
+        && packed.position_ids()[row] >= TENSOR_CORE_PROMPT_MIN_POSITION
+}
+
+fn has_tensor_core_prompt_rows(packed: &LlamaPackedBatchMetadata<'_>) -> bool {
+    !packed.prefill_row_indices().is_empty()
+        && (0..packed.total_input_tokens()).any(|row| is_tensor_core_prompt_row(packed, row))
 }
 
 fn upload_batch_tokens(

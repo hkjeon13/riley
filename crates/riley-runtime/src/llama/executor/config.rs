@@ -151,6 +151,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     shape_buckets: LlamaBatchShapeBuckets,
     greedy_candidate_count: Option<usize>,
     d128_global_merge: bool,
+    prompt_attention_mma: bool,
     fused_silu_multiply: bool,
     fused_qkv_rope: bool,
     fused_kv_write: bool,
@@ -179,6 +180,7 @@ impl PreparedLlamaBatchExecutorConfig {
             shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
             greedy_candidate_count: None,
             d128_global_merge: false,
+            prompt_attention_mma: false,
             fused_silu_multiply: false,
             fused_qkv_rope: false,
             fused_kv_write: false,
@@ -236,6 +238,22 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn d128_global_merge(self) -> bool {
         self.d128_global_merge
+    }
+
+    /// Produces the attention of prompt rows with the tensor-core prefill
+    /// kernel. A prompt token's attention then rounds differently from the
+    /// shared-KV producer, the same way in every batch and chunk; generated
+    /// tokens are unaffected. Requires the D128 global merge and synchronous
+    /// metadata transport.
+    #[must_use]
+    pub const fn with_prompt_attention_mma(mut self) -> Self {
+        self.prompt_attention_mma = true;
+        self
+    }
+
+    #[must_use]
+    pub const fn prompt_attention_mma(self) -> bool {
+        self.prompt_attention_mma
     }
 
     /// Runs the MLP activation and gate multiply as one BF16 kernel. The
@@ -659,6 +677,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         shape_buckets: config.shape_buckets,
         greedy_candidate_count: config.greedy_candidate_count,
         d128_global_merge: config.d128_global_merge,
+        prompt_attention_mma: config.prompt_attention_mma,
         fused_silu_multiply: config.fused_silu_multiply,
         fused_qkv_rope: config.fused_qkv_rope,
         fused_kv_write: config.fused_kv_write,

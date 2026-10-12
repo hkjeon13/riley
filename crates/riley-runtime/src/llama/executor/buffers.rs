@@ -46,6 +46,9 @@ pub(crate) struct PerOperationHostWorkspace {
     /// Step counts last written to the device (active rows, output rows);
     /// a step with the same counts skips that copy.
     pub(crate) uploaded_step_counts: Option<[u32; STEP_COUNT_WORDS]>,
+    /// Row kinds (one U32 per token row, 1 = prompt token) for the
+    /// tensor-core prompt attention.
+    pub(crate) row_kinds: Box<[u8]>,
 }
 
 pub(crate) struct IterationBatchHostWorkspace {
@@ -90,6 +93,7 @@ pub(crate) fn allocate_synchronous_host_input(
         row_positions: allocate_zeroed_host_bytes(bounds.max_input_tokens(), U32_BYTES)?,
         output_token_indices: allocate_zeroed_host_bytes(bounds.max_output_slots(), U32_BYTES)?,
         uploaded_step_counts: None,
+        row_kinds: allocate_zeroed_host_bytes(bounds.max_input_tokens(), U32_BYTES)?,
     }))
 }
 
@@ -223,10 +227,11 @@ fn allocate_per_operation_device_metadata(
             U32_BYTES,
             LlamaBatchExecutorResource::RowSequenceSlots,
         )?,
-        // Two trailing U32 words hold the step's active row count and output
-        // row count for recorded steps that read them on the device.
+        // Two U32 words after the positions hold the step's active row count
+        // and output row count for recorded steps that read them on the
+        // device; one row-kind word per token row follows them.
         row_positions: allocate(
-            bounds.max_input_tokens() + STEP_COUNT_WORDS,
+            2 * bounds.max_input_tokens() + STEP_COUNT_WORDS,
             U32_BYTES,
             LlamaBatchExecutorResource::RowPositions,
         )?,
