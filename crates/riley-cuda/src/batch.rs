@@ -901,8 +901,38 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma<
     )
 }
 
+/// Tensor-core partial-state producer followed by the global-max page merge.
+///
+/// The producer keeps the shared-KV launch geometry (one CTA per page, KV head
+/// and row) and writes the same page-local softmax states, but computes them
+/// with tensor-core arithmetic: scores keep the two BF16 roundings, the FP32
+/// softmax weights are carried through the tensor cores as three exact BF16
+/// pieces. The states therefore differ from the shared-KV producer's in
+/// rounding only. An output depends only on the row's own query and context,
+/// not on the rows it is batched with or the chunk a prompt token arrives in.
+/// Requires ascending order.
+///
+/// # Errors
+///
+/// As [`native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge`].
+pub fn native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge<
+    S: CudaExecutionStream + ?Sized,
+>(
+    params: &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    execute_native_bf16_ragged_d128_two_stage(
+        params,
+        stream,
+        D128_PRODUCER_TENSOR_CORE,
+        D128_MERGE_GLOBAL_MAX,
+        0,
+    )
+}
+
 const D128_PRODUCER_PER_QUERY_HEAD: u64 = 0;
 const D128_PRODUCER_SHARED_KV: u64 = 1;
+const D128_PRODUCER_TENSOR_CORE: u64 = 2;
 const D128_MERGE_ORDERED: u64 = 0;
 const D128_MERGE_GLOBAL_MAX: u64 = 1;
 

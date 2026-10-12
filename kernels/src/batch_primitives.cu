@@ -3462,6 +3462,214 @@ void native_bf16_prefill_d128_mma_partial_state_kernel(
   }
 }
 
+// Tensor-core partial-state producer for the D128 two-stage attention. One
+// single-warp CTA owns a `(logical_block, key_value_head, row)` page, the
+// launch geometry of the shared-KV producer, and writes the page's state
+// `[m, l, n[128]]` for all eight query heads of the KV head:
+//   1. score = BF16(BF16(q . k) * scale): eight m16n8k16 MMAs (tokens x
+//      heads) accumulate the depth steps in ascending order into one FP32
+//      accumulator, with the paged producers' two BF16 roundings. Tokens
+//      past the page's valid count score -Inf.
+//   2. m = max of the page's scores; e = exp(score - m); l = sum of e (the
+//      two tokens of a lane, then a fixed lane tree).
+//   3. n = sum of e * v with the full FP32 weight: e is split exactly into
+//      three BF16 pieces (e = high + middle + low) and each piece is one MMA
+//      operand (depth x heads over tokens), so no weight bit is dropped.
+// A state depends only on its own page and row, so it does not depend on the
+// other rows of the batch or on the chunk a prompt token arrives in. It is
+// the same page-local softmax state as the shared-KV producer's, computed in
+// a different order, so it differs from it in rounding only; it is a
+// separately selected numerical mode. An unresolvable page writes a NaN
+// state; a non-finite score yields a NaN state through its weights.
+__global__ __launch_bounds__(kWarpSize)
+void native_bf16_ragged_paged_split_gqa_d128_tensor_core_partial_state_kernel(
+    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
+    const __nv_bfloat16* value_pool, float* partial_states,
+    DeviceBatch batch, uint64_t partial_state_capacity, float scale) {
+  constexpr uint32_t kHead = 128;
+  constexpr uint32_t kGroupHeads = 8;
+  const uint32_t lane = threadIdx.x;
+  const uint32_t group = lane / 4;
+  const uint32_t pair = lane % 4;
+  const uint64_t logical_block = blockIdx.x;
+  const uint64_t key_value_head = blockIdx.y;
+  const uint64_t row = blockIdx.z;
+  // Every exit before the shuffles below is uniform across the warp.
+  if (row >= active_rows(batch) ||
+      key_value_head >= kNativeBf16RaggedPagedSplitGqaD128KeyValueHeadCount) {
+    return;
+  }
+  const uint64_t partial_state_count =
+      static_cast<uint64_t>(batch.row_positions[row]) /
+          RILEY_CUDA_PAGED_KV_BLOCK_SIZE + 1;
+  if (logical_block >= partial_state_count ||
+      logical_block >= partial_state_capacity) {
+    return;
+  }
+  // This lane holds query heads `2 * pair` and `2 * pair + 1` of the group.
+  float* const state0 =
+      partial_states +
+      ((row * partial_state_capacity + logical_block) *
+           kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount +
+       key_value_head * kGroupHeads + 2 * pair) *
+          kNativeBf16RaggedPagedSplitGqaD128StateStride;
+  float* const state1 = state0 + kNativeBf16RaggedPagedSplitGqaD128StateStride;
+  uint64_t block_head_base = 0;
+  uint64_t token_count = 0;
+  const bool valid_block = resolve_ragged_partial_block(
+      batch, row, logical_block, key_value_head, &block_head_base,
+      &token_count);
+  float maximum0 = CUDART_NAN_F;
+  float maximum1 = CUDART_NAN_F;
+  float denominator0 = CUDART_NAN_F;
+  float denominator1 = CUDART_NAN_F;
+  float numerator[8][4];
+#pragma unroll
+  for (uint32_t step = 0; step < 8; ++step) {
+    numerator[step][0] = valid_block ? 0.0F : CUDART_NAN_F;
+    numerator[step][1] = numerator[step][0];
+    numerator[step][2] = numerator[step][0];
+    numerator[step][3] = numerator[step][0];
+  }
+  if (valid_block) {
+    // Query operand B[k = depth][n = head]: head `group` of this KV head.
+    const __nv_bfloat16* const query_head =
+        query +
+        (row * kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount +
+         key_value_head * kGroupHeads + group) *
+            kHead +
+        2 * pair;
+    // Key operand A[m = token][k = depth]: tokens `group` and `group + 8`.
+    const __nv_bfloat16* const key_low =
+        key_pool + block_head_base + group * kHead + 2 * pair;
+    const __nv_bfloat16* const key_high = key_low + 8 * kHead;
+    // The eight depth steps accumulate into one FP32 accumulator in
+    // ascending order, the way a tensor-core GEMM walks its inner dimension.
+    float dot[4] = {0.0F, 0.0F, 0.0F, 0.0F};
+#pragma unroll
+    for (uint32_t step = 0; step < 8; ++step) {
+      mma_m16n8k16_bf16(
+          dot, *reinterpret_cast<const uint32_t*>(key_low + 16 * step),
+          *reinterpret_cast<const uint32_t*>(key_high + 16 * step),
+          *reinterpret_cast<const uint32_t*>(key_low + 16 * step + 8),
+          *reinterpret_cast<const uint32_t*>(key_high + 16 * step + 8),
+          *reinterpret_cast<const uint32_t*>(query_head + 16 * step),
+          *reinterpret_cast<const uint32_t*>(query_head + 16 * step + 8));
+    }
+    // [token group, head 2 pair], [token group, head 2 pair + 1],
+    // [token group + 8, head 2 pair], [token group + 8, head 2 pair + 1].
+    float score[4];
+#pragma unroll
+    for (uint32_t element = 0; element < 4; ++element) {
+      const bool present = (element < 2 ? group : group + 8) < token_count;
+      score[element] = present ? staged_attention_score(dot[element], scale)
+                               : -CUDART_INF_F;
+    }
+    maximum0 = fmaxf(score[0], score[2]);
+    maximum1 = fmaxf(score[1], score[3]);
+#pragma unroll
+    for (uint32_t offset = 4; offset < kWarpSize; offset *= 2) {
+      maximum0 =
+          fmaxf(maximum0, __shfl_xor_sync(kFullWarpMask, maximum0, offset));
+      maximum1 =
+          fmaxf(maximum1, __shfl_xor_sync(kFullWarpMask, maximum1, offset));
+    }
+    float weight[4];
+    weight[0] = expf(score[0] - maximum0);
+    weight[1] = expf(score[1] - maximum1);
+    weight[2] = expf(score[2] - maximum0);
+    weight[3] = expf(score[3] - maximum1);
+    denominator0 = weight[0] + weight[2];
+    denominator1 = weight[1] + weight[3];
+#pragma unroll
+    for (uint32_t offset = 4; offset < kWarpSize; offset *= 2) {
+      denominator0 += __shfl_xor_sync(kFullWarpMask, denominator0, offset);
+      denominator1 += __shfl_xor_sync(kFullWarpMask, denominator1, offset);
+    }
+    // Weight operands B[k = token][n = head group], one per BF16 piece: the
+    // operand of lane `(group, pair)` is head `group` at tokens
+    // `2 * pair (+1, +8, +9)`, whose weights sit in lanes
+    // `(2 * pair, group / 2)` and `(2 * pair + 1, group / 2)`. Each
+    // subtraction is exact, and the third piece holds what is left.
+    const uint32_t source_even = 8 * pair + group / 2;
+    const uint32_t source_odd = source_even + 4;
+    const uint32_t source_shift = 16 * (group % 2);
+    uint32_t weight_operand[3][2];
+#pragma unroll
+    for (uint32_t piece = 0; piece < 3; ++piece) {
+      float rounded[4];
+#pragma unroll
+      for (uint32_t element = 0; element < 4; ++element) {
+        rounded[element] =
+            __bfloat162float(__float2bfloat16_rn(weight[element]));
+        weight[element] -= rounded[element];
+      }
+      const uint32_t low_tokens = pack_bf16_pair(rounded[0], rounded[1]);
+      const uint32_t high_tokens = pack_bf16_pair(rounded[2], rounded[3]);
+      const uint32_t even_low =
+          __shfl_sync(kFullWarpMask, low_tokens, source_even);
+      const uint32_t even_high =
+          __shfl_sync(kFullWarpMask, high_tokens, source_even);
+      const uint32_t odd_low =
+          __shfl_sync(kFullWarpMask, low_tokens, source_odd);
+      const uint32_t odd_high =
+          __shfl_sync(kFullWarpMask, high_tokens, source_odd);
+      weight_operand[piece][0] =
+          ((even_low >> source_shift) & 0xffffU) |
+          (((odd_low >> source_shift) & 0xffffU) << 16);
+      weight_operand[piece][1] =
+          ((even_high >> source_shift) & 0xffffU) |
+          (((odd_high >> source_shift) & 0xffffU) << 16);
+    }
+    // Value operand A[m = depth][k = token]: depths `16 step + group (+8)`;
+    // tokens past the page's valid count are staged as zero.
+    const uint16_t* const value_token =
+        reinterpret_cast<const uint16_t*>(value_pool + block_head_base +
+                                          2 * pair * kHead + group);
+    const bool present0 = 2 * pair < token_count;
+    const bool present1 = 2 * pair + 1 < token_count;
+    const bool present2 = 2 * pair + 8 < token_count;
+    const bool present3 = 2 * pair + 9 < token_count;
+#pragma unroll
+    for (uint32_t step = 0; step < 8; ++step) {
+      const uint16_t* const token0 = value_token + 16 * step;
+      const uint16_t* const token1 = token0 + kHead;
+      const uint16_t* const token2 = token0 + 8 * kHead;
+      const uint16_t* const token3 = token2 + kHead;
+      const uint32_t value0 =
+          (present0 ? static_cast<uint32_t>(token0[0]) : 0U) |
+          ((present1 ? static_cast<uint32_t>(token1[0]) : 0U) << 16);
+      const uint32_t value1 =
+          (present0 ? static_cast<uint32_t>(token0[8]) : 0U) |
+          ((present1 ? static_cast<uint32_t>(token1[8]) : 0U) << 16);
+      const uint32_t value2 =
+          (present2 ? static_cast<uint32_t>(token2[0]) : 0U) |
+          ((present3 ? static_cast<uint32_t>(token3[0]) : 0U) << 16);
+      const uint32_t value3 =
+          (present2 ? static_cast<uint32_t>(token2[8]) : 0U) |
+          ((present3 ? static_cast<uint32_t>(token3[8]) : 0U) << 16);
+#pragma unroll
+      for (uint32_t piece = 0; piece < 3; ++piece) {
+        mma_m16n8k16_bf16(numerator[step], value0, value1, value2, value3,
+                          weight_operand[piece][0], weight_operand[piece][1]);
+      }
+    }
+  }
+  if (group == 0) {
+    state0[0] = maximum0;
+    state0[1] = denominator0;
+    state1[0] = maximum1;
+    state1[1] = denominator1;
+  }
+#pragma unroll
+  for (uint32_t step = 0; step < 8; ++step) {
+    state0[2 + 16 * step + group] = numerator[step][0];
+    state1[2 + 16 * step + group] = numerator[step][1];
+    state0[2 + 16 * step + group + 8] = numerator[step][2];
+    state1[2 + 16 * step + group + 8] = numerator[step][3];
+  }
+}
+
 // Shared-KV launch geometry for the D128 partial-state producer. One CTA owns
 // a `(logical_block, key_value_head, row)` page and has one warp per query
 // head of that KV head. The page's immutable BF16 K/V tile is read from global
@@ -4169,7 +4377,8 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
   params = &stable_params;
   if (params->format_version !=
           RILEY_CUDA_NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_V3_VERSION ||
-      params->reserved[0] > 1 || params->reserved[1] > 1 ||
+      params->reserved[0] > 2 || params->reserved[1] > 1 ||
+      (params->reserved[0] == 2 && params->reserved[1] != 1) ||
       (params->reserved[2] != 0 &&
        (params->reserved[0] != 1 || params->reserved[1] != 1)) ||
       params->reserved[3] != 0) {
@@ -4345,15 +4554,15 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
           : params->launch_partial_state_count;
   // A dynamic step capture launches the producer over every dense row; rows
   // at or beyond the device-side active count exit immediately. Only the
-  // shared-KV producer with the global-max merge supports it.
+  // shared-KV and tensor-core producers with the global-max merge support it.
   const auto& dynamic = riley_cuda_internal::thread_step_capture_dynamic();
   if (dynamic.counts != nullptr &&
-      (params->reserved[0] != 1 || params->reserved[1] != 1 ||
+      (params->reserved[0] == 0 || params->reserved[1] != 1 ||
        dynamic.dense_rows > params->output_row_count ||
        dynamic.dense_rows > kMaximumGridYOrZ)) {
     return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
-                            "a dynamic step capture requires the shared-KV producer, the global-max merge, and dense rows within the output rows");
+                            "a dynamic step capture requires the shared-KV or tensor-core producer, the global-max merge, and dense rows within the output rows");
   }
   const uint64_t launch_rows = dynamic.counts != nullptr
                                    ? dynamic.dense_rows
@@ -4387,9 +4596,23 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
         static_cast<uint32_t>(launch_extent),
         static_cast<uint32_t>(params->query_head_count),
         static_cast<uint32_t>(launch_rows));
-    // reserved[0] selects the producer launch geometry only; both producers
-    // write bit-identical partial states.
-    if (params->reserved[0] == 1) {
+    // reserved[0] selects the producer: 2 is the tensor-core producer (its
+    // own rounding); 1 and 0 are the two launch geometries of the per-token
+    // producer, which write bit-identical partial states.
+    if (params->reserved[0] == 2) {
+      const dim3 tensor_core_grid(
+          static_cast<uint32_t>(launch_extent),
+          static_cast<uint32_t>(params->key_value_head_count),
+          static_cast<uint32_t>(launch_rows));
+      native_bf16_ragged_paged_split_gqa_d128_tensor_core_partial_state_kernel<<<
+          tensor_core_grid, kWarpSize, 0, stream->stream>>>(
+          reinterpret_cast<const __nv_bfloat16*>(query.data),
+          reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+          reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+          reinterpret_cast<float*>(partial_states.data),
+          device_batch(params->batch, batch), params->partial_state_capacity,
+          params->scale);
+    } else if (params->reserved[0] == 1) {
       const dim3 shared_kv_grid(
           static_cast<uint32_t>(launch_extent),
           static_cast<uint32_t>(params->key_value_head_count),
