@@ -11,6 +11,62 @@ pub enum OverloadPolicy {
     Wait,
 }
 
+/// Iteration sizes at which the executor's cost steps up, and how much prefill
+/// an iteration may put off to stay below one.
+///
+/// A step whose row count just passes a boundary costs every decoding request
+/// the whole step-up for a handful of prompt tokens. With this policy the
+/// scheduler trims those tokens from the tail of the prefill selection and
+/// runs them in the next iteration instead. A request is trimmed at most once,
+/// so the delay is bounded by one iteration per request, and chunking a prompt
+/// differently never changes which tokens it is given.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PrefillPlateauPolicy {
+    /// Strictly ascending iteration token counts; one more token than a
+    /// boundary is disproportionately more expensive than the boundary itself.
+    pub boundaries: Vec<usize>,
+    /// Largest number of prefill tokens put off to stay at a boundary.
+    pub max_deferred_tokens: usize,
+    /// Fewest decode rows an iteration needs before prefill is put off.
+    pub min_decode_rows: usize,
+}
+
+impl PrefillPlateauPolicy {
+    /// Validates the policy against the iteration token budget it trims.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SchedulerError::InvalidConfiguration`] for an empty or
+    /// unordered boundary list, a boundary at or past the budget, or a zero
+    /// deferral bound.
+    pub fn validate(self, iteration_token_budget: usize) -> SchedulerResult<Self> {
+        if self.boundaries.is_empty() {
+            return Err(SchedulerError::InvalidConfiguration {
+                field: "prefill_plateau.boundaries",
+                reason: "must name at least one boundary",
+            });
+        }
+        if self.boundaries[0] == 0 || self.boundaries.windows(2).any(|pair| pair[0] >= pair[1]) {
+            return Err(SchedulerError::InvalidConfiguration {
+                field: "prefill_plateau.boundaries",
+                reason: "must be non-zero and strictly ascending",
+            });
+        }
+        if self
+            .boundaries
+            .last()
+            .is_some_and(|last| *last >= iteration_token_budget)
+        {
+            return Err(SchedulerError::InvalidConfiguration {
+                field: "prefill_plateau.boundaries",
+                reason: "must stay below iteration_token_budget",
+            });
+        }
+        validate_nonzero("prefill_plateau.max_deferred_tokens", self.max_deferred_tokens)?;
+        Ok(self)
+    }
+}
+
 /// All host-memory, work, and KV promises enforced by one scheduler.
 ///
 /// The fields are public to make deployment configuration explicit. Call
