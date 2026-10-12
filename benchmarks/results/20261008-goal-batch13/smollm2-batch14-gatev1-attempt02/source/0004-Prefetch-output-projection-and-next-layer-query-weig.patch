@@ -1,0 +1,67 @@
+From 60be6bfc6913f1ad8138d2a6641491c160322ecb Mon Sep 17 00:00:00 2001
+From: psyche <hkjeon13@gmail.com>
+Date: Sun, 11 Oct 2026 14:56:57 +0900
+Subject: [PATCH 4/5] Prefetch output-projection and next-layer query weights
+
+The fused QKV dispatch touches the output projection weights and the second
+merge-norm touches the next layer's query weights, the same way the gate/up
+weights are prefetched.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ kernels/src/decode_shared32_model.cuh       | 10 +++++++---
+ kernels/tests/kernel_batch14_correctness.cu |  3 ++-
+ 2 files changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/kernels/src/decode_shared32_model.cuh b/kernels/src/decode_shared32_model.cuh
+index 5fa1e63e..a1bb97bb 100644
+--- a/kernels/src/decode_shared32_model.cuh
++++ b/kernels/src/decode_shared32_model.cuh
+@@ -51,7 +51,9 @@ __global__ void qkv_merge_rope(const float* parts,__nv_bfloat16* qo,__nv_bfloat1
+ // run the unchanged K192 chunk recurrences for those tiles into the FP32 parts
+ // buffer, then the block merges and rotates its own columns exactly as
+ // qkv_merge_rope does. Blocks 0..35 are Q, 36..47 K, 48..59 V.
+-__global__ void qkv_parts_merge_rope(const __nv_bfloat16* x,const __nv_bfloat16* qw,const __nv_bfloat16* kw,const __nv_bfloat16* vw,float* parts,__nv_bfloat16* qo,__nv_bfloat16* keys,__nv_bfloat16* values,const float* cos,const float* sin,const uint32_t* pages,const uint32_t* shape,const uint32_t* active){
++// Blocks 60 and up only prefetch the output projection weights.
++__global__ void qkv_parts_merge_rope(const __nv_bfloat16* x,const __nv_bfloat16* qw,const __nv_bfloat16* kw,const __nv_bfloat16* vw,float* parts,__nv_bfloat16* qo,__nv_bfloat16* keys,__nv_bfloat16* values,const float* cos,const float* sin,const uint32_t* pages,const uint32_t* shape,const uint32_t* active,const void* prefetch=nullptr,uint64_t prefetch_bytes=0){
++ if(blockIdx.x>=60){riley_touch_weight_lines(prefetch,prefetch_bytes,uint64_t(blockIdx.x-60)*blockDim.x+threadIdx.x,uint64_t(gridDim.x-60)*blockDim.x);return;}
+  const uint32_t rows=*active;if(rows<1||rows>32)return;
+  const int block=blockIdx.x,kind=block<36?0:(block<48?1:2),local=block-(kind==0?0:(kind==1?36:48)),head=local/4,pair=local%4;
+  const int warp=threadIdx.x/32,column=head*8+pair+(warp/3)*4,chunk=warp%3;
+@@ -93,7 +95,7 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
+  if(layer==0)riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(0),nullptr,w(base),nullptr,b(1),0,pointwise,32);
+  auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
+  auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
+- if(fused_qkv)qkv_parts_merge_rope<<<60,192,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
++ if(fused_qkv)qkv_parts_merge_rope<<<60+48,192,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active,w(base+4),uint64_t(576)*576*2);
+  else{
+  shared32_qkv_parts<<<dim3(120,3),32,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),active);
+  qkv_merge_rope<<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
+@@ -115,7 +117,9 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
+  if(grouped_attention){
+   if(tiled)enqueue_shared32_projection<576,1536,320,true,false>(stream,b(11),w(273+layer*3+2),b(4),static_cast<float*>(scratch[7]),active);
+   else enqueue_shared32_projection<576,1536,320,false,false>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]),active);
+-  riley_merge_norm_v56::merge_norm<<<32,256,0,stream>>>(static_cast<const float*>(scratch[7]),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,pointwise,32);
++  // The second norm prefetches the next layer's query projection weights.
++  if(layer+1<30)riley_merge_norm_v56::merge_norm<<<32+48,256,0,stream>>>(static_cast<const float*>(scratch[7]),scratch[10],w(base+9),b(0),b(1),2,pointwise,32,w(base+10),uint64_t(576)*576*2,32);
++  else riley_merge_norm_v56::merge_norm<<<32,256,0,stream>>>(static_cast<const float*>(scratch[7]),scratch[10],w(1),b(0),b(1),2,pointwise,32);
+  }else{
+  if(tiled)enqueue_shared32_projection<576,1536,320,true>(stream,b(11),w(273+layer*3+2),b(4),static_cast<float*>(scratch[7]),active);
+  else enqueue_shared32_projection<576,1536,320,false>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]),active);
+diff --git a/kernels/tests/kernel_batch14_correctness.cu b/kernels/tests/kernel_batch14_correctness.cu
+index ede56690..153988eb 100644
+--- a/kernels/tests/kernel_batch14_correctness.cu
++++ b/kernels/tests/kernel_batch14_correctness.cu
+@@ -52,7 +52,8 @@ int fused_qkv_cases(int seed){
+    fill_bf16(ka,KV+2*Guard);fill_bf16(kb,KV+2*Guard);fill_bf16(va,KV+2*Guard);fill_bf16(vb,KV+2*Guard);
+    shared32_qkv_parts<<<dim3(120,3),32>>>(x,qw,kw,vw,pa,live);
+    riley_shared32_model::qkv_merge_rope<<<dim3(2,32),256>>>(pa,qa+Guard,ka+Guard,va+Guard,cos,sin,pages,shape,live);
+-   riley_shared32_model::qkv_parts_merge_rope<<<60,192>>>(x,qw,kw,vw,pb,qb+Guard,kb+Guard,vb+Guard,cos,sin,pages,shape,live);
++   if(seed%2)riley_shared32_model::qkv_parts_merge_rope<<<60+48,192>>>(x,qw,kw,vw,pb,qb+Guard,kb+Guard,vb+Guard,cos,sin,pages,shape,live,qw,uint64_t(576)*576*2);
++   else riley_shared32_model::qkv_parts_merge_rope<<<60,192>>>(x,qw,kw,vw,pb,qb+Guard,kb+Guard,vb+Guard,cos,sin,pages,shape,live);
+    OK(cudaGetLastError());OK(cudaDeviceSynchronize());
+    compare(pa,pb,Parts,"fused QKV FP32 parts including inactive",rows);
+    compare(qa,qb,32*576+2*Guard,"fused QKV rotated query including guards/inactive",rows);
+-- 
+2.52.0
+

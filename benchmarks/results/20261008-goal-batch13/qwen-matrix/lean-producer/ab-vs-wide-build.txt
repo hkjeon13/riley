@@ -1,0 +1,20 @@
+base True None new True None
+prompts with one output across all cells: base 15 / 15 new 15 / 15 | prompts whose output is unchanged: 15 / 15
+  c1-fixed     tok/s   124 ->   126 (v   129) tpot_p50  7.84 ->  7.74 (v  7.40) tpot_p99   7.9 ->   7.8 (v   7.4) ttft_p50  11 ->  11 (v  13) ttft_p95  13 ->  13 (v  19) ttft_p99  13 ->  13 (v  21) e2e_p50  161 ->  159 (v  157) err 0 gain +1.4%
+  c1-natural   tok/s   125 ->   127 (v   132) tpot_p50  7.85 ->  7.74 (v  7.45) tpot_p99   7.9 ->   7.8 (v   7.5) ttft_p50  11 ->  11 (v  13) ttft_p95  33 ->  31 (v  25) ttft_p99  33 ->  32 (v  26) e2e_p50  506 ->  499 (v  482) err 0 gain +1.4%
+  c8-fixed     tok/s   780 ->   791 (v   754) tpot_p50  9.13 ->  9.02 (v  9.10) tpot_p99   9.7 ->   9.8 (v   9.5) ttft_p50  23 ->  22 (v  33) ttft_p95  35 ->  34 (v  38) ttft_p99  64 ->  62 (v  51) e2e_p50  203 ->  201 (v  203) err 0 gain +1.4%
+  c8-natural   tok/s   836 ->   859 (v   835) tpot_p50  9.04 ->  8.79 (v  8.96) tpot_p99   9.4 ->   9.1 (v   9.1) ttft_p50  22 ->  22 (v  37) ttft_p95  44 ->  43 (v  44) ttft_p99  71 ->  69 (v  68) e2e_p50  589 ->  573 (v  593) err 0 gain +2.7%
+  c16-fixed    tok/s  1275 ->  1297 (v  1285) tpot_p50 11.11 -> 10.91 (v 10.27) tpot_p99  12.2 ->  12.3 (v  11.4) ttft_p50  24 ->  24 (v  37) ttft_p95  74 ->  64 (v  93) ttft_p99 124 -> 120 (v  94) e2e_p50  246 ->  238 (v  237) err 0 gain +1.7%
+  c16-natural  tok/s  1462 ->  1502 (v  1496) tpot_p50  9.97 ->  9.69 (v  9.63) tpot_p99  11.2 ->  11.0 (v   9.9) ttft_p50  31 ->  31 (v  41) ttft_p95  67 ->  69 (v  92) ttft_p99 189 -> 187 (v 125) e2e_p50  650 ->  635 (v  644) err 0 gain +2.7%
+  c32-fixed    tok/s  1806 ->  1842 (v  1887) tpot_p50 14.29 -> 14.17 (v 13.42) tpot_p99  15.4 ->  15.1 (v  20.0) ttft_p50  43 ->  41 (v  53) ttft_p95 242 -> 251 (v 160) ttft_p99 266 -> 264 (v 170) e2e_p50  335 ->  317 (v  319) err 0 gain +2.0%
+  c32-natural  tok/s  2260 ->  2326 (v  2493) tpot_p50 12.22 -> 11.84 (v 10.79) tpot_p99  15.6 ->  15.2 (v  12.6) ttft_p50  40 ->  38 (v  62) ttft_p95 269 -> 316 (v 202) ttft_p99 393 -> 382 (v 245) e2e_p50  801 ->  776 (v  741) err 0 gain +2.9%
+     16 GEMMEQUIV m=112 n=151936 k=2048 id=31 tile=17 stages=15 splitk=1 red=0 same=1 recorded=1
+     16 GEMMEQUIV m=128 n=151936 k=2048 id=31 tile=17 stages=15 splitk=1 red=0 same=1 recorded=1
+     16 GEMMEQUIV m=16 n=151936 k=2048 id=31 tile=15 stages=17 splitk=1 red=0 same=1 recorded=1
+     16 GEMMEQUIV m=1 n=151936 k=2048 id=31 tile=15 stages=17 splitk=1 red=0 same=1 recorded=1
+     16 GEMMEQUIV m=24 n=151936 k=2048 id=31 tile=15 stages=17 splitk=1 red=0 same=1 recorded=1
+     16 GEMMEQUIV m=2 n=151936 k=2048 id=31 tile=15 stages=17 splitk=1 red=0 same=1 recorded=1
+     16 GEMMEQUIV m=32 n=151936 k=2048 id=31 tile=15 stages=17 splitk=1 red=0 same=1 recorded=1
+     16 GEMMEQUIV m=48 n=151936 k=2048 id=31 tile=15 stages=17 splitk=1 red=0 same=1 recorded=1
+
+[exited with code 0]

@@ -1,0 +1,140 @@
+{
+ "argv": [
+  "/data/riley-serving-261007/qwen-http-exact-target-attempt01/release/riley",
+  "serve",
+  "--bind",
+  "127.0.0.1:52409",
+  "--model",
+  "/data/riley-models/Qwen2.5-3B-Instruct-aa8e72537993ba99e69dfaafa59ed015b17504d1",
+  "--model-id",
+  "qwen3b",
+  "--max-active-sequences",
+  "1",
+  "--max-waiting-requests",
+  "64",
+  "--max-sequence-tokens",
+  "1024",
+  "--max-output-tokens",
+  "128",
+  "--max-weight-bytes",
+  "8589934592",
+  "--batch-token-budget",
+  "256",
+  "--prefill-chunk-tokens",
+  "256",
+  "--gemm-reduction-policy",
+  "first-heuristic-split-k-v1",
+  "--kv-blocks",
+  "64",
+  "--decode-attention-backend",
+  "native-bf16-paged-split-gqa-d128-two-stage",
+  "--execution-graph-policy",
+  "disabled",
+  "--reduction-profile",
+  "canonical-v1",
+  "--projection-bias-backend",
+  "merged-qkv-strict-staged-v1",
+  "--batch-shape-policy",
+  "power-of-two",
+  "--execution-completion",
+  "iteration-batch",
+  "--metadata-transport",
+  "synchronous",
+  "--residual-rmsnorm",
+  "fused",
+  "--sampling-backend",
+  "gpu-greedy",
+  "--batch-shape-buckets",
+  "1,2,4,8,16,24,32,48,64,80,96,112,128,144,160,176,192,208,224,240,256",
+  "--decode-attention-merge",
+  "global-max-v1",
+  "--decode-step-graph",
+  "capture-v1",
+  "--mlp-activation",
+  "fused-silu-multiply-v1",
+  "--query-key-rope",
+  "fused-split-v1",
+  "--gemm-algorithm-selection",
+  "bit-equivalent-table-v1",
+  "--mlp-residual-norm",
+  "fused-next-norm-v1",
+  "--lm-head-rows",
+  "output-rows-v1"
+ ],
+ "binary_sha256": "102bd4dec9472452bbabde21065237758d9ea36c2bb30f8f22f33e36ac89a7bf",
+ "concurrency": 1,
+ "workload": "natural",
+ "sustained": {
+  "round_tok_per_s": [
+   126.4,
+   126.3,
+   126.3,
+   126.3,
+   126.3,
+   126.3
+  ],
+  "round_tpot_p50": [
+   7.77,
+   7.777,
+   7.775,
+   7.78,
+   7.776,
+   7.776
+  ],
+  "seconds": 340.5143100148998,
+  "rounds": 6,
+  "requests": 576,
+  "errors": 0,
+  "inconsistent": 0,
+  "tok_per_s_first_last_min": [
+   126.40455105954766,
+   126.29461811150065,
+   126.26022306956612
+  ],
+  "tpot_p50_first_last": [
+   7.77009743568857,
+   7.775593848366823
+  ],
+  "kv_after_rounds": [
+   0
+  ]
+ },
+ "memory": {
+  "gpu_MiB_first_last_quarter": [
+   7312.0,
+   7312.0
+  ],
+  "rss_MiB_first_last_quarter": [
+   6450.829577323718,
+   6451.139322916667
+  ],
+  "rss_MiB_max": 6451.15234375
+ },
+ "cancellation": {
+  "idle": 20,
+  "under_load": 40,
+  "requests_during_loaded_cancellation": 48,
+  "server_counters": {
+   "cancellations": 60,
+   "disconnects": 60,
+   "overloads": 0,
+   "dropped_observations": 0
+  }
+ },
+ "failure": null,
+ "exit_code": 0,
+ "gpu_compute_after": "",
+ "native_close": {
+  "active_requests": 0,
+  "waiting_requests": 0,
+  "kv_allocated_blocks": 0,
+  "allocation": {
+   "device_live_count": 0,
+   "device_live_bytes": 0,
+   "pinned_live_count": 0,
+   "pinned_live_bytes": 0
+  }
+ },
+ "reclaimed": true,
+ "pass": true
+}

@@ -1,0 +1,6 @@
+rows= 32 (32 rows of 400 tokens, 0 rows of 400 tokens), grid pages=25: producer   27.7 us, producer+transition+reduce   40.9 us
+rows=256 (32 rows of 400 tokens, 224 rows of 130 tokens), grid pages=25: producer   84.5 us, producer+transition+reduce  102.1 us
+rows=256 (256 rows of 130 tokens, 0 rows of 130 tokens), grid pages=9: producer   66.8 us, producer+transition+reduce   81.8 us
+rows=224 (224 rows of 130 tokens, 0 rows of 130 tokens), grid pages=9: producer   59.2 us, producer+transition+reduce   73.3 us
+rows=256 (32 rows of 400 tokens, 224 rows of 60 tokens), grid pages=25: producer   53.6 us, producer+transition+reduce   66.5 us
+rows= 64 (32 rows of 400 tokens, 32 rows of 130 tokens), grid pages=25: producer   34.5 us, producer+transition+reduce   47.3 us

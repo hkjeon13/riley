@@ -1,0 +1,9 @@
+K= 2048 N=11008 M= 1  gemmEx(T,N)    49.8 us  transposed    49.8 us  Lt first    49.9 us  Lt best[3/8]    19.2 us  weight-read bound@900GB/s  50.1 us
+K= 2048 N=11008 M= 8  gemmEx(T,N)    21.7 us  transposed    18.1 us  Lt first    22.0 us  Lt best[1/6]    17.8 us  weight-read bound@900GB/s  50.1 us
+K= 2048 N=11008 M=32  gemmEx(T,N)    22.3 us  transposed    27.9 us  Lt first    22.4 us  Lt best[0/8]    22.4 us  weight-read bound@900GB/s  50.1 us
+K=11008 N= 2048 M= 1  gemmEx(T,N)    18.6 us  transposed    18.6 us  Lt first    18.6 us  Lt best[2/8]    16.9 us  weight-read bound@900GB/s  50.1 us
+K=11008 N= 2048 M= 8  gemmEx(T,N)    44.1 us  transposed    20.0 us  Lt first    42.3 us  Lt best[1/6]    18.9 us  weight-read bound@900GB/s  50.1 us
+K=11008 N= 2048 M=32  gemmEx(T,N)    26.7 us  transposed    26.4 us  Lt first    26.6 us  Lt best[4/8]    21.6 us  weight-read bound@900GB/s  50.1 us
+K= 2048 N= 2048 M= 1  gemmEx(T,N)     6.4 us  transposed     6.4 us  Lt first     6.4 us  Lt best[1/8]     4.8 us  weight-read bound@900GB/s   9.3 us
+K= 2048 N= 2048 M= 8  gemmEx(T,N)     9.9 us  transposed     8.0 us  Lt first     9.9 us  Lt best[2/6]     7.8 us  weight-read bound@900GB/s   9.3 us
+K= 2048 N= 2048 M=32  gemmEx(T,N)     7.8 us  transposed     7.5 us  Lt first     7.8 us  Lt best[2/8]     7.6 us  weight-read bound@900GB/s   9.3 us

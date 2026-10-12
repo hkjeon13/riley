@@ -1,0 +1,41 @@
+From dae7284e22381eae94f1745aa4a3850db6c73067 Mon Sep 17 00:00:00 2001
+From: psyche <hkjeon13@gmail.com>
+Date: Thu, 8 Oct 2026 12:08:45 +0900
+Subject: [PATCH] Scan packet padding by words in the native shape validator
+
+The byte-wise early-exit scan covers every inactive row on each replay
+(about 51 KB at one active row) and cannot vectorize. C1 fixed TPOT is
+the remaining minimum-criterion gap, where each microsecond is 0.1%.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ kernels/src/prefill_shape_packet.hpp | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/kernels/src/prefill_shape_packet.hpp b/kernels/src/prefill_shape_packet.hpp
+index 03ddeae..19eb6a2 100644
+--- a/kernels/src/prefill_shape_packet.hpp
++++ b/kernels/src/prefill_shape_packet.hpp
+@@ -13,7 +13,8 @@ inline bool valid_variable_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t
+  auto u32=[&](uint32_t at){uint32_t v;std::memcpy(&v,p+at,4);return v;};
+  auto u64=[&](uint32_t at){uint64_t v;std::memcpy(&v,p+at,8);return v;};
+  auto u16=[&](uint32_t at){uint16_t v;std::memcpy(&v,p+at,2);return v;};
+- auto zero=[&](uint32_t a,uint32_t b){for(;a<b;++a)if(p[a])return false;return true;};
++ // Accumulate whole words so the scan vectorizes; the verdict is unchanged.
++ auto zero=[&](uint32_t a,uint32_t b){uint64_t any=0;for(;a+8<=b;a+=8){uint64_t v;std::memcpy(&v,p+a,8);any|=v;}for(;a<b;++a)any|=p[a];return any==0;};
+  uint32_t stage=u32(16),active=u32(20);
+  if(u32(0)!=magic||u32(4)!=version||u32(8)!=extent||u32(12)!=stride||stage>1||!active||active>capacity||u32(24)!=capacity||u32(28)!=physical||u32(32)>1||(Packed&&stage==0?u32(36)==0||u32(36)>1024:!zero(36,40))||!u64(40)||!u64(48)||!u64(56)||zero(64,96)||!zero(96,128)||(stage==0&&active>(Packed?4U:1U)))return false;
+  bool used[4096]{};uint32_t slots=0,prefill_count=0;
+@@ -56,7 +57,8 @@ inline bool valid_v7_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physi
+  auto u32=[&](uint32_t at){uint32_t v;std::memcpy(&v,p+at,4);return v;};
+  auto u64=[&](uint32_t at){uint64_t v;std::memcpy(&v,p+at,8);return v;};
+  auto u16=[&](uint32_t at){uint16_t v;std::memcpy(&v,p+at,2);return v;};
+- auto zero=[&](uint32_t a,uint32_t b){for(;a<b;++a)if(p[a])return false;return true;};
++ // Accumulate whole words so the scan vectorizes; the verdict is unchanged.
++ auto zero=[&](uint32_t a,uint32_t b){uint64_t any=0;for(;a+8<=b;a+=8){uint64_t v;std::memcpy(&v,p+a,8);any|=v;}for(;a<b;++a)any|=p[a];return any==0;};
+  uint32_t stage=u32(16),active=u32(20);
+  if(u32(0)!=0x37444d52||u32(4)!=7||u32(8)!=extent||u32(12)!=stride||stage>2||!active||active>capacity||u32(24)!=capacity||u32(28)!=physical||u32(32)>1||!u64(40)||!u64(48)||!u64(56)||zero(64,96)||!zero(100,128))return false;
+  if(stage==1?(u32(36)||u32(96)):(!u32(36)||u32(36)>1024||!u32(96)||u32(96)>1024))return false;
+-- 
+2.52.0
+

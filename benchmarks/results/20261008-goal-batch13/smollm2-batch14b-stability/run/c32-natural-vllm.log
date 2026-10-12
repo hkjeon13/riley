@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-261007/kernel-batch14b-stability-controller-attempt01/stability13.py", line 280, in <module>
+    main()
+    ~~~~^^
+  File "/data/riley-serving-261007/kernel-batch14b-stability-controller-attempt01/stability13.py", line 212, in main
+    gate(out, 'cancel-under-load')
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/riley-serving-261007/kernel-batch14b-stability-controller-attempt01/stability13.py", line 62, in gate
+    raise RuntimeError('host gate timeout ' + label)
+RuntimeError: host gate timeout cancel-under-load

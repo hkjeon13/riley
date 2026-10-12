@@ -1,0 +1,65 @@
+From 647496ca0a329cbcb5d12d29e9b6db561a33e214 Mon Sep 17 00:00:00 2001
+From: psyche <hkjeon13@gmail.com>
+Date: Sun, 11 Oct 2026 15:02:41 +0900
+Subject: [PATCH 5/5] Prefetch weights only in the one-row decode capture
+
+With eight or more live rows the prefetch blocks cost about one percent
+(c8 and c32-natural diagnostics), so every other capture launches the
+unextended grids.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ kernels/src/decode_shared32_model.cuh | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/kernels/src/decode_shared32_model.cuh b/kernels/src/decode_shared32_model.cuh
+index a1bb97bb..7a854157 100644
+--- a/kernels/src/decode_shared32_model.cuh
++++ b/kernels/src/decode_shared32_model.cuh
+@@ -88,6 +88,7 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
+  auto b=[&](int i){return static_cast<__nv_bfloat16*>(scratch[i]);};
+  auto w=[&](int i){return static_cast<const __nv_bfloat16*>(weights[i]);};
+  const auto* meta=static_cast<const uint32_t*>(metadata);auto* shape=meta+32;auto* pages=meta+64;auto* active=meta+5;auto* pointwise=meta+3;
++ const bool one_row_prefetch=grouped_attention&&attention_rows==1;
+  auto err=cudaMemsetAsync(status,0,4,stream);if(err!=cudaSuccess)return err;
+  embedding<<<32,256,0,stream>>>(w(0),b(0),shape,active,status);
+  if(tiled)for(int i=273;i<363;++i)if(!weights[i])return cudaErrorInvalidValue;
+@@ -95,19 +96,21 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
+  if(layer==0)riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(0),nullptr,w(base),nullptr,b(1),0,pointwise,32);
+  auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
+  auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
+- if(fused_qkv)qkv_parts_merge_rope<<<60+48,192,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active,w(base+4),uint64_t(576)*576*2);
++ if(fused_qkv)qkv_parts_merge_rope<<<60+(one_row_prefetch?48:0),192,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active,w(base+4),one_row_prefetch?uint64_t(576)*576*2:0);
+  else{
+  shared32_qkv_parts<<<dim3(120,3),32,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),active);
+  qkv_merge_rope<<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
+  }
+  // The gate and up weights of this layer are prefetched during the attention and norm kernels that precede their use.
+  const __nv_bfloat16* gate_weights=tiled?w(273+layer*3):w(base+6);const __nv_bfloat16* up_weights=tiled?w(274+layer*3):w(base+7);
+- constexpr uint64_t gate_bytes=uint64_t(1536)*576*2,gate_half=gate_bytes/2;
++ // Only the one-row capture prefetches: with more live rows the kernels are no longer latency bound and the extra loads cost time.
++ const bool prefetch=one_row_prefetch;
++ const uint64_t gate_bytes=prefetch?uint64_t(1536)*576*2:0,gate_half=gate_bytes/2,projection_bytes=prefetch?uint64_t(576)*576*2:0;
+  if(grouped_attention)riley_gqa50_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context,attention_rows,gate_weights,gate_half,up_weights,gate_bytes);
+  else riley_shared32_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
+  if(grouped_attention){
+   enqueue_shared32_projection<576,576,128,false,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
+-  riley_merge_norm_v56::merge_norm<<<32+64,256,0,stream>>>(static_cast<const float*>(scratch[7]),b(0),w(base+5),scratch[10],b(1),1,pointwise,32,reinterpret_cast<const uint8_t*>(gate_weights)+gate_half,gate_half,32);
++  riley_merge_norm_v56::merge_norm<<<32+(prefetch?64:0),256,0,stream>>>(static_cast<const float*>(scratch[7]),b(0),w(base+5),scratch[10],b(1),1,pointwise,32,reinterpret_cast<const uint8_t*>(gate_weights)+gate_half,gate_half,32);
+  }else{
+  enqueue_shared32_projection<576,576,128,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
+  riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,pointwise,32);
+@@ -118,8 +121,8 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
+   if(tiled)enqueue_shared32_projection<576,1536,320,true,false>(stream,b(11),w(273+layer*3+2),b(4),static_cast<float*>(scratch[7]),active);
+   else enqueue_shared32_projection<576,1536,320,false,false>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]),active);
+   // The second norm prefetches the next layer's query projection weights.
+-  if(layer+1<30)riley_merge_norm_v56::merge_norm<<<32+48,256,0,stream>>>(static_cast<const float*>(scratch[7]),scratch[10],w(base+9),b(0),b(1),2,pointwise,32,w(base+10),uint64_t(576)*576*2,32);
+-  else riley_merge_norm_v56::merge_norm<<<32,256,0,stream>>>(static_cast<const float*>(scratch[7]),scratch[10],w(1),b(0),b(1),2,pointwise,32);
++  if(layer+1<30&&prefetch)riley_merge_norm_v56::merge_norm<<<32+48,256,0,stream>>>(static_cast<const float*>(scratch[7]),scratch[10],w(base+9),b(0),b(1),2,pointwise,32,w(base+10),projection_bytes,32);
++  else riley_merge_norm_v56::merge_norm<<<32,256,0,stream>>>(static_cast<const float*>(scratch[7]),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,pointwise,32);
+  }else{
+  if(tiled)enqueue_shared32_projection<576,1536,320,true>(stream,b(11),w(273+layer*3+2),b(4),static_cast<float*>(scratch[7]),active);
+  else enqueue_shared32_projection<576,1536,320,false>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]),active);
+-- 
+2.52.0
+

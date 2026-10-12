@@ -1,0 +1,138 @@
+From 7b1bef58a22f8ed6cab30dca2f7957938806b18d Mon Sep 17 00:00:00 2001
+From: psyche <hkjeon13@gmail.com>
+Date: Sun, 11 Oct 2026 11:34:44 +0900
+Subject: [PATCH 3/4] Fuse QKV parts, merge, RoPE and KV write for the
+ one-live-row decode capture
+
+A block owns the two column tiles that RoPE pairs, runs the unchanged K192
+chunk recurrences for them, then merges and rotates its own columns. One
+kernel per layer is removed. The native test compares parts, rotated query
+and cache writes against the two-kernel sequence bit for bit.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ kernels/src/decode_shared32_model.cuh       | 34 +++++++++++++++++--
+ kernels/src/graph_numerics_precise.cu       |  2 +-
+ kernels/tests/kernel_batch14_correctness.cu | 36 ++++++++++++++++++++-
+ 3 files changed, 68 insertions(+), 4 deletions(-)
+
+diff --git a/kernels/src/decode_shared32_model.cuh b/kernels/src/decode_shared32_model.cuh
+index 169e003c..a836b02f 100644
+--- a/kernels/src/decode_shared32_model.cuh
++++ b/kernels/src/decode_shared32_model.cuh
+@@ -46,12 +46,39 @@ __global__ void qkv_merge_rope(const float* parts,__nv_bfloat16* qo,__nv_bfloat1
+  if(head<9){qo[row*576+base+dim]=first;qo[row*576+base+dim+32]=second;}
+  else {uint32_t dst=((pages[pos/16]*3+head-9)*16+pos%16)*64+dim;keys[dst]=first;keys[dst+32]=second;const float* v=parts+3*32*(576+192);values[dst]=qkv_rounded(v,192,row,base+dim);values[dst+32]=qkv_rounded(v,192,row,base+dim+32);}
+ }
++// QKV parts, merge, RoPE and KV write in one dispatch. A block owns the two
++// eight-column tiles that RoPE pairs (dim and dim+32 of one head): six warps
++// run the unchanged K192 chunk recurrences for those tiles into the FP32 parts
++// buffer, then the block merges and rotates its own columns exactly as
++// qkv_merge_rope does. Blocks 0..35 are Q, 36..47 K, 48..59 V.
++__global__ void qkv_parts_merge_rope(const __nv_bfloat16* x,const __nv_bfloat16* qw,const __nv_bfloat16* kw,const __nv_bfloat16* vw,float* parts,__nv_bfloat16* qo,__nv_bfloat16* keys,__nv_bfloat16* values,const float* cos,const float* sin,const uint32_t* pages,const uint32_t* shape,const uint32_t* active){
++ const uint32_t rows=*active;if(rows<1||rows>32)return;
++ const int block=blockIdx.x,kind=block<36?0:(block<48?1:2),local=block-(kind==0?0:(kind==1?36:48)),head=local/4,pair=local%4;
++ const int warp=threadIdx.x/32,column=head*8+pair+(warp/3)*4,chunk=warp%3;
++ float* part=kind==0?parts:parts+3*32*576+(kind==1?0:3*32*192);
++ if(kind==0)shared32_projection_compute<576,576,192,false>(x,qw,part,nullptr,active,column,chunk);
++ else shared32_projection_compute<192,576,192,false>(x,kind==1?kw:vw,part,nullptr,active,column,chunk);
++ __syncthreads();
++ const int n=kind==0?576:192,base=head*64;
++ for(uint32_t i=threadIdx.x;i<rows*8;i+=blockDim.x){
++  const uint32_t row=i/8;const int dim=pair*8+int(i%8);
++  const uint32_t* row_shape=shape+row*416;const uint32_t* row_pages=pages+row*416;const uint32_t pos=row_shape[1];
++  const __nv_bfloat16 low=qkv_rounded(part,n,row,base+dim),high=qkv_rounded(part,n,row,base+dim+32);
++  const uint32_t dst=((row_pages[pos/16]*3+head)*16+pos%16)*64+dim;
++  if(kind==2){values[dst]=low;values[dst+32]=high;continue;}
++  float a=__bfloat162float(low),b=__bfloat162float(high);
++  float c=__bfloat162float(__float2bfloat16_rn(cos[pos*32+dim])),sn=__bfloat162float(__float2bfloat16_rn(sin[pos*32+dim]));
++  auto first=__float2bfloat16_rn(a*c-b*sn),second=__float2bfloat16_rn(b*c+a*sn);
++  if(kind==0){qo[row*576+base+dim]=first;qo[row*576+base+dim+32]=second;}
++  else{keys[dst]=first;keys[dst+32]=second;}
++ }
++}
+ // Fixed-capacity GEMM also reads inactive rows; initialize those inputs.
+ __global__ void clear_inactive_hidden(__nv_bfloat16* hidden,const uint32_t* active){
+  uint32_t rows=*active,row=blockIdx.x;if(rows<1||rows>32||row<rows)return;
+  for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)hidden[row*576+i]=__float2bfloat16_rn(0.F);
+ }
+-inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context,bool tiled=false,bool grouped_attention=false,uint32_t attention_rows=32){
++inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context,bool tiled=false,bool grouped_attention=false,uint32_t attention_rows=32,bool fused_qkv=false){
+  if(!attention_rows||attention_rows>32||(attention_rows!=32&&!grouped_attention))return cudaErrorInvalidValue;
+  if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!status||!physical||physical>4096||!context||context>4096)return cudaErrorInvalidValue;
+  for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
+@@ -64,10 +91,13 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
+  if(tiled)for(int i=273;i<363;++i)if(!weights[i])return cudaErrorInvalidValue;
+  for(int layer=0;layer<30;++layer){int base=3+9*layer;
+  if(layer==0)riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(0),nullptr,w(base),nullptr,b(1),0,pointwise,32);
+- shared32_qkv_parts<<<dim3(120,3),32,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),active);
+  auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
+  auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
++ if(fused_qkv)qkv_parts_merge_rope<<<60,192,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
++ else{
++ shared32_qkv_parts<<<dim3(120,3),32,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),active);
+  qkv_merge_rope<<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
++ }
+  if(grouped_attention)riley_gqa50_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context,attention_rows);
+  else riley_shared32_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
+  if(grouped_attention){
+diff --git a/kernels/src/graph_numerics_precise.cu b/kernels/src/graph_numerics_precise.cu
+index 59b91e42..3fc9cc8c 100644
+--- a/kernels/src/graph_numerics_precise.cu
++++ b/kernels/src/graph_numerics_precise.cu
+@@ -358,7 +358,7 @@ cudaError_t enqueue_compiled_v7_gqa_shared_model(cudaStream_t s,void*const* d,co
+  return riley_shared32_model::enqueue(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled,true);
+ }
+ cudaError_t enqueue_compiled_v7_gqa_shared_model_rows(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled,uint32_t attention_rows) noexcept {
+- return riley_shared32_model::enqueue(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled,true,attention_rows);
++ return riley_shared32_model::enqueue(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled,true,attention_rows,attention_rows==1);
+ }
+ cudaError_t enqueue_compiled_v5_shared_result(cudaStream_t s,const void* m,const void* logits,const void* status,void* result) noexcept {
+  return riley_shared32_result::enqueue<0x35524d52>(s,m,static_cast<const __nv_bfloat16*>(logits),static_cast<const uint32_t*>(status),result);
+diff --git a/kernels/tests/kernel_batch14_correctness.cu b/kernels/tests/kernel_batch14_correctness.cu
+index 0e1e87f4..6988c416 100644
+--- a/kernels/tests/kernel_batch14_correctness.cu
++++ b/kernels/tests/kernel_batch14_correctness.cu
+@@ -27,4 +27,38 @@ int narrow_attention_cases(int seed){
+  }
+  for(void* p:{(void*)q,(void*)k,(void*)v,(void*)sa,(void*)sb,(void*)a,(void*)b,(void*)shape,(void*)pages,(void*)live})OK(cudaFree(p));return cases;
+ }
+-int main(){kernel_batch11_matrix_main();int narrow=0;for(int seed:{1,17,99})narrow+=narrow_attention_cases(seed);OK(cudaDeviceSynchronize());std::printf("{\"passed\":true,\"narrow_grid_attention_cases\":%d,\"BF16_and_FP32_exact\":true,\"performance_claim_eligible\":false}\n",narrow);}
++#include "decode_shared32_model.cuh"
++int fused_qkv_cases(int seed){
++ constexpr int Physical=256,KV=Physical*3*16*64,Guard=16,Parts=3*32*(576+192+192);
++ auto* x=alloc<__nv_bfloat16>(32*576);auto* qw=alloc<__nv_bfloat16>(576*576);auto* kw=alloc<__nv_bfloat16>(192*576);auto* vw=alloc<__nv_bfloat16>(192*576);
++ auto* pa=alloc<float>(Parts);auto* pb=alloc<float>(Parts);
++ auto* qa=alloc<__nv_bfloat16>(32*576+2*Guard);auto* qb=alloc<__nv_bfloat16>(32*576+2*Guard);
++ auto* ka=alloc<__nv_bfloat16>(KV+2*Guard);auto* kb=alloc<__nv_bfloat16>(KV+2*Guard);auto* va=alloc<__nv_bfloat16>(KV+2*Guard);auto* vb=alloc<__nv_bfloat16>(KV+2*Guard);
++ auto* cos=alloc<float>(4096*32);auto* sin=alloc<float>(4096*32);
++ auto* shape=alloc<uint32_t>(32*416);auto* pages=alloc<uint32_t>(32*416);auto* live=alloc<uint32_t>(1);
++ for(int i=0;i<32*576;++i)x[i]=__float2bfloat16_rn(float((i*17+seed)%127-63)/128);
++ for(int i=0;i<576*576;++i)qw[i]=__float2bfloat16_rn(float((i*7+seed)%131-65)/128);
++ for(int i=0;i<192*576;++i){kw[i]=__float2bfloat16_rn(float((i*11+seed)%113-56)/128);vw[i]=__float2bfloat16_rn(float((i*13+seed)%251-125)/128);}
++ for(int i=0;i<4096*32;++i){cos[i]=std::cos(float(i%977)*.0131F+seed);sin[i]=std::sin(float(i%977)*.0131F+seed);}
++ if(seed==99)for(int i=0;i<576;++i)x[i]=__float2bfloat16_rn(i%2?3.0e38F:-3.0e38F);
++ int cases=0;
++ for(int position:{0,1,15,16,17,127,128,1023,4095}){
++  // Distinct physical pages per row so no two rows write the same cache slot.
++  for(int r=0;r<32;++r){shape[r*416+1]=position;for(int p=0;p<256;++p)pages[r*416+p]=(p*7+r*8)%Physical;}
++  for(int rows:{0,1,2,3,15,16,17,31,32,33}){
++   *live=rows;fill_fp32(pa,Parts);fill_fp32(pb,Parts);fill_bf16(qa,32*576+2*Guard);fill_bf16(qb,32*576+2*Guard);
++   fill_bf16(ka,KV+2*Guard);fill_bf16(kb,KV+2*Guard);fill_bf16(va,KV+2*Guard);fill_bf16(vb,KV+2*Guard);
++   shared32_qkv_parts<<<dim3(120,3),32>>>(x,qw,kw,vw,pa,live);
++   riley_shared32_model::qkv_merge_rope<<<dim3(2,32),256>>>(pa,qa+Guard,ka+Guard,va+Guard,cos,sin,pages,shape,live);
++   riley_shared32_model::qkv_parts_merge_rope<<<60,192>>>(x,qw,kw,vw,pb,qb+Guard,kb+Guard,vb+Guard,cos,sin,pages,shape,live);
++   OK(cudaGetLastError());OK(cudaDeviceSynchronize());
++   compare(pa,pb,Parts,"fused QKV FP32 parts including inactive",rows);
++   compare(qa,qb,32*576+2*Guard,"fused QKV rotated query including guards/inactive",rows);
++   compare(ka,kb,KV+2*Guard,"fused QKV cache keys including guards/untouched",rows);
++   compare(va,vb,KV+2*Guard,"fused QKV cache values including guards/untouched",rows);
++   ++cases;
++  }
++ }
++ for(void* p:{(void*)x,(void*)qw,(void*)kw,(void*)vw,(void*)pa,(void*)pb,(void*)qa,(void*)qb,(void*)ka,(void*)kb,(void*)va,(void*)vb,(void*)cos,(void*)sin,(void*)shape,(void*)pages,(void*)live})OK(cudaFree(p));return cases;
++}
++int main(){kernel_batch11_matrix_main();int fused=0;for(int seed:{1,17,99})fused+=fused_qkv_cases(seed);std::printf("{\"passed\":true,\"fused_qkv_cases\":%d,\"BF16_and_FP32_exact\":true,\"performance_claim_eligible\":false}\n",fused);int narrow=0;for(int seed:{1,17,99})narrow+=narrow_attention_cases(seed);OK(cudaDeviceSynchronize());std::printf("{\"passed\":true,\"narrow_grid_attention_cases\":%d,\"BF16_and_FP32_exact\":true,\"performance_claim_eligible\":false}\n",narrow);}
+-- 
+2.52.0
+

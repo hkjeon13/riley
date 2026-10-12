@@ -1,0 +1,95 @@
+{
+ "schema": "riley.kernel-batch13.matched128.gatev1.v1",
+ "scope": "All eight cells with V52 baseline / Batch12 / Batch13 candidate / reconstructed vLLM 0.27.1 interleaved in one attempt",
+ "workloads": [
+  "fixed",
+  "natural"
+ ],
+ "concurrency": [
+  1,
+  8,
+  16,
+  32
+ ],
+ "repeats": 4,
+ "orders": [
+  [
+   "v52",
+   "batch12",
+   "candidate",
+   "vllm"
+  ],
+  [
+   "vllm",
+   "candidate",
+   "batch12",
+   "v52"
+  ],
+  [
+   "v52",
+   "batch12",
+   "candidate",
+   "vllm"
+  ],
+  [
+   "vllm",
+   "candidate",
+   "batch12",
+   "v52"
+  ]
+ ],
+ "warmup": 96,
+ "retained": 384,
+ "token_budget": 512,
+ "chunk_tokens": {
+  "fixed": 128,
+  "natural": 512
+ },
+ "prefix_cache": false,
+ "sampling": "greedy temperature0, original EOS and original request max_tokens",
+ "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+ "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+ "gpu_operating_cap_bytes": 21474836480,
+ "vllm_gpu_memory_utilization": 0.3,
+ "host_start_gate": {
+  "timeout_seconds": 300,
+  "interval_seconds": 2,
+  "consecutive": 3,
+  "cpu_some_max": 5,
+  "io_full_max": 5,
+  "memory_full_max": 0.5,
+  "io_soft_wait_seconds": 301
+ },
+ "exclusion_policy": "none; fail whole attempt, retain every sample and failed attempt",
+ "correctness_policy": "Riley exact frozen token/text/finish reference; all engine input/output counts and transport exact; cross-engine arithmetic differences recorded",
+ "completion": false,
+ "post_screen_required": [
+  "independent recomputation from retained rows",
+  "sustained load",
+  "cancellation",
+  "re-request",
+  "resource reclamation"
+ ],
+ "performance_claim_eligible": false,
+ "startup_http_ready_timeout_seconds": 300,
+ "startup_timeout_scope": "cold initialization only; captured logs and host samples; excluded from serving timing by explicit warmup and retained phase envelopes",
+ "candidate_source_commit": "9acd7ee6bb1574931a8390b79610683ef7eb11e0",
+ "host_clock_bridge": "every host sample sandwiches epoch and CLOCK_MONOTONIC_RAW between perf_counter calls; request clock remains unchanged",
+ "batch_changes": [
+  "Dense-table block ownership/aliasing validation in wire validate, block tables and execution authority (replaces BTree/HashSet/quadratic scan)",
+  "Prompt encoding on the submitting thread while the engine has active requests",
+  "Word-wise padding scan in the native shape packet validator"
+ ],
+ "candidate_binary_sha256": "3dd44e7523b2be9af5e0b100871ea3ef903e6c13ceea9af9dcb2ab400d25022b",
+ "predeclared_time_ns": 1791440605801304118,
+ "host_gate_revision": "ORIGINAL gate v1 thresholds: cpu some<=5, io full<=5, memory full<=0.5, 3 consecutive samples within 300 s, otherwise the whole attempt aborts. io_soft_wait_seconds exceeds the timeout so the gate v2 soft path can never trigger.",
+ "comparability": "same binaries, plan, order and repeats as the gate v2 attempt; separate attempt, results not merged",
+ "measured_motivation": {
+  "source": "Batch11 nsys profiles c32-natural/c32-fixed/c1-fixed r0 candidate",
+  "finding": "host time between graph replays 16-17% of C32 wall (natural 332us, fixed 121us per decode iteration), ~40% of it prompt tokenization in admit; C1 byte-wise validator scan",
+  "limits": "diagnostic only"
+ },
+ "correctness_sha256": "521245f70a49dcf4e3dec5158340b89b9b83d3261e267b49902ceea6d24e79a5",
+ "diagnostic_runs_before_plan": "kernel-batch13-diagnostic-attempt01 single-lane A/B runs guided development; they are not qualifying measurements and are preserved",
+ "environment_preparation": "page cache of the vLLM venv is read once before launch; startup is outside all timed phases"
+}

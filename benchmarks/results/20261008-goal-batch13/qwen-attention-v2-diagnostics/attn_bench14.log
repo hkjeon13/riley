@@ -1,0 +1,22 @@
+DIFF P0=500 R=16 keysPad=528 rowsPad=16 batch=32: 1 of 4096 elements
+DIFF P0=500 R=16 keysPad=528 rowsPad=64 batch=32: 1 of 4096 elements
+DIFF P0=500 R=16 keysPad=528 rowsPad=256 batch=8: 1 of 4096 elements
+DIFF P0=500 R=16 keysPad=528 rowsPad=256 batch=32: 1 of 4096 elements
+per-shape heuristic: cases 846, cases with any difference 4, elements compared 7225344, differing 4, algo-check fallbacks 0
+  timing 1 sequence(s) x 128 rows, keys 328:   22.9 us per launch set
+  timing 1 sequence(s) x 224 rows, keys 224:   26.6 us per launch set
+  timing 1 sequence(s) x 174 rows, keys 398:   28.3 us per launch set
+  timing 2 sequence(s) x 112 rows, keys 130:   25.4 us per launch set
+  timing 4 sequence(s) x 56 rows, keys 156:   26.0 us per launch set
+  timing 8 sequence(s) x 28 rows, keys 32:   22.2 us per launch set
+  timing 3 sequence(s) x 60 rows, keys 120:   22.6 us per launch set
+pinned QK algorithm: candidate -1 of 8 (id=-1 tile=0 stages=0 splitk=0)
+pinned PV algorithm: candidate -1 of 8 (id=-1 tile=0 stages=0 splitk=0)
+PINNED cuBLASLt algorithms: cases 846, cases with any difference 0, elements compared 7225344, differing 0, algo-check fallbacks 456
+  timing 1 sequence(s) x 128 rows, keys 328:   22.9 us per launch set
+  timing 1 sequence(s) x 224 rows, keys 224:   26.6 us per launch set
+  timing 1 sequence(s) x 174 rows, keys 398:   28.3 us per launch set
+  timing 2 sequence(s) x 112 rows, keys 130:   25.6 us per launch set
+  timing 4 sequence(s) x 56 rows, keys 156:   26.0 us per launch set
+  timing 8 sequence(s) x 28 rows, keys 32:   23.0 us per launch set
+  timing 3 sequence(s) x 60 rows, keys 120:   22.3 us per launch set

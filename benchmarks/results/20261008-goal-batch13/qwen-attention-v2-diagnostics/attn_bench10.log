@@ -1,0 +1,8 @@
+rows=  1 (1 x 300 tokens, 0 x 300): base    7.6 us | float tiles    7.3 (state words differing 0) | + butterfly    6.1 (differing 0)
+rows=  8 (8 x 300 tokens, 0 x 300): base   10.3 us | float tiles    9.9 (state words differing 0) | + butterfly    8.6 (differing 0)
+rows= 32 (32 x 400 tokens, 0 x 400): base   32.4 us | float tiles   31.6 (state words differing 0) | + butterfly   26.9 (differing 0)
+rows= 32 (32 x 150 tokens, 0 x 150): base   15.1 us | float tiles   14.5 (state words differing 0) | + butterfly   12.6 (differing 0)
+rows=256 (32 x 400 tokens, 224 x 130): base   98.0 us | float tiles   96.0 (state words differing 0) | + butterfly   80.5 (differing 0)
+rows=160 (32 x 400 tokens, 128 x 200): base   84.9 us | float tiles   85.4 (state words differing 0) | + butterfly   72.5 (differing 0)
+rows= 96 (32 x 330 tokens, 64 x 330): base   70.2 us | float tiles   70.0 (state words differing 0) | + butterfly   58.7 (differing 0)
+rows=256 (256 x 130 tokens, 0 x 130): base   73.6 us | float tiles   73.5 (state words differing 0) | + butterfly   62.4 (differing 0)

@@ -1,0 +1,6 @@
+pass True failure None reclaimed True {'seconds': 1801.4779887129553, 'rounds': 531, 'requests': 50976, 'errors': 0, 'inconsistent': 0, 'tok_per_s_first_last_min': [2111.7872519346565, 2115.8418445304023, 2099.09662924302], 'tpot_p50_first_last': [11.52785426487213, 11.544896687771523], 'rss_MiB_first_last_quarter': [6575.734907670455, 6578.966628663277], 'rss_MiB_max': 6579.06640625, 'gpu_MiB_first_last_quarter': [8548.574162679426, 8550.0], 'kv_after_rounds': [0]} {'idle': 20, 'under_load': 40, 'requests_during_loaded_cancellation': 288}
+round_tok_per_s 531 [2116.79, 2112.69, 2112.77, 2112.42, 2112.45, 2113.82, 2114.12, 2113.6, 2112.88, 2113.52] min 2099.1 max 2124.9
+round_tpot_p50 531 [11.49, 11.53, 11.52, 11.53, 11.52, 11.52, 11.52, 11.53, 11.53, 11.51] min 11.361 max 11.656
+rss [6454, 6577, 6578, 6578, 6578, 6579, 6579, 6579, 6579, 6579] gpu [8436, 8550, 8550, 8550, 8550, 8550, 8550, 8550, 8550, 8550] temp max 78.0
+
+[exited with code 0]

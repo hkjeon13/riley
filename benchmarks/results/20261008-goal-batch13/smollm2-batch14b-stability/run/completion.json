@@ -1,0 +1,55 @@
+{
+ "failure": {
+  "type": "AssertionError",
+  "message": "c32-natural vllm failed; evidence retained"
+ },
+ "records": [
+  {
+   "case": "c1-fixed",
+   "engine": "candidate",
+   "exit": 0
+  },
+  {
+   "case": "c1-natural",
+   "engine": "candidate",
+   "exit": 0
+  },
+  {
+   "case": "c8-fixed",
+   "engine": "candidate",
+   "exit": 0
+  },
+  {
+   "case": "c8-natural",
+   "engine": "candidate",
+   "exit": 0
+  },
+  {
+   "case": "c16-fixed",
+   "engine": "candidate",
+   "exit": 0
+  },
+  {
+   "case": "c16-natural",
+   "engine": "candidate",
+   "exit": 0
+  },
+  {
+   "case": "c32-fixed",
+   "engine": "candidate",
+   "exit": 0
+  },
+  {
+   "case": "c32-natural",
+   "engine": "candidate",
+   "exit": 0
+  },
+  {
+   "case": "c32-natural",
+   "engine": "vllm",
+   "exit": 1
+  }
+ ],
+ "plan_sha256": "eb11c03a7ed93a1ccddc6d8fa7cb295da0cccc9b22a6bd445bb2c6bfab1f15d7",
+ "all_lanes_complete": false
+}

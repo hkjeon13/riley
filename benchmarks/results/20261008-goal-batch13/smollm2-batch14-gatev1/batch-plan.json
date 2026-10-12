@@ -1,0 +1,90 @@
+{
+ "schema": "riley.kernel-batch14.matched96.gatev1.v1",
+ "scope": "All eight cells with Batch13 baseline / Batch14 candidate / reconstructed vLLM 0.27.1 interleaved in one attempt",
+ "workloads": [
+  "fixed",
+  "natural"
+ ],
+ "concurrency": [
+  1,
+  8,
+  16,
+  32
+ ],
+ "repeats": 4,
+ "orders": [
+  [
+   "batch13",
+   "candidate",
+   "vllm"
+  ],
+  [
+   "vllm",
+   "candidate",
+   "batch13"
+  ],
+  [
+   "batch13",
+   "candidate",
+   "vllm"
+  ],
+  [
+   "vllm",
+   "candidate",
+   "batch13"
+  ]
+ ],
+ "warmup": 96,
+ "retained": 384,
+ "token_budget": 512,
+ "chunk_tokens": {
+  "fixed": 128,
+  "natural": 512
+ },
+ "prefix_cache": false,
+ "sampling": "greedy temperature0, original EOS and original request max_tokens",
+ "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+ "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+ "gpu_operating_cap_bytes": 21474836480,
+ "vllm_gpu_memory_utilization": 0.3,
+ "host_start_gate": {
+  "timeout_seconds": 300,
+  "interval_seconds": 2,
+  "consecutive": 3,
+  "cpu_some_max": 5,
+  "io_full_max": 5,
+  "memory_full_max": 0.5,
+  "io_soft_wait_seconds": 301
+ },
+ "exclusion_policy": "none; fail whole attempt, retain every sample and failed attempt",
+ "correctness_policy": "Riley exact frozen token/text/finish reference; all engine input/output counts and transport exact; cross-engine arithmetic differences recorded",
+ "completion": false,
+ "post_screen_required": [
+  "independent recomputation from retained rows",
+  "sustained load",
+  "cancellation",
+  "re-request",
+  "resource reclamation"
+ ],
+ "performance_claim_eligible": false,
+ "startup_http_ready_timeout_seconds": 300,
+ "startup_timeout_scope": "cold initialization only; captured logs and host samples; excluded from serving timing by explicit warmup and retained phase envelopes",
+ "candidate_source_commit": "57a0d0dd0745073b819d2a9a13109f9c535f7ea5",
+ "host_clock_bridge": "every host sample sandwiches epoch and CLOCK_MONOTONIC_RAW between perf_counter calls; request clock remains unchanged",
+ "batch_changes": [
+  "Narrow decode captures: QK score and AV launch grids sized for at most 1, 2, 4, 8 or 16 live rows, selected by the packet live-row count",
+  "Fused QKV parts, merge, RoPE and KV write dispatch in every shared32 grouped-attention decode capture (one kernel fewer per layer)"
+ ],
+ "candidate_binary_sha256": "32a06d8e3a52b130f66a89cd455d5c604eef40d0e4149de0b44d79245f103286",
+ "predeclared_time_ns": 1791686828150912261,
+ "host_gate_revision": "ORIGINAL gate v1 thresholds: cpu some<=5, io full<=5, memory full<=0.5, 3 consecutive samples within 300 s, otherwise the whole attempt aborts. io_soft_wait_seconds exceeds the timeout so the gate v2 soft path can never trigger.",
+ "comparability": "same controller logic, fixtures, gate v1, warmup/retained counts, vLLM and Batch13 binary as kernel-batch13-gatev1; V52 and Batch12 lanes dropped (96 lanes); separate attempt, results not merged with Batch13 attempts",
+ "measured_motivation": {
+  "source": "Batch11 nsys profile c1-fixed r0 candidate; graph-replay microbenchmark grid_floor.cu",
+  "finding": "C1 decode is 9 kernels per layer (26 us); the QK score launch spends about 1.4 us per layer on blocks of inactive rows; QKV merge+RoPE is a separate 1.5 us dispatch",
+  "limits": "diagnostic only"
+ },
+ "correctness_sha256": "3894effeef2d3f323df7dbbb151efc9b4b3587d2077691aa23349ef64141c6d1",
+ "diagnostic_runs_before_plan": "kernel-batch14-diagnostic-attempt01 single-lane A/B runs (variants b14a-b14f) guided development; they are not qualifying measurements and are preserved, including rejected variants b14a and b14d",
+ "environment_preparation": "page cache of the vLLM venv is read once before launch; startup is outside all timed phases"
+}
