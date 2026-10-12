@@ -1,0 +1,70 @@
+diff --git a/kernels/src/graph_resources.cu b/kernels/src/graph_resources.cu
+index 1a63d2fa..a5fc88e5 100644
+--- a/kernels/src/graph_resources.cu
++++ b/kernels/src/graph_resources.cu
+@@ -11,6 +11,7 @@
+ // The ledger remains the single authority for all retained parents. The
+ // optional transfer graph is a lifecycle probe, not a model decode graph.
+ static constexpr uint32_t kNarrowAttentionRows[5]={1,2,4,8,16};
++static constexpr uint32_t kNarrowPrefillRows[5]={64,128,192,256,384};
+ struct RileyCudaGraphResources {
+   // Cold additional decode entries share the parent's single resource ledger.
+   struct CatalogEntry {
+@@ -43,9 +44,11 @@ struct RileyCudaGraphResources {
+   cudaGraph_t prefill_graph = nullptr;
+   cudaGraphExec_t prefill_exec = nullptr;
+   // Indices 2..6: decode stage captured with attention grids for at most
+-  // 1, 2, 4, 8 and 16 live rows (kNarrowAttentionRows).
+-  cudaGraph_t compact_graph[7]{};
+-  cudaGraphExec_t compact_exec[7]{};
++  // 1, 2, 4, 8 and 16 live rows (kNarrowAttentionRows). Indices 7..11: packed
++  // prefill stage captured for row capacities below the retained capacity
++  // (kNarrowPrefillRows); unrecorded entries stay null.
++  cudaGraph_t compact_graph[12]{};
++  cudaGraphExec_t compact_exec[12]{};
+   bool compact_ready=false,last_compact=false;
+   RileyCudaPinnedHostBuffer* input = nullptr;
+   RileyCudaPinnedHostBuffer* output = nullptr;
+@@ -216,6 +219,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
+       (*resources)->compact_graph[4] || (*resources)->compact_exec[4] ||
+       (*resources)->compact_graph[5] || (*resources)->compact_exec[5] ||
+       (*resources)->compact_graph[6] || (*resources)->compact_exec[6] ||
++      (*resources)->compact_graph[7] || (*resources)->compact_exec[7] ||
++      (*resources)->compact_graph[8] || (*resources)->compact_exec[8] ||
++      (*resources)->compact_graph[9] || (*resources)->compact_exec[9] ||
++      (*resources)->compact_graph[10] || (*resources)->compact_exec[10] ||
++      (*resources)->compact_graph[11] || (*resources)->compact_exec[11] ||
+       (*resources)->catalog[0].graph || (*resources)->catalog[0].exec ||
+       (*resources)->catalog[1].graph || (*resources)->catalog[1].exec ||
+       (*resources)->catalog[2].graph || (*resources)->catalog[2].exec ||
+@@ -253,7 +261,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
+       if (status == RILEY_CUDA_STATUS_SUCCESS) (*resources)->prefill_graph = nullptr;
+       else (*resources)->completion_unknown = true;
+     }
+-    for(int i=0;i<7;++i){
++    for(int i=0;i<12;++i){
+       if(status==RILEY_CUDA_STATUS_SUCCESS&&(*resources)->compact_exec[i]){
+         status=runtime_error(cudaGraphExecDestroy((*resources)->compact_exec[i]),error,RILEY_CUDA_ERROR_STAGE_CLOSE,kClose);
+         if(status==RILEY_CUDA_STATUS_SUCCESS)(*resources)->compact_exec[i]=nullptr;else (*resources)->completion_unknown=true;
+@@ -386,6 +394,10 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
+       // A narrow capture serves live counts up to its row bound; larger counts keep the capacity grids.
+       if(stage==1){uint32_t live;std::memcpy(&live,source+20,4);
+         for(int narrow=0;narrow<5;++narrow)if(live&&live<=kNarrowAttentionRows[narrow]){if(r->compact_exec[2+narrow])selected_exec=r->compact_exec[2+narrow];break;}
++      }else{
++        // Every packed prefill kernel uses its capacity only as a bound on the packet's total rows.
++        uint32_t total;std::memcpy(&total,source+36,4);
++        for(int narrow=0;narrow<5;++narrow)if(total&&total<=kNarrowPrefillRows[narrow]){if(r->compact_exec[7+narrow])selected_exec=r->compact_exec[7+narrow];break;}
+       }
+     }
+   }
+@@ -1323,6 +1335,10 @@ static RileyCudaStatus record_variable_shared(
+      status=record_shape(1,true,kNarrowAttentionRows[narrow]);
+      if(status==RILEY_CUDA_STATUS_SUCCESS){r->compact_graph[2+narrow]=r->graph;r->compact_exec[2+narrow]=r->exec;r->graph=nullptr;r->exec=nullptr;}
+     }
++    for(int narrow=0;narrow<5&&status==RILEY_CUDA_STATUS_SUCCESS;++narrow)if(kNarrowPrefillRows[narrow]<capacity){
++     status=record_shape(kNarrowPrefillRows[narrow],true);
++     if(status==RILEY_CUDA_STATUS_SUCCESS){r->compact_graph[7+narrow]=r->graph;r->compact_exec[7+narrow]=r->exec;r->graph=nullptr;r->exec=nullptr;}
++    }
+    }
+   }
+   if(status==RILEY_CUDA_STATUS_SUCCESS)status=record_shape(1);

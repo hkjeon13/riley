@@ -1,0 +1,47 @@
+{
+ "failure": null,
+ "reclaimed": true,
+ "sustained_seconds": 1802.1771616559708,
+ "requests": 306048,
+ "rounds": 797,
+ "exact": 306048,
+ "rss_MiB_by_sixth": [
+  760.86,
+  761.5,
+  761.73,
+  761.88,
+  761.99,
+  762.09
+ ],
+ "rss_slope_MiB_per_min_whole": 0.0447,
+ "rss_slope_MiB_per_min_second_half": 0.0207,
+ "rss_max": 762.12,
+ "gpu_MiB_min_max": [
+  1938.0,
+  1938.0
+ ],
+ "throughput_first_last_min": [
+  12772.3,
+  12882.5,
+  11127.6
+ ],
+ "tpot_p50_first_last": [
+  2.3178781365252727,
+  2.3054757985251846
+ ],
+ "kv_after_rounds": [
+  0
+ ],
+ "server_counters": {
+  "cancellations": 80,
+  "disconnects": 80,
+  "overloads": 0,
+  "dropped_observations": 307048
+ },
+ "native_close_allocation": {
+  "device_live_count": 0,
+  "device_live_bytes": 0,
+  "pinned_live_count": 0,
+  "pinned_live_bytes": 0
+ }
+}

@@ -1,0 +1,106 @@
+{
+ "argv": [
+  "/data/riley-serving-261007/qwen-http-exact-target-attempt01/release/riley",
+  "serve",
+  "--bind",
+  "127.0.0.1:36083",
+  "--model",
+  "/data/riley-models/Qwen2.5-3B-Instruct-aa8e72537993ba99e69dfaafa59ed015b17504d1",
+  "--model-id",
+  "qwen3b",
+  "--max-active-sequences",
+  "8",
+  "--max-waiting-requests",
+  "64",
+  "--max-sequence-tokens",
+  "256",
+  "--max-output-tokens",
+  "32",
+  "--max-weight-bytes",
+  "8589934592",
+  "--batch-token-budget",
+  "256",
+  "--prefill-chunk-tokens",
+  "256",
+  "--gemm-reduction-policy",
+  "first-heuristic-split-k-v1",
+  "--kv-blocks",
+  "128",
+  "--decode-attention-backend",
+  "native-bf16-paged-split-gqa-d128-two-stage",
+  "--execution-graph-policy",
+  "disabled",
+  "--reduction-profile",
+  "canonical-v1",
+  "--projection-bias-backend",
+  "strict-staged-v1",
+  "--batch-shape-policy",
+  "power-of-two",
+  "--execution-completion",
+  "iteration-batch",
+  "--metadata-transport",
+  "synchronous",
+  "--residual-rmsnorm",
+  "separate"
+ ],
+ "binary_sha256": "3677ef914737b448c18702ed664ebb610aaed95a6da1278965059a7bf31acaf8",
+ "concurrency": 8,
+ "workload": "fixed",
+ "sustained": {
+  "seconds": 202.7845783260418,
+  "rounds": 58,
+  "requests": 5568,
+  "errors": 0,
+  "inconsistent": 0,
+  "tok_per_s_first_last_min": [
+   551.4831359834147,
+   548.2279884827956,
+   542.121692482404
+  ],
+  "tpot_p50_first_last": [
+   12.633442467389008,
+   12.672757248579455
+  ],
+  "kv_after_rounds": [
+   0
+  ]
+ },
+ "memory": {
+  "gpu_MiB_first_last_quarter": [
+   11148.0,
+   11148.0
+  ],
+  "rss_MiB_first_last_quarter": [
+   6403.005533854167,
+   6403.360921223958
+  ],
+  "rss_MiB_max": 6403.37890625
+ },
+ "cancellation": {
+  "idle": 20,
+  "under_load": 40,
+  "requests_during_loaded_cancellation": 288,
+  "server_counters": {
+   "cancellations": 60,
+   "disconnects": 60,
+   "overloads": 0,
+   "dropped_observations": 5204
+  }
+ },
+ "failure": null,
+ "exit_code": 0,
+ "gpu_compute_after": "",
+ "native_close": {
+  "active_requests": 0,
+  "waiting_requests": 0,
+  "kv_allocated_blocks": 0,
+  "allocation": {
+   "device_live_count": 0,
+   "device_live_bytes": 0,
+   "pinned_live_count": 0,
+   "pinned_live_bytes": 0
+  }
+ },
+ "reclaimed": true,
+ "pass": true
+}

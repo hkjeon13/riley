@@ -1,0 +1,32 @@
+base True None new True None
+prompts with one output across all cells: base 15 / 15 new 15 / 15 | prompts whose output is unchanged: 15 / 15
+  c1-fixed     tok/s   113 ->   121 (v   129) tpot_p50  8.64 ->  8.07 (v  7.40) tpot_p99   8.7 ->   8.1 (v   7.4) ttft_p50  12 ->  12 (v  13) ttft_p95  14 ->  13 (v  19) ttft_p99  14 ->  13 (v  21) e2e_p50  178 ->  166 (v  157) err 0 gain +7.0%
+  c1-natural   tok/s   114 ->   121 (v   132) tpot_p50  8.65 ->  8.08 (v  7.45) tpot_p99   8.7 ->   8.1 (v   7.5) ttft_p50  12 ->  12 (v  13) ttft_p95  34 ->  33 (v  25) ttft_p99  34 ->  33 (v  26) e2e_p50  558 ->  521 (v  482) err 0 gain +7.0%
+  c8-fixed     tok/s   719 ->   764 (v   754) tpot_p50  9.93 ->  9.36 (v  9.10) tpot_p99  10.6 ->   9.9 (v   9.5) ttft_p50  24 ->  23 (v  33) ttft_p95  38 ->  35 (v  38) ttft_p99  65 ->  63 (v  51) e2e_p50  213 ->  204 (v  203) err 0 gain +6.3%
+  c8-natural   tok/s   771 ->   816 (v   835) tpot_p50  9.80 ->  9.25 (v  8.96) tpot_p99  10.2 ->   9.6 (v   9.1) ttft_p50  22 ->  21 (v  37) ttft_p95  46 ->  47 (v  44) ttft_p99  77 ->  81 (v  68) e2e_p50  639 ->  603 (v  593) err 0 gain +5.8%
+  c16-fixed    tok/s  1195 ->  1251 (v  1285) tpot_p50 11.88 -> 11.26 (v 10.27) tpot_p99  13.0 ->  12.8 (v  11.4) ttft_p50  26 ->  24 (v  37) ttft_p95  64 ->  70 (v  93) ttft_p99 127 -> 125 (v  94) e2e_p50  257 ->  254 (v  237) err 0 gain +4.7%
+  c16-natural  tok/s  1360 ->  1429 (v  1496) tpot_p50 10.71 -> 10.18 (v  9.63) tpot_p99  11.7 ->  10.9 (v   9.9) ttft_p50  33 ->  33 (v  41) ttft_p95  73 -> 110 (v  92) ttft_p99 186 -> 197 (v 125) e2e_p50  701 ->  668 (v  644) err 0 gain +5.1%
+  c32-fixed    tok/s  1751 ->  1801 (v  1887) tpot_p50 14.81 -> 14.46 (v 13.42) tpot_p99  15.7 ->  15.3 (v  20.0) ttft_p50  43 ->  42 (v  53) ttft_p95 251 -> 249 (v 160) ttft_p99 281 -> 270 (v 170) e2e_p50  341 ->  335 (v  319) err 0 gain +2.8%
+  c32-natural  tok/s  2145 ->  2222 (v  2493) tpot_p50 12.82 -> 12.41 (v 10.79) tpot_p99  16.3 ->  16.0 (v  12.6) ttft_p50  41 ->  36 (v  62) ttft_p95 288 -> 278 (v 202) ttft_p99 400 -> 403 (v 245) e2e_p50  839 ->  813 (v  741) err 0 gain +3.6%
+1152
+0
+bit-equivalent-gemm compared=48 replaced=0
+test bit_equivalent_selection_preserves_qwen_projection_bytes_for_every_bucket ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 1.71s
+
+48
+bit-equivalent-gemm shape=merged-qkv rows=1 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm shape=merged-qkv rows=2 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm shape=merged-qkv rows=8 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm shape=merged-qkv rows=24 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm shape=merged-qkv rows=32 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm shape=merged-qkv rows=48 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm shape=merged-qkv rows=64 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm shape=merged-qkv rows=96 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm shape=merged-qkv rows=128 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm shape=merged-qkv rows=160 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm shape=merged-qkv rows=208 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm shape=merged-qkv rows=256 replaced=false algorithm=30/17/0/3 differing=0
+
+[exited with code 0]

@@ -1,0 +1,40 @@
+// Diagnostic: does touching a layer's weights in an earlier kernel (so they sit in the GPU L2 cache) shorten a later
+// latency-bound projection kernel? Model-like pattern: 30 layers of 3.5 MB (gate+up of SmolLM2), each read once per pass.
+#include <cuda_runtime.h>
+#include <cuda_bf16.h>
+#include <chrono>
+#include <cstdio>
+#include <cstdint>
+static double now() { return std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+// Consumer: 192 blocks x 2 warps, each warp reads 8 columns x 576 of one matrix with a dependent MMA-like chain (fma accumulate).
+__global__ void consumer(const __nv_bfloat16* gate, const __nv_bfloat16* up, const __nv_bfloat16* x, __nv_bfloat16* out) {
+  const int warp = threadIdx.x / 32, lane = threadIdx.x % 32, g = lane / 4, t = lane % 4; const __nv_bfloat16* w = (warp ? up : gate) + (blockIdx.x * 8 + g) * 576;
+  float d = 0.F; for (int depth = 0; depth < 576; depth += 16) { const uint32_t b = *reinterpret_cast<const uint32_t*>(w + depth + 2 * t), bb = *reinterpret_cast<const uint32_t*>(w + depth + 2 * t + 8);
+    d = fmaf(float(b & 0xffff), __bfloat162float(x[depth + 2 * t]), d) + float(bb >> 16); }
+  if (t == 0) out[warp * 1536 + blockIdx.x * 8 + g] = __float2bfloat16_rn(d); }
+// Prefetch: blocks stride over the weight bytes with 64-byte steps (one load per cache line) and keep nothing.
+__global__ void prefetch(const uint8_t* bytes, uint64_t count, uint32_t* sink) {
+  const uint64_t lines = count / 64, per = (lines + gridDim.x * blockDim.x - 1) / (gridDim.x * blockDim.x); const uint64_t first = (uint64_t(blockIdx.x) * blockDim.x + threadIdx.x) * per; uint32_t acc = 0;
+  for (uint64_t i = first; i < first + per && i < lines; ++i) acc ^= *reinterpret_cast<const uint32_t*>(bytes + i * 64);
+  if (acc == 0x12345678u) sink[0] = acc; }
+// Small latency-bound kernel standing in for attention/norm work that precedes the consumer.
+__global__ void filler(const __nv_bfloat16* x, __nv_bfloat16* out) { float d = 0.F; for (int i = 0; i < 64; ++i) d = fmaf(d, 1.0001F, __bfloat162float(x[(threadIdx.x + i * 7) % 576])); if (threadIdx.x == 0) out[blockIdx.x] = __float2bfloat16_rn(d); }
+// Filler whose blocks past `work` touch one cache line per 64 bytes of the next weights instead of working.
+__global__ void filler_prefetch(const __nv_bfloat16* x, __nv_bfloat16* out, const uint8_t* bytes, uint64_t count, uint32_t* sink, int work) {
+  if (int(blockIdx.x) < work) { float d = 0.F; for (int i = 0; i < 64; ++i) d = fmaf(d, 1.0001F, __bfloat162float(x[(threadIdx.x + i * 7) % 576])); if (threadIdx.x == 0) out[blockIdx.x] = __float2bfloat16_rn(d); return; }
+  const uint64_t slots = uint64_t(gridDim.x - work) * blockDim.x, lines = count / 64, per = (lines + slots - 1) / slots, first = (uint64_t(blockIdx.x - work) * blockDim.x + threadIdx.x) * per; uint32_t acc = 0;
+  for (uint64_t i = first; i < first + per && i < lines; ++i) acc ^= *reinterpret_cast<const uint32_t*>(bytes + i * 64);
+  if (acc == 0x12345678u) sink[0] = acc; }
+int main() {
+  const int L = 60; const size_t M = 1536 * 576; __nv_bfloat16 *w, *x, *out; uint32_t* sink; cudaMalloc(&w, L * 2 * M * 2); cudaMalloc(&x, 576 * 2); cudaMalloc(&out, 2 * 1536 * 2); cudaMalloc(&sink, 4);
+  cudaMemset(w, 1, L * 2 * M * 2); cudaMemset(x, 1, 576 * 2); cudaStream_t s; cudaStreamCreate(&s);
+  auto run = [&](int extra, int fillers, int where) { cudaGraph_t g; cudaGraphExec_t e; cudaStreamBeginCapture(s, cudaStreamCaptureModeThreadLocal);
+    for (int l = 0; l < L; ++l) { const __nv_bfloat16* gate = w + size_t(l) * 2 * M;
+      for (int f = 0; f < fillers; ++f) { if (extra && f == where) filler_prefetch<<<24 + extra, 96, 0, s>>>(x, out, reinterpret_cast<const uint8_t*>(gate), 2 * M * 2, sink, 24); else filler<<<24, 96, 0, s>>>(x, out); }
+      consumer<<<192, 64, 0, s>>>(gate, gate + M, x, out); }
+    cudaStreamEndCapture(s, &g); cudaGraphInstantiate(&e, g, 0); for (int i = 0; i < 5; ++i) cudaGraphLaunch(e, s); cudaStreamSynchronize(s);
+    double best = 1e9; for (int rep = 0; rep < 7; ++rep) { const double t0 = now(); for (int i = 0; i < 10; ++i) cudaGraphLaunch(e, s); cudaStreamSynchronize(s); const double t = (now() - t0) / (10 * L); if (t < best) best = t; }
+    cudaGraphExecDestroy(e); cudaGraphDestroy(g); return best; };
+  for (int fillers : {1, 2, 3}) { const double base = run(0, fillers, 0); std::printf("%d fillers + consumer: %.2f us\n", fillers, base);
+    for (int where = 0; where < fillers; ++where) for (int extra : {48, 96, 192, 384}) { const double t = run(extra, fillers, where); std::printf("   prefetch in filler %d with %3d extra blocks: %.2f us (%+.2f)\n", where, extra, t, t - base); } }
+  return 0; }

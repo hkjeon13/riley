@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-261007/qwen_matrix_steady_budget.py", line 67, in <module>
+    assert p.poll() is None and time.monotonic() < deadline, 'startup failed ' + name
+AssertionError: startup failed c8-fixed-r0-riley-scheduler

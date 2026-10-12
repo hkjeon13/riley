@@ -1,0 +1,61 @@
+{
+ "failure": null,
+ "reclaimed": true,
+ "sustained_seconds": 1800.205315737985,
+ "errors": 0,
+ "requests": 329472,
+ "rounds": 858,
+ "exact": 329472,
+ "rss_MiB_by_sixth_all_samples": [
+  764.89,
+  769.72,
+  769.98,
+  770.23,
+  770.43,
+  769.71
+ ],
+ "rss_slope_MiB_per_min_whole": 0.1477,
+ "rss_slope_MiB_per_min_second_half": -0.0704,
+ "rss_max": 770.56,
+ "gpu_MiB_min_max_after_first_minute": [
+  948.0,
+  1874.0
+ ],
+ "throughput_first_last_min": [
+  13559.2,
+  13718.0,
+  13193.2
+ ],
+ "throughput_mean_by_sixth": [
+  13810.0,
+  13801.6,
+  13755.5,
+  13753.4,
+  13748.0,
+  13757.8
+ ],
+ "tpot_p50_mean_by_sixth": [
+  2.145,
+  2.1471,
+  2.1557,
+  2.1554,
+  2.156,
+  2.1547
+ ],
+ "tpot_p99_max": 2.831,
+ "drains": 84,
+ "drain_all_zero": true,
+ "native_close_allocation": {
+  "device_live_count": 0,
+  "device_live_bytes": 0,
+  "pinned_live_count": 0,
+  "pinned_live_bytes": 0
+ },
+ "server_counters": {
+  "cancellations": 80,
+  "disconnects": 80,
+  "overloads": 0,
+  "dropped_observations": 330760
+ },
+ "scope": "computed after the run from completion.json rounds, host-samples.json (all samples) and drains.json"
+}

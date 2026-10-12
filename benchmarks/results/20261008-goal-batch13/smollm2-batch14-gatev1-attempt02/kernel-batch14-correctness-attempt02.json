@@ -1,0 +1,28 @@
+{
+ "source_commit": "896a38e209f4ae78f0ad193fb9ff18b66b1c747d",
+ "server_binary_sha256": "32004b4297bff56258510ffd8be3fdc361a18264d2465fdf11c35df33fd06b86",
+ "native_exact_cases": 3161,
+ "native_additional_cases": {
+  "merge_norm_prefetch": 24,
+  "prefill_qkv": 69,
+  "mixed_rope": 45,
+  "fused_qkv": 270,
+  "narrow_grid_attention": 4800
+ },
+ "native_binary_sha256": "e583150fc6023f9de6f19013e70d506b061eaa70526bfe70b5db40225d98e90d",
+ "native_log_sha256": "988c80cd1a6e96bf97c47dfedace0ffa4cf3fabd5f7b50d53c795fa714144a0d",
+ "BF16_and_FP32_exact": true,
+ "HTTP_exact_requests": 60,
+ "HTTP_cells": [
+  "c1-fixed",
+  "c1-natural",
+  "c8-fixed",
+  "c8-natural",
+  "c16-fixed",
+  "c16-natural",
+  "c32-fixed",
+  "c32-natural"
+ ],
+ "source_receipt_sha256": "dbe036457876f81108703df2c5124d45d3739651c95c39698b7cbf10cd51389f",
+ "scope": "correctness only; the 816- and 3161-case parts of the native log are byte-identical to Batch13 (sha f9f88464 after removing the Batch14 record lines)"
+}

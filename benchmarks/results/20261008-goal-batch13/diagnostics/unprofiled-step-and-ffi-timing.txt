@@ -1,0 +1,27 @@
+== c1fixed-diagffi-r0
+DIAGFFI n=512 pre_us=6.3 launch_us=4.4 sync_us=941.7
+DIAG iters=512 wall_us_per_iter=997.6 ffi_us_per_iter=952.5 host_us_per_iter=45.1
+DIAGFFI n=512 pre_us=6.1 launch_us=4.0 sync_us=944.6
+DIAG iters=512 wall_us_per_iter=997.1 ffi_us_per_iter=954.8 host_us_per_iter=42.3
+== c1natural-diagffi-r0
+DIAGFFI n=512 pre_us=6.3 launch_us=4.6 sync_us=962.6
+DIAG iters=512 wall_us_per_iter=994.2 ffi_us_per_iter=973.7 host_us_per_iter=20.5
+DIAGFFI n=512 pre_us=6.2 launch_us=4.1 sync_us=958.9
+DIAG iters=512 wall_us_per_iter=986.7 ffi_us_per_iter=969.4 host_us_per_iter=17.3
+== c32fixed-diagffi-r0
+== c32natural-diagffi-r0
+DIAGFFI n=512 pre_us=12.1 launch_us=14.4 sync_us=2027.6
+DIAG iters=512 wall_us_per_iter=2190.7 ffi_us_per_iter=2055.0 host_us_per_iter=135.7
+DIAGFFI n=512 pre_us=11.3 launch_us=12.9 sync_us=2269.1
+DIAG iters=512 wall_us_per_iter=2419.4 ffi_us_per_iter=2294.2 host_us_per_iter=125.2
+== c1fixed-diagstep-r0
+DIAGSTEP us/iter loop=41.4 plan=0.7 authorize=0.3 execute=955.5 sample=0.7 commit=0.4 events=0.2 publish=0.8
+DIAGFFI n=512 pre_us=6.5 launch_us=4.3 sync_us=945.0
+DIAG iters=512 wall_us_per_iter=1004.1 ffi_us_per_iter=956.0 host_us_per_iter=48.1
+DIAGSTEP us/iter loop=42.6 plan=0.7 authorize=0.3 execute=958.4 sample=0.7 commit=0.4 events=0.2 publish=0.8
+== c32fixed-diagstep-r0
+== c32natural-diagstep-r0
+DIAGSTEP us/iter loop=14.8 plan=16.7 authorize=12.9 execute=2091.1 sample=11.8 commit=6.8 events=3.2 publish=37.4
+DIAGFFI n=512 pre_us=11.5 launch_us=10.4 sync_us=2181.7
+DIAG iters=512 wall_us_per_iter=2328.0 ffi_us_per_iter=2204.4 host_us_per_iter=123.7
+DIAGSTEP us/iter loop=3.6 plan=19.0 authorize=12.3 execute=2227.6 sample=13.1 commit=7.4 events=3.3 publish=41.6

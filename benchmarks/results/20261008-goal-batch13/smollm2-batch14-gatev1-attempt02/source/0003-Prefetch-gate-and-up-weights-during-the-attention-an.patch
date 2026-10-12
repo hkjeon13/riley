@@ -1,0 +1,169 @@
+From 8248af2fd0e9892034ae9ccc84d0a89ac5f70ac1 Mon Sep 17 00:00:00 2001
+From: psyche <hkjeon13@gmail.com>
+Date: Sun, 11 Oct 2026 14:51:32 +0900
+Subject: [PATCH 3/5] Prefetch gate and up weights during the attention and
+ norm kernels
+
+Decode at one row is latency bound, and the gate/up dispatch is the one
+kernel that waits on memory bandwidth (3.5 MB per layer). Extra blocks
+appended to the QK score, AV and first merge-norm launches touch one word per
+cache line of those weights, so the gate/up kernel finds them in L2. The extra
+blocks only load; native tests rerun the attention and merge-norm comparisons
+with prefetch blocks attached.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ kernels/src/decode_gqa_attention_v50.cuh    | 17 +++++++++----
+ kernels/src/decode_merge_norm_v56.cuh       |  5 +++-
+ kernels/src/decode_shared32_model.cuh       |  7 ++++--
+ kernels/src/weight_prefetch.cuh             | 13 ++++++++++
+ kernels/tests/kernel_batch14_correctness.cu | 27 +++++++++++++++++++--
+ 5 files changed, 59 insertions(+), 10 deletions(-)
+ create mode 100644 kernels/src/weight_prefetch.cuh
+
+diff --git a/kernels/src/decode_gqa_attention_v50.cuh b/kernels/src/decode_gqa_attention_v50.cuh
+index 5b0a5e7d..ebee3dd6 100644
+--- a/kernels/src/decode_gqa_attention_v50.cuh
++++ b/kernels/src/decode_gqa_attention_v50.cuh
+@@ -1,9 +1,12 @@
+ #pragma once
+ #include "decode_shape.cuh"
++#include "weight_prefetch.cuh"
+ namespace riley_gqa50_attention {
+ 
+ // Parallel QK score tiles, preserving the exact four K16 MMA recurrence.
+-__global__ void scores(const __nv_bfloat16* q,const __nv_bfloat16* k,float* result,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows){
++// Grid rows at or past work_rows only prefetch the next projection weights.
++__global__ void scores(const __nv_bfloat16* q,const __nv_bfloat16* k,float* result,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows,const void* prefetch=nullptr,uint64_t prefetch_bytes=0,uint32_t work_rows=0xffffffffu){
++ if(blockIdx.y>=work_rows){riley_touch_weight_lines(prefetch,prefetch_bytes,(uint64_t(blockIdx.y-work_rows)*gridDim.x+blockIdx.x)*blockDim.x+threadIdx.x,uint64_t(gridDim.y-work_rows)*gridDim.x*blockDim.x);return;}
+  int row=blockIdx.y/3;uint32_t active=*live_rows;if(active<1||active>32||row>=active)return;
+  shape+=row*416;pages+=row*416;
+  q+=row*576;result+=row*9*4096;
+@@ -24,7 +27,8 @@ __global__ void scores(const __nv_bfloat16* q,const __nv_bfloat16* k,float* resu
+  }
+ }
+ 
+-__global__ void independent_values(const float* scores,const __nv_bfloat16* v,__nv_bfloat16* out,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows){
++__global__ void independent_values(const float* scores,const __nv_bfloat16* v,__nv_bfloat16* out,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows,const void* prefetch=nullptr,uint64_t prefetch_bytes=0,uint32_t work_rows=0xffffffffu){
++ if(blockIdx.y>=work_rows){riley_touch_weight_lines(prefetch,prefetch_bytes,(uint64_t(blockIdx.y-work_rows)*gridDim.x+blockIdx.x)*blockDim.x+threadIdx.x,uint64_t(gridDim.y-work_rows)*gridDim.x*blockDim.x);return;}
+  int row=blockIdx.y/3;uint32_t active=*live_rows;if(active<1||active>32||row>=active)return;
+  shape+=row*416;pages+=row*416;
+  scores+=row*9*4096;out+=row*576;
+@@ -72,8 +76,11 @@ __global__ void independent_values(const float* scores,const __nv_bfloat16* v,__
+ // rows at or above the live count, so a grid narrower than the wire capacity
+ // only drops blocks that would have returned; the caller must not replay a
+ // narrow launch with more live rows than grid_rows.
+-inline void enqueue(cudaStream_t stream,const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,float* scratch,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows,uint32_t context,uint32_t grid_rows=32){
+- scores<<<dim3(min((context+7)/8,32u),3*grid_rows),32,0,stream>>>(q,k,scratch,shape,pages,live_rows);
+- independent_values<<<dim3(8,3*grid_rows),96,0,stream>>>(scratch,v,out,shape,pages,live_rows);
++inline void enqueue(cudaStream_t stream,const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,float* scratch,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows,uint32_t context,uint32_t grid_rows=32,
++ const void* score_prefetch=nullptr,uint64_t score_prefetch_bytes=0,const void* value_prefetch=nullptr,uint64_t value_prefetch_bytes=0){
++ // Extra grid rows carry the prefetch: about 200 blocks for either kernel.
++ const uint32_t stripes=min((context+7)/8,32u),score_extra=score_prefetch_bytes?(191+stripes)/stripes:0,value_extra=value_prefetch_bytes?24:0;
++ scores<<<dim3(stripes,3*grid_rows+score_extra),32,0,stream>>>(q,k,scratch,shape,pages,live_rows,score_prefetch,score_prefetch_bytes,score_extra?3*grid_rows:0xffffffffu);
++ independent_values<<<dim3(8,3*grid_rows+value_extra),96,0,stream>>>(scratch,v,out,shape,pages,live_rows,value_prefetch,value_prefetch_bytes,value_extra?3*grid_rows:0xffffffffu);
+ }
+ }
+diff --git a/kernels/src/decode_merge_norm_v56.cuh b/kernels/src/decode_merge_norm_v56.cuh
+index bcea133c..3db52675 100644
+--- a/kernels/src/decode_merge_norm_v56.cuh
++++ b/kernels/src/decode_merge_norm_v56.cuh
+@@ -2,9 +2,12 @@
+ #include <cuda_runtime.h>
+ #include <cuda_bf16.h>
+ #include <stdint.h>
++#include "weight_prefetch.cuh"
+ // Internal V3 pointwise operators; the retained owner validates parent extents.
+ namespace riley_merge_norm_v56 {
+-__global__ void merge_norm(const float* parts,const void* b,const __nv_bfloat16* w,void* residual,__nv_bfloat16* out,int mode,const uint32_t* shape,uint32_t capacity){
++// Blocks at or past work_blocks only prefetch the next projection weights.
++__global__ void merge_norm(const float* parts,const void* b,const __nv_bfloat16* w,void* residual,__nv_bfloat16* out,int mode,const uint32_t* shape,uint32_t capacity,const void* prefetch=nullptr,uint64_t prefetch_bytes=0,uint32_t work_blocks=0xffffffffu){
++ if(blockIdx.x>=work_blocks){riley_touch_weight_lines(prefetch,prefetch_bytes,uint64_t(blockIdx.x-work_blocks)*blockDim.x+threadIdx.x,uint64_t(gridDim.x-work_blocks)*blockDim.x);return;}
+  const uint32_t row=blockIdx.x,live=shape[2];if(capacity!=32||!live||live>capacity||row>=live)return;
+  parts+=row*576;out+=row*576;
+  if(mode==1){b=static_cast<const __nv_bfloat16*>(b)+row*576;residual=static_cast<float*>(residual)+row*576;}
+diff --git a/kernels/src/decode_shared32_model.cuh b/kernels/src/decode_shared32_model.cuh
+index a836b02f..5fa1e63e 100644
+--- a/kernels/src/decode_shared32_model.cuh
++++ b/kernels/src/decode_shared32_model.cuh
+@@ -98,11 +98,14 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
+  shared32_qkv_parts<<<dim3(120,3),32,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),active);
+  qkv_merge_rope<<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
+  }
+- if(grouped_attention)riley_gqa50_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context,attention_rows);
++ // The gate and up weights of this layer are prefetched during the attention and norm kernels that precede their use.
++ const __nv_bfloat16* gate_weights=tiled?w(273+layer*3):w(base+6);const __nv_bfloat16* up_weights=tiled?w(274+layer*3):w(base+7);
++ constexpr uint64_t gate_bytes=uint64_t(1536)*576*2,gate_half=gate_bytes/2;
++ if(grouped_attention)riley_gqa50_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context,attention_rows,gate_weights,gate_half,up_weights,gate_bytes);
+  else riley_shared32_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
+  if(grouped_attention){
+   enqueue_shared32_projection<576,576,128,false,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
+-  riley_merge_norm_v56::merge_norm<<<32,256,0,stream>>>(static_cast<const float*>(scratch[7]),b(0),w(base+5),scratch[10],b(1),1,pointwise,32);
++  riley_merge_norm_v56::merge_norm<<<32+64,256,0,stream>>>(static_cast<const float*>(scratch[7]),b(0),w(base+5),scratch[10],b(1),1,pointwise,32,reinterpret_cast<const uint8_t*>(gate_weights)+gate_half,gate_half,32);
+  }else{
+  enqueue_shared32_projection<576,576,128,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
+  riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,pointwise,32);
+diff --git a/kernels/src/weight_prefetch.cuh b/kernels/src/weight_prefetch.cuh
+new file mode 100644
+index 00000000..6083e4ba
+--- /dev/null
++++ b/kernels/src/weight_prefetch.cuh
+@@ -0,0 +1,13 @@
++#pragma once
++#include <cuda_runtime.h>
++#include <stdint.h>
++// Touches one word of every 64-byte line in [bytes, bytes+count) so that a
++// later kernel finds those weights in the device L2 cache. Loads only: no
++// value is kept and nothing is written, so results cannot change. `slot` is
++// this thread's index among the `slots` threads sharing the range.
++__device__ __forceinline__ void riley_touch_weight_lines(const void* bytes,uint64_t count,uint64_t slot,uint64_t slots){
++ const uint64_t lines=count/64,per=(lines+slots-1)/slots,first=slot*per;
++ const auto* base=static_cast<const volatile uint8_t*>(bytes);uint32_t unused=0;
++ for(uint64_t line=first;line<first+per&&line<lines;++line)unused^=*reinterpret_cast<const volatile uint32_t*>(base+line*64);
++ (void)unused;
++}
+diff --git a/kernels/tests/kernel_batch14_correctness.cu b/kernels/tests/kernel_batch14_correctness.cu
+index d9cab44d..ede56690 100644
+--- a/kernels/tests/kernel_batch14_correctness.cu
++++ b/kernels/tests/kernel_batch14_correctness.cu
+@@ -18,7 +18,9 @@ int narrow_attention_cases(int seed){
+    *live=rows;fill_fp32(sa,S+2*Guard);fill_fp32(sb,S+2*Guard);fill_bf16(a,N+2*Guard);fill_bf16(b,N+2*Guard);
+    riley_gqa50_attention_batch11_reference::scores<<<dim3(stripes,96),32>>>(q,k,sa+Guard,shape,pages,live);
+    riley_gqa50_attention_batch11_reference::independent_values<<<dim3(8,96),96>>>(sa+Guard,v,a+Guard,shape,pages,live);
+-   riley_gqa50_attention::enqueue(nullptr,q,k,v,b+Guard,sb+Guard,shape,pages,live,context,grid_rows);
++   // Odd seeds attach prefetch blocks (the key cache doubles as the range to touch); outputs must not change.
++   if(seed%2)riley_gqa50_attention::enqueue(nullptr,q,k,v,b+Guard,sb+Guard,shape,pages,live,context,grid_rows,k,884736,v,1769472);
++   else riley_gqa50_attention::enqueue(nullptr,q,k,v,b+Guard,sb+Guard,shape,pages,live,context,grid_rows);
+    OK(cudaGetLastError());OK(cudaDeviceSynchronize());
+    compare(sa,sb,S+2*Guard,"narrow grid QK scores including guards/inactive",rows);
+    compare(a,b,N+2*Guard,"narrow grid AV including guards/inactive",rows);
+@@ -117,4 +119,25 @@ int prefill_qkv_cases(int seed){
+  }
+  for(void* p:{(void*)x,(void*)qw,(void*)kw,(void*)vw,(void*)a[0],(void*)a[1],(void*)a[2],(void*)b[0],(void*)b[1],(void*)b[2],(void*)live})OK(cudaFree(p));return cases;
+ }
+-int main(){kernel_batch11_matrix_main();{int fused=0;for(int seed:{1,17,99})fused+=prefill_qkv_cases(seed);std::printf("{\"passed\":true,\"prefill_qkv_cases\":%d,\"BF16_exact\":true,\"performance_claim_eligible\":false}\n",fused);}{int mixed=0;for(int seed:{1,17,99})mixed+=mixed_rope_cases(seed);std::printf("{\"passed\":true,\"mixed_rope_cases\":%d,\"BF16_exact\":true,\"performance_claim_eligible\":false}\n",mixed);}int fused=0;for(int seed:{1,17,99})fused+=fused_qkv_cases(seed);std::printf("{\"passed\":true,\"fused_qkv_cases\":%d,\"BF16_and_FP32_exact\":true,\"performance_claim_eligible\":false}\n",fused);int narrow=0;for(int seed:{1,17,99})narrow+=narrow_attention_cases(seed);OK(cudaDeviceSynchronize());std::printf("{\"passed\":true,\"narrow_grid_attention_cases\":%d,\"BF16_and_FP32_exact\":true,\"performance_claim_eligible\":false}\n",narrow);}
++int merge_norm_prefetch_cases(int seed){
++ constexpr size_t N=32*576,Guard=16;
++ auto* parts=alloc<float>(5*N);auto* skip_bf=alloc<__nv_bfloat16>(N);auto* skip_fp=alloc<float>(N);auto* weight=alloc<__nv_bfloat16>(576);auto* touched=alloc<__nv_bfloat16>(884736/2);
++ auto* a=alloc<__nv_bfloat16>(N+2*Guard);auto* b=alloc<__nv_bfloat16>(N+2*Guard);auto* ra=alloc<float>(N+2*Guard);auto* rb=alloc<float>(N+2*Guard);auto* ba=alloc<__nv_bfloat16>(N+2*Guard);auto* bb=alloc<__nv_bfloat16>(N+2*Guard);
++ auto* shape=alloc<uint32_t>(3);shape[0]=shape[1]=0;
++ for(size_t i=0;i<5*N;++i)parts[i]=float((i*13+seed)%251)/257.F-.4F;
++ for(size_t i=0;i<N;++i){skip_fp[i]=float(int((i*17+seed)%127)-63)/128;skip_bf[i]=__float2bfloat16_rn(skip_fp[i]);}
++ for(size_t i=0;i<576;++i)weight[i]=__float2bfloat16_rn(float((i+seed)%17+1)/16);
++ int cases=0;
++ for(int mode:{1,2})for(int rows:{0,1,2,16,32,33}){
++  shape[2]=rows;fill_bf16(a,N+2*Guard);fill_bf16(b,N+2*Guard);fill_fp32(ra,N+2*Guard);fill_fp32(rb,N+2*Guard);fill_bf16(ba,N+2*Guard);fill_bf16(bb,N+2*Guard);
++  const void* skip=mode==1?static_cast<void*>(skip_bf):static_cast<void*>(skip_fp);
++  void* ar=mode==1?static_cast<void*>(ra+Guard):static_cast<void*>(ba+Guard);void* br=mode==1?static_cast<void*>(rb+Guard):static_cast<void*>(bb+Guard);
++  riley_merge_norm_v56::merge_norm<<<32,256>>>(parts,skip,weight,ar,a+Guard,mode,shape,32);
++  riley_merge_norm_v56::merge_norm<<<32+64,256>>>(parts,skip,weight,br,b+Guard,mode,shape,32,touched,884736,32);
++  OK(cudaGetLastError());OK(cudaDeviceSynchronize());
++  compare(a,b,N+2*Guard,"merge_norm with prefetch blocks: normalized rows",rows);compare(ra,rb,N+2*Guard,"merge_norm with prefetch blocks: FP32 residual",rows);compare(ba,bb,N+2*Guard,"merge_norm with prefetch blocks: BF16 residual",rows);
++  ++cases;
++ }
++ for(void* p:{(void*)parts,(void*)skip_bf,(void*)skip_fp,(void*)weight,(void*)touched,(void*)a,(void*)b,(void*)ra,(void*)rb,(void*)ba,(void*)bb,(void*)shape})OK(cudaFree(p));return cases;
++}
++int main(){kernel_batch11_matrix_main();{int n=0;for(int seed:{1,17})n+=merge_norm_prefetch_cases(seed);std::printf("{\"passed\":true,\"merge_norm_prefetch_cases\":%d,\"BF16_and_FP32_exact\":true,\"performance_claim_eligible\":false}\n",n);}{int fused=0;for(int seed:{1,17,99})fused+=prefill_qkv_cases(seed);std::printf("{\"passed\":true,\"prefill_qkv_cases\":%d,\"BF16_exact\":true,\"performance_claim_eligible\":false}\n",fused);}{int mixed=0;for(int seed:{1,17,99})mixed+=mixed_rope_cases(seed);std::printf("{\"passed\":true,\"mixed_rope_cases\":%d,\"BF16_exact\":true,\"performance_claim_eligible\":false}\n",mixed);}int fused=0;for(int seed:{1,17,99})fused+=fused_qkv_cases(seed);std::printf("{\"passed\":true,\"fused_qkv_cases\":%d,\"BF16_and_FP32_exact\":true,\"performance_claim_eligible\":false}\n",fused);int narrow=0;for(int seed:{1,17,99})narrow+=narrow_attention_cases(seed);OK(cudaDeviceSynchronize());std::printf("{\"passed\":true,\"narrow_grid_attention_cases\":%d,\"BF16_and_FP32_exact\":true,\"performance_claim_eligible\":false}\n",narrow);}
+-- 
+2.52.0
+

@@ -1,0 +1,157 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: constant `NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V2_SIZE` is never used
+  --> crates/riley-cuda/src/ffi.rs:98:7
+   |
+98 | const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V2_SIZE: u32 = 744;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: struct `RawNativeBf16RaggedPagedSplitGqaParamsV2` is never constructed
+    --> crates/riley-cuda/src/ffi.rs:1172:8
+     |
+1172 | struct RawNativeBf16RaggedPagedSplitGqaParamsV2 {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+     --> crates/riley-cuda/src/ffi.rs:11264:19
+      |
+11263 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+11264 |     pub(super) fn record_mlp(
+      |                   ^^^^^^^^^^
+...
+11274 |     pub(super) fn record_mlp_with_norm(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:11568:19
+      |
+11567 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+11568 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+11579 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+11591 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1799:8
+     |
+1799 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 5 warnings
+   Compiling riley-cuda v0.1.0 (/data/riley-serving-261007/qwen-http-exact-source-attempt01/crates/riley-cuda)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2.97s
+     Running tests/gemm_gpu.rs (/data/riley-serving-261007/qwen-http-exact-target-attempt01/release/deps/gemm_gpu-e8f9f19a9c7dbd4f)
+
+running 1 test
+bit-equivalent-gemm anchor=128 shape=merged-qkv rows=1 replaced=true algorithm=21/5/13/3 differing=0
+bit-equivalent-gemm anchor=128 shape=merged-qkv rows=2 replaced=true algorithm=21/5/13/3 differing=0
+bit-equivalent-gemm anchor=128 shape=merged-qkv rows=8 replaced=true algorithm=21/5/13/3 differing=0
+bit-equivalent-gemm anchor=128 shape=merged-qkv rows=24 replaced=true algorithm=21/5/13/3 differing=0
+bit-equivalent-gemm anchor=128 shape=merged-qkv rows=32 replaced=true algorithm=21/5/13/3 differing=0
+bit-equivalent-gemm anchor=128 shape=merged-qkv rows=48 replaced=true algorithm=21/11/13/3 differing=0
+bit-equivalent-gemm anchor=128 shape=merged-qkv rows=64 replaced=true algorithm=21/11/13/3 differing=0
+bit-equivalent-gemm anchor=128 shape=merged-qkv rows=96 replaced=true algorithm=23/18/15/3 differing=0
+bit-equivalent-gemm anchor=128 shape=merged-qkv rows=128 replaced=true algorithm=23/18/15/3 differing=0
+bit-equivalent-gemm anchor=128 shape=merged-qkv rows=160 replaced=true algorithm=21/15/12/3 differing=0
+bit-equivalent-gemm anchor=128 shape=merged-qkv rows=208 replaced=true algorithm=6/20/15/3 differing=0
+bit-equivalent-gemm anchor=128 shape=merged-qkv rows=256 replaced=true algorithm=6/20/15/3 differing=0
+bit-equivalent-gemm anchor=128 shape=output rows=1 replaced=true algorithm=21/5/13/4 differing=0
+bit-equivalent-gemm anchor=128 shape=output rows=2 replaced=true algorithm=21/5/13/4 differing=0
+bit-equivalent-gemm anchor=128 shape=output rows=8 replaced=true algorithm=21/5/13/4 differing=0
+bit-equivalent-gemm anchor=128 shape=output rows=24 replaced=true algorithm=21/5/13/4 differing=0
+bit-equivalent-gemm anchor=128 shape=output rows=32 replaced=true algorithm=21/5/13/4 differing=0
+bit-equivalent-gemm anchor=128 shape=output rows=48 replaced=true algorithm=21/11/13/4 differing=0
+bit-equivalent-gemm anchor=128 shape=output rows=64 replaced=true algorithm=21/11/13/4 differing=0
+bit-equivalent-gemm anchor=128 shape=output rows=96 replaced=true algorithm=21/11/13/4 differing=0
+bit-equivalent-gemm anchor=128 shape=output rows=128 replaced=true algorithm=23/18/15/4 differing=0
+bit-equivalent-gemm anchor=128 shape=output rows=160 replaced=true algorithm=21/15/12/4 differing=0
+bit-equivalent-gemm anchor=128 shape=output rows=208 replaced=true algorithm=21/20/10/4 differing=0
+bit-equivalent-gemm anchor=128 shape=output rows=256 replaced=true algorithm=21/20/10/4 differing=0
+bit-equivalent-gemm anchor=128 shape=gate-up rows=1 replaced=true algorithm=21/11/19/1 differing=0
+bit-equivalent-gemm anchor=128 shape=gate-up rows=2 replaced=true algorithm=21/11/19/1 differing=0
+bit-equivalent-gemm anchor=128 shape=gate-up rows=8 replaced=true algorithm=21/11/19/1 differing=0
+bit-equivalent-gemm anchor=128 shape=gate-up rows=24 replaced=true algorithm=21/11/19/1 differing=0
+bit-equivalent-gemm anchor=128 shape=gate-up rows=32 replaced=true algorithm=21/11/19/1 differing=0
+bit-equivalent-gemm anchor=128 shape=gate-up rows=48 replaced=true algorithm=21/11/20/1 differing=0
+bit-equivalent-gemm anchor=128 shape=gate-up rows=64 replaced=true algorithm=21/11/20/1 differing=0
+bit-equivalent-gemm anchor=128 shape=gate-up rows=96 replaced=true algorithm=21/15/18/1 differing=0
+bit-equivalent-gemm anchor=128 shape=gate-up rows=128 replaced=true algorithm=21/15/25/1 differing=0
+bit-equivalent-gemm anchor=128 shape=gate-up rows=160 replaced=false algorithm=21/15/12/1 differing=0
+bit-equivalent-gemm anchor=128 shape=gate-up rows=208 replaced=false algorithm=21/15/12/1 differing=0
+bit-equivalent-gemm anchor=128 shape=gate-up rows=256 replaced=false algorithm=21/15/12/1 differing=0
+bit-equivalent-gemm anchor=128 shape=down rows=1 replaced=true algorithm=21/5/19/4 differing=0
+bit-equivalent-gemm anchor=128 shape=down rows=2 replaced=true algorithm=21/5/19/4 differing=0
+bit-equivalent-gemm anchor=128 shape=down rows=8 replaced=true algorithm=21/5/19/4 differing=0
+bit-equivalent-gemm anchor=128 shape=down rows=24 replaced=true algorithm=21/5/19/4 differing=0
+bit-equivalent-gemm anchor=128 shape=down rows=32 replaced=true algorithm=21/5/19/4 differing=0
+bit-equivalent-gemm anchor=128 shape=down rows=48 replaced=true algorithm=21/11/19/4 differing=0
+bit-equivalent-gemm anchor=128 shape=down rows=64 replaced=true algorithm=21/11/19/4 differing=0
+bit-equivalent-gemm anchor=128 shape=down rows=96 replaced=true algorithm=6/18/12/4 differing=0
+bit-equivalent-gemm anchor=128 shape=down rows=128 replaced=true algorithm=21/15/12/4 differing=0
+bit-equivalent-gemm anchor=128 shape=down rows=160 replaced=true algorithm=21/15/12/4 differing=0
+bit-equivalent-gemm anchor=128 shape=down rows=208 replaced=false algorithm=6/17/15/4 differing=0
+bit-equivalent-gemm anchor=128 shape=down rows=256 replaced=false algorithm=6/17/15/4 differing=0
+bit-equivalent-gemm anchor=256 shape=merged-qkv rows=1 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm anchor=256 shape=merged-qkv rows=2 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm anchor=256 shape=merged-qkv rows=8 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm anchor=256 shape=merged-qkv rows=24 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm anchor=256 shape=merged-qkv rows=32 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm anchor=256 shape=merged-qkv rows=48 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm anchor=256 shape=merged-qkv rows=64 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm anchor=256 shape=merged-qkv rows=96 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm anchor=256 shape=merged-qkv rows=128 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm anchor=256 shape=merged-qkv rows=160 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm anchor=256 shape=merged-qkv rows=208 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm anchor=256 shape=merged-qkv rows=256 replaced=false algorithm=30/17/0/3 differing=0
+bit-equivalent-gemm anchor=256 shape=output rows=1 replaced=false algorithm=31/15/17/1 differing=0
+bit-equivalent-gemm anchor=256 shape=output rows=2 replaced=false algorithm=31/15/17/1 differing=0
+bit-equivalent-gemm anchor=256 shape=output rows=8 replaced=false algorithm=31/15/17/1 differing=0
+bit-equivalent-gemm anchor=256 shape=output rows=24 replaced=false algorithm=31/15/17/1 differing=0
+bit-equivalent-gemm anchor=256 shape=output rows=32 replaced=false algorithm=31/15/17/1 differing=0
+bit-equivalent-gemm anchor=256 shape=output rows=48 replaced=false algorithm=31/15/17/1 differing=0
+bit-equivalent-gemm anchor=256 shape=output rows=64 replaced=false algorithm=31/15/17/1 differing=0
+bit-equivalent-gemm anchor=256 shape=output rows=96 replaced=false algorithm=31/15/17/1 differing=0
+bit-equivalent-gemm anchor=256 shape=output rows=128 replaced=false algorithm=31/15/17/1 differing=0
+bit-equivalent-gemm anchor=256 shape=output rows=160 replaced=false algorithm=31/15/17/1 differing=0
+bit-equivalent-gemm anchor=256 shape=output rows=208 replaced=false algorithm=31/15/17/1 differing=0
+bit-equivalent-gemm anchor=256 shape=output rows=256 replaced=false algorithm=31/15/17/1 differing=0
+bit-equivalent-gemm anchor=256 shape=gate-up rows=1 replaced=false algorithm=30/18/0/1 differing=0
+bit-equivalent-gemm anchor=256 shape=gate-up rows=2 replaced=false algorithm=30/18/0/1 differing=0
+bit-equivalent-gemm anchor=256 shape=gate-up rows=8 replaced=false algorithm=30/18/0/1 differing=0
+bit-equivalent-gemm anchor=256 shape=gate-up rows=24 replaced=false algorithm=30/18/0/1 differing=0
+bit-equivalent-gemm anchor=256 shape=gate-up rows=32 replaced=false algorithm=30/18/0/1 differing=0
+bit-equivalent-gemm anchor=256 shape=gate-up rows=48 replaced=false algorithm=30/18/0/1 differing=0
+bit-equivalent-gemm anchor=256 shape=gate-up rows=64 replaced=false algorithm=30/18/0/1 differing=0
+bit-equivalent-gemm anchor=256 shape=gate-up rows=96 replaced=false algorithm=30/18/0/1 differing=0
+bit-equivalent-gemm anchor=256 shape=gate-up rows=128 replaced=false algorithm=30/18/0/1 differing=0
+bit-equivalent-gemm anchor=256 shape=gate-up rows=160 replaced=false algorithm=30/18/0/1 differing=0
+bit-equivalent-gemm anchor=256 shape=gate-up rows=208 replaced=false algorithm=30/18/0/1 differing=0
+bit-equivalent-gemm anchor=256 shape=gate-up rows=256 replaced=false algorithm=30/18/0/1 differing=0
+bit-equivalent-gemm anchor=256 shape=down rows=1 replaced=false algorithm=30/17/0/12 differing=0
+bit-equivalent-gemm anchor=256 shape=down rows=2 replaced=false algorithm=30/17/0/12 differing=0
+bit-equivalent-gemm anchor=256 shape=down rows=8 replaced=false algorithm=30/17/0/12 differing=0
+bit-equivalent-gemm anchor=256 shape=down rows=24 replaced=false algorithm=30/17/0/12 differing=0
+bit-equivalent-gemm anchor=256 shape=down rows=32 replaced=false algorithm=30/17/0/12 differing=0
+bit-equivalent-gemm anchor=256 shape=down rows=48 replaced=false algorithm=30/17/0/12 differing=0
+bit-equivalent-gemm anchor=256 shape=down rows=64 replaced=false algorithm=30/17/0/12 differing=0
+bit-equivalent-gemm anchor=256 shape=down rows=96 replaced=false algorithm=30/17/0/12 differing=0
+bit-equivalent-gemm anchor=256 shape=down rows=128 replaced=false algorithm=30/17/0/12 differing=0
+bit-equivalent-gemm anchor=256 shape=down rows=160 replaced=false algorithm=30/17/0/12 differing=0
+bit-equivalent-gemm anchor=256 shape=down rows=208 replaced=false algorithm=30/17/0/12 differing=0
+bit-equivalent-gemm anchor=256 shape=down rows=256 replaced=false algorithm=30/17/0/12 differing=0
+bit-equivalent-gemm compared=96 replaced_with_128_anchor=43 replaced_with_256_anchor=0
+test bit_equivalent_selection_preserves_qwen_projection_bytes_for_every_bucket ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 3.21s
+

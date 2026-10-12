@@ -1,0 +1,75 @@
+c32-natural-r0-riley-scheduler {'errors': 0, 'first_error': None, 'output_tok_per_s': 2080.1, 'output_tokens': 14336, 'prompt_tokens': 34624, 'ttft_p50': 36.92, 'tpot_p50': 13.2, 'e2e_p50': 864.33, 'gpu_peak_MiB': 8606.0}
+---- with graph
+steps 519 mean period 12.51 median 10.57
+-- pure decode: n=347 share_of_time=0.55 mean=10.30 ms kernels/step=34 busy=0.46 idle=9.84
+      0.232 ms n=   6.2 avg=   37.3us Kernel2
+      0.086 ms n=   1.6 avg=   54.9us ampere_bf16_s16816gemm_bf16_64x128_ldg8_f2f_stages_64x3_tn
+      0.051 ms n=   1.6 avg=   32.7us native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_ke
+      0.032 ms n=   0.0 avg=  735.1us ampere_bf16_s1688gemm_bf16_64x128_sliced1x2_ldg8_f2f_tn
+      0.007 ms n=   1.6 avg=    4.4us rms_norm_kernel
+      0.007 ms n=   1.6 avg=    4.5us residual_rms_norm_kernel
+      0.007 ms n=   4.7 avg=    1.4us splitKreduce_kernel
+      0.006 ms n=   1.6 avg=    4.1us native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel
+      0.005 ms n=   3.1 avg=    1.5us indexed_rope_kernel
+      0.005 ms n=   0.0 avg=  107.2us bf16_argmax_kernel
+      0.004 ms n=   1.6 avg=    2.6us silu_kernel
+      0.004 ms n=   1.6 avg=    2.3us gated_multiply_kernel
+      0.003 ms n=   1.6 avg=    2.2us ragged_paged_kv_cache_write_kernel
+      0.003 ms n=   1.6 avg=    1.6us qkv_split_bias_kernel
+      0.002 ms n=   1.6 avg=    1.4us residual_add_kernel
+      0.002 ms n=   1.0 avg=    1.7us embedding_kernel
+-- mixed: n=172 share_of_time=0.45 mean=16.97 ms kernels/step=648 busy=15.42 idle=1.54
+      6.954 ms n= 134.8 avg=   51.6us Kernel2
+      3.126 ms n=  33.7 avg=   92.8us native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_ke
+      2.455 ms n=  33.7 avg=   72.8us ampere_bf16_s16816gemm_bf16_64x128_ldg8_f2f_stages_64x3_tn
+      0.928 ms n=   0.9 avg=  991.8us ampere_bf16_s1688gemm_bf16_64x128_sliced1x2_ldg8_f2f_tn
+      0.328 ms n=  33.7 avg=    9.7us native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel
+      0.271 ms n=  33.7 avg=    8.1us silu_kernel
+      0.268 ms n= 101.1 avg=    2.7us splitKreduce_kernel
+      0.215 ms n=  33.7 avg=    6.4us gated_multiply_kernel
+      0.176 ms n=  34.6 avg=    5.1us rms_norm_kernel
+      0.175 ms n=  33.7 avg=    5.2us residual_rms_norm_kernel
+      0.132 ms n=  67.4 avg=    2.0us indexed_rope_kernel
+      0.105 ms n=  33.7 avg=    3.1us qkv_split_bias_kernel
+      0.100 ms n=   0.9 avg=  107.2us bf16_argmax_kernel
+      0.090 ms n=  33.7 avg=    2.7us residual_add_kernel
+      0.076 ms n=  33.7 avg=    2.3us ragged_paged_kv_cache_write_kernel
+      0.018 ms n=   0.9 avg=   18.8us row_gather_kernel
+---- without graph
+steps 519 mean period 12.89 median 11.03
+-- pure decode: n=346 share_of_time=0.56 mean=10.78 ms kernels/step=692 busy=10.02 idle=0.76
+      5.230 ms n= 144.0 avg=   36.3us Kernel2
+      1.966 ms n=  36.0 avg=   54.6us ampere_bf16_s16816gemm_bf16_64x128_ldg8_f2f_stages_64x3_tn
+      0.989 ms n=  36.0 avg=   27.5us native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_ke
+      0.721 ms n=   1.0 avg=  721.3us ampere_bf16_s1688gemm_bf16_64x128_sliced1x2_ldg8_f2f_tn
+      0.156 ms n=  37.0 avg=    4.2us rms_norm_kernel
+      0.155 ms n=  36.0 avg=    4.3us residual_rms_norm_kernel
+      0.140 ms n= 108.0 avg=    1.3us splitKreduce_kernel
+      0.133 ms n=  36.0 avg=    3.7us native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel
+      0.106 ms n=   1.0 avg=  105.8us bf16_argmax_kernel
+      0.103 ms n=  72.0 avg=    1.4us indexed_rope_kernel
+      0.077 ms n=  36.0 avg=    2.1us ragged_paged_kv_cache_write_kernel
+      0.070 ms n=  36.0 avg=    1.9us silu_kernel
+      0.063 ms n=  36.0 avg=    1.7us gated_multiply_kernel
+      0.052 ms n=  36.0 avg=    1.4us qkv_split_bias_kernel
+      0.045 ms n=  36.0 avg=    1.2us residual_add_kernel
+      0.015 ms n=   1.0 avg=   14.6us row_gather_kernel
+-- mixed: n=173 share_of_time=0.44 mean=17.10 ms kernels/step=692 busy=16.01 idle=1.09
+      7.269 ms n= 144.0 avg=   50.5us Kernel2
+      3.168 ms n=  36.0 avg=   88.0us native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_ke
+      2.575 ms n=  36.0 avg=   71.5us ampere_bf16_s16816gemm_bf16_64x128_ldg8_f2f_stages_64x3_tn
+      0.971 ms n=   1.0 avg=  971.5us ampere_bf16_s1688gemm_bf16_64x128_sliced1x2_ldg8_f2f_tn
+      0.332 ms n=  36.0 avg=    9.2us native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel
+      0.277 ms n= 108.0 avg=    2.6us splitKreduce_kernel
+      0.276 ms n=  36.0 avg=    7.7us silu_kernel
+      0.219 ms n=  36.0 avg=    6.1us gated_multiply_kernel
+      0.187 ms n=  37.0 avg=    5.0us rms_norm_kernel
+      0.185 ms n=  36.0 avg=    5.1us residual_rms_norm_kernel
+      0.139 ms n=  72.0 avg=    1.9us indexed_rope_kernel
+      0.108 ms n=  36.0 avg=    3.0us qkv_split_bias_kernel
+      0.107 ms n=   1.0 avg=  107.1us bf16_argmax_kernel
+      0.093 ms n=  36.0 avg=    2.6us residual_add_kernel
+      0.081 ms n=  36.0 avg=    2.3us ragged_paged_kv_cache_write_kernel
+      0.019 ms n=   1.0 avg=   18.6us row_gather_kernel
+
+[exited with code 0]

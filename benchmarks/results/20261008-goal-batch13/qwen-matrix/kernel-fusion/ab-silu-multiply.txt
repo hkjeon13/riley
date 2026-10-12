@@ -1,0 +1,12 @@
+base True None new True None
+prompts with one output across all cells: base 15 / 15 new 15 / 15 | prompts whose output is unchanged: 15 / 15
+  c1-fixed     tok/s   111 ->   112 (v   129) tpot_p50  8.75 ->  8.72 (v  7.40) tpot_p99   8.8 ->   8.8 (v   7.4) ttft_p50  13 ->  12 (v  13) ttft_p95  14 ->  14 (v  19) ttft_p99  14 ->  14 (v  21) e2e_p50  180 ->  179 (v  157) err 0 gain +0.5%
+  c1-natural   tok/s   112 ->   112 (v   132) tpot_p50  8.77 ->  8.74 (v  7.45) tpot_p99   8.8 ->   8.8 (v   7.5) ttft_p50  13 ->  13 (v  13) ttft_p95  35 ->  34 (v  25) ttft_p99  35 ->  35 (v  26) e2e_p50  565 ->  563 (v  482) err 0 gain +0.4%
+  c8-fixed     tok/s   706 ->   712 (v   754) tpot_p50 10.10 -> 10.03 (v  9.10) tpot_p99  10.7 ->  10.6 (v   9.5) ttft_p50  25 ->  24 (v  33) ttft_p95  37 ->  37 (v  38) ttft_p99  66 ->  64 (v  51) e2e_p50  222 ->  221 (v  203) err 0 gain +0.9%
+  c8-natural   tok/s   759 ->   764 (v   835) tpot_p50  9.95 ->  9.89 (v  8.96) tpot_p99  10.3 ->  10.2 (v   9.1) ttft_p50  23 ->  23 (v  37) ttft_p95  47 ->  46 (v  44) ttft_p99  81 ->  83 (v  68) e2e_p50  649 ->  644 (v  593) err 0 gain +0.7%
+  c16-fixed    tok/s  1168 ->  1184 (v  1285) tpot_p50 12.16 -> 11.97 (v 10.27) tpot_p99  14.0 ->  12.7 (v  11.4) ttft_p50  26 ->  26 (v  37) ttft_p95  60 ->  71 (v  93) ttft_p99 129 -> 126 (v  94) e2e_p50  269 ->  256 (v  237) err 0 gain +1.4%
+  c16-natural  tok/s  1338 ->  1349 (v  1496) tpot_p50 10.89 -> 10.79 (v  9.63) tpot_p99  12.1 ->  11.8 (v   9.9) ttft_p50  34 ->  32 (v  41) ttft_p95  79 ->  72 (v  92) ttft_p99 195 -> 196 (v 125) e2e_p50  713 ->  706 (v  644) err 0 gain +0.8%
+  c32-fixed    tok/s  1706 ->  1736 (v  1887) tpot_p50 15.15 -> 14.93 (v 13.42) tpot_p99  16.0 ->  15.8 (v  20.0) ttft_p50  44 ->  44 (v  53) ttft_p95 263 -> 257 (v 160) ttft_p99 291 -> 284 (v 170) e2e_p50  361 ->  356 (v  319) err 0 gain +1.8%
+  c32-natural  tok/s  2111 ->  2128 (v  2493) tpot_p50 13.02 -> 12.94 (v 10.79) tpot_p99  16.2 ->  16.5 (v  12.6) ttft_p50  41 ->  35 (v  62) ttft_p95 313 -> 277 (v 202) ttft_p99 412 -> 402 (v 245) e2e_p50  852 ->  847 (v  741) err 0 gain +0.8%
+
+[exited with code 0]

@@ -1,0 +1,10 @@
+K=2048 N=11008 anchor row-invariance across M: holds
+M=  1 configs 2334 in-class   84 | anchor   53.7 us | best in-class   50.2 us (id=21 tile=11 stages=19 splitk=1 red=0) | best any   50.1 us (id=21 tile=5 stages=19 splitk=1 red=0)
+M=  2 configs 2327 in-class   84 | anchor   53.7 us | best in-class   50.1 us (id=21 tile=11 stages=19 splitk=1 red=0) | best any   50.2 us (id=21 tile=11 stages=19 splitk=1 red=0)
+M=  4 configs 2327 in-class   84 | anchor   53.7 us | best in-class   50.2 us (id=21 tile=11 stages=19 splitk=1 red=0) | best any   50.2 us (id=21 tile=11 stages=19 splitk=1 red=0)
+M=  8 configs 2327 in-class   84 | anchor   53.6 us | best in-class   50.3 us (id=21 tile=11 stages=19 splitk=1 red=0) | best any   50.3 us (id=21 tile=11 stages=19 splitk=1 red=0)
+M= 16 configs 2327 in-class   84 | anchor   53.6 us | best in-class   50.4 us (id=21 tile=11 stages=19 splitk=1 red=0) | best any   50.4 us (id=21 tile=11 stages=19 splitk=1 red=0)
+M= 32 configs 2326 in-class   84 | anchor   53.6 us | best in-class   50.9 us (id=23 tile=11 stages=19 splitk=1 red=0) | best any   50.9 us (id=23 tile=11 stages=19 splitk=1 red=0)
+M= 64 configs 2233 in-class   84 | anchor   54.0 us | best in-class   52.6 us (id=21 tile=11 stages=20 splitk=1 red=0) | best any   52.4 us (id=21 tile=11 stages=19 splitk=6 red=1)
+M=128 configs 1861 in-class   84 | anchor   63.8 us | best in-class   54.7 us (id=21 tile=15 stages=25 splitk=1 red=0) | best any   54.9 us (id=21 tile=15 stages=25 splitk=1 red=0)
+M=256 configs 1303 in-class   84 | anchor   87.5 us | best in-class   85.1 us (id=21 tile=18 stages=15 splitk=1 red=0) | best any   87.0 us (id=21 tile=17 stages=12 splitk=1 red=0)

@@ -1,0 +1,21 @@
+{
+ "source_commit": "9acd7ee6bb1574931a8390b79610683ef7eb11e0",
+ "server_binary_sha256": "3dd44e7523b2be9af5e0b100871ea3ef903e6c13ceea9af9dcb2ab400d25022b",
+ "native_exact_cases": 3161,
+ "native_binary_sha256": "3aac851a4dc3e243fc2f2d5847abfb7de0f6dcb3c9b1317d33477c04468aa11e",
+ "native_log_sha256": "f9f88464f6b3d759854a37eb2460195d4abbe0e23318d4ba4a0162c1043f1bc6",
+ "BF16_and_FP32_exact": true,
+ "HTTP_exact_requests": 60,
+ "HTTP_cells": [
+  "c1-fixed",
+  "c1-natural",
+  "c8-fixed",
+  "c8-natural",
+  "c16-fixed",
+  "c16-natural",
+  "c32-fixed",
+  "c32-natural"
+ ],
+ "source_receipt_sha256": "702605429a7645d82794e549fd19df5dd692697246933b0846eb08db793c5159",
+ "scope": "correctness only; native log is byte-identical to Batch12 (same sha256); device kernel sources unchanged vs Batch12"
+}

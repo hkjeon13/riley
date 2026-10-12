@@ -1,0 +1,1407 @@
+{
+ "all_lanes_pass": false,
+ "lanes": [
+  {
+   "case": "c1-fixed",
+   "engine": "candidate",
+   "failure": null,
+   "reclaimed": true,
+   "exit_code": 0,
+   "native_close": {
+    "active_requests": 0,
+    "waiting_requests": 0,
+    "kv_allocated_blocks": 0,
+    "allocation": {
+     "device_live_count": 0,
+     "device_live_bytes": 0,
+     "pinned_live_count": 0,
+     "pinned_live_bytes": 0
+    },
+    "batch_shapes": {
+     "metrics_degraded": true,
+     "last": null,
+     "bucket_count": 1,
+     "buckets": [
+      {
+       "dense_rows": 1,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      }
+     ]
+    },
+    "counters": {
+     "cancellations": 80,
+     "disconnects": 80,
+     "overloads": 0,
+     "dropped_observations": 17200
+    }
+   },
+   "after_stop": {
+    "gpu_compute_apps": "",
+    "gpu": "257",
+    "port_listening": false
+   },
+   "sustained_seconds": 305.02421115292236,
+   "sustained_requests": 16896,
+   "sustained_rounds": 44,
+   "exact": 16896,
+   "throughput_first": 1110.4241861945418,
+   "throughput_last": 1109.234430885619,
+   "throughput_min": 1100.7403819305894,
+   "tpot_first": 0.7940178333333333,
+   "tpot_last": 0.7961596297335203,
+   "gpu_first_quarter": 1158.0,
+   "gpu_last_quarter": 1158.0,
+   "gpu_max": 1158.0,
+   "rss_first_quarter": 762.2664388020834,
+   "rss_last_quarter": 762.3615451388889,
+   "rss_max": 762.36328125,
+   "rss_slope_MiB_per_min": 0.025238137001963208,
+   "kv_after_rounds": [
+    0
+   ],
+   "drains": 84,
+   "drain_max_ms": 20.72313,
+   "idle_cancels": 40,
+   "idle_after_token": 20,
+   "idle_rerequests_exact": 480,
+   "loaded_cancels": 40,
+   "loaded_after_token": 20,
+   "loaded_exact_requests": 576,
+   "loaded_requests": 576,
+   "server_counters": {
+    "cancellations": 80,
+    "disconnects": 80,
+    "overloads": 0,
+    "dropped_observations": 17200
+   }
+  },
+  {
+   "case": "c1-natural",
+   "engine": "candidate",
+   "failure": null,
+   "reclaimed": true,
+   "exit_code": 0,
+   "native_close": {
+    "active_requests": 0,
+    "waiting_requests": 0,
+    "kv_allocated_blocks": 0,
+    "allocation": {
+     "device_live_count": 0,
+     "device_live_bytes": 0,
+     "pinned_live_count": 0,
+     "pinned_live_bytes": 0
+    },
+    "batch_shapes": {
+     "metrics_degraded": true,
+     "last": null,
+     "bucket_count": 1,
+     "buckets": [
+      {
+       "dense_rows": 1,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      }
+     ]
+    },
+    "counters": {
+     "cancellations": 80,
+     "disconnects": 80,
+     "overloads": 0,
+     "dropped_observations": 4168
+    }
+   },
+   "after_stop": {
+    "gpu_compute_apps": "",
+    "gpu": "257",
+    "port_listening": false
+   },
+   "sustained_seconds": 308.1587401358411,
+   "sustained_requests": 4608,
+   "sustained_rounds": 12,
+   "exact": 4608,
+   "throughput_first": 1115.7478188149694,
+   "throughput_last": 1116.902999879686,
+   "throughput_min": 1115.7478188149694,
+   "tpot_first": 0.7996544444444444,
+   "tpot_last": 0.7992642460317461,
+   "gpu_first_quarter": 1178.0,
+   "gpu_last_quarter": 1178.0,
+   "gpu_max": 1178.0,
+   "rss_first_quarter": 762.1648116438356,
+   "rss_last_quarter": 762.3463184931506,
+   "rss_max": 762.36328125,
+   "rss_slope_MiB_per_min": 0.04615274769351844,
+   "kv_after_rounds": [
+    0
+   ],
+   "drains": 84,
+   "drain_max_ms": 20.79437,
+   "idle_cancels": 40,
+   "idle_after_token": 20,
+   "idle_rerequests_exact": 120,
+   "loaded_cancels": 40,
+   "loaded_after_token": 20,
+   "loaded_exact_requests": 192,
+   "loaded_requests": 192,
+   "server_counters": {
+    "cancellations": 80,
+    "disconnects": 80,
+    "overloads": 0,
+    "dropped_observations": 4168
+   }
+  },
+  {
+   "case": "c8-fixed",
+   "engine": "candidate",
+   "failure": null,
+   "reclaimed": true,
+   "exit_code": 0,
+   "native_close": {
+    "active_requests": 0,
+    "waiting_requests": 0,
+    "kv_allocated_blocks": 0,
+    "allocation": {
+     "device_live_count": 0,
+     "device_live_bytes": 0,
+     "pinned_live_count": 0,
+     "pinned_live_bytes": 0
+    },
+    "batch_shapes": {
+     "metrics_degraded": true,
+     "last": null,
+     "bucket_count": 1,
+     "buckets": [
+      {
+       "dense_rows": 1,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      }
+     ]
+    },
+    "counters": {
+     "cancellations": 80,
+     "disconnects": 80,
+     "overloads": 0,
+     "dropped_observations": 90160
+    }
+   },
+   "after_stop": {
+    "gpu_compute_apps": "",
+    "gpu": "257",
+    "port_listening": false
+   },
+   "sustained_seconds": 301.1238164838869,
+   "sustained_requests": 87552,
+   "sustained_rounds": 228,
+   "exact": 87552,
+   "throughput_first": 5821.02133443808,
+   "throughput_last": 5774.332182637499,
+   "throughput_min": 5760.321163826328,
+   "tpot_first": 1.183965992753623,
+   "tpot_last": 1.2072384,
+   "gpu_first_quarter": 1186.0,
+   "gpu_last_quarter": 1186.0,
+   "gpu_max": 1186.0,
+   "rss_first_quarter": 762.4747469190141,
+   "rss_last_quarter": 762.7528058978874,
+   "rss_max": 762.78125,
+   "rss_slope_MiB_per_min": 0.07351814884569609,
+   "kv_after_rounds": [
+    0
+   ],
+   "drains": 84,
+   "drain_max_ms": 20.68651,
+   "idle_cancels": 40,
+   "idle_after_token": 20,
+   "idle_rerequests_exact": 480,
+   "loaded_cancels": 40,
+   "loaded_after_token": 20,
+   "loaded_exact_requests": 2880,
+   "loaded_requests": 2880,
+   "server_counters": {
+    "cancellations": 80,
+    "disconnects": 80,
+    "overloads": 0,
+    "dropped_observations": 90160
+   }
+  },
+  {
+   "case": "c8-natural",
+   "engine": "candidate",
+   "failure": null,
+   "reclaimed": true,
+   "exit_code": 0,
+   "native_close": {
+    "active_requests": 0,
+    "waiting_requests": 0,
+    "kv_allocated_blocks": 0,
+    "allocation": {
+     "device_live_count": 0,
+     "device_live_bytes": 0,
+     "pinned_live_count": 0,
+     "pinned_live_bytes": 0
+    },
+    "batch_shapes": {
+     "metrics_degraded": true,
+     "last": null,
+     "bucket_count": 1,
+     "buckets": [
+      {
+       "dense_rows": 1,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      }
+     ]
+    },
+    "counters": {
+     "cancellations": 80,
+     "disconnects": 80,
+     "overloads": 0,
+     "dropped_observations": 25576
+    }
+   },
+   "after_stop": {
+    "gpu_compute_apps": "",
+    "gpu": "257",
+    "port_listening": false
+   },
+   "sustained_seconds": 302.6775369970128,
+   "sustained_requests": 25344,
+   "sustained_rounds": 66,
+   "exact": 25344,
+   "throughput_first": 6228.787565724775,
+   "throughput_last": 6315.241796451293,
+   "throughput_min": 6192.057404947079,
+   "tpot_first": 1.1913282777777776,
+   "tpot_last": 1.1739963085239344,
+   "gpu_first_quarter": 1334.0,
+   "gpu_last_quarter": 1334.0,
+   "gpu_max": 1334.0,
+   "rss_first_quarter": 762.4157443576389,
+   "rss_last_quarter": 762.6334092881945,
+   "rss_max": 762.6484375,
+   "rss_slope_MiB_per_min": 0.05714164300776657,
+   "kv_after_rounds": [
+    0
+   ],
+   "drains": 84,
+   "drain_max_ms": 20.986698,
+   "idle_cancels": 40,
+   "idle_after_token": 20,
+   "idle_rerequests_exact": 120,
+   "loaded_cancels": 40,
+   "loaded_after_token": 20,
+   "loaded_exact_requests": 864,
+   "loaded_requests": 864,
+   "server_counters": {
+    "cancellations": 80,
+    "disconnects": 80,
+    "overloads": 0,
+    "dropped_observations": 25576
+   }
+  },
+  {
+   "case": "c16-fixed",
+   "engine": "candidate",
+   "failure": null,
+   "reclaimed": true,
+   "exit_code": 0,
+   "native_close": {
+    "active_requests": 0,
+    "waiting_requests": 0,
+    "kv_allocated_blocks": 0,
+    "allocation": {
+     "device_live_count": 0,
+     "device_live_bytes": 0,
+     "pinned_live_count": 0,
+     "pinned_live_bytes": 0
+    },
+    "batch_shapes": {
+     "metrics_degraded": true,
+     "last": null,
+     "bucket_count": 1,
+     "buckets": [
+      {
+       "dense_rows": 1,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      }
+     ]
+    },
+    "counters": {
+     "cancellations": 80,
+     "disconnects": 80,
+     "overloads": 0,
+     "dropped_observations": 133264
+    }
+   },
+   "after_stop": {
+    "gpu_compute_apps": "",
+    "gpu": "257",
+    "port_listening": false
+   },
+   "sustained_seconds": 300.52806561696343,
+   "sustained_requests": 129408,
+   "sustained_rounds": 337,
+   "exact": 129408,
+   "throughput_first": 8454.63235471551,
+   "throughput_last": 8877.162229505166,
+   "throughput_min": 8319.820098450056,
+   "tpot_first": 1.6381434579710143,
+   "tpot_last": 1.5245563709677419,
+   "gpu_first_quarter": 1214.0,
+   "gpu_last_quarter": 1214.0,
+   "gpu_max": 1214.0,
+   "rss_first_quarter": 764.3230633802817,
+   "rss_last_quarter": 764.8944762323944,
+   "rss_max": 764.9296875,
+   "rss_slope_MiB_per_min": 0.15182692604383358,
+   "kv_after_rounds": [
+    0
+   ],
+   "drains": 84,
+   "drain_max_ms": 20.68542,
+   "idle_cancels": 40,
+   "idle_after_token": 20,
+   "idle_rerequests_exact": 480,
+   "loaded_cancels": 40,
+   "loaded_after_token": 20,
+   "loaded_exact_requests": 4128,
+   "loaded_requests": 4128,
+   "server_counters": {
+    "cancellations": 80,
+    "disconnects": 80,
+    "overloads": 0,
+    "dropped_observations": 133264
+   }
+  },
+  {
+   "case": "c16-natural",
+   "engine": "candidate",
+   "failure": null,
+   "reclaimed": true,
+   "exit_code": 0,
+   "native_close": {
+    "active_requests": 0,
+    "waiting_requests": 0,
+    "kv_allocated_blocks": 0,
+    "allocation": {
+     "device_live_count": 0,
+     "device_live_bytes": 0,
+     "pinned_live_count": 0,
+     "pinned_live_bytes": 0
+    },
+    "batch_shapes": {
+     "metrics_degraded": true,
+     "last": null,
+     "bucket_count": 1,
+     "buckets": [
+      {
+       "dense_rows": 1,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      }
+     ]
+    },
+    "counters": {
+     "cancellations": 80,
+     "disconnects": 80,
+     "overloads": 0,
+     "dropped_observations": 41032
+    }
+   },
+   "after_stop": {
+    "gpu_compute_apps": "",
+    "gpu": "257",
+    "port_listening": false
+   },
+   "sustained_seconds": 302.53978674998507,
+   "sustained_requests": 40320,
+   "sustained_rounds": 105,
+   "exact": 40320,
+   "throughput_first": 9843.414060977177,
+   "throughput_last": 9944.306483550794,
+   "throughput_min": 9677.93146644458,
+   "tpot_first": 1.505822839832521,
+   "tpot_last": 1.4885207952755906,
+   "gpu_first_quarter": 1514.0,
+   "gpu_last_quarter": 1514.0,
+   "gpu_max": 1514.0,
+   "rss_first_quarter": 764.2389865451389,
+   "rss_last_quarter": 764.7052951388889,
+   "rss_max": 764.74609375,
+   "rss_slope_MiB_per_min": 0.12264977297373066,
+   "kv_after_rounds": [
+    0
+   ],
+   "drains": 84,
+   "drain_max_ms": 20.713567,
+   "idle_cancels": 40,
+   "idle_after_token": 20,
+   "idle_rerequests_exact": 120,
+   "loaded_cancels": 40,
+   "loaded_after_token": 20,
+   "loaded_exact_requests": 1344,
+   "loaded_requests": 1344,
+   "server_counters": {
+    "cancellations": 80,
+    "disconnects": 80,
+    "overloads": 0,
+    "dropped_observations": 41032
+   }
+  },
+  {
+   "case": "c32-fixed",
+   "engine": "candidate",
+   "failure": null,
+   "reclaimed": true,
+   "exit_code": 0,
+   "native_close": {
+    "active_requests": 0,
+    "waiting_requests": 0,
+    "kv_allocated_blocks": 0,
+    "allocation": {
+     "device_live_count": 0,
+     "device_live_bytes": 0,
+     "pinned_live_count": 0,
+     "pinned_live_bytes": 0
+    },
+    "batch_shapes": {
+     "metrics_degraded": true,
+     "last": null,
+     "bucket_count": 1,
+     "buckets": [
+      {
+       "dense_rows": 1,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      }
+     ]
+    },
+    "counters": {
+     "cancellations": 80,
+     "disconnects": 80,
+     "overloads": 0,
+     "dropped_observations": 176656
+    }
+   },
+   "after_stop": {
+    "gpu_compute_apps": "",
+    "gpu": "257",
+    "port_listening": false
+   },
+   "sustained_seconds": 300.47785026510246,
+   "sustained_requests": 171648,
+   "sustained_rounds": 447,
+   "exact": 171648,
+   "throughput_first": 11583.592300024211,
+   "throughput_last": 11555.972500125848,
+   "throughput_min": 11026.392539158032,
+   "tpot_first": 2.4021379188405794,
+   "tpot_last": 2.4337452434782607,
+   "gpu_first_quarter": 1270.0,
+   "gpu_last_quarter": 1270.0,
+   "gpu_max": 1270.0,
+   "rss_first_quarter": 768.0349361795775,
+   "rss_last_quarter": 768.8252090669014,
+   "rss_max": 768.87890625,
+   "rss_slope_MiB_per_min": 0.20923108203477542,
+   "kv_after_rounds": [
+    0
+   ],
+   "drains": 84,
+   "drain_max_ms": 20.67022,
+   "idle_cancels": 40,
+   "idle_after_token": 20,
+   "idle_rerequests_exact": 480,
+   "loaded_cancels": 40,
+   "loaded_after_token": 20,
+   "loaded_exact_requests": 5280,
+   "loaded_requests": 5280,
+   "server_counters": {
+    "cancellations": 80,
+    "disconnects": 80,
+    "overloads": 0,
+    "dropped_observations": 176656
+   }
+  },
+  {
+   "case": "c32-natural",
+   "engine": "candidate",
+   "failure": null,
+   "reclaimed": true,
+   "exit_code": 0,
+   "native_close": {
+    "active_requests": 0,
+    "waiting_requests": 0,
+    "kv_allocated_blocks": 0,
+    "allocation": {
+     "device_live_count": 0,
+     "device_live_bytes": 0,
+     "pinned_live_count": 0,
+     "pinned_live_bytes": 0
+    },
+    "batch_shapes": {
+     "metrics_degraded": true,
+     "last": null,
+     "bucket_count": 1,
+     "buckets": [
+      {
+       "dense_rows": 1,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      },
+      {
+       "dense_rows": 0,
+       "hit_count": 0,
+       "latency_sample_count": 0,
+       "gpu_execution_ns_total": 0,
+       "gpu_execution_ns_average": 0,
+       "gpu_execution_ns_maximum": 0,
+       "gpu_execution_ns_last": 0
+      }
+     ]
+    },
+    "counters": {
+     "cancellations": 80,
+     "disconnects": 80,
+     "overloads": 0,
+     "dropped_observations": 56200
+    }
+   },
+   "after_stop": {
+    "gpu_compute_apps": "",
+    "gpu": "257",
+    "port_listening": false
+   },
+   "sustained_seconds": 300.0576473220717,
+   "sustained_requests": 54912,
+   "sustained_rounds": 143,
+   "exact": 54912,
+   "throughput_first": 13661.837267547617,
+   "throughput_last": 13673.38458351106,
+   "throughput_min": 13207.995828432884,
+   "tpot_first": 2.1675525074930153,
+   "tpot_last": 2.1702127258064516,
+   "gpu_first_quarter": 1874.0,
+   "gpu_last_quarter": 1874.0,
+   "gpu_max": 1874.0,
+   "rss_first_quarter": 768.3139304577464,
+   "rss_last_quarter": 769.2470290492957,
+   "rss_max": 769.30859375,
+   "rss_slope_MiB_per_min": 0.2479164697508263,
+   "kv_after_rounds": [
+    0
+   ],
+   "drains": 84,
+   "drain_max_ms": 20.680812,
+   "idle_cancels": 40,
+   "idle_after_token": 20,
+   "idle_rerequests_exact": 120,
+   "loaded_cancels": 40,
+   "loaded_after_token": 20,
+   "loaded_exact_requests": 1920,
+   "loaded_requests": 1920,
+   "server_counters": {
+    "cancellations": 80,
+    "disconnects": 80,
+    "overloads": 0,
+    "dropped_observations": 56200
+   }
+  },
+  {
+   "case": "c32-natural",
+   "engine": "vllm",
+   "failure": {
+    "type": "RuntimeError",
+    "message": "host gate timeout cancel-under-load"
+   },
+   "reclaimed": null,
+   "exit_code": 0,
+   "native_close": null,
+   "after_stop": {
+    "gpu_compute_apps": "",
+    "gpu": "257",
+    "port_listening": false
+   }
+  },
+  {
+   "case": "c32-fixed",
+   "engine": "vllm",
+   "state": "미실행"
+  }
+ ],
+ "plan": {
+  "status": "FROZEN_FOR_EXECUTION",
+  "schema": "riley.kernel-batch14b.stability.v1",
+  "cases": [
+   "c1-fixed",
+   "c1-natural",
+   "c8-fixed",
+   "c8-natural",
+   "c16-fixed",
+   "c16-natural",
+   "c32-fixed",
+   "c32-natural"
+  ],
+  "engines": [
+   "candidate",
+   "vllm"
+  ],
+  "lanes": [
+   [
+    "c1-fixed",
+    "candidate"
+   ],
+   [
+    "c1-natural",
+    "candidate"
+   ],
+   [
+    "c8-fixed",
+    "candidate"
+   ],
+   [
+    "c8-natural",
+    "candidate"
+   ],
+   [
+    "c16-fixed",
+    "candidate"
+   ],
+   [
+    "c16-natural",
+    "candidate"
+   ],
+   [
+    "c32-fixed",
+    "candidate"
+   ],
+   [
+    "c32-natural",
+    "candidate"
+   ],
+   [
+    "c32-natural",
+    "vllm"
+   ],
+   [
+    "c32-fixed",
+    "vllm"
+   ]
+  ],
+  "lane_scope": "candidate on all eight cells; vLLM on both C32 cells as an error/memory-trend reference only",
+  "matched_attempt": "kernel-batch14-gatev1-quiet-attempt02",
+  "output_prefix": "kernel-batch14b-stability",
+  "binaries": {
+   "candidate": "32004b4297bff56258510ffd8be3fdc361a18264d2465fdf11c35df33fd06b86",
+   "vllm": "fe00035d5bd98fd57d20fe31aa6270907afbd68e92663dbc6ac9f793258e7e27"
+  },
+  "host_start_gate": {
+   "timeout_seconds": 300,
+   "interval_seconds": 2,
+   "consecutive": 3,
+   "cpu_some_max": 5,
+   "io_full_max": 5,
+   "memory_full_max": 0.5,
+   "io_soft_wait_seconds": 301
+  },
+  "sustained_seconds": 300,
+  "cancellation_trials_each_mode": 20,
+  "loaded_cancellations": 40,
+  "loaded_cancel_interval_seconds": 0.25,
+  "loaded_round_requests": 96,
+  "correctness_policy": "Riley rows exact against the frozen token/text/finish reference in every phase including during and after cancellation; all engines transport/protocol valid",
+  "pass_criteria": [
+   "zero request errors",
+   "exact references (Riley)",
+   "KV blocks/active/waiting drain to zero after sustained load, after every idle cancellation, after re-requests and after cancellation under load",
+   "exit code 0, no GPU compute process, port closed, native device/pinned live allocations zero at close (Riley)"
+  ],
+  "limits": [
+   "early cancellation closes right after the request write; the server-side phase (queued/prefill) is not observable from the client",
+   "memory is sampled once per second; peaks between samples are not proven",
+   "no performance qualification"
+  ],
+  "no_exclusions": true,
+  "pins": {
+   "/data/riley-serving-261007/kernel-batch14b-stability-controller-attempt01/stability13.py": "1de17085fb2cca071eac5b15063e2be21f3835cf6c1880a8daa1c5c4343f9981",
+   "/data/riley-serving-261007/kernel-batch14b-stability-controller-attempt01/serving_token_client_v2.py": "2bc9238265666b99654f4f4e456ca0bb10c45b8bed8f28493452b89c1f450fcf",
+   "/data/riley-serving-261007/kernel-batch14b-stability-controller-attempt01/mixed_phase_v34.py": "c37408fb6d02f41ee7fb56d6bd41beda305dd2cf5bb4ef3a73879cb44401c96f",
+   "/data/riley-serving-261007/kernel-batch14b-stability-controller-attempt01/fixtures.json": "ae1f6f48a2acc1f7c0a6f084567bb96916cb005eeb727ae59aca815f1c5ab955"
+  },
+  "predeclared_time_ns": 1791702001166383634
+ }
+}

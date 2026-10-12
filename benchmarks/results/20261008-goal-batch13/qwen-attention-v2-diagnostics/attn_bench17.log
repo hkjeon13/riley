@@ -1,0 +1,30 @@
+key class 64 per-shape heuristic: cases 54, cases with any difference 0, elements compared 350208, differing 0, algo-check fallbacks 0
+key class 256 per-shape heuristic: cases 162, cases with any difference 0, elements compared 1284096, differing 0, algo-check fallbacks 0
+key class 1024 per-shape heuristic: cases 264, cases with any difference 0, elements compared 2174976, differing 0, algo-check fallbacks 0
+  timing 1 sequence(s) x 128 rows at positions 200.., key class 1024:   30.0 us per launch set
+  timing 1 sequence(s) x 224 rows at positions 0.., key class 1024:   38.0 us per launch set
+  timing 1 sequence(s) x 174 rows at positions 224.., key class 1024:   36.2 us per launch set
+  timing 1 sequence(s) x 174 rows at positions 224.., key class 512:   29.2 us per launch set
+  timing 2 sequence(s) x 112 rows at positions 18.., key class 256:   26.9 us per launch set
+  timing 4 sequence(s) x 56 rows at positions 100.., key class 256:   27.3 us per launch set
+  timing 3 sequence(s) x 60 rows at positions 60.., key class 256:   25.1 us per launch set
+  timing 1 sequence(s) x 125 rows at positions 0.., key class 256:   20.4 us per launch set
+  timing 8 sequence(s) x 28 rows at positions 4.., key class 64:   25.3 us per launch set
+  timing 2 sequence(s) x 16 rows at positions 0.., key class 64:   12.7 us per launch set
+QK: configurations valid on every padded probe shape: 94; pinned id=5 tile=20 stages=7
+PV: configurations valid on every padded probe shape: 94; pinned id=5 tile=20 stages=7
+fastest valid QK configuration: id=6 tile=18 stages=12 (class-256 launch set 31.5 us with it)
+fastest valid PV configuration: id=21 tile=15 stages=12 (class-256 launch set 26.7 us with it)
+key class 64 PINNED cuBLASLt algorithms: cases 54, cases with any difference 0, elements compared 350208, differing 0, algo-check fallbacks 0
+key class 256 PINNED cuBLASLt algorithms: cases 162, cases with any difference 0, elements compared 1284096, differing 0, algo-check fallbacks 0
+key class 1024 PINNED cuBLASLt algorithms: cases 264, cases with any difference 0, elements compared 2174976, differing 0, algo-check fallbacks 0
+  timing 1 sequence(s) x 128 rows at positions 200.., key class 1024:   31.6 us per launch set
+  timing 1 sequence(s) x 224 rows at positions 0.., key class 1024:   42.1 us per launch set
+  timing 1 sequence(s) x 174 rows at positions 224.., key class 1024:   37.9 us per launch set
+  timing 1 sequence(s) x 174 rows at positions 224.., key class 512:   30.4 us per launch set
+  timing 2 sequence(s) x 112 rows at positions 18.., key class 256:   26.7 us per launch set
+  timing 4 sequence(s) x 56 rows at positions 100.., key class 256:   27.1 us per launch set
+  timing 3 sequence(s) x 60 rows at positions 60.., key class 256:   25.0 us per launch set
+  timing 1 sequence(s) x 125 rows at positions 0.., key class 256:   21.1 us per launch set
+  timing 8 sequence(s) x 28 rows at positions 4.., key class 64:   26.1 us per launch set
+  timing 2 sequence(s) x 16 rows at positions 0.., key class 64:   15.0 us per launch set
