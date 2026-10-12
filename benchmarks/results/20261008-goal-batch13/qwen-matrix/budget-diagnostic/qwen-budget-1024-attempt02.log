@@ -1,6 +1,0 @@
-c8-fixed-r0-riley-scheduler {'errors': 0, 'first_error': None, 'output_tok_per_s': 518.92, 'output_tokens': 3840, 'prompt_tokens': 24144, 'ttft_p50': 64.1, 'tpot_p50': 13.0, 'e2e_p50': 266.8, 'gpu_peak_MiB': 24080.0}
-c8-fixed-r1-riley-scheduler {'errors': 0, 'first_error': None, 'output_tok_per_s': 528.28, 'output_tokens': 3840, 'prompt_tokens': 24144, 'ttft_p50': 63.89, 'tpot_p50': 12.76, 'e2e_p50': 278.67, 'gpu_peak_MiB': 24080.0}
-Traceback (most recent call last):
-  File "/data/riley-serving-261007/qwen_matrix_steady_budget.py", line 67, in <module>
-    assert p.poll() is None and time.monotonic() < deadline, 'startup failed ' + name
-AssertionError: startup failed c8-natural-r0-riley-scheduler

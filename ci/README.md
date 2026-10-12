@@ -91,7 +91,7 @@ reviewers still inspect actual default-off, flag-on, and stable-fallback control
 flow. Stable promotion, withdrawal, or contract mutation requires schema v2.
 Canonical semantic SHA-256 pins and mutation tests prevent portable JSON schema
 relaxation from silently diverging from the checker. The checker does not load a
-model or initialize a GPU. See `deploy/extensions/README.md`.
+model or initialize a GPU.
 
 The final shell check copies the current tree to a temporary directory without
 the excluded tool/research roots, then runs locked metadata and an all-targets
@@ -154,12 +154,13 @@ records or checks:
    Transformers, or Triton runtime dependency, and an NVML `DT_NEEDED` edge
    confined to `riley-native` rather than the production/profile binaries.
 
-PR 03부터 artifact는 CUDA Driver API를 link한다. GPU를 의도적으로 주지 않는 이
-compile-only image에는 실제 host driver가 없으므로, `abi_link`와 `--version`처럼
-device/context를 초기화하지 않는 metadata executable에 한해서 toolkit
-`libcuda.so` stub을 임시 SONAME alias로 사용한다. 이 경로는 artifact의
-RPATH/RUNPATH에 기록되지 않아야 한다. 별도 GPU gate는 NVIDIA Container Runtime이
-주입한 실제 `libcuda.so.1`을 `ldd`와 `ldconfig`로 다시 강제한다.
+The artifact links the CUDA Driver API. The compile-only image is deliberately
+given no GPU and so has no host driver; for metadata executables that never
+initialise a device or context (`abi_link`, `--version`) the toolkit's
+`libcuda.so` stub is used through a temporary SONAME alias. That path must not
+be recorded in the artifact's RPATH/RUNPATH. The separate GPU gate enforces the
+real `libcuda.so.1` injected by the NVIDIA Container Runtime with `ldd` and
+`ldconfig`.
 
 On a host with CUDA 12.8.1 installed, the equivalent direct build contract is:
 
@@ -319,7 +320,7 @@ runtime stage and copies only the verified bundle payload. Its builder also
 selects the already-installed exact Rust toolchain instead of allowing a
 source-directory rustup sync. The final stage
 asserts that source, Python/Pip, Rust/CUDA compilers, and build tools are
-absent. See `docs/release/README.md` for the file layout and runtime contract.
+absent.
 
 The long reliability lane uses the separately reviewed, Python-free
 `ci/release/ReliabilitySoak.Dockerfile` derivative and the remote-only

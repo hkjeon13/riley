@@ -1,6 +1,0 @@
-prefill rows=224 over 2 sequences (positions 18..129, keys 130): gather   4.8 qk   5.5 softmax  12.6 pv   4.3 scatter   2.8 | all   30.1 us | per-row paged producer (attn_bench6)  36.7 us | cuda 0 nan 0 checksum 7.078
-prefill rows=224 over 4 sequences (positions 100..155, keys 156): gather   5.1 qk   5.5 softmax  12.7 pv   4.4 scatter   2.8 | all   30.6 us | per-row paged producer (attn_bench6)  58.6 us | cuda 0 nan 0 checksum 11.587
-prefill rows=128 over 1 sequences (positions 200..327, keys 328): gather   4.3 qk   5.0 softmax   8.8 pv   5.1 scatter   2.4 | all   25.8 us | per-row paged producer (attn_bench6)  67.7 us | cuda 0 nan 0 checksum -15.275
-prefill rows=224 over 8 sequences (positions 4..31, keys 32): gather   4.8 qk   2.9 softmax   3.9 pv   2.9 scatter   2.8 | all   17.2 us | per-row paged producer (attn_bench6)  14.4 us | cuda 0 nan 0 checksum 243.525
-prefill rows= 64 over 2 sequences (positions 300..331, keys 332): gather   4.1 qk   4.4 softmax   5.8 pv   5.4 scatter   1.8 | all   21.5 us | per-row paged producer (attn_bench6)  42.4 us | cuda 0 nan 0 checksum -4.483
-prefill rows=256 over 1 sequences (positions 142..397, keys 398): gather   5.2 qk  10.0 softmax  15.6 pv   6.8 scatter   3.1 | all   40.8 us | per-row paged producer (attn_bench6)  -1.0 us | cuda 0 nan 0 checksum -9.082

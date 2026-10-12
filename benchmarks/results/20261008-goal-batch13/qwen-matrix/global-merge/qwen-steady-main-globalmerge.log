@@ -1,6 +1,0 @@
-Traceback (most recent call last):
-  File "/data/riley-serving-261007/qwen_matrix_steady_main_flags.py", line 87, in <module>
-    ttft_p50=st.median(r['ttft_ms'] for r in ok), ttft_p95=pct([r['ttft_ms'] for r in ok], .95), tpot_p50=st.median(tp), tpot_p95=pct(tp, .95), tpot_p99=pct(tp, .99), ttft_p99=pct([r['ttft_ms'] for r in ok], .99), e2e_p99=pct([r['e2e_ms'] for r in ok], .99), e2e_p50=st.median(r['e2e_ms'] for r in ok), e2e_p95=pct([r['e2e_ms'] for r in ok], .95),
-  File "/usr/lib/python3.10/statistics.py", line 449, in median
-    data = sorted(data)
-TypeError: '<' not supported between instances of 'NoneType' and 'NoneType'

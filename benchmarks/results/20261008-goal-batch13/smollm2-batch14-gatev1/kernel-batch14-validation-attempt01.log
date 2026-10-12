@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/data/riley-serving-261007/run_kernel_batch14_validation_attempt01.py", line 21, in <module>
-    records=[json.loads(l) for l in (P/"native.log").read_text().splitlines() if l.startswith("{")];assert len(records)==3 and all(x["passed"] for x in records) and records[1]["fused_qkv_cases"]==270 and records[2]["narrow_grid_attention_cases"]==4800,"batch14 native records";result=dict(records[0],fused_qkv_cases=270,narrow_grid_attention_cases=4800)
-                                                                                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError: batch14 native records
