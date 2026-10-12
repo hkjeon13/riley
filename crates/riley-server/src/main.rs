@@ -57,6 +57,16 @@ serve options:
   --max-output-tokens N          API output bound (default: min(1024, context-1))
   --batch-token-budget N         tokens per CUDA iteration (default: 512)
   --prefill-chunk-tokens N       prompt tokens per request/iteration (default: 512)
+  --prefill-plateau-rows LIST    ascending iteration sizes after which one more row costs a
+                                 step-up (for example 128,192): an iteration that would end at
+                                 most --prefill-plateau-defer-tokens past one runs the overflowing
+                                 prompt tokens in the next iteration instead; a request waits at
+                                 most once and its output does not change (default: off)
+  --prefill-plateau-defer-tokens N
+                                 largest overflow put off by --prefill-plateau-rows (default: 32)
+  --prefill-plateau-min-decode-rows N
+                                 fewest decode rows for --prefill-plateau-rows to apply
+                                 (default: 12)
   --kv-blocks N                  physical 16-token KV blocks (default: full active promise)
   --residual-rmsnorm MODE        fused E0 candidate or separate path (default: separate)
   --execution-completion MODE    per-operation or iteration-batch (default: iteration-batch)
@@ -83,6 +93,11 @@ serve options:
   --kv-cache-write ID            separate-v1 or fused-split-v1: write the KV cache inside the merged
                                  QKV split kernel, same stored bytes; needs --query-key-rope
                                  fused-split-v1 (default: separate-v1)
+  --decode-attention-producer ID shared-kv-v1 or tensor-core-v1: produce the native D128 page
+                                 states of every row with tensor-core arithmetic (different
+                                 rounding, identical in every batch and chunk); needs
+                                 --decode-attention-merge global-max-v1 and excludes
+                                 --prompt-attention tensor-core-v1 (default: shared-kv-v1)
   --prompt-attention ID          shared-kv-v1 or tensor-core-v1: produce the attention of prompt
                                  tokens with the tensor-core prefill kernel (different rounding for
                                  prompt tokens, identical in every batch and chunk); needs
@@ -127,6 +142,7 @@ struct ServeOptions {
     max_output_tokens: Option<usize>,
     batch_token_budget: usize,
     prefill_chunk_tokens: usize,
+    prefill_plateau: Option<riley_scheduler::PrefillPlateauPolicy>,
     physical_kv_blocks: Option<usize>,
     residual_rmsnorm: ResidualRmsNormMode,
     execution_completion: ExecutionCompletionMode,
@@ -147,6 +163,7 @@ struct ServeOptions {
     fused_qkv_rope: bool,
     fused_kv_write: bool,
     prompt_attention_mma: bool,
+    d128_tensor_core_producer: bool,
     fused_mlp_residual_norm: bool,
     output_row_lm_head: bool,
     decode_step_capture: bool,
@@ -358,6 +375,9 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut max_output_tokens = None;
     let mut batch_token_budget = None;
     let mut prefill_chunk_tokens = None;
+    let mut prefill_plateau_rows = None;
+    let mut prefill_plateau_defer_tokens = None;
+    let mut prefill_plateau_min_decode_rows = None;
     let mut physical_kv_blocks = None;
     let mut residual_rmsnorm = None;
     let mut execution_completion = None;
@@ -378,6 +398,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut query_key_rope = None;
     let mut kv_cache_write = None;
     let mut prompt_attention = None;
+    let mut decode_attention_producer = None;
     let mut mlp_residual_norm = None;
     let mut lm_head_rows = None;
     let mut decode_step_graph = None;
@@ -486,6 +507,27 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 &mut batch_shape_policy,
                 parse_batch_shape_policy(next_value(&mut arguments, "--batch-shape-policy")?)?,
                 "--batch-shape-policy",
+            )?,
+            "--prefill-plateau-rows" => set_once(
+                &mut prefill_plateau_rows,
+                parse_prefill_plateau_rows(next_value(&mut arguments, "--prefill-plateau-rows")?)?,
+                "--prefill-plateau-rows",
+            )?,
+            "--prefill-plateau-defer-tokens" => set_once(
+                &mut prefill_plateau_defer_tokens,
+                parse_number(
+                    next_value(&mut arguments, "--prefill-plateau-defer-tokens")?,
+                    "--prefill-plateau-defer-tokens",
+                )?,
+                "--prefill-plateau-defer-tokens",
+            )?,
+            "--prefill-plateau-min-decode-rows" => set_once(
+                &mut prefill_plateau_min_decode_rows,
+                parse_number(
+                    next_value(&mut arguments, "--prefill-plateau-min-decode-rows")?,
+                    "--prefill-plateau-min-decode-rows",
+                )?,
+                "--prefill-plateau-min-decode-rows",
             )?,
             "--batch-shape-buckets" => set_once(
                 &mut batch_shape_buckets,
@@ -625,6 +667,25 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     }
                 },
                 "--query-key-rope",
+            )?,
+            "--decode-attention-producer" => set_once(
+                &mut decode_attention_producer,
+                match parse_utf8(
+                    next_value(&mut arguments, "--decode-attention-producer")?,
+                    "--decode-attention-producer",
+                )?
+                .as_str()
+                {
+                    "shared-kv-v1" => false,
+                    "tensor-core-v1" => true,
+                    _ => {
+                        return Err(
+                            "--decode-attention-producer requires shared-kv-v1 or tensor-core-v1"
+                                .to_owned(),
+                        );
+                    }
+                },
+                "--decode-attention-producer",
             )?,
             "--prompt-attention" => set_once(
                 &mut prompt_attention,
@@ -883,6 +944,25 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             512
         }
     });
+    if prefill_plateau_rows.is_none()
+        && (prefill_plateau_defer_tokens.is_some() || prefill_plateau_min_decode_rows.is_some())
+    {
+        return Err(
+            "--prefill-plateau-defer-tokens and --prefill-plateau-min-decode-rows require --prefill-plateau-rows"
+                .to_owned(),
+        );
+    }
+    let prefill_plateau = prefill_plateau_rows
+        .map(|boundaries| {
+            riley_scheduler::PrefillPlateauPolicy {
+                boundaries,
+                max_deferred_tokens: prefill_plateau_defer_tokens.unwrap_or(32),
+                min_decode_rows: prefill_plateau_min_decode_rows.unwrap_or(12),
+            }
+            .validate(batch_token_budget)
+            .map_err(|error| format!("invalid --prefill-plateau-rows policy: {error}"))
+        })
+        .transpose()?;
     if vllm_smol_p128_graph
         && execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Require
     {
@@ -982,6 +1062,21 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let fused_qkv_rope = query_key_rope.unwrap_or(false);
     let fused_kv_write = kv_cache_write.unwrap_or(false);
     let prompt_attention_mma = prompt_attention.unwrap_or(false);
+    let d128_tensor_core_producer = decode_attention_producer.unwrap_or(false);
+    if d128_tensor_core_producer {
+        if !decode_attention_merge.unwrap_or(false) {
+            return Err(
+                "--decode-attention-producer tensor-core-v1 requires --decode-attention-merge global-max-v1"
+                    .to_owned(),
+            );
+        }
+        if prompt_attention_mma {
+            return Err(
+                "--decode-attention-producer tensor-core-v1 already covers prompt tokens and excludes --prompt-attention tensor-core-v1"
+                    .to_owned(),
+            );
+        }
+    }
     if fused_kv_write && !fused_qkv_rope {
         return Err(
             "--kv-cache-write fused-split-v1 requires --query-key-rope fused-split-v1".to_owned(),
@@ -1056,6 +1151,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         max_output_tokens,
         batch_token_budget,
         prefill_chunk_tokens,
+        prefill_plateau,
         physical_kv_blocks,
         residual_rmsnorm,
         execution_completion,
@@ -1076,6 +1172,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         fused_qkv_rope,
         fused_kv_write,
         prompt_attention_mma,
+        d128_tensor_core_producer,
         fused_mlp_residual_norm,
         output_row_lm_head: lm_head_rows.unwrap_or(false),
         decode_step_capture,
@@ -1110,6 +1207,18 @@ fn parse_batch_shape_policy(value: OsString) -> Result<BatchShapePolicyMode, Str
         "power-of-two" => Ok(BatchShapePolicyMode::PowerOfTwo),
         _ => Err("--batch-shape-policy requires fixed-max or power-of-two".to_owned()),
     }
+}
+
+fn parse_prefill_plateau_rows(value: OsString) -> Result<Vec<usize>, String> {
+    parse_utf8(value, "--prefill-plateau-rows")?
+        .split(',')
+        .map(|entry| {
+            entry.parse::<usize>().map_err(|_| {
+                "--prefill-plateau-rows requires comma-separated positive decimal integers"
+                    .to_owned()
+            })
+        })
+        .collect()
 }
 
 fn parse_batch_shape_buckets(value: OsString) -> Result<Vec<usize>, String> {
@@ -1798,6 +1907,11 @@ fn run_serve(
     } else {
         executor
     };
+    let executor = if options.d128_tensor_core_producer {
+        executor.with_d128_tensor_core_producer()
+    } else {
+        executor
+    };
     let executor = if options.fused_mlp_residual_norm {
         executor.with_fused_mlp_residual_norm()
     } else {
@@ -1886,7 +2000,9 @@ fn run_serve(
         },
     )
     .map_err(|error| format!("CUDA backend preparation failed: {error}"))?
-    .with_execution_graph_policy(options.execution_graph_policy);
+    .with_execution_graph_policy(options.execution_graph_policy)
+    .with_prefill_plateau_policy(options.prefill_plateau.clone())
+    .map_err(|error| format!("invalid --prefill-plateau-rows policy: {error}"))?;
     let native_d128_two_stage_startup_receipt = if options.decode_attention_backend
         == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
     {
@@ -4809,6 +4925,7 @@ mod tests {
                 max_output_tokens: None,
                 batch_token_budget: 512,
                 prefill_chunk_tokens: 512,
+                prefill_plateau: None,
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
@@ -4829,6 +4946,7 @@ mod tests {
                 fused_qkv_rope: false,
                 fused_kv_write: false,
                 prompt_attention_mma: false,
+                d128_tensor_core_producer: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
@@ -5210,6 +5328,7 @@ mod tests {
                 max_output_tokens: Some(128),
                 batch_token_budget: 64,
                 prefill_chunk_tokens: 32,
+                prefill_plateau: None,
                 physical_kv_blocks: Some(512),
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
@@ -5230,6 +5349,7 @@ mod tests {
                 fused_qkv_rope: false,
                 fused_kv_write: false,
                 prompt_attention_mma: false,
+                d128_tensor_core_producer: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
@@ -5344,6 +5464,97 @@ mod tests {
     }
 
     #[test]
+    fn tensor_core_producer_requires_the_global_merge_and_excludes_the_prompt_producer() {
+        let native = [
+            "serve",
+            "--model",
+            "/a",
+            "--batch-token-budget",
+            "256",
+            "--decode-attention-backend",
+            "native-bf16-paged-split-gqa-d128-two-stage",
+            "--execution-graph-policy",
+            "disabled",
+            "--reduction-profile",
+            "canonical-v1",
+            "--decode-attention-producer",
+            "tensor-core-v1",
+        ];
+        let merge = ["--decode-attention-merge", "global-max-v1"];
+        let Ok(CliCommand::Serve(options)) =
+            parse_arguments(args(&[&native[..], &merge[..]].concat()))
+        else {
+            panic!("serve options");
+        };
+        assert!(options.d128_tensor_core_producer);
+        assert!(parse_arguments(args(&native)).is_err());
+        assert!(
+            parse_arguments(args(
+                &[&native[..], &merge[..], &["--prompt-attention", "tensor-core-v1"]].concat()
+            ))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--decode-attention-producer",
+                "tiled",
+            ]))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn prefill_plateau_flags_build_a_validated_policy() {
+        let base = ["serve", "--model", "/a", "--batch-token-budget", "256"];
+        let parse = |extra: &[&str]| parse_arguments(args(&[&base[..], extra].concat()));
+        let Ok(CliCommand::Serve(off)) = parse(&[]) else {
+            panic!("serve options");
+        };
+        assert_eq!(off.prefill_plateau, None);
+        let Ok(CliCommand::Serve(defaults)) = parse(&["--prefill-plateau-rows", "128,192"]) else {
+            panic!("serve options");
+        };
+        assert_eq!(
+            defaults.prefill_plateau,
+            Some(riley_scheduler::PrefillPlateauPolicy {
+                boundaries: vec![128, 192],
+                max_deferred_tokens: 32,
+                min_decode_rows: 12,
+            })
+        );
+        let Ok(CliCommand::Serve(explicit)) = parse(&[
+            "--prefill-plateau-rows",
+            "128",
+            "--prefill-plateau-defer-tokens",
+            "48",
+            "--prefill-plateau-min-decode-rows",
+            "0",
+        ]) else {
+            panic!("serve options");
+        };
+        assert_eq!(
+            explicit.prefill_plateau,
+            Some(riley_scheduler::PrefillPlateauPolicy {
+                boundaries: vec![128],
+                max_deferred_tokens: 48,
+                min_decode_rows: 0,
+            })
+        );
+        for rejected in [
+            &["--prefill-plateau-rows", "192,128"][..],
+            &["--prefill-plateau-rows", "256"],
+            &["--prefill-plateau-rows", "128,x"],
+            &["--prefill-plateau-defer-tokens", "8"],
+            &["--prefill-plateau-rows", "128", "--prefill-plateau-defer-tokens", "0"],
+        ] {
+            assert!(parse(rejected).is_err(), "{rejected:?}");
+        }
+    }
+
+    #[test]
     fn custom_batch_shape_buckets_require_active_policy_and_exact_budget_bound() {
         assert!(
             parse_arguments(args(&[
@@ -5378,6 +5589,7 @@ mod tests {
                 max_output_tokens: None,
                 batch_token_budget: 7,
                 prefill_chunk_tokens: 512,
+                prefill_plateau: None,
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
@@ -5398,6 +5610,7 @@ mod tests {
                 fused_qkv_rope: false,
                 fused_kv_write: false,
                 prompt_attention_mma: false,
+                d128_tensor_core_producer: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
@@ -5787,6 +6000,7 @@ mod tests {
                 max_output_tokens: None,
                 batch_token_budget: 512,
                 prefill_chunk_tokens: 512,
+                prefill_plateau: None,
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Fused,
                 execution_completion: ExecutionCompletionMode::PerOperation,
@@ -5807,6 +6021,7 @@ mod tests {
                 fused_qkv_rope: false,
                 fused_kv_write: false,
                 prompt_attention_mma: false,
+                d128_tensor_core_producer: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,

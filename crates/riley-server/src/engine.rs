@@ -2327,6 +2327,20 @@ mod cuda_backend {
             self
         }
 
+        /// Installs the scheduler's prefill plateau policy before worker startup.
+        ///
+        /// # Errors
+        ///
+        /// Returns the scheduler's configuration error for a policy that does
+        /// not fit its iteration token budget.
+        pub fn with_prefill_plateau_policy(
+            mut self,
+            policy: Option<riley_scheduler::PrefillPlateauPolicy>,
+        ) -> Result<Self, riley_scheduler::SchedulerError> {
+            self.scheduler.set_prefill_plateau_policy(policy)?;
+            Ok(self)
+        }
+
         /// Loaded model metadata copied before resources move to the worker.
         #[must_use]
         pub const fn metadata(&self) -> &ModelMetadata {

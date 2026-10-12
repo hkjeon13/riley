@@ -11,7 +11,7 @@ use riley_runtime::paged_kv::{
     KV_BLOCK_SIZE, KvBlockPool, KvBlockPoolStats, KvLayout, SequenceReservation, SequenceState,
 };
 
-use crate::config::{OverloadPolicy, SchedulerConfig};
+use crate::config::{OverloadPolicy, PrefillPlateauPolicy, SchedulerConfig};
 use crate::error::{SchedulerError, SchedulerResult};
 use crate::metrics::{
     IterationMetricSample, SchedulerGauges, SchedulerMetrics, SchedulerMetricsSnapshot,
@@ -440,6 +440,7 @@ struct RequestRecord {
     promised_kv_blocks: usize,
     sequence: Option<SequenceState>,
     cancellation_deferred: bool,
+    plateau_deferred: bool,
 }
 
 impl RequestRecord {
@@ -517,6 +518,7 @@ pub struct Scheduler {
     next_iteration_id: u64,
     last_now_ns: Option<u64>,
     aging_override_last_iteration: bool,
+    prefill_plateau: Option<PrefillPlateauPolicy>,
     inflight: Option<InflightPlan>,
     metrics: SchedulerMetrics,
     metrics_degraded: bool,
@@ -653,6 +655,7 @@ impl Scheduler {
             next_iteration_id: 1,
             last_now_ns: None,
             aging_override_last_iteration: false,
+            prefill_plateau: None,
             inflight: None,
             metrics,
             metrics_degraded: false,
@@ -667,6 +670,22 @@ impl Scheduler {
     #[must_use]
     pub const fn config(&self) -> &SchedulerConfig {
         &self.config
+    }
+
+    /// Installs or clears the prefill plateau policy for later iterations.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SchedulerError::InvalidConfiguration`] when the policy does
+    /// not validate against this scheduler's iteration token budget.
+    pub fn set_prefill_plateau_policy(
+        &mut self,
+        policy: Option<PrefillPlateauPolicy>,
+    ) -> SchedulerResult<()> {
+        self.prefill_plateau = policy
+            .map(|policy| policy.validate(self.config.iteration_token_budget))
+            .transpose()?;
+        Ok(())
     }
 
     #[must_use]
@@ -812,6 +831,7 @@ impl Scheduler {
             promised_kv_blocks,
             sequence: None,
             cancellation_deferred: false,
+            plateau_deferred: false,
         };
 
         let state = if can_admit {
@@ -866,7 +886,8 @@ impl Scheduler {
         self.expire_waiting(now_ns)?;
         self.admit_waiting(now_ns)?;
 
-        let (candidates, used_aging_override) = self.select_candidates(now_ns)?;
+        let (candidates, used_aging_override, plateau_deferred) =
+            self.select_candidates(now_ns)?;
         if candidates.is_empty() {
             self.aging_override_last_iteration = false;
             self.drain_completion_outbox_into(&mut completions);
@@ -881,6 +902,11 @@ impl Scheduler {
         let plan = self.prepare_plan(iteration_id, &candidates, now_ns)?;
         self.advance_iteration_id()?;
         self.aging_override_last_iteration = used_aging_override;
+        for record in &mut self.requests {
+            if plateau_deferred.contains(&record.request_id) {
+                record.plateau_deferred = true;
+            }
+        }
         if let Some(inflight) = &mut self.inflight {
             inflight.scheduler_cpu_ns = elapsed_ns(cpu_started);
         }
@@ -1501,7 +1527,11 @@ impl Scheduler {
         }
     }
 
-    fn select_candidates(&self, now_ns: u64) -> SchedulerResult<(Vec<Candidate>, bool)> {
+    #[allow(clippy::too_many_lines)]
+    fn select_candidates(
+        &self,
+        now_ns: u64,
+    ) -> SchedulerResult<(Vec<Candidate>, bool, Vec<RequestId>)> {
         let mut prefill = Vec::new();
         let mut decode = Vec::new();
         try_reserve_exact(&mut prefill, self.active_sequences, "prefill candidates")?;
@@ -1519,6 +1549,7 @@ impl Scheduler {
                             request_id: record.request_id,
                             ready_since_ns: record.ready_since_ns,
                             remaining_tokens: remaining,
+                            plateau_deferred: record.plateau_deferred,
                         });
                     }
                 }
@@ -1526,6 +1557,7 @@ impl Scheduler {
                     request_id: record.request_id,
                     ready_since_ns: record.ready_since_ns,
                     remaining_tokens: 1,
+                    plateau_deferred: false,
                 }),
                 RequestState::Waiting
                 | RequestState::Finished
@@ -1580,6 +1612,7 @@ impl Scheduler {
             });
             budget -= 1;
         }
+        let prefill_start = selected.len();
         for item in &prefill {
             if budget == 0 {
                 break;
@@ -1598,7 +1631,86 @@ impl Scheduler {
             });
             budget -= token_count;
         }
-        Ok((selected, aged_request.is_some()))
+        let mut plateau_deferred = Vec::new();
+        if aged_request.is_none() {
+            self.defer_past_plateau(
+                &prefill,
+                decode.len(),
+                prefill_start,
+                &mut selected,
+                &mut plateau_deferred,
+            )?;
+        }
+        Ok((selected, aged_request.is_some(), plateau_deferred))
+    }
+
+    /// Trims the tail of the prefill selection when the iteration would end
+    /// just past a plateau boundary; see [`PrefillPlateauPolicy`].
+    fn defer_past_plateau(
+        &self,
+        prefill: &[ReadyRequest],
+        decode_rows: usize,
+        prefill_start: usize,
+        selected: &mut Vec<Candidate>,
+        deferred: &mut Vec<RequestId>,
+    ) -> SchedulerResult<()> {
+        let Some(policy) = &self.prefill_plateau else {
+            return Ok(());
+        };
+        if decode_rows < policy.min_decode_rows {
+            return Ok(());
+        }
+        let total: usize = selected.iter().map(|item| item.token_count).sum();
+        let prefill_tokens: usize = selected[prefill_start..]
+            .iter()
+            .map(|item| item.token_count)
+            .sum();
+        let Some(boundary) = policy
+            .boundaries
+            .iter()
+            .rev()
+            .copied()
+            .find(|boundary| *boundary < total)
+        else {
+            return Ok(());
+        };
+        let overflow = total - boundary;
+        if overflow > policy.max_deferred_tokens || overflow > prefill_tokens {
+            return Ok(());
+        }
+        // Every request that loses tokens must not have been trimmed before.
+        let mut remaining = overflow;
+        let mut first_trimmed = selected.len();
+        while remaining != 0 {
+            first_trimmed -= 1;
+            let item = selected[first_trimmed];
+            let already = prefill
+                .iter()
+                .find(|ready| ready.request_id == item.request_id)
+                .is_none_or(|ready| ready.plateau_deferred);
+            if already {
+                return Ok(());
+            }
+            remaining -= item.token_count.min(remaining);
+        }
+        try_reserve_exact(
+            deferred,
+            selected.len() - first_trimmed,
+            "plateau deferred requests",
+        )?;
+        let mut remaining = overflow;
+        while remaining != 0 {
+            let last = selected.len() - 1;
+            let item = &mut selected[last];
+            deferred.push(item.request_id);
+            let trimmed = item.token_count.min(remaining);
+            item.token_count -= trimmed;
+            remaining -= trimmed;
+            if item.token_count == 0 {
+                selected.pop();
+            }
+        }
+        Ok(())
     }
 
     #[allow(clippy::too_many_lines)]
@@ -2541,6 +2653,7 @@ struct ReadyRequest {
     request_id: RequestId,
     ready_since_ns: u64,
     remaining_tokens: usize,
+    plateau_deferred: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

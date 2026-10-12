@@ -151,6 +151,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     shape_buckets: LlamaBatchShapeBuckets,
     greedy_candidate_count: Option<usize>,
     d128_global_merge: bool,
+    d128_tensor_core_producer: bool,
     prompt_attention_mma: bool,
     fused_silu_multiply: bool,
     fused_qkv_rope: bool,
@@ -180,6 +181,7 @@ impl PreparedLlamaBatchExecutorConfig {
             shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
             greedy_candidate_count: None,
             d128_global_merge: false,
+            d128_tensor_core_producer: false,
             prompt_attention_mma: false,
             fused_silu_multiply: false,
             fused_qkv_rope: false,
@@ -238,6 +240,23 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn d128_global_merge(self) -> bool {
         self.d128_global_merge
+    }
+
+    /// Produces the native D128 page states of every row with the tensor-core
+    /// producer instead of the shared-KV producer. This is a separately
+    /// selected numerical mode: the page states differ in rounding only, the
+    /// same way in every batch and chunk. Requires the D128 global merge and
+    /// replaces the prompt-row producer.
+    #[must_use]
+    pub const fn with_d128_tensor_core_producer(mut self) -> Self {
+        self.d128_tensor_core_producer = true;
+        self
+    }
+
+    /// Whether the native D128 route uses the tensor-core page producer.
+    #[must_use]
+    pub const fn d128_tensor_core_producer(self) -> bool {
+        self.d128_tensor_core_producer
     }
 
     /// Produces the attention of prompt rows with the tensor-core prefill
@@ -677,6 +696,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         shape_buckets: config.shape_buckets,
         greedy_candidate_count: config.greedy_candidate_count,
         d128_global_merge: config.d128_global_merge,
+        d128_tensor_core_producer: config.d128_tensor_core_producer,
         prompt_attention_mma: config.prompt_attention_mma,
         fused_silu_multiply: config.fused_silu_multiply,
         fused_qkv_rope: config.fused_qkv_rope,
