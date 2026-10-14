@@ -2,6 +2,26 @@
 
 All notable changes to Riley are documented in this file.
 
+## Unreleased
+
+Serving work since `0.1.0-rc2`, measured in [docs/performance.md](docs/performance.md):
+
+- Qwen2.5-3B-Instruct support through a paged, two-stage attention backend,
+  with tensor-core arithmetic for attention pages.
+- CUDA graph capture and replay of generation steps.
+- Fused kernels for residual and norm, activation, RoPE and KV-cache writes;
+  one GEMM for the Q, K and V projections; GPU-side greedy token selection.
+- Per-row-count GEMM algorithm selection restricted to algorithms that
+  reproduce the reference algorithm's bytes, keeping output independent of
+  batch composition.
+- A scheduler policy that keeps steps under GEMM cost plateaus
+  (`--prefill-plateau-rows`).
+- A reference-exact route that reproduces Hugging Face Transformers output
+  byte for byte, used as a correctness anchor.
+- `riley-checkpoint`, a tool that prepares and verifies checkpoint directories.
+- Documentation rewritten for users; development records were removed from the
+  tree and summarised in [docs/HISTORY.md](docs/HISTORY.md).
+
 ## 0.1.0-rc2 — 2026-08-27
 
 This candidate supersedes `0.1.0-rc1` and fixes a mixed-stage output-routing
@@ -12,9 +32,11 @@ output slots before sampling and covers the mixed-stage ordering with a
 regression test.
 
 The release owner accepted a previously completed soak and authorized this
-prerelease without a candidate-bound 7-hour-15-minute rerun. Gate E therefore
-remains unpassed for `0.1.0-rc2`; this is an explicit owner-approved
-prerelease, not a relaxation of the fail-closed gate.
+prerelease without rerunning the 7-hour-15-minute soak on this candidate. The
+release gate (correctness, Python-free packaging, performance regression and
+soak on one candidate, called Gate E below) therefore remains unpassed for
+`0.1.0-rc2`; this is an explicit owner-approved prerelease, not a relaxation
+of the gate.
 
 ## 0.1.0-rc1 — 2026-08-27
 

@@ -11,7 +11,7 @@ opaque device and pinned-host byte buffers, coherent allocation accounting,
 and stream-ordered asynchronous H2D/D2H copies. The diagnostic fill kernel is
 only a lifecycle and ordering smoke test; model loading, tensor execution, and
 inference remain out of scope. The stable C contract and ownership rules are
-documented in [`../../docs/cuda-abi-v1.md`](../../docs/cuda-abi-v1.md).
+declared in [`../../kernels/include/riley_cuda.h`](../../kernels/include/riley_cuda.h).
 
 ## Build configuration
 
