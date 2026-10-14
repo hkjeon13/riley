@@ -13257,6 +13257,7 @@ mod tests {
                 .span(crate::ffi::DTYPE_U32, 0, results_byte_len),
             OUTPUT_ROW_COUNT,
             VOCABULARY_SIZE,
+            0,
             &mut eager_stream.native,
         )?;
 

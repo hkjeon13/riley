@@ -214,6 +214,12 @@ impl CheckpointProvenance {
         })
     }
 
+    /// Whether the manifest lists `path` among the checkpoint's files.
+    #[must_use]
+    pub fn lists(&self, path: &Path) -> bool {
+        self.files.contains_key(path)
+    }
+
     /// Returns the immutable source model identifier.
     #[must_use]
     pub fn source_model(&self) -> &str {

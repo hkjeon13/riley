@@ -6,9 +6,9 @@ use serde_json::Value;
 
 use crate::ir::{
     Activation, AttentionBiasSpec, AttentionSpec, DecoderBlockSpec, EmbeddingSpec, GatedMlpSpec,
-    LmHeadSpec, ModelSpec, NormSpec, RopeSpec, SpecialTokenSpec,
+    LmHeadSpec, ModelSpec, NormSpec, RopeScaling, RopeSpec, SpecialTokenSpec,
 };
-use crate::{strict_json, ArtifactKind, LoadLimits, ModelError, ModelResult};
+use crate::{ArtifactKind, LoadLimits, ModelError, ModelResult, strict_json};
 
 /// Supported source-model families recognized at the cold configuration boundary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -17,6 +17,9 @@ pub enum ModelFamily {
     Llama,
     /// Hugging Face Qwen2/Qwen2.5 dense decoder configuration.
     Qwen2,
+    /// Hugging Face Qwen3 dense decoder configuration: the Qwen2 decoder
+    /// without attention biases and with an RMS norm on each query and key head.
+    Qwen3,
 }
 
 /// Validated source configuration dispatched before execution planning.
@@ -50,7 +53,9 @@ impl ModelConfig {
         let identity: RawModelIdentity = strict_json::from_slice(input, ArtifactKind::Config)?;
         match identity.model_type.as_str() {
             "llama" => LlamaConfig::from_json_slice_with_limits(input, limits).map(Self::Llama),
-            "qwen2" => Qwen2Config::from_json_slice_with_limits(input, limits).map(Self::Qwen2),
+            "qwen2" | "qwen3" => {
+                Qwen2Config::from_json_slice_with_limits(input, limits).map(Self::Qwen2)
+            }
             other => unsupported("model_type", other),
         }
     }
@@ -60,7 +65,13 @@ impl ModelConfig {
     pub const fn family(&self) -> ModelFamily {
         match self {
             Self::Llama(_) => ModelFamily::Llama,
-            Self::Qwen2(_) => ModelFamily::Qwen2,
+            Self::Qwen2(config) => {
+                if config.query_key_norm {
+                    ModelFamily::Qwen3
+                } else {
+                    ModelFamily::Qwen2
+                }
+            }
         }
     }
 
@@ -138,6 +149,7 @@ pub struct LlamaConfig {
     max_sequence_length: usize,
     norm_epsilon: f64,
     rope_theta: f64,
+    rope_scaling: Option<RopeScaling>,
     attention_bias: bool,
     mlp_bias: bool,
     tied_embeddings: bool,
@@ -179,7 +191,8 @@ impl LlamaConfig {
             self.head_dimension,
             self.rope_theta,
             self.max_sequence_length,
-        );
+        )
+        .with_scaling(self.rope_scaling);
         let attention = AttentionSpec::new(
             self.hidden_size,
             self.query_heads,
@@ -230,6 +243,24 @@ impl LlamaConfig {
         self.dtype
     }
 
+    /// Adds the end-of-sequence IDs of the checkpoint's `generation_config.json`
+    /// (an integer or a list under `eos_token_id`) to the ones of `config.json`.
+    /// Hugging Face generation stops on the generation configuration's list;
+    /// a redistributed Llama 3 checkpoint keeps the full list only there.
+    /// Every other field of the file is ignored: sampling is a request matter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for malformed JSON, an ID outside the vocabulary, or
+    /// more IDs than the load limits allow.
+    pub(crate) fn extend_eos_from_generation_config(
+        &mut self,
+        input: &[u8],
+        limits: LoadLimits,
+    ) -> ModelResult<()> {
+        extend_eos_token_ids(&mut self.eos_token_ids, self.vocabulary_size, input, limits)
+    }
+
     /// Returns the configured padding token when the source artifact declares one.
     ///
     /// Riley carries sequence lengths and masks separately, so this does not
@@ -250,6 +281,7 @@ impl LlamaConfig {
         let (source_architecture, dtype) = validate_identity(&raw)?;
         let dimensions = ValidatedDimensions::from_raw(&raw, limits)?;
         let rope_theta = validate_execution_values(&raw)?;
+        let rope_scaling = validate_llama_rope_scaling(raw.rope_scaling.as_ref())?;
         validate_transformers_js_config(raw.transformers_js_config.as_ref())?;
         let warnings = collect_warnings(&raw);
         let (bos_token_id, eos_token_ids) = validated_special_tokens(
@@ -275,6 +307,7 @@ impl LlamaConfig {
             max_sequence_length: dimensions.max_sequence_length,
             norm_epsilon: raw.rms_norm_eps,
             rope_theta,
+            rope_scaling,
             attention_bias: raw.attention_bias.unwrap_or(false),
             mlp_bias: raw.mlp_bias.unwrap_or(false),
             tied_embeddings: raw.tie_word_embeddings.unwrap_or(false),
@@ -287,11 +320,47 @@ impl LlamaConfig {
     }
 }
 
-/// Validated dense Qwen2/Qwen2.5 Hugging Face configuration.
+/// Appends the `eos_token_id` entries of a `generation_config.json` that are
+/// not yet in `eos_token_ids`.
+fn extend_eos_token_ids(
+    eos_token_ids: &mut Vec<u32>,
+    vocabulary_size: usize,
+    input: &[u8],
+    limits: LoadLimits,
+) -> ModelResult<()> {
+    validate_config_length(input, limits)?;
+    let value: Value = strict_json::from_slice(input, ArtifactKind::Config)?;
+    let ids: Vec<u64> = match value.get("eos_token_id") {
+        None | Some(Value::Null) => Vec::new(),
+        Some(Value::Number(id)) => id.as_u64().into_iter().collect(),
+        Some(Value::Array(ids)) => ids.iter().filter_map(Value::as_u64).collect(),
+        Some(other) => {
+            return unsupported("generation_config.eos_token_id", &stable_value(other));
+        }
+    };
+    for id in ids {
+        let id = checked_token_id("generation_config.eos_token_id", id, vocabulary_size)?;
+        if !eos_token_ids.contains(&id) {
+            eos_token_ids.push(id);
+        }
+    }
+    if eos_token_ids.len() > limits.added_tokens() {
+        return Err(ModelError::LimitExceeded {
+            resource: "config EOS token IDs",
+            limit: u64::try_from(limits.added_tokens()).unwrap_or(u64::MAX),
+            actual: u64::try_from(eos_token_ids.len()).ok(),
+        });
+    }
+    Ok(())
+}
+
+/// Validated dense Qwen2/Qwen2.5 or Qwen3 Hugging Face configuration.
 ///
-/// This adapter intentionally covers only the pinned dense text architecture.
-/// Qwen-VL, `MoE`, Qwen3, sliding-window attention, and scaled or multi-axis
-/// rotary embeddings are rejected at this cold boundary.
+/// This adapter covers only the dense text architectures: Qwen2/Qwen2.5
+/// (Q/K/V biases) and Qwen3 (no attention bias, an RMS norm on each query and
+/// key head, `head_dim` independent of `hidden_size`). Qwen-VL, `MoE`,
+/// sliding-window attention, and scaled or multi-axis rotary embeddings are
+/// rejected at this cold boundary.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Qwen2Config {
     dtype: DType,
@@ -310,9 +379,27 @@ pub struct Qwen2Config {
     eos_token_ids: Vec<u32>,
     source_architecture: String,
     warnings: Vec<ConfigWarning>,
+    /// Qwen3: no attention bias and RMS-normalized query and key heads.
+    query_key_norm: bool,
 }
 
 impl Qwen2Config {
+    /// Adds the end-of-sequence IDs of the checkpoint's `generation_config.json`
+    /// to the ones of `config.json` (see `LlamaConfig`): a Qwen checkpoint
+    /// names `<|im_end|>` in `config.json` and adds `<|endoftext|>` only there.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for malformed JSON, an ID outside the vocabulary, or
+    /// more IDs than the load limits allow.
+    pub(crate) fn extend_eos_from_generation_config(
+        &mut self,
+        input: &[u8],
+        limits: LoadLimits,
+    ) -> ModelResult<()> {
+        extend_eos_token_ids(&mut self.eos_token_ids, self.vocabulary_size, input, limits)
+    }
+
     /// Parses and validates a bounded dense Qwen2/Qwen2.5 `config.json`.
     ///
     /// # Errors
@@ -349,8 +436,16 @@ impl Qwen2Config {
             self.query_heads,
             self.key_value_heads,
             self.head_dimension,
-            AttentionBiasSpec::qkv(),
+            if self.query_key_norm {
+                AttentionBiasSpec::uniform(false)
+            } else {
+                AttentionBiasSpec::qkv()
+            },
             rope,
+        )
+        .with_query_key_norm(
+            self.query_key_norm
+                .then(|| NormSpec::rms(self.head_dimension, self.norm_epsilon)),
         );
         let mlp = GatedMlpSpec::new(
             self.hidden_size,
@@ -401,7 +496,7 @@ impl Qwen2Config {
                 value: stable_value(value),
             });
         }
-        let (source_architecture, dtype) = validate_qwen2_identity(&raw)?;
+        let (source_architecture, dtype, query_key_norm) = validate_qwen2_identity(&raw)?;
         let dimensions = ValidatedDimensions::from_values(
             raw.hidden_size,
             raw.intermediate_size,
@@ -411,6 +506,9 @@ impl Qwen2Config {
             raw.head_dim,
             raw.vocab_size,
             raw.max_position_embeddings,
+            // Qwen3 projects the residual to `heads * head_dim`, which need
+            // not equal the residual width.
+            !query_key_norm,
             limits,
         )?;
         let rope_theta = validate_qwen2_execution_values(&raw)?;
@@ -439,6 +537,7 @@ impl Qwen2Config {
             eos_token_ids,
             source_architecture,
             warnings,
+            query_key_norm,
         })
     }
 }
@@ -475,6 +574,8 @@ struct RawLlamaConfig {
     #[serde(rename = "transformers.js_config")]
     transformers_js_config: Option<TransformersJsConfig>,
     transformers_version: Option<String>,
+    /// Marker some redistributed checkpoints add to their configuration.
+    unsloth_fixed: Option<bool>,
     use_cache: Option<bool>,
     vocab_size: u64,
     #[serde(rename = "_name_or_path")]
@@ -497,6 +598,7 @@ struct TransformersJsConfig {
 #[derive(Deserialize)]
 struct RawQwen2Config {
     architectures: Option<Vec<String>>,
+    attention_bias: Option<bool>,
     attention_dropout: Option<f64>,
     bos_token_id: Option<u64>,
     eos_token_id: Option<OneOrManyIds>,
@@ -558,6 +660,7 @@ impl ValidatedDimensions {
             raw.head_dim,
             raw.vocab_size,
             raw.max_position_embeddings,
+            true,
             limits,
         )
     }
@@ -572,6 +675,7 @@ impl ValidatedDimensions {
         raw_head_dimension: Option<u64>,
         raw_vocabulary_size: u64,
         raw_max_sequence_length: u64,
+        projection_equals_hidden: bool,
         limits: LoadLimits,
     ) -> ModelResult<Self> {
         let hidden_size = bounded_positive_usize(
@@ -627,7 +731,7 @@ impl ValidatedDimensions {
                 .ok_or_else(|| ModelError::NumericOverflow {
                     field: "num_attention_heads * head_dim".to_owned(),
                 })?;
-        if projected != hidden_size {
+        if projection_equals_hidden && projected != hidden_size {
             return invalid(
                 "head_dim",
                 "num_attention_heads * head_dim must equal hidden_size",
@@ -691,28 +795,90 @@ fn validate_identity(raw: &RawLlamaConfig) -> ModelResult<(String, DType)> {
     Ok((source_architecture, dtype))
 }
 
-fn validate_qwen2_identity(raw: &RawQwen2Config) -> ModelResult<(String, DType)> {
-    require_exact("model_type", &raw.model_type, "qwen2")?;
+/// Returns the source architecture, the dtype, and whether this is Qwen3.
+fn validate_qwen2_identity(raw: &RawQwen2Config) -> ModelResult<(String, DType, bool)> {
+    let qwen3 = match raw.model_type.as_str() {
+        "qwen2" => false,
+        "qwen3" => true,
+        other => return unsupported("model_type", other),
+    };
+    let expected_architecture = if qwen3 {
+        "Qwen3ForCausalLM"
+    } else {
+        "Qwen2ForCausalLM"
+    };
     require_exact("hidden_act", &raw.hidden_act, "silu")?;
     let source_architecture = match raw.architectures.as_deref() {
-        None | Some([]) => "Qwen2ForCausalLM".to_owned(),
-        Some([architecture]) if architecture == "Qwen2ForCausalLM" => architecture.clone(),
+        None | Some([]) => expected_architecture.to_owned(),
+        Some([architecture]) if architecture == expected_architecture => architecture.clone(),
         Some(architectures) => {
             return unsupported("architectures", &format!("{architectures:?}"));
         }
     };
+    // Qwen2 always has Q/K/V biases and its config does not say so; Qwen3 has
+    // none and may say so.
+    match (qwen3, raw.attention_bias) {
+        (false, Some(value)) | (true, Some(value @ true)) => {
+            return unsupported("attention_bias", &value.to_string());
+        }
+        (false, None) | (true, None | Some(false)) => {}
+    }
+    if qwen3 && raw.head_dim.is_none() {
+        return invalid("head_dim", "Qwen3 requires an explicit head_dim");
+    }
     let dtype = match raw.torch_dtype.as_str() {
         "float16" | "fp16" => DType::F16,
         "bfloat16" | "bf16" => DType::BF16,
         other => return unsupported("torch_dtype", other),
     };
-    Ok((source_architecture, dtype))
+    Ok((source_architecture, dtype, qwen3))
+}
+
+/// Accepts no rescaling, or the `llama3` rescaling of Llama 3.1/3.2 with
+/// exactly its four parameters; every other scheme is rejected.
+fn validate_llama_rope_scaling(value: Option<&Value>) -> ModelResult<Option<RopeScaling>> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let Some(object) = value.as_object() else {
+        return unsupported("rope_scaling", &stable_value(value));
+    };
+    if object.get("rope_type").and_then(Value::as_str) != Some("llama3") || object.len() != 5 {
+        return unsupported("rope_scaling", &stable_value(value));
+    }
+    let number = |name: &str| -> ModelResult<f64> {
+        let Some(number) = object.get(name).and_then(Value::as_f64) else {
+            return unsupported("rope_scaling", &stable_value(value));
+        };
+        require_finite_positive("rope_scaling", number)?;
+        Ok(number)
+    };
+    let factor = number("factor")?;
+    let low_frequency_factor = number("low_freq_factor")?;
+    let high_frequency_factor = number("high_freq_factor")?;
+    let Some(original) = object
+        .get("original_max_position_embeddings")
+        .and_then(Value::as_u64)
+        .and_then(|original| usize::try_from(original).ok())
+        .filter(|original| *original != 0)
+    else {
+        return unsupported("rope_scaling", &stable_value(value));
+    };
+    if factor < 1.0 || high_frequency_factor <= low_frequency_factor {
+        return invalid(
+            "rope_scaling",
+            "llama3 needs factor >= 1 and high_freq_factor > low_freq_factor",
+        );
+    }
+    Ok(Some(RopeScaling::llama3(
+        factor,
+        low_frequency_factor,
+        high_frequency_factor,
+        original,
+    )))
 }
 
 fn validate_execution_values(raw: &RawLlamaConfig) -> ModelResult<f64> {
-    if raw.rope_scaling.is_some() {
-        return unsupported("rope_scaling", "non-null");
-    }
     if raw.rope_interleaved.unwrap_or(false) {
         return unsupported("rope_interleaved", "true");
     }
@@ -896,6 +1062,12 @@ fn collect_warnings(raw: &RawLlamaConfig) -> Vec<ConfigWarning> {
         raw.transformers_version.is_some(),
         "transformers_version",
         "the runtime does not dispatch on a Python library version",
+    );
+    push_warning(
+        &mut warnings,
+        raw.unsloth_fixed.is_some(),
+        "unsloth_fixed",
+        "a redistribution marker does not select execution",
     );
     push_warning(
         &mut warnings,
@@ -1421,7 +1593,7 @@ mod tests {
             ));
         }
 
-        for unsupported_family in ["qwen2_moe", "qwen2_vl", "qwen3"] {
+        for unsupported_family in ["qwen2_moe", "qwen2_vl", "qwen3_moe"] {
             let changed = QWEN2_5_CONFIG.replace(
                 "\"model_type\": \"qwen2\"",
                 &format!("\"model_type\": \"{unsupported_family}\""),
@@ -1571,5 +1743,76 @@ mod tests {
                 actual: Some(1_000_001),
             }
         ));
+    }
+    #[test]
+    fn llama3_rope_scaling_is_accepted_and_other_schemes_are_rejected() {
+        let llama32 = r#"{
+          "architectures": ["LlamaForCausalLM"],
+          "attention_bias": false,
+          "attention_dropout": 0.0,
+          "bos_token_id": 128000,
+          "eos_token_id": [128001, 128008, 128009],
+          "head_dim": 64,
+          "hidden_act": "silu",
+          "hidden_size": 2048,
+          "initializer_range": 0.02,
+          "intermediate_size": 8192,
+          "max_position_embeddings": 131072,
+          "mlp_bias": false,
+          "model_type": "llama",
+          "num_attention_heads": 32,
+          "num_hidden_layers": 16,
+          "num_key_value_heads": 8,
+          "pretraining_tp": 1,
+          "rms_norm_eps": 1e-05,
+          "rope_scaling": {
+            "factor": 32.0,
+            "high_freq_factor": 4.0,
+            "low_freq_factor": 1.0,
+            "original_max_position_embeddings": 8192,
+            "rope_type": "llama3"
+          },
+          "rope_theta": 500000.0,
+          "tie_word_embeddings": true,
+          "torch_dtype": "bfloat16",
+          "transformers_version": "4.45.0.dev0",
+          "use_cache": true,
+          "vocab_size": 128256
+        }"#;
+        let config = LlamaConfig::from_json_slice(llama32.as_bytes()).expect("Llama 3.2 config");
+        let spec = config.to_model_spec();
+        let rope = spec.blocks()[0].attention().rope();
+        let scaling = rope.scaling().expect("llama3 scaling");
+        assert_eq!(scaling.factor().to_bits(), 32.0_f64.to_bits());
+        assert_eq!(scaling.low_frequency_factor().to_bits(), 1.0_f64.to_bits());
+        assert_eq!(scaling.high_frequency_factor().to_bits(), 4.0_f64.to_bits());
+        assert_eq!(scaling.original_max_sequence_length(), 8192);
+        assert_eq!(rope.theta().to_bits(), 500_000.0_f64.to_bits());
+        assert_eq!(spec.blocks()[0].attention().head_dimension(), 64);
+
+        for other in [
+            r#"{"type": "linear", "factor": 2.0}"#,
+            r#"{"rope_type": "yarn", "factor": 32.0, "high_freq_factor": 4.0, "low_freq_factor": 1.0, "original_max_position_embeddings": 8192}"#,
+            r#"{"rope_type": "llama3", "factor": 32.0, "high_freq_factor": 4.0, "low_freq_factor": 1.0}"#,
+            r#"{"rope_type": "llama3", "factor": 32.0, "high_freq_factor": 1.0, "low_freq_factor": 1.0, "original_max_position_embeddings": 8192}"#,
+        ] {
+            let start = llama32.find("\"rope_scaling\": {").expect("scaling field");
+            let end = llama32[start..].find('}').expect("scaling end") + start + 1;
+            let changed = format!(
+                "{}\"rope_scaling\": {other}{}",
+                &llama32[..start],
+                &llama32[end..]
+            );
+            let error =
+                LlamaConfig::from_json_slice(changed.as_bytes()).expect_err("rejected scaling");
+            assert!(
+                matches!(
+                    &error,
+                    ModelError::UnsupportedConfig { field, .. } | ModelError::InvalidConfig { field, .. }
+                        if field == "rope_scaling"
+                ),
+                "{other}: {error:?}"
+            );
+        }
     }
 }

@@ -2230,6 +2230,26 @@ impl PreparedLlamaDecode {
                 reason: "must be non-zero",
             });
         }
+        if model
+            .spec()
+            .blocks()
+            .iter()
+            .any(|block| block.attention().query_key_norm().is_some())
+        {
+            return Err(LlamaDecodeError::InvalidConfiguration {
+                field: "model",
+                reason: "a per-head query/key norm is supported by the batch executor only",
+            });
+        }
+        if model.spec().blocks().iter().any(|block| {
+            block.attention().query_heads() * block.attention().head_dimension()
+                != block.attention().hidden_size()
+        }) {
+            return Err(LlamaDecodeError::InvalidConfiguration {
+                field: "model",
+                reason: "a query projection wider than the hidden size is supported by the batch executor only",
+            });
+        }
         if maximum_sequence_length < prompt_length {
             return Err(LlamaDecodeError::InvalidConfiguration {
                 field: "maximum_sequence_length",
@@ -2551,7 +2571,7 @@ impl PreparedLlamaDecode {
             let angles = build_decode_rope_angles(
                 maximum_sequence_length,
                 dimensions.head_dimension(),
-                forward.plan.rope_theta(),
+                forward.plan.rope_frequencies(),
             )?;
             rope_cos
                 .upload_from_slice(0, &angles, &mut forward.io_staging, stream)
@@ -2577,7 +2597,7 @@ impl PreparedLlamaDecode {
             let (cos, sin) = build_decode_cpu_rope_tables(
                 maximum_sequence_length,
                 dimensions.head_dimension(),
-                forward.plan.rope_theta(),
+                forward.plan.rope_frequencies(),
             )?;
             rope_cos
                 .upload_from_slice(0, &cos, &mut forward.io_staging, stream)
@@ -4764,15 +4784,15 @@ fn allocate_decode_host_bytes(
 fn build_decode_rope_angles(
     sequence_length: usize,
     head_dimension: usize,
-    theta: f32,
+    frequencies: impl Into<super::plan::LlamaRopeFrequencies>,
 ) -> LlamaDecodeResult<Box<[u8]>> {
+    let frequencies = frequencies.into();
     let bytes = rope_table_bytes(sequence_length, head_dimension)?;
     let mut angles = allocate_decode_host_bytes(bytes, LlamaDecodeResource::RopeCos)?;
     let half = head_dimension / 2;
     for position in 0..sequence_length {
         for pair in 0..half {
-            let exponent = (2 * pair) as f32 / head_dimension as f32;
-            let inverse_frequency = 1.0 / theta.powf(exponent);
+            let inverse_frequency = frequencies.inverse_frequency(pair, head_dimension);
             let angle = position as f32 * inverse_frequency;
             let element = position
                 .checked_mul(half)
@@ -4793,16 +4813,16 @@ type DecodeRopeTableBytes = (Box<[u8]>, Box<[u8]>);
 fn build_decode_cpu_rope_tables(
     sequence_length: usize,
     head_dimension: usize,
-    theta: f32,
+    frequencies: impl Into<super::plan::LlamaRopeFrequencies>,
 ) -> LlamaDecodeResult<DecodeRopeTableBytes> {
+    let frequencies = frequencies.into();
     let bytes = rope_table_bytes(sequence_length, head_dimension)?;
     let mut cos = allocate_decode_host_bytes(bytes, LlamaDecodeResource::RopeCos)?;
     let mut sin = allocate_decode_host_bytes(bytes, LlamaDecodeResource::RopeSin)?;
     let half = head_dimension / 2;
     for position in 0..sequence_length {
         for pair in 0..half {
-            let exponent = (2 * pair) as f32 / head_dimension as f32;
-            let inverse_frequency = 1.0 / theta.powf(exponent);
+            let inverse_frequency = frequencies.inverse_frequency(pair, head_dimension);
             let angle = position as f32 * inverse_frequency;
             let (sine, cosine) = angle.sin_cos();
             let element = position

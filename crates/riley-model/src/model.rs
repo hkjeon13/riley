@@ -14,6 +14,10 @@ pub const CONFIG_FILENAME: &str = "config.json";
 /// Required Hugging Face tokenizer filename.
 pub const TOKENIZER_FILENAME: &str = "tokenizer.json";
 
+/// Optional Hugging Face generation defaults; only its end-of-sequence IDs are
+/// read, and only for a Llama-family checkpoint whose manifest lists the file.
+pub const GENERATION_CONFIG_FILENAME: &str = "generation_config.json";
+
 /// Required Qwen chat/tokenizer metadata filename.
 pub const TOKENIZER_CONFIG_FILENAME: &str = "tokenizer_config.json";
 
@@ -54,7 +58,26 @@ impl LoadedModel {
             limits.config_bytes(),
             "config.json",
         )?;
-        let config = ModelConfig::from_json_slice_with_limits(config_artifact.bytes(), limits)?;
+        let mut config = ModelConfig::from_json_slice_with_limits(config_artifact.bytes(), limits)?;
+        // A checkpoint whose manifest lists its generation configuration also
+        // stops on that file's end-of-sequence IDs, as Hugging Face generation
+        // does. A manifest without the file keeps the IDs of `config.json`.
+        let generation_config = Path::new(GENERATION_CONFIG_FILENAME);
+        if session.provenance().lists(generation_config) {
+            let artifact = session.read_once(
+                generation_config,
+                limits.config_bytes(),
+                "generation_config.json",
+            )?;
+            match &mut config {
+                ModelConfig::Llama(llama_config) => {
+                    llama_config.extend_eos_from_generation_config(artifact.bytes(), limits)?;
+                }
+                ModelConfig::Qwen2(qwen_config) => {
+                    qwen_config.extend_eos_from_generation_config(artifact.bytes(), limits)?;
+                }
+            }
+        }
         let spec = config.to_model_spec();
         validate_manifest_dtype(session.provenance(), &spec)?;
 
@@ -68,10 +91,19 @@ impl LoadedModel {
             Option<Qwen2TokenizerConfig>,
         ) = match &config {
             ModelConfig::Llama(llama_config) => {
+                // The SmolLM2 artifact shape, else the Llama 3 one; the error
+                // reported for neither is the SmolLM2 one.
                 let tokenizer = SmolLm2Tokenizer::from_json_slice_with_limits(
                     tokenizer_artifact.bytes(),
                     limits,
-                )?;
+                )
+                .or_else(|error| {
+                    SmolLm2Tokenizer::from_llama3_json_slice_with_limits(
+                        tokenizer_artifact.bytes(),
+                        limits,
+                    )
+                    .map_err(|_| error)
+                })?;
                 validate_dense_tokenizer_coherence(&spec, &tokenizer, llama_config.pad_token_id())?;
                 (Arc::new(tokenizer), None)
             }
@@ -86,10 +118,18 @@ impl LoadedModel {
                     limits.config_bytes(),
                     "tokenizer_config.json",
                 )?;
+                // The pinned Qwen2.5 chat profile when the metadata matches it,
+                // else the completions-only reading of the same file.
                 let tokenizer_config = Qwen2TokenizerConfig::from_json_slice_with_limits(
                     tokenizer_config_artifact.bytes(),
                     limits,
-                )?;
+                )
+                .or_else(|_| {
+                    Qwen2TokenizerConfig::from_json_slice_completions_only_with_limits(
+                        tokenizer_config_artifact.bytes(),
+                        limits,
+                    )
+                })?;
                 tokenizer_config.validate_tokenizer(&tokenizer)?;
                 validate_qwen_context_bound(&spec, &tokenizer_config)?;
                 (Arc::new(tokenizer), Some(tokenizer_config))

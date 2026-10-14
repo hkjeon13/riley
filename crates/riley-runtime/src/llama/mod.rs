@@ -140,7 +140,7 @@ pub use graph_registry_dispatch::{
 pub use plan::{
     HIDDEN_WORKSPACE_BUFFER_COUNT, INTERMEDIATE_WORKSPACE_BUFFER_COUNT,
     KEY_VALUE_WORKSPACE_BUFFER_COUNT, LlamaDimensions, LlamaExecutionPlan, LlamaLayerPlan,
-    LlamaWorkspaceSpec,
+    LlamaRopeFrequencies, LlamaRopeScaling, LlamaWorkspaceSpec,
 };
 
 #[cfg(any(feature = "cuda", test))]
@@ -779,7 +779,7 @@ mod source_contract_tests {
     fn cold_zeroed_host_bytes_share_one_checked_allocator() {
         for (boundary, source, expected_calls) in [
             ("batch owner", include_str!("executor/owner.rs"), 1),
-            ("batch buffers", include_str!("executor/buffers.rs"), 7),
+            ("batch buffers", include_str!("executor/buffers.rs"), 8),
             ("RoPE builders", include_str!("executor/rope.rs"), 3),
         ] {
             assert!(
@@ -800,14 +800,14 @@ mod source_contract_tests {
             (
                 "execution dispatch",
                 include_str!("executor/dispatch.rs"),
-                1,
+                2,
             ),
             (
                 "batch allocation",
                 include_str!("executor/allocation.rs"),
                 6,
             ),
-            ("batch buffers", include_str!("executor/buffers.rs"), 2),
+            ("batch buffers", include_str!("executor/buffers.rs"), 5),
             ("packed metadata", include_str!("executor/metadata.rs"), 3),
         ] {
             assert!(
@@ -907,7 +907,7 @@ mod source_contract_tests {
                 include_str!("executor/allocation.rs"),
                 1,
             ),
-            ("buffer allocation", include_str!("executor/buffers.rs"), 2),
+            ("buffer allocation", include_str!("executor/buffers.rs"), 3),
             ("packed metadata", include_str!("executor/metadata.rs"), 2),
         ] {
             assert_eq!(
@@ -935,18 +935,18 @@ mod source_contract_tests {
         for (boundary, source, expected_calls) in [
             // Two existing cold-layout conversions plus the native D128
             // workspace row/page conversions must all use the shared facade.
-            ("batch owner", include_str!("executor/owner.rs"), 4),
+            ("batch owner", include_str!("executor/owner.rs"), 5),
             (
                 "execution dispatch",
                 include_str!("executor/dispatch.rs"),
-                14,
+                17,
             ),
             (
                 "batch allocation",
                 include_str!("executor/allocation.rs"),
                 3,
             ),
-            ("batch buffers", include_str!("executor/buffers.rs"), 3),
+            ("batch buffers", include_str!("executor/buffers.rs"), 5),
             ("device views", include_str!("executor/device_views.rs"), 3),
             ("output sizing", include_str!("executor/output.rs"), 3),
             ("RoPE scalar", include_str!("executor/rope.rs"), 1),
@@ -1042,10 +1042,17 @@ mod source_contract_tests {
             1,
             "synchronous fallback must retain its established token upload"
         );
+        // Six metadata uploads: two that change every step, and four that are
+        // skipped only when the device already holds the same bytes.
         assert_eq!(
             hot.matches("upload_prefix(").count(),
-            6,
-            "synchronous fallback must retain all six metadata uploads"
+            2,
+            "synchronous fallback must retain its two unconditional metadata uploads"
+        );
+        assert_eq!(
+            hot.matches("upload_prefix_if_changed(").count(),
+            4,
+            "synchronous fallback must retain its four change-gated metadata uploads"
         );
         assert_eq!(
             hot.matches(".copy_from_pinned_in_command_batch(").count(),

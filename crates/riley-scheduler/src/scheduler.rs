@@ -11,7 +11,9 @@ use riley_runtime::paged_kv::{
     KV_BLOCK_SIZE, KvBlockPool, KvBlockPoolStats, KvLayout, SequenceReservation, SequenceState,
 };
 
-use crate::config::{OverloadPolicy, PrefillPlateauPolicy, SchedulerConfig};
+use crate::config::{
+    OverloadPolicy, PrefillCoalescingPolicy, PrefillPlateauPolicy, SchedulerConfig,
+};
 use crate::error::{SchedulerError, SchedulerResult};
 use crate::metrics::{
     IterationMetricSample, SchedulerGauges, SchedulerMetrics, SchedulerMetricsSnapshot,
@@ -519,6 +521,7 @@ pub struct Scheduler {
     last_now_ns: Option<u64>,
     aging_override_last_iteration: bool,
     prefill_plateau: Option<PrefillPlateauPolicy>,
+    prefill_coalescing: Option<PrefillCoalescingPolicy>,
     inflight: Option<InflightPlan>,
     metrics: SchedulerMetrics,
     metrics_degraded: bool,
@@ -656,6 +659,7 @@ impl Scheduler {
             last_now_ns: None,
             aging_override_last_iteration: false,
             prefill_plateau: None,
+            prefill_coalescing: None,
             inflight: None,
             metrics,
             metrics_degraded: false,
@@ -685,6 +689,19 @@ impl Scheduler {
         self.prefill_plateau = policy
             .map(|policy| policy.validate(self.config.iteration_token_budget))
             .transpose()?;
+        Ok(())
+    }
+
+    /// Installs or clears the prefill coalescing policy for later iterations.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SchedulerError::InvalidConfiguration`] for an invalid policy.
+    pub fn set_prefill_coalescing_policy(
+        &mut self,
+        policy: Option<PrefillCoalescingPolicy>,
+    ) -> SchedulerResult<()> {
+        self.prefill_coalescing = policy.map(PrefillCoalescingPolicy::validate).transpose()?;
         Ok(())
     }
 
@@ -886,8 +903,7 @@ impl Scheduler {
         self.expire_waiting(now_ns)?;
         self.admit_waiting(now_ns)?;
 
-        let (candidates, used_aging_override, plateau_deferred) =
-            self.select_candidates(now_ns)?;
+        let (candidates, used_aging_override, plateau_deferred) = self.select_candidates(now_ns)?;
         if candidates.is_empty() {
             self.aging_override_last_iteration = false;
             self.drain_completion_outbox_into(&mut completions);
@@ -1550,6 +1566,7 @@ impl Scheduler {
                             ready_since_ns: record.ready_since_ns,
                             remaining_tokens: remaining,
                             plateau_deferred: record.plateau_deferred,
+                            started: record.prefill_cursor != 0,
                         });
                     }
                 }
@@ -1558,6 +1575,7 @@ impl Scheduler {
                     ready_since_ns: record.ready_since_ns,
                     remaining_tokens: 1,
                     plateau_deferred: false,
+                    started: true,
                 }),
                 RequestState::Waiting
                 | RequestState::Finished
@@ -1613,11 +1631,29 @@ impl Scheduler {
             budget -= 1;
         }
         let prefill_start = selected.len();
+        // Coalescing: while few prompt tokens are ready and none has waited
+        // long, new prompts are held back so that they start together.
+        let hold_new_prompts = match self.prefill_coalescing {
+            Some(policy) if aged_request.is_none() && decode.len() >= policy.min_decode_rows => {
+                let mut ready_tokens = 0_usize;
+                let mut longest_wait_ns = 0_u64;
+                for item in prefill.iter().filter(|item| !item.started) {
+                    ready_tokens = ready_tokens.saturating_add(item.remaining_tokens);
+                    longest_wait_ns =
+                        longest_wait_ns.max(now_ns.saturating_sub(item.ready_since_ns));
+                }
+                ready_tokens < policy.min_tokens && longest_wait_ns < policy.max_wait_ns
+            }
+            _ => false,
+        };
         for item in &prefill {
             if budget == 0 {
                 break;
             }
             if Some(item.request_id) == aged_request {
+                continue;
+            }
+            if hold_new_prompts && !item.started {
                 continue;
             }
             let token_count = item
@@ -2654,6 +2690,8 @@ struct ReadyRequest {
     ready_since_ns: u64,
     remaining_tokens: usize,
     plateau_deferred: bool,
+    /// A prompt some of whose tokens have already run.
+    started: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

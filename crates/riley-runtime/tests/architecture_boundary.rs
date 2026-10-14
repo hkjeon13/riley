@@ -643,7 +643,7 @@ fn executor_rope_only_materializes_cold_host_table_bytes_and_scalar_shape() {
         "head_dimension / 2",
         "checked_mul(F32_BYTES)",
         "table_byte_len / row_bytes",
-        "theta.powf",
+        "frequencies.inverse_frequency",
         "angle.sin_cos",
         "to_ne_bytes",
         "LlamaBatchExecutorError::ArithmeticOverflow",

@@ -27,11 +27,13 @@ const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS: usize = 32
 #[cfg(any(feature = "cuda", test))]
 const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_RAGGED_BACKEND_ID: &str = "riley.cuda.ragged-paged-attention.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16.transition-v2";
 #[cfg(any(feature = "cuda", test))]
-const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_QUERY_HEADS: usize = 16;
-#[cfg(any(feature = "cuda", test))]
-const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_KEY_VALUE_HEADS: usize = 2;
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_GROUP_HEADS: usize = 8;
 #[cfg(any(feature = "cuda", test))]
 const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_HEAD_SIZE: usize = 128;
+// Second head size of the two-stage attention (tensor-core producer with the
+// global-max merge only; the executor rejects other producers).
+#[cfg(any(feature = "cuda", test))]
+const NATIVE_BF16_PAGED_SPLIT_GQA_D64_TWO_STAGE_HEAD_SIZE: usize = 64;
 #[cfg(any(feature = "cuda", test))]
 const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE: usize = 16;
 #[cfg(any(feature = "cuda", test))]
@@ -62,6 +64,14 @@ serve options:
                                  most --prefill-plateau-defer-tokens past one runs the overflowing
                                  prompt tokens in the next iteration instead; a request waits at
                                  most once and its output does not change (default: off)
+  --prefill-coalescing-tokens N  hold newly admitted prompts back until N prompt tokens are ready
+                                 or the oldest has waited --prefill-coalescing-wait-us, so that
+                                 several prompts start in one iteration; applies from
+                                 --prefill-coalescing-min-decode-rows decode rows; a prompt's
+                                 output does not change (default: off)
+  --prefill-coalescing-wait-us N longest a ready prompt is held back (default: 10000)
+  --prefill-coalescing-min-decode-rows N
+                                 fewest decode rows for coalescing to apply (default: 4)
   --prefill-plateau-defer-tokens N
                                  largest overflow put off by --prefill-plateau-rows (default: 32)
   --prefill-plateau-min-decode-rows N
@@ -88,6 +98,21 @@ serve options:
                                  backend (default: ordered-v1)
   --mlp-activation ID            separate-v1 or fused-silu-multiply-v1: one kernel for SiLU and
                                  the gate multiply, bit-identical (default: separate-v1)
+  --step-uploads ID              per-buffer-v1 or staged-batch-v1: copy an iteration's tokens and
+                                 metadata to the device inside its command batch from one pinned
+                                 buffer instead of one synchronized upload per buffer; needs
+                                 synchronous metadata transport and iteration-batch completion
+                                 (default: per-buffer-v1)
+  --startup-warmup ID            disabled or step-shapes-v1: before serving, run internal requests
+                                 that step through the decode and prefill-mixed row shapes, so
+                                 --decode-step-graph capture-v1 records them at start-up rather
+                                 than under traffic (default: disabled)
+  --event-publication ID         immediate-v1 or after-submit-v1: publish an iteration's events
+                                 after the next iteration is submitted to the GPU, same events
+                                 and order (default: immediate-v1)
+  --mlp-projection ID            separate-v1 or merged-gate-up-v1: one GEMM over the concatenated
+                                 gate|up weights (a second device copy of both); needs
+                                 --mlp-activation fused-silu-multiply-v1 (default: separate-v1)
   --query-key-rope ID            separate-v1 or fused-split-v1: apply RoPE inside the merged QKV
                                  split kernel, bit-identical (default: separate-v1)
   --kv-cache-write ID            separate-v1 or fused-split-v1: write the KV cache inside the merged
@@ -98,10 +123,12 @@ serve options:
                                  rounding, identical in every batch and chunk); needs
                                  --decode-attention-merge global-max-v1 and excludes
                                  --prompt-attention tensor-core-v1 (default: shared-kv-v1)
-  --prompt-attention ID          shared-kv-v1 or tensor-core-v1: produce the attention of prompt
-                                 tokens with the tensor-core prefill kernel (different rounding for
-                                 prompt tokens, identical in every batch and chunk); needs
-                                 --decode-attention-merge global-max-v1 (default: shared-kv-v1)
+  --prompt-attention ID          shared-kv-v1, tensor-core-v1 or dense-v1: produce the attention of
+                                 prompt tokens with the tensor-core prefill kernel (different
+                                 rounding for prompt tokens, identical in every batch and chunk);
+                                 needs --decode-attention-merge global-max-v1. dense-v1 is that
+                                 kernel for every prompt token and any head geometry, next to
+                                 --decode-attention-producer tensor-core-v1 (default: shared-kv-v1)
   --mlp-residual-norm ID         separate-v1 or fused-next-norm-v1: fuse the MLP residual add with
                                  the following norm; needs --residual-rmsnorm fused
                                  (default: separate-v1)
@@ -143,6 +170,7 @@ struct ServeOptions {
     batch_token_budget: usize,
     prefill_chunk_tokens: usize,
     prefill_plateau: Option<riley_scheduler::PrefillPlateauPolicy>,
+    prefill_coalescing: Option<riley_scheduler::PrefillCoalescingPolicy>,
     physical_kv_blocks: Option<usize>,
     residual_rmsnorm: ResidualRmsNormMode,
     execution_completion: ExecutionCompletionMode,
@@ -160,9 +188,14 @@ struct ServeOptions {
     bit_equivalent_gemm_selection: bool,
     d128_global_merge: bool,
     fused_silu_multiply: bool,
+    merged_gate_up: bool,
+    publish_after_submit: bool,
+    startup_warmup: bool,
+    staged_step_uploads: bool,
     fused_qkv_rope: bool,
     fused_kv_write: bool,
     prompt_attention_mma: bool,
+    dense_prompt_attention: bool,
     d128_tensor_core_producer: bool,
     fused_mlp_residual_norm: bool,
     output_row_lm_head: bool,
@@ -378,6 +411,9 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut prefill_plateau_rows = None;
     let mut prefill_plateau_defer_tokens = None;
     let mut prefill_plateau_min_decode_rows = None;
+    let mut prefill_coalescing_tokens = None;
+    let mut prefill_coalescing_wait_us = None;
+    let mut prefill_coalescing_min_decode_rows = None;
     let mut physical_kv_blocks = None;
     let mut residual_rmsnorm = None;
     let mut execution_completion = None;
@@ -395,6 +431,10 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut gemm_algorithm_selection = None;
     let mut decode_attention_merge = None;
     let mut mlp_activation = None;
+    let mut mlp_projection = None;
+    let mut event_publication = None;
+    let mut startup_warmup = None;
+    let mut step_uploads = None;
     let mut query_key_rope = None;
     let mut kv_cache_write = None;
     let mut prompt_attention = None;
@@ -520,6 +560,30 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     "--prefill-plateau-defer-tokens",
                 )?,
                 "--prefill-plateau-defer-tokens",
+            )?,
+            "--prefill-coalescing-tokens" => set_once(
+                &mut prefill_coalescing_tokens,
+                parse_number(
+                    next_value(&mut arguments, "--prefill-coalescing-tokens")?,
+                    "--prefill-coalescing-tokens",
+                )?,
+                "--prefill-coalescing-tokens",
+            )?,
+            "--prefill-coalescing-wait-us" => set_once(
+                &mut prefill_coalescing_wait_us,
+                parse_number(
+                    next_value(&mut arguments, "--prefill-coalescing-wait-us")?,
+                    "--prefill-coalescing-wait-us",
+                )?,
+                "--prefill-coalescing-wait-us",
+            )?,
+            "--prefill-coalescing-min-decode-rows" => set_once(
+                &mut prefill_coalescing_min_decode_rows,
+                parse_number(
+                    next_value(&mut arguments, "--prefill-coalescing-min-decode-rows")?,
+                    "--prefill-coalescing-min-decode-rows",
+                )?,
+                "--prefill-coalescing-min-decode-rows",
             )?,
             "--prefill-plateau-min-decode-rows" => set_once(
                 &mut prefill_plateau_min_decode_rows,
@@ -695,11 +759,13 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 )?
                 .as_str()
                 {
-                    "shared-kv-v1" => false,
-                    "tensor-core-v1" => true,
+                    "shared-kv-v1" => 0_u8,
+                    "tensor-core-v1" => 1,
+                    "dense-v1" => 2,
                     _ => {
                         return Err(
-                            "--prompt-attention requires shared-kv-v1 or tensor-core-v1".to_owned()
+                            "--prompt-attention requires shared-kv-v1, tensor-core-v1 or dense-v1"
+                                .to_owned(),
                         );
                     }
                 },
@@ -722,6 +788,79 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     }
                 },
                 "--kv-cache-write",
+            )?,
+            "--step-uploads" => set_once(
+                &mut step_uploads,
+                match parse_utf8(
+                    next_value(&mut arguments, "--step-uploads")?,
+                    "--step-uploads",
+                )?
+                .as_str()
+                {
+                    "per-buffer-v1" => false,
+                    "staged-batch-v1" => true,
+                    _ => {
+                        return Err(
+                            "--step-uploads requires per-buffer-v1 or staged-batch-v1".to_owned()
+                        );
+                    }
+                },
+                "--step-uploads",
+            )?,
+            "--startup-warmup" => set_once(
+                &mut startup_warmup,
+                match parse_utf8(
+                    next_value(&mut arguments, "--startup-warmup")?,
+                    "--startup-warmup",
+                )?
+                .as_str()
+                {
+                    "disabled" => false,
+                    "step-shapes-v1" => true,
+                    _ => {
+                        return Err(
+                            "--startup-warmup requires disabled or step-shapes-v1".to_owned()
+                        );
+                    }
+                },
+                "--startup-warmup",
+            )?,
+            "--event-publication" => set_once(
+                &mut event_publication,
+                match parse_utf8(
+                    next_value(&mut arguments, "--event-publication")?,
+                    "--event-publication",
+                )?
+                .as_str()
+                {
+                    "immediate-v1" => false,
+                    "after-submit-v1" => true,
+                    _ => {
+                        return Err(
+                            "--event-publication requires immediate-v1 or after-submit-v1"
+                                .to_owned(),
+                        );
+                    }
+                },
+                "--event-publication",
+            )?,
+            "--mlp-projection" => set_once(
+                &mut mlp_projection,
+                match parse_utf8(
+                    next_value(&mut arguments, "--mlp-projection")?,
+                    "--mlp-projection",
+                )?
+                .as_str()
+                {
+                    "separate-v1" => false,
+                    "merged-gate-up-v1" => true,
+                    _ => {
+                        return Err(
+                            "--mlp-projection requires separate-v1 or merged-gate-up-v1".to_owned()
+                        );
+                    }
+                },
+                "--mlp-projection",
             )?,
             "--mlp-activation" => set_once(
                 &mut mlp_activation,
@@ -952,6 +1091,26 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 .to_owned(),
         );
     }
+    if prefill_coalescing_tokens.is_none()
+        && (prefill_coalescing_wait_us.is_some() || prefill_coalescing_min_decode_rows.is_some())
+    {
+        return Err(
+            "--prefill-coalescing-wait-us and --prefill-coalescing-min-decode-rows require --prefill-coalescing-tokens"
+                .to_owned(),
+        );
+    }
+    let prefill_coalescing = prefill_coalescing_tokens
+        .map(|min_tokens: usize| {
+            riley_scheduler::PrefillCoalescingPolicy {
+                min_tokens,
+                max_wait_ns: (prefill_coalescing_wait_us.unwrap_or(10_000_usize) as u64)
+                    .saturating_mul(1_000),
+                min_decode_rows: prefill_coalescing_min_decode_rows.unwrap_or(4),
+            }
+            .validate()
+            .map_err(|error| format!("invalid --prefill-coalescing-tokens policy: {error}"))
+        })
+        .transpose()?;
     let prefill_plateau = prefill_plateau_rows
         .map(|boundaries| {
             riley_scheduler::PrefillPlateauPolicy {
@@ -1046,6 +1205,16 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             );
         }
     }
+    let staged_step_uploads = step_uploads.unwrap_or(false);
+    if staged_step_uploads
+        && (execution_completion != ExecutionCompletionMode::IterationBatch
+            || metadata_transport != MetadataTransportMode::Synchronous)
+    {
+        return Err(
+            "--step-uploads staged-batch-v1 requires iteration-batch completion and synchronous metadata transport"
+                .to_owned(),
+        );
+    }
     let bit_equivalent_gemm_selection = gemm_algorithm_selection.unwrap_or(false);
     if bit_equivalent_gemm_selection && !gemm_reduction_policy.unwrap_or(false) {
         return Err(
@@ -1061,8 +1230,15 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     }
     let fused_qkv_rope = query_key_rope.unwrap_or(false);
     let fused_kv_write = kv_cache_write.unwrap_or(false);
-    let prompt_attention_mma = prompt_attention.unwrap_or(false);
+    let dense_prompt_attention = prompt_attention == Some(2);
+    let prompt_attention_mma = prompt_attention == Some(1);
     let d128_tensor_core_producer = decode_attention_producer.unwrap_or(false);
+    if dense_prompt_attention && !d128_tensor_core_producer {
+        return Err(
+            "--prompt-attention dense-v1 requires --decode-attention-producer tensor-core-v1"
+                .to_owned(),
+        );
+    }
     if d128_tensor_core_producer {
         if !decode_attention_merge.unwrap_or(false) {
             return Err(
@@ -1087,6 +1263,13 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     {
         return Err(
             "--query-key-rope fused-split-v1 requires --projection-bias-backend merged-qkv-strict-staged-v1"
+                .to_owned(),
+        );
+    }
+    let merged_gate_up = mlp_projection.unwrap_or(false);
+    if merged_gate_up && !mlp_activation.unwrap_or(false) {
+        return Err(
+            "--mlp-projection merged-gate-up-v1 requires --mlp-activation fused-silu-multiply-v1"
                 .to_owned(),
         );
     }
@@ -1152,6 +1335,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         batch_token_budget,
         prefill_chunk_tokens,
         prefill_plateau,
+        prefill_coalescing,
         physical_kv_blocks,
         residual_rmsnorm,
         execution_completion,
@@ -1169,9 +1353,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         bit_equivalent_gemm_selection,
         d128_global_merge,
         fused_silu_multiply: mlp_activation.unwrap_or(false),
+        merged_gate_up,
+        publish_after_submit: event_publication.unwrap_or(false),
+        startup_warmup: startup_warmup.unwrap_or(false),
+        staged_step_uploads,
         fused_qkv_rope,
         fused_kv_write,
         prompt_attention_mma,
+        dense_prompt_attention,
         d128_tensor_core_producer,
         fused_mlp_residual_norm,
         output_row_lm_head: lm_head_rows.unwrap_or(false),
@@ -1533,9 +1722,13 @@ const fn native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(
     head_size: usize,
     page_size: usize,
 ) -> bool {
-    query_heads == NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_QUERY_HEADS
-        && key_value_heads == NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_KEY_VALUE_HEADS
-        && head_size == NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_HEAD_SIZE
+    query_heads != 0
+        && key_value_heads != 0
+        && query_heads % key_value_heads == 0
+        && query_heads / key_value_heads
+            <= NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_GROUP_HEADS
+        && (head_size == NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_HEAD_SIZE
+            || head_size == NATIVE_BF16_PAGED_SPLIT_GQA_D64_TWO_STAGE_HEAD_SIZE)
         && page_size == NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE
 }
 
@@ -1550,18 +1743,21 @@ const fn native_bf16_paged_split_gqa_d128_two_stage_context_supported(
 fn validate_native_bf16_paged_split_gqa_d128_two_stage_model(
     backend: DecodeAttentionBackendMode,
     model: &riley_model::LoadedModel,
+    max_sequence_tokens: usize,
 ) -> Result<(), String> {
     if backend != DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage {
         return Ok(());
     }
 
     let spec = model.spec();
-    if !native_bf16_paged_split_gqa_d128_two_stage_context_supported(spec.max_sequence_length()) {
+    // The bound is on the sequences the server admits, not on the checkpoint
+    // context: a longer-context model serves with --max-sequence-tokens.
+    if !native_bf16_paged_split_gqa_d128_two_stage_context_supported(max_sequence_tokens) {
         return Err(format!(
-            "{} requires a model context at most {}; found {}",
+            "{} requires --max-sequence-tokens at most {}; found {}",
             backend.cli_id(),
             NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS,
-            spec.max_sequence_length(),
+            max_sequence_tokens,
         ));
     }
     if spec.dtype().name() != "bf16" {
@@ -1594,10 +1790,9 @@ fn validate_native_bf16_paged_split_gqa_d128_two_stage_model(
             page_size,
         ) {
             return Err(format!(
-                "{} requires QH={} KVH={} D={} page={}; layer {} has QH={} KVH={} D={}",
+                "{} requires at most {} query heads per key/value head, D={} and page={}; layer {} has QH={} KVH={} D={}",
                 backend.cli_id(),
-                NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_QUERY_HEADS,
-                NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_KEY_VALUE_HEADS,
+                NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_GROUP_HEADS,
                 NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_HEAD_SIZE,
                 NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE,
                 block.index(),
@@ -1621,6 +1816,9 @@ fn validate_native_bf16_paged_split_gqa_d128_two_stage_model(
 #[cfg(any(feature = "cuda", test))]
 fn native_bf16_paged_split_gqa_d128_two_stage_startup_receipt(
     resolved_ragged_backend: &str,
+    query_heads: usize,
+    key_value_heads: usize,
+    head_size: usize,
 ) -> Result<String, String> {
     if resolved_ragged_backend != NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_RAGGED_BACKEND_ID {
         return Err(format!(
@@ -1629,9 +1827,9 @@ fn native_bf16_paged_split_gqa_d128_two_stage_startup_receipt(
     }
     Ok(format!(
         "RILEY_DECODE_ATTENTION requested_backend=native-bf16-paged-split-gqa-d128-two-stage resolved_ragged_backend={resolved_ragged_backend} fallback_reason=none query_heads={} key_value_heads={} head_size={} page_size={} graph=false",
-        NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_QUERY_HEADS,
-        NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_KEY_VALUE_HEADS,
-        NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_HEAD_SIZE,
+        query_heads,
+        key_value_heads,
+        head_size,
         NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE,
     ))
 }
@@ -1778,10 +1976,17 @@ fn run_serve(
         .map_err(|error| format!("invalid model load limit: {error}"))?;
     let model = LoadedModel::load(&options.model_path, load_limits)
         .map_err(|error| format!("model load failed: {error}"))?;
-    validate_native_bf16_paged_split_gqa_d128_two_stage_model(
-        options.decode_attention_backend,
-        &model,
-    )?;
+    let attention_heads = model.spec().blocks().first().map_or((0, 0), |block| {
+        (
+            block.attention().query_heads(),
+            block.attention().key_value_heads(),
+        )
+    });
+    let attention_head_size = model
+        .spec()
+        .blocks()
+        .first()
+        .map_or(0, |block| block.attention().head_dimension());
     let model_context = model.spec().max_sequence_length();
     let max_sequence_tokens = options.max_sequence_tokens.unwrap_or(model_context);
     if max_sequence_tokens < 2 || max_sequence_tokens > model_context {
@@ -1789,6 +1994,11 @@ fn run_serve(
             "--max-sequence-tokens must be between 2 and the model bound {model_context}"
         ));
     }
+    validate_native_bf16_paged_split_gqa_d128_two_stage_model(
+        options.decode_attention_backend,
+        &model,
+        max_sequence_tokens,
+    )?;
     validate_reduction_profile_context(options.reduction_profile, max_sequence_tokens)?;
     let default_output_tokens = 1_024_usize.min(max_sequence_tokens - 1);
     let max_output_tokens = options.max_output_tokens.unwrap_or(default_output_tokens);
@@ -1842,6 +2052,11 @@ fn run_serve(
             PreparedLlamaForwardConfig::default().with_merged_qkv_projection()
         }
     };
+    let forward = if options.merged_gate_up {
+        forward.with_merged_gate_up_projection()
+    } else {
+        forward
+    };
     let forward = if options.first_heuristic_gemm_reductions {
         forward.with_first_heuristic_gemm_reductions()
     } else {
@@ -1864,6 +2079,11 @@ fn run_serve(
     let executor = match options.metadata_transport {
         MetadataTransportMode::Synchronous => executor.with_synchronous_metadata(),
         MetadataTransportMode::PackedAsync => executor.with_packed_async_metadata(),
+    };
+    let executor = if options.staged_step_uploads {
+        executor.with_staged_step_uploads()
+    } else {
+        executor
     };
     let executor = match options.batch_shape_policy {
         BatchShapePolicyMode::FixedMaximum => executor.with_fixed_maximum_shape(),
@@ -1904,6 +2124,11 @@ fn run_serve(
     };
     let executor = if options.prompt_attention_mma {
         executor.with_prompt_attention_mma()
+    } else {
+        executor
+    };
+    let executor = if options.dense_prompt_attention {
+        executor.with_dense_prompt_attention()
     } else {
         executor
     };
@@ -1958,6 +2183,7 @@ fn run_serve(
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
+    let warmup_model_id = model_id.clone();
     let metadata = ModelMetadata {
         model_id,
         created_unix_seconds,
@@ -2002,13 +2228,17 @@ fn run_serve(
     .map_err(|error| format!("CUDA backend preparation failed: {error}"))?
     .with_execution_graph_policy(options.execution_graph_policy)
     .with_prefill_plateau_policy(options.prefill_plateau.clone())
-    .map_err(|error| format!("invalid --prefill-plateau-rows policy: {error}"))?;
+    .and_then(|engine| engine.with_prefill_coalescing_policy(options.prefill_coalescing))
+    .map_err(|error| format!("invalid prefill plateau or coalescing policy: {error}"))?;
     let native_d128_two_stage_startup_receipt = if options.decode_attention_backend
         == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
     {
         let facts = resources.effective_runtime_facts();
         Some(native_bf16_paged_split_gqa_d128_two_stage_startup_receipt(
             facts.attention_decode(),
+            attention_heads.0,
+            attention_heads.1,
+            attention_head_size,
         )?)
     } else {
         None
@@ -2061,10 +2291,21 @@ fn run_serve(
                 max_inflight_requests: maximum_live_requests,
                 admission_timeout: Duration::from_secs(30),
                 idle_poll_interval: Duration::from_millis(1),
+                publish_after_submit: options.publish_after_submit,
             },
         )
         .map_err(|error| format!("inference engine startup failed: {error}"))?,
     );
+    if options.startup_warmup {
+        warm_up_step_shapes(
+            &engine,
+            &warmup_model_id,
+            options.max_active_sequences,
+            options.batch_token_budget,
+            max_sequence_tokens,
+            max_output_tokens,
+        );
+    }
     let runtime_config_body = match (c02_runtime_config.as_ref(), c02_receipt) {
         (Some(c02), Some(receipt)) => {
             write_c02_startup_artifact(&c02.startup_artifact, c02, &receipt)?;
@@ -2168,6 +2409,86 @@ struct HfExactServe {
     shutdown_metrics_path: Option<PathBuf>,
 }
 
+/// Best-effort start-up warm-up: internal requests whose iterations pass
+/// through the row shapes ordinary traffic produces, so every recordable step
+/// shape is recorded before the server accepts connections.
+///
+/// `max_active - 1` requests decode side by side and end one after another
+/// (pure-decode shapes for every active count); meanwhile one prompt after
+/// another of growing length joins them (prefill-mixed shapes up to the token
+/// budget). The requests are ordinary greedy completions; their text is
+/// discarded and a failure only shortens the warm-up.
+#[cfg(feature = "cuda")]
+fn warm_up_step_shapes(
+    engine: &riley_server::engine::InferenceEngine,
+    model_id: &str,
+    max_active: usize,
+    token_budget: usize,
+    max_sequence_tokens: usize,
+    max_output_tokens: usize,
+) {
+    use riley_server::domain::{GenerationEvent, GenerationRequest, SamplingParameters};
+    use std::time::{Duration, Instant};
+
+    let started = Instant::now();
+    let request = |prompt_tokens: usize, max_new_tokens: usize| GenerationRequest {
+        model_id: model_id.to_owned(),
+        // One short common word per token for the supported BPE vocabularies.
+        prompt: " a".repeat(prompt_tokens.max(1)),
+        max_new_tokens: max_new_tokens.clamp(1, max_output_tokens),
+        sampling: SamplingParameters {
+            temperature: 0.0,
+            top_p: 1.0,
+            seed: Some(0),
+        },
+        stop_sequences: Vec::new(),
+        stream: false,
+        include_token_ids: false,
+    };
+    let finish = |handle: &riley_server::engine::GenerationHandle| loop {
+        match handle.recv_timeout(Duration::from_secs(60)) {
+            Ok(GenerationEvent::Finished { .. } | GenerationEvent::Failed { .. }) | Err(_) => break,
+            Ok(_) => {}
+        }
+    };
+    let decoders = max_active.saturating_sub(1);
+    // Prompt lengths that take the iteration to each 16-row shape boundary
+    // above the decoders, up to the token budget.
+    let mut prompt_lengths = Vec::new();
+    let mut total = (decoders / 16 + 1) * 16;
+    while total <= token_budget {
+        let length = total - decoders;
+        if length + 1 < max_sequence_tokens {
+            prompt_lengths.push(length);
+        }
+        total += 16;
+    }
+    // Decoders outlive the prompts, then end one iteration apart.
+    let decode_tokens = 2 * prompt_lengths.len() + 8;
+    let handles: Vec<_> = (0..decoders)
+        .filter_map(|index| engine.submit(request(1, decode_tokens + index)).ok())
+        .collect();
+    let mut submitted = handles.len();
+    for &length in &prompt_lengths {
+        if let Ok(handle) = engine.submit(request(length, 1)) {
+            submitted += 1;
+            finish(&handle);
+        }
+    }
+    for handle in &handles {
+        finish(handle);
+    }
+    // Alone: prefill-only and single-row decode shapes.
+    if let Ok(handle) = engine.submit(request(1, 4)) {
+        submitted += 1;
+        finish(&handle);
+    }
+    eprintln!(
+        "riley startup warm-up: {submitted} internal requests in {:.2} s",
+        started.elapsed().as_secs_f64()
+    );
+}
+
 /// Serves the HF-exact numerics profile through the ordinary HTTP service and
 /// engine worker. Only the backend differs from the scheduler route.
 #[cfg(all(feature = "hf-exact-probe", unix))]
@@ -2201,6 +2522,7 @@ fn run_serve_hf_exact(serve: HfExactServe) -> Result<(), String> {
                 max_inflight_requests: serve.maximum_live_requests,
                 admission_timeout: Duration::from_secs(30),
                 idle_poll_interval: Duration::from_millis(1),
+                publish_after_submit: false,
             },
         )
         .map_err(|error| format!("inference engine startup failed: {error}"))?,
@@ -4926,6 +5248,7 @@ mod tests {
                 batch_token_budget: 512,
                 prefill_chunk_tokens: 512,
                 prefill_plateau: None,
+                prefill_coalescing: None,
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
@@ -4943,9 +5266,14 @@ mod tests {
                 bit_equivalent_gemm_selection: false,
                 d128_global_merge: false,
                 fused_silu_multiply: false,
+                merged_gate_up: false,
+                publish_after_submit: false,
+                startup_warmup: false,
+                staged_step_uploads: false,
                 fused_qkv_rope: false,
                 fused_kv_write: false,
                 prompt_attention_mma: false,
+                dense_prompt_attention: false,
                 d128_tensor_core_producer: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
@@ -5329,6 +5657,7 @@ mod tests {
                 batch_token_budget: 64,
                 prefill_chunk_tokens: 32,
                 prefill_plateau: None,
+                prefill_coalescing: None,
                 physical_kv_blocks: Some(512),
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
@@ -5346,9 +5675,14 @@ mod tests {
                 bit_equivalent_gemm_selection: false,
                 d128_global_merge: false,
                 fused_silu_multiply: false,
+                merged_gate_up: false,
+                publish_after_submit: false,
+                startup_warmup: false,
+                staged_step_uploads: false,
                 fused_qkv_rope: false,
                 fused_kv_write: false,
                 prompt_attention_mma: false,
+                dense_prompt_attention: false,
                 d128_tensor_core_producer: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
@@ -5490,7 +5824,12 @@ mod tests {
         assert!(parse_arguments(args(&native)).is_err());
         assert!(
             parse_arguments(args(
-                &[&native[..], &merge[..], &["--prompt-attention", "tensor-core-v1"]].concat()
+                &[
+                    &native[..],
+                    &merge[..],
+                    &["--prompt-attention", "tensor-core-v1"]
+                ]
+                .concat()
             ))
             .is_err()
         );
@@ -5548,7 +5887,12 @@ mod tests {
             &["--prefill-plateau-rows", "256"],
             &["--prefill-plateau-rows", "128,x"],
             &["--prefill-plateau-defer-tokens", "8"],
-            &["--prefill-plateau-rows", "128", "--prefill-plateau-defer-tokens", "0"],
+            &[
+                "--prefill-plateau-rows",
+                "128",
+                "--prefill-plateau-defer-tokens",
+                "0",
+            ],
         ] {
             assert!(parse(rejected).is_err(), "{rejected:?}");
         }
@@ -5590,6 +5934,7 @@ mod tests {
                 batch_token_budget: 7,
                 prefill_chunk_tokens: 512,
                 prefill_plateau: None,
+                prefill_coalescing: None,
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
@@ -5607,9 +5952,14 @@ mod tests {
                 bit_equivalent_gemm_selection: false,
                 d128_global_merge: false,
                 fused_silu_multiply: false,
+                merged_gate_up: false,
+                publish_after_submit: false,
+                startup_warmup: false,
+                staged_step_uploads: false,
                 fused_qkv_rope: false,
                 fused_kv_write: false,
                 prompt_attention_mma: false,
+                dense_prompt_attention: false,
                 d128_tensor_core_producer: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
@@ -5922,10 +6272,17 @@ mod tests {
     #[test]
     fn native_d128_two_stage_receipt_pins_geometry_and_no_fallback() {
         assert!(native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(16, 2, 128, 16));
-        assert!(!native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(9, 3, 64, 16));
+        assert!(native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(9, 3, 64, 16));
+        assert!(!native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(9, 3, 96, 16));
         assert!(!native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(16, 2, 128, 32));
+        assert!(native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(12, 2, 128, 16));
+        assert!(native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(28, 4, 128, 16));
+        assert!(!native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(18, 2, 128, 16));
         let receipt = native_bf16_paged_split_gqa_d128_two_stage_startup_receipt(
             NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_RAGGED_BACKEND_ID,
+            16,
+            2,
+            128,
         )
         .expect("native ragged backend receipt");
         assert_eq!(
@@ -5934,7 +6291,10 @@ mod tests {
         );
         assert!(
             native_bf16_paged_split_gqa_d128_two_stage_startup_receipt(
-                "riley.cuda.ragged-paged-attention.legacy-d64-v1"
+                "riley.cuda.ragged-paged-attention.legacy-d64-v1",
+                16,
+                2,
+                128,
             )
             .is_err()
         );
@@ -6001,6 +6361,7 @@ mod tests {
                 batch_token_budget: 512,
                 prefill_chunk_tokens: 512,
                 prefill_plateau: None,
+                prefill_coalescing: None,
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Fused,
                 execution_completion: ExecutionCompletionMode::PerOperation,
@@ -6018,9 +6379,14 @@ mod tests {
                 bit_equivalent_gemm_selection: false,
                 d128_global_merge: false,
                 fused_silu_multiply: false,
+                merged_gate_up: false,
+                publish_after_submit: false,
+                startup_warmup: false,
+                staged_step_uploads: false,
                 fused_qkv_rope: false,
                 fused_kv_write: false,
                 prompt_attention_mma: false,
+                dense_prompt_attention: false,
                 d128_tensor_core_producer: false,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,

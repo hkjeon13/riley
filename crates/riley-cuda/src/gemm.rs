@@ -604,6 +604,7 @@ impl CudaContext {
                 config.k,
                 config.max_workspace_bytes,
                 config.reduction_policy.abi_flags(),
+                config.bit_equivalent_selection,
             )?;
             let algorithm = CudaGemmAlgorithmMetadata::from_native(config, native.info()?)?;
             Ok(CudaPreparedGemm {

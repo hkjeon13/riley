@@ -591,6 +591,7 @@ pub(super) struct RawQkvRope {
     pub(super) table_position_count: u64,
     pub(super) rotated_row_count: u64,
     pub(super) defer_for_kv_write: bool,
+    pub(super) head_norm_epsilon: Option<f32>,
 }
 
 #[repr(C)]
@@ -2194,6 +2195,15 @@ unsafe extern "C" {
         destination: *mut RawDeviceBuffer,
         destination_offset: u64,
         source: *mut RawPinnedHostBuffer,
+        source_offset: u64,
+        byte_len: u64,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_command_batch_copy_d2h_async(
+        destination: *mut RawPinnedHostBuffer,
+        destination_offset: u64,
+        source: *mut RawDeviceBuffer,
         source_offset: u64,
         byte_len: u64,
         stream: *mut RawStream,
@@ -6691,6 +6701,37 @@ impl DeviceBufferHandle {
         )
     }
 
+    pub(super) fn copy_to_pinned_in_command_batch(
+        &self,
+        source_offset: u64,
+        destination: &PinnedHostBufferHandle,
+        destination_offset: u64,
+        byte_len: u64,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: both opaque buffers are borrowed for this submission and
+        // native validation registers their active-use counters in the
+        // command batch owned by this thread before enqueuing the copy; the
+        // pinned bytes are read only after the batch has ended.
+        let status = unsafe {
+            riley_cuda_command_batch_copy_d2h_async(
+                destination.as_ptr(),
+                destination_offset,
+                self.as_ptr(),
+                source_offset,
+                byte_len,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(
+            status,
+            "enqueue command-batch device-to-pinned-host copy",
+            &error,
+        )
+    }
+
     pub(super) fn close(&mut self) -> CudaResult<()> {
         let Some(pointer) = self.pointer else {
             return Ok(());
@@ -6977,6 +7018,7 @@ pub(super) fn embedding_execute(
     token_count: u64,
     vocabulary_size: u64,
     hidden_size: u64,
+    report_mode: u64,
     stream: &mut StreamHandle,
 ) -> NativeEmbeddingCompletion {
     let mut report = RawEmbeddingErrorReport::new();
@@ -6991,7 +7033,7 @@ pub(super) fn embedding_execute(
         token_count,
         vocabulary_size,
         hidden_size,
-        reserved: [0; 3],
+        reserved: [report_mode, 0, 0],
     };
     let mut error = ErrorInfo::new();
     // SAFETY: every repr(C) descriptor and the report/error outputs remain
@@ -7318,6 +7360,7 @@ pub(super) fn qkv_split_bias_execute(
                 table_position_count: 0,
                 rotated_row_count: 0,
                 defer_for_kv_write: false,
+                head_norm_epsilon: None,
             },
         ),
     };
@@ -7338,7 +7381,10 @@ pub(super) fn qkv_split_bias_execute(
             mode,
             rope.rotated_row_count,
             u64::from(rope.defer_for_kv_write),
-            0,
+            // Bit 0 selects the head-norm form; the upper half carries the
+            // F32 bits of its epsilon.
+            rope.head_norm_epsilon
+                .map_or(0, |epsilon| 1 | (u64::from(epsilon.to_bits()) << 32)),
         ],
         rope_cos: rope.cos,
         rope_sin: rope.sin,
@@ -7411,6 +7457,7 @@ pub(super) fn gated_multiply_execute(
     output: RawBufferSpan,
     element_count: u64,
     raw_gate: bool,
+    merged_row_width: u64,
     stream: &mut StreamHandle,
 ) -> CudaResult<()> {
     let params = RawGatedMultiplyParams {
@@ -7420,7 +7467,7 @@ pub(super) fn gated_multiply_execute(
         up,
         output,
         element_count,
-        reserved: [u64::from(raw_gate), 0, 0, 0, 0],
+        reserved: [u64::from(raw_gate), merged_row_width, 0, 0, 0],
     };
     primitive_status("execute CUDA gated multiply", stream, |stream, error| {
         // SAFETY: params and the borrowed opaque resources outlive the
@@ -8778,6 +8825,7 @@ pub(super) fn native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
     producer_layout: u64,
     merge_layout: u64,
     prompt_row_kinds: u64,
+    generated_row_list: u64,
     stream: &mut StreamHandle,
 ) -> CudaResult<()> {
     let params = RawNativeBf16RaggedPagedSplitGqaParamsV3 {
@@ -8799,7 +8847,12 @@ pub(super) fn native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
         launch_partial_state_count,
         scale,
         reduction_order,
-        reserved: [producer_layout, merge_layout, prompt_row_kinds, 0],
+        reserved: [
+            producer_layout,
+            merge_layout,
+            prompt_row_kinds,
+            generated_row_list,
+        ],
     };
     primitive_status(
         "execute CUDA native BF16 ragged paged split-GQA D128 two-stage V3",
@@ -9386,6 +9439,7 @@ impl GemmPlanHandle {
         k: u64,
         max_workspace_bytes: u64,
         flags: u32,
+        bit_equivalent_selection: bool,
     ) -> CudaResult<Self> {
         if flags & !(GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K | GEMM_FLAG_ALLOW_INPLACE_SPLIT_K) != 0 {
             return Err(CudaError::invalid_argument(
@@ -9393,7 +9447,10 @@ impl GemmPlanHandle {
                 "unknown GEMM reduction-policy flags",
             ));
         }
-        let config = RawGemmConfig::new(flags, m, n, k, max_workspace_bytes);
+        let mut config = RawGemmConfig::new(flags, m, n, k, max_workspace_bytes);
+        // On a plan that is not anchored the flag lets a listed anchor
+        // override replace the first heuristic.
+        config.reserved[0] = u64::from(bit_equivalent_selection);
         let mut pointer = ptr::null_mut();
         let mut error = ErrorInfo::new();
         // SAFETY: the context is retained by the native plan on success, the
@@ -10674,7 +10731,7 @@ mod selected_gemm_native_gpu_tests {
         let _runtime = crate::CudaRuntime::initialize()?;
         let mut context = ContextHandle::create(0)?;
         let mut stream = StreamHandle::create(&context)?;
-        let mut plan = GemmPlanHandle::create(&context, 1, 576, 576, 0, 3)?;
+        let mut plan = GemmPlanHandle::create(&context, 1, 576, 576, 0, 3, false)?;
         let mut input = DeviceBufferHandle::create(&context, 1152)?;
         let mut weight = DeviceBufferHandle::create(&context, 576 * 1152)?;
         let mut output = DeviceBufferHandle::create(&context, 1152)?;
@@ -10897,7 +10954,7 @@ mod graph_resource_native_gpu_tests {
         let mut first = DeviceBufferHandle::create(&context, 128)?;
         let mut second = DeviceBufferHandle::create(&context, 128)?;
         let mut pinned = PinnedHostBufferHandle::create(&context, 128)?;
-        let mut plan = GemmPlanHandle::create(&context, 1, 64, 64, 0, 3)?;
+        let mut plan = GemmPlanHandle::create(&context, 1, 64, 64, 0, 3, false)?;
         for iteration in 0..16 {
             // Hundreds of occurrences remain four unique leases including stream.
             let mut ledger = GraphResourcesHandle::reserve(
@@ -10968,7 +11025,7 @@ mod graph_resource_native_gpu_tests {
         let mut foreign = ContextHandle::create(0)?;
         let mut stream = StreamHandle::create(&context)?;
         let mut foreign_buffer = DeviceBufferHandle::create(&foreign, 4)?;
-        let mut foreign_plan = GemmPlanHandle::create(&foreign, 1, 64, 64, 0, 0)?;
+        let mut foreign_plan = GemmPlanHandle::create(&foreign, 1, 64, 64, 0, 0, false)?;
         assert!(GraphResourcesHandle::reserve(&stream, &[&foreign_buffer], &[], &[]).is_err());
         assert!(GraphResourcesHandle::reserve(&stream, &[], &[], &[&foreign_plan]).is_err());
         let mut buffers = (0..1024)
@@ -11400,10 +11457,10 @@ mod mlp_native_gpu_tests {
         let mut missing = DeviceBufferHandle::create(&context, 128)?;
         let mut staging = PinnedHostBufferHandle::create(&context, 512)?;
         let mut short = PinnedHostBufferHandle::create(&context, 511)?;
-        let mut intermediate = GemmPlanHandle::create(&context, 1, 128, 64, 0, 3)?;
-        let mut down = GemmPlanHandle::create(&context, 1, 64, 128, 0, 3)?;
-        let mut wrong_m = GemmPlanHandle::create(&context, 2, 128, 64, 0, 0)?;
-        let mut projection = GemmPlanHandle::create(&context, 1, 64, 64, 0, 3)?;
+        let mut intermediate = GemmPlanHandle::create(&context, 1, 128, 64, 0, 3, false)?;
+        let mut down = GemmPlanHandle::create(&context, 1, 64, 128, 0, 3, false)?;
+        let mut wrong_m = GemmPlanHandle::create(&context, 2, 128, 64, 0, 0, false)?;
+        let mut projection = GemmPlanHandle::create(&context, 1, 64, 64, 0, 3, false)?;
         for cycle in 0..8 {
             let refs: Vec<_> = buffers.iter().collect();
             let mut owner = GraphResourcesHandle::reserve(
@@ -11751,9 +11808,9 @@ mod norm_qkv_native_gpu_tests {
         let mut absent = DeviceBufferHandle::create(&context, 128)?;
         let mut staging = PinnedHostBufferHandle::create(&context, 512)?;
         let mut short = PinnedHostBufferHandle::create(&context, 511)?;
-        let mut q = GemmPlanHandle::create(&context, 1, 64, 64, 0, 3)?;
-        let mut kv = GemmPlanHandle::create(&context, 1, 32, 64, 0, 3)?;
-        let mut wrong = GemmPlanHandle::create(&context, 2, 64, 64, 0, 0)?;
+        let mut q = GemmPlanHandle::create(&context, 1, 64, 64, 0, 3, false)?;
+        let mut kv = GemmPlanHandle::create(&context, 1, 32, 64, 0, 3, false)?;
+        let mut wrong = GemmPlanHandle::create(&context, 2, 64, 64, 0, 0, false)?;
         for cycle in 0..4 {
             let refs: Vec<_> = buffers.iter().collect();
             let mut graph = GraphResourcesHandle::reserve(
@@ -11870,8 +11927,8 @@ mod qkv_rope_native_gpu_tests {
         .map(|n| DeviceBufferHandle::create(&context, n))
         .collect::<CudaResult<Vec<_>>>()?;
         let mut staging = PinnedHostBufferHandle::create(&context, 1024)?;
-        let mut q = GemmPlanHandle::create(&context, 1, 128, 128, 0, 3)?;
-        let mut kv = GemmPlanHandle::create(&context, 1, 64, 128, 0, 3)?;
+        let mut q = GemmPlanHandle::create(&context, 1, 128, 128, 0, 3, false)?;
+        let mut kv = GemmPlanHandle::create(&context, 1, 64, 128, 0, 3, false)?;
         for cycle in 0..2 {
             let refs: Vec<_> = buffers.iter().collect();
             let mut owner = GraphResourcesHandle::reserve(&stream, &refs, &[&staging], &[&q, &kv])?;

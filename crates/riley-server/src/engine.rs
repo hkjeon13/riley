@@ -17,6 +17,7 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use riley_runtime::host_trace;
 use riley_scheduler::SchedulerMetricsSnapshot;
 
 use crate::domain::{
@@ -59,6 +60,12 @@ pub struct EngineConfig {
     pub admission_timeout: Duration,
     /// Worker wait between empty backend ticks.
     pub idle_poll_interval: Duration,
+    /// Publish an iteration's events after the next iteration has been
+    /// submitted to the GPU (or at once when no iteration follows) instead of
+    /// before planning it. Same events in the same per-request order; a token
+    /// reaches its stream a fraction of a millisecond later and the GPU does
+    /// not wait for the publication.
+    pub publish_after_submit: bool,
 }
 
 impl Default for EngineConfig {
@@ -69,6 +76,7 @@ impl Default for EngineConfig {
             max_inflight_requests: 256,
             admission_timeout: Duration::from_secs(5),
             idle_poll_interval: Duration::from_millis(1),
+            publish_after_submit: false,
         }
     }
 }
@@ -1586,6 +1594,148 @@ fn unix_seconds() -> u64 {
         .as_secs()
 }
 
+/// One event of a finished iteration, held back until the next iteration has
+/// been submitted (`EngineConfig::publish_after_submit`). It carries its own
+/// stream and cancellation handles, so delivering it needs no engine state.
+struct StagedEvent {
+    request_id: EngineRequestId,
+    event: GenerationEvent,
+    events: SyncSender<GenerationEvent>,
+    cancellation: Arc<AtomicU8>,
+    /// The request's control block when the event is terminal: it has already
+    /// left the engine's request map and is dropped once the event is sent.
+    terminal: Option<RequestControl>,
+}
+
+#[derive(Default)]
+struct Outbox {
+    staged: Vec<StagedEvent>,
+    /// Requests whose stream was full or gone at delivery; the engine thread
+    /// cancels them after the iteration returns.
+    slow_consumers: Vec<EngineRequestId>,
+}
+
+thread_local! {
+    static OUTBOX: std::cell::RefCell<Outbox> = std::cell::RefCell::new(Outbox::default());
+}
+
+/// Moves `events` to the outbox. A terminal event removes its request from
+/// `requests` now, so admission capacity and cancellation scans see the
+/// request as finished before the event is delivered.
+fn stage_events(
+    requests: &mut BTreeMap<EngineRequestId, RequestControl>,
+    events: Vec<BackendEvent>,
+) {
+    OUTBOX.with(|outbox| {
+        let mut outbox = outbox.borrow_mut();
+        for backend_event in events {
+            let (request_id, event) = backend_event.into_parts();
+            if matches!(&event, GenerationEvent::TokenDelta { text } if text.is_empty()) {
+                continue;
+            }
+            let terminal = matches!(
+                event,
+                GenerationEvent::Finished { .. } | GenerationEvent::Failed { .. }
+            );
+            if terminal {
+                if let Some(control) = requests.remove(&request_id) {
+                    outbox.staged.push(StagedEvent {
+                        request_id,
+                        event,
+                        events: control.events.clone(),
+                        cancellation: Arc::clone(&control.cancellation),
+                        terminal: Some(control),
+                    });
+                }
+            } else if let Some(control) = requests.get(&request_id) {
+                outbox.staged.push(StagedEvent {
+                    request_id,
+                    event,
+                    events: control.events.clone(),
+                    cancellation: Arc::clone(&control.cancellation),
+                    terminal: None,
+                });
+            }
+        }
+    });
+}
+
+/// Sends every staged event with the rules of [`publish_events`]: a request
+/// that was cancelled or reached a terminal event in the meantime gets no
+/// further token, and a stream that cannot take a token marks its request for
+/// cancellation.
+fn deliver_staged_events() {
+    OUTBOX.with(|outbox| {
+        let mut outbox = outbox.borrow_mut();
+        let staged = std::mem::take(&mut outbox.staged);
+        for item in staged {
+            let StagedEvent {
+                request_id,
+                event,
+                events,
+                cancellation,
+                terminal,
+            } = item;
+            if terminal.is_none()
+                && matches!(
+                    cancellation.load(Ordering::Acquire),
+                    REQUEST_CANCELLED | REQUEST_CANCELLING | REQUEST_TERMINAL
+                )
+            {
+                continue;
+            }
+            let sent = events.try_send(event).is_ok();
+            if terminal.is_some() {
+                cancellation.store(REQUEST_TERMINAL, Ordering::Release);
+            } else if !sent
+                && cancellation
+                    .compare_exchange(
+                        REQUEST_LIVE,
+                        REQUEST_CANCELLING,
+                        Ordering::AcqRel,
+                        Ordering::Acquire,
+                    )
+                    .is_ok()
+            {
+                outbox.slow_consumers.push(request_id);
+            }
+        }
+    });
+}
+
+/// Delivers what is staged and cancels the requests whose stream could not
+/// take a token, as [`publish_events`] does at once.
+fn flush_staged_events<B: EngineBackend>(
+    backend: &mut B,
+    requests: &mut BTreeMap<EngineRequestId, RequestControl>,
+) {
+    deliver_staged_events();
+    let slow_consumers =
+        OUTBOX.with(|outbox| std::mem::take(&mut outbox.borrow_mut().slow_consumers));
+    for request_id in slow_consumers {
+        if !requests.contains_key(&request_id) {
+            continue;
+        }
+        match backend.cancel(request_id) {
+            Ok(events) => publish_events(backend, requests, events),
+            Err(error) => {
+                eprintln!(
+                    "riley slow-consumer cancellation failure: {}",
+                    error.detail()
+                );
+                if let Some(control) = requests.remove(&request_id) {
+                    let _ = control.events.try_send(GenerationEvent::Failed {
+                        class: error.class(),
+                    });
+                    control
+                        .cancellation
+                        .store(REQUEST_TERMINAL, Ordering::Release);
+                }
+            }
+        }
+    }
+}
+
 fn worker_main<B: EngineBackend>(
     mut backend: B,
     config: EngineConfig,
@@ -1596,9 +1746,16 @@ fn worker_main<B: EngineBackend>(
     let mut requests = BTreeMap::<EngineRequestId, RequestControl>::new();
     lifecycle.store(LIFECYCLE_READY);
     let mut failed = false;
+    let publish_after_submit = config.publish_after_submit;
+    if publish_after_submit {
+        riley_runtime::submit_hook::set(Some(deliver_staged_events));
+    }
 
     loop {
         if lifecycle.load() == LIFECYCLE_DRAINING {
+            if publish_after_submit {
+                flush_staged_events(&mut backend, &mut requests);
+            }
             reject_pending_commands(commands, stats);
             match backend.shutdown() {
                 Ok(events) => {
@@ -1660,8 +1817,28 @@ fn worker_main<B: EngineBackend>(
         }
 
         if !backend.is_idle() {
-            match backend.step() {
-                Ok(events) => publish_events(&mut backend, &mut requests, events),
+            host_trace::lap_here(host_trace::CANCEL_COMMANDS);
+            let step = backend.step();
+            if publish_after_submit {
+                // Delivered already when the step submitted GPU work; this
+                // covers a step that returned without submitting and cancels
+                // the slow consumers found at delivery.
+                flush_staged_events(&mut backend, &mut requests);
+            }
+            match step {
+                Ok(events) => {
+                    if publish_after_submit {
+                        stage_events(&mut requests, events);
+                        if backend.is_idle() {
+                            // No iteration follows to carry the delivery.
+                            flush_staged_events(&mut backend, &mut requests);
+                        }
+                    } else {
+                        publish_events(&mut backend, &mut requests, events);
+                    }
+                    host_trace::lap_here(host_trace::PUBLISH);
+                    host_trace::step_done();
+                }
                 Err(error) => {
                     eprintln!("riley engine backend failure: {}", error.detail());
                     fail_remaining(&mut requests, error.class());
@@ -1689,6 +1866,9 @@ fn worker_main<B: EngineBackend>(
         }
     }
 
+    if publish_after_submit {
+        riley_runtime::submit_hook::set(None);
+    }
     stats.waiting_requests.store(0, Ordering::Release);
     lifecycle.store(if failed {
         LIFECYCLE_FAILED
@@ -2338,6 +2518,19 @@ mod cuda_backend {
             policy: Option<riley_scheduler::PrefillPlateauPolicy>,
         ) -> Result<Self, riley_scheduler::SchedulerError> {
             self.scheduler.set_prefill_plateau_policy(policy)?;
+            Ok(self)
+        }
+
+        /// Installs the scheduler's prefill coalescing policy before worker startup.
+        ///
+        /// # Errors
+        ///
+        /// Returns the scheduler's configuration error for an invalid policy.
+        pub fn with_prefill_coalescing_policy(
+            mut self,
+            policy: Option<riley_scheduler::PrefillCoalescingPolicy>,
+        ) -> Result<Self, riley_scheduler::SchedulerError> {
+            self.scheduler.set_prefill_coalescing_policy(policy)?;
             Ok(self)
         }
 
@@ -3094,6 +3287,9 @@ mod cuda_backend {
             &mut self,
             failure: &riley_scheduler::IterationExecutionFailure,
         ) -> Result<Vec<BackendEvent>, BackendError> {
+            // The affected requests only see a generic internal error; the
+            // cause stays in the server log.
+            eprintln!("riley iteration execution failure: {}", failure.error());
             let Some((iteration_id, abort)) = failure.abort_data() else {
                 return Err(internal(format!(
                     "executor failed without proven stream quiescence: {}",
@@ -3423,6 +3619,7 @@ mod cuda_backend {
             let selection = self.sampling_selection_for_plan(&plan)?;
             let gpu_greedy = selection.selected_backend == C02SamplingBackend::GpuGreedy;
             let expected_active_rows = plan.total_tokens();
+            riley_runtime::host_trace::lap_here(riley_runtime::host_trace::PLAN);
             let (mut downloaded, timing, staged_shape) =
                 if let Some(graph) = self.decode_graph.as_mut() {
                     let execution = riley_scheduler::execute_llama_iteration_graph(
@@ -3488,6 +3685,7 @@ mod cuda_backend {
                     }
                 };
             let sampling = self.sample_iteration(&plan, &downloaded, selection);
+            riley_runtime::host_trace::lap_here(riley_runtime::host_trace::SAMPLE);
             if gpu_greedy {
                 if let Err(source) =
                     downloaded.restore_greedy_token_workspace(&mut self.greedy_token_workspace)
@@ -3563,6 +3761,7 @@ mod cuda_backend {
                 updates.iteration_metric().is_some(),
             );
             self.record_committed_audit_tokens(updates.token_events())?;
+            riley_runtime::host_trace::lap_here(riley_runtime::host_trace::COMMIT);
 
             // External publication starts only after the authoritative commit
             // above returns successfully.
@@ -3611,6 +3810,7 @@ mod cuda_backend {
                     updates.settlement_failures().len()
                 );
             }
+            riley_runtime::host_trace::lap_here(riley_runtime::host_trace::EVENTS);
             Ok(events)
         }
 
@@ -3822,6 +4022,10 @@ mod tests {
         }
 
         fn step(&mut self) -> Result<Vec<BackendEvent>, BackendError> {
+            // Stands for the point where a GPU backend has submitted its work.
+            if !self.requests.is_empty() {
+                riley_runtime::submit_hook::run();
+            }
             if !self.step_delay.is_zero() {
                 thread::sleep(self.step_delay);
             }
@@ -3913,6 +4117,22 @@ mod tests {
         maximum_requests: usize,
         step_delay: Duration,
     ) -> InferenceEngine {
+        engine_with_publication(
+            counters,
+            event_capacity,
+            maximum_requests,
+            step_delay,
+            false,
+        )
+    }
+
+    fn engine_with_publication(
+        counters: Arc<MockCounters>,
+        event_capacity: usize,
+        maximum_requests: usize,
+        step_delay: Duration,
+        publish_after_submit: bool,
+    ) -> InferenceEngine {
         InferenceEngine::start(
             model(),
             EngineConfig {
@@ -3921,6 +4141,7 @@ mod tests {
                 max_inflight_requests: maximum_requests,
                 admission_timeout: Duration::from_secs(1),
                 idle_poll_interval: Duration::from_millis(1),
+                publish_after_submit,
             },
             MockBackend::new(counters, step_delay),
         )
@@ -4432,6 +4653,99 @@ mod tests {
         }
         engine.shutdown(Duration::from_secs(1)).expect("shutdown");
         assert_eq!(counters.admitted.load(Ordering::Acquire), 8);
+    }
+
+    #[test]
+    fn after_submit_publication_keeps_order_and_terminal_last() {
+        let counters = Arc::new(MockCounters::default());
+        let engine =
+            engine_with_publication(Arc::clone(&counters), 8, 4, Duration::from_millis(2), true);
+        let handle = engine.submit(request(3)).expect("admitted");
+        for _ in 0..3 {
+            assert_eq!(
+                handle.recv_timeout(Duration::from_secs(1)),
+                Ok(GenerationEvent::TokenDelta {
+                    text: "x".to_owned()
+                })
+            );
+        }
+        assert!(matches!(
+            handle.recv_timeout(Duration::from_secs(1)),
+            Ok(GenerationEvent::Finished {
+                reason: FinishReason::Length,
+                usage
+            }) if usage.completion_tokens() == 3
+        ));
+        assert!(handle.recv_timeout(Duration::from_millis(10)).is_err());
+        // A finished request frees its slot for the next one at once.
+        let again = engine.submit(request(1)).expect("slot is free again");
+        assert!(matches!(
+            again.recv_timeout(Duration::from_secs(1)),
+            Ok(GenerationEvent::TokenDelta { .. })
+        ));
+        engine.shutdown(Duration::from_secs(1)).expect("shutdown");
+    }
+
+    #[test]
+    fn after_submit_publication_cancels_a_slow_consumer_and_a_dropped_handle() {
+        let counters = Arc::new(MockCounters::default());
+        let engine = engine_with_publication(Arc::clone(&counters), 1, 2, Duration::ZERO, true);
+        let slow = engine.submit(request(100)).expect("admitted");
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while counters.cancelled.load(Ordering::Acquire) == 0 && Instant::now() < deadline {
+            thread::yield_now();
+        }
+        assert_eq!(counters.cancelled.load(Ordering::Acquire), 1);
+        assert!(matches!(
+            slow.recv_timeout(Duration::from_secs(1)),
+            Ok(GenerationEvent::TokenDelta { .. })
+        ));
+        let dropped = engine.submit(request(100)).expect("admitted");
+        drop(dropped);
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while counters.cancelled.load(Ordering::Acquire) < 2 && Instant::now() < deadline {
+            thread::yield_now();
+        }
+        assert_eq!(counters.cancelled.load(Ordering::Acquire), 2);
+        engine.shutdown(Duration::from_secs(1)).expect("shutdown");
+    }
+
+    #[test]
+    fn after_submit_publication_finishes_concurrent_requests() {
+        let counters = Arc::new(MockCounters::default());
+        let engine = engine_with_publication(Arc::clone(&counters), 8, 8, Duration::ZERO, true);
+        let mut clients = Vec::new();
+        for _ in 0..8 {
+            let engine = engine.clone();
+            clients.push(thread::spawn(move || {
+                let mut total = 0;
+                for _ in 0..20 {
+                    let handle = loop {
+                        match engine.submit(request(2)) {
+                            Ok(handle) => break handle,
+                            Err(EngineError::Overloaded) => thread::yield_now(),
+                            Err(error) => panic!("unexpected admission error: {error:?}"),
+                        }
+                    };
+                    loop {
+                        match handle
+                            .recv_timeout(Duration::from_secs(2))
+                            .expect("worker event")
+                        {
+                            GenerationEvent::TokenDelta { .. } => total += 1,
+                            GenerationEvent::Finished { .. } => break,
+                            other => panic!("unexpected event: {other:?}"),
+                        }
+                    }
+                }
+                total
+            }));
+        }
+        for client in clients {
+            assert_eq!(client.join().expect("client thread"), 40);
+        }
+        engine.shutdown(Duration::from_secs(1)).expect("shutdown");
+        assert_eq!(counters.admitted.load(Ordering::Acquire), 160);
     }
 
     #[test]

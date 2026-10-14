@@ -5,8 +5,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::error::{CudaError, CudaResult};
 use crate::runtime::{
-    ContextInner, CudaCommandStream, CudaContext, CudaStream, ensure_same_context,
-    execution_stream_mut,
+    ContextInner, CudaCommandStream, CudaContext, CudaExecutionStream, CudaStream,
+    ensure_same_context, execution_stream_mut,
 };
 
 #[cfg(feature = "cuda")]
@@ -576,6 +576,58 @@ impl CudaDeviceBuffer {
         #[cfg(not(feature = "cuda"))]
         {
             let _ = (destination_offset, source_offset, byte_len, stream);
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Enqueues a device-to-pinned-host copy in the command batch that is
+    /// active on `stream`; it completes with the batch, after which the pinned
+    /// bytes may be read.
+    ///
+    /// Unlike [`Self::copy_from_pinned_in_command_batch`] this accepts any
+    /// execution stream, so an operation that only sees the type-erased
+    /// stream of its batch can enqueue its result copy. The native batch
+    /// ledger holds both buffers until the batch ends: reading, reusing or
+    /// closing either one before then fails closed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a range, context-ownership, busy-state, missing-command-batch,
+    /// or native copy error.
+    pub fn copy_to_pinned_in_active_command_batch<S: CudaExecutionStream + ?Sized>(
+        &self,
+        source_offset: u64,
+        destination: &CudaPinnedHostBuffer,
+        destination_offset: u64,
+        byte_len: u64,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "CudaDeviceBuffer::copy_to_pinned_in_active_command_batch";
+        let stream = execution_stream_mut(stream);
+        prepare_copy(
+            &self.context,
+            self.byte_len,
+            source_offset,
+            &destination.context,
+            destination.byte_len,
+            destination_offset,
+            byte_len,
+            &stream.context,
+            OPERATION,
+        )?;
+        #[cfg(feature = "cuda")]
+        {
+            self.native.copy_to_pinned_in_command_batch(
+                source_offset,
+                &destination.native,
+                destination_offset,
+                byte_len,
+                &mut stream.native,
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (source_offset, destination_offset, byte_len, stream);
             Err(CudaError::unavailable(OPERATION))
         }
     }

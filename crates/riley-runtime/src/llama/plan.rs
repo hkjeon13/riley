@@ -74,11 +74,20 @@ pub struct LlamaDimensions {
     query_heads: usize,
     key_value_heads: usize,
     head_dimension: usize,
+    query_width: usize,
     key_value_width: usize,
     group_size: usize,
 }
 
 impl LlamaDimensions {
+    /// Width of the query projection and of the attention output
+    /// (`query_heads * head_dimension`). Qwen3-0.6B and 4B make it wider than
+    /// the residual stream; every other supported model has it equal.
+    #[must_use]
+    pub const fn query_width(self) -> usize {
+        self.query_width
+    }
+
     #[must_use]
     pub const fn hidden_size(self) -> usize {
         self.hidden_size
@@ -130,6 +139,7 @@ impl LlamaDimensions {
 pub struct LlamaWorkspaceSpec {
     token_ids_bytes: u64,
     hidden_buffer_bytes: u64,
+    query_buffer_bytes: u64,
     key_value_buffer_bytes: u64,
     intermediate_buffer_bytes: u64,
     attention_buffer_bytes: u64,
@@ -151,6 +161,16 @@ impl LlamaWorkspaceSpec {
     #[must_use]
     pub const fn hidden_buffer_bytes(self) -> u64 {
         self.hidden_buffer_bytes
+    }
+
+    /// Bytes of one `[sequence, query_width]` BF16 matrix: the rotated query
+    /// and the attention output. Equal to [`Self::hidden_buffer_bytes`] unless
+    /// the model's query projection is wider than its residual stream; the two
+    /// hidden buffers that hold them are then allocated this large (the
+    /// planned totals keep counting them at the hidden width).
+    #[must_use]
+    pub const fn query_buffer_bytes(self) -> u64 {
+        self.query_buffer_bytes
     }
 
     /// Bytes in each of the three independent key/value-width buffers.
@@ -228,10 +248,19 @@ pub struct LlamaLayerPlan {
     down: PhysicalWeightId,
     input_norm_epsilon: f32,
     post_attention_norm_epsilon: f32,
+    /// Per-head query and key RMS norm scales and their epsilon (Qwen3).
+    query_key_norm: Option<(PhysicalWeightId, PhysicalWeightId, f32)>,
 }
 
 #[allow(dead_code)]
 impl LlamaLayerPlan {
+    /// Returns the per-head `(query scale, key scale, epsilon)` RMS norm
+    /// applied to the projected query and key before the rotary embedding.
+    #[must_use]
+    pub(crate) const fn query_key_norm(&self) -> Option<(PhysicalWeightId, PhysicalWeightId, f32)> {
+        self.query_key_norm
+    }
+
     #[must_use]
     pub const fn index(&self) -> usize {
         self.index
@@ -324,8 +353,72 @@ pub struct LlamaExecutionPlan {
     lm_head: PhysicalWeightId,
     final_norm_epsilon: f32,
     rope_theta: f32,
+    rope_scaling: Option<LlamaRopeScaling>,
     logical_weight_count: usize,
     workspace: LlamaWorkspaceSpec,
+}
+
+/// The `llama3` rotary frequency rescaling in the F32 arithmetic the tables
+/// are built with.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LlamaRopeScaling {
+    factor: f32,
+    low_frequency_factor: f32,
+    high_frequency_factor: f32,
+    original_max_sequence_length: f32,
+}
+
+/// Base and optional rescaling of the rotary frequencies of one model.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LlamaRopeFrequencies {
+    theta: f32,
+    scaling: Option<LlamaRopeScaling>,
+}
+
+impl From<f32> for LlamaRopeFrequencies {
+    fn from(theta: f32) -> Self {
+        Self {
+            theta,
+            scaling: None,
+        }
+    }
+}
+
+impl LlamaRopeFrequencies {
+    /// Inverse frequency of rotary pair `pair` of a `head_dimension`-wide head.
+    ///
+    /// Without rescaling this is `1 / theta^(2 * pair / head_dimension)`. With
+    /// the `llama3` rescaling it follows Hugging Face Transformers'
+    /// `_compute_llama3_parameters` statement by statement in F32: a frequency
+    /// whose wavelength is above `original / low_factor` is divided by
+    /// `factor`, one below `original / high_factor` is kept, and one in
+    /// between is interpolated between the two.
+    #[allow(clippy::cast_precision_loss)]
+    #[must_use]
+    pub fn inverse_frequency(self, pair: usize, head_dimension: usize) -> f32 {
+        let exponent = (2 * pair) as f32 / head_dimension as f32;
+        let inverse_frequency = 1.0 / self.theta.powf(exponent);
+        let Some(scaling) = self.scaling else {
+            return inverse_frequency;
+        };
+        let low_frequency_wavelength =
+            scaling.original_max_sequence_length / scaling.low_frequency_factor;
+        let high_frequency_wavelength =
+            scaling.original_max_sequence_length / scaling.high_frequency_factor;
+        let wavelength = 2.0 * std::f32::consts::PI / inverse_frequency;
+        let scaled = if wavelength > low_frequency_wavelength {
+            inverse_frequency / scaling.factor
+        } else {
+            inverse_frequency
+        };
+        let smooth = (scaling.original_max_sequence_length / wavelength
+            - scaling.low_frequency_factor)
+            / (scaling.high_frequency_factor - scaling.low_frequency_factor);
+        let smoothed = (1.0 - smooth) * scaled / scaling.factor + smooth * scaled;
+        let medium =
+            !(wavelength < high_frequency_wavelength) && !(wavelength > low_frequency_wavelength);
+        if medium { smoothed } else { scaled }
+    }
 }
 
 #[allow(dead_code)]
@@ -412,6 +505,26 @@ impl LlamaExecutionPlan {
             ExecutionSite::layer(0, LlamaOp::QueryRope),
             LlamaScalar::RopeTheta,
         )?;
+        // The model configuration has already validated the rescaling; every
+        // block carries the same rotary specification (checked per block
+        // against the first one's base below).
+        #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+        let rope_scaling = first_rope.scaling().map(|scaling| LlamaRopeScaling {
+            factor: scaling.factor() as f32,
+            low_frequency_factor: scaling.low_frequency_factor() as f32,
+            high_frequency_factor: scaling.high_frequency_factor() as f32,
+            original_max_sequence_length: scaling.original_max_sequence_length() as f32,
+        });
+        if spec
+            .blocks()
+            .iter()
+            .any(|block| block.attention().rope().scaling() != first_rope.scaling())
+        {
+            return Err(LlamaPlanError::InvalidDimension {
+                site: ExecutionSite::layer(0, LlamaOp::QueryRope),
+                dimension: LlamaDimension::RopeDimension,
+            });
+        }
 
         let embedding = bind_weight(
             weights,
@@ -479,6 +592,7 @@ impl LlamaExecutionPlan {
             lm_head,
             final_norm_epsilon,
             rope_theta,
+            rope_scaling,
             logical_weight_count,
             workspace,
         })
@@ -507,6 +621,15 @@ impl LlamaExecutionPlan {
     #[must_use]
     pub const fn rope_theta(&self) -> f32 {
         self.rope_theta
+    }
+
+    /// Base and rescaling the rotary tables are built from.
+    #[must_use]
+    pub const fn rope_frequencies(&self) -> LlamaRopeFrequencies {
+        LlamaRopeFrequencies {
+            theta: self.rope_theta,
+            scaling: self.rope_scaling,
+        }
     }
 
     #[must_use]
@@ -572,7 +695,6 @@ fn validate_global_dimensions(
                 site,
                 dimension: LlamaDimension::QueryWidth,
             })?;
-    require_equal(site, LlamaDimension::QueryWidth, hidden_size, query_width)?;
     let key_value_width =
         key_value_heads
             .checked_mul(head_dimension)
@@ -587,6 +709,7 @@ fn validate_global_dimensions(
         query_heads,
         key_value_heads,
         head_dimension,
+        query_width,
         key_value_width,
         group_size: query_heads / key_value_heads,
     })
@@ -619,6 +742,7 @@ struct AttentionWeightBindings {
     value_bias: Option<PhysicalWeightId>,
     output: PhysicalWeightId,
     output_bias: Option<PhysicalWeightId>,
+    query_key_norm: Option<(PhysicalWeightId, PhysicalWeightId, f32)>,
 }
 
 #[cfg(any(feature = "cuda", test))]
@@ -656,6 +780,7 @@ fn build_layer_plan<C: PlanWeightCatalog>(
         weights,
         layer,
         hidden,
+        dimensions.query_width,
         dimensions.key_value_width,
     )?;
     Ok(LlamaLayerPlan {
@@ -700,6 +825,7 @@ fn build_layer_plan<C: PlanWeightCatalog>(
         )?,
         input_norm_epsilon,
         post_attention_norm_epsilon,
+        query_key_norm: attention_weights.query_key_norm,
     })
 }
 
@@ -709,6 +835,7 @@ fn bind_attention_weights<C: PlanWeightCatalog>(
     weights: &C,
     layer: usize,
     hidden: usize,
+    query_width: usize,
     key_value_width: usize,
 ) -> LlamaPlanResult<AttentionWeightBindings> {
     let decoder = |parameter| WeightSlot::Decoder { layer, parameter };
@@ -721,14 +848,14 @@ fn bind_attention_weights<C: PlanWeightCatalog>(
             weights,
             query_site,
             decoder(DecoderWeight::QueryWeight),
-            &[hidden, hidden],
+            &[query_width, hidden],
         )?,
         query_bias: bind_optional_weight(
             attention.bias().query(),
             weights,
             query_site,
             decoder(DecoderWeight::QueryBias),
-            &[hidden],
+            &[query_width],
         )?,
         key: bind_weight(
             weights,
@@ -760,7 +887,7 @@ fn bind_attention_weights<C: PlanWeightCatalog>(
             weights,
             output_site,
             decoder(DecoderWeight::OutputWeight),
-            &[hidden, hidden],
+            &[hidden, query_width],
         )?,
         output_bias: bind_optional_weight(
             attention.bias().output(),
@@ -769,6 +896,27 @@ fn bind_attention_weights<C: PlanWeightCatalog>(
             decoder(DecoderWeight::OutputBias),
             &[hidden],
         )?,
+        query_key_norm: attention
+            .query_key_norm()
+            .map(|norm| {
+                let head = attention.head_dimension();
+                Ok::<_, LlamaPlanError>((
+                    bind_weight(
+                        weights,
+                        query_site,
+                        decoder(DecoderWeight::QueryNormScale),
+                        &[head],
+                    )?,
+                    bind_weight(
+                        weights,
+                        key_site,
+                        decoder(DecoderWeight::KeyNormScale),
+                        &[head],
+                    )?,
+                    validate_norm(norm, head, query_site)?,
+                ))
+            })
+            .transpose()?,
     })
 }
 
@@ -958,6 +1106,14 @@ fn build_workspace_spec(
     let token_ids_bytes = checked_bytes(LlamaBufferRole::TokenIds, &[sequence], U32_BYTES)?;
     let hidden_buffer_bytes =
         checked_bytes(LlamaBufferRole::Hidden, &[sequence, hidden], BF16_BYTES)?;
+    let query_buffer_bytes = checked_bytes(
+        LlamaBufferRole::Hidden,
+        &[
+            sequence,
+            to_u64(dimensions.query_width, LlamaBufferRole::Hidden)?,
+        ],
+        BF16_BYTES,
+    )?;
     let key_value_buffer_bytes = checked_bytes(
         LlamaBufferRole::KeyValue,
         &[sequence, key_value],
@@ -1019,6 +1175,7 @@ fn build_workspace_spec(
     Ok(LlamaWorkspaceSpec {
         token_ids_bytes,
         hidden_buffer_bytes,
+        query_buffer_bytes,
         key_value_buffer_bytes,
         intermediate_buffer_bytes,
         attention_buffer_bytes,
@@ -1392,6 +1549,65 @@ mod tests {
     }
 
     #[test]
+    fn llama3_rope_frequencies_follow_the_transformers_formula() {
+        // Reference: transformers' `_compute_llama3_parameters` evaluated in
+        // float32 (numpy) for base 500000, low 1, high 4, original 8192.
+        let frequencies = |factor: f32| super::LlamaRopeFrequencies {
+            theta: 500_000.0,
+            scaling: Some(super::LlamaRopeScaling {
+                factor,
+                low_frequency_factor: 1.0,
+                high_frequency_factor: 4.0,
+                original_max_sequence_length: 8192.0,
+            }),
+        };
+        let cases: [(usize, f32, &[(usize, u32)]); 2] = [
+            (
+                64,
+                32.0,
+                &[
+                    (0, 0x3f80_0000),
+                    (1, 0x3f29_e1c6),
+                    (8, 0x3d1a_08c8),
+                    (15, 0x3aa9_279b),
+                    (16, 0x39e1_3626),
+                    (30, 0x3418_64a7),
+                    (31, 0x33ca_41b0),
+                ],
+            ),
+            (
+                128,
+                8.0,
+                &[
+                    (0, 0x3f80_0000),
+                    (1, 0x3f50_8ac1),
+                    (16, 0x3d1a_08c8),
+                    (29, 0x3b0d_fd06),
+                    (30, 0x3ab3_d11d),
+                    (62, 0x34ca_41b0),
+                    (63, 0x34a4_c2ff),
+                ],
+            ),
+        ];
+        for (head_dimension, factor, expected) in cases {
+            for &(pair, bits) in expected {
+                let actual = frequencies(factor).inverse_frequency(pair, head_dimension);
+                let reference = f32::from_bits(bits);
+                assert!(
+                    ((actual - reference) / reference).abs() < 2.0e-6,
+                    "head {head_dimension} pair {pair}: {actual:e} vs {reference:e}"
+                );
+            }
+        }
+        // Without rescaling the helper is the plain inverse power.
+        let plain = super::LlamaRopeFrequencies::from(10_000.0_f32);
+        assert_eq!(
+            plain.inverse_frequency(3, 64).to_bits(),
+            (1.0_f32 / 10_000.0_f32.powf(6.0 / 64.0)).to_bits()
+        );
+    }
+
+    #[test]
     fn workspace_arithmetic_is_checked() {
         let dimensions = super::LlamaDimensions {
             hidden_size: 1,
@@ -1400,6 +1616,7 @@ mod tests {
             query_heads: usize::MAX,
             key_value_heads: 1,
             head_dimension: 2,
+            query_width: 1,
             key_value_width: 2,
             group_size: 1,
         };

@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 
 namespace {
@@ -42,6 +43,16 @@ constexpr uint64_t kAttentionHeadSize = 64;
 constexpr uint64_t kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount = 16;
 constexpr uint64_t kNativeBf16RaggedPagedSplitGqaD128KeyValueHeadCount = 2;
 constexpr uint64_t kNativeBf16RaggedPagedSplitGqaD128HeadSize = 128;
+// Head counts of a D128 attention launch. The two constants above are the
+// geometry of the prompt-row MMA producer only; every other D128 kernel takes
+// its head counts from the operation's parameters.
+struct D128Heads {
+  uint64_t query;
+  uint64_t key_value;
+};
+constexpr uint64_t kNativeBf16RaggedD128MaximumGroupHeads = 8;
+// The second head size of the tensor-core producer and the global-max merge.
+constexpr uint64_t kNativeBf16RaggedD64HeadSize = 64;
 constexpr uint64_t kNativeBf16RaggedPagedSplitGqaD128StateStride =
     kNativeBf16RaggedPagedSplitGqaD128HeadSize + 2;
 constexpr uint64_t kNativeBf16RaggedPagedSplitGqaD128TransitionWidth = 2;
@@ -1249,6 +1260,125 @@ __global__ void qkv_split_bias_rope_kv_write_kernel(
         key_pool[cache_base + unit] = first_output;
         key_pool[cache_base + unit + half] = second_output;
       }
+    }
+  }
+}
+
+// Head-norm form of the merged QKV split (Qwen3: no Q/K/V bias, an RMS norm
+// with a learned scale over every query head and every key head before the
+// rotary embedding). One block per (row, head slot); slots are the query
+// heads, then the key heads, then the value heads; a head is 128 wide and the
+// block has 128 threads.
+//
+// A query or key block reproduces rms_norm_kernel<__nv_bfloat16> for one row
+// of 128 columns launched with 256 threads (one column per thread, pairwise
+// tree from offset 128 down, the upper half all zeros, so the tree from offset
+// 64 over the 128 squares is the same sum), stores nothing for the normalized
+// head, and rotates it with the arithmetic of indexed_rope_kernel. A key block
+// also stores the rotated key to its cache slot, a value block copies its
+// projection to the value output and to its cache slot, like
+// qkv_split_bias_rope_kv_write_kernel. `key_pool == nullptr` skips the cache.
+constexpr uint32_t kHeadNormSplitHeadSize = 128;
+
+__global__ __launch_bounds__(kHeadNormSplitHeadSize)
+void qkv_split_head_norm_rope_kv_write_kernel(
+    const __nv_bfloat16* merged, const __nv_bfloat16* query_scale,
+    const __nv_bfloat16* key_scale, const float* cos, const float* sin,
+    const uint32_t* positions, __nv_bfloat16* query, __nv_bfloat16* key,
+    __nv_bfloat16* value, __nv_bfloat16* key_pool, __nv_bfloat16* value_pool,
+    DeviceBatch batch, uint32_t query_head_count,
+    uint32_t key_value_head_count, uint64_t table_position_count,
+    uint64_t rotated_row_count, float epsilon,
+    const uint32_t* dynamic_counts) {
+  __shared__ float partial_sums[kHeadNormSplitHeadSize];
+  __shared__ float normalized[kHeadNormSplitHeadSize];
+  if (dynamic_counts != nullptr) {
+    rotated_row_count = dynamic_counts[0];
+  }
+  const uint32_t head_size = kHeadNormSplitHeadSize;
+  const uint32_t half = head_size / 2;
+  const uint32_t slots = query_head_count + 2 * key_value_head_count;
+  const uint64_t row = blockIdx.x / slots;
+  const uint32_t slot = blockIdx.x % slots;
+  const uint64_t query_width =
+      static_cast<uint64_t>(query_head_count) * head_size;
+  const uint64_t key_value_width =
+      static_cast<uint64_t>(key_value_head_count) * head_size;
+  const uint64_t merged_row = row * (query_width + 2 * key_value_width);
+  const uint32_t column = threadIdx.x;
+  if (slot >= query_head_count + key_value_head_count) {
+    const uint32_t head = slot - query_head_count - key_value_head_count;
+    const uint64_t local = static_cast<uint64_t>(head) * head_size + column;
+    const __nv_bfloat16 stored =
+        merged[merged_row + query_width + key_value_width + local];
+    value[row * key_value_width + local] = stored;
+    uint64_t cache_base = 0;
+    if (value_pool != nullptr &&
+        resolve_row_cache_base(batch, row, batch.row_positions[row], head,
+                               key_value_head_count, head_size, &cache_base)) {
+      value_pool[cache_base + column] = stored;
+    }
+    return;
+  }
+  if (row >= rotated_row_count) {
+    return;
+  }
+  const bool is_query = slot < query_head_count;
+  const uint32_t head = is_query ? slot : slot - query_head_count;
+  const uint64_t section = is_query ? 0 : query_width;
+  const __nv_bfloat16* scale = is_query ? query_scale : key_scale;
+  const uint64_t head_base = static_cast<uint64_t>(head) * head_size;
+  const float projected =
+      __bfloat162float(merged[merged_row + section + head_base + column]);
+  partial_sums[column] = projected * projected;
+  __syncthreads();
+  for (uint32_t offset = head_size / 2; offset != 0; offset /= 2) {
+    if (column < offset) {
+      partial_sums[column] += partial_sums[column + offset];
+    }
+    __syncthreads();
+  }
+  const float inverse_rms =
+      rsqrtf(partial_sums[0] / static_cast<float>(head_size) + epsilon);
+  const float normalized_for_weight =
+      round_to_storage<__nv_bfloat16>(projected * inverse_rms);
+  normalized[column] = round_to_storage<__nv_bfloat16>(
+      normalized_for_weight * __bfloat162float(scale[column]));
+  __syncthreads();
+  if (column >= half) {
+    return;
+  }
+  __nv_bfloat16* output = is_query ? query : key;
+  const uint64_t output_base =
+      row * (is_query ? query_width : key_value_width) + head_base;
+  const uint64_t position = positions[row];
+  __nv_bfloat16 first_output = __float2bfloat16_rn(CUDART_NAN_F);
+  __nv_bfloat16 second_output = __float2bfloat16_rn(CUDART_NAN_F);
+  if (position < table_position_count) {
+    const float first_value = normalized[column];
+    const float second_value = normalized[column + half];
+    const uint64_t table_index = position * half + column;
+    const float cosine = round_to_storage<__nv_bfloat16>(cos[table_index]);
+    const float sine = round_to_storage<__nv_bfloat16>(sin[table_index]);
+    const float first_cosine =
+        multiply_in_storage<__nv_bfloat16>(first_value, cosine);
+    const float second_sine =
+        multiply_in_storage<__nv_bfloat16>(second_value, sine);
+    const float second_cosine =
+        multiply_in_storage<__nv_bfloat16>(second_value, cosine);
+    const float first_sine =
+        multiply_in_storage<__nv_bfloat16>(first_value, sine);
+    first_output = __float2bfloat16_rn(first_cosine - second_sine);
+    second_output = __float2bfloat16_rn(second_cosine + first_sine);
+  }
+  output[output_base + column] = first_output;
+  output[output_base + column + half] = second_output;
+  if (!is_query && key_pool != nullptr) {
+    uint64_t cache_base = 0;
+    if (resolve_row_cache_base(batch, row, batch.row_positions[row], head,
+                               key_value_head_count, head_size, &cache_base)) {
+      key_pool[cache_base + column] = first_output;
+      key_pool[cache_base + column + half] = second_output;
     }
   }
 }
@@ -2483,6 +2613,30 @@ riley_cuda_ragged_paged_kv_cache_write_execute(
             split.row_count * (split.query_width / 2 +
                                split.key_value_width / 2 +
                                split.key_value_width);
+        if (split.head_norm) {
+          const uint64_t slots = (split.query_width + 2 * split.key_value_width) /
+                                 kHeadNormSplitHeadSize;
+          qkv_split_head_norm_rope_kv_write_kernel
+              <<<static_cast<uint32_t>(split.row_count * slots),
+                 kHeadNormSplitHeadSize, 0, stream->stream>>>(
+                  static_cast<const __nv_bfloat16*>(split.merged),
+                  static_cast<const __nv_bfloat16*>(split.query_bias),
+                  static_cast<const __nv_bfloat16*>(split.key_bias),
+                  static_cast<const float*>(split.cos),
+                  static_cast<const float*>(split.sin),
+                  static_cast<const uint32_t*>(split.positions),
+                  static_cast<__nv_bfloat16*>(split.query),
+                  static_cast<__nv_bfloat16*>(split.key),
+                  static_cast<__nv_bfloat16*>(split.value),
+                  reinterpret_cast<__nv_bfloat16*>(key_pool.data),
+                  reinterpret_cast<__nv_bfloat16*>(value_pool.data),
+                  device_batch(params->batch, batch),
+                  static_cast<uint32_t>(split.query_width /
+                                        kHeadNormSplitHeadSize),
+                  static_cast<uint32_t>(params->key_value_head_count),
+                  split.table_position_count, split.rotated_row_count,
+                  split.norm_epsilon, dynamic.counts);
+        } else {
         qkv_split_bias_rope_kv_write_kernel
             <<<block_count(work_items), kThreads, 0, stream->stream>>>(
                 static_cast<const __nv_bfloat16*>(split.merged),
@@ -2502,6 +2656,7 @@ riley_cuda_ragged_paged_kv_cache_write_execute(
                 split.key_value_width, split.head_size,
                 split.table_position_count, split.rotated_row_count,
                 work_items, dynamic.counts);
+        }
         status = launch_status(error, kOperation);
       }
     } else {
@@ -2972,7 +3127,8 @@ struct NativeBf16RaggedPartialTransitionV2 {
 __device__ __forceinline__ bool resolve_ragged_partial_block(
     const DeviceBatch& batch, uint64_t row, uint64_t logical_block,
     uint64_t key_value_head, uint64_t* block_head_base,
-    uint64_t* token_count) {
+    uint64_t* token_count, D128Heads heads,
+    uint64_t head_size = kNativeBf16RaggedPagedSplitGqaD128HeadSize) {
   if (block_head_base == nullptr || token_count == nullptr ||
       row >= active_rows(batch)) {
     return false;
@@ -3007,10 +3163,9 @@ __device__ __forceinline__ bool resolve_ragged_partial_block(
   }
   *block_head_base =
       (physical_block *
-           kNativeBf16RaggedPagedSplitGqaD128KeyValueHeadCount +
+           heads.key_value +
        key_value_head) *
-      RILEY_CUDA_PAGED_KV_BLOCK_SIZE *
-      kNativeBf16RaggedPagedSplitGqaD128HeadSize;
+      RILEY_CUDA_PAGED_KV_BLOCK_SIZE * head_size;
   *token_count = required;
   return true;
 }
@@ -3019,13 +3174,14 @@ __global__ __launch_bounds__(kWarpSize) void
 native_bf16_ragged_paged_split_gqa_d128_partial_state_kernel(
     const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
     const __nv_bfloat16* value_pool, float* partial_states,
-    DeviceBatch batch, uint64_t partial_state_capacity, float scale) {
+    DeviceBatch batch, uint64_t partial_state_capacity, float scale,
+    D128Heads heads) {
   const uint32_t lane = threadIdx.x;
   const uint64_t logical_block = blockIdx.x;
   const uint64_t query_head = blockIdx.y;
   const uint64_t row = blockIdx.z;
   if (row >= active_rows(batch) ||
-      query_head >= kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount) {
+      query_head >= heads.query) {
     return;
   }
   const uint64_t logical_token_count =
@@ -3040,17 +3196,17 @@ native_bf16_ragged_paged_split_gqa_d128_partial_state_kernel(
   }
 
   const uint64_t group_size =
-      kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount /
-      kNativeBf16RaggedPagedSplitGqaD128KeyValueHeadCount;
+      heads.query /
+      heads.key_value;
   const uint64_t key_value_head = query_head / group_size;
   const uint64_t query_base =
-      (row * kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount + query_head) *
+      (row * heads.query + query_head) *
       kNativeBf16RaggedPagedSplitGqaD128HeadSize;
   uint64_t block_head_base = 0;
   uint64_t token_count = 0;
   const bool valid_block = resolve_ragged_partial_block(
       batch, row, logical_block, key_value_head, &block_head_base,
-      &token_count);
+      &token_count, heads);
 
   const float query0 = __bfloat162float(query[query_base + lane]);
   const float query1 =
@@ -3111,7 +3267,7 @@ native_bf16_ragged_paged_split_gqa_d128_partial_state_kernel(
   }
   const uint64_t state_base =
       (((row * partial_state_capacity + logical_block) *
-            kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount +
+            heads.query +
         query_head) *
        kNativeBf16RaggedPagedSplitGqaD128StateStride);
   if (lane == 0) {
@@ -3266,7 +3422,8 @@ void native_bf16_prefill_d128_mma_partial_state_kernel(
       uint64_t token_count = 0;
       const bool valid = resolve_ragged_partial_block(
           batch, run_last_row, page, key_value_head, &block_head_base,
-          &token_count);
+          &token_count, D128Heads{kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount,
+                    kNativeBf16RaggedPagedSplitGqaD128KeyValueHeadCount});
 #pragma unroll
       for (uint32_t part = 0; part < 4; ++part) {
         const uint32_t word = threadIdx.x + part * blockDim.x;
@@ -3462,6 +3619,279 @@ void native_bf16_prefill_d128_mma_partial_state_kernel(
   }
 }
 
+// Prompt-row tensor-core producer for any head geometry of the two-stage
+// attention: the kernel above with the query heads of a KV head (at most
+// eight, one warp each) and the head size (128 or 64) as parameters, and the
+// page staged in one step with 16-byte loads. One CTA owns a `(16-row tile,
+// key_value_head, 4-page segment)`; a row's state is the same online-softmax
+// fold of the segment's pages and depends only on the row's own query and
+// context. A 64-wide head fills `[m, l, n[64]]` of its D128-stride state slot.
+template <uint32_t kHead>
+__global__ __launch_bounds__(256)
+void native_bf16_prefill_mma_generic_partial_state_kernel(
+    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
+    const __nv_bfloat16* value_pool, float* partial_states,
+    DeviceBatch batch, uint64_t partial_state_capacity, float scale,
+    const uint32_t* row_kinds, D128Heads heads, uint32_t group_heads) {
+  constexpr uint32_t kPage = 16;
+  constexpr uint32_t kSteps = kHead / 16;
+  constexpr uint32_t kDims = kHead / 8;
+  __shared__ __align__(16) __nv_bfloat16 key_tile[kPage][kHead];
+  __shared__ __align__(16) __nv_bfloat16 value_tile[kHead][kPage];
+  const uint32_t lane = threadIdx.x % kWarpSize;
+  const uint32_t warp = threadIdx.x / kWarpSize;
+  const uint32_t group = lane / 4;
+  const uint32_t pair = lane % 4;
+  const uint64_t key_value_head = blockIdx.y;
+  const uint64_t query_head = key_value_head * group_heads + warp;
+  const uint64_t segment = blockIdx.z;
+  const uint64_t first_page = segment * kNativeBf16PrefillD128MmaSegmentPages;
+  const uint64_t tile_begin =
+      static_cast<uint64_t>(blockIdx.x) * kNativeBf16PrefillD128MmaTileRows;
+  const uint64_t row_count = active_rows(batch);
+  const uint64_t tile_end =
+      row_count < tile_begin + kNativeBf16PrefillD128MmaTileRows
+          ? row_count
+          : tile_begin + kNativeBf16PrefillD128MmaTileRows;
+  // Everything that steers the loops and barriers below is CTA-uniform.
+  if (row_kinds == nullptr || segment >= partial_state_capacity ||
+      key_value_head >= heads.key_value) {
+    return;
+  }
+  const uint64_t lane_row0 = tile_begin + group;
+  const uint64_t lane_row1 = lane_row0 + 8;
+  uint64_t run_begin = tile_begin;
+  while (run_begin < tile_end) {
+    if (row_kinds[run_begin] != kNativeBf16RaggedD128PromptRowKind) {
+      ++run_begin;
+      continue;
+    }
+    const uint32_t sequence = batch.row_sequence_slots[run_begin];
+    uint64_t run_end = run_begin + 1;
+    while (run_end < tile_end &&
+           row_kinds[run_end] == kNativeBf16RaggedD128PromptRowKind &&
+           batch.row_sequence_slots[run_end] == sequence &&
+           batch.row_positions[run_end] ==
+               batch.row_positions[run_end - 1] + 1) {
+      ++run_end;
+    }
+    const uint64_t run_last_row = run_end - 1;
+    const uint64_t run_pages =
+        static_cast<uint64_t>(batch.row_positions[run_last_row]) / kPage + 1;
+    const uint64_t this_run_begin = run_begin;
+    run_begin = run_end;
+    if (first_page >= run_pages) {
+      continue;
+    }
+    const uint64_t end_page =
+        run_pages < first_page + kNativeBf16PrefillD128MmaSegmentPages
+            ? run_pages
+            : first_page + kNativeBf16PrefillD128MmaSegmentPages;
+    const bool live0 = lane_row0 >= this_run_begin && lane_row0 < run_end;
+    const bool live1 = lane_row1 >= this_run_begin && lane_row1 < run_end;
+    const uint64_t position0 = live0 ? batch.row_positions[lane_row0] : 0;
+    const uint64_t position1 = live1 ? batch.row_positions[lane_row1] : 0;
+
+    uint32_t query_operand[kSteps][4];
+#pragma unroll
+    for (uint32_t step = 0; step < kSteps; ++step) {
+      const __nv_bfloat16* q0 =
+          query +
+          ((live0 ? lane_row0 : this_run_begin) * heads.query + query_head) *
+              kHead +
+          step * 16 + 2 * pair;
+      const __nv_bfloat16* q1 =
+          query +
+          ((live1 ? lane_row1 : this_run_begin) * heads.query + query_head) *
+              kHead +
+          step * 16 + 2 * pair;
+      query_operand[step][0] =
+          live0 ? *reinterpret_cast<const uint32_t*>(q0) : 0;
+      query_operand[step][1] =
+          live1 ? *reinterpret_cast<const uint32_t*>(q1) : 0;
+      query_operand[step][2] =
+          live0 ? *reinterpret_cast<const uint32_t*>(q0 + 8) : 0;
+      query_operand[step][3] =
+          live1 ? *reinterpret_cast<const uint32_t*>(q1 + 8) : 0;
+    }
+
+    float numerator[kDims][4];
+#pragma unroll
+    for (uint32_t dim = 0; dim < kDims; ++dim) {
+      numerator[dim][0] = 0.0F;
+      numerator[dim][1] = 0.0F;
+      numerator[dim][2] = 0.0F;
+      numerator[dim][3] = 0.0F;
+    }
+    float maximum0 = -CUDART_INF_F;
+    float maximum1 = -CUDART_INF_F;
+    float denominator0 = 0.0F;
+    float denominator1 = 0.0F;
+    for (uint64_t page = first_page; page < end_page; ++page) {
+      // Tokens at or past the page's valid count are staged as zero, so a
+      // masked key multiplies a zero probability with a finite value.
+      {
+        uint64_t block_head_base = 0;
+        uint64_t token_count = 0;
+        const bool valid = resolve_ragged_partial_block(
+            batch, run_last_row, page, key_value_head, &block_head_base,
+            &token_count, heads, kHead);
+        // Sixteen bytes (eight elements of one token) to a load.
+        for (uint32_t vector = threadIdx.x; vector < kPage * (kHead / 8);
+             vector += blockDim.x) {
+          const uint32_t token = vector / (kHead / 8);
+          const uint32_t column = 8 * (vector % (kHead / 8));
+          const bool present = valid && token < token_count;
+          const uint64_t element = block_head_base + token * kHead + column;
+          const uint4 zero = make_uint4(0U, 0U, 0U, 0U);
+          const uint4 key_words =
+              present ? *reinterpret_cast<const uint4*>(key_pool + element)
+                      : zero;
+          const uint4 value_words =
+              present ? *reinterpret_cast<const uint4*>(value_pool + element)
+                      : zero;
+          *reinterpret_cast<uint4*>(&key_tile[token][column]) = key_words;
+          const uint32_t value_pairs[4] = {value_words.x, value_words.y,
+                                           value_words.z, value_words.w};
+#pragma unroll
+          for (uint32_t part = 0; part < 4; ++part) {
+            value_tile[column + 2 * part][token] = __ushort_as_bfloat16(
+                static_cast<uint16_t>(value_pairs[part]));
+            value_tile[column + 2 * part + 1][token] = __ushort_as_bfloat16(
+                static_cast<uint16_t>(value_pairs[part] >> 16));
+          }
+        }
+      }
+      __syncthreads();
+      float score[2][4] = {{0.0F, 0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 0.0F, 0.0F}};
+#pragma unroll
+      for (uint32_t step = 0; step < kSteps; ++step) {
+#pragma unroll
+        for (uint32_t half = 0; half < 2; ++half) {
+          const __nv_bfloat16* key_operand =
+              &key_tile[half * 8 + group][step * 16 + 2 * pair];
+          mma_m16n8k16_bf16(
+              score[half], query_operand[step][0], query_operand[step][1],
+              query_operand[step][2], query_operand[step][3],
+              *reinterpret_cast<const uint32_t*>(key_operand),
+              *reinterpret_cast<const uint32_t*>(key_operand + 8));
+        }
+      }
+      float page_maximum0 = -CUDART_INF_F;
+      float page_maximum1 = -CUDART_INF_F;
+#pragma unroll
+      for (uint32_t half = 0; half < 2; ++half) {
+#pragma unroll
+        for (uint32_t element = 0; element < 2; ++element) {
+          const uint64_t key_position =
+              page * kPage + half * 8 + 2 * pair + element;
+          score[half][element] = (live0 && key_position <= position0)
+                                     ? score[half][element] * scale
+                                     : -CUDART_INF_F;
+          score[half][2 + element] = (live1 && key_position <= position1)
+                                         ? score[half][2 + element] * scale
+                                         : -CUDART_INF_F;
+          page_maximum0 = fmaxf(page_maximum0, score[half][element]);
+          page_maximum1 = fmaxf(page_maximum1, score[half][2 + element]);
+        }
+      }
+      // A row's sixteen scores of this page sit in the four lanes of its group.
+      page_maximum0 = fmaxf(page_maximum0,
+                            __shfl_xor_sync(kFullWarpMask, page_maximum0, 1));
+      page_maximum0 = fmaxf(page_maximum0,
+                            __shfl_xor_sync(kFullWarpMask, page_maximum0, 2));
+      page_maximum1 = fmaxf(page_maximum1,
+                            __shfl_xor_sync(kFullWarpMask, page_maximum1, 1));
+      page_maximum1 = fmaxf(page_maximum1,
+                            __shfl_xor_sync(kFullWarpMask, page_maximum1, 2));
+      const float next_maximum0 = fmaxf(maximum0, page_maximum0);
+      const float next_maximum1 = fmaxf(maximum1, page_maximum1);
+      const bool empty0 = next_maximum0 == -CUDART_INF_F;
+      const bool empty1 = next_maximum1 == -CUDART_INF_F;
+      const float alpha0 = empty0 ? 1.0F : expf(maximum0 - next_maximum0);
+      const float alpha1 = empty1 ? 1.0F : expf(maximum1 - next_maximum1);
+      maximum0 = next_maximum0;
+      maximum1 = next_maximum1;
+      float page_sum0 = 0.0F;
+      float page_sum1 = 0.0F;
+      uint32_t probability_operand[4];
+#pragma unroll
+      for (uint32_t half = 0; half < 2; ++half) {
+        float probability[4];
+#pragma unroll
+        for (uint32_t element = 0; element < 2; ++element) {
+          probability[element] = __bfloat162float(__float2bfloat16_rn(
+              empty0 ? 0.0F : expf(score[half][element] - next_maximum0)));
+          probability[2 + element] = __bfloat162float(__float2bfloat16_rn(
+              empty1 ? 0.0F
+                     : expf(score[half][2 + element] - next_maximum1)));
+          page_sum0 += probability[element];
+          page_sum1 += probability[2 + element];
+        }
+        probability_operand[half * 2] =
+            pack_bf16_pair(probability[0], probability[1]);
+        probability_operand[half * 2 + 1] =
+            pack_bf16_pair(probability[2], probability[3]);
+      }
+      page_sum0 += __shfl_xor_sync(kFullWarpMask, page_sum0, 1);
+      page_sum0 += __shfl_xor_sync(kFullWarpMask, page_sum0, 2);
+      page_sum1 += __shfl_xor_sync(kFullWarpMask, page_sum1, 1);
+      page_sum1 += __shfl_xor_sync(kFullWarpMask, page_sum1, 2);
+      denominator0 = fmaf(denominator0, alpha0, page_sum0);
+      denominator1 = fmaf(denominator1, alpha1, page_sum1);
+#pragma unroll
+      for (uint32_t dim = 0; dim < kDims; ++dim) {
+        numerator[dim][0] *= alpha0;
+        numerator[dim][1] *= alpha0;
+        numerator[dim][2] *= alpha1;
+        numerator[dim][3] *= alpha1;
+        const __nv_bfloat16* value_operand =
+            &value_tile[dim * 8 + group][2 * pair];
+        mma_m16n8k16_bf16(
+            numerator[dim], probability_operand[0], probability_operand[1],
+            probability_operand[2], probability_operand[3],
+            *reinterpret_cast<const uint32_t*>(value_operand),
+            *reinterpret_cast<const uint32_t*>(value_operand + 8));
+      }
+      // The tiles are overwritten by the next page (or the next run).
+      __syncthreads();
+    }
+
+    // A row writes this segment only if the segment starts inside its context.
+    const bool write0 = live0 && first_page < position0 / kPage + 1;
+    const bool write1 = live1 && first_page < position1 / kPage + 1;
+    float* const state0 =
+        partial_states +
+        ((lane_row0 * partial_state_capacity + segment) * heads.query +
+         query_head) *
+            kNativeBf16RaggedPagedSplitGqaD128StateStride;
+    float* const state1 =
+        partial_states +
+        ((lane_row1 * partial_state_capacity + segment) * heads.query +
+         query_head) *
+            kNativeBf16RaggedPagedSplitGqaD128StateStride;
+    if (write0 && pair == 0) {
+      state0[0] = maximum0;
+      state0[1] = denominator0;
+    }
+    if (write1 && pair == 0) {
+      state1[0] = maximum1;
+      state1[1] = denominator1;
+    }
+#pragma unroll
+    for (uint32_t dim = 0; dim < kDims; ++dim) {
+      if (write0) {
+        state0[2 + dim * 8 + 2 * pair] = numerator[dim][0];
+        state0[2 + dim * 8 + 2 * pair + 1] = numerator[dim][1];
+      }
+      if (write1) {
+        state1[2 + dim * 8 + 2 * pair] = numerator[dim][2];
+        state1[2 + dim * 8 + 2 * pair + 1] = numerator[dim][3];
+      }
+    }
+  }
+}
+
 // Tensor-core partial-state producer for the D128 two-stage attention. One
 // single-warp CTA owns a `(logical_block, key_value_head, row)` page, the
 // launch geometry of the shared-KV producer, and writes the page's state
@@ -3481,22 +3911,46 @@ void native_bf16_prefill_d128_mma_partial_state_kernel(
 // a different order, so it differs from it in rounding only; it is a
 // separately selected numerical mode. An unresolvable page writes a NaN
 // state; a non-finite score yields a NaN state through its weights.
+//
+// `kHead` is the head size: 128, or 64 with half the depth steps. A state
+// keeps the D128 stride for either head size, so a 64-wide head fills
+// `[m, l, n[64]]` of its slot and the workspace layout does not change.
+template <uint32_t kHead>
 __global__ __launch_bounds__(kWarpSize)
 void native_bf16_ragged_paged_split_gqa_d128_tensor_core_partial_state_kernel(
     const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
     const __nv_bfloat16* value_pool, float* partial_states,
-    DeviceBatch batch, uint64_t partial_state_capacity, float scale) {
-  constexpr uint32_t kHead = 128;
-  constexpr uint32_t kGroupHeads = 8;
+    DeviceBatch batch, uint64_t partial_state_capacity, float scale,
+    D128Heads heads, const uint32_t* row_kinds,
+    const uint32_t* generated_rows) {
+  constexpr uint32_t kSteps = kHead / 16;
+  // Query heads of one KV head, at most the eight columns of the MMA. Columns
+  // at or beyond the group are computed on a zero query and never stored.
+  const uint32_t kGroupHeads =
+      static_cast<uint32_t>(heads.query / heads.key_value);
   const uint32_t lane = threadIdx.x;
   const uint32_t group = lane / 4;
   const uint32_t pair = lane % 4;
   const uint64_t logical_block = blockIdx.x;
   const uint64_t key_value_head = blockIdx.y;
-  const uint64_t row = blockIdx.z;
+  // With a generated-row list (`[count, rows...]`) the grid's third axis
+  // indexes that list instead of the dense rows, so a step that also holds a
+  // prompt chunk launches no blocks for the chunk's rows.
+  uint64_t row = blockIdx.z;
   // Every exit before the shuffles below is uniform across the warp.
+  if (generated_rows != nullptr) {
+    if (row >= generated_rows[0]) {
+      return;
+    }
+    row = generated_rows[1 + row];
+  }
   if (row >= active_rows(batch) ||
-      key_value_head >= kNativeBf16RaggedPagedSplitGqaD128KeyValueHeadCount) {
+      key_value_head >= heads.key_value) {
+    return;
+  }
+  // With row kinds, a prompt row is produced by the prefill kernel.
+  if (row_kinds != nullptr &&
+      row_kinds[row] == kNativeBf16RaggedD128PromptRowKind) {
     return;
   }
   const uint64_t partial_state_count =
@@ -3510,7 +3964,7 @@ void native_bf16_ragged_paged_split_gqa_d128_tensor_core_partial_state_kernel(
   float* const state0 =
       partial_states +
       ((row * partial_state_capacity + logical_block) *
-           kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount +
+           heads.query +
        key_value_head * kGroupHeads + 2 * pair) *
           kNativeBf16RaggedPagedSplitGqaD128StateStride;
   float* const state1 = state0 + kNativeBf16RaggedPagedSplitGqaD128StateStride;
@@ -3518,14 +3972,14 @@ void native_bf16_ragged_paged_split_gqa_d128_tensor_core_partial_state_kernel(
   uint64_t token_count = 0;
   const bool valid_block = resolve_ragged_partial_block(
       batch, row, logical_block, key_value_head, &block_head_base,
-      &token_count);
+      &token_count, heads, kHead);
   float maximum0 = CUDART_NAN_F;
   float maximum1 = CUDART_NAN_F;
   float denominator0 = CUDART_NAN_F;
   float denominator1 = CUDART_NAN_F;
-  float numerator[8][4];
+  float numerator[kSteps][4];
 #pragma unroll
-  for (uint32_t step = 0; step < 8; ++step) {
+  for (uint32_t step = 0; step < kSteps; ++step) {
     numerator[step][0] = valid_block ? 0.0F : CUDART_NAN_F;
     numerator[step][1] = numerator[step][0];
     numerator[step][2] = numerator[step][0];
@@ -3533,28 +3987,33 @@ void native_bf16_ragged_paged_split_gqa_d128_tensor_core_partial_state_kernel(
   }
   if (valid_block) {
     // Query operand B[k = depth][n = head]: head `group` of this KV head.
+    const bool live_head = group < kGroupHeads;
     const __nv_bfloat16* const query_head =
         query +
-        (row * kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount +
-         key_value_head * kGroupHeads + group) *
+        (row * heads.query +
+         key_value_head * kGroupHeads + (live_head ? group : 0)) *
             kHead +
         2 * pair;
     // Key operand A[m = token][k = depth]: tokens `group` and `group + 8`.
     const __nv_bfloat16* const key_low =
         key_pool + block_head_base + group * kHead + 2 * pair;
     const __nv_bfloat16* const key_high = key_low + 8 * kHead;
-    // The eight depth steps accumulate into one FP32 accumulator in
+    // The depth steps (eight at D128) accumulate into one FP32 accumulator in
     // ascending order, the way a tensor-core GEMM walks its inner dimension.
     float dot[4] = {0.0F, 0.0F, 0.0F, 0.0F};
 #pragma unroll
-    for (uint32_t step = 0; step < 8; ++step) {
+    for (uint32_t step = 0; step < kSteps; ++step) {
       mma_m16n8k16_bf16(
           dot, *reinterpret_cast<const uint32_t*>(key_low + 16 * step),
           *reinterpret_cast<const uint32_t*>(key_high + 16 * step),
           *reinterpret_cast<const uint32_t*>(key_low + 16 * step + 8),
           *reinterpret_cast<const uint32_t*>(key_high + 16 * step + 8),
-          *reinterpret_cast<const uint32_t*>(query_head + 16 * step),
-          *reinterpret_cast<const uint32_t*>(query_head + 16 * step + 8));
+          live_head
+              ? *reinterpret_cast<const uint32_t*>(query_head + 16 * step)
+              : 0U,
+          live_head
+              ? *reinterpret_cast<const uint32_t*>(query_head + 16 * step + 8)
+              : 0U);
     }
     // [token group, head 2 pair], [token group, head 2 pair + 1],
     // [token group + 8, head 2 pair], [token group + 8, head 2 pair + 1].
@@ -3631,7 +4090,7 @@ void native_bf16_ragged_paged_split_gqa_d128_tensor_core_partial_state_kernel(
     const bool present2 = 2 * pair + 8 < token_count;
     const bool present3 = 2 * pair + 9 < token_count;
 #pragma unroll
-    for (uint32_t step = 0; step < 8; ++step) {
+    for (uint32_t step = 0; step < kSteps; ++step) {
       const uint16_t* const token0 = value_token + 16 * step;
       const uint16_t* const token1 = token0 + kHead;
       const uint16_t* const token2 = token0 + 8 * kHead;
@@ -3655,18 +4114,28 @@ void native_bf16_ragged_paged_split_gqa_d128_tensor_core_partial_state_kernel(
       }
     }
   }
+  const bool store0 = 2 * pair < kGroupHeads;
+  const bool store1 = 2 * pair + 1 < kGroupHeads;
   if (group == 0) {
-    state0[0] = maximum0;
-    state0[1] = denominator0;
-    state1[0] = maximum1;
-    state1[1] = denominator1;
+    if (store0) {
+      state0[0] = maximum0;
+      state0[1] = denominator0;
+    }
+    if (store1) {
+      state1[0] = maximum1;
+      state1[1] = denominator1;
+    }
   }
 #pragma unroll
-  for (uint32_t step = 0; step < 8; ++step) {
-    state0[2 + 16 * step + group] = numerator[step][0];
-    state1[2 + 16 * step + group] = numerator[step][1];
-    state0[2 + 16 * step + group + 8] = numerator[step][2];
-    state1[2 + 16 * step + group + 8] = numerator[step][3];
+  for (uint32_t step = 0; step < kSteps; ++step) {
+    if (store0) {
+      state0[2 + 16 * step + group] = numerator[step][0];
+      state0[2 + 16 * step + group + 8] = numerator[step][2];
+    }
+    if (store1) {
+      state1[2 + 16 * step + group] = numerator[step][1];
+      state1[2 + 16 * step + group + 8] = numerator[step][3];
+    }
   }
 }
 
@@ -3678,8 +4147,7 @@ void native_bf16_ragged_paged_split_gqa_d128_tensor_core_partial_state_kernel(
 // online token order, and numerator updates as the one-warp producer above,
 // and writes the identical `[m, l, n[128]]` state.
 constexpr uint32_t kNativeBf16RaggedPagedSplitGqaD128SharedKvWarps =
-    static_cast<uint32_t>(kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount /
-                          kNativeBf16RaggedPagedSplitGqaD128KeyValueHeadCount);
+    static_cast<uint32_t>(kNativeBf16RaggedD128MaximumGroupHeads);
 constexpr uint32_t kNativeBf16RaggedPagedSplitGqaD128SharedKvThreads =
     kNativeBf16RaggedPagedSplitGqaD128SharedKvWarps * kWarpSize;
 constexpr uint32_t kNativeBf16RaggedPagedSplitGqaD128TileElements =
@@ -3691,7 +4159,7 @@ void native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_kernel(
     const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
     const __nv_bfloat16* value_pool, float* partial_states,
     DeviceBatch batch, uint64_t partial_state_capacity, float scale,
-    const uint32_t* row_kinds) {
+    const uint32_t* row_kinds, D128Heads heads) {
   const uint32_t lane = threadIdx.x % kWarpSize;
   const uint32_t warp = threadIdx.x / kWarpSize;
   const uint64_t logical_block = blockIdx.x;
@@ -3699,7 +4167,7 @@ void native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_kernel(
   const uint64_t row = blockIdx.z;
   // Every exit before the barrier below depends only on CTA-uniform values.
   if (row >= active_rows(batch) ||
-      key_value_head >= kNativeBf16RaggedPagedSplitGqaD128KeyValueHeadCount) {
+      key_value_head >= heads.key_value) {
     return;
   }
   // Prompt rows are produced by the tensor-core prefill kernel instead.
@@ -3717,15 +4185,15 @@ void native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_kernel(
   }
 
   const uint64_t query_head =
-      key_value_head * kNativeBf16RaggedPagedSplitGqaD128SharedKvWarps + warp;
+      key_value_head * (heads.query / heads.key_value) + warp;
   const uint64_t query_base =
-      (row * kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount + query_head) *
+      (row * heads.query + query_head) *
       kNativeBf16RaggedPagedSplitGqaD128HeadSize;
   uint64_t block_head_base = 0;
   uint64_t token_count = 0;
   const bool valid_block = resolve_ragged_partial_block(
       batch, row, logical_block, key_value_head, &block_head_base,
-      &token_count);
+      &token_count, heads);
 
   // The tiles are staged already widened to FP32 (an exact conversion), so
   // the per-token loop reads them without converting again in every warp.
@@ -3736,7 +4204,7 @@ void native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_kernel(
     const uint32_t tile_elements = static_cast<uint32_t>(
         token_count * kNativeBf16RaggedPagedSplitGqaD128HeadSize);
     for (uint32_t element = threadIdx.x; element < tile_elements;
-         element += kNativeBf16RaggedPagedSplitGqaD128SharedKvThreads) {
+         element += blockDim.x) {
       shared_keys[element] =
           __bfloat162float(key_pool[block_head_base + element]);
       shared_values[element] =
@@ -3805,7 +4273,7 @@ void native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_kernel(
   }
   const uint64_t state_base =
       (((row * partial_state_capacity + logical_block) *
-            kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount +
+            heads.query +
         query_head) *
        kNativeBf16RaggedPagedSplitGqaD128StateStride);
   if (lane == 0) {
@@ -3885,7 +4353,7 @@ native_bf16_ragged_paged_split_gqa_d128_transition_kernel(
     const float* partial_states, float* reduction_steps,
     float* reduction_normalizers, const uint32_t* row_positions,
     uint64_t partial_state_capacity, uint64_t launch_partial_state_count,
-    uint32_t reduction_order) {
+    uint32_t reduction_order, D128Heads heads) {
   if (threadIdx.x != 0) {
     return;
   }
@@ -3896,7 +4364,7 @@ native_bf16_ragged_paged_split_gqa_d128_transition_kernel(
   const uint64_t partial_state_count =
       ((logical_token_count - 1) / RILEY_CUDA_PAGED_KV_BLOCK_SIZE) + 1;
   const uint64_t normalizer_index =
-      row * kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount + query_head;
+      row * heads.query + query_head;
   if (partial_state_count > partial_state_capacity ||
       partial_state_count > launch_partial_state_count) {
     // Raw C callers cannot make the reducer read beyond its declared
@@ -3910,7 +4378,7 @@ native_bf16_ragged_paged_split_gqa_d128_transition_kernel(
   float denominator = 0.0F;
   const uint64_t pair_base =
       row * partial_state_capacity *
-      kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount + query_head;
+      heads.query + query_head;
   uint64_t ordinal = 0;
   // The scalar merge chain is strictly ordered, but its inputs are not. Issue
   // the next four `(m, l)` loads together so their memory latency overlaps;
@@ -3929,7 +4397,7 @@ native_bf16_ragged_paged_split_gqa_d128_transition_kernel(
               : partial_state_count - 1 - (ordinal + ahead);
       pair_index[ahead] =
           pair_base +
-          partition * kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount;
+          partition * heads.query;
       const uint64_t state_base =
           pair_index[ahead] * kNativeBf16RaggedPagedSplitGqaD128StateStride;
       other_maximum[ahead] = partial_states[state_base];
@@ -3956,7 +4424,7 @@ native_bf16_ragged_paged_split_gqa_d128_transition_kernel(
             : partial_state_count - 1 - ordinal;
     const uint64_t state_base =
         (((row * partial_state_capacity + partition) *
-              kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount +
+              heads.query +
           query_head) *
          kNativeBf16RaggedPagedSplitGqaD128StateStride);
     const NativeBf16RaggedPartialTransitionV2 transition =
@@ -3965,7 +4433,7 @@ native_bf16_ragged_paged_split_gqa_d128_transition_kernel(
             &maximum, &denominator);
     const uint64_t transition_base =
         (((row * partial_state_capacity + partition) *
-              kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount +
+              heads.query +
           query_head) *
          kNativeBf16RaggedPagedSplitGqaD128TransitionWidth);
     reduction_steps[transition_base] = transition.left_scale;
@@ -3981,7 +4449,7 @@ native_bf16_ragged_paged_split_gqa_d128_transition_reduce_kernel(
     const float* reduction_normalizers, const uint32_t* row_positions,
     __nv_bfloat16* output, uint64_t active_row_count,
     uint64_t partial_state_capacity, uint64_t launch_partial_state_count,
-    uint32_t reduction_order) {
+    uint32_t reduction_order, D128Heads heads) {
   const uint64_t query_head = blockIdx.x;
   const uint64_t row = blockIdx.y;
   const uint64_t depth = threadIdx.x;
@@ -3989,7 +4457,7 @@ native_bf16_ragged_paged_split_gqa_d128_transition_reduce_kernel(
     return;
   }
   const uint64_t output_base =
-      (row * kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount + query_head) *
+      (row * heads.query + query_head) *
       kNativeBf16RaggedPagedSplitGqaD128HeadSize;
   if (row >= active_row_count) {
     output[output_base + depth] = __float2bfloat16_rn(0.0F);
@@ -4007,7 +4475,7 @@ native_bf16_ragged_paged_split_gqa_d128_transition_reduce_kernel(
   float numerator = 0.0F;
   const uint64_t pair_base =
       row * partial_state_capacity *
-      kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount + query_head;
+      heads.query + query_head;
   uint64_t ordinal = 0;
   bool poisoned = false;
   // Same replay order as the scalar loop below; only the loads of the next
@@ -4029,7 +4497,7 @@ native_bf16_ragged_paged_split_gqa_d128_transition_reduce_kernel(
               : partial_state_count - 1 - (ordinal + ahead);
       const uint64_t pair_index =
           pair_base +
-          partition * kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount;
+          partition * heads.query;
       const uint64_t state_base =
           pair_index * kNativeBf16RaggedPagedSplitGqaD128StateStride;
       const uint64_t transition_base =
@@ -4067,12 +4535,12 @@ native_bf16_ragged_paged_split_gqa_d128_transition_reduce_kernel(
             : partial_state_count - 1 - ordinal;
     const uint64_t state_base =
         (((row * partial_state_capacity + partition) *
-              kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount +
+              heads.query +
           query_head) *
          kNativeBf16RaggedPagedSplitGqaD128StateStride);
     const uint64_t transition_base =
         (((row * partial_state_capacity + partition) *
-              kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount +
+              heads.query +
           query_head) *
          kNativeBf16RaggedPagedSplitGqaD128TransitionWidth);
     const NativeBf16RaggedPartialTransitionV2 transition{
@@ -4089,7 +4557,7 @@ native_bf16_ragged_paged_split_gqa_d128_transition_reduce_kernel(
         both_positive_infinity);
   }
   const float denominator = reduction_normalizers[
-      row * kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount + query_head];
+      row * heads.query + query_head];
   const float inverse_denominator =
       isnan(denominator)
           ? CUDART_NAN_F
@@ -4115,12 +4583,16 @@ __device__ __forceinline__ float native_d128_nan_propagating_max(float left,
   return (isnan(left) || isnan(right)) ? CUDART_NAN_F : fmaxf(left, right);
 }
 
-__global__ __launch_bounds__(kNativeBf16RaggedD128GlobalMergeThreads) void
+// `kHead` is the head size and the thread count of the CTA: 128, or 64 (the
+// stride-128 fold is then a stride-64 fold over the same slots).
+template <uint32_t kHead>
+__global__ __launch_bounds__(kHead) void
 native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
     const float* partial_states, const uint32_t* row_positions,
     __nv_bfloat16* output, uint64_t active_row_count,
     uint64_t partial_state_capacity, uint64_t launch_partial_state_count,
-    const uint32_t* dynamic_counts, const uint32_t* row_kinds) {
+    const uint32_t* dynamic_counts, const uint32_t* row_kinds,
+    D128Heads heads) {
   __shared__ float page_weights[kNativeBf16RaggedD128GlobalMergeMaximumPages];
   if (dynamic_counts != nullptr) {
     active_row_count = dynamic_counts[0];
@@ -4130,8 +4602,7 @@ native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
   const uint64_t row = blockIdx.y;
   const uint32_t depth = threadIdx.x;
   const uint64_t output_base =
-      (row * kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount + query_head) *
-      kNativeBf16RaggedPagedSplitGqaD128HeadSize;
+      (row * heads.query + query_head) * kHead;
   // Every early exit below depends only on CTA-uniform values.
   if (row >= active_row_count) {
     output[output_base + depth] = __float2bfloat16_rn(0.0F);
@@ -4153,12 +4624,12 @@ native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
     return;
   }
   const uint64_t page_stride =
-      kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount *
+      heads.query *
       kNativeBf16RaggedPagedSplitGqaD128StateStride;
   const float* const states =
       partial_states +
       (row * partial_state_capacity *
-           kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount +
+           heads.query +
        query_head) *
           kNativeBf16RaggedPagedSplitGqaD128StateStride;
 
@@ -4166,13 +4637,13 @@ native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
   // with at most 128 pages each thread owns at most one page.
   float local_maximum = -CUDART_INF_F;
   for (uint64_t page = depth; page < page_count;
-       page += kNativeBf16RaggedD128GlobalMergeThreads) {
+       page += kHead) {
     local_maximum = native_d128_nan_propagating_max(
         local_maximum, states[page * page_stride]);
   }
   reduction[depth] = local_maximum;
   __syncthreads();
-  for (uint32_t offset = kNativeBf16RaggedD128GlobalMergeThreads / 2;
+  for (uint32_t offset = kHead / 2;
        offset != 0; offset /= 2) {
     if (depth < offset) {
       reduction[depth] = native_d128_nan_propagating_max(
@@ -4184,7 +4655,7 @@ native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
   __syncthreads();
   float local_denominator = 0.0F;
   for (uint64_t page = depth; page < page_count;
-       page += kNativeBf16RaggedD128GlobalMergeThreads) {
+       page += kHead) {
     const float weight = expf(states[page * page_stride] - maximum);
     if (page < kNativeBf16RaggedD128GlobalMergeMaximumPages) {
       page_weights[page] = weight;
@@ -4194,7 +4665,7 @@ native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
   }
   reduction[depth] = local_denominator;
   __syncthreads();
-  for (uint32_t offset = kNativeBf16RaggedD128GlobalMergeThreads / 2;
+  for (uint32_t offset = kHead / 2;
        offset != 0; offset /= 2) {
     if (depth < offset) {
       reduction[depth] += reduction[depth + offset];
@@ -4380,8 +4851,9 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
       params->reserved[0] > 2 || params->reserved[1] > 1 ||
       (params->reserved[0] == 2 && params->reserved[1] != 1) ||
       (params->reserved[2] != 0 &&
-       (params->reserved[0] != 1 || params->reserved[1] != 1)) ||
-      params->reserved[3] != 0) {
+       (params->reserved[0] == 0 || params->reserved[1] != 1)) ||
+      (params->reserved[3] != 0 &&
+       (params->reserved[0] != 2 || params->reserved[2] == 0))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "native ragged D128 V3 version or reserved fields are invalid");
@@ -4391,14 +4863,39 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
   if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
-  if (params->query_head_count !=
-          kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount ||
-      params->key_value_head_count !=
-          kNativeBf16RaggedPagedSplitGqaD128KeyValueHeadCount ||
-      params->head_size != kNativeBf16RaggedPagedSplitGqaD128HeadSize) {
+  if (params->query_head_count == 0 || params->key_value_head_count == 0 ||
+      params->query_head_count > kMaximumGridYOrZ ||
+      params->query_head_count % params->key_value_head_count != 0 ||
+      (params->head_size != kNativeBf16RaggedPagedSplitGqaD128HeadSize &&
+       params->head_size != kNativeBf16RaggedD64HeadSize)) {
     return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
-                            "native ragged D128 V3 requires QH=16, KVH=2, and D=128");
+                            "native ragged D128 V3 requires D=128 or D=64 and query heads that are a multiple of the key/value heads");
+  }
+  // A 64-wide head exists for the tensor-core producer with the global-max
+  // merge only (with or without the generic prompt-row producer).
+  if (params->head_size == kNativeBf16RaggedD64HeadSize &&
+      (params->reserved[0] != 2 || params->reserved[1] != 1)) {
+    return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "native ragged D=64 requires the tensor-core producer and the global-max merge");
+  }
+  const bool head64 = params->head_size == kNativeBf16RaggedD64HeadSize;
+  // The shared-KV producer has one warp, and the tensor-core producer one MMA
+  // column, per query head of a KV head; the prompt-row producer next to the
+  // shared-KV producer is laid out for eight query heads on each of two KV
+  // heads (the one next to the tensor-core producer takes any such geometry).
+  if ((params->reserved[0] != 0 &&
+       params->query_head_count / params->key_value_head_count >
+           kNativeBf16RaggedD128MaximumGroupHeads) ||
+      (params->reserved[2] != 0 && params->reserved[0] == 1 &&
+       (params->query_head_count !=
+            kNativeBf16RaggedPagedSplitGqaD128QueryHeadCount ||
+        params->key_value_head_count !=
+            kNativeBf16RaggedPagedSplitGqaD128KeyValueHeadCount))) {
+    return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "the selected native ragged D128 producer does not support this query/key-value head geometry");
   }
   if (params->partial_state_capacity == 0 ||
       params->launch_partial_state_count == 0 ||
@@ -4584,6 +5081,29 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
     row_kinds =
         reinterpret_cast<const uint32_t*>(batch.row_positions.data) + first_word;
   }
+  // reserved[3] != 0 (tensor-core producer with row kinds only): a list of
+  // the rows that are not prompt rows, as U32 words `[count, rows...]` in the
+  // row-position buffer. The low half is the list's first word plus one, the
+  // high half its row capacity; the producer then launches over the list.
+  const uint32_t* generated_rows = nullptr;
+  uint64_t generated_row_capacity = 0;
+  if (params->reserved[3] != 0) {
+    const uint64_t first_word = (params->reserved[3] & 0xffffffffULL) - 1;
+    generated_row_capacity = params->reserved[3] >> 32;
+    const RileyCudaDeviceBuffer* positions = batch.row_positions.buffer;
+    if ((params->reserved[3] & 0xffffffffULL) == 0 ||
+        generated_row_capacity == 0 || positions == nullptr ||
+        batch.row_positions.byte_offset != 0 ||
+        first_word >= positions->byte_len / sizeof(uint32_t) ||
+        generated_row_capacity >
+            positions->byte_len / sizeof(uint32_t) - first_word - 1) {
+      return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                              RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                              "the generated-row list lies outside the row-position buffer");
+    }
+    generated_rows =
+        reinterpret_cast<const uint32_t*>(batch.row_positions.data) + first_word;
+  }
   bool launch_attempted = false;
   CurrentContext scope(stream->owner);
   status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
@@ -4592,6 +5112,8 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
+    const D128Heads heads{params->query_head_count,
+                          params->key_value_head_count};
     const dim3 producer_grid(
         static_cast<uint32_t>(launch_extent),
         static_cast<uint32_t>(params->query_head_count),
@@ -4600,32 +5122,88 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
     // own rounding); 1 and 0 are the two launch geometries of the per-token
     // producer, which write bit-identical partial states.
     if (params->reserved[0] == 2) {
+      const uint64_t tensor_core_rows =
+          generated_rows != nullptr && generated_row_capacity < launch_rows
+              ? generated_row_capacity
+              : launch_rows;
       const dim3 tensor_core_grid(
           static_cast<uint32_t>(launch_extent),
           static_cast<uint32_t>(params->key_value_head_count),
-          static_cast<uint32_t>(launch_rows));
-      native_bf16_ragged_paged_split_gqa_d128_tensor_core_partial_state_kernel<<<
-          tensor_core_grid, kWarpSize, 0, stream->stream>>>(
-          reinterpret_cast<const __nv_bfloat16*>(query.data),
-          reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
-          reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
-          reinterpret_cast<float*>(partial_states.data),
-          device_batch(params->batch, batch), params->partial_state_capacity,
-          params->scale);
+          static_cast<uint32_t>(tensor_core_rows));
+      if (head64) {
+        native_bf16_ragged_paged_split_gqa_d128_tensor_core_partial_state_kernel<
+            64><<<tensor_core_grid, kWarpSize, 0, stream->stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(query.data),
+            reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+            reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+            reinterpret_cast<float*>(partial_states.data),
+            device_batch(params->batch, batch),
+            params->partial_state_capacity, params->scale, heads,
+            row_kinds, generated_rows);
+      } else {
+        native_bf16_ragged_paged_split_gqa_d128_tensor_core_partial_state_kernel<
+            128><<<tensor_core_grid, kWarpSize, 0, stream->stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(query.data),
+            reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+            reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+            reinterpret_cast<float*>(partial_states.data),
+            device_batch(params->batch, batch),
+            params->partial_state_capacity, params->scale, heads,
+            row_kinds, generated_rows);
+      }
+      if (row_kinds != nullptr) {
+        status = launch_status(error, kOperation);
+      }
+      if (row_kinds != nullptr && status == RILEY_CUDA_STATUS_SUCCESS) {
+        // Prompt rows: one CTA per 16-row tile, KV head and 4-page segment,
+        // one warp per query head of the KV head.
+        const uint32_t group_heads = static_cast<uint32_t>(
+            params->query_head_count / params->key_value_head_count);
+        const dim3 prefill_grid(
+            static_cast<uint32_t>(
+                (launch_rows + kNativeBf16PrefillD128MmaTileRows - 1) /
+                kNativeBf16PrefillD128MmaTileRows),
+            static_cast<uint32_t>(params->key_value_head_count),
+            static_cast<uint32_t>(
+                (launch_extent + kNativeBf16PrefillD128MmaSegmentPages - 1) /
+                kNativeBf16PrefillD128MmaSegmentPages));
+        if (head64) {
+          native_bf16_prefill_mma_generic_partial_state_kernel<64><<<
+              prefill_grid, group_heads * kWarpSize, 0, stream->stream>>>(
+              reinterpret_cast<const __nv_bfloat16*>(query.data),
+              reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+              reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+              reinterpret_cast<float*>(partial_states.data),
+              device_batch(params->batch, batch),
+              params->partial_state_capacity, params->scale, row_kinds, heads,
+              group_heads);
+        } else {
+          native_bf16_prefill_mma_generic_partial_state_kernel<128><<<
+              prefill_grid, group_heads * kWarpSize, 0, stream->stream>>>(
+              reinterpret_cast<const __nv_bfloat16*>(query.data),
+              reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+              reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+              reinterpret_cast<float*>(partial_states.data),
+              device_batch(params->batch, batch),
+              params->partial_state_capacity, params->scale, row_kinds, heads,
+              group_heads);
+        }
+      }
     } else if (params->reserved[0] == 1) {
       const dim3 shared_kv_grid(
           static_cast<uint32_t>(launch_extent),
           static_cast<uint32_t>(params->key_value_head_count),
           static_cast<uint32_t>(launch_rows));
       native_bf16_ragged_paged_split_gqa_d128_shared_kv_partial_state_kernel<<<
-          shared_kv_grid, kNativeBf16RaggedPagedSplitGqaD128SharedKvThreads, 0,
+          shared_kv_grid,
+          static_cast<uint32_t>(heads.query / heads.key_value) * kWarpSize, 0,
           stream->stream>>>(
           reinterpret_cast<const __nv_bfloat16*>(query.data),
           reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
           reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
           reinterpret_cast<float*>(partial_states.data),
           device_batch(params->batch, batch), params->partial_state_capacity,
-          params->scale, row_kinds);
+          params->scale, row_kinds, heads);
       if (row_kinds != nullptr) {
         status = launch_status(error, kOperation);
       }
@@ -4656,7 +5234,7 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
           reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
           reinterpret_cast<float*>(partial_states.data),
           device_batch(params->batch, batch), params->partial_state_capacity,
-          params->scale);
+          params->scale, heads);
     }
     if (status == RILEY_CUDA_STATUS_SUCCESS) {
       status = launch_status(error, kOperation);
@@ -4667,14 +5245,26 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
   if (status == RILEY_CUDA_STATUS_SUCCESS && params->reserved[1] == 1) {
     const dim3 merge_grid(static_cast<uint32_t>(params->query_head_count),
                           static_cast<uint32_t>(params->output_row_count), 1);
-    native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel<<<
-        merge_grid, kNativeBf16RaggedD128GlobalMergeThreads, 0,
-        stream->stream>>>(
-        reinterpret_cast<const float*>(partial_states.data),
-        reinterpret_cast<const uint32_t*>(batch.row_positions.data),
-        reinterpret_cast<__nv_bfloat16*>(output.data),
-        params->batch.active_row_count, params->partial_state_capacity,
-        launch_extent, dynamic.counts, row_kinds);
+    if (head64) {
+      native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel<64><<<
+          merge_grid, 64, 0, stream->stream>>>(
+          reinterpret_cast<const float*>(partial_states.data),
+          reinterpret_cast<const uint32_t*>(batch.row_positions.data),
+          reinterpret_cast<__nv_bfloat16*>(output.data),
+          params->batch.active_row_count, params->partial_state_capacity,
+          launch_extent, dynamic.counts, row_kinds,
+          D128Heads{params->query_head_count, params->key_value_head_count});
+    } else {
+      native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel<128><<<
+          merge_grid, kNativeBf16RaggedD128GlobalMergeThreads, 0,
+          stream->stream>>>(
+          reinterpret_cast<const float*>(partial_states.data),
+          reinterpret_cast<const uint32_t*>(batch.row_positions.data),
+          reinterpret_cast<__nv_bfloat16*>(output.data),
+          params->batch.active_row_count, params->partial_state_capacity,
+          launch_extent, dynamic.counts, row_kinds,
+          D128Heads{params->query_head_count, params->key_value_head_count});
+    }
     status = launch_status(error, kOperation);
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS && params->reserved[1] == 0) {
@@ -4688,7 +5278,8 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
         reinterpret_cast<float*>(reduction_normalizers.data),
         reinterpret_cast<const uint32_t*>(batch.row_positions.data),
         params->partial_state_capacity, launch_extent,
-        params->reduction_order);
+        params->reduction_order,
+        D128Heads{params->query_head_count, params->key_value_head_count});
     status = launch_status(error, kOperation);
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS && params->reserved[1] == 0) {
@@ -4704,7 +5295,8 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
         reinterpret_cast<const uint32_t*>(batch.row_positions.data),
         reinterpret_cast<__nv_bfloat16*>(output.data),
         params->batch.active_row_count, params->partial_state_capacity,
-        launch_extent, params->reduction_order);
+        launch_extent, params->reduction_order,
+        D128Heads{params->query_head_count, params->key_value_head_count});
     status = launch_status(error, kOperation);
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
@@ -4876,11 +5468,26 @@ extern "C" RileyCudaStatus riley_cuda_qkv_split_bias_execute(
   // reserved[2] == 1 (RoPE mode, inside a command batch) defers the launch
   // to the KV cache write that follows; see DeferredQkvSplit.
   const bool deferred_launch = params->reserved[2] == 1;
+  // reserved[3] bit 0 (RoPE mode only) selects the head-norm form: no bias is
+  // added; query_bias and key_bias instead hold the BF16 per-head RMS norm
+  // scales ([rope_head_size], which must be 128), value_bias is not read, and
+  // the upper 32 bits of reserved[3] are the F32 bits of the norm epsilon.
+  const bool head_norm = (params->reserved[3] & 1U) != 0;
+  float head_norm_epsilon = 0.0F;
+  {
+    const uint32_t epsilon_bits =
+        static_cast<uint32_t>(params->reserved[3] >> 32);
+    std::memcpy(&head_norm_epsilon, &epsilon_bits, sizeof(head_norm_epsilon));
+  }
   if (params->reserved0 != 0 || params->reserved[0] > 1 ||
       (!with_rope && params->reserved[1] != 0) ||
       (with_rope && params->reserved[1] > params->row_count) ||
       params->reserved[2] > 1 || (deferred_launch && !with_rope) ||
-      params->reserved[3] != 0) {
+      (params->reserved[3] & 0xfffffffeULL) != 0 ||
+      (!head_norm && params->reserved[3] != 0) ||
+      (head_norm &&
+       (!with_rope || params->rope_head_size != kHeadNormSplitHeadSize ||
+        !(head_norm_epsilon > 0.0F)))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "params reserved fields must be zero");
@@ -4926,10 +5533,12 @@ extern "C" RileyCudaStatus riley_cuda_qkv_split_bias_execute(
       !checked_multiply(query_elements, sizeof(__nv_bfloat16), &query_bytes) ||
       !checked_multiply(key_value_elements, sizeof(__nv_bfloat16),
                         &key_value_bytes) ||
-      !checked_multiply(params->query_width, sizeof(__nv_bfloat16),
-                        &query_bias_bytes) ||
-      !checked_multiply(params->key_value_width, sizeof(__nv_bfloat16),
-                        &key_value_bias_bytes)) {
+      !checked_multiply(head_norm ? params->rope_head_size
+                                  : params->query_width,
+                        sizeof(__nv_bfloat16), &query_bias_bytes) ||
+      !checked_multiply(head_norm ? params->rope_head_size
+                                  : params->key_value_width,
+                        sizeof(__nv_bfloat16), &key_value_bias_bytes)) {
     return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "merged QKV shape product overflows uint64_t");
@@ -5078,7 +5687,35 @@ extern "C" RileyCudaStatus riley_cuda_qkv_split_bias_execute(
       deferred.head_size = params->rope_head_size;
       deferred.table_position_count = params->rope_table_position_count;
       deferred.rotated_row_count = params->reserved[1];
+      deferred.head_norm = head_norm;
+      deferred.norm_epsilon = head_norm_epsilon;
     }
+  } else if (status == RILEY_CUDA_STATUS_SUCCESS && merged_elements != 0 &&
+             head_norm) {
+    launch_attempted = true;
+    const uint64_t slots = merged_width / kHeadNormSplitHeadSize;
+    DeviceBatch no_cache{};
+    qkv_split_head_norm_rope_kv_write_kernel
+        <<<static_cast<uint32_t>(params->row_count * slots),
+           kHeadNormSplitHeadSize, 0, stream->stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(merged.data),
+            reinterpret_cast<const __nv_bfloat16*>(query_bias.data),
+            reinterpret_cast<const __nv_bfloat16*>(key_bias.data),
+            reinterpret_cast<const float*>(rope_cos.data),
+            reinterpret_cast<const float*>(rope_sin.data),
+            reinterpret_cast<const uint32_t*>(rope_positions.data),
+            reinterpret_cast<__nv_bfloat16*>(query.data),
+            reinterpret_cast<__nv_bfloat16*>(key.data),
+            reinterpret_cast<__nv_bfloat16*>(value.data), nullptr, nullptr,
+            no_cache,
+            static_cast<uint32_t>(params->query_width /
+                                  kHeadNormSplitHeadSize),
+            static_cast<uint32_t>(params->key_value_width /
+                                  kHeadNormSplitHeadSize),
+            params->rope_table_position_count, params->reserved[1],
+            head_norm_epsilon,
+            riley_cuda_internal::thread_step_capture_dynamic().counts);
+    status = launch_status(error, kOperation);
   } else if (status == RILEY_CUDA_STATUS_SUCCESS && merged_elements != 0 &&
       with_rope) {
     launch_attempted = true;

@@ -120,7 +120,10 @@ pub struct CudaUploadedTensor {
     source: TensorSource,
     dtype: CudaDType,
     shape: Vec<usize>,
-    buffer: CudaDeviceBuffer,
+    byte_len: u64,
+    /// `None` once the device copy was released because a merged copy of the
+    /// same bytes replaced it (see `release_separate_gate_up`).
+    buffer: Option<CudaDeviceBuffer>,
 }
 
 impl CudaUploadedTensor {
@@ -145,7 +148,7 @@ impl CudaUploadedTensor {
     /// Physical device bytes.
     #[must_use]
     pub const fn byte_len(&self) -> u64 {
-        self.buffer.byte_len()
+        self.byte_len
     }
 }
 
@@ -157,7 +160,8 @@ impl fmt::Debug for CudaUploadedTensor {
             .field("shard_path", &self.source.shard_path())
             .field("dtype", &self.dtype)
             .field("shape", &self.shape)
-            .field("byte_len", &self.buffer.byte_len())
+            .field("byte_len", &self.byte_len)
+            .field("released", &self.buffer.is_none())
             .finish()
     }
 }
@@ -217,6 +221,8 @@ pub struct CudaUploadedWeights {
     /// Optional per-layer `Q|K|V` projection weights concatenated along the
     /// output axis for the merged-QKV projection mode.
     merged_qkv: Vec<CudaDeviceBuffer>,
+    merged_gate_up: Vec<CudaDeviceBuffer>,
+    negative_zero_bias: Option<CudaDeviceBuffer>,
 }
 
 impl CudaUploadedWeights {
@@ -273,7 +279,8 @@ impl CudaUploadedWeights {
                     source: source.clone(),
                     dtype,
                     shape: view.shape().dimensions().to_vec(),
-                    buffer,
+                    byte_len,
+                    buffer: Some(buffer),
                 });
                 physical_indices.insert(key, index);
                 index
@@ -288,6 +295,8 @@ impl CudaUploadedWeights {
             slots,
             total_physical_bytes,
             merged_qkv: Vec::new(),
+            merged_gate_up: Vec::new(),
+            negative_zero_bias: None,
         })
     }
 
@@ -307,6 +316,7 @@ impl CudaUploadedWeights {
         context: &CudaContext,
         stream: &mut CudaStream,
         staging_capacity_bytes: u64,
+        release_separate: bool,
     ) -> CudaWeightUploadResult<()> {
         if !self.merged_qkv.is_empty() {
             return Ok(());
@@ -342,9 +352,196 @@ impl CudaUploadedWeights {
                     .map_err(|_| CudaWeightUploadError::HostLengthOverflow { slot })?;
             }
             merged.push(buffer);
+            // Releasing layer by layer keeps the peak at one extra layer
+            // instead of a second copy of every layer.
+            if release_separate {
+                self.release_layer_separate(layer, &parts)?;
+            }
         }
         staging.close()?;
         self.merged_qkv = merged;
+        Ok(())
+    }
+
+    /// Uploads a BF16 vector of `element_count` negative zeros.
+    ///
+    /// It stands for the Q/K/V biases of a model that has none when its
+    /// merged Q|K|V projection goes through the split-with-bias kernel:
+    /// `x + (-0.0)` is `x` bit for bit for every `x`, including both zeros.
+    ///
+    /// # Errors
+    ///
+    /// Returns a length, allocation, copy, or staging-close error. An already
+    /// uploaded vector that is long enough is left untouched.
+    pub(crate) fn upload_negative_zero_bias(
+        &mut self,
+        element_count: usize,
+        context: &CudaContext,
+        stream: &mut CudaStream,
+    ) -> CudaWeightUploadResult<()> {
+        let byte_len = element_count
+            .checked_mul(2)
+            .ok_or(CudaWeightUploadError::TotalLengthOverflow)?;
+        let byte_len_u64 =
+            u64::try_from(byte_len).map_err(|_| CudaWeightUploadError::TotalLengthOverflow)?;
+        if self
+            .negative_zero_bias
+            .as_ref()
+            .is_some_and(|buffer| buffer.byte_len() >= byte_len_u64)
+            || byte_len == 0
+        {
+            return Ok(());
+        }
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(byte_len)
+            .map_err(|_| CudaWeightUploadError::TotalLengthOverflow)?;
+        for _ in 0..element_count {
+            bytes.extend_from_slice(&0x8000_u16.to_ne_bytes());
+        }
+        let mut staging = context.allocate_pinned_host_buffer(byte_len_u64)?;
+        let mut buffer = context.allocate_device_buffer(byte_len_u64)?;
+        buffer.upload_from_slice(0, &bytes, &mut staging, stream)?;
+        staging.close()?;
+        if let Some(previous) = self.negative_zero_bias.replace(buffer) {
+            previous.close()?;
+        }
+        Ok(())
+    }
+
+    /// The negative-zero bias vector, when uploaded.
+    pub(crate) fn negative_zero_bias(&self) -> Option<&CudaDeviceBuffer> {
+        self.negative_zero_bias.as_ref()
+    }
+
+    /// Releases the separate device copies of every layer's gate and up
+    /// projection weights after their merged copies were uploaded, so the
+    /// merged MLP projection does not hold both. A slot whose tensor is shared
+    /// with another slot is kept. Viewing a released weight fails, which
+    /// keeps any path that still wants the separate projections fail-closed.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first CUDA close failure; without merged copies nothing is
+    /// released.
+    pub(crate) fn release_separate_gate_up(&mut self, layer_count: usize) -> CudaResult<()> {
+        if self.merged_gate_up.len() != layer_count {
+            return Ok(());
+        }
+        self.release_separate(
+            layer_count,
+            &[
+                riley_model::DecoderWeight::GateWeight,
+                riley_model::DecoderWeight::UpWeight,
+            ],
+        )
+    }
+
+    fn release_separate(
+        &mut self,
+        layer_count: usize,
+        parameters: &[riley_model::DecoderWeight],
+    ) -> CudaResult<()> {
+        let mut first_error = None;
+        for layer in 0..layer_count {
+            if let Err(error) = self.release_layer_separate(layer, parameters) {
+                first_error.get_or_insert(error);
+            }
+        }
+        first_error.map_or(Ok(()), Err)
+    }
+
+    /// Releases the device tensors of `parameters` in one layer, unless
+    /// another slot shares the tensor.
+    fn release_layer_separate(
+        &mut self,
+        layer: usize,
+        parameters: &[riley_model::DecoderWeight],
+    ) -> CudaResult<()> {
+        let mut first_error = None;
+        for &parameter in parameters {
+            let slot = WeightSlot::Decoder { layer, parameter };
+            let Some(&index) = self.slots.get(&slot) else {
+                continue;
+            };
+            if self.slots.values().filter(|other| **other == index).count() != 1 {
+                continue;
+            }
+            if let Some(buffer) = self.physical[index].buffer.take() {
+                self.total_physical_bytes = self
+                    .total_physical_bytes
+                    .saturating_sub(self.physical[index].byte_len);
+                if let Err(error) = buffer.close() {
+                    first_error.get_or_insert(error);
+                }
+            }
+        }
+        first_error.map_or(Ok(()), Err)
+    }
+
+    /// The merged gate|up projection weight of one layer, when uploaded.
+    pub(crate) fn merged_gate_up(&self, layer: usize) -> Option<&CudaDeviceBuffer> {
+        self.merged_gate_up.get(layer)
+    }
+
+    /// Uploads, for every decoder layer, one device buffer holding the MLP
+    /// gate and up projection weights concatenated along the output axis
+    /// (`[2 * intermediate, hidden]`), as unmodified checkpoint bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a model lookup, length, allocation, copy, or staging-close
+    /// error. Already merged weights are left untouched.
+    pub(crate) fn upload_merged_gate_up(
+        &mut self,
+        weights: &LoadedWeights,
+        layer_count: usize,
+        context: &CudaContext,
+        stream: &mut CudaStream,
+        staging_capacity_bytes: u64,
+        release_separate: bool,
+    ) -> CudaWeightUploadResult<()> {
+        if !self.merged_gate_up.is_empty() {
+            return Ok(());
+        }
+        if staging_capacity_bytes == 0 {
+            return Err(CudaWeightUploadError::EmptyStagingCapacity);
+        }
+        let mut staging = context.allocate_pinned_host_buffer(staging_capacity_bytes)?;
+        let mut merged = Vec::with_capacity(layer_count);
+        for layer in 0..layer_count {
+            let parts = [
+                riley_model::DecoderWeight::GateWeight,
+                riley_model::DecoderWeight::UpWeight,
+            ];
+            let mut total = 0_u64;
+            for parameter in parts {
+                let slot = WeightSlot::Decoder { layer, parameter };
+                let bytes = weights.view(slot)?.view().storage().len();
+                total = u64::try_from(bytes)
+                    .ok()
+                    .and_then(|bytes| total.checked_add(bytes))
+                    .ok_or(CudaWeightUploadError::TotalLengthOverflow)?;
+            }
+            let mut buffer = context.allocate_device_buffer(total)?;
+            let mut offset = 0_u64;
+            for parameter in parts {
+                let slot = WeightSlot::Decoder { layer, parameter };
+                let bound = weights.view(slot)?;
+                let bytes = bound.view().storage();
+                buffer.upload_from_slice(offset, bytes, &mut staging, stream)?;
+                offset += u64::try_from(bytes.len())
+                    .map_err(|_| CudaWeightUploadError::HostLengthOverflow { slot })?;
+            }
+            merged.push(buffer);
+            // Releasing layer by layer keeps the peak at one extra layer
+            // instead of a second copy of every layer.
+            if release_separate {
+                self.release_layer_separate(layer, &parts)?;
+            }
+        }
+        staging.close()?;
+        self.merged_gate_up = merged;
         Ok(())
     }
 
@@ -422,7 +619,11 @@ impl CudaUploadedWeights {
             .physical
             .get(id.index())
             .ok_or(CudaWeightUploadError::MissingPhysicalWeight { index: id.index() })?;
-        let span = CudaBufferSpan::new(&tensor.buffer, tensor.dtype, 0, tensor.buffer.byte_len())?;
+        let buffer = tensor
+            .buffer
+            .as_ref()
+            .ok_or(CudaWeightUploadError::MissingPhysicalWeight { index: id.index() })?;
+        let span = CudaBufferSpan::new(buffer, tensor.dtype, 0, buffer.byte_len())?;
         Ok(CudaPhysicalWeight { tensor, span })
     }
 
@@ -432,7 +633,9 @@ impl CudaUploadedWeights {
     pub(crate) fn borrow_graph_weight_parents(
         &mut self,
     ) -> impl Iterator<Item = &mut CudaDeviceBuffer> {
-        self.physical.iter_mut().map(|tensor| &mut tensor.buffer)
+        self.physical
+            .iter_mut()
+            .filter_map(|tensor| tensor.buffer.as_mut())
     }
 
     /// Cold graph binding of one actual physical weight. The exclusive borrow
@@ -444,7 +647,10 @@ impl CudaUploadedWeights {
     ) -> CudaWeightUploadResult<&mut CudaDeviceBuffer> {
         // Preserve the existing owner-ID check and dtype/span validation.
         self.view_physical(id)?;
-        Ok(&mut self.physical[id.index()].buffer)
+        self.physical[id.index()]
+            .buffer
+            .as_mut()
+            .ok_or(CudaWeightUploadError::MissingPhysicalWeight { index: id.index() })
     }
 
     /// Resolves a canonical slot into its immutable whole-allocation span.
@@ -472,8 +678,22 @@ impl CudaUploadedWeights {
     /// Returns the first CUDA close failure after attempting the full set.
     pub fn close(self) -> CudaResult<()> {
         let mut first_error = None;
-        for tensor in self.physical {
-            if let Err(error) = tensor.buffer.close() {
+        for buffer in self.physical.into_iter().filter_map(|tensor| tensor.buffer) {
+            if let Err(error) = buffer.close() {
+                if first_error.is_none() {
+                    first_error = Some(error);
+                }
+            }
+        }
+        for buffer in self.merged_gate_up {
+            if let Err(error) = buffer.close() {
+                if first_error.is_none() {
+                    first_error = Some(error);
+                }
+            }
+        }
+        if let Some(buffer) = self.negative_zero_bias {
+            if let Err(error) = buffer.close() {
                 if first_error.is_none() {
                     first_error = Some(error);
                 }

@@ -281,7 +281,7 @@ impl PreparedLlamaBatchOwner {
             attention.query_heads(),
             attention.key_value_heads(),
             attention.head_dimension(),
-            spec.max_sequence_length(),
+            serving_sequence_tokens(config, spec.max_sequence_length()),
             bounds,
         )?;
         if config.vllm_smol_p128_graph()
@@ -351,7 +351,7 @@ impl PreparedLlamaBatchOwner {
             dimensions.query_heads(),
             dimensions.key_value_heads(),
             dimensions.head_dimension(),
-            spec.max_sequence_length(),
+            serving_sequence_tokens(config, spec.max_sequence_length()),
             bounds,
         )?;
         let layout = KvLayout::checked(
@@ -383,19 +383,24 @@ impl PreparedLlamaBatchOwner {
                 });
             let partial_state_capacity =
                 native_d128_partial_state_capacity(workspace_sequence_tokens)?;
-            let workspace_layout = NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::new(
-                usize_u64(
-                    bounds.max_input_tokens(),
-                    LlamaBatchExecutorResource::NativeD128PartialStates,
-                )?,
-                partial_state_capacity,
-            )
-            .map_err(|source| {
-                owner_cuda(
-                    ExecutionSite::layer(0, LlamaOp::RaggedPagedAttention),
-                    source,
+            let workspace_layout =
+                NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::with_query_heads(
+                    usize_u64(
+                        bounds.max_input_tokens(),
+                        LlamaBatchExecutorResource::NativeD128PartialStates,
+                    )?,
+                    partial_state_capacity,
+                    usize_u64(
+                        dimensions.query_heads(),
+                        LlamaBatchExecutorResource::NativeD128PartialStates,
+                    )?,
                 )
-            })?;
+                .map_err(|source| {
+                    owner_cuda(
+                        ExecutionSite::layer(0, LlamaOp::RaggedPagedAttention),
+                        source,
+                    )
+                })?;
             let attention_site = ExecutionSite::layer(0, LlamaOp::RaggedPagedAttention);
             Some(NativeD128TwoStageWorkspace {
                 partial_states: allocate_device(
@@ -448,7 +453,7 @@ impl PreparedLlamaBatchOwner {
             let rope_angles = build_absolute_rope_angles(
                 spec.max_sequence_length(),
                 dimensions.head_dimension(),
-                forward.plan.rope_theta(),
+                forward.plan.rope_frequencies(),
             )?;
             absolute_rope_cos
                 .upload_from_slice(0, &rope_angles, &mut forward.io_staging, stream)
@@ -474,7 +479,7 @@ impl PreparedLlamaBatchOwner {
             let (rope_cos, rope_sin) = build_absolute_cpu_rope_tables(
                 spec.max_sequence_length(),
                 dimensions.head_dimension(),
-                forward.plan.rope_theta(),
+                forward.plan.rope_frequencies(),
             )?;
             absolute_rope_cos
                 .upload_from_slice(0, &rope_cos, &mut forward.io_staging, stream)
@@ -484,7 +489,12 @@ impl PreparedLlamaBatchOwner {
                 .map_err(|source| owner_cuda(rope_site, source))?;
         }
 
-        let device_input = allocate_device_input(context, bounds, config.metadata_transport())?;
+        let device_input = allocate_device_input(
+            context,
+            bounds,
+            config.metadata_transport(),
+            config.staged_step_uploads(),
+        )?;
         let gathered_logits_capacity_bytes =
             output_logits_bytes(bounds.max_output_slots(), dimensions.vocabulary_size())?;
         let gathered_logits = if bounds.max_output_slots() == 0 {
@@ -506,7 +516,12 @@ impl PreparedLlamaBatchOwner {
                 ExecutionSite::global(LlamaOp::OutputGather),
             )?)
         };
-        let host = allocate_host_workspace(context, bounds, config.metadata_transport())?;
+        let host = allocate_host_workspace(
+            context,
+            bounds,
+            config.metadata_transport(),
+            config.staged_step_uploads(),
+        )?;
 
         Ok(Self {
             metadata,
@@ -620,9 +635,12 @@ fn allocate_device_input(
     context: &CudaContext,
     bounds: LlamaBatchMetadataConfig,
     transport: BatchMetadataTransport,
+    staged: bool,
 ) -> LlamaBatchExecutorResult<BatchDeviceInput> {
     match transport {
-        BatchMetadataTransport::Synchronous => allocate_synchronous_device_input(context, bounds),
+        BatchMetadataTransport::Synchronous => {
+            allocate_synchronous_device_input(context, bounds, staged)
+        }
         BatchMetadataTransport::PackedAsync => {
             let capacity = PackedIterationLayout::capacity(bounds)?.total_bytes;
             allocate_packed_device_input(context, capacity)
@@ -634,9 +652,12 @@ fn allocate_host_workspace(
     context: &CudaContext,
     bounds: LlamaBatchMetadataConfig,
     transport: BatchMetadataTransport,
+    staged: bool,
 ) -> LlamaBatchExecutorResult<BatchHostWorkspace> {
     let input = match transport {
-        BatchMetadataTransport::Synchronous => allocate_synchronous_host_input(bounds)?,
+        BatchMetadataTransport::Synchronous => {
+            allocate_synchronous_host_input(context, bounds, staged)?
+        }
         BatchMetadataTransport::PackedAsync => {
             let capacity = PackedIterationLayout::capacity(bounds)?.total_bytes;
             allocate_packed_host_input(context, capacity)?
@@ -658,6 +679,19 @@ fn allocate_device(
         .map_err(|source| owner_cuda(site, source))
 }
 
+/// The longest sequence the scheduler admits: the declared serving bound when
+/// one was given, else the checkpoint context.
+fn serving_sequence_tokens(
+    config: PreparedLlamaBatchExecutorConfig,
+    model_sequence_tokens: usize,
+) -> usize {
+    config
+        .serving_sequence_token_bound()
+        .map_or(model_sequence_tokens, |bound| {
+            bound.clamp(1, model_sequence_tokens)
+        })
+}
+
 fn validate_batch_attention_geometry(
     config: PreparedLlamaBatchExecutorConfig,
     query_heads: usize,
@@ -676,25 +710,40 @@ fn validate_batch_attention_geometry(
         return Ok(());
     }
 
-    if query_heads != riley_cuda::NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT as usize
-        || key_value_heads
-            != riley_cuda::NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT as usize
-        || head_dimension != riley_cuda::NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE as usize
+    if query_heads == 0
+        || key_value_heads == 0
+        || query_heads % key_value_heads != 0
+        || query_heads / key_value_heads
+            > riley_cuda::NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_MAX_GROUP_HEADS as usize
+        || (head_dimension
+            != riley_cuda::NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE as usize
+            && head_dimension
+                != riley_cuda::NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D64_HEAD_SIZE as usize)
     {
         return Err(LlamaBatchExecutorError::InvalidConfiguration {
             field: "native_d128_two_stage_geometry",
-            reason: "requires QH=16, KVH=2, and head_dimension=128",
+            reason: "requires head_dimension=128 or 64 and at most eight query heads per key/value head",
+        });
+    }
+    // A 64-wide head exists for the tensor-core producer with the global-max
+    // merge only.
+    if head_dimension == riley_cuda::NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D64_HEAD_SIZE as usize
+        && !(config.d128_tensor_core_producer() && config.d128_global_merge())
+    {
+        return Err(LlamaBatchExecutorError::InvalidConfiguration {
+            field: "native_d128_two_stage_geometry",
+            reason: "head_dimension=64 requires the tensor-core producer and the global-max merge",
         });
     }
     if bounds.max_input_tokens() > NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS {
         return Err(LlamaBatchExecutorError::InvalidConfiguration {
             field: "max_input_tokens",
-            reason: "native D128 two-stage requires a batch token budget at most 32",
+            reason: "native D128 two-stage requires a batch token budget at most 256",
         });
     }
     if maximum_sequence_tokens > NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS {
         return Err(LlamaBatchExecutorError::InvalidConfiguration {
-            field: "model.max_sequence_length",
+            field: "max_sequence_tokens",
             reason: "native D128 two-stage workspace is qualified through 32768 tokens",
         });
     }
@@ -842,6 +891,31 @@ mod tests {
                 ..
             })
         ));
+        for (query_heads, key_value_heads) in [(12, 2), (28, 4), (40, 8), (16, 8), (32, 8)] {
+            validate_batch_attention_geometry(
+                config,
+                query_heads,
+                key_value_heads,
+                128,
+                NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS,
+                bounds,
+            )
+            .expect("every head-dimension-128 geometry with a group of at most eight is admitted");
+        }
+        assert!(matches!(
+            validate_batch_attention_geometry(
+                config,
+                18,
+                2,
+                128,
+                NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS,
+                bounds,
+            ),
+            Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "native_d128_two_stage_geometry",
+                ..
+            })
+        ));
 
         let (over_rows, over_rows_bounds) = native_config(NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS + 1);
         assert!(matches!(
@@ -868,7 +942,7 @@ mod tests {
                 bounds,
             ),
             Err(LlamaBatchExecutorError::InvalidConfiguration {
-                field: "model.max_sequence_length",
+                field: "max_sequence_tokens",
                 ..
             })
         ));

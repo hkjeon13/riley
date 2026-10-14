@@ -940,6 +940,7 @@ impl PreparedLlamaForward {
             attention,
             reduction_profile: _,
             projection_bias_mode: _,
+            merged_gate_up: _,
             output_projection_mode: _,
             mlp_projection_mode: _,
             lm_head_mode: _,
@@ -966,6 +967,8 @@ impl PreparedLlamaForward {
             down,
             lm_head,
             merged_qkv,
+            merged_gate_up,
+            output_projection,
             projection_bias_epilogue,
             #[cfg(feature = "cuda-cublas-gemm-probe")]
             output_projection_direct_cublas,
@@ -1018,6 +1021,20 @@ impl PreparedLlamaForward {
                 &mut first,
                 LlamaForwardResource::HiddenGemm,
                 merged_qkv.close(),
+            );
+        }
+        if let Some(merged_gate_up) = merged_gate_up {
+            record_close(
+                &mut first,
+                LlamaForwardResource::IntermediateGemm,
+                merged_gate_up.close(),
+            );
+        }
+        if let Some(output_projection) = output_projection {
+            record_close(
+                &mut first,
+                LlamaForwardResource::HiddenGemm,
+                output_projection.close(),
             );
         }
         if let Some(ProjectionBiasEpilogueGemmPlans { query, key_value }) = projection_bias_epilogue
@@ -1403,6 +1420,7 @@ fn resolve_rms_norm_profile(
     model: &LoadedModel,
     reduction_profile: LlamaReductionProfile,
     _rms_norm_selection: LlamaRmsNormSelection,
+    compute_capability: (u32, u32),
 ) -> LlamaRmsNormProfile {
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     if _rms_norm_selection == LlamaRmsNormSelection::HuggingFaceCudaQwenP2051ProbeV1 {
@@ -1422,9 +1440,15 @@ fn resolve_rms_norm_profile(
         LlamaReductionProfile::FixedContiguous37BalancedV1 => {
             LlamaRmsNormProfile::FixedContiguous37Balanced
         }
+        // The Hugging Face SmolLM2 kernel picks its reduction layout from
+        // the row count of the launch (it reproduces the reviewed 8.9
+        // reference shape by shape), so a row's bits depend on the batch it
+        // is in. Another device has no such reference and keeps the
+        // row-invariant canonical kernel.
         LlamaReductionProfile::CanonicalV1
             if matches!(model.config(), ModelConfig::Llama(_))
-                && is_reviewed_smollm2_rms_norm_geometry(model.spec()) =>
+                && is_reviewed_smollm2_rms_norm_geometry(model.spec())
+                && compute_capability == (8, 9) =>
         {
             LlamaRmsNormProfile::HuggingFaceSmolLm2
         }
@@ -2326,6 +2350,7 @@ pub struct PreparedLlamaForwardConfig {
     attention_preference: AttentionPreference,
     reduction_profile: LlamaReductionProfile,
     projection_bias_mode: LlamaProjectionBiasMode,
+    merged_gate_up: bool,
     output_projection_mode: LlamaOutputProjectionMode,
     mlp_projection_mode: LlamaMlpProjectionMode,
     lm_head_mode: LlamaLmHeadMode,
@@ -2351,6 +2376,7 @@ impl PreparedLlamaForwardConfig {
             attention_preference: AttentionPreference::Optimized,
             reduction_profile: LlamaReductionProfile::CanonicalV1,
             projection_bias_mode: LlamaProjectionBiasMode::StrictStagedV1,
+            merged_gate_up: false,
             output_projection_mode: LlamaOutputProjectionMode::StrictHiddenGemmV1,
             mlp_projection_mode: LlamaMlpProjectionMode::StrictStagedV1,
             lm_head_mode: LlamaLmHeadMode::StrictFullSequenceGemmV1,
@@ -2447,6 +2473,15 @@ impl PreparedLlamaForwardConfig {
     #[must_use]
     pub const fn with_merged_qkv_projection(mut self) -> Self {
         self.projection_bias_mode = LlamaProjectionBiasMode::MergedQkvStrictStagedV1;
+        self
+    }
+
+    /// Selects one GEMM over the concatenated gate|up weights of each MLP
+    /// (batch executor only; needs the fused SiLU multiply). The merged weight
+    /// is a second device copy of the two projections.
+    #[must_use]
+    pub const fn with_merged_gate_up_projection(mut self) -> Self {
+        self.merged_gate_up = true;
         self
     }
 
@@ -2877,6 +2912,10 @@ pub(super) struct GemmPlans {
     pub(super) down: PreparedLlamaGemm,
     pub(super) lm_head: PreparedLlamaGemm,
     merged_qkv: Option<PreparedLlamaGemm>,
+    merged_gate_up: Option<PreparedLlamaGemm>,
+    /// Output projection `query_width -> hidden` of a model whose query
+    /// projection is wider than its residual stream; `hidden` otherwise.
+    output_projection: Option<PreparedLlamaGemm>,
     projection_bias_epilogue: Option<ProjectionBiasEpilogueGemmPlans>,
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     output_projection_direct_cublas: Option<CudaPreparedCublasGemmProbe>,
@@ -2895,6 +2934,14 @@ impl GemmPlans {
             || self.lm_head.is_poisoned()
             || self
                 .merged_qkv
+                .as_ref()
+                .is_some_and(PreparedLlamaGemm::is_poisoned)
+            || self
+                .merged_gate_up
+                .as_ref()
+                .is_some_and(PreparedLlamaGemm::is_poisoned)
+            || self
+                .output_projection
                 .as_ref()
                 .is_some_and(PreparedLlamaGemm::is_poisoned)
             || self
@@ -2942,11 +2989,27 @@ impl GemmPlans {
             self.merged_qkv
                 .as_ref()
                 .map_or(0, PreparedLlamaGemm::workspace_bytes),
+            self.merged_gate_up
+                .as_ref()
+                .map_or(0, PreparedLlamaGemm::workspace_bytes),
+            self.output_projection
+                .as_ref()
+                .map_or(0, PreparedLlamaGemm::workspace_bytes),
             projection_bias_workspace,
         ]
         .into_iter()
         .max()
         .unwrap_or(0)
+    }
+
+    /// The attention output projection plan.
+    pub(super) fn output_projection_plan(&mut self) -> &mut PreparedLlamaGemm {
+        self.output_projection.as_mut().unwrap_or(&mut self.hidden)
+    }
+
+    /// The merged gate|up plan, when the merged MLP projection is selected.
+    pub(super) fn merged_gate_up_plan(&mut self) -> Option<&mut PreparedLlamaGemm> {
+        self.merged_gate_up.as_mut()
     }
 
     /// The merged Q|K|V plan, when the merged projection mode is selected.
@@ -3000,6 +3063,8 @@ impl GemmPlans {
             down,
             lm_head,
             merged_qkv,
+            merged_gate_up,
+            output_projection,
             projection_bias_epilogue,
             #[cfg(feature = "cuda-cublas-gemm-probe")]
             output_projection_direct_cublas,
@@ -3009,6 +3074,20 @@ impl GemmPlans {
             lm_head_last_token_direct_cublas,
         } = self;
         let mut first = None;
+        if let Some(merged_gate_up) = merged_gate_up {
+            record_close(
+                &mut first,
+                LlamaForwardResource::IntermediateGemm,
+                merged_gate_up.close(),
+            );
+        }
+        if let Some(output_projection) = output_projection {
+            record_close(
+                &mut first,
+                LlamaForwardResource::HiddenGemm,
+                output_projection.close(),
+            );
+        }
         record_close(&mut first, LlamaForwardResource::HiddenGemm, hidden.close());
         record_close(
             &mut first,
@@ -3111,6 +3190,7 @@ pub struct PreparedLlamaForward {
     attention: PreparedPrefillAttention,
     reduction_profile: LlamaReductionProfile,
     projection_bias_mode: LlamaProjectionBiasMode,
+    merged_gate_up: bool,
     output_projection_mode: LlamaOutputProjectionMode,
     mlp_projection_mode: LlamaMlpProjectionMode,
     lm_head_mode: LlamaLmHeadMode,
@@ -3195,8 +3275,12 @@ impl PreparedLlamaForward {
         .with_bit_equivalent_selection(
             config.first_heuristic_gemm_reductions && config.bit_equivalent_gemm_selection,
         );
-        let rms_norm_profile =
-            resolve_rms_norm_profile(model, config.reduction_profile, config.rms_norm_selection);
+        let rms_norm_profile = resolve_rms_norm_profile(
+            model,
+            config.reduction_profile,
+            config.rms_norm_selection,
+            context.compute_capability(),
+        );
         let rope_table_profile = resolve_rope_table_profile(
             model,
             config.reduction_profile,
@@ -3220,8 +3304,51 @@ impl PreparedLlamaForward {
                     context,
                     stream,
                     config.upload_staging_bytes,
+                    // With both merged copies the batch route reads no
+                    // separate projection; a 14B checkpoint does not fit a
+                    // 40 GB card with the Q/K/V weights held twice.
+                    config.merged_gate_up,
                 )
                 .map_err(|source| LlamaForwardError::Weight { site: None, source })?;
+        }
+        // A model without Q/K/V biases and without a per-head query/key norm
+        // (Llama 3) takes the merged projection through the split-with-bias
+        // kernel with a bias of negative zeros, which adds nothing.
+        if config.projection_bias_mode.merges_qkv()
+            && plan.layers().iter().all(|layer| {
+                layer.query_bias().is_none()
+                    && layer.key_bias().is_none()
+                    && layer.value_bias().is_none()
+                    && layer.query_key_norm().is_none()
+            })
+        {
+            let dimensions = plan.dimensions();
+            weights
+                .upload_negative_zero_bias(
+                    dimensions.query_width().max(dimensions.key_value_width()),
+                    context,
+                    stream,
+                )
+                .map_err(|source| LlamaForwardError::Weight { site: None, source })?;
+        }
+        if config.merged_gate_up {
+            weights
+                .upload_merged_gate_up(
+                    model.weights(),
+                    plan.layers().len(),
+                    context,
+                    stream,
+                    config.upload_staging_bytes,
+                    true,
+                )
+                .map_err(|source| LlamaForwardError::Weight { site: None, source })?;
+            // The merged copy replaces the two separate device tensors.
+            weights
+                .release_separate_gate_up(plan.layers().len())
+                .map_err(|source| LlamaForwardError::Weight {
+                    site: None,
+                    source: source.into(),
+                })?;
         }
         let workspace = plan.workspace_spec();
         let attention_preference = canonical_prefill_attention_preference(
@@ -3231,6 +3358,17 @@ impl PreparedLlamaForward {
             config.attention_preference,
             config.reduction_profile,
         );
+        // The reviewed HF-eager prefill backend exists for compute capability
+        // 8.9 only; on another device the reviewed geometry keeps the
+        // configured preference, as every other geometry does.
+        let attention_preference = if attention_preference == AttentionPreference::HuggingFaceEager
+            && config.attention_preference != AttentionPreference::HuggingFaceEager
+            && context.compute_capability() != (8, 9)
+        {
+            config.attention_preference
+        } else {
+            attention_preference
+        };
         let attention = prepare_attention(
             context,
             &plan,
@@ -3253,6 +3391,7 @@ impl PreparedLlamaForward {
             config.reduction_profile,
             gemm_reduction_policies,
             config.projection_bias_mode,
+            config.merged_gate_up,
             config.output_projection_mode,
             config.mlp_projection_mode,
             config.lm_head_mode,
@@ -3264,6 +3403,7 @@ impl PreparedLlamaForward {
             &plan,
             attention_workspace_bytes,
             gemm_workspace_bytes,
+            config.merged_gate_up,
         )?;
         let mut io_staging = context
             .allocate_pinned_host_buffer(config.io_staging_bytes)
@@ -3325,6 +3465,7 @@ impl PreparedLlamaForward {
             attention,
             reduction_profile: config.reduction_profile,
             projection_bias_mode: config.projection_bias_mode,
+            merged_gate_up: config.merged_gate_up,
             output_projection_mode: config.output_projection_mode,
             mlp_projection_mode: config.mlp_projection_mode,
             lm_head_mode: config.lm_head_mode,
@@ -3371,6 +3512,7 @@ impl PreparedLlamaForward {
         if plan.dimensions() != self.plan.dimensions()
             || plan.layers().len() != self.plan.layers().len()
             || plan.rope_theta().to_bits() != self.plan.rope_theta().to_bits()
+            || plan.rope_frequencies() != self.plan.rope_frequencies()
         {
             return Err(LlamaForwardError::InvalidConfiguration {
                 field: "batch_shape_plan",
@@ -3385,6 +3527,7 @@ impl PreparedLlamaForward {
             self.reduction_profile,
             self.gemm_reduction_policies,
             self.projection_bias_mode,
+            self.merged_gate_up,
             self.output_projection_mode,
             self.mlp_projection_mode,
             self.lm_head_mode,
@@ -4161,6 +4304,25 @@ impl PreparedLlamaForward {
         mut full_sequence_layer_stage_trace: Option<&mut PreparedLlamaFullSequenceLayerStageTrace>,
         mut cache: Option<PrefillKvCacheSink<'_>>,
     ) -> LlamaForwardResult<()> {
+        // The per-head query/key norm (Qwen3) is implemented by the batch
+        // executor only; this single-sequence route would silently skip it.
+        if self
+            .plan
+            .layers()
+            .iter()
+            .any(|layer| layer.query_key_norm().is_some())
+        {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "model",
+                reason: "a per-head query/key norm is supported by the batch executor only",
+            });
+        }
+        if self.plan.dimensions().query_width() != self.plan.dimensions().hidden_size() {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "model",
+                reason: "a query projection wider than the hidden size is supported by the batch executor only",
+            });
+        }
         let plan = &self.plan;
         let weights = &self.weights;
         let gemms = &mut self.gemms;
@@ -5563,6 +5725,7 @@ pub(super) fn prepare_gemms(
     reduction_profile: LlamaReductionProfile,
     policies: LlamaGemmReductionPolicies,
     projection_bias_mode: LlamaProjectionBiasMode,
+    merged_gate_up: bool,
     output_projection_mode: LlamaOutputProjectionMode,
     mlp_projection_mode: LlamaMlpProjectionMode,
     lm_head_mode: LlamaLmHeadMode,
@@ -5577,6 +5740,10 @@ pub(super) fn prepare_gemms(
         LlamaForwardResource::HiddenCurrent,
     )?;
     let key_value = to_u64(dimensions.key_value_width(), LlamaForwardResource::KeyRaw)?;
+    let query_width = to_u64(
+        dimensions.query_width(),
+        LlamaForwardResource::HiddenCurrent,
+    )?;
     let intermediate = to_u64(
         dimensions.intermediate_size(),
         LlamaForwardResource::GateRaw,
@@ -5609,7 +5776,10 @@ pub(super) fn prepare_gemms(
                         // shape to that algorithm without a heuristic fallback.
                         let selection = CudaGemmConfig::new(rows, n, k, workspace_cap)
                             .map_err(|source| LlamaForwardError::cuda(site, source))?
-                            .with_reduction_policy(policy);
+                            .with_reduction_policy(policy)
+                            .with_bit_equivalent_selection(
+                                policies.bit_equivalent_selection(),
+                            );
                         let selection = context
                             .prepare_gemm(selection)
                             .map_err(|source| LlamaForwardError::cuda(site, source))?;
@@ -5679,14 +5849,18 @@ pub(super) fn prepare_gemms(
     )?;
 
     let merged_qkv_plan = if projection_bias_mode.merges_qkv() {
+        // Every layer has all three biases (Qwen2), none of them with a
+        // per-head query/key norm (Qwen3: the head-norm split), or none at all
+        // (Llama 3: the split adds a negative-zero bias).
         if plan.layers().iter().any(|layer| {
-            layer.query_bias().is_none()
-                || layer.key_bias().is_none()
-                || layer.value_bias().is_none()
+            let biases = [layer.query_bias(), layer.key_bias(), layer.value_bias()];
+            let all = biases.iter().all(Option::is_some);
+            let none = biases.iter().all(Option::is_none);
+            !(all && layer.query_key_norm().is_none() || none)
         }) {
             return Err(LlamaForwardError::InvalidConfiguration {
                 field: "projection_bias_mode",
-                reason: "merged QKV projection requires Q/K/V biases in every decoder layer",
+                reason: "merged QKV projection requires all three Q/K/V biases or none of them in every decoder layer",
             });
         }
         let anchor = match anchors {
@@ -5700,10 +5874,54 @@ pub(super) fn prepare_gemms(
         };
         Some(prepare(
             sequence,
-            hidden + 2 * key_value,
+            query_width + 2 * key_value,
             hidden,
             policies.hidden(),
             ExecutionSite::layer(0, LlamaOp::QueryProjection),
+            anchor,
+        )?)
+    } else {
+        None
+    };
+
+    let output_projection_plan = if query_width == hidden {
+        None
+    } else {
+        let anchor = match anchors {
+            None => None,
+            Some(value) => Some(value.output_projection.as_ref().ok_or(
+                LlamaForwardError::InvalidConfiguration {
+                    field: "gemm_anchor",
+                    reason: "output projection shape variants require a maximum-shape anchor",
+                },
+            )?),
+        };
+        Some(prepare(
+            sequence,
+            hidden,
+            query_width,
+            policies.hidden(),
+            ExecutionSite::layer(0, LlamaOp::OutputProjection),
+            anchor,
+        )?)
+    };
+
+    let merged_gate_up_plan = if merged_gate_up {
+        let anchor = match anchors {
+            None => None,
+            Some(value) => Some(value.merged_gate_up.as_ref().ok_or(
+                LlamaForwardError::InvalidConfiguration {
+                    field: "gemm_anchor",
+                    reason: "merged gate|up shape variants require a merged maximum-shape anchor",
+                },
+            )?),
+        };
+        Some(prepare(
+            sequence,
+            2 * intermediate,
+            hidden,
+            policies.intermediate(),
+            ExecutionSite::layer(0, LlamaOp::GateProjection),
             anchor,
         )?)
     } else {
@@ -5956,6 +6174,8 @@ pub(super) fn prepare_gemms(
         down: down_plan,
         lm_head: lm_head_plan,
         merged_qkv: merged_qkv_plan,
+        merged_gate_up: merged_gate_up_plan,
+        output_projection: output_projection_plan,
         projection_bias_epilogue,
         #[cfg(feature = "cuda-cublas-gemm-probe")]
         output_projection_direct_cublas,
@@ -5987,6 +6207,7 @@ fn allocate_buffers(
     plan: &LlamaExecutionPlan,
     attention_workspace_bytes: u64,
     gemm_workspace_bytes: u64,
+    merged_gate_up: bool,
 ) -> LlamaForwardResult<ForwardBuffers> {
     let spec = plan.workspace_spec();
     let allocate = |bytes, site| {
@@ -6005,12 +6226,43 @@ fn allocate_buffers(
         hidden_current: allocate(spec.hidden_buffer_bytes(), hidden_site)?,
         hidden_norm: allocate(spec.hidden_buffer_bytes(), hidden_site)?,
         hidden_projection: allocate(spec.hidden_buffer_bytes(), hidden_site)?,
-        hidden_rotary: allocate(spec.hidden_buffer_bytes(), hidden_site)?,
-        hidden_context: allocate(spec.hidden_buffer_bytes(), hidden_site)?,
+        // The rotated query and the attention output are query-width.
+        hidden_rotary: allocate(
+            spec.hidden_buffer_bytes().max(spec.query_buffer_bytes()),
+            hidden_site,
+        )?,
+        hidden_context: allocate(
+            spec.hidden_buffer_bytes().max(spec.query_buffer_bytes()),
+            hidden_site,
+        )?,
         key_raw: allocate(spec.key_value_buffer_bytes(), kv_site)?,
         value_raw: allocate(spec.key_value_buffer_bytes(), kv_site)?,
         key_rotary: allocate(spec.key_value_buffer_bytes(), kv_site)?,
-        gate_raw: allocate(spec.intermediate_buffer_bytes(), intermediate_site)?,
+        // A merged gate|up GEMM writes both projections of a row side by side.
+        // It is also the scratch of the merged Q|K|V GEMM, which is wider
+        // than the intermediate size for a few small models.
+        gate_raw: allocate(
+            if merged_gate_up {
+                spec.intermediate_buffer_bytes().checked_mul(2).ok_or(
+                    LlamaForwardError::InvalidConfiguration {
+                        field: "merged_gate_up",
+                        reason: "merged gate|up output size overflows",
+                    },
+                )?
+            } else {
+                spec.intermediate_buffer_bytes()
+            }
+            .max(
+                spec.key_value_buffer_bytes()
+                    .checked_mul(2)
+                    .and_then(|bytes| bytes.checked_add(spec.query_buffer_bytes()))
+                    .ok_or(LlamaForwardError::InvalidConfiguration {
+                        field: "merged_qkv",
+                        reason: "merged Q|K|V output size overflows",
+                    })?,
+            ),
+            intermediate_site,
+        )?,
         up_raw: allocate(spec.intermediate_buffer_bytes(), intermediate_site)?,
         gate_activated: allocate(spec.intermediate_buffer_bytes(), intermediate_site)?,
         gated_product: allocate(spec.intermediate_buffer_bytes(), intermediate_site)?,
@@ -6072,11 +6324,10 @@ fn build_rope_angles(plan: &LlamaExecutionPlan) -> LlamaForwardResult<Box<[u8]>>
         plan.workspace_spec().rope_cos_bytes(),
         LlamaForwardResource::RopeCos,
     )?;
-    let theta = plan.rope_theta();
+    let frequencies = plan.rope_frequencies();
     for position in 0..plan.sequence_length() {
         for pair in 0..half {
-            let exponent = (2 * pair) as f32 / head_dimension as f32;
-            let inverse_frequency = 1.0 / theta.powf(exponent);
+            let inverse_frequency = frequencies.inverse_frequency(pair, head_dimension);
             let angle = position as f32 * inverse_frequency;
             let element = position
                 .checked_mul(half)
@@ -6106,11 +6357,10 @@ fn build_cpu_rope_tables(plan: &LlamaExecutionPlan) -> LlamaForwardResult<RopeTa
         plan.workspace_spec().rope_sin_bytes(),
         LlamaForwardResource::RopeSin,
     )?;
-    let theta = plan.rope_theta();
+    let frequencies = plan.rope_frequencies();
     for position in 0..plan.sequence_length() {
         for pair in 0..half {
-            let exponent = (2 * pair) as f32 / head_dimension as f32;
-            let inverse_frequency = 1.0 / theta.powf(exponent);
+            let inverse_frequency = frequencies.inverse_frequency(pair, head_dimension);
             let angle = position as f32 * inverse_frequency;
             let (sine, cosine) = angle.sin_cos();
             let element = position

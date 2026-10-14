@@ -43,6 +43,10 @@ pub enum DecoderWeight {
     DownWeight,
     /// Gated MLP down-projection bias.
     DownBias,
+    /// Per-head query RMS normalization scale (Qwen3).
+    QueryNormScale,
+    /// Per-head key RMS normalization scale (Qwen3).
+    KeyNormScale,
 }
 
 impl DecoderWeight {
@@ -64,6 +68,8 @@ impl DecoderWeight {
             Self::UpBias => "mlp.up.bias",
             Self::DownWeight => "mlp.down.weight",
             Self::DownBias => "mlp.down.bias",
+            Self::QueryNormScale => "attention.query_norm.scale",
+            Self::KeyNormScale => "attention.key_norm.scale",
         }
     }
 }
@@ -519,6 +525,20 @@ fn extend_block_requirements(
         key_value_width,
         *attention.bias(),
     );
+    if attention.query_key_norm().is_some() {
+        for (parameter, suffix) in [
+            (DecoderWeight::QueryNormScale, "self_attn.q_norm.weight"),
+            (DecoderWeight::KeyNormScale, "self_attn.k_norm.weight"),
+        ] {
+            push_requirement(
+                output,
+                layer,
+                parameter,
+                format!("{prefix}.{suffix}"),
+                vec![attention.head_dimension()],
+            );
+        }
+    }
     push_requirement(
         output,
         layer,

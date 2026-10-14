@@ -104,6 +104,64 @@ pub struct RopeSpec {
     theta: f64,
     max_sequence_length: usize,
     layout: RopeLayout,
+    /// Frequency rescaling for contexts longer than the pretraining length
+    /// (Llama 3.1/3.2); absent for the other models.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scaling: Option<RopeScaling>,
+}
+
+/// The `llama3` rotary frequency rescaling of Hugging Face Transformers:
+/// frequencies whose wavelength exceeds
+/// `original_max_sequence_length / low_frequency_factor` are divided by
+/// `factor`, those with a wavelength below
+/// `original_max_sequence_length / high_frequency_factor` are kept, and the
+/// ones in between are interpolated.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+pub struct RopeScaling {
+    factor: f64,
+    low_frequency_factor: f64,
+    high_frequency_factor: f64,
+    original_max_sequence_length: usize,
+}
+
+impl RopeScaling {
+    pub(crate) const fn llama3(
+        factor: f64,
+        low_frequency_factor: f64,
+        high_frequency_factor: f64,
+        original_max_sequence_length: usize,
+    ) -> Self {
+        Self {
+            factor,
+            low_frequency_factor,
+            high_frequency_factor,
+            original_max_sequence_length,
+        }
+    }
+
+    /// Divisor applied to the low frequencies.
+    #[must_use]
+    pub const fn factor(&self) -> f64 {
+        self.factor
+    }
+
+    /// Wavelength bound divisor above which a frequency counts as low.
+    #[must_use]
+    pub const fn low_frequency_factor(&self) -> f64 {
+        self.low_frequency_factor
+    }
+
+    /// Wavelength bound divisor below which a frequency counts as high.
+    #[must_use]
+    pub const fn high_frequency_factor(&self) -> f64 {
+        self.high_frequency_factor
+    }
+
+    /// Context length the frequencies were trained for.
+    #[must_use]
+    pub const fn original_max_sequence_length(&self) -> usize {
+        self.original_max_sequence_length
+    }
 }
 
 impl RopeSpec {
@@ -113,7 +171,19 @@ impl RopeSpec {
             theta,
             max_sequence_length,
             layout: RopeLayout::Standard,
+            scaling: None,
         }
+    }
+
+    pub(crate) const fn with_scaling(mut self, scaling: Option<RopeScaling>) -> Self {
+        self.scaling = scaling;
+        self
+    }
+
+    /// Returns the frequency rescaling, when the model has one.
+    #[must_use]
+    pub const fn scaling(&self) -> Option<&RopeScaling> {
+        self.scaling.as_ref()
     }
 
     /// Returns the rotated head dimension.
@@ -217,6 +287,10 @@ pub struct AttentionSpec {
     head_dimension: usize,
     bias: AttentionBiasSpec,
     rope: RopeSpec,
+    /// RMS norm over each query head and each key head before the rotary
+    /// embedding (Qwen3); absent for the other families.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    query_key_norm: Option<NormSpec>,
 }
 
 impl AttentionSpec {
@@ -235,7 +309,19 @@ impl AttentionSpec {
             head_dimension,
             bias,
             rope,
+            query_key_norm: None,
         }
+    }
+
+    pub(crate) fn with_query_key_norm(mut self, norm: Option<NormSpec>) -> Self {
+        self.query_key_norm = norm;
+        self
+    }
+
+    /// Returns the per-head query/key normalization, when the model has one.
+    #[must_use]
+    pub const fn query_key_norm(&self) -> Option<&NormSpec> {
+        self.query_key_norm.as_ref()
     }
 
     /// Returns the residual width.

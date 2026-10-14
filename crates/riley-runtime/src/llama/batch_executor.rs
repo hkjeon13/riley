@@ -20,7 +20,7 @@ use riley_model::LoadedModel;
 use super::batch::{LlamaBatchRow, LlamaPackedBatchMetadata};
 pub use super::executor::allocation::PreparedLlamaBatchAllocationReport;
 use super::executor::allocation::build_batch_allocation_report;
-use super::executor::buffers::{BatchDeviceInput, U16_BYTES, U32_BYTES};
+use super::executor::buffers::{BatchDeviceInput, BatchHostInput, U16_BYTES, U32_BYTES};
 pub use super::executor::config::{
     BatchMetadataTransport, ExecutionCompletionImplementation, PreparedLlamaBatchExecutorConfig,
     RaggedAttentionImplementation, ResidualNormImplementation,
@@ -718,9 +718,23 @@ impl PreparedLlamaBatchExecutor {
                 field: "greedy_results_host",
                 reason: "cold-prepared host result storage is too short",
             })?;
-        if let Err(source) =
-            device.download_to_slice(0, host, &mut self.owner.forward.io_staging, stream)
-        {
+        // Staged step uploads: the iteration's command batch has already
+        // copied the selections into the pinned staging buffer.
+        let staged = match &mut self.owner.host.input {
+            BatchHostInput::PerOperation(input)
+                if input.staged_greedy_bytes.get() == result_bytes =>
+            {
+                input.staged_greedy_bytes.set(0);
+                let offset = input.staged_output_offset;
+                input.staging.as_mut().map(|staging| (staging, offset))
+            }
+            _ => None,
+        };
+        let downloaded = match staged {
+            Some((staging, offset)) => staging.read(offset, host),
+            None => device.download_to_slice(0, host, &mut self.owner.forward.io_staging, stream),
+        };
+        if let Err(source) = downloaded {
             poison_for_cuda_error(&mut self.owner.poisoned, &source);
             return Err(batch_cuda(
                 ExecutionSite::global(LlamaOp::OutputGather),
@@ -1275,7 +1289,11 @@ mod tests {
             LlamaBatchMetadataConfig::new(8, 512, 8, 8, 8).expect("valid metadata bounds");
         let defaults =
             PreparedLlamaBatchExecutorConfig::new(metadata, PreparedLlamaForwardConfig::default());
-        let excessive = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 512];
+        // One more than the bucket limit, ascending and ending at the token budget.
+        let excessive: Vec<usize> = (1
+            ..=crate::llama::executor::shape::MAX_LLAMA_BATCH_SHAPE_BUCKETS)
+            .chain([512])
+            .collect();
         for invalid in [
             &[][..],
             &[0, 512][..],

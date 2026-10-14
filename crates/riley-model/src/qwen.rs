@@ -196,6 +196,9 @@ pub struct Qwen2TokenizerConfig {
     eos_token: String,
     pad_token: String,
     model_max_length: u64,
+    /// Whether the whole pinned Qwen2.5 profile, chat template included, was
+    /// verified. The completions-only profile leaves it false.
+    pinned_chat_profile: bool,
 }
 
 impl Qwen2TokenizerConfig {
@@ -229,7 +232,114 @@ impl Qwen2TokenizerConfig {
             eos_token: raw.eos_token,
             pad_token: raw.pad_token,
             model_max_length: raw.model_max_length,
+            pinned_chat_profile: true,
         })
+    }
+
+    /// Parses `tokenizer_config.json` of a Qwen-tokenizer checkpoint whose
+    /// chat profile is not the pinned Qwen2.5 one (Qwen3, fine-tunes with
+    /// another template or extra metadata keys).
+    ///
+    /// Only what raw-prompt completion needs is read and verified: the added
+    /// tokens (cross-checked against `tokenizer.json` by
+    /// [`Self::validate_tokenizer`]), the EOS and padding token contents, and
+    /// the context bound. The chat template is kept as metadata and
+    /// [`Self::render_chat`] refuses to render it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for malformed metadata or an added token with
+    /// stripping, normalization, or single-word matching enabled.
+    pub fn from_json_slice_completions_only_with_limits(
+        input: &[u8],
+        limits: LoadLimits,
+    ) -> ModelResult<Self> {
+        enforce_limit("tokenizer_config JSON", limits.config_bytes(), input.len())?;
+        let raw: serde_json::Value = strict_json::from_slice(input, ArtifactKind::Tokenizer)?;
+        let object = raw
+            .as_object()
+            .ok_or_else(|| invalid_config("tokenizer_config must be a JSON object"))?;
+        let token_content = |field: &str| -> Option<String> {
+            match object.get(field)? {
+                serde_json::Value::String(content) => Some(content.clone()),
+                serde_json::Value::Object(token) => {
+                    token.get("content")?.as_str().map(str::to_owned)
+                }
+                _ => None,
+            }
+        };
+        let eos_token = token_content("eos_token")
+            .ok_or_else(|| invalid_config("tokenizer_config has no eos_token content"))?;
+        let pad_token = token_content("pad_token").unwrap_or_else(|| eos_token.clone());
+        // Some exports write "no bound" as a float far beyond any context.
+        let model_max_length = match object.get("model_max_length") {
+            Some(serde_json::Value::Number(number)) => number.as_u64().or_else(|| {
+                number
+                    .as_f64()
+                    .filter(|value| value.is_finite() && *value >= 1.0)
+                    .map(|_| u64::MAX)
+            }),
+            _ => None,
+        }
+        .filter(|value| *value != 0)
+        .ok_or_else(|| invalid_config("tokenizer_config has no positive model_max_length"))?;
+        let chat_template = match object.get("chat_template") {
+            None | Some(serde_json::Value::Null) => String::new(),
+            Some(serde_json::Value::String(template))
+                if template.len() <= MAX_CHAT_TEMPLATE_BYTES =>
+            {
+                template.clone()
+            }
+            Some(_) => {
+                return Err(invalid_config(
+                    "chat_template has an invalid form or length",
+                ));
+            }
+        };
+        let raw_added: BTreeMap<String, RawConfigAddedToken> = object
+            .get("added_tokens_decoder")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|error| invalid_config(format!("added_tokens_decoder: {error}")))?
+            .ok_or_else(|| invalid_config("tokenizer_config has no added_tokens_decoder"))?;
+        if raw_added.is_empty() || raw_added.len() > limits.added_tokens() {
+            return Err(invalid_config("added_tokens_decoder has an invalid size"));
+        }
+        let mut added_tokens = BTreeMap::new();
+        for (key, token) in raw_added {
+            let id: u32 = key
+                .parse()
+                .map_err(|_| invalid_config(format!("added token ID {key} is not a u32")))?;
+            if token.lstrip.0 || token.normalized.0 || token.rstrip.0 || token.single_word.0 {
+                return Err(invalid_config(format!(
+                    "added token ID {id} enables stripping, normalization, or single-word matching"
+                )));
+            }
+            added_tokens.insert(
+                id,
+                ConfigAddedToken {
+                    content: token.content,
+                    special: token.special.0,
+                },
+            );
+        }
+
+        Ok(Self {
+            chat_template,
+            added_tokens,
+            eos_token,
+            pad_token,
+            model_max_length,
+            pinned_chat_profile: false,
+        })
+    }
+
+    /// Returns whether the pinned Qwen2.5 chat profile was verified, which
+    /// [`Self::render_chat`] requires.
+    #[must_use]
+    pub const fn has_pinned_chat_profile(&self) -> bool {
+        self.pinned_chat_profile
     }
 
     /// Returns the original validated Jinja template metadata.
@@ -263,11 +373,14 @@ impl Qwen2TokenizerConfig {
     /// Returns an error when content, special identity, or the exclusive
     /// addressable-ID upper bound differs.
     pub fn validate_tokenizer(&self, tokenizer: &Qwen2Tokenizer) -> ModelResult<()> {
-        let expected_count = PINNED_ADDED_TOKENS
-            .last()
-            .and_then(|(id, _, _)| usize::try_from(*id).ok())
+        // The added tokens end the vocabulary: one past the last added ID.
+        let expected_count = self
+            .added_tokens
+            .keys()
+            .next_back()
+            .and_then(|id| usize::try_from(*id).ok())
             .and_then(|id| id.checked_add(1))
-            .ok_or_else(|| invalid_config("pinned addressable token count overflow"))?;
+            .ok_or_else(|| invalid_config("addressable token count overflow"))?;
         if tokenizer.addressable_token_count() != expected_count {
             return Err(invalid_config(format!(
                 "Qwen tokenizer addressable token count must be {expected_count}, found {}",
@@ -301,6 +414,11 @@ impl Qwen2TokenizerConfig {
         messages: &[ChatMessage<'_>],
         options: ChatTemplateOptions,
     ) -> ModelResult<String> {
+        if !self.pinned_chat_profile {
+            return Err(invalid_config(
+                "this checkpoint's chat template is not the pinned Qwen2.5 profile; only raw-prompt completion is supported",
+            ));
+        }
         if options.tools_requested {
             return Err(invalid_config(
                 "Qwen chat tools are unsupported by the no-tools renderer",
@@ -771,7 +889,20 @@ mod tests {
             ),
             fixture.replace(r#""end_of_word_suffix":"""#, r#""end_of_word_suffix":"x""#),
         ];
-        for unexpected in [Value::Null, Value::Bool(false)] {
+        // `ignore_merges: false` is what Qwen3 exports write for the same
+        // behaviour as an omitted key; null and true stay rejected.
+        let mut explicit_false: Value = serde_json::from_str(&fixture).unwrap();
+        explicit_false["model"]
+            .as_object_mut()
+            .unwrap()
+            .insert("ignore_merges".to_owned(), Value::Bool(false));
+        assert!(
+            Qwen2Tokenizer::from_json_slice(
+                serde_json::to_string(&explicit_false).unwrap().as_bytes()
+            )
+            .is_ok()
+        );
+        for unexpected in [Value::Null, Value::Bool(true)] {
             let mut variant: Value = serde_json::from_str(&fixture).unwrap();
             variant["model"]
                 .as_object_mut()

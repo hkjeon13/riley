@@ -395,6 +395,32 @@ pub fn embedding<S: CudaExecutionStream + ?Sized>(
     params: &mut EmbeddingParams<'_>,
     stream: &mut S,
 ) -> Result<(), EmbeddingError> {
+    embedding_with_report_mode(params, stream, 0)
+}
+
+/// [`embedding`] inside a command batch without the read-back of its device
+/// error report, so the gather can be part of a recorded step. The report (a
+/// 32-byte `RileyCudaEmbeddingErrorReport`: `u32` size, `u32` code, `u64`
+/// token position, `u64` token id, `u64` zero) stays in `error_scratch`; the
+/// caller must copy it back and check its code after the batch has completed.
+/// Until then an out-of-range token is undetected (the gather leaves its
+/// output untouched in that case).
+///
+/// # Errors
+///
+/// Returns a CUDA validation or launch error.
+pub fn embedding_deferred_report<S: CudaExecutionStream + ?Sized>(
+    params: &mut EmbeddingParams<'_>,
+    stream: &mut S,
+) -> Result<(), EmbeddingError> {
+    embedding_with_report_mode(params, stream, 1)
+}
+
+fn embedding_with_report_mode<S: CudaExecutionStream + ?Sized>(
+    params: &mut EmbeddingParams<'_>,
+    stream: &mut S,
+    report_mode: u64,
+) -> Result<(), EmbeddingError> {
     const OPERATION: &str = "embedding";
     let stream = execution_stream_mut(stream);
     validate_embedding_params(params, stream)?;
@@ -409,6 +435,7 @@ pub fn embedding<S: CudaExecutionStream + ?Sized>(
             params.token_count,
             params.vocabulary_size,
             params.hidden_size,
+            report_mode,
             &mut stream.native,
         );
         match (completion.result, completion.report.code) {
@@ -433,7 +460,7 @@ pub fn embedding<S: CudaExecutionStream + ?Sized>(
     }
     #[cfg(not(feature = "cuda"))]
     {
-        let _ = params;
+        let _ = (params, report_mode);
         Err(CudaError::unavailable(OPERATION).into())
     }
 }
@@ -1270,6 +1297,12 @@ pub struct QkvRopeParams<'a> {
     /// in one kernel with the same stored bytes. That write must take this
     /// call's key and value outputs as its sources.
     pub defer_for_kv_write: bool,
+    /// Head-norm form for models without Q/K/V bias (Qwen3): `Some(epsilon)`
+    /// applies an RMS norm over every query head and key head before the
+    /// rotary embedding instead of adding a bias. `query_bias` and `key_bias`
+    /// of the split then hold the BF16 `[head_size]` norm scales, `value_bias`
+    /// is not read, and `head_size` must be 128.
+    pub head_norm_epsilon: Option<f32>,
 }
 
 /// [`qkv_split_bias`] with the indexed BF16 `RoPE` of the query and key outputs
@@ -1369,9 +1402,25 @@ fn qkv_split_bias_impl<S: CudaExecutionStream + ?Sized>(
         params.key_value_width,
         CudaDType::BF16,
     )?;
-    let query_bias_bytes = required_vector_bytes(OPERATION, params.query_width, CudaDType::BF16)?;
-    let key_value_bias_bytes =
-        required_vector_bytes(OPERATION, params.key_value_width, CudaDType::BF16)?;
+    let head_norm = rope.and_then(|rope| rope.head_norm_epsilon.map(|_| rope.head_size));
+    if let Some(head_size) = head_norm {
+        if head_size != 128 {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "the head-norm split requires a head size of 128",
+            ));
+        }
+    }
+    let query_bias_bytes = required_vector_bytes(
+        OPERATION,
+        head_norm.unwrap_or(params.query_width),
+        CudaDType::BF16,
+    )?;
+    let key_value_bias_bytes = required_vector_bytes(
+        OPERATION,
+        head_norm.unwrap_or(params.key_value_width),
+        CudaDType::BF16,
+    )?;
     require_capacity(OPERATION, "merged", params.merged.byte_len, merged_bytes)?;
     require_capacity(
         OPERATION,
@@ -1428,6 +1477,7 @@ fn qkv_split_bias_impl<S: CudaExecutionStream + ?Sized>(
                 table_position_count: rope.table_position_count,
                 rotated_row_count: rope.positions_host.len() as u64,
                 defer_for_kv_write: rope.defer_for_kv_write,
+                head_norm_epsilon: rope.head_norm_epsilon,
             }),
             &mut stream.native,
         )
@@ -1525,6 +1575,67 @@ pub fn silu_gated_multiply<S: CudaExecutionStream + ?Sized>(
     gated_multiply_impl(params, stream, true)
 }
 
+/// Inputs for `silu(gate) * up` over the output of one merged gate|up GEMM.
+#[derive(Debug)]
+pub struct MergedGatedMultiplyParams<'a> {
+    /// BF16 rows of `2 * row_width` values: raw gate, then up.
+    pub merged: CudaBufferSpan<'a>,
+    /// BF16 product, `row_width` values per row.
+    pub output: CudaBufferSpanMut<'a>,
+    /// Output elements (`rows * row_width`).
+    pub element_count: u64,
+    /// Width of the gate (and of the up) projection.
+    pub row_width: u64,
+}
+
+/// Executes `silu(raw_gate) * up` where both operands sit in one row-merged
+/// buffer; the arithmetic per element is that of [`silu_gated_multiply`].
+///
+/// # Errors
+///
+/// Returns a descriptor, dtype, range, launch, or synchronization error.
+pub fn silu_gated_multiply_merged_rows<S: CudaExecutionStream + ?Sized>(
+    params: &mut MergedGatedMultiplyParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "silu_gated_multiply_merged_rows";
+    let stream = execution_stream_mut(stream);
+    require_dtype(OPERATION, "merged", params.merged.dtype, CudaDType::BF16)?;
+    require_dtype(OPERATION, "output", params.output.dtype, CudaDType::BF16)?;
+    require_nonzero(OPERATION, "row_width", params.row_width)?;
+    if params.element_count % params.row_width != 0 || params.element_count > 0x7fff_ffff {
+        return Err(CudaError::invalid_argument(
+            OPERATION,
+            "element_count must be a multiple of row_width below 2^31",
+        ));
+    }
+    let required = required_vector_bytes(OPERATION, params.element_count, CudaDType::BF16)?;
+    require_capacity(OPERATION, "merged", params.merged.byte_len, required * 2)?;
+    require_capacity(OPERATION, "output", params.output.byte_len, required)?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[params.merged.buffer, params.output.buffer],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::gated_multiply_execute(
+            params.merged.raw(),
+            params.merged.raw(),
+            params.output.raw(),
+            params.element_count,
+            true,
+            params.row_width,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
 fn gated_multiply_impl<S: CudaExecutionStream + ?Sized>(
     params: &mut GatedMultiplyParams<'_>,
     stream: &mut S,
@@ -1556,6 +1667,7 @@ fn gated_multiply_impl<S: CudaExecutionStream + ?Sized>(
             params.output.raw(),
             params.element_count,
             raw_gate,
+            0,
             &mut stream.native,
         )
     }

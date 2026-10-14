@@ -21,14 +21,24 @@ pub(crate) const QWEN2_SPLIT_REGEX: &str = concat!(
     "\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
 );
 
+// The Llama 3 tokenizer (meta-llama/Llama-3.1 and 3.2) splits with the same
+// expression except that a run of up to three digits is one piece.
+pub(crate) const LLAMA3_SPLIT_REGEX: &str = concat!(
+    "(?i:'s|'t|'re|'ve|'m|'ll|'d)|",
+    "[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|",
+    "\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|",
+    "\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
+);
+
 /// Options controlling tokenizer encoding.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EncodeOptions {
     /// Requests configured post-processing special tokens.
     ///
-    /// The supported `SmolLM2` artifact has no post-processor, so this flag does
-    /// not add BOS or EOS. Special-token text already present in the input is
-    /// still recognized exactly.
+    /// The supported `SmolLM2` and Qwen artifacts have no such template, so
+    /// for them this flag adds nothing. The Llama 3 artifact's template puts
+    /// its begin-of-text token first. Special-token text already present in
+    /// the input is still recognized exactly.
     pub add_special_tokens: bool,
 }
 
@@ -144,12 +154,22 @@ pub struct SmolLm2Tokenizer {
     byte_decoder: BTreeMap<char, u8>,
     maximum_decoded_token_bytes: usize,
     profile: TokenizerProfile,
+    /// Token the post-processor template puts before the input (Llama 3).
+    bos_token_id: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TokenizerProfile {
     SmolLm2,
     Qwen2,
+    Llama3,
+}
+
+impl TokenizerProfile {
+    /// Added tokens outside the byte-level vocabulary decode as their raw text.
+    const fn added_tokens_are_raw(self) -> bool {
+        matches!(self, Self::Qwen2 | Self::Llama3)
+    }
 }
 
 impl SmolLm2Tokenizer {
@@ -180,6 +200,28 @@ impl SmolLm2Tokenizer {
         Self::from_json_slice_with_profile(input, limits, TokenizerProfile::Qwen2)
     }
 
+    /// Parses a Llama 3 tokenizer artifact (Llama 3.1 / 3.2): the Qwen-style
+    /// split with digit runs of up to three, `ignore_merges`, and a template
+    /// that prepends the begin-of-text token.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for malformed, duplicate, oversized, or unsupported
+    /// tokenizer JSON and for inconsistent vocabularies or merge tables.
+    pub fn from_llama3_json_slice_with_limits(
+        input: &[u8],
+        limits: LoadLimits,
+    ) -> ModelResult<Self> {
+        Self::from_json_slice_with_profile(input, limits, TokenizerProfile::Llama3)
+    }
+
+    /// Returns the token the template prepends when special tokens are
+    /// requested, if the artifact has one.
+    #[must_use]
+    pub const fn bos_token_id(&self) -> Option<u32> {
+        self.bos_token_id
+    }
+
     fn from_json_slice_with_profile(
         input: &[u8],
         limits: LoadLimits,
@@ -204,6 +246,10 @@ impl SmolLm2Tokenizer {
             raw.added_tokens.len(),
         )?;
 
+        let bos_template = match profile {
+            TokenizerProfile::Llama3 => Some(llama3_bos_template(&raw.post_processor)?),
+            TokenizerProfile::SmolLm2 | TokenizerProfile::Qwen2 => None,
+        };
         let (byte_encoder, byte_decoder) = byte_maps();
         let (vocab, mut vocab_by_id) = validate_vocab(raw.model.vocab)?;
         let validated_added =
@@ -217,7 +263,7 @@ impl SmolLm2Tokenizer {
             .iter()
             .enumerate()
             .map(|(id, token)| {
-                if profile == TokenizerProfile::Qwen2
+                if profile.added_tokens_are_raw()
                     && u32::try_from(id)
                         .ok()
                         .is_some_and(|id| added_ids.contains(&id))
@@ -229,6 +275,23 @@ impl SmolLm2Tokenizer {
             })
             .max()
             .unwrap_or(0);
+        // The template's token must be the special added token it names.
+        let bos_token_id = match bos_template {
+            None => None,
+            Some((content, id)) => {
+                let matches = usize::try_from(id)
+                    .ok()
+                    .and_then(|index| vocab_by_id.get(index))
+                    .is_some_and(|token| *token == content)
+                    && special_ids.contains(&id);
+                if !matches {
+                    return Err(invalid(
+                        "Llama 3 post_processor template names a token that is not that special added token",
+                    ));
+                }
+                Some(id)
+            }
+        };
 
         Ok(Self {
             vocab,
@@ -241,6 +304,7 @@ impl SmolLm2Tokenizer {
             byte_decoder,
             maximum_decoded_token_bytes,
             profile,
+            bos_token_id,
         })
     }
 
@@ -292,6 +356,7 @@ impl SmolLm2Tokenizer {
                 .flat_map(gpt2_pieces)
                 .collect::<Vec<_>>(),
             TokenizerProfile::Qwen2 => qwen2_pieces(input),
+            TokenizerProfile::Llama3 => llama3_pieces(input),
         };
         for piece in pieces {
             let mapped = piece
@@ -299,6 +364,14 @@ impl SmolLm2Tokenizer {
                 .iter()
                 .map(|byte| self.byte_encoder[usize::from(*byte)])
                 .collect::<String>();
+            // `ignore_merges`: a piece that is itself a vocabulary entry is
+            // that token, whatever the merge table would build from it.
+            if self.profile == TokenizerProfile::Llama3 {
+                if let Some(&id) = self.vocab.get(&mapped) {
+                    output.push(id);
+                    continue;
+                }
+            }
             output.extend(self.bpe(&mapped)?);
         }
         Ok(())
@@ -364,7 +437,7 @@ impl SmolLm2Tokenizer {
         if self.is_special_id(id) && options.skip_special_tokens {
             return Ok(None);
         }
-        if self.profile == TokenizerProfile::Qwen2 && self.added_ids.contains(&id) {
+        if self.profile.added_tokens_are_raw() && self.added_ids.contains(&id) {
             return Ok(Some(DecodedToken::Raw(token.as_bytes())));
         }
         Ok(Some(DecodedToken::classify(token, &self.byte_decoder)))
@@ -422,8 +495,11 @@ impl<'a> DecodedToken<'a> {
 }
 
 impl Tokenizer for SmolLm2Tokenizer {
-    fn encode(&self, input: &str, _options: EncodeOptions) -> ModelResult<Vec<u32>> {
+    fn encode(&self, input: &str, options: EncodeOptions) -> ModelResult<Vec<u32>> {
         let mut output = Vec::new();
+        if options.add_special_tokens {
+            output.extend(self.bos_token_id);
+        }
         let mut cursor = 0_usize;
         while cursor < input.len() {
             let Some((start, end, id)) = self.added_trie.next_match(input, cursor) else {
@@ -667,13 +743,30 @@ fn validate_bpe_profile(raw: &RawTokenizer, profile: TokenizerProfile) -> ModelR
                 ));
             }
         }
+        TokenizerProfile::Llama3 => {
+            if !model.continuing_subword_prefix.is_null()
+                || !model.end_of_word_suffix.is_null()
+                || !matches!(
+                    model.ignore_merges,
+                    RawOptionalJson::Present(serde_json::Value::Bool(true))
+                )
+            {
+                return Err(invalid(
+                    "Llama 3 BPE requires null subword prefixes/suffixes and ignore_merges=true",
+                ));
+            }
+        }
         TokenizerProfile::Qwen2 => {
             if model.continuing_subword_prefix.as_str() != Some("")
                 || model.end_of_word_suffix.as_str() != Some("")
-                || !matches!(model.ignore_merges, RawOptionalJson::Missing)
+                || !matches!(
+                    model.ignore_merges,
+                    RawOptionalJson::Missing
+                        | RawOptionalJson::Present(serde_json::Value::Bool(false))
+                )
             {
                 return Err(invalid(
-                    "Qwen2 BPE requires empty subword prefixes/suffixes and omitted ignore_merges",
+                    "Qwen2 BPE requires empty subword prefixes/suffixes and ignore_merges omitted or false",
                 ));
             }
         }
@@ -685,7 +778,9 @@ fn validate_pipeline(raw: &RawTokenizer, profile: TokenizerProfile) -> ModelResu
     if raw.pre_tokenizer.kind != "Sequence" || raw.pre_tokenizer.pretokenizers.len() != 2 {
         return Err(invalid(match profile {
             TokenizerProfile::SmolLm2 => "pre_tokenizer must be Sequence(Digits, ByteLevel)",
-            TokenizerProfile::Qwen2 => "pre_tokenizer must be Sequence(Split, ByteLevel)",
+            TokenizerProfile::Qwen2 | TokenizerProfile::Llama3 => {
+                "pre_tokenizer must be Sequence(Split, ByteLevel)"
+            }
         }));
     }
 
@@ -714,6 +809,32 @@ fn validate_pipeline(raw: &RawTokenizer, profile: TokenizerProfile) -> ModelResu
             ) {
                 return Err(invalid(
                     "pre_tokenizer must use individual digits and ByteLevel(false,true,true)",
+                ));
+            }
+        }
+        TokenizerProfile::Llama3 => {
+            if !raw.normalizer.is_null() {
+                return Err(invalid("Llama 3 normalizer must be null"));
+            }
+            // The ByteLevel step only maps bytes (no regex of its own, no
+            // prefix space); `trim_offsets` concerns offsets, not token IDs.
+            if !matches!(
+                (&raw.pre_tokenizer.pretokenizers[0], &raw.pre_tokenizer.pretokenizers[1]),
+                (
+                    RawPreTokenizer::Split {
+                        pattern: RawSplitPattern::Regex(pattern),
+                        behavior,
+                        invert: false,
+                    },
+                    RawPreTokenizer::ByteLevel {
+                        add_prefix_space: false,
+                        trim_offsets: _,
+                        use_regex: false,
+                    }
+                ) if pattern == LLAMA3_SPLIT_REGEX && behavior == "Isolated"
+            ) {
+                return Err(invalid(
+                    "Llama 3 pre_tokenizer must use the pinned Split regex with Isolated(false) and ByteLevel without prefix space or regex",
                 ));
             }
         }
@@ -755,14 +876,80 @@ fn validate_pipeline(raw: &RawTokenizer, profile: TokenizerProfile) -> ModelResu
                 && !raw.decoder.trim_offsets
                 && !raw.decoder.use_regex
         }
+        // Decoding a ByteLevel vocabulary does not depend on these flags.
+        TokenizerProfile::Llama3 => raw.decoder.kind == "ByteLevel",
     };
     if !decoder_matches {
         return Err(invalid(match profile {
             TokenizerProfile::SmolLm2 => "decoder must be ByteLevel(true,true,true)",
             TokenizerProfile::Qwen2 => "decoder must be ByteLevel(false,false,false)",
+            TokenizerProfile::Llama3 => "decoder must be ByteLevel",
         }));
     }
     Ok(())
+}
+
+/// Reads the single-sequence template of the Llama 3 post-processor and
+/// returns the content and ID of the one special token it puts before the
+/// input. The accepted shape is a `TemplateProcessing` (alone, or after a
+/// `ByteLevel` step in a `Sequence`) whose `single` template is exactly
+/// `[special token, sequence A]`.
+fn llama3_bos_template(value: &serde_json::Value) -> ModelResult<(String, u32)> {
+    let unsupported = || invalid("unsupported Llama 3 post_processor");
+    let template = match value.get("type").and_then(serde_json::Value::as_str) {
+        Some("TemplateProcessing") => value,
+        Some("Sequence") => {
+            let processors = value
+                .get("processors")
+                .and_then(serde_json::Value::as_array)
+                .ok_or_else(unsupported)?;
+            let mut template = None;
+            for processor in processors {
+                match processor.get("type").and_then(serde_json::Value::as_str) {
+                    Some("ByteLevel") => {}
+                    Some("TemplateProcessing") if template.is_none() => {
+                        template = Some(processor);
+                    }
+                    _ => return Err(unsupported()),
+                }
+            }
+            template.ok_or_else(unsupported)?
+        }
+        _ => return Err(unsupported()),
+    };
+    let single = template
+        .get("single")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(unsupported)?;
+    let [first, second] = single.as_slice() else {
+        return Err(unsupported());
+    };
+    let content = first
+        .get("SpecialToken")
+        .filter(|token| token.get("type_id").and_then(serde_json::Value::as_u64) == Some(0))
+        .and_then(|token| token.get("id"))
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(unsupported)?;
+    let sequence = second.get("Sequence").ok_or_else(unsupported)?;
+    if sequence.get("id").and_then(serde_json::Value::as_str) != Some("A")
+        || sequence.get("type_id").and_then(serde_json::Value::as_u64) != Some(0)
+    {
+        return Err(unsupported());
+    }
+    let ids = template
+        .get("special_tokens")
+        .and_then(|tokens| tokens.get(content))
+        .and_then(|token| token.get("ids"))
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(unsupported)?;
+    let [id] = ids.as_slice() else {
+        return Err(unsupported());
+    };
+    let id = id
+        .as_u64()
+        .and_then(|id| u32::try_from(id).ok())
+        .ok_or_else(unsupported)?;
+    Ok((content.to_owned(), id))
 }
 
 #[derive(Deserialize)]
@@ -1242,7 +1429,26 @@ fn qwen2_pieces(input: &str) -> Vec<&str> {
     pieces
 }
 
+/// Pieces of the Llama 3 split: the Qwen2 alternation with `\p{N}{1,3}`.
+fn llama3_pieces(input: &str) -> Vec<&str> {
+    let mut pieces = Vec::new();
+    let mut cursor = 0_usize;
+    while cursor < input.len() {
+        let end = next_split_piece_end(input, cursor, 3);
+        debug_assert!(end > cursor && end <= input.len());
+        pieces.push(&input[cursor..end]);
+        cursor = end;
+    }
+    pieces
+}
+
 fn next_qwen2_piece_end(input: &str, start: usize) -> usize {
+    next_split_piece_end(input, start, 1)
+}
+
+/// One match of the pinned alternation; `maximum_number_run` is the bound of
+/// its `\p{N}{1,n}` branch (1 for Qwen2, 3 for Llama 3).
+fn next_split_piece_end(input: &str, start: usize, maximum_number_run: usize) -> usize {
     if let Some(end) = qwen2_contraction_end(input, start) {
         return end;
     }
@@ -1253,7 +1459,14 @@ fn next_qwen2_piece_end(input: &str, start: usize) -> usize {
 
     let first = input[start..].chars().next().expect("start is in bounds");
     if first.is_numeric() {
-        return start + first.len_utf8();
+        return input[start..]
+            .char_indices()
+            .take_while(|(_, character)| character.is_numeric())
+            .take(maximum_number_run)
+            .last()
+            .map_or(start + first.len_utf8(), |(offset, character)| {
+                start + offset + character.len_utf8()
+            });
     }
     if let Some(end) = qwen2_punctuation_end(input, start) {
         return end;
@@ -2153,6 +2366,92 @@ mod tests {
                 .decode(&[24], DecodeOptions::default())
                 .expect("ByteLevel uses lossy UTF-8 decoding"),
             "�"
+        );
+    }
+    const LLAMA3_FIXTURE: &str = r#"{
+      "version":"1.0",
+      "truncation":null,
+      "padding":null,
+      "added_tokens":[
+        {"id":20,"content":"<|begin_of_text|>","single_word":false,"lstrip":false,"rstrip":false,"normalized":false,"special":true},
+        {"id":21,"content":"<|eot_id|>","single_word":false,"lstrip":false,"rstrip":false,"normalized":false,"special":true}],
+      "normalizer":null,
+      "pre_tokenizer":{"type":"Sequence","pretokenizers":[{"type":"Split","pattern":{"Regex":"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"},"behavior":"Isolated","invert":false},{"type":"ByteLevel","add_prefix_space":false,"trim_offsets":true,"use_regex":false}]},
+      "post_processor":{"type":"Sequence","processors":[{"type":"ByteLevel","add_prefix_space":true,"trim_offsets":false,"use_regex":true},{"type":"TemplateProcessing","single":[{"SpecialToken":{"id":"<|begin_of_text|>","type_id":0}},{"Sequence":{"id":"A","type_id":0}}],"pair":[{"SpecialToken":{"id":"<|begin_of_text|>","type_id":0}},{"Sequence":{"id":"A","type_id":0}},{"SpecialToken":{"id":"<|begin_of_text|>","type_id":1}},{"Sequence":{"id":"B","type_id":1}}],"special_tokens":{"<|begin_of_text|>":{"id":"<|begin_of_text|>","ids":[20],"tokens":["<|begin_of_text|>"]}}}]},
+      "decoder":{"type":"ByteLevel","add_prefix_space":true,"trim_offsets":true,"use_regex":true},
+      "model":{"type":"BPE","dropout":null,"unk_token":null,"continuing_subword_prefix":null,"end_of_word_suffix":null,"fuse_unk":false,"byte_fallback":false,"ignore_merges":true,
+        "vocab":{"a":0,"b":1,"c":2,"1":3,"2":4,"3":5,"4":6,"Ġ":7,"ab":8,"abc":9,"12":10,"123":11,"Ġa":12,"Ġab":13,"bc":14,"Ġabc":15,"Ġ1":16,"34":17,"!":18,"Ċ":19},
+        "merges":["a b","ab c","1 2","12 3","Ġ a","Ġa b","b c","3 4"]}
+    }"#;
+
+    #[test]
+    fn llama3_profile_groups_digits_prefers_whole_pieces_and_prepends_bos() {
+        let tokenizer = SmolLm2Tokenizer::from_llama3_json_slice_with_limits(
+            LLAMA3_FIXTURE.as_bytes(),
+            LoadLimits::default(),
+        )
+        .expect("Llama 3 tokenizer");
+        assert_eq!(tokenizer.bos_token_id(), Some(20));
+        // Digit runs split after three digits; "1234" is "123" then "4".
+        assert_eq!(
+            llama3_pieces("abc 1234 12345678!\n"),
+            ["abc", " ", "123", "4", " ", "123", "456", "78", "!\n"]
+        );
+        // " abc" is a vocabulary entry, so `ignore_merges` takes it whole even
+        // though the merge table alone would stop at "Ġab" + "c".
+        let ids = tokenizer
+            .encode("abc abc1234", EncodeOptions::default())
+            .expect("encode");
+        assert_eq!(ids, [20, 9, 15, 11, 6]);
+        let without_bos = tokenizer
+            .encode(
+                "abc abc1234",
+                EncodeOptions {
+                    add_special_tokens: false,
+                },
+            )
+            .expect("encode");
+        assert_eq!(without_bos, [9, 15, 11, 6]);
+        // A special token written in the text is still matched exactly.
+        assert_eq!(
+            tokenizer
+                .encode(
+                    "ab<|eot_id|>",
+                    EncodeOptions {
+                        add_special_tokens: false,
+                    },
+                )
+                .expect("encode"),
+            [8, 21]
+        );
+        assert_eq!(
+            tokenizer
+                .decode(
+                    &ids,
+                    DecodeOptions {
+                        skip_special_tokens: true,
+                    }
+                )
+                .expect("decode"),
+            "abc abc1234"
+        );
+        assert_eq!(
+            tokenizer
+                .decode(&ids, DecodeOptions::default())
+                .expect("decode"),
+            "<|begin_of_text|>abc abc1234"
+        );
+        // The Qwen2 and SmolLM2 profiles reject this artifact, and this
+        // profile rejects a tokenizer without `ignore_merges`.
+        assert!(SmolLm2Tokenizer::from_json_slice(LLAMA3_FIXTURE.as_bytes()).is_err());
+        assert!(
+            SmolLm2Tokenizer::from_llama3_json_slice_with_limits(
+                LLAMA3_FIXTURE
+                    .replace("\"ignore_merges\":true", "\"ignore_merges\":false")
+                    .as_bytes(),
+                LoadLimits::default(),
+            )
+            .is_err()
         );
     }
 }

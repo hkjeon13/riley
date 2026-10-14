@@ -1393,7 +1393,10 @@ fn trace_mode(
 ) -> TestResult<ModeTrace> {
     let (context, mut stream) = first_context()?;
     let raw_directory = required_path("RILEY_QWEN_HTTP_LOGIT_TRACE_DIR");
-    assert!(raw_directory.is_dir(), "precreated diagnostic output directory required");
+    assert!(
+        raw_directory.is_dir(),
+        "precreated diagnostic output directory required"
+    );
 
     let mut executor = PreparedLlamaBatchExecutor::prepare(
         model,
@@ -1499,11 +1502,12 @@ fn trace_mode(
                 assert_eq!(plan.output_slots().len(), 1);
                 let native = downloaded.logits_bf16_native();
                 assert_eq!(native.len(), EXPECTED_VOCABULARY_SIZE * BF16_BYTES);
-                let raw_path = raw_directory.join(
-                    format!("{variant_id}-step-{trace_step:03}.bf16le")
-                );
+                let raw_path =
+                    raw_directory.join(format!("{variant_id}-step-{trace_step:03}.bf16le"));
                 let mut raw_file = fs::OpenOptions::new()
-                    .write(true).create_new(true).open(raw_path)?;
+                    .write(true)
+                    .create_new(true)
+                    .open(raw_path)?;
                 raw_file.write_all(&bf16_le_bytes(native)?)?;
 
                 let addressable_len = EXPECTED_ADDRESSABLE_TOKEN_COUNT * BF16_BYTES;
@@ -1551,10 +1555,7 @@ fn trace_mode(
                 }
             };
             let samples = match staged.as_ref() {
-                Some(row) => vec![SampledIterationToken::new(
-                    row.selected_token_id,
-                    false,
-                )],
+                Some(row) => vec![SampledIterationToken::new(row.selected_token_id, false)],
                 None => Vec::new(),
             };
             let result = match downloaded.into_result(&samples, timing) {
@@ -1616,7 +1617,12 @@ fn trace_mode(
         assert!(scheduler.inflight_iteration_id().is_none());
         assert_eq!(
             terminal_token_ids.as_deref(),
-            Some(rows.iter().map(|row| row.selected_token_id).collect::<Vec<_>>().as_slice())
+            Some(
+                rows.iter()
+                    .map(|row| row.selected_token_id)
+                    .collect::<Vec<_>>()
+                    .as_slice()
+            )
         );
         Ok(ModeTrace {
             variant_id,
@@ -1893,7 +1899,6 @@ fn dense_cache_free_reference_control_json(control: &DenseReferenceControl) -> V
     })
 }
 
-
 #[test]
 #[ignore = "remote-only own-chosen128 C1 ordinary-route numerical trace; no serving claim"]
 fn qwen3b_ordinary_c1_own_chosen128_logit_trace() -> TestResult {
@@ -1901,24 +1906,52 @@ fn qwen3b_ordinary_c1_own_chosen128_logit_trace() -> TestResult {
     let hf = load_hf_teacher_forced_oracle(&workload)?;
     let model = load_model()?;
     let strict = trace_mode(
-        &model, &workload, &hf, "strict-fixed-maximum",
-        LlamaProjectionBiasMode::StrictStagedV1, TraceShapePolicy::FixedMaximum,
+        &model,
+        &workload,
+        &hf,
+        "strict-fixed-maximum",
+        LlamaProjectionBiasMode::StrictStagedV1,
+        TraceShapePolicy::FixedMaximum,
     )?;
     assert_eq!(strict.rows.len(), 128);
-    let own_tokens = strict.rows.iter().map(|row| row.selected_token_id).collect::<Vec<_>>();
+    let own_tokens = strict
+        .rows
+        .iter()
+        .map(|row| row.selected_token_id)
+        .collect::<Vec<_>>();
     let observation_bytes = fs::read(required_path("RILEY_QWEN_HTTP_OBSERVATION"))?;
-    assert_eq!(sha256_hex(&observation_bytes), "478fdce2773f851e8b10a854015801a639ef4c9bd1faedce5aff5a733ad0fbcc");
+    assert_eq!(
+        sha256_hex(&observation_bytes),
+        "478fdce2773f851e8b10a854015801a639ef4c9bd1faedce5aff5a733ad0fbcc"
+    );
     let observation: Value = serde_json::from_slice(&observation_bytes)?;
-    let http_tokens = observation["token_ids"].as_array().ok_or("HTTP token array missing")?
-        .iter().map(|x| x.as_u64().and_then(|v| u32::try_from(v).ok())
-            .ok_or("HTTP token ID invalid")).collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(own_tokens, http_tokens, "ordinary scheduler reproduction differs from complete HTTP output");
+    let http_tokens = observation["token_ids"]
+        .as_array()
+        .ok_or("HTTP token array missing")?
+        .iter()
+        .map(|x| {
+            x.as_u64()
+                .and_then(|v| u32::try_from(v).ok())
+                .ok_or("HTTP token ID invalid")
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(
+        own_tokens, http_tokens,
+        "ordinary scheduler reproduction differs from complete HTTP output"
+    );
     let mut trace = trace_json(&strict);
-    for (step, row) in trace["rows"].as_array_mut().ok_or("trace rows missing")?.iter_mut().enumerate() {
-        row["HF_comparison_same_input_prefix"] = json!(own_tokens[..step] == hf.teacher_token_ids[..step]);
+    for (step, row) in trace["rows"]
+        .as_array_mut()
+        .ok_or("trace rows missing")?
+        .iter_mut()
+        .enumerate()
+    {
+        row["HF_comparison_same_input_prefix"] =
+            json!(own_tokens[..step] == hf.teacher_token_ids[..step]);
         row["raw_sidecar"] = json!(format!("strict-fixed-maximum-step-{step:03}.bf16le"));
     }
-    println!("RILEY_QWEN_ORDINARY_C1_OWN_CHOSEN128_LOGIT_TRACE={}",
+    println!(
+        "RILEY_QWEN_ORDINARY_C1_OWN_CHOSEN128_LOGIT_TRACE={}",
         serde_json::to_string(&json!({
             "schema_version": "riley.qwen-ordinary-c1-own-chosen128-logit-trace.v1",
             "performance_claim_eligible": false,
@@ -1941,6 +1974,7 @@ fn qwen3b_ordinary_c1_own_chosen128_logit_trace() -> TestResult {
             },
             "own_token_ids": own_tokens, "trace": trace,
             "serving_performance": "미실행", "goal_achieved": false
-        }))?);
+        }))?
+    );
     Ok(())
 }

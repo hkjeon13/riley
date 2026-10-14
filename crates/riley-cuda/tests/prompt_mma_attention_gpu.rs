@@ -54,7 +54,10 @@ fn pattern(count: usize, multiplier: usize, offset: usize, modulus: usize, scale
 }
 
 fn encode_u32(values: &[u32]) -> Vec<u8> {
-    values.iter().flat_map(|value| value.to_ne_bytes()).collect()
+    values
+        .iter()
+        .flat_map(|value| value.to_ne_bytes())
+        .collect()
 }
 
 fn upload(
@@ -326,9 +329,30 @@ fn prompt_rows_are_independent_of_batching_alignment_and_chunking() -> TestResul
         [prompt_rows(5, 63..66), prompt_rows(4, 0..1)].concat(),
     ];
 
-    let reference = run(&context, &mut stream, &mut staging, &pools, &arrangement_a, false)?;
-    let output_a = run(&context, &mut stream, &mut staging, &pools, &arrangement_a, true)?;
-    let output_b = run(&context, &mut stream, &mut staging, &pools, &arrangement_b, true)?;
+    let reference = run(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &arrangement_a,
+        false,
+    )?;
+    let output_a = run(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &arrangement_a,
+        true,
+    )?;
+    let output_b = run(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &arrangement_b,
+        true,
+    )?;
     let mut by_row = std::collections::HashMap::new();
     for (row, bytes) in arrangement_a.iter().zip(&output_a) {
         by_row.insert(*row, bytes.clone());
@@ -342,7 +366,10 @@ fn prompt_rows_are_independent_of_batching_alignment_and_chunking() -> TestResul
             for (left, right) in mma.chunks_exact(2).zip(shared.chunks_exact(2)) {
                 let a = bf16_value(u16::from_ne_bytes([left[0], left[1]]));
                 let b = bf16_value(u16::from_ne_bytes([right[0], right[1]]));
-                assert!(a.is_finite() && b.is_finite(), "non-finite attention output");
+                assert!(
+                    a.is_finite() && b.is_finite(),
+                    "non-finite attention output"
+                );
                 worst = worst.max((a - b).abs());
                 prompt_elements += 1;
                 prompt_identical_to_shared_kv += usize::from(left == right);

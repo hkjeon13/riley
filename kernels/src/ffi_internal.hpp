@@ -1723,6 +1723,9 @@ struct DeferredQkvSplit {
   uint64_t head_size = 0;
   uint64_t table_position_count = 0;
   uint64_t rotated_row_count = 0;
+  // Head-norm form: query_bias/key_bias are the per-head norm scales.
+  bool head_norm = false;
+  float norm_epsilon = 0.0F;
 };
 
 inline DeferredQkvSplit& thread_deferred_qkv_split() noexcept {

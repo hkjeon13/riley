@@ -25,8 +25,8 @@ pub use config::{ConfigWarning, LlamaConfig, ModelConfig, ModelFamily, Qwen2Conf
 pub use error::{ArtifactKind, ModelError, ModelResult};
 pub use ir::{
     Activation, AttentionBiasSpec, AttentionSpec, DecoderBlockSpec, EmbeddingSpec, GatedMlpSpec,
-    LmHeadSpec, ModelArchitecture, ModelSpec, NormKind, NormSpec, RopeLayout, RopeSpec,
-    SpecialTokenSpec,
+    LmHeadSpec, ModelArchitecture, ModelSpec, NormKind, NormSpec, RopeLayout, RopeScaling,
+    RopeSpec, SpecialTokenSpec,
 };
 pub use limits::LoadLimits;
 pub use model::{CONFIG_FILENAME, LoadedModel, TOKENIZER_CONFIG_FILENAME, TOKENIZER_FILENAME};

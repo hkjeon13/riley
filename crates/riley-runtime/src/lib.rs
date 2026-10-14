@@ -1,12 +1,14 @@
 //! Model, tensor, and backend orchestration boundary.
 
 pub mod generation;
+pub mod host_trace;
 mod kernel;
 pub mod llama;
 pub mod paged_kv;
 pub mod reference;
 pub mod rng;
 pub mod sampling;
+pub mod submit_hook;
 
 #[cfg(any(feature = "cuda", test))]
 mod cuda_weights;

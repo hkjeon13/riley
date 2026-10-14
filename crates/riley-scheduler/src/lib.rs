@@ -64,7 +64,7 @@ pub mod metrics;
 pub mod plan;
 mod scheduler;
 
-pub use config::{OverloadPolicy, PrefillPlateauPolicy, SchedulerConfig};
+pub use config::{OverloadPolicy, PrefillCoalescingPolicy, PrefillPlateauPolicy, SchedulerConfig};
 pub use error::{SchedulerError, SchedulerResult};
 pub use execution::{
     DownloadedLlamaIteration, IterationAdapterError, IterationAdapterResult,

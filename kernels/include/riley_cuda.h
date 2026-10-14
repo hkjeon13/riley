@@ -428,6 +428,12 @@ typedef struct RileyCudaQkvSplitBiasParams {
   // stream, whose key and value sources must be this call's key and value
   // outputs, runs the split and the cache write in one kernel with the same
   // stored bytes. A command batch must not end with a deferred split pending.
+  // reserved[3] bit 0 (RoPE mode only, rope_head_size == 128) selects the
+  // head-norm form for models without Q/K/V bias: no bias is added, query_bias
+  // and key_bias hold the BF16 [rope_head_size] scales of an RMS norm applied
+  // to every query head and key head before the rotary embedding (the
+  // arithmetic of the BF16 RMS norm primitive on rows of one head), value_bias
+  // is not read, and the upper 32 bits are the F32 bits of the norm epsilon.
   uint64_t reserved[4];
   RileyCudaBufferSpan rope_cos;
   RileyCudaBufferSpan rope_sin;
@@ -2309,6 +2315,18 @@ RileyCudaStatus riley_cuda_command_batch_copy_h2d_async(
     uint64_t byte_len,
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Device-to-pinned-host counterpart with the same batch lifetime contract: the
+// pinned bytes are valid once riley_cuda_stream_command_batch_end has
+// confirmed completion.
+RileyCudaStatus riley_cuda_command_batch_copy_d2h_async(
+    RileyCudaPinnedHostBuffer* destination,
+    uint64_t destination_offset,
+    RileyCudaDeviceBuffer* source,
+    uint64_t source_offset,
+    uint64_t byte_len,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // out_complete is 1 when native buffer-use counters have been released, even
 // if the returned status reports a deferred submission error.
 RileyCudaStatus riley_cuda_copy_query(
@@ -2362,6 +2380,10 @@ RileyCudaStatus riley_cuda_test_memory_fault_stats(
 // remains untouched, the lowest bad token is reported, and OUT_OF_RANGE is
 // returned only after the stream is confirmed complete. A zero-token call
 // clears only out_report; its device scratch is intentionally untouched.
+// params->reserved[0] == 1 (inside a command batch) launches the kernels and
+// leaves the error report in device_error_scratch, so the gather can be part
+// of a recorded step; the caller copies the report back and checks it after
+// the batch.
 RileyCudaStatus riley_cuda_embedding_execute(
     const RileyCudaEmbeddingParams* params,
     RileyCudaStream* stream,

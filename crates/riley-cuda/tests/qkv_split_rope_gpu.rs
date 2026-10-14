@@ -189,6 +189,7 @@ fn run_case(
             head_size: head_size_u64,
             table_position_count: table_u64,
             defer_for_kv_write: false,
+            head_norm_epsilon: None,
         };
         split(
             &mut query_fused,

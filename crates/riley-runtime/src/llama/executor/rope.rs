@@ -8,6 +8,7 @@ use super::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult, usize_u64,
 };
 use super::host::allocate_zeroed_host_bytes;
+use crate::llama::plan::LlamaRopeFrequencies;
 
 const F32_BYTES_USIZE: usize = std::mem::size_of::<f32>();
 const F32_BYTES: u64 = 4;
@@ -49,14 +50,14 @@ fn absolute_rope_table_shape(
 pub(in crate::llama) fn build_absolute_rope_angles(
     position_count: usize,
     head_dimension: usize,
-    theta: f32,
+    frequencies: impl Into<LlamaRopeFrequencies>,
 ) -> LlamaBatchExecutorResult<Box<[u8]>> {
+    let frequencies = frequencies.into();
     let (half, elements) = absolute_rope_table_shape(position_count, head_dimension)?;
     let mut angles = allocate_zeroed_host_bytes(elements, F32_BYTES_USIZE)?;
     for position in 0..position_count {
         for pair in 0..half {
-            let exponent = (2 * pair) as f32 / head_dimension as f32;
-            let inverse_frequency = 1.0 / theta.powf(exponent);
+            let inverse_frequency = frequencies.inverse_frequency(pair, head_dimension);
             let angle = position as f32 * inverse_frequency;
             let byte_offset = position
                 .checked_mul(half)
@@ -76,15 +77,15 @@ pub(in crate::llama) fn build_absolute_rope_angles(
 pub(in crate::llama) fn build_absolute_cpu_rope_tables(
     position_count: usize,
     head_dimension: usize,
-    theta: f32,
+    frequencies: impl Into<LlamaRopeFrequencies>,
 ) -> LlamaBatchExecutorResult<RopeTableBytes> {
+    let frequencies = frequencies.into();
     let (half, elements) = absolute_rope_table_shape(position_count, head_dimension)?;
     let mut cos = allocate_zeroed_host_bytes(elements, F32_BYTES_USIZE)?;
     let mut sin = allocate_zeroed_host_bytes(elements, F32_BYTES_USIZE)?;
     for position in 0..position_count {
         for pair in 0..half {
-            let exponent = (2 * pair) as f32 / head_dimension as f32;
-            let inverse_frequency = 1.0 / theta.powf(exponent);
+            let inverse_frequency = frequencies.inverse_frequency(pair, head_dimension);
             let angle = position as f32 * inverse_frequency;
             let (sine, cosine) = angle.sin_cos();
             let byte_offset = position

@@ -121,6 +121,7 @@ fn engine_config() -> EngineConfig {
         max_inflight_requests: MAX_ACTIVE_REQUESTS + MAX_WAITING_REQUESTS,
         admission_timeout: Duration::from_secs(30),
         idle_poll_interval: Duration::from_millis(1),
+        publish_after_submit: false,
     }
 }
 

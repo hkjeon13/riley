@@ -1,7 +1,8 @@
 //! Tensor-core page-state producer of the D128 two-stage attention: a row's
 //! output must not depend on the rows it is batched with, on its index or on
 //! the chunk it arrives in; rows past the active count are zeros; and the
-//! result stays within rounding distance of the shared-KV producer.
+//! result stays within rounding distance of the shared-KV producer. Checked
+//! for every head geometry in `GEOMETRIES`.
 #![allow(clippy::too_many_lines)]
 
 use std::error::Error;
@@ -17,15 +18,61 @@ use riley_cuda::{
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
-const QUERY_HEADS: usize = 16;
-const KEY_VALUE_HEADS: usize = 2;
+/// Query and key/value head counts of one checked geometry.
+#[derive(Clone, Copy, Debug)]
+struct Heads {
+    query: usize,
+    key_value: usize,
+}
+
+impl Heads {
+    const fn row_width(self) -> usize {
+        self.query * HEAD_SIZE
+    }
+}
+
+/// Qwen2.5-3B first, then groups of 6, 7, 5, 2, 4, 3 and 1 query heads per
+/// key/value head.
+const GEOMETRIES: [Heads; 8] = [
+    Heads {
+        query: 16,
+        key_value: 2,
+    },
+    Heads {
+        query: 12,
+        key_value: 2,
+    },
+    Heads {
+        query: 28,
+        key_value: 4,
+    },
+    Heads {
+        query: 40,
+        key_value: 8,
+    },
+    Heads {
+        query: 16,
+        key_value: 8,
+    },
+    Heads {
+        query: 32,
+        key_value: 8,
+    },
+    Heads {
+        query: 24,
+        key_value: 8,
+    },
+    Heads {
+        query: 4,
+        key_value: 4,
+    },
+];
 const HEAD_SIZE: usize = 128;
 const PAGE_SIZE: usize = 16;
 const SCALE: f32 = 0.088_388_346;
 const SEQUENCES: usize = 6;
 const PAGES_PER_SEQUENCE: usize = 20;
 const PAGE_CAPACITY: usize = 24;
-const ROW_WIDTH: usize = QUERY_HEADS * HEAD_SIZE;
 /// Output rows launched past the active rows; they must come back as zeros.
 const PADDING_ROWS: usize = 3;
 
@@ -55,7 +102,10 @@ fn pattern(count: usize, multiplier: usize, offset: usize, modulus: usize, scale
 }
 
 fn encode_u32(values: &[u32]) -> Vec<u8> {
-    values.iter().flat_map(|value| value.to_ne_bytes()).collect()
+    values
+        .iter()
+        .flat_map(|value| value.to_ne_bytes())
+        .collect()
 }
 
 fn upload(
@@ -85,12 +135,13 @@ fn download(
 
 /// The query of a logical row is a function of the row alone, so the same row
 /// carries the same query in every arrangement.
-fn row_query(row: Row) -> Vec<u8> {
+fn row_query(row: Row, row_width: usize) -> Vec<u8> {
     let seed = row.sequence as usize * 7_919 + row.position as usize * 104_729;
-    pattern(ROW_WIDTH, 11, seed % 9_973, 29, 9.0)
+    pattern(row_width, 11, seed % 9_973, 29, 9.0)
 }
 
 struct Pools {
+    heads: Heads,
     key_pool: CudaDeviceBuffer,
     value_pool: CudaDeviceBuffer,
     offsets: CudaDeviceBuffer,
@@ -112,6 +163,7 @@ fn run(
     tensor_core: bool,
 ) -> TestResult<Vec<Vec<u8>>> {
     let row_count = rows.len();
+    let row_width = pools.heads.row_width();
     let output_rows = row_count + PADDING_ROWS;
     let slots: Vec<u32> = rows.iter().map(|row| row.sequence).collect();
     let positions: Vec<u32> = rows.iter().map(|row| row.position).collect();
@@ -123,14 +175,18 @@ fn run(
         &positions,
         u64::try_from(SEQUENCES * PAGES_PER_SEQUENCE)?,
     )?;
-    let mut query_bytes: Vec<u8> = rows.iter().flat_map(|row| row_query(*row)).collect();
-    query_bytes.resize(output_rows * ROW_WIDTH * 2, 0);
+    let mut query_bytes: Vec<u8> = rows
+        .iter()
+        .flat_map(|row| row_query(*row, row_width))
+        .collect();
+    query_bytes.resize(output_rows * row_width * 2, 0);
     let query = upload(context, stream, staging, &query_bytes)?;
     let row_slots = upload(context, stream, staging, &encode_u32(&slots))?;
     let position_buffer = upload(context, stream, staging, &encode_u32(&positions))?;
-    let layout = NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::new(
+    let layout = NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::with_query_heads(
         u64::try_from(output_rows)?,
         u64::try_from(PAGE_CAPACITY)?,
+        u64::try_from(pools.heads.query)?,
     )?;
     let mut partial_states = context.allocate_device_buffer(layout.partial_state_bytes())?;
     let mut reduction_steps = context.allocate_device_buffer(layout.reduction_step_bytes())?;
@@ -140,7 +196,7 @@ fn run(
         context,
         stream,
         staging,
-        &vec![0x5a_u8; output_rows * ROW_WIDTH * 2],
+        &vec![0x5a_u8; output_rows * row_width * 2],
     )?;
     {
         let (states_len, steps_len, normalizers_len, output_len) = (
@@ -195,8 +251,8 @@ fn run(
                     position_buffer.byte_len(),
                 )?,
             )?,
-            query_head_count: u64::try_from(QUERY_HEADS)?,
-            key_value_head_count: u64::try_from(KEY_VALUE_HEADS)?,
+            query_head_count: u64::try_from(pools.heads.query)?,
+            key_value_head_count: u64::try_from(pools.heads.key_value)?,
             head_size: u64::try_from(HEAD_SIZE)?,
             output_row_count: u64::try_from(output_rows)?,
             partial_state_capacity: u64::try_from(PAGE_CAPACITY)?,
@@ -222,13 +278,13 @@ fn run(
     ] {
         buffer.close()?;
     }
-    let (active, padding) = bytes.split_at(row_count * ROW_WIDTH * 2);
+    let (active, padding) = bytes.split_at(row_count * row_width * 2);
     assert!(
         padding.iter().all(|byte| *byte == 0),
         "rows past the active count must be zeros"
     );
     Ok(active
-        .chunks_exact(ROW_WIDTH * 2)
+        .chunks_exact(row_width * 2)
         .map(<[u8]>::to_vec)
         .collect())
 }
@@ -244,12 +300,19 @@ fn rows(sequence: u32, positions: impl IntoIterator<Item = u32>) -> Vec<Row> {
 #[ignore = "remote GPU"]
 fn tensor_core_outputs_are_independent_of_batching_order_and_chunking() -> TestResult {
     let runtime = CudaRuntime::initialize()?;
+    for heads in GEOMETRIES {
+        check_geometry(&runtime, heads)?;
+    }
+    Ok(())
+}
+
+fn check_geometry(runtime: &CudaRuntime, heads: Heads) -> TestResult {
     let context = runtime.device(0)?.create_context()?;
     let mut stream = context.create_stream()?;
     let mut staging = context.allocate_pinned_host_buffer(64 << 20)?;
 
     let physical_blocks = SEQUENCES * PAGES_PER_SEQUENCE;
-    let pool_elements = physical_blocks * KEY_VALUE_HEADS * PAGE_SIZE * HEAD_SIZE;
+    let pool_elements = physical_blocks * heads.key_value * PAGE_SIZE * HEAD_SIZE;
     let sequence_block_offsets: Vec<u32> = (0..=SEQUENCES)
         .map(|sequence| (sequence * PAGES_PER_SEQUENCE) as u32)
         .collect();
@@ -259,6 +322,7 @@ fn tensor_core_outputs_are_independent_of_batching_order_and_chunking() -> TestR
         .collect();
     let valid_tokens = vec![PAGE_SIZE as u16; physical_blocks];
     let pools = Pools {
+        heads,
         key_pool: upload(
             &context,
             &mut stream,
@@ -313,9 +377,30 @@ fn tensor_core_outputs_are_independent_of_batching_order_and_chunking() -> TestR
         &arrangement_a[90..],
     ];
 
-    let reference = run(&context, &mut stream, &mut staging, &pools, &arrangement_a, false)?;
-    let output_a = run(&context, &mut stream, &mut staging, &pools, &arrangement_a, true)?;
-    let output_b = run(&context, &mut stream, &mut staging, &pools, &arrangement_b, true)?;
+    let reference = run(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &arrangement_a,
+        false,
+    )?;
+    let output_a = run(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &arrangement_a,
+        true,
+    )?;
+    let output_b = run(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &arrangement_b,
+        true,
+    )?;
     let mut by_row = std::collections::HashMap::new();
     for (row, bytes) in arrangement_a.iter().zip(&output_a) {
         by_row.insert(*row, bytes.clone());
@@ -328,7 +413,10 @@ fn tensor_core_outputs_are_independent_of_batching_order_and_chunking() -> TestR
         for (left, right) in tensor_core.chunks_exact(2).zip(shared_kv.chunks_exact(2)) {
             let a = bf16_value(u16::from_ne_bytes([left[0], left[1]]));
             let b = bf16_value(u16::from_ne_bytes([right[0], right[1]]));
-            assert!(a.is_finite() && b.is_finite(), "non-finite attention output");
+            assert!(
+                a.is_finite() && b.is_finite(),
+                "non-finite attention output"
+            );
             worst = worst.max((a - b).abs());
             elements += 1;
             identical += usize::from(left == right);
@@ -353,7 +441,9 @@ fn tensor_core_outputs_are_independent_of_batching_order_and_chunking() -> TestR
         }
     }
     println!(
-        "tensor-core-producer rows={} elements={elements} identical_to_shared_kv={identical} max_abs_difference={worst} rearranged_rows={} chunked_rows={chunked_rows}",
+        "tensor-core-producer query_heads={} key_value_heads={} rows={} elements={elements} identical_to_shared_kv={identical} max_abs_difference={worst} rearranged_rows={} chunked_rows={chunked_rows}",
+        heads.query,
+        heads.key_value,
         arrangement_a.len(),
         arrangement_b.len(),
     );

@@ -1285,6 +1285,7 @@ fn execute_llama_iteration_inner(
         }
     };
 
+    riley_runtime::host_trace::lap_here(riley_runtime::host_trace::PREPARE);
     if let Some(timer) = timer.as_deref_mut() {
         timer.record_start(stream).map_err(|error| {
             IterationExecutionFailure::new(iteration_id, Some(ExecutionAbort::NotDispatched), error)
@@ -1353,6 +1354,7 @@ fn execute_llama_iteration_inner(
         ));
     }
 
+    riley_runtime::host_trace::lap_here(riley_runtime::host_trace::DOWNLOAD);
     if let Some(tokens) = greedy_token_workspace {
         greedy_token_ids = std::mem::take(tokens);
     }

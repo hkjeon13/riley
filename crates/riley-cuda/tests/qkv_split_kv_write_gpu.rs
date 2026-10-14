@@ -5,8 +5,8 @@ use std::error::Error;
 
 use riley_cuda::{
     CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDeviceBuffer,
-    CudaPinnedHostBuffer, CudaRuntime, CudaStream, PackedBatchHostV1, PackedBatchV1,
-    QkvRopeParams, QkvSplitBiasParams, RaggedPagedKvCacheWriteParams, qkv_split_bias_rope,
+    CudaPinnedHostBuffer, CudaRuntime, CudaStream, PackedBatchHostV1, PackedBatchV1, QkvRopeParams,
+    QkvSplitBiasParams, RaggedPagedKvCacheWriteParams, qkv_split_bias_rope,
     ragged_paged_kv_cache_write,
 };
 
@@ -22,7 +22,9 @@ fn bf16_bits(value: f32) -> u16 {
 }
 
 fn encode_bf16(values: impl Iterator<Item = f32>) -> Vec<u8> {
-    values.flat_map(|value| bf16_bits(value).to_ne_bytes()).collect()
+    values
+        .flat_map(|value| bf16_bits(value).to_ne_bytes())
+        .collect()
 }
 
 fn encode_f32(values: impl Iterator<Item = f32>) -> Vec<u8> {
@@ -30,11 +32,17 @@ fn encode_f32(values: impl Iterator<Item = f32>) -> Vec<u8> {
 }
 
 fn encode_u32(values: &[u32]) -> Vec<u8> {
-    values.iter().flat_map(|value| value.to_ne_bytes()).collect()
+    values
+        .iter()
+        .flat_map(|value| value.to_ne_bytes())
+        .collect()
 }
 
 fn encode_u16(values: &[u16]) -> Vec<u8> {
-    values.iter().flat_map(|value| value.to_ne_bytes()).collect()
+    values
+        .iter()
+        .flat_map(|value| value.to_ne_bytes())
+        .collect()
 }
 
 fn upload(
@@ -136,25 +144,71 @@ fn deferred_qkv_split_and_kv_write_match_the_two_separate_launches() -> TestResu
         &mut staging,
         &encode_f32((0..table_positions * HEAD / 2).map(|i| (i as f32 * 0.013).sin())),
     )?;
-    let offsets_device = upload(&context, &mut stream, &mut staging, &encode_u32(&sequence_block_offsets))?;
+    let offsets_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&sequence_block_offsets),
+    )?;
     let block_ids_device = upload(&context, &mut stream, &mut staging, &encode_u32(&block_ids))?;
-    let valid_tokens_device = upload(&context, &mut stream, &mut staging, &encode_u16(&valid_tokens))?;
-    let row_slots_device = upload(&context, &mut stream, &mut staging, &encode_u32(&row_sequence_slots))?;
-    let row_positions_device = upload(&context, &mut stream, &mut staging, &encode_u32(&row_positions))?;
+    let valid_tokens_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u16(&valid_tokens),
+    )?;
+    let row_slots_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&row_sequence_slots),
+    )?;
+    let row_positions_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&row_positions),
+    )?;
 
     let sentinel = |elements: usize| encode_bf16(std::iter::repeat_n(-113.0_f32, elements));
     let pool_elements = physical_blocks * key_value_heads * BLOCK * HEAD;
     let mut results = Vec::new();
     for deferred in [false, true] {
-        let mut query = upload(&context, &mut stream, &mut staging, &sentinel(rows * query_width))?;
-        let mut key = upload(&context, &mut stream, &mut staging, &sentinel(rows * key_value_width))?;
-        let mut value = upload(&context, &mut stream, &mut staging, &sentinel(rows * key_value_width))?;
-        let mut key_pool = upload(&context, &mut stream, &mut staging, &sentinel(pool_elements))?;
-        let mut value_pool = upload(&context, &mut stream, &mut staging, &sentinel(pool_elements))?;
+        let mut query = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &sentinel(rows * query_width),
+        )?;
+        let mut key = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &sentinel(rows * key_value_width),
+        )?;
+        let mut value = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &sentinel(rows * key_value_width),
+        )?;
+        let mut key_pool = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &sentinel(pool_elements),
+        )?;
+        let mut value_pool = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &sentinel(pool_elements),
+        )?;
         let mut command_batch = stream.begin_command_batch()?;
         {
             let mut commands = command_batch.commands();
-            let (query_len, key_len, value_len) = (query.byte_len(), key.byte_len(), value.byte_len());
+            let (query_len, key_len, value_len) =
+                (query.byte_len(), key.byte_len(), value.byte_len());
             let mut split = QkvSplitBiasParams {
                 merged: span(&merged, CudaDType::BF16)?,
                 query_bias: span(&query_bias, CudaDType::BF16)?,
@@ -175,6 +229,7 @@ fn deferred_qkv_split_and_kv_write_match_the_two_separate_launches() -> TestResu
                 head_size: u64::try_from(HEAD)?,
                 table_position_count: u64::try_from(table_positions)?,
                 defer_for_kv_write: deferred,
+                head_norm_epsilon: None,
             };
             qkv_split_bias_rope(&mut split, &rope, &mut commands)?;
             let (key_pool_len, value_pool_len) = (key_pool.byte_len(), value_pool.byte_len());
@@ -182,8 +237,18 @@ fn deferred_qkv_split_and_kv_write_match_the_two_separate_launches() -> TestResu
                 &mut RaggedPagedKvCacheWriteParams {
                     key_source: span(&key, CudaDType::BF16)?,
                     value_source: span(&value, CudaDType::BF16)?,
-                    key_pool: CudaBufferSpanMut::new(&mut key_pool, CudaDType::BF16, 0, key_pool_len)?,
-                    value_pool: CudaBufferSpanMut::new(&mut value_pool, CudaDType::BF16, 0, value_pool_len)?,
+                    key_pool: CudaBufferSpanMut::new(
+                        &mut key_pool,
+                        CudaDType::BF16,
+                        0,
+                        key_pool_len,
+                    )?,
+                    value_pool: CudaBufferSpanMut::new(
+                        &mut value_pool,
+                        CudaDType::BF16,
+                        0,
+                        value_pool_len,
+                    )?,
                     batch: PackedBatchV1::new(
                         host,
                         span(&offsets_device, CudaDType::U32)?,
@@ -200,7 +265,13 @@ fn deferred_qkv_split_and_kv_write_match_the_two_separate_launches() -> TestResu
         }
         command_batch.finish()?;
         let mut bytes = Vec::new();
-        for buffer in [&mut query, &mut key, &mut value, &mut key_pool, &mut value_pool] {
+        for buffer in [
+            &mut query,
+            &mut key,
+            &mut value,
+            &mut key_pool,
+            &mut value_pool,
+        ] {
             bytes.push(download(&context, &mut stream, buffer)?);
         }
         results.push(bytes);
@@ -208,7 +279,10 @@ fn deferred_qkv_split_and_kv_write_match_the_two_separate_launches() -> TestResu
             buffer.close()?;
         }
     }
-    for (index, name) in ["query", "key", "value", "key pool", "value pool"].iter().enumerate() {
+    for (index, name) in ["query", "key", "value", "key pool", "value pool"]
+        .iter()
+        .enumerate()
+    {
         let differing = results[0][index]
             .chunks_exact(2)
             .zip(results[1][index].chunks_exact(2))

@@ -1,9 +1,9 @@
 //! Run one GPU validation command after explicit device preflight.
 //! Exit 77 is an unsupported-hardware skip, not success. CUDA errors exit 1.
+use riley_cuda::CudaRuntime;
 use riley_cuda::hardware_validation::{
     HardwareRequirement, HardwareValidationDisposition, HardwareValidationPolicy,
 };
-use riley_cuda::CudaRuntime;
 use std::ffi::OsString;
 use std::process::{Command, ExitCode};
 

@@ -951,6 +951,94 @@ bool use_wide_rms_norm(uint64_t row_count, uint64_t hidden_size) noexcept {
          row_count <= 256;
 }
 
+// The wide form for the other hidden sizes that are a multiple of 256 columns
+// (up to 4096): 1024 threads, four per lane of the 256-thread kernels. Thread
+// (lane, slot) loads that lane's columns number slot, slot + 4, ... (at most
+// four of them), stages them in shared memory, and the first 256 threads then
+// run the original per-thread accumulation over their lane's columns in
+// ascending order and the original pairwise tree. Every arithmetic statement
+// and its order match rms_norm_kernel / residual_rms_norm_kernel launched with
+// 256 threads, so the outputs are bit-identical; a thread waits on at most
+// four sequential global loads instead of hidden_size / 256.
+constexpr uint32_t kWideGeneralSlots = 4;
+constexpr uint32_t kWideGeneralMaxColumnsPerLane =
+    kWideGeneralSlots * kWideGeneralSlots;
+
+template <bool kResidual>
+__global__ __launch_bounds__(kWideRmsNormThreads)
+void wide_bf16_general_rms_norm_kernel(
+    const __nv_bfloat16* left, const __nv_bfloat16* right,
+    const __nv_bfloat16* weight, __nv_bfloat16* residual_output,
+    __nv_bfloat16* normalized_output, uint64_t row_count, uint32_t hidden_size,
+    float epsilon) {
+  __shared__ float staged[kWideGeneralMaxColumnsPerLane][kWideRmsNormLanes];
+  __shared__ float partial_sums[kWideRmsNormLanes];
+  const uint64_t row = blockIdx.x;
+  if (row >= row_count) {
+    return;
+  }
+  const uint64_t base = row * hidden_size;
+  const uint32_t columns_per_lane = hidden_size / kWideRmsNormLanes;
+  const uint32_t lane = threadIdx.x % kWideRmsNormLanes;
+  const uint32_t slot = threadIdx.x / kWideRmsNormLanes;
+  float values[kWideGeneralSlots];
+  uint32_t count = 0;
+  for (uint32_t index = slot; index < columns_per_lane;
+       index += kWideGeneralSlots) {
+    const uint32_t column = lane + kWideRmsNormLanes * index;
+    float value = 0.0F;
+    if constexpr (kResidual) {
+      value = round_to_storage<__nv_bfloat16>(
+          __bfloat162float(left[base + column]) +
+          __bfloat162float(right[base + column]));
+      residual_output[base + column] = __float2bfloat16_rn(value);
+    } else {
+      value = __bfloat162float(left[base + column]);
+    }
+    staged[index][lane] = value;
+    values[count] = value;
+    ++count;
+  }
+  __syncthreads();
+  if (threadIdx.x < kWideRmsNormLanes) {
+    float sum = 0.0F;
+    for (uint32_t index = 0; index < columns_per_lane; ++index) {
+      const float value = staged[index][lane];
+      sum += value * value;
+    }
+    partial_sums[lane] = sum;
+  }
+  __syncthreads();
+  for (uint32_t offset = kWideRmsNormLanes / 2; offset != 0; offset /= 2) {
+    if (threadIdx.x < offset) {
+      partial_sums[threadIdx.x] += partial_sums[threadIdx.x + offset];
+    }
+    __syncthreads();
+  }
+  const float inverse_rms =
+      rsqrtf(partial_sums[0] / static_cast<float>(hidden_size) + epsilon);
+  for (uint32_t item = 0; item < count; ++item) {
+    const uint32_t column =
+        lane + kWideRmsNormLanes * (slot + kWideGeneralSlots * item);
+    const float normalized = values[item] * inverse_rms;
+    const float normalized_for_weight =
+        round_to_storage<__nv_bfloat16>(normalized);
+    normalized_output[base + column] = __float2bfloat16_rn(
+        normalized_for_weight * __bfloat162float(weight[column]));
+  }
+}
+
+template <typename T>
+bool use_wide_general_rms_norm(uint64_t row_count,
+                               uint64_t hidden_size) noexcept {
+  return std::is_same<T, __nv_bfloat16>::value &&
+         hidden_size != kWideRmsNormHiddenSize &&
+         hidden_size % kWideRmsNormLanes == 0 &&
+         hidden_size / kWideRmsNormLanes >= 2 &&
+         hidden_size / kWideRmsNormLanes <= kWideGeneralMaxColumnsPerLane &&
+         row_count != 0 && row_count <= 256;
+}
+
 __global__ void row_bias_add_in_place_kernel(__nv_bfloat16* matrix,
                                              const __nv_bfloat16* bias,
                                              uint64_t column_count,
@@ -1006,6 +1094,26 @@ __global__ void silu_gated_multiply_bf16_kernel(const __nv_bfloat16* raw_gate,
         __float2bfloat16_rn(value / (1.0F + expf(-value))));
     output[index] =
         __float2bfloat16_rn(activated * __bfloat162float(up[index]));
+  }
+}
+
+// Merged-row variant of the raw-gate multiply: `merged` holds one row of
+// `2 * width` values per token, the raw gate projection followed by the up
+// projection (the output of one GEMM over the concatenated gate|up weights).
+// Same arithmetic per element as silu_gated_multiply_bf16_kernel.
+__global__ void silu_gated_multiply_merged_rows_bf16_kernel(
+    const __nv_bfloat16* merged, __nv_bfloat16* output, uint32_t element_count,
+    uint32_t width) {
+  const uint32_t first = blockIdx.x * blockDim.x + threadIdx.x;
+  const uint32_t stride = gridDim.x * blockDim.x;
+  for (uint32_t index = first; index < element_count; index += stride) {
+    const uint32_t row = index / width;
+    const __nv_bfloat16* gate = merged + static_cast<uint64_t>(row) * width + index;
+    const float value = __bfloat162float(gate[0]);
+    const float activated = __bfloat162float(
+        __float2bfloat16_rn(value / (1.0F + expf(-value))));
+    output[index] =
+        __float2bfloat16_rn(activated * __bfloat162float(gate[width]));
   }
 }
 
@@ -1135,6 +1243,15 @@ void launch_rms_norm(const ResolvedSpan& input, const ResolvedSpan& weight,
             reinterpret_cast<__nv_bfloat16*>(output.data), row_count, epsilon);
     return;
   }
+  if (use_wide_general_rms_norm<T>(row_count, hidden_size)) {
+    wide_bf16_general_rms_norm_kernel<false>
+        <<<static_cast<uint32_t>(row_count), kWideRmsNormThreads, 0, stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(input.data), nullptr,
+            reinterpret_cast<const __nv_bfloat16*>(weight.data), nullptr,
+            reinterpret_cast<__nv_bfloat16*>(output.data), row_count,
+            static_cast<uint32_t>(hidden_size), epsilon);
+    return;
+  }
   const uint32_t blocks = static_cast<uint32_t>(
       row_count < kMaximumBlocks ? row_count : kMaximumBlocks);
   rms_norm_kernel<T><<<blocks, kThreads, kThreads * sizeof(float), stream>>>(
@@ -1216,6 +1333,17 @@ void launch_residual_rms_norm(
             reinterpret_cast<__nv_bfloat16*>(residual_output.data),
             reinterpret_cast<__nv_bfloat16*>(normalized_output.data),
             row_count, epsilon);
+    return;
+  }
+  if (use_wide_general_rms_norm<T>(row_count, hidden_size)) {
+    wide_bf16_general_rms_norm_kernel<true>
+        <<<static_cast<uint32_t>(row_count), kWideRmsNormThreads, 0, stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(left.data),
+            reinterpret_cast<const __nv_bfloat16*>(right.data),
+            reinterpret_cast<const __nv_bfloat16*>(weight.data),
+            reinterpret_cast<__nv_bfloat16*>(residual_output.data),
+            reinterpret_cast<__nv_bfloat16*>(normalized_output.data),
+            row_count, static_cast<uint32_t>(hidden_size), epsilon);
     return;
   }
   const uint32_t blocks = static_cast<uint32_t>(
@@ -1338,10 +1466,16 @@ extern "C" RileyCudaStatus riley_cuda_embedding_execute(
   // placing out_report inside its params storage.
   const RileyCudaEmbeddingParams stable_params = *params;
   params = &stable_params;
-  if (params->reserved0 != 0 || !reserved_is_zero(params->reserved, 3)) {
+  // reserved[0] == 1 (command batch only) is for a caller that records the
+  // gather in a step graph: the kernels are launched and the error report is
+  // left in device_error_scratch (a RileyCudaEmbeddingErrorReport the caller
+  // copies back and checks after the batch); nothing is read back here.
+  const uint64_t report_mode = params->reserved[0];
+  if (params->reserved0 != 0 || report_mode > 1 ||
+      !reserved_is_zero(params->reserved + 1, 2)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
-                            "params reserved fields must be zero");
+                            "params reserved fields must be zero, or reserved[0] 1");
   }
   if (params->out_report == nullptr ||
       params->out_report->struct_size < sizeof(*params->out_report)) {
@@ -1472,6 +1606,13 @@ extern "C" RileyCudaStatus riley_cuda_embedding_execute(
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = prior_launch_status(error, kOperation);
   }
+  if (status == RILEY_CUDA_STATUS_SUCCESS && report_mode == 1 &&
+      !uses.command_batch()) {
+    status = validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "an embedding with a deferred error report needs a command batch");
+  }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
     reset_embedding_error<<<1, 1, 0, stream->stream>>>(
@@ -1506,6 +1647,12 @@ extern "C" RileyCudaStatus riley_cuda_embedding_execute(
         reinterpret_cast<RileyCudaEmbeddingErrorReport*>(
             device_error.data));
     status = launch_status(error, kOperation);
+  }
+  if (report_mode == 1) {
+    // The report stays on the device for the caller to copy back. Inside the
+    // command batch nothing is synchronized here.
+    return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                              error, kOperation);
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = runtime_error(
@@ -2226,12 +2373,21 @@ extern "C" RileyCudaStatus riley_cuda_gated_multiply_execute(
   // reserved[0] == 1 selects the raw-gate variant (BF16 only): the gate span
   // holds the unactivated projection and SiLU is applied in the same kernel.
   const bool raw_gate = params->reserved[0] == 1;
+  // reserved[1] != 0 (raw-gate variant only) is the row width of a merged
+  // gate|up input: the gate span then covers `2 * element_count` values, each
+  // row holding the raw gate followed by the up projection, and the up span
+  // must name the same buffer.
+  const uint64_t merged_width = params->reserved[1];
   if (params->reserved0 != 0 || params->reserved[0] > 1 ||
-      !reserved_is_zero(params->reserved + 1, 4) ||
-      (raw_gate && params->activated_gate.dtype != RILEY_CUDA_DTYPE_BF16)) {
+      !reserved_is_zero(params->reserved + 2, 3) ||
+      (raw_gate && params->activated_gate.dtype != RILEY_CUDA_DTYPE_BF16) ||
+      (merged_width != 0 &&
+       (!raw_gate || params->element_count % merged_width != 0 ||
+        params->element_count > 0x7fffffffULL ||
+        params->up.buffer != params->activated_gate.buffer))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
-                            "params reserved fields must be zero, or reserved[0] 1 with BF16 spans");
+                            "params reserved fields must be zero, reserved[0] 1 with BF16 spans, or reserved[1] a row width dividing element_count with one merged gate|up buffer");
   }
   if (!arithmetic_dtype(params->activated_gate.dtype) ||
       params->up.dtype != params->activated_gate.dtype ||
@@ -2251,8 +2407,9 @@ extern "C" RileyCudaStatus riley_cuda_gated_multiply_execute(
   ResolvedSpan activated_gate{};
   ResolvedSpan up{};
   ResolvedSpan output{};
-  status = resolve_span(params->activated_gate, byte_count, &activated_gate,
-                        error, kOperation);
+  status = resolve_span(params->activated_gate,
+                        merged_width != 0 ? byte_count * 2 : byte_count,
+                        &activated_gate, error, kOperation);
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = resolve_span(params->up, byte_count, &up, error, kOperation);
   }
@@ -2300,7 +2457,14 @@ extern "C" RileyCudaStatus riley_cuda_gated_multiply_execute(
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
-    if (raw_gate) {
+    if (merged_width != 0) {
+      silu_gated_multiply_merged_rows_bf16_kernel
+          <<<block_count(params->element_count), kThreads, 0, stream->stream>>>(
+              reinterpret_cast<const __nv_bfloat16*>(activated_gate.data),
+              reinterpret_cast<__nv_bfloat16*>(output.data),
+              static_cast<uint32_t>(params->element_count),
+              static_cast<uint32_t>(merged_width));
+    } else if (raw_gate) {
       silu_gated_multiply_bf16_kernel
           <<<block_count(params->element_count), kThreads, 0, stream->stream>>>(
               reinterpret_cast<const __nv_bfloat16*>(activated_gate.data),

@@ -19,12 +19,19 @@ pub const FIXED37_RAGGED_MAX_LOGICAL_TOKENS: u64 = 8_192;
 const BF16_BYTES: u64 = 2;
 const ATTENTION_HEAD_SIZE: u64 = 64;
 
-/// Fixed query-head count of the eager native ragged D128 two-stage path.
+/// Query-head count of the geometry the native ragged D128 two-stage path
+/// was first qualified on (Qwen2.5-3B); the prompt-row producer still needs it.
 pub const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT: u64 = 16;
-/// Fixed KV-head count of the eager native ragged D128 two-stage path.
+/// KV-head count of that geometry.
 pub const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT: u64 = 2;
+/// Most query heads one KV head may serve on the shared-KV and tensor-core
+/// producers (one warp, or one MMA column, per query head of a KV head).
+pub const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_MAX_GROUP_HEADS: u64 = 8;
 /// Fixed head size of the eager native ragged D128 two-stage path.
 pub const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE: u64 = 128;
+/// The second head size of the two-stage attention: the tensor-core producer
+/// with the global-max merge only. A state keeps the D128 stride.
+pub const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D64_HEAD_SIZE: u64 = 64;
 /// F32 words in one `[maximum, denominator, numerator[D]]` partial state.
 pub const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_PARTIAL_STATE_WIDTH: u64 =
     NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE + 2;
@@ -682,15 +689,34 @@ impl NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout {
     ///
     /// Returns for a zero axis or byte arithmetic overflow.
     pub fn new(output_row_count: u64, partial_state_capacity: u64) -> CudaResult<Self> {
+        Self::with_query_heads(
+            output_row_count,
+            partial_state_capacity,
+            NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT,
+        )
+    }
+
+    /// Calculates the same spans for a model with `query_head_count` query
+    /// heads.
+    ///
+    /// # Errors
+    ///
+    /// Returns for a zero axis or byte arithmetic overflow.
+    pub fn with_query_heads(
+        output_row_count: u64,
+        partial_state_capacity: u64,
+        query_head_count: u64,
+    ) -> CudaResult<Self> {
         const OPERATION: &str = "NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::new";
         require_nonzero(OPERATION, "output_row_count", output_row_count)?;
         require_nonzero(OPERATION, "partial_state_capacity", partial_state_capacity)?;
+        require_nonzero(OPERATION, "query_head_count", query_head_count)?;
         let partial_state_bytes = checked_bytes(
             OPERATION,
             &[
                 output_row_count,
                 partial_state_capacity,
-                NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT,
+                query_head_count,
                 NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_PARTIAL_STATE_WIDTH,
                 CudaDType::F32.size_bytes(),
             ],
@@ -700,7 +726,7 @@ impl NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout {
             &[
                 output_row_count,
                 partial_state_capacity,
-                NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT,
+                query_head_count,
                 NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_TRANSITION_WIDTH,
                 CudaDType::F32.size_bytes(),
             ],
@@ -709,7 +735,7 @@ impl NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout {
             OPERATION,
             &[
                 output_row_count,
-                NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT,
+                query_head_count,
                 CudaDType::F32.size_bytes(),
             ],
         )?;
@@ -808,6 +834,7 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_two_stage<S: CudaExecutionStream 
         D128_PRODUCER_PER_QUERY_HEAD,
         D128_MERGE_ORDERED,
         0,
+        0,
     )
 }
 
@@ -831,6 +858,7 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv<
         stream,
         D128_PRODUCER_SHARED_KV,
         D128_MERGE_ORDERED,
+        0,
         0,
     )
 }
@@ -859,6 +887,7 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge<
         stream,
         D128_PRODUCER_SHARED_KV,
         D128_MERGE_GLOBAL_MAX,
+        0,
         0,
     )
 }
@@ -898,6 +927,7 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma<
         D128_PRODUCER_SHARED_KV,
         D128_MERGE_GLOBAL_MAX,
         prompt_row_kinds,
+        0,
     )
 }
 
@@ -927,6 +957,57 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge<
         D128_PRODUCER_TENSOR_CORE,
         D128_MERGE_GLOBAL_MAX,
         0,
+        0,
+    )
+}
+
+/// The tensor-core producer for generated rows together with the generic
+/// prompt-row tensor-core producer: a prompt row (row-kind word `1`, see
+/// [`native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma`]) folds
+/// its partial states four pages at a time, sixteen rows of a sequence to a
+/// CTA, for any head geometry and head size the tensor-core producer takes. A
+/// prompt row's output rounds differently from the per-page producer's; it
+/// depends only on the row's own query and context.
+///
+/// # Errors
+///
+/// As [`native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge`],
+/// plus an out-of-range error when the row kinds lie outside the buffer.
+pub fn native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge_prompt_mma<
+    S: CudaExecutionStream + ?Sized,
+>(
+    params: &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams<'_>,
+    row_kinds_first_word: u64,
+    generated_rows: Option<(u64, u64)>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "native_bf16_ragged_paged_split_gqa_d128_two_stage";
+    let prompt_row_kinds = row_kinds_first_word
+        .checked_add(1)
+        .ok_or_else(|| CudaError::out_of_range(OPERATION, "row kind offset overflows u64"))?;
+    // `[count, rows...]` U32 words in the row-position buffer naming the rows
+    // that are not prompt rows: first word and row capacity. The per-page
+    // producer then launches over the list instead of every dense row.
+    let generated_row_list = match generated_rows {
+        None => 0,
+        Some((first_word, capacity)) => {
+            if first_word >= u64::from(u32::MAX) || capacity == 0 || capacity > u64::from(u32::MAX)
+            {
+                return Err(CudaError::out_of_range(
+                    OPERATION,
+                    "generated-row list offset or capacity is out of range",
+                ));
+            }
+            (capacity << 32) | (first_word + 1)
+        }
+    };
+    execute_native_bf16_ragged_d128_two_stage(
+        params,
+        stream,
+        D128_PRODUCER_TENSOR_CORE,
+        D128_MERGE_GLOBAL_MAX,
+        prompt_row_kinds,
+        generated_row_list,
     )
 }
 
@@ -943,6 +1024,7 @@ fn execute_native_bf16_ragged_d128_two_stage<S: CudaExecutionStream + ?Sized>(
     producer_layout: u64,
     merge_layout: u64,
     prompt_row_kinds: u64,
+    generated_row_list: u64,
 ) -> CudaResult<()> {
     const OPERATION: &str = "native_bf16_ragged_paged_split_gqa_d128_two_stage";
     let stream = execution_stream_mut(stream);
@@ -980,6 +1062,7 @@ fn execute_native_bf16_ragged_d128_two_stage<S: CudaExecutionStream + ?Sized>(
             producer_layout,
             merge_layout,
             prompt_row_kinds,
+            generated_row_list,
             &mut stream.native,
         )
     }
@@ -991,6 +1074,7 @@ fn execute_native_bf16_ragged_d128_two_stage<S: CudaExecutionStream + ?Sized>(
             producer_layout,
             merge_layout,
             prompt_row_kinds,
+            generated_row_list,
         );
         Err(CudaError::unavailable(OPERATION))
     }
@@ -1231,14 +1315,16 @@ fn validate_native_bf16_ragged_paged_split_gqa_d128_two_stage(
 ) -> CudaResult<u64> {
     const MAXIMUM_GRID_X: u64 = 2_147_483_647;
     const MAXIMUM_GRID_Y_OR_Z: u64 = 65_535;
-    if params.query_head_count != NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT
-        || params.key_value_head_count
-            != NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT
-        || params.head_size != NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE
+    if params.query_head_count == 0
+        || params.key_value_head_count == 0
+        || params.query_head_count > MAXIMUM_GRID_Y_OR_Z
+        || params.query_head_count % params.key_value_head_count != 0
+        || (params.head_size != NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE
+            && params.head_size != NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D64_HEAD_SIZE)
     {
         return Err(CudaError::invalid_argument(
             operation,
-            "native ragged two-stage attention requires QH=16, KVH=2, and head_size=128",
+            "native ragged two-stage attention requires head_size=128 or 64 and query heads that are a multiple of the key/value heads",
         ));
     }
     require_nonzero(
@@ -1297,16 +1383,17 @@ fn validate_native_bf16_ragged_paged_split_gqa_d128_two_stage(
         require_dtype(operation, name, dtype, CudaDType::F32)?;
     }
 
-    let layout = NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::new(
+    let layout = NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::with_query_heads(
         params.output_row_count,
         params.partial_state_capacity,
+        params.query_head_count,
     )?;
     let query_bytes = checked_bytes(
         operation,
         &[
             host.active_row_count(),
-            NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT,
-            NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE,
+            params.query_head_count,
+            params.head_size,
             BF16_BYTES,
         ],
     )?;
@@ -1314,16 +1401,16 @@ fn validate_native_bf16_ragged_paged_split_gqa_d128_two_stage(
         operation,
         &[
             params.output_row_count,
-            NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT,
-            NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE,
+            params.query_head_count,
+            params.head_size,
             BF16_BYTES,
         ],
     )?;
     let pool_bytes = paged_pool_bytes(
         operation,
         host.physical_block_count(),
-        NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT,
-        NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE,
+        params.key_value_head_count,
+        params.head_size,
     )?;
     for (name, actual, required) in [
         ("query", params.query.byte_len(), query_bytes),

@@ -20,6 +20,46 @@ pub enum OverloadPolicy {
 /// runs them in the next iteration instead. A request is trimmed at most once,
 /// so the delay is bounded by one iteration per request, and chunking a prompt
 /// differently never changes which tokens it is given.
+/// Holds newly admitted prompts back for a short time so that several of them
+/// start in the same iteration.
+///
+/// An iteration that carries prompt tokens costs noticeably more than a pure
+/// decode iteration even for a handful of tokens, and it delays every
+/// sequence that is decoding. With this policy the scheduler starts no new
+/// prompt while fewer than `min_tokens` prompt tokens are ready and the
+/// oldest ready prompt has waited less than `max_wait_ns`; a prompt that has
+/// already started always continues. Only when and with which rows a prompt
+/// runs changes, never which tokens it is given.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PrefillCoalescingPolicy {
+    /// Ready prompt tokens that start the waiting prompts at once.
+    pub min_tokens: usize,
+    /// Longest a ready prompt is held back, in nanoseconds.
+    pub max_wait_ns: u64,
+    /// Fewest decode rows an iteration needs before prompts are held back.
+    pub min_decode_rows: usize,
+}
+
+impl PrefillCoalescingPolicy {
+    /// Validates the policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SchedulerError::InvalidConfiguration`] for a zero token
+    /// threshold, wait bound or decode-row threshold.
+    pub fn validate(self) -> SchedulerResult<Self> {
+        validate_nonzero("prefill_coalescing.min_tokens", self.min_tokens)?;
+        validate_nonzero("prefill_coalescing.min_decode_rows", self.min_decode_rows)?;
+        if self.max_wait_ns == 0 {
+            return Err(SchedulerError::InvalidConfiguration {
+                field: "prefill_coalescing.max_wait_ns",
+                reason: "must be positive",
+            });
+        }
+        Ok(self)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PrefillPlateauPolicy {
     /// Strictly ascending iteration token counts; one more token than a
@@ -62,7 +102,10 @@ impl PrefillPlateauPolicy {
                 reason: "must stay below iteration_token_budget",
             });
         }
-        validate_nonzero("prefill_plateau.max_deferred_tokens", self.max_deferred_tokens)?;
+        validate_nonzero(
+            "prefill_plateau.max_deferred_tokens",
+            self.max_deferred_tokens,
+        )?;
         Ok(self)
     }
 }

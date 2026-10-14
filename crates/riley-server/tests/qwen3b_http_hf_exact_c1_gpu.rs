@@ -397,6 +397,7 @@ fn qwen3b_http_hf_exact_c1_tokens_logits_and_lifecycle() -> TestResult {
             max_inflight_requests: 3,
             admission_timeout: Duration::from_secs(30),
             idle_poll_interval: Duration::from_millis(1),
+            publish_after_submit: false,
         },
     )?);
     let backend: Arc<dyn CompletionBackend> = engine.clone();

@@ -160,6 +160,8 @@ pub struct PreparedLlamaBatchExecutorConfig {
     output_row_lm_head: bool,
     serving_sequence_token_bound: Option<usize>,
     decode_step_capture: bool,
+    staged_step_uploads: bool,
+    dense_prompt_attention: bool,
 }
 
 impl PreparedLlamaBatchExecutorConfig {
@@ -190,6 +192,8 @@ impl PreparedLlamaBatchExecutorConfig {
             output_row_lm_head: false,
             serving_sequence_token_bound: None,
             decode_step_capture: false,
+            staged_step_uploads: false,
+            dense_prompt_attention: false,
         }
     }
 
@@ -202,6 +206,23 @@ impl PreparedLlamaBatchExecutorConfig {
     pub const fn with_decode_step_capture(mut self) -> Self {
         self.decode_step_capture = true;
         self
+    }
+
+    /// Stages an iteration's token and metadata bytes in one pinned buffer
+    /// and copies them to their device buffers inside the iteration's command
+    /// batch, instead of one synchronized upload per buffer before it. Same
+    /// bytes in the same device buffers. Requires synchronous metadata and
+    /// iteration-batch completion.
+    #[must_use]
+    pub const fn with_staged_step_uploads(mut self) -> Self {
+        self.staged_step_uploads = true;
+        self
+    }
+
+    /// Whether token and metadata uploads are staged into the command batch.
+    #[must_use]
+    pub const fn staged_step_uploads(self) -> bool {
+        self.staged_step_uploads
     }
 
     /// Whether pure-decode steps are recorded and replayed as CUDA graphs.
@@ -273,6 +294,26 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn prompt_attention_mma(self) -> bool {
         self.prompt_attention_mma
+    }
+
+    /// Produces the attention of every prompt row with the generic prompt-row
+    /// tensor-core kernel (sixteen rows of a sequence and four pages to a
+    /// CTA) next to the tensor-core producer for generated rows, for any head
+    /// geometry that producer takes. A prompt token's attention then rounds
+    /// differently from the per-page producer, the same way in every batch
+    /// and chunk; generated tokens are unaffected. Requires the tensor-core
+    /// producer, the D128 global merge and synchronous metadata transport.
+    #[must_use]
+    pub const fn with_dense_prompt_attention(mut self) -> Self {
+        self.prompt_attention_mma = true;
+        self.dense_prompt_attention = true;
+        self
+    }
+
+    /// Whether every prompt row takes the generic prompt-row kernel.
+    #[must_use]
+    pub const fn dense_prompt_attention(self) -> bool {
+        self.dense_prompt_attention
     }
 
     /// Runs the MLP activation and gate multiply as one BF16 kernel. The
@@ -574,6 +615,15 @@ impl PreparedLlamaBatchExecutorConfig {
                 reason: "packed async metadata requires iteration-batch completion",
             });
         }
+        if self.staged_step_uploads
+            && (self.metadata_transport != BatchMetadataTransport::Synchronous
+                || self.execution_completion != ExecutionCompletionImplementation::IterationBatch)
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "staged_step_uploads",
+                reason: "staged step uploads require synchronous metadata and iteration-batch completion",
+            });
+        }
         Ok(())
     }
 
@@ -705,6 +755,8 @@ pub(in crate::llama) const fn normalize_prepared_config(
         output_row_lm_head: config.output_row_lm_head,
         serving_sequence_token_bound: config.serving_sequence_token_bound,
         decode_step_capture: config.decode_step_capture,
+        staged_step_uploads: config.staged_step_uploads,
+        dense_prompt_attention: config.dense_prompt_attention,
     }
 }
 

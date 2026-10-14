@@ -28,12 +28,18 @@ pub(crate) struct PerOperationDeviceMetadata {
     pub(crate) row_sequence_slots: CudaDeviceBuffer,
     pub(crate) row_positions: CudaDeviceBuffer,
     pub(crate) output_token_indices: Option<CudaDeviceBuffer>,
+    /// Token ids of the iteration when uploads are staged into the command
+    /// batch (the forward's own token buffer is then not written).
+    pub(crate) token_ids: Option<CudaDeviceBuffer>,
 }
 
 pub(crate) enum BatchDeviceInput {
     PerOperation(PerOperationDeviceMetadata),
     IterationBatch { slab: CudaDeviceBuffer },
 }
+
+/// Owned copy of the bytes last uploaded for one kind of step metadata.
+pub(crate) type UploadedBytes = Vec<u8>;
 
 pub(crate) struct PerOperationHostWorkspace {
     pub(crate) padded_tokens: Box<[u32]>,
@@ -49,7 +55,60 @@ pub(crate) struct PerOperationHostWorkspace {
     /// Row kinds (one U32 per token row, 1 = prompt token) for the
     /// tensor-core prompt attention.
     pub(crate) row_kinds: Box<[u8]>,
+    /// Bytes last copied to the device for the metadata that often repeats
+    /// from one step to the next (block offsets, block ids, row slots, output
+    /// indices); a step whose bytes are the same skips that copy. Emptied
+    /// before a copy starts, so a failed copy is never taken as current.
+    pub(crate) uploaded: [UploadedBytes; UPLOADED_METADATA_KINDS],
+    /// Staged step uploads: the pinned bytes of this iteration and where each
+    /// run of them goes. `None` keeps one synchronized upload per buffer.
+    pub(crate) staging: Option<CudaPinnedHostBuffer>,
+    pub(crate) staged: [StagedCopy; MAX_STAGED_COPIES],
+    pub(crate) staged_count: usize,
+    /// Results the command batch copied back into `staging`, after the upload
+    /// region: the greedy selections (`staged_greedy_bytes` of them, at
+    /// `staged_output_offset`) and the embedding error report (32 bytes after
+    /// the greedy capacity). Cells, because the iteration body records them
+    /// while it only shares the workspace.
+    pub(crate) staged_output_offset: u64,
+    pub(crate) staged_report_offset: u64,
+    pub(crate) staged_greedy_bytes: std::cell::Cell<usize>,
+    pub(crate) staged_report: std::cell::Cell<bool>,
 }
+
+/// Bytes of the device embedding error report (`RileyCudaEmbeddingErrorReport`).
+pub(crate) const EMBEDDING_REPORT_BYTES: usize = 32;
+
+/// Device buffer a staged run of bytes is copied to.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StagedTarget {
+    Tokens,
+    BlockOffsets,
+    BlockIds,
+    ValidTokens,
+    RowSlots,
+    RowPositions,
+    OutputIndices,
+}
+
+/// One copy from the pinned staging buffer into a device buffer.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct StagedCopy {
+    pub(crate) target: StagedTarget,
+    pub(crate) destination_offset: u64,
+    pub(crate) staging_offset: u64,
+    pub(crate) byte_len: u64,
+}
+
+/// Tokens, five metadata arrays, the step counts, the row kinds and the
+/// output indices.
+pub(crate) const MAX_STAGED_COPIES: usize = 9;
+
+pub(crate) const UPLOADED_METADATA_KINDS: usize = 4;
+pub(crate) const UPLOADED_BLOCK_OFFSETS: usize = 0;
+pub(crate) const UPLOADED_BLOCK_IDS: usize = 1;
+pub(crate) const UPLOADED_ROW_SLOTS: usize = 2;
+pub(crate) const UPLOADED_OUTPUT_INDICES: usize = 3;
 
 pub(crate) struct IterationBatchHostWorkspace {
     pub(crate) bytes: Box<[u8]>,
@@ -64,8 +123,22 @@ pub(crate) enum BatchHostInput {
 pub(crate) fn allocate_synchronous_device_input(
     context: &CudaContext,
     bounds: LlamaBatchMetadataConfig,
+    staged: bool,
 ) -> LlamaBatchExecutorResult<BatchDeviceInput> {
-    allocate_per_operation_device_metadata(context, bounds).map(BatchDeviceInput::PerOperation)
+    let mut metadata = allocate_per_operation_device_metadata(context, bounds)?;
+    if staged {
+        let bytes = checked_byte_len(
+            bounds.max_input_tokens(),
+            U32_BYTES,
+            LlamaBatchExecutorResource::HostWorkspace,
+        )?;
+        metadata.token_ids = Some(allocate_device(
+            context,
+            usize_u64(bytes, LlamaBatchExecutorResource::HostWorkspace)?,
+            ExecutionSite::global(LlamaOp::Embedding),
+        )?);
+    }
+    Ok(BatchDeviceInput::PerOperation(metadata))
 }
 
 pub(crate) fn allocate_packed_device_input(
@@ -80,9 +153,68 @@ pub(crate) fn allocate_packed_device_input(
     Ok(BatchDeviceInput::IterationBatch { slab })
 }
 
+/// Pinned bytes one iteration can stage: every array at its bound, each run
+/// rounded up to eight bytes.
+fn staged_upload_capacity(bounds: LlamaBatchMetadataConfig) -> LlamaBatchExecutorResult<usize> {
+    let offsets = sequence_block_offset_count(bounds.max_rows())?;
+    let runs = [
+        (bounds.max_input_tokens(), U32_BYTES),
+        (offsets, U32_BYTES),
+        (bounds.max_block_entries(), U32_BYTES),
+        (bounds.max_block_entries(), U16_BYTES),
+        (bounds.max_input_tokens(), U32_BYTES),
+        (bounds.max_input_tokens(), U32_BYTES),
+        (STEP_COUNT_WORDS, U32_BYTES),
+        // Row kinds, then the generated-row list (count and rows).
+        (bounds.max_input_tokens() + 1 + bounds.max_rows(), U32_BYTES),
+        (bounds.max_output_slots(), U32_BYTES),
+    ];
+    let mut total = 0_usize;
+    for (elements, element_bytes) in runs {
+        let bytes = checked_byte_len(
+            elements,
+            element_bytes,
+            LlamaBatchExecutorResource::HostWorkspace,
+        )?;
+        total = total.checked_add(bytes.div_ceil(8) * 8).ok_or(
+            LlamaBatchExecutorError::InvalidConfiguration {
+                field: "staged_step_uploads",
+                reason: "staged upload capacity overflows",
+            },
+        )?;
+    }
+    Ok(total.max(8))
+}
+
 pub(crate) fn allocate_synchronous_host_input(
+    context: &CudaContext,
     bounds: LlamaBatchMetadataConfig,
+    staged: bool,
 ) -> LlamaBatchExecutorResult<BatchHostInput> {
+    let staged_output_offset = staged_upload_capacity(bounds)?;
+    let staged_greedy_capacity = checked_byte_len(
+        bounds.max_output_slots(),
+        2 * U32_BYTES,
+        LlamaBatchExecutorResource::HostWorkspace,
+    )?
+    .div_ceil(8)
+        * 8;
+    let staged_report_offset = staged_output_offset + staged_greedy_capacity;
+    let staging = if staged {
+        let capacity = staged_report_offset + EMBEDDING_REPORT_BYTES;
+        Some(
+            context
+                .allocate_pinned_host_buffer(usize_u64(
+                    capacity,
+                    LlamaBatchExecutorResource::PinnedIterationInput,
+                )?)
+                .map_err(|source| {
+                    allocation_cuda(ExecutionSite::global(LlamaOp::BatchMetadataUpload), source)
+                })?,
+        )
+    } else {
+        None
+    };
     let offsets = sequence_block_offset_count(bounds.max_rows())?;
     Ok(BatchHostInput::PerOperation(PerOperationHostWorkspace {
         padded_tokens: allocate_zeroed_u32(bounds.max_input_tokens())?,
@@ -93,7 +225,28 @@ pub(crate) fn allocate_synchronous_host_input(
         row_positions: allocate_zeroed_host_bytes(bounds.max_input_tokens(), U32_BYTES)?,
         output_token_indices: allocate_zeroed_host_bytes(bounds.max_output_slots(), U32_BYTES)?,
         uploaded_step_counts: None,
-        row_kinds: allocate_zeroed_host_bytes(bounds.max_input_tokens(), U32_BYTES)?,
+        row_kinds: allocate_zeroed_host_bytes(
+            bounds.max_input_tokens() + 1 + bounds.max_rows(),
+            U32_BYTES,
+        )?,
+        uploaded: [
+            Vec::with_capacity(offsets * U32_BYTES),
+            Vec::with_capacity(bounds.max_block_entries() * U32_BYTES),
+            Vec::with_capacity(bounds.max_input_tokens() * U32_BYTES),
+            Vec::with_capacity(bounds.max_output_slots() * U32_BYTES),
+        ],
+        staging,
+        staged: [StagedCopy {
+            target: StagedTarget::Tokens,
+            destination_offset: 0,
+            staging_offset: 0,
+            byte_len: 0,
+        }; MAX_STAGED_COPIES],
+        staged_count: 0,
+        staged_output_offset: staged_output_offset as u64,
+        staged_report_offset: staged_report_offset as u64,
+        staged_greedy_bytes: std::cell::Cell::new(0),
+        staged_report: std::cell::Cell::new(false),
     }))
 }
 
@@ -136,6 +289,7 @@ pub(crate) fn close_device_input(input: BatchDeviceInput) -> Option<LlamaBatchEx
                 row_sequence_slots,
                 row_positions,
                 output_token_indices,
+                token_ids,
             } = metadata;
             for (resource, result) in [
                 (
@@ -168,6 +322,13 @@ pub(crate) fn close_device_input(input: BatchDeviceInput) -> Option<LlamaBatchEx
                     buffer.close(),
                 );
             }
+            if let Some(buffer) = token_ids {
+                record_close(
+                    &mut first,
+                    LlamaBatchExecutorResource::HostWorkspace,
+                    buffer.close(),
+                );
+            }
         }
         BatchDeviceInput::IterationBatch { slab } => record_close(
             &mut first,
@@ -180,12 +341,21 @@ pub(crate) fn close_device_input(input: BatchDeviceInput) -> Option<LlamaBatchEx
 
 pub(crate) fn close_host_input(input: BatchHostInput) -> Option<LlamaBatchExecutorError> {
     let mut first = None;
-    if let BatchHostInput::IterationBatch(host) = input {
-        record_close(
+    match input {
+        BatchHostInput::IterationBatch(host) => record_close(
             &mut first,
             LlamaBatchExecutorResource::PinnedIterationInput,
             host.pinned.close(),
-        );
+        ),
+        BatchHostInput::PerOperation(host) => {
+            if let Some(staging) = host.staging {
+                record_close(
+                    &mut first,
+                    LlamaBatchExecutorResource::PinnedIterationInput,
+                    staging.close(),
+                );
+            }
+        }
     }
     first
 }
@@ -229,9 +399,10 @@ fn allocate_per_operation_device_metadata(
         )?,
         // Two U32 words after the positions hold the step's active row count
         // and output row count for recorded steps that read them on the
-        // device; one row-kind word per token row follows them.
+        // device; one row-kind word per token row follows them, then the
+        // generated-row list of the dense prompt attention (count and rows).
         row_positions: allocate(
-            2 * bounds.max_input_tokens() + STEP_COUNT_WORDS,
+            2 * bounds.max_input_tokens() + STEP_COUNT_WORDS + 1 + bounds.max_rows(),
             U32_BYTES,
             LlamaBatchExecutorResource::RowPositions,
         )?,
@@ -244,6 +415,7 @@ fn allocate_per_operation_device_metadata(
                 LlamaBatchExecutorResource::OutputTokenIndices,
             )?)
         },
+        token_ids: None,
     })
 }
 
