@@ -607,7 +607,8 @@ RileyCudaStatus select_bias_deterministic_algorithm(
       cublasLtMatmulAlgoGetHeuristic(
           plan->handle, plan->operation, plan->weight_layout,
           plan->input_layout, plan->output_layout, plan->output_layout,
-          plan->preference, kMaximumHeuristicResults, candidates,
+          plan->preference,
+          (plan->config.flags & RILEY_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K) ? 1 : kMaximumHeuristicResults, candidates,
           &returned_results),
       error, RILEY_CUDA_ERROR_STAGE_PREPARE,
       "prepare cuBLASLt bias GEMM plan");

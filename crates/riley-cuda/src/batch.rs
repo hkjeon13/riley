@@ -2187,3 +2187,86 @@ mod tests {
         );
     }
 }
+
+/// Eager materialized BF16 reference. Uses caller-owned prepared resources; graph capture remains rejected.
+pub fn prepared_materialized_ragged_attention<S: CudaExecutionStream + ?Sized>(
+    query: CudaBufferSpan<'_>, key_pool: CudaBufferSpan<'_>, value_pool: CudaBufferSpan<'_>,
+    output: &mut CudaDeviceBuffer, batch: PackedBatchV1<'_>,
+    reference: &crate::decode::PreparedPagedDecodeAttention, workspace: &mut CudaDeviceBuffer,
+    valid_device: &CudaDeviceBuffer,
+    valid_host: &mut [u16], duplicate_scratch: &mut [u8],
+    stream: &mut S,
+) -> CudaResult<()> {
+    use crate::decode::{PagedDecodeAttentionParams,PagedKvBlockTableHostV1,PagedKvBlockTableV1};
+    let stream=execution_stream_mut(stream);
+    let host=batch.host();
+    if reference.backend()!=crate::decode::DecodeAttentionBackend::MaterializedReference {
+        return Err(CudaError::invalid_argument("prepared_materialized_ragged_attention","an explicitly prepared materialized reference is required"));
+    }
+    let request=reference.request();
+    let row_bytes=request.query_head_count()*request.head_size()*2;
+    if query.dtype()!=CudaDType::BF16 || key_pool.dtype()!=CudaDType::BF16 || value_pool.dtype()!=CudaDType::BF16 || host.physical_block_count()!=request.physical_block_count() {
+        return Err(CudaError::invalid_argument("prepared_materialized_ragged_attention","BF16 spans and the prepared physical pool are required"));
+    }
+    if host.row_positions().iter().any(|p|u64::from(*p)+1>request.maximum_sequence_length()) {
+        return Err(CudaError::invalid_argument("prepared_materialized_ragged_attention","row exceeds the prepared sequence bound"));
+    }
+    let active_bytes=host.active_row_count().checked_mul(row_bytes).ok_or_else(||CudaError::invalid_argument("prepared_materialized_ragged_attention","active output byte count overflows"))?;
+    if active_bytes>query.byte_len() || active_bytes>output.byte_len() || output.byte_len()%row_bytes!=0 {
+        return Err(CudaError::invalid_argument("prepared_materialized_ragged_attention","prepared output or zero scratch is too small"));
+    }
+    let workspace_len=workspace.byte_len();
+    let valid_stride=valid_host.len();
+    for row in 0..host.active_row_count() as usize {
+        let tokens=u64::from(host.row_positions()[row])+1;
+        let slot=host.row_sequence_slots()[row] as usize;
+        let begin=host.sequence_block_offsets()[slot] as usize;
+        let end=begin+tokens.div_ceil(16) as usize;
+        let count=end-begin;
+        if count==0 || count>valid_host.len() {
+            return Err(CudaError::invalid_argument("prepared_materialized_ragged_attention","prepared host scratch cannot hold the logical prefix"));
+        }
+        let valid=&mut valid_host[..count];valid.fill(16);
+        valid[count-1]=((tokens-1)%16+1) as u16;
+        let table=PagedKvBlockTableHostV1::new_with_duplicate_scratch(&host.block_ids()[begin..end],valid,tokens,host.physical_block_count(),duplicate_scratch)?;
+        let ids=batch.device_block_ids();
+        reference.execute(&mut PagedDecodeAttentionParams{
+            query:CudaBufferSpan::new(query.buffer(),CudaDType::BF16,query.byte_offset()+row as u64*row_bytes,row_bytes)?,
+            key_pool,value_pool,
+            workspace:CudaBufferSpanMut::new(workspace,reference.workspace_dtype(),0,workspace_len)?,
+            output:CudaBufferSpanMut::new(output,CudaDType::BF16,row as u64*row_bytes,row_bytes)?,
+            block_table:PagedKvBlockTableV1::new(table,CudaBufferSpan::new(ids.buffer(),CudaDType::U32,ids.byte_offset()+begin as u64*4,(end-begin) as u64*4)?,CudaBufferSpan::new(valid_device,CudaDType::U16,row as u64*valid_stride as u64*2,count as u64*2)?)?,
+        },stream)?;
+    }
+    // Direct reference calls complete eagerly; a command batch owns its one fence.
+    Ok(())
+}
+
+/// Prepares immutable row-prefix metadata before starting an iteration command batch.
+/// All storage is caller-owned; no allocation occurs here or in the layer dispatch.
+pub fn prepare_materialized_ragged_attention_metadata(
+    host: PackedBatchHostV1<'_>, reference: &crate::decode::PreparedPagedDecodeAttention,
+    output: &mut CudaDeviceBuffer, valid_device: &mut CudaDeviceBuffer,
+    staging: &mut crate::memory::CudaPinnedHostBuffer, valid_host: &mut [u16],
+    encoded_valid: &mut [u8], zero_host: &[u8], stream: &mut CudaStream,
+) -> CudaResult<()> {
+    let op="prepare_materialized_ragged_attention_metadata";
+    let row_bytes=reference.request().query_head_count()*reference.request().head_size()*2;
+    let active_bytes=host.active_row_count().checked_mul(row_bytes).ok_or_else(||CudaError::invalid_argument(op,"row bytes overflow"))?;
+    let stride=valid_host.len();
+    let copy_bytes=(host.active_row_count() as usize).checked_mul(stride).and_then(|n|n.checked_mul(2)).ok_or_else(||CudaError::invalid_argument(op,"metadata bytes overflow"))?;
+    if stride==0 || copy_bytes>encoded_valid.len() || copy_bytes as u64>valid_device.byte_len() || active_bytes>output.byte_len() || output.byte_len()-active_bytes>zero_host.len() as u64 {
+        return Err(CudaError::invalid_argument(op,"prepared scratch cannot hold the iteration"));
+    }
+    for (row,raw) in encoded_valid[..copy_bytes].chunks_exact_mut(stride*2).enumerate() {
+        let tokens=u64::from(host.row_positions()[row])+1;
+        let count=tokens.div_ceil(16) as usize;
+        if tokens>reference.request().maximum_sequence_length() || count>stride {return Err(CudaError::invalid_argument(op,"prefix exceeds prepared capacity"));}
+        raw.fill(0);valid_host[..count].fill(16);valid_host[count-1]=((tokens-1)%16+1) as u16;
+        for (bytes,value) in raw[..count*2].chunks_exact_mut(2).zip(valid_host[..count].iter()) {bytes.copy_from_slice(&value.to_le_bytes());}
+    }
+    valid_device.upload_from_slice(0,&encoded_valid[..copy_bytes],staging,stream)?;
+    let inactive=(output.byte_len()-active_bytes) as usize;
+    if inactive>0 {output.upload_from_slice(active_bytes,&zero_host[..inactive],staging,stream)?;}
+    Ok(())
+}

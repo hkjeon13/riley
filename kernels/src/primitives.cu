@@ -1714,14 +1714,32 @@ extern "C" RileyCudaStatus riley_cuda_embedding_execute(
   return status;
 }
 
+__global__ void hugging_face_qwen_head128_rms_norm_kernel(const __nv_bfloat16*x,const __nv_bfloat16*w,__nv_bfloat16*y,uint64_t rows, float epsilon){int t=threadIdx.x;uint64_t r=blockIdx.x;if(r>=rows)return;float sum=0;for(int j=0;j<4;j++){float z=__bfloat162float(x[r*128+4*t+j]);sum=__fadd_rn(sum,__fmul_rn(z,z));}for(int o=16;o;o/=2)sum=__fadd_rn(sum,__shfl_down_sync(0xffffffff,sum,o));float variance=__fmul_rn(sum,1.F/128.F);float inv=rsqrtf(__fadd_rn(variance,epsilon));inv=__shfl_sync(0xffffffff,inv,0);for(int j=0;j<4;j++){int i=4*t+j;float a=__fmul_rn(__bfloat162float(x[r*128+i]),inv);y[r*128+i]=__float2bfloat16_rn(__fmul_rn(__bfloat162float(__float2bfloat16_rn(a)),__bfloat162float(w[i])));}}
+
+__global__ void hugging_face_qwen_wide_rms_norm_kernel(const __nv_bfloat16*x,const __nv_bfloat16*w,__nv_bfloat16*y,int width,int rows,float eps){
+ extern __shared__ float partials[];__shared__ float inverse;
+ int t=threadIdx.x,r=blockIdx.x;float acc[4]={0,0,0,0};
+ for(int word=t;word<width/4;word+=blockDim.x){for(int j=0;j<4;j++){float z=__bfloat162float(x[r*width+word*4+j]);acc[j]=__fadd_rn(acc[j],__fmul_rn(z,z));}}
+ float sum=acc[0];for(int j=1;j<4;j++)sum=__fadd_rn(sum,acc[j]);partials[t]=sum;
+ for(int off=blockDim.x/2;off>=32;off/=2){__syncthreads();if(t<off){sum=__fadd_rn(sum,partials[t+off]);partials[t]=sum;}}
+ __syncthreads();if(t<32){for(int off=16;off;off/=2)sum=__fadd_rn(sum,__shfl_down_sync(0xffffffff,sum,off));if(t==0){float variance=__fmul_rn(sum,1.F/width);inverse=rsqrtf(__fadd_rn(variance,eps));}}
+ __syncthreads();for(int j=t;j<width;j+=blockDim.x)y[r*width+j]=__float2bfloat16_rn(__fmul_rn(__bfloat162float(__float2bfloat16_rn(__fmul_rn(__bfloat162float(x[r*width+j]),inverse))),__bfloat162float(w[j])));
+}
+
 enum class RmsNormImplementation {
   Canonical,
   HuggingFaceSmolLm2,
   HuggingFaceQwenP2051,
+  HuggingFaceQwenHead128,
+  HuggingFaceQwenWide,
 };
 
 const char* rms_norm_operation(RmsNormImplementation implementation) noexcept {
   switch (implementation) {
+    case RmsNormImplementation::HuggingFaceQwenHead128:
+      return "execute Hugging Face Qwen head128 RMSNorm";
+    case RmsNormImplementation::HuggingFaceQwenWide:
+      return "execute Hugging Face Qwen wide RMSNorm";
     case RmsNormImplementation::Canonical:
       return "execute RMSNorm";
     case RmsNormImplementation::HuggingFaceSmolLm2:
@@ -1782,6 +1800,18 @@ RileyCudaStatus execute_rms_norm_impl(
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
         "the Hugging Face Qwen diagnostic path requires BF16, row_count=2051 "
         "or 2048, hidden_size=2048, and epsilon=1e-6 exactly");
+  }
+  if (implementation == RmsNormImplementation::HuggingFaceQwenHead128 &&
+      !(params->input.dtype == RILEY_CUDA_DTYPE_BF16 && params->hidden_size == 128 &&
+        params->row_count <= 524288 && params->epsilon == 1.e-6F)) {
+    return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+      RILEY_CUDA_ERROR_STAGE_VALIDATION,kOperation,"BF16 head128 rows<=524288 epsilon1e-6 required");
+  }
+  if (implementation == RmsNormImplementation::HuggingFaceQwenWide &&
+      !(params->input.dtype == RILEY_CUDA_DTYPE_BF16 && (params->hidden_size == 2048 || params->hidden_size == 2560) &&
+        params->row_count <= 8192 && params->epsilon == 1.e-6F)) {
+    return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+      RILEY_CUDA_ERROR_STAGE_VALIDATION,kOperation,"BF16 width2048/2560 rows<=8192 epsilon1e-6 required");
   }
   uint64_t element_count = 0;
   if (!checked_multiply(params->row_count, params->hidden_size,
@@ -1854,7 +1884,17 @@ RileyCudaStatus execute_rms_norm_impl(
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
-    if (implementation == RmsNormImplementation::HuggingFaceSmolLm2) {
+    if (implementation == RmsNormImplementation::HuggingFaceQwenWide) {
+      uint32_t height=1;while(height*2<=params->row_count && height<16)height*=2;
+      const uint32_t threads=512/height;
+      hugging_face_qwen_wide_rms_norm_kernel<<<params->row_count,threads,threads*sizeof(float),stream->stream>>>(
+        reinterpret_cast<const __nv_bfloat16*>(input.data),reinterpret_cast<const __nv_bfloat16*>(weight.data),
+        reinterpret_cast<__nv_bfloat16*>(output.data),params->hidden_size,params->row_count,params->epsilon);
+    } else if (implementation == RmsNormImplementation::HuggingFaceQwenHead128) {
+      hugging_face_qwen_head128_rms_norm_kernel<<<params->row_count,32,0,stream->stream>>>(
+        reinterpret_cast<const __nv_bfloat16*>(input.data),reinterpret_cast<const __nv_bfloat16*>(weight.data),
+        reinterpret_cast<__nv_bfloat16*>(output.data),params->row_count,params->epsilon);
+    } else if (implementation == RmsNormImplementation::HuggingFaceSmolLm2) {
       launch_hugging_face_smollm2_rms_norm(
           input.data, weight.data, output.data, params->row_count, stream->stream);
     } else if (implementation == RmsNormImplementation::HuggingFaceQwenP2051) {
@@ -1900,6 +1940,22 @@ riley_cuda_hugging_face_qwen_p2051_rms_norm_execute(
   clear_error(error);
   return execute_rms_norm_impl(
       params, stream, error, RmsNormImplementation::HuggingFaceQwenP2051);
+}
+extern "C" RileyCudaStatus
+riley_cuda_hugging_face_qwen_head128_rms_norm_execute(
+    const RileyCudaRmsNormParams* params, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  return execute_rms_norm_impl(
+      params, stream, error, RmsNormImplementation::HuggingFaceQwenHead128);
+}
+extern "C" RileyCudaStatus
+riley_cuda_hugging_face_qwen_wide_rms_norm_execute(
+    const RileyCudaRmsNormParams* params, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  return execute_rms_norm_impl(
+      params, stream, error, RmsNormImplementation::HuggingFaceQwenWide);
 }
 
 extern "C" RileyCudaStatus riley_cuda_residual_add_execute(

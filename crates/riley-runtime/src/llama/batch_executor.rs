@@ -193,6 +193,21 @@ impl PreparedLlamaBatchExecutor {
         self.config
     }
 
+    /// Arithmetic profile resolved by this successfully prepared owner.
+    #[must_use]
+    pub const fn numerics_profile_id(&self) -> &'static str {
+        if self.owner.forward.owned_hf_eager_bf16 { "owned-hf-eager-bf16-v1" } else { "existing" }
+    }
+
+    #[must_use]
+    pub const fn output_projection_backend_id(&self) -> &'static str { self.owner.forward.output_projection_backend_id() }
+    #[must_use]
+    pub const fn mlp_projection_backend_id(&self) -> &'static str { self.owner.forward.mlp_projection_backend_id() }
+    #[must_use]
+    pub const fn lm_head_backend_id(&self) -> &'static str { self.owner.forward.lm_head_backend_id() }
+    #[must_use]
+    pub const fn rms_norm_backend_id(&self) -> &'static str { self.owner.forward.rms_norm_backend_id() }
+
     /// Stable C02 identifier for the completion boundary frozen during cold
     /// preparation. This reads the normalized prepared configuration, not a
     /// caller's requested CLI setting.
@@ -229,7 +244,8 @@ impl PreparedLlamaBatchExecutor {
     /// preference requested by the caller.
     #[must_use]
     pub fn prefill_attention_implementation_id(&self) -> &'static str {
-        self.owner.forward.attention_selection().implementation_id()
+        if self.owner.forward.owned_hf_eager_bf16 { "riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1" }
+        else { self.owner.forward.attention_selection().implementation_id() }
     }
 
     /// Stable ID of the ragged paged-attention implementation bound to this
@@ -252,7 +268,8 @@ impl PreparedLlamaBatchExecutor {
     /// exposed here.
     #[must_use]
     pub const fn gemm_reduction_policy_aggregate_id(&self) -> &'static str {
-        self.owner.forward.reduction_profile().id()
+        if self.owner.forward.owned_hf_eager_bf16 { "owned-hf-eager-bf16-v1" }
+        else { self.owner.forward.reduction_profile().id() }
     }
 
     /// Stable ID of the Q/K/V bias implementation selected during cold
@@ -263,7 +280,7 @@ impl PreparedLlamaBatchExecutor {
     /// to the executor that actually owns its plans.
     #[must_use]
     pub const fn projection_bias_backend_id(&self) -> &'static str {
-        self.owner.forward.projection_bias_mode().id()
+        self.owner.forward.actual_projection_bias_backend_id()
     }
 
     /// Stable C02 value for the residual-plus-RMSNorm implementation.
@@ -275,7 +292,8 @@ impl PreparedLlamaBatchExecutor {
     /// Runtime selection contract bound to the prepared reduction profile.
     #[must_use]
     pub const fn runtime_selection_policy_id(&self) -> &'static str {
-        runtime_selection_policy_id(self.owner.forward.reduction_profile())
+        if self.owner.forward.owned_hf_eager_bf16 { "fail-closed" }
+        else { runtime_selection_policy_id(self.owner.forward.reduction_profile()) }
     }
 
     /// Number of exact dense-row plans owned by this executor, including the
@@ -381,6 +399,7 @@ impl PreparedLlamaBatchExecutor {
     pub fn is_poisoned(&self) -> bool {
         self.owner.poisoned
             || self.owner.forward.poisoned
+            || self.owner.forward.batch_output_lm_head.as_ref().is_some_and(|p|p.is_poisoned())
             || self
                 .owner
                 .shape_variants
@@ -547,7 +566,7 @@ impl PreparedLlamaBatchExecutor {
                 }
                 let forward_gemms = &forward.gemms;
                 poison_for_batch_error(poisoned, &mut forward.poisoned, &error, || {
-                    forward_gemms.any_poisoned()
+                    forward_gemms.any_poisoned() || forward.batch_output_lm_head.as_ref().is_some_and(|p|p.is_poisoned())
                 });
                 *poisoned |= shape_variants
                     .iter()

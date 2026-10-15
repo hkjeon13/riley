@@ -197,6 +197,16 @@ impl<'a> CudaBufferSpan<'a> {
         self.byte_len / self.dtype.size_bytes()
     }
 
+    /// Returns a typed view strictly contained in this declared span.
+    /// Allocation ownership and dtype remain unchanged; no device address is exposed.
+    ///
+    /// # Errors
+    /// Returns a declared-span range, overflow, or scalar-alignment error.
+    pub fn subspan(&self, relative_offset:u64, byte_len:u64)->CudaResult<Self> {
+        let offset=subspan_absolute_offset(self.byte_offset,self.byte_len,relative_offset,byte_len)?;
+        Self::new(self.buffer,self.dtype,offset,byte_len)
+    }
+
     pub(crate) const fn buffer(&self) -> &CudaDeviceBuffer {
         self.buffer
     }
@@ -282,6 +292,14 @@ impl<'a> CudaBufferSpanMut<'a> {
     #[must_use]
     pub const fn element_capacity(&self) -> u64 {
         self.byte_len / self.dtype.size_bytes()
+    }
+
+    /// Reborrows an exclusive typed subspan inside this declared parent range.
+    /// # Errors
+    /// Returns a parent range, overflow, or scalar alignment error.
+    pub fn subspan(&mut self,relative_offset:u64,byte_len:u64)->CudaResult<CudaBufferSpanMut<'_>>{
+      let offset=subspan_absolute_offset(self.byte_offset,self.byte_len,relative_offset,byte_len)?;
+      CudaBufferSpanMut::new(&mut *self.buffer,self.dtype,offset,byte_len)
     }
 
     pub(crate) fn buffer(&self) -> &CudaDeviceBuffer {
@@ -668,6 +686,124 @@ pub fn hugging_face_qwen_p2051_rms_norm<S: CudaExecutionStream + ?Sized>(
     #[cfg(feature = "cuda")]
     {
         ffi::hugging_face_qwen_p2051_rms_norm_execute(
+            params.input.raw(),
+            params.weight.raw(),
+            params.output.raw(),
+            params.row_count,
+            params.hidden_size,
+            params.epsilon,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
+/// Executes the bounded, source-pinned Qwen head128 float4 mean order.
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub fn hugging_face_qwen_head128_rms_norm<S: CudaExecutionStream + ?Sized>(
+    params: &mut RmsNormParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "hugging_face_qwen_head128_rms_norm";
+    let stream = execution_stream_mut(stream);
+    validate_hugging_face_qwen_head128_rms_norm_contract(
+        OPERATION,
+        params.input.dtype,
+        params.row_count,
+        params.hidden_size,
+        params.epsilon,
+    )?;
+    require_dtype(OPERATION, "weight", params.weight.dtype, params.input.dtype)?;
+    require_dtype(OPERATION, "output", params.output.dtype, params.input.dtype)?;
+    let matrix_bytes = required_matrix_bytes(
+        OPERATION,
+        params.row_count,
+        params.hidden_size,
+        params.input.dtype,
+    )?;
+    require_capacity(OPERATION, "input", params.input.byte_len, matrix_bytes)?;
+    require_capacity(
+        OPERATION,
+        "weight",
+        params.weight.byte_len,
+        required_vector_bytes(OPERATION, params.hidden_size, params.weight.dtype)?,
+    )?;
+    require_capacity(OPERATION, "output", params.output.byte_len, matrix_bytes)?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.input.buffer,
+            params.weight.buffer,
+            params.output.buffer,
+        ],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::hugging_face_qwen_head128_rms_norm_execute(
+            params.input.raw(),
+            params.weight.raw(),
+            params.output.raw(),
+            params.row_count,
+            params.hidden_size,
+            params.epsilon,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
+/// Executes bounded Qwen wide RMSNorm with the actual request row geometry.
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub fn hugging_face_qwen_wide_rms_norm<S: CudaExecutionStream + ?Sized>(
+    params: &mut RmsNormParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "hugging_face_qwen_wide_rms_norm";
+    let stream = execution_stream_mut(stream);
+    validate_hugging_face_qwen_wide_rms_norm_contract(
+        OPERATION,
+        params.input.dtype,
+        params.row_count,
+        params.hidden_size,
+        params.epsilon,
+    )?;
+    require_dtype(OPERATION, "weight", params.weight.dtype, params.input.dtype)?;
+    require_dtype(OPERATION, "output", params.output.dtype, params.input.dtype)?;
+    let matrix_bytes = required_matrix_bytes(
+        OPERATION,
+        params.row_count,
+        params.hidden_size,
+        params.input.dtype,
+    )?;
+    require_capacity(OPERATION, "input", params.input.byte_len, matrix_bytes)?;
+    require_capacity(
+        OPERATION,
+        "weight",
+        params.weight.byte_len,
+        required_vector_bytes(OPERATION, params.hidden_size, params.weight.dtype)?,
+    )?;
+    require_capacity(OPERATION, "output", params.output.byte_len, matrix_bytes)?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.input.buffer,
+            params.weight.buffer,
+            params.output.buffer,
+        ],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::hugging_face_qwen_wide_rms_norm_execute(
             params.input.raw(),
             params.weight.raw(),
             params.output.raw(),
@@ -1273,7 +1409,7 @@ pub fn qkv_split_bias<S: CudaExecutionStream + ?Sized>(
     params: &mut QkvSplitBiasParams<'_>,
     stream: &mut S,
 ) -> CudaResult<()> {
-    qkv_split_bias_impl(params, None, stream)
+    qkv_split_bias_impl(params, None, stream,false)
 }
 
 /// `RoPE` inputs for [`qkv_split_bias_rope`].
@@ -1318,13 +1454,33 @@ pub fn qkv_split_bias_rope<S: CudaExecutionStream + ?Sized>(
     rope: &QkvRopeParams<'_>,
     stream: &mut S,
 ) -> CudaResult<()> {
-    qkv_split_bias_impl(params, Some(rope), stream)
+    qkv_split_bias_impl(params, Some(rope), stream,false)
+}
+
+/// Diagnostic HF float4 head128 mean fused with split and stored-BF16 RoPE.
+/// Existing span, ownership and completion validation remains shared.
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub fn qkv_split_bias_rope_hf_head128<S:CudaExecutionStream+?Sized>(params:&mut QkvSplitBiasParams<'_>,rope:&QkvRopeParams<'_>,stream:&mut S)->CudaResult<()>{
+ validate_hf_head_split_contract(params.row_count,rope.head_size,rope.head_norm_epsilon,rope.defer_for_kv_write)?;
+ qkv_split_bias_impl(params,Some(rope),stream,true)
+}
+#[cfg(feature="cuda-cublas-gemm-probe")]
+fn validate_hf_head_split_contract(rows:u64,width:u64,eps:Option<f32>,defer:bool)->CudaResult<()>{
+ if rows<=8192 && width==128 && eps.map(f32::to_bits)==Some(1e-6f32.to_bits()) && !defer{return Ok(());}
+ Err(CudaError::invalid_argument("HF head128 split","non-deferred head128 rows<=8192 epsilon1e-6 required"))
+}
+#[cfg(all(test,feature="cuda-cublas-gemm-probe"))]
+#[test]
+fn hf_head_split_contract_preserves_default_and_rejects_deferred(){
+ for rows in [0,1,128,397,512,8192]{assert!(validate_hf_head_split_contract(rows,128,Some(1e-6),false).is_ok());}
+ for (rows,width,eps,defer) in [(8193,128,Some(1e-6),false),(1,64,Some(1e-6),false),(1,128,None,false),(1,128,Some(1e-5),false),(1,128,Some(1e-6),true)]{assert!(validate_hf_head_split_contract(rows,width,eps,defer).is_err());}
 }
 
 fn qkv_split_bias_impl<S: CudaExecutionStream + ?Sized>(
     params: &mut QkvSplitBiasParams<'_>,
     rope: Option<&QkvRopeParams<'_>>,
     stream: &mut S,
+    hf_head_norm:bool,
 ) -> CudaResult<()> {
     const OPERATION: &str = "qkv_split_bias";
     let stream = execution_stream_mut(stream);
@@ -1479,6 +1635,7 @@ fn qkv_split_bias_impl<S: CudaExecutionStream + ?Sized>(
                 defer_for_kv_write: rope.defer_for_kv_write,
                 head_norm_epsilon: rope.head_norm_epsilon,
             }),
+            hf_head_norm,
             &mut stream.native,
         )
     }
@@ -2564,4 +2721,109 @@ mod tests {
             );
         }
     }
+}
+
+fn subspan_absolute_offset(base:u64,span_len:u64,relative:u64,len:u64)->CudaResult<u64> {
+    const OP:&str="CudaBufferSpan::subspan";
+    if relative>span_len || len>span_len-relative {return Err(CudaError::out_of_range(OP,"subspan exceeds its declared parent span"));}
+    base.checked_add(relative).ok_or_else(||CudaError::out_of_range(OP,"subspan offset overflow"))
+}
+#[cfg(test)]
+mod subspan_contract_tests {
+ use super::*;
+ #[test]
+ fn subspan_never_expands_declared_span() {
+  assert_eq!(subspan_absolute_offset(64,128,128,0).unwrap(),192);
+  assert_eq!(subspan_absolute_offset(64,128,127,1).unwrap(),191);
+  assert!(subspan_absolute_offset(64,128,128,1).is_err());
+  assert!(subspan_absolute_offset(64,128,u64::MAX,2).is_err());
+  assert!(subspan_absolute_offset(u64::MAX-1,16,2,0).is_err());
+ }
+}
+
+#[cfg(feature="cuda-cublas-gemm-probe")]
+fn validate_hugging_face_qwen_head128_rms_norm_contract(operation: &'static str,dtype:CudaDType,row_count:u64,hidden_size:u64,epsilon:f32)->CudaResult<()> {
+ if dtype==CudaDType::BF16 && hidden_size==128 && row_count<=524288 && epsilon.to_bits()==1e-6f32.to_bits(){return Ok(());}
+ Err(CudaError::new(CudaErrorKind::NotSupported,CudaErrorDomain::Rust,CudaErrorStage::Validation,0,operation,"BF16 head128 rows<=524288 epsilon1e-6 required"))
+}
+#[cfg(all(test,feature="cuda-cublas-gemm-probe"))]
+#[test]
+fn hf_head128_norm_contract_is_finite_and_strict(){
+ for rows in [0,1,8,16,2048,8192,32768,262144,524288]{assert!(validate_hugging_face_qwen_head128_rms_norm_contract("test",CudaDType::BF16,rows,128,1e-6).is_ok());}
+ for (dtype,rows,width,eps) in [(CudaDType::F32,16,128,1e-6),(CudaDType::BF16,524289,128,1e-6),(CudaDType::BF16,16,64,1e-6),(CudaDType::BF16,16,128,1e-5)]{assert!(validate_hugging_face_qwen_head128_rms_norm_contract("test",dtype,rows,width,eps).is_err());}
+}
+
+#[cfg(feature="cuda-cublas-gemm-probe")]
+fn validate_hugging_face_qwen_wide_rms_norm_contract(operation: &'static str,dtype:CudaDType,row_count:u64,hidden_size:u64,epsilon:f32)->CudaResult<()> {
+ if dtype==CudaDType::BF16 && matches!(hidden_size,2048|2560) && row_count<=8192 && epsilon.to_bits()==1e-6f32.to_bits(){return Ok(());}
+ Err(CudaError::new(CudaErrorKind::NotSupported,CudaErrorDomain::Rust,CudaErrorStage::Validation,0,operation,"BF16 width2048/2560 rows<=8192 epsilon1e-6 required"))
+}
+#[cfg(all(test,feature="cuda-cublas-gemm-probe"))]
+#[test]
+fn hf_wide_norm_contract_is_finite_and_strict(){
+ for width in [2048,2560]{for rows in [0,1,2,3,8,15,16,128,397,512,1024,2048,8192]{assert!(validate_hugging_face_qwen_wide_rms_norm_contract("test",CudaDType::BF16,rows,width,1e-6).is_ok());}}
+ for (dtype,rows,width,eps) in [(CudaDType::F32,16,2048,1e-6),(CudaDType::BF16,8193,2048,1e-6),(CudaDType::BF16,16,128,1e-6),(CudaDType::BF16,16,2560,1e-5)]{assert!(validate_hugging_face_qwen_wide_rms_norm_contract("test",dtype,rows,width,eps).is_err());}
+}
+
+/// Applies the bounded wide RMSNorm to each contiguous request row group.
+/// Parent capacities and ownership are validated before any group executes.
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub fn hugging_face_qwen_wide_rms_norm_row_groups<S:CudaExecutionStream+?Sized>(params:&mut RmsNormParams<'_>,slots:&[u32],stream:&mut S)->CudaResult<()>{
+    const OPERATION: &str = "hugging_face_qwen_wide_rms_norm";
+    let stream = execution_stream_mut(stream);
+    validate_hugging_face_qwen_wide_rms_norm_contract(
+        OPERATION,
+        params.input.dtype,
+        params.row_count,
+        params.hidden_size,
+        params.epsilon,
+    )?;
+    require_dtype(OPERATION, "weight", params.weight.dtype, params.input.dtype)?;
+    require_dtype(OPERATION, "output", params.output.dtype, params.input.dtype)?;
+    let matrix_bytes = required_matrix_bytes(
+        OPERATION,
+        params.row_count,
+        params.hidden_size,
+        params.input.dtype,
+    )?;
+    require_capacity(OPERATION, "input", params.input.byte_len, matrix_bytes)?;
+    require_capacity(
+        OPERATION,
+        "weight",
+        params.weight.byte_len,
+        required_vector_bytes(OPERATION, params.hidden_size, params.weight.dtype)?,
+    )?;
+    require_capacity(OPERATION, "output", params.output.byte_len, matrix_bytes)?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.input.buffer,
+            params.weight.buffer,
+            params.output.buffer,
+        ],
+    )?;
+
+ if slots.len() as u64>params.row_count{return Err(CudaError::invalid_argument(OPERATION,"active rows exceed prepared descriptor"));}
+ let row_bytes=params.hidden_size*2;let mut begin=0;
+ while begin<slots.len(){let mut end=begin+1;while end<slots.len()&&slots[end]==slots[begin]{end+=1;}
+   let offset=begin as u64*row_bytes;let bytes=(end-begin) as u64*row_bytes;
+   let mut group=RmsNormParams{input:params.input.subspan(offset,bytes)?,weight:params.weight.subspan(0,params.weight.byte_len())?,output:params.output.subspan(offset,bytes)?,row_count:(end-begin) as u64,hidden_size:params.hidden_size,epsilon:params.epsilon};
+   hugging_face_qwen_wide_rms_norm(&mut group,stream)?;begin=end;
+ }
+ Ok(())
+}
+
+/// Bounded, synchronous, owned bit packing for separately projected Qwen3 QKV.
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub fn hf_pack_separate_qkv<S:CudaExecutionStream+?Sized>(q:CudaBufferSpan<'_>,k:CudaBufferSpan<'_>,v:CudaBufferSpan<'_>,out:CudaBufferSpanMut<'_>,rows:u64,qw:u64,kw:u64,stream:&mut S)->CudaResult<()>{
+ const OP:&str="HF pack separate QKV";
+ if rows==0||rows>8192||qw!=4096||kw!=1024{return Err(CudaError::invalid_argument(OP,"rows1..8192,Q4096,KV1024 required"));}
+ let stream=execution_stream_mut(stream);
+ for (name,dtype,bytes,need) in [("query",q.dtype,q.byte_len,rows*qw*2),("key",k.dtype,k.byte_len,rows*kw*2),("value",v.dtype,v.byte_len,rows*kw*2),("merged",out.dtype,out.byte_len,rows*(qw+2*kw)*2)]{
+  if dtype!=CudaDType::BF16{return Err(CudaError::invalid_argument(OP,"BF16 required"));}require_capacity(OP,name,bytes,need)?;
+ }
+ validate_resources(OP,stream,&[q.buffer,k.buffer,v.buffer,out.buffer])?;
+ #[cfg(feature="cuda")]{ffi::hf_pack_qkv_execute(q.raw(),k.raw(),v.raw(),out.raw(),rows,qw,kw,&mut stream.native)}
+ #[cfg(not(feature="cuda"))]{Err(CudaError::unavailable(OP))}
 }

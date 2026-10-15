@@ -42,7 +42,7 @@ impl LlamaGemmReductionPolicies {
     const REVIEWED_LLAMA: Self = Self {
         heuristic_anchor_rows: None,
         bit_equivalent_selection: false,
-        hidden: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
+        hidden: CudaGemmReductionPolicy::StrictNoSplitV1,
         key_value: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
         intermediate: CudaGemmReductionPolicy::StrictNoSplitV1,
         down: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
@@ -128,10 +128,11 @@ impl LlamaGemmReductionPolicies {
 
 /// Resolves the reviewed policy once at the validated model boundary.
 ///
-/// The reviewed BF16 dense-576 Llama profile preserves the raw first-heuristic
-/// reduction for attention projections and the down projection. Gate/up and the
-/// LM head stay no-split, matching the frozen oracle. Other Llama geometries and
-/// dense Qwen2 are entirely no-split. Execution code consumes only the prepared
+/// The reviewed BF16 dense-576 Llama profile keeps hidden projections no-split:
+/// output-type split-K changed Q projection bits and greedy tokens at M=128.
+/// Source-bound Q/K/V operator and own-generation probes qualify this policy.
+/// Key/value and down projections preserve their reviewed reduction policy;
+/// gate/up and the LM head remain no-split. Other geometries are no-split. Execution code consumes only the prepared
 /// plans and never branches on source-model identity.
 pub(super) fn canonical_gemm_reduction_policies(
     config: &ModelConfig,
@@ -293,7 +294,7 @@ mod tests {
         let llama = ModelConfig::from_json_slice(LLAMA_CONFIG.as_bytes()).unwrap();
         let llama_spec = llama.to_model_spec();
         let llama = canonical_gemm_reduction_policies(&llama, &llama_spec);
-        assert_eq!(llama.hidden(), AllowInPlaceAndOutputTypeSplitKV1);
+        assert_eq!(llama.hidden(), StrictNoSplitV1);
         assert_eq!(llama.key_value(), AllowInPlaceAndOutputTypeSplitKV1);
         assert_eq!(llama.intermediate(), StrictNoSplitV1);
         assert_eq!(llama.down(), AllowInPlaceAndOutputTypeSplitKV1);

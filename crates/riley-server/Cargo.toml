@@ -15,6 +15,8 @@ cuda = ["riley-runtime/cuda", "riley-scheduler/cuda"]
 server = ["dep:libc", "dep:serde", "dep:serde_json", "dep:sha2"]
 bench = ["dep:serde", "dep:serde_json"]
 experimental = []
+# Caller-owned BF16 eager numerics; no Torch runtime dependency.
+owned-hf-eager = ["cuda", "riley-runtime/cuda-cublas-gemm-probe"]
 # Serves the source-bound HF-eager-exact Qwen P2048 cache-on route. It links
 # the direct cuBLAS probe and is not part of ordinary CUDA serving builds.
 hf-exact-probe = ["cuda", "riley-runtime/cuda-cublas-gemm-probe"]

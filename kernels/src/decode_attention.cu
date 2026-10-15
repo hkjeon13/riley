@@ -628,7 +628,8 @@ class ExclusiveUses final {
         buffers_{},
         buffer_count_(0),
         acquired_count_(0),
-        stream_acquired_(false) {}
+        stream_acquired_(false),
+        command_batch_(false) {}
 
   ExclusiveUses(const ExclusiveUses&) = delete;
   ExclusiveUses& operator=(const ExclusiveUses&) = delete;
@@ -648,6 +649,24 @@ class ExclusiveUses final {
 
   RileyCudaStatus acquire(RileyCudaErrorInfo* error,
                               const char* operation) noexcept {
+    // Keep command-batch leases until its single completion fence, exactly as
+    // batch_primitives does. Foreign threads and foreign asynchronous uses
+    // still fail closed through the shared registration contract.
+    if (riley_cuda_internal::command_batch_is_active(stream_)) {
+      if (!riley_cuda_internal::command_batch_is_owned_by_current_thread(stream_)) {
+        return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+            RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
+            "an active stream command batch is owned by another thread");
+      }
+      command_batch_ = true;
+      for (size_t index = 0; index < buffer_count_; ++index) {
+        const RileyCudaStatus status = riley_cuda_internal::command_batch_register_use(
+            stream_, &buffers_[index]->active_uses, error, operation,
+            "a decode buffer already has a foreign asynchronous use");
+        if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
+      }
+      return RILEY_CUDA_STATUS_SUCCESS;
+    }
     for (size_t index = 0; index < buffer_count_; ++index) {
       if (!try_acquire_exclusive_use(buffers_[index]->active_uses)) {
         release_acquired();
@@ -668,6 +687,8 @@ class ExclusiveUses final {
     stream_acquired_ = true;
     return RILEY_CUDA_STATUS_SUCCESS;
   }
+
+  bool command_batch() const noexcept { return command_batch_; }
 
   bool release_completed() noexcept {
     bool valid = true;
@@ -696,6 +717,7 @@ class ExclusiveUses final {
   size_t buffer_count_;
   size_t acquired_count_;
   bool stream_acquired_;
+  bool command_batch_;
 };
 
 uint32_t block_count(uint64_t work_items) noexcept {
@@ -717,6 +739,10 @@ RileyCudaStatus complete_execution(ExclusiveUses* uses,
                                        bool launch_attempted,
                                        RileyCudaErrorInfo* error,
                                        const char* operation) noexcept {
+  if (uses->command_batch()) {
+    return scope->leave(operation_status, error,
+                        RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE, operation);
+  }
   bool completion_confirmed = !launch_attempted;
   RileyCudaStatus status = operation_status;
   if (launch_attempted) {

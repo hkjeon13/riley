@@ -521,6 +521,7 @@ pub struct Scheduler {
     last_now_ns: Option<u64>,
     aging_override_last_iteration: bool,
     prefill_plateau: Option<PrefillPlateauPolicy>,
+    atomic_prefill_chunks: bool,
     prefill_coalescing: Option<PrefillCoalescingPolicy>,
     inflight: Option<InflightPlan>,
     metrics: SchedulerMetrics,
@@ -659,6 +660,7 @@ impl Scheduler {
             last_now_ns: None,
             aging_override_last_iteration: false,
             prefill_plateau: None,
+            atomic_prefill_chunks: false,
             prefill_coalescing: None,
             inflight: None,
             metrics,
@@ -669,6 +671,14 @@ impl Scheduler {
         };
         scheduler.refresh_metric_gauges();
         Ok(scheduler)
+    }
+
+    /// Preserves each configured prefill chunk rather than trimming it to the
+    /// iteration's residual budget. Decoder work keeps its ordinary priority;
+    /// the bounded aging override can reserve one whole chunk when necessary.
+    pub fn set_atomic_prefill_chunks(&mut self,enabled:bool)->SchedulerResult<()> {
+        if enabled && self.prefill_plateau.is_some() {return Err(SchedulerError::InvalidConfiguration {field:"atomic_prefill_chunks",reason:"cannot combine with a token-trimming plateau policy"});}
+        self.atomic_prefill_chunks=enabled;Ok(())
     }
 
     #[must_use]
@@ -686,6 +696,7 @@ impl Scheduler {
         &mut self,
         policy: Option<PrefillPlateauPolicy>,
     ) -> SchedulerResult<()> {
+        if self.atomic_prefill_chunks && policy.is_some() {return Err(SchedulerError::InvalidConfiguration {field:"prefill_plateau",reason:"atomic prefill chunks cannot be trimmed"});}
         self.prefill_plateau = policy
             .map(|policy| policy.validate(self.config.iteration_token_budget))
             .transpose()?;
@@ -1606,7 +1617,7 @@ impl Scheduler {
                     reason: "selected prefill request disappeared",
                 })?;
             let reserved_for_decode = usize::from(budget > 1);
-            let usable = budget.saturating_sub(reserved_for_decode).max(1);
+            let usable = if self.atomic_prefill_chunks {budget} else {budget.saturating_sub(reserved_for_decode).max(1)};
             let token_count = item
                 .remaining_tokens
                 .min(self.config.max_prefill_chunk_tokens)
@@ -1656,10 +1667,9 @@ impl Scheduler {
             if hold_new_prompts && !item.started {
                 continue;
             }
-            let token_count = item
-                .remaining_tokens
-                .min(self.config.max_prefill_chunk_tokens)
-                .min(budget);
+            let desired=item.remaining_tokens.min(self.config.max_prefill_chunk_tokens);
+            if self.atomic_prefill_chunks && desired>budget {continue;}
+            let token_count=desired.min(budget);
             selected.push(Candidate {
                 request_id: item.request_id,
                 kind: WorkKind::Prefill,
@@ -2833,6 +2843,29 @@ mod tests {
         IterationOutput, IterationResult, OutputSlot, OverloadPolicy, SchedulerConfig,
         SchedulerError,
     };
+
+    #[test]
+    fn atomic_prefill_defers_residual_budget_without_losing_decode_progress() {
+        let mut s=test_scheduler_with_max_active_sequences(2);
+        s.set_atomic_prefill_chunks(true).unwrap();
+        s.submit(RequestDescriptor::new(vec![1,2],2),0).unwrap();
+        let p=s.plan_iteration(1).unwrap().into_parts().0.unwrap();
+        assert_eq!(p.prefill_items()[0].input_tokens().len(),2);
+        let r=IterationResult::new(p.iteration_id(),vec![IterationOutput::new(OutputSlot::new(0),7,false)],1,0).unwrap();
+        s.complete_iteration(&r,2).unwrap();
+        s.submit(RequestDescriptor::new(vec![3,4,5,6],1),2).unwrap();
+        let p=s.plan_iteration(3).unwrap().into_parts().0.unwrap();
+        assert!(p.prefill_items().is_empty());assert_eq!(p.decode_items().len(),1);
+        let r=IterationResult::new(p.iteration_id(),vec![IterationOutput::new(OutputSlot::new(0),8,false)],1,0).unwrap();
+        s.complete_iteration(&r,4).unwrap();
+        let p=s.plan_iteration(5).unwrap().into_parts().0.unwrap();
+        assert_eq!(p.prefill_items().len(),1);assert_eq!(p.prefill_items()[0].input_tokens().len(),4);
+        let r=IterationResult::new(p.iteration_id(),vec![IterationOutput::new(OutputSlot::new(0),9,false)],1,0).unwrap();
+        s.complete_iteration(&r,6).unwrap();
+        let closed=s.close(7,None).unwrap();
+        assert_eq!(closed.final_metrics().gauges.allocated_kv_blocks,0);
+        assert_eq!(closed.final_metrics().gauges.promised_kv_blocks,0);
+    }
 
     fn test_scheduler() -> Scheduler {
         test_scheduler_with_max_active_sequences(1)

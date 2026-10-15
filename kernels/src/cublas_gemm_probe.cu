@@ -3,6 +3,9 @@
 #if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
 
 #include <cublas_v2.h>
+#include <cuda_bf16.h>
+#include "hf_softmax_diagnostic.cuh"
+#include "hf_regular_f32_softmax.cuh"
 
 #include <atomic>
 #include <cstddef>
@@ -314,6 +317,70 @@ RileyCudaStatus resolve_exact_span(
   return RILEY_CUDA_STATUS_SUCCESS;
 }
 
+RileyCudaStatus resolve_attention_span(
+    const RileyCudaBufferSpan* span, RileyCudaDType required_dtype,
+    uint64_t required_bytes, ResolvedSpan* output,
+    RileyCudaErrorInfo* error, const char* dtype_detail) noexcept {
+  if (span == nullptr || output == nullptr ||
+      span->struct_size < sizeof(*span)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kExecuteOperation,
+                            "a span is null or has an incompatible struct_size");
+  }
+  if (!reserved_is_zero(span->reserved, 2)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kExecuteOperation,
+                            "span reserved fields must be zero");
+  }
+  if (span->dtype != required_dtype) {
+    return set_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_VALIDATION,
+                     RILEY_CUDA_ERROR_STAGE_VALIDATION, kExecuteOperation,
+                     dtype_detail);
+  }
+  if (span->buffer == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kExecuteOperation, "a span buffer handle is null");
+  }
+  if (span->byte_offset % (required_dtype == RILEY_CUDA_DTYPE_BF16 ? 2 : required_dtype == RILEY_CUDA_DTYPE_U8 ? 1 : 4) != 0) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kExecuteOperation,
+                            "every span byte_offset must be element aligned");
+  }
+  if (span->byte_len != required_bytes) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kExecuteOperation,
+        "a span byte_len does not exactly match the prepared requirement");
+  }
+  if (span->byte_offset > span->buffer->byte_len ||
+      span->byte_len > span->buffer->byte_len - span->byte_offset) {
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kExecuteOperation,
+                            "a declared span exceeds its opaque allocation");
+  }
+  if (required_bytes != 0 && span->buffer->device_data == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kExecuteOperation,
+                            "a non-empty span refers to a zero-byte allocation");
+  }
+  void* data = nullptr;
+  if (span->buffer->device_data != nullptr) {
+    data = static_cast<void*>(
+        static_cast<uint8_t*>(span->buffer->device_data) +
+        static_cast<size_t>(span->byte_offset));
+  }
+  *output = ResolvedSpan{span->buffer, data, span->byte_offset,
+                         required_bytes};
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
+
 bool spans_overlap(const ResolvedSpan& left,
                    const ResolvedSpan& right) noexcept {
   if (left.buffer != right.buffer || left.byte_len == 0 ||
@@ -325,10 +392,24 @@ bool spans_overlap(const ResolvedSpan& left,
   return left.byte_offset < right_end && right.byte_offset < left_end;
 }
 
+// The attention owner may reuse completed BF16 QK rows for probabilities.
+// Only this exact role/range alias is safe: each tile is fully read into F32
+// scratch before its disjoint BF16 rows are overwritten on the same stream.
+constexpr bool hf_score_probability_alias(bool enabled, size_t left, size_t right,
+                                         uint64_t lo, uint64_t ro,
+                                         uint64_t ll, uint64_t rl) noexcept {
+  return enabled && left == 8 && right == 11 && lo == ro && ll == rl;
+}
+static_assert(hf_score_probability_alias(true,8,11,0,0,64,64));
+static_assert(!hf_score_probability_alias(false,8,11,0,0,64,64));
+static_assert(!hf_score_probability_alias(true,8,11,0,2,64,64));
+static_assert(!hf_score_probability_alias(true,8,11,0,0,64,62));
+static_assert(!hf_score_probability_alias(true,5,12,0,0,64,64));
+
 RileyCudaStatus validate_span_relationships(
     RileyCudaCublasGemmProbePlan* plan, RileyCudaStream* stream,
     const ResolvedSpan* spans, size_t count,
-    RileyCudaErrorInfo* error) noexcept {
+    RileyCudaErrorInfo* error, bool allow_hf_score_alias = false) noexcept {
   if (plan->owner == nullptr || stream == nullptr) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -349,7 +430,10 @@ RileyCudaStatus validate_span_relationships(
           "plan and device spans belong to different context owners");
     }
     for (size_t other = index + 1; other < count; ++other) {
-      if (spans_overlap(spans[index], spans[other])) {
+      if (spans_overlap(spans[index], spans[other]) &&
+          !hf_score_probability_alias(allow_hf_score_alias,index,other,
+              spans[index].byte_offset,spans[other].byte_offset,
+              spans[index].byte_len,spans[other].byte_len)) {
         return validation_error(
             error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
             RILEY_CUDA_ERROR_STAGE_VALIDATION, kExecuteOperation,
@@ -381,7 +465,7 @@ class ExclusiveProbeUses final {
         return true;
       }
     }
-    if (buffer == nullptr || buffer_count_ == kMaximumGemmBuffers) {
+    if (buffer == nullptr || buffer_count_ == 16) {
       return false;
     }
     buffers_[buffer_count_++] = buffer;
@@ -457,7 +541,7 @@ class ExclusiveProbeUses final {
 
   RileyCudaCublasGemmProbePlan* plan_;
   RileyCudaStream* stream_;
-  RileyCudaDeviceBuffer* buffers_[kMaximumGemmBuffers];
+  RileyCudaDeviceBuffer* buffers_[16];
   size_t buffer_count_;
   size_t acquired_buffers_;
   bool plan_acquired_;
@@ -832,6 +916,91 @@ extern "C" RileyCudaStatus riley_cuda_cublas_gemm_probe_plan_execute(
                             error);
 }
 
+extern "C" RileyCudaStatus riley_cuda_cublas_gemm_probe_plan_execute_rows(
+    RileyCudaCublasGemmProbePlan* plan, const RileyCudaBufferSpan* input,
+    const RileyCudaBufferSpan* weight, const RileyCudaBufferSpan* output,
+    uint64_t rows, RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (plan == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kExecuteOperation, "the plan is null");
+  }
+  if (plan->handle == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kExecuteOperation,
+                            "the direct cuBLAS probe plan is not prepared");
+  }
+
+  if(rows==0 || rows>plan->config.m) return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"requested GEMM rows exceed the cold plan");
+  ResolvedSpan spans[kMaximumGemmBuffers]{};
+  RileyCudaStatus status = resolve_attention_span(
+      input, RILEY_CUDA_DTYPE_BF16, rows*plan->config.k*2, &spans[0], error,
+      "input span dtype must be BF16");
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_attention_span(weight, RILEY_CUDA_DTYPE_BF16,
+                                plan->weight_bytes, &spans[1], error,
+                                "weight span dtype must be BF16");
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_attention_span(output, RILEY_CUDA_DTYPE_BF16,
+                                rows*plan->config.n*2, &spans[2], error,
+                                "output span dtype must be BF16");
+  }
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  status = validate_span_relationships(plan, stream, spans,
+                                       kMaximumGemmBuffers, error);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ExclusiveProbeUses uses(plan, stream);
+  for (const ResolvedSpan& span : spans) {
+    if (!uses.add(span.buffer)) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kExecuteOperation,
+                            "too many unique direct cuBLAS probe device buffers");
+    }
+  }
+  status = uses.acquire(error);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  CurrentContext scope(plan->owner);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                       kExecuteOperation);
+  bool launch_attempted = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = cublas_probe_error(cublasSetStream(plan->handle, stream->stream),
+                                error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                                kExecuteOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const float alpha = 1.0F;
+    const float beta = 0.0F;
+    // Row-major X[M,K], W[N,K], Y[M,N] are physical column-major
+    // Xc[K,M], Wc[K,N], Yc[N,M]. Therefore Yc = Wc^T * Xc.
+    launch_attempted = true;
+    status = cublas_probe_error(
+        cublasGemmEx(plan->handle, CUBLAS_OP_T, CUBLAS_OP_N,
+                     static_cast<int>(plan->config.n),
+                     static_cast<int>(rows),
+                     static_cast<int>(plan->config.k), &alpha, spans[1].data,
+                     CUDA_R_16BF, static_cast<int>(plan->config.k),
+                     spans[0].data, CUDA_R_16BF,
+                     static_cast<int>(plan->config.k), &beta, spans[2].data,
+                     CUDA_R_16BF, static_cast<int>(plan->config.n),
+                     CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP),
+        error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kExecuteOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error);
+}
+
 extern "C" RileyCudaStatus riley_cuda_cublas_gemm_probe_plan_close(
     RileyCudaCublasGemmProbePlan** plan,
     RileyCudaErrorInfo* error) noexcept {
@@ -896,4 +1065,63 @@ extern "C" RileyCudaStatus riley_cuda_cublas_gemm_probe_plan_close(
   return status;
 }
 
-#endif  // RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE
+namespace {
+__global__ void hf_q_gather(const __nv_bfloat16*in,__nv_bfloat16*out,int m,int h,int d){int i=blockIdx.x*blockDim.x+threadIdx.x;if(i<m*h*d){int depth=i%d,row=(i/d)%m,head=i/(d*m);out[i]=in[(row*h+head)*d+depth];}}
+__global__ void hf_kv_gather(const __nv_bfloat16*kin,const __nv_bfloat16*vin,const uint32_t*ids,__nv_bfloat16*k,__nv_bfloat16*v,int t,uint64_t physical,int h,int kvh,int d){int i=blockIdx.x*blockDim.x+threadIdx.x;if(i<t*h*d){int depth=i%d,row=(i/d)%t,head=i/(d*t);uint64_t id=ids[row/16];if(id>=physical){k[i]=v[i]=__float2bfloat16_rn(CUDART_NAN_F);}else{uint64_t j=((id*kvh+head/(h/kvh))*16+row%16)*d+depth;k[i]=kin[j];v[i]=vin[j];}}}
+// Tile only independent softmax rows. Full BF16 QK/AV geometry is unchanged.
+// Global score/probability tensors exceed INT32_MAX elements at 8k Q32.
+__global__ void hf_scale_mask_tile(const __nv_bfloat16*in,float*out,int m,int t,int h,int start,int tile,float scale){
+ uint64_t i=uint64_t(blockIdx.x)*blockDim.x+threadIdx.x;
+ if(i<uint64_t(h)*tile*t){int key=i%t,row=(i/t)%tile,head=i/(uint64_t(tile)*t);uint64_t source=(uint64_t(head)*m+start+row)*t+key;
+ out[i]=key>t-m+start+row?-3.3895313892515355e38f:__bfloat162float(__float2bfloat16_rn(__bfloat162float(in[source])*scale));}
+}
+__global__ void hf_scatter_bf16_tile(const float*in,__nv_bfloat16*out,int m,int t,int h,int start,int tile){
+ uint64_t i=uint64_t(blockIdx.x)*blockDim.x+threadIdx.x;
+ if(i<uint64_t(h)*tile*t){int key=i%t,row=(i/t)%tile,head=i/(uint64_t(tile)*t);uint64_t target=(uint64_t(head)*m+start+row)*t+key;out[target]=__float2bfloat16_rn(in[i]);}
+}
+__global__ void hf_output_rows(const __nv_bfloat16*in,__nv_bfloat16*out,int m,int h,int d){int i=blockIdx.x*blockDim.x+threadIdx.x;if(i<m*h*d){int depth=i%d,head=(i/d)%h,row=i/(h*d);out[i]=in[(head*m+row)*d+depth];}}
+}
+// Private bounded per-operation, caller-owned workspace, existing use ledger.
+extern "C" RileyCudaStatus riley_cuda_cublas_hf_attention_execute(
+ RileyCudaCublasGemmProbePlan*plan,const RileyCudaBufferSpan*raw,uint64_t count,
+ uint64_t rows,uint64_t tokens,uint64_t physical,uint64_t qh,uint64_t kvh,uint64_t depth,
+ RileyCudaStream*stream,RileyCudaErrorInfo*error) noexcept {
+ clear_error(error);
+ if(!plan || !plan->handle || !raw || count!=14 || rows==0 || rows>8192 || tokens<rows || tokens>9216 || physical==0 || physical>UINT32_MAX || rows>plan->config.m || tokens>plan->config.n || (depth!=64&&depth!=128) || depth!=plan->config.k || qh==0 || qh>64 || kvh==0 || kvh>qh || qh%kvh!=0 || qh/kvh>8)
+  return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"bounded diagnostic requires BF16 D64/D128 GQA<=8, QH<=64, M<=8192, T<=9216 and 14 spans");
+ const uint64_t q=rows*qh*depth*2,kv=tokens*qh*depth*2,s=qh*rows*tokens,tile_s=qh*(rows<128?rows:128)*tokens,pool=physical*kvh*16*depth*2;
+ const uint64_t sizes[14]={q,pool,pool,((tokens+15)/16)*4,q,q,kv,kv,s*2,tile_s*4,tile_s*4,s*2,q,16777216};
+ ResolvedSpan spans[14]{};RileyCudaStatus status=RILEY_CUDA_STATUS_SUCCESS;
+ for(size_t i=0;i<14;i++){uint32_t dtype=i==3?RILEY_CUDA_DTYPE_U32:(i==9||i==10)?RILEY_CUDA_DTYPE_F32:i==13?RILEY_CUDA_DTYPE_U8:RILEY_CUDA_DTYPE_BF16;status=resolve_attention_span(raw+i,dtype,sizes[i],spans+i,error,"attention span dtype mismatch");if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;}
+ status=validate_span_relationships(plan,stream,spans,14,error,true);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+ ExclusiveProbeUses uses(plan,stream);for(auto&span:spans)if(!uses.add(span.buffer))return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"attention use ledger overflow");
+ status=uses.acquire(error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+ CurrentContext scope(plan->owner);status=scope.enter(error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);bool attempted=false;
+ if(status==RILEY_CUDA_STATUS_SUCCESS)status=cublas_probe_error(cublasSetStream(plan->handle,stream->stream),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
+ if(status==RILEY_CUDA_STATUS_SUCCESS)status=cublas_probe_error(cublasSetWorkspace(plan->handle,spans[13].data,sizes[13]),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
+ if(status==RILEY_CUDA_STATUS_SUCCESS){int m=static_cast<int>(rows),t=static_cast<int>(tokens),h=static_cast<int>(qh),kh=static_cast<int>(kvh),d=static_cast<int>(depth);float alpha=1,beta=0,scale=static_cast<float>(1.0/std::sqrt(static_cast<double>(d)));attempted=true;
+  hf_q_gather<<<(m*h*d+255)/256,256,0,stream->stream>>>(static_cast<const __nv_bfloat16*>(spans[0].data),static_cast<__nv_bfloat16*>(spans[5].data),m,h,d);
+  hf_kv_gather<<<(t*h*d+255)/256,256,0,stream->stream>>>(static_cast<const __nv_bfloat16*>(spans[1].data),static_cast<const __nv_bfloat16*>(spans[2].data),static_cast<const uint32_t*>(spans[3].data),static_cast<__nv_bfloat16*>(spans[6].data),static_cast<__nv_bfloat16*>(spans[7].data),t,physical,h,kh,d);
+  status=cublas_probe_error(cublasGemmStridedBatchedEx(plan->handle,CUBLAS_OP_T,CUBLAS_OP_N,t,m,d,&alpha,spans[6].data,CUDA_R_16BF,d,t*d,spans[5].data,CUDA_R_16BF,d,m*d,&beta,spans[8].data,CUDA_R_16BF,t,m*t,h,CUBLAS_COMPUTE_32F,CUBLAS_GEMM_DEFAULT_TENSOR_OP),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
+  if(status==RILEY_CUDA_STATUS_SUCCESS){
+   for(int start=0;start<m;start+=128){int tile=(m-start)<128?(m-start):128;uint64_t elements=uint64_t(h)*tile*t;
+    hf_scale_mask_tile<<<(elements+255)/256,256,0,stream->stream>>>(static_cast<const __nv_bfloat16*>(spans[8].data),static_cast<float*>(spans[9].data),m,t,h,start,tile,scale);
+    if(t<=2048){int log=0;while((1<<log)<t)log++;int width=(1<<log)<32?(1<<log):32,warps=128/width,wb=log<=7?2:1,blocks=(h*tile+warps*wb-1)/(warps*wb);dim3 threads(width,warps);
+#define HF_CASE(L) case L: softmax_warp_forward<float,float,float,L,false,false,32><<<blocks,threads,0,stream->stream>>>(static_cast<float*>(spans[10].data),static_cast<const float*>(spans[9].data),h*tile,t,t);break;
+     switch(log){HF_CASE(0) HF_CASE(1) HF_CASE(2) HF_CASE(3) HF_CASE(4) HF_CASE(5) HF_CASE(6) HF_CASE(7) HF_CASE(8) HF_CASE(9) HF_CASE(10) HF_CASE(11)}
+#undef HF_CASE
+    }else{
+#define HF_REG(N) case N: hf_regular_f32_softmax<N><<<h*tile,1024,0,stream->stream>>>(static_cast<float*>(spans[10].data),static_cast<const float*>(spans[9].data),t);break;
+     switch((t+1023)/1024){HF_REG(3) HF_REG(4) HF_REG(5) HF_REG(6) HF_REG(7) HF_REG(8) HF_REG(9)}
+#undef HF_REG
+    }
+    hf_scatter_bf16_tile<<<(elements+255)/256,256,0,stream->stream>>>(static_cast<const float*>(spans[10].data),static_cast<__nv_bfloat16*>(spans[11].data),m,t,h,start,tile);
+   }
+   status=cublas_probe_error(cublasGemmStridedBatchedEx(plan->handle,CUBLAS_OP_N,CUBLAS_OP_N,d,m,t,&alpha,spans[7].data,CUDA_R_16BF,d,t*d,spans[11].data,CUDA_R_16BF,t,m*t,&beta,spans[12].data,CUDA_R_16BF,d,m*d,h,CUBLAS_COMPUTE_32F,CUBLAS_GEMM_DEFAULT_TENSOR_OP),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
+   if(status==RILEY_CUDA_STATUS_SUCCESS)hf_output_rows<<<(m*h*d+255)/256,256,0,stream->stream>>>(static_cast<const __nv_bfloat16*>(spans[12].data),static_cast<__nv_bfloat16*>(spans[4].data),m,h,d);
+  }
+  if(status==RILEY_CUDA_STATUS_SUCCESS){auto e=cudaGetLastError();if(e!=cudaSuccess)status=runtime_error(e,error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);}
+ }
+ return complete_execution(&uses,&scope,stream,status,attempted,error);
+}
+#endif // RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE

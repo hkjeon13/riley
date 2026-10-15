@@ -24,6 +24,11 @@ use crate::domain::{
     GenerationEvent, GenerationRequest, ModelMetadata, RequestMetadata, ServiceErrorClass,
 };
 
+// Complete prompt prefill preserves this profile's request GEMM geometry.
+fn owned_prefill_shape_valid(owned: bool, prompt: usize, batch: usize, chunk: usize) -> bool {
+    !owned || (prompt <= batch && prompt <= chunk)
+}
+
 const REQUEST_LIVE: u8 = 0;
 const REQUEST_CANCELLED: u8 = 1;
 const REQUEST_TERMINAL: u8 = 2;
@@ -2470,6 +2475,12 @@ mod cuda_backend {
                     .map_err(|source| {
                         internal(format!("batch executor preparation failed: {source}"))
                     })?;
+            if executor.config().owned_hf_eager_bf16() {
+                eprintln!("RILEY_NUMERICS profile={} prefill={} decode={} qkv={} output={} mlp={} lm_head={} rms_norm={} graph=false fallback=forbidden max_prompt_tokens={}",
+                    executor.numerics_profile_id(),executor.prefill_attention_implementation_id(),executor.decode_attention_implementation_id(),
+                    executor.projection_bias_backend_id(),executor.output_projection_backend_id(),executor.mlp_projection_backend_id(),
+                    executor.lm_head_backend_id(),executor.rms_norm_backend_id(),config.scheduler.iteration_token_budget.min(config.scheduler.max_prefill_chunk_tokens));
+            }
             let batch_token_budget = executor.batch_token_budget();
             if config.scheduler.iteration_token_budget != batch_token_budget {
                 let scheduler_budget = config.scheduler.iteration_token_budget;
@@ -2478,8 +2489,11 @@ mod cuda_backend {
                     "scheduler iteration token budget {scheduler_budget} differs from prepared executor batch token budget {batch_token_budget}"
                 )));
             }
-            let scheduler = Scheduler::new(config.scheduler, executor.kv_layout())
+            let mut scheduler = Scheduler::new(config.scheduler, executor.kv_layout())
                 .map_err(|source| internal(format!("scheduler preparation failed: {source}")))?;
+            if config.executor.owned_hf_eager_bf16() {
+                scheduler.set_atomic_prefill_chunks(true).map_err(|e|internal(format!("atomic prefill preparation: {e}")))?;
+            }
             let timer = LlamaIterationCudaTimer::prepare(&context)
                 .map_err(|source| internal(format!("CUDA timing preparation failed: {source}")))?;
             Ok(Self {
@@ -2812,6 +2826,7 @@ mod cuda_backend {
             } else {
                 (Some(resources.executor), None)
             };
+            let eager_numerics = executor.as_ref().map_or("existing", |e| e.numerics_profile_id());
             eprintln!(
                 "RILEY_GRAPH prepared={} policy={:?} fallback={} gpu_iteration_timing={} numerics={}",
                 use_graph,
@@ -2820,7 +2835,7 @@ mod cuda_backend {
                 !use_graph,
                 decode_graph
                     .as_ref()
-                    .map_or("existing", |graph| graph.numerical_profile_id())
+                    .map_or(eager_numerics, |graph| graph.numerical_profile_id())
             );
             Ok(Self {
                 metadata: resources.metadata,
@@ -3488,6 +3503,13 @@ mod cuda_backend {
                 return Err(private_request_error(
                     "requested output token count is outside server bounds",
                 ));
+            }
+            let owned = self.executor.as_ref().is_some_and(|e| e.config().owned_hf_eager_bf16());
+            if owned {
+                let c=self.scheduler.as_ref().ok_or_else(||internal("scheduler unavailable"))?.config();
+                if !super::owned_prefill_shape_valid(true,prompt_token_ids.len(),c.iteration_token_budget,c.max_prefill_chunk_tokens) {
+                    return Err(private_request_error("prompt exceeds the owned profile full-prefill token budget"));
+                }
             }
             if let Some(graph) = &self.decode_graph {
                 graph
@@ -4773,4 +4795,14 @@ mod tests {
         let incomplete = [b'o', b'k', 0xe2, 0x82];
         assert_eq!(visible_utf8_prefix(&incomplete), "ok");
     }
+}
+
+#[cfg(test)]
+#[test]
+fn owned_prefill_admission_does_not_trim_or_change_the_default_contract() {
+    assert!(owned_prefill_shape_valid(true,8192,8192,8192));
+    assert!(!owned_prefill_shape_valid(true,8193,8192,8192));
+    assert!(!owned_prefill_shape_valid(true,129,512,128));
+    assert!(owned_prefill_shape_valid(true,128,512,128));
+    assert!(owned_prefill_shape_valid(false,8193,512,128));
 }

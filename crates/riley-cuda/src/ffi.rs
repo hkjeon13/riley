@@ -2264,6 +2264,16 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_hugging_face_qwen_head128_rms_norm_execute(
+        params: *const RawRmsNormParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_hugging_face_qwen_wide_rms_norm_execute(
+        params: *const RawRmsNormParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_fixed37_rms_norm_execute(
         params: *const RawRmsNormParams,
         stream: *mut RawStream,
@@ -2295,6 +2305,11 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn riley_cuda_qkv_split_bias_execute(
+        params: *const RawQkvSplitBiasParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_qkv_split_bias_rope_hf_head128_execute(
         params: *const RawQkvSplitBiasParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
@@ -2334,6 +2349,7 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_hf_pack_qkv_execute(q:RawBufferSpan,k:RawBufferSpan,v:RawBufferSpan,out:RawBufferSpan,rows:u64,qw:u64,kw:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
     fn riley_cuda_row_gather_execute(
         params: *const RawRowGatherParams,
         stream: *mut RawStream,
@@ -2647,6 +2663,14 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_hf_attention_execute(plan: *mut RawCublasGemmProbePlan,
+        spans: *const RawBufferSpan, count: u64, rows: u64, tokens: u64,
+        physical: u64, qh:u64,kvh:u64,head_size:u64,stream: *mut RawStream, error: *mut ErrorInfo) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_gemm_probe_plan_execute_rows(plan:*mut RawCublasGemmProbePlan,
+        input:*const RawBufferSpan,weight:*const RawBufferSpan,output:*const RawBufferSpan,
+        rows:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_gemm_probe_plan_close(
         plan: *mut *mut RawCublasGemmProbePlan,
@@ -7141,6 +7165,68 @@ pub(super) fn hugging_face_qwen_p2051_rms_norm_execute(
         },
     )
 }
+pub(super) fn hugging_face_qwen_head128_rms_norm_execute(
+    input: RawBufferSpan,
+    weight: RawBufferSpan,
+    output: RawBufferSpan,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRmsNormParams {
+        struct_size: RMS_NORM_PARAMS_SIZE,
+        reserved0: 0,
+        input,
+        weight,
+        output,
+        row_count,
+        hidden_size,
+        epsilon,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute Hugging Face Qwen head128 CUDA RMSNorm",
+        stream,
+        |stream, error| {
+            // SAFETY: the source-bound descriptor and every borrowed opaque
+            // resource remain live through synchronous native completion.
+            unsafe { riley_cuda_hugging_face_qwen_head128_rms_norm_execute(&params, stream, error) }
+        },
+    )
+}
+pub(super) fn hugging_face_qwen_wide_rms_norm_execute(
+    input: RawBufferSpan,
+    weight: RawBufferSpan,
+    output: RawBufferSpan,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRmsNormParams {
+        struct_size: RMS_NORM_PARAMS_SIZE,
+        reserved0: 0,
+        input,
+        weight,
+        output,
+        row_count,
+        hidden_size,
+        epsilon,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute Hugging Face Qwen wide CUDA RMSNorm",
+        stream,
+        |stream, error| {
+            // SAFETY: the source-bound descriptor and every borrowed opaque
+            // resource remain live through synchronous native completion.
+            unsafe { riley_cuda_hugging_face_qwen_wide_rms_norm_execute(&params, stream, error) }
+        },
+    )
+}
 
 pub(super) fn fixed37_rms_norm_execute(
     input: RawBufferSpan,
@@ -7344,6 +7430,7 @@ pub(super) fn qkv_split_bias_execute(
     query_width: u64,
     key_value_width: u64,
     rope: Option<RawQkvRope>,
+    hf_head_norm: bool,
     stream: &mut StreamHandle,
 ) -> CudaResult<()> {
     // Without RoPE the trailing spans are never read; they carry the merged
@@ -7398,7 +7485,7 @@ pub(super) fn qkv_split_bias_execute(
         |stream, error| {
             // SAFETY: the descriptor and all borrowed opaque buffers remain
             // live for the synchronously completing native operation.
-            unsafe { riley_cuda_qkv_split_bias_execute(&params, stream, error) }
+            unsafe { if hf_head_norm {riley_cuda_qkv_split_bias_rope_hf_head128_execute(&params,stream,error)} else {riley_cuda_qkv_split_bias_execute(&params, stream, error)} }
         },
     )
 }
@@ -10006,6 +10093,22 @@ impl CublasGemmProbePlanHandle {
         status_result(status, "execute direct cuBLAS GEMM probe", &error)
     }
 
+    pub(super) fn attention(&mut self, spans: &[RawBufferSpan;14], rows:u64,tokens:u64,physical:u64,qh:u64,kvh:u64,head_size:u64,stream:&mut StreamHandle)->CudaResult<()> {
+        let mut error=ErrorInfo::new();
+        // SAFETY: safe bridge retains exclusive plan/stream/output/scratch borrows;
+        // native checks all span owners, overlap, geometry and use guards, then fences.
+        let status=unsafe {riley_cuda_cublas_hf_attention_execute(self.as_ptr(),spans.as_ptr(),14,rows,tokens,physical,qh,kvh,head_size,stream.as_ptr(),&mut error)};
+        status_result(status,"private prepared HF attention",&error)
+    }
+
+    pub(super) fn execute_rows(&mut self,input:RawBufferSpan,weight:RawBufferSpan,output:RawBufferSpan,rows:u64,stream:&mut StreamHandle)->CudaResult<()> {
+        let mut error=ErrorInfo::new();
+        // SAFETY: safe group owner retains parent borrows, bounds each child range;
+        // native validates all owners/leases and synchronizes before releasing them.
+        let status=unsafe {riley_cuda_cublas_gemm_probe_plan_execute_rows(self.as_ptr(),&input,&weight,&output,rows,stream.as_ptr(),&mut error)};
+        status_result(status,"private request-row cuBLAS GEMM",&error)
+    }
+
     pub(super) fn close(&mut self) -> CudaResult<()> {
         let Some(pointer) = self.pointer else {
             return Ok(());
@@ -12332,4 +12435,9 @@ mod aggregate_replay_fault_tests {
         }
         Ok(())
     }
+}
+
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub(super) fn hf_pack_qkv_execute(q:RawBufferSpan,k:RawBufferSpan,v:RawBufferSpan,out:RawBufferSpan,rows:u64,qw:u64,kw:u64,stream:&mut StreamHandle)->CudaResult<()>{
+ primitive_status("HF pack separate QKV",stream,|stream,error|unsafe{riley_cuda_hf_pack_qkv_execute(q,k,v,out,rows,qw,kw,stream,error)})
 }

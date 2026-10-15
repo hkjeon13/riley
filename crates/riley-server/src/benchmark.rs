@@ -1200,6 +1200,9 @@ mod cuda_executor {
                     match execution {
                         Ok(measured) => measured,
                         Err(failure) => {
+                            if std::env::var_os("RILEY_BENCH_DIAGNOSTICS").is_some() {
+                                eprintln!("RILEY_BENCH_EXECUTION_DIAGNOSTIC {failure:?}");
+                            }
                             if let Some((failed_iteration, abort)) = failure.abort_data() {
                                 let now_ns = self.now_ns()?;
                                 self.scheduler_mut()?

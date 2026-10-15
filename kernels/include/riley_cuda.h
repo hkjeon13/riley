@@ -2414,6 +2414,17 @@ RileyCudaStatus riley_cuda_hugging_face_qwen_p2051_rms_norm_execute(
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 
+// Diagnostic BF16 head128, rows<=32768, epsilon1e-6; same ownership/completion ABI.
+RileyCudaStatus riley_cuda_hugging_face_qwen_head128_rms_norm_execute(
+    const RileyCudaRmsNormParams* params,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Diagnostic BF16 width2048/2560 rows<=512 epsilon1e-6, actual request rows.
+RileyCudaStatus riley_cuda_hugging_face_qwen_wide_rms_norm_execute(
+    const RileyCudaRmsNormParams* params,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
 // Alternate RMSNorm entry point for fixed-contiguous-37-balanced-v1. The
 // storage, alias, exceptional-value, and synchronous-completion contract is
 // identical to riley_cuda_rms_norm_execute; only the sum-of-squares
@@ -2462,6 +2473,11 @@ RileyCudaStatus riley_cuda_fixed37_log_softmax_execute(
 // BF16-only merged Q|K|V split with row-wise bias addition. query, key, and
 // value are the outputs; no output may overlap another span.
 RileyCudaStatus riley_cuda_qkv_split_bias_execute(
+    const RileyCudaQkvSplitBiasParams* params,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Diagnostic non-deferred HF head128 norm+RoPE, rows<=512,epsilon1e-6.
+RileyCudaStatus riley_cuda_qkv_split_bias_rope_hf_head128_execute(
     const RileyCudaQkvSplitBiasParams* params,
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;

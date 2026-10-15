@@ -55,6 +55,7 @@ serve options:
   --device ORDINAL               CUDA device ordinal (default: 0)
   --max-active-sequences N       active scheduler capacity (default: 8)
   --max-waiting-requests N       waiting scheduler capacity (default: 64)
+  --admission-timeout-ms MS      bounded queue/command wait, 1..3600000 (default: 30000)
   --max-sequence-tokens N        context bound (default: checkpoint maximum)
   --max-output-tokens N          API output bound (default: min(1024, context-1))
   --batch-token-budget N         tokens per CUDA iteration (default: 512)
@@ -87,7 +88,7 @@ serve options:
   --graph-numerics existing|vllm-smol-p128-v1  explicit bounded arithmetic (default: existing)
   --projection-bias-backend MODE strict-staged-v1, cublaslt-bias-epilogue-experimental-v1, or
                                  merged-qkv-strict-staged-v1 (default: strict-staged-v1)
-  --decode-attention-backend MODE existing or native-bf16-paged-split-gqa-d128-two-stage (default: existing)
+  --decode-attention-backend MODE existing, native-bf16-paged-split-gqa-d128-two-stage, materialized-bf16-reference-d128, or materialized-bf16-reference-d64 (default: existing)
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
   --gemm-reduction-policy ID     canonical or first-heuristic-split-k-v1 (default: canonical)
@@ -137,7 +138,9 @@ serve options:
                                  (default: dense-v1)
   --decode-step-graph MODE       disabled or capture-v1: record pure-decode steps of the native
                                  D128 route as CUDA graphs and replay them (default: disabled)
-  --numerics-profile ID          existing or hf-eager-qwen-p2048-o128-probe-v1 (default: existing);
+  --numerics-profile ID          existing | owned-hf-eager-bf16-v1 | hf-eager-qwen-p2048-o128-probe-v1;
+                                owned profile requires the owned-hf-eager feature, eager-only;
+                                prompt tokens must fit both batch and prefill token budgets;
                                  the HF-exact profile needs an hf-exact-probe build and
                                  --max-active-sequences 1, and serves only P2048/O<=128 greedy
   --logit-observation-dir DIR    with the HF-exact profile, write each published logit row to DIR
@@ -165,6 +168,7 @@ struct ServeOptions {
     device_ordinal: u32,
     max_active_sequences: usize,
     max_waiting_requests: usize,
+    admission_timeout_ms: u64,
     max_sequence_tokens: Option<usize>,
     max_output_tokens: Option<usize>,
     batch_token_budget: usize,
@@ -252,6 +256,7 @@ enum NumericsProfileMode {
     #[default]
     Existing,
     HfEagerQwenP2048O128ProbeV1,
+    OwnedHfEagerBf16V1,
 }
 
 /// Explicit server-level Q/K/V projection-bias selection.
@@ -288,13 +293,21 @@ enum DecodeAttentionBackendMode {
     #[default]
     Existing,
     NativeBf16PagedSplitGqaD128TwoStage,
+    MaterializedBf16ReferenceD128,
+    MaterializedBf16ReferenceD64,
+    OwnedHfEagerBf16V1,
 }
 
 impl DecodeAttentionBackendMode {
+    const fn uses_paged_geometry(self) -> bool { !matches!(self,Self::Existing) }
+
     #[cfg(any(feature = "cuda", test))]
     const fn cli_id(self) -> &'static str {
         match self {
             Self::Existing => "existing",
+            Self::MaterializedBf16ReferenceD128 => "materialized-bf16-reference-d128",
+            Self::MaterializedBf16ReferenceD64 => "materialized-bf16-reference-d64",
+            Self::OwnedHfEagerBf16V1 => "owned-hf-eager-bf16-v1",
             Self::NativeBf16PagedSplitGqaD128TwoStage => {
                 "native-bf16-paged-split-gqa-d128-two-stage"
             }
@@ -404,6 +417,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut device_ordinal = None;
     let mut max_active_sequences = None;
     let mut max_waiting_requests = None;
+    let mut admission_timeout_ms = None;
     let mut max_sequence_tokens = None;
     let mut max_output_tokens = None;
     let mut batch_token_budget = None;
@@ -487,6 +501,11 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     "--max-active-sequences",
                 )?,
                 "--max-active-sequences",
+            )?,
+            "--admission-timeout-ms" => set_once(
+                &mut admission_timeout_ms,
+                parse_admission_timeout_ms(next_value(&mut arguments, "--admission-timeout-ms")?)?,
+                "--admission-timeout-ms",
             )?,
             "--max-waiting-requests" => set_once(
                 &mut max_waiting_requests,
@@ -1008,8 +1027,12 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
 
     let residual_rmsnorm = residual_rmsnorm.unwrap_or(ResidualRmsNormMode::Separate);
     let execution_completion =
-        execution_completion.unwrap_or(ExecutionCompletionMode::IterationBatch);
-    let batch_shape_policy = batch_shape_policy.unwrap_or(BatchShapePolicyMode::FixedMaximum);
+        execution_completion.unwrap_or(if numerics_profile == Some(NumericsProfileMode::OwnedHfEagerBf16V1) {
+            ExecutionCompletionMode::PerOperation
+        } else { ExecutionCompletionMode::IterationBatch });
+    let batch_shape_policy = batch_shape_policy.unwrap_or(if numerics_profile == Some(NumericsProfileMode::OwnedHfEagerBf16V1) {
+        BatchShapePolicyMode::PowerOfTwo
+    } else { BatchShapePolicyMode::FixedMaximum });
     let batch_token_budget = batch_token_budget.unwrap_or(512);
     let metadata_transport = metadata_transport.unwrap_or(MetadataTransportMode::Synchronous);
     if metadata_transport == MetadataTransportMode::PackedAsync
@@ -1042,9 +1065,26 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let execution_graph_policy =
         execution_graph_policy.unwrap_or(riley_runtime::llama::ExecutionGraphPolicy::Disabled);
     let projection_bias_backend = projection_bias_backend.unwrap_or_default();
-    let decode_attention_backend = decode_attention_backend.unwrap_or_default();
+    let requested_decode_attention_backend = decode_attention_backend.unwrap_or_default();
+    let decode_attention_backend = if numerics_profile == Some(NumericsProfileMode::OwnedHfEagerBf16V1) {
+        if !matches!(requested_decode_attention_backend, DecodeAttentionBackendMode::Existing | DecodeAttentionBackendMode::OwnedHfEagerBf16V1) {
+            return Err("owned-hf-eager-bf16-v1 selects its own attention; conflicting legacy backend override".to_owned());
+        }
+        DecodeAttentionBackendMode::OwnedHfEagerBf16V1
+    } else { requested_decode_attention_backend };
     let reduction_profile = reduction_profile.unwrap_or(ReductionProfileMode::CanonicalV1);
     let numerics_profile = numerics_profile.unwrap_or_default();
+    if ["RILEY_CLASSIC_GEMM_DIAGNOSTIC","RILEY_HF_ATTENTION_DIAGNOSTIC",
+        "RILEY_REQUEST_GEMM_DIAGNOSTIC","RILEY_ATOMIC_PREFILL_DIAGNOSTIC"].iter().any(|k|std::env::var_os(k).is_some()) {
+        return Err("legacy numerical diagnostic environment is unsupported; use --numerics-profile owned-hf-eager-bf16-v1".to_owned());
+    }
+    if decode_attention_backend == DecodeAttentionBackendMode::OwnedHfEagerBf16V1
+        && numerics_profile != NumericsProfileMode::OwnedHfEagerBf16V1 {
+        return Err("owned attention requires --numerics-profile owned-hf-eager-bf16-v1".to_owned());
+    }
+    if numerics_profile == NumericsProfileMode::OwnedHfEagerBf16V1 && !cfg!(feature="owned-hf-eager") {
+        return Err("owned-hf-eager-bf16-v1 requires a build with --features server,owned-hf-eager".to_owned());
+    }
     if numerics_profile == NumericsProfileMode::HfEagerQwenP2048O128ProbeV1 {
         if !cfg!(feature = "hf-exact-probe") {
             return Err(
@@ -1066,18 +1106,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     }
     let max_active_sequences = max_active_sequences.unwrap_or(8);
     let max_weight_bytes = max_weight_bytes.unwrap_or_else(|| {
-        if decode_attention_backend
-            == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
-        {
+        if decode_attention_backend.uses_paged_geometry() {
             NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_DEFAULT_MAX_WEIGHT_BYTES
         } else {
             DEFAULT_MAX_WEIGHT_BYTES
         }
     });
     let prefill_chunk_tokens = prefill_chunk_tokens.unwrap_or_else(|| {
-        if decode_attention_backend
-            == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
-        {
+        if decode_attention_backend.uses_paged_geometry() {
             batch_token_budget
         } else {
             512
@@ -1284,7 +1320,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             );
         }
     }
-    if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+    if decode_attention_backend.uses_paged_geometry()
         && execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Disabled
     {
         return Err(
@@ -1292,7 +1328,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 .to_owned(),
         );
     }
-    if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+    if decode_attention_backend.uses_paged_geometry()
         && reduction_profile != ReductionProfileMode::CanonicalV1
     {
         return Err(
@@ -1300,14 +1336,36 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 .to_owned(),
         );
     }
-    if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
-        && batch_token_budget > NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_BATCH_TOKENS
+    if numerics_profile == NumericsProfileMode::OwnedHfEagerBf16V1 {
+        if execution_completion != ExecutionCompletionMode::PerOperation
+            || metadata_transport != MetadataTransportMode::Synchronous || staged_step_uploads
+            || residual_rmsnorm != ResidualRmsNormMode::Separate || decode_step_capture
+            || vllm_smol_p128_graph || fused_mlp_residual_norm || fused_kv_write
+            || prompt_attention_mma || dense_prompt_attention || d128_tensor_core_producer
+            || d128_global_merge || merged_gate_up || mlp_activation.unwrap_or(false)
+            || gemm_reduction_policy.unwrap_or(false) || bit_equivalent_gemm_selection
+            || prefill_plateau.is_some() || prefill_coalescing.is_some()
+            || projection_bias_backend != ProjectionBiasBackendMode::StrictStagedV1 || fused_qkv_rope
+            || c02_runtime_config.is_some() {
+            return Err("owned-hf-eager-bf16-v1 requires its synchronous separate-norm profile without graph, C02, or component overrides".to_owned());
+        }
+        if max_sequence_tokens.is_some_and(|n|n>9216) {
+            return Err("owned-hf-eager-bf16-v1 supports --max-sequence-tokens at most 9216".to_owned());
+        }
+    }
+    let maximum_paged_batch_tokens = match decode_attention_backend {
+        DecodeAttentionBackendMode::OwnedHfEagerBf16V1 => 8192,
+        DecodeAttentionBackendMode::MaterializedBf16ReferenceD64 => 512,
+        _ => NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_BATCH_TOKENS,
+    };
+    if decode_attention_backend.uses_paged_geometry()
+        && batch_token_budget > maximum_paged_batch_tokens
     {
         return Err(format!(
-            "native-bf16-paged-split-gqa-d128-two-stage requires --batch-token-budget at most {NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_BATCH_TOKENS}"
+            "selected paged attention backend requires --batch-token-budget at most {maximum_paged_batch_tokens}"
         ));
     }
-    if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+    if decode_attention_backend.uses_paged_geometry()
         && prefill_chunk_tokens > batch_token_budget
     {
         return Err(
@@ -1315,7 +1373,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 .to_owned(),
         );
     }
-    if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+    if decode_attention_backend.uses_paged_geometry()
         && max_active_sequences > batch_token_budget
     {
         return Err(
@@ -1330,6 +1388,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         device_ordinal: device_ordinal.unwrap_or(0),
         max_active_sequences,
         max_waiting_requests: max_waiting_requests.unwrap_or(64),
+        admission_timeout_ms: admission_timeout_ms.unwrap_or(30_000),
         max_sequence_tokens,
         max_output_tokens,
         batch_token_budget,
@@ -1478,11 +1537,14 @@ fn parse_projection_bias_backend(value: OsString) -> Result<ProjectionBiasBacken
 fn parse_decode_attention_backend(value: OsString) -> Result<DecodeAttentionBackendMode, String> {
     match parse_utf8(value, "--decode-attention-backend")?.as_str() {
         "existing" => Ok(DecodeAttentionBackendMode::Existing),
+        "materialized-bf16-reference-d128" => Ok(DecodeAttentionBackendMode::MaterializedBf16ReferenceD128),
+        "materialized-bf16-reference-d64" => Ok(DecodeAttentionBackendMode::MaterializedBf16ReferenceD64),
+        "owned-hf-eager-bf16-v1" => Ok(DecodeAttentionBackendMode::OwnedHfEagerBf16V1),
         "native-bf16-paged-split-gqa-d128-two-stage" => {
             Ok(DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage)
         }
         _ => Err(
-            "--decode-attention-backend requires existing or native-bf16-paged-split-gqa-d128-two-stage"
+            "--decode-attention-backend requires existing, native-bf16-paged-split-gqa-d128-two-stage, or materialized-bf16-reference-d128"
                 .to_owned(),
         ),
     }
@@ -1492,8 +1554,9 @@ fn parse_numerics_profile(value: OsString) -> Result<NumericsProfileMode, String
     match parse_utf8(value, "--numerics-profile")?.as_str() {
         "existing" => Ok(NumericsProfileMode::Existing),
         "hf-eager-qwen-p2048-o128-probe-v1" => Ok(NumericsProfileMode::HfEagerQwenP2048O128ProbeV1),
+        "owned-hf-eager-bf16-v1" => Ok(NumericsProfileMode::OwnedHfEagerBf16V1),
         _ => Err(
-            "--numerics-profile requires existing or hf-eager-qwen-p2048-o128-probe-v1".to_owned(),
+            "--numerics-profile requires existing, owned-hf-eager-bf16-v1, or hf-eager-qwen-p2048-o128-probe-v1".to_owned(),
         ),
     }
 }
@@ -1693,6 +1756,14 @@ fn parse_utf8(value: OsString, option: &str) -> Result<String, String> {
         .map_err(|_| format!("{option} requires a UTF-8 value"))
 }
 
+fn parse_admission_timeout_ms(value: OsString) -> Result<u64, String> {
+    let milliseconds: u64 = parse_number(value, "--admission-timeout-ms")?;
+    if !(1..=3_600_000).contains(&milliseconds) {
+        return Err("--admission-timeout-ms must be between 1 and 3600000".to_owned());
+    }
+    Ok(milliseconds)
+}
+
 fn parse_number<T>(value: OsString, option: &str) -> Result<T, String>
 where
     T: std::str::FromStr,
@@ -1745,11 +1816,23 @@ fn validate_native_bf16_paged_split_gqa_d128_two_stage_model(
     model: &riley_model::LoadedModel,
     max_sequence_tokens: usize,
 ) -> Result<(), String> {
-    if backend != DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage {
+    if !backend.uses_paged_geometry() {
         return Ok(());
     }
 
     let spec = model.spec();
+    if backend==DecodeAttentionBackendMode::OwnedHfEagerBf16V1 {
+        if spec.dtype().name()!="bf16" || max_sequence_tokens>9216 || spec.blocks().is_empty() {
+            return Err("owned-hf-eager-bf16-v1 requires BF16 blocks and sequence<=9216".to_owned());
+        }
+        return Ok(()); // Exact supported model geometry is checked by the runtime before weight upload.
+    }
+    if backend==DecodeAttentionBackendMode::MaterializedBf16ReferenceD64 {
+        if spec.dtype().name()!="bf16" || max_sequence_tokens>32768 || spec.blocks().is_empty() || spec.blocks().iter().any(|b| {let a=b.attention();a.head_dimension()!=64 || a.query_heads()==0 || a.key_value_heads()==0 || a.query_heads()%a.key_value_heads()!=0 || a.query_heads()/a.key_value_heads()>8}) {
+            return Err("materialized-bf16-reference-d64 requires BF16 D64 GQA ratio<=8 and sequence<=32768".to_owned());
+        }
+        return Ok(());
+    }
     // The bound is on the sequences the server admits, not on the checkpoint
     // context: a longer-context model serves with --max-sequence-tokens.
     if !native_bf16_paged_split_gqa_d128_two_stage_context_supported(max_sequence_tokens) {
@@ -1988,7 +2071,7 @@ fn run_serve(
         .first()
         .map_or(0, |block| block.attention().head_dimension());
     let model_context = model.spec().max_sequence_length();
-    let max_sequence_tokens = options.max_sequence_tokens.unwrap_or(model_context);
+    let max_sequence_tokens = options.max_sequence_tokens.unwrap_or(if options.numerics_profile==NumericsProfileMode::OwnedHfEagerBf16V1 {model_context.min(9216)} else {model_context});
     if max_sequence_tokens < 2 || max_sequence_tokens > model_context {
         return Err(format!(
             "--max-sequence-tokens must be between 2 and the model bound {model_context}"
@@ -2017,6 +2100,12 @@ fn run_serve(
         .max_active_sequences
         .checked_add(options.max_waiting_requests)
         .ok_or_else(|| "request capacity overflowed".to_owned())?;
+    // Admission commands cover active plus waiting requests. Keep one extra
+    // slot for metrics/wake control traffic, without increasing inference
+    // or scheduler waiting capacity.
+    let command_queue_capacity = maximum_live_requests
+        .checked_add(1)
+        .ok_or_else(|| "command queue capacity overflowed".to_owned())?;
     let maximum_waiting_prompt_tokens = options
         .max_waiting_requests
         .checked_mul(max_sequence_tokens)
@@ -2031,7 +2120,7 @@ fn run_serve(
         max_prefill_chunk_tokens: options.prefill_chunk_tokens,
         aging_threshold_ns: 100_000_000,
         overload_policy: OverloadPolicy::Wait,
-        admission_timeout_ns: Some(30_000_000_000),
+        admission_timeout_ns: Some(options.admission_timeout_ms * 1_000_000),
         max_promised_kv_blocks: physical_kv_blocks,
         metrics_window_samples: 1_024,
     };
@@ -2052,6 +2141,9 @@ fn run_serve(
             PreparedLlamaForwardConfig::default().with_merged_qkv_projection()
         }
     };
+    let owned_wide_query = options.numerics_profile == NumericsProfileMode::OwnedHfEagerBf16V1
+        && model.spec().blocks().first().is_some_and(|b|b.attention().query_heads()*b.attention().head_dimension()>model.spec().embedding().hidden_size());
+    let forward = if owned_wide_query { forward.with_merged_qkv_projection() } else { forward };
     let forward = if options.merged_gate_up {
         forward.with_merged_gate_up_projection()
     } else {
@@ -2112,7 +2204,7 @@ fn run_serve(
     } else {
         executor
     };
-    let executor = if options.fused_qkv_rope {
+    let executor = if options.fused_qkv_rope || owned_wide_query {
         executor.with_fused_qkv_rope()
     } else {
         executor
@@ -2151,6 +2243,9 @@ fn run_serve(
     // selection. Graph-capable existing modes keep the established
     // grouped-head selection; the default remains the legacy path.
     let executor = match options.decode_attention_backend {
+        DecodeAttentionBackendMode::OwnedHfEagerBf16V1 => executor.with_owned_hf_eager_bf16().with_serving_sequence_token_bound(max_sequence_tokens),
+        DecodeAttentionBackendMode::MaterializedBf16ReferenceD128 => executor.with_materialized_bf16_reference_d128().with_serving_sequence_token_bound(max_sequence_tokens),
+        DecodeAttentionBackendMode::MaterializedBf16ReferenceD64 => executor.with_materialized_bf16_reference_d64().with_serving_sequence_token_bound(max_sequence_tokens),
         DecodeAttentionBackendMode::Existing => {
             if options.execution_graph_policy
                 != riley_runtime::llama::ExecutionGraphPolicy::Disabled
@@ -2206,6 +2301,7 @@ fn run_serve(
             model,
             device_ordinal: options.device_ordinal,
             max_waiting_requests: options.max_waiting_requests,
+            admission_timeout_ms: options.admission_timeout_ms,
             maximum_live_requests,
             max_output_tokens,
             bind_address,
@@ -2243,12 +2339,26 @@ fn run_serve(
     } else {
         None
     };
+    if matches!(options.decode_attention_backend, DecodeAttentionBackendMode::MaterializedBf16ReferenceD128 | DecodeAttentionBackendMode::MaterializedBf16ReferenceD64) {
+        let facts=resources.effective_runtime_facts();
+        let actual=facts.attention_decode();
+        let expected=if options.decode_attention_backend==DecodeAttentionBackendMode::MaterializedBf16ReferenceD64 {"riley.cuda.ragged-paged-attention.materialized-bf16-reference.d64.v1"} else {"riley.cuda.ragged-paged-attention.materialized-bf16-reference.d128.v1"};
+        if actual!=expected {
+            return Err(format!("materialized BF16 reference selection mismatch: {actual}"));
+        }
+    }
     let projection_bias_startup_receipt = {
         let facts = resources.effective_runtime_facts();
-        projection_bias_backend_startup_receipt(
-            options.projection_bias_backend,
-            facts.projection_bias_backend(),
-        )?
+        if options.numerics_profile==NumericsProfileMode::OwnedHfEagerBf16V1 {
+            if facts.attention_prefill()!="riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1"
+                || facts.attention_decode()!="riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1"
+                || facts.gemm_reduction_policy()!="owned-hf-eager-bf16-v1" {
+                return Err("owned numerical profile resolved an unexpected backend".to_owned());
+            }
+            format!("RILEY_PROJECTION_BIAS requested_profile=owned-hf-eager-bf16-v1 resolved_backend={} fallback_reason=none",facts.projection_bias_backend())
+        } else {
+            projection_bias_backend_startup_receipt(options.projection_bias_backend,facts.projection_bias_backend())?
+        }
     };
     let (c02_receipt, c02_generation_audit) = match c02_runtime_config.as_ref() {
         Some(c02) => {
@@ -2286,10 +2396,10 @@ fn run_serve(
         InferenceEngine::start_cuda(
             resources,
             EngineConfig {
-                command_queue_capacity: options.max_waiting_requests,
+                command_queue_capacity,
                 event_channel_capacity: 32,
                 max_inflight_requests: maximum_live_requests,
-                admission_timeout: Duration::from_secs(30),
+                admission_timeout: Duration::from_millis(options.admission_timeout_ms),
                 idle_poll_interval: Duration::from_millis(1),
                 publish_after_submit: options.publish_after_submit,
             },
@@ -2400,6 +2510,7 @@ struct HfExactServe {
     model: riley_model::LoadedModel,
     device_ordinal: u32,
     max_waiting_requests: usize,
+    admission_timeout_ms: u64,
     maximum_live_requests: usize,
     max_output_tokens: usize,
     bind_address: std::net::SocketAddr,
@@ -2502,11 +2613,12 @@ fn run_serve_hf_exact(serve: HfExactServe) -> Result<(), String> {
     };
     use riley_server::service::{CompletionBackend, ServerConfig, start_server_with_c02_metrics};
 
-    let mut resources = HfExactEngineResources::prepare(
+    let mut resources = HfExactEngineResources::prepare_with_admission_timeout(
         serve.metadata,
         serve.model,
         serve.device_ordinal,
         serve.max_waiting_requests,
+        Duration::from_millis(serve.admission_timeout_ms),
     )
     .map_err(|error| format!("HF-exact backend preparation failed: {error}"))?;
     if let Some(directory) = serve.logit_observation_dir {
@@ -2520,7 +2632,7 @@ fn run_serve_hf_exact(serve: HfExactServe) -> Result<(), String> {
                 command_queue_capacity: serve.max_waiting_requests,
                 event_channel_capacity: 32,
                 max_inflight_requests: serve.maximum_live_requests,
-                admission_timeout: Duration::from_secs(30),
+                admission_timeout: Duration::from_millis(serve.admission_timeout_ms),
                 idle_poll_interval: Duration::from_millis(1),
                 publish_after_submit: false,
             },
@@ -5233,6 +5345,29 @@ mod tests {
     }
 
     #[test]
+    fn admission_timeout_cli_accepts_explicit_budget_and_preserves_default() {
+        let default = parse_arguments(args(&["serve", "--model", "/m"])).unwrap();
+        let CliCommand::Serve(default) = default else { panic!("serve expected") };
+        assert_eq!(default.admission_timeout_ms, 30_000);
+        for milliseconds in ["1", "600000", "3600000"] {
+            let parsed = parse_arguments(args(&["serve", "--model", "/m", "--admission-timeout-ms", milliseconds])).unwrap();
+            let CliCommand::Serve(options) = parsed else { panic!("serve expected") };
+            assert_eq!(options.admission_timeout_ms.to_string(), milliseconds);
+            assert!(options.admission_timeout_ms.checked_mul(1_000_000).is_some());
+        }
+        assert!(USAGE.contains("--admission-timeout-ms MS"));
+    }
+
+    #[test]
+    fn admission_timeout_cli_rejects_unbounded_invalid_and_duplicate_budgets() {
+        for value in ["0", "-1", "1.5", "3600001", "18446744073709551616", "none"] {
+            assert!(parse_arguments(args(&["serve", "--model", "/m", "--admission-timeout-ms", value])).is_err(), "{value}");
+        }
+        assert!(parse_arguments(args(&["serve", "--model", "/m", "--admission-timeout-ms"])).is_err());
+        assert!(parse_arguments(args(&["serve", "--model", "/m", "--admission-timeout-ms", "600000", "--admission-timeout-ms", "30000"])).is_err());
+    }
+
+    #[test]
     fn serve_defaults_are_bounded_and_model_is_required() {
         assert_eq!(
             parse_arguments(args(&["serve", "--model", "/models/fixture"])),
@@ -5243,6 +5378,7 @@ mod tests {
                 device_ordinal: 0,
                 max_active_sequences: 8,
                 max_waiting_requests: 64,
+                admission_timeout_ms: 30_000,
                 max_sequence_tokens: None,
                 max_output_tokens: None,
                 batch_token_budget: 512,
@@ -5652,6 +5788,7 @@ mod tests {
                 device_ordinal: 2,
                 max_active_sequences: 4,
                 max_waiting_requests: 9,
+                admission_timeout_ms: 30_000,
                 max_sequence_tokens: Some(2048),
                 max_output_tokens: Some(128),
                 batch_token_budget: 64,
@@ -5929,6 +6066,7 @@ mod tests {
                 device_ordinal: 0,
                 max_active_sequences: 8,
                 max_waiting_requests: 64,
+                admission_timeout_ms: 30_000,
                 max_sequence_tokens: None,
                 max_output_tokens: None,
                 batch_token_budget: 7,
@@ -6136,6 +6274,17 @@ mod tests {
                 parse_arguments(arguments.into_iter().map(OsString::from)).is_err(),
                 "candidate combination must fail closed"
             );
+        }
+    }
+
+    #[test]
+    fn materialized_bf16_reference_cli_requires_eager_canonical_and_rejects_native_overrides() {
+        let base=["serve","--model","/qwen17","--decode-attention-backend","materialized-bf16-reference-d128","--batch-token-budget","32"];
+        let CliCommand::Serve(options)=parse_arguments(args(&base)).expect("explicit reference") else {panic!("serve")};
+        assert_eq!(options.decode_attention_backend,DecodeAttentionBackendMode::MaterializedBf16ReferenceD128);
+        assert_eq!(options.prefill_chunk_tokens,32);
+        for extra in [["--decode-step-graph","capture-v1"],["--decode-attention-merge","global-max-v1"]] {
+            let mut input=base.to_vec();input.extend(extra);assert!(parse_arguments(args(&input)).is_err());
         }
     }
 
@@ -6356,6 +6505,7 @@ mod tests {
                 device_ordinal: 0,
                 max_active_sequences: 8,
                 max_waiting_requests: 64,
+                admission_timeout_ms: 30_000,
                 max_sequence_tokens: None,
                 max_output_tokens: None,
                 batch_token_budget: 512,
@@ -6587,5 +6737,29 @@ mod graph_numerics_cli_tests {
             )
             .is_err()
         );
+    }
+}
+
+#[cfg(test)]
+mod owned_hf_cli_tests {
+    use super::*;
+    fn base(extra: &[&str]) -> Result<CliCommand,String> {
+        let mut a=vec!["serve","--model","/models/fixture","--numerics-profile","owned-hf-eager-bf16-v1"];
+        a.extend_from_slice(extra);parse_arguments(a.into_iter().map(OsString::from))
+    }
+    #[test]
+    fn owned_hf_cli_is_explicit_and_has_no_graph_or_command_batch_fallback() {
+        if cfg!(feature="owned-hf-eager") {
+            let CliCommand::Serve(o)=base(&["--batch-token-budget","8192","--max-sequence-tokens","8704"]).unwrap() else {panic!("serve")};
+            assert_eq!(o.numerics_profile,NumericsProfileMode::OwnedHfEagerBf16V1);
+            assert_eq!(o.decode_attention_backend,DecodeAttentionBackendMode::OwnedHfEagerBf16V1);
+            assert_eq!(o.execution_completion,ExecutionCompletionMode::PerOperation);
+            assert_eq!(o.batch_shape_policy,BatchShapePolicyMode::PowerOfTwo);
+        } else { assert!(base(&[]).unwrap_err().contains("owned-hf-eager")); }
+        for bad in [&["--batch-token-budget","8193"][..],&["--max-sequence-tokens","9217"],
+            &["--execution-completion","iteration-batch"],&["--execution-graph-policy","require"],
+            &["--decode-attention-backend","materialized-bf16-reference-d128"],&["--residual-rmsnorm","fused"]] {
+            assert!(base(bad).is_err(),"accepted {:?}",bad);
+        }
     }
 }

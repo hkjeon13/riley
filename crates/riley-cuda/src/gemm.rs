@@ -1926,6 +1926,66 @@ impl CudaPreparedFixed37Gemm {
 
 #[cfg(feature = "cuda-cublas-gemm-probe")]
 impl CudaPreparedCublasGemmProbe {
+    /// Private request-row execution; no plan or buffer is allocated while dispatching.
+    pub fn execute_row_groups<S:CudaExecutionStream+?Sized>(&mut self,params:&mut CublasGemmProbeParams<'_>,slots:&[u32],output_rows:Option<usize>,stream:&mut S)->CudaResult<()> {
+        const OP:&str="CudaPreparedCublasGemmProbe::execute_row_groups";
+        if self.poisoned {return Err(CudaError::invalid_state(OP,"poisoned owner"));}
+        let stream=execution_stream_mut(stream);self.validate_execution(params,stream)?;
+        let total=output_rows.unwrap_or(slots.len());
+        if total as u64>self.config.m {return Err(CudaError::invalid_argument(OP,"active request rows exceed cold plan"));}
+        let mut begin=0;
+        while begin<total {
+            let mut end=begin+1;
+            if output_rows.is_none() {while end<total && slots[end]==slots[begin] {end+=1;}}
+            let m=(end-begin) as u64;
+            let input=params.input.subspan(begin as u64*self.config.k*2,m*self.config.k*2)?;
+            let offset=params.output.byte_offset()+begin as u64*self.config.n*2;
+            let output=params.output.buffer().native_handle().span(ffi::DTYPE_BF16,offset,m*self.config.n*2);
+            let result=self.native.execute_rows(input.raw(),params.weight.raw(),output,m,&mut stream.native);
+            if result.is_err(){self.poisoned=true;return result;}
+            begin=end;
+        }
+        Ok(())
+    }
+
+    /// Private bounded synchronous attention bridge with caller-owned cold scratch.
+    #[allow(clippy::too_many_arguments)]
+    pub fn execute_hf_attention<S: CudaExecutionStream + ?Sized>(
+        &mut self, query: CudaBufferSpan<'_>, key: CudaBufferSpan<'_>,
+        value: CudaBufferSpan<'_>, ids: CudaBufferSpan<'_>,
+        output: CudaBufferSpanMut<'_>, scratch: &mut [CudaDeviceBuffer; 8],
+        rows: u64, tokens: u64, physical: u64, qh:u64,kvh:u64,head_size:u64,stream: &mut S,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "CudaPreparedCublasGemmProbe::execute_hf_attention";
+        if self.poisoned || !hf_attention_geometry_valid(self.config,rows,tokens,physical,qh,kvh,head_size) {
+            return Err(CudaError::invalid_argument(OPERATION,"bounded cold D64/D128 attention geometry or poisoned owner"));
+        }
+        let stream = execution_stream_mut(stream);
+        ensure_same_context(&self.context, &stream.context, OPERATION)?;
+        for b in [query.buffer(), key.buffer(), value.buffer(), ids.buffer(), output.buffer()] {
+            ensure_same_context(&self.context,b.context_owner(),OPERATION)?;
+        }
+        let sizes = [rows*qh*head_size*2,physical*kvh*16*head_size*2,physical*kvh*16*head_size*2,tokens.div_ceil(16)*4,rows*qh*head_size*2];
+        for (span,(dtype,size)) in [query,key,value,ids].iter().zip([(CudaDType::BF16,sizes[0]),(CudaDType::BF16,sizes[1]),(CudaDType::BF16,sizes[2]),(CudaDType::U32,sizes[3])]) {
+            if span.dtype()!=dtype || span.byte_len()!=size {return Err(CudaError::invalid_argument(OPERATION,"input span geometry or dtype mismatch"));}
+        }
+        if output.dtype()!=CudaDType::BF16 || output.byte_len()!=sizes[4] {return Err(CudaError::invalid_argument(OPERATION,"output span geometry mismatch"));}
+        let q=rows*qh*head_size*2;let kv=tokens*qh*head_size*2;let s=qh*rows*tokens;let tiled=qh*rows.min(128)*tokens;
+        // Completed BF16 score rows become probabilities in-place; GEMM geometry is unchanged.
+        let lens=[q,kv,kv,s*2,tiled*4,tiled*4,q,16777216];
+        let roles=[5,6,7,8,9,10,12,13];
+        let mut spans=[query.raw();14];spans[1]=key.raw();spans[2]=value.raw();spans[3]=ids.raw();spans[4]=output.raw();
+        for (i,b) in scratch.iter_mut().enumerate() {
+            ensure_same_context(&self.context,b.context_owner(),OPERATION)?;
+            let dtype=if i==4||i==5 {CudaDType::F32} else if i==7 {CudaDType::U8} else {CudaDType::BF16};
+            spans[roles[i]]=CudaBufferSpan::new(b,dtype,0,lens[i])?.raw();
+        }
+        spans[11]=spans[8]; // Exact internal alias, retained exclusively by this scratch owner.
+        let result=self.native.attention(&spans,rows,tokens,physical,qh,kvh,head_size,&mut stream.native);
+        if result.is_err(){self.poisoned=true;}
+        result
+    }
+
     /// Exact logical/storage contract fixed at cold prepare time.
     #[must_use]
     pub const fn config(&self) -> CudaGemmConfig {
@@ -2456,4 +2516,26 @@ mod tests {
         assert_eq!(error.kind(), CudaErrorKind::Unavailable);
         assert!(error.message().contains("--features cuda"));
     }
+}
+
+#[cfg(feature="cuda-cublas-gemm-probe")]
+fn hf_attention_geometry_valid(config:CudaGemmConfig,rows:u64,tokens:u64,physical:u64,qh:u64,kvh:u64,head_size:u64)->bool {
+    rows>0 && rows<=8192 && tokens>=rows && tokens<=9216 && physical>0 && physical<=u32::MAX as u64 && rows<=config.m && tokens<=config.n && matches!(head_size,64|128) && config.k==head_size && qh>0 && qh<=64 && kvh>0 && kvh<=qh && qh%kvh==0 && qh/kvh<=8
+}
+#[cfg(all(test,feature="cuda-cublas-gemm-probe"))]
+mod hf_attention_contract_tests {
+ use super::*;
+ #[test]
+ fn hf_attention_diagnostic_preflight_stops_at_cold_bounds() {
+  let c=CudaGemmConfig::new(512,528,64,16777216).unwrap();
+  for (m,t) in [(16,16),(128,128),(398,398),(1,149),(1,425),(512,528)] {assert!(hf_attention_geometry_valid(c,m,t,33,9,3,64));}
+  for (m,t,p) in [(0,1,33),(513,528,33),(512,511,33),(1,529,33),(1,1025,33),(1,1,0),(1,1,u32::MAX as u64+1)] {assert!(!hf_attention_geometry_valid(c,m,t,p,9,3,64));}
+  let c128=CudaGemmConfig::new(512,528,128,16777216).unwrap();
+  for (h,k) in [(16,2),(16,8),(32,8)] {assert!(hf_attention_geometry_valid(c128,397,525,33,h,k,128));}
+  for (h,k,d) in [(0,2,128),(65,8,128),(16,0,128),(17,2,128),(32,2,128),(16,8,96)] {assert!(!hf_attention_geometry_valid(c128,1,128,33,h,k,d));}
+  let long=CudaGemmConfig::new(8192,9216,128,16777216).unwrap();
+  for (m,t) in [(1,9216),(8192,8192),(8192,8704),(8192,9216)] {assert!(hf_attention_geometry_valid(long,m,t,576,32,8,128));}
+  for (m,t) in [(8193,9216),(8192,8191),(1,9217)] {assert!(!hf_attention_geometry_valid(long,m,t,576,32,8,128));}
+  let small=CudaGemmConfig::new(128,128,64,0).unwrap();assert!(!hf_attention_geometry_valid(small,129,129,33,9,3,64));assert!(!hf_attention_geometry_valid(small,1,129,33,9,3,64));
+ }
 }

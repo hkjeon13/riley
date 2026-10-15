@@ -71,6 +71,13 @@ pub enum RaggedAttentionImplementation {
     /// fail-closed opt-in: a different geometry is rejected during cold
     /// preparation rather than falling back to a D64 implementation.
     NativeBf16PagedSplitGqaD128TwoStage,
+    /// Eager D128 reference: BF16 scores, scaled scores, probabilities and output.
+    /// Owns its workspace during preparation; graph capture is unsupported.
+    MaterializedBf16ReferenceD128,
+    /// Explicit eager D64 reference with BF16 score/probability rounding.
+    MaterializedBf16ReferenceD64,
+    /// Owned BF16 QK/probability/AV with bounded row-tiled FP32 softmax.
+    OwnedHfEagerBf16V1,
 }
 
 pub(in crate::llama) const fn execution_completion_implementation_id(
@@ -110,6 +117,15 @@ pub(in crate::llama) const fn ragged_attention_implementation_id(
     ) {
         return RAGGED_PAGED_ATTENTION_NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_V2;
     }
+    if matches!(implementation,RaggedAttentionImplementation::OwnedHfEagerBf16V1) {
+        return "riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1";
+    }
+    if matches!(implementation,RaggedAttentionImplementation::MaterializedBf16ReferenceD128) {
+        return "riley.cuda.ragged-paged-attention.materialized-bf16-reference.d128.v1";
+    }
+    if matches!(implementation,RaggedAttentionImplementation::MaterializedBf16ReferenceD64) {
+        return "riley.cuda.ragged-paged-attention.materialized-bf16-reference.d64.v1";
+    }
     match (profile, implementation) {
         (AttentionReductionProfile::CanonicalV1, RaggedAttentionImplementation::Legacy) => {
             RAGGED_PAGED_ATTENTION_LEGACY_D64_V1
@@ -121,6 +137,9 @@ pub(in crate::llama) const fn ragged_attention_implementation_id(
             AttentionReductionProfile::CanonicalV1,
             RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage,
         ) => RAGGED_PAGED_ATTENTION_NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_V2,
+        (AttentionReductionProfile::CanonicalV1,RaggedAttentionImplementation::MaterializedBf16ReferenceD128) => "riley.cuda.ragged-paged-attention.materialized-bf16-reference.d128.v1",
+        (AttentionReductionProfile::CanonicalV1,RaggedAttentionImplementation::MaterializedBf16ReferenceD64) => "riley.cuda.ragged-paged-attention.materialized-bf16-reference.d64.v1",
+        (AttentionReductionProfile::CanonicalV1,RaggedAttentionImplementation::OwnedHfEagerBf16V1) => "riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1",
         (AttentionReductionProfile::FixedContiguous37BalancedV1, _) => {
             RAGGED_PAGED_ATTENTION_FIXED37_TWO_PASS_D64_S8192_V1
         }
@@ -529,6 +548,47 @@ impl PreparedLlamaBatchExecutorConfig {
         self
     }
 
+    /// Selects the complete owned arithmetic profile. Other configuration
+    /// setters cannot silently replace one component: validate rejects mixes.
+    #[must_use]
+    pub const fn with_owned_hf_eager_bf16(mut self) -> Self {
+        self.forward = self.forward.with_owned_hf_eager_bf16();
+        self.ragged_attention_implementation = RaggedAttentionImplementation::OwnedHfEagerBf16V1;
+        self
+    }
+
+    #[must_use]
+    pub const fn owned_hf_eager_bf16(self) -> bool {
+        matches!(self.ragged_attention_implementation,RaggedAttentionImplementation::OwnedHfEagerBf16V1)
+    }
+
+    /// Selects an eager D128 reference with explicit BF16 probability rounding.
+    /// Canonical reductions and graph-disabled execution are required.
+    #[must_use]
+    pub const fn with_materialized_bf16_reference_d128(mut self) -> Self {
+        self.ragged_attention_implementation=RaggedAttentionImplementation::MaterializedBf16ReferenceD128;
+        self
+    }
+
+    #[must_use]
+    pub const fn materialized_bf16_reference_d128(self) -> bool {
+        matches!(self.ragged_attention_implementation,RaggedAttentionImplementation::MaterializedBf16ReferenceD128)
+    }
+
+    /// Selects the explicit eager D64 BF16 materialized reference.
+    #[must_use]
+    pub const fn with_materialized_bf16_reference_d64(mut self) -> Self {
+        self.ragged_attention_implementation=RaggedAttentionImplementation::MaterializedBf16ReferenceD64;
+        self
+    }
+    #[must_use]
+    pub const fn materialized_bf16_reference_d64(self) -> bool {
+        matches!(self.ragged_attention_implementation,RaggedAttentionImplementation::MaterializedBf16ReferenceD64)
+    }
+    pub(in crate::llama) const fn uses_paged_attention_workspace(self) -> bool {
+        self.uses_d128_paged_attention() || self.materialized_bf16_reference_d64() || self.owned_hf_eager_bf16()
+    }
+
     /// Returns the canonical ragged attention launch implementation.
     #[must_use]
     pub const fn ragged_attention_implementation(self) -> RaggedAttentionImplementation {
@@ -540,9 +600,15 @@ impl PreparedLlamaBatchExecutorConfig {
     /// allocate its dedicated eager workspace.
     #[must_use]
     pub const fn native_bf16_paged_split_gqa_d128_two_stage(self) -> bool {
+        matches!(self.ragged_attention_implementation,RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage)
+    }
+
+    /// Common cold geometry/resource admission; it does not identify the arithmetic backend.
+    pub(in crate::llama) const fn uses_d128_paged_attention(self) -> bool {
         matches!(
             self.ragged_attention_implementation,
             RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage
+                | RaggedAttentionImplementation::MaterializedBf16ReferenceD128
         )
     }
 
@@ -633,7 +699,22 @@ impl PreparedLlamaBatchExecutorConfig {
     pub(in crate::llama) fn validate_attention_implementation(
         self,
     ) -> LlamaBatchExecutorResult<()> {
-        if self.native_bf16_paged_split_gqa_d128_two_stage()
+        if self.owned_hf_eager_bf16() != self.forward.owned_hf_eager_bf16() {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"owned-hf-eager-bf16-v1",reason:"attention and GEMM/norm profile must be selected together"});
+        }
+        if self.owned_hf_eager_bf16() && (!cfg!(feature="cuda-cublas-gemm-probe")
+            || self.execution_completion != ExecutionCompletionImplementation::PerOperation
+            || self.metadata_transport != BatchMetadataTransport::Synchronous
+            || self.residual_norm != ResidualNormImplementation::Separate
+            || self.staged_step_uploads || self.decode_step_capture || self.fused_mlp_residual_norm
+            || self.fused_silu_multiply || self.fused_kv_write) {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"owned-hf-eager-bf16-v1",reason:"requires linked owned CUDA path, per-operation synchronous separate-norm execution without capture"});
+        }
+        if (self.materialized_bf16_reference_d128() || self.materialized_bf16_reference_d64() || self.owned_hf_eager_bf16())
+            && (self.decode_step_capture || self.vllm_smol_p128_graph || self.d128_global_merge || self.d128_tensor_core_producer || self.prompt_attention_mma) {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"materialized_bf16_reference_d128",reason:"reference attention requires eager execution without native producer/merge overrides"});
+        }
+        if self.uses_paged_attention_workspace()
             && self.ragged_attention_reduction_profile != AttentionReductionProfile::CanonicalV1
         {
             return Err(LlamaBatchExecutorError::InvalidConfiguration {
@@ -641,7 +722,7 @@ impl PreparedLlamaBatchExecutorConfig {
                 reason: "native D128 two-stage attention requires canonical-v1 reductions",
             });
         }
-        if self.native_bf16_paged_split_gqa_d128_two_stage() && self.vllm_smol_p128_graph {
+        if self.uses_paged_attention_workspace() && self.vllm_smol_p128_graph {
             return Err(LlamaBatchExecutorError::InvalidConfiguration {
                 field: "vllm-smol-p128-v1",
                 reason: "native D128 two-stage attention is eager-only and cannot use the D64 graph",
@@ -764,6 +845,29 @@ pub(in crate::llama) const fn normalize_prepared_config(
 mod graph_numerical_profile_tests {
     use super::*;
     #[test]
+    fn d64_reference_is_explicit_eager_and_does_not_admit_d128_native_modes() {
+        let base=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,128,16,1,16).unwrap(),PreparedLlamaForwardConfig::default());
+        assert!(!base.uses_paged_attention_workspace());
+        let config=base.with_materialized_bf16_reference_d64();
+        assert!(config.validate_attention_implementation().is_ok());
+        assert!(!config.uses_d128_paged_attention());
+        assert!(config.uses_paged_attention_workspace());
+        assert!(!config.materialized_bf16_reference_d128());
+        for invalid in [config.with_decode_step_capture(),config.with_vllm_smol_p128_graph(),config.with_d128_global_merge(),config.with_d128_tensor_core_producer(),config.with_fixed37_reductions()] { assert!(invalid.validate_attention_implementation().is_err()); }
+    }
+
+    #[test]
+    fn materialized_reference_rejects_incompatible_modes_before_cuda_preparation() {
+        let config=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,128,16,1,16).unwrap(),PreparedLlamaForwardConfig::default()).with_materialized_bf16_reference_d128();
+        assert!(config.validate_attention_implementation().is_ok());
+        assert!(!config.native_bf16_paged_split_gqa_d128_two_stage());
+        assert!(config.uses_d128_paged_attention());
+        for invalid in [config.with_decode_step_capture(),config.with_vllm_smol_p128_graph(),config.with_d128_global_merge(),config.with_d128_tensor_core_producer(),config.with_fixed37_reductions()] {
+            assert!(invalid.validate_attention_implementation().is_err());
+        }
+    }
+
+    #[test]
     fn explicit_profile_survives_normalization_without_changing_default() {
         let c = PreparedLlamaBatchExecutorConfig::new(
             LlamaBatchMetadataConfig::new(1, 1, 16, 1, 16).unwrap(),
@@ -860,5 +964,25 @@ mod graph_numerical_profile_tests {
                 ..
             })
         ));
+    }
+}
+
+#[cfg(test)]
+mod owned_hf_profile_contract_tests {
+    use super::*;
+    #[test]
+    fn owned_hf_profile_rejects_partial_selection_and_execution_overrides() {
+        let base = PreparedLlamaBatchExecutorConfig::new(
+            LlamaBatchMetadataConfig::new(1,8192,576,1,576).unwrap(), PreparedLlamaForwardConfig::default());
+        let own = base.with_owned_hf_eager_bf16();
+        assert_eq!(own.validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
+        assert_eq!(ragged_attention_implementation_id(own.ragged_attention_reduction_profile(),own.ragged_attention_implementation()),"riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1");
+        assert!(own.uses_paged_attention_workspace());
+        for bad in [own.with_iteration_batch_completion(),own.with_fused_residual_norm(),
+            own.with_decode_step_capture(),own.with_vllm_smol_p128_graph(),own.with_d128_global_merge(),
+            own.with_d128_tensor_core_producer(),own.with_fixed37_reductions(),own.with_legacy_ragged_attention_heads(),
+            own.with_materialized_bf16_reference_d64()] {
+            assert!(bad.validate_attention_implementation().is_err());
+        }
     }
 }

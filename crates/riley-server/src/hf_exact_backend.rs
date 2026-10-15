@@ -13,7 +13,7 @@
 //! rejected at admission instead of being served with unqualified arithmetic.
 
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use riley_model::{DecodeOptions, EncodeOptions, LoadedModel};
 use riley_runtime::generation::{
@@ -94,6 +94,16 @@ impl std::fmt::Debug for HfExactEngineResources {
     }
 }
 
+const DEFAULT_ADMISSION_TIMEOUT: Duration = Duration::from_secs(30);
+
+fn admission_timeout_ns(timeout: Duration) -> Result<u64, BackendError> {
+    if timeout < Duration::from_millis(1) || timeout > Duration::from_secs(3600) {
+        return Err(internal("admission timeout must be between 1ms and 1hour"));
+    }
+    u64::try_from(timeout.as_nanos())
+        .map_err(|_| internal("admission timeout does not fit the scheduler clock"))
+}
+
 impl HfExactEngineResources {
     /// Initializes CUDA and prepares the exact decode owner. No model
     /// execution occurs during this cold preparation.
@@ -108,6 +118,31 @@ impl HfExactEngineResources {
         device_ordinal: u32,
         max_waiting_requests: usize,
     ) -> Result<Self, BackendError> {
+        Self::prepare_with_admission_timeout(
+            metadata,
+            model,
+            device_ordinal,
+            max_waiting_requests,
+            DEFAULT_ADMISSION_TIMEOUT,
+        )
+    }
+
+    /// Prepares this route with an explicit bounded scheduler admission wait.
+    /// The caller supplies the same duration to the engine command queue.
+    /// Existing `prepare` callers retain the thirty-second default.
+    ///
+    /// # Errors
+    /// Returns a private diagnostic for a timeout outside 1ms..=1hour,
+    /// invalid metadata, CUDA preparation, or unsupported model geometry.
+    pub fn prepare_with_admission_timeout(
+        metadata: ModelMetadata,
+        model: LoadedModel,
+        device_ordinal: u32,
+        max_waiting_requests: usize,
+        admission_timeout: Duration,
+    ) -> Result<Self, BackendError> {
+        // Reject invalid configuration before acquiring any CUDA resource.
+        let admission_timeout_ns = admission_timeout_ns(admission_timeout)?;
         metadata
             .validate()
             .map_err(|source| internal(format!("invalid model metadata: {source}")))?;
@@ -181,7 +216,7 @@ impl HfExactEngineResources {
                         max_prefill_chunk_tokens: HF_EXACT_PROMPT_TOKENS,
                         aging_threshold_ns: 100_000_000,
                         overload_policy: OverloadPolicy::Wait,
-                        admission_timeout_ns: Some(30_000_000_000),
+                        admission_timeout_ns: Some(admission_timeout_ns),
                         max_promised_kv_blocks: blocks,
                         metrics_window_samples: 1_024,
                     },
@@ -881,6 +916,23 @@ impl EngineBackend for HfExactBackend {
                 };
                 Ok(events)
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod admission_timeout_tests {
+    use super::{admission_timeout_ns, DEFAULT_ADMISSION_TIMEOUT};
+    use std::time::Duration;
+
+    #[test]
+    fn hf_exact_admission_timeout_preserves_default_and_checked_units() {
+        assert_eq!(admission_timeout_ns(DEFAULT_ADMISSION_TIMEOUT).unwrap(), 30_000_000_000);
+        assert_eq!(admission_timeout_ns(Duration::from_millis(600_000)).unwrap(), 600_000_000_000);
+        assert_eq!(admission_timeout_ns(Duration::from_millis(1)).unwrap(), 1_000_000);
+        assert_eq!(admission_timeout_ns(Duration::from_secs(3600)).unwrap(), 3_600_000_000_000);
+        for invalid in [Duration::ZERO, Duration::from_nanos(999_999), Duration::from_secs(3600) + Duration::from_nanos(1), Duration::MAX] {
+            assert!(admission_timeout_ns(invalid).is_err());
         }
     }
 }

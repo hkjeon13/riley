@@ -76,6 +76,8 @@ impl PreparedLlamaBatchExecutor {
         .map(|plan| match plan {
             PreparedLlamaGemm::Canonical(plan) => Ok(plan),
             PreparedLlamaGemm::Fixed37(_) => Err(rejected("selected plan backend unsupported")),
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            PreparedLlamaGemm::ClassicDiagnostic(_) | PreparedLlamaGemm::ClassicRequestRows(_) => Err(rejected("classic diagnostic has no graph audit support")),
         })
         .collect::<LlamaBatchExecutorResult<Vec<_>>>()?;
         let counts = (devices.len(), plans.len());

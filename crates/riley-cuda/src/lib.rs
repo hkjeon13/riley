@@ -240,3 +240,22 @@ mod tests {
         assert_eq!(EXPECTED_ABI_VERSION, 1);
     }
 }
+
+pub use batch::prepared_materialized_ragged_attention;
+
+pub use batch::prepare_materialized_ragged_attention_metadata;
+
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub use primitives::hugging_face_qwen_head128_rms_norm;
+
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub use primitives::hugging_face_qwen_wide_rms_norm;
+
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub use primitives::hugging_face_qwen_wide_rms_norm_row_groups;
+
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub use primitives::qkv_split_bias_rope_hf_head128;
+
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub use primitives::hf_pack_separate_qkv;
