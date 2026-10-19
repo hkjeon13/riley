@@ -1725,6 +1725,8 @@ struct DeferredQkvSplit {
   uint64_t rotated_row_count = 0;
   // Head-norm form: query_bias/key_bias are the per-head norm scales.
   bool head_norm = false;
+  // Retain the exact existing HF128 reduction when the cache write launches.
+  bool hf_head_norm = false;
   float norm_epsilon = 0.0F;
 };
 

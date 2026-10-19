@@ -35,7 +35,9 @@ pub use provenance::{
     CheckpointProvenance, LEGACY_PROVENANCE_FILENAME, PROVENANCE_FILENAME, ProvenanceFile,
 };
 pub use qwen::{ChatMessage, ChatRole, ChatTemplateOptions, Qwen2Tokenizer, Qwen2TokenizerConfig};
-pub use tokenizer::{DecodeOptions, EncodeOptions, SmolLm2Tokenizer, Tokenizer};
+pub use tokenizer::{
+    DecodeOptions, EncodeOptions, MistralTokenizer, SmolLm2Tokenizer, TokenDecodeState, Tokenizer,
+};
 pub use weights::{
     BoundWeight, DecoderWeight, LoadedWeights, TensorSource, WeightBinding, WeightSlot,
 };

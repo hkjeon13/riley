@@ -1,0 +1,21 @@
+{
+  "status": "V236-fresh-A100-fifteen-generation-prompts-two-models-complete",
+  "phases": [
+    {
+      "prompts": 15,
+      "complete": true,
+      "tag": "qwen4b",
+      "torch_peak_reserved_bytes": 8334082048,
+      "scope": "ActualHFgenerationnotteacherforced; no serving/performance claim"
+    },
+    {
+      "prompts": 15,
+      "complete": true,
+      "tag": "mistral",
+      "torch_peak_reserved_bytes": 14793310208,
+      "scope": "ActualHFgenerationnotteacherforced; no serving/performance claim"
+    }
+  ],
+  "source_adopted": false,
+  "scope": "ActualHFgenerationreferences; no nativeAPIorperformanceclaim; no historical logits/generation reused"
+}

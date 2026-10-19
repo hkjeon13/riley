@@ -1203,6 +1203,8 @@ typedef struct RileyCudaFixed37RaggedPagedAttentionParams {
 #define RILEY_CUDA_GEMM_DETERMINISTIC_REQUIRED 1u
 #define RILEY_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K 1u
 #define RILEY_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K 2u
+// FP32 partial reduction, restricted to the explicit HF bias qualifier.
+#define RILEY_CUDA_GEMM_FLAG_ALLOW_COMPUTE_TYPE_SPLIT_K 4u
 #define RILEY_CUDA_GEMM_BACKEND_CUBLASLT 1u
 #define RILEY_CUDA_GEMM_BACKEND_FIXED37 2u
 
@@ -2405,6 +2407,12 @@ RileyCudaStatus riley_cuda_hugging_face_smollm2_rms_norm_execute(
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 
+// Independent singleton rows: original C1 reduction and BF16 boundaries per CTA.
+RileyCudaStatus riley_cuda_hugging_face_smollm2_singleton_rms_norm_execute(
+    const RileyCudaRmsNormParams* params,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
 // Additive byte-exact sibling for the source-bound Hugging Face Qwen P2051
 // cache-free diagnostic. It admits only BF16 row_count=2051,
 // hidden_size=2048, and epsilon=1e-6. The native implementation reproduces
@@ -2906,6 +2914,15 @@ RileyCudaStatus riley_cuda_bias_gemm_plan_info(
     RileyCudaGemmAlgorithmInfo* out_info,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 
+// Cold prepare a qualified SM89 BF16 Q/K/V singleton batch. Logical config.m
+// is 2..32 requests; each Lt matrix keeps M=1 and the checked M=1 algorithm.
+RileyCudaStatus riley_cuda_bias_singleton_batch_plan_create(
+    RileyCudaContext* context,
+    const RileyCudaGemmConfig* config,
+    const RileyCudaBufferSpan* preparation_bias,
+    RileyCudaBiasGemmPlan** out_plan,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
 // Executes the prepared logical row-major operation without byte reordering:
 // cuBLASLt sees column-major TN(W, X, Y). input, weight, bias, output, and
 // workspace must each have exactly the prepared byte length, a 256-byte
@@ -2971,6 +2988,21 @@ RileyCudaStatus riley_cuda_fixed37_gemm_plan_close(
 // native_code is the original cublasStatus_t. The test-only probe deliberately
 // does not add a new global status or error-domain ABI discriminant.
 RileyCudaStatus riley_cuda_cublas_gemm_probe_plan_create(
+    RileyCudaContext* context,
+    const RileyCudaGemmConfig* config,
+    RileyCudaCublasGemmProbePlan** out_plan,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Owned eager plan: same arithmetic, additionally permits command batches.
+// Plan and buffer leases are retained by the batch until confirmed completion.
+// CUDA Graph capture remains unsupported.
+/* Registers the managed MLP's eight operands (X, Wgate, Wup, Wdown,
+ * gate scratch, up scratch, product scratch, output) for batch completion. */
+RileyCudaStatus riley_cuda_owned_hf_mlp_register_uses(
+    RileyCudaCublasGemmProbePlan* gate, RileyCudaCublasGemmProbePlan* down,
+    const RileyCudaBufferSpan* buffers, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+RileyCudaStatus riley_cuda_owned_hf_gemm_plan_create(
     RileyCudaContext* context,
     const RileyCudaGemmConfig* config,
     RileyCudaCublasGemmProbePlan** out_plan,
@@ -3173,6 +3205,10 @@ RileyCudaStatus riley_cuda_graph_resources_record_attention_chain(
     RileyCudaGraphResources*,RileyCudaDeviceBuffer* const*,RileyCudaGemmPlan*,RileyCudaGemmPlan*,
     RileyCudaPinnedHostBuffer*,float,uint32_t,RileyCudaDeviceBuffer* const*,uint64_t,
     RileyCudaDeviceBuffer* const*,const uint64_t*,RileyCudaDeviceBuffer*,const uint64_t*,RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+
+/* Private qualified exact H9/KV3/D64 singleton attention. */
+int riley_cuda_cublas_hf_smol_exact_supported(const RileyCudaCublasGemmProbePlan*,uint64_t) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_cublas_hf_smol_exact_execute(RileyCudaCublasGemmProbePlan*,const RileyCudaBufferSpan*,uint64_t,const uint32_t*,const uint64_t*,uint64_t,uint64_t,uint64_t,uint64_t,uint64_t,RileyCudaStream*,RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
 
 #ifdef __cplusplus
 }  // extern "C"

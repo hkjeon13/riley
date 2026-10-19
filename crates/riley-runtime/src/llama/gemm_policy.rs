@@ -142,7 +142,9 @@ pub(super) fn canonical_gemm_reduction_policies(
         ModelConfig::Llama(_) if is_reviewed_llama_geometry(spec) => {
             LlamaGemmReductionPolicies::REVIEWED_LLAMA
         }
-        ModelConfig::Llama(_) | ModelConfig::Qwen2(_) => LlamaGemmReductionPolicies::STRICT,
+        ModelConfig::Llama(_) | ModelConfig::Mistral(_) | ModelConfig::Qwen2(_) => {
+            LlamaGemmReductionPolicies::STRICT
+        }
     }
 }
 

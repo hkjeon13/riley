@@ -124,6 +124,7 @@ const GEMM_EPILOGUE_BIAS: u32 = 1;
 const GEMM_DETERMINISTIC_REQUIRED: u32 = 1;
 const GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K: u32 = 1;
 const GEMM_FLAG_ALLOW_INPLACE_SPLIT_K: u32 = 2;
+const GEMM_FLAG_ALLOW_COMPUTE_TYPE_SPLIT_K: u32 = 4;
 
 #[repr(C)]
 struct ErrorInfo {
@@ -2259,6 +2260,11 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_hugging_face_smollm2_singleton_rms_norm_execute(
+        params: *const RawRmsNormParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_hugging_face_qwen_p2051_rms_norm_execute(
         params: *const RawRmsNormParams,
         stream: *mut RawStream,
@@ -2270,6 +2276,11 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn riley_cuda_hugging_face_qwen_wide_rms_norm_execute(
+        params: *const RawRmsNormParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_hugging_face_qwen_singleton_rms_norm_execute(
         params: *const RawRmsNormParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
@@ -2604,6 +2615,13 @@ unsafe extern "C" {
         out_info: *mut RawGemmAlgorithmInfo,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_bias_singleton_batch_plan_create(
+        context: *mut RawContext,
+        config: *const RawGemmConfig,
+        preparation_bias: *const RawBufferSpan,
+        out_plan: *mut *mut RawBiasGemmPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_bias_gemm_plan_execute(
         plan: *mut RawBiasGemmPlan,
         input: *const RawBufferSpan,
@@ -2649,6 +2667,13 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_owned_hf_gemm_plan_create(
+        context: *mut RawContext,
+        config: *const RawGemmConfig,
+        out_plan: *mut *mut RawCublasGemmProbePlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_gemm_probe_plan_info(
         plan: *mut RawCublasGemmProbePlan,
         out_info: *mut RawCublasGemmProbeInfo,
@@ -2668,9 +2693,29 @@ unsafe extern "C" {
         spans: *const RawBufferSpan, count: u64, rows: u64, tokens: u64,
         physical: u64, qh:u64,kvh:u64,head_size:u64,stream: *mut RawStream, error: *mut ErrorInfo) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_hf_smol_fused_gate_up_supported(plan:*const RawCublasGemmProbePlan,rows:u64)->i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_hf_smol_fused_gate_up_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,rows:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_hf_smol_fused_qkv_supported(plan:*const RawCublasGemmProbePlan,rows:u64)->i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_hf_smol_fused_qkv_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,rows:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_hf_smol_exact_supported(plan:*const RawCublasGemmProbePlan,tokens:u64)->i32;
+    fn riley_cuda_cublas_hf_smol_exact_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,rows:*const u32,tokens:*const u64,requests:u64,active:u64,physical:u64,sequences:u64,ids:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    fn riley_cuda_cublas_hf_decode_chunk_qualified(plan:*const RawCublasGemmProbePlan)->i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_hf_attention_chunk_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,tokens:*const u64,requests:u64,physical:u64,sequences:u64,ids:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_hf_attention_chunk_wide_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,tokens:*const u64,requests:u64,physical:u64,sequences:u64,ids:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_owned_hf_mlp_register_uses(gate:*mut RawCublasGemmProbePlan,
+        down:*mut RawCublasGemmProbePlan,buffers:*const RawBufferSpan,
+        stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_gemm_probe_plan_execute_rows(plan:*mut RawCublasGemmProbePlan,
         input:*const RawBufferSpan,weight:*const RawBufferSpan,output:*const RawBufferSpan,
-        rows:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+        rows:u64,grouped_decode:u32,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_gemm_probe_plan_close(
         plan: *mut *mut RawCublasGemmProbePlan,
@@ -7134,6 +7179,38 @@ pub(super) fn hugging_face_smollm2_rms_norm_execute(
     )
 }
 
+pub(super) fn hugging_face_smollm2_singleton_rms_norm_execute(
+    input: RawBufferSpan,
+    weight: RawBufferSpan,
+    output: RawBufferSpan,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRmsNormParams {
+        struct_size: RMS_NORM_PARAMS_SIZE,
+        reserved0: 0,
+        input,
+        weight,
+        output,
+        row_count,
+        hidden_size,
+        epsilon,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute Hugging Face SmolLM2 CUDA RMSNorm",
+        stream,
+        |stream, error| {
+            // SAFETY: the reviewed descriptor and every borrowed opaque
+            // resource remain live through synchronous native completion.
+            unsafe { riley_cuda_hugging_face_smollm2_singleton_rms_norm_execute(&params, stream, error) }
+        },
+    )
+}
+
 pub(super) fn hugging_face_qwen_p2051_rms_norm_execute(
     input: RawBufferSpan,
     weight: RawBufferSpan,
@@ -7224,6 +7301,38 @@ pub(super) fn hugging_face_qwen_wide_rms_norm_execute(
             // SAFETY: the source-bound descriptor and every borrowed opaque
             // resource remain live through synchronous native completion.
             unsafe { riley_cuda_hugging_face_qwen_wide_rms_norm_execute(&params, stream, error) }
+        },
+    )
+}
+
+pub(super) fn hugging_face_qwen_singleton_rms_norm_execute(
+    input: RawBufferSpan,
+    weight: RawBufferSpan,
+    output: RawBufferSpan,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRmsNormParams {
+        struct_size: RMS_NORM_PARAMS_SIZE,
+        reserved0: 0,
+        input,
+        weight,
+        output,
+        row_count,
+        hidden_size,
+        epsilon,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute Hugging Face Qwen singleton-row CUDA RMSNorm",
+        stream,
+        |stream, error| {
+            // SAFETY: the source-bound descriptor and every borrowed opaque
+            // resource remain live through synchronous native completion.
+            unsafe { riley_cuda_hugging_face_qwen_singleton_rms_norm_execute(&params, stream, error) }
         },
     )
 }
@@ -9726,8 +9835,14 @@ impl BiasGemmPlanHandle {
         max_workspace_bytes: u64,
         flags: u32,
         preparation_bias: RawBufferSpan,
+        singleton_batch: bool,
     ) -> CudaResult<Self> {
-        if flags & !(GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K | GEMM_FLAG_ALLOW_INPLACE_SPLIT_K) != 0 {
+        let hf_flags = GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K
+            | GEMM_FLAG_ALLOW_INPLACE_SPLIT_K
+            | GEMM_FLAG_ALLOW_COMPUTE_TYPE_SPLIT_K;
+        if flags & !hf_flags != 0
+            || (flags & GEMM_FLAG_ALLOW_COMPUTE_TYPE_SPLIT_K != 0 && flags != hf_flags)
+        {
             return Err(CudaError::invalid_argument(
                 "prepare CUDA bias-epilogue GEMM plan",
                 "unknown GEMM reduction-policy flags",
@@ -9740,13 +9855,11 @@ impl BiasGemmPlanHandle {
         // bias span remain valid for this synchronous prepare call.  Native
         // validates the BF16 [N] span and does not retain its allocation lease.
         let status = unsafe {
-            riley_cuda_bias_gemm_plan_create(
-                context.as_ptr(),
-                &config,
-                &preparation_bias,
-                &mut pointer,
-                &mut error,
-            )
+            if singleton_batch {
+                riley_cuda_bias_singleton_batch_plan_create(context.as_ptr(),&config,&preparation_bias,&mut pointer,&mut error)
+            } else {
+                riley_cuda_bias_gemm_plan_create(context.as_ptr(),&config,&preparation_bias,&mut pointer,&mut error)
+            }
         };
         status_result(status, "prepare CUDA bias-epilogue GEMM plan", &error)?;
         let pointer = NonNull::new(pointer).ok_or_else(|| {
@@ -10001,6 +10114,7 @@ impl CublasGemmProbePlanHandle {
         n: u64,
         k: u64,
         max_workspace_bytes: u64,
+        owned_command_batches: bool,
     ) -> CudaResult<Self> {
         let config = RawGemmConfig::new(0, m, n, k, max_workspace_bytes);
         let mut pointer = ptr::null_mut();
@@ -10008,12 +10122,15 @@ impl CublasGemmProbePlanHandle {
         // SAFETY: native retains the context on success and either initializes
         // the independent owner or leaves the output null on failure.
         let status = unsafe {
-            riley_cuda_cublas_gemm_probe_plan_create(
-                context.as_ptr(),
-                &config,
-                &mut pointer,
-                &mut error,
-            )
+            if owned_command_batches {
+                riley_cuda_owned_hf_gemm_plan_create(
+                    context.as_ptr(), &config, &mut pointer, &mut error,
+                )
+            } else {
+                riley_cuda_cublas_gemm_probe_plan_create(
+                    context.as_ptr(), &config, &mut pointer, &mut error,
+                )
+            }
         };
         status_result(status, "prepare direct cuBLAS GEMM probe", &error)?;
         let pointer = NonNull::new(pointer).ok_or_else(|| {
@@ -10101,11 +10218,74 @@ impl CublasGemmProbePlanHandle {
         status_result(status,"private prepared HF attention",&error)
     }
 
-    pub(super) fn execute_rows(&mut self,input:RawBufferSpan,weight:RawBufferSpan,output:RawBufferSpan,rows:u64,stream:&mut StreamHandle)->CudaResult<()> {
+    pub(super) fn smol_fused_gate_up_supported(&self,rows:u64)->bool {
+        // SAFETY: immutable qualified live-plan metadata, no GPU operation.
+        unsafe {riley_cuda_cublas_hf_smol_fused_gate_up_supported(self.as_ptr(),rows)!=0}
+    }
+    pub(super) fn smol_fused_gate_up(&mut self,spans:&[RawBufferSpan;4],rows:u64,stream:&mut StreamHandle)->CudaResult<()> {
+        let mut error=ErrorInfo::new();
+        // SAFETY: retained caller borrows; native validates ranges, contexts,
+        // aliases and registers exclusive uses until capture/commands fence.
+        let status=unsafe {riley_cuda_cublas_hf_smol_fused_gate_up_execute(self.as_ptr(),spans.as_ptr(),4,rows,stream.as_ptr(),&mut error)};
+        status_result(status,"private exact Smol GateUp SiLU",&error)
+    }
+
+    pub(super) fn smol_fused_qkv_supported(&self,rows:u64)->bool {
+        // SAFETY: immutable qualified live-plan metadata; no CUDA operation.
+        unsafe {riley_cuda_cublas_hf_smol_fused_qkv_supported(self.as_ptr(),rows)!=0}
+    }
+    pub(super) fn smol_fused_qkv(&mut self,spans:&[RawBufferSpan;7],rows:u64,stream:&mut StreamHandle)->CudaResult<()> {
+        let mut error=ErrorInfo::new();
+        // SAFETY: caller retains all borrows. Native validates owners, spans,
+        // aliases and bounds and registers exclusive uses until fenced.
+        let status=unsafe {riley_cuda_cublas_hf_smol_fused_qkv_execute(self.as_ptr(),spans.as_ptr(),7,rows,stream.as_ptr(),&mut error)};
+        status_result(status,"private exact Smol fused QKV",&error)
+    }
+
+    pub(super) fn smol_exact_supported(&self,tokens:u64)->bool {
+        // SAFETY: immutable cold plan flag and static recipe lookup, no CUDA call.
+        unsafe {riley_cuda_cublas_hf_smol_exact_supported(self.as_ptr(),tokens)!=0}
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn attention_smol_exact(&mut self,spans:&[RawBufferSpan;11],rows:&[u32;32],tokens:&[u64;32],requests:u64,active:u64,physical:u64,sequences:u64,ids:u64,stream:&mut StreamHandle)->CudaResult<()> {
+        let mut error=ErrorInfo::new();
+        // SAFETY: owners retain spans/host metadata for synchronous submission;
+        // native copies selected rows and retains exclusive GPU uses until fenced.
+        let status=unsafe {riley_cuda_cublas_hf_smol_exact_execute(self.as_ptr(),spans.as_ptr(),11,rows.as_ptr(),tokens.as_ptr(),requests,active,physical,sequences,ids,stream.as_ptr(),&mut error)};
+        status_result(status,"private exact Smol attention",&error)
+    }
+    pub(super) fn decode_chunk_qualified(&self)->bool {
+        // SAFETY: immutable cold query of the live plan; no CUDA operation.
+        unsafe {riley_cuda_cublas_hf_decode_chunk_qualified(self.as_ptr())!=0}
+    }
+    pub(super) fn attention_chunk(&mut self,spans:&[RawBufferSpan;12],span_count:u64,tokens:&[u64;8],requests:u64,physical:u64,sequences:u64,ids:u64,stream:&mut StreamHandle)->CudaResult<()> {
+        let mut error=ErrorInfo::new();
+        // SAFETY: the safe owner retains every span and host token array for
+        // synchronous submission. Native copies token scalars into kernel args,
+        // validates ownership/overlap and retains GPU resource leases until fenced.
+        let status=unsafe{riley_cuda_cublas_hf_attention_chunk_execute(self.as_ptr(),spans.as_ptr(),span_count,tokens.as_ptr(),requests,physical,sequences,ids,stream.as_ptr(),&mut error)};
+        status_result(status,"private exact heterogeneous decode chunk",&error)
+    }
+    pub(super) fn attention_chunk_wide(&mut self,spans:&[RawBufferSpan;12],span_count:u64,tokens:&[u64;32],requests:u64,physical:u64,sequences:u64,ids:u64,stream:&mut StreamHandle)->CudaResult<()> {
+        let mut error=ErrorInfo::new();
+        // SAFETY: the safe owner retains every span and host token array for
+        // synchronous submission. Native copies token scalars into kernel args,
+        // validates ownership/overlap and retains GPU resource leases until fenced.
+        let status=unsafe{riley_cuda_cublas_hf_attention_chunk_wide_execute(self.as_ptr(),spans.as_ptr(),span_count,tokens.as_ptr(),requests,physical,sequences,ids,stream.as_ptr(),&mut error)};
+        status_result(status,"private exact heterogeneous decode chunk",&error)
+    }
+    pub(super) fn register_mlp_uses(&self,down:&Self,buffers:&[RawBufferSpan;8],stream:&mut StreamHandle)->CudaResult<()> {
+        let mut error=ErrorInfo::new();
+        // SAFETY: both plan owners and all eight validated spans remain live
+        // for this synchronous registration; the native batch retains uses.
+        let status=unsafe{riley_cuda_owned_hf_mlp_register_uses(self.as_ptr(),down.as_ptr(),buffers.as_ptr(),stream.as_ptr(),&mut error)};
+        status_result(status,"register owned MLP graph resources",&error)
+    }
+    pub(super) fn execute_rows(&mut self,input:RawBufferSpan,weight:RawBufferSpan,output:RawBufferSpan,rows:u64,grouped_decode:u8,stream:&mut StreamHandle)->CudaResult<()> {
         let mut error=ErrorInfo::new();
         // SAFETY: safe group owner retains parent borrows, bounds each child range;
         // native validates all owners/leases and synchronizes before releasing them.
-        let status=unsafe {riley_cuda_cublas_gemm_probe_plan_execute_rows(self.as_ptr(),&input,&weight,&output,rows,stream.as_ptr(),&mut error)};
+        let status=unsafe {riley_cuda_cublas_gemm_probe_plan_execute_rows(self.as_ptr(),&input,&weight,&output,rows,u32::from(grouped_decode),stream.as_ptr(),&mut error)};
         status_result(status,"private request-row cuBLAS GEMM",&error)
     }
 

@@ -1,0 +1,11 @@
+{
+  "command": "cargo test --locked --workspace",
+  "suites": 122,
+  "passed": 826,
+  "failed": 0,
+  "ignored": 37,
+  "all_reported_suites_ok": true,
+  "GPU_scope": "Local macOS CPU suite only; GPU targets gated or ignored; separate pinned remote receipts in this checkpoint",
+  "format_check": "cargo fmt --all -- --check fails existing nonformatted Rust in28files; qualification snapshot retained unchanged; no silent formatting rewrite",
+  "diff_check": "git diff --check passed"
+}

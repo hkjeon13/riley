@@ -7,6 +7,7 @@
 #include <cmath>
 #include <stdint.h>
 #include <cuda_fp16.h>
+#include <cuda_bf16.h>
 #include <cuda_runtime.h>
 #include <math_constants.h>
 #define WARP_SHFL_XOR(value,offset,width) __shfl_xor_sync(0xffffffffu,value,offset,width)
@@ -14,6 +15,11 @@
 
 
 namespace {
+
+// Eager decode's BF16-scaled boundary, fused only at explicitly selected loads.
+__device__ __forceinline__ float hf_decode_scaled_bf16_d128(float value) {
+ return __bfloat162float(__float2bfloat16_rn(value*__uint_as_float(0x3db504f3)));
+}
 
 int log2_ceil(int value) {
     int log2_value = 0;
@@ -69,7 +75,7 @@ __device__ __forceinline__ void warp_reduce(acc_t* sum) {
 // input_t=half,  acc_t=float, output_t=float => read half tensor, float accumulators, write float tensor.
 // input_t_float, acc_t=float, output_t=half  => read float tensor, float accumulators, write half tensor.
 
-template <typename input_t, typename output_t, typename acc_t, int log2_elements, bool is_log_softmax, bool is_masked, int WARP_SIZE_PARAM>
+template <typename input_t, typename output_t, typename acc_t, int log2_elements, bool is_log_softmax, bool is_masked, int WARP_SIZE_PARAM, bool scaled_bf16_d128 = false, bool scaled_bf16_d64 = false>
 __global__ void softmax_warp_forward(output_t *dst, const input_t *src, int batch_size, int stride, int element_count, const bool *mask = nullptr, const int head_chunk_size = -1, bool is_transformer_mask = false)
 {
     // WARP_SIZE and WARP_BATCH must match the return values batches_per_warp and warp_size of method warp_softmax_forward_kernel.
@@ -111,6 +117,12 @@ __global__ void softmax_warp_forward(output_t *dst, const input_t *src, int batc
             int element_index = local_idx + it * WARP_SIZE;
             if (element_index < batch_element_count) {
                 elements[i][it] = src[i*element_count+it*WARP_SIZE];
+                if constexpr (scaled_bf16_d64) {
+                    // D64 eager scale is exactly 1/8, with the same BF16 boundary.
+                    elements[i][it] = __bfloat162float(__float2bfloat16_rn(elements[i][it] * 0.125f));
+                } else if constexpr (scaled_bf16_d128) {
+                    elements[i][it] = hf_decode_scaled_bf16_d128(elements[i][it]);
+                }
             } else {
                 elements[i][it] = -CUDART_INF_F;
             }

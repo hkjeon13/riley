@@ -818,6 +818,72 @@ __global__ void residual_rms_norm_kernel(
   }
 }
 
+// A narrow BF16 row fits in three registers per thread. Retain the original
+// 256-thread column accumulation and reduction tree, but keep the residual in
+// registers and reconstruct the shared-memory tree in warp zero. This avoids
+// reloading the residual and the barrier at every reduction level. The hidden
+// size remains a runtime parameter in the division, matching the old kernel.
+template <bool kResidual>
+__global__ __launch_bounds__(256) void canonical_narrow_bf16_rms_norm_kernel(
+    const __nv_bfloat16* left, const __nv_bfloat16* right,
+    const __nv_bfloat16* weight, __nv_bfloat16* residual_output,
+    __nv_bfloat16* normalized_output, uint64_t row_count,
+    uint64_t hidden_size, float epsilon) {
+  __shared__ float partial_sums[256];
+  const uint64_t row = blockIdx.x;
+  if (row >= row_count) return;
+  const uint32_t lane = threadIdx.x;
+  const uint64_t base = row * hidden_size;
+  float values[3];
+  float sum = 0.0F;
+  #pragma unroll
+  for (uint32_t slot = 0; slot < 3; ++slot) {
+    const uint32_t column = lane + slot * 256;
+    if (column < 576) {
+      float value = __bfloat162float(left[base + column]);
+      if constexpr (kResidual) {
+        value = round_to_storage<__nv_bfloat16>(
+            value + __bfloat162float(right[base + column]));
+        residual_output[base + column] = __float2bfloat16_rn(value);
+      }
+      values[slot] = value;
+      sum += value * value;
+    }
+  }
+  partial_sums[lane] = sum;
+  __syncthreads();
+  if (lane < 32) {
+    const float a0 = __fadd_rn(partial_sums[lane], partial_sums[lane + 128]);
+    const float a1 = __fadd_rn(partial_sums[lane + 64], partial_sums[lane + 192]);
+    const float b0 = __fadd_rn(partial_sums[lane + 32], partial_sums[lane + 160]);
+    const float b1 = __fadd_rn(partial_sums[lane + 96], partial_sums[lane + 224]);
+    float total = __fadd_rn(__fadd_rn(a0, a1), __fadd_rn(b0, b1));
+    for (uint32_t offset = 16; offset != 0; offset /= 2) {
+      total = __fadd_rn(total, __shfl_down_sync(0xffffffffU, total, offset));
+    }
+    if (lane == 0) partial_sums[0] = total;
+  }
+  __syncthreads();
+  const float inverse_rms =
+      rsqrtf(partial_sums[0] / static_cast<float>(hidden_size) + epsilon);
+  #pragma unroll
+  for (uint32_t slot = 0; slot < 3; ++slot) {
+    const uint32_t column = lane + slot * 256;
+    if (column < 576) {
+      const float normalized = values[slot] * inverse_rms;
+      const float staged = round_to_storage<__nv_bfloat16>(normalized);
+      normalized_output[base + column] =
+          __float2bfloat16_rn(staged * __bfloat162float(weight[column]));
+    }
+  }
+}
+
+template <typename T>
+bool use_canonical_narrow_rms_norm(uint64_t rows, uint64_t width) noexcept {
+  return std::is_same<T, __nv_bfloat16>::value && width == 576 &&
+         rows != 0 && rows <= 256;
+}
+
 // Wide-block forms of rms_norm_kernel / residual_rms_norm_kernel for BF16 rows
 // of exactly 2048 columns. The 256-thread kernels make every thread wait on
 // eight sequential global loads; here 1024 threads load two columns each, stage
@@ -1009,12 +1075,23 @@ void wide_bf16_general_rms_norm_kernel(
     partial_sums[lane] = sum;
   }
   __syncthreads();
-  for (uint32_t offset = kWideRmsNormLanes / 2; offset != 0; offset /= 2) {
-    if (threadIdx.x < offset) {
-      partial_sums[threadIdx.x] += partial_sums[threadIdx.x + offset];
+  // Reconstruct the original 128/64/32 shared-memory levels in warp-zero
+  // registers, with the same parenthesized additions. This removes their
+  // inter-warp writes/barriers; the final five levels retain their order too.
+  static_assert(kWideRmsNormLanes == 256, "warp reduction requires 256 lanes");
+  if (threadIdx.x < 32) {
+    const uint32_t index = threadIdx.x;
+    const float a0 = __fadd_rn(partial_sums[index], partial_sums[index + 128]);
+    const float a1 = __fadd_rn(partial_sums[index + 64], partial_sums[index + 192]);
+    const float b0 = __fadd_rn(partial_sums[index + 32], partial_sums[index + 160]);
+    const float b1 = __fadd_rn(partial_sums[index + 96], partial_sums[index + 224]);
+    float sum = __fadd_rn(__fadd_rn(a0, a1), __fadd_rn(b0, b1));
+    for (uint32_t offset = 16; offset != 0; offset /= 2) {
+      sum += __shfl_down_sync(0xffffffffU, sum, offset);
     }
-    __syncthreads();
+    if (threadIdx.x == 0) partial_sums[0] = sum;
   }
+  __syncthreads();
   const float inverse_rms =
       rsqrtf(partial_sums[0] / static_cast<float>(hidden_size) + epsilon);
   for (uint32_t item = 0; item < count; ++item) {
@@ -1235,6 +1312,15 @@ void launch_rms_norm(const ResolvedSpan& input, const ResolvedSpan& weight,
                      const ResolvedSpan& output, uint64_t row_count,
                      uint64_t hidden_size, float epsilon,
                      cudaStream_t stream) {
+  if (use_canonical_narrow_rms_norm<T>(row_count, hidden_size)) {
+    canonical_narrow_bf16_rms_norm_kernel<false>
+        <<<static_cast<uint32_t>(row_count), 256, 0, stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(input.data), nullptr,
+            reinterpret_cast<const __nv_bfloat16*>(weight.data), nullptr,
+            reinterpret_cast<__nv_bfloat16*>(output.data),
+            row_count, hidden_size, epsilon);
+    return;
+  }
   if (use_wide_rms_norm<T>(row_count, hidden_size)) {
     wide_bf16_rms_norm_kernel
         <<<static_cast<uint32_t>(row_count), kWideRmsNormThreads, 0, stream>>>(
@@ -1324,6 +1410,17 @@ void launch_residual_rms_norm(
     const ResolvedSpan& weight, const ResolvedSpan& residual_output,
     const ResolvedSpan& normalized_output, uint64_t row_count,
     uint64_t hidden_size, float epsilon, cudaStream_t stream) {
+  if (use_canonical_narrow_rms_norm<T>(row_count, hidden_size)) {
+    canonical_narrow_bf16_rms_norm_kernel<true>
+        <<<static_cast<uint32_t>(row_count), 256, 0, stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(left.data),
+            reinterpret_cast<const __nv_bfloat16*>(right.data),
+            reinterpret_cast<const __nv_bfloat16*>(weight.data),
+            reinterpret_cast<__nv_bfloat16*>(residual_output.data),
+            reinterpret_cast<__nv_bfloat16*>(normalized_output.data),
+            row_count, hidden_size, epsilon);
+    return;
+  }
   if (use_wide_rms_norm<T>(row_count, hidden_size)) {
     wide_bf16_residual_rms_norm_kernel
         <<<static_cast<uint32_t>(row_count), kWideRmsNormThreads, 0, stream>>>(
@@ -1729,9 +1826,11 @@ __global__ void hugging_face_qwen_wide_rms_norm_kernel(const __nv_bfloat16*x,con
 enum class RmsNormImplementation {
   Canonical,
   HuggingFaceSmolLm2,
+  HuggingFaceSmolLm2Singleton,
   HuggingFaceQwenP2051,
   HuggingFaceQwenHead128,
   HuggingFaceQwenWide,
+  HuggingFaceQwenSingleton,
 };
 
 const char* rms_norm_operation(RmsNormImplementation implementation) noexcept {
@@ -1740,8 +1839,12 @@ const char* rms_norm_operation(RmsNormImplementation implementation) noexcept {
       return "execute Hugging Face Qwen head128 RMSNorm";
     case RmsNormImplementation::HuggingFaceQwenWide:
       return "execute Hugging Face Qwen wide RMSNorm";
+    case RmsNormImplementation::HuggingFaceQwenSingleton:
+      return "execute Hugging Face Qwen singleton-row RMSNorm";
     case RmsNormImplementation::Canonical:
       return "execute RMSNorm";
+    case RmsNormImplementation::HuggingFaceSmolLm2Singleton:
+      return "execute Hugging Face SmolLM2 singleton-row RMSNorm";
     case RmsNormImplementation::HuggingFaceSmolLm2:
       return "execute Hugging Face SmolLM2 RMSNorm";
     case RmsNormImplementation::HuggingFaceQwenP2051:
@@ -1755,6 +1858,8 @@ RileyCudaStatus execute_rms_norm_impl(
     RileyCudaErrorInfo* error,
     RmsNormImplementation implementation) noexcept {
   const char* kOperation = rms_norm_operation(implementation);
+  const bool wide = implementation == RmsNormImplementation::HuggingFaceQwenWide ||
+                    implementation == RmsNormImplementation::HuggingFaceQwenSingleton;
   if (params == nullptr || params->struct_size < sizeof(*params)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
@@ -1779,7 +1884,8 @@ RileyCudaStatus execute_rms_norm_impl(
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "hidden_size and finite positive epsilon are required");
   }
-  if (implementation == RmsNormImplementation::HuggingFaceSmolLm2 &&
+  if ((implementation == RmsNormImplementation::HuggingFaceSmolLm2 ||
+       implementation == RmsNormImplementation::HuggingFaceSmolLm2Singleton) &&
       !is_hugging_face_smollm2_rms_norm_contract(
           params->input.dtype, params->row_count, params->hidden_size,
           params->epsilon)) {
@@ -1807,11 +1913,12 @@ RileyCudaStatus execute_rms_norm_impl(
     return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
       RILEY_CUDA_ERROR_STAGE_VALIDATION,kOperation,"BF16 head128 rows<=524288 epsilon1e-6 required");
   }
-  if (implementation == RmsNormImplementation::HuggingFaceQwenWide &&
-      !(params->input.dtype == RILEY_CUDA_DTYPE_BF16 && (params->hidden_size == 2048 || params->hidden_size == 2560) &&
-        params->row_count <= 8192 && params->epsilon == 1.e-6F)) {
+  if (wide &&
+      !(params->input.dtype == RILEY_CUDA_DTYPE_BF16 && params->row_count <= 8192 &&
+        (((params->hidden_size == 2048 || params->hidden_size == 2560) && params->epsilon == 1.e-6F) ||
+         (params->hidden_size == 4096 && params->epsilon == 1.e-5F)))) {
     return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
-      RILEY_CUDA_ERROR_STAGE_VALIDATION,kOperation,"BF16 width2048/2560 rows<=8192 epsilon1e-6 required");
+      RILEY_CUDA_ERROR_STAGE_VALIDATION,kOperation,"BF16 width2048/2560 epsilon1e-6 or width4096 epsilon1e-5, rows<=8192 required");
   }
   uint64_t element_count = 0;
   if (!checked_multiply(params->row_count, params->hidden_size,
@@ -1884,8 +1991,13 @@ RileyCudaStatus execute_rms_norm_impl(
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
-    if (implementation == RmsNormImplementation::HuggingFaceQwenWide) {
-      uint32_t height=1;while(height*2<=params->row_count && height<16)height*=2;
+    if (wide) {
+      uint32_t height=1;
+      // Independent M=1 requests retain the original 512-thread reduction.
+      // Only the grid extent changes; each CTA owns one disjoint row.
+      if (implementation != RmsNormImplementation::HuggingFaceQwenSingleton) {
+        while(height*2<=params->row_count && height<16)height*=2;
+      }
       const uint32_t threads=512/height;
       hugging_face_qwen_wide_rms_norm_kernel<<<params->row_count,threads,threads*sizeof(float),stream->stream>>>(
         reinterpret_cast<const __nv_bfloat16*>(input.data),reinterpret_cast<const __nv_bfloat16*>(weight.data),
@@ -1894,6 +2006,14 @@ RileyCudaStatus execute_rms_norm_impl(
       hugging_face_qwen_head128_rms_norm_kernel<<<params->row_count,32,0,stream->stream>>>(
         reinterpret_cast<const __nv_bfloat16*>(input.data),reinterpret_cast<const __nv_bfloat16*>(weight.data),
         reinterpret_cast<__nv_bfloat16*>(output.data),params->row_count,params->epsilon);
+    } else if (implementation == RmsNormImplementation::HuggingFaceSmolLm2Singleton) {
+      // Preserve the exact C1 block and reduction tree for each independent row.
+      // Prefill continues to use the original row-dependent launch geometry.
+      hugging_face_smollm2_rms_norm_kernel<false>
+          <<<params->row_count, dim3(128, 1, 1), 128 * sizeof(float), stream->stream>>>(
+              reinterpret_cast<const __nv_bfloat16*>(input.data), nullptr,
+              reinterpret_cast<const __nv_bfloat16*>(weight.data), nullptr,
+              reinterpret_cast<__nv_bfloat16*>(output.data), params->row_count);
     } else if (implementation == RmsNormImplementation::HuggingFaceSmolLm2) {
       launch_hugging_face_smollm2_rms_norm(
           input.data, weight.data, output.data, params->row_count, stream->stream);
@@ -1956,6 +2076,24 @@ riley_cuda_hugging_face_qwen_wide_rms_norm_execute(
   clear_error(error);
   return execute_rms_norm_impl(
       params, stream, error, RmsNormImplementation::HuggingFaceQwenWide);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_hugging_face_smollm2_singleton_rms_norm_execute(
+    const RileyCudaRmsNormParams* params, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  return execute_rms_norm_impl(
+      params, stream, error, RmsNormImplementation::HuggingFaceSmolLm2Singleton);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_hugging_face_qwen_singleton_rms_norm_execute(
+    const RileyCudaRmsNormParams* params, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  return execute_rms_norm_impl(
+      params, stream, error, RmsNormImplementation::HuggingFaceQwenSingleton);
 }
 
 extern "C" RileyCudaStatus riley_cuda_residual_add_execute(

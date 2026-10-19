@@ -2614,6 +2614,7 @@ mod cuda_backend {
         scheduler_id: SchedulerRequestId,
         state: GenerationState,
         decoded_token_bytes: Vec<u8>,
+        token_decode_state: riley_model::TokenDecodeState,
         prompt_tokens: u64,
         cancellation_deferred: bool,
         pre_iteration_cancel_delta: String,
@@ -3086,12 +3087,13 @@ mod cuda_backend {
                 let decoded_count = if needs_decoding {
                     self.model
                         .tokenizer()
-                        .decode_token_bytes_into(
+                        .decode_token_bytes_with_state(
                             token_id,
                             DecodeOptions {
                                 skip_special_tokens: true,
                             },
                             &mut request.decoded_token_bytes,
+                            &mut request.token_decode_state,
                         )
                         .map_err(|source| internal(format!("token decoding failed: {source}")))?
                 } else {
@@ -3588,6 +3590,7 @@ mod cuda_backend {
                 scheduler_id: submission.request_id(),
                 state,
                 decoded_token_bytes,
+                token_decode_state: riley_model::TokenDecodeState::default(),
                 prompt_tokens,
                 cancellation_deferred: false,
                 pre_iteration_cancel_delta,

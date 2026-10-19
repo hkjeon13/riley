@@ -193,6 +193,7 @@ impl CudaContext {
         {
             let native = ffi::DeviceBufferHandle::create(&self.inner.native, byte_len)?;
             Ok(CudaDeviceBuffer {
+                identity: crate::runtime::CudaResourceIdentity::new(),
                 native,
                 context: Arc::clone(&self.inner),
                 byte_len,
@@ -338,6 +339,7 @@ impl BufferUseState {
 /// }
 /// ```
 pub struct CudaDeviceBuffer {
+    pub(crate) identity: crate::runtime::CudaResourceIdentity,
     #[cfg(feature = "cuda")]
     native: ffi::DeviceBufferHandle,
     // Native must close before releasing the context Arc.

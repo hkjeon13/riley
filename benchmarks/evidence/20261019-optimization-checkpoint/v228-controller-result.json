@@ -1,0 +1,161 @@
+{
+  "status": "V228-dedicated-SM80-mode6-two-model-HF-and-allR-native-byteexact",
+  "phases": [
+    {
+      "status": "V228-SM80-beforeafter-HF-and-real-bounded-batch-Graphs-independent-pass",
+      "tag": "qwen3-4b",
+      "byte_audit": {
+        "status": "wholemodel-beforeafter-byte-exact-with-live-Graph-audit",
+        "tag": "qwen3-4b",
+        "fresh_HF_rows": 104,
+        "before_vs_fresh_HF_all_bytes_equal": true,
+        "source_adopted": false
+      },
+      "actual_captured_argument_proof": [
+        {
+          "name": "v228-qwen3-4b-before-allR-Graph",
+          "captured_GEMM_calls": 4536,
+          "post_Graphs": 216,
+          "actual_row_Graph_keys": {
+            "1": 36,
+            "2": 36,
+            "4": 36,
+            "8": 36,
+            "16": 36,
+            "32": 36
+          },
+          "total_segment_Graphs": 432,
+          "first_changed_context_segment_replays": 432,
+          "maximum_GEMM_rows": 1,
+          "sampled_peak_total_GPU_MiB": 14643,
+          "log_sha256": "ff24d8dddabc085f924a9a1de032dbeddf9a1540b0a8e74214d351eddb616801"
+        },
+        {
+          "name": "v228-qwen3-4b-after-allR-Graph",
+          "captured_GEMM_calls": 3456,
+          "post_Graphs": 1152,
+          "actual_row_Graph_keys": {
+            "1": 36,
+            "2": 36,
+            "3": 36,
+            "4": 36,
+            "5": 36,
+            "6": 36,
+            "7": 36,
+            "8": 36,
+            "9": 36,
+            "10": 36,
+            "11": 36,
+            "12": 36,
+            "13": 36,
+            "14": 36,
+            "15": 36,
+            "16": 36,
+            "17": 36,
+            "18": 36,
+            "19": 36,
+            "20": 36,
+            "21": 36,
+            "22": 36,
+            "23": 36,
+            "24": 36,
+            "25": 36,
+            "26": 36,
+            "27": 36,
+            "28": 36,
+            "29": 36,
+            "30": 36,
+            "31": 36,
+            "32": 36
+          },
+          "total_segment_Graphs": 2304,
+          "first_changed_context_segment_replays": 2304,
+          "maximum_GEMM_rows": 16,
+          "sampled_peak_total_GPU_MiB": 15901,
+          "log_sha256": "d70eadb626c65e3b954006a638e0dd0e3e85ac1fce87695bb9a5e18779b892b0"
+        }
+      ],
+      "source_adopted": false,
+      "scope": "All32rowkeys after; before originaldensekeys. Full-vocab nativebeforeafter +freshA100HF104rows and internalreplicaassertions. Realcapturearguments and genericcapture/firstreplaycounts proveGraphreuse; no API/performance/long-soakclaim."
+    },
+    {
+      "status": "V228-SM80-beforeafter-HF-and-real-bounded-batch-Graphs-independent-pass",
+      "tag": "mistral-7b",
+      "byte_audit": {
+        "status": "wholemodel-beforeafter-byte-exact-with-live-Graph-audit",
+        "tag": "mistral-7b",
+        "fresh_HF_rows": 104,
+        "before_vs_fresh_HF_all_bytes_equal": true,
+        "source_adopted": false
+      },
+      "actual_captured_argument_proof": [
+        {
+          "name": "v228-mistral-7b-before-allR-Graph",
+          "captured_GEMM_calls": 4032,
+          "post_Graphs": 192,
+          "actual_row_Graph_keys": {
+            "1": 32,
+            "2": 32,
+            "4": 32,
+            "8": 32,
+            "16": 32,
+            "32": 32
+          },
+          "total_segment_Graphs": 384,
+          "first_changed_context_segment_replays": 384,
+          "maximum_GEMM_rows": 1,
+          "sampled_peak_total_GPU_MiB": 20029,
+          "log_sha256": "b5014409480772603860472ef75d5d4fe00fa19a6bc93edda3785348ed7f99f5"
+        },
+        {
+          "name": "v228-mistral-7b-after-allR-Graph",
+          "captured_GEMM_calls": 3072,
+          "post_Graphs": 1024,
+          "actual_row_Graph_keys": {
+            "1": 32,
+            "2": 32,
+            "3": 32,
+            "4": 32,
+            "5": 32,
+            "6": 32,
+            "7": 32,
+            "8": 32,
+            "9": 32,
+            "10": 32,
+            "11": 32,
+            "12": 32,
+            "13": 32,
+            "14": 32,
+            "15": 32,
+            "16": 32,
+            "17": 32,
+            "18": 32,
+            "19": 32,
+            "20": 32,
+            "21": 32,
+            "22": 32,
+            "23": 32,
+            "24": 32,
+            "25": 32,
+            "26": 32,
+            "27": 32,
+            "28": 32,
+            "29": 32,
+            "30": 32,
+            "31": 32,
+            "32": 32
+          },
+          "total_segment_Graphs": 2048,
+          "first_changed_context_segment_replays": 2048,
+          "maximum_GEMM_rows": 16,
+          "sampled_peak_total_GPU_MiB": 20925,
+          "log_sha256": "0ea5196a9781b12b91971b85da23bc856150db35c9e05ae893c14dc64f662875"
+        }
+      ],
+      "source_adopted": false,
+      "scope": "All32rowkeys after; before originaldensekeys. Full-vocab nativebeforeafter +freshA100HF104rows and internalreplicaassertions. Realcapturearguments and genericcapture/firstreplaycounts proveGraphreuse; no API/performance/long-soakclaim."
+    }
+  ],
+  "source_adopted": false,
+  "real_batch": "independent captured-GEMM-argument audit passed"
+}

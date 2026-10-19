@@ -483,6 +483,8 @@ impl PreparedLlamaBatchExecutor {
             output_ready,
         } = self;
         let PreparedLlamaBatchOwner {
+            #[cfg(feature="cuda-cublas-gemm-probe")]
+            owned_mlp_graphs,
             metadata,
             forward,
             shape_variants,
@@ -536,6 +538,8 @@ impl PreparedLlamaBatchExecutor {
             gathered_logits,
             greedy_results,
             native_d128_two_stage_workspace.as_mut(),
+            #[cfg(feature="cuda-cublas-gemm-probe")]
+            owned_mlp_graphs.as_mut(),
             host,
             output_mode_requested,
             &mut dispatch_disposition,
@@ -769,6 +773,12 @@ impl PreparedLlamaBatchExecutor {
         Ok(())
     }
 
+    /// Counters for the optional owned MLP graph cache.
+    #[cfg(feature="cuda-cublas-gemm-probe")]
+    pub fn owned_mlp_graph_stats(&self)->Option<riley_cuda::CudaOwnedHfMlpGraphStats>{
+        self.owner.owned_mlp_graphs.as_ref().map(riley_cuda::CudaOwnedHfMlpGraph::stats)
+    }
+
     /// Explicitly closes all extra batch allocations, then the reused forward.
     /// Every resource is attempted even after the first cleanup failure.
     ///
@@ -798,6 +808,8 @@ fn execute_packed(
     gathered_logits: &mut Option<CudaDeviceBuffer>,
     greedy_results: &mut Option<CudaDeviceBuffer>,
     native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
+    #[cfg(feature="cuda-cublas-gemm-probe")]
+    owned_mlp_graphs: Option<&mut riley_cuda::CudaOwnedHfMlpGraph>,
     host: &mut BatchHostWorkspace,
     output_mode: BatchOutputMode,
     dispatch_disposition: &mut BatchDispatchDisposition,
@@ -818,6 +830,8 @@ fn execute_packed(
         gathered_logits,
         greedy_results,
         native_d128_two_stage_workspace,
+        #[cfg(feature="cuda-cublas-gemm-probe")]
+        owned_mlp_graphs,
         &mut host.input,
         output_mode == BatchOutputMode::GreedyTokens,
         dispatch_disposition,

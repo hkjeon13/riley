@@ -1,0 +1,228 @@
+{
+  "status": "V234-SM80-fixed6-matrix-rows-diagnostic-complete",
+  "conditions": 1056,
+  "results": [
+    {
+      "case": "mistral-down",
+      "N": 4096,
+      "K": 14336,
+      "algorithm": [
+        6,
+        18,
+        16,
+        1,
+        0
+      ],
+      "all_three_states_exact_rows": [],
+      "statuses": [
+        0
+      ],
+      "changed_values": 20797
+    },
+    {
+      "case": "mistral-key",
+      "N": 1024,
+      "K": 4096,
+      "algorithm": [
+        6,
+        18,
+        16,
+        1,
+        0
+      ],
+      "all_three_states_exact_rows": [],
+      "statuses": [
+        0
+      ],
+      "changed_values": 2788
+    },
+    {
+      "case": "mistral-output",
+      "N": 4096,
+      "K": 4096,
+      "algorithm": [
+        6,
+        18,
+        16,
+        1,
+        0
+      ],
+      "all_three_states_exact_rows": [],
+      "statuses": [
+        0
+      ],
+      "changed_values": 6639
+    },
+    {
+      "case": "mistral-query",
+      "N": 4096,
+      "K": 4096,
+      "algorithm": [
+        6,
+        18,
+        16,
+        1,
+        0
+      ],
+      "all_three_states_exact_rows": [],
+      "statuses": [
+        0
+      ],
+      "changed_values": 6404
+    },
+    {
+      "case": "mistral-value",
+      "N": 1024,
+      "K": 4096,
+      "algorithm": [
+        6,
+        18,
+        16,
+        1,
+        0
+      ],
+      "all_three_states_exact_rows": [],
+      "statuses": [
+        0
+      ],
+      "changed_values": 3475
+    },
+    {
+      "case": "qwen4b-down",
+      "N": 2560,
+      "K": 9728,
+      "algorithm": [
+        6,
+        18,
+        16,
+        1,
+        0
+      ],
+      "all_three_states_exact_rows": [],
+      "statuses": [
+        0
+      ],
+      "changed_values": 964923
+    },
+    {
+      "case": "qwen4b-key",
+      "N": 1024,
+      "K": 2560,
+      "algorithm": [
+        6,
+        18,
+        16,
+        1,
+        0
+      ],
+      "all_three_states_exact_rows": [],
+      "statuses": [
+        0
+      ],
+      "changed_values": 1578
+    },
+    {
+      "case": "qwen4b-output",
+      "N": 2560,
+      "K": 4096,
+      "algorithm": [
+        6,
+        18,
+        16,
+        1,
+        0
+      ],
+      "all_three_states_exact_rows": [],
+      "statuses": [
+        0
+      ],
+      "changed_values": 6414
+    },
+    {
+      "case": "qwen4b-query",
+      "N": 4096,
+      "K": 2560,
+      "algorithm": [
+        6,
+        18,
+        16,
+        1,
+        0
+      ],
+      "all_three_states_exact_rows": [],
+      "statuses": [
+        0
+      ],
+      "changed_values": 3355
+    },
+    {
+      "case": "qwen4b-runtime-merged-qkv",
+      "N": 6144,
+      "K": 2560,
+      "algorithm": [
+        6,
+        18,
+        16,
+        1,
+        0
+      ],
+      "all_three_states_exact_rows": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32
+      ],
+      "statuses": [
+        0
+      ],
+      "changed_values": 0
+    },
+    {
+      "case": "qwen4b-value",
+      "N": 1024,
+      "K": 2560,
+      "algorithm": [
+        6,
+        18,
+        16,
+        1,
+        0
+      ],
+      "all_three_states_exact_rows": [],
+      "statuses": [
+        0
+      ],
+      "changed_values": 1954
+    }
+  ],
+  "source_adopted": false,
+  "scope": "Independently tested native same-A100 M1 vs fixedAlgo6tile18stage16split1reduction0 workspace0, not borrowed acceptance from other shape/hardware. All3states andsupportstatusrequired. NoGraph/fullmodel/API/perfacceptance."
+}

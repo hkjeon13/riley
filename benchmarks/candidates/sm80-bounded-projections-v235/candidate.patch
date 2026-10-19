@@ -1,0 +1,142 @@
+--- a/kernels/src/cublas_gemm_probe.cu
++++ b/kernels/src/cublas_gemm_probe.cu
+@@ -84,0 +85 @@
++  bool owned_sm80_gateup_rows_qualified = false;
+@@ -95,0 +97 @@
++  bool decode_recipe_sm80_only = false;
+@@ -715,0 +718,9 @@
++  // Candidate220: independently qualified SM80 Gate/Up row batching only.
++  if(plan->owned_command_batches && capability_major==8 && capability_minor==0 &&
++     runtime_version==12040 && cublas_version==120405 &&
++     (!workspace_config || !*workspace_config) && (!mps_percentage || !*mps_percentage)) {
++    int multiprocessors=0;
++    if(cuDeviceGetAttribute(&multiprocessors,CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT,
++         plan->owner->device)==CUDA_SUCCESS)
++      plan->owned_sm80_gateup_rows_qualified=multiprocessors==108;
++  }
+@@ -740,0 +752,3 @@
++  // V234: original merged-QKV M1 topology, qualified independently on SM80.
++  const bool sm80_merged_qkv=plan->owned_sm80_gateup_rows_qualified &&
++      cublasLtGetVersion()==120405 && plan->config.n==6144 && plan->config.k==2560;
+@@ -743 +757 @@
+-      (!original_gate_up && !small_k_singleton) ||
++      (!original_gate_up && !small_k_singleton && !sm80_merged_qkv) ||
+@@ -744,0 +759 @@
++  if(sm80_merged_qkv){plan->decode_recipe_sm80_only=true;plan->decode_span_alignment=256;}
+@@ -1813,0 +1829 @@
++  const bool bounded_sm80_profile=grouped_decode==6;
+@@ -1816 +1832 @@
+-  if(exact_r2_profile)grouped_decode=2;
++  if(exact_r2_profile || bounded_sm80_profile)grouped_decode=2;
+@@ -1828,0 +1845,2 @@
++  if(bounded_sm80_profile && !plan->owned_sm80_gateup_rows_qualified)
++    return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"bounded SM80 Gate/Up requires independently qualified hardware and workspace configuration");
+@@ -1959 +1977,20 @@
+-    } else if (grouped_decode==2 && plan->decode_ready && rows>=2 && rows<=32 &&
++    } else if(bounded_sm80_profile && plan->owned_sm80_gateup_rows_qualified &&
++        rows>=2 && rows<=32 &&
++        ((plan->config.n==9728 && plan->config.k==2560) ||
++         (plan->config.n==14336 && plan->config.k==4096))) {
++      // Separate projections, bounded M<=16 preserves native-M1 reduction.
++      // All buffers/plans remain registered by the original owned batch.
++      for(uint64_t first=0;first<rows && status==RILEY_CUDA_STATUS_SUCCESS;first+=16) {
++        const int count=static_cast<int>(rows-first<16?rows-first:16);
++        status=cublas_probe_error(cublasGemmEx(plan->handle,CUBLAS_OP_T,CUBLAS_OP_N,
++            static_cast<int>(plan->config.n),count,static_cast<int>(plan->config.k),
++            &alpha,spans[1].data,CUDA_R_16BF,static_cast<int>(plan->config.k),
++            static_cast<const __nv_bfloat16*>(spans[0].data)+first*plan->config.k,
++            CUDA_R_16BF,static_cast<int>(plan->config.k),&beta,
++            static_cast<__nv_bfloat16*>(spans[2].data)+first*plan->config.n,
++            CUDA_R_16BF,static_cast<int>(plan->config.n),CUBLAS_COMPUTE_32F,
++            CUBLAS_GEMM_DEFAULT_TENSOR_OP),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,
++            kExecuteOperation);
++      }
++    } else if (grouped_decode==2 && plan->decode_ready &&
++        (!plan->decode_recipe_sm80_only || bounded_sm80_profile) && rows>=2 && rows<=32 &&
+@@ -2222,0 +2260 @@
++extern "C" int riley_cuda_cublas_bounded_sm80_gateup_qualified(const RileyCudaCublasGemmProbePlan*plan) noexcept {return plan && plan->owned_sm80_gateup_rows_qualified;}
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -2705,0 +2706 @@
++    fn riley_cuda_cublas_bounded_sm80_gateup_qualified(plan:*const RawCublasGemmProbePlan)->i32;
+@@ -10255,0 +10257,4 @@
++    }
++    pub(super) fn bounded_sm80_gateup_qualified(&self)->bool {
++        // SAFETY: immutable cold query of a live owned plan; no GPU operation.
++        unsafe {riley_cuda_cublas_bounded_sm80_gateup_qualified(self.as_ptr())!=0}
+--- a/crates/riley-cuda/src/gemm.rs
++++ b/crates/riley-cuda/src/gemm.rs
+@@ -1994 +1994 @@
+-        if grouped_decode>5 { return Err(CudaError::invalid_argument(OP,"unknown decode batch mode")); }
++        if grouped_decode>6 { return Err(CudaError::invalid_argument(OP,"unknown decode batch mode")); }
+@@ -2035 +2035 @@
+-        if grouped_decode>5 { return Err(CudaError::invalid_argument(OP,"unknown decode batch mode")); }
++        if grouped_decode>6 { return Err(CudaError::invalid_argument(OP,"unknown decode batch mode")); }
+@@ -2153,0 +2154,2 @@
++    /// Cold SM80/CUDA12.4/108SM environment qualification; shape checks stay native.
++    pub fn supports_bounded_sm80_gateup_rows(&self)->bool {self.native.bounded_sm80_gateup_qualified()}
+--- a/crates/riley-runtime/src/llama/executor/config.rs
++++ b/crates/riley-runtime/src/llama/executor/config.rs
+@@ -285,0 +286,5 @@
++    /// Explicit SM80-only Gate/Up row batches, each native GEMM bounded to16 rows.
++    /// Unknown environments and model geometries are rejected during preparation.
++    pub const fn with_bounded_sm80_gateup_batch(mut self)->Self{self.owned_decode_batch=6;self}
++    /// Qualified SM80 merged-QKV rows and bounded Gate/Up rows.
++    pub const fn with_bounded_sm80_projection_batch(self)->Self{self.with_bounded_sm80_gateup_batch()}
+@@ -1050,0 +1056,3 @@
++        assert!(base.with_bounded_sm80_gateup_batch().validate_attention_implementation().is_err());
++        assert!(own.with_bounded_sm80_gateup_batch().validate_attention_implementation().is_err());
++        assert_eq!(own.with_iteration_batch_completion().with_bounded_sm80_gateup_batch().validate_attention_implementation().is_ok(),cfg!(feature="cuda-cublas-gemm-probe"));
+--- a/crates/riley-runtime/src/llama/executor/owner.rs
++++ b/crates/riley-runtime/src/llama/executor/owner.rs
+@@ -328,0 +329,3 @@
++        if config.owned_decode_batch()==6 && (bounds.max_rows()>32 || bounds.max_output_slots()>32) {
++            return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"bounded_sm80_gateup",reason:"requires at most32 simultaneous sequences"});
++        }
+@@ -662,0 +666,6 @@
++        if config.owned_decode_batch()==6 && (!matches!((dimensions.hidden_size(),dimensions.query_heads(),dimensions.key_value_heads(),dimensions.head_dimension(),dimensions.intermediate_size()),(2560,32,8,128,9728)|(4096,32,8,128,14336))
++            ||!native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).and_then(|w|w.hf.as_ref()).is_some_and(|w|w.plan.supports_bounded_sm80_gateup_rows())
++            ||["CUBLAS_WORKSPACE_CONFIG","CUDA_MPS_ACTIVE_THREAD_PERCENTAGE"].iter().any(|k|std::env::var_os(k).is_some_and(|v|!v.is_empty()))) {
++            return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"bounded_sm80_gateup",reason:"requires Q4/Mistral SM80/108SM/CUDA12.4 and unmodified cuBLAS workspace/SM configuration"});
++        }
++        #[cfg(feature="cuda-cublas-gemm-probe")]
+--- a/crates/riley-runtime/src/llama/executor/dispatch.rs
++++ b/crates/riley-runtime/src/llama/executor/dispatch.rs
+@@ -305 +305 @@
+-    let host_batch=if matches!(config.owned_decode_batch(),3|4|5){host_batch.with_request_row_groups(packed.input_row_offsets()).map_err(|e|batch_cuda(metadata_site,e))?}else{host_batch};
++    let host_batch=if matches!(config.owned_decode_batch(),3|4|5|6){host_batch.with_request_row_groups(packed.input_row_offsets()).map_err(|e|batch_cuda(metadata_site,e))?}else{host_batch};
+@@ -695 +695,7 @@
+-        let actual_row_graph=smol_actual_row_graph||wide_actual_row_graph;
++        #[cfg(feature="cuda-cublas-gemm-probe")]
++        let sm80_actual_row_graph=actual_rows>=2 && config.owned_decode_batch()==6 && dense_rows<=32
++            && matches!((plan.dimensions().hidden_size(),plan.dimensions().query_heads(),plan.dimensions().key_value_heads(),plan.dimensions().head_dimension(),plan.dimensions().intermediate_size()),(2560,32,8,128,9728)|(4096,32,8,128,14336))
++            && native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).and_then(|m|m.hf.as_ref()).is_some_and(|hf|hf.plan.supports_bounded_sm80_gateup_rows());
++        #[cfg(not(feature="cuda-cublas-gemm-probe"))]
++        let sm80_actual_row_graph=false;
++        let actual_row_graph=smol_actual_row_graph||wide_actual_row_graph||sm80_actual_row_graph;
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -142 +142 @@
+-  --owned-decode-batch MODE      disabled, grouped-v1 or lt-mlp-v2: explicit owned decode batching
++  --owned-decode-batch MODE      disabled, grouped-v1, lt-mlp-v2 or bounded-projections-sm80-v1: explicit owned decode batching
+@@ -698,2 +698,2 @@
+-                    "disabled" => 0, "grouped-v1" => 1, "lt-mlp-v2" => 2, "exact-r2-v3"=>3, "exact-r2-global-v4"=>4, "exact-smallrows-v5"=>5,
+-                    _ => return Err("--owned-decode-batch requires disabled, grouped-v1, lt-mlp-v2, exact-r2-v3, exact-r2-global-v4 or exact-smallrows-v5".to_owned()),
++                    "disabled" => 0, "grouped-v1" => 1, "lt-mlp-v2" => 2, "exact-r2-v3"=>3, "exact-r2-global-v4"=>4, "exact-smallrows-v5"=>5, "bounded-gateup-sm80-v1"|"bounded-projections-sm80-v1"=>6,
++                    _ => return Err("--owned-decode-batch requires disabled, grouped-v1, lt-mlp-v2, exact-r2-v3, exact-r2-global-v4, exact-smallrows-v5 or bounded-projections-sm80-v1".to_owned()),
+@@ -1370,0 +1371,3 @@
++    if owned_decode_batch==6 && max_active_sequences>32 {
++        return Err("--owned-decode-batch bounded-gateup-sm80-v1 requires --max-active-sequences at most 32".to_owned());
++    }
+@@ -2300,0 +2304 @@
++        6 => {eprintln!("RILEY_OWNED_BATCH mode=bounded-projections-sm80-v1 gateup_max_rows=16 merged_qkv_max_rows=32 actual_row_graph_keys=true");executor.with_bounded_sm80_gateup_batch()},
+@@ -6835,0 +6840,9 @@
++    fn bounded_sm80_gateup_cli_is_explicit_and_bounded(){
++        assert!(base(&["--owned-decode-batch","bounded-gateup-sm80-v1"]).is_err());
++        let CliCommand::Serve(o)=base(&["--owned-decode-batch","bounded-gateup-sm80-v1","--execution-completion","iteration-batch","--max-active-sequences","32"]).unwrap()else{panic!("serve")};
++        assert_eq!(o.owned_decode_batch,6);
++        let CliCommand::Serve(p)=base(&["--owned-decode-batch","bounded-projections-sm80-v1","--execution-completion","iteration-batch","--max-active-sequences","32"]).unwrap()else{panic!("serve")};assert_eq!(p.owned_decode_batch,6);
++        assert!(base(&["--owned-decode-batch","bounded-gateup-sm80-v1","--execution-completion","iteration-batch","--max-active-sequences","33"]).is_err());
++    }
++    #[test]
++    #[cfg(feature="owned-hf-eager")]

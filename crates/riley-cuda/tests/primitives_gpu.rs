@@ -1348,20 +1348,26 @@ fn qwen_layer3_isolated_rms_norm_captured_input_replay() -> TestResult {
     close_context(context)
 }
 
-// BF16 rows of 2048 columns use the wide-block kernels up to 256 rows and the
+// BF16 rows of 512..4096 columns use the wide-block kernels up to 256 rows and the
 // 256-thread kernels beyond that. Running the same rows through a 300-row call
 // (256-thread kernels) and through 256-row and 44-row calls (wide kernels) must
 // give identical bytes for both the plain and the fused residual RMSNorm.
 #[test]
 #[ignore = "remote GPU"]
 fn wide_bf16_rms_norm_kernels_match_the_256_thread_kernels() -> TestResult {
-    const HIDDEN: usize = 2048;
+    for hidden in [512, 1024, 1536, 2048, 2560, 3072, 4096] {
+        wide_rms_norm_exact_case(hidden, 1.0e-6)?;
+    }
+    wide_rms_norm_exact_case(4096, 1.0e-5)
+}
+
+fn wide_rms_norm_exact_case(hidden: usize, epsilon: f32) -> TestResult {
     const ROWS: usize = 300;
     const SPLIT: usize = 256;
     let (_runtime, device) = first_device()?;
     let context = device.create_context()?;
     let mut stream = context.create_stream()?;
-    let total = ROWS * HIDDEN;
+    let total = ROWS * hidden;
     let total_bytes = u64::try_from(total * 2)?;
     let mut staging = context.allocate_pinned_host_buffer(total_bytes)?;
     let left = upload(
@@ -1380,10 +1386,9 @@ fn wide_bf16_rms_norm_kernels_match_the_256_thread_kernels() -> TestResult {
         &context,
         &mut stream,
         &mut staging,
-        &lcg_bf16_bytes(HIDDEN, 134_775_813, 7, 0x7c, 4, false),
+        &lcg_bf16_bytes(hidden, 134_775_813, 7, 0x7c, 4, false),
     )?;
-    let weight_bytes = u64::try_from(HIDDEN * 2)?;
-    let epsilon = 1.0e-6_f32;
+    let weight_bytes = u64::try_from(hidden * 2)?;
     let mut outputs = Vec::new();
     // (first row, row count) per call: one 256-thread call, then two wide calls.
     for calls in [vec![(0, ROWS)], vec![(0, SPLIT), (SPLIT, ROWS - SPLIT)]] {
@@ -1391,15 +1396,15 @@ fn wide_bf16_rms_norm_kernels_match_the_256_thread_kernels() -> TestResult {
         let mut residual = context.allocate_device_buffer(total_bytes)?;
         let mut fused = context.allocate_device_buffer(total_bytes)?;
         for (first, rows) in calls {
-            let offset = u64::try_from(first * HIDDEN * 2)?;
-            let bytes = u64::try_from(rows * HIDDEN * 2)?;
+            let offset = u64::try_from(first * hidden * 2)?;
+            let bytes = u64::try_from(rows * hidden * 2)?;
             {
                 let mut params = RmsNormParams {
                     input: CudaBufferSpan::new(&left, CudaDType::BF16, offset, bytes)?,
                     weight: CudaBufferSpan::new(&weight, CudaDType::BF16, 0, weight_bytes)?,
                     output: CudaBufferSpanMut::new(&mut norm, CudaDType::BF16, offset, bytes)?,
                     row_count: u64::try_from(rows)?,
-                    hidden_size: u64::try_from(HIDDEN)?,
+                    hidden_size: u64::try_from(hidden)?,
                     epsilon,
                 };
                 rms_norm(&mut params, &mut stream)?;
@@ -1422,7 +1427,7 @@ fn wide_bf16_rms_norm_kernels_match_the_256_thread_kernels() -> TestResult {
                         bytes,
                     )?,
                     row_count: u64::try_from(rows)?,
-                    hidden_size: u64::try_from(HIDDEN)?,
+                    hidden_size: u64::try_from(hidden)?,
                     epsilon,
                 };
                 residual_rms_norm(&mut params, &mut stream)?;
@@ -1447,7 +1452,7 @@ fn wide_bf16_rms_norm_kernels_match_the_256_thread_kernels() -> TestResult {
     let residual_differing = count(&outputs[0].1, &outputs[1].1);
     let fused_differing = count(&outputs[0].2, &outputs[1].2);
     println!(
-        "wide-rms-norm rows={ROWS} hidden={HIDDEN} norm_differing={norm_differing} \
+        "wide-rms-norm rows={ROWS} hidden={hidden} norm_differing={norm_differing} \
 residual_differing={residual_differing} fused_differing={fused_differing}"
     );
     assert_eq!(norm_differing, 0);

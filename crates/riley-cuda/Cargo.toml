@@ -179,3 +179,13 @@ required-features = ["cuda"]
 name = "qwen3b_p2051_attention_window_gpu"
 path = "tests/qwen3b_p2051_attention_window_gpu.rs"
 required-features = ["cuda"]
+
+[[test]]
+name = "wide_norm_oracle_gpu"
+path = "tests/wide_norm_oracle_gpu.rs"
+required-features = ["cuda-cublas-gemm-probe"]
+
+[[test]]
+name = "owned_hf_command_batch_gpu"
+path = "tests/owned_hf_command_batch_gpu.rs"
+required-features = ["cuda-cublas-gemm-probe"]

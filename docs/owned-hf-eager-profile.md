@@ -32,8 +32,20 @@ that prompt would change GEMM geometry; the server rejects it instead.
 Cached single-token decode remains within the configured total context.
 The default `existing` profile retains its original prompt/chunk behavior.
 
-Graph capture, command batches, packed metadata and component overrides are
-rejected for this profile; there is no fallback to another numerical backend.
+Full-step Graph capture, packed metadata and unqualified component overrides
+are rejected for this profile; there is no fallback to another numerical backend.
+The explicit `--owned-decode-graph segments-v1` option reuses fixed decode
+segments around eager Attention with iteration-batch completion.
+`--owned-decode-batch grouped-v1` groups unchanged M=1 cuBLAS calls in native
+submission. These opt-ins have separate model/device qualification; see
+[Graph and batch validation](owned-graph-batch-optimization.md).
+The default remains per-operation completion. Explicit
+`--execution-completion iteration-batch` retains the arithmetic and request-row
+geometry while keeping resources leased through one iteration completion.
+This also supports the admitted Qwen2.5 attention-bias projection path;
+owned MLP biases remain rejected. See
+[A100 completion measurements](inference-completion-optimization.md) for the
+qualified model, numerical controls and measurement scope.
 C02's older exact-change artifact schema is a separate contract and is not
 selected with this profile. `RILEY_NUMERICS` records the actual prepared
 attention, QKV, MLP, output, LM-head and normalization identifiers.

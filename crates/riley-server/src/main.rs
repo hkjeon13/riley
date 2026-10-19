@@ -1,3 +1,5 @@
+mod inference_profile;
+
 #[cfg(any(feature = "cuda", test))]
 use std::collections::BTreeMap;
 use std::env;
@@ -50,6 +52,7 @@ usage:
   riley serve --model PATH [options]
 
 serve options:
+  --inference-profile MODE       native-bf16-v1: opt-in optimized BF16 defaults; explicit options override
   --model-id ID                  public model ID (default: checkpoint source model)
   --bind ADDRESS                 listener address (default: 127.0.0.1:8080)
   --device ORDINAL               CUDA device ordinal (default: 0)
@@ -136,8 +139,11 @@ serve options:
   --lm-head-rows ID              dense-v1 or output-rows-v1: in steps that mix prefill and decode,
                                  run the LM head on output rows only, bit-identical
                                  (default: dense-v1)
+  --owned-decode-batch MODE      disabled, grouped-v1 or lt-mlp-v2: explicit owned decode batching
+  --owned-decode-graph MODE      disabled or segments-v1: reuse exact owned decode segments
   --decode-step-graph MODE       disabled or capture-v1: record pure-decode steps of the native
                                  D128 route as CUDA graphs and replay them (default: disabled)
+  --owned-mlp-graph ID           off | pure-decode-v1; requires owned HF, iteration-batch, fused SiLU
   --numerics-profile ID          existing | owned-hf-eager-bf16-v1 | hf-eager-qwen-p2048-o128-probe-v1;
                                 owned profile requires the owned-hf-eager feature, eager-only;
                                 prompt tokens must fit both batch and prefill token budgets;
@@ -191,6 +197,7 @@ struct ServeOptions {
     first_heuristic_gemm_reductions: bool,
     bit_equivalent_gemm_selection: bool,
     d128_global_merge: bool,
+    owned_mlp_graph: bool,
     fused_silu_multiply: bool,
     merged_gate_up: bool,
     publish_after_submit: bool,
@@ -204,6 +211,8 @@ struct ServeOptions {
     fused_mlp_residual_norm: bool,
     output_row_lm_head: bool,
     decode_step_capture: bool,
+    owned_decode_graph: bool,
+    owned_decode_batch: u8,
     vllm_smol_p128_graph: bool,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
@@ -395,7 +404,7 @@ fn print_version() -> ExitCode {
 
 #[allow(clippy::too_many_lines)]
 fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliCommand, String> {
-    let mut arguments = arguments.into_iter();
+    let mut arguments = inference_profile::expand(arguments)?.into_iter();
     let Some(command) = arguments.next() else {
         return Err("a command is required".to_owned());
     };
@@ -436,6 +445,8 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut metadata_transport = None;
     let mut sampling_backend = None;
     let mut execution_graph_policy = None;
+    let mut owned_decode_graph = None;
+    let mut owned_decode_batch = None;
     let mut graph_numerics = None;
     let mut projection_bias_backend = None;
     let mut decode_attention_backend = None;
@@ -444,6 +455,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut gemm_reduction_policy = None;
     let mut gemm_algorithm_selection = None;
     let mut decode_attention_merge = None;
+    let mut owned_mlp_graph = None;
     let mut mlp_activation = None;
     let mut mlp_projection = None;
     let mut event_publication = None;
@@ -680,6 +692,20 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 parse_reduction_profile(next_value(&mut arguments, "--reduction-profile")?)?,
                 "--reduction-profile",
             )?,
+            "--owned-decode-batch" => set_once(
+                &mut owned_decode_batch,
+                match parse_utf8(next_value(&mut arguments,"--owned-decode-batch")?,"--owned-decode-batch")?.as_str() {
+                    "disabled" => 0, "grouped-v1" => 1, "lt-mlp-v2" => 2, "exact-r2-v3"=>3, "exact-r2-global-v4"=>4, "exact-smallrows-v5"=>5,
+                    _ => return Err("--owned-decode-batch requires disabled, grouped-v1, lt-mlp-v2, exact-r2-v3, exact-r2-global-v4 or exact-smallrows-v5".to_owned()),
+                }, "--owned-decode-batch",
+            )?,
+            "--owned-decode-graph" => set_once(
+                &mut owned_decode_graph,
+                match parse_utf8(next_value(&mut arguments,"--owned-decode-graph")?,"--owned-decode-graph")?.as_str() {
+                    "disabled" => false, "segments-v1" => true,
+                    _ => return Err("--owned-decode-graph requires disabled or segments-v1".to_owned()),
+                }, "--owned-decode-graph",
+            )?,
             "--decode-step-graph" => set_once(
                 &mut decode_step_graph,
                 match parse_utf8(
@@ -881,6 +907,10 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 },
                 "--mlp-projection",
             )?,
+            "--owned-mlp-graph" => set_once(&mut owned_mlp_graph,
+                match parse_utf8(next_value(&mut arguments,"--owned-mlp-graph")?,"--owned-mlp-graph")?.as_str(){
+                    "off"=>false,"pure-decode-v1"=>true,_=>return Err("--owned-mlp-graph requires off or pure-decode-v1".to_owned()),
+                },"--owned-mlp-graph")?,
             "--mlp-activation" => set_once(
                 &mut mlp_activation,
                 match parse_utf8(
@@ -1336,18 +1366,34 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 .to_owned(),
         );
     }
+    let owned_decode_graph = owned_decode_graph.unwrap_or(false);
+    let owned_decode_batch = owned_decode_batch.unwrap_or(0);
+    if owned_decode_batch==5 && max_active_sequences>32 {
+        return Err("--owned-decode-batch exact-smallrows-v5 requires --max-active-sequences at most 32".to_owned());
+    }
+    if owned_decode_batch==4 && max_active_sequences>2 {
+        return Err("--owned-decode-batch exact-r2-global-v4 requires --max-active-sequences at most 2; larger batches retain exact-r2-v3".to_owned());
+    }
+
+    if (owned_decode_graph || owned_decode_batch != 0) && (numerics_profile != NumericsProfileMode::OwnedHfEagerBf16V1
+        || execution_completion != ExecutionCompletionMode::IterationBatch) {
+        return Err("--owned-decode-graph requires owned-hf-eager-bf16-v1 and iteration-batch completion".to_owned());
+        }
+    if owned_mlp_graph.unwrap_or(false) && (numerics_profile!=NumericsProfileMode::OwnedHfEagerBf16V1
+        || execution_completion!=ExecutionCompletionMode::IterationBatch || !mlp_activation.unwrap_or(false)){
+        return Err("--owned-mlp-graph pure-decode-v1 requires owned HF numerics, iteration-batch completion and fused SiLU".to_owned());
+    }
     if numerics_profile == NumericsProfileMode::OwnedHfEagerBf16V1 {
-        if execution_completion != ExecutionCompletionMode::PerOperation
-            || metadata_transport != MetadataTransportMode::Synchronous || staged_step_uploads
+        if metadata_transport != MetadataTransportMode::Synchronous || staged_step_uploads
             || residual_rmsnorm != ResidualRmsNormMode::Separate || decode_step_capture
             || vllm_smol_p128_graph || fused_mlp_residual_norm || fused_kv_write
             || prompt_attention_mma || dense_prompt_attention || d128_tensor_core_producer
-            || d128_global_merge || merged_gate_up || mlp_activation.unwrap_or(false)
+            || d128_global_merge || merged_gate_up
             || gemm_reduction_policy.unwrap_or(false) || bit_equivalent_gemm_selection
             || prefill_plateau.is_some() || prefill_coalescing.is_some()
             || projection_bias_backend != ProjectionBiasBackendMode::StrictStagedV1 || fused_qkv_rope
             || c02_runtime_config.is_some() {
-            return Err("owned-hf-eager-bf16-v1 requires its synchronous separate-norm profile without graph, C02, or component overrides".to_owned());
+            return Err("owned-hf-eager-bf16-v1 requires synchronous metadata and separate norms without graph, C02, or component overrides".to_owned());
         }
         if max_sequence_tokens.is_some_and(|n|n>9216) {
             return Err("owned-hf-eager-bf16-v1 supports --max-sequence-tokens at most 9216".to_owned());
@@ -1411,6 +1457,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         first_heuristic_gemm_reductions: gemm_reduction_policy.unwrap_or(false),
         bit_equivalent_gemm_selection,
         d128_global_merge,
+        owned_mlp_graph: owned_mlp_graph.unwrap_or(false),
         fused_silu_multiply: mlp_activation.unwrap_or(false),
         merged_gate_up,
         publish_after_submit: event_publication.unwrap_or(false),
@@ -1424,6 +1471,8 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         fused_mlp_residual_norm,
         output_row_lm_head: lm_head_rows.unwrap_or(false),
         decode_step_capture,
+        owned_decode_graph,
+        owned_decode_batch,
         vllm_smol_p128_graph,
         max_weight_bytes,
         shutdown_on_stdin,
@@ -2204,6 +2253,7 @@ fn run_serve(
     } else {
         executor
     };
+    let executor = if options.owned_mlp_graph {executor.with_owned_mlp_graphs()}else{executor};
     let executor = if options.fused_qkv_rope || owned_wide_query {
         executor.with_fused_qkv_rope()
     } else {
@@ -2242,6 +2292,18 @@ fn run_serve(
     // The native D128 mode is eager-only and must retain its explicit
     // selection. Graph-capable existing modes keep the established
     // grouped-head selection; the default remains the legacy path.
+    let executor = match options.owned_decode_batch {
+        1 => { eprintln!("RILEY_OWNED_BATCH mode=grouped-v1 rows_per_matrix=1"); executor.with_owned_decode_batch() },
+        2 => { eprintln!("RILEY_OWNED_BATCH mode=lt-mlp-v2 coalesced_n=11008 coalesced_k=2048"); executor.with_owned_mlp_decode_batch() },
+        3 => {eprintln!("RILEY_OWNED_BATCH mode=exact-r2-v3 q4_r2_gate=true cached_request_rows=true atomic_prefill=true");executor.with_exact_r2_decode_batch()},
+        4 => {eprintln!("RILEY_OWNED_BATCH mode=exact-r2-global-v4 q4_r2_gate=true q4_r2_down_output_global=true cached_request_rows=true atomic_prefill=true");executor.with_exact_r2_global_decode_batch()},
+        5 => {eprintln!("RILEY_OWNED_BATCH mode=exact-smallrows-v5 actual_row_graph_keys=true cached_request_rows=true atomic_prefill=true");executor.with_exact_smallrows_decode_batch()},
+        _ => executor,
+    };
+    let executor = if options.owned_decode_graph {
+        eprintln!("RILEY_OWNED_GRAPH mode=segments-v1 attention_capture=qualified exact_bucket=true");
+        executor.with_owned_decode_graph()
+    } else { executor };
     let executor = match options.decode_attention_backend {
         DecodeAttentionBackendMode::OwnedHfEagerBf16V1 => executor.with_owned_hf_eager_bf16().with_serving_sequence_token_bound(max_sequence_tokens),
         DecodeAttentionBackendMode::MaterializedBf16ReferenceD128 => executor.with_materialized_bf16_reference_d128().with_serving_sequence_token_bound(max_sequence_tokens),
@@ -5401,6 +5463,7 @@ mod tests {
                 first_heuristic_gemm_reductions: false,
                 bit_equivalent_gemm_selection: false,
                 d128_global_merge: false,
+                owned_mlp_graph: false,
                 fused_silu_multiply: false,
                 merged_gate_up: false,
                 publish_after_submit: false,
@@ -5414,6 +5477,8 @@ mod tests {
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
+                owned_decode_graph: false,
+                owned_decode_batch: 0,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
@@ -5811,6 +5876,7 @@ mod tests {
                 first_heuristic_gemm_reductions: false,
                 bit_equivalent_gemm_selection: false,
                 d128_global_merge: false,
+                owned_mlp_graph: false,
                 fused_silu_multiply: false,
                 merged_gate_up: false,
                 publish_after_submit: false,
@@ -5824,6 +5890,8 @@ mod tests {
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
+                owned_decode_graph: false,
+                owned_decode_batch: 0,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
@@ -6089,6 +6157,7 @@ mod tests {
                 first_heuristic_gemm_reductions: false,
                 bit_equivalent_gemm_selection: false,
                 d128_global_merge: false,
+                owned_mlp_graph: false,
                 fused_silu_multiply: false,
                 merged_gate_up: false,
                 publish_after_submit: false,
@@ -6102,6 +6171,8 @@ mod tests {
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
+                owned_decode_graph: false,
+                owned_decode_batch: 0,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
@@ -6275,6 +6346,16 @@ mod tests {
                 "candidate combination must fail closed"
             );
         }
+    }
+
+    #[test]
+    fn owned_decode_graph_requires_exact_iteration_profile() {
+        let base=["serve","--model","/qwen25-3b","--owned-decode-graph","segments-v1"];
+        assert!(parse_arguments(args(&base)).is_err());
+        let mut exact=base.to_vec(); exact.extend(["--numerics-profile","owned-hf-eager-bf16-v1"]);
+        assert!(parse_arguments(args(&exact)).is_err());
+        exact.extend(["--execution-completion","iteration-batch"]);
+        assert!(parse_arguments(args(&exact)).is_ok());
     }
 
     #[test]
@@ -6528,6 +6609,7 @@ mod tests {
                 first_heuristic_gemm_reductions: false,
                 bit_equivalent_gemm_selection: false,
                 d128_global_merge: false,
+                owned_mlp_graph: false,
                 fused_silu_multiply: false,
                 merged_gate_up: false,
                 publish_after_submit: false,
@@ -6541,6 +6623,8 @@ mod tests {
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
+                owned_decode_graph: false,
+                owned_decode_batch: 0,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
@@ -6748,18 +6832,52 @@ mod owned_hf_cli_tests {
         a.extend_from_slice(extra);parse_arguments(a.into_iter().map(OsString::from))
     }
     #[test]
-    fn owned_hf_cli_is_explicit_and_has_no_graph_or_command_batch_fallback() {
+    #[cfg(feature="owned-hf-eager")]
+    fn owned_mlp_graph_cli_requires_reviewed_launch_configuration(){
+        assert!(base(&["--owned-mlp-graph","pure-decode-v1"]).is_err());
+        assert!(base(&["--owned-mlp-graph","pure-decode-v1","--execution-completion","iteration-batch"]).is_err());
+        let CliCommand::Serve(o)=base(&["--owned-mlp-graph","pure-decode-v1","--execution-completion","iteration-batch","--mlp-activation","fused-silu-multiply-v1"]).unwrap()else{panic!("serve")};
+        assert!(o.owned_mlp_graph);
+    }
+    #[test]
+    fn owned_hf_cli_has_explicit_completion_and_rejects_arithmetic_overrides() {
         if cfg!(feature="owned-hf-eager") {
             let CliCommand::Serve(o)=base(&["--batch-token-budget","8192","--max-sequence-tokens","8704"]).unwrap() else {panic!("serve")};
             assert_eq!(o.numerics_profile,NumericsProfileMode::OwnedHfEagerBf16V1);
             assert_eq!(o.decode_attention_backend,DecodeAttentionBackendMode::OwnedHfEagerBf16V1);
             assert_eq!(o.execution_completion,ExecutionCompletionMode::PerOperation);
             assert_eq!(o.batch_shape_policy,BatchShapePolicyMode::PowerOfTwo);
+            let CliCommand::Serve(batched)=base(&["--execution-completion","iteration-batch"]).unwrap() else {panic!("serve")};
+            assert_eq!(batched.execution_completion,ExecutionCompletionMode::IterationBatch);
+            let CliCommand::Serve(fused)=base(&["--mlp-activation","fused-silu-multiply-v1"]).unwrap() else {panic!("serve")};
+            assert!(fused.fused_silu_multiply);
         } else { assert!(base(&[]).unwrap_err().contains("owned-hf-eager")); }
         for bad in [&["--batch-token-budget","8193"][..],&["--max-sequence-tokens","9217"],
-            &["--execution-completion","iteration-batch"],&["--execution-graph-policy","require"],
+            &["--execution-graph-policy","require"],
             &["--decode-attention-backend","materialized-bf16-reference-d128"],&["--residual-rmsnorm","fused"]] {
             assert!(base(bad).is_err(),"accepted {:?}",bad);
         }
     }
+}
+
+#[cfg(test)]
+mod native_profile_cli_tests {
+ use super::*;
+ fn parse(extra:&[&str])->Result<CliCommand,String>{let mut a=vec!["serve","--model","/models/fixture","--inference-profile","native-bf16-v1"];a.extend_from_slice(extra);parse_arguments(a.into_iter().map(OsString::from))}
+ #[test]
+ fn native_profile_selects_the_measured_route_and_keeps_default_launch_unchanged(){
+  let CliCommand::Serve(p)=parse(&[]).unwrap()else{panic!("serve")};
+  assert_eq!(p.max_sequence_tokens,Some(1024));assert_eq!(p.batch_token_budget,256);assert_eq!(p.prefill_chunk_tokens,256);
+  assert_eq!(p.decode_attention_backend,DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage);
+  assert_eq!(p.projection_bias_backend,ProjectionBiasBackendMode::MergedQkvStrictStagedV1);
+  assert_eq!(p.sampling_backend,SamplingBackendMode::GpuGreedy);
+  assert!(p.decode_step_capture && p.fused_silu_multiply && p.merged_gate_up && p.fused_qkv_rope && p.fused_kv_write && p.fused_mlp_residual_norm && p.bit_equivalent_gemm_selection);
+  let CliCommand::Serve(d)=parse_arguments(["serve","--model","/models/fixture"].map(OsString::from)).unwrap()else{panic!("serve")};assert_eq!(d.batch_token_budget,512);assert!(!d.merged_gate_up);assert!(!d.decode_step_capture);
+ }
+ #[test]
+ fn explicit_overrides_still_require_consistent_execution_options(){
+  let CliCommand::Serve(p)=parse(&["--max-sequence-tokens","512","--sampling-backend","cpu"]).unwrap()else{panic!("serve")};assert_eq!(p.max_sequence_tokens,Some(512));assert_eq!(p.sampling_backend,SamplingBackendMode::Cpu);
+  assert!(parse(&["--metadata-transport","packed-async"]).is_err());
+  assert!(parse(&["--numerics-profile","owned-hf-eager-bf16-v1"]).is_err());
+ }
 }

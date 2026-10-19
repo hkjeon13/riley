@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use crate::artifact::VerifiedArtifactSession;
 use crate::{
-    CheckpointProvenance, LoadLimits, LoadedWeights, ModelConfig, ModelError, ModelResult,
-    ModelSpec, Qwen2Tokenizer, Qwen2TokenizerConfig, SmolLm2Tokenizer, Tokenizer,
+    CheckpointProvenance, LoadLimits, LoadedWeights, MistralTokenizer, ModelConfig, ModelError,
+    ModelResult, ModelSpec, Qwen2Tokenizer, Qwen2TokenizerConfig, SmolLm2Tokenizer, Tokenizer,
 };
 
 /// Required Hugging Face configuration filename.
@@ -70,7 +70,7 @@ impl LoadedModel {
                 "generation_config.json",
             )?;
             match &mut config {
-                ModelConfig::Llama(llama_config) => {
+                ModelConfig::Llama(llama_config) | ModelConfig::Mistral(llama_config) => {
                     llama_config.extend_eos_from_generation_config(artifact.bytes(), limits)?;
                 }
                 ModelConfig::Qwen2(qwen_config) => {
@@ -105,6 +105,31 @@ impl LoadedModel {
                     .map_err(|_| error)
                 })?;
                 validate_dense_tokenizer_coherence(&spec, &tokenizer, llama_config.pad_token_id())?;
+                (Arc::new(tokenizer), None)
+            }
+            ModelConfig::Mistral(config) => {
+                let tokenizer = MistralTokenizer::from_json_slice_with_limits(
+                    tokenizer_artifact.bytes(),
+                    limits,
+                )?;
+                if tokenizer.addressable_token_count() != spec.embedding().vocabulary_size()
+                    || spec.special_tokens().bos() != Some(tokenizer.bos_token_id())
+                    || spec
+                        .special_tokens()
+                        .eos()
+                        .iter()
+                        .any(|id| !tokenizer.is_special_id(*id))
+                    || config
+                        .pad_token_id()
+                        .is_some_and(|id| !tokenizer.is_special_id(id))
+                {
+                    return Err(ModelError::InvalidArtifact {
+                        artifact: TOKENIZER_FILENAME.to_owned(),
+                        reason:
+                            "Mistral tokenizer vocabulary or special tokens disagree with config"
+                                .to_owned(),
+                    });
+                }
                 (Arc::new(tokenizer), None)
             }
             ModelConfig::Qwen2(_) => {

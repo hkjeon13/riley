@@ -15,6 +15,8 @@ use crate::{ArtifactKind, LoadLimits, ModelError, ModelResult, strict_json};
 pub enum ModelFamily {
     /// Hugging Face Llama dense decoder configuration.
     Llama,
+    /// Hugging Face Mistral dense decoder with full causal attention.
+    Mistral,
     /// Hugging Face Qwen2/Qwen2.5 dense decoder configuration.
     Qwen2,
     /// Hugging Face Qwen3 dense decoder configuration: the Qwen2 decoder
@@ -27,6 +29,9 @@ pub enum ModelFamily {
 pub enum ModelConfig {
     /// Llama-compatible source configuration.
     Llama(LlamaConfig),
+    /// Mistral configuration with explicit full causal attention.
+    /// Uses the native Metaspace/byte-fallback tokenizer adapter when loaded.
+    Mistral(LlamaConfig),
     /// Dense Qwen2/Qwen2.5 source configuration.
     Qwen2(Qwen2Config),
 }
@@ -53,6 +58,7 @@ impl ModelConfig {
         let identity: RawModelIdentity = strict_json::from_slice(input, ArtifactKind::Config)?;
         match identity.model_type.as_str() {
             "llama" => LlamaConfig::from_json_slice_with_limits(input, limits).map(Self::Llama),
+            "mistral" => LlamaConfig::from_mistral_json_slice(input, limits).map(Self::Mistral),
             "qwen2" | "qwen3" => {
                 Qwen2Config::from_json_slice_with_limits(input, limits).map(Self::Qwen2)
             }
@@ -65,6 +71,7 @@ impl ModelConfig {
     pub const fn family(&self) -> ModelFamily {
         match self {
             Self::Llama(_) => ModelFamily::Llama,
+            Self::Mistral(_) => ModelFamily::Mistral,
             Self::Qwen2(config) => {
                 if config.query_key_norm {
                     ModelFamily::Qwen3
@@ -79,7 +86,7 @@ impl ModelConfig {
     #[must_use]
     pub fn to_model_spec(&self) -> ModelSpec {
         match self {
-            Self::Llama(config) => config.to_model_spec(),
+            Self::Llama(config) | Self::Mistral(config) => config.to_model_spec(),
             Self::Qwen2(config) => config.to_model_spec(),
         }
     }
@@ -88,7 +95,7 @@ impl ModelConfig {
     #[must_use]
     pub fn warnings(&self) -> &[ConfigWarning] {
         match self {
-            Self::Llama(config) => config.warnings(),
+            Self::Llama(config) | Self::Mistral(config) => config.warnings(),
             Self::Qwen2(config) => config.warnings(),
         }
     }
@@ -97,7 +104,7 @@ impl ModelConfig {
     #[must_use]
     pub const fn dtype(&self) -> DType {
         match self {
-            Self::Llama(config) => config.dtype(),
+            Self::Llama(config) | Self::Mistral(config) => config.dtype(),
             Self::Qwen2(config) => config.dtype(),
         }
     }
@@ -180,7 +187,27 @@ impl LlamaConfig {
     pub fn from_json_slice_with_limits(input: &[u8], limits: LoadLimits) -> ModelResult<Self> {
         validate_config_length(input, limits)?;
         let raw: RawLlamaConfig = strict_json::from_slice(input, ArtifactKind::Config)?;
-        Self::from_raw(raw, limits)
+        Self::from_raw(raw, limits, "llama", "LlamaForCausalLM")
+    }
+
+    /// Mistral defaults to windowed attention when the field is absent.
+    /// Accept only an explicit null, never reinterpret a missing window.
+    fn from_mistral_json_slice(input: &[u8], limits: LoadLimits) -> ModelResult<Self> {
+        let fields: BTreeMap<String, Value> = strict_json::from_slice(input, ArtifactKind::Config)?;
+        if fields.get("sliding_window") != Some(&Value::Null) {
+            return unsupported(
+                "sliding_window",
+                "Mistral requires explicit null (full attention)",
+            );
+        }
+        let raw: RawLlamaConfig = strict_json::from_slice(input, ArtifactKind::Config)?;
+        if raw.attention_bias.unwrap_or(false) || raw.mlp_bias.unwrap_or(false) {
+            return unsupported("bias", "Mistral projections must be bias-free");
+        }
+        if raw.rope_scaling.is_some() {
+            return unsupported("rope_scaling", "Mistral scaled RoPE is not qualified");
+        }
+        Self::from_raw(raw, limits, "mistral", "MistralForCausalLM")
     }
 
     /// Converts the already validated configuration into canonical execution IR.
@@ -271,14 +298,19 @@ impl LlamaConfig {
         self.pad_token_id
     }
 
-    fn from_raw(raw: RawLlamaConfig, limits: LoadLimits) -> ModelResult<Self> {
+    fn from_raw(
+        raw: RawLlamaConfig,
+        limits: LoadLimits,
+        model_type: &str,
+        architecture: &str,
+    ) -> ModelResult<Self> {
         if let Some((field, value)) = raw.unknown.iter().next() {
             return Err(ModelError::UnsupportedConfig {
                 field: field.clone(),
                 value: stable_value(value),
             });
         }
-        let (source_architecture, dtype) = validate_identity(&raw)?;
+        let (source_architecture, dtype) = validate_identity(&raw, model_type, architecture)?;
         let dimensions = ValidatedDimensions::from_raw(&raw, limits)?;
         let rope_theta = validate_execution_values(&raw)?;
         let rope_scaling = validate_llama_rope_scaling(raw.rope_scaling.as_ref())?;
@@ -774,15 +806,19 @@ impl ValidatedDimensions {
     }
 }
 
-fn validate_identity(raw: &RawLlamaConfig) -> ModelResult<(String, DType)> {
-    require_exact("model_type", &raw.model_type, "llama")?;
+fn validate_identity(
+    raw: &RawLlamaConfig,
+    model_type: &str,
+    expected_architecture: &str,
+) -> ModelResult<(String, DType)> {
+    require_exact("model_type", &raw.model_type, model_type)?;
     if raw.is_llama_config == Some(false) {
         return unsupported("is_llama_config", "false");
     }
     require_exact("hidden_act", &raw.hidden_act, "silu")?;
     let source_architecture = match raw.architectures.as_deref() {
-        None | Some([]) => "LlamaForCausalLM".to_owned(),
-        Some([architecture]) if architecture == "LlamaForCausalLM" => architecture.clone(),
+        None | Some([]) => expected_architecture.to_owned(),
+        Some([architecture]) if architecture == expected_architecture => architecture.clone(),
         Some(architectures) => {
             return unsupported("architectures", &format!("{architectures:?}"));
         }

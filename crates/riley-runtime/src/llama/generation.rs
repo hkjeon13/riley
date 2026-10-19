@@ -747,6 +747,7 @@ impl<'model> PreparedLlamaGeneration<'model> {
         }
 
         let mut decode_token = None;
+        let mut token_decode_state = riley_model::TokenDecodeState::default();
         loop {
             state
                 .pre_step()
@@ -870,12 +871,13 @@ impl<'model> PreparedLlamaGeneration<'model> {
                 .map_err(LlamaGenerationFailure::Generation)?;
             let decoded_byte_count = if token_needs_decoding {
                 self.tokenizer
-                    .decode_token_bytes_into(
+                    .decode_token_bytes_with_state(
                         sample.token_id(),
                         DecodeOptions {
                             skip_special_tokens: true,
                         },
                         &mut self.decoded_token_bytes,
+                        &mut token_decode_state,
                     )
                     .map_err(LlamaGenerationFailure::Tokenizer)?
             } else {

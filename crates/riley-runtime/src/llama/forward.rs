@@ -960,9 +960,11 @@ impl PreparedLlamaForward {
             poisoned: _,
             captured_steps,
             captured_step_budget: _,
+            owned_decode_segments,
         } = self;
         // Recorded steps reference the plans and buffers closed below.
         drop(captured_steps);
+        drop(owned_decode_segments);
         let GemmPlans {
             hidden,
             key_value,
@@ -1066,6 +1068,8 @@ impl PreparedLlamaForward {
         if let Some(table)=hf_request_bias_epilogue {
           for plan in table.query {record_close(&mut first,LlamaForwardResource::QueryBiasEpilogueGemm,plan.close());}
           for plan in table.key_value {record_close(&mut first,LlamaForwardResource::KeyValueBiasEpilogueGemm,plan.close());}
+          for plan in table.batch_query.into_iter().flatten() {record_close(&mut first,LlamaForwardResource::QueryBiasEpilogueGemm,plan.close());}
+          for plan in table.batch_key_value.into_iter().flatten() {record_close(&mut first,LlamaForwardResource::KeyValueBiasEpilogueGemm,plan.close());}
         }
         #[cfg(feature = "cuda-cublas-gemm-probe")]
         if let Some(plan) = output_projection_direct_cublas {
@@ -1170,7 +1174,24 @@ fn record_close(
     }
 }
 
+// Reserve bounded, private actual-row keys within each fixed dense owner.
+// Wide models keep two layer segments; the extra slot remains Smol-only.
+pub(super) fn owned_decode_segment_capacity(plan:&LlamaExecutionPlan,dense_rows:usize)->usize {
+    let d=plan.dimensions();let legacy=plan.layers().len()*2;
+    let smol=d.hidden_size()==576&&d.query_heads()==9&&d.key_value_heads()==3&&d.head_dimension()==64;
+    let wide=matches!(d.hidden_size(),2560|4096)&&d.query_heads()==32&&d.key_value_heads()==8&&d.head_dimension()==128;
+    legacy+if dense_rows<=32&&(smol||wide){dense_rows*(legacy+1)}else{0}
+}
+
 /// Upper bound on recorded steps per prepared forward owner.
+/// Fixed-address graph retained by one prepared shape; never shared across owners.
+#[derive(Default)]
+pub(super) struct OwnedDecodeSegment {
+    pub(super) warmed: bool,
+    pub(super) replayed: bool,
+    pub(super) graph: Option<riley_cuda::CudaStepGraph>,
+}
+
 pub(super) const MAX_RECORDED_STEPS: usize = 32;
 
 /// Prepared GEMM implementation bound to one whole-runtime reduction profile.
@@ -1292,15 +1313,17 @@ pub(super) fn execute_gemm<S: CudaExecutionStream + ?Sized>(
 pub(super) fn execute_gemm_with_row_groups<S:CudaExecutionStream+?Sized>(
     plan:&mut PreparedLlamaGemm,input:&CudaDeviceBuffer,weight:CudaBufferSpan<'_>,
     output:&mut CudaDeviceBuffer,workspace:&mut Option<CudaDeviceBuffer>,stream:&mut S,
-    site:ExecutionSite,slots:&[u32],output_rows:Option<usize>,
+    site:ExecutionSite,host:riley_cuda::PackedBatchHostV1<'_>,output_rows:Option<usize>,grouped_decode:u8,
 )->LlamaForwardResult<()> {
+    let slots=host.row_sequence_slots();
     #[cfg(feature="cuda-cublas-gemm-probe")]
     if let PreparedLlamaGemm::ClassicRequestRows(p)=plan {
         let c=p.config();
         let mut params=CublasGemmProbeParams {input:span(input,CudaDType::BF16,c.input_bytes(),site)?,weight,output:span_mut(output,CudaDType::BF16,c.output_bytes(),site)?};
-        return p.execute_row_groups(&mut params,slots,output_rows,stream).map_err(|e|LlamaForwardError::cuda(site,e));
+        if let Some(groups)=host.request_row_groups(){return p.execute_row_groups_cached(&mut params,groups,output_rows,grouped_decode,stream).map_err(|e|LlamaForwardError::cuda(site,e));}
+        return p.execute_row_groups(&mut params,slots,output_rows,grouped_decode,stream).map_err(|e|LlamaForwardError::cuda(site,e));
     }
-    #[cfg(not(feature="cuda-cublas-gemm-probe"))] let _=(slots,output_rows);
+    #[cfg(not(feature="cuda-cublas-gemm-probe"))] let _=(slots,output_rows,grouped_decode);
     execute_gemm(plan,input,weight,output,workspace,stream,site)
 }
 
@@ -1309,13 +1332,23 @@ pub(super) fn execute_projection_with_row_groups<S:CudaExecutionStream+?Sized>(
     strict_plan:&mut PreparedLlamaGemm,fused_plan:Option<&mut CudaPreparedBiasEpilogueGemm>,
     weights:&CudaUploadedWeights,bias_id:Option<PhysicalWeightId>,input:&CudaDeviceBuffer,
     weight:CudaBufferSpan<'_>,output:&mut CudaDeviceBuffer,workspace:&mut Option<CudaDeviceBuffer>,
-    row_count:u64,column_count:u64,stream:&mut S,site:ExecutionSite,slots:&[u32],requests:Option<&mut [CudaPreparedBiasEpilogueGemm]>,
+    row_count:u64,column_count:u64,stream:&mut S,site:ExecutionSite,host:riley_cuda::PackedBatchHostV1<'_>,requests:Option<&mut [CudaPreparedBiasEpilogueGemm]>,mut batches:Option<&mut [Option<CudaPreparedBiasEpilogueGemm>]>,decode_mode:u8,
 )->LlamaForwardResult<()> {
+    let slots=host.row_sequence_slots();
     if let Some(plans)=requests {
       let bias=weight_span(weights,bias_id.ok_or(LlamaForwardError::InvalidConfiguration{field:"hf_request_bias",reason:"bound bias missing"})?,site)?;
       let mut begin=0;
       while begin<slots.len(){let mut end=begin+1;while end<slots.len()&&slots[end]==slots[begin]{end+=1;}
-        let rows=end-begin;let p=plans.get_mut(rows-1).ok_or(LlamaForwardError::InvalidConfiguration{field:"hf_request_bias",reason:"actual request rows exceed cold plans"})?;
+        let rows=end-begin;
+        let mut batched_end=end;
+        if rows==1 && batches.is_some() {
+          while batched_end<slots.len() && batched_end-begin<32 {
+            let mut next=batched_end+1;while next<slots.len() && slots[next]==slots[batched_end]{next+=1;}
+            if next-batched_end!=1 {break;}batched_end=next;
+          }
+        }
+        let batched=if rows==1 && batched_end-begin>=2 {batches.as_deref_mut().and_then(|v|v.get_mut(batched_end-begin)).and_then(Option::as_mut)}else{None};
+        let p=if let Some(p)=batched {end=batched_end;p}else{plans.get_mut(rows-1).ok_or(LlamaForwardError::InvalidConfiguration{field:"hf_request_bias",reason:"actual request rows exceed cold plans"})?};
         let c=p.config();let need=p.algorithm_metadata().workspace_bytes();
         let scratch=if need==0{None}else{Some(span_mut(workspace.as_mut().ok_or(LlamaForwardError::InvalidConfiguration{field:"hf_request_bias_workspace",reason:"cold workspace missing"})?,CudaDType::U8,need,site)?)};
         let mut params=BiasGemmParams{input:CudaBufferSpan::new(input,CudaDType::BF16,begin as u64*c.k()*2,c.input_bytes()).map_err(|e|LlamaForwardError::cuda(site,e))?,weight:weight.subspan(0,c.weight_bytes()).map_err(|e|LlamaForwardError::cuda(site,e))?,bias:bias.subspan(0,c.n()*2).map_err(|e|LlamaForwardError::cuda(site,e))?,output:CudaBufferSpanMut::new(output,CudaDType::BF16,begin as u64*c.n()*2,c.output_bytes()).map_err(|e|LlamaForwardError::cuda(site,e))?,workspace:scratch};
@@ -1325,7 +1358,22 @@ pub(super) fn execute_projection_with_row_groups<S:CudaExecutionStream+?Sized>(
     }
     match fused_plan {
         Some(p)=>execute_bias_epilogue_gemm(p,weights,bias_id,input,weight,output,workspace,stream,site),
-        None=>{execute_gemm_with_row_groups(strict_plan,input,weight,output,workspace,stream,site,slots,None)?;
+        None=>{
+            // The no-bias Q/K/V route previously forced mode0, so exact
+            // singleton batch kernels were never reached. Reuse only the
+            // qualified SM89 shapes and preserve all multi-token extents.
+            let exact_decode_mode={
+                #[cfg(feature="cuda-cublas-gemm-probe")]
+                {if matches!(decode_mode,2|5) && bias_id.is_none(){match &*strict_plan{
+                    PreparedLlamaGemm::ClassicRequestRows(p) if ((p.config().k()==4096 && matches!(p.config().n(),1024|4096))
+                        || (p.config().k()==576 && matches!(p.config().n(),192|576)))
+                        && p.supports_exact_decode_chunk()=>decode_mode,
+                    _=>0,
+                }}else{0}}
+                #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+                {let _=decode_mode;0}
+            };
+            execute_gemm_with_row_groups(strict_plan,input,weight,output,workspace,stream,site,host,None,exact_decode_mode)?;
             execute_projection_bias(weights,bias_id,output,row_count,column_count,stream,site)}
     }
 }
@@ -1588,11 +1636,17 @@ pub(super) fn execute_profile_rms_norm<S: CudaExecutionStream + ?Sized>(
 }
 
 pub(super) fn execute_profile_rms_norm_grouped<S:CudaExecutionStream+?Sized>(
- profile:LlamaRmsNormProfile,params:&mut RmsNormParams<'_>,stream:&mut S,slots:&[u32],hf_wide:bool,
+ profile:LlamaRmsNormProfile,params:&mut RmsNormParams<'_>,stream:&mut S,host:riley_cuda::PackedBatchHostV1<'_>,hf_wide:bool,
 )->Result<(),CudaError>{
+ let slots=host.row_sequence_slots();
  #[cfg(feature="cuda-cublas-gemm-probe")]
- if hf_wide && matches!(params.hidden_size,2048|2560){
+ if hf_wide && matches!(params.hidden_size,2048|2560|4096){
+   if let Some(groups)=host.request_row_groups(){return riley_cuda::hugging_face_qwen_wide_rms_norm_row_groups_cached(params,groups,stream);}
    return hugging_face_qwen_wide_rms_norm_row_groups(params,slots,stream);
+ }
+ #[cfg(feature="cuda-cublas-gemm-probe")]
+ if hf_wide && profile==LlamaRmsNormProfile::HuggingFaceSmolLm2 {
+   return riley_cuda::hugging_face_smollm2_rms_norm_row_groups(params,slots,stream);
  }
  #[cfg(not(feature="cuda-cublas-gemm-probe"))]let _=(slots,hf_wide);
  execute_profile_rms_norm(profile,params,stream)
@@ -2478,7 +2532,8 @@ impl PreparedLlamaForwardConfig {
     }
 
     /// Selects the owned BF16 eager arithmetic profile for batch preparation.
-    /// It requires the matching batch attention selector and per-operation mode.
+    /// It requires the matching batch attention selector; the batch owner
+    /// validates completion policy and unsupported component combinations.
     #[must_use]
     pub const fn with_owned_hf_eager_bf16(mut self) -> Self {
         self.owned_hf_eager_bf16 = true;
@@ -3018,6 +3073,7 @@ pub(super) struct MlpProjectionDirectCublasGemmPlans {
 #[cfg(feature="cuda-cublas-gemm-probe")]
 pub(super) struct HfRequestBiasEpilogueGemmPlans {
  query:Vec<CudaPreparedBiasEpilogueGemm>,key_value:Vec<CudaPreparedBiasEpilogueGemm>,
+ batch_query:Vec<Option<CudaPreparedBiasEpilogueGemm>>,batch_key_value:Vec<Option<CudaPreparedBiasEpilogueGemm>>,
 }
 
 pub(super) struct GemmPlans {
@@ -3071,7 +3127,7 @@ impl GemmPlans {
                 #[cfg(feature = "cuda-cublas-gemm-probe")]
                 {
                     self.hf_separate_query.as_ref().is_some_and(PreparedLlamaGemm::is_poisoned) ||
-                    self.hf_request_bias_epilogue.as_ref().is_some_and(|t|t.query.iter().chain(t.key_value.iter()).any(CudaPreparedBiasEpilogueGemm::is_poisoned)) ||
+                    self.hf_request_bias_epilogue.as_ref().is_some_and(|t|t.query.iter().chain(t.key_value.iter()).chain(t.batch_query.iter().flatten()).chain(t.batch_key_value.iter().flatten()).any(CudaPreparedBiasEpilogueGemm::is_poisoned)) ||
                     self.output_projection_direct_cublas
                         .as_ref()
                         .is_some_and(CudaPreparedCublasGemmProbe::is_poisoned)
@@ -3144,20 +3200,20 @@ impl GemmPlans {
         self.merged_qkv.as_mut()
     }
 
-    pub(super) fn query_projection_plans_with_requests(&mut self)->(&mut PreparedLlamaGemm,Option<&mut CudaPreparedBiasEpilogueGemm>,Option<&mut [CudaPreparedBiasEpilogueGemm]>){
+    pub(super) fn query_projection_plans_with_requests(&mut self)->(&mut PreparedLlamaGemm,Option<&mut CudaPreparedBiasEpilogueGemm>,Option<&mut [CudaPreparedBiasEpilogueGemm]>,Option<&mut [Option<CudaPreparedBiasEpilogueGemm>]>){
       let Self{hidden,projection_bias_epilogue,#[cfg(feature="cuda-cublas-gemm-probe")]hf_request_bias_epilogue,..}=self;
       #[cfg(feature="cuda-cublas-gemm-probe")]
-      let requests=hf_request_bias_epilogue.as_mut().map(|t|t.query.as_mut_slice());
-      #[cfg(not(feature="cuda-cublas-gemm-probe"))]let requests=None;
-      (hidden,projection_bias_epilogue.as_mut().map(|p|&mut p.query),requests)
+      let (requests,batches)=if let Some(t)=hf_request_bias_epilogue.as_mut(){(Some(t.query.as_mut_slice()),Some(t.batch_query.as_mut_slice()))}else{(None,None)};
+      #[cfg(not(feature="cuda-cublas-gemm-probe"))]let (requests,batches)=(None,None);
+      (hidden,projection_bias_epilogue.as_mut().map(|p|&mut p.query),requests,batches)
     }
 
-    pub(super) fn key_value_projection_plans_with_requests(&mut self)->(&mut PreparedLlamaGemm,Option<&mut CudaPreparedBiasEpilogueGemm>,Option<&mut [CudaPreparedBiasEpilogueGemm]>){
+    pub(super) fn key_value_projection_plans_with_requests(&mut self)->(&mut PreparedLlamaGemm,Option<&mut CudaPreparedBiasEpilogueGemm>,Option<&mut [CudaPreparedBiasEpilogueGemm]>,Option<&mut [Option<CudaPreparedBiasEpilogueGemm>]>){
       let Self{key_value,projection_bias_epilogue,#[cfg(feature="cuda-cublas-gemm-probe")]hf_request_bias_epilogue,..}=self;
       #[cfg(feature="cuda-cublas-gemm-probe")]
-      let requests=hf_request_bias_epilogue.as_mut().map(|t|t.key_value.as_mut_slice());
-      #[cfg(not(feature="cuda-cublas-gemm-probe"))]let requests=None;
-      (key_value,projection_bias_epilogue.as_mut().map(|p|&mut p.key_value),requests)
+      let (requests,batches)=if let Some(t)=hf_request_bias_epilogue.as_mut(){(Some(t.key_value.as_mut_slice()),Some(t.batch_key_value.as_mut_slice()))}else{(None,None)};
+      #[cfg(not(feature="cuda-cublas-gemm-probe"))]let (requests,batches)=(None,None);
+      (key_value,projection_bias_epilogue.as_mut().map(|p|&mut p.key_value),requests,batches)
     }
 
     pub(super) fn query_projection_plans(
@@ -3366,6 +3422,7 @@ pub struct PreparedLlamaForward {
     /// Recorded steps of the maximum dense shape (see the batch executor's
     /// shape variants, which hold their own). Destroyed before the plans.
     pub(super) captured_steps: Vec<(usize, riley_cuda::CudaStepGraph)>,
+    pub(super) owned_decode_segments: Vec<OwnedDecodeSegment>,
     /// How many more steps may be recorded across every dense shape. Each
     /// recorded step keeps several MiB of host and device memory, so the
     /// total is bounded; shapes met after the budget is spent run eagerly.
@@ -3454,7 +3511,8 @@ impl PreparedLlamaForward {
                 let a=b.attention();
                 matches!((a.hidden_size(),a.query_heads(),a.key_value_heads(),a.head_dimension(),a.has_bias(),a.query_key_norm().is_some()),
                     (576,9,3,64,false,false)|(2048,16,2,128,true,false)|
-                    (2048,16,8,128,false,true)|(2560,32,8,128,false,true))
+                    (2048,16,8,128,false,true)|(2560,32,8,128,false,true)|
+                    (4096,32,8,128,false,false))
             });
             let wide_query=model.spec().blocks().first().is_some_and(|b|b.attention().query_heads()*b.attention().head_dimension()>b.attention().hidden_size());
             let expected_projection=if wide_query {LlamaProjectionBiasMode::MergedQkvStrictStagedV1} else {LlamaProjectionBiasMode::StrictStagedV1};
@@ -3471,12 +3529,17 @@ impl PreparedLlamaForward {
         .with_bit_equivalent_selection(
             config.first_heuristic_gemm_reductions && config.bit_equivalent_gemm_selection,
         );
-        let rms_norm_profile = resolve_rms_norm_profile(
-            model,
-            config.reduction_profile,
-            config.rms_norm_selection,
-            context.compute_capability(),
-        );
+        let rms_norm_profile = if config.owned_hf_eager_bf16
+            && matches!(model.config(), ModelConfig::Llama(_))
+            && is_reviewed_smollm2_rms_norm_geometry(model.spec())
+        {
+            // The owned A100/4090 profile uses the independently qualified
+            // HF row reduction, rather than the default device-specific path.
+            LlamaRmsNormProfile::HuggingFaceSmolLm2
+        } else {
+            resolve_rms_norm_profile(model, config.reduction_profile,
+                config.rms_norm_selection, context.compute_capability())
+        };
         let rope_table_profile = resolve_rope_table_profile(
             model,
             config.reduction_profile,
@@ -3664,12 +3727,14 @@ impl PreparedLlamaForward {
             let cfg = CudaGemmConfig::new(m, plan.dimensions().vocabulary_size() as u64,
                 plan.dimensions().hidden_size() as u64, 0)
                 .map_err(|e| LlamaForwardError::cuda(ExecutionSite::global(LlamaOp::LmHead), e))?;
-            Some(PreparedLlamaGemm::ClassicRequestRows(context.prepare_cublas_gemm_probe(cfg)
+            Some(PreparedLlamaGemm::ClassicRequestRows(context.prepare_owned_hf_gemm(cfg)
                 .map_err(|e| LlamaForwardError::cuda(ExecutionSite::global(LlamaOp::LmHead), e))?))
         } else { None };
         #[cfg(not(feature="cuda-cublas-gemm-probe"))]
         let batch_output_lm_head = None;
 
+        let owned_decode_segments = (0..owned_decode_segment_capacity(&plan,plan.sequence_length()))
+            .map(|_| OwnedDecodeSegment::default()).collect();
         Ok(Self {
             plan,
             weights,
@@ -3695,6 +3760,7 @@ impl PreparedLlamaForward {
             tokens_ready: false,
             output_ready: false,
             poisoned: false,
+            owned_decode_segments,
             captured_steps: Vec::new(),
             captured_step_budget: MAX_RECORDED_STEPS,
         })
@@ -3875,7 +3941,10 @@ impl PreparedLlamaForward {
     /// serving selector value.
     #[must_use]
     pub const fn rms_norm_backend_id(&self) -> &'static str {
-        if self.owned_hf_eager_bf16 && matches!(self.plan.dimensions().hidden_size(),2048|2560) {
+        if self.owned_hf_eager_bf16 && self.plan.dimensions().hidden_size()==576 {
+            return "owned-hf-smollm2-request-rmsnorm-v1";
+        }
+        if self.owned_hf_eager_bf16 && matches!(self.plan.dimensions().hidden_size(),2048|2560|4096) {
             return "owned-hf-float4-request-rmsnorm-v1";
         }
         match self.rms_norm_profile {
@@ -6011,7 +6080,7 @@ pub(super) fn prepare_gemms(
             .map_err(|source| LlamaForwardError::cuda(site, source))?;
         #[cfg(feature = "cuda-cublas-gemm-probe")]
         if owned_hf_eager_bf16 {
-            return context.prepare_cublas_gemm_probe(config)
+            return context.prepare_owned_hf_gemm(config)
                 .map(PreparedLlamaGemm::ClassicRequestRows)
                 .map_err(|source| LlamaForwardError::cuda(site, source));
         }
@@ -6202,13 +6271,28 @@ pub(super) fn prepare_gemms(
       let first=plan.layers().first().expect("all-biased nonempty plan");let site=ExecutionSite::layer(0,LlamaOp::QueryProjection);
       let mut query=Vec::with_capacity(sequence as usize);let mut key_value_plans=Vec::with_capacity(sequence as usize);
       for rows in 1..=sequence {
-        let q=CudaGemmConfig::new(rows,hidden,hidden,1048576).map_err(|e|LlamaForwardError::cuda(site,e))?.with_reduction_policy(CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1);
-        let kv=CudaGemmConfig::new(rows,key_value,hidden,1048576).map_err(|e|LlamaForwardError::cuda(site,e))?.with_reduction_policy(CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1);
+        let q=CudaGemmConfig::new(rows,hidden,hidden,1048576).map_err(|e|LlamaForwardError::cuda(site,e))?.with_reduction_policy(CudaGemmReductionPolicy::HfCompatibleBiasSplitKV1);
+        let kv=CudaGemmConfig::new(rows,key_value,hidden,1048576).map_err(|e|LlamaForwardError::cuda(site,e))?.with_reduction_policy(CudaGemmReductionPolicy::HfCompatibleBiasSplitKV1);
         query.push(context.prepare_hf_compatible_bias_epilogue_probe(q,weight_span(weights,first.query_bias().expect("validated bias"),site)?).map_err(|e|LlamaForwardError::cuda(site,e))?);
         key_value_plans.push(context.prepare_hf_compatible_bias_epilogue_probe(kv,weight_span(weights,first.key_bias().expect("validated bias"),site)?).map_err(|e|LlamaForwardError::cuda(site,e))?);
       }
       eprintln!("private-hf-request-bias: cold all M=1..{sequence}, Lt cap1048576, first heuristic, owned plans");
-      Some(HfRequestBiasEpilogueGemmPlans{query,key_value:key_value_plans})
+      {
+        let mut batch_query=(0..=32).map(|_|None).collect::<Vec<_>>();
+        let mut batch_key_value=(0..=32).map(|_|None).collect::<Vec<_>>();
+        for rows in 2..=sequence.min(32) {
+          for (n,bias_id,plans) in [(hidden,first.query_bias().expect("bias"),&mut batch_query),(key_value,first.key_bias().expect("bias"),&mut batch_key_value)] {
+            let config=CudaGemmConfig::new(rows,n,hidden,1048576).map_err(|e|LlamaForwardError::cuda(site,e))?.with_reduction_policy(CudaGemmReductionPolicy::HfCompatibleBiasSplitKV1);
+            match context.prepare_hf_bias_singleton_batch(config,weight_span(weights,bias_id,site)?) {
+              Ok(plan)=>plans[rows as usize]=Some(plan),
+              Err(e) if e.kind()==riley_cuda::CudaErrorKind::NotSupported=>{},
+              Err(e)=>return Err(LlamaForwardError::cuda(site,e)),
+            }
+          }
+        }
+        eprintln!("private-hf-singleton-bias: Q={} KV={} checked batch extents",batch_query.iter().flatten().count(),batch_key_value.iter().flatten().count());
+        Some(HfRequestBiasEpilogueGemmPlans{query,key_value:key_value_plans,batch_query,batch_key_value})
+      }
     } else {None};
 
     let projection_bias_epilogue = if projection_bias_mode.requires_qkv_bias_epilogue() {
@@ -6865,10 +6949,12 @@ mod tests {
             paired_mlp_probe
                 .validate()
                 .expect("paired P2051 direct-cuBLAS MLP probe is canonical-only");
+            // The Q/K/V canonical-reduction guard rejects this combination
+            // before the downstream O-projection/MLP guards are reached.
             assert!(matches!(
                 paired_mlp_probe.with_fixed37_reductions().validate(),
                 Err(LlamaForwardError::InvalidConfiguration {
-                    field: "output_projection_mode",
+                    field: "projection_bias_mode",
                     ..
                 })
             ));

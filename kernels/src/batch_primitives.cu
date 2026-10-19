@@ -2614,6 +2614,8 @@ riley_cuda_ragged_paged_kv_cache_write_execute(
       if (split.stream != stream->stream || split.key != key_source.data ||
           split.value != value_source.data ||
           split.head_size != params->head_size ||
+          (split.hf_head_norm && (split.positions != batch.row_positions.data ||
+              split.rotated_row_count != params->batch.active_row_count)) ||
           split.key_value_width !=
               params->key_value_head_count * params->head_size) {
         status = validation_error(
@@ -2628,6 +2630,30 @@ riley_cuda_ragged_paged_kv_cache_write_execute(
         if (split.head_norm) {
           const uint64_t slots = (split.query_width + 2 * split.key_value_width) /
                                  kHeadNormSplitHeadSize;
+          // Same instantiated HF kernel as the established standalone split;
+          // only cache destinations change. Existing command-batch leases hold inputs.
+          if(split.hf_head_norm){
+          qkv_split_head_norm_rope_kv_write_kernel<true>
+              <<<static_cast<uint32_t>(split.row_count * slots),
+                 kHeadNormSplitHeadSize, 0, stream->stream>>>(
+                  static_cast<const __nv_bfloat16*>(split.merged),
+                  static_cast<const __nv_bfloat16*>(split.query_bias),
+                  static_cast<const __nv_bfloat16*>(split.key_bias),
+                  static_cast<const float*>(split.cos),
+                  static_cast<const float*>(split.sin),
+                  static_cast<const uint32_t*>(split.positions),
+                  static_cast<__nv_bfloat16*>(split.query),
+                  static_cast<__nv_bfloat16*>(split.key),
+                  static_cast<__nv_bfloat16*>(split.value),
+                  reinterpret_cast<__nv_bfloat16*>(key_pool.data),
+                  reinterpret_cast<__nv_bfloat16*>(value_pool.data),
+                  device_batch(params->batch, batch),
+                  static_cast<uint32_t>(split.query_width /
+                                        kHeadNormSplitHeadSize),
+                  static_cast<uint32_t>(params->key_value_head_count),
+                  split.table_position_count, split.rotated_row_count,
+                  split.norm_epsilon, dynamic.counts);
+          }else{
           qkv_split_head_norm_rope_kv_write_kernel<false>
               <<<static_cast<uint32_t>(split.row_count * slots),
                  kHeadNormSplitHeadSize, 0, stream->stream>>>(
@@ -2648,6 +2674,7 @@ riley_cuda_ragged_paged_kv_cache_write_execute(
                   static_cast<uint32_t>(params->key_value_head_count),
                   split.table_position_count, split.rotated_row_count,
                   split.norm_epsilon, dynamic.counts);
+          }
         } else {
         qkv_split_bias_rope_kv_write_kernel
             <<<block_count(work_items), kThreads, 0, stream->stream>>>(
@@ -5504,9 +5531,9 @@ static RileyCudaStatus execute_qkv_split_bias_profile(
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "params reserved fields must be zero");
   }
-  if(hf_head_norm && (!head_norm || deferred_launch || params->row_count>8192 || head_norm_epsilon!=1.e-6F)) {
+  if(hf_head_norm && (!head_norm || params->row_count>8192 || head_norm_epsilon!=1.e-6F)) {
     return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_VALIDATION,kOperation,
-      "HF head128 requires non-deferred BF16 Q/K headnorm epsilon1e-6 rows<=8192");
+      "HF head128 requires BF16 Q/K headnorm epsilon1e-6 rows<=8192");
   }
   if (params->query_width == 0 || params->key_value_width == 0) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
@@ -5704,6 +5731,7 @@ static RileyCudaStatus execute_qkv_split_bias_profile(
       deferred.table_position_count = params->rope_table_position_count;
       deferred.rotated_row_count = params->reserved[1];
       deferred.head_norm = head_norm;
+      deferred.hf_head_norm = hf_head_norm;
       deferred.norm_epsilon = head_norm_epsilon;
     }
   } else if (status == RILEY_CUDA_STATUS_SUCCESS && merged_elements != 0 &&
@@ -5894,7 +5922,23 @@ cudaError_t riley_cuda_internal::enqueue_decode_argmax(cudaStream_t stream,const
   return cudaGetLastError();
 }
 
-// Diagnostic shape-preserving bit copy. No arithmetic, allocation or plan creation.
+namespace {
+// Bitwise BF16 packing for the existing Q4096/KV1024 route. No arithmetic,
+// allocations, or library workspace. Grid-stride traversal preserves large rows.
+__global__ void hf_pack_qkv_bits_kernel(const uint16_t* query,const uint16_t* key,
+                                      const uint16_t* value,uint16_t* merged,
+                                      uint32_t rows) {
+ const uint32_t elements=rows*6144u;
+ for(uint32_t i=blockIdx.x*blockDim.x+threadIdx.x;i<elements;i+=gridDim.x*blockDim.x){
+  const uint32_t row=i/6144u,column=i%6144u;
+  merged[i]=column<4096u?query[row*4096u+column]
+      :column<5120u?key[row*1024u+column-4096u]
+      :value[row*1024u+column-5120u];
+ }
+}
+}
+// Shape-preserving bit copy; command-batch leases are handled by ExclusiveUses.
+
 extern "C" RileyCudaStatus riley_cuda_hf_pack_qkv_execute(
  RileyCudaBufferSpan q,RileyCudaBufferSpan k,RileyCudaBufferSpan v,RileyCudaBufferSpan out,
  uint64_t rows,uint64_t qw,uint64_t kw,RileyCudaStream* stream,RileyCudaErrorInfo* error) noexcept {
@@ -5907,14 +5951,17 @@ extern "C" RileyCudaStatus riley_cuda_hf_pack_qkv_execute(
  for(int i=0;i<3&&status==RILEY_CUDA_STATUS_SUCCESS;i++)status=reject_overlap(spans[3],spans[i],false,error,op);
  if(status==RILEY_CUDA_STATUS_SUCCESS)status=validate_contexts(stream,spans,4,error,op);
  if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
- if(command_batch_is_active(stream)||riley_cuda_internal::thread_has_active_step_capture())return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"synchronous per-operation diagnostic only");
+ if(riley_cuda_internal::thread_has_active_step_capture()&&!command_batch_is_active(stream))return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"step capture requires an active owned command batch");
  ExclusiveUses uses(stream);for(auto& span:spans)if(!uses.add(span.buffer))return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"buffer set overflow");
  status=uses.acquire(error,op);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
  CurrentContext scope(stream->owner);bool launched=false;status=scope.enter(error,RILEY_CUDA_ERROR_STAGE_LAUNCH,op);
  if(status==RILEY_CUDA_STATUS_SUCCESS)status=prior_launch_status(error,op);
- uint64_t offset=0;
- for(int i=0;i<3&&status==RILEY_CUDA_STATUS_SUCCESS;i++){
-  launched=true;status=runtime_error(cudaMemcpy2DAsync(spans[3].data+offset*2,widths[3]*2,spans[i].data,widths[i]*2,widths[i]*2,rows,cudaMemcpyDeviceToDevice,stream->stream),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,op);offset+=widths[i];
+ if(status==RILEY_CUDA_STATUS_SUCCESS){
+  launched=true;
+  hf_pack_qkv_bits_kernel<<<block_count(rows*6144),kThreads,0,stream->stream>>>(
+   reinterpret_cast<const uint16_t*>(spans[0].data),reinterpret_cast<const uint16_t*>(spans[1].data),
+   reinterpret_cast<const uint16_t*>(spans[2].data),reinterpret_cast<uint16_t*>(spans[3].data),static_cast<uint32_t>(rows));
+  status=launch_status(error,op);
  }
  return complete_execution(&uses,&scope,stream,status,launched,error,op);
 }

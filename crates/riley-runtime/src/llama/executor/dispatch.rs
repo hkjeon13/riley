@@ -34,7 +34,7 @@ use riley_cuda::{
 
 use super::super::batch::{LlamaBatchRowKind, LlamaPackedBatchMetadata};
 use super::super::forward::{
-    ForwardBuffers, GemmPlans, LlamaForwardError, LlamaRmsNormProfile, PreparedLlamaForward,
+    ForwardBuffers, GemmPlans, OwnedDecodeSegment, LlamaForwardError, LlamaRmsNormProfile, PreparedLlamaForward,
     PreparedLlamaGemm, execute_gemm_with_row_groups, execute_profile_residual_rms_norm, execute_profile_rms_norm, execute_profile_rms_norm_grouped,
     execute_projection_bias, execute_projection_with_row_groups, poison_for_cuda_error,
     span, span_mut, weight_span,
@@ -270,6 +270,8 @@ pub(in crate::llama) fn execute_packed(
     gathered_logits: &mut Option<CudaDeviceBuffer>,
     greedy_results: &mut Option<CudaDeviceBuffer>,
     mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
+    #[cfg(feature="cuda-cublas-gemm-probe")]
+    mut owned_mlp_graphs: Option<&mut riley_cuda::CudaOwnedHfMlpGraph>,
     host_input: &mut BatchHostInput,
     produce_greedy_tokens: bool,
     dispatch_disposition: &mut BatchDispatchDisposition,
@@ -300,6 +302,7 @@ pub(in crate::llama) fn execute_packed(
         )?,
     )
     .map_err(|source| batch_cuda(metadata_site, source))?;
+    let host_batch=if matches!(config.owned_decode_batch(),3|4|5){host_batch.with_request_row_groups(packed.input_row_offsets()).map_err(|e|batch_cuda(metadata_site,e))?}else{host_batch};
     crate::host_trace::lap_here(crate::host_trace::PACK);
     let packed_layout = match (&mut *host_input, &mut *device, config.metadata_transport()) {
         (
@@ -504,6 +507,12 @@ pub(in crate::llama) fn execute_packed(
             &mut prepared.valid_host,&mut prepared.encoded_valid,&prepared.zero_host,stream)
             .map_err(|e|batch_cuda(metadata_site,e))?;
     }
+    #[cfg(feature="cuda-cublas-gemm-probe")]
+    let owned_mlp_eligible=active>0 && active<=32
+        && packed.row_kind_codes().iter().all(|v|*v==LlamaBatchRowKind::Decode.code())
+        && packed.row_sequence_slots().iter().enumerate().all(|(i,v)|!packed.row_sequence_slots()[..i].contains(v));
+    #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+    let owned_mlp_eligible = false;
     let mut execute_iteration_body = |batch: PackedBatchV1<'_>,
                                       token_ids: Option<CudaBufferSpan<'_>>,
                                       output_indices: Option<CudaBufferSpan<'_>>,
@@ -520,6 +529,7 @@ pub(in crate::llama) fn execute_packed(
             buffers,
             captured_steps: maximum_captured_steps,
             captured_step_budget,
+            owned_decode_segments: maximum_owned_segments,
             ..
         } = forward;
         // A mixed step's output rows are fewer than its dense rows. Their LM
@@ -557,7 +567,7 @@ pub(in crate::llama) fn execute_packed(
         } else {
             None
         };
-        let (plan, gemms, mut captured_steps, output_lm_head) =
+        let (plan, gemms, mut captured_steps, output_lm_head, owned_segments) =
             if dense_rows == maximum_plan.sequence_length() {
                 let output_lm_head = match output_rows_index {
                     Some(index) => Some(&mut shape_variants[index].gemms.lm_head),
@@ -568,6 +578,7 @@ pub(in crate::llama) fn execute_packed(
                     maximum_gemms,
                     Some(maximum_captured_steps),
                     output_lm_head,
+                    maximum_owned_segments,
                 )
             } else {
                 let current_index = shape_variants
@@ -593,6 +604,7 @@ pub(in crate::llama) fn execute_packed(
                     &mut shape.gemms,
                     Some(&mut shape.captured_steps),
                     output_lm_head,
+                    &mut shape.owned_decode_segments,
                 )
             };
         let output_lm_head = if packed.output_count() != 0 {
@@ -660,6 +672,39 @@ pub(in crate::llama) fn execute_packed(
             },
             _ => StepCaptureMode::Disabled,
         };
+        // Dynamic full-body Graphs only for the separately qualified Smol path.
+        // Each actual count has a private key within its unchanged dense owner.
+        let actual_rows = packed.row_sequence_slots().len();
+        #[cfg(feature="cuda-cublas-gemm-probe")]
+        let smol_actual_row_graph = actual_rows>=2 && config.owned_decode_batch()>=2 && dense_rows<=32
+            && plan.dimensions().hidden_size()==576 && plan.dimensions().query_heads()==9
+            && plan.dimensions().key_value_heads()==3 && plan.dimensions().head_dimension()==64
+            && native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref())
+                .and_then(|m|m.hf.as_ref()).is_some_and(|hf| hf.decode_chunk.is_some()
+                    && packed.position_ids().iter().all(|&pos|u64::from(pos)<hf.plan.config().n() && hf.plan.supports_exact_smol_attention(u64::from(pos)+1)));
+        #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+        let smol_actual_row_graph = false;
+        #[cfg(feature="cuda-cublas-gemm-probe")]
+        let wide_actual_row_graph=actual_rows>=2 && config.owned_decode_batch()==5 && dense_rows<=32
+            && matches!(plan.dimensions().hidden_size(),2560|4096)
+            && plan.dimensions().query_heads()==32 && plan.dimensions().key_value_heads()==8 && plan.dimensions().head_dimension()==128
+            && native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).and_then(|m|m.hf.as_ref())
+                .is_some_and(|hf|hf.decode_chunk.is_some()&&hf.plan.supports_exact_decode_chunk());
+        #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+        let wide_actual_row_graph=false;
+        let actual_row_graph=smol_actual_row_graph||wide_actual_row_graph;
+        let owned_segments = if config.owned_decode_graph() && in_command_batch
+            && actual_rows!=0 && actual_rows<=dense_rows
+            && (actual_rows==dense_rows || actual_row_graph)
+            && packed.row_sequence_slots().iter().enumerate().all(|(i,&slot)|slot as usize==i)
+            && packed.output_count()==actual_rows && packed.prefill_token_count()==0
+            && plan.layers().len()%2==0 {
+            let legacy_count=plan.layers().len()*2;
+            if actual_row_graph {
+                let stride=legacy_count+1;let start=legacy_count+(actual_rows-1)*stride;
+                Some(&mut owned_segments[start..start+stride])
+            } else { Some(&mut owned_segments[..legacy_count]) }
+        } else { None };
         let fixed = execute_fixed_graph(
             plan,
             weights,
@@ -667,6 +712,9 @@ pub(in crate::llama) fn execute_packed(
             buffers,
             config.residual_norm_implementation(),
             rms_norm_profile,
+            if config.owned_decode_batch()>=2 || packed.prefill_token_count()==0 { config.owned_decode_batch() } else { 0 },
+            owned_mlp_eligible && in_command_batch,
+            owned_segments,
             config.ragged_attention_reduction_profile(),
             config.ragged_attention_implementation(),
             config.d128_global_merge(),
@@ -688,6 +736,8 @@ pub(in crate::llama) fn execute_packed(
             config.fused_mlp_residual_norm(),
             embedding_in_step,
             native_d128_two_stage_workspace.as_deref_mut(),
+            #[cfg(feature="cuda-cublas-gemm-probe")]
+            if owned_mlp_eligible && in_command_batch {owned_mlp_graphs.as_deref_mut()}else{None},
             layout,
             key_cache,
             value_cache,
@@ -1058,6 +1108,30 @@ enum StepCaptureMode<'a> {
     Replay(&'a CudaStepGraph, &'a [u32]),
 }
 
+/// Warm library state once, then capture the same operations. Attention stays
+/// eager because its cuBLAS geometry depends on each request's current length.
+fn execute_owned_decode_segment<S: CudaExecutionStream + ?Sized>(
+    segment: Option<&mut OwnedDecodeSegment>, stream: &mut S,
+    body: impl FnOnce(&mut S) -> LlamaBatchExecutorResult<()>,
+) -> LlamaBatchExecutorResult<()> {
+    let Some(segment) = segment else { return body(stream); };
+    let site = ExecutionSite::global(LlamaOp::IterationCompletion);
+    if let Some(graph) = &segment.graph {
+        launch_step_graph(stream, graph).map_err(|e| batch_cuda(site,e))?;
+        if !segment.replayed { eprintln!("RILEY_OWNED_SEGMENT replay=true"); segment.replayed=true; }
+        return Ok(());
+    }
+    if !segment.warmed { body(stream)?; segment.warmed=true; return Ok(()); }
+    begin_step_capture(stream).map_err(|e|batch_cuda(site,e))?;
+    if let Err(error) = body(stream) { let _=abort_step_capture(stream); return Err(error); }
+    let graph = end_step_capture(stream).map_err(|e|batch_cuda(site,e))?;
+    // Capture records work without executing it; execute this iteration once.
+    launch_step_graph(stream,&graph).map_err(|e|batch_cuda(site,e))?;
+    segment.graph=Some(graph);
+    eprintln!("RILEY_OWNED_SEGMENT capture=true");
+    Ok(())
+}
+
 fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     plan: &LlamaExecutionPlan,
     weights: &CudaUploadedWeights,
@@ -1065,6 +1139,9 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     buffers: &mut ForwardBuffers,
     residual_norm_implementation: ResidualNormImplementation,
     rms_norm_profile: LlamaRmsNormProfile,
+    owned_decode_batch: u8,
+    smol_qkv_fusion_eligible: bool,
+    mut owned_segments: Option<&mut [OwnedDecodeSegment]>,
     attention_reduction_profile: AttentionReductionProfile,
     attention_implementation: RaggedAttentionImplementation,
     d128_global_merge: bool,
@@ -1076,6 +1153,8 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     fused_mlp_residual_norm: bool,
     embedding_in_recorded_step: bool,
     mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
+    #[cfg(feature="cuda-cublas-gemm-probe")]
+    mut owned_mlp_graphs: Option<&mut riley_cuda::CudaOwnedHfMlpGraph>,
     layout: KvLayout,
     key_cache: &mut CudaDeviceBuffer,
     value_cache: &mut CudaDeviceBuffer,
@@ -1224,8 +1303,36 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         }
     }
 
+    // Cache a whole decode body separately from the original layer segments.
+    // Embedding and its host error report ran above; dynamic metadata uploads,
+    // result download and sampling remain outside this graph.
     #[cfg(feature="cuda-cublas-gemm-probe")]
-    let hf_wide_norm=matches!(hidden,2048|2560)&&native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).is_some_and(|m|m.hf.is_some());
+    let owned_full_body = owned_segments.is_some() && owned_decode_batch >= 2
+        && batch.host().row_positions().len() >= 2 && dense_rows <= 32
+        && owned_segments.as_ref().is_some_and(|s|s.len()==plan.layers().len()*2+1)
+        && query_heads == 9 && key_value_heads == 3 && head_size == 64
+        && batch.host().row_positions().len() as u64 <= dense_rows
+        && batch.host().row_sequence_slots().iter().enumerate().all(|(i,&slot)| slot as usize == i)
+        && output_row_lm_head.as_ref().is_none_or(|o|o.output_indices_host.iter().enumerate().all(|(i,&r)|r as usize == i))
+        && native_d128_two_stage_workspace.as_ref()
+            .and_then(|w|w.materialized.as_ref()).and_then(|m|m.hf.as_ref())
+            .is_some_and(|hf|hf.decode_chunk.is_some() && batch.host().row_positions().iter()
+                .all(|&pos|u64::from(pos)<hf.plan.config().n() && hf.plan.supports_exact_smol_attention(u64::from(pos)+1)));
+    #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+    let owned_full_body = false;
+    let (whole_body_segment, mut owned_segments) = match owned_segments.take() {
+        Some(segments) => {
+            let (prepost,whole)=segments.split_at_mut(plan.layers().len()*2);
+            if owned_full_body {
+                if !whole[0].warmed { eprintln!("RILEY_OWNED_BODY_KEY active_rows={} dense_rows={}",batch.host().row_positions().len(),dense_rows); }
+                (Some(&mut whole[0]),None)
+            }else{(None,Some(prepost))}
+        },
+        None => (None,None),
+    };
+    execute_owned_decode_segment(whole_body_segment,stream,|stream| {
+    #[cfg(feature="cuda-cublas-gemm-probe")]
+    let hf_wide_norm=matches!(hidden,576|2048|2560|4096)&&native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).is_some_and(|m|m.hf.is_some());
     #[cfg(not(feature="cuda-cublas-gemm-probe"))]let hf_wide_norm=false;
     if hf_wide_norm && residual_norm_implementation!=ResidualNormImplementation::Separate {
       return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"hf_wide_norm",reason:"private request RMSNorm requires separate residual/norm"});
@@ -1240,6 +1347,14 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             &mut buffers.hidden_projection,
         );
         let layer_index = layer.index();
+        let layer_offset = layout.layer_byte_offset(layer_index).ok_or(
+            LlamaBatchExecutorError::InvalidConfiguration {
+                field: "KV layer offset",
+                reason: "decoder layer lies outside the prepared KV layout",
+            },
+        )?;
+        let pre_segment = owned_segments.as_deref_mut().map(|segments| &mut segments[ordinal*2]);
+        execute_owned_decode_segment(pre_segment, stream, |stream| {
         let input_norm_site = ExecutionSite::layer(layer_index, LlamaOp::InputNorm);
         let input_norm_weight = weight_span(weights, layer.input_norm_weight(), input_norm_site)?;
         // With the fused MLP residual norm the previous layer already wrote
@@ -1263,7 +1378,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 hidden_size: hidden,
                 epsilon: layer.input_norm_epsilon(),
             };
-            execute_profile_rms_norm_grouped(rms_norm_profile,&mut params,stream,batch.host().row_sequence_slots(),hf_wide_norm)
+            execute_profile_rms_norm_grouped(rms_norm_profile,&mut params,stream,batch.host(),hf_wide_norm)
                 .map_err(|source| batch_cuda(input_norm_site, source))?;
         }
 
@@ -1321,9 +1436,9 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             };
             #[cfg(feature="cuda-cublas-gemm-probe")]
             let separate=if let Some((query,key_value))=gemms.hf_separate_projection_plans(){
-              execute_gemm_with_row_groups(query,&buffers.hidden_norm,weight_span(weights,layer.query_weight(),query_site)?,&mut buffers.hidden_context,&mut buffers.gemm_workspace,stream,query_site,batch.host().row_sequence_slots(),None)?;
-              execute_gemm_with_row_groups(key_value,&buffers.hidden_norm,weight_span(weights,layer.key_weight(),query_site)?,&mut buffers.key_raw,&mut buffers.gemm_workspace,stream,query_site,batch.host().row_sequence_slots(),None)?;
-              execute_gemm_with_row_groups(key_value,&buffers.hidden_norm,weight_span(weights,layer.value_weight(),query_site)?,&mut buffers.value_raw,&mut buffers.gemm_workspace,stream,query_site,batch.host().row_sequence_slots(),None)?;
+              execute_gemm_with_row_groups(query,&buffers.hidden_norm,weight_span(weights,layer.query_weight(),query_site)?,&mut buffers.hidden_context,&mut buffers.gemm_workspace,stream,query_site,batch.host(),None,owned_decode_batch)?;
+              execute_gemm_with_row_groups(key_value,&buffers.hidden_norm,weight_span(weights,layer.key_weight(),query_site)?,&mut buffers.key_raw,&mut buffers.gemm_workspace,stream,query_site,batch.host(),None,owned_decode_batch)?;
+              execute_gemm_with_row_groups(key_value,&buffers.hidden_norm,weight_span(weights,layer.value_weight(),query_site)?,&mut buffers.value_raw,&mut buffers.gemm_workspace,stream,query_site,batch.host(),None,owned_decode_batch)?;
               hf_pack_separate_qkv(span(&buffers.hidden_context,CudaDType::BF16,dense_rows*query_width*2,query_site)?,span(&buffers.key_raw,CudaDType::BF16,dense_rows*key_value_width*2,query_site)?,span(&buffers.value_raw,CudaDType::BF16,dense_rows*key_value_width*2,query_site)?,span_mut(&mut buffers.gate_raw,CudaDType::BF16,merged_bytes,query_site)?,dense_rows,query_width,key_value_width,stream).map_err(|e|batch_cuda(query_site,e))?;
               true
             }else{false};
@@ -1348,7 +1463,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                     &mut buffers.gemm_workspace,
                     stream,
                     query_site,
-                batch.host().row_sequence_slots(),None,
+                batch.host(),None,owned_decode_batch,
 )?;
             }
             }
@@ -1398,11 +1513,11 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                     head_size,
                     table_position_count: max_positions,
                     // The KV cache write below consumes the deferred split.
-                    defer_for_kv_write: fused_kv_write,
+                    defer_for_kv_write: fused_kv_write || (matches!(owned_decode_batch,3|4|5) && hf_wide_norm && head_norm_epsilon.is_some()),
                     head_norm_epsilon,
                 };
                 #[cfg(feature="cuda-cublas-gemm-probe")]
-                let split_result=if hf_wide_norm && head_norm_epsilon.is_some(){qkv_split_bias_rope_hf_head128(&mut params,&rope,stream)}else{qkv_split_bias_rope(&mut params,&rope,stream)};
+                let split_result=if hf_wide_norm && head_norm_epsilon.is_some(){if matches!(owned_decode_batch,3|4|5) {riley_cuda::qkv_split_bias_rope_hf_head128_deferred(&mut params,&rope,stream)}else{qkv_split_bias_rope_hf_head128(&mut params,&rope,stream)}}else{qkv_split_bias_rope(&mut params,&rope,stream)};
                 #[cfg(not(feature="cuda-cublas-gemm-probe"))]
                 let split_result=qkv_split_bias_rope(&mut params,&rope,stream);
                 split_result.map_err(|source|batch_cuda(query_site,source))?;
@@ -1418,7 +1533,25 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                     reason: "a query projection wider than the hidden size requires the merged Q|K|V projection with the fused RoPE split",
                 });
             }
-            let (strict, fused, requests) = gemms.query_projection_plans_with_requests();
+            #[cfg(feature="cuda-cublas-gemm-probe")]
+            let fused_smol_qkv = if smol_qkv_fusion_eligible && owned_decode_batch>=2
+                && hidden==576 && query_width==576 && key_value_width==192 && head_size==64
+                && layer.query_bias().is_none() && layer.key_bias().is_none() && layer.value_bias().is_none() && layer.query_key_norm().is_none() {
+                if let super::super::forward::PreparedLlamaGemm::ClassicRequestRows(native)=&mut gemms.hidden {
+                    let rows=batch.host().row_positions().len() as u64;
+                    native.try_execute_hf_smol_fused_qkv(
+                        weight_span(weights,layer.query_weight(),query_site)?,weight_span(weights,layer.key_weight(),query_site)?,weight_span(weights,layer.value_weight(),query_site)?,
+                        span(&buffers.hidden_norm,CudaDType::BF16,rows*576*2,query_site)?,
+                        span_mut(hidden_projection,CudaDType::BF16,rows*576*2,query_site)?,
+                        span_mut(&mut buffers.key_raw,CudaDType::BF16,rows*192*2,query_site)?,
+                        span_mut(&mut buffers.value_raw,CudaDType::BF16,rows*192*2,query_site)?,rows,stream)
+                        .map_err(|e|batch_cuda(query_site,e))?
+                } else {false}
+            } else {false};
+            #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+            let fused_smol_qkv=false;
+            if !fused_smol_qkv {
+            let (strict, fused, requests, batches) = gemms.query_projection_plans_with_requests();
             execute_projection_with_row_groups(
                 strict,
                 fused,
@@ -1432,10 +1565,10 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 hidden,
                 stream,
                 query_site,
-            batch.host().row_sequence_slots(),requests,
+            batch.host(),requests,if owned_decode_batch>=2 {batches}else{None},owned_decode_batch,
 )?;
             let key_site = ExecutionSite::layer(layer_index, LlamaOp::KeyProjection);
-            let (strict, fused, requests) = gemms.key_value_projection_plans_with_requests();
+            let (strict, fused, requests, batches) = gemms.key_value_projection_plans_with_requests();
             execute_projection_with_row_groups(
                 strict,
                 fused,
@@ -1449,10 +1582,10 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 key_value_width,
                 stream,
                 key_site,
-            batch.host().row_sequence_slots(),requests,
+            batch.host(),requests,if owned_decode_batch>=2 {batches}else{None},owned_decode_batch,
 )?;
             let value_site = ExecutionSite::layer(layer_index, LlamaOp::ValueProjection);
-            let (strict, fused, requests) = gemms.key_value_projection_plans_with_requests();
+            let (strict, fused, requests, batches) = gemms.key_value_projection_plans_with_requests();
             execute_projection_with_row_groups(
                 strict,
                 fused,
@@ -1466,8 +1599,9 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 key_value_width,
                 stream,
                 value_site,
-            batch.host().row_sequence_slots(),requests,
+            batch.host(),requests,if owned_decode_batch>=2 {batches}else{None},owned_decode_batch,
 )?;
+            }
         }
 
         // Qwen3 RMS-normalizes every projected query head and key head before
@@ -1606,12 +1740,6 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         }
 
         let cache_site = ExecutionSite::layer(layer_index, LlamaOp::KvCacheWrite);
-        let layer_offset = layout.layer_byte_offset(layer_index).ok_or(
-            LlamaBatchExecutorError::InvalidConfiguration {
-                field: "KV layer offset",
-                reason: "decoder layer lies outside the prepared KV layout",
-            },
-        )?;
         {
             let mut params = RaggedPagedKvCacheWriteParams {
                 key_source: span(
@@ -1648,6 +1776,8 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 .map_err(|source| batch_cuda(cache_site, source))?;
         }
 
+        Ok(())
+        })?;
         let attention_site = ExecutionSite::layer(layer_index, LlamaOp::RaggedPagedAttention);
         let materialized_reference = native_d128_two_stage_workspace.as_ref().is_some_and(|w|w.materialized.is_some());
         if materialized_reference {
@@ -1660,10 +1790,54 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             #[cfg(feature="cuda-cublas-gemm-probe")]
             if let Some(hf)=prepared.hf.as_mut() {
                 let host=batch.host();let positions=host.row_positions();let slots=host.row_sequence_slots();let mut begin=0;
+                let mut selected=[0u32;32];let mut selected_count=0usize;
+                if dimensions.query_heads()==9 && dimensions.key_value_heads()==3 && head_size==64 && hf.decode_chunk.is_some() {
+                    for r in 0..positions.len() {if selected_count==32{break;}if (r==0||slots[r-1]!=slots[r]) && (r+1==slots.len()||slots[r+1]!=slots[r]) && hf.plan.supports_exact_smol_attention(u64::from(positions[r])+1){selected[selected_count]=r as u32;selected_count+=1;}}
+                    if selected_count==1 {selected_count=0;}
+                    if selected_count>=2 {let bytes=positions.len() as u64*query_width*2;
+                        hf.plan.execute_hf_attention_smol_exact(
+                            CudaBufferSpan::new(&buffers.hidden_rotary,CudaDType::BF16,0,bytes).map_err(|e|batch_cuda(attention_site,e))?,
+                            CudaBufferSpan::new(key_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
+                            CudaBufferSpan::new(value_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
+                            CudaBufferSpanMut::new(&mut buffers.hidden_context,CudaDType::BF16,0,bytes).map_err(|e|batch_cuda(attention_site,e))?,
+                            hf.decode_chunk.as_mut().expect("cold qualified scratch"),batch,&selected[..selected_count],stream,
+                        ).map_err(|e|batch_cuda(attention_site,e))?;
+                    }
+                }
+                let mut selected_cursor=0usize;
                 while begin<positions.len() {
-                    let slot=slots[begin] as usize;let mut end=begin+1;
-                    while end<positions.len() && slots[end] as usize==slot {end+=1;}
-                    if positions[begin..end].windows(2).any(|adjacent|adjacent[0].checked_add(1)!=Some(adjacent[1])) {return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"hf_attention_rows",reason:"query rows must be contiguous within a sequence"});}
+                    if selected_cursor<selected_count && selected[selected_cursor] as usize==begin {selected_cursor+=1;begin+=1;continue;}
+                    // Chunk independent decode requests even when context lengths
+                    // differ. Original per-request QK/PV arithmetic is unchanged.
+                    if let Some(chunk)=hf.decode_chunk.as_mut().filter(|_|head_size==128){
+                        let mut end=begin;
+                        let maximum=if dimensions.query_heads()==32{32}else{8};
+                        while end<positions.len() && end-begin<maximum && positions[end]<512 && !slots[begin..end].contains(&slots[end]) && (end==0||slots[end-1]!=slots[end]) && (end+1==slots.len()||slots[end+1]!=slots[end]){end+=1;}
+                        if end-begin>=2{let count=(end-begin) as u64;let row_bytes=query_width*2;let rb=begin as u64*row_bytes;
+                            if dimensions.query_heads()==32 {
+                            hf.plan.execute_hf_attention_chunk_wide(
+                                CudaBufferSpan::new(&buffers.hidden_rotary,CudaDType::BF16,rb,count*row_bytes).map_err(|e|batch_cuda(attention_site,e))?,
+                                CudaBufferSpan::new(key_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
+                                CudaBufferSpan::new(value_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
+                                CudaBufferSpanMut::new(&mut buffers.hidden_context,CudaDType::BF16,rb,count*row_bytes).map_err(|e|batch_cuda(attention_site,e))?,
+                                chunk,&mut hf.scratch[7],None,batch,begin,end-begin,stream,
+                            ).map_err(|e|batch_cuda(attention_site,e))?;
+                            } else {
+                            hf.plan.execute_hf_attention_chunk(
+                                CudaBufferSpan::new(&buffers.hidden_rotary,CudaDType::BF16,rb,count*row_bytes).map_err(|e|batch_cuda(attention_site,e))?,
+                                CudaBufferSpan::new(key_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
+                                CudaBufferSpan::new(value_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
+                                CudaBufferSpanMut::new(&mut buffers.hidden_context,CudaDType::BF16,rb,count*row_bytes).map_err(|e|batch_cuda(attention_site,e))?,
+                                chunk,&mut hf.scratch[7],None,batch,begin,end-begin,stream,
+                            ).map_err(|e|batch_cuda(attention_site,e))?;
+                            }begin=end;continue;
+                        }
+                    }
+                    let slot=slots[begin] as usize;
+                    let end=if let Some(groups)=host.request_row_groups(){groups.group_end(begin).map_err(|e|batch_cuda(attention_site,e))?}else{
+                        let mut end=begin+1;while end<positions.len()&&slots[end] as usize==slot{end+=1;}
+                        if positions[begin..end].windows(2).any(|p|p[0].checked_add(1)!=Some(p[1])){return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"hf_attention_rows",reason:"query rows must be contiguous within a sequence"});}end
+                    };
                     let m=(end-begin) as u64;let t=u64::from(positions[end-1])+1;let table_begin=host.sequence_block_offsets()[slot] as u64;let table_len=t.div_ceil(16);
                     if table_begin+table_len>host.block_ids().len() as u64 {return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"hf_attention_table",reason:"logical prefix exceeds packed block table"});}
                     let ids=batch.device_block_ids();let row_bytes=query_width*2;let rb=(begin as u64)*row_bytes;
@@ -1861,6 +2035,8 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             .map_err(|source| batch_cuda(attention_site, source))?;
         }
 
+        let post_segment = owned_segments.as_deref_mut().map(|segments| &mut segments[ordinal*2+1]);
+        execute_owned_decode_segment(post_segment, stream, |stream| {
         let output_site = ExecutionSite::layer(layer_index, LlamaOp::OutputProjection);
         execute_gemm_with_row_groups(
             gemms.output_projection_plan(),
@@ -1870,7 +2046,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             &mut buffers.gemm_workspace,
             stream,
             output_site,
-        batch.host().row_sequence_slots(),None,
+        batch.host(),None,owned_decode_batch,
 )?;
         execute_projection_bias(
             weights,
@@ -1930,7 +2106,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                     hidden_size: hidden,
                     epsilon: layer.post_attention_norm_epsilon(),
                 };
-                execute_profile_rms_norm_grouped(rms_norm_profile,&mut norm,stream,batch.host().row_sequence_slots(),hf_wide_norm)
+                execute_profile_rms_norm_grouped(rms_norm_profile,&mut norm,stream,batch.host(),hf_wide_norm)
                     .map_err(|source| batch_cuda(post_norm_site, source))?;
             }
             ResidualNormImplementation::Fused => {
@@ -1972,6 +2148,21 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                     .map_err(|source| batch_cuda(post_norm_site, source))?;
             }
         }
+        #[cfg(feature="cuda-cublas-gemm-probe")]
+        let mlp_done=if let Some(graphs)=owned_mlp_graphs.as_deref_mut(){
+            let site=ExecutionSite::layer(layer_index,LlamaOp::GateProjection);
+            graphs.execute(&mut riley_cuda::CudaOwnedHfMlpParams {
+                input:span(&buffers.hidden_norm,CudaDType::BF16,buffers.hidden_norm.byte_len(),site)?,
+                gate_weight:weight_span(weights,layer.gate_weight(),site)?,
+                up_weight:weight_span(weights,layer.up_weight(),site)?,
+                down_weight:weight_span(weights,layer.down_weight(),site)?,
+                gate:&mut buffers.gate_raw,up:&mut buffers.up_raw,product:&mut buffers.gated_product,
+                output:hidden_current,active_rows:batch.host().row_sequence_slots().len() as u32,
+            },stream).map_err(|e|batch_cuda(site,e))?;true
+        }else{false};
+        #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+        let mlp_done=false;
+        if !mlp_done {
         let gate_site = ExecutionSite::layer(layer_index, LlamaOp::GateProjection);
         if gemms.merged_gate_up_plan().is_some() {
             // One GEMM over the concatenated gate|up weights; each output row
@@ -2001,7 +2192,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                     &mut buffers.gemm_workspace,
                     stream,
                     gate_site,
-                batch.host().row_sequence_slots(),None,
+                batch.host(),None,owned_decode_batch,
 )?;
             }
             let gated_site = ExecutionSite::layer(layer_index, LlamaOp::GatedMultiply);
@@ -2024,6 +2215,20 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             silu_gated_multiply_merged_rows(&mut params, stream)
                 .map_err(|source| batch_cuda(gated_site, source))?;
         } else {
+            #[cfg(feature="cuda-cublas-gemm-probe")]
+            let fused_smol_gate_up=if smol_qkv_fusion_eligible && owned_decode_batch>=2 && hidden==576 && plan.dimensions().intermediate_size()==1536 {
+                if let super::super::forward::PreparedLlamaGemm::ClassicRequestRows(native)=&mut gemms.intermediate {
+                    let rows=batch.host().row_positions().len() as u64;
+                    native.try_execute_hf_smol_fused_gate_up(
+                        weight_span(weights,layer.gate_weight(),gate_site)?,weight_span(weights,layer.up_weight(),gate_site)?,
+                        span(&buffers.hidden_norm,CudaDType::BF16,rows*576*2,gate_site)?,
+                        span_mut(&mut buffers.gated_product,CudaDType::BF16,rows*1536*2,gate_site)?,rows,stream)
+                        .map_err(|e|batch_cuda(gate_site,e))?
+                }else{false}
+            }else{false};
+            #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+            let fused_smol_gate_up=false;
+            if !fused_smol_gate_up {
             execute_gemm_with_row_groups(
                 &mut gemms.intermediate,
                 &buffers.hidden_norm,
@@ -2032,7 +2237,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 &mut buffers.gemm_workspace,
                 stream,
                 gate_site,
-            batch.host().row_sequence_slots(),None,
+            batch.host(),None,owned_decode_batch,
 )?;
             let up_site = ExecutionSite::layer(layer_index, LlamaOp::UpProjection);
             execute_gemm_with_row_groups(
@@ -2043,7 +2248,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 &mut buffers.gemm_workspace,
                 stream,
                 up_site,
-            batch.host().row_sequence_slots(),None,
+            batch.host(),None,owned_decode_batch,
 )?;
             let silu_site = ExecutionSite::layer(layer_index, LlamaOp::Silu);
             if !fused_silu_multiply {
@@ -2099,6 +2304,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                         .map_err(|source| batch_cuda(gated_site, source))?;
                 }
             }
+            }
         }
         let down_site = ExecutionSite::layer(layer_index, LlamaOp::DownProjection);
         execute_gemm_with_row_groups(
@@ -2109,8 +2315,9 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             &mut buffers.gemm_workspace,
             stream,
             down_site,
-        batch.host().row_sequence_slots(),None,
+        batch.host(),None,owned_decode_batch,
 )?;
+        }
         let mlp_residual_site = ExecutionSite::layer(layer_index, LlamaOp::MlpResidual);
         if norm_after_mlp {
             // The norm that follows this residual: the next layer's input norm,
@@ -2184,6 +2391,8 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             residual_add(&mut params, stream)
                 .map_err(|source| batch_cuda(mlp_residual_site, source))?;
         }
+        Ok(())
+        })?;
     }
 
     // Preserve the public owner roles after an odd number of layers. Within
@@ -2213,7 +2422,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             hidden_size: hidden,
             epsilon: plan.final_norm_epsilon(),
         };
-        execute_profile_rms_norm_grouped(rms_norm_profile,&mut params,stream,batch.host().row_sequence_slots(),hf_wide_norm)
+        execute_profile_rms_norm_grouped(rms_norm_profile,&mut params,stream,batch.host(),hf_wide_norm)
             .map_err(|source| batch_cuda(final_norm_site, source))?;
     }
     let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
@@ -2262,7 +2471,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             &mut buffers.gemm_workspace,
             stream,
             lm_head_site,
-        batch.host().row_sequence_slots(),Some(gathered_rows as usize),
+        batch.host(),Some(gathered_rows as usize),owned_decode_batch,
 )?;
         return Ok(());
     }
@@ -2274,9 +2483,10 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         &mut buffers.gemm_workspace,
         stream,
         lm_head_site,
-    batch.host().row_sequence_slots(),Some(batch.host().active_row_count() as usize),
+    batch.host(),Some(batch.host().active_row_count() as usize),owned_decode_batch,
 )?;
     Ok(())
+    })
 }
 
 /// First position whose prompt token takes the tensor-core attention producer.

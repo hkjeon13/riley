@@ -1,0 +1,49 @@
+{
+  "status": "private-QKV-native-topology-implementation-unqualified",
+  "delta": [
+    {
+      "path": "kernels/src/cublas_gemm_probe.cu",
+      "before": "f0bb4cdb0c865b972529a24dbfe8b24f010178dabb267c0058ebbda19c701180",
+      "after": "28612ab53489e18316d79626c7c86a851f452847dcdb679bdf4a1eb2f7bbd5c2",
+      "artifact": "candidate-v235-kernels__src__cublas_gemm_probe.cu"
+    },
+    {
+      "path": "crates/riley-cuda/src/ffi.rs",
+      "before": "fd5aed08d1fe23dd052229103b359f293bfe8433aabaa0932fb4b9b40c9b651e",
+      "after": "7483e8c800d127d635eb60c9e4b09604031f01e9335cc25cfa5419eb89344021",
+      "artifact": "candidate-v235-crates__riley-cuda__src__ffi.rs"
+    },
+    {
+      "path": "crates/riley-cuda/src/gemm.rs",
+      "before": "ac4e5a760391f1a563b1618921bfe1b95b8f076a006009652f1ccff9f6c52603",
+      "after": "f0217f6917dd0fe7d702eee00584d707642951619247af95b4d2d2df0b801fd9",
+      "artifact": "candidate-v235-crates__riley-cuda__src__gemm.rs"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/executor/config.rs",
+      "before": "ddd916bd3d7b4dd9a573d0924de722f6ecd83ea8b1c078c74bf3ceae01ea5acb",
+      "after": "9522cdc8aa3390375a985cfb385ea20455d5c251b4d1f0768a5e42e604167d11",
+      "artifact": "candidate-v235-crates__riley-runtime__src__llama__executor__config.rs"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/executor/owner.rs",
+      "before": "78a69d1ccf003ca84fff55a1224558b32dedfeb09fe1b9a4f48863e46ae168aa",
+      "after": "ffa75527e06fe186db97b5cbdca7edac5590242c08b98fe390fdea5f29e0dd20",
+      "artifact": "candidate-v235-crates__riley-runtime__src__llama__executor__owner.rs"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/executor/dispatch.rs",
+      "before": "fa77ca75375b0d4f0dc4eb11ffa51c8f67f6308dbf7dcd357292f13bc88ddef1",
+      "after": "63178f5daf535e530f6ecb1ebc315c3f39fbec63d7cc6d12cc041592c21b0122",
+      "artifact": "candidate-v235-crates__riley-runtime__src__llama__executor__dispatch.rs"
+    },
+    {
+      "path": "crates/riley-server/src/main.rs",
+      "before": "ad3c8d5ff42cd6c1f95841e0da371875a5beed8a75156134efe961962c39724f",
+      "after": "37e19cd24fe1e4812ef15a27f9e2447900be40481fa4013de9680dac1db2eacb",
+      "artifact": "candidate-v235-crates__riley-server__src__main.rs"
+    }
+  ],
+  "source_adopted": false,
+  "basis": "225GF/runtimeproof retained. Only Q4merged6144x2560 new fixedLt6/18/16/1/0matrixRows1..32 proven234; coldlayoutsworkspace0 prechecked, explicitmode6only. Old0..5 execution guard retained. NewprojectionsCLIalias6; no math relaxation."
+}

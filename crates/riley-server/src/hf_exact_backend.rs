@@ -278,6 +278,7 @@ struct HfExactRequest {
     prompt_tokens: u64,
     state: GenerationState,
     decoded_token_bytes: Vec<u8>,
+    token_decode_state: riley_model::TokenDecodeState,
     include_token_ids: bool,
     prompt_ids_for_delivery: Option<Vec<u32>>,
     next_delivery_index: usize,
@@ -571,12 +572,13 @@ impl HfExactBackend {
         let decoded_count = if needs_decoding {
             self.model
                 .tokenizer()
-                .decode_token_bytes_into(
+                .decode_token_bytes_with_state(
                     token_id,
                     DecodeOptions {
                         skip_special_tokens: true,
                     },
                     &mut request.decoded_token_bytes,
+                    &mut request.token_decode_state,
                 )
                 .map_err(|source| internal(format!("token decoding failed: {source}")))?
         } else {
@@ -704,6 +706,7 @@ impl EngineBackend for HfExactBackend {
             prompt_tokens,
             state,
             decoded_token_bytes,
+            token_decode_state: riley_model::TokenDecodeState::default(),
             include_token_ids: request.include_token_ids,
             prompt_ids_for_delivery,
             next_delivery_index: 0,

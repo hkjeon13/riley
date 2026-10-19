@@ -44,7 +44,7 @@ pub use batch::{
     NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_TRANSITION_WIDTH,
     NativeBf16RaggedPagedSplitGqaD128TwoStageParams,
     NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout, PACKED_BATCH_BLOCK_SIZE,
-    PACKED_BATCH_VERSION, PackedBatchHostV1, PackedBatchV1, RaggedPagedAttentionParams,
+    PACKED_BATCH_VERSION, ValidatedRequestRowGroups, PackedBatchHostV1, PackedBatchV1, RaggedPagedAttentionParams,
     RaggedPagedKvCacheWriteParams, RowGatherParams, fixed37_ragged_paged_attention,
     grouped_ragged_paged_attention, indexed_rope,
     native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma,
@@ -252,10 +252,15 @@ pub use primitives::hugging_face_qwen_head128_rms_norm;
 pub use primitives::hugging_face_qwen_wide_rms_norm;
 
 #[cfg(feature="cuda-cublas-gemm-probe")]
-pub use primitives::hugging_face_qwen_wide_rms_norm_row_groups;
+pub use primitives::{hugging_face_qwen_wide_rms_norm_row_groups_cached, hugging_face_qwen_wide_rms_norm_row_groups, hugging_face_smollm2_rms_norm_row_groups};
 
 #[cfg(feature="cuda-cublas-gemm-probe")]
-pub use primitives::qkv_split_bias_rope_hf_head128;
+pub use primitives::{qkv_split_bias_rope_hf_head128, qkv_split_bias_rope_hf_head128_deferred};
 
 #[cfg(feature="cuda-cublas-gemm-probe")]
 pub use primitives::hf_pack_separate_qkv;
+
+#[cfg(feature="cuda-cublas-gemm-probe")]
+mod owned_mlp;
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub use owned_mlp::{CudaOwnedHfMlpGraph,CudaOwnedHfMlpParams,CudaOwnedHfMlpGraphStats};

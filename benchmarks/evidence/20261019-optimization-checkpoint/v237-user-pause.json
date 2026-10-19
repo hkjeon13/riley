@@ -1,0 +1,38 @@
+{
+  "status": "paused-by-user-for-commit-and-push",
+  "controller_pid": 25322,
+  "controller_stopped": true,
+  "current_finite_receipt": {
+    "status": "complete",
+    "wrapper_pid": 4087236,
+    "child_pid": 4087291,
+    "argv": [
+      "taskset",
+      "-c",
+      "0,2,4,6,8,10,12,14",
+      "/mnt/efs/nlp/psyche/riley-qkv-gateup-v214-20261019/owned-A100-v237-after",
+      "--ignored",
+      "--nocapture",
+      "--test-threads=1"
+    ],
+    "gpu": "GPU-b7a1c292-6e3a-1bf2-6e6a-25307835853b",
+    "started_utc": "2026-10-19T01:11:39.028733+00:00",
+    "initial_gpu_memory_mib": 4,
+    "verified_owned_pids": [
+      4087291,
+      4087300
+    ],
+    "returncode": 0,
+    "failure": null,
+    "wall_seconds": 106.79257331043482,
+    "finished_utc": "2026-10-19T01:13:25.821296+00:00"
+  },
+  "independent_audit_exit": 1,
+  "pending": [
+    "Mistral newcandidate wholemodelGraph validation",
+    "heterogeneous API exactness",
+    "same-device before/after/stock performance comparison"
+  ],
+  "source_adopted": false,
+  "raw_preserved": true
+}

@@ -178,7 +178,10 @@ pub struct PreparedLlamaBatchExecutorConfig {
     fused_mlp_residual_norm: bool,
     output_row_lm_head: bool,
     serving_sequence_token_bound: Option<usize>,
+    owned_mlp_graphs: bool,
     decode_step_capture: bool,
+    owned_decode_graph: bool,
+    owned_decode_batch: u8,
     staged_step_uploads: bool,
     dense_prompt_attention: bool,
 }
@@ -210,11 +213,20 @@ impl PreparedLlamaBatchExecutorConfig {
             fused_mlp_residual_norm: false,
             output_row_lm_head: false,
             serving_sequence_token_bound: None,
+            owned_mlp_graphs: false,
             decode_step_capture: false,
+            owned_decode_graph: false,
+            owned_decode_batch: 0,
             staged_step_uploads: false,
             dense_prompt_attention: false,
         }
     }
+
+    /// Enables bounded MLP-only graphs for independent M1 decode rows.
+    #[must_use]
+    pub const fn with_owned_mlp_graphs(mut self)->Self { self.owned_mlp_graphs=true;self }
+    #[must_use]
+    pub const fn owned_mlp_graphs(self)->bool { self.owned_mlp_graphs }
 
     /// Records the first pure-decode step of each dense-row shape as a CUDA
     /// graph and replays it for later pure-decode steps that fill the same
@@ -226,6 +238,51 @@ impl PreparedLlamaBatchExecutorConfig {
         self.decode_step_capture = true;
         self
     }
+
+    /// Replays fixed decode segments around the dynamic-length owned attention.
+    /// The exact profile retains all arithmetic and request GEMM row groups.
+    #[must_use]
+    pub const fn with_owned_decode_graph(mut self) -> Self {
+        self.owned_decode_graph = true;
+        self
+    }
+
+    #[must_use]
+    pub const fn owned_decode_graph(self) -> bool { self.owned_decode_graph }
+
+    /// Submits unchanged M=1 cuBLAS calls under one native validation/lease scope.
+    #[must_use]
+    pub const fn with_owned_decode_batch(mut self) -> Self {
+        self.owned_decode_batch = 1;
+        self
+    }
+    #[must_use]
+    pub const fn owned_decode_batch(self) -> u8 { self.owned_decode_batch }
+
+    /// Experimental bounded Qwen Gate/Up row coalescing; independent byte gates required.
+    #[must_use]
+    pub const fn with_owned_mlp_decode_batch(mut self) -> Self {
+        self.owned_decode_batch=2;
+        self
+    }
+
+    /// Q4 SM89 exact R2 Gate/Up plus once-validated request boundaries.
+    #[must_use]
+    pub const fn with_exact_r2_decode_batch(mut self)->Self{self.owned_decode_batch=3;self}
+
+    /// Opt-in SM89 Q4 R2 Down/attention-output global-load kernels for at most2
+    /// simultaneous sequences. Preserves
+    /// eager BF16 arithmetic; throughput and first-token latency are qualified
+    /// separately. Existing mode3 and ordinary modes retain their algorithms.
+    #[must_use]
+    pub const fn with_exact_r2_global_decode_batch(mut self)->Self{self.owned_decode_batch=4;self}
+
+
+    /// Opt-in SM89 Qwen3-4B/Mistral small-row kernels and private per-actual-row
+    /// layer Graph keys, bounded to 32 sequences. Keeps eager arithmetic; first
+    /// token and streaming latency tradeoffs are measured separately.
+    #[must_use]
+    pub const fn with_exact_smallrows_decode_batch(mut self)->Self{self.owned_decode_batch=5;self}
 
     /// Stages an iteration's token and metadata bytes in one pinned buffer
     /// and copies them to their device buffers inside the iteration's command
@@ -699,16 +756,24 @@ impl PreparedLlamaBatchExecutorConfig {
     pub(in crate::llama) fn validate_attention_implementation(
         self,
     ) -> LlamaBatchExecutorResult<()> {
+        if (self.owned_decode_graph || self.owned_decode_batch != 0) && (!self.owned_hf_eager_bf16()
+            || self.execution_completion != ExecutionCompletionImplementation::IterationBatch) {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"owned_decode_graph",reason:"requires owned profile and iteration-batch completion"});
+        }
+        if self.owned_mlp_graphs && (!self.owned_hf_eager_bf16()
+            || self.execution_completion!=ExecutionCompletionImplementation::IterationBatch
+            || !self.fused_silu_multiply || !cfg!(feature="cuda-cublas-gemm-probe")) {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"owned_mlp_graphs",reason:"owned HF iteration-batch completion and fused SiLU required"});
+        }
         if self.owned_hf_eager_bf16() != self.forward.owned_hf_eager_bf16() {
             return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"owned-hf-eager-bf16-v1",reason:"attention and GEMM/norm profile must be selected together"});
         }
         if self.owned_hf_eager_bf16() && (!cfg!(feature="cuda-cublas-gemm-probe")
-            || self.execution_completion != ExecutionCompletionImplementation::PerOperation
             || self.metadata_transport != BatchMetadataTransport::Synchronous
             || self.residual_norm != ResidualNormImplementation::Separate
             || self.staged_step_uploads || self.decode_step_capture || self.fused_mlp_residual_norm
-            || self.fused_silu_multiply || self.fused_kv_write) {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"owned-hf-eager-bf16-v1",reason:"requires linked owned CUDA path, per-operation synchronous separate-norm execution without capture"});
+            || self.fused_kv_write) {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"owned-hf-eager-bf16-v1",reason:"requires linked owned CUDA path, synchronous metadata and separate norms without capture"});
         }
         if (self.materialized_bf16_reference_d128() || self.materialized_bf16_reference_d64() || self.owned_hf_eager_bf16())
             && (self.decode_step_capture || self.vllm_smol_p128_graph || self.d128_global_merge || self.d128_tensor_core_producer || self.prompt_attention_mma) {
@@ -835,7 +900,10 @@ pub(in crate::llama) const fn normalize_prepared_config(
         fused_mlp_residual_norm: config.fused_mlp_residual_norm,
         output_row_lm_head: config.output_row_lm_head,
         serving_sequence_token_bound: config.serving_sequence_token_bound,
+        owned_mlp_graphs: config.owned_mlp_graphs,
         decode_step_capture: config.decode_step_capture,
+        owned_decode_graph: config.owned_decode_graph,
+        owned_decode_batch: config.owned_decode_batch,
         staged_step_uploads: config.staged_step_uploads,
         dense_prompt_attention: config.dense_prompt_attention,
     }
@@ -978,7 +1046,22 @@ mod owned_hf_profile_contract_tests {
         assert_eq!(own.validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
         assert_eq!(ragged_attention_implementation_id(own.ragged_attention_reduction_profile(),own.ragged_attention_implementation()),"riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1");
         assert!(own.uses_paged_attention_workspace());
-        for bad in [own.with_iteration_batch_completion(),own.with_fused_residual_norm(),
+        assert!(base.with_owned_decode_graph().validate_attention_implementation().is_err());
+        assert!(base.with_owned_decode_batch().validate_attention_implementation().is_err());
+        assert!(own.with_owned_decode_batch().validate_attention_implementation().is_err());
+        assert_eq!(own.with_iteration_batch_completion().with_owned_decode_batch().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
+
+        assert!(own.with_owned_decode_graph().validate_attention_implementation().is_err());
+        assert_eq!(own.with_iteration_batch_completion().with_owned_decode_graph().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
+
+        assert_eq!(own.with_iteration_batch_completion().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
+        assert_eq!(own.with_fused_silu_multiply().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
+        let graphed=own.with_fused_silu_multiply().with_iteration_batch_completion().with_owned_mlp_graphs();
+        assert_eq!(graphed.validate_attention_implementation().is_ok(),cfg!(feature="cuda-cublas-gemm-probe"));
+        assert!(super::normalize_prepared_config(graphed).owned_mlp_graphs());
+        assert!(own.with_owned_mlp_graphs().validate_attention_implementation().is_err());
+        assert!(own.with_fused_silu_multiply().with_owned_mlp_graphs().validate_attention_implementation().is_err());
+        for bad in [own.with_fused_residual_norm(),
             own.with_decode_step_capture(),own.with_vllm_smol_p128_graph(),own.with_d128_global_merge(),
             own.with_d128_tensor_core_producer(),own.with_fixed37_reductions(),own.with_legacy_ragged_attention_heads(),
             own.with_materialized_bf16_reference_d64()] {

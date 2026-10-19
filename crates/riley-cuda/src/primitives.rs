@@ -575,8 +575,13 @@ pub fn rms_norm<S: CudaExecutionStream + ?Sized>(
 /// Returns not-supported outside the reviewed contract, or a descriptor,
 /// shape, overlap, launch, or synchronization error.
 pub fn hugging_face_smollm2_rms_norm<S: CudaExecutionStream + ?Sized>(
-    params: &mut RmsNormParams<'_>,
-    stream: &mut S,
+    params: &mut RmsNormParams<'_>, stream: &mut S,
+) -> CudaResult<()> {
+    execute_hugging_face_smollm2_rms_norm(params, stream, false)
+}
+
+fn execute_hugging_face_smollm2_rms_norm<S: CudaExecutionStream + ?Sized>(
+    params: &mut RmsNormParams<'_>, stream: &mut S, singleton_rows: bool,
 ) -> CudaResult<()> {
     const OPERATION: &str = "hugging_face_smollm2_rms_norm";
     let stream = execution_stream_mut(stream);
@@ -614,7 +619,12 @@ pub fn hugging_face_smollm2_rms_norm<S: CudaExecutionStream + ?Sized>(
     )?;
     #[cfg(feature = "cuda")]
     {
-        ffi::hugging_face_smollm2_rms_norm_execute(
+        let execute = if singleton_rows {
+            ffi::hugging_face_smollm2_singleton_rms_norm_execute
+        } else {
+            ffi::hugging_face_smollm2_rms_norm_execute
+        };
+        execute(
             params.input.raw(),
             params.weight.raw(),
             params.output.raw(),
@@ -626,7 +636,7 @@ pub fn hugging_face_smollm2_rms_norm<S: CudaExecutionStream + ?Sized>(
     }
     #[cfg(not(feature = "cuda"))]
     {
-        let _ = params;
+        let _ = (params, singleton_rows);
         Err(CudaError::unavailable(OPERATION))
     }
 }
@@ -767,6 +777,20 @@ pub fn hugging_face_qwen_wide_rms_norm<S: CudaExecutionStream + ?Sized>(
     params: &mut RmsNormParams<'_>,
     stream: &mut S,
 ) -> CudaResult<()> {
+    execute_hugging_face_qwen_wide_rms_norm(params, stream, false)
+}
+
+#[cfg(feature="cuda-cublas-gemm-probe")]
+fn hugging_face_qwen_singleton_rms_norm<S: CudaExecutionStream + ?Sized>(
+    params: &mut RmsNormParams<'_>, stream: &mut S,
+) -> CudaResult<()> {
+    execute_hugging_face_qwen_wide_rms_norm(params, stream, true)
+}
+
+#[cfg(feature="cuda-cublas-gemm-probe")]
+fn execute_hugging_face_qwen_wide_rms_norm<S: CudaExecutionStream + ?Sized>(
+    params: &mut RmsNormParams<'_>, stream: &mut S, singleton_rows: bool,
+) -> CudaResult<()> {
     const OPERATION: &str = "hugging_face_qwen_wide_rms_norm";
     let stream = execution_stream_mut(stream);
     validate_hugging_face_qwen_wide_rms_norm_contract(
@@ -803,14 +827,14 @@ pub fn hugging_face_qwen_wide_rms_norm<S: CudaExecutionStream + ?Sized>(
     )?;
     #[cfg(feature = "cuda")]
     {
-        ffi::hugging_face_qwen_wide_rms_norm_execute(
-            params.input.raw(),
-            params.weight.raw(),
-            params.output.raw(),
-            params.row_count,
-            params.hidden_size,
-            params.epsilon,
-            &mut stream.native,
+        let execute = if singleton_rows {
+            ffi::hugging_face_qwen_singleton_rms_norm_execute
+        } else {
+            ffi::hugging_face_qwen_wide_rms_norm_execute
+        };
+        execute(
+            params.input.raw(), params.weight.raw(), params.output.raw(),
+            params.row_count, params.hidden_size, params.epsilon, &mut stream.native,
         )
     }
     #[cfg(not(feature = "cuda"))]
@@ -1464,6 +1488,16 @@ pub fn qkv_split_bias_rope_hf_head128<S:CudaExecutionStream+?Sized>(params:&mut 
  validate_hf_head_split_contract(params.row_count,rope.head_size,rope.head_norm_epsilon,rope.defer_for_kv_write)?;
  qkv_split_bias_impl(params,Some(rope),stream,true)
 }
+/// Defers the existing exact HF128 split into the following cache write.
+/// Native validation requires one command batch and a matching stream/sources;
+/// the batch retains every source/output lease until the fused launch finishes.
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub fn qkv_split_bias_rope_hf_head128_deferred<S:CudaExecutionStream+?Sized>(params:&mut QkvSplitBiasParams<'_>,rope:&QkvRopeParams<'_>,stream:&mut S)->CudaResult<()>{
+    validate_hf_head_split_contract(params.row_count,rope.head_size,rope.head_norm_epsilon,false)?;
+    if !rope.defer_for_kv_write{return Err(CudaError::invalid_argument("HF128 deferred split","explicit deferred cache-write selection required"));}
+    qkv_split_bias_impl(params,Some(rope),stream,true)
+}
+
 #[cfg(feature="cuda-cublas-gemm-probe")]
 fn validate_hf_head_split_contract(rows:u64,width:u64,eps:Option<f32>,defer:bool)->CudaResult<()>{
  if rows<=8192 && width==128 && eps.map(f32::to_bits)==Some(1e-6f32.to_bits()) && !defer{return Ok(());}
@@ -2755,29 +2789,41 @@ fn hf_head128_norm_contract_is_finite_and_strict(){
 
 #[cfg(feature="cuda-cublas-gemm-probe")]
 fn validate_hugging_face_qwen_wide_rms_norm_contract(operation: &'static str,dtype:CudaDType,row_count:u64,hidden_size:u64,epsilon:f32)->CudaResult<()> {
- if dtype==CudaDType::BF16 && matches!(hidden_size,2048|2560) && row_count<=8192 && epsilon.to_bits()==1e-6f32.to_bits(){return Ok(());}
- Err(CudaError::new(CudaErrorKind::NotSupported,CudaErrorDomain::Rust,CudaErrorStage::Validation,0,operation,"BF16 width2048/2560 rows<=8192 epsilon1e-6 required"))
+ let supported = (matches!(hidden_size,2048|2560) && epsilon.to_bits()==1e-6f32.to_bits())
+     || (hidden_size==4096 && epsilon.to_bits()==1e-5f32.to_bits());
+ if dtype==CudaDType::BF16 && supported && row_count<=8192 {return Ok(());}
+ Err(CudaError::new(CudaErrorKind::NotSupported,CudaErrorDomain::Rust,CudaErrorStage::Validation,0,operation,"BF16 width2048/2560 epsilon1e-6 or width4096 epsilon1e-5, rows<=8192 required"))
 }
 #[cfg(all(test,feature="cuda-cublas-gemm-probe"))]
 #[test]
 fn hf_wide_norm_contract_is_finite_and_strict(){
- for width in [2048,2560]{for rows in [0,1,2,3,8,15,16,128,397,512,1024,2048,8192]{assert!(validate_hugging_face_qwen_wide_rms_norm_contract("test",CudaDType::BF16,rows,width,1e-6).is_ok());}}
- for (dtype,rows,width,eps) in [(CudaDType::F32,16,2048,1e-6),(CudaDType::BF16,8193,2048,1e-6),(CudaDType::BF16,16,128,1e-6),(CudaDType::BF16,16,2560,1e-5)]{assert!(validate_hugging_face_qwen_wide_rms_norm_contract("test",dtype,rows,width,eps).is_err());}
+ for (width,eps) in [(2048,1e-6),(2560,1e-6),(4096,1e-5)]{for rows in [0,1,2,3,8,15,16,128,397,512,1024,2048,8192]{assert!(validate_hugging_face_qwen_wide_rms_norm_contract("test",CudaDType::BF16,rows,width,eps).is_ok());}}
+ for (dtype,rows,width,eps) in [(CudaDType::F32,16,2048,1e-6),(CudaDType::BF16,8193,2048,1e-6),(CudaDType::BF16,16,128,1e-6),(CudaDType::BF16,16,2560,1e-5),(CudaDType::BF16,16,4096,1e-6),(CudaDType::BF16,16,4096,f32::NAN)]{assert!(validate_hugging_face_qwen_wide_rms_norm_contract("test",dtype,rows,width,eps).is_err());}
 }
 
 /// Applies the bounded wide RMSNorm to each contiguous request row group.
 /// Parent capacities and ownership are validated before any group executes.
 #[cfg(feature="cuda-cublas-gemm-probe")]
 pub fn hugging_face_qwen_wide_rms_norm_row_groups<S:CudaExecutionStream+?Sized>(params:&mut RmsNormParams<'_>,slots:&[u32],stream:&mut S)->CudaResult<()>{
-    const OPERATION: &str = "hugging_face_qwen_wide_rms_norm";
+    hugging_face_rms_norm_row_groups(params, slots, stream, false, None)
+}
+
+/// Applies the reviewed SmolLM2 RMSNorm to actual request rows, independently
+/// of the owner's padded row capacity and other concurrent requests.
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub fn hugging_face_smollm2_rms_norm_row_groups<S:CudaExecutionStream+?Sized>(params:&mut RmsNormParams<'_>,slots:&[u32],stream:&mut S)->CudaResult<()>{
+    hugging_face_rms_norm_row_groups(params, slots, stream, true, None)
+}
+
+#[cfg(feature="cuda-cublas-gemm-probe")]
+fn hugging_face_rms_norm_row_groups<S:CudaExecutionStream+?Sized>(params:&mut RmsNormParams<'_>,slots:&[u32],stream:&mut S,smol:bool,cached:Option<crate::batch::ValidatedRequestRowGroups<'_>>)->CudaResult<()>{
+    const OPERATION: &str = "hugging_face_request_rms_norm";
     let stream = execution_stream_mut(stream);
-    validate_hugging_face_qwen_wide_rms_norm_contract(
-        OPERATION,
-        params.input.dtype,
-        params.row_count,
-        params.hidden_size,
-        params.epsilon,
-    )?;
+    if smol {
+        validate_hugging_face_smollm2_rms_norm_contract(OPERATION,params.input.dtype,params.row_count,params.hidden_size,params.epsilon)?;
+    } else {
+        validate_hugging_face_qwen_wide_rms_norm_contract(OPERATION,params.input.dtype,params.row_count,params.hidden_size,params.epsilon)?;
+    }
     require_dtype(OPERATION, "weight", params.weight.dtype, params.input.dtype)?;
     require_dtype(OPERATION, "output", params.output.dtype, params.input.dtype)?;
     let matrix_bytes = required_matrix_bytes(
@@ -2806,10 +2852,20 @@ pub fn hugging_face_qwen_wide_rms_norm_row_groups<S:CudaExecutionStream+?Sized>(
 
  if slots.len() as u64>params.row_count{return Err(CudaError::invalid_argument(OPERATION,"active rows exceed prepared descriptor"));}
  let row_bytes=params.hidden_size*2;let mut begin=0;
- while begin<slots.len(){let mut end=begin+1;while end<slots.len()&&slots[end]==slots[begin]{end+=1;}
+ while begin<slots.len(){let mut end=if let Some(groups)=cached{groups.group_end(begin)?}else{let mut end=begin+1;while end<slots.len()&&slots[end]==slots[begin]{end+=1;}end};
+   let singleton = end-begin == 1;
+   if singleton {
+     while end<slots.len() && (!smol || end-begin<32) {
+       let mut next=end+1;while next<slots.len()&&slots[next]==slots[end]{next+=1;}
+       if next-end != 1 { break; }
+       end=next;
+     }
+   }
    let offset=begin as u64*row_bytes;let bytes=(end-begin) as u64*row_bytes;
    let mut group=RmsNormParams{input:params.input.subspan(offset,bytes)?,weight:params.weight.subspan(0,params.weight.byte_len())?,output:params.output.subspan(offset,bytes)?,row_count:(end-begin) as u64,hidden_size:params.hidden_size,epsilon:params.epsilon};
-   hugging_face_qwen_wide_rms_norm(&mut group,stream)?;begin=end;
+   if smol {execute_hugging_face_smollm2_rms_norm(&mut group,stream,singleton && end-begin>1)?;}
+   else if singleton && end-begin>1 {hugging_face_qwen_singleton_rms_norm(&mut group,stream)?;}
+   else {hugging_face_qwen_wide_rms_norm(&mut group,stream)?;}begin=end;
  }
  Ok(())
 }
@@ -2826,4 +2882,11 @@ pub fn hf_pack_separate_qkv<S:CudaExecutionStream+?Sized>(q:CudaBufferSpan<'_>,k
  validate_resources(OP,stream,&[q.buffer,k.buffer,v.buffer,out.buffer])?;
  #[cfg(feature="cuda")]{ffi::hf_pack_qkv_execute(q.raw(),k.raw(),v.raw(),out.raw(),rows,qw,kw,&mut stream.native)}
  #[cfg(not(feature="cuda"))]{Err(CudaError::unavailable(OP))}
+}
+
+/// Reuses validated request boundaries; the original norm geometry and FP32
+/// reduction tree are unchanged. This descriptor owns no GPU allocations.
+#[cfg(feature="cuda-cublas-gemm-probe")]
+pub fn hugging_face_qwen_wide_rms_norm_row_groups_cached<S:CudaExecutionStream+?Sized>(params:&mut RmsNormParams<'_>,groups:crate::batch::ValidatedRequestRowGroups<'_>,stream:&mut S)->CudaResult<()>{
+    hugging_face_rms_norm_row_groups(params,groups.row_sequence_slots(),stream,false,Some(groups))
 }

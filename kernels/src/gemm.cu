@@ -20,13 +20,14 @@ constexpr uint64_t kRequiredAlignment = 256;
 constexpr int kMaximumHeuristicResults = 32;
 constexpr size_t kStrictGemmBufferCount = 4;
 constexpr size_t kMaximumGemmBuffers = 5;
-// The source-bound HF M=1 BIAS diagnostic is the only profile that mirrors
-// PyTorch's `gemm_and_bias` heuristic preferences.  Keep this distinct from
-// the strict serving contract: these split-K flags are admitted only by the
-// Rust diagnostic owner.
+// Explicit HF BIAS profiles mirror PyTorch's `gemm_and_bias` preferences.
+// Their reduction flags remain separate from the strict plain-GEMM contract.
 constexpr uint32_t kHfCompatibleBiasDiagnosticFlags =
     RILEY_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K |
     RILEY_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K;
+constexpr uint32_t kHfCompatibleBiasAllReductionsFlags =
+    kHfCompatibleBiasDiagnosticFlags |
+    RILEY_CUDA_GEMM_FLAG_ALLOW_COMPUTE_TYPE_SPLIT_K;
 
 struct GemmByteLengths {
   uint64_t input;
@@ -214,9 +215,13 @@ RileyCudaStatus validate_config_for_epilogue(
   }
   constexpr uint32_t kKnownGemmFlags =
       RILEY_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K |
-      RILEY_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K;
+      RILEY_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K |
+      RILEY_CUDA_GEMM_FLAG_ALLOW_COMPUTE_TYPE_SPLIT_K;
   // reserved[0] == 1 requests bit-equivalent selection on anchored plans.
   if ((config->flags & ~kKnownGemmFlags) != 0 ||
+      ((config->flags & RILEY_CUDA_GEMM_FLAG_ALLOW_COMPUTE_TYPE_SPLIT_K) != 0 &&
+       (required_epilogue != RILEY_CUDA_GEMM_EPILOGUE_BIAS ||
+        config->flags != kHfCompatibleBiasAllReductionsFlags)) ||
       config->reserved0 != 0 || config->reserved[0] > 1 ||
       !reserved_is_zero(config->reserved + 1, 2)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
@@ -376,6 +381,9 @@ bool deterministic_reduction_configuration(
       static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_OUTPUT_TYPE)) {
     return (config.flags &
             RILEY_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K) != 0;
+  }
+  if (scheme == static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_COMPUTE_TYPE)) {
+    return (config.flags & RILEY_CUDA_GEMM_FLAG_ALLOW_COMPUTE_TYPE_SPLIT_K) != 0;
   }
   if (scheme == static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_INPLACE)) {
     return (config.flags &
@@ -673,8 +681,17 @@ struct EquivalentCandidate {
   uint32_t stages;
   uint32_t split_k;
   uint32_t reduction;
+  // Zero preserves historical entries; new recipes bind the qualified library.
+  size_t cublaslt_version = 0;
 };
 constexpr EquivalentCandidate kEquivalentCandidates[] = {
+    // RTX 4090, cuBLASLt 12.8.4: Qwen3-1.7B, decode row counts 1..32.
+    // Preserve the 128-row anchor reduction, with smaller M/N tiles. Actual
+    // all-layer BF16 fixtures and full-model gates qualify these separately.
+    // Runtime probe and AlgoCheck remain mandatory; unsupported versions fall
+    // back to the original anchor. QKV is deliberately absent (bit mismatch).
+    {89, 2048, 12288, 1, 32, 21, 11, 19, 1, 0, 120804},
+    {89, 6144, 2048, 1, 32, 21, 5, 19, 4, 4, 120804},
     // ---- RTX 4090 (sm_89), cuBLAS 12.8: Qwen2.5-3B ----
     // merged Q|K|V 2048 -> 2560
     {89, 2048, 2560, 1, 32, 21, 5, 13, 3, 4},
@@ -1223,6 +1240,8 @@ bool select_equivalent_candidate(RileyCudaGemmPlan* plan,
       static_cast<uint32_t>(major * 10 + minor);
   for (const EquivalentCandidate& entry : kEquivalentCandidates) {
     if (entry.compute_capability == compute_capability &&
+        (entry.cublaslt_version == 0 ||
+         entry.cublaslt_version == cublasLtGetVersion()) &&
         entry.k == plan->config.k && entry.n == plan->config.n &&
         plan->config.m >= entry.min_m && plan->config.m <= entry.max_m &&
         try_equivalent_candidate(plan, anchor_algorithm, &entry, selected,
@@ -1412,19 +1431,21 @@ RileyCudaStatus prepare_plan_with_optional_bias(
     return status;
   }
   if (preparation_bias != nullptr &&
-      plan->config.flags == kHfCompatibleBiasDiagnosticFlags) {
+      (plan->config.flags == kHfCompatibleBiasDiagnosticFlags ||
+       plan->config.flags == kHfCompatibleBiasAllReductionsFlags)) {
     // PyTorch's CUDA addmm fast path calls gemm_and_bias with a 1-D bias and
     // sets the A/B/C minimum-alignment preferences from its actual pointers
-    // before it asks cuBLASLt for a heuristic. Riley's diagnostic span
-    // contract already proves each pointer has this alignment. Do not set D:
-    // PyTorch supplies only A/B/C, and strict serving plans retain their
-    // existing selection contract.
+    // before it asks cuBLASLt for a heuristic. The pinned PyTorch commit
+    // cf30153c also supplies D using the bias pointer alignment. Riley's
+    // diagnostic span contract proves this alignment for every pointer.
+    // Strict serving plans retain their existing selection contract.
     const uint32_t minimum_alignment =
         static_cast<uint32_t>(kRequiredAlignment);
     constexpr cublasLtMatmulPreferenceAttributes_t kAlignmentAttributes[] = {
         CUBLASLT_MATMUL_PREF_MIN_ALIGNMENT_A_BYTES,
         CUBLASLT_MATMUL_PREF_MIN_ALIGNMENT_B_BYTES,
         CUBLASLT_MATMUL_PREF_MIN_ALIGNMENT_C_BYTES,
+        CUBLASLT_MATMUL_PREF_MIN_ALIGNMENT_D_BYTES,
     };
     for (const cublasLtMatmulPreferenceAttributes_t attribute :
          kAlignmentAttributes) {
@@ -2576,6 +2597,61 @@ extern "C" RileyCudaStatus riley_cuda_gemm_plan_execute(
   }
   return complete_execution(&uses, &scope, stream, status,
                             matmul_attempted, error);
+}
+
+// Preserve the selected one-row reduction while batching independent requests.
+extern "C" RileyCudaStatus riley_cuda_bias_singleton_batch_plan_create(
+    RileyCudaContext* context,const RileyCudaGemmConfig* config,
+    const RileyCudaBufferSpan* bias,RileyCudaBiasGemmPlan** out_plan,
+    RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  constexpr const char* op="prepare singleton bias batch";
+  if(config==nullptr || out_plan==nullptr || *out_plan!=nullptr ||
+      config->m<2 || config->m>32 || config->k!=2048 ||
+      (config->n!=2048 && config->n!=256))
+    return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"requires Qwen singleton Q/K/V geometry");
+  RileyCudaGemmConfig one=*config;one.m=1;
+  RileyCudaBiasGemmPlan* value=nullptr;
+  RileyCudaStatus status=riley_cuda_bias_gemm_plan_create(context,&one,bias,&value,error);
+  if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+  auto* g=&value->gemm;
+  const auto& info=g->algorithm_info;
+  if(info.compute_capability_major!=8 || info.compute_capability_minor!=9 ||
+      info.cublaslt_version!=120804 || info.algorithm_id!=13 ||
+      info.tile_id!=0 || info.stages_id!=0 || info.split_k!=1 ||
+      info.reduction_scheme!=0 || info.workspace_bytes!=0) {
+    status=validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,
+        RILEY_CUDA_ERROR_STAGE_PREPARE,op,"unqualified singleton bias algorithm");
+  } else {
+    CurrentContext scope(context);
+    status=scope.enter(error,RILEY_CUDA_ERROR_STAGE_PREPARE,op);
+    const int32_t count=static_cast<int32_t>(config->m);
+    const int64_t strides[3]={0,static_cast<int64_t>(config->k),static_cast<int64_t>(config->n)};
+    const cublasLtMatrixLayout_t layouts[3]={g->weight_layout,g->input_layout,g->output_layout};
+    for(size_t i=0;i<3 && status==RILEY_CUDA_STATUS_SUCCESS;++i) {
+      status=cublaslt_error(cublasLtMatrixLayoutSetAttribute(layouts[i],CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT,&count,sizeof(count)),error,RILEY_CUDA_ERROR_STAGE_PREPARE,op);
+      if(status==RILEY_CUDA_STATUS_SUCCESS)status=cublaslt_error(cublasLtMatrixLayoutSetAttribute(layouts[i],CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET,&strides[i],sizeof(strides[i])),error,RILEY_CUDA_ERROR_STAGE_PREPARE,op);
+    }
+    cublasLtMatmulHeuristicResult_t checked{};
+    if(status==RILEY_CUDA_STATUS_SUCCESS)status=cublaslt_error(cublasLtMatmulAlgoCheck(g->handle,g->operation,g->weight_layout,g->input_layout,g->output_layout,g->output_layout,&g->algorithm,&checked),error,RILEY_CUDA_ERROR_STAGE_PREPARE,op);
+    if(status==RILEY_CUDA_STATUS_SUCCESS)status=cublaslt_error(checked.state,error,RILEY_CUDA_ERROR_STAGE_PREPARE,op);
+    if(status==RILEY_CUDA_STATUS_SUCCESS && checked.workspaceSize!=0)
+      status=validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_PREPARE,op,"singleton batch needs unexpected workspace");
+    if(status==RILEY_CUDA_STATUS_SUCCESS) {
+      g->config.m=config->m;g->algorithm_info.m=config->m;
+      g->input_bytes=config->m*config->k*2;g->output_bytes=config->m*config->n*2;
+    }
+    status=scope.leave(status,error,RILEY_CUDA_ERROR_STAGE_PREPARE,op);
+  }
+  if(status==RILEY_CUDA_STATUS_SUCCESS){*out_plan=value;return status;}
+  // Existing close owns descriptor teardown and context-child accounting.
+  RileyCudaErrorInfo original{};
+  if(error!=nullptr)original=*error;
+  const RileyCudaStatus cleanup=riley_cuda_bias_gemm_plan_close(&value,error);
+  if(cleanup!=RILEY_CUDA_STATUS_SUCCESS)return cleanup;
+  if(error!=nullptr)*error=original;
+  return status;
 }
 
 extern "C" RileyCudaStatus riley_cuda_bias_gemm_plan_info(

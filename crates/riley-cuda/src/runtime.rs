@@ -369,6 +369,7 @@ impl CudaContext {
         {
             let native = ffi::StreamHandle::create(&self.inner.native)?;
             Ok(CudaStream {
+                identity: CudaResourceIdentity::new(),
                 context: Arc::clone(&self.inner),
                 native,
                 _not_sync: PhantomData,
@@ -471,6 +472,22 @@ impl CudaContext {
     }
 }
 
+/// Opaque allocation/stream identity. Cloned tags preserve identity without
+/// retaining a CUDA allocation; equality never aliases a later allocation.
+#[derive(Clone, Debug)]
+pub(crate) struct CudaResourceIdentity(Arc<()>);
+impl CudaResourceIdentity {
+    pub(crate) fn new() -> Self { Self(Arc::new(())) }
+}
+impl PartialEq for CudaResourceIdentity {
+    fn eq(&self, other:&Self)->bool { Arc::ptr_eq(&self.0,&other.0) }
+}
+impl Eq for CudaResourceIdentity {}
+impl std::hash::Hash for CudaResourceIdentity {
+    fn hash<H:std::hash::Hasher>(&self,state:&mut H){std::ptr::hash(Arc::as_ptr(&self.0),state);}
+}
+
+
 /// Explicit non-default CUDA stream.
 ///
 /// A stream is `Send` but deliberately `!Sync`; ordered mutations require
@@ -482,6 +499,7 @@ impl CudaContext {
 /// assert_sync::<riley_cuda::CudaStream>();
 /// ```
 pub struct CudaStream {
+    pub(crate) identity: CudaResourceIdentity,
     #[cfg(feature = "cuda")]
     pub(crate) native: ffi::StreamHandle,
     // Declared after native so drop closes the child before releasing the

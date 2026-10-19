@@ -47,6 +47,7 @@ pub const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_TRANSITION_WIDTH: u64 = 2;
 /// immutable for as long as the descriptor can be submitted.
 #[derive(Clone, Copy, Debug)]
 pub struct PackedBatchHostV1<'a> {
+    request_groups:Option<ValidatedRequestRowGroups<'a>>,
     sequence_block_offsets: &'a [u32],
     block_ids: &'a [u32],
     valid_tokens: &'a [u16],
@@ -56,6 +57,19 @@ pub struct PackedBatchHostV1<'a> {
     block_count: u64,
     active_row_count: u64,
     physical_block_count: u64,
+}
+
+/// Safe borrowed proof of canonical contiguous request extents.
+#[derive(Clone,Copy,Debug)]
+pub struct ValidatedRequestRowGroups<'a>{offsets:&'a [u32],slots:&'a [u32]}
+impl<'a> ValidatedRequestRowGroups<'a>{
+    #[must_use]
+    pub const fn row_sequence_slots(self)->&'a [u32]{self.slots}
+    pub fn group_end(self,begin:usize)->CudaResult<usize>{
+        let slot=self.slots.get(begin).copied().ok_or_else(||CudaError::invalid_argument("request group","start outside active rows"))? as usize;
+        if self.offsets.get(slot).copied()!=Some(begin as u32){return Err(CudaError::invalid_argument("request group","start is not a request boundary"));}
+        self.offsets.get(slot+1).copied().map(|v|v as usize).ok_or_else(||CudaError::invalid_argument("request group","missing end boundary"))
+    }
 }
 
 impl<'a> PackedBatchHostV1<'a> {
@@ -87,6 +101,7 @@ impl<'a> PackedBatchHostV1<'a> {
             physical_block_count,
         )?;
         Ok(Self {
+            request_groups:None,
             sequence_block_offsets,
             block_ids,
             valid_tokens,
@@ -98,6 +113,27 @@ impl<'a> PackedBatchHostV1<'a> {
             physical_block_count,
         })
     }
+
+    /// Validates the existing input CSR once; device metadata and page ownership
+    /// still pass the canonical constructor above. No rows are reordered.
+    pub fn with_request_row_groups(mut self,offsets:&'a [u32])->CudaResult<Self>{
+        const OP:&str="PackedBatchHostV1::with_request_row_groups";
+        if offsets.len()!=self.sequence_count as usize+1 || offsets.first()!=Some(&0)
+            || offsets.last().copied().map(u64::from)!=Some(self.active_row_count) {
+            return Err(CudaError::invalid_argument(OP,"request CSR bounds differ from packed rows"));
+        }
+        for (slot,pair) in offsets.windows(2).enumerate(){
+            let begin=pair[0] as usize;let end=pair[1] as usize;
+            if begin>=end||end>self.row_sequence_slots.len()
+                ||self.row_sequence_slots[begin..end].iter().any(|&s|s as usize!=slot)
+                ||self.row_positions[begin..end].windows(2).any(|p|p[0].checked_add(1)!=Some(p[1])) {
+                return Err(CudaError::invalid_argument(OP,"request rows are not contiguous canonical CSR groups"));
+            }
+        }
+        self.request_groups=Some(ValidatedRequestRowGroups{offsets,slots:self.row_sequence_slots});Ok(self)
+    }
+    #[must_use]
+    pub const fn request_row_groups(self)->Option<ValidatedRequestRowGroups<'a>>{self.request_groups}
 
     #[must_use]
     pub const fn format_version(self) -> u32 {
@@ -2269,4 +2305,18 @@ pub fn prepare_materialized_ragged_attention_metadata(
     let inactive=(output.byte_len()-active_bytes) as usize;
     if inactive>0 {output.upload_from_slice(active_bytes,&zero_host[..inactive],staging,stream)?;}
     Ok(())
+}
+
+#[cfg(test)]
+mod request_row_group_cache_tests {
+    use super::*;
+    #[test]
+    fn request_cache_requires_canonical_boundaries_and_positions(){
+        let offsets=[0,1,2];let blocks=[0,1];let valid=[2,1];let slots=[0,0,1];let positions=[0,1,0];
+        let host=PackedBatchHostV1::new(&offsets,&blocks,&valid,&slots,&positions,2).unwrap();
+        let rows=[0,2,3];let groups=host.with_request_row_groups(&rows).unwrap().request_row_groups().unwrap();
+        assert_eq!(groups.group_end(0).unwrap(),2);assert_eq!(groups.group_end(2).unwrap(),3);assert!(groups.group_end(1).is_err());assert!(groups.group_end(3).is_err());
+        assert!(host.with_request_row_groups(&[0,1,3]).is_err());assert!(host.with_request_row_groups(&[0,2,2]).is_err());
+        let positions=[1,0,0];let host=PackedBatchHostV1::new(&offsets,&blocks,&valid,&slots,&positions,2).unwrap();assert!(host.with_request_row_groups(&rows).is_err());
+    }
 }

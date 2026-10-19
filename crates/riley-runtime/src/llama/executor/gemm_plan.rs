@@ -10,7 +10,7 @@ use riley_cuda::{CudaContext, CudaErrorKind};
 use riley_model::LoadedModel;
 
 use super::super::LlamaExecutionPlan;
-use super::super::forward::{GemmPlans, LlamaForwardError, PreparedLlamaForward};
+use super::super::forward::{GemmPlans, LlamaForwardError, PreparedLlamaForward, OwnedDecodeSegment, owned_decode_segment_capacity};
 use super::error::{LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult};
 use super::shape::{LlamaBatchShapePolicy, validate_shape_buckets};
 
@@ -23,6 +23,7 @@ pub(in crate::llama) struct PreparedLlamaBatchShape {
     /// Recorded pure-decode steps for this dense-row shape, keyed by the
     /// number of active rows (which fixes every recorded launch extent).
     /// Empty unless step capture is enabled.
+    pub(in crate::llama) owned_decode_segments: Vec<OwnedDecodeSegment>,
     pub(in crate::llama) captured_steps: Vec<(usize, riley_cuda::CudaStepGraph)>,
 }
 
@@ -30,6 +31,7 @@ impl PreparedLlamaBatchShape {
     pub(in crate::llama) fn close(self) -> LlamaBatchExecutorResult<()> {
         // The recorded step references the plans; destroy it first.
         drop(self.captured_steps);
+        drop(self.owned_decode_segments);
         self.gemms.close().map_err(LlamaBatchExecutorError::Forward)
     }
 }
@@ -80,6 +82,7 @@ pub(in crate::llama) fn prepare_shape_variants(
         };
         variants.push(PreparedLlamaBatchShape {
             dense_rows,
+            owned_decode_segments: (0..owned_decode_segment_capacity(&plan,dense_rows)).map(|_| OwnedDecodeSegment::default()).collect(),
             plan,
             gemms,
             captured_steps: Vec::new(),

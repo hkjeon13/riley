@@ -6,6 +6,9 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::{ArtifactKind, LoadLimits, ModelError, ModelResult, strict_json};
 
+mod mistral;
+pub use mistral::MistralTokenizer;
+
 const TOKENIZER_VERSION: &str = "1.0";
 const MAX_ADDED_TOKEN_BYTES: usize = 4096;
 const MAX_TOTAL_ADDED_TOKEN_BYTES: usize = 1024 * 1024;
@@ -57,12 +60,47 @@ pub struct DecodeOptions {
     pub skip_special_tokens: bool,
 }
 
+/// Request-local decoder state; never share it between concurrent generations.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TokenDecodeState {
+    emitted_bytes: bool,
+}
+
 /// Python-free tokenizer interface consumed by model loading and generation.
 ///
 /// Artifact parsing is resource-bounded. Request-level input and output limits
 /// remain the caller's responsibility until the serving API applies its model
 /// context and admission-control policy.
 pub trait Tokenizer: Send + Sync {
+    /// Whether the artifact decoder strips one ASCII space from the beginning
+    /// of the complete decoded sequence, after skipped special tokens.
+    fn strips_leading_decoder_space(&self) -> bool {
+        false
+    }
+
+    /// Decodes raw token bytes with request-local prefix handling.
+    /// Empty or skipped tokens do not consume the sequence prefix.
+    ///
+    /// # Errors
+    /// Returns the same validation errors as `decode_token_bytes_into`.
+    fn decode_token_bytes_with_state(
+        &self,
+        id: u32,
+        options: DecodeOptions,
+        destination: &mut [u8],
+        state: &mut TokenDecodeState,
+    ) -> ModelResult<usize> {
+        let mut count = self.decode_token_bytes_into(id, options, destination)?;
+        if count != 0 {
+            if !state.emitted_bytes && self.strips_leading_decoder_space() && destination[0] == b' '
+            {
+                destination.copy_within(1..count, 0);
+                count -= 1;
+            }
+            state.emitted_bytes = true;
+        }
+        Ok(count)
+    }
     /// Encodes UTF-8 text into model token IDs.
     ///
     /// # Errors
@@ -385,28 +423,7 @@ impl SmolLm2Tokenizer {
         if nodes.is_empty() {
             return Ok(Vec::new());
         }
-        for index in 0..nodes.len() {
-            nodes[index].previous = index.checked_sub(1);
-            nodes[index].next = (index + 1 < nodes.len()).then_some(index + 1);
-        }
-
-        let mut candidates = BinaryHeap::new();
-        for left in 0..nodes.len().saturating_sub(1) {
-            push_candidate(&nodes, &self.merge_ranks, left, left + 1, &mut candidates);
-        }
-        while let Some(Reverse((rank, position, left, right))) = candidates.pop() {
-            if !candidate_is_current(&nodes, &self.merge_ranks, rank, left, right) {
-                continue;
-            }
-            merge_nodes(
-                &mut nodes,
-                &self.merge_ranks,
-                left,
-                right,
-                position,
-                &mut candidates,
-            );
-        }
+        merge_bpe_nodes(&mut nodes, &self.merge_ranks);
 
         let mut ids = Vec::new();
         let mut current = Some(0_usize);
@@ -441,6 +458,25 @@ impl SmolLm2Tokenizer {
             return Ok(Some(DecodedToken::Raw(token.as_bytes())));
         }
         Ok(Some(DecodedToken::classify(token, &self.byte_decoder)))
+    }
+}
+
+/// Shared ranked BPE merge engine for ByteLevel and Unicode/byte-fallback inputs.
+fn merge_bpe_nodes(nodes: &mut [BpeNode], merge_ranks: &BTreeMap<String, BTreeMap<String, usize>>) {
+    for index in 0..nodes.len() {
+        nodes[index].previous = index.checked_sub(1);
+        nodes[index].next = (index + 1 < nodes.len()).then_some(index + 1);
+    }
+
+    let mut candidates = BinaryHeap::new();
+    for left in 0..nodes.len().saturating_sub(1) {
+        push_candidate(&nodes, merge_ranks, left, left + 1, &mut candidates);
+    }
+    while let Some(Reverse((rank, position, left, right))) = candidates.pop() {
+        if !candidate_is_current(&nodes, merge_ranks, rank, left, right) {
+            continue;
+        }
+        merge_nodes(nodes, merge_ranks, left, right, position, &mut candidates);
     }
 }
 
