@@ -118,6 +118,24 @@ and TPOT p99 pairs up to +12.37%. It remains unadopted. All 30 normal arms and
 four separate profile arms are retained. The current runtime remains v15C;
 the large throughput objective is unmet. [Audited G evidence](benchmarks/evidence/20261021-mlp-batch-v16g/README.md).
 
+<!-- v17 independent experiments -->
+### A100 · Qwen3-4B · independent v17 experiments
+
+Decode projection and mixed execution/committed-event overlap are separate source candidates from v15C. Each row uses its own fresh same-GPU controls and five processes per engine/concurrency. No completed normal arm is excluded.
+
+| Experiment | Clients | v15C tok/s | Candidate tok/s | Change | vLLM tok/s | Candidate / vLLM | Gate |
+|---|---:|---:|---:|---:|---:|---:|---|
+| v17A Gate/Up | 16 | 735.627 | 743.473 | +1.07% | 1155.362 | 64.35% | Rejected |
+| v17A Gate/Up | 32 | 978.131 | 981.322 | +0.33% | 1691.051 | 58.03% | Rejected |
+
+The original literal native/HF BF16 references and paired TTFT/TPOT p95/p99
+2% tail gates are retained. “Criteria pass” in an experiment receipt is
+qualification; application to main is recorded separately. The projection candidate is rejected on tails and will not be combined with B4. The independent mixed/overlap comparison is running. Main remains v15C.
+
+[projection-v17a report](docs/qwen-projection-v17a-20261021.md)
+
+<!-- end v17 independent experiments -->
+
 Dated A100 matrices for other model families and their original numerical
 contracts are in [model coverage](docs/model-coverage-a100.md). Separate native
 preset screens are documented in [native HF performance](docs/hf-native-performance.md),

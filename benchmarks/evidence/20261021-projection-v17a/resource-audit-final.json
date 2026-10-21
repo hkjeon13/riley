@@ -1,0 +1,107 @@
+{
+  "time_ns": 1792579291857089531,
+  "resource_runs": [
+    {
+      "name": "final-teacher-C1-eager-r3",
+      "samples": 37,
+      "whole_device_peak_MiB": 9783.0,
+      "receipt_sha256": "972ef9555f41baa4016d4f427574e952d38e725305a32aa3021009d8b9f5cfc1"
+    },
+    {
+      "name": "final-teacher-allR-Graph-r3",
+      "samples": 46,
+      "whole_device_peak_MiB": 19053.0,
+      "receipt_sha256": "7d1c706b9889b49fda8749f36be02fdc8053a51814bff9c94b4fa6b92c64caa2"
+    },
+    {
+      "name": "teacher-body-allR-r3",
+      "samples": 103,
+      "whole_device_peak_MiB": 19133.0,
+      "receipt_sha256": "a62616c95bd486d7527c711eab0b21feaa352f93a8c5264fd0224fcd631406b4"
+    },
+    {
+      "name": "teacher-mixed-r3",
+      "samples": 60,
+      "whole_device_peak_MiB": 18905.0,
+      "receipt_sha256": "e64ba995f30a3e0e8fa095fafbace4139a0bf05b0ec659f73ea1c27fd3b07063"
+    },
+    {
+      "name": "teacher-mixed-no-output-r3",
+      "samples": 57,
+      "whole_device_peak_MiB": 18905.0,
+      "receipt_sha256": "8571683db590cd03373d03a38f584fb8e57e40b85bf5997fffe0fbbfbc8d127f"
+    },
+    {
+      "name": "memory_gpu",
+      "samples": 1,
+      "whole_device_peak_MiB": 505.0,
+      "receipt_sha256": "efecce36dbb7998027db4df6bc599fdb29cc3cb07d8f4bf4dfbb7fc4757aefd1"
+    },
+    {
+      "name": "owned_hf_command_batch_gpu",
+      "samples": 1,
+      "whole_device_peak_MiB": 505.0,
+      "receipt_sha256": "f45b20b957461ce89aa173d7778430e57656d25e26f821a823660d2b6c8ae2af"
+    },
+    {
+      "name": "host_runtime_gpu",
+      "samples": 1,
+      "whole_device_peak_MiB": 504.0,
+      "receipt_sha256": "141e995b9cdb6710506d184b5137e7d9c4bc014903bfe0f2adb9e6cd0aaca0e8"
+    },
+    {
+      "name": "sm80_prefill_alignment_gpu",
+      "samples": 2,
+      "whole_device_peak_MiB": 951.0,
+      "receipt_sha256": "fe0c8943fbf20480708c02630a8c49fe0656580a417cad7dcc354a6b9d09d4c7"
+    },
+    {
+      "name": "bounded576",
+      "samples": 101,
+      "whole_device_peak_MiB": 18483.0,
+      "receipt_sha256": "1edfdb59f8c0a41be9a4d81a8fb7313b4670ea9c542254ce91c6342a3ae550da"
+    },
+    {
+      "name": "/mnt/efs/nlp/psyche/riley-projection-v17a-20261021/research",
+      "samples": 3,
+      "whole_device_peak_MiB": 1055.0,
+      "receipt_sha256": "d011a9c47fe852b7f598a093ee0754602fdd6c3fc980213371fcbb245eb44315",
+      "literal_component_cases": 156
+    },
+    {
+      "name": "/mnt/efs/nlp/psyche/riley-projection-v17a2-20261021/research",
+      "samples": 3,
+      "whole_device_peak_MiB": 1055.0,
+      "receipt_sha256": "62eaa8ae4eea30a316a13b225280e9716efa3389f8775456824a3c985f07688a",
+      "literal_component_cases": 156
+    },
+    {
+      "name": "/mnt/efs/nlp/psyche/riley-projection-v17a-20261021/current-route",
+      "samples": 2,
+      "whole_device_peak_MiB": 1065.0,
+      "receipt_sha256": "ecc2330b9df4de2a63c8a913f1f4fe124503de3f84fbc8a27d1e632cc2cd41a2",
+      "component_cases": 156,
+      "literal_matching_cases": 156,
+      "scope": "Current-route screen with negative numerical/performance outcomes retained; not part of original server BF16 gate"
+    },
+    {
+      "name": "/mnt/efs/nlp/psyche/riley-projection-v17a-20261021/packed-route",
+      "samples": 11,
+      "whole_device_peak_MiB": 1121.0,
+      "receipt_sha256": "d53d040438456629b70c567f1c28d2499cc8fa74121b7e8a8a88fa2d25c1968c",
+      "component_cases": 1530,
+      "literal_matching_cases": 1530,
+      "scope": "Packed two-chain cuBLAS experiment, negative status/byte outcomes retained; not part of server BF16 gate"
+    }
+  ],
+  "source937_verified": true,
+  "binary_sha256": "2f3be741db508fea7feb835a1d87b45a7f4db0c587e1ff0ee35db2ef1eef6efd",
+  "normal_arms": 30,
+  "normal_profile_arms": 34,
+  "stored_SSE_verified": 6490,
+  "normal_profile_peak_MiB": 18267.0,
+  "GPU6_foreign_work_preserved": true,
+  "all_finite_GPU_jobs_on_GPU7": true,
+  "qualification_GPU": 7,
+  "normal_profile_GPU": 7
+}

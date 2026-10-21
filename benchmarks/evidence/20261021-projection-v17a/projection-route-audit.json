@@ -1,0 +1,16 @@
+{
+  "profiles": [
+    {
+      "trace": "/mnt/efs/nlp/psyche/riley-projection-v17a-20261021/runs/profile-c16/c16-r0-owned-after/trace.sqlite",
+      "new_gateup_calls": 684,
+      "new_down_calls": 0
+    },
+    {
+      "trace": "/mnt/efs/nlp/psyche/riley-projection-v17a-20261021/runs/profile-c32/c32-r0-owned-after/trace.sqlite",
+      "new_gateup_calls": 468,
+      "new_down_calls": 0
+    }
+  ],
+  "source_dispatch": "Mode10 owned_sm80_full_projection_rows N2560 K9728 R2..32 Lt branch precedes custom Down branch. A changes the shadowed fallback; Down replacement was not integrated in serving. Report only actual Gate/Up effect; component comparison to real current Lt added separately.",
+  "scope": "Corrects initial source-path assumption. No normal arms removed, no source/binary mutation."
+}

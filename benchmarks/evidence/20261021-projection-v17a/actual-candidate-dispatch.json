@@ -1,0 +1,22 @@
+[
+  {
+    "trace": "/mnt/efs/nlp/psyche/riley-projection-v17a-20261021/runs/profile-c16/c16-r0-owned-after/trace.sqlite",
+    "trace_sha256": "78643f1c6de4abc75f0e242e293263279170de3e1d9d9a2be640659338e19d46",
+    "candidate_kernels": {
+      "void v17_gateup<(int)4, (int)8, (int)16, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, int)": {
+        "count": 684,
+        "ms": 56.78816400000005
+      }
+    }
+  },
+  {
+    "trace": "/mnt/efs/nlp/psyche/riley-projection-v17a-20261021/runs/profile-c32/c32-r0-owned-after/trace.sqlite",
+    "trace_sha256": "efe290f58398a8329b5c738a4935ad3350afe481fc244fae071687ca3e44ed56",
+    "candidate_kernels": {
+      "void v17_gateup<(int)4, (int)8, (int)16, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, int)": {
+        "count": 468,
+        "ms": 39.087168999999975
+      }
+    }
+  }
+]

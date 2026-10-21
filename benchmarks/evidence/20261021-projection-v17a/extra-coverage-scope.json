@@ -1,0 +1,7 @@
+{
+  "files": 2048,
+  "serving_capacity": 576,
+  "same_original_HF_native_references": true,
+  "covers": "natural128 R1..32/chunks4; prefill rows256/384/512; no new cold merged-scratch growth path exists in A/B",
+  "raw_template_scope_correction": "bounded576-byte-audit.json inherited G template text mentioning a raw-buffer resize; that part does not apply to either A or B. Byte checks and reference hashes are unchanged."
+}

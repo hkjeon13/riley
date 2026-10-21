@@ -1,0 +1,646 @@
+[
+  {
+    "concurrency": 16,
+    "mode": "before",
+    "kernel_count": 93294,
+    "kernel_sum_ms": 1669.163606,
+    "kernel_union_ms": 1667.417238,
+    "gpu_kernel_span_ms": 2206.256746,
+    "kernel_busy_fraction": 0.7557675420247757,
+    "categories": {
+      "linear-GateUp": {
+        "count": 5868,
+        "ms": 488.2677290000014
+      },
+      "linear-Down": {
+        "count": 9504,
+        "ms": 259.1100150000014
+      },
+      "linear-KV": {
+        "count": 12816,
+        "ms": 192.1035210000011
+      },
+      "attention-QK-PV": {
+        "count": 11880,
+        "ms": 160.35115599999946
+      },
+      "linear-O": {
+        "count": 10044,
+        "ms": 138.2507759999976
+      },
+      "norm": {
+        "count": 9636,
+        "ms": 81.85306399999811
+      },
+      "linear-Q": {
+        "count": 2484,
+        "ms": 71.76643099999991
+      },
+      "linear-LMhead": {
+        "count": 102,
+        "ms": 57.15428100000002
+      },
+      "linear-QKV": {
+        "count": 2484,
+        "ms": 51.31336199999992
+      },
+      "other-unattributed": {
+        "count": 10158,
+        "ms": 45.680652999998536
+      },
+      "RoPE": {
+        "count": 3672,
+        "ms": 36.09049699999984
+      },
+      "softmax": {
+        "count": 5940,
+        "ms": 31.453778999999624
+      },
+      "residual": {
+        "count": 7344,
+        "ms": 28.570075999999432
+      },
+      "SiLU": {
+        "count": 1188,
+        "ms": 23.257468000000003
+      },
+      "greedy": {
+        "count": 102,
+        "ms": 3.6275180000000002
+      },
+      "KV-gather": {
+        "count": 72,
+        "ms": 0.3132799999999999
+      }
+    },
+    "cuda_api": {
+      "cudaStreamSynchronize_v3020": {
+        "count": 204,
+        "ms": 1293.8123599999994
+      },
+      "cudaLaunchKernel_v7000": {
+        "count": 38043,
+        "ms": 153.80557399999788
+      },
+      "cudaGraphLaunch_v10000": {
+        "count": 1221,
+        "ms": 77.23057799999994
+      },
+      "cuLaunchKernel": {
+        "count": 6804,
+        "ms": 30.867619000000033
+      },
+      "cuCtxGetCurrent": {
+        "count": 156476,
+        "ms": 9.809701999998126
+      },
+      "cudaStreamGetCaptureInfo_v2_v11030": {
+        "count": 26529,
+        "ms": 8.334158999999975
+      },
+      "cudaMemcpyAsync_v3020": {
+        "count": 986,
+        "ms": 4.545299
+      },
+      "cudaOccupancyMaxActiveBlocksPerMultiprocessor_v6050": {
+        "count": 6876,
+        "ms": 4.11636899999998
+      },
+      "cudaGetLastError_v3020": {
+        "count": 45399,
+        "ms": 4.031411999999868
+      },
+      "cuKernelGetFunction": {
+        "count": 6804,
+        "ms": 2.8526639999999985
+      },
+      "cudaEventRecord_v3020": {
+        "count": 2616,
+        "ms": 2.8431519999999995
+      },
+      "cuCtxPopCurrent_v2": {
+        "count": 32342,
+        "ms": 2.7877420000001134
+      },
+      "cuCtxPushCurrent_v2": {
+        "count": 32342,
+        "ms": 2.7016230000000268
+      },
+      "cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags": {
+        "count": 6804,
+        "ms": 1.6630480000000054
+      },
+      "cudaDeviceGetAttribute_v5000": {
+        "count": 6804,
+        "ms": 1.65734000000001
+      },
+      "cudaGetDevice_v3020": {
+        "count": 6804,
+        "ms": 1.5198310000000093
+      },
+      "cudaEventElapsedTime_v3020": {
+        "count": 204,
+        "ms": 0.9834420000000004
+      },
+      "cudaEventSynchronize_v3020": {
+        "count": 102,
+        "ms": 0.893069
+      },
+      "cuFuncGetAttribute": {
+        "count": 2556,
+        "ms": 0.8293350000000002
+      },
+      "cudaMemsetAsync_v3020": {
+        "count": 1008,
+        "ms": 0.17452599999999946
+      }
+    },
+    "copy_count": 986,
+    "copy_bytes": 406834690,
+    "copy_sum_ms": 42.224752,
+    "scope": "Separate64keep after correctness and64warm; not normal192keep; mixed opaque vendor GEMMs must not be attributed using pure decode graph stage order."
+  },
+  {
+    "concurrency": 16,
+    "mode": "after",
+    "kernel_count": 92934,
+    "kernel_sum_ms": 1662.982168,
+    "kernel_union_ms": 1661.233463,
+    "gpu_kernel_span_ms": 2173.936788,
+    "kernel_busy_fraction": 0.7641590464680982,
+    "categories": {
+      "linear-GateUp": {
+        "count": 5868,
+        "ms": 487.24425600000075
+      },
+      "linear-Down": {
+        "count": 9504,
+        "ms": 256.2775340000012
+      },
+      "linear-KV": {
+        "count": 12528,
+        "ms": 190.9447800000016
+      },
+      "attention-QK-PV": {
+        "count": 11880,
+        "ms": 160.46684499999984
+      },
+      "linear-O": {
+        "count": 9900,
+        "ms": 137.91582799999708
+      },
+      "norm": {
+        "count": 9636,
+        "ms": 81.8470489999982
+      },
+      "linear-Q": {
+        "count": 2556,
+        "ms": 72.14298199999973
+      },
+      "linear-LMhead": {
+        "count": 102,
+        "ms": 57.147047999999984
+      },
+      "linear-QKV": {
+        "count": 2484,
+        "ms": 51.268309999999886
+      },
+      "other-unattributed": {
+        "count": 10158,
+        "ms": 45.288647999999036
+      },
+      "RoPE": {
+        "count": 3672,
+        "ms": 35.69022999999978
+      },
+      "softmax": {
+        "count": 5940,
+        "ms": 31.414979999999666
+      },
+      "residual": {
+        "count": 7344,
+        "ms": 28.243367999999528
+      },
+      "SiLU": {
+        "count": 1188,
+        "ms": 23.149286000000014
+      },
+      "greedy": {
+        "count": 102,
+        "ms": 3.6265280000000004
+      },
+      "KV-gather": {
+        "count": 72,
+        "ms": 0.31449600000000005
+      }
+    },
+    "cuda_api": {
+      "cudaStreamSynchronize_v3020": {
+        "count": 204,
+        "ms": 1275.399795
+      },
+      "cudaLaunchKernel_v7000": {
+        "count": 37827,
+        "ms": 163.6071269999988
+      },
+      "cudaGraphLaunch_v10000": {
+        "count": 1221,
+        "ms": 84.47576600000002
+      },
+      "cuLaunchKernel": {
+        "count": 6660,
+        "ms": 28.813162000000027
+      },
+      "cuCtxGetCurrent": {
+        "count": 155836,
+        "ms": 10.36956799999723
+      },
+      "cudaStreamGetCaptureInfo_v2_v11030": {
+        "count": 24441,
+        "ms": 8.392321000000072
+      },
+      "cudaMemcpyAsync_v3020": {
+        "count": 994,
+        "ms": 4.9224440000000005
+      },
+      "cudaGetLastError_v3020": {
+        "count": 45183,
+        "ms": 4.257662000000138
+      },
+      "cudaOccupancyMaxActiveBlocksPerMultiprocessor_v6050": {
+        "count": 6913,
+        "ms": 3.9757689999999846
+      },
+      "cudaEventRecord_v3020": {
+        "count": 2292,
+        "ms": 3.0318869999999984
+      },
+      "cuKernelGetFunction": {
+        "count": 6660,
+        "ms": 2.886971
+      },
+      "cuCtxPopCurrent_v2": {
+        "count": 32206,
+        "ms": 2.8752040000000356
+      },
+      "cuCtxPushCurrent_v2": {
+        "count": 32206,
+        "ms": 2.8426840000000526
+      },
+      "cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags": {
+        "count": 6660,
+        "ms": 1.9126010000000087
+      },
+      "cudaDeviceGetAttribute_v5000": {
+        "count": 6660,
+        "ms": 1.6908590000000112
+      },
+      "cudaGetDevice_v3020": {
+        "count": 6660,
+        "ms": 1.5347950000000143
+      },
+      "cudaEventElapsedTime_v3020": {
+        "count": 204,
+        "ms": 1.0133050000000001
+      },
+      "cudaEventSynchronize_v3020": {
+        "count": 102,
+        "ms": 0.8924479999999999
+      },
+      "cuFuncGetAttribute": {
+        "count": 2412,
+        "ms": 0.45557700000000134
+      },
+      "cudaMemsetAsync_v3020": {
+        "count": 864,
+        "ms": 0.18502300000000058
+      }
+    },
+    "copy_count": 994,
+    "copy_bytes": 406834498,
+    "copy_sum_ms": 39.904614,
+    "scope": "Separate64keep after correctness and64warm; not normal192keep; mixed opaque vendor GEMMs must not be attributed using pure decode graph stage order."
+  },
+  {
+    "concurrency": 32,
+    "mode": "before",
+    "kernel_count": 69165,
+    "kernel_sum_ms": 1320.166013,
+    "kernel_union_ms": 1318.982045,
+    "gpu_kernel_span_ms": 1798.166331,
+    "kernel_busy_fraction": 0.7335150382147824,
+    "categories": {
+      "linear-GateUp": {
+        "count": 4464,
+        "ms": 359.54118899999975
+      },
+      "linear-Down": {
+        "count": 6768,
+        "ms": 194.78719999999856
+      },
+      "linear-KV": {
+        "count": 9576,
+        "ms": 170.68295100000182
+      },
+      "attention-QK-PV": {
+        "count": 9216,
+        "ms": 139.5283640000003
+      },
+      "linear-O": {
+        "count": 7092,
+        "ms": 105.59763499999784
+      },
+      "linear-Q": {
+        "count": 2376,
+        "ms": 69.69722999999968
+      },
+      "norm": {
+        "count": 6862,
+        "ms": 67.82755299999943
+      },
+      "linear-LMhead": {
+        "count": 65,
+        "ms": 38.788971000000004
+      },
+      "other-unattributed": {
+        "count": 7309,
+        "ms": 37.467046000000074
+      },
+      "RoPE": {
+        "count": 2340,
+        "ms": 30.17536000000003
+      },
+      "SiLU": {
+        "count": 2484,
+        "ms": 29.4608849999998
+      },
+      "softmax": {
+        "count": 4608,
+        "ms": 27.17414900000015
+      },
+      "linear-QKV": {
+        "count": 1188,
+        "ms": 24.564437000000012
+      },
+      "residual": {
+        "count": 4680,
+        "ms": 22.225267000000063
+      },
+      "greedy": {
+        "count": 65,
+        "ms": 2.332543999999999
+      },
+      "KV-gather": {
+        "count": 72,
+        "ms": 0.315232
+      }
+    },
+    "cuda_api": {
+      "cudaStreamSynchronize_v3020": {
+        "count": 130,
+        "ms": 953.9634890000001
+      },
+      "cudaLaunchKernel_v7000": {
+        "count": 36378,
+        "ms": 153.06562399999896
+      },
+      "cudaGraphLaunch_v10000": {
+        "count": 1149,
+        "ms": 51.57175300000003
+      },
+      "cuLaunchKernel": {
+        "count": 6552,
+        "ms": 27.570274999999995
+      },
+      "cuCtxGetCurrent": {
+        "count": 152292,
+        "ms": 9.365163999998089
+      },
+      "cudaStreamGetCaptureInfo_v2_v11030": {
+        "count": 23874,
+        "ms": 7.8175679999999765
+      },
+      "cudaGetLastError_v3020": {
+        "count": 43369,
+        "ms": 4.117646000000226
+      },
+      "cudaMemcpyAsync_v3020": {
+        "count": 685,
+        "ms": 3.519494000000002
+      },
+      "cudaOccupancyMaxActiveBlocksPerMultiprocessor_v6050": {
+        "count": 5690,
+        "ms": 3.0515720000000006
+      },
+      "cuKernelGetFunction": {
+        "count": 6552,
+        "ms": 2.7658660000000035
+      },
+      "cuCtxPopCurrent_v2": {
+        "count": 30480,
+        "ms": 2.612591000000149
+      },
+      "cuCtxPushCurrent_v2": {
+        "count": 30480,
+        "ms": 2.5216419999999866
+      },
+      "cudaEventRecord_v3020": {
+        "count": 2218,
+        "ms": 2.3660529999999973
+      },
+      "cudaDeviceGetAttribute_v5000": {
+        "count": 6552,
+        "ms": 1.6242060000000063
+      },
+      "cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags": {
+        "count": 6552,
+        "ms": 1.5846780000000102
+      },
+      "cudaGetDevice_v3020": {
+        "count": 6552,
+        "ms": 1.4385600000000076
+      },
+      "cudaEventElapsedTime_v3020": {
+        "count": 130,
+        "ms": 0.6391070000000001
+      },
+      "cudaEventSynchronize_v3020": {
+        "count": 65,
+        "ms": 0.5665239999999999
+      },
+      "cuFuncGetAttribute": {
+        "count": 2304,
+        "ms": 0.44470799999999944
+      },
+      "cudaMemsetAsync_v3020": {
+        "count": 792,
+        "ms": 0.14092299999999985
+      }
+    },
+    "copy_count": 685,
+    "copy_bytes": 232254462,
+    "copy_sum_ms": 22.967781,
+    "scope": "Separate64keep after correctness and64warm; not normal192keep; mixed opaque vendor GEMMs must not be attributed using pure decode graph stage order."
+  },
+  {
+    "concurrency": 32,
+    "mode": "after",
+    "kernel_count": 69307,
+    "kernel_sum_ms": 1308.159937,
+    "kernel_union_ms": 1306.956609,
+    "gpu_kernel_span_ms": 1656.94427,
+    "kernel_busy_fraction": 0.7887752368400417,
+    "categories": {
+      "linear-GateUp": {
+        "count": 4320,
+        "ms": 350.62089799999944
+      },
+      "linear-Down": {
+        "count": 6624,
+        "ms": 192.48669099999964
+      },
+      "linear-KV": {
+        "count": 10008,
+        "ms": 172.77160700000024
+      },
+      "attention-QK-PV": {
+        "count": 9216,
+        "ms": 139.54472299999946
+      },
+      "linear-O": {
+        "count": 7308,
+        "ms": 106.20100599999776
+      },
+      "linear-Q": {
+        "count": 2268,
+        "ms": 68.71609599999981
+      },
+      "norm": {
+        "count": 6716,
+        "ms": 64.92857399999981
+      },
+      "linear-LMhead": {
+        "count": 65,
+        "ms": 38.76892799999998
+      },
+      "other-unattributed": {
+        "count": 7309,
+        "ms": 37.500381999999966
+      },
+      "RoPE": {
+        "count": 2340,
+        "ms": 29.993208999999883
+      },
+      "SiLU": {
+        "count": 2448,
+        "ms": 29.409407999999814
+      },
+      "softmax": {
+        "count": 4608,
+        "ms": 27.05756800000015
+      },
+      "linear-QKV": {
+        "count": 1224,
+        "ms": 25.325780999999996
+      },
+      "residual": {
+        "count": 4680,
+        "ms": 22.03061799999986
+      },
+      "greedy": {
+        "count": 65,
+        "ms": 2.328639999999999
+      },
+      "KV-gather": {
+        "count": 108,
+        "ms": 0.47580799999999995
+      }
+    },
+    "cuda_api": {
+      "cudaStreamSynchronize_v3020": {
+        "count": 130,
+        "ms": 881.6622520000002
+      },
+      "cudaLaunchKernel_v7000": {
+        "count": 35905,
+        "ms": 180.9912680000006
+      },
+      "cudaGraphLaunch_v10000": {
+        "count": 1114,
+        "ms": 65.3134549999999
+      },
+      "cuLaunchKernel": {
+        "count": 6588,
+        "ms": 34.48802099999997
+      },
+      "cuCtxGetCurrent": {
+        "count": 153112,
+        "ms": 9.561404999996267
+      },
+      "cudaStreamGetCaptureInfo_v2_v11030": {
+        "count": 26143,
+        "ms": 8.617728000000014
+      },
+      "cudaGetLastError_v3020": {
+        "count": 42532,
+        "ms": 4.106520000000042
+      },
+      "cudaMemcpyAsync_v3020": {
+        "count": 671,
+        "ms": 4.007267000000001
+      },
+      "cudaOccupancyMaxActiveBlocksPerMultiprocessor_v6050": {
+        "count": 5544,
+        "ms": 3.3623399999999997
+      },
+      "cuKernelGetFunction": {
+        "count": 6588,
+        "ms": 3.0467859999999916
+      },
+      "cudaEventRecord_v3020": {
+        "count": 2578,
+        "ms": 2.877229999999997
+      },
+      "cuCtxPopCurrent_v2": {
+        "count": 29814,
+        "ms": 2.63195800000006
+      },
+      "cuCtxPushCurrent_v2": {
+        "count": 29814,
+        "ms": 2.5343000000000417
+      },
+      "cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags": {
+        "count": 6588,
+        "ms": 1.7339690000000028
+      },
+      "cudaGetDevice_v3020": {
+        "count": 6588,
+        "ms": 1.6871940000000047
+      },
+      "cudaDeviceGetAttribute_v5000": {
+        "count": 6588,
+        "ms": 1.6775740000000101
+      },
+      "cudaEventElapsedTime_v3020": {
+        "count": 130,
+        "ms": 0.7313699999999999
+      },
+      "cudaEventSynchronize_v3020": {
+        "count": 65,
+        "ms": 0.575428
+      },
+      "cuFuncGetAttribute": {
+        "count": 2340,
+        "ms": 0.4135690000000007
+      },
+      "cudaMemsetAsync_v3020": {
+        "count": 864,
+        "ms": 0.1751830000000002
+      }
+    },
+    "copy_count": 671,
+    "copy_bytes": 232251622,
+    "copy_sum_ms": 25.055616,
+    "scope": "Separate64keep after correctness and64warm; not normal192keep; mixed opaque vendor GEMMs must not be attributed using pure decode graph stage order."
+  }
+]
