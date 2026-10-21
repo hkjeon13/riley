@@ -1813,6 +1813,36 @@ extern "C" RileyCudaStatus riley_cuda_embedding_execute(
 
 __global__ void hugging_face_qwen_head128_rms_norm_kernel(const __nv_bfloat16*x,const __nv_bfloat16*w,__nv_bfloat16*y,uint64_t rows, float epsilon){int t=threadIdx.x;uint64_t r=blockIdx.x;if(r>=rows)return;float sum=0;for(int j=0;j<4;j++){float z=__bfloat162float(x[r*128+4*t+j]);sum=__fadd_rn(sum,__fmul_rn(z,z));}for(int o=16;o;o/=2)sum=__fadd_rn(sum,__shfl_down_sync(0xffffffff,sum,o));float variance=__fmul_rn(sum,1.F/128.F);float inv=rsqrtf(__fadd_rn(variance,epsilon));inv=__shfl_sync(0xffffffff,inv,0);for(int j=0;j<4;j++){int i=4*t+j;float a=__fmul_rn(__bfloat162float(x[r*128+i]),inv);y[r*128+i]=__float2bfloat16_rn(__fmul_rn(__bfloat162float(__float2bfloat16_rn(a)),__bfloat162float(w[i])));}}
 
+// The >=16-row HF topology uses one 32-thread reduction per row. Pack four
+// independent rows in a CTA while retaining each lane's four accumulation
+// chains, descending shuffle tree and both BF16 rounding boundaries.
+__global__ void hugging_face_qwen_prefill_warp_rms_norm_kernel(
+    const __nv_bfloat16* x, const __nv_bfloat16* w, __nv_bfloat16* y,
+    int width, int rows, float epsilon) {
+  const int lane = threadIdx.x % 32;
+  const int row = blockIdx.x * 4 + threadIdx.x / 32;
+  if (row >= rows) return;  // Every lane in this warp takes the same branch.
+  float acc[4] = {0, 0, 0, 0};
+  for (int word = lane; word < width / 4; word += 32) {
+    for (int j = 0; j < 4; ++j) {
+      const float z = __bfloat162float(x[row * width + word * 4 + j]);
+      acc[j] = __fadd_rn(acc[j], __fmul_rn(z, z));
+    }
+  }
+  float sum = acc[0];
+  for (int j = 1; j < 4; ++j) sum = __fadd_rn(sum, acc[j]);
+  for (int offset = 16; offset; offset /= 2)
+    sum = __fadd_rn(sum, __shfl_down_sync(0xffffffff, sum, offset));
+  float inverse = rsqrtf(__fadd_rn(__fmul_rn(sum, 1.F / width), epsilon));
+  inverse = __shfl_sync(0xffffffff, inverse, 0);
+  for (int j = lane; j < width; j += 32) {
+    const float scaled = __bfloat162float(__float2bfloat16_rn(
+        __fmul_rn(__bfloat162float(x[row * width + j]), inverse)));
+    y[row * width + j] =
+        __float2bfloat16_rn(__fmul_rn(scaled, __bfloat162float(w[j])));
+  }
+}
+
 __global__ void hugging_face_qwen_wide_rms_norm_kernel(const __nv_bfloat16*x,const __nv_bfloat16*w,__nv_bfloat16*y,int width,int rows,float eps){
  extern __shared__ float partials[];__shared__ float inverse;
  int t=threadIdx.x,r=blockIdx.x;float acc[4]={0,0,0,0};
@@ -1999,9 +2029,18 @@ RileyCudaStatus execute_rms_norm_impl(
         while(height*2<=params->row_count && height<16)height*=2;
       }
       const uint32_t threads=512/height;
-      hugging_face_qwen_wide_rms_norm_kernel<<<params->row_count,threads,threads*sizeof(float),stream->stream>>>(
+      if (threads == 32) {
+        hugging_face_qwen_prefill_warp_rms_norm_kernel
+            <<<(params->row_count + 3) / 4, 128, 0, stream->stream>>>(
+                reinterpret_cast<const __nv_bfloat16*>(input.data),
+                reinterpret_cast<const __nv_bfloat16*>(weight.data),
+                reinterpret_cast<__nv_bfloat16*>(output.data),
+                params->hidden_size, params->row_count, params->epsilon);
+      } else {
+        hugging_face_qwen_wide_rms_norm_kernel<<<params->row_count,threads,threads*sizeof(float),stream->stream>>>(
         reinterpret_cast<const __nv_bfloat16*>(input.data),reinterpret_cast<const __nv_bfloat16*>(weight.data),
         reinterpret_cast<__nv_bfloat16*>(output.data),params->hidden_size,params->row_count,params->epsilon);
+      }
     } else if (implementation == RmsNormImplementation::HuggingFaceQwenHead128) {
       hugging_face_qwen_head128_rms_norm_kernel<<<params->row_count,32,0,stream->stream>>>(
         reinterpret_cast<const __nv_bfloat16*>(input.data),reinterpret_cast<const __nv_bfloat16*>(weight.data),

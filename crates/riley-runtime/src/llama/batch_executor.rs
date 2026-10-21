@@ -407,6 +407,66 @@ impl PreparedLlamaBatchExecutor {
                 .any(|shape| shape.gemms.any_poisoned())
     }
 
+    /// Captures Qwen decode body graphs before any external iteration.
+    ///
+    /// Uses valid forced-token prefills in private, not-yet-admitted KV pages.
+    /// This is startup work: no scheduler requests or logical KV reservations
+    /// are created. Future requests overwrite their logical prefixes normally.
+    /// The caller must choose the same output mode as serving. Logit and greedy
+    /// graphs have separate keys, so switching mode cannot reuse stale outputs.
+    pub fn warm_owned_qwen_decode_graphs(&mut self,greedy:bool,stream:&mut CudaStream)->LlamaBatchExecutorResult<bool>{
+        let d=self.owner.forward.plan.dimensions();let bounds=self.config.metadata();
+        let count=bounds.max_rows().min(bounds.max_output_slots());
+        if !self.config.owned_decode_graph() || self.config.owned_decode_batch()!=10 || self.config.owned_mlp_graphs()
+            || (d.hidden_size(),d.query_heads(),d.key_value_heads(),d.head_dimension(),d.intermediate_size())!=(2560,32,8,128,9728)
+            || !(2..=32).contains(&count) || bounds.max_input_tokens()<128 || bounds.physical_block_count()<count*16
+            || bounds.max_block_entries()<count*9 || self.config.serving_sequence_token_bound().unwrap_or(self.owner.forward.plan.sequence_length())<131 {
+            return Ok(false);
+        }
+        if self.shape_history.last_success().is_some() || self.owner.poisoned {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"owned graph warmup",reason:"warmup is only valid before the first external iteration"});
+        }
+        use super::batch::{LlamaBatchBlockTable,LlamaBatchRowKind};
+        use crate::paged_kv::BLOCK_TABLE_V1_VERSION;
+        let history=self.shape_history;let prompt=vec![0u32;128];let token=[0u32];
+        let tables=(0..count).map(|r|(0..9).map(|p|(r*16+p)as u32).collect::<Vec<_>>()).collect::<Vec<_>>();
+        let valid_prefill=vec![16u16;8];let chunk=(bounds.max_input_tokens()/128).min(count);
+        for first in (0..count).step_by(chunk){let end=(first+chunk).min(count);
+            let rows=(first..end).enumerate().map(|(slot,r)|LlamaBatchRow::new(u64::MAX-r as u64,LlamaBatchRowKind::Prefill,&prompt,128,LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION,&tables[r][..8],&valid_prefill,128),Some(slot as u32))).collect::<Vec<_>>();
+            if greedy{self.execute_greedy(&rows,stream)?;}else{self.execute(&rows,stream)?;}
+        }
+        // Prewarm every layer/count piece using the same stable parent buffers.
+        // Temporarily select the MLP-only route so captures never nest in body
+        // graphs. Restore policy even when a startup execution fails.
+        #[cfg(feature="cuda-cublas-gemm-probe")]
+        if let Some(g)=self.owner.owned_mlp_graphs.as_mut(){g.set_capture_allowed(true);}
+        let original_config=self.config;
+        self.config=self.config.with_owned_mlp_graphs();
+        let piecewise_warm=(||->LlamaBatchExecutorResult<()>{
+            for active in 1..=count {
+                let mut valid=vec![16u16;9];valid[8]=1;
+                let rows=(0..active).map(|r|LlamaBatchRow::new(u64::MAX-r as u64,LlamaBatchRowKind::Decode,&token,129,LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION,&tables[r],&valid,129),Some(r as u32))).collect::<Vec<_>>();
+                if greedy{self.execute_greedy(&rows,stream)?;}else{self.execute(&rows,stream)?;}
+            }
+            Ok(())
+        })();
+        self.config=original_config;
+        #[cfg(feature="cuda-cublas-gemm-probe")]
+        if let Some(g)=self.owner.owned_mlp_graphs.as_mut(){g.set_capture_allowed(false);}
+        piecewise_warm?;
+        eprintln!("RILEY_PIECEWISE_WARMUP rows=1..{count} complete=true capture_sealed=true");
+        for active in 1..=count{for length in 129..=131{
+            let mut valid=vec![16u16;9];valid[8]=(length-128)as u16;
+            let rows=(0..active).map(|r|LlamaBatchRow::new(u64::MAX-r as u64,LlamaBatchRowKind::Decode,&token,length as u32,LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION,&tables[r],&valid,length as u32),Some(r as u32))).collect::<Vec<_>>();
+            if greedy{self.execute_greedy(&rows,stream)?;}else{self.execute(&rows,stream)?;}
+        }}
+        // Startup iterations never appear as externally consumed output/history.
+        self.shape_history=history;self.output_count=0;self.output_ready=false;
+        self.output_mode=BatchOutputMode::Logits;self.owner.forward.output_ready=false;
+        eprintln!("RILEY_OWNED_BODY_WARMUP rows=1..{count} greedy={greedy} complete=true");
+        Ok(true)
+    }
+
     /// Validates, packs, uploads, and executes one mixed iteration.
     ///
     /// All host/model bounds are checked before the first device mutation.
@@ -500,7 +560,7 @@ impl PreparedLlamaBatchExecutor {
             host,
             poisoned,
         } = owner;
-        let packed = metadata.pack(rows)?;
+        let packed = if config.owned_decode_graph() && config.owned_decode_batch()==10 {metadata.pack_decode_first(rows)?}else{metadata.pack(rows)?};
         let active_rows = packed.total_input_tokens();
         config.select_dense_rows(active_rows)?;
         let selected_dense_rows = select_prepared_dense_rows(

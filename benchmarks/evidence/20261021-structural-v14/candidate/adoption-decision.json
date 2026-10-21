@@ -1,0 +1,10 @@
+{
+  "adopted": false,
+  "baseline_retained": "v13B",
+  "baseline_binary_sha256": "9dd87720ceb5c9f99532b8b01851557598032a6fe5ba037316e327eba1505566",
+  "candidate": "D",
+  "candidate_binary_sha256": "c46ee3eb264091de3b78e21d6f02187dfb7090b6a44f7162565668230b3ac71a",
+  "correctness_passed": true,
+  "reason": "Fresh five-repeat normal API medians C16+0.7567%, C32-0.2666%; three paired >2% tail flags. No demonstrated large throughput gain; retain only reproducible experiment patch/evidence.",
+  "prototype_patch_sha256": "4491e3a49ce20f7440c780938fb9980713cc12587ede7022056a6733075061ee"
+}

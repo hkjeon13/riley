@@ -582,6 +582,56 @@ impl CudaDeviceBuffer {
         }
     }
 
+    /// Enqueues an H2D copy on a type-erased execution stream in an active
+    /// command batch. The same native copy ledger as the typed command-stream
+    /// method retains both allocations until completion and fails closed on
+    /// premature reuse, close, or a missing batch.
+    ///
+    /// # Errors
+    /// Returns range, ownership, busy-state, missing-batch, or copy errors.
+    pub fn copy_from_pinned_in_active_command_batch<S: CudaExecutionStream + ?Sized>(
+        &self,
+        destination_offset: u64,
+        source: &CudaPinnedHostBuffer,
+        source_offset: u64,
+        byte_len: u64,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "CudaDeviceBuffer::copy_from_pinned_in_active_command_batch";
+        let stream = execution_stream_mut(stream);
+        prepare_copy(
+            &self.context,
+            self.byte_len,
+            destination_offset,
+            &source.context,
+            source.byte_len,
+            source_offset,
+            byte_len,
+            &stream.context,
+            OPERATION,
+        )?;
+        self.use_state.ensure_idle(OPERATION, "device buffer")?;
+        source
+            .use_state
+            .ensure_idle(OPERATION, "pinned host buffer")?;
+
+        #[cfg(feature = "cuda")]
+        {
+            self.native.copy_from_pinned_in_command_batch(
+                destination_offset,
+                &source.native,
+                source_offset,
+                byte_len,
+                &mut stream.native,
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (destination_offset, source_offset, byte_len, stream);
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
     /// Enqueues a device-to-pinned-host copy in the command batch that is
     /// active on `stream`; it completes with the batch, after which the pinned
     /// bytes may be read.

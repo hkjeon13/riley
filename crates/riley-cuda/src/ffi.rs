@@ -2697,12 +2697,17 @@ unsafe extern "C" {
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_hf_smol_fused_gate_up_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,rows:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_hf_sm80_fused_gate_up_supported(plan:*const RawCublasGemmProbePlan,rows:u64)->i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_hf_sm80_fused_gate_up_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,rows:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_hf_smol_fused_qkv_supported(plan:*const RawCublasGemmProbePlan,rows:u64)->i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_hf_smol_fused_qkv_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,rows:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_hf_smol_exact_supported(plan:*const RawCublasGemmProbePlan,tokens:u64)->i32;
     fn riley_cuda_cublas_hf_smol_exact_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,rows:*const u32,tokens:*const u64,requests:u64,active:u64,physical:u64,sequences:u64,ids:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    fn riley_cuda_cublas_bounded_sm80_gateup_qualified(plan:*const RawCublasGemmProbePlan)->i32;
     fn riley_cuda_cublas_hf_decode_chunk_qualified(plan:*const RawCublasGemmProbePlan)->i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_hf_attention_chunk_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,tokens:*const u64,requests:u64,physical:u64,sequences:u64,ids:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
@@ -2712,6 +2717,15 @@ unsafe extern "C" {
     fn riley_cuda_owned_hf_mlp_register_uses(gate:*mut RawCublasGemmProbePlan,
         down:*mut RawCublasGemmProbePlan,buffers:*const RawBufferSpan,
         stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_projections(plan:*mut RawCublasGemmProbePlan,error:*mut ErrorInfo)->i32;
+    fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_attention(plan:*mut RawCublasGemmProbePlan,error:*mut ErrorInfo)->i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_prefill(plan:*mut RawCublasGemmProbePlan,error:*mut ErrorInfo)->i32;
+    fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_paged_attention(plan:*mut RawCublasGemmProbePlan,error:*mut ErrorInfo)->i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_hf_sm80_paged_qualified(plan:*const RawCublasGemmProbePlan,tokens:u64)->i32;
+
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_gemm_probe_plan_execute_rows(plan:*mut RawCublasGemmProbePlan,
         input:*const RawBufferSpan,weight:*const RawBufferSpan,output:*const RawBufferSpan,
@@ -10230,6 +10244,18 @@ impl CublasGemmProbePlanHandle {
         status_result(status,"private exact Smol GateUp SiLU",&error)
     }
 
+    pub(super) fn sm80_fused_gate_up_supported(&self,rows:u64)->bool {
+        // SAFETY: immutable qualified live-plan metadata, no GPU operation.
+        unsafe {riley_cuda_cublas_hf_sm80_fused_gate_up_supported(self.as_ptr(),rows)!=0}
+    }
+    pub(super) fn sm80_fused_gate_up(&mut self,spans:&[RawBufferSpan;4],rows:u64,stream:&mut StreamHandle)->CudaResult<()> {
+        let mut error=ErrorInfo::new();
+        // SAFETY: retained caller borrows; native validates ranges, contexts,
+        // aliases and registers exclusive uses until capture/commands fence.
+        let status=unsafe {riley_cuda_cublas_hf_sm80_fused_gate_up_execute(self.as_ptr(),spans.as_ptr(),4,rows,stream.as_ptr(),&mut error)};
+        status_result(status,"private exact SM80 GateUp SiLU",&error)
+    }
+
     pub(super) fn smol_fused_qkv_supported(&self,rows:u64)->bool {
         // SAFETY: immutable qualified live-plan metadata; no CUDA operation.
         unsafe {riley_cuda_cublas_hf_smol_fused_qkv_supported(self.as_ptr(),rows)!=0}
@@ -10253,6 +10279,10 @@ impl CublasGemmProbePlanHandle {
         // native copies selected rows and retains exclusive GPU uses until fenced.
         let status=unsafe {riley_cuda_cublas_hf_smol_exact_execute(self.as_ptr(),spans.as_ptr(),11,rows.as_ptr(),tokens.as_ptr(),requests,active,physical,sequences,ids,stream.as_ptr(),&mut error)};
         status_result(status,"private exact Smol attention",&error)
+    }
+    pub(super) fn bounded_sm80_gateup_qualified(&self)->bool {
+        // SAFETY: immutable cold query of a live owned plan; no GPU operation.
+        unsafe {riley_cuda_cublas_bounded_sm80_gateup_qualified(self.as_ptr())!=0}
     }
     pub(super) fn decode_chunk_qualified(&self)->bool {
         // SAFETY: immutable cold query of the live plan; no CUDA operation.
@@ -10280,6 +10310,34 @@ impl CublasGemmProbePlanHandle {
         // for this synchronous registration; the native batch retains uses.
         let status=unsafe{riley_cuda_owned_hf_mlp_register_uses(self.as_ptr(),down.as_ptr(),buffers.as_ptr(),stream.as_ptr(),&mut error)};
         status_result(status,"register owned MLP graph resources",&error)
+    }
+    pub(super) fn prepare_sm80_attention(&mut self)->CudaResult<()> {
+        let mut error=ErrorInfo::new();
+        // SAFETY: unique cold owner; native preparation allocates no resources.
+        let status=unsafe{riley_cuda_cublas_gemm_probe_plan_prepare_sm80_attention(self.as_ptr(),&mut error)};
+        status_result(status,"prepare native SM80 attention",&error)
+    }
+    pub(super) fn prepare_sm80_prefill(&mut self)->CudaResult<()> {
+        let mut error=ErrorInfo::new();
+        // SAFETY: unique cold owner; native checks context, image and geometry.
+        let status=unsafe{riley_cuda_cublas_gemm_probe_plan_prepare_sm80_prefill(self.as_ptr(),&mut error)};
+        status_result(status,"prepare native SM80 prefill",&error)
+    }
+    pub(super) fn prepare_sm80_paged_attention(&mut self)->CudaResult<()> {
+        let mut error=ErrorInfo::new();
+        // SAFETY: unique cold owner; native checks context, image and geometry.
+        let status=unsafe{riley_cuda_cublas_gemm_probe_plan_prepare_sm80_paged_attention(self.as_ptr(),&mut error)};
+        status_result(status,"prepare native SM80 paged attention",&error)
+    }
+    pub(super) fn supports_sm80_paged_attention(&self,tokens:u64)->bool {
+        // SAFETY: read-only eligibility query on this live plan.
+        unsafe{riley_cuda_cublas_hf_sm80_paged_qualified(self.as_ptr(),tokens)!=0}
+    }
+    pub(super) fn prepare_bounded_sm80_projections(&mut self)->CudaResult<()> {
+        let mut error=ErrorInfo::new();
+        // SAFETY: cold unique plan owner, before any capture or command batch.
+        let status=unsafe{riley_cuda_cublas_gemm_probe_plan_prepare_sm80_projections(self.as_ptr(),&mut error)};
+        status_result(status,"prepare bounded SM80 projections",&error)
     }
     pub(super) fn execute_rows(&mut self,input:RawBufferSpan,weight:RawBufferSpan,output:RawBufferSpan,rows:u64,grouped_decode:u8,stream:&mut StreamHandle)->CudaResult<()> {
         let mut error=ErrorInfo::new();

@@ -1,0 +1,156 @@
+diff --git a/kernels/src/cublas_gemm_probe.cu b/kernels/src/cublas_gemm_probe.cu
+--- a/kernels/src/cublas_gemm_probe.cu
++++ b/kernels/src/cublas_gemm_probe.cu
+@@ -85,6 +85,7 @@
+   bool owned_sm80_gateup_rows_qualified = false;
+   bool owned_sm80_attention_enabled = false;
+   bool owned_sm80_paged_attention_enabled = false;
++  bool owned_sm80_decode_mlp_v8_enabled = false;
+   bool owned_smol_attention_qualified = false;
+   bool owned_attention_extended_qualified = false;
+   cublasLtHandle_t decode_lt = nullptr;
+@@ -1910,6 +1911,81 @@
+ }
+ __global__ void sm80_down_reduce(const __nv_bfloat16*p,__nv_bfloat16*y,int count){int i=blockIdx.x*blockDim.x+threadIdx.x;if(i<count)y[i]=__float2bfloat16_rn(__fadd_rn(__bfloat162float(p[i]),__bfloat162float(p[count+i])));}
+ }
++
++
++// Decode v8: qualified native K32 sliced arithmetic, padded shared strides.
++template<int W,int R,int P,int S>__device__ __forceinline__ void sm80_v8_down_stage(__nv_bfloat16*dst,const __nv_bfloat16*w,const __nv_bfloat16*x,int rows,int col,int first,int split,int it){
++ constexpr int N=W*16,L=64+P;int kbase=split*4864+it*64;
++ for(int i=threadIdx.x;i<(N+R)*8;i+=W*32){int row=i/8,k=(i%8)*8;bool a=row<N;int xr=row-N;bool valid=it<76&&(a||first+xr<rows);const __nv_bfloat16*src=valid?(a?w+(col+row)*9728+kbase+k:x+(first+xr)*9728+kbase+k):w;sm80_down_copy16(dst+row*L+k,src,valid);}
++ asm volatile("cp.async.commit_group;");
++}
++template<int W,int R,int P,int S>__global__ void sm80_v8_down(const __nv_bfloat16*w,const __nv_bfloat16*x,__nv_bfloat16*parts,int rows){
++#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
++
++ using namespace nvcuda;constexpr int N=W*16,L=64+P,Stage=(N+R)*L,RB=R/16;
++ __shared__ __align__(32)__nv_bfloat16 shared[Stage*S];int col=blockIdx.x*N,first=blockIdx.y*R,split=blockIdx.z,warp=threadIdx.x/32,lane=threadIdx.x%32;
++ wmma::fragment<wmma::matrix_a,16,16,16,__nv_bfloat16,wmma::row_major>a;
++ wmma::fragment<wmma::matrix_b,16,16,16,__nv_bfloat16,wmma::col_major>b;
++ wmma::fragment<wmma::accumulator,16,16,16,float>c[RB][2];
++ #pragma unroll
++ for(int rb=0;rb<RB;rb++){wmma::fill_fragment(c[rb][0],0.f);wmma::fill_fragment(c[rb][1],0.f);}
++ #pragma unroll
++ for(int st=0;st<S;st++)sm80_v8_down_stage<W,R,P,S>(shared+st*Stage,w,x,rows,col,first,split,st);
++ for(int it=0;it<76;it++){
++  asm volatile("cp.async.wait_group %0;"::"n"(S-1));__syncthreads();auto*t=shared+(it%S)*Stage;
++  #pragma unroll
++  for(int j=0;j<4;j++){wmma::load_matrix_sync(a,t+warp*16*L+j*16,L);
++   #pragma unroll
++   for(int rb=0;rb<RB;rb++){wmma::load_matrix_sync(b,t+(N+rb*16)*L+j*16,L);wmma::mma_sync(c[rb][j/2],a,b,c[rb][j/2]);}}
++  __syncthreads();sm80_v8_down_stage<W,R,P,S>(t,w,x,rows,col,first,split,it+S);
++ }
++ asm volatile("cp.async.wait_group 0;");__syncthreads();
++ #pragma unroll
++ for(int rb=0;rb<RB;rb++){
++  for(int i=0;i<c[rb][0].num_elements;i++)c[rb][0].x[i]=__fadd_rn(c[rb][0].x[i],c[rb][1].x[i]);
++  float*out=reinterpret_cast<float*>(shared)+(warp*RB+rb)*256;wmma::store_matrix_sync(out,c[rb][0],16,wmma::mem_col_major);__syncwarp();
++  for(int i=lane;i<256;i+=32){int row=first+rb*16+i/16;if(row<rows)parts[(split*rows+row)*2560+col+warp*16+i%16]=__float2bfloat16_rn(out[i]);}
++ }
++
++#endif
++}
++
++template<int W,int R,int P,int S>__device__ __forceinline__ void sm80_v8_gate_stage(__nv_bfloat16*dst,const __nv_bfloat16*w,const __nv_bfloat16*x,int rows,int col,int first,int split,int it){
++ constexpr int N=W*16,L=64+P;int kbase=it*64;
++ for(int i=threadIdx.x;i<(N+R)*8;i+=W*32){int row=i/8,k=(i%8)*8;bool a=row<N;int xr=row-N;bool valid=it<40&&(a||first+xr<rows);const __nv_bfloat16*src=valid?(a?w+(col+row)*2560+kbase+k:x+(first+xr)*2560+kbase+k):w;sm80_down_copy16(dst+row*L+k,src,valid);}
++ asm volatile("cp.async.commit_group;");
++}
++template<int W,int R,int P,int S>__global__ void sm80_v8_gate(const __nv_bfloat16*w,const __nv_bfloat16*x,__nv_bfloat16*parts,int rows){
++#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
++
++ using namespace nvcuda;constexpr int N=W*16,L=64+P,Stage=(N+R)*L,RB=R/16;
++ __shared__ __align__(32)__nv_bfloat16 shared[Stage*S];int col=blockIdx.x*N,first=blockIdx.y*R,split=blockIdx.z,warp=threadIdx.x/32,lane=threadIdx.x%32;
++ wmma::fragment<wmma::matrix_a,16,16,16,__nv_bfloat16,wmma::row_major>a;
++ wmma::fragment<wmma::matrix_b,16,16,16,__nv_bfloat16,wmma::col_major>b;
++ wmma::fragment<wmma::accumulator,16,16,16,float>c[RB][2];
++ #pragma unroll
++ for(int rb=0;rb<RB;rb++){wmma::fill_fragment(c[rb][0],0.f);wmma::fill_fragment(c[rb][1],0.f);}
++ #pragma unroll
++ for(int st=0;st<S;st++)sm80_v8_gate_stage<W,R,P,S>(shared+st*Stage,w,x,rows,col,first,split,st);
++ for(int it=0;it<40;it++){
++  asm volatile("cp.async.wait_group %0;"::"n"(S-1));__syncthreads();auto*t=shared+(it%S)*Stage;
++  #pragma unroll
++  for(int j=0;j<4;j++){wmma::load_matrix_sync(a,t+warp*16*L+j*16,L);
++   #pragma unroll
++   for(int rb=0;rb<RB;rb++){wmma::load_matrix_sync(b,t+(N+rb*16)*L+j*16,L);wmma::mma_sync(c[rb][j/2],a,b,c[rb][j/2]);}}
++  __syncthreads();sm80_v8_gate_stage<W,R,P,S>(t,w,x,rows,col,first,split,it+S);
++ }
++ asm volatile("cp.async.wait_group 0;");__syncthreads();
++ #pragma unroll
++ for(int rb=0;rb<RB;rb++){
++  for(int i=0;i<c[rb][0].num_elements;i++)c[rb][0].x[i]=__fadd_rn(c[rb][0].x[i],c[rb][1].x[i]);
++  float*out=reinterpret_cast<float*>(shared)+(warp*RB+rb)*256;wmma::store_matrix_sync(out,c[rb][0],16,wmma::mem_col_major);__syncwarp();
++  for(int i=lane;i<256;i+=32){int row=first+rb*16+i/16;if(row<rows)parts[row*9728+col+warp*16+i%16]=__float2bfloat16_rn(__fmaf_rn(1.f,out[i],0.f));}
++ }
++
++#endif
++}
++
+ 
+ extern "C" RileyCudaStatus riley_cuda_cublas_gemm_probe_plan_execute_rows(
+     RileyCudaCublasGemmProbePlan* plan, const RileyCudaBufferSpan* input,
+@@ -2113,6 +2189,16 @@
+             CUDA_R_16BF,2560,&beta,static_cast<__nv_bfloat16*>(spans[2].data)+first*151936,
+             CUDA_R_16BF,151936,CUBLAS_COMPUTE_32F,CUBLAS_GEMM_DEFAULT_TENSOR_OP),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
+       }
++    } else if(down_sm80_v6_profile && plan->owned_sm80_decode_mlp_v8_enabled &&
++        rows>=5 && rows<=32 && plan->config.n==2560 && plan->config.k==9728 &&
++        plan->sm80_projection_workspace && plan->sm80_projection_workspace_bytes>=2*32*2560*2 &&
++        ((reinterpret_cast<uintptr_t>(spans[0].data)|reinterpret_cast<uintptr_t>(spans[1].data)|reinterpret_cast<uintptr_t>(spans[2].data))&uintptr_t(31))==0){
++      auto*parts=static_cast<__nv_bfloat16*>(plan->sm80_projection_workspace->device_data);
++      sm80_v8_down<4,16,8,4><<<dim3(40,(static_cast<int>(rows)+15)/16,2),128,0,stream->stream>>>(
++        static_cast<const __nv_bfloat16*>(spans[1].data),static_cast<const __nv_bfloat16*>(spans[0].data),parts,static_cast<int>(rows));
++      const int count=static_cast<int>(rows)*2560;
++      sm80_down_reduce<<<(count+255)/256,256,0,stream->stream>>>(parts,static_cast<__nv_bfloat16*>(spans[2].data),count);
++      auto e=cudaGetLastError();if(e!=cudaSuccess)status=runtime_error(e,error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
+     } else if(down_sm80_v6_profile && plan->owned_sm80_gateup_rows_qualified &&
+         rows>=12 && rows<=32 && plan->config.n==2560 && plan->config.k==9728 &&
+         plan->sm80_projection_workspace_bytes>=2*32*2560*2 &&
+@@ -2136,6 +2222,12 @@
+             plan->sm80_projection_workspace->device_data,plan->sm80_projection_workspace_bytes,stream->stream);
+         status=cublas_probe_error(st,error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
+       }
++    } else if(down_sm80_v6_profile && plan->owned_sm80_decode_mlp_v8_enabled &&
++        rows>=17 && rows<=32 && plan->config.n==9728 && plan->config.k==2560 &&
++        ((reinterpret_cast<uintptr_t>(spans[0].data)|reinterpret_cast<uintptr_t>(spans[1].data)|reinterpret_cast<uintptr_t>(spans[2].data))&uintptr_t(31))==0){
++      sm80_v8_gate<4,16,16,2><<<dim3(152,(static_cast<int>(rows)+15)/16),128,0,stream->stream>>>(
++        static_cast<const __nv_bfloat16*>(spans[1].data),static_cast<const __nv_bfloat16*>(spans[0].data),static_cast<__nv_bfloat16*>(spans[2].data),static_cast<int>(rows));
++      auto e=cudaGetLastError();if(e!=cudaSuccess)status=runtime_error(e,error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
+     } else if(bounded_sm80_profile && plan->owned_sm80_gateup_rows_qualified &&
+         rows>=2 && rows<=32 &&
+         ((plan->config.n==9728 && plan->config.k==2560) ||
+@@ -2504,7 +2596,19 @@
+     return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation,"cold qualified SM80 owner required");
+   const bool down=plan->config.n==2560 && plan->config.k==9728;
+   const bool gate=plan->config.n==9728 && plan->config.k==2560;
+-  if((!down&&!gate)||plan->config.m<161)return RILEY_CUDA_STATUS_SUCCESS;
++  if(!down&&!gate)return RILEY_CUDA_STATUS_SUCCESS;
++  {
++    CurrentContext image_scope(plan->owner);auto image_status=image_scope.enter(error,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation);
++    if(image_status==RILEY_CUDA_STATUS_SUCCESS){
++      cudaFuncAttributes a{};auto e=cudaFuncGetAttributes(&a,down?reinterpret_cast<const void*>(sm80_v8_down<4,16,8,4>):reinterpret_cast<const void*>(sm80_v8_gate<4,16,16,2>));
++      if(e!=cudaSuccess)image_status=runtime_error(e,error,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation);
++      else if(a.binaryVersion<80||a.ptxVersion<80)image_status=validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation,"native SM80 decode MLP v8 image required");
++    }
++    image_status=image_scope.leave(image_status,error,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation);
++    if(image_status!=RILEY_CUDA_STATUS_SUCCESS)return image_status;
++    plan->owned_sm80_decode_mlp_v8_enabled=true;
++  }
++  if(plan->config.m<161)return RILEY_CUDA_STATUS_SUCCESS;
+   if(plan->prefill_lt!=nullptr || plan->prefill_workspace!=nullptr)
+     return validation_error(error,RILEY_CUDA_STATUS_INVALID_STATE,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation,"prefill recipe already prepared");
+   if(cublasLtGetVersion()!=120405)
+diff --git a/crates/riley-server/src/main.rs b/crates/riley-server/src/main.rs
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -2305,7 +2305,7 @@
+         7 => {eprintln!("RILEY_OWNED_BATCH mode=bounded-projections-sm80-v2 q_rows=32 output_rows=8 down_rows=4");executor.with_bounded_sm80_projection_batch()},
+         8 => {eprintln!("RILEY_OWNED_BATCH mode=native-kv-sm80-v3 q_rows=32 output_rows=8 down_rows=4 kv_reuse=2,4,8 native_k_stride=32 kv_unroll=16");executor.with_bounded_sm80_projection_kv_batch()},
+         9 => {eprintln!("RILEY_OWNED_BATCH mode=native-attention-sm80-v4 kv_vector_bytes=16 gqa_reuse=4 fused_decode_scale=true");executor.with_bounded_sm80_attention_batch()},
+-        10 => {eprintln!("RILEY_OWNED_BATCH mode=native-prefill-sm80-v5 prefill_gate_original=64..130 prefill_gate_merged=161..576 prefill_down_native_lt_v7=161..576 prefill_gate_lt_v7=257..512 decode_down_native_sliced_v6=12..32 paged_attention_chunk_v6=2..32 attention_t=24..216");executor.with_bounded_sm80_prefill_batch()},
++        10 => {eprintln!("RILEY_OWNED_BATCH mode=native-prefill-sm80-v5 prefill_gate_original=64..130 prefill_gate_merged=161..576 prefill_down_native_lt_v7=161..576 prefill_gate_lt_v7=257..512 decode_down_padded_v8=5..32 decode_gate_up_native_v8=17..32 paged_attention_chunk_v6=2..32 attention_t=24..216");executor.with_bounded_sm80_prefill_batch()},
+         _ => executor,
+     };
+     let executor = if options.owned_decode_graph {

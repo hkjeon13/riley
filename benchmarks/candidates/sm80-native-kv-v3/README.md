@@ -1,0 +1,9 @@
+# SM80 native-order K/V reuse v3
+
+Explicit opt-in `--owned-decode-batch native-kv-sm80-v3`, mode8, above mode7 bounded projections. Defaults and modes0..7 retain their existing arithmetic. Same Qwen3-4B/SM80-108SM/CUDA12040/cuBLAS-Lt120405/no workspace or MPS override/maximum32-sequence bounds as mode7.
+
+K/V(N1024,K2560) preserve native lane-strided32 FFMA order, descending32 F32 reduction, and BF16 rounding. Weights are reused across2 rows for actual rows2..4,4 for5..8,8 for9..32; the CUDA loop unroll factor is16. Singleton and multi-token prefill extents retain the old path. No new workspace or buffer allocation. Existing plan/stream/use ledgers retain ownership.
+
+The final935-file source binds binary `cc521448e19978e148d1e04d1c00b7a1eec524683316fce8c3ebc0bbab1cf277`. CPU519 passed/40 existing ignored; only the previously approved4 C02 fixture reruns use private temporary trees in /tmp and remove them. Full-vocabulary104HF teacher rows and actual Graph keys1..32 passed. Component qualification covered2880 comparisons across unroll/reuse variants, with no BF16 changes. Initial loop1 and contiguous-reduction candidates remain in EFS and were not adopted.
+
+Expanded serving verification is complete: C16 throughput304.7→341.5tok/s(+12.1%), C32 318.6→363.9(+14.2%),3fresh-process paired triplets per cell. C16 usesGPU6 andC32 GPU7, with same-GPU mode7/mode8/stock controls. C16 TTFTp95 increased139.1→140.9ms(+1.3%); C1/C8 also have individual tail regressions. The feature remains opt-in and does not satisfy the global performance non-regression release gate. See the [report](../../../docs/qwen-c16-c32-expansion-20261019.md) for final cohort metrics and limitations. This patch applies above mode7 (`../sm80-bounded-projections-v2/candidate.patch`), which itself applies above mode6. `git apply --reverse --check benchmarks/candidates/sm80-native-kv-v3/candidate.patch` verifies this layer on the current tree. No commit or push is performed.

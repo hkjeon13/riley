@@ -1175,12 +1175,21 @@ fn record_close(
 }
 
 // Reserve bounded, private actual-row keys within each fixed dense owner.
-// Wide models keep two layer segments; the extra slot remains Smol-only.
+// Keep separate output-mode ranges; each includes layer segments and a body slot.
 pub(super) fn owned_decode_segment_capacity(plan:&LlamaExecutionPlan,dense_rows:usize)->usize {
     let d=plan.dimensions();let legacy=plan.layers().len()*2;
     let smol=d.hidden_size()==576&&d.query_heads()==9&&d.key_value_heads()==3&&d.head_dimension()==64;
     let wide=matches!(d.hidden_size(),2560|4096)&&d.query_heads()==32&&d.key_value_heads()==8&&d.head_dimension()==128;
-    legacy+if dense_rows<=32&&(smol||wide){dense_rows*(legacy+1)}else{0}
+    legacy+if dense_rows<=32&&(smol||wide){2*dense_rows*(legacy+1)}else{0}
+}
+
+// Whole-body graphs include different logit destinations in the two output
+// modes. Each dense owner therefore retains disjoint actual-row key ranges.
+pub(super) fn owned_decode_segment_offset(legacy:usize,dense:usize,actual:usize,greedy:bool)->Option<usize>{
+    if actual==0||actual>dense||dense>32{return None;}
+    let stride=legacy.checked_add(1)?;
+    let key=(if greedy{dense}else{0}).checked_add(actual-1)?;
+    legacy.checked_add(key.checked_mul(stride)?)
 }
 
 /// Upper bound on recorded steps per prepared forward owner.
@@ -1315,15 +1324,27 @@ pub(super) fn execute_gemm_with_row_groups<S:CudaExecutionStream+?Sized>(
     output:&mut CudaDeviceBuffer,workspace:&mut Option<CudaDeviceBuffer>,stream:&mut S,
     site:ExecutionSite,host:riley_cuda::PackedBatchHostV1<'_>,output_rows:Option<usize>,grouped_decode:u8,
 )->LlamaForwardResult<()> {
+    execute_gemm_with_row_groups_from(plan,input,weight,output,workspace,stream,site,host,output_rows,grouped_decode,0)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn execute_gemm_with_row_groups_from<S:CudaExecutionStream+?Sized>(
+    plan:&mut PreparedLlamaGemm,input:&CudaDeviceBuffer,weight:CudaBufferSpan<'_>,
+    output:&mut CudaDeviceBuffer,workspace:&mut Option<CudaDeviceBuffer>,stream:&mut S,
+    site:ExecutionSite,host:riley_cuda::PackedBatchHostV1<'_>,output_rows:Option<usize>,grouped_decode:u8,first_row:usize,
+)->LlamaForwardResult<()> {
+    if first_row==host.row_sequence_slots().len(){return Ok(());}
     let slots=host.row_sequence_slots();
     #[cfg(feature="cuda-cublas-gemm-probe")]
     if let PreparedLlamaGemm::ClassicRequestRows(p)=plan {
         let c=p.config();
         let mut params=CublasGemmProbeParams {input:span(input,CudaDType::BF16,c.input_bytes(),site)?,weight,output:span_mut(output,CudaDType::BF16,c.output_bytes(),site)?};
-        if let Some(groups)=host.request_row_groups(){return p.execute_row_groups_cached(&mut params,groups,output_rows,grouped_decode,stream).map_err(|e|LlamaForwardError::cuda(site,e));}
+        if let Some(groups)=host.request_row_groups(){return p.execute_row_groups_cached_from(&mut params,groups,output_rows,grouped_decode,first_row,stream).map_err(|e|LlamaForwardError::cuda(site,e));}
+        if first_row!=0 {return Err(LlamaForwardError::InvalidConfiguration{field:"piecewise MLP suffix",reason:"validated request groups required"});}
         return p.execute_row_groups(&mut params,slots,output_rows,grouped_decode,stream).map_err(|e|LlamaForwardError::cuda(site,e));
     }
     #[cfg(not(feature="cuda-cublas-gemm-probe"))] let _=(slots,output_rows,grouped_decode);
+    if first_row!=0{return Err(LlamaForwardError::InvalidConfiguration{field:"piecewise MLP suffix",reason:"classic request plan required"});}
     execute_gemm(plan,input,weight,output,workspace,stream,site)
 }
 
@@ -1364,7 +1385,12 @@ pub(super) fn execute_projection_with_row_groups<S:CudaExecutionStream+?Sized>(
             // qualified SM89 shapes and preserve all multi-token extents.
             let exact_decode_mode={
                 #[cfg(feature="cuda-cublas-gemm-probe")]
-                {if matches!(decode_mode,2|5) && bias_id.is_none(){match &*strict_plan{
+                {if matches!(decode_mode,7|8|9|10) && bias_id.is_none() {
+                    match &*strict_plan {
+                        PreparedLlamaGemm::ClassicRequestRows(p) if p.config().k()==2560 && (p.config().n()==4096 || (decode_mode>=8 && p.config().n()==1024)) && p.supports_bounded_sm80_gateup_rows()=>decode_mode,
+                        _=>0,
+                    }
+                } else if matches!(decode_mode,2|5) && bias_id.is_none(){match &*strict_plan{
                     PreparedLlamaGemm::ClassicRequestRows(p) if ((p.config().k()==4096 && matches!(p.config().n(),1024|4096))
                         || (p.config().k()==576 && matches!(p.config().n(),192|576)))
                         && p.supports_exact_decode_chunk()=>decode_mode,
@@ -3101,6 +3127,32 @@ pub(super) struct GemmPlans {
 }
 
 impl GemmPlans {
+    #[cfg(feature="cuda-cublas-gemm-probe")]
+    pub(super) fn prepare_sm80_merged_decode(&mut self,context:&CudaContext)->LlamaForwardResult<()> {
+        let site=ExecutionSite::global(LlamaOp::GateProjection);
+        let mut p=context.prepare_owned_hf_gemm(CudaGemmConfig::new(32,19456,2560,0).map_err(|e|LlamaForwardError::cuda(site,e))?)
+            .map_err(|e|LlamaForwardError::cuda(site,e))?;
+        p.prepare_sm80_prefill().map_err(|e|LlamaForwardError::cuda(site,e))?;
+        self.merged_gate_up=Some(PreparedLlamaGemm::ClassicRequestRows(p));
+        Ok(())
+    }
+    #[cfg(feature="cuda-cublas-gemm-probe")]
+    pub(super) fn prepare_sm80_prefill(&mut self)->LlamaForwardResult<()> {
+        let site=ExecutionSite::global(LlamaOp::IterationCompletion);
+        for gemm in [&mut self.key_value,&mut self.intermediate,&mut self.down].into_iter().chain(self.hf_separate_query.iter_mut()).chain(self.output_projection.iter_mut()) {
+            if let PreparedLlamaGemm::ClassicRequestRows(p)=gemm {p.prepare_sm80_prefill().map_err(|e|LlamaForwardError::cuda(site,e))?;}
+        }
+        Ok(())
+    }
+    #[cfg(feature="cuda-cublas-gemm-probe")]
+    pub(super) fn prepare_bounded_sm80_projections(&mut self)->LlamaForwardResult<()> {
+        let site=ExecutionSite::global(LlamaOp::IterationCompletion);
+        for gemm in [&mut self.hidden,&mut self.down].into_iter().chain(self.output_projection.iter_mut()) {
+            if let PreparedLlamaGemm::ClassicRequestRows(p)=gemm {p.prepare_bounded_sm80_projections().map_err(|e|LlamaForwardError::cuda(site,e))?;}
+        }
+        Ok(())
+    }
+
     pub(super) fn any_poisoned(&self) -> bool {
         self.hidden.is_poisoned()
             || self.key_value.is_poisoned()
@@ -7098,5 +7150,23 @@ mod tests {
             })
         ));
         assert_eq!(report, before);
+    }
+}
+
+#[cfg(test)]
+mod owned_decode_output_mode_keys {
+    #[test]
+    fn dense_actual_and_output_modes_have_disjoint_bounded_ranges(){
+        for dense in 1..=32 {let legacy=72;let capacity=legacy+2*dense*(legacy+1);let mut spans=Vec::new();
+            for greedy in [false,true]{for actual in 1..=dense{
+                let start=super::owned_decode_segment_offset(legacy,dense,actual,greedy).unwrap();
+                assert!(start>=legacy&&start+legacy+1<=capacity);
+                for &(a,b)in &spans{assert!(start>=b||start+legacy+1<=a);}
+                spans.push((start,start+legacy+1));
+            }}
+        }
+        assert!(super::owned_decode_segment_offset(72,16,0,false).is_none());
+        assert!(super::owned_decode_segment_offset(72,16,17,false).is_none());
+        assert!(super::owned_decode_segment_offset(usize::MAX,16,1,false).is_none());
     }
 }

@@ -326,6 +326,9 @@ impl PreparedLlamaBatchOwner {
             })?
             .attention();
         let bounds = config.metadata();
+        if matches!(config.owned_decode_batch(),6|7|8|9|10) && (bounds.max_rows()>32 || bounds.max_output_slots()>32) {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"bounded_sm80_gateup",reason:"requires at most32 simultaneous sequences"});
+        }
         if config.owned_decode_batch()==5 && (bounds.max_rows()>32 || bounds.max_output_slots()>32) {
             return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"exact_smallrows_decode",reason:"mode5 requires at most32 simultaneous sequences"});
         }
@@ -384,7 +387,7 @@ impl PreparedLlamaBatchOwner {
         } else {
             PreparedLlamaForward::prepare(model, context, stream, forward_rows, forward_config)?
         };
-        let shape_variants = match prepare_shape_variants(
+        let mut shape_variants = match prepare_shape_variants(
             model,
             context,
             &forward,
@@ -397,6 +400,28 @@ impl PreparedLlamaBatchOwner {
                 return Err(error);
             }
         };
+        #[cfg(feature="cuda-cublas-gemm-probe")]
+        if matches!(config.owned_decode_batch(),7|8|9|10) {
+            let d=forward.plan.dimensions();
+            if (d.hidden_size(),d.query_heads(),d.key_value_heads(),d.head_dimension(),d.intermediate_size())!=(2560,32,8,128,9728) {
+                return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"bounded_sm80_projections",reason:"requires qualified Qwen3-4B geometry"});
+            }
+            forward.gemms.prepare_bounded_sm80_projections()?;
+            for shape in shape_variants.iter_mut(){shape.gemms.prepare_bounded_sm80_projections()?;}
+        }
+        #[cfg(feature="cuda-cublas-gemm-probe")]
+        if config.owned_decode_batch()==10 {
+            forward.gemms.prepare_sm80_prefill()?;
+            for shape in shape_variants.iter_mut(){shape.gemms.prepare_sm80_prefill()?;}
+        }
+        #[cfg(feature="cuda-cublas-gemm-probe")]
+        if config.owned_decode_batch()==10 && config.owned_decode_graph() && bounds.max_rows()>=2 && bounds.max_input_tokens()>=128 {
+            forward.weights.upload_merged_gate_up(model.weights(),forward.plan.layers().len(),context,stream,
+                config.forward().upload_staging_bytes(),false)
+                .map_err(|source|crate::llama::LlamaForwardError::Weight{site:None,source})?;
+            forward.gemms.prepare_sm80_merged_decode(context)?;
+            for shape in shape_variants.iter_mut(){shape.gemms.prepare_sm80_merged_decode(context)?;}
+        }
         let required_gemm_workspace_bytes = shape_variants.iter().fold(
             forward.gemms.maximum_workspace_bytes(),
             |required, shape| required.max(shape.gemms.maximum_workspace_bytes()),
@@ -489,13 +514,15 @@ impl PreparedLlamaBatchOwner {
                         return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"hf_attention_diagnostic",reason:"owned D64/D128 GQA<=8 M<=8192 T<=9216 geometry only"});
                     }
                     let m=bounds.max_input_tokens() as u64;let t=workspace_sequence_tokens as u64;let h=dimensions.query_heads() as u64;let d=dimensions.head_dimension() as u64;let q=m*h*d*2;let kv=t*h*d*2;let sc=h*m*t;let tiled=h*m.min(128)*t;
-                    let plan=context.prepare_owned_hf_gemm(riley_cuda::CudaGemmConfig::new(m,t,d,16777216).map_err(|e|owner_cuda(attention_site,e))?).map_err(|e|owner_cuda(attention_site,e))?;
+                    let mut plan=context.prepare_owned_hf_gemm(riley_cuda::CudaGemmConfig::new(m,t,d,16777216).map_err(|e|owner_cuda(attention_site,e))?).map_err(|e|owner_cuda(attention_site,e))?;
+                    if matches!(config.owned_decode_batch(),9|10) {plan.prepare_sm80_attention().map_err(|e|owner_cuda(attention_site,e))?;}
+                    if config.owned_decode_batch()==10 {plan.prepare_sm80_paged_attention().map_err(|e|owner_cuda(attention_site,e))?;}
                     let mut allocated=Vec::with_capacity(8);
                     for len in [q,kv,kv,sc*2,tiled*4,tiled*4,q,16777216] {allocated.push(allocate_device(context,len,attention_site)?);}
                     let scratch=match allocated.try_into() {Ok(a)=>a,Err(_)=>unreachable!("eight cold buffers")};
                     eprintln!("owned-hf-eager-bf16-v1: owned scratch, completion={:?}, M={m}, T={t}",config.execution_completion_implementation());
                     let decode_chunk=if config.owned_decode_batch()>=2 && bounds.max_rows()>=2 && matches!((dimensions.query_heads(),dimensions.key_value_heads()),(16,2)|(32,8)) && d==128 && plan.supports_exact_decode_chunk(){
-                        let maximum=if dimensions.query_heads()==32{32}else{8};let r=bounds.max_rows().min(maximum) as u64;let t=t.min(512);let kv=r*h*t*128*2;let p=r*h*t*2;
+                        let maximum=if dimensions.query_heads()==32{32}else{8};let r=bounds.max_rows().min(maximum) as u64;let t=t.min(512);let p=r*h*t*2;let kv=if plan.uses_sm80_paged_attention(){p}else{r*h*t*128*2};
                         Some([allocate_device(context,kv,attention_site)?,allocate_device(context,kv,attention_site)?,allocate_device(context,p,attention_site)?])
                     }else if config.owned_decode_batch()>=2 && bounds.max_rows()>=2 && dimensions.query_heads()==9 && dimensions.key_value_heads()==3 && d==64 && plan.supports_exact_smol_attention(16) {
                         let r=bounds.max_rows().min(32) as u64;let kv=r*3*1024*64*2;let p=r*9*1024*2;
@@ -660,11 +687,21 @@ impl PreparedLlamaBatchOwner {
             return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"exact_smallrows_decode",reason:"requires qualified Q4/Mistral SM89/CUDA12.8 geometry and unmodified cuBLAS workspace/SM configuration"});
         }
         #[cfg(feature="cuda-cublas-gemm-probe")]
-        let owned_mlp_graphs=if config.owned_mlp_graphs() {
+        if matches!(config.owned_decode_batch(),6|7|8|9|10) && (!matches!((dimensions.hidden_size(),dimensions.query_heads(),dimensions.key_value_heads(),dimensions.head_dimension(),dimensions.intermediate_size()),(2560,32,8,128,9728)|(4096,32,8,128,14336))
+            ||!native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).and_then(|w|w.hf.as_ref()).is_some_and(|w|w.plan.supports_bounded_sm80_gateup_rows())
+            ||["CUBLAS_WORKSPACE_CONFIG","CUDA_MPS_ACTIVE_THREAD_PERCENTAGE"].iter().any(|k|std::env::var_os(k).is_some_and(|v|!v.is_empty()))) {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"bounded_sm80_gateup",reason:"requires Q4/Mistral SM80/108SM/CUDA12.4 and unmodified cuBLAS workspace/SM configuration"});
+        }
+        #[cfg(feature="cuda-cublas-gemm-probe")]
+        let owned_mlp_graphs=if config.owned_mlp_graphs() || (config.owned_decode_graph() && config.owned_decode_batch()==10 && bounds.max_rows()>=2) {
             if spec.blocks().iter().any(|b|b.mlp().has_bias()) {return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"owned_mlp_graphs",reason:"MLP biases are not supported by graph MLP"});}
-            Some(riley_cuda::CudaOwnedHfMlpGraph::prepare(context,bounds.max_input_tokens().min(32) as u32,
-                dimensions.hidden_size() as u64,dimensions.intermediate_size() as u64,1024)
-                .map_err(|e|owner_cuda(ExecutionSite::layer(0,LlamaOp::GateProjection),e))?)
+            let sm80=matches!(config.owned_decode_batch(),9|10);
+            let mut graphs=riley_cuda::CudaOwnedHfMlpGraph::prepare(context,bounds.max_input_tokens().min(32) as u32,
+                dimensions.hidden_size() as u64,dimensions.intermediate_size() as u64,if sm80 {2048}else{1024})
+                .map_err(|e|owner_cuda(ExecutionSite::layer(0,LlamaOp::GateProjection),e))?;
+            if config.owned_decode_graph() && config.owned_decode_batch()==10 {graphs.enable_piecewise_sm80(context).map_err(|e|owner_cuda(ExecutionSite::layer(0,LlamaOp::GateProjection),e))?;}
+            else if sm80 {graphs.enable_bounded_sm80_projections().map_err(|e|owner_cuda(ExecutionSite::layer(0,LlamaOp::GateProjection),e))?;}
+            Some(graphs)
         }else{None};
 
         Ok(Self {

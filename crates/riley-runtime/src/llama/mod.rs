@@ -1007,6 +1007,7 @@ mod source_contract_tests {
         let owner = include_str!("executor/owner.rs");
         let prepare_variants = owner
             .find("let shape_variants = match prepare_shape_variants(")
+            .or_else(|| owner.find("let mut shape_variants = match prepare_shape_variants("))
             .expect("shape variants are cold-prepared");
         let maximum_requirement = owner
             .find("let required_gemm_workspace_bytes = shape_variants.iter().fold(")

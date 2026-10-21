@@ -1,0 +1,96 @@
+--- a/crates/riley-cuda/src/gemm.rs
++++ b/crates/riley-cuda/src/gemm.rs
+@@ -2011,6 +2011,11 @@
+             let prefill_bounds=if grouped_decode==10 && output_rows.is_none(){
+                 match (self.config.n,self.config.k) {
+                     (9728, 2560) | (2560, 9728) => Some((64_usize,130_usize,161_usize,576_usize)),
++                    // Packed linear tokens: keep each original native-M128
++                    // arithmetic family and its independently qualified bounds.
++                    (4096, 2560) => Some((65,130,257,576)),
++                    (1024, 2560) => Some((94,128,161,512)),
++                    (2560, 4096) => Some((65,128,161,576)),
+                     _ => None,
+                 }
+             }else{None};
+@@ -2027,7 +2032,8 @@
+             }
+             // Mode11 is a private native call selector, not a public decode mode.
+             // Never replace a standalone large prefill with the M128 recipe.
+-            let fixed_prefill=end>original_end && (self.config.k==9728 || (257..=512).contains(&(end-begin)));
++            let packed_projection=matches!((self.config.n,self.config.k),(4096,2560)|(1024,2560)|(2560,4096));
++            let fixed_prefill=end>original_end && (packed_projection || self.config.k==9728 || (257..=512).contains(&(end-begin)));
+             let mut mode=if fixed_prefill {11}else{0};
+             if grouped_decode>=2 && end==begin+1 {
+                 mode=grouped_decode;
+@@ -2074,6 +2080,11 @@
+             let prefill_bounds=if grouped_decode==10 && output_rows.is_none(){
+                 match (self.config.n,self.config.k) {
+                     (9728, 2560) | (2560, 9728) => Some((64_usize,130_usize,161_usize,576_usize)),
++                    // Packed linear tokens: keep each original native-M128
++                    // arithmetic family and its independently qualified bounds.
++                    (4096, 2560) => Some((65,130,257,576)),
++                    (1024, 2560) => Some((94,128,161,512)),
++                    (2560, 4096) => Some((65,128,161,576)),
+                     _ => None,
+                 }
+             }else{None};
+@@ -2090,7 +2101,8 @@
+             }
+             // Mode11 is a private native call selector, not a public decode mode.
+             // Never replace a standalone large prefill with the M128 recipe.
+-            let fixed_prefill=end>original_end && (self.config.k==9728 || (257..=512).contains(&(end-begin)));
++            let packed_projection=matches!((self.config.n,self.config.k),(4096,2560)|(1024,2560)|(2560,4096));
++            let fixed_prefill=end>original_end && (packed_projection || self.config.k==9728 || (257..=512).contains(&(end-begin)));
+             let mut mode=if fixed_prefill {11}else{0};
+             if grouped_decode>=2 && end==begin+1 {
+                 mode=grouped_decode;
+--- a/crates/riley-runtime/src/llama/forward.rs
++++ b/crates/riley-runtime/src/llama/forward.rs
+@@ -3118,7 +3118,7 @@
+     #[cfg(feature="cuda-cublas-gemm-probe")]
+     pub(super) fn prepare_sm80_prefill(&mut self)->LlamaForwardResult<()> {
+         let site=ExecutionSite::global(LlamaOp::IterationCompletion);
+-        for gemm in [&mut self.intermediate,&mut self.down].into_iter().chain(self.output_projection.iter_mut()) {
++        for gemm in [&mut self.key_value,&mut self.intermediate,&mut self.down].into_iter().chain(self.hf_separate_query.iter_mut()).chain(self.output_projection.iter_mut()) {
+             if let PreparedLlamaGemm::ClassicRequestRows(p)=gemm {p.prepare_sm80_prefill().map_err(|e|LlamaForwardError::cuda(site,e))?;}
+         }
+         Ok(())
+--- a/kernels/src/cublas_gemm_probe.cu
++++ b/kernels/src/cublas_gemm_probe.cu
+@@ -2780,8 +2780,10 @@
+   const bool gate=plan->config.n==9728 && plan->config.k==2560;
+   const bool output=plan->config.n==2560&&plan->config.k==4096;
+   if((down||output)&&plan->decode_lt&&plan->sm80_projection_workspace){auto st=prepare_sm80_full_projection_rows(plan,error);if(st!=RILEY_CUDA_STATUS_SUCCESS)return st;}
+-  if(!down&&!gate)return RILEY_CUDA_STATUS_SUCCESS;
+-  {
++  const bool query=plan->config.n==4096&&plan->config.k==2560;
++  const bool kv=plan->config.n==1024&&plan->config.k==2560;
++  if(!down&&!gate&&!query&&!kv&&!output)return RILEY_CUDA_STATUS_SUCCESS;
++  if(down||gate){
+     CurrentContext image_scope(plan->owner);auto image_status=image_scope.enter(error,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation);
+     if(image_status==RILEY_CUDA_STATUS_SUCCESS){
+       cudaFuncAttributes a{};auto e=cudaFuncGetAttributes(&a,down?reinterpret_cast<const void*>(sm80_v8_down<4,16,8,4>):reinterpret_cast<const void*>(sm80_v8_gate<4,16,16,2>));
+@@ -2821,16 +2823,20 @@
+   cublasOperation_t trans=CUBLAS_OP_T;
+   if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatmulDescSetAttribute(plan->prefill_op,CUBLASLT_MATMUL_DESC_TRANSA,&trans,sizeof(trans)));
+   if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatrixLayoutCreate(&plan->prefill_weight,CUDA_R_16BF,plan->config.k,plan->config.n,plan->config.k));
+-  if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatmulAlgoInit(plan->prefill_lt,CUBLAS_COMPUTE_32F,CUDA_R_32F,CUDA_R_16BF,CUDA_R_16BF,CUDA_R_16BF,CUDA_R_16BF,down?6:21,&plan->prefill_algo));
++  if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatmulAlgoInit(plan->prefill_lt,CUBLAS_COMPUTE_32F,CUDA_R_32F,CUDA_R_16BF,CUDA_R_16BF,CUDA_R_16BF,CUDA_R_16BF,(query||kv||output||down)?6:21,&plan->prefill_algo));
+   const cublasLtMatmulAlgoConfigAttributes_t attrs[]={CUBLASLT_ALGO_CONFIG_TILE_ID,CUBLASLT_ALGO_CONFIG_STAGES_ID,CUBLASLT_ALGO_CONFIG_SPLITK_NUM,CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME,CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING,CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION};
+-  const uint32_t vals[]={down?24u:20u,down?15u:11u,down?5u:0u,down?4u:0u,down?1u:0u,0};
++  // Pinned native-M128 accumulation families, including split-K reduction.
++  // Q: original65..130, merged257..576; KV:94..128, merged161..512;
++  // O:65..128, merged161..576. Rust dispatch preserves all other extents.
++  const uint32_t vals[]={down?24u:(query||kv)?18u:20u,down?15u:(query||kv)?12u:11u,
++    down||output?5u:kv?4u:0u,down||output||kv?4u:0u,down||query||kv?1u:0u,0};
+   for(size_t i=0;i<6 && status==RILEY_CUDA_STATUS_SUCCESS;i++){
+     status=checked(cublasLtMatmulAlgoConfigSetAttribute(&plan->prefill_algo,attrs[i],&vals[i],sizeof(vals[i])));
+     uint32_t got=0;size_t written=0;
+     if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatmulAlgoConfigGetAttribute(&plan->prefill_algo,attrs[i],&got,sizeof(got),&written));
+     if(status==RILEY_CUDA_STATUS_SUCCESS && (written!=sizeof(got)||got!=vals[i]))status=validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation,"prefill algorithm metadata changed");
+   }
+-  const uint32_t maximum=static_cast<uint32_t>(std::min<uint64_t>(576,plan->config.m));
++  const uint32_t maximum=static_cast<uint32_t>(std::min<uint64_t>(kv?512:576,plan->config.m));
+   for(uint32_t rows=161;rows<=maximum && status==RILEY_CUDA_STATUS_SUCCESS;rows++){
+     status=checked(cublasLtMatrixLayoutCreate(&plan->prefill_input[rows],CUDA_R_16BF,plan->config.k,rows,plan->config.k));
+     if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatrixLayoutCreate(&plan->prefill_output[rows],CUDA_R_16BF,plan->config.n,rows,plan->config.n));

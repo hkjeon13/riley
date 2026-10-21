@@ -1,0 +1,289 @@
+diff --git a/kernels/src/cublas_gemm_probe.cu b/kernels/src/cublas_gemm_probe.cu
+--- a/kernels/src/cublas_gemm_probe.cu
++++ b/kernels/src/cublas_gemm_probe.cu
+@@ -95,6 +95,16 @@
+   cublasLtMatrixLayout_t decode_input[33]{};
+   cublasLtMatrixLayout_t decode_output[33]{};
+   cublasLtMatmulAlgo_t decode_algo{};
++  // Cold-only bounded prefill recipes; no descriptors or scratch in dispatch.
++  cublasLtHandle_t prefill_lt = nullptr;
++  cublasLtMatmulDesc_t prefill_op = nullptr;
++  cublasLtMatrixLayout_t prefill_weight = nullptr;
++  cublasLtMatrixLayout_t prefill_input[577]{};
++  cublasLtMatrixLayout_t prefill_output[577]{};
++  cublasLtMatmulAlgo_t prefill_algo{};
++  RileyCudaDeviceBuffer* prefill_workspace = nullptr;
++  uint64_t prefill_workspace_bytes = 0;
++  uint32_t prefill_max_rows = 0;
+   bool decode_ready = false;
+   uint32_t decode_span_alignment = 0;
+   uint32_t sm80_projection_rows = 0;
+@@ -830,6 +840,12 @@
+                                        RileyCudaErrorInfo* error,
+                                        uint32_t stage,
+                                        const char* operation) noexcept {
++  plan->prefill_max_rows=0;
++  if(plan->prefill_workspace!=nullptr) {
++    auto st=riley_cuda_device_buffer_close(&plan->prefill_workspace,error);
++    if(st!=RILEY_CUDA_STATUS_SUCCESS)return st;
++  }
++  plan->prefill_workspace_bytes=0;
+   plan->decode_ready=false;
+   plan->sm80_projection_rows=0;
+   if(plan->sm80_projection_workspace!=nullptr) {
+@@ -846,6 +862,13 @@
+     DESTROY_DECODE(decode_input[rows],cublasLtMatrixLayoutDestroy)
+     DESTROY_DECODE(decode_batch_weight[rows],cublasLtMatrixLayoutDestroy)
+   }
++  for(size_t rows=0;rows<577;++rows) {
++    DESTROY_DECODE(prefill_output[rows],cublasLtMatrixLayoutDestroy)
++    DESTROY_DECODE(prefill_input[rows],cublasLtMatrixLayoutDestroy)
++  }
++  DESTROY_DECODE(prefill_weight,cublasLtMatrixLayoutDestroy)
++  DESTROY_DECODE(prefill_op,cublasLtMatmulDescDestroy)
++  DESTROY_DECODE(prefill_lt,cublasLtDestroy)
+   DESTROY_DECODE(decode_weight,cublasLtMatrixLayoutDestroy)
+   DESTROY_DECODE(decode_preference,cublasLtMatmulPreferenceDestroy)
+   DESTROY_DECODE(decode_op,cublasLtMatmulDescDestroy)
+@@ -863,7 +886,9 @@
+ 
+ bool plan_resources_destroyed(
+     const RileyCudaCublasGemmProbePlan* plan) noexcept {
+-  if(plan==nullptr || plan->sm80_projection_workspace!=nullptr || plan->handle!=nullptr || plan->decode_lt!=nullptr || plan->decode_op!=nullptr || plan->decode_weight!=nullptr || plan->decode_preference!=nullptr)return false;
++  if(plan==nullptr || plan->prefill_workspace!=nullptr || plan->prefill_lt!=nullptr || plan->prefill_op!=nullptr || plan->prefill_weight!=nullptr || plan->sm80_projection_workspace!=nullptr || plan->handle!=nullptr || plan->decode_lt!=nullptr || plan->decode_op!=nullptr || plan->decode_weight!=nullptr || plan->decode_preference!=nullptr)return false;
++  for(size_t rows=0;rows<577;++rows)
++    if(plan->prefill_input[rows]!=nullptr || plan->prefill_output[rows]!=nullptr)return false;
+   for(size_t rows=0;rows<33;++rows)
+     if(plan->decode_input[rows]!=nullptr || plan->decode_output[rows]!=nullptr || plan->decode_batch_weight[rows]!=nullptr)return false;
+   return true;
+@@ -1892,6 +1917,8 @@
+     uint64_t rows, uint32_t grouped_decode, RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
+   clear_error(error);
+   // Explicit mode3 owns the separately qualified R2 Gate/Up route.
++  const bool prefill_sm80_v7_profile=grouped_decode==11;
++  if(prefill_sm80_v7_profile)grouped_decode=0;
+   const bool down_sm80_v6_profile=grouped_decode==10;
+   const bool global_r2_profile=grouped_decode==4;
+   const bool native_kv_sm80_profile=(grouped_decode==8||grouped_decode==9||grouped_decode==10);
+@@ -1921,6 +1948,8 @@
+       (plan->config.k==4096 || plan->config.k==9728) &&
+       (plan->sm80_projection_rows==0 || plan->decode_lt==nullptr || plan->sm80_projection_workspace==nullptr))
+     return validation_error(error,RILEY_CUDA_STATUS_INVALID_STATE,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"bounded projection recipe was not cold-prepared");
++  if(prefill_sm80_v7_profile && (rows<161 || rows>plan->prefill_max_rows || plan->prefill_lt==nullptr || plan->prefill_workspace==nullptr))
++    return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"qualified cold prefill row extent required");
+   ResolvedSpan spans[kMaximumGemmBuffers]{};
+   RileyCudaStatus status = resolve_attention_span(
+       input, RILEY_CUDA_DTYPE_BF16, rows*plan->config.k*2, &spans[0], error,
+@@ -1954,6 +1983,8 @@
+   }
+   if(projection_sm80_profile && plan->sm80_projection_workspace!=nullptr && !uses.add(plan->sm80_projection_workspace))
+     return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"private projection workspace use registration failed");
++  if(prefill_sm80_v7_profile && !uses.add(plan->prefill_workspace))
++    return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"private prefill workspace registration failed");
+   status = uses.acquire(error);
+   if (status != RILEY_CUDA_STATUS_SUCCESS) {
+     return status;
+@@ -1981,7 +2012,13 @@
+        ?owned_quad_v107_variant(static_cast<int>(plan->config.n),static_cast<int>(plan->config.k),static_cast<int>(rows)):-1;
+     // Existing mode3 retains its Gate/Up implementation. Only explicit mode4
+     // adds R2 Down/output weight reuse; common guards keep prefill dispatch lean.
+-    if(exact_r2_profile && grouped_decode==2 && rows==2 && plan->owned_attention_extended_qualified &&
++    if(prefill_sm80_v7_profile){
++      status=cublas_probe_error(cublasLtMatmul(plan->prefill_lt,plan->prefill_op,&alpha,
++        spans[1].data,plan->prefill_weight,spans[0].data,plan->prefill_input[rows],&beta,
++        spans[2].data,plan->prefill_output[rows],spans[2].data,plan->prefill_output[rows],
++        &plan->prefill_algo,plan->prefill_workspace->device_data,plan->prefill_workspace_bytes,stream->stream),
++        error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
++    }else if(exact_r2_profile && grouped_decode==2 && rows==2 && plan->owned_attention_extended_qualified &&
+        ((reinterpret_cast<uintptr_t>(spans[0].data)|reinterpret_cast<uintptr_t>(spans[1].data)|reinterpret_cast<uintptr_t>(spans[2].data))&uintptr_t(15))==0 &&
+        ((plan->config.n==9728 && plan->config.k==2560) ||
+         (global_r2_profile && plan->config.n==2560 && (plan->config.k==4096 || plan->config.k==9728)))){
+@@ -2457,6 +2494,56 @@
+   if(status==RILEY_CUDA_STATUS_SUCCESS)plan->sm80_projection_rows=limit;
+   return scope.leave(status,error,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation);
+ }
++
++// Qualified against native M128 for every M64..576, six input states.
++// Dispatch only merges original M64..130, whose native families match M128.
++extern "C" RileyCudaStatus riley_cuda_cublas_gemm_probe_plan_prepare_sm80_prefill(
++    RileyCudaCublasGemmProbePlan*plan,RileyCudaErrorInfo*error) noexcept {
++  clear_error(error);
++  if(plan==nullptr || !plan->owned_sm80_gateup_rows_qualified || plan->active_uses.load()!=0)
++    return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation,"cold qualified SM80 owner required");
++  const bool down=plan->config.n==2560 && plan->config.k==9728;
++  const bool gate=plan->config.n==9728 && plan->config.k==2560;
++  if((!down&&!gate)||plan->config.m<161)return RILEY_CUDA_STATUS_SUCCESS;
++  if(plan->prefill_lt!=nullptr || plan->prefill_workspace!=nullptr)
++    return validation_error(error,RILEY_CUDA_STATUS_INVALID_STATE,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation,"prefill recipe already prepared");
++  if(cublasLtGetVersion()!=120405)
++    return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation,"qualified cuBLASLt120405 required");
++  for(const char*name:{"CUBLAS_WORKSPACE_CONFIG","CUDA_MPS_ACTIVE_THREAD_PERCENTAGE"}){
++    const char*v=std::getenv(name);if(v&&*v)return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation,"unmodified workspace/SM environment required");
++  }
++  CurrentContext scope(plan->owner);auto status=scope.enter(error,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation);
++  auto checked=[&](cublasStatus_t st){return cublas_probe_error(st,error,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation);};
++  if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtCreate(&plan->prefill_lt));
++  if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatmulDescCreate(&plan->prefill_op,CUBLAS_COMPUTE_32F,CUDA_R_32F));
++  cublasOperation_t trans=CUBLAS_OP_T;
++  if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatmulDescSetAttribute(plan->prefill_op,CUBLASLT_MATMUL_DESC_TRANSA,&trans,sizeof(trans)));
++  if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatrixLayoutCreate(&plan->prefill_weight,CUDA_R_16BF,plan->config.k,plan->config.n,plan->config.k));
++  if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatmulAlgoInit(plan->prefill_lt,CUBLAS_COMPUTE_32F,CUDA_R_32F,CUDA_R_16BF,CUDA_R_16BF,CUDA_R_16BF,CUDA_R_16BF,down?6:21,&plan->prefill_algo));
++  const cublasLtMatmulAlgoConfigAttributes_t attrs[]={CUBLASLT_ALGO_CONFIG_TILE_ID,CUBLASLT_ALGO_CONFIG_STAGES_ID,CUBLASLT_ALGO_CONFIG_SPLITK_NUM,CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME,CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING,CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION};
++  const uint32_t vals[]={down?24u:20u,down?15u:11u,down?5u:0u,down?4u:0u,down?1u:0u,0};
++  for(size_t i=0;i<6 && status==RILEY_CUDA_STATUS_SUCCESS;i++){
++    status=checked(cublasLtMatmulAlgoConfigSetAttribute(&plan->prefill_algo,attrs[i],&vals[i],sizeof(vals[i])));
++    uint32_t got=0;size_t written=0;
++    if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatmulAlgoConfigGetAttribute(&plan->prefill_algo,attrs[i],&got,sizeof(got),&written));
++    if(status==RILEY_CUDA_STATUS_SUCCESS && (written!=sizeof(got)||got!=vals[i]))status=validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation,"prefill algorithm metadata changed");
++  }
++  const uint32_t maximum=static_cast<uint32_t>(std::min<uint64_t>(576,plan->config.m));
++  for(uint32_t rows=161;rows<=maximum && status==RILEY_CUDA_STATUS_SUCCESS;rows++){
++    status=checked(cublasLtMatrixLayoutCreate(&plan->prefill_input[rows],CUDA_R_16BF,plan->config.k,rows,plan->config.k));
++    if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatrixLayoutCreate(&plan->prefill_output[rows],CUDA_R_16BF,plan->config.n,rows,plan->config.n));
++    cublasLtMatmulHeuristicResult_t check{};
++    if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatmulAlgoCheck(plan->prefill_lt,plan->prefill_op,plan->prefill_weight,plan->prefill_input[rows],plan->prefill_output[rows],plan->prefill_output[rows],&plan->prefill_algo,&check));
++    if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(check.state);
++    if(status==RILEY_CUDA_STATUS_SUCCESS && check.workspaceSize>16u*1024u*1024u)status=validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation,"prefill workspace exceeds16MiB");
++    if(status==RILEY_CUDA_STATUS_SUCCESS)plan->prefill_workspace_bytes=std::max<uint64_t>(plan->prefill_workspace_bytes,check.workspaceSize);
++  }
++  plan->prefill_workspace_bytes=std::max<uint64_t>(256,plan->prefill_workspace_bytes);
++  if(status==RILEY_CUDA_STATUS_SUCCESS)status=riley_cuda_device_buffer_create(plan->owner,plan->prefill_workspace_bytes,&plan->prefill_workspace,error);
++  if(status==RILEY_CUDA_STATUS_SUCCESS)plan->prefill_max_rows=maximum;
++  return scope.leave(status,error,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation);
++}
++
+ extern "C" int riley_cuda_cublas_bounded_sm80_gateup_qualified(const RileyCudaCublasGemmProbePlan*plan) noexcept {return plan && plan->owned_sm80_gateup_rows_qualified;}
+ extern "C" int riley_cuda_cublas_hf_decode_chunk_qualified(const RileyCudaCublasGemmProbePlan*plan) noexcept {return plan && (plan->owned_weight_reuse_qualified||plan->owned_sm80_paged_attention_enabled);}
+ // Eleven disjoint, caller-owned spans. Original per-request QK/PV dimensions
+diff --git a/crates/riley-cuda/src/ffi.rs b/crates/riley-cuda/src/ffi.rs
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -2717,6 +2717,7 @@
+     fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_projections(plan:*mut RawCublasGemmProbePlan,error:*mut ErrorInfo)->i32;
+     fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_attention(plan:*mut RawCublasGemmProbePlan,error:*mut ErrorInfo)->i32;
+     #[cfg(feature = "cuda-cublas-gemm-probe")]
++    fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_prefill(plan:*mut RawCublasGemmProbePlan,error:*mut ErrorInfo)->i32;
+     fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_paged_attention(plan:*mut RawCublasGemmProbePlan,error:*mut ErrorInfo)->i32;
+     #[cfg(feature = "cuda-cublas-gemm-probe")]
+     fn riley_cuda_cublas_hf_sm80_paged_qualified(plan:*const RawCublasGemmProbePlan,tokens:u64)->i32;
+@@ -10299,6 +10300,12 @@
+         // SAFETY: unique cold owner; native preparation allocates no resources.
+         let status=unsafe{riley_cuda_cublas_gemm_probe_plan_prepare_sm80_attention(self.as_ptr(),&mut error)};
+         status_result(status,"prepare native SM80 attention",&error)
++    }
++    pub(super) fn prepare_sm80_prefill(&mut self)->CudaResult<()> {
++        let mut error=ErrorInfo::new();
++        // SAFETY: unique cold owner; native checks context, image and geometry.
++        let status=unsafe{riley_cuda_cublas_gemm_probe_plan_prepare_sm80_prefill(self.as_ptr(),&mut error)};
++        status_result(status,"prepare native SM80 prefill",&error)
+     }
+     pub(super) fn prepare_sm80_paged_attention(&mut self)->CudaResult<()> {
+         let mut error=ErrorInfo::new();
+diff --git a/crates/riley-cuda/src/gemm.rs b/crates/riley-cuda/src/gemm.rs
+--- a/crates/riley-cuda/src/gemm.rs
++++ b/crates/riley-cuda/src/gemm.rs
+@@ -2005,11 +2005,12 @@
+         while begin<total {
+             let mut end=begin+1;
+             if output_rows.is_none() {while end<total && slots[end]==slots[begin] {end+=1;}}
++            let original_end=end;
+             // Only mode10 merges adjacent prefill groups with an independently
+             // qualified native arithmetic family. Other modes preserve extents.
+             let prefill_bounds=if grouped_decode==10 && output_rows.is_none(){
+                 match (self.config.n,self.config.k) {
+-                    (9728, 2560) => Some((64_usize,130_usize,161_usize,576_usize)),
++                    (9728, 2560) | (2560, 9728) => Some((64_usize,130_usize,161_usize,576_usize)),
+                     _ => None,
+                 }
+             }else{None};
+@@ -2024,7 +2025,10 @@
+                     }
+                 }
+             }
+-            let mut mode=0;
++            // Mode11 is a private native call selector, not a public decode mode.
++            // Never replace a standalone large prefill with the M128 recipe.
++            let fixed_prefill=end>original_end && (self.config.k==9728 || (257..=512).contains(&(end-begin)));
++            let mut mode=if fixed_prefill {11}else{0};
+             if grouped_decode>=2 && end==begin+1 {
+                 mode=grouped_decode;
+                 while end<total && end-begin<32 {
+@@ -2064,11 +2068,12 @@
+         while begin<total {
+             let mut end=begin+1;
+             if output_rows.is_none() {end=groups.group_end(begin)?;}
++            let original_end=end;
+             // Only mode10 merges adjacent prefill groups with an independently
+             // qualified native arithmetic family. Other modes preserve extents.
+             let prefill_bounds=if grouped_decode==10 && output_rows.is_none(){
+                 match (self.config.n,self.config.k) {
+-                    (9728, 2560) => Some((64_usize,130_usize,161_usize,576_usize)),
++                    (9728, 2560) | (2560, 9728) => Some((64_usize,130_usize,161_usize,576_usize)),
+                     _ => None,
+                 }
+             }else{None};
+@@ -2083,7 +2088,10 @@
+                     }
+                 }
+             }
+-            let mut mode=0;
++            // Mode11 is a private native call selector, not a public decode mode.
++            // Never replace a standalone large prefill with the M128 recipe.
++            let fixed_prefill=end>original_end && (self.config.k==9728 || (257..=512).contains(&(end-begin)));
++            let mut mode=if fixed_prefill {11}else{0};
+             if grouped_decode>=2 && end==begin+1 {
+                 mode=grouped_decode;
+                 while end<total && end-begin<32 {
+@@ -2192,6 +2200,7 @@
+     /// Cold opt-in attention staging; the native owner validates SM80 geometry.
+     pub fn prepare_sm80_attention(&mut self)->CudaResult<()> {self.native.prepare_sm80_attention()}
+     /// Opt-in paged chunk preparation; native SIMT/WMMA families stay pinned.
++    pub fn prepare_sm80_prefill(&mut self)->CudaResult<()> {self.native.prepare_sm80_prefill()}
+     pub fn prepare_sm80_paged_attention(&mut self)->CudaResult<()> {self.native.prepare_sm80_paged_attention()}
+     pub fn uses_sm80_paged_attention(&self)->bool {self.native.supports_sm80_paged_attention(0)}
+     pub fn supports_sm80_paged_attention(&self,tokens:u64)->bool {tokens!=0&&self.native.supports_sm80_paged_attention(tokens)}
+diff --git a/crates/riley-runtime/src/llama/forward.rs b/crates/riley-runtime/src/llama/forward.rs
+--- a/crates/riley-runtime/src/llama/forward.rs
++++ b/crates/riley-runtime/src/llama/forward.rs
+@@ -3107,6 +3107,14 @@
+ 
+ impl GemmPlans {
+     #[cfg(feature="cuda-cublas-gemm-probe")]
++    pub(super) fn prepare_sm80_prefill(&mut self)->LlamaForwardResult<()> {
++        let site=ExecutionSite::global(LlamaOp::IterationCompletion);
++        for gemm in [&mut self.intermediate,&mut self.down].into_iter().chain(self.output_projection.iter_mut()) {
++            if let PreparedLlamaGemm::ClassicRequestRows(p)=gemm {p.prepare_sm80_prefill().map_err(|e|LlamaForwardError::cuda(site,e))?;}
++        }
++        Ok(())
++    }
++    #[cfg(feature="cuda-cublas-gemm-probe")]
+     pub(super) fn prepare_bounded_sm80_projections(&mut self)->LlamaForwardResult<()> {
+         let site=ExecutionSite::global(LlamaOp::IterationCompletion);
+         for gemm in [&mut self.hidden,&mut self.down].into_iter().chain(self.output_projection.iter_mut()) {
+diff --git a/crates/riley-runtime/src/llama/executor/owner.rs b/crates/riley-runtime/src/llama/executor/owner.rs
+--- a/crates/riley-runtime/src/llama/executor/owner.rs
++++ b/crates/riley-runtime/src/llama/executor/owner.rs
+@@ -408,6 +408,11 @@
+             }
+             forward.gemms.prepare_bounded_sm80_projections()?;
+             for shape in shape_variants.iter_mut(){shape.gemms.prepare_bounded_sm80_projections()?;}
++        }
++        #[cfg(feature="cuda-cublas-gemm-probe")]
++        if config.owned_decode_batch()==10 {
++            forward.gemms.prepare_sm80_prefill()?;
++            for shape in shape_variants.iter_mut(){shape.gemms.prepare_sm80_prefill()?;}
+         }
+         let required_gemm_workspace_bytes = shape_variants.iter().fold(
+             forward.gemms.maximum_workspace_bytes(),
+diff --git a/crates/riley-server/src/main.rs b/crates/riley-server/src/main.rs
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -2305,7 +2305,7 @@
+         7 => {eprintln!("RILEY_OWNED_BATCH mode=bounded-projections-sm80-v2 q_rows=32 output_rows=8 down_rows=4");executor.with_bounded_sm80_projection_batch()},
+         8 => {eprintln!("RILEY_OWNED_BATCH mode=native-kv-sm80-v3 q_rows=32 output_rows=8 down_rows=4 kv_reuse=2,4,8 native_k_stride=32 kv_unroll=16");executor.with_bounded_sm80_projection_kv_batch()},
+         9 => {eprintln!("RILEY_OWNED_BATCH mode=native-attention-sm80-v4 kv_vector_bytes=16 gqa_reuse=4 fused_decode_scale=true");executor.with_bounded_sm80_attention_batch()},
+-        10 => {eprintln!("RILEY_OWNED_BATCH mode=native-prefill-sm80-v5 prefill_gate_original=64..130 prefill_gate_merged=161..576 prefill_down=false decode_down_native_sliced_v6=12..32 paged_attention_chunk_v6=2..32 attention_t=24..216");executor.with_bounded_sm80_prefill_batch()},
++        10 => {eprintln!("RILEY_OWNED_BATCH mode=native-prefill-sm80-v5 prefill_gate_original=64..130 prefill_gate_merged=161..576 prefill_down_native_lt_v7=161..576 prefill_gate_lt_v7=257..512 decode_down_native_sliced_v6=12..32 paged_attention_chunk_v6=2..32 attention_t=24..216");executor.with_bounded_sm80_prefill_batch()},
+         _ => executor,
+     };
+     let executor = if options.owned_decode_graph {

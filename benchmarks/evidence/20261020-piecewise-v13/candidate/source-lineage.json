@@ -1,0 +1,39 @@
+{
+  "parent": "/mnt/efs/nlp/psyche/riley-packed-v12b-20261020",
+  "parent_manifest_sha256": "5d12b875983207452cb7acc486922e77aa2f85dfbca357b5621ebf1f49d3a64e",
+  "changed": {
+    "crates/riley-cuda/src/gemm.rs": {
+      "before": "f6ca7c2a67e163f926d791027ac431e353d5442dc92b82575ebc4105856f9131",
+      "after": "4cef93d4bc2a75d173d182a1395e830c8c1a1d2265bf0360929e8851806788d0"
+    },
+    "crates/riley-cuda/src/owned_mlp.rs": {
+      "before": "472fd9bf62e7a9dbae7f37c542bf55f32fb9a4bd9c154fecfe7bc3fe29f222f8",
+      "after": "4839a176903f34f5a122aa638d87de1a5d4cf455c87896c1883dc0f4fc66898c"
+    },
+    "crates/riley-runtime/src/llama/batch.rs": {
+      "before": "21930341af34b21bed2b1e33d84f113582d7ec64320bcc4749b9421c799d179d",
+      "after": "5b8e397abd597636f6a15b2c0c3efd62fdaf49a07b28251426847fce1679cd24"
+    },
+    "crates/riley-runtime/src/llama/batch_executor.rs": {
+      "before": "8293c519a95bdda43be6baf86a28aa5e4570f2b16271dacfcc250115010842b1",
+      "after": "a44082e4463627189f42355559906847abc84f5b00ce59fae0caeddd466a1347"
+    },
+    "crates/riley-runtime/src/llama/executor/dispatch.rs": {
+      "before": "1e676e8f6ca4dad34e1cc807fcdd0b9b571e7b024981103ebc254b2974f73d8b",
+      "after": "72ffadf0cd463774ce6a5d7330bf4b8e55d1f667a1dbd4c53caacf2ec684c22c"
+    },
+    "crates/riley-runtime/src/llama/executor/owner.rs": {
+      "before": "6ab51005b8626f890821bcabbfb88924d8b9f1178909a3f6b2eb7491a0b46287",
+      "after": "6c6b249b7f42e3188f362eeaf98609bc848ae199e6eed9d0d2ff107afebabf2e"
+    },
+    "crates/riley-runtime/src/llama/forward.rs": {
+      "before": "8375ca90ad9a7256f271007cc893b1f224c192104bea149ca1cb2111197e187f",
+      "after": "5c3c034f129c9f18151c7def69bb7112c21d7606c02ae9dd918abe78181a696e"
+    },
+    "kernels/src/cublas_gemm_probe.cu": {
+      "before": "a76bd1df6c00e343b611d7a565742f0bf9391b4f0a9088bf946668b83cf8f9d4",
+      "after": "c6e7f1a889cc49a9fe456b5c4699abb96c1efc59c9b8346938b0e6d0f91fe050"
+    }
+  },
+  "binary_sha256": "9dd87720ceb5c9f99532b8b01851557598032a6fe5ba037316e327eba1505566"
+}

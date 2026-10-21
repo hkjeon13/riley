@@ -1,0 +1,13 @@
+# Qwen SM80 latency/decode layer v9
+
+Seven-file layer on immutable qualified v8, not clean HEAD. Default service modes remain unchanged. Final comparison uses mode10, staged uploads and existing fused BF16 SiLU multiply; no Graph/coalescing flags. See [the report](../../../docs/qwen-initial-prefill-and-launch-v9-20261020.md).
+
+- Down R5..32 computes independent native K32 accumulator chains with explicit original split/BF16 boundaries. Existing bounded workspace grows327680→1310720B and retains its managed use/replay ledger. R5..16 uses N128/R16/stride40/4stages; R17..32 N64/R32/stride48/4stages. Existing SM80/version/environment/context/span/alignment guards and native-image checks remain.
+- Mode10 owned HF permits existing pinned staged uploads while preserving synchronous metadata and iteration-batch requirements. Other owned HF modes remain blocked.
+- Attention valid-prefix and zero-tail payloads are encoded into nonoverlapping existing pinned storage and copied in the active iteration batch. The new generic H2D wrapper retains the typed method's context/range/use guards and native copy ledger. No new GPU buffer or FFI ABI. Shared staged+materialized callers also use this transport; whole-model/performance qualification here is Qwen3-4B/A100.
+- Existing fused SiLU/multiply retains BF16 intermediate rounding. Full-vocabulary checks qualify it with new Down/transport.
+- Gate/Up slice/wide kernels and Graph/initial-cohort experiments were rejected. Scheduler and Graph policy changes were removed from the final patch; experiment evidence remains separate.
+
+Original native/HF exactness, natural EOS and persistent GPU6/7 CUDA contexts remain required. All runtime/model/build/scratch/evidence stay on EFS except the previously approved four private C02 fixtures, removed after CPU checks. No commit/push is part of this task.
+
+Qualified final binary SHA256: `d9a1e6042861e432e08f4ac4b533e0f2dcc0a45a95f13b8713f2969941734424`. Final eager and actual R1..32 Graph runs each match104HF full-vocabulary rows/208BF16 files against original native/HF. All-R compatibility captures/first replays2304 each; normal performance comparison keeps Graph off. CPU521 passed/40 ignored after the approved four fixture reruns. Fresh three-repeat throughput medians: C16 566.949→574.188tok/s (+1.28%), C32 717.308→735.891 (+2.59%). TTFT p95 medians108.628→105.854ms and341.738→339.077ms; one C16 pair regressed, so its tail is not stably resolved. [Independent audit](../../evidence/20261020-latency-v9/independent-audit.json) verifies7403SSE values across41 accepted arms, source/binary identity and resource recovery. Final GPU6/7 holds remain20GiB with original contexts.

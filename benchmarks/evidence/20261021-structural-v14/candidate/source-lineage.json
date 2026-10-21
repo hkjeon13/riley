@@ -1,0 +1,23 @@
+{
+  "parent": "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020",
+  "parent_manifest_sha256": "474ebd145037fc91a023dcc8a4adc996be1d20eaead886a5058d9086e59a6fbe",
+  "changed": {
+    "crates/riley-cuda/src/gemm.rs": {
+      "before": "4cef93d4bc2a75d173d182a1395e830c8c1a1d2265bf0360929e8851806788d0",
+      "after": "954227c8f63f75e67f659b397cf9771a262d6332559fe1649be1cbd86a29722b"
+    },
+    "crates/riley-cuda/src/owned_mlp.rs": {
+      "before": "4839a176903f34f5a122aa638d87de1a5d4cf455c87896c1883dc0f4fc66898c",
+      "after": "97e9dabc85f9e74b0fa9f76f05e990c69c7d1e8ca2ce6fd9c9dcfefac9592438"
+    },
+    "crates/riley-runtime/src/llama/executor/dispatch.rs": {
+      "before": "72ffadf0cd463774ce6a5d7330bf4b8e55d1f667a1dbd4c53caacf2ec684c22c",
+      "after": "2dd2d340a5784159459439b976dff8627e1bd25c5143b04565f8d61cb5b8e078"
+    },
+    "kernels/src/cublas_gemm_probe.cu": {
+      "before": "c6e7f1a889cc49a9fe456b5c4699abb96c1efc59c9b8346938b0e6d0f91fe050",
+      "after": "f0f6cabcdea0799974f773b8998281e43cc7399efa7a7654998f55614d7694dc"
+    }
+  },
+  "binary_sha256": "c46ee3eb264091de3b78e21d6f02187dfb7090b6a44f7162565668230b3ac71a"
+}

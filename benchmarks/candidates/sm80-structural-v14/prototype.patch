@@ -1,0 +1,276 @@
+diff --git a/crates/riley-cuda/src/gemm.rs b/crates/riley-cuda/src/gemm.rs
+--- a/crates/riley-cuda/src/gemm.rs
++++ b/crates/riley-cuda/src/gemm.rs
+@@ -2131,16 +2131,16 @@
+         Ok(())
+     }
+ 
+-    /// Private native-M1-equivalent merged Gate/Up. Only independently
+-    /// qualified R1 and R17..32 use the pinned SM80/cuBLASLt recipe.
++    /// Private native-M1-equivalent merged Gate/Up. All independently
++    /// qualified R1..32 use the pinned SM80/cuBLASLt recipe.
+     pub fn execute_sm80_merged_gate_up<S:CudaExecutionStream+?Sized>(
+         &mut self,input:CudaBufferSpan<'_>,weight:CudaBufferSpan<'_>,
+         output:CudaBufferSpanMut<'_>,rows:u64,stream:&mut S,
+     )->CudaResult<()> {
+         const OP:&str="native exact SM80 merged Gate/Up";
+         if self.poisoned || self.config.n!=19456 || self.config.k!=2560 || rows>self.config.m
+-            || !(rows==1 || (17..=32).contains(&rows)) {
+-            return Err(CudaError::invalid_argument(OP,"qualified cold merged plan and R1/R17..32 required"));
++            || !(1..=32).contains(&rows) {
++            return Err(CudaError::invalid_argument(OP,"qualified cold merged plan and R1..32 required"));
+         }
+         let stream=execution_stream_mut(stream);
+         ensure_same_context(&self.context,&stream.context,OP)?;
+@@ -2360,7 +2360,7 @@
+     #[allow(clippy::too_many_arguments)]
+     pub fn execute_hf_attention_chunk_wide_dynamic<S:CudaExecutionStream+?Sized>(&mut self,query:CudaBufferSpan<'_>,key:CudaBufferSpan<'_>,value:CudaBufferSpan<'_>,output:CudaBufferSpanMut<'_>,scratch:&mut[CudaDeviceBuffer;3],workspace:&mut CudaDeviceBuffer,batch:crate::PackedBatchV1<'_>,begin:usize,requests:usize,stream:&mut S)->CudaResult<()> {
+         const OP:&str="CudaPreparedCublasGemmProbe::execute_hf_attention_chunk_wide_dynamic";
+-        let host=batch.host();let (tokens,total)=exact_wide_decode_chunk_tokens(host.row_positions(),host.row_sequence_slots(),begin,requests).ok_or_else(||CudaError::invalid_argument(OP,"distinct singleton slots, R2..32 and eachT1..512 required"))?;
++        let host=batch.host();let (tokens,total)=exact_dynamic_wide_decode_chunk_tokens(host.row_positions(),host.row_sequence_slots(),begin,requests).ok_or_else(||CudaError::invalid_argument(OP,"distinct singleton slots, R1..32 and eachT1..512 required"))?;
+         let sm80=self.uses_sm80_paged_attention();
+         if !sm80{return Err(CudaError::invalid_argument(OP,"dynamic route requires SM80 paged attention"));}
+         let total=requests as u64*512;
+@@ -2956,6 +2956,22 @@
+ }
+ fn exact_decode_chunk_tokens(p:&[u32],s:&[u32],begin:usize,requests:usize)->Option<([u64;8],u64)>{exact_decode_chunk_tokens_bounded::<8>(p,s,begin,requests)}
+ fn exact_wide_decode_chunk_tokens(p:&[u32],s:&[u32],begin:usize,requests:usize)->Option<([u64;32],u64)>{exact_decode_chunk_tokens_bounded::<32>(p,s,begin,requests)}
++// Only the dynamic SM80 route admits R1; static cuBLAS chunk contracts stay R2+.
++fn exact_dynamic_wide_decode_chunk_tokens(p:&[u32],s:&[u32],begin:usize,requests:usize)->Option<([u64;32],u64)>{
++ if requests!=1{return exact_wide_decode_chunk_tokens(p,s,begin,requests);}
++ if p.len()!=s.len(){return None;}let &position=p.get(begin)?;let &slot=s.get(begin)?;
++ if (begin>0&&s[begin-1]==slot)||(begin+1<s.len()&&s[begin+1]==slot)||position>=512{return None;}
++ let mut tokens=[0;32];tokens[0]=u64::from(position)+1;Some((tokens,tokens[0]))
++}
++#[cfg(test)]mod dynamic_singleton_tests {
++ use super::exact_dynamic_wide_decode_chunk_tokens as tokens;
++ #[test]fn singleton_route_requires_distinct_rows_and_bounded_positions(){
++  assert_eq!(tokens(&[511],&[9],0,1).unwrap().1,512);
++  assert!(tokens(&[512],&[9],0,1).is_none());assert!(tokens(&[0],&[],0,1).is_none());
++  assert!(tokens(&[0,0],&[9,9],0,1).is_none());assert!(tokens(&[0,0],&[9,9],1,1).is_none());
++  assert!(tokens(&[0],&[9],usize::MAX,1).is_none());assert!(tokens(&[0],&[9],0,0).is_none());
++ }
++}
+ #[cfg(test)]mod exact_decode_chunk_tests{
+  use super::exact_decode_chunk_tokens as chunk;
+  #[test]fn heterogeneous_singletons_and_prefill_boundaries(){
+diff --git a/crates/riley-cuda/src/owned_mlp.rs b/crates/riley-cuda/src/owned_mlp.rs
+--- a/crates/riley-cuda/src/owned_mlp.rs
++++ b/crates/riley-cuda/src/owned_mlp.rs
+@@ -150,7 +150,7 @@
+         self.execute_impl(p,Some(merged),stream)
+     }
+     fn execute_impl<S:CudaExecutionStream+?Sized>(&mut self,p:&mut CudaOwnedHfMlpParams<'_>,merged:Option<CudaBufferSpan<'_>>,stream:&mut S)->CudaResult<()> {
+-        let merged=merged.filter(|_|self.row_batch_mode==10 && (p.active_rows==1 || p.active_rows>=17));
++        let merged=merged.filter(|_|self.row_batch_mode==10 && (1..=32).contains(&p.active_rows));
+         let weight_half=self.hidden*self.intermediate*2;
+         let gate_weight=if let Some(w)=merged {w.subspan(0,weight_half)?}else{p.gate_weight};
+         let up_weight=if let Some(w)=merged {w.subspan(weight_half,weight_half)?}else{p.up_weight};
+diff --git a/crates/riley-runtime/src/llama/executor/dispatch.rs b/crates/riley-runtime/src/llama/executor/dispatch.rs
+--- a/crates/riley-runtime/src/llama/executor/dispatch.rs
++++ b/crates/riley-runtime/src/llama/executor/dispatch.rs
+@@ -518,7 +518,15 @@
+     #[cfg(feature="cuda-cublas-gemm-probe")]
+     let owned_mlp_eligible=if config.owned_decode_batch()==10 && config.owned_decode_graph() {
+         let decode=packed.row_kind_codes().iter().take_while(|v|**v==LlamaBatchRowKind::Decode.code()).count();
+-        decode>0 && decode<=32 && (config.owned_mlp_graphs() || packed.prefill_token_count()>0 || decode==1)
++        // Keep the existing singleton MLP piece when the full-body route cannot
++        // represent its context/output shape. Supporting R1 must not remove the
++        // established fallback for long or otherwise unsupported contexts.
++        let singleton_body_qualified=dense_rows<=32 && packed.output_count()==1
++            && (forward.plan.dimensions().hidden_size(),forward.plan.dimensions().query_heads(),forward.plan.dimensions().key_value_heads(),forward.plan.dimensions().head_dimension())==(2560,32,8,128)
++            && native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).and_then(|m|m.hf.as_ref())
++                .is_some_and(|hf|hf.decode_chunk.is_some() && hf.plan.uses_sm80_paged_attention() && hf.plan.supports_bounded_sm80_gateup_rows()
++                    && packed.position_ids().iter().all(|&p|hf.plan.supports_sm80_paged_attention(u64::from(p)+1)));
++        decode>0 && decode<=32 && (config.owned_mlp_graphs() || packed.prefill_token_count()>0 || (decode==1 && !singleton_body_qualified))
+     }else{active>0 && active<=32
+         && packed.row_kind_codes().iter().all(|v|*v==LlamaBatchRowKind::Decode.code())
+         && packed.row_sequence_slots().iter().enumerate().all(|(i,v)|!packed.row_sequence_slots()[..i].contains(v))};
+@@ -684,6 +692,14 @@
+         crate::host_trace::note_step_kind(capturing, replaying);
+         // Staged step uploads also move the embedding into the recorded step.
+         let embedding_in_step = config.staged_step_uploads() && (capturing || replaying);
++        // Host token admission is authoritative before KV mutation. For this
++        // qualified staged lane, enqueue the device's redundant report check at
++        // command completion instead of stopping the GPU between embedding and
++        // layer0. A malformed device report still fails before publication.
++        let defer_validated_embedding_report=in_command_batch && config.owned_decode_batch()==10
++            && config.staged_step_uploads()
++            && matches!(&*host_input,BatchHostInput::PerOperation(h) if h.staging.is_some())
++            && packed.input_token_ids().iter().all(|&t|(t as usize)<plan.dimensions().vocabulary_size());
+         let step_capture = match (recorded, step_counts) {
+             (Some(graph), _) => StepCaptureMode::Replay(graph, packed.output_token_indices()),
+             (None, Some(counts)) if capturing => StepCaptureMode::Capture {
+@@ -713,17 +729,17 @@
+         #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+         let wide_actual_row_graph=false;
+         #[cfg(feature="cuda-cublas-gemm-probe")]
+-        let sm80_actual_row_graph=actual_rows>=2 && matches!(config.owned_decode_batch(),6|7|8|9|10) && dense_rows<=32
++        let sm80_actual_row_graph=(actual_rows>=2 || (actual_rows==1 && config.owned_decode_batch()==10 && plan.dimensions().hidden_size()==2560)) && matches!(config.owned_decode_batch(),6|7|8|9|10) && dense_rows<=32
+             && matches!((plan.dimensions().hidden_size(),plan.dimensions().query_heads(),plan.dimensions().key_value_heads(),plan.dimensions().head_dimension(),plan.dimensions().intermediate_size()),(2560,32,8,128,9728)|(4096,32,8,128,14336))
+             && native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).and_then(|m|m.hf.as_ref()).is_some_and(|hf|hf.plan.supports_bounded_sm80_gateup_rows());
+         #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+         let sm80_actual_row_graph=false;
+-        // Qwen mode10 uses qualified whole-body graphs only. Keep R1 and
+-        // unsupported contexts eager instead of creating 72 layer captures.
++        // Qwen mode10 uses qualified whole-body graphs, including R1.
++        // Unsupported contexts stay eager rather than creating layer captures.
+         let qwen_body_only=config.owned_decode_batch()==10 && plan.dimensions().hidden_size()==2560
+             && plan.dimensions().query_heads()==32 && plan.dimensions().key_value_heads()==8 && plan.dimensions().head_dimension()==128;
+         #[cfg(feature="cuda-cublas-gemm-probe")]
+-        let qwen_body_eligible=actual_rows>=2 && actual_rows<=32 && native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).and_then(|m|m.hf.as_ref())
++        let qwen_body_eligible=actual_rows>=1 && actual_rows<=32 && native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).and_then(|m|m.hf.as_ref())
+             .is_some_and(|hf|hf.plan.uses_sm80_paged_attention() && packed.position_ids().iter().all(|&p|hf.plan.supports_sm80_paged_attention(u64::from(p)+1)));
+         #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+         let qwen_body_eligible=false;
+@@ -774,6 +790,7 @@
+             config.fused_kv_write(),
+             config.fused_mlp_residual_norm(),
+             embedding_in_step,
++            defer_validated_embedding_report,
+             native_d128_two_stage_workspace.as_deref_mut(),
+             #[cfg(feature="cuda-cublas-gemm-probe")]
+             if owned_mlp_eligible && in_command_batch {owned_mlp_graphs.as_deref_mut()}else{None},
+@@ -823,7 +840,7 @@
+                     .map_err(|source| batch_cuda(site, source))?;
+                 host.staged_greedy_bytes.set(byte_len);
+             }
+-            if embedding_in_step {
++            if embedding_in_step || defer_validated_embedding_report {
+                 embedding_error_scratch
+                     .copy_to_pinned_in_active_command_batch(
+                         0,
+@@ -1199,6 +1216,7 @@
+     fused_kv_write: bool,
+     fused_mlp_residual_norm: bool,
+     embedding_in_recorded_step: bool,
++    defer_validated_embedding_report: bool,
+     mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
+     #[cfg(feature="cuda-cublas-gemm-probe")]
+     mut owned_mlp_graphs: Option<&mut riley_cuda::CudaOwnedHfMlpGraph>,
+@@ -1307,7 +1325,7 @@
+         })
+     };
+     if !embedding_in_recorded_step {
+-        run_embedding(false, &mut *buffers, &mut *stream)?;
++        run_embedding(defer_validated_embedding_report, &mut *buffers, &mut *stream)?;
+     }
+ 
+     // An embedding that reads its error report back on the host has run
+@@ -1356,7 +1374,7 @@
+     // result download and sampling remain outside this graph.
+     #[cfg(feature="cuda-cublas-gemm-probe")]
+     let owned_full_body = owned_segments.is_some() && owned_decode_batch >= 2
+-        && batch.host().row_positions().len() >= 2 && dense_rows <= 32
++        && (batch.host().row_positions().len() >= 2 || (batch.host().row_positions().len()==1 && owned_decode_batch==10 && hidden==2560)) && dense_rows <= 32
+         && owned_segments.as_ref().is_some_and(|s|s.len()==plan.layers().len()*2+1)
+         && batch.host().row_positions().len() as u64 <= dense_rows
+         && batch.host().row_sequence_slots().iter().enumerate().all(|(i,&slot)| slot as usize == i)
+@@ -1865,7 +1883,7 @@
+                         let mut end=begin;
+                         let maximum=if dimensions.query_heads()==32{32}else{8};
+                         while end<positions.len() && end-begin<maximum && positions[end]<512 && (!hf.plan.uses_sm80_paged_attention() || hf.plan.supports_sm80_paged_attention(u64::from(positions[end])+1)) && !slots[begin..end].contains(&slots[end]) && (end==0||slots[end-1]!=slots[end]) && (end+1==slots.len()||slots[end+1]!=slots[end]){end+=1;}
+-                        if end-begin>=2{let count=(end-begin) as u64;let row_bytes=query_width*2;let rb=begin as u64*row_bytes;
++                        if end-begin>=2 || (end-begin==1 && owned_decode_batch==10 && hidden==2560 && hf.plan.uses_sm80_paged_attention()){let count=(end-begin) as u64;let row_bytes=query_width*2;let rb=begin as u64*row_bytes;
+                             if dimensions.query_heads()==32 {
+                             if owned_decode_batch==10 && hidden==2560 && hf.plan.uses_sm80_paged_attention() {
+                             hf.plan.execute_hf_attention_chunk_wide_dynamic(
+@@ -2237,7 +2255,7 @@
+         #[cfg(feature="cuda-cublas-gemm-probe")]
+         let native_merged=owned_decode_batch==10 && piecewise_rows==0 && batch.host().request_row_groups().is_some()
+             && batch.host().row_sequence_slots().windows(2).all(|v|v[0]!=v[1])
+-            && matches!(batch.host().row_sequence_slots().len(),1|17..=32) && weights.merged_gate_up(layer_index).is_some();
++            && (1..=32).contains(&batch.host().row_sequence_slots().len()) && weights.merged_gate_up(layer_index).is_some();
+         #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+         let native_merged=false;
+         if native_merged {
+diff --git a/kernels/src/cublas_gemm_probe.cu b/kernels/src/cublas_gemm_probe.cu
+--- a/kernels/src/cublas_gemm_probe.cu
++++ b/kernels/src/cublas_gemm_probe.cu
+@@ -3372,6 +3372,60 @@
+ #undef BATCH_SM
+ }
+ 
++// Native-family softmax/PV fusion: QK stays independently parallel. Preserve
++// BF16 scale/probability/output boundaries and the original per-element trees.
++// Tensor PV shares four query heads; SIMT PV shares two. Only R24..32 uses it.
++template<int HEADS> __device__ __forceinline__ void fused_softpv_body(const __nv_bfloat16*scores,const __nv_bfloat16*v,const uint32_t*ids,__nv_bfloat16*out,uint64_t physical,uint64_t sequences,uint64_t id_count,const uint32_t*slots,const uint32_t*offsets,const uint32_t*positions,int head,__nv_bfloat16*stage,float*result,float*partial,__nv_bfloat16*probability){
++#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
++ int r=blockIdx.y,t=positions[r]+1,kind=sm80_paged_qk_family(t);if(kind<0)return;
++ int tid=threadIdx.x,warp=tid/32,lane=tid%32,kh=head/4;
++ out+=r*32*128;
++ __syncthreads();int log=0;while((1<<log)<t)log++;int wb=log<=7?2:1;
++ if(warp<(HEADS+wb-1)/wb){
++#define FUSED_SM(L) case L:hf_wide_chunk_softmax_body<__nv_bfloat16,__nv_bfloat16,float,L,false,false,32,true>(probability,scores+uint64_t(r)*512*32+head*t,HEADS,t,t,lane,warp,4,nullptr,-1,false,warp*wb);break;
++  switch(log){FUSED_SM(5) FUSED_SM(6) FUSED_SM(7) FUSED_SM(8)}
++#undef FUSED_SM
++ }
++ __syncthreads();
++ if(t%8==0){
++  using namespace nvcuda;auto*st=stage+warp*512;auto*res=result+warp*256;
++  for(int first=warp*16;first<128;first+=64){
++   wmma::fragment<wmma::matrix_a,16,16,16,__nv_bfloat16,wmma::col_major>a;wmma::fragment<wmma::matrix_b,16,16,16,__nv_bfloat16,wmma::col_major>b;wmma::fragment<wmma::accumulator,16,16,16,float>c;wmma::fill_fragment(c,0.f);
++   for(int base=0;base<t;base+=16){uint64_t id=sm80_paged_id(ids,slots,offsets,r,base/16,physical,sequences,id_count);int token=base+lane/2,depth=first/8+lane%2;uint4 vec=make_uint4(0,0,0,0);if(token<t)vec=id<physical?reinterpret_cast<const uint4*>(v)[((id*8+kh)*16+token%16)*16+depth]:make_uint4(0x7fff7fff,0x7fff7fff,0x7fff7fff,0x7fff7fff);reinterpret_cast<uint4*>(st)[lane]=vec;
++    for(int i=lane;i<256;i+=32){int token=base+i%16;st[256+i]=i/16<HEADS&&token<t?probability[(i/16)*t+token]:__float2bfloat16_rn(0.f);}__syncwarp();wmma::load_matrix_sync(a,st,16);wmma::load_matrix_sync(b,st+256,16);wmma::mma_sync(c,a,b,c);__syncwarp();}
++   wmma::store_matrix_sync(res,c,16,wmma::mem_col_major);__syncwarp();if(lane<16){
++    #pragma unroll
++    for(int h=0;h<HEADS;h++)out[(head+h)*128+first+lane]=__float2bfloat16_rn(__fmaf_rn(1.f,res[h*16+lane],0.f));}__syncwarp();
++  }
++ }else{
++  int chain=tid/64;
++  for(int first=0;first<128;first+=64){int depth=first+tid%64;float sum[4]={};
++   for(int page=0;page<(t+15)/16;page++){uint64_t id=sm80_paged_id(ids,slots,offsets,r,page,physical,sequences,id_count),base=((id*8+kh)*16)*128+depth;
++    #pragma unroll
++    for(int j=chain;j<16;j+=2){int token=page*16+j;if(token<t){float a=id<physical?__bfloat162float(v[base+j*128]):CUDART_NAN_F;
++     #pragma unroll
++     for(int h=0;h<HEADS;h++)sum[h]=__fmaf_rn(a,__bfloat162float(probability[h*t+token]),sum[h]);}}}
++   #pragma unroll
++   for(int h=0;h<HEADS;h++)partial[h*128+tid]=sum[h];__syncthreads();if(tid<64){
++    #pragma unroll
++    for(int h=0;h<HEADS;h++)out[(head+h)*128+depth]=__float2bfloat16_rn(__fmaf_rn(1.f,__fadd_rn(partial[h*128+tid],partial[h*128+tid+64]),0.f));}__syncthreads();
++  }
++ }
++#endif
++}
++
++
++__global__ void sm80_fused_softpv_dispatch(const __nv_bfloat16*scores,const __nv_bfloat16*v,const uint32_t*ids,__nv_bfloat16*out,uint64_t physical,uint64_t sequences,uint64_t id_count,const uint32_t*slots,const uint32_t*offsets,const uint32_t*positions){
++ int t=positions[blockIdx.y]+1;if(t<24||t>216)return;
++ __shared__ __align__(32) __nv_bfloat16 stage[4*512];
++ __shared__ __align__(32) float result[4*256];
++ __shared__ __align__(32) float partial[4*128];
++ __shared__ __align__(32) __nv_bfloat16 probability[4*216];
++ int head=blockIdx.x*2;
++ if(t%8==0){if(blockIdx.x%2)return;fused_softpv_body<4>(scores,v,ids,out,physical,sequences,id_count,slots,offsets,positions,head,stage,result,partial,probability);}
++ else{fused_softpv_body<2>(scores,v,ids,out,physical,sequences,id_count,slots,offsets,positions,head,stage,result,partial,probability);}
++}
++
+ }
+ 
+ extern "C" RileyCudaStatus riley_cuda_cublas_hf_attention_chunk_wide_execute(
+@@ -3382,8 +3436,8 @@
+  const bool sm80=plan && plan->owned_sm80_paged_attention_enabled;
+  const bool dynamic=raw && count==12 && raw[11].dtype==RILEY_CUDA_DTYPE_U32;
+  if(dynamic&&!sm80)return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"dynamic attention requires qualified SM80 paged plan");
+- if(!plan || !plan->handle || (!plan->owned_weight_reuse_qualified && !sm80) || !raw || (count!=11 && count!=12) || !host_tokens || requests<2 || requests>32 || physical==0 || physical>UINT32_MAX || sequences==0 || sequences>UINT32_MAX || id_count==0 || id_count>UINT32_MAX || plan->config.k!=128)
+-  return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"qualified Q32/KV8/D128 decode chunk requires2..32requests and11spans(optional12thscaledtrace)");
++ if(!plan || !plan->handle || (!plan->owned_weight_reuse_qualified && !sm80) || !raw || (count!=11 && count!=12) || !host_tokens || requests<(dynamic?1:2) || requests>32 || physical==0 || physical>UINT32_MAX || sequences==0 || sequences>UINT32_MAX || id_count==0 || id_count>UINT32_MAX || plan->config.k!=128)
++  return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"qualified Q32/KV8/D128 decode chunk requires2..32requests(static)or1..32(dynamic) and11spans(optional12thscaledtrace)");
+  HfDecodeChunk info{};info.count=static_cast<int>(requests);uint64_t total=0;int maximum=0;
+  for(uint64_t r=0;r<requests;r++){uint64_t t=host_tokens[r];if(t==0 || t>512 || t>plan->config.n || (sm80 && sm80_paged_qk_family(t)<0))return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"decode chunk T must be1..512 withinprepared bound");info.tokens[r]=static_cast<int>(t);info.starts[r]=static_cast<int>(total);total+=t;info.total=static_cast<int>(total);if(static_cast<int>(t)>maximum)maximum=static_cast<int>(t);}
+  if(dynamic)total=requests*512;
+@@ -3410,8 +3464,12 @@
+    attempted=true;
+    auto*q=static_cast<const __nv_bfloat16*>(spans[0].data);auto*k=static_cast<const __nv_bfloat16*>(spans[1].data);auto*v=static_cast<const __nv_bfloat16*>(spans[2].data);auto*ids=static_cast<const uint32_t*>(spans[3].data);auto*out=static_cast<__nv_bfloat16*>(spans[4].data);auto*p=static_cast<__nv_bfloat16*>(spans[7].data);auto*slots=static_cast<const uint32_t*>(spans[9].data);auto*offsets=static_cast<const uint32_t*>(spans[10].data);auto*pos=static_cast<const uint32_t*>(spans[11].data);
+    sm80_batched_qk_dispatch<<<dim3(27,8,requests),128,0,stream->stream>>>(q,k,ids,p,physical,graph_sequences,graph_ids,slots,offsets,pos);
+-   sm80_batched_softmax<<<dim3(8,requests),128,0,stream->stream>>>(p,pos);
+-   sm80_batched_pv_dispatch<<<dim3(8,16,requests),32,0,stream->stream>>>(v,ids,p,out,physical,graph_sequences,graph_ids,slots,offsets,pos);
++   if(requests>=24){
++    sm80_fused_softpv_dispatch<<<dim3(16,requests),128,0,stream->stream>>>(p,v,ids,out,physical,graph_sequences,graph_ids,slots,offsets,pos);
++   }else{
++    sm80_batched_softmax<<<dim3(8,requests),128,0,stream->stream>>>(p,pos);
++    sm80_batched_pv_dispatch<<<dim3(8,16,requests),32,0,stream->stream>>>(v,ids,p,out,physical,graph_sequences,graph_ids,slots,offsets,pos);
++   }
+    auto e=cudaGetLastError();if(e!=cudaSuccess)status=runtime_error(e,error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
+    return complete_execution(&uses,&scope,stream,status,attempted,error);
+   }

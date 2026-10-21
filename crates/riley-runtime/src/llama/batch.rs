@@ -530,6 +530,16 @@ impl PreparedLlamaBatchMetadata {
         &'batch mut self,
         rows: &[LlamaBatchRow<'_>],
     ) -> LlamaBatchResult<LlamaPackedBatchMetadata<'batch>> {
+        self.pack_ordered(rows,false)
+    }
+
+    /// Decode-prefix packing for fixed-address mixed-batch linear Graphs.
+    /// Explicit output slots retain the caller's routing order.
+    pub(crate) fn pack_decode_first<'batch>(&'batch mut self,rows:&[LlamaBatchRow<'_>])->LlamaBatchResult<LlamaPackedBatchMetadata<'batch>> {
+        self.pack_ordered(rows,true)
+    }
+
+    fn pack_ordered<'batch>(&'batch mut self,rows:&[LlamaBatchRow<'_>],decode_first:bool)->LlamaBatchResult<LlamaPackedBatchMetadata<'batch>> {
         // HOT_BATCH_PACK_BEGIN
         let validated = self.validate(rows)?;
         self.clear_packed();
@@ -542,7 +552,9 @@ impl PreparedLlamaBatchMetadata {
 
         let mut token_offset = 0_u32;
         let mut block_offset = 0_u32;
-        for (row_index, row) in rows.iter().enumerate() {
+        let ordered=rows.iter().filter(|r|!decode_first || r.kind==LlamaBatchRowKind::Decode)
+            .chain(rows.iter().filter(|r|decode_first && r.kind!=LlamaBatchRowKind::Decode));
+        for (row_index, row) in ordered.enumerate() {
             let row_index_u32 = checked_u32(row_index, "row index")?;
             let input_count = checked_u32(row.input_token_ids.len(), "row input token count")?;
             let block_count =
@@ -1298,6 +1310,50 @@ mod tests {
         assert_eq!(packed.valid_tokens_for_row(1), Some(&decode_valid[..]));
         assert_eq!(packed.output_slot_for_row(0), Some(1));
         assert_eq!(packed.output_slot_for_row(3), None);
+    }
+
+    #[test]
+    fn decode_prefix_preserves_caller_output_slots_and_block_routes() {
+        let prefill_tokens = [10, 11, 12];
+        let prefill_ids = [2];
+        let prefill_valid = [3];
+        let decode_tokens = [20];
+        let decode_ids = [4, 5];
+        let decode_valid = [FULL, 1];
+        let rows = [
+            LlamaBatchRow::new(
+                41,
+                LlamaBatchRowKind::Prefill,
+                &prefill_tokens,
+                3,
+                LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION, &prefill_ids, &prefill_valid, 3),
+                Some(1),
+            ),
+            LlamaBatchRow::new(
+                42,
+                LlamaBatchRowKind::Decode,
+                &decode_tokens,
+                17,
+                LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION, &decode_ids, &decode_valid, 17),
+                Some(0),
+            ),
+        ];
+        let mut prepared = PreparedLlamaBatchMetadata::prepare(config()).expect("prepare");
+        let packed = prepared.pack_decode_first(&rows).expect("pack");
+
+        assert_eq!(packed.sequence_tags(), &[42,41]);
+        assert_eq!(packed.input_token_ids(), &[20,10,11,12]);
+        assert_eq!(packed.position_ids(), &[16,0,1,2]);
+        assert_eq!(packed.block_row_offsets(), &[0,2,3]);
+        assert_eq!(packed.physical_block_ids(), &[4,5,2]);
+        assert_eq!(packed.valid_tokens(), &[FULL,1,3]);
+        assert_eq!(packed.output_slots_by_row(), &[0,1]);
+        assert_eq!(packed.output_row_indices(), &[0,1]);
+        assert_eq!(packed.output_token_indices(), &[0,3]);
+        assert_eq!(packed.prefill_row_indices(), &[1]);
+        assert_eq!(packed.decode_row_indices(), &[0]);
+        assert_eq!(packed.prefill_token_count(),3);
+        assert_eq!(packed.decode_token_count(),1);
     }
 
     #[test]

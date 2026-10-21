@@ -1,0 +1,176 @@
+{
+  "time_ns": 1792544684224685760,
+  "vllm": "0.27.1+cu129",
+  "torch": "2.13.0+cu129",
+  "sources": [
+    {
+      "path": "/home/nlp/riley-261013/vllm0271-venv/lib/python3.13/site-packages/vllm/model_executor/models/qwen3.py",
+      "sha256": "44b1ebbb85a9701cdf754af554af2952f3a9a25d94da219d8ecfd0b7b01dda21",
+      "selected_lines": [
+        {
+          "line": 42,
+          "text": "from vllm.model_executor.layers.linear import QKVParallelLinear, RowParallelLinear"
+        },
+        {
+          "line": 58,
+          "text": "from .qwen2 import Qwen2MLP as Qwen3MLP"
+        },
+        {
+          "line": 105,
+          "text": "self.qkv_proj = QKVParallelLinear("
+        },
+        {
+          "line": 277,
+          "text": "\"gate_up_proj\": [\"gate_proj\", \"up_proj\"],"
+        }
+      ]
+    },
+    {
+      "path": "/home/nlp/riley-261013/vllm0271-venv/lib/python3.13/site-packages/vllm/model_executor/models/qwen2.py",
+      "sha256": "a77e5e56f262bf8d9e1c2cfe0d44af7dc7417a0903f3ddf786b39da3c0f337c8",
+      "selected_lines": [
+        {
+          "line": 39,
+          "text": "from vllm.model_executor.layers.activation import SiluAndMul"
+        },
+        {
+          "line": 46,
+          "text": "MergedColumnParallelLinear,"
+        },
+        {
+          "line": 47,
+          "text": "QKVParallelLinear,"
+        },
+        {
+          "line": 80,
+          "text": "class Qwen2MLP(nn.Module):"
+        },
+        {
+          "line": 90,
+          "text": "self.gate_up_proj = MergedColumnParallelLinear("
+        },
+        {
+          "line": 95,
+          "text": "prefix=f\"{prefix}.gate_up_proj\","
+        },
+        {
+          "line": 108,
+          "text": "self.act_fn = SiluAndMul()"
+        },
+        {
+          "line": 111,
+          "text": "gate_up, _ = self.gate_up_proj(x)"
+        },
+        {
+          "line": 156,
+          "text": "self.qkv_proj = QKVParallelLinear("
+        },
+        {
+          "line": 277,
+          "text": "self.mlp = Qwen2MLP("
+        },
+        {
+          "line": 329,
+          "text": "\".gate_proj\": (\".gate_up_proj\", 0),"
+        },
+        {
+          "line": 330,
+          "text": "\".up_proj\": (\".gate_up_proj\", 1),"
+        },
+        {
+          "line": 447,
+          "text": "\"gate_up_proj\": [\"gate_proj\", \"up_proj\"],"
+        }
+      ]
+    },
+    {
+      "path": "/home/nlp/riley-261013/vllm0271-venv/lib/python3.13/site-packages/vllm/model_executor/layers/linear.py",
+      "sha256": "d0662fddc4785419002320a4d9eb5183c9268051ebcf31f1c8276e8529633308",
+      "selected_lines": [
+        {
+          "line": 661,
+          "text": "class MergedColumnParallelLinear(ColumnParallelLinear):"
+        },
+        {
+          "line": 761,
+          "text": "# (e.g., Phi-3's gate_up_proj)."
+        },
+        {
+          "line": 884,
+          "text": "\"MergedColumnParallelLinear, assume the weight is \""
+        },
+        {
+          "line": 947,
+          "text": "# gate_up_proj), there is only a single scale for the"
+        },
+        {
+          "line": 1022,
+          "text": "class QKVParallelLinear(ColumnParallelLinear):"
+        },
+        {
+          "line": 1107,
+          "text": "\"Shard id for QKVParallelLinear should be 'q', 'k', or 'v', \""
+        },
+        {
+          "line": 1395,
+          "text": "\"QKVParallelLinear, assume the weight is the same \""
+        },
+        {
+          "line": 1428,
+          "text": "class MinimaxM3QKVParallelLinearWithIndexer(QKVParallelLinear):"
+        },
+        {
+          "line": 1434,
+          "text": "lives here only to sit alongside QKVParallelLinear, whose sharding /"
+        },
+        {
+          "line": 1464,
+          "text": "\"MinimaxM3QKVParallelLinearWithIndexer requires \""
+        },
+        {
+          "line": 1487,
+          "text": "# the QKVParallelLinear convention). index_k is a single replicated head."
+        },
+        {
+          "line": 1500,
+          "text": "# Skip QKVParallelLinear.__init__ (3-group layout); build the 5-group"
+        },
+        {
+          "line": 1516,
+          "text": "\"Shard id for MinimaxM3QKVParallelLinearWithIndexer must be one of \""
+        }
+      ]
+    },
+    {
+      "path": "/home/nlp/riley-261013/vllm0271-venv/lib/python3.13/site-packages/vllm/model_executor/layers/activation.py",
+      "sha256": "24fa82b26c7be0ff4b9953ee26247eb6bbb7a23bbdc631651ea3978ecc3f79ea",
+      "selected_lines": [
+        {
+          "line": 118,
+          "text": "class SiluAndMul(CustomOp):"
+        },
+        {
+          "line": 207,
+          "text": "class SiluAndMulWithClamp(CustomOp):"
+        },
+        {
+          "line": 889,
+          "text": "\"silu\": lambda: SiluAndMul(),"
+        },
+        {
+          "line": 890,
+          "text": "\"swish\": lambda: SiluAndMul(),"
+        },
+        {
+          "line": 898,
+          "text": "\"\"\"Get an activation-and-mul (i.e. SiluAndMul) function by name.\"\"\""
+        },
+        {
+          "line": 902,
+          "text": "return SiluAndMul(compile_native=False)"
+        }
+      ]
+    }
+  ],
+  "scope": "Read-only installed source/metadata; actual backend and Graph path require the saved startup/trace evidence"
+}

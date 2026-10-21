@@ -2470,11 +2470,15 @@ mod cuda_backend {
             } else {
                 config.executor
             };
-            let executor =
+            let mut executor =
                 PreparedLlamaBatchExecutor::prepare(&model, &context, &mut stream, executor_config)
                     .map_err(|source| {
                         internal(format!("batch executor preparation failed: {source}"))
                     })?;
+            // Complete qualified decode graph capture before accepting requests.
+            if let Err(source)=executor.warm_owned_qwen_decode_graphs(config.gpu_greedy,&mut stream){
+                let _=executor.close();return Err(internal(format!("decode graph warmup failed: {source}")));
+            }
             if executor.config().owned_hf_eager_bf16() {
                 eprintln!("RILEY_NUMERICS profile={} prefill={} decode={} qkv={} output={} mlp={} lm_head={} rms_norm={} graph=false fallback=forbidden max_prompt_tokens={}",
                     executor.numerics_profile_id(),executor.prefill_attention_implementation_id(),executor.decode_attention_implementation_id(),

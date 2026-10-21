@@ -283,6 +283,18 @@ impl PreparedLlamaBatchExecutorConfig {
     /// token and streaming latency tradeoffs are measured separately.
     #[must_use]
     pub const fn with_exact_smallrows_decode_batch(mut self)->Self{self.owned_decode_batch=5;self}
+    /// Explicit SM80-only Gate/Up row batches, each native GEMM bounded to16 rows.
+    /// Unknown environments and model geometries are rejected during preparation.
+    pub const fn with_bounded_sm80_gateup_batch(mut self)->Self{self.owned_decode_batch=6;self}
+    #[must_use]
+    pub const fn with_bounded_sm80_projection_batch(mut self)->Self{self.owned_decode_batch=7;self}
+    /// Explicit SM80 Qwen projection batching plus native-order strided K/V reuse.
+    #[must_use]
+    pub const fn with_bounded_sm80_projection_kv_batch(mut self)->Self{self.owned_decode_batch=8;self}
+    /// Explicit native-order projections with vector GQA staging and fused decode scaling.
+    pub const fn with_bounded_sm80_attention_batch(mut self)->Self{self.owned_decode_batch=9;self}
+    /// Native-equivalent contiguous prefill row batches on qualified SM80 geometry.
+    pub const fn with_bounded_sm80_prefill_batch(mut self)->Self{self.owned_decode_batch=10;self}
 
     /// Stages an iteration's token and metadata bytes in one pinned buffer
     /// and copies them to their device buffers inside the iteration's command
@@ -771,7 +783,7 @@ impl PreparedLlamaBatchExecutorConfig {
         if self.owned_hf_eager_bf16() && (!cfg!(feature="cuda-cublas-gemm-probe")
             || self.metadata_transport != BatchMetadataTransport::Synchronous
             || self.residual_norm != ResidualNormImplementation::Separate
-            || self.staged_step_uploads || self.decode_step_capture || self.fused_mlp_residual_norm
+            || (self.staged_step_uploads && self.owned_decode_batch != 10) || self.decode_step_capture || self.fused_mlp_residual_norm
             || self.fused_kv_write) {
             return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"owned-hf-eager-bf16-v1",reason:"requires linked owned CUDA path, synchronous metadata and separate norms without capture"});
         }
@@ -1048,6 +1060,9 @@ mod owned_hf_profile_contract_tests {
         assert!(own.uses_paged_attention_workspace());
         assert!(base.with_owned_decode_graph().validate_attention_implementation().is_err());
         assert!(base.with_owned_decode_batch().validate_attention_implementation().is_err());
+        assert!(base.with_bounded_sm80_gateup_batch().validate_attention_implementation().is_err());
+        assert!(own.with_bounded_sm80_gateup_batch().validate_attention_implementation().is_err());
+        assert_eq!(own.with_iteration_batch_completion().with_bounded_sm80_gateup_batch().validate_attention_implementation().is_ok(),cfg!(feature="cuda-cublas-gemm-probe"));
         assert!(own.with_owned_decode_batch().validate_attention_implementation().is_err());
         assert_eq!(own.with_iteration_batch_completion().with_owned_decode_batch().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
 
@@ -1056,6 +1071,9 @@ mod owned_hf_profile_contract_tests {
 
         assert_eq!(own.with_iteration_batch_completion().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
         assert_eq!(own.with_fused_silu_multiply().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
+        let staged = own.with_iteration_batch_completion().with_staged_step_uploads();
+        assert!(staged.validate_attention_implementation().is_err());
+        assert_eq!(staged.with_bounded_sm80_prefill_batch().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
         let graphed=own.with_fused_silu_multiply().with_iteration_batch_completion().with_owned_mlp_graphs();
         assert_eq!(graphed.validate_attention_implementation().is_ok(),cfg!(feature="cuda-cublas-gemm-probe"));
         assert!(super::normalize_prepared_config(graphed).owned_mlp_graphs());

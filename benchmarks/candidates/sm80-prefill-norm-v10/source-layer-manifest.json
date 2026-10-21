@@ -1,0 +1,24 @@
+{
+  "baseline": "/mnt/efs/nlp/psyche/riley-latency-v9-20261020/source",
+  "qualified_binding": {
+    "binary": "/mnt/efs/nlp/psyche/riley-comprehensive-v10-20261020/riley-comprehensive-v10-final",
+    "binary_sha256": "1dc816aadc7355ec84b061f282d3e9a85a9d575d4b65b5852e56001b160c4639",
+    "source_manifest_sha256": "8856a29cea2e9e8a84e0ff53f613e878c95f579587642366ccb675e98a54eab8",
+    "changed_vs_v9": [
+      "crates/riley-cuda/src/primitives.rs",
+      "kernels/src/primitives.cu"
+    ]
+  },
+  "files": [
+    {
+      "path": "crates/riley-cuda/src/primitives.rs",
+      "before_sha256": "0893fd96cfafae3c9561ef1d905daf4202751903e7bf696565adc44922c49445",
+      "after_sha256": "8368abe97c1b64c5a74192570df9c74a94cdfd802302c6cca5b1751561d8ed59"
+    },
+    {
+      "path": "kernels/src/primitives.cu",
+      "before_sha256": "996fb591729bed9e02830ebceaf169536a7ad82192eb6c6112a94f22acd9b0e9",
+      "after_sha256": "cd32d607f41fccea85419fdb8c331c91f4e2d6a2a7aa082ec5a0f1909176c5c2"
+    }
+  ]
+}

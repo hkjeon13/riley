@@ -1,0 +1,310 @@
+--- a/kernels/src/cublas_gemm_probe.cu
++++ b/kernels/src/cublas_gemm_probe.cu
+@@ -1912,6 +1912,32 @@
+ __global__ void sm80_down_reduce(const __nv_bfloat16*p,__nv_bfloat16*y,int count){int i=blockIdx.x*blockDim.x+threadIdx.x;if(i<count)y[i]=__float2bfloat16_rn(__fadd_rn(__bfloat162float(p[i]),__bfloat162float(p[count+i])));}
+ }
+ 
++
++// Decode v9 preserves both K32 accumulator chains in independent CTAs.
++template<int W,int R,int P,int S>__device__ __forceinline__ void sm80_v9_down_stage(__nv_bfloat16*dst,const __nv_bfloat16*w,const __nv_bfloat16*x,int rows,int col,int first,int part,int it){
++ constexpr int N=W*16,L=32+P;int kbase=(part/2)*4864+(part%2)*32+it*64;
++ for(int i=threadIdx.x;i<(N+R)*4;i+=W*32){int row=i/4,k=(i%4)*8;bool a=row<N;int xr=row-N;bool valid=it<76&&(a||first+xr<rows);const __nv_bfloat16*src=valid?(a?w+(col+row)*9728+kbase+k:x+(first+xr)*9728+kbase+k):w;sm80_down_copy16(dst+row*L+k,src,valid);}asm volatile("cp.async.commit_group;");
++}
++template<int W,int R,int P,int S>__global__ void sm80_v9_down(const __nv_bfloat16*w,const __nv_bfloat16*x,float*parts,int rows){
++ #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
++ using namespace nvcuda;constexpr int N=W*16,L=32+P,Stage=(N+R)*L,RB=R/16;__shared__ __align__(32)__nv_bfloat16 shared[Stage*S];int col=blockIdx.x*N,first=blockIdx.y*R,part=blockIdx.z,warp=threadIdx.x/32,lane=threadIdx.x%32;
++ wmma::fragment<wmma::matrix_a,16,16,16,__nv_bfloat16,wmma::row_major>a;wmma::fragment<wmma::matrix_b,16,16,16,__nv_bfloat16,wmma::col_major>b;wmma::fragment<wmma::accumulator,16,16,16,float>c[RB];
++ #pragma unroll
++ for(int rb=0;rb<RB;rb++)wmma::fill_fragment(c[rb],0.f);
++ #pragma unroll
++ for(int st=0;st<S;st++)sm80_v9_down_stage<W,R,P,S>(shared+st*Stage,w,x,rows,col,first,part,st);
++ for(int it=0;it<76;it++){asm volatile("cp.async.wait_group %0;"::"n"(S-1));__syncthreads();auto*t=shared+(it%S)*Stage;
++ #pragma unroll
++ for(int j=0;j<2;j++){wmma::load_matrix_sync(a,t+warp*16*L+j*16,L);
++ #pragma unroll
++ for(int rb=0;rb<RB;rb++){wmma::load_matrix_sync(b,t+(N+rb*16)*L+j*16,L);wmma::mma_sync(c[rb],a,b,c[rb]);}}
++ __syncthreads();sm80_v9_down_stage<W,R,P,S>(t,w,x,rows,col,first,part,it+S);}
++ asm volatile("cp.async.wait_group 0;");__syncthreads();
++ #pragma unroll
++ for(int rb=0;rb<RB;rb++){float*out=reinterpret_cast<float*>(shared)+(warp*RB+rb)*256;wmma::store_matrix_sync(out,c[rb],16,wmma::mem_col_major);__syncwarp();for(int i=lane;i<256;i+=32){int row=first+rb*16+i/16;if(row<rows)parts[(part*rows+row)*2560+col+warp*16+i%16]=out[i];}}
++#endif
++}
++__global__ void sm80_v9_down_reduce(const float*p,__nv_bfloat16*y,int n){int i=blockIdx.x*blockDim.x+threadIdx.x;if(i<n){float a=__bfloat162float(__float2bfloat16_rn(__fadd_rn(p[i],p[n+i])));float b=__bfloat162float(__float2bfloat16_rn(__fadd_rn(p[2*n+i],p[3*n+i])));y[i]=__float2bfloat16_rn(__fadd_rn(a,b));}}
+ 
+ // Decode v8: qualified native K32 sliced arithmetic, padded shared strides.
+ template<int W,int R,int P,int S>__device__ __forceinline__ void sm80_v8_down_stage(__nv_bfloat16*dst,const __nv_bfloat16*w,const __nv_bfloat16*x,int rows,int col,int first,int split,int it){
+@@ -2191,6 +2217,18 @@
+       }
+     } else if(down_sm80_v6_profile && plan->owned_sm80_decode_mlp_v8_enabled &&
+         rows>=5 && rows<=32 && plan->config.n==2560 && plan->config.k==9728 &&
++        plan->sm80_projection_workspace && plan->sm80_projection_workspace_bytes>=4*32*2560*4 &&
++        ((reinterpret_cast<uintptr_t>(spans[0].data)|reinterpret_cast<uintptr_t>(spans[1].data)|reinterpret_cast<uintptr_t>(spans[2].data))&uintptr_t(31))==0){
++      auto*parts=static_cast<float*>(plan->sm80_projection_workspace->device_data);
++      if(rows<=16)sm80_v9_down<8,16,8,4><<<dim3(20,1,4),256,0,stream->stream>>>(
++        static_cast<const __nv_bfloat16*>(spans[1].data),static_cast<const __nv_bfloat16*>(spans[0].data),parts,static_cast<int>(rows));
++      else sm80_v9_down<4,32,16,4><<<dim3(40,1,4),128,0,stream->stream>>>(
++        static_cast<const __nv_bfloat16*>(spans[1].data),static_cast<const __nv_bfloat16*>(spans[0].data),parts,static_cast<int>(rows));
++      const int count=static_cast<int>(rows)*2560;
++      sm80_v9_down_reduce<<<(count+255)/256,256,0,stream->stream>>>(parts,static_cast<__nv_bfloat16*>(spans[2].data),count);
++      auto e=cudaGetLastError();if(e!=cudaSuccess)status=runtime_error(e,error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
++    } else if(down_sm80_v6_profile && plan->owned_sm80_decode_mlp_v8_enabled &&
++        rows>=5 && rows<=32 && plan->config.n==2560 && plan->config.k==9728 &&
+         plan->sm80_projection_workspace && plan->sm80_projection_workspace_bytes>=2*32*2560*2 &&
+         ((reinterpret_cast<uintptr_t>(spans[0].data)|reinterpret_cast<uintptr_t>(spans[1].data)|reinterpret_cast<uintptr_t>(spans[2].data))&uintptr_t(31))==0){
+       auto*parts=static_cast<__nv_bfloat16*>(plan->sm80_projection_workspace->device_data);
+@@ -2581,7 +2619,7 @@
+     if(status==RILEY_CUDA_STATUS_SUCCESS && check.workspaceSize>4u*1024u*1024u)status=validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation,"fixed workspace bound exceeded");
+     if(status==RILEY_CUDA_STATUS_SUCCESS)plan->sm80_projection_workspace_bytes=std::max<uint64_t>(plan->sm80_projection_workspace_bytes,check.workspaceSize);
+   }
+-  if(down)plan->sm80_projection_workspace_bytes=std::max<uint64_t>(plan->sm80_projection_workspace_bytes,2*32*2560*2);
++  if(down)plan->sm80_projection_workspace_bytes=std::max<uint64_t>(plan->sm80_projection_workspace_bytes,4*32*2560*4);
+   if(status==RILEY_CUDA_STATUS_SUCCESS)status=riley_cuda_device_buffer_create(plan->owner,std::max<uint64_t>(plan->sm80_projection_workspace_bytes,256),&plan->sm80_projection_workspace,error);
+   if(status==RILEY_CUDA_STATUS_SUCCESS)plan->sm80_projection_rows=limit;
+   return scope.leave(status,error,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation);
+@@ -2606,6 +2644,15 @@
+     }
+     image_status=image_scope.leave(image_status,error,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation);
+     if(image_status!=RILEY_CUDA_STATUS_SUCCESS)return image_status;
++    if(down){
++      CurrentContext v9_scope(plan->owner);auto st=v9_scope.enter(error,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation);
++      if(st==RILEY_CUDA_STATUS_SUCCESS)for(auto fn:{reinterpret_cast<const void*>(sm80_v9_down<8,16,8,4>),reinterpret_cast<const void*>(sm80_v9_down<4,32,16,4>)}){
++        cudaFuncAttributes a{};auto e=cudaFuncGetAttributes(&a,fn);
++        if(e!=cudaSuccess){st=runtime_error(e,error,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation);break;}
++        if(a.binaryVersion<80||a.ptxVersion<80){st=validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation,"native SM80 decode Down v9 image required");break;}
++      }
++      st=v9_scope.leave(st,error,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation);if(st!=RILEY_CUDA_STATUS_SUCCESS)return st;
++    }
+     plan->owned_sm80_decode_mlp_v8_enabled=true;
+   }
+   if(plan->config.m<161)return RILEY_CUDA_STATUS_SUCCESS;
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -1387,7 +1387,7 @@
+         return Err("--owned-mlp-graph pure-decode-v1 requires owned HF numerics, iteration-batch completion and fused SiLU".to_owned());
+     }
+     if numerics_profile == NumericsProfileMode::OwnedHfEagerBf16V1 {
+-        if metadata_transport != MetadataTransportMode::Synchronous || staged_step_uploads
++        if metadata_transport != MetadataTransportMode::Synchronous || (staged_step_uploads && owned_decode_batch != 10)
+             || residual_rmsnorm != ResidualRmsNormMode::Separate || decode_step_capture
+             || vllm_smol_p128_graph || fused_mlp_residual_norm || fused_kv_write
+             || prompt_attention_mma || dense_prompt_attention || d128_tensor_core_producer
+@@ -2305,7 +2305,7 @@
+         7 => {eprintln!("RILEY_OWNED_BATCH mode=bounded-projections-sm80-v2 q_rows=32 output_rows=8 down_rows=4");executor.with_bounded_sm80_projection_batch()},
+         8 => {eprintln!("RILEY_OWNED_BATCH mode=native-kv-sm80-v3 q_rows=32 output_rows=8 down_rows=4 kv_reuse=2,4,8 native_k_stride=32 kv_unroll=16");executor.with_bounded_sm80_projection_kv_batch()},
+         9 => {eprintln!("RILEY_OWNED_BATCH mode=native-attention-sm80-v4 kv_vector_bytes=16 gqa_reuse=4 fused_decode_scale=true");executor.with_bounded_sm80_attention_batch()},
+-        10 => {eprintln!("RILEY_OWNED_BATCH mode=native-prefill-sm80-v5 prefill_gate_original=64..130 prefill_gate_merged=161..576 prefill_down_native_lt_v7=161..576 prefill_gate_lt_v7=257..512 decode_down_padded_v8=5..32 decode_gate_up_native_v8=17..32 paged_attention_chunk_v6=2..32 attention_t=24..216");executor.with_bounded_sm80_prefill_batch()},
++        10 => {eprintln!("RILEY_OWNED_BATCH mode=native-prefill-sm80-v5 prefill_gate_original=64..130 prefill_gate_merged=161..576 prefill_down_native_lt_v7=161..576 prefill_gate_lt_v7=257..512 decode_down_slice_v9=5..32 decode_gate_up_native_v8=17..32 paged_attention_chunk_v6=2..32 attention_t=24..216");executor.with_bounded_sm80_prefill_batch()},
+         _ => executor,
+     };
+     let executor = if options.owned_decode_graph {
+--- a/crates/riley-runtime/src/llama/executor/config.rs
++++ b/crates/riley-runtime/src/llama/executor/config.rs
+@@ -783,7 +783,7 @@
+         if self.owned_hf_eager_bf16() && (!cfg!(feature="cuda-cublas-gemm-probe")
+             || self.metadata_transport != BatchMetadataTransport::Synchronous
+             || self.residual_norm != ResidualNormImplementation::Separate
+-            || self.staged_step_uploads || self.decode_step_capture || self.fused_mlp_residual_norm
++            || (self.staged_step_uploads && self.owned_decode_batch != 10) || self.decode_step_capture || self.fused_mlp_residual_norm
+             || self.fused_kv_write) {
+             return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"owned-hf-eager-bf16-v1",reason:"requires linked owned CUDA path, synchronous metadata and separate norms without capture"});
+         }
+@@ -1071,6 +1071,9 @@
+ 
+         assert_eq!(own.with_iteration_batch_completion().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
+         assert_eq!(own.with_fused_silu_multiply().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
++        let staged = own.with_iteration_batch_completion().with_staged_step_uploads();
++        assert!(staged.validate_attention_implementation().is_err());
++        assert_eq!(staged.with_bounded_sm80_prefill_batch().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
+         let graphed=own.with_fused_silu_multiply().with_iteration_batch_completion().with_owned_mlp_graphs();
+         assert_eq!(graphed.validate_attention_implementation().is_ok(),cfg!(feature="cuda-cublas-gemm-probe"));
+         assert!(super::normalize_prepared_config(graphed).owned_mlp_graphs());
+--- a/crates/riley-runtime/src/llama/executor/dispatch.rs
++++ b/crates/riley-runtime/src/llama/executor/dispatch.rs
+@@ -501,12 +501,20 @@
+         && produce_greedy_tokens
+         && active != 0
+         && active <= dense_rows;
+-    if let Some(prepared)=native_d128_two_stage_workspace.as_deref_mut().and_then(|w|w.materialized.as_mut()) {
+-        riley_cuda::prepare_materialized_ragged_attention_metadata(host_batch,&prepared.reference,
+-            &mut forward.buffers.hidden_context,&mut prepared.valid,&mut prepared.staging,
+-            &mut prepared.valid_host,&mut prepared.encoded_valid,&prepared.zero_host,stream)
+-            .map_err(|e|batch_cuda(metadata_site,e))?;
+-    }
++    let staged_attention_metadata=if let Some(prepared)=native_d128_two_stage_workspace.as_deref_mut().and_then(|w|w.materialized.as_mut()) {
++        if config.staged_step_uploads() {
++            Some(riley_cuda::stage_materialized_ragged_attention_metadata(host_batch,&prepared.reference,
++                &forward.buffers.hidden_context,&prepared.valid,&mut prepared.staging,
++                &mut prepared.valid_host,&mut prepared.encoded_valid,&prepared.zero_host)
++                .map_err(|e|batch_cuda(metadata_site,e))?)
++        } else {
++            riley_cuda::prepare_materialized_ragged_attention_metadata(host_batch,&prepared.reference,
++                &mut forward.buffers.hidden_context,&mut prepared.valid,&mut prepared.staging,
++                &mut prepared.valid_host,&mut prepared.encoded_valid,&prepared.zero_host,stream)
++                .map_err(|e|batch_cuda(metadata_site,e))?;
++            None
++        }
++    }else{None};
+     #[cfg(feature="cuda-cublas-gemm-probe")]
+     let owned_mlp_eligible=active>0 && active<=32
+         && packed.row_kind_codes().iter().all(|v|*v==LlamaBatchRowKind::Decode.code())
+@@ -520,6 +528,15 @@
+                                       step_counts: Option<CudaBufferSpan<'_>>,
+                                       stream: &mut dyn CudaExecutionStream|
+      -> LlamaBatchExecutorResult<()> {
++        if let Some((bytes,active_bytes))=staged_attention_metadata {
++            let prepared=native_d128_two_stage_workspace.as_deref_mut().and_then(|w|w.materialized.as_mut())
++                .ok_or(LlamaBatchExecutorError::InvalidConfiguration{field:"staged attention metadata",reason:"prepared owner missing"})?;
++            prepared.valid.copy_from_pinned_in_active_command_batch(0,&prepared.staging,0,bytes,stream)
++                .map_err(|e|batch_cuda(metadata_site,e))?;
++            let inactive=forward.buffers.hidden_context.byte_len()-active_bytes;
++            if inactive>0 {forward.buffers.hidden_context.copy_from_pinned_in_active_command_batch(
++                active_bytes,&prepared.staging,bytes,inactive,stream).map_err(|e|batch_cuda(metadata_site,e))?;}
++        }
+         let rms_norm_profile = forward.rms_norm_profile();
+         let PreparedLlamaForward {
+             plan: maximum_plan,
+--- a/crates/riley-cuda/src/memory.rs
++++ b/crates/riley-cuda/src/memory.rs
+@@ -582,6 +582,56 @@
+         }
+     }
+ 
++    /// Enqueues an H2D copy on a type-erased execution stream in an active
++    /// command batch. The same native copy ledger as the typed command-stream
++    /// method retains both allocations until completion and fails closed on
++    /// premature reuse, close, or a missing batch.
++    ///
++    /// # Errors
++    /// Returns range, ownership, busy-state, missing-batch, or copy errors.
++    pub fn copy_from_pinned_in_active_command_batch<S: CudaExecutionStream + ?Sized>(
++        &self,
++        destination_offset: u64,
++        source: &CudaPinnedHostBuffer,
++        source_offset: u64,
++        byte_len: u64,
++        stream: &mut S,
++    ) -> CudaResult<()> {
++        const OPERATION: &str = "CudaDeviceBuffer::copy_from_pinned_in_active_command_batch";
++        let stream = execution_stream_mut(stream);
++        prepare_copy(
++            &self.context,
++            self.byte_len,
++            destination_offset,
++            &source.context,
++            source.byte_len,
++            source_offset,
++            byte_len,
++            &stream.context,
++            OPERATION,
++        )?;
++        self.use_state.ensure_idle(OPERATION, "device buffer")?;
++        source
++            .use_state
++            .ensure_idle(OPERATION, "pinned host buffer")?;
++
++        #[cfg(feature = "cuda")]
++        {
++            self.native.copy_from_pinned_in_command_batch(
++                destination_offset,
++                &source.native,
++                source_offset,
++                byte_len,
++                &mut stream.native,
++            )
++        }
++        #[cfg(not(feature = "cuda"))]
++        {
++            let _ = (destination_offset, source_offset, byte_len, stream);
++            Err(CudaError::unavailable(OPERATION))
++        }
++    }
++
+     /// Enqueues a device-to-pinned-host copy in the command batch that is
+     /// active on `stream`; it completes with the batch, after which the pinned
+     /// bytes may be read.
+--- a/crates/riley-cuda/src/batch.rs
++++ b/crates/riley-cuda/src/batch.rs
+@@ -2278,6 +2278,48 @@
+     Ok(())
+ }
+ 
++fn encode_materialized_ragged_attention_metadata(
++    host: PackedBatchHostV1<'_>, reference: &crate::decode::PreparedPagedDecodeAttention,
++    output: &CudaDeviceBuffer, valid_device: &CudaDeviceBuffer,
++    valid_host: &mut [u16], encoded_valid: &mut [u8], zero_host: &[u8],
++) -> CudaResult<(usize,u64)> {
++    let op="prepare_materialized_ragged_attention_metadata";
++    let row_bytes=reference.request().query_head_count()*reference.request().head_size()*2;
++    let active_bytes=host.active_row_count().checked_mul(row_bytes).ok_or_else(||CudaError::invalid_argument(op,"row bytes overflow"))?;
++    let stride=valid_host.len();
++    let copy_bytes=(host.active_row_count() as usize).checked_mul(stride).and_then(|n|n.checked_mul(2)).ok_or_else(||CudaError::invalid_argument(op,"metadata bytes overflow"))?;
++    if stride==0 || copy_bytes>encoded_valid.len() || copy_bytes as u64>valid_device.byte_len() || active_bytes>output.byte_len() || output.byte_len()-active_bytes>zero_host.len() as u64 {
++        return Err(CudaError::invalid_argument(op,"prepared scratch cannot hold the iteration"));
++    }
++    for (row,raw) in encoded_valid[..copy_bytes].chunks_exact_mut(stride*2).enumerate() {
++        let tokens=u64::from(host.row_positions()[row])+1;
++        let count=tokens.div_ceil(16) as usize;
++        if tokens>reference.request().maximum_sequence_length() || count>stride {return Err(CudaError::invalid_argument(op,"prefix exceeds prepared capacity"));}
++        raw.fill(0);valid_host[..count].fill(16);valid_host[count-1]=((tokens-1)%16+1) as u16;
++        for (bytes,value) in raw[..count*2].chunks_exact_mut(2).zip(valid_host[..count].iter()) {bytes.copy_from_slice(&value.to_le_bytes());}
++    }
++    Ok((copy_bytes,active_bytes))
++}
++
++/// Writes non-overlapping valid-prefix and zero-tail payloads into existing
++/// pinned storage before the command batch; no device copy or allocation occurs.
++pub fn stage_materialized_ragged_attention_metadata(
++    host: PackedBatchHostV1<'_>, reference: &crate::decode::PreparedPagedDecodeAttention,
++    output: &CudaDeviceBuffer, valid_device: &CudaDeviceBuffer,
++    staging: &mut crate::memory::CudaPinnedHostBuffer, valid_host: &mut [u16],
++    encoded_valid: &mut [u8], zero_host: &[u8],
++) -> CudaResult<(u64,u64)> {
++    let (copy_bytes,active_bytes)=encode_materialized_ragged_attention_metadata(
++        host,reference,output,valid_device,valid_host,encoded_valid,zero_host)?;
++    let inactive=output.byte_len()-active_bytes;
++    let end=(copy_bytes as u64).checked_add(inactive).ok_or_else(||
++        CudaError::invalid_argument("stage materialized metadata","staging extent overflow"))?;
++    if end>staging.byte_len(){return Err(CudaError::invalid_argument("stage materialized metadata","prepared staging cannot hold both payloads"));}
++    staging.write(0,&encoded_valid[..copy_bytes])?;
++    if inactive>0 {staging.write(copy_bytes as u64,&zero_host[..inactive as usize])?;}
++    Ok((copy_bytes as u64,active_bytes))
++}
++
+ /// Prepares immutable row-prefix metadata before starting an iteration command batch.
+ /// All storage is caller-owned; no allocation occurs here or in the layer dispatch.
+ pub fn prepare_materialized_ragged_attention_metadata(
+@@ -2286,21 +2328,8 @@
+     staging: &mut crate::memory::CudaPinnedHostBuffer, valid_host: &mut [u16],
+     encoded_valid: &mut [u8], zero_host: &[u8], stream: &mut CudaStream,
+ ) -> CudaResult<()> {
+-    let op="prepare_materialized_ragged_attention_metadata";
+-    let row_bytes=reference.request().query_head_count()*reference.request().head_size()*2;
+-    let active_bytes=host.active_row_count().checked_mul(row_bytes).ok_or_else(||CudaError::invalid_argument(op,"row bytes overflow"))?;
+-    let stride=valid_host.len();
+-    let copy_bytes=(host.active_row_count() as usize).checked_mul(stride).and_then(|n|n.checked_mul(2)).ok_or_else(||CudaError::invalid_argument(op,"metadata bytes overflow"))?;
+-    if stride==0 || copy_bytes>encoded_valid.len() || copy_bytes as u64>valid_device.byte_len() || active_bytes>output.byte_len() || output.byte_len()-active_bytes>zero_host.len() as u64 {
+-        return Err(CudaError::invalid_argument(op,"prepared scratch cannot hold the iteration"));
+-    }
+-    for (row,raw) in encoded_valid[..copy_bytes].chunks_exact_mut(stride*2).enumerate() {
+-        let tokens=u64::from(host.row_positions()[row])+1;
+-        let count=tokens.div_ceil(16) as usize;
+-        if tokens>reference.request().maximum_sequence_length() || count>stride {return Err(CudaError::invalid_argument(op,"prefix exceeds prepared capacity"));}
+-        raw.fill(0);valid_host[..count].fill(16);valid_host[count-1]=((tokens-1)%16+1) as u16;
+-        for (bytes,value) in raw[..count*2].chunks_exact_mut(2).zip(valid_host[..count].iter()) {bytes.copy_from_slice(&value.to_le_bytes());}
+-    }
++    let (copy_bytes,active_bytes)=encode_materialized_ragged_attention_metadata(
++        host,reference,output,valid_device,valid_host,encoded_valid,zero_host)?;
+     valid_device.upload_from_slice(0,&encoded_valid[..copy_bytes],staging,stream)?;
+     let inactive=(output.byte_len()-active_bytes) as usize;
+     if inactive>0 {output.upload_from_slice(active_bytes,&zero_host[..inactive],staging,stream)?;}
+--- a/crates/riley-cuda/src/lib.rs
++++ b/crates/riley-cuda/src/lib.rs
+@@ -243,7 +243,7 @@
+ 
+ pub use batch::prepared_materialized_ragged_attention;
+ 
+-pub use batch::prepare_materialized_ragged_attention_metadata;
++pub use batch::{prepare_materialized_ragged_attention_metadata, stage_materialized_ragged_attention_metadata};
+ 
+ #[cfg(feature="cuda-cublas-gemm-probe")]
+ pub use primitives::hugging_face_qwen_head128_rms_norm;

@@ -139,7 +139,7 @@ serve options:
   --lm-head-rows ID              dense-v1 or output-rows-v1: in steps that mix prefill and decode,
                                  run the LM head on output rows only, bit-identical
                                  (default: dense-v1)
-  --owned-decode-batch MODE      disabled, grouped-v1 or lt-mlp-v2: explicit owned decode batching
+  --owned-decode-batch MODE      disabled, grouped-v1, lt-mlp-v2, bounded-gateup-sm80-v1 or bounded-projections-sm80-v2 / native-kv-sm80-v3 / native-attention-sm80-v4 / native-prefill-sm80-v5: explicit owned decode batching
   --owned-decode-graph MODE      disabled or segments-v1: reuse exact owned decode segments
   --decode-step-graph MODE       disabled or capture-v1: record pure-decode steps of the native
                                  D128 route as CUDA graphs and replay them (default: disabled)
@@ -695,8 +695,8 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             "--owned-decode-batch" => set_once(
                 &mut owned_decode_batch,
                 match parse_utf8(next_value(&mut arguments,"--owned-decode-batch")?,"--owned-decode-batch")?.as_str() {
-                    "disabled" => 0, "grouped-v1" => 1, "lt-mlp-v2" => 2, "exact-r2-v3"=>3, "exact-r2-global-v4"=>4, "exact-smallrows-v5"=>5,
-                    _ => return Err("--owned-decode-batch requires disabled, grouped-v1, lt-mlp-v2, exact-r2-v3, exact-r2-global-v4 or exact-smallrows-v5".to_owned()),
+                    "disabled" => 0, "grouped-v1" => 1, "lt-mlp-v2" => 2, "exact-r2-v3"=>3, "exact-r2-global-v4"=>4, "exact-smallrows-v5"=>5, "bounded-gateup-sm80-v1"=>6, "bounded-projections-sm80-v2"=>7, "native-kv-sm80-v3"=>8, "native-attention-sm80-v4"=>9, "native-prefill-sm80-v5"=>10,
+                    _ => return Err("--owned-decode-batch requires disabled, grouped-v1, lt-mlp-v2, exact-r2-v3, exact-r2-global-v4 exact-smallrows-v5, bounded-gateup-sm80-v1 or bounded-projections-sm80-v2 / native-kv-sm80-v3 / native-attention-sm80-v4 / native-prefill-sm80-v5".to_owned()),
                 }, "--owned-decode-batch",
             )?,
             "--owned-decode-graph" => set_once(
@@ -1368,6 +1368,9 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     }
     let owned_decode_graph = owned_decode_graph.unwrap_or(false);
     let owned_decode_batch = owned_decode_batch.unwrap_or(0);
+    if matches!(owned_decode_batch,6|7|8|9|10) && max_active_sequences>32 {
+        return Err("bounded SM80 decode batching requires --max-active-sequences at most 32".to_owned());
+    }
     if owned_decode_batch==5 && max_active_sequences>32 {
         return Err("--owned-decode-batch exact-smallrows-v5 requires --max-active-sequences at most 32".to_owned());
     }
@@ -1384,7 +1387,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         return Err("--owned-mlp-graph pure-decode-v1 requires owned HF numerics, iteration-batch completion and fused SiLU".to_owned());
     }
     if numerics_profile == NumericsProfileMode::OwnedHfEagerBf16V1 {
-        if metadata_transport != MetadataTransportMode::Synchronous || staged_step_uploads
+        if metadata_transport != MetadataTransportMode::Synchronous || (staged_step_uploads && owned_decode_batch != 10)
             || residual_rmsnorm != ResidualRmsNormMode::Separate || decode_step_capture
             || vllm_smol_p128_graph || fused_mlp_residual_norm || fused_kv_write
             || prompt_attention_mma || dense_prompt_attention || d128_tensor_core_producer
@@ -2298,6 +2301,11 @@ fn run_serve(
         3 => {eprintln!("RILEY_OWNED_BATCH mode=exact-r2-v3 q4_r2_gate=true cached_request_rows=true atomic_prefill=true");executor.with_exact_r2_decode_batch()},
         4 => {eprintln!("RILEY_OWNED_BATCH mode=exact-r2-global-v4 q4_r2_gate=true q4_r2_down_output_global=true cached_request_rows=true atomic_prefill=true");executor.with_exact_r2_global_decode_batch()},
         5 => {eprintln!("RILEY_OWNED_BATCH mode=exact-smallrows-v5 actual_row_graph_keys=true cached_request_rows=true atomic_prefill=true");executor.with_exact_smallrows_decode_batch()},
+        6 => {eprintln!("RILEY_OWNED_BATCH mode=bounded-gateup-sm80-v1 max_gemm_rows=16 actual_row_graph_keys=true");executor.with_bounded_sm80_gateup_batch()},
+        7 => {eprintln!("RILEY_OWNED_BATCH mode=bounded-projections-sm80-v2 q_rows=32 output_rows=8 down_rows=4");executor.with_bounded_sm80_projection_batch()},
+        8 => {eprintln!("RILEY_OWNED_BATCH mode=native-kv-sm80-v3 q_rows=32 output_rows=8 down_rows=4 kv_reuse=2,4,8 native_k_stride=32 kv_unroll=16");executor.with_bounded_sm80_projection_kv_batch()},
+        9 => {eprintln!("RILEY_OWNED_BATCH mode=native-attention-sm80-v4 kv_vector_bytes=16 gqa_reuse=4 fused_decode_scale=true");executor.with_bounded_sm80_attention_batch()},
+        10 => {eprintln!("RILEY_OWNED_BATCH mode=native-prefill-sm80-v5 prefill_gate_original=64..130 prefill_gate_merged=161..576 prefill_down_native_lt_v7=161..576 prefill_gate_lt_v7=257..512 decode_down_slice_v9=5..32 decode_gate_up_native_v8=17..32 paged_attention_chunk_v6=2..32 attention_t=24..216");executor.with_bounded_sm80_prefill_batch()},
         _ => executor,
     };
     let executor = if options.owned_decode_graph {
@@ -6830,6 +6838,38 @@ mod owned_hf_cli_tests {
     fn base(extra: &[&str]) -> Result<CliCommand,String> {
         let mut a=vec!["serve","--model","/models/fixture","--numerics-profile","owned-hf-eager-bf16-v1"];
         a.extend_from_slice(extra);parse_arguments(a.into_iter().map(OsString::from))
+    }
+    #[test]
+    #[cfg(feature="owned-hf-eager")]
+    fn native_kv_sm80_cli_is_explicit_and_bounded(){
+        assert!(base(&["--owned-decode-batch","native-kv-sm80-v3"]).is_err());
+        let CliCommand::Serve(o)=base(&["--owned-decode-batch","native-kv-sm80-v3","--execution-completion","iteration-batch","--max-active-sequences","32"]).unwrap()else{panic!("serve")};
+        assert_eq!(o.owned_decode_batch,8);
+        assert!(base(&["--owned-decode-batch","native-kv-sm80-v3","--execution-completion","iteration-batch","--max-active-sequences","33"]).is_err());
+    }
+    #[test]
+    #[cfg(feature="owned-hf-eager")]
+    fn native_attention_sm80_cli_is_explicit_and_bounded(){
+        assert!(base(&["--owned-decode-batch","native-attention-sm80-v4"]).is_err());
+        let CliCommand::Serve(o)=base(&["--owned-decode-batch","native-attention-sm80-v4","--execution-completion","iteration-batch","--max-active-sequences","32"]).unwrap()else{panic!("serve")};
+        assert_eq!(o.owned_decode_batch,9);
+        assert!(base(&["--owned-decode-batch","native-attention-sm80-v4","--execution-completion","iteration-batch","--max-active-sequences","33"]).is_err());
+    }
+    #[test]
+    #[cfg(feature="owned-hf-eager")]
+    fn native_prefill_sm80_cli_is_explicit_and_bounded(){
+        assert!(base(&["--owned-decode-batch","native-prefill-sm80-v5"]).is_err());
+        let CliCommand::Serve(o)=base(&["--owned-decode-batch","native-prefill-sm80-v5","--execution-completion","iteration-batch","--max-active-sequences","32"]).unwrap()else{panic!("serve")};
+        assert_eq!(o.owned_decode_batch,10);
+        assert!(base(&["--owned-decode-batch","native-prefill-sm80-v5","--execution-completion","iteration-batch","--max-active-sequences","33"]).is_err());
+    }
+    #[test]
+    #[cfg(feature="owned-hf-eager")]
+    fn bounded_sm80_gateup_cli_is_explicit_and_bounded(){
+        assert!(base(&["--owned-decode-batch","bounded-gateup-sm80-v1"]).is_err());
+        let CliCommand::Serve(o)=base(&["--owned-decode-batch","bounded-gateup-sm80-v1","--execution-completion","iteration-batch","--max-active-sequences","32"]).unwrap()else{panic!("serve")};
+        assert_eq!(o.owned_decode_batch,6);
+        assert!(base(&["--owned-decode-batch","bounded-gateup-sm80-v1","--execution-completion","iteration-batch","--max-active-sequences","33"]).is_err());
     }
     #[test]
     #[cfg(feature="owned-hf-eager")]

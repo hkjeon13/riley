@@ -243,7 +243,7 @@ mod tests {
 
 pub use batch::prepared_materialized_ragged_attention;
 
-pub use batch::prepare_materialized_ragged_attention_metadata;
+pub use batch::{prepare_materialized_ragged_attention_metadata, stage_materialized_ragged_attention_metadata};
 
 #[cfg(feature="cuda-cublas-gemm-probe")]
 pub use primitives::hugging_face_qwen_head128_rms_norm;

@@ -2815,6 +2815,55 @@ pub fn hugging_face_smollm2_rms_norm_row_groups<S:CudaExecutionStream+?Sized>(pa
     hugging_face_rms_norm_row_groups(params, slots, stream, true, None)
 }
 
+// The wide HF launch saturates its height at 16 rows: every larger request
+// uses exactly 32 threads per row. Joining only these groups changes grid
+// extent without changing a row's accumulation or reduction tree.
+#[cfg(feature="cuda-cublas-gemm-probe")]
+fn merged_wide_prefill_norm_end(
+    slots: &[u32], begin: usize, mut end: usize,
+    cached: Option<crate::batch::ValidatedRequestRowGroups<'_>>,
+) -> CudaResult<usize> {
+    if end-begin < 16 { return Ok(end); }
+    while end < slots.len() {
+        let next = if let Some(groups)=cached { groups.group_end(end)? } else {
+            let mut next=end+1;
+            while next<slots.len() && slots[next]==slots[end] { next+=1; }
+            next
+        };
+        if next-end < 16 { break; }
+        end=next;
+    }
+    Ok(end)
+}
+
+#[cfg(all(test,feature="cuda-cublas-gemm-probe"))]
+#[test]
+fn wide_prefill_norm_merge_preserves_each_request_reduction_geometry() {
+    // Exhaust the threshold on both sides, including a non-eligible group
+    // between two large requests. A short request must never inherit the
+    // 32-thread tree merely because its neighbours are large.
+    for a in 1..=33_usize { for b in 1..=33_usize {
+        let lengths=[a,b,15,128,130,1,16];
+        let slots:Vec<u32>=lengths.iter().enumerate()
+            .flat_map(|(id,&n)| std::iter::repeat_n(id as u32,n)).collect();
+        let mut begin=0;
+        for (i,&length) in lengths.iter().enumerate() {
+            let end=merged_wide_prefill_norm_end(&slots,begin,begin+length,None).unwrap();
+            let mut expected=begin+length;
+            if length>=16 {
+                for &next in &lengths[i+1..] {
+                    if next<16 { break; }
+                    expected+=next;
+                }
+            }
+            assert_eq!(end,expected);
+            let threads=|rows:usize|512/(1_usize << rows.min(16).ilog2());
+            if end>begin+length { assert_eq!(threads(length),32); assert_eq!(threads(end-begin),32); }
+            begin+=length;
+        }
+    }}
+}
+
 #[cfg(feature="cuda-cublas-gemm-probe")]
 fn hugging_face_rms_norm_row_groups<S:CudaExecutionStream+?Sized>(params:&mut RmsNormParams<'_>,slots:&[u32],stream:&mut S,smol:bool,cached:Option<crate::batch::ValidatedRequestRowGroups<'_>>)->CudaResult<()>{
     const OPERATION: &str = "hugging_face_request_rms_norm";
@@ -2860,6 +2909,8 @@ fn hugging_face_rms_norm_row_groups<S:CudaExecutionStream+?Sized>(params:&mut Rm
        if next-end != 1 { break; }
        end=next;
      }
+   } else if !smol {
+     end=merged_wide_prefill_norm_end(slots,begin,end,cached)?;
    }
    let offset=begin as u64*row_bytes;let bytes=(end-begin) as u64*row_bytes;
    let mut group=RmsNormParams{input:params.input.subspan(offset,bytes)?,weight:params.weight.subspan(0,params.weight.byte_len())?,output:params.output.subspan(offset,bytes)?,row_count:(end-begin) as u64,hidden_size:params.hidden_size,epsilon:params.epsilon};

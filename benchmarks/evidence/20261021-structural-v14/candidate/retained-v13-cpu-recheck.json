@@ -1,0 +1,156 @@
+{
+  "time_ns": 1792546509840947923,
+  "source_manifest_sha256": "474ebd145037fc91a023dcc8a4adc996be1d20eaead886a5058d9086e59a6fbe",
+  "source_files": 935,
+  "binary_sha256": "9dd87720ceb5c9f99532b8b01851557598032a6fe5ba037316e327eba1505566",
+  "CPU_passed": 524,
+  "CPU_ignored": 40,
+  "fixture_temporary_root": "/tmp/riley-c02-retained-v13-4o5yt9w8",
+  "fixture_temporary_tree_removed": true,
+  "tests": [
+    {
+      "name": "riley",
+      "binary": "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/target/release/deps/riley-ac83fcfaa3057788",
+      "binary_sha256": "9c47e89af24dca4590d91001ad2e11770ceb38c10aaf7d2ea98d27880a7aae30",
+      "argv": [
+        "taskset",
+        "-c",
+        "48-51",
+        "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/target/release/deps/riley-ac83fcfaa3057788",
+        "--test-threads=1",
+        "--skip",
+        "tests::c02_audit_directory_is_private_held_and_descriptor_relative",
+        "--skip",
+        "tests::c02_generation_audit_writer_creates_a_bound_leaf_and_marker_once",
+        "--skip",
+        "tests::c02_generation_audit_writer_refuses_schema_oversize_without_evidence",
+        "--skip",
+        "tests::c02_shutdown_writer_binds_raw_final_metrics_to_a_nonhidden_marker"
+      ],
+      "returncode": 0,
+      "passed": 38,
+      "ignored": 0
+    },
+    {
+      "name": "riley_server",
+      "binary": "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/target/release/deps/riley_server-e0885bf90355a4d3",
+      "binary_sha256": "4eec097e96ef27d5fd16db7ab97c3028d752313f7f1af7c0bb85cfd254c08f38",
+      "argv": [
+        "taskset",
+        "-c",
+        "48-51",
+        "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/target/release/deps/riley_server-e0885bf90355a4d3",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "passed": 72,
+      "ignored": 1
+    },
+    {
+      "name": "riley_runtime",
+      "binary": "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/target/release/deps/riley_runtime-c220cd941fc5f2f6",
+      "binary_sha256": "f12cdc8defd35b46caf3d760efb774f9ca93b529cb2709e3430298c694dfc690",
+      "argv": [
+        "taskset",
+        "-c",
+        "48-51",
+        "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/target/release/deps/riley_runtime-c220cd941fc5f2f6",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "passed": 295,
+      "ignored": 22
+    },
+    {
+      "name": "riley_scheduler",
+      "binary": "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/target/release/deps/riley_scheduler-583a473fb2e449f4",
+      "binary_sha256": "8e02daf9fffad2cf354c1b30d7c62a3004a209c9940497c0796029e5336dd2c0",
+      "argv": [
+        "taskset",
+        "-c",
+        "48-51",
+        "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/target/release/deps/riley_scheduler-583a473fb2e449f4",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "passed": 32,
+      "ignored": 0
+    },
+    {
+      "name": "riley_cuda",
+      "binary": "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/target/release/deps/riley_cuda-25e2598fcd5e7ac9",
+      "binary_sha256": "3e7c2e556ca971edcdabf78d486a24dd26ec735c790d028009a47f118e6b4233",
+      "argv": [
+        "taskset",
+        "-c",
+        "48-51",
+        "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/target/release/deps/riley_cuda-25e2598fcd5e7ac9",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "passed": 83,
+      "ignored": 17
+    },
+    {
+      "name": "tests::c02_audit_directory_is_private_held_and_descriptor_relative",
+      "argv": [
+        "taskset",
+        "-c",
+        "48-51",
+        "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/target/release/deps/riley-ac83fcfaa3057788",
+        "--exact",
+        "tests::c02_audit_directory_is_private_held_and_descriptor_relative",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "passed": 1,
+      "fixture_only_tmp_exception": true
+    },
+    {
+      "name": "tests::c02_generation_audit_writer_creates_a_bound_leaf_and_marker_once",
+      "argv": [
+        "taskset",
+        "-c",
+        "48-51",
+        "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/target/release/deps/riley-ac83fcfaa3057788",
+        "--exact",
+        "tests::c02_generation_audit_writer_creates_a_bound_leaf_and_marker_once",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "passed": 1,
+      "fixture_only_tmp_exception": true
+    },
+    {
+      "name": "tests::c02_generation_audit_writer_refuses_schema_oversize_without_evidence",
+      "argv": [
+        "taskset",
+        "-c",
+        "48-51",
+        "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/target/release/deps/riley-ac83fcfaa3057788",
+        "--exact",
+        "tests::c02_generation_audit_writer_refuses_schema_oversize_without_evidence",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "passed": 1,
+      "fixture_only_tmp_exception": true
+    },
+    {
+      "name": "tests::c02_shutdown_writer_binds_raw_final_metrics_to_a_nonhidden_marker",
+      "argv": [
+        "taskset",
+        "-c",
+        "48-51",
+        "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/target/release/deps/riley-ac83fcfaa3057788",
+        "--exact",
+        "tests::c02_shutdown_writer_binds_raw_final_metrics_to_a_nonhidden_marker",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "passed": 1,
+      "fixture_only_tmp_exception": true
+    }
+  ],
+  "scope": "Fresh execution of the unchanged retained v13 compiled CPU test artifacts. CUDA invisible; only four C02 fixture trees use authorized private/tmp; source/model/scripts/build/runtime remain on EFS. Fresh10native baseline API arms independently audited."
+}

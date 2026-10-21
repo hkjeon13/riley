@@ -2278,14 +2278,11 @@ pub fn prepared_materialized_ragged_attention<S: CudaExecutionStream + ?Sized>(
     Ok(())
 }
 
-/// Prepares immutable row-prefix metadata before starting an iteration command batch.
-/// All storage is caller-owned; no allocation occurs here or in the layer dispatch.
-pub fn prepare_materialized_ragged_attention_metadata(
+fn encode_materialized_ragged_attention_metadata(
     host: PackedBatchHostV1<'_>, reference: &crate::decode::PreparedPagedDecodeAttention,
-    output: &mut CudaDeviceBuffer, valid_device: &mut CudaDeviceBuffer,
-    staging: &mut crate::memory::CudaPinnedHostBuffer, valid_host: &mut [u16],
-    encoded_valid: &mut [u8], zero_host: &[u8], stream: &mut CudaStream,
-) -> CudaResult<()> {
+    output: &CudaDeviceBuffer, valid_device: &CudaDeviceBuffer,
+    valid_host: &mut [u16], encoded_valid: &mut [u8], zero_host: &[u8],
+) -> CudaResult<(usize,u64)> {
     let op="prepare_materialized_ragged_attention_metadata";
     let row_bytes=reference.request().query_head_count()*reference.request().head_size()*2;
     let active_bytes=host.active_row_count().checked_mul(row_bytes).ok_or_else(||CudaError::invalid_argument(op,"row bytes overflow"))?;
@@ -2301,6 +2298,38 @@ pub fn prepare_materialized_ragged_attention_metadata(
         raw.fill(0);valid_host[..count].fill(16);valid_host[count-1]=((tokens-1)%16+1) as u16;
         for (bytes,value) in raw[..count*2].chunks_exact_mut(2).zip(valid_host[..count].iter()) {bytes.copy_from_slice(&value.to_le_bytes());}
     }
+    Ok((copy_bytes,active_bytes))
+}
+
+/// Writes non-overlapping valid-prefix and zero-tail payloads into existing
+/// pinned storage before the command batch; no device copy or allocation occurs.
+pub fn stage_materialized_ragged_attention_metadata(
+    host: PackedBatchHostV1<'_>, reference: &crate::decode::PreparedPagedDecodeAttention,
+    output: &CudaDeviceBuffer, valid_device: &CudaDeviceBuffer,
+    staging: &mut crate::memory::CudaPinnedHostBuffer, valid_host: &mut [u16],
+    encoded_valid: &mut [u8], zero_host: &[u8],
+) -> CudaResult<(u64,u64)> {
+    let (copy_bytes,active_bytes)=encode_materialized_ragged_attention_metadata(
+        host,reference,output,valid_device,valid_host,encoded_valid,zero_host)?;
+    let inactive=output.byte_len()-active_bytes;
+    let end=(copy_bytes as u64).checked_add(inactive).ok_or_else(||
+        CudaError::invalid_argument("stage materialized metadata","staging extent overflow"))?;
+    if end>staging.byte_len(){return Err(CudaError::invalid_argument("stage materialized metadata","prepared staging cannot hold both payloads"));}
+    staging.write(0,&encoded_valid[..copy_bytes])?;
+    if inactive>0 {staging.write(copy_bytes as u64,&zero_host[..inactive as usize])?;}
+    Ok((copy_bytes as u64,active_bytes))
+}
+
+/// Prepares immutable row-prefix metadata before starting an iteration command batch.
+/// All storage is caller-owned; no allocation occurs here or in the layer dispatch.
+pub fn prepare_materialized_ragged_attention_metadata(
+    host: PackedBatchHostV1<'_>, reference: &crate::decode::PreparedPagedDecodeAttention,
+    output: &mut CudaDeviceBuffer, valid_device: &mut CudaDeviceBuffer,
+    staging: &mut crate::memory::CudaPinnedHostBuffer, valid_host: &mut [u16],
+    encoded_valid: &mut [u8], zero_host: &[u8], stream: &mut CudaStream,
+) -> CudaResult<()> {
+    let (copy_bytes,active_bytes)=encode_materialized_ragged_attention_metadata(
+        host,reference,output,valid_device,valid_host,encoded_valid,zero_host)?;
     valid_device.upload_from_slice(0,&encoded_valid[..copy_bytes],staging,stream)?;
     let inactive=(output.byte_len()-active_bytes) as usize;
     if inactive>0 {output.upload_from_slice(active_bytes,&zero_host[..inactive],staging,stream)?;}

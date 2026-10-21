@@ -1,0 +1,33 @@
+{
+  "archives": [
+    {
+      "file": "20261020-batched-v11.zip",
+      "bytes": 6122166,
+      "sha256": "c0a0a53c5d04e06263bcc2ae7ce1d35d735742ead83a7c2fa94e027002dd8088",
+      "entries": 711,
+      "verdict": "historical"
+    },
+    {
+      "file": "20261020-packed-v12.zip",
+      "bytes": 6837128,
+      "sha256": "8a85446b32a44cf78978d3a7082bfe74dc7d1bcc2fec1831712de7558694c562",
+      "entries": 692,
+      "verdict": "historical"
+    },
+    {
+      "file": "20261020-piecewise-v13.zip",
+      "bytes": 6338800,
+      "sha256": "4df7f88552b077d01105f169cb0a8bc6a53c4258bcb32783825675dc11ad5945",
+      "entries": 714,
+      "verdict": "retained-default-source"
+    },
+    {
+      "file": "20261021-structural-v14.zip",
+      "bytes": 11119006,
+      "sha256": "62edbb7f085b6131b2d3953b8bcdeb58123e39700880f8f50565fee958c65a48",
+      "entries": 1920,
+      "verdict": "candidate-not-adopted"
+    }
+  ],
+  "notes": "Compact published archives only. Expanded BF16/traces/binaries remain at EFS paths recorded by each report/index. Older candidate patches are historical; v14prototype is unapplied."
+}

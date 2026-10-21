@@ -1,0 +1,61 @@
+{
+  "time_ns": 1792544509262809854,
+  "binary_sha256": "df8f11d98c8e42659fa85f011c98234217cc0a46c45fc983860f967c1ba86af2",
+  "temporary_root": "/tmp/riley-c02-gpu67-dldmzkl7",
+  "scope": "Only four C02 unit-test fixture trees; scripts/models/benchmarks remain under EFS; GPU invisible; private temporary tree removed on exit.",
+  "tests": [
+    {
+      "name": "tests::c02_audit_directory_is_private_held_and_descriptor_relative",
+      "argv": [
+        "/usr/bin/taskset",
+        "-c",
+        "48-51",
+        "/mnt/efs/nlp/psyche/riley-structural-v14d-20261021/target/release/deps/riley-ac83fcfaa3057788",
+        "--exact",
+        "tests::c02_audit_directory_is_private_held_and_descriptor_relative",
+        "--test-threads=1"
+      ],
+      "returncode": 0
+    },
+    {
+      "name": "tests::c02_generation_audit_writer_creates_a_bound_leaf_and_marker_once",
+      "argv": [
+        "/usr/bin/taskset",
+        "-c",
+        "48-51",
+        "/mnt/efs/nlp/psyche/riley-structural-v14d-20261021/target/release/deps/riley-ac83fcfaa3057788",
+        "--exact",
+        "tests::c02_generation_audit_writer_creates_a_bound_leaf_and_marker_once",
+        "--test-threads=1"
+      ],
+      "returncode": 0
+    },
+    {
+      "name": "tests::c02_generation_audit_writer_refuses_schema_oversize_without_evidence",
+      "argv": [
+        "/usr/bin/taskset",
+        "-c",
+        "48-51",
+        "/mnt/efs/nlp/psyche/riley-structural-v14d-20261021/target/release/deps/riley-ac83fcfaa3057788",
+        "--exact",
+        "tests::c02_generation_audit_writer_refuses_schema_oversize_without_evidence",
+        "--test-threads=1"
+      ],
+      "returncode": 0
+    },
+    {
+      "name": "tests::c02_shutdown_writer_binds_raw_final_metrics_to_a_nonhidden_marker",
+      "argv": [
+        "/usr/bin/taskset",
+        "-c",
+        "48-51",
+        "/mnt/efs/nlp/psyche/riley-structural-v14d-20261021/target/release/deps/riley-ac83fcfaa3057788",
+        "--exact",
+        "tests::c02_shutdown_writer_binds_raw_final_metrics_to_a_nonhidden_marker",
+        "--test-threads=1"
+      ],
+      "returncode": 0
+    }
+  ],
+  "all_passed": true
+}
