@@ -23,3 +23,5 @@ G는 실제 `graph.is_some() || warmed || replayed` 상태를 검사하도록 �
 GPU7에서10개 observer receipt를 보존한다. 원래9개 검사는 성공, 추가 bound 검사는 실패다. 전체 device peak는각22,528MiB 이하였으며 GPU6 외부 작업과 original GPU6/7 holder PID/context는 유지했다. 모든 실행 파일·scratch는 EFS, 기존4개 C02 unit fixture만 승인된 private/tmp에서 재검사했다.
 
 [판정·resource](../benchmarks/evidence/20261021-mlp-batch-v16f/qualification-decision.json) · [source lineage](../benchmarks/evidence/20261021-mlp-batch-v16f/source-lineage.json) · [원자료 ZIP](../benchmarks/evidence/20261021-mlp-batch-v16f.zip):402,238B/159entries, SHA256 `fedbc0219b7a95e0bad545027cb63324818792542892e85bdbe6de049f1395a5`. 패치, guard 실패 stderr, 원래 수치 audit, queue 실패와937-source manifest를 보존했다. 대형 BF16/ELF는 heavy index로 EFS에 연결한다. [로컬 검증](../benchmarks/evidence/20261021-mlp-batch-v16f/local-archive-verification.json)은 CRC/모든entry SHA·size 및 Git baseline에서 패치 적용 후6개 변경 파일의 hash 재구성을 확인했다.
+
+후속 [G의 독립 재빌드·검증](qwen-mlp-batch-v16g-20261021.md)은 추가576-capacity 검사까지 총6,528파일 일치를 통과했다. 정상 C16/C32도 모두 완료했으나 paired tail 경고로 미채택했으며 기존 v15C를 유지한다.

@@ -1,0 +1,422 @@
+--- a/crates/riley-cuda/src/gemm.rs
++++ b/crates/riley-cuda/src/gemm.rs
+@@ -2149,6 +2149,29 @@
+         if result.is_err(){self.poisoned=true;}result
+     }
+ 
++    /// Coalesced M65..576 Gate/Up using the native M65..130 family.
++    /// The caller must restrict each original prefill group to M65..130; this
++    /// does not promise equality to a single native M160 GEMM. The separate
++    /// cold M576 plan never uses the M1/R17..32 decode family.
++    pub fn execute_sm80_prefill_merged_gate_up<S:CudaExecutionStream+?Sized>(
++        &mut self,input:CudaBufferSpan<'_>,weight:CudaBufferSpan<'_>,
++        output:CudaBufferSpanMut<'_>,rows:u64,stream:&mut S,
++    )->CudaResult<()> {
++        const OP:&str="native exact SM80 prefill merged Gate/Up";
++        if self.poisoned || self.config.n!=19456 || self.config.k!=2560 || self.config.m!=576
++            || !(65..=576).contains(&rows) {
++            return Err(CudaError::invalid_argument(OP,"qualified cold M576 plan and coalesced M65..576 view required"));
++        }
++        if input.byte_offset()%256!=0 || weight.byte_offset()%256!=0 || output.byte_offset()%256!=0 {
++            return Err(CudaError::invalid_argument(OP,"prefill merged operands require256-byte aligned views"));
++        }
++        let stream=execution_stream_mut(stream);
++        ensure_same_context(&self.context,&stream.context,OP)?;
++        for b in [input.buffer(),weight.buffer(),output.buffer()] {ensure_same_context(&self.context,b.context_owner(),OP)?;}
++        let result=self.native.execute_rows(input.raw(),weight.raw(),output.raw(),rows,13,&mut stream.native);
++        if result.is_err(){self.poisoned=true;}result
++    }
++
+     /// Bounded attention bridge with caller-owned cold scratch and plan-selected completion.
+     #[allow(clippy::too_many_arguments)]
+     pub fn execute_hf_attention<S: CudaExecutionStream + ?Sized>(
+--- a/crates/riley-cuda/tests/sm80_prefill_alignment_gpu.rs
++++ b/crates/riley-cuda/tests/sm80_prefill_alignment_gpu.rs
+@@ -123,3 +123,94 @@
+     staging.close()?; stream.close()?; c.close()?;
+     Ok(())
+ }
++
++// The merged prefill family is separately prepared from the decode family.
++// Raw Gate and Up bytes must match the original two-GEMM path before SiLU.
++#[test]
++#[ignore = "A100 SM80/CUDA12.4: native prefill merged Gate/Up contracts"]
++fn prefill_merged_gate_up_preserves_raw_bytes_and_command_leases() -> Result {
++    use riley_cuda::CublasGemmProbeParams;
++    let runtime = CudaRuntime::initialize()?;
++    let c = runtime.device(0)?.create_context()?;
++    let mut stream = c.create_stream()?;
++    let mut other = c.create_stream()?;
++    let mut staging = c.allocate_pinned_host_buffer(4 * 1024 * 1024)?;
++    let (maximum, hidden, intermediate) = (576_u64, 2560_u64, 9728_u64);
++    let half = intermediate * hidden * 2;
++    let weights = upload(&c, &mut stream, &mut staging,
++        &finite_bf16((half * 2 / 2) as usize, 11))?;
++    let mut input = c.allocate_device_buffer(maximum * hidden * 2 + 256)?;
++    let mut gate = c.allocate_device_buffer(maximum * intermediate * 2)?;
++    let mut up = c.allocate_device_buffer(maximum * intermediate * 2)?;
++    let mut output = c.allocate_device_buffer(maximum * intermediate * 4 + 256)?;
++    let mut original = c.prepare_owned_hf_gemm(CudaGemmConfig::new(maximum, intermediate, hidden, 0)?)?;
++    let mut merged = c.prepare_owned_hf_gemm(CudaGemmConfig::new(maximum, intermediate * 2, hidden, 0)?)?;
++    merged.prepare_sm80_prefill()?;
++    let stable = c.allocation_stats()?;
++    // Alignment rejection submits nothing and leaves the owner usable.
++    assert!(merged.execute_sm80_prefill_merged_gate_up(
++        CudaBufferSpan::new(&input, CudaDType::BF16, 2, 65 * hidden * 2)?,
++        CudaBufferSpan::new(&weights, CudaDType::BF16, 0, half * 2)?,
++        CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, 65 * intermediate * 4)?,
++        65, &mut stream).is_err());
++    assert!(!merged.is_poisoned());
++    let mut checked = 0;
++    for seed in 1..=3 {
++        input.upload_from_slice(0, &finite_bf16((maximum * hidden) as usize, seed), &mut staging, &mut stream)?;
++        for m in [65_u64, 96, 115, 128, 129, 130, 192, 256, 384, 512, 576] {
++            let groups=m.div_ceil(130);let mut slots=Vec::with_capacity(m as usize);
++            for group in 0..groups {let rows=m/groups+if group<m%groups {1}else{0};assert!((65..=130).contains(&rows));slots.extend(std::iter::repeat_n(group as u32,rows as usize));}
++            for (offset, destination) in [(0_u64, &mut gate), (half, &mut up)] {
++                original.execute_row_groups(&mut CublasGemmProbeParams {
++                    input: CudaBufferSpan::new(&input, CudaDType::BF16, 0, maximum * hidden * 2)?,
++                    weight: CudaBufferSpan::new(&weights, CudaDType::BF16, offset, half)?,
++                    output: CudaBufferSpanMut::new(destination, CudaDType::BF16, 0, maximum * intermediate * 2)?,
++                }, &slots, None, 0, &mut stream)?;
++            }
++            let bytes = (m * intermediate * 2) as usize;
++            let mut expected_gate = vec![0; bytes];
++            let mut expected_up = vec![0; bytes];
++            gate.download_to_slice(0, &mut expected_gate, &mut staging, &mut stream)?;
++            up.download_to_slice(0, &mut expected_up, &mut staging, &mut stream)?;
++            for batched in [false, true] {
++                output.upload_from_slice(0, &vec![0xa5; output.byte_len() as usize], &mut staging, &mut stream)?;
++                if batched {
++                    let mut batch = stream.begin_command_batch()?;
++                    merged.execute_sm80_prefill_merged_gate_up(
++                        CudaBufferSpan::new(&input, CudaDType::BF16, 0, m * hidden * 2)?,
++                        CudaBufferSpan::new(&weights, CudaDType::BF16, 0, half * 2)?,
++                        CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, m * intermediate * 4)?,
++                        m, &mut batch.commands())?;
++                    let mut invalid_read = [0_u8; 2];
++                    assert!(output.download_to_slice(0, &mut invalid_read, &mut staging, &mut other).is_err(),
++                        "another stream must not read an unfinished merged output");
++                    batch.finish()?;
++                } else {
++                    merged.execute_sm80_prefill_merged_gate_up(
++                        CudaBufferSpan::new(&input, CudaDType::BF16, 0, m * hidden * 2)?,
++                        CudaBufferSpan::new(&weights, CudaDType::BF16, 0, half * 2)?,
++                        CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, m * intermediate * 4)?,
++                        m, &mut stream)?;
++                }
++                let mut actual = vec![0; output.byte_len() as usize];
++                output.download_to_slice(0, &mut actual, &mut staging, &mut stream)?;
++                let row_bytes = (intermediate * 2) as usize;
++                for r in 0..m as usize {
++                    assert_eq!(&actual[r * row_bytes * 2..r * row_bytes * 2 + row_bytes],
++                        &expected_gate[r * row_bytes..(r + 1) * row_bytes], "raw Gate M{m} seed{seed} batch={batched}");
++                    assert_eq!(&actual[r * row_bytes * 2 + row_bytes..(r + 1) * row_bytes * 2],
++                        &expected_up[r * row_bytes..(r + 1) * row_bytes], "raw Up M{m} seed{seed} batch={batched}");
++                }
++                assert!(actual[bytes * 2..].iter().all(|&b| b == 0xa5), "output view suffix preserved");
++                assert_eq!(c.allocation_stats()?, stable, "no hot CUDA allocations");
++                checked += 1;
++            }
++        }
++    }
++    eprintln!("SM80_PREFILL_MERGED exact_raw_cases={checked} sentinel_bounds=true hot_cuda_allocations=0 foreign_stream_read_rejected=true");
++    assert_eq!(checked, 66);
++    merged.close()?; original.close()?;
++    output.close()?; up.close()?; gate.close()?; input.close()?; weights.close()?;
++    staging.close()?; other.close()?; stream.close()?; c.close()?;
++    Ok(())
++}
+--- a/crates/riley-runtime/src/llama/executor/dispatch.rs
++++ b/crates/riley-runtime/src/llama/executor/dispatch.rs
+@@ -2251,7 +2251,37 @@
+             && matches!(batch.host().row_sequence_slots().len(),1|17..=32) && weights.merged_gate_up(layer_index).is_some();
+         #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+         let native_merged=false;
+-        if native_merged {
++        #[cfg(feature="cuda-cublas-gemm-probe")]
++        let prefill_merged=owned_decode_batch==10 && fused_silu_multiply && gemms.native_prefill_merged.is_some()
++            && weights.merged_gate_up(layer_index).is_some()
++            && (65..=576).contains(&(batch.host().row_sequence_slots().len()-piecewise_rows))
++            && batch.host().request_row_groups().is_some_and(|g|{
++                let end=batch.host().row_sequence_slots().len();let mut row=piecewise_rows;
++                while row<end {match g.group_end(row){
++                    Ok(next) if next>row && next<=end && (65..=130).contains(&(next-row))=>row=next,
++                    _=>return false,
++                }}true
++            });
++        #[cfg(not(feature="cuda-cublas-gemm-probe"))]
++        let prefill_merged=false;
++        if prefill_merged {
++            #[cfg(feature="cuda-cublas-gemm-probe")]
++            {
++                let rows=(batch.host().row_sequence_slots().len()-piecewise_rows)as u64;
++                let begin=piecewise_rows as u64;let merged_bytes=rows*19456*2;
++                let w=weights.merged_gate_up(layer_index).expect("checked merged prefill weights");
++                gemms.native_prefill_merged.as_mut().expect("checked cold prefill plan").execute_sm80_prefill_merged_gate_up(
++                    CudaBufferSpan::new(&buffers.hidden_norm,CudaDType::BF16,begin*hidden*2,rows*hidden*2).map_err(|e|batch_cuda(gate_site,e))?,
++                    CudaBufferSpan::new(w,CudaDType::BF16,0,w.byte_len()).map_err(|e|batch_cuda(gate_site,e))?,
++                    span_mut(&mut buffers.gate_raw,CudaDType::BF16,merged_bytes,gate_site)?,rows,stream)
++                    .map_err(|e|batch_cuda(gate_site,e))?;
++                silu_gated_multiply_merged_rows(&mut MergedGatedMultiplyParams {
++                    merged:span(&buffers.gate_raw,CudaDType::BF16,merged_bytes,gate_site)?,
++                    output:CudaBufferSpanMut::new(&mut buffers.gated_product,CudaDType::BF16,begin*9728*2,rows*9728*2).map_err(|e|batch_cuda(gate_site,e))?,
++                    element_count:rows*9728,row_width:9728,
++                },stream).map_err(|e|batch_cuda(gate_site,e))?;
++            }
++        }else if native_merged {
+             #[cfg(feature="cuda-cublas-gemm-probe")]
+             if let Some(PreparedLlamaGemm::ClassicRequestRows(native))=gemms.merged_gate_up_plan() {
+                 let rows=batch.host().row_sequence_slots().len() as u64;
+--- a/crates/riley-runtime/src/llama/executor/owner.rs
++++ b/crates/riley-runtime/src/llama/executor/owner.rs
+@@ -419,6 +419,7 @@
+             forward.weights.upload_merged_gate_up(model.weights(),forward.plan.layers().len(),context,stream,
+                 config.forward().upload_staging_bytes(),false)
+                 .map_err(|source|crate::llama::LlamaForwardError::Weight{site:None,source})?;
++            forward.ensure_native_prefill_merged_scratch(context)?;
+             forward.gemms.prepare_sm80_merged_decode(context)?;
+             for shape in shape_variants.iter_mut(){shape.gemms.prepare_sm80_merged_decode(context)?;}
+         }
+--- a/crates/riley-runtime/src/llama/forward.rs
++++ b/crates/riley-runtime/src/llama/forward.rs
+@@ -975,6 +975,8 @@
+             #[cfg(feature="cuda-cublas-gemm-probe")]
+             hf_separate_query,
+             merged_gate_up,
++            #[cfg(feature="cuda-cublas-gemm-probe")]
++            native_prefill_merged,
+             output_projection,
+             projection_bias_epilogue,
+             #[cfg(feature="cuda-cublas-gemm-probe")]
+@@ -1037,6 +1039,8 @@
+                 merged_qkv.close(),
+             );
+         }
++        #[cfg(feature="cuda-cublas-gemm-probe")]
++        if let Some(p)=native_prefill_merged {record_close(&mut first,LlamaForwardResource::IntermediateGemm,p.close());}
+         if let Some(merged_gate_up) = merged_gate_up {
+             record_close(
+                 &mut first,
+@@ -3112,6 +3116,8 @@
+     #[cfg(feature="cuda-cublas-gemm-probe")]
+     hf_separate_query:Option<PreparedLlamaGemm>,
+     merged_gate_up: Option<PreparedLlamaGemm>,
++    #[cfg(feature="cuda-cublas-gemm-probe")]
++    pub(super) native_prefill_merged: Option<CudaPreparedCublasGemmProbe>,
+     /// Output projection `query_width -> hidden` of a model whose query
+     /// projection is wider than its residual stream; `hidden` otherwise.
+     output_projection: Option<PreparedLlamaGemm>,
+@@ -3134,6 +3140,10 @@
+             .map_err(|e|LlamaForwardError::cuda(site,e))?;
+         p.prepare_sm80_prefill().map_err(|e|LlamaForwardError::cuda(site,e))?;
+         self.merged_gate_up=Some(PreparedLlamaGemm::ClassicRequestRows(p));
++        let mut prefill=context.prepare_owned_hf_gemm(CudaGemmConfig::new(576,19456,2560,0).map_err(|e|LlamaForwardError::cuda(site,e))?)
++            .map_err(|e|LlamaForwardError::cuda(site,e))?;
++        prefill.prepare_sm80_prefill().map_err(|e|LlamaForwardError::cuda(site,e))?;
++        self.native_prefill_merged=Some(prefill);
+         Ok(())
+     }
+     #[cfg(feature="cuda-cublas-gemm-probe")]
+@@ -3178,6 +3188,7 @@
+             || {
+                 #[cfg(feature = "cuda-cublas-gemm-probe")]
+                 {
++                    self.native_prefill_merged.as_ref().is_some_and(CudaPreparedCublasGemmProbe::is_poisoned) ||
+                     self.hf_separate_query.as_ref().is_some_and(PreparedLlamaGemm::is_poisoned) ||
+                     self.hf_request_bias_epilogue.as_ref().is_some_and(|t|t.query.iter().chain(t.key_value.iter()).chain(t.batch_query.iter().flatten()).chain(t.batch_key_value.iter().flatten()).any(CudaPreparedBiasEpilogueGemm::is_poisoned)) ||
+                     self.output_projection_direct_cublas
+@@ -3317,6 +3328,8 @@
+             #[cfg(feature="cuda-cublas-gemm-probe")]
+             hf_separate_query,
+             merged_gate_up,
++            #[cfg(feature="cuda-cublas-gemm-probe")]
++            native_prefill_merged,
+             output_projection,
+             projection_bias_epilogue,
+             #[cfg(feature="cuda-cublas-gemm-probe")]
+@@ -3329,6 +3342,8 @@
+             lm_head_last_token_direct_cublas,
+         } = self;
+         let mut first = None;
++        #[cfg(feature="cuda-cublas-gemm-probe")]
++        if let Some(p)=native_prefill_merged {record_close(&mut first,LlamaForwardResource::IntermediateGemm,p.close());}
+         if let Some(merged_gate_up) = merged_gate_up {
+             record_close(
+                 &mut first,
+@@ -3922,6 +3937,31 @@
+                 ));
+             }
+         }
++        Ok(())
++    }
++
++    /// Cold-only raw output for the coalesced native-family Gate/Up plan.
++    /// Shared shape variants and Graphs keep this allocation's address fixed.
++    #[cfg(feature="cuda-cublas-gemm-probe")]
++    pub(super) fn ensure_native_prefill_merged_scratch(&mut self,context:&CudaContext)->LlamaForwardResult<()> {
++        let site=ExecutionSite::layer(0,LlamaOp::GateProjection);
++        let required=self.plan.workspace_spec().intermediate_buffer_bytes().checked_mul(2)
++            .map(|bytes|bytes.min(576*19456*2))
++            .ok_or(LlamaForwardError::ArithmeticOverflow{resource:LlamaForwardResource::GateRaw})?;
++        let previous_bytes=self.buffers.gate_raw.byte_len();
++        if required<=previous_bytes{return Ok(());}
++        if self.poisoned || !self.captured_steps.is_empty() || self.owned_decode_segments.iter().any(|s|s.graph.is_some() || s.warmed || s.replayed){
++            return Err(LlamaForwardError::InvalidConfiguration{field:"native_prefill_merged_scratch",reason:"raw scratch must be sized before Graph preparation"});
++        }
++        let extra=required-previous_bytes;let mut report=self.allocation_report;
++        report.graph_bytes=report.graph_bytes.checked_add(extra)
++            .ok_or(LlamaForwardError::ArithmeticOverflow{resource:LlamaForwardResource::GateRaw})?;
++        report.total_device_bytes=report.total_device_bytes.checked_add(extra)
++            .ok_or(LlamaForwardError::ArithmeticOverflow{resource:LlamaForwardResource::GateRaw})?;
++        let replacement=context.allocate_device_buffer(required).map_err(|e|LlamaForwardError::cuda(site,e))?;
++        let previous=std::mem::replace(&mut self.buffers.gate_raw,replacement);
++        self.allocation_report=report;
++        if let Err(e)=previous.close(){self.poisoned=true;return Err(LlamaForwardError::cuda(site,e));}
+         Ok(())
+     }
+ 
+@@ -6596,6 +6636,8 @@
+         #[cfg(feature="cuda-cublas-gemm-probe")]
+         hf_separate_query,
+         merged_gate_up: merged_gate_up_plan,
++        #[cfg(feature="cuda-cublas-gemm-probe")]
++        native_prefill_merged: None,
+         output_projection: output_projection_plan,
+         projection_bias_epilogue,
+         #[cfg(feature="cuda-cublas-gemm-probe")]
+--- a/kernels/src/cublas_gemm_probe.cu
++++ b/kernels/src/cublas_gemm_probe.cu
+@@ -2123,7 +2123,8 @@
+     uint64_t rows, uint32_t grouped_decode, RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
+   clear_error(error);
+   // Explicit mode3 owns the separately qualified R2 Gate/Up route.
+-  const bool merged_sm80_profile=grouped_decode==12;
++  const bool merged_prefill_sm80_profile=grouped_decode==13;
++  const bool merged_sm80_profile=grouped_decode==12 || merged_prefill_sm80_profile;
+   const bool prefill_sm80_v7_profile=grouped_decode==11 || merged_sm80_profile;
+   if(prefill_sm80_v7_profile)grouped_decode=0;
+   const bool native_prefill_sm80_profile=grouped_decode==10;
+@@ -2155,7 +2156,7 @@
+       (plan->config.k==4096 || plan->config.k==9728) &&
+       (plan->sm80_projection_rows==0 || plan->decode_lt==nullptr || plan->sm80_projection_workspace==nullptr))
+     return validation_error(error,RILEY_CUDA_STATUS_INVALID_STATE,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"bounded projection recipe was not cold-prepared");
+-  if(prefill_sm80_v7_profile && (rows<(merged_sm80_profile?1u:161u) || (merged_sm80_profile && (plan->config.n!=19456 || plan->config.k!=2560 || rows>32)) || rows>plan->prefill_max_rows || plan->prefill_lt==nullptr || plan->prefill_workspace==nullptr))
++  if(prefill_sm80_v7_profile && (rows<(merged_prefill_sm80_profile?65u:merged_sm80_profile?1u:161u) || (merged_sm80_profile && (plan->config.n!=19456 || plan->config.k!=2560 || rows>(merged_prefill_sm80_profile?576u:32u))) || rows>plan->prefill_max_rows || plan->prefill_lt==nullptr || plan->prefill_workspace==nullptr))
+     return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"qualified cold prefill row extent required");
+   ResolvedSpan spans[kMaximumGemmBuffers]{};
+   RileyCudaStatus status = resolve_attention_span(
+@@ -2812,7 +2813,9 @@
+     return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation,"cold qualified SM80 owner required");
+   const bool down=plan->config.n==2560 && plan->config.k==9728;
+   const bool gate=plan->config.n==9728 && plan->config.k==2560;
+-  const bool merged=plan->config.n==19456 && plan->config.k==2560 && plan->config.m<=32;
++  const bool merged_decode=plan->config.n==19456 && plan->config.k==2560 && plan->config.m<=32;
++  const bool merged_prefill=plan->config.n==19456 && plan->config.k==2560 && plan->config.m==576;
++  const bool merged=merged_decode||merged_prefill;
+   const bool output=plan->config.n==2560&&plan->config.k==4096;
+   if((down||output)&&plan->decode_lt&&plan->sm80_projection_workspace){auto st=prepare_sm80_full_projection_rows(plan,error);if(st!=RILEY_CUDA_STATUS_SUCCESS)return st;}
+   const bool query=plan->config.n==4096&&plan->config.k==2560;
+@@ -2858,21 +2861,22 @@
+   cublasOperation_t trans=CUBLAS_OP_T;
+   if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatmulDescSetAttribute(plan->prefill_op,CUBLASLT_MATMUL_DESC_TRANSA,&trans,sizeof(trans)));
+   if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatrixLayoutCreate(&plan->prefill_weight,CUDA_R_16BF,plan->config.k,plan->config.n,plan->config.k));
+-  if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatmulAlgoInit(plan->prefill_lt,CUBLAS_COMPUTE_32F,CUDA_R_32F,CUDA_R_16BF,CUDA_R_16BF,CUDA_R_16BF,CUDA_R_16BF,merged?31:(query||kv||output||down)?6:21,&plan->prefill_algo));
++  if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatmulAlgoInit(plan->prefill_lt,CUBLAS_COMPUTE_32F,CUDA_R_32F,CUDA_R_16BF,CUDA_R_16BF,CUDA_R_16BF,CUDA_R_16BF,merged_decode?31:(query||kv||output||down)?6:21,&plan->prefill_algo));
+   const cublasLtMatmulAlgoConfigAttributes_t attrs[]={CUBLASLT_ALGO_CONFIG_TILE_ID,CUBLASLT_ALGO_CONFIG_STAGES_ID,CUBLASLT_ALGO_CONFIG_SPLITK_NUM,CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME,CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING,CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION};
+   // Pinned native-M128 accumulation families, including split-K reduction.
++  // A separate N19456/M576 plan uses the native65..130 one-chain family over coalesced prefill, never decode31.
+   // Q: original65..130, merged257..576; KV:94..128, merged161..512;
+   // O:65..128, merged161..576. Rust dispatch preserves all other extents.
+-  const uint32_t vals[]={merged?15u:down?24u:(query||kv)?18u:20u,merged?17u:down?15u:(query||kv)?12u:11u,
+-    merged?0u:down||output?5u:kv?4u:0u,merged?0u:down||output||kv?4u:0u,merged?0u:down||query||kv?1u:0u,0};
++  const uint32_t vals[]={merged_decode?15u:down?24u:(query||kv)?18u:20u,merged_decode?17u:down?15u:(query||kv)?12u:11u,
++    merged_decode?0u:down||output?5u:kv?4u:0u,merged_decode?0u:down||output||kv?4u:0u,merged_decode?0u:down||query||kv?1u:0u,0};
+   for(size_t i=0;i<6 && status==RILEY_CUDA_STATUS_SUCCESS;i++){
+     status=checked(cublasLtMatmulAlgoConfigSetAttribute(&plan->prefill_algo,attrs[i],&vals[i],sizeof(vals[i])));
+     uint32_t got=0;size_t written=0;
+     if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatmulAlgoConfigGetAttribute(&plan->prefill_algo,attrs[i],&got,sizeof(got),&written));
+     if(status==RILEY_CUDA_STATUS_SUCCESS && (written!=sizeof(got)||got!=vals[i]))status=validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_PREPARE,kCreateOperation,"prefill algorithm metadata changed");
+   }
+-  const uint32_t maximum=static_cast<uint32_t>(std::min<uint64_t>(merged?32:kv?512:576,plan->config.m));
+-  for(uint32_t rows=merged?1:161;rows<=maximum && status==RILEY_CUDA_STATUS_SUCCESS;rows++){
++  const uint32_t maximum=static_cast<uint32_t>(std::min<uint64_t>(merged_decode?32:merged_prefill?576:kv?512:576,plan->config.m));
++  for(uint32_t rows=merged_decode?1:merged_prefill?65:161;rows<=maximum && status==RILEY_CUDA_STATUS_SUCCESS;rows++){
+     status=checked(cublasLtMatrixLayoutCreate(&plan->prefill_input[rows],CUDA_R_16BF,plan->config.k,rows,plan->config.k));
+     if(status==RILEY_CUDA_STATUS_SUCCESS)status=checked(cublasLtMatrixLayoutCreate(&plan->prefill_output[rows],CUDA_R_16BF,plan->config.n,rows,plan->config.n));
+     cublasLtMatmulHeuristicResult_t check{};
+@@ -3347,20 +3351,25 @@
+  for(int j=0;j<128/L;j++){int d=Serial16?lane+j*16:lane*16+j;float a=id<physical?__bfloat162float(k[((id*8+head/4)*16+token%16)*128+d]):CUDART_NAN_F;
+  #pragma unroll
+  for(int h=0;h<4;h++)sum[h]=__fmaf_rn(a,__bfloat162float(q[(head+h)*128+d]),sum[h]);}}
+- if(active){
+- #pragma unroll
+- for(int h=0;h<4;h++)p[h*128+tid]=sum[h];}__syncthreads();
+- if(active&&lane==0&&token<t){
+- #pragma unroll
+- for(int h=0;h<4;h++){float*pv=p+h*128+tid,val=pv[0];if constexpr(Serial16){
+- #pragma unroll
+- for(int j=1;j<16;j++)val=__fadd_rn(val,pv[j]);
+- }else{float a=__fadd_rn(pv[0],pv[4]),b=__fadd_rn(pv[1],pv[5]),c=__fadd_rn(pv[2],pv[6]),d=__fadd_rn(pv[3],pv[7]);val=__fadd_rn(__fadd_rn(a,c),__fadd_rn(b,d));}score[(head+h)*t+token]=__float2bfloat16_rn(__fmaf_rn(1.f,val,0.f));}}
++
++ if(!active)return;
++ #pragma unroll
++ for(int h=0;h<4;h++){
++  float val=sum[h];
++  if constexpr(Serial16){
++   #pragma unroll
++   for(int j=1;j<16;j++){float b=__shfl_sync(0xffffffffu,sum[h],j,16);if(lane==0)val=__fadd_rn(val,b);}
++  }else{
++   #pragma unroll
++   for(int d=4;d;d/=2){float b=__shfl_down_sync(0xffffffffu,val,d,8);if(lane<d)val=__fadd_rn(val,b);}
++  }
++  if(lane==0&&token<t)score[(head+h)*t+token]=__float2bfloat16_rn(__fmaf_rn(1.f,val,0.f));
++ }
+ }
+ __global__ void sm80_batched_qk_dispatch(const __nv_bfloat16*q,const __nv_bfloat16*k,const uint32_t*ids,__nv_bfloat16*score,uint64_t physical,uint64_t sequences,uint64_t id_count,const uint32_t*slots,const uint32_t*offsets,const uint32_t*positions){
+ #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+  int r=blockIdx.z,t=positions[r]+1,kind=sm80_paged_qk_family(t);if(kind<0||blockIdx.x*8>=t)return;q+=r*32*128;score+=uint64_t(r)*512*32;
+- if(kind!=2){__shared__ float partial[4*128];if(kind==1)sm80_batched_qk_simt<true>(q,k,ids,score,physical,sequences,id_count,slots,offsets,r,t,partial);else sm80_batched_qk_simt<false>(q,k,ids,score,physical,sequences,id_count,slots,offsets,r,t,partial);return;}
++ if(kind!=2){float*partial=nullptr;if(kind==1)sm80_batched_qk_simt<true>(q,k,ids,score,physical,sequences,id_count,slots,offsets,r,t,partial);else sm80_batched_qk_simt<false>(q,k,ids,score,physical,sequences,id_count,slots,offsets,r,t,partial);return;}
+  if(blockIdx.x%2||threadIdx.x>=32)return;int lane=threadIdx.x,head=blockIdx.y*4,first=blockIdx.x*8;using namespace nvcuda;
+  __shared__ __align__(32)__nv_bfloat16 stage[4096];
+  for(int i=lane;i<256;i+=32){int token=first+i/16,depth=i%16;uint64_t id=token<t?sm80_paged_id(ids,slots,offsets,r,token/16,physical,sequences,id_count):physical;uint4 vec=make_uint4(0,0,0,0);if(token<t)vec=id<physical?reinterpret_cast<const uint4*>(k)[((id*8+head/4)*16+token%16)*16+depth]:make_uint4(0x7fff7fff,0x7fff7fff,0x7fff7fff,0x7fff7fff);reinterpret_cast<uint4*>(stage)[i]=vec;reinterpret_cast<uint4*>(stage+2048)[i]=i<64?reinterpret_cast<const uint4*>(q)[head*16+i]:make_uint4(0,0,0,0);}
+@@ -3372,10 +3381,12 @@
+  for(int h=0;h<4;h++)score[(head+h)*t+first+lane]=__float2bfloat16_rn(__fmaf_rn(1.f,result[h*16+lane],0.f));}
+ #endif
+ }
++// Four independent native depth tiles share one CTA. Each warp retains its
++// original BF16/FMA/WMMA arithmetic and private scratch; no cross-warp reduction.
+ __global__ void sm80_batched_pv_dispatch(const __nv_bfloat16*v,const uint32_t*ids,const __nv_bfloat16*prob,__nv_bfloat16*out,uint64_t physical,uint64_t sequences,uint64_t id_count,const uint32_t*slots,const uint32_t*offsets,const uint32_t*positions){
+ #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+- int r=blockIdx.z,t=positions[r]+1;if(t<24||t>216)return;prob+=uint64_t(r)*512*32;out+=r*32*128;int tid=threadIdx.x;
+- if(t%8!=0){int head=blockIdx.y*2,depth=blockIdx.x*16+tid%16,chain=tid/16;float sum[2]={};
++ int r=blockIdx.z,t=positions[r]+1;if(t<24||t>216)return;prob+=uint64_t(r)*512*32;out+=r*32*128;int tid=threadIdx.x%32;int tile=blockIdx.x*4+threadIdx.x/32;
++ if(t%8!=0){int head=blockIdx.y*2,depth=tile*16+tid%16,chain=tid/16;float sum[2]={};
+   for(int page=0;page<(t+15)/16;page++){uint64_t id=sm80_paged_id(ids,slots,offsets,r,page,physical,sequences,id_count),base=((id*8+head/4)*16)*128+depth;
+    #pragma unroll
+    for(int j=chain;j<16;j+=2){int token=page*16+j;if(token<t){float a=id<physical?__bfloat162float(v[base+j*128]):CUDART_NAN_F;
+@@ -3384,11 +3395,11 @@
+   #pragma unroll
+   for(int h=0;h<2;h++){float other=__shfl_down_sync(0xffffffffu,sum[h],16);if(tid<16)out[(head+h)*128+depth]=__float2bfloat16_rn(__fmaf_rn(1.f,__fadd_rn(sum[h],other),0.f));}return;
+  }
+- if(blockIdx.y%2)return;using namespace nvcuda;int head=blockIdx.y*2,kh=head/4,first=blockIdx.x*16;
+- __shared__ __align__(32)__nv_bfloat16 stage[512];wmma::fragment<wmma::matrix_a,16,16,16,__nv_bfloat16,wmma::col_major>a;wmma::fragment<wmma::matrix_b,16,16,16,__nv_bfloat16,wmma::col_major>b;wmma::fragment<wmma::accumulator,16,16,16,float>c;wmma::fill_fragment(c,0.f);
++ if(blockIdx.y%2)return;using namespace nvcuda;int head=blockIdx.y*2,kh=head/4,first=tile*16;
++ __shared__ __align__(32)__nv_bfloat16 all_stage[4][512];auto*stage=all_stage[threadIdx.x/32];wmma::fragment<wmma::matrix_a,16,16,16,__nv_bfloat16,wmma::col_major>a;wmma::fragment<wmma::matrix_b,16,16,16,__nv_bfloat16,wmma::col_major>b;wmma::fragment<wmma::accumulator,16,16,16,float>c;wmma::fill_fragment(c,0.f);
+  for(int base=0;base<t;base+=16){uint64_t id=sm80_paged_id(ids,slots,offsets,r,base/16,physical,sequences,id_count);int token=base+tid/2,depth=first/8+tid%2;uint4 vec=make_uint4(0,0,0,0);if(token<t)vec=id<physical?reinterpret_cast<const uint4*>(v)[((id*8+kh)*16+token%16)*16+depth]:make_uint4(0x7fff7fff,0x7fff7fff,0x7fff7fff,0x7fff7fff);reinterpret_cast<uint4*>(stage)[tid]=vec;
+   for(int i=tid;i<256;i+=32){int token=base+i%16;stage[256+i]=i/16<4&&token<t?prob[(head+i/16)*t+token]:__float2bfloat16_rn(0.f);}__syncwarp();wmma::load_matrix_sync(a,stage,16);wmma::load_matrix_sync(b,stage+256,16);wmma::mma_sync(c,a,b,c);__syncwarp();}
+- __shared__ __align__(32)float result[256];wmma::store_matrix_sync(result,c,16,wmma::mem_col_major);__syncwarp();if(tid<16){
++ __shared__ __align__(32)float all_result[4][256];auto*result=all_result[threadIdx.x/32];wmma::store_matrix_sync(result,c,16,wmma::mem_col_major);__syncwarp();if(tid<16){
+  #pragma unroll
+  for(int h=0;h<4;h++)out[(head+h)*128+first+tid]=__float2bfloat16_rn(__fmaf_rn(1.f,result[h*16+tid],0.f));}
+ #endif
+@@ -3440,7 +3451,7 @@
+    auto*q=static_cast<const __nv_bfloat16*>(spans[0].data);auto*k=static_cast<const __nv_bfloat16*>(spans[1].data);auto*v=static_cast<const __nv_bfloat16*>(spans[2].data);auto*ids=static_cast<const uint32_t*>(spans[3].data);auto*out=static_cast<__nv_bfloat16*>(spans[4].data);auto*p=static_cast<__nv_bfloat16*>(spans[7].data);auto*slots=static_cast<const uint32_t*>(spans[9].data);auto*offsets=static_cast<const uint32_t*>(spans[10].data);auto*pos=static_cast<const uint32_t*>(spans[11].data);
+    sm80_batched_qk_dispatch<<<dim3(27,8,requests),128,0,stream->stream>>>(q,k,ids,p,physical,graph_sequences,graph_ids,slots,offsets,pos);
+    sm80_batched_softmax<<<dim3(8,requests),128,0,stream->stream>>>(p,pos);
+-   sm80_batched_pv_dispatch<<<dim3(8,16,requests),32,0,stream->stream>>>(v,ids,p,out,physical,graph_sequences,graph_ids,slots,offsets,pos);
++   sm80_batched_pv_dispatch<<<dim3(2,16,requests),128,0,stream->stream>>>(v,ids,p,out,physical,graph_sequences,graph_ids,slots,offsets,pos);
+    auto e=cudaGetLastError();if(e!=cudaSuccess)status=runtime_error(e,error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
+    return complete_execution(&uses,&scope,stream,status,attempted,error);
+   }

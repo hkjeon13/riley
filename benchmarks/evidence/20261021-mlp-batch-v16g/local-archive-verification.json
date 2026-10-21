@@ -1,0 +1,18 @@
+{
+  "archive_sha256": "90ce769950a5ea8361ce83e16b152ab08e376883b950febbe37f850fd6aa082e",
+  "archive_entries": 647,
+  "CRC_all_pass": true,
+  "entry_SHA_and_size_all_pass": true,
+  "source_count": 937,
+  "unchanged_sources_match_baseline_commit": true,
+  "archived_patch_reconstructs_all_changed_source_hashes": true,
+  "changed_sources": [
+    "crates/riley-cuda/src/gemm.rs",
+    "crates/riley-cuda/tests/sm80_prefill_alignment_gpu.rs",
+    "crates/riley-runtime/src/llama/executor/dispatch.rs",
+    "crates/riley-runtime/src/llama/executor/owner.rs",
+    "crates/riley-runtime/src/llama/forward.rs",
+    "kernels/src/cublas_gemm_probe.cu"
+  ],
+  "scope": "Changed runtime patch is archived; numerical and normal comparison proofs are separate receipts"
+}

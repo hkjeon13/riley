@@ -71,7 +71,7 @@ Gate/Up, Down and KV redesigns and selects a native-order QK/PV candidate for
 whole-model qualification. Its component timings do not replace the server
 measurements above.
 
-Latest completed server experiments, **both unadopted**. Each row uses its
+Completed server experiments, **all unadopted**. Each row uses its
 own fresh v15C and stock controls, with five completed repetitions per engine:
 
 | Experiment | Clients | v15C control tok/s | Candidate tok/s | Change | vLLM tok/s | Candidate / vLLM |
@@ -80,6 +80,8 @@ own fresh v15C and stock controls, with five completed repetitions per engine:
 | v16B | 32 | 973.861 | 986.968 | +1.35% | 1672.321 | 59.02% |
 | v16C | 16 | 738.804 | 760.250 | +2.90% | 1146.853 | 66.29% |
 | v16C | 32 | 975.260 | 991.783 | +1.69% | 1676.802 | 59.15% |
+| v16G | 16 | 735.892 | 747.695 | +1.60% | 1143.677 | 65.38% |
+| v16G | 32 | 979.990 | 998.974 | +1.94% | 1690.953 | 59.08% |
 
 v16B changes QK/PV execution; v16C adds a separate merged prefill Gate/Up
 plan. Both pass the original 4,480-file native/HF BF16 gate. v16C also passes
@@ -99,11 +101,22 @@ excluded from qualified server throughput claims.
 
 [v16D coalesced prefill Gate/Up](docs/qwen-mlp-batch-v16d-20261021.md) passes
 2,676 layer0 BF16 cases and reduces actual-route GEMM time in a component
-screen. Whole-model qualification is required before adoption.
+screen. Its whole-model successor G completed qualification but was rejected
+on paired tails (see below).
 
 [v16F serving-capacity qualification](docs/qwen-mlp-batch-v16f-20261021.md)
 passes the original numerical suite but fails an added cold scratch-constructor
 check before logits. It is unadopted and has no normal throughput measurements.
+
+[v16G coalesced Gate/Up + QK/PV](docs/qwen-mlp-batch-v16g-20261021.md)
+extends the merged prefill path to whole eligible batches (65–576 rows) and
+fixes the cold scratch guard found in F. It passes the original 4,480-file
+native/HF BF16 gate plus 2,048 serving-capacity files, 524 CPU tests and six
+GPU contract tests (120 alignment/view and 66 raw merged cases). The C16
+TTFT p95 r0 pair is +2.42%; C32 has TTFT p95/p99 pairs up to +5.66%
+and TPOT p99 pairs up to +12.37%. It remains unadopted. All 30 normal arms and
+four separate profile arms are retained. The current runtime remains v15C;
+the large throughput objective is unmet. [Audited G evidence](benchmarks/evidence/20261021-mlp-batch-v16g/README.md).
 
 Dated A100 matrices for other model families and their original numerical
 contracts are in [model coverage](docs/model-coverage-a100.md). Separate native

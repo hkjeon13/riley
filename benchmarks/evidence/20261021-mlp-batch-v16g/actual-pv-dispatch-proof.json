@@ -1,0 +1,1064 @@
+[
+  {
+    "concurrency": 16,
+    "mode": "before",
+    "trace": "/mnt/efs/nlp/psyche/riley-mlp-batch-v16g-20261021/runs/profile-c16/c16-r0-owned-before/trace.sqlite",
+    "trace_sha256": "40df36f62b057bf8d1198ba6aeffd391248aff7f609e9f84c323c3ebc2f3671b",
+    "query": "SELECT k.gridX,k.gridY,k.gridZ,k.blockX,k.blockY,k.blockZ,count(*),sum(k.end-k.start)/1e6 FROM CUPTI_ACTIVITY_KIND_KERNEL k JOIN StringIds s ON s.id=k.demangledName WHERE s.value LIKE '%sm80_batched_pv_dispatch%' GROUP BY 1,2,3,4,5,6",
+    "rows": [
+      {
+        "grid": [
+          8,
+          16,
+          2
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 216,
+        "kernel_sum_ms": 3.242511
+      },
+      {
+        "grid": [
+          8,
+          16,
+          3
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.541278
+      },
+      {
+        "grid": [
+          8,
+          16,
+          4
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.110685
+      },
+      {
+        "grid": [
+          8,
+          16,
+          5
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 216,
+        "kernel_sum_ms": 3.36318
+      },
+      {
+        "grid": [
+          8,
+          16,
+          6
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.557724
+      },
+      {
+        "grid": [
+          8,
+          16,
+          7
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.574717
+      },
+      {
+        "grid": [
+          8,
+          16,
+          8
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.150939
+      },
+      {
+        "grid": [
+          8,
+          16,
+          9
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 216,
+        "kernel_sum_ms": 3.50363
+      },
+      {
+        "grid": [
+          8,
+          16,
+          11
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.313278
+      },
+      {
+        "grid": [
+          8,
+          16,
+          12
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 288,
+        "kernel_sum_ms": 5.365437
+      },
+      {
+        "grid": [
+          8,
+          16,
+          13
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 360,
+        "kernel_sum_ms": 6.633104
+      },
+      {
+        "grid": [
+          8,
+          16,
+          14
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 468,
+        "kernel_sum_ms": 8.838515
+      },
+      {
+        "grid": [
+          8,
+          16,
+          15
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 288,
+        "kernel_sum_ms": 5.253019
+      },
+      {
+        "grid": [
+          8,
+          16,
+          16
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 1188,
+        "kernel_sum_ms": 21.767383
+      }
+    ],
+    "scope": "Separate64keep profile dispatch geometry only; timing sums/counts differ, not normal HTTP or fixed-work speedup"
+  },
+  {
+    "concurrency": 16,
+    "mode": "after",
+    "trace": "/mnt/efs/nlp/psyche/riley-mlp-batch-v16g-20261021/runs/profile-c16/c16-r0-owned-after/trace.sqlite",
+    "trace_sha256": "773dfeb3b9c61609bc595a470fde23ffc00dec1674f2d4c7696efcc8f3805ed0",
+    "query": "SELECT k.gridX,k.gridY,k.gridZ,k.blockX,k.blockY,k.blockZ,count(*),sum(k.end-k.start)/1e6 FROM CUPTI_ACTIVITY_KIND_KERNEL k JOIN StringIds s ON s.id=k.demangledName WHERE s.value LIKE '%sm80_batched_pv_dispatch%' GROUP BY 1,2,3,4,5,6",
+    "rows": [
+      {
+        "grid": [
+          2,
+          16,
+          2
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 216,
+        "kernel_sum_ms": 3.049303
+      },
+      {
+        "grid": [
+          2,
+          16,
+          3
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.508544
+      },
+      {
+        "grid": [
+          2,
+          16,
+          4
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.060222
+      },
+      {
+        "grid": [
+          2,
+          16,
+          5
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 216,
+        "kernel_sum_ms": 3.201212
+      },
+      {
+        "grid": [
+          2,
+          16,
+          6
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.521279
+      },
+      {
+        "grid": [
+          2,
+          16,
+          7
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.529856
+      },
+      {
+        "grid": [
+          2,
+          16,
+          8
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.060286
+      },
+      {
+        "grid": [
+          2,
+          16,
+          9
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 180,
+        "kernel_sum_ms": 2.732442
+      },
+      {
+        "grid": [
+          2,
+          16,
+          10
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.066718
+      },
+      {
+        "grid": [
+          2,
+          16,
+          12
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 324,
+        "kernel_sum_ms": 5.488763
+      },
+      {
+        "grid": [
+          2,
+          16,
+          13
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 432,
+        "kernel_sum_ms": 7.23487
+      },
+      {
+        "grid": [
+          2,
+          16,
+          14
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 288,
+        "kernel_sum_ms": 4.745882
+      },
+      {
+        "grid": [
+          2,
+          16,
+          15
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 468,
+        "kernel_sum_ms": 7.680755
+      },
+      {
+        "grid": [
+          2,
+          16,
+          16
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 1116,
+        "kernel_sum_ms": 17.896863
+      }
+    ],
+    "scope": "Separate64keep profile dispatch geometry only; timing sums/counts differ, not normal HTTP or fixed-work speedup"
+  },
+  {
+    "concurrency": 32,
+    "mode": "before",
+    "trace": "/mnt/efs/nlp/psyche/riley-mlp-batch-v16g-20261021/runs/profile-c32/c32-r0-owned-before/trace.sqlite",
+    "trace_sha256": "787781eb327021f9a5c6b815ea9ebfc7da669319429d0eee9a16d0e3d3c77cb3",
+    "query": "SELECT k.gridX,k.gridY,k.gridZ,k.blockX,k.blockY,k.blockZ,count(*),sum(k.end-k.start)/1e6 FROM CUPTI_ACTIVITY_KIND_KERNEL k JOIN StringIds s ON s.id=k.demangledName WHERE s.value LIKE '%sm80_batched_pv_dispatch%' GROUP BY 1,2,3,4,5,6",
+    "rows": [
+      {
+        "grid": [
+          8,
+          16,
+          2
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.080187
+      },
+      {
+        "grid": [
+          8,
+          16,
+          3
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.128374
+      },
+      {
+        "grid": [
+          8,
+          16,
+          4
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 108,
+        "kernel_sum_ms": 1.643514
+      },
+      {
+        "grid": [
+          8,
+          16,
+          5
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.202106
+      },
+      {
+        "grid": [
+          8,
+          16,
+          7
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 108,
+        "kernel_sum_ms": 1.714321
+      },
+      {
+        "grid": [
+          8,
+          16,
+          8
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.568383
+      },
+      {
+        "grid": [
+          8,
+          16,
+          9
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.210135
+      },
+      {
+        "grid": [
+          8,
+          16,
+          10
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.605243
+      },
+      {
+        "grid": [
+          8,
+          16,
+          12
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 108,
+        "kernel_sum_ms": 1.921081
+      },
+      {
+        "grid": [
+          8,
+          16,
+          13
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.620505
+      },
+      {
+        "grid": [
+          8,
+          16,
+          14
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.254456
+      },
+      {
+        "grid": [
+          8,
+          16,
+          15
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.706907
+      },
+      {
+        "grid": [
+          8,
+          16,
+          16
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.680544
+      },
+      {
+        "grid": [
+          8,
+          16,
+          17
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 108,
+        "kernel_sum_ms": 2.051476
+      },
+      {
+        "grid": [
+          8,
+          16,
+          20
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.756287
+      },
+      {
+        "grid": [
+          8,
+          16,
+          21
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.766174
+      },
+      {
+        "grid": [
+          8,
+          16,
+          23
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.808796
+      },
+      {
+        "grid": [
+          8,
+          16,
+          24
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.822624
+      },
+      {
+        "grid": [
+          8,
+          16,
+          26
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.567321
+      },
+      {
+        "grid": [
+          8,
+          16,
+          28
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 252,
+        "kernel_sum_ms": 6.425306
+      },
+      {
+        "grid": [
+          8,
+          16,
+          29
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 180,
+        "kernel_sum_ms": 5.10937
+      },
+      {
+        "grid": [
+          8,
+          16,
+          30
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 468,
+        "kernel_sum_ms": 13.701196
+      },
+      {
+        "grid": [
+          8,
+          16,
+          31
+        ],
+        "block": [
+          32,
+          1,
+          1
+        ],
+        "count": 108,
+        "kernel_sum_ms": 3.195356
+      }
+    ],
+    "scope": "Separate64keep profile dispatch geometry only; timing sums/counts differ, not normal HTTP or fixed-work speedup"
+  },
+  {
+    "concurrency": 32,
+    "mode": "after",
+    "trace": "/mnt/efs/nlp/psyche/riley-mlp-batch-v16g-20261021/runs/profile-c32/c32-r0-owned-after/trace.sqlite",
+    "trace_sha256": "8350e38b20ac4c290eab822c6fe433ab4b7f1edc2670eb6b96d9603131e3dce3",
+    "query": "SELECT k.gridX,k.gridY,k.gridZ,k.blockX,k.blockY,k.blockZ,count(*),sum(k.end-k.start)/1e6 FROM CUPTI_ACTIVITY_KIND_KERNEL k JOIN StringIds s ON s.id=k.demangledName WHERE s.value LIKE '%sm80_batched_pv_dispatch%' GROUP BY 1,2,3,4,5,6",
+    "rows": [
+      {
+        "grid": [
+          2,
+          16,
+          2
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 108,
+        "kernel_sum_ms": 1.548606
+      },
+      {
+        "grid": [
+          2,
+          16,
+          3
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.029213
+      },
+      {
+        "grid": [
+          2,
+          16,
+          4
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 108,
+        "kernel_sum_ms": 1.587359
+      },
+      {
+        "grid": [
+          2,
+          16,
+          5
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.091679
+      },
+      {
+        "grid": [
+          2,
+          16,
+          7
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 108,
+        "kernel_sum_ms": 1.623771
+      },
+      {
+        "grid": [
+          2,
+          16,
+          8
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.519903
+      },
+      {
+        "grid": [
+          2,
+          16,
+          9
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.146238
+      },
+      {
+        "grid": [
+          2,
+          16,
+          10
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.5528
+      },
+      {
+        "grid": [
+          2,
+          16,
+          11
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.565887
+      },
+      {
+        "grid": [
+          2,
+          16,
+          12
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 108,
+        "kernel_sum_ms": 1.751837
+      },
+      {
+        "grid": [
+          2,
+          16,
+          14
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.142589
+      },
+      {
+        "grid": [
+          2,
+          16,
+          16
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.219487
+      },
+      {
+        "grid": [
+          2,
+          16,
+          17
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 108,
+        "kernel_sum_ms": 1.865181
+      },
+      {
+        "grid": [
+          2,
+          16,
+          20
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.650976
+      },
+      {
+        "grid": [
+          2,
+          16,
+          22
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.620416
+      },
+      {
+        "grid": [
+          2,
+          16,
+          23
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.676318
+      },
+      {
+        "grid": [
+          2,
+          16,
+          24
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 36,
+        "kernel_sum_ms": 0.68659
+      },
+      {
+        "grid": [
+          2,
+          16,
+          26
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 72,
+        "kernel_sum_ms": 1.320027
+      },
+      {
+        "grid": [
+          2,
+          16,
+          28
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 216,
+        "kernel_sum_ms": 4.576282
+      },
+      {
+        "grid": [
+          2,
+          16,
+          29
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 288,
+        "kernel_sum_ms": 6.120345
+      },
+      {
+        "grid": [
+          2,
+          16,
+          30
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 360,
+        "kernel_sum_ms": 7.566072
+      },
+      {
+        "grid": [
+          2,
+          16,
+          31
+        ],
+        "block": [
+          128,
+          1,
+          1
+        ],
+        "count": 144,
+        "kernel_sum_ms": 2.898268
+      }
+    ],
+    "scope": "Separate64keep profile dispatch geometry only; timing sums/counts differ, not normal HTTP or fixed-work speedup"
+  }
+]

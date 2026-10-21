@@ -1,0 +1,314 @@
+[
+  {
+    "concurrency": 16,
+    "mode": "before",
+    "NVTX_prefill_GateUp_GEMM_ms": 176.84680200000003,
+    "NVTX_prefill_GateUp_GEMM_calls": 2376,
+    "kernel_count": 93548,
+    "kernel_sum_ms": 1674.345462,
+    "kernel_union_ms": 1672.620823,
+    "gpu_kernel_span_ms": 2132.135388,
+    "kernel_busy_fraction": 0.7844815260859035,
+    "categories": {
+      "linear-GateUp": {
+        "count": 6012,
+        "ms": 491.8735579999999
+      },
+      "linear-Down": {
+        "count": 9648,
+        "ms": 256.7502210000016
+      },
+      "linear-KV": {
+        "count": 12528,
+        "ms": 190.35431800000163
+      },
+      "attention-QK-PV": {
+        "count": 11880,
+        "ms": 160.30639399999924
+      },
+      "linear-O": {
+        "count": 9900,
+        "ms": 138.12873199999777
+      },
+      "norm": {
+        "count": 9782,
+        "ms": 84.8135459999981
+      },
+      "linear-Q": {
+        "count": 2736,
+        "ms": 74.72534699999972
+      },
+      "linear-LMhead": {
+        "count": 102,
+        "ms": 57.166059999999995
+      },
+      "linear-QKV": {
+        "count": 2412,
+        "ms": 49.79350399999988
+      },
+      "other-unattributed": {
+        "count": 10158,
+        "ms": 46.06269899999886
+      },
+      "RoPE": {
+        "count": 3672,
+        "ms": 36.66224299999981
+      },
+      "softmax": {
+        "count": 5940,
+        "ms": 31.44612999999966
+      },
+      "residual": {
+        "count": 7344,
+        "ms": 29.062435999999284
+      },
+      "SiLU": {
+        "count": 1260,
+        "ms": 23.253204000000032
+      },
+      "greedy": {
+        "count": 102,
+        "ms": 3.632797999999999
+      },
+      "KV-gather": {
+        "count": 72,
+        "ms": 0.31427199999999983
+      }
+    },
+    "scope": "Separate64keep after correctness and64warm; instrumented, batch counts differ, not normal192keep timing or hardware counters"
+  },
+  {
+    "concurrency": 16,
+    "mode": "after",
+    "NVTX_prefill_GateUp_GEMM_ms": 152.17045099999999,
+    "NVTX_prefill_GateUp_GEMM_calls": 1188,
+    "kernel_count": 92180,
+    "kernel_sum_ms": 1642.171329,
+    "kernel_union_ms": 1640.507843,
+    "gpu_kernel_span_ms": 2073.50169,
+    "kernel_busy_fraction": 0.7911774805450001,
+    "categories": {
+      "linear-GateUp": {
+        "count": 4824,
+        "ms": 467.22512099999926
+      },
+      "linear-Down": {
+        "count": 9648,
+        "ms": 255.41462000000223
+      },
+      "linear-KV": {
+        "count": 12384,
+        "ms": 190.02939400000187
+      },
+      "attention-QK-PV": {
+        "count": 11880,
+        "ms": 153.4901539999994
+      },
+      "linear-O": {
+        "count": 9828,
+        "ms": 137.79785299999756
+      },
+      "norm": {
+        "count": 9782,
+        "ms": 84.80488499999791
+      },
+      "linear-Q": {
+        "count": 2772,
+        "ms": 74.77345899999953
+      },
+      "linear-LMhead": {
+        "count": 102,
+        "ms": 57.13840499999999
+      },
+      "linear-QKV": {
+        "count": 2412,
+        "ms": 49.81248599999998
+      },
+      "other-unattributed": {
+        "count": 10158,
+        "ms": 45.89954299999873
+      },
+      "RoPE": {
+        "count": 3672,
+        "ms": 36.36787899999978
+      },
+      "softmax": {
+        "count": 5940,
+        "ms": 31.530807000000134
+      },
+      "residual": {
+        "count": 7344,
+        "ms": 28.80892799999973
+      },
+      "SiLU": {
+        "count": 1260,
+        "ms": 25.122151999999982
+      },
+      "greedy": {
+        "count": 102,
+        "ms": 3.6455000000000006
+      },
+      "KV-gather": {
+        "count": 72,
+        "ms": 0.31014300000000006
+      }
+    },
+    "scope": "Separate64keep after correctness and64warm; instrumented, batch counts differ, not normal192keep timing or hardware counters"
+  },
+  {
+    "concurrency": 32,
+    "mode": "before",
+    "NVTX_prefill_GateUp_GEMM_ms": 162.90774699999997,
+    "NVTX_prefill_GateUp_GEMM_calls": 2088,
+    "kernel_count": 69892,
+    "kernel_sum_ms": 1330.132543,
+    "kernel_union_ms": 1328.929217,
+    "gpu_kernel_span_ms": 2102.791167,
+    "kernel_busy_fraction": 0.6319834503090245,
+    "categories": {
+      "linear-GateUp": {
+        "count": 4428,
+        "ms": 362.21939500000053
+      },
+      "linear-Down": {
+        "count": 6768,
+        "ms": 197.8356159999992
+      },
+      "linear-KV": {
+        "count": 9792,
+        "ms": 171.88645799999972
+      },
+      "attention-QK-PV": {
+        "count": 9288,
+        "ms": 139.21028200000006
+      },
+      "linear-O": {
+        "count": 7236,
+        "ms": 106.7305499999974
+      },
+      "linear-Q": {
+        "count": 2376,
+        "ms": 70.98778599999984
+      },
+      "norm": {
+        "count": 6862,
+        "ms": 66.74291699999922
+      },
+      "linear-LMhead": {
+        "count": 66,
+        "ms": 39.324124000000005
+      },
+      "other-unattributed": {
+        "count": 7386,
+        "ms": 37.96237000000009
+      },
+      "RoPE": {
+        "count": 2376,
+        "ms": 30.40665199999997
+      },
+      "SiLU": {
+        "count": 2520,
+        "ms": 29.553895999999785
+      },
+      "softmax": {
+        "count": 4644,
+        "ms": 27.216332000000182
+      },
+      "linear-QKV": {
+        "count": 1188,
+        "ms": 24.569844999999997
+      },
+      "residual": {
+        "count": 4752,
+        "ms": 22.491473999999805
+      },
+      "greedy": {
+        "count": 66,
+        "ms": 2.3675189999999993
+      },
+      "KV-gather": {
+        "count": 144,
+        "ms": 0.6273270000000002
+      }
+    },
+    "scope": "Separate64keep after correctness and64warm; instrumented, batch counts differ, not normal192keep timing or hardware counters"
+  },
+  {
+    "concurrency": 32,
+    "mode": "after",
+    "NVTX_prefill_GateUp_GEMM_ms": 153.110839,
+    "NVTX_prefill_GateUp_GEMM_calls": 1116,
+    "kernel_count": 69166,
+    "kernel_sum_ms": 1308.996665,
+    "kernel_union_ms": 1307.836956,
+    "gpu_kernel_span_ms": 1674.737641,
+    "kernel_busy_fraction": 0.7809205000128137,
+    "categories": {
+      "linear-GateUp": {
+        "count": 3420,
+        "ms": 349.7886850000011
+      },
+      "linear-Down": {
+        "count": 6840,
+        "ms": 198.42042599999792
+      },
+      "linear-KV": {
+        "count": 10152,
+        "ms": 173.41233000000074
+      },
+      "attention-QK-PV": {
+        "count": 9216,
+        "ms": 127.70029500000028
+      },
+      "linear-O": {
+        "count": 7380,
+        "ms": 106.96119599999747
+      },
+      "linear-Q": {
+        "count": 2412,
+        "ms": 70.88829499999964
+      },
+      "norm": {
+        "count": 6935,
+        "ms": 69.30024499999917
+      },
+      "linear-LMhead": {
+        "count": 65,
+        "ms": 38.65294300000001
+      },
+      "other-unattributed": {
+        "count": 7309,
+        "ms": 37.23281200000003
+      },
+      "SiLU": {
+        "count": 2520,
+        "ms": 30.999866999999863
+      },
+      "RoPE": {
+        "count": 2340,
+        "ms": 30.095704000000023
+      },
+      "softmax": {
+        "count": 4608,
+        "ms": 26.87475799999997
+      },
+      "linear-QKV": {
+        "count": 1152,
+        "ms": 23.80269800000001
+      },
+      "residual": {
+        "count": 4680,
+        "ms": 22.21694099999989
+      },
+      "greedy": {
+        "count": 65,
+        "ms": 2.334686000000001
+      },
+      "KV-gather": {
+        "count": 72,
+        "ms": 0.31478400000000006
+      }
+    },
+    "scope": "Separate64keep after correctness and64warm; instrumented, batch counts differ, not normal192keep timing or hardware counters"
+  }
+]
