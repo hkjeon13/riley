@@ -71,20 +71,26 @@ Gate/Up, Down and KV redesigns and selects a native-order QK/PV candidate for
 whole-model qualification. Its component timings do not replace the server
 measurements above.
 
-The latest completed server experiment is **v16B, not adopted**. Its fresh
-v15C controls and stock controls are shown together below; these are separate
-samples from the qualified table above.
+Latest completed server experiments, **both unadopted**. Each row uses its
+own fresh v15C and stock controls, with five completed repetitions per engine:
 
-| Clients | v15C control tok/s | QK/PV candidate tok/s | Change | vLLM tok/s | Candidate / vLLM |
-|---:|---:|---:|---:|---:|---:|
-| 16 | 729.296 | 738.407 | +1.25% | 1130.970 | 65.29% |
-| 32 | 973.861 | 986.968 | +1.35% | 1672.321 | 59.02% |
+| Experiment | Clients | v15C control tok/s | Candidate tok/s | Change | vLLM tok/s | Candidate / vLLM |
+|---|---:|---:|---:|---:|---:|---:|
+| v16B | 16 | 729.296 | 738.407 | +1.25% | 1130.970 | 65.29% |
+| v16B | 32 | 973.861 | 986.968 | +1.35% | 1672.321 | 59.02% |
+| v16C | 16 | 738.804 | 760.250 | +2.90% | 1146.853 | 66.29% |
+| v16C | 32 | 975.260 | 991.783 | +1.69% | 1676.802 | 59.15% |
 
-The original 4,480-file BF16 gate and GPU contracts passed. Paired tail flags
-remain: C16 TTFT p95 up to +4.74%, and C32 TPOT p99 +11.52% in one repeat.
-All five repetitions remain included. This does not meet the large throughput
-improvement objective. [v16B report and execution diagnosis](docs/qwen-mlp-decode-v16b-20261021.md) ·
-[audited raw evidence](benchmarks/evidence/20261021-mlp-decode-v16b/README.md).
+v16B changes QK/PV execution; v16C adds a separate merged prefill Gate/Up
+plan. Both pass the original 4,480-file native/HF BF16 gate. v16C also passes
+six GPU contract tests, including 36 new raw merged cases. v16C retains a
+C16 TTFT p95 pair +3.48% and C32 TPOT p99 pairs up to +4.38%. The large
+throughput improvement objective remains unmet. Completed normal samples
+were all kept. C16's vLLM startup/continuation interruption is documented.
+
+[v16B report and diagnosis](docs/qwen-mlp-decode-v16b-20261021.md) ·
+[v16C implementation, all repeats and caveats](docs/qwen-mlp-prefill-v16c-20261021.md) ·
+[v16C audited evidence](benchmarks/evidence/20261021-mlp-prefill-v16c/README.md).
 
 Dated A100 matrices for other model families and their original numerical
 contracts are in [model coverage](docs/model-coverage-a100.md). Separate native

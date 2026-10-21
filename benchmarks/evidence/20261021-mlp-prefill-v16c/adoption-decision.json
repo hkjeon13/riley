@@ -1,0 +1,48 @@
+{
+  "time_ns": 1792564439957609956,
+  "adopted": false,
+  "accuracy_threshold_changed": false,
+  "normal_completed_arms_excluded": 0,
+  "tail_flags": {
+    "16": [
+      {
+        "repeat": 1,
+        "metric": "ttft_ms_p95",
+        "percent_change": 3.4835587862994455
+      }
+    ],
+    "32": [
+      {
+        "repeat": 0,
+        "metric": "tpot_ms_p99",
+        "percent_change": 2.631575341825343
+      },
+      {
+        "repeat": 3,
+        "metric": "tpot_ms_p99",
+        "percent_change": 2.7136714766987646
+      },
+      {
+        "repeat": 4,
+        "metric": "ttft_ms_p95",
+        "percent_change": 3.4101180256955077
+      },
+      {
+        "repeat": 4,
+        "metric": "ttft_ms_p99",
+        "percent_change": 2.8961426612831964
+      },
+      {
+        "repeat": 4,
+        "metric": "tpot_ms_p99",
+        "percent_change": 4.3799458128048085
+      }
+    ]
+  },
+  "throughput_changes": {
+    "16": 2.9028059948212004,
+    "32": 1.694197404313602
+  },
+  "scope": "Same native/HF literal BF16 and lifetime/lease contracts; matched five fresh before/after/stock runs per concurrency; profiles separate",
+  "reason": "Adopt only with positive both-concurrency throughput and original tail gates; no hardware-counter or broad model claims"
+}

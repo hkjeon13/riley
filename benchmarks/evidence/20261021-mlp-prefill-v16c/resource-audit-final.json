@@ -1,0 +1,67 @@
+{
+  "time_ns": 1792564439904472314,
+  "resource_runs": [
+    {
+      "name": "final-teacher-C1-eager-r3",
+      "samples": 70,
+      "whole_device_peak_MiB": 9783.0,
+      "receipt_sha256": "4e1afb5a911081b046fb5ccb38e50435896f7a7dfe88ba692e91255453e92b10"
+    },
+    {
+      "name": "final-teacher-allR-Graph-r3",
+      "samples": 81,
+      "whole_device_peak_MiB": 19135.0,
+      "receipt_sha256": "27c157a030fe9a6788a8862315fc25b75c467da5d2834410ba4a662f8ea6938d"
+    },
+    {
+      "name": "teacher-body-allR-r3",
+      "samples": 180,
+      "whole_device_peak_MiB": 19215.0,
+      "receipt_sha256": "a02fc0aeef8eb6a251e5caf548b3446cd52805cccd8685438de53fe39a6b846c"
+    },
+    {
+      "name": "teacher-mixed-r3",
+      "samples": 118,
+      "whole_device_peak_MiB": 18987.0,
+      "receipt_sha256": "77bc5f95bcf5a05d072247201bd42389f3e62b6143d345429cc10237191c5642"
+    },
+    {
+      "name": "teacher-mixed-no-output-r3",
+      "samples": 114,
+      "whole_device_peak_MiB": 18987.0,
+      "receipt_sha256": "55008d31648249564f5793025fcf7ccfd27f40f17ee247e35bd4f71d919ebdcf"
+    },
+    {
+      "name": "memory_gpu",
+      "samples": 1,
+      "whole_device_peak_MiB": 487.0,
+      "receipt_sha256": "32e7af8ba3070e9a31956b8096f04b7d2a2f944beca1d6ed39ec17f89008a164"
+    },
+    {
+      "name": "owned_hf_command_batch_gpu",
+      "samples": 1,
+      "whole_device_peak_MiB": 505.0,
+      "receipt_sha256": "5a5a5348631d73ec9ef68b81030b714b15872c9acaded7c2fe464303b2239d3b"
+    },
+    {
+      "name": "host_runtime_gpu",
+      "samples": 1,
+      "whole_device_peak_MiB": 504.0,
+      "receipt_sha256": "2b70960d1583e685b8a6fd05356c017327e668ce5e03fb809ab01babce016e72"
+    },
+    {
+      "name": "sm80_prefill_alignment_gpu",
+      "samples": 2,
+      "whole_device_peak_MiB": 1043.0,
+      "receipt_sha256": "7e8f81a320a4e78251bde7ca9416b33647dc3f1829ebf77def9ab578a670c383"
+    }
+  ],
+  "source937_verified": true,
+  "binary_sha256": "38650f0891ee4dacb40a326b85448a83177e9e5b75b8d672a4e66e9ccbee1337",
+  "normal_arms": 30,
+  "normal_profile_arms": 34,
+  "stored_SSE_verified": 6490,
+  "normal_profile_peak_MiB": 18349.0,
+  "GPU6_foreign_work_preserved": true,
+  "all_finite_GPU_jobs_on_GPU7": true
+}

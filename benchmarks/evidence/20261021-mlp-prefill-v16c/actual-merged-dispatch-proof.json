@@ -1,0 +1,27 @@
+[
+  {
+    "trace": "/mnt/efs/nlp/psyche/riley-mlp-prefill-v16c-20261021/runs/profile-c16/c16-r0-owned-after/trace.sqlite",
+    "trace_sha256": "097de8a0a0742a0c8d87660b63d207989357375ea42f13f8eb91fb8b567bfe1e",
+    "merged_prefill_labels": [
+      "W0/LtMatmul/N19456/M115/K2560/B1",
+      "W0/LtMatmul/N19456/M120/K2560/B1",
+      "W0/LtMatmul/N19456/M125/K2560/B1",
+      "W0/LtMatmul/N19456/M128/K2560/B1",
+      "W0/LtMatmul/N19456/M130/K2560/B1"
+    ],
+    "scope": "NVTX shows qualified merged dimensions in actual server; source pins21/20/11/0/0/0/0; no normal timing from profiles"
+  },
+  {
+    "trace": "/mnt/efs/nlp/psyche/riley-mlp-prefill-v16c-20261021/runs/profile-c32/c32-r0-owned-after/trace.sqlite",
+    "trace_sha256": "2ab4cb65b8a27763534609af88cc632daa03f057d22740f5eedcb85b17b20cbd",
+    "merged_prefill_labels": [
+      "W0/LtMatmul/N19456/M115/K2560/B1",
+      "W0/LtMatmul/N19456/M120/K2560/B1",
+      "W0/LtMatmul/N19456/M125/K2560/B1",
+      "W0/LtMatmul/N19456/M126/K2560/B1",
+      "W0/LtMatmul/N19456/M128/K2560/B1",
+      "W0/LtMatmul/N19456/M130/K2560/B1"
+    ],
+    "scope": "NVTX shows qualified merged dimensions in actual server; source pins21/20/11/0/0/0/0; no normal timing from profiles"
+  }
+]
