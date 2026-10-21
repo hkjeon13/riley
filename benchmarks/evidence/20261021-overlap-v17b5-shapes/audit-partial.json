@@ -1,0 +1,134 @@
+{
+  "partial": true,
+  "time_ns": 1792587951373072785,
+  "arms": [
+    {
+      "token_budget_from_actual_argv": 576,
+      "run": "shapes-c16",
+      "arm": "c16-r0-owned-after",
+      "gpu": 7,
+      "record": {
+        "concurrency": 16,
+        "repeat": 0,
+        "window": 0,
+        "mode": "owned-after",
+        "requests": 64,
+        "correctness_requests": 45,
+        "output_tok_s": 711.3713015211794,
+        "graph_captures_before_measurement": 27,
+        "graph_captures_during_measurement": 0,
+        "bucket_warm_requested": false,
+        "measured_graph_capture_free": true,
+        "hf_correctness_tokens": 45,
+        "hf_correctness_text": 45,
+        "output_tokens": 1280,
+        "measured_hf_token_matches": 64,
+        "ttft_ms_p50": 60.6769360601902,
+        "ttft_ms_p95": 156.33753351867176,
+        "ttft_ms_p99": 163.62681202590466,
+        "tpot_ms_p50": 18.280256053675778,
+        "tpot_ms_p95": 20.232437314546626,
+        "tpot_ms_p99": 22.315146989056032,
+        "e2e_ms_p50": 378.5828799009323,
+        "e2e_ms_p95": 674.3366591632366,
+        "e2e_ms_p99": 720.8480498194695
+      },
+      "full_SSE_values_verified": 112,
+      "HF_token_matches": 112,
+      "HF_text_matches": 112,
+      "resources_recovered": true,
+      "owned_config_endpoint_status": 503,
+      "resolved_startup_and_binary_verified": true,
+      "disconnect_recovery": true,
+      "peak_owned_and_holder_MiB": 15882.0,
+      "peak_whole_device_MiB": 15897.0,
+      "foreign_gpu_pids": [],
+      "actual_binary_sha256": "00c25c46b2377681c92809b87d0cda90bdae7b9ab2f4bff70b9dff24bb29ee01"
+    },
+    {
+      "token_budget_from_actual_argv": 576,
+      "run": "shapes-c32",
+      "arm": "c32-r0-owned-after",
+      "gpu": 7,
+      "record": {
+        "concurrency": 32,
+        "repeat": 0,
+        "window": 0,
+        "mode": "owned-after",
+        "requests": 64,
+        "correctness_requests": 45,
+        "output_tok_s": 896.8378225428314,
+        "graph_captures_before_measurement": 55,
+        "graph_captures_during_measurement": 0,
+        "bucket_warm_requested": false,
+        "measured_graph_capture_free": true,
+        "hf_correctness_tokens": 45,
+        "hf_correctness_text": 45,
+        "output_tokens": 1280,
+        "measured_hf_token_matches": 64,
+        "ttft_ms_p50": 69.00033727288246,
+        "ttft_ms_p95": 328.53360585868336,
+        "ttft_ms_p99": 336.54014252126217,
+        "tpot_ms_p50": 27.789784903808304,
+        "tpot_ms_p95": 36.05525049780094,
+        "tpot_ms_p99": 40.19374053393091,
+        "e2e_ms_p50": 539.1063205897808,
+        "e2e_ms_p95": 1105.622413381934,
+        "e2e_ms_p99": 1131.9446519762278
+      },
+      "full_SSE_values_verified": 112,
+      "HF_token_matches": 112,
+      "HF_text_matches": 112,
+      "resources_recovered": true,
+      "owned_config_endpoint_status": 503,
+      "resolved_startup_and_binary_verified": true,
+      "disconnect_recovery": true,
+      "peak_owned_and_holder_MiB": 18540.0,
+      "peak_whole_device_MiB": 18555.0,
+      "foreign_gpu_pids": [],
+      "actual_binary_sha256": "00c25c46b2377681c92809b87d0cda90bdae7b9ab2f4bff70b9dff24bb29ee01"
+    }
+  ],
+  "cells": [
+    {
+      "run": "shapes-c16",
+      "concurrency": 16,
+      "modes": {
+        "owned-after": {
+          "output_tok_s": 711.3713015211794,
+          "ttft_ms_p50": 60.6769360601902,
+          "ttft_ms_p95": 156.33753351867176,
+          "ttft_ms_p99": 163.62681202590466,
+          "tpot_ms_p50": 18.280256053675778,
+          "tpot_ms_p95": 20.232437314546626,
+          "tpot_ms_p99": 22.315146989056032,
+          "e2e_ms_p50": 378.5828799009323,
+          "e2e_ms_p95": 674.3366591632366,
+          "e2e_ms_p99": 720.8480498194695
+        }
+      },
+      "pairs": []
+    },
+    {
+      "run": "shapes-c32",
+      "concurrency": 32,
+      "modes": {
+        "owned-after": {
+          "output_tok_s": 896.8378225428314,
+          "ttft_ms_p50": 69.00033727288246,
+          "ttft_ms_p95": 328.53360585868336,
+          "ttft_ms_p99": 336.54014252126217,
+          "tpot_ms_p50": 27.789784903808304,
+          "tpot_ms_p95": 36.05525049780094,
+          "tpot_ms_p99": 40.19374053393091,
+          "e2e_ms_p50": 539.1063205897808,
+          "e2e_ms_p95": 1105.622413381934,
+          "e2e_ms_p99": 1131.9446519762278
+        }
+      },
+      "pairs": []
+    }
+  ],
+  "total_full_SSE_values_verified": 224,
+  "scope": "Completed arms only; full original native value/SSE oracle, quantiles, binary/runner identity, same GPU and zero resource gauges. Failed experiments remain on EFS."
+}

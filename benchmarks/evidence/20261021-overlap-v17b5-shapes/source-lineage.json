@@ -1,0 +1,13 @@
+{
+  "time_ns": 1792587502076167469,
+  "baseline_candidate": "/mnt/efs/nlp/psyche/riley-overlap-v17b5-20261021",
+  "baseline_source_manifest_sha256": "15c9b35da91e551d0d681e597a9fa9ede12c932101cdff61c946b285ca4a19e0",
+  "baseline_binary_sha256": "2f5ce7d5bf0c535a80c049be9cc23e2f581bb6ca77b0cf2a1ee10ea6e3fd0fd2",
+  "changed_sources": [
+    "crates/riley-runtime/src/llama/executor/dispatch.rs",
+    "crates/riley-runtime/src/llama/forward.rs"
+  ],
+  "diagnostic_only": true,
+  "changes": "Cold-owned fixed host counters, incremented for mixed batches after startup; emitted at close only. No CUDA arguments, scheduling, capture keys, or numerical operators changed.",
+  "scope": "Instrumented timings excluded from normal performance comparisons. Whole-process counts include correctness/warmup; do not prove normal192keep causal speedup."
+}

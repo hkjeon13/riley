@@ -1,0 +1,413 @@
+[
+  {
+    "concurrency": 16,
+    "totals": {
+      "mixed_batches": 89,
+      "canonical": 26,
+      "key_hits": 8,
+      "canonical_key_misses": 18
+    },
+    "multiple_prefill_batches": 48,
+    "request_histogram": [
+      {
+        "decode": 1,
+        "prefill_requests": 1,
+        "count": 1
+      },
+      {
+        "decode": 2,
+        "prefill_requests": 4,
+        "count": 1
+      },
+      {
+        "decode": 4,
+        "prefill_requests": 4,
+        "count": 1
+      },
+      {
+        "decode": 4,
+        "prefill_requests": 5,
+        "count": 1
+      },
+      {
+        "decode": 6,
+        "prefill_requests": 4,
+        "count": 1
+      },
+      {
+        "decode": 8,
+        "prefill_requests": 4,
+        "count": 1
+      },
+      {
+        "decode": 9,
+        "prefill_requests": 4,
+        "count": 1
+      },
+      {
+        "decode": 10,
+        "prefill_requests": 3,
+        "count": 2
+      },
+      {
+        "decode": 10,
+        "prefill_requests": 4,
+        "count": 2
+      },
+      {
+        "decode": 11,
+        "prefill_requests": 2,
+        "count": 2
+      },
+      {
+        "decode": 12,
+        "prefill_requests": 1,
+        "count": 2
+      },
+      {
+        "decode": 12,
+        "prefill_requests": 2,
+        "count": 8
+      },
+      {
+        "decode": 12,
+        "prefill_requests": 3,
+        "count": 2
+      },
+      {
+        "decode": 12,
+        "prefill_requests": 4,
+        "count": 1
+      },
+      {
+        "decode": 13,
+        "prefill_requests": 1,
+        "count": 13
+      },
+      {
+        "decode": 13,
+        "prefill_requests": 2,
+        "count": 10
+      },
+      {
+        "decode": 13,
+        "prefill_requests": 3,
+        "count": 4
+      },
+      {
+        "decode": 14,
+        "prefill_requests": 1,
+        "count": 10
+      },
+      {
+        "decode": 14,
+        "prefill_requests": 2,
+        "count": 11
+      },
+      {
+        "decode": 15,
+        "prefill_requests": 1,
+        "count": 15
+      }
+    ],
+    "single_prefill_geometry": [
+      {
+        "decode": 12,
+        "prefill_tokens": 128,
+        "count": 1,
+        "key_hits": 0
+      },
+      {
+        "decode": 13,
+        "prefill_tokens": 115,
+        "count": 3,
+        "key_hits": 0
+      },
+      {
+        "decode": 13,
+        "prefill_tokens": 120,
+        "count": 3,
+        "key_hits": 0
+      },
+      {
+        "decode": 13,
+        "prefill_tokens": 125,
+        "count": 1,
+        "key_hits": 0
+      },
+      {
+        "decode": 13,
+        "prefill_tokens": 128,
+        "count": 3,
+        "key_hits": 0
+      },
+      {
+        "decode": 13,
+        "prefill_tokens": 130,
+        "count": 3,
+        "key_hits": 0
+      },
+      {
+        "decode": 14,
+        "prefill_tokens": 16,
+        "count": 1,
+        "key_hits": 0
+      },
+      {
+        "decode": 14,
+        "prefill_tokens": 125,
+        "count": 1,
+        "key_hits": 0
+      },
+      {
+        "decode": 14,
+        "prefill_tokens": 128,
+        "count": 5,
+        "key_hits": 0
+      },
+      {
+        "decode": 14,
+        "prefill_tokens": 130,
+        "count": 3,
+        "key_hits": 0
+      },
+      {
+        "decode": 15,
+        "prefill_tokens": 16,
+        "count": 1,
+        "key_hits": 0
+      },
+      {
+        "decode": 15,
+        "prefill_tokens": 125,
+        "count": 5,
+        "key_hits": 3
+      },
+      {
+        "decode": 15,
+        "prefill_tokens": 126,
+        "count": 1,
+        "key_hits": 1
+      },
+      {
+        "decode": 15,
+        "prefill_tokens": 128,
+        "count": 6,
+        "key_hits": 3
+      },
+      {
+        "decode": 15,
+        "prefill_tokens": 130,
+        "count": 1,
+        "key_hits": 1
+      }
+    ],
+    "log_sha256": "2a9d68efd6cc2eb58e732615adc5cf8c8663c1f23c7fab39842af8bd77c5c6a5",
+    "scope": "Post-startup whole process including correctness/warmup; prefill_requests counts suffix request slots, not necessarily new requests. Instrumented timings excluded; not a normal192keep miss-reason counter."
+  },
+  {
+    "concurrency": 32,
+    "totals": {
+      "mixed_batches": 77,
+      "canonical": 23,
+      "key_hits": 5,
+      "canonical_key_misses": 18
+    },
+    "multiple_prefill_batches": 41,
+    "request_histogram": [
+      {
+        "decode": 1,
+        "prefill_requests": 1,
+        "count": 1
+      },
+      {
+        "decode": 4,
+        "prefill_requests": 4,
+        "count": 2
+      },
+      {
+        "decode": 5,
+        "prefill_requests": 5,
+        "count": 1
+      },
+      {
+        "decode": 8,
+        "prefill_requests": 4,
+        "count": 2
+      },
+      {
+        "decode": 10,
+        "prefill_requests": 4,
+        "count": 1
+      },
+      {
+        "decode": 12,
+        "prefill_requests": 4,
+        "count": 2
+      },
+      {
+        "decode": 14,
+        "prefill_requests": 4,
+        "count": 1
+      },
+      {
+        "decode": 16,
+        "prefill_requests": 4,
+        "count": 2
+      },
+      {
+        "decode": 18,
+        "prefill_requests": 2,
+        "count": 1
+      },
+      {
+        "decode": 20,
+        "prefill_requests": 4,
+        "count": 3
+      },
+      {
+        "decode": 24,
+        "prefill_requests": 4,
+        "count": 3
+      },
+      {
+        "decode": 27,
+        "prefill_requests": 4,
+        "count": 1
+      },
+      {
+        "decode": 28,
+        "prefill_requests": 1,
+        "count": 1
+      },
+      {
+        "decode": 28,
+        "prefill_requests": 2,
+        "count": 6
+      },
+      {
+        "decode": 28,
+        "prefill_requests": 3,
+        "count": 2
+      },
+      {
+        "decode": 28,
+        "prefill_requests": 4,
+        "count": 2
+      },
+      {
+        "decode": 29,
+        "prefill_requests": 1,
+        "count": 8
+      },
+      {
+        "decode": 29,
+        "prefill_requests": 2,
+        "count": 8
+      },
+      {
+        "decode": 30,
+        "prefill_requests": 1,
+        "count": 20
+      },
+      {
+        "decode": 30,
+        "prefill_requests": 2,
+        "count": 4
+      },
+      {
+        "decode": 31,
+        "prefill_requests": 1,
+        "count": 6
+      }
+    ],
+    "single_prefill_geometry": [
+      {
+        "decode": 28,
+        "prefill_tokens": 126,
+        "count": 1,
+        "key_hits": 0
+      },
+      {
+        "decode": 29,
+        "prefill_tokens": 125,
+        "count": 3,
+        "key_hits": 0
+      },
+      {
+        "decode": 29,
+        "prefill_tokens": 126,
+        "count": 1,
+        "key_hits": 0
+      },
+      {
+        "decode": 29,
+        "prefill_tokens": 128,
+        "count": 4,
+        "key_hits": 0
+      },
+      {
+        "decode": 30,
+        "prefill_tokens": 115,
+        "count": 1,
+        "key_hits": 0
+      },
+      {
+        "decode": 30,
+        "prefill_tokens": 120,
+        "count": 2,
+        "key_hits": 0
+      },
+      {
+        "decode": 30,
+        "prefill_tokens": 125,
+        "count": 2,
+        "key_hits": 0
+      },
+      {
+        "decode": 30,
+        "prefill_tokens": 126,
+        "count": 6,
+        "key_hits": 0
+      },
+      {
+        "decode": 30,
+        "prefill_tokens": 128,
+        "count": 5,
+        "key_hits": 0
+      },
+      {
+        "decode": 30,
+        "prefill_tokens": 130,
+        "count": 2,
+        "key_hits": 0
+      },
+      {
+        "decode": 31,
+        "prefill_tokens": 115,
+        "count": 3,
+        "key_hits": 3
+      },
+      {
+        "decode": 31,
+        "prefill_tokens": 126,
+        "count": 1,
+        "key_hits": 1
+      },
+      {
+        "decode": 31,
+        "prefill_tokens": 128,
+        "count": 1,
+        "key_hits": 1
+      },
+      {
+        "decode": 31,
+        "prefill_tokens": 130,
+        "count": 1,
+        "key_hits": 0
+      }
+    ],
+    "log_sha256": "59133666fcb89034332371039f4b6fe588237b571a54592dc8c544a84a375218",
+    "scope": "Post-startup whole process including correctness/warmup; prefill_requests counts suffix request slots, not necessarily new requests. Instrumented timings excluded; not a normal192keep miss-reason counter."
+  }
+]

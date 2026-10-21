@@ -84,3 +84,25 @@ actual-candidate-dispatch.json의 mixed_full_body_graphs는 residual72·prefill 
 후보의 원래 유한 검증·정상·프로파일은 GPU7에서 직렬 실행했다. B 계열의 추가 canonical 검사와 이전 B3 revision의 numerical/canonical은 GPU6에서 실행했고 정상 timing 전 모두 끝냈다. 외부 작업은 건드리지 않았다. original holder6/7 PID2027914/2027915, ticks6083215119/6083215121을 해제·재시작하지 않았다. 마지막3개 fresh 표본에서 idle20GiB와 동일 identity를 확인했다. finite whole-device resource는22528MiB 이하로 검증했다. 서버 전체 CPU/I/O 독점은 아니다.
 
 [Archive](../benchmarks/evidence/20261021-overlap-v17b5.zip): 6,716,696B / 976entries, SHA256 `f423004646d54fa828c462b7e7751b5eb4509f8748e668d2d9ecb970118104b0`. Independent audit는34arms와6490stored SSE values를 검증했다. [전체5회 통계](../benchmarks/evidence/20261021-overlap-v17b5/final-statistics.json), [정확한 패치](../benchmarks/candidates/overlap-v17b5/candidate.patch), [근거 및 local CRC/SHA/source reconstruction](../benchmarks/evidence/20261021-overlap-v17b5/README.md). Candidate binary SHA256 `2f5ce7d5bf0c535a80c049be9cc23e2f581bb6ca77b0cf2a1ee10ea6e3fd0fd2`. 대형 BF16/ELF/SQLite/Nsight는 archive의 EFS SHA/size index로 보존한다.
+
+
+## 추가 shape 계수 진단
+
+정상30arms·프로파일4arms·B5 archive를 먼저 고정한 뒤, B5 source에서 Rust2파일에 고정 크기 host counter만 추가한 별도 바이너리로 검사했다. 시작 시 할당하고 mixed step에서 숫자만 누적하며 종료 때 출력한다. CUDA 인자·cache key·scheduler·산술은 바꾸지 않았다. C16/C32 각각45 correctness +64warm +64keep의 후보 단독 실행이며, 원래 disconnect/recovery3건씩까지 **224 stored native/SSE values**와 원래 자원·binary/runner 검사를 통과했다. 이 바이너리에서는7552 full-vocabulary BF16 검사를 다시 하지 않았으며 **진단 시간은 정상 성능표·채택 판정에 넣지 않는다**.
+
+계수 범위는 startup mixed capture 이후 whole process로 correctness/warmup/recovery를 포함한다. prefill 요청 수는 suffix request-slot 수이며 fresh 요청과 continuation을 구분하지 않는다. 따라서 아래 선택률은 정상192keep의 hit rate나 인과적 wall-time 기여율이 아니다.
+
+| C | Mixed steps | 여러 prefill 요청 | 모든 Graph eligibility 통과 | Cache 선택 | Eligible이지만 key 없음 |
+|---:|---:|---:|---:|---:|---:|
+| 16 | 89 | 48 (53.93%) | 26 | 8 (8.99%) | 18 |
+| 32 | 77 | 41 (53.25%) | 23 | 5 (6.49%) | 18 |
+
+- 전체 mixed step의 절반 이상이 여러 prefill 요청을 포함했다. 현재 full-body cache는 **단일 fresh prefill**만 지원하므로 이들은 대상 밖이다.
+- 단일 prefill에서도 C16의 R13/14, C32의 R29/30이 실제로 나타났고 해당 shape의 cache 선택은0이었다. 시작 cache의 R7/15/23/31 가정이 실제 serving shape를 충분히 덮지 못했다. eligibility를 통과했지만 준비된 key가 없는 step도 각각18회였다.
+- 나머지 eligibility 탈락은 사유별 counter를 분리하지 않았으므로 모두 continuation·출력순서·context 때문이라고 확정하지 않는다. 개별 single-prefill의 dense rows/greedy 값과 변동 여부도 원본 로그 및 single-prefill-key-fields.json에 보존했다.
+
+따라서 고정 metadata 주소를 고친 것만으로는 mixed 실행의 대부분을 Graph에 넣지 못한다. 다음 구조 변경의 우선순위는 **multi-prefill과 가변 R을 지원하는 projection piecewise Graph + 요청별 attention 분리**, 이어서 **scheduler/metadata 준비와 완료 commit을 분리하는 실제 CPU one-batch-ahead pipeline**이다. 단순히24개 whole-model cache를 무작정 늘리면 Graph당 host/device 자원과 shape 조합 수가 늘어난다. 기존 수치·수명·취소 기준을 유지한 별도 검증이 필요하며 이 후속 구조는 이번 main에 구현·채택한 것으로 보고하지 않는다.
+
+진단 준비 과정의 holder.py 복사 누락으로 첫 실행이 중단된 기록을 failed-first-attempt에 보존했다. 원본 holder 모듈을 그대로 복사해 admission을 넓히지 않고 같은 바이너리로 재실행했다. 두 arm과 원본 strict auditor는 통과했지만 호출자의 예상218건에서 복구 재시도6건을 누락한 후처리 assertion이 실패했다. 원본 auditor SHA를 유지하고 예상값을224로 바로잡아 완료했으며, 두 번째 실패 상태·correction/finalizer도 보존했다. 완료된 timed arm을 제외하거나 재실행하지 않았다. 이 실패·수정은 원래 B5 정상/프로파일 표본에 영향을 주지 않는다.
+
+[진단 archive](../benchmarks/evidence/20261021-overlap-v17b5-shapes.zip):310,729B /89entries, SHA256 `34d5ed00cb5c5cb12384e86c272152a7d402af336a37cb77e82bd0d9a50e5829`. [계수 및 검증](../benchmarks/evidence/20261021-overlap-v17b5-shapes/README.md), [계수 원자료](../benchmarks/evidence/20261021-overlap-v17b5-shapes/shape-summary.json), [진단 전용 패치](../benchmarks/candidates/overlap-v17b5-shapes/diagnostic.patch). CRC·모든 entry SHA와 qualified B5 + 진단 패치의937-source 재구성을 확인했다. 최종3개 fresh 표본에서도 original GPU6/7 holder identity와 idle20GiB를 확인했다.

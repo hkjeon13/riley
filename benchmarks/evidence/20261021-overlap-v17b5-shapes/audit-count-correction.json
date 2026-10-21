@@ -1,0 +1,8 @@
+{
+  "time_ns": 1792588106954201069,
+  "original_expected": 218,
+  "correct_expected": 224,
+  "reason": "Original strict auditor includes three disconnect/recovery retry values per arm: 64 measured +45 correctness +3 recovery =112, times2. Both completed arms already passed all original oracle/SSE/resource assertions. No native criteria, values, source, or binary changed; no arm repeated/excluded.",
+  "original_auditor_unchanged": true,
+  "original_auditor_sha256": "120293cb5dfae51d55a6b6ab4f20b84f00b8121366ce0c13cb8e85483ce0a23c"
+}

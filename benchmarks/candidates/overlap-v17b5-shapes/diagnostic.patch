@@ -1,0 +1,85 @@
+--- a/crates/riley-runtime/src/llama/executor/dispatch.rs
++++ b/crates/riley-runtime/src/llama/executor/dispatch.rs
+@@ -582,7 +582,7 @@
+             captured_steps: maximum_captured_steps,
+             captured_step_budget,
+             owned_decode_segments: maximum_owned_segments,
+-            mixed_graphs, mixed_stream, mixed_capture_allowed,
++            mixed_graphs, mixed_stream, mixed_capture_allowed, mixed_audit,
+             ..
+         } = forward;
+         // A mixed step's output rows are fewer than its dense rows. Their LM
+@@ -810,6 +810,11 @@
+                 if *mixed_capture_allowed && mixed_graphs.len()<24 {mixed_graphs.push((mixed_key,OwnedDecodeSegment::default()));Some(mixed_graphs.len()-1)}else{None}
+             })
+         }else{None};
++        if !*mixed_capture_allowed && decode>0 && prefill>0 {
++            let slots=&packed.row_sequence_slots()[decode..];
++            let fresh=usize::from(!slots.is_empty())+slots.windows(2).filter(|p|p[0]!=p[1]).count();
++            mixed_audit.record(decode,prefill,fresh,canonical_mixed,mixed_index.is_some(),dense_rows,produce_greedy_tokens);
++        }
+         let mixed_recording=mixed_index.is_some();
+         let mixed_segment=mixed_index.map(|i|&mut mixed_graphs[i].1);
+         let fixed = execute_owned_decode_segment(mixed_segment,stream,|stream| execute_fixed_graph(
+--- a/crates/riley-runtime/src/llama/forward.rs
++++ b/crates/riley-runtime/src/llama/forward.rs
+@@ -961,12 +961,13 @@
+             captured_steps,
+             captured_step_budget: _,
+             owned_decode_segments,
+-            mixed_graphs, mixed_stream:_, mixed_capture_allowed:_,
++            mixed_graphs, mixed_stream:_, mixed_capture_allowed:_, mixed_audit,
+         } = self;
+         // Recorded steps reference the plans and buffers closed below.
+         drop(captured_steps);
+         drop(owned_decode_segments);
+         drop(mixed_graphs);
++        drop(mixed_audit);
+         let GemmPlans {
+             hidden,
+             key_value,
+@@ -3446,6 +3447,28 @@
+     pub(super) gemm_workspace: Option<CudaDeviceBuffer>,
+ }
+ 
++// Diagnostic-only candidate: fixed host counters, emitted once at shutdown.
++// No CUDA arguments, scheduling, capture keys, or arithmetic are changed.
++pub(super) struct MixedGraphAudit {
++    total:u64, canonical:u64, hits:u64,
++    requests:[[u64;33];33], shapes:[[u64;131];32], shape_hits:[[u64;131];32], first_keys:[[u64;131];32], key_changes:[[u64;131];32],
++}
++impl MixedGraphAudit {
++    fn new()->Self{Self{total:0,canonical:0,hits:0,requests:[[0;33];33],shapes:[[0;131];32],shape_hits:[[0;131];32],first_keys:[[0;131];32],key_changes:[[0;131];32]}}
++    pub(super) fn record(&mut self,r:usize,p:usize,fresh:usize,canonical:bool,hit:bool,dense:usize,greedy:bool){
++        self.total+=1;self.canonical+=u64::from(canonical);self.hits+=u64::from(hit);
++        self.requests[r.min(32)][fresh.min(32)]+=1;
++        if fresh==1 && r<32 && p<131 {let key=((dense as u64)<<1)|u64::from(greedy);if self.shapes[r][p]==0{self.first_keys[r][p]=key;}else if self.first_keys[r][p]!=key{self.key_changes[r][p]+=1;}self.shapes[r][p]+=1;self.shape_hits[r][p]+=u64::from(hit);}
++    }
++}
++impl Drop for MixedGraphAudit {
++    fn drop(&mut self){
++        eprintln!("RILEY_MIXED_AUDIT total={} canonical={} key_hits={} canonical_key_misses={} scope=post-startup-whole-process",self.total,self.canonical,self.hits,self.canonical-self.hits);
++        for(r,counts)in self.requests.iter().enumerate(){for(fresh,&count)in counts.iter().enumerate(){if count>0{eprintln!("RILEY_MIXED_REQUESTS decode={} prefill_requests={} count={}",r,fresh,count);}}}
++        for(r,counts)in self.shapes.iter().enumerate(){for(p,&count)in counts.iter().enumerate(){if count>0{eprintln!("RILEY_MIXED_SINGLE decode={} prefill={} count={} key_hits={} first_dense_rows={} first_greedy={} different_keys={}",r,p,count,self.shape_hits[r][p],self.first_keys[r][p]>>1,self.first_keys[r][p]&1,self.key_changes[r][p]);}}}
++    }
++}
++
+ /// Owning fixed-S reference forward. All hot execution state is direct-indexed.
+ pub struct PreparedLlamaForward {
+     pub(super) plan: LlamaExecutionPlan,
+@@ -3480,6 +3503,7 @@
+     pub(super) mixed_graphs: Vec<(usize,OwnedDecodeSegment)>,
+     pub(super) mixed_stream: Option<riley_cuda::CudaExecutionStreamKey>,
+     pub(super) mixed_capture_allowed: bool,
++    pub(super) mixed_audit: Box<MixedGraphAudit>,
+     /// How many more steps may be recorded across every dense shape. Each
+     /// recorded step keeps several MiB of host and device memory, so the
+     /// total is bounded; shapes met after the budget is spent run eagerly.
+@@ -3819,6 +3843,7 @@
+             poisoned: false,
+             owned_decode_segments,
+             mixed_graphs:Vec::with_capacity(24), mixed_stream:None, mixed_capture_allowed:false,
++            mixed_audit:Box::new(MixedGraphAudit::new()),
+             captured_steps: Vec::new(),
+             captured_step_budget: MAX_RECORDED_STEPS,
+         })

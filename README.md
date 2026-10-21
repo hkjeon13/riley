@@ -138,6 +138,8 @@ qualification; application to main is recorded separately. The projection candid
 
 B5 executes mixed full-body Graphs, but only 4/1 complete launches were observed in the separate C16/C32 profiles (5.55%/1.84% of kernel sums). Committed-event delivery overlap does not implement a whole one-batch-ahead scheduler. These profile fractions are not normal-run causal speedups.
 
+A separate host-counter audit found multi-prefill in 48/89 (C16) and 41/77 (C32) mixed steps; only 8/89 and 5/77 selected the prepared cache. These post-startup whole-process counts include warmup/recovery and are not normal-run hit rates. The diagnostic binary passed224 original native/SSE value checks; its timings are excluded. [Shape audit and scope](docs/qwen-overlap-v17b5-20261021.md#추가-shape-계수-진단)
+
 [projection-v17a report](docs/qwen-projection-v17a-20261021.md) · [overlap-v17b4 report](docs/qwen-overlap-v17b4-20261021.md) · [overlap-v17b5 report](docs/qwen-overlap-v17b5-20261021.md)
 
 <!-- end v17 independent experiments -->
