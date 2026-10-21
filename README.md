@@ -66,6 +66,11 @@ Earlier experiments remain separately documented: [v14 rejected](docs/qwen-mixed
 the final alignment guard is a compatibility fix, not a proven cause of the
 different tail outcome.
 
+[v16A structural research](docs/qwen-mlp-decode-v16a-20261021.md) retains unsuccessful
+Gate/Up, Down and KV redesigns and selects a native-order QK/PV candidate for
+whole-model qualification. Its component timings do not replace the server
+measurements above.
+
 Dated A100 matrices for other model families and their original numerical
 contracts are in [model coverage](docs/model-coverage-a100.md). Separate native
 preset screens are documented in [native HF performance](docs/hf-native-performance.md),

@@ -1,0 +1,78 @@
+diff --git a/kernels/src/cublas_gemm_probe.cu b/kernels/src/cublas_gemm_probe.cu
+index ef1878ad2..e8f36b1ff 100644
+--- a/kernels/src/cublas_gemm_probe.cu
++++ b/kernels/src/cublas_gemm_probe.cu
+@@ -3347,20 +3347,25 @@ template<bool Serial16>__device__ __forceinline__ void sm80_batched_qk_simt(cons
+  for(int j=0;j<128/L;j++){int d=Serial16?lane+j*16:lane*16+j;float a=id<physical?__bfloat162float(k[((id*8+head/4)*16+token%16)*128+d]):CUDART_NAN_F;
+  #pragma unroll
+  for(int h=0;h<4;h++)sum[h]=__fmaf_rn(a,__bfloat162float(q[(head+h)*128+d]),sum[h]);}}
+- if(active){
+- #pragma unroll
+- for(int h=0;h<4;h++)p[h*128+tid]=sum[h];}__syncthreads();
+- if(active&&lane==0&&token<t){
+- #pragma unroll
+- for(int h=0;h<4;h++){float*pv=p+h*128+tid,val=pv[0];if constexpr(Serial16){
++
++ if(!active)return;
+  #pragma unroll
+- for(int j=1;j<16;j++)val=__fadd_rn(val,pv[j]);
+- }else{float a=__fadd_rn(pv[0],pv[4]),b=__fadd_rn(pv[1],pv[5]),c=__fadd_rn(pv[2],pv[6]),d=__fadd_rn(pv[3],pv[7]);val=__fadd_rn(__fadd_rn(a,c),__fadd_rn(b,d));}score[(head+h)*t+token]=__float2bfloat16_rn(__fmaf_rn(1.f,val,0.f));}}
++ for(int h=0;h<4;h++){
++  float val=sum[h];
++  if constexpr(Serial16){
++   #pragma unroll
++   for(int j=1;j<16;j++){float b=__shfl_sync(0xffffffffu,sum[h],j,16);if(lane==0)val=__fadd_rn(val,b);}
++  }else{
++   #pragma unroll
++   for(int d=4;d;d/=2){float b=__shfl_down_sync(0xffffffffu,val,d,8);if(lane<d)val=__fadd_rn(val,b);}
++  }
++  if(lane==0&&token<t)score[(head+h)*t+token]=__float2bfloat16_rn(__fmaf_rn(1.f,val,0.f));
++ }
+ }
+ __global__ void sm80_batched_qk_dispatch(const __nv_bfloat16*q,const __nv_bfloat16*k,const uint32_t*ids,__nv_bfloat16*score,uint64_t physical,uint64_t sequences,uint64_t id_count,const uint32_t*slots,const uint32_t*offsets,const uint32_t*positions){
+ #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+  int r=blockIdx.z,t=positions[r]+1,kind=sm80_paged_qk_family(t);if(kind<0||blockIdx.x*8>=t)return;q+=r*32*128;score+=uint64_t(r)*512*32;
+- if(kind!=2){__shared__ float partial[4*128];if(kind==1)sm80_batched_qk_simt<true>(q,k,ids,score,physical,sequences,id_count,slots,offsets,r,t,partial);else sm80_batched_qk_simt<false>(q,k,ids,score,physical,sequences,id_count,slots,offsets,r,t,partial);return;}
++ if(kind!=2){float*partial=nullptr;if(kind==1)sm80_batched_qk_simt<true>(q,k,ids,score,physical,sequences,id_count,slots,offsets,r,t,partial);else sm80_batched_qk_simt<false>(q,k,ids,score,physical,sequences,id_count,slots,offsets,r,t,partial);return;}
+  if(blockIdx.x%2||threadIdx.x>=32)return;int lane=threadIdx.x,head=blockIdx.y*4,first=blockIdx.x*8;using namespace nvcuda;
+  __shared__ __align__(32)__nv_bfloat16 stage[4096];
+  for(int i=lane;i<256;i+=32){int token=first+i/16,depth=i%16;uint64_t id=token<t?sm80_paged_id(ids,slots,offsets,r,token/16,physical,sequences,id_count):physical;uint4 vec=make_uint4(0,0,0,0);if(token<t)vec=id<physical?reinterpret_cast<const uint4*>(k)[((id*8+head/4)*16+token%16)*16+depth]:make_uint4(0x7fff7fff,0x7fff7fff,0x7fff7fff,0x7fff7fff);reinterpret_cast<uint4*>(stage)[i]=vec;reinterpret_cast<uint4*>(stage+2048)[i]=i<64?reinterpret_cast<const uint4*>(q)[head*16+i]:make_uint4(0,0,0,0);}
+@@ -3372,10 +3377,12 @@ __global__ void sm80_batched_qk_dispatch(const __nv_bfloat16*q,const __nv_bfloat
+  for(int h=0;h<4;h++)score[(head+h)*t+first+lane]=__float2bfloat16_rn(__fmaf_rn(1.f,result[h*16+lane],0.f));}
+ #endif
+ }
++// Four independent native depth tiles share one CTA. Each warp retains its
++// original BF16/FMA/WMMA arithmetic and private scratch; no cross-warp reduction.
+ __global__ void sm80_batched_pv_dispatch(const __nv_bfloat16*v,const uint32_t*ids,const __nv_bfloat16*prob,__nv_bfloat16*out,uint64_t physical,uint64_t sequences,uint64_t id_count,const uint32_t*slots,const uint32_t*offsets,const uint32_t*positions){
+ #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+- int r=blockIdx.z,t=positions[r]+1;if(t<24||t>216)return;prob+=uint64_t(r)*512*32;out+=r*32*128;int tid=threadIdx.x;
+- if(t%8!=0){int head=blockIdx.y*2,depth=blockIdx.x*16+tid%16,chain=tid/16;float sum[2]={};
++ int r=blockIdx.z,t=positions[r]+1;if(t<24||t>216)return;prob+=uint64_t(r)*512*32;out+=r*32*128;int tid=threadIdx.x%32;int tile=blockIdx.x*4+threadIdx.x/32;
++ if(t%8!=0){int head=blockIdx.y*2,depth=tile*16+tid%16,chain=tid/16;float sum[2]={};
+   for(int page=0;page<(t+15)/16;page++){uint64_t id=sm80_paged_id(ids,slots,offsets,r,page,physical,sequences,id_count),base=((id*8+head/4)*16)*128+depth;
+    #pragma unroll
+    for(int j=chain;j<16;j+=2){int token=page*16+j;if(token<t){float a=id<physical?__bfloat162float(v[base+j*128]):CUDART_NAN_F;
+@@ -3384,11 +3391,11 @@ __global__ void sm80_batched_pv_dispatch(const __nv_bfloat16*v,const uint32_t*id
+   #pragma unroll
+   for(int h=0;h<2;h++){float other=__shfl_down_sync(0xffffffffu,sum[h],16);if(tid<16)out[(head+h)*128+depth]=__float2bfloat16_rn(__fmaf_rn(1.f,__fadd_rn(sum[h],other),0.f));}return;
+  }
+- if(blockIdx.y%2)return;using namespace nvcuda;int head=blockIdx.y*2,kh=head/4,first=blockIdx.x*16;
+- __shared__ __align__(32)__nv_bfloat16 stage[512];wmma::fragment<wmma::matrix_a,16,16,16,__nv_bfloat16,wmma::col_major>a;wmma::fragment<wmma::matrix_b,16,16,16,__nv_bfloat16,wmma::col_major>b;wmma::fragment<wmma::accumulator,16,16,16,float>c;wmma::fill_fragment(c,0.f);
++ if(blockIdx.y%2)return;using namespace nvcuda;int head=blockIdx.y*2,kh=head/4,first=tile*16;
++ __shared__ __align__(32)__nv_bfloat16 all_stage[4][512];auto*stage=all_stage[threadIdx.x/32];wmma::fragment<wmma::matrix_a,16,16,16,__nv_bfloat16,wmma::col_major>a;wmma::fragment<wmma::matrix_b,16,16,16,__nv_bfloat16,wmma::col_major>b;wmma::fragment<wmma::accumulator,16,16,16,float>c;wmma::fill_fragment(c,0.f);
+  for(int base=0;base<t;base+=16){uint64_t id=sm80_paged_id(ids,slots,offsets,r,base/16,physical,sequences,id_count);int token=base+tid/2,depth=first/8+tid%2;uint4 vec=make_uint4(0,0,0,0);if(token<t)vec=id<physical?reinterpret_cast<const uint4*>(v)[((id*8+kh)*16+token%16)*16+depth]:make_uint4(0x7fff7fff,0x7fff7fff,0x7fff7fff,0x7fff7fff);reinterpret_cast<uint4*>(stage)[tid]=vec;
+   for(int i=tid;i<256;i+=32){int token=base+i%16;stage[256+i]=i/16<4&&token<t?prob[(head+i/16)*t+token]:__float2bfloat16_rn(0.f);}__syncwarp();wmma::load_matrix_sync(a,stage,16);wmma::load_matrix_sync(b,stage+256,16);wmma::mma_sync(c,a,b,c);__syncwarp();}
+- __shared__ __align__(32)float result[256];wmma::store_matrix_sync(result,c,16,wmma::mem_col_major);__syncwarp();if(tid<16){
++ __shared__ __align__(32)float all_result[4][256];auto*result=all_result[threadIdx.x/32];wmma::store_matrix_sync(result,c,16,wmma::mem_col_major);__syncwarp();if(tid<16){
+  #pragma unroll
+  for(int h=0;h<4;h++)out[(head+h)*128+first+tid]=__float2bfloat16_rn(__fmaf_rn(1.f,result[h*16+tid],0.f));}
+ #endif
+@@ -3440,7 +3447,7 @@ extern "C" RileyCudaStatus riley_cuda_cublas_hf_attention_chunk_wide_execute(
+    auto*q=static_cast<const __nv_bfloat16*>(spans[0].data);auto*k=static_cast<const __nv_bfloat16*>(spans[1].data);auto*v=static_cast<const __nv_bfloat16*>(spans[2].data);auto*ids=static_cast<const uint32_t*>(spans[3].data);auto*out=static_cast<__nv_bfloat16*>(spans[4].data);auto*p=static_cast<__nv_bfloat16*>(spans[7].data);auto*slots=static_cast<const uint32_t*>(spans[9].data);auto*offsets=static_cast<const uint32_t*>(spans[10].data);auto*pos=static_cast<const uint32_t*>(spans[11].data);
+    sm80_batched_qk_dispatch<<<dim3(27,8,requests),128,0,stream->stream>>>(q,k,ids,p,physical,graph_sequences,graph_ids,slots,offsets,pos);
+    sm80_batched_softmax<<<dim3(8,requests),128,0,stream->stream>>>(p,pos);
+-   sm80_batched_pv_dispatch<<<dim3(8,16,requests),32,0,stream->stream>>>(v,ids,p,out,physical,graph_sequences,graph_ids,slots,offsets,pos);
++   sm80_batched_pv_dispatch<<<dim3(2,16,requests),128,0,stream->stream>>>(v,ids,p,out,physical,graph_sequences,graph_ids,slots,offsets,pos);
+    auto e=cudaGetLastError();if(e!=cudaSuccess)status=runtime_error(e,error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
+    return complete_execution(&uses,&scope,stream,status,attempted,error);
+   }

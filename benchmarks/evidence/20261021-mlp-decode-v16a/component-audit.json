@@ -1,0 +1,201 @@
+{
+  "time_ns": 1792557605622349374,
+  "baseline_commit": "57502e7a0fafd165966071e88b3e8a56cdea0e3d",
+  "baseline_source937_manifest_sha256": "0360889f8881ba60c4e8dbc5c52aa05214f54300aca4f531ed5b5fc71f6a7019",
+  "scope": "GPU7 finite component research, not whole-model/native-HF qualification or HTTP throughput; generated finite weights/activations, not checkpoint activations",
+  "receipts": [
+    {
+      "name": "probe",
+      "status": "complete",
+      "returncode": 0,
+      "failure": null,
+      "whole_device_peak_MiB": 1055.0,
+      "receipt_sha256": "639d5e51e6c91dadf3b334edc7535ecef1183c707bc1a4c98b0aca720f67ee3c"
+    },
+    {
+      "name": "tc",
+      "status": "failed",
+      "returncode": 4,
+      "failure": null,
+      "whole_device_peak_MiB": 505.0,
+      "receipt_sha256": "ff238eaa258b16ea66c117d3b8ad5f3b4f4afb577c2605bcb623b669310c8d35"
+    },
+    {
+      "name": "attention",
+      "status": "complete",
+      "returncode": 0,
+      "failure": null,
+      "whole_device_peak_MiB": 941.0,
+      "receipt_sha256": "73317ea4d7ca2515d0bcb42e046f67e45479c61a1339e905af0a1fef11707d68"
+    },
+    {
+      "name": "transposed",
+      "status": "complete",
+      "returncode": 0,
+      "failure": null,
+      "whole_device_peak_MiB": 505.0,
+      "receipt_sha256": "b7c81f656bc3ef1e61f191ac3fd18b693bd9a723835c12759ae5004fc75fe796"
+    },
+    {
+      "name": "expanded",
+      "status": "complete",
+      "returncode": 0,
+      "failure": null,
+      "whole_device_peak_MiB": 507.0,
+      "receipt_sha256": "3655ea296718f9d4881d2d56e1edbb4eeb8437a1d02893d6b40c7aaf8d5155b4"
+    },
+    {
+      "name": "row",
+      "status": "complete",
+      "returncode": 0,
+      "failure": null,
+      "whole_device_peak_MiB": 505.0,
+      "receipt_sha256": "c462c11c9ee513c48e2b61e9d276ad849e30b514076e2535d0497305c7bbf8e0"
+    },
+    {
+      "name": "row-timing",
+      "status": "failed",
+      "returncode": 4,
+      "failure": null,
+      "whole_device_peak_MiB": 1037.0,
+      "receipt_sha256": "75801307bf142a15582b1f2eb75c0bdf1cfed758de49d4c57cfcf4b21abaa9b9"
+    },
+    {
+      "name": "row-timing-r2",
+      "status": "complete",
+      "returncode": 0,
+      "failure": null,
+      "whole_device_peak_MiB": 1037.0,
+      "receipt_sha256": "06e809c258cc625d3b07a2a28f3338a7f658d06d54e7d503f7be541201c41b72"
+    },
+    {
+      "name": "row-timing-r3",
+      "status": "complete",
+      "returncode": 0,
+      "failure": null,
+      "whole_device_peak_MiB": 1037.0,
+      "receipt_sha256": "635bd0b6f79a9aa3dde2903d5132291661ad375c6eaa966676b76a998fb98385"
+    },
+    {
+      "name": "mixed-column",
+      "status": "complete",
+      "returncode": 0,
+      "failure": null,
+      "whole_device_peak_MiB": 1037.0,
+      "receipt_sha256": "6b029b02df8273c67485bc2b6ca80430076843a845d12fea137715b6044ef235"
+    },
+    {
+      "name": "mixed-wide",
+      "status": "complete",
+      "returncode": 0,
+      "failure": null,
+      "whole_device_peak_MiB": 1037.0,
+      "receipt_sha256": "94dd111a1ea69598c351769042e789eda2dd771017ad8b601bd4ede747f4c0b2"
+    },
+    {
+      "name": "pv-multiwarp",
+      "status": "complete",
+      "returncode": 0,
+      "failure": null,
+      "whole_device_peak_MiB": 941.0,
+      "receipt_sha256": "7aa18f845fb479277b80941d326379cb2a5712c2fce8225207784062af2360e7"
+    },
+    {
+      "name": "qk-warp",
+      "status": "complete",
+      "returncode": 0,
+      "failure": null,
+      "whole_device_peak_MiB": 941.0,
+      "receipt_sha256": "da57e24288c2b7dc0e46959d024da91c8b39dcf714c0cc85dd72ce8e6189de7c"
+    }
+  ],
+  "selected_for_whole_model_validation": "QK register shuffle preserving native serial/tree reductions + four-warp PV CTAs",
+  "selected_context_combinations": 37056,
+  "paired_three_repeat_component_times": [
+    {
+      "T": 128,
+      "R": 16,
+      "before_us": 31.217937,
+      "after_us": 27.095436,
+      "percent_change": -13.205552307956802
+    },
+    {
+      "T": 128,
+      "R": 32,
+      "before_us": 47.794937,
+      "after_us": 39.981937,
+      "percent_change": -16.346919758467294
+    },
+    {
+      "T": 129,
+      "R": 16,
+      "before_us": 27.868376,
+      "after_us": 24.776375,
+      "percent_change": -11.095016803275515
+    },
+    {
+      "T": 129,
+      "R": 32,
+      "before_us": 45.009872,
+      "after_us": 38.297813,
+      "percent_change": -14.912415214155693
+    },
+    {
+      "T": 144,
+      "R": 16,
+      "before_us": 33.368313,
+      "after_us": 29.684502,
+      "percent_change": -11.039847894018507
+    },
+    {
+      "T": 144,
+      "R": 32,
+      "before_us": 50.649876,
+      "after_us": 41.48875,
+      "percent_change": -18.087163727705857
+    },
+    {
+      "T": 159,
+      "R": 16,
+      "before_us": 30.579187,
+      "after_us": 27.115688,
+      "percent_change": -11.32632793671069
+    },
+    {
+      "T": 159,
+      "R": 32,
+      "before_us": 54.370125,
+      "after_us": 43.946312,
+      "percent_change": -19.171949669050793
+    },
+    {
+      "T": 192,
+      "R": 16,
+      "before_us": 41.493,
+      "after_us": 34.683563,
+      "percent_change": -16.411050056636068
+    },
+    {
+      "T": 192,
+      "R": 32,
+      "before_us": 69.916122,
+      "after_us": 53.566376,
+      "percent_change": -23.38480100483834
+    },
+    {
+      "T": 213,
+      "R": 16,
+      "before_us": 38.096939,
+      "after_us": 33.533749,
+      "percent_change": -11.977838954462982
+    },
+    {
+      "T": 213,
+      "R": 32,
+      "before_us": 80.560066,
+      "after_us": 59.896,
+      "percent_change": -25.65050778384418
+    }
+  ],
+  "whole_model_adopted": false
+}
