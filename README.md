@@ -23,6 +23,22 @@ cuBLASLt. There is no Python in the serving process.
 
 ## Performance
 
+### Latest structural experiment · multi-prefill / variable-R Graph
+
+Completed2026-10-22, five fresh runs per engine/concurrency on GPU7. The new
+prefill MLP Graph path passed accuracy checks but was **not adopted**.
+
+| Clients | Current Riley tok/s | Candidate tok/s | Change | vLLM tok/s | Candidate / vLLM |
+|---:|---:|---:|---:|---:|---:|
+| 16 | 748.663 | 739.910 | -1.17% | 1136.356 | 65.11% |
+| 32 | 981.234 | 981.079 | -0.02% | 1684.366 | 58.25% |
+
+9,600 literal BF16 reference files,526 CPU tests and five GPU contract functions
+passed. Actual multi-prefill replay was verified in separate profiles. Ten paired
+TTFT/TPOT tail checks exceeded+2%; current v15C remains the accepted runtime.
+[Implementation, limits and all repeats](docs/qwen-piecewise-v18a-20261021.md) ·
+[Audited evidence](benchmarks/evidence/20261021-piecewise-v18a/README.md).
+
 ### A100 · Qwen3-4B · latest qualified checkpoint
 
 Measured 2026-10-21 on the same physical A100 (GPU 7), sequentially, with

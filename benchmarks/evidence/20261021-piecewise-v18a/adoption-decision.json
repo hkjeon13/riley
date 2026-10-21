@@ -1,0 +1,68 @@
+{
+  "time_ns": 1792599503937503612,
+  "eligible_for_integration": false,
+  "integrated_into_main": false,
+  "normal_completed_arms_excluded": 0,
+  "accuracy_threshold_changed": false,
+  "tail_flags": {
+    "16": [
+      {
+        "repeat": 0,
+        "metric": "tpot_ms_p99",
+        "percent_change": 3.3358727751224837
+      },
+      {
+        "repeat": 1,
+        "metric": "ttft_ms_p95",
+        "percent_change": 5.10733233805829
+      },
+      {
+        "repeat": 2,
+        "metric": "ttft_ms_p95",
+        "percent_change": 2.864510646539453
+      },
+      {
+        "repeat": 3,
+        "metric": "ttft_ms_p95",
+        "percent_change": 2.4477676656887715
+      },
+      {
+        "repeat": 3,
+        "metric": "ttft_ms_p99",
+        "percent_change": 2.3490963943042953
+      },
+      {
+        "repeat": 3,
+        "metric": "tpot_ms_p99",
+        "percent_change": 3.5433800190125764
+      }
+    ],
+    "32": [
+      {
+        "repeat": 0,
+        "metric": "tpot_ms_p95",
+        "percent_change": 2.673860298417252
+      },
+      {
+        "repeat": 1,
+        "metric": "tpot_ms_p99",
+        "percent_change": 2.2002624027350537
+      },
+      {
+        "repeat": 2,
+        "metric": "tpot_ms_p99",
+        "percent_change": 9.744641739530513
+      },
+      {
+        "repeat": 3,
+        "metric": "tpot_ms_p95",
+        "percent_change": 3.6316581654283864
+      }
+    ]
+  },
+  "throughput_changes": {
+    "16": -1.1691417325103814,
+    "32": -0.015821112522951264
+  },
+  "reason": "Require positive median throughput at both C16/C32 and no paired TTFT/TPOT p95/p99 regression greater than2%; original accuracy/resource/actual-dispatch gates passed. Main integration is a separate verified step."
+}

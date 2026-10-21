@@ -1,0 +1,31 @@
+{
+  "time_ns": 1792597013919963975,
+  "baseline_commit": "57502e7a0fafd165966071e88b3e8a56cdea0e3d",
+  "baseline_binary": "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/riley-prefill-host-v15c",
+  "baseline_sha256": "233c3a6a81bad76d65577bacd5837d59e2ebe1dd52a8fde73f3cd07a38cf937a",
+  "binary": "/mnt/efs/nlp/psyche/riley-piecewise-v18a-20261021/riley-piecewise-v18a",
+  "binary_sha256": "cc1e4ed77d79c51fe658f641b18305cdfbb7bbc63d8df9dedc06b40ff1aad2e6",
+  "qualified_source_count": 938,
+  "changed_sources": [
+    "crates/riley-cuda/src/ffi.rs",
+    "crates/riley-cuda/src/gemm.rs",
+    "crates/riley-cuda/src/lib.rs",
+    "crates/riley-cuda/src/prefill_piece.rs",
+    "crates/riley-runtime/src/llama/batch_executor.rs",
+    "crates/riley-runtime/src/llama/executor/dispatch.rs",
+    "crates/riley-runtime/src/llama/executor/owner.rs",
+    "kernels/include/riley_cuda.h",
+    "kernels/src/batch_primitives.cu",
+    "kernels/src/cublas_gemm_probe.cu"
+  ],
+  "new_sources": [
+    "crates/riley-cuda/src/prefill_piece.rs"
+  ],
+  "source_manifest_sha256": "af688161a1d48b11677747bbaac0c3a58fe46f55500b4816b84c1fd2623db85b",
+  "normal_inputs_sha256": {
+    "/mnt/efs/nlp/psyche/riley-piecewise-v18a-20261021/riley-piecewise-v18a": "cc1e4ed77d79c51fe658f641b18305cdfbb7bbc63d8df9dedc06b40ff1aad2e6",
+    "/mnt/efs/nlp/psyche/riley-piecewise-v18a-20261021/measure-matched.py": "fbdfeee188a5eb2ddf8d08fd57a3aedc87e88fc8033bca75d4b4bef594bfb744",
+    "/mnt/efs/nlp/psyche/riley-piecewise-v18a-20261021/final-c16.argv.json": "77b9eb0744dc39ec09d2be77494924f40619c8d75b333db8e7bc2e1a349efba1",
+    "/mnt/efs/nlp/psyche/riley-piecewise-v18a-20261021/final-c32.argv.json": "ac971725844ee92002e39c7fb68c409f7ed1f14ba8f0eb707257a60d66dc72ba"
+  }
+}

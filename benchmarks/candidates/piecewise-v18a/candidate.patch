@@ -1,0 +1,557 @@
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -2361,6 +2361,7 @@
+         error: *mut ErrorInfo,
+     ) -> i32;
+     fn riley_cuda_hf_pack_qkv_execute(q:RawBufferSpan,k:RawBufferSpan,v:RawBufferSpan,out:RawBufferSpan,rows:u64,qw:u64,kw:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
++    fn riley_cuda_piecewise_rows_execute(params:*const RawRowGatherParams,direction:u32,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+     fn riley_cuda_row_gather_execute(
+         params: *const RawRowGatherParams,
+         stream: *mut RawStream,
+@@ -7826,6 +7827,34 @@
+         // SAFETY: params and every borrowed opaque resource remain live for
+         // the synchronously completing native operation.
+         unsafe { riley_cuda_row_gather_execute(&params, stream, error) }
++    })
++}
++
++pub(super) fn piecewise_rows_execute(
++    input: RawBufferSpan,
++    row_indices: RawBufferSpan,
++    output: RawBufferSpan,
++    input_row_count: u64,
++    output_row_count: u64,
++    column_count: u64,
++    direction:u32,
++    stream: &mut StreamHandle,
++) -> CudaResult<()> {
++    let params = RawRowGatherParams {
++        struct_size: ROW_GATHER_PARAMS_SIZE,
++        reserved0: 0,
++        input,
++        row_indices,
++        output,
++        input_row_count,
++        output_row_count,
++        column_count,
++        reserved: [0; 4],
++    };
++    primitive_status("execute CUDA row gather", stream, |stream, error| {
++        // SAFETY: params and every borrowed opaque resource remain live for
++        // the synchronously completing native operation.
++        unsafe { riley_cuda_piecewise_rows_execute(&params,direction, stream, error) }
+     })
+ }
+ 
+--- a/crates/riley-cuda/src/gemm.rs
++++ b/crates/riley-cuda/src/gemm.rs
+@@ -2131,6 +2131,20 @@
+         Ok(())
+     }
+ 
++    /// Same exact prefill dispatch selected by the validated merged row groups.
++    pub(crate) fn execute_prefill_piece<S:CudaExecutionStream+?Sized>(&mut self,p:&mut CublasGemmProbeParams<'_>,rows:u64,merged:bool,stream:&mut S)->CudaResult<()> {
++        let allowed=matches!((self.config.n,self.config.k),(9728,2560)|(2560,9728));
++        if !allowed || !(if merged{161..=576}else{64..=130}).contains(&rows) || rows>self.config.m || self.poisoned {
++            return Err(CudaError::invalid_argument("prefill piece","qualified exact MLP extent required"));
++        }
++        let stream=execution_stream_mut(stream);self.validate_execution(p,stream)?;
++        let mode=if merged && (self.config.k==9728 || (257..=512).contains(&rows)){11}else{0};
++        let input=p.input.subspan(0,rows*self.config.k*2)?;
++        let output=p.output.buffer().native_handle().span(ffi::DTYPE_BF16,p.output.byte_offset(),rows*self.config.n*2);
++        let result=self.native.execute_rows(input.raw(),p.weight.raw(),output,rows,mode,&mut stream.native);
++        if result.is_err(){self.poisoned=true;}result
++    }
++
+     /// Private native-M1-equivalent merged Gate/Up. Only independently
+     /// qualified R1 and R17..32 use the pinned SM80/cuBLASLt recipe.
+     pub fn execute_sm80_merged_gate_up<S:CudaExecutionStream+?Sized>(
+--- a/crates/riley-cuda/src/lib.rs
++++ b/crates/riley-cuda/src/lib.rs
+@@ -263,4 +263,8 @@
+ #[cfg(feature="cuda-cublas-gemm-probe")]
+ mod owned_mlp;
+ #[cfg(feature="cuda-cublas-gemm-probe")]
++mod prefill_piece;
++#[cfg(feature="cuda-cublas-gemm-probe")]
++pub use prefill_piece::CudaOwnedPrefillMlpGraph;
++#[cfg(feature="cuda-cublas-gemm-probe")]
+ pub use owned_mlp::{CudaOwnedHfMlpGraph,CudaOwnedHfMlpParams,CudaOwnedHfMlpGraphStats};
+--- /dev/null
++++ b/crates/riley-cuda/src/prefill_piece.rs
+@@ -0,0 +1,77 @@
++//! Exact prefill MLP pieces. Device row offsets remove decode R from graph keys.
++//! Each piece uses the same M and arithmetic selector as validated row groups.
++use crate::error::{CudaError,CudaResult};
++use crate::runtime::{CudaResourceIdentity,execution_stream_mut};
++use crate::{CudaContext,CudaDeviceBuffer,CudaPinnedHostBuffer,CudaBufferSpan,CudaBufferSpanMut,CudaDType,CudaExecutionStream,CudaStepGraph,CudaPreparedCublasGemmProbe,CudaGemmConfig,CublasGemmProbeParams,GatedMultiplyParams};
++use std::collections::HashMap;
++const OP:&str="prefill MLP piece";
++#[derive(Clone,Eq,PartialEq,Hash)]
++struct Binding(CudaResourceIdentity,u64,u64);
++#[derive(Eq,PartialEq,Hash)]
++struct Key{stream:CudaResourceIdentity,rows:u32,merged:bool,operands:[Binding;5]}
++/// Stable scratch shared across layers. All graphs retire before plans/scratch.
++/// Caller uploads the validated prefix once per batch, before any piece runs.
++pub struct CudaOwnedPrefillMlpGraph {
++ entries:HashMap<Key,CudaStepGraph>,gate_plan:CudaPreparedCublasGemmProbe,down_plan:CudaPreparedCublasGemmProbe,
++ input:CudaDeviceBuffer,output:CudaDeviceBuffer,gate:CudaDeviceBuffer,up:CudaDeviceBuffer,product:CudaDeviceBuffer,
++ prefix:CudaDeviceBuffer,prefix_host:CudaPinnedHostBuffer,capacity:u32,first:u32,
++ stream:Option<CudaResourceIdentity>,capture_allowed:bool,poisoned:bool,hits:u64,misses:u64,
++}
++impl CudaOwnedPrefillMlpGraph {
++ pub fn prepare(c:&CudaContext,capacity:u32)->CudaResult<Self>{
++  if !(128..=576).contains(&capacity){return Err(CudaError::invalid_argument(OP,"capacity128..576 required"));}
++  let mut gate_plan=c.prepare_owned_hf_gemm(CudaGemmConfig::new(capacity as u64,9728,2560,0)?)?;
++  let mut down_plan=c.prepare_owned_hf_gemm(CudaGemmConfig::new(capacity as u64,2560,9728,0)?)?;
++  gate_plan.prepare_sm80_prefill()?;down_plan.prepare_sm80_prefill()?;
++  let h=capacity as u64*2560*2;let m=capacity as u64*9728*2;
++  Ok(Self{entries:HashMap::new(),gate_plan,down_plan,input:c.allocate_device_buffer(h)?,output:c.allocate_device_buffer(h)?,gate:c.allocate_device_buffer(m)?,up:c.allocate_device_buffer(m)?,product:c.allocate_device_buffer(m)?,prefix:c.allocate_device_buffer(4)?,prefix_host:c.allocate_pinned_host_buffer(4)?,capacity,first:0,stream:None,capture_allowed:false,poisoned:false,hits:0,misses:0})
++ }
++ /// Called outside a command batch, after metadata validation.
++ pub fn stage_prefix(&mut self,first:u32)->CudaResult<()> {
++  if first>self.capacity{return Err(CudaError::invalid_argument(OP,"prefix exceeds capacity"));}
++  self.prefix_host.write(0,&first.to_ne_bytes())?;self.first=first;Ok(())
++ }
++ pub fn enqueue_prefix<S:CudaExecutionStream+?Sized>(&self,s:&mut S)->CudaResult<()>{self.prefix.copy_from_pinned_in_active_command_batch(0,&self.prefix_host,0,4,s)}
++ pub fn set_capture_allowed(&mut self,v:bool){self.capture_allowed=v;if !v{eprintln!("RILEY_PREFILL_PIECE_SEALED entries={}",self.entries.len());}}
++ pub fn execute<S:CudaExecutionStream+?Sized>(&mut self,input:CudaBufferSpan<'_>,gate:CudaBufferSpan<'_>,up:CudaBufferSpan<'_>,down:CudaBufferSpan<'_>,output:&mut CudaDeviceBuffer,rows:u32,merged:bool,s:&mut S)->CudaResult<()> {
++  if self.poisoned || rows>self.capacity-self.first || !(if merged{161..=576}else{64..=130}).contains(&rows){return Err(CudaError::invalid_argument(OP,"invalid exact piece extent or poisoned owner"));}
++  let s=execution_stream_mut(s);
++  if self.stream.as_ref().is_some_and(|v|*v!=s.identity){return Err(CudaError::invalid_state(OP,"piece owner cannot change streams"));}
++  self.stream=Some(s.identity.clone());
++  let b=|x:CudaBufferSpan<'_>|Binding(x.buffer().identity.clone(),x.byte_offset(),x.byte_len());
++  let out=CudaBufferSpan::new(output,CudaDType::BF16,0,self.capacity as u64*2560*2)?;
++  let key=Key{stream:s.identity.clone(),rows,merged,operands:[b(input),b(gate),b(up),b(down),b(out)]};
++  let prefix=CudaBufferSpan::new(&self.prefix,CudaDType::U32,0,4)?.raw();
++  let h=self.capacity as u64*2560*2;let m=self.capacity as u64*9728*2;
++  let raw=|x:&CudaDeviceBuffer,bytes|x.native_handle().span(crate::ffi::DTYPE_BF16,0,bytes);
++  self.gate_plan.register_mlp_uses(&self.down_plan,[raw(&self.input,h),gate.raw(),up.raw(),down.raw(),raw(&self.gate,m),raw(&self.up,m),raw(&self.product,m),raw(&self.output,h)],s)?;
++  crate::ffi::piecewise_rows_execute(input.raw(),prefix,raw(&self.input,h),self.capacity as u64,rows as u64,2560,2,&mut s.native)?;
++  crate::ffi::piecewise_rows_execute(raw(&self.output,h),prefix,out.raw(),self.capacity as u64,rows as u64,2560,3,&mut s.native)?;
++  if let Some(g)=self.entries.get(&key){
++   let result=crate::launch_step_graph(s,g);if result.is_err(){self.poisoned=true;}else{self.hits+=1;}return result;
++  }
++  self.misses+=1;
++  let work=|owner:&mut Self,s:&mut crate::CudaStream|->CudaResult<()> {
++   crate::ffi::piecewise_rows_execute(input.raw(),prefix,raw(&owner.input,h),owner.capacity as u64,rows as u64,2560,0,&mut s.native)?;
++   for (w,dst) in [(gate,&mut owner.gate),(up,&mut owner.up)] {
++    owner.gate_plan.execute_prefill_piece(&mut CublasGemmProbeParams{input:CudaBufferSpan::new(&owner.input,CudaDType::BF16,0,h)?,weight:w,output:CudaBufferSpanMut::new(dst,CudaDType::BF16,0,m)?},rows as u64,merged,s)?;
++   }
++   crate::silu_gated_multiply(&mut GatedMultiplyParams{activated_gate:CudaBufferSpan::new(&owner.gate,CudaDType::BF16,0,m)?,up:CudaBufferSpan::new(&owner.up,CudaDType::BF16,0,m)?,output:CudaBufferSpanMut::new(&mut owner.product,CudaDType::BF16,0,m)?,element_count:rows as u64*9728},s)?;
++   owner.down_plan.execute_prefill_piece(&mut CublasGemmProbeParams{input:CudaBufferSpan::new(&owner.product,CudaDType::BF16,0,m)?,weight:down,output:CudaBufferSpanMut::new(&mut owner.output,CudaDType::BF16,0,h)?},rows as u64,merged,s)?;
++   crate::ffi::piecewise_rows_execute(raw(&owner.output,h),prefix,out.raw(),owner.capacity as u64,rows as u64,2560,1,&mut s.native)
++  };
++  if let Err(e)=work(self,s){self.poisoned=true;return Err(e);}
++  if !self.capture_allowed || self.entries.len()>=18_432{return Ok(());}
++  crate::begin_step_capture(s)?;
++  if let Err(e)=work(self,s){let _=crate::abort_step_capture(s);self.poisoned=true;return Err(e);}
++  let graph=crate::end_step_capture(s)?;
++  if let Err(e)=crate::launch_step_graph(s,&graph){self.poisoned=true;return Err(e);}
++  self.entries.insert(key,graph);Ok(())
++ }
++ pub fn close(mut self)->CudaResult<()> {
++  eprintln!("RILEY_PREFILL_PIECE entries={} hits={} misses={}",self.entries.len(),self.hits,self.misses);
++  for(_,g)in self.entries.drain(){g.close()?;}
++  self.gate_plan.close()?;self.down_plan.close()?;
++  self.input.close()?;self.output.close()?;self.gate.close()?;self.up.close()?;self.product.close()?;self.prefix.close()?;self.prefix_host.close()
++ }
++}
+--- a/crates/riley-runtime/src/llama/batch_executor.rs
++++ b/crates/riley-runtime/src/llama/batch_executor.rs
+@@ -428,6 +428,29 @@
+         }
+         use super::batch::{LlamaBatchBlockTable,LlamaBatchRowKind};
+         use crate::paged_kv::BLOCK_TABLE_V1_VERSION;
++        #[cfg(feature="cuda-cublas-gemm-probe")]
++        if let Some(g)=self.owner.prefill_mlp_graphs.as_mut(){
++            use super::forward::{span,weight_span};
++            use riley_cuda::CudaDType;
++            let site=ExecutionSite::global(LlamaOp::IterationCompletion);
++            let f=&mut self.owner.forward;
++            g.stage_prefix(0).map_err(|e|batch_cuda(site,e))?;g.set_capture_allowed(true);
++            let capacity=bounds.max_input_tokens();
++            // Exact P only: each key is independent of R and prefill partition.
++            for (ordinal,layer) in f.plan.layers().iter().enumerate(){
++                let mut batch=stream.begin_command_batch().map_err(|e|batch_cuda(site,e))?;
++                let result=(||->LlamaBatchExecutorResult<()>{
++                    let mut commands=batch.commands();g.enqueue_prefix(&mut commands).map_err(|e|batch_cuda(site,e))?;
++                    for p in (64..=130).chain(161..=capacity){if p>capacity{continue;}
++                        let output=if ordinal%2==0{&mut f.buffers.hidden_current}else{&mut f.buffers.hidden_projection};
++                        g.execute(span(&f.buffers.hidden_norm,CudaDType::BF16,f.buffers.hidden_norm.byte_len(),site)?,
++                            weight_span(&f.weights,layer.gate_weight(),site)?,weight_span(&f.weights,layer.up_weight(),site)?,weight_span(&f.weights,layer.down_weight(),site)?,output,p as u32,p>=161,&mut commands).map_err(|e|batch_cuda(site,e))?;
++                    }Ok(())
++                })();
++                let completion=batch.finish().map_err(|e|batch_cuda(site,e));completion?;result?;
++            }
++            g.set_capture_allowed(false);
++        }
+         let history=self.shape_history;let prompt=vec![0u32;128];let token=[0u32];
+         let tables=(0..count).map(|r|(0..9).map(|p|(r*16+p)as u32).collect::<Vec<_>>()).collect::<Vec<_>>();
+         let valid_prefill=vec![16u16;8];let chunk=(bounds.max_input_tokens()/128).min(count);
+@@ -545,6 +568,8 @@
+         let PreparedLlamaBatchOwner {
+             #[cfg(feature="cuda-cublas-gemm-probe")]
+             owned_mlp_graphs,
++            #[cfg(feature="cuda-cublas-gemm-probe")]
++            prefill_mlp_graphs,
+             metadata,
+             forward,
+             shape_variants,
+@@ -600,6 +625,8 @@
+             native_d128_two_stage_workspace.as_mut(),
+             #[cfg(feature="cuda-cublas-gemm-probe")]
+             owned_mlp_graphs.as_mut(),
++            #[cfg(feature="cuda-cublas-gemm-probe")]
++            prefill_mlp_graphs.as_mut(),
+             host,
+             output_mode_requested,
+             &mut dispatch_disposition,
+@@ -870,6 +897,8 @@
+     native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
+     #[cfg(feature="cuda-cublas-gemm-probe")]
+     owned_mlp_graphs: Option<&mut riley_cuda::CudaOwnedHfMlpGraph>,
++    #[cfg(feature="cuda-cublas-gemm-probe")]
++    prefill_mlp_graphs: Option<&mut riley_cuda::CudaOwnedPrefillMlpGraph>,
+     host: &mut BatchHostWorkspace,
+     output_mode: BatchOutputMode,
+     dispatch_disposition: &mut BatchDispatchDisposition,
+@@ -892,6 +921,8 @@
+         native_d128_two_stage_workspace,
+         #[cfg(feature="cuda-cublas-gemm-probe")]
+         owned_mlp_graphs,
++        #[cfg(feature="cuda-cublas-gemm-probe")]
++        prefill_mlp_graphs,
+         &mut host.input,
+         output_mode == BatchOutputMode::GreedyTokens,
+         dispatch_disposition,
+--- a/crates/riley-runtime/src/llama/executor/dispatch.rs
++++ b/crates/riley-runtime/src/llama/executor/dispatch.rs
+@@ -272,6 +272,8 @@
+     mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
+     #[cfg(feature="cuda-cublas-gemm-probe")]
+     mut owned_mlp_graphs: Option<&mut riley_cuda::CudaOwnedHfMlpGraph>,
++    #[cfg(feature="cuda-cublas-gemm-probe")]
++    mut prefill_mlp_graphs: Option<&mut riley_cuda::CudaOwnedPrefillMlpGraph>,
+     host_input: &mut BatchHostInput,
+     produce_greedy_tokens: bool,
+     dispatch_disposition: &mut BatchDispatchDisposition,
+@@ -524,6 +526,13 @@
+         && packed.row_sequence_slots().iter().enumerate().all(|(i,v)|!packed.row_sequence_slots()[..i].contains(v))};
+     #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+     let owned_mlp_eligible = false;
++    #[cfg(feature="cuda-cublas-gemm-probe")]
++    let prefill_piece=if prefill_mlp_graphs.is_some() && packed.prefill_token_count()>0 {
++        let first=packed.row_kind_codes().iter().take_while(|v|**v==LlamaBatchRowKind::Decode.code()).count();
++        prefill_piece_extent(packed.row_sequence_slots(),first)
++    }else{None};
++    #[cfg(feature="cuda-cublas-gemm-probe")]
++    if let Some((first,_,_))=prefill_piece {prefill_mlp_graphs.as_mut().expect("checked owner").stage_prefix(first as u32).map_err(|e|batch_cuda(metadata_site,e))?;}
+     let mut execute_iteration_body = |batch: PackedBatchV1<'_>,
+                                       token_ids: Option<CudaBufferSpan<'_>>,
+                                       output_indices: Option<CudaBufferSpan<'_>>,
+@@ -531,6 +540,8 @@
+                                       step_counts: Option<CudaBufferSpan<'_>>,
+                                       stream: &mut dyn CudaExecutionStream|
+      -> LlamaBatchExecutorResult<()> {
++        #[cfg(feature="cuda-cublas-gemm-probe")]
++        if prefill_piece.is_some() && in_command_batch {prefill_mlp_graphs.as_ref().expect("checked owner").enqueue_prefix(stream).map_err(|e|batch_cuda(metadata_site,e))?;}
+         if let Some((bytes,active_bytes))=staged_attention_metadata {
+             let prepared=native_d128_two_stage_workspace.as_deref_mut().and_then(|w|w.materialized.as_mut())
+                 .ok_or(LlamaBatchExecutorError::InvalidConfiguration{field:"staged attention metadata",reason:"prepared owner missing"})?;
+@@ -786,6 +797,10 @@
+             native_d128_two_stage_workspace.as_deref_mut(),
+             #[cfg(feature="cuda-cublas-gemm-probe")]
+             if owned_mlp_eligible && in_command_batch {owned_mlp_graphs.as_deref_mut()}else{None},
++            #[cfg(feature="cuda-cublas-gemm-probe")]
++            if prefill_piece.is_some() && in_command_batch {prefill_mlp_graphs.as_deref_mut()}else{None},
++            #[cfg(feature="cuda-cublas-gemm-probe")]
++            prefill_piece,
+             if owned_mlp_eligible && config.owned_decode_batch()==10 {packed.row_kind_codes().iter().take_while(|v|**v==LlamaBatchRowKind::Decode.code()).count()}else{0},
+             layout,
+             key_cache,
+@@ -1212,6 +1227,10 @@
+     mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
+     #[cfg(feature="cuda-cublas-gemm-probe")]
+     mut owned_mlp_graphs: Option<&mut riley_cuda::CudaOwnedHfMlpGraph>,
++    #[cfg(feature="cuda-cublas-gemm-probe")]
++    mut prefill_mlp_graphs: Option<&mut riley_cuda::CudaOwnedPrefillMlpGraph>,
++    #[cfg(feature="cuda-cublas-gemm-probe")]
++    prefill_piece:Option<(usize,usize,bool)>,
+     piecewise_active_rows:usize,
+     layout: KvLayout,
+     key_cache: &mut CudaDeviceBuffer,
+@@ -2226,7 +2245,7 @@
+         #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+         let piecewise_rows=0;
+         #[cfg(feature="cuda-cublas-gemm-probe")]
+-        let mlp_done=if let Some(graphs)=owned_mlp_graphs.as_deref_mut(){
++        let mut mlp_done=if let Some(graphs)=owned_mlp_graphs.as_deref_mut(){
+             let site=ExecutionSite::layer(layer_index,LlamaOp::GateProjection);
+             let mut mlp_params=riley_cuda::CudaOwnedHfMlpParams {
+                 input:span(&buffers.hidden_norm,CudaDType::BF16,buffers.hidden_norm.byte_len(),site)?,
+@@ -2243,6 +2262,16 @@
+         }else{false};
+         #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+         let mlp_done=false;
++        #[cfg(feature="cuda-cublas-gemm-probe")]
++        if let (Some(graphs),Some((first,rows,merged)))=(prefill_mlp_graphs.as_deref_mut(),prefill_piece){
++            // A nonzero prefix must already have executed via its existing M1 graph.
++            if first==0 || piecewise_rows==first {
++                let site=ExecutionSite::layer(layer_index,LlamaOp::GateProjection);
++                graphs.execute(span(&buffers.hidden_norm,CudaDType::BF16,buffers.hidden_norm.byte_len(),site)?,
++                    weight_span(weights,layer.gate_weight(),site)?,weight_span(weights,layer.up_weight(),site)?,weight_span(weights,layer.down_weight(),site)?,hidden_current,rows as u32,merged,stream).map_err(|e|batch_cuda(site,e))?;
++                mlp_done=true;
++            }
++        }
+         if !mlp_done {
+         let gate_site = ExecutionSite::layer(layer_index, LlamaOp::GateProjection);
+         #[cfg(feature="cuda-cublas-gemm-probe")]
+@@ -3116,3 +3145,31 @@
+         }
+     }
+ }
++
++// Mirrors the existing mode10 MLP merge contract, without changing arithmetic.
++// Two short groups whose sum is below161 retain their separate eager GEMMs.
++fn prefill_piece_extent(slots:&[u32],first:usize)->Option<(usize,usize,bool)>{
++ if first>=slots.len() || first>0 && slots[first-1]==slots[first]{return None;}
++ let mut at=first;let mut groups=0;
++ while at<slots.len(){let mut end=at+1;while end<slots.len()&&slots[end]==slots[at]{end+=1;}
++  if !(64..=130).contains(&(end-at)){return None;}groups+=1;at=end;
++ }
++ let rows=slots.len()-first;
++ if groups==1 || (161..=576).contains(&rows){Some((first,rows,groups>1))}else{None}
++}
++#[cfg(test)]
++mod prefill_piece_tests {
++ use super::prefill_piece_extent;
++ #[test]fn variable_prefix_and_multi_prefill(){
++  for r in 0..=32{for lengths in [vec![115],vec![120,125],vec![64,64,64],vec![130,130,130,130]]{
++   let mut slots=(0..r).collect::<Vec<u32>>();for(i,n)in lengths.iter().enumerate(){slots.extend(std::iter::repeat_n(r+i as u32,*n));}
++   assert_eq!(prefill_piece_extent(&slots,r as usize),Some((r as usize,lengths.iter().sum(),lengths.len()>1)));
++  }}
++ }
++ #[test]fn preserve_unmerged_and_partial_boundaries(){
++  for lengths in [vec![64,64],vec![63,120],vec![131],vec![130,130,130,130,64]]{
++   let mut slots=vec![];for(i,n)in lengths.iter().enumerate(){slots.extend(std::iter::repeat_n(i as u32,*n));}assert_eq!(prefill_piece_extent(&slots,0),None);
++  }
++  assert_eq!(prefill_piece_extent(&[0,0,1,1],1),None);assert_eq!(prefill_piece_extent(&[],0),None);
++ }
++}
+--- a/crates/riley-runtime/src/llama/executor/owner.rs
++++ b/crates/riley-runtime/src/llama/executor/owner.rs
+@@ -103,6 +103,8 @@
+ pub(in crate::llama) struct PreparedLlamaBatchOwner {
+     #[cfg(feature="cuda-cublas-gemm-probe")]
+     pub(in crate::llama) owned_mlp_graphs: Option<riley_cuda::CudaOwnedHfMlpGraph>,
++    #[cfg(feature="cuda-cublas-gemm-probe")]
++    pub(in crate::llama) prefill_mlp_graphs: Option<riley_cuda::CudaOwnedPrefillMlpGraph>,
+     pub(in crate::llama) metadata: PreparedLlamaBatchMetadata,
+     pub(in crate::llama) forward: PreparedLlamaForward,
+     pub(in crate::llama) shape_variants: Box<[PreparedLlamaBatchShape]>,
+@@ -704,9 +706,16 @@
+             Some(graphs)
+         }else{None};
+ 
++        #[cfg(feature="cuda-cublas-gemm-probe")]
++        let prefill_mlp_graphs=if config.owned_decode_graph() && config.owned_decode_batch()==10
++            && dimensions.hidden_size()==2560 && dimensions.intermediate_size()==9728 && (128..=576).contains(&bounds.max_input_tokens()) {
++            Some(riley_cuda::CudaOwnedPrefillMlpGraph::prepare(context,bounds.max_input_tokens() as u32).map_err(|e|owner_cuda(ExecutionSite::layer(0,LlamaOp::GateProjection),e))?)
++        }else{None};
+         Ok(Self {
+             #[cfg(feature="cuda-cublas-gemm-probe")]
+             owned_mlp_graphs,
++            #[cfg(feature="cuda-cublas-gemm-probe")]
++            prefill_mlp_graphs,
+             metadata,
+             forward,
+             shape_variants,
+@@ -734,6 +743,8 @@
+         let Self {
+             #[cfg(feature="cuda-cublas-gemm-probe")]
+             owned_mlp_graphs,
++            #[cfg(feature="cuda-cublas-gemm-probe")]
++            prefill_mlp_graphs,
+             metadata: _,
+             forward,
+             shape_variants,
+@@ -750,6 +761,8 @@
+             poisoned: _,
+         } = self;
+         let mut first = None;
++        #[cfg(feature="cuda-cublas-gemm-probe")]
++        if let Some(graphs)=prefill_mlp_graphs {record_close(&mut first,LlamaBatchExecutorResource::HostWorkspace,graphs.close());}
+         #[cfg(feature="cuda-cublas-gemm-probe")]
+         if let Some(graphs)=owned_mlp_graphs {record_close(&mut first,LlamaBatchExecutorResource::HostWorkspace,graphs.close());}
+         record_close(
+--- a/kernels/include/riley_cuda.h
++++ b/kernels/include/riley_cuda.h
+@@ -2543,6 +2543,10 @@
+     RileyCudaStream* stream,
+     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+ 
++// Private fixed-address BF16 row gather/scatter; direction2/3 register uses only.
++RileyCudaStatus riley_cuda_piecewise_rows_execute(const RileyCudaRowGatherParams* params,
++ uint32_t direction,RileyCudaStream* stream,RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
++
+ RileyCudaStatus riley_cuda_row_gather_execute(
+     const RileyCudaRowGatherParams* params,
+     RileyCudaStream* stream,
+--- a/kernels/src/batch_primitives.cu
++++ b/kernels/src/batch_primitives.cu
+@@ -2335,6 +2335,143 @@
+                             error, kOperation);
+ }
+ 
++namespace {
++// Row offset is device data, so one exact-P piece serves every decode prefix.
++__global__ void piecewise_prefill_rows(const uint4* src,const uint32_t* first,uint4* dst,
++ uint64_t capacity,uint64_t rows,uint64_t width,bool scatter) {
++ const uint64_t start=first[0];if(start>capacity || rows>capacity-start)return;
++ for(uint64_t i=uint64_t(blockIdx.x)*blockDim.x+threadIdx.x;i<rows*width;i+=uint64_t(gridDim.x)*blockDim.x){
++  const uint64_t shifted=start*width+i;dst[scatter?shifted:i]=src[scatter?i:shifted];
++ }
++}
++} // namespace
++
++extern "C" RileyCudaStatus riley_cuda_piecewise_rows_execute(
++    const RileyCudaRowGatherParams* params, uint32_t direction, RileyCudaStream* stream,
++    RileyCudaErrorInfo* error) noexcept {
++  constexpr const char* kOperation = "execute fixed-address prefill rows";
++  clear_error(error);
++  if (params == nullptr || params->struct_size < sizeof(*params)) {
++    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
++                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
++                            "params is null or has an incompatible struct_size");
++  }
++  if(direction>3 || !command_batch_is_owned_by_current_thread(stream))
++    return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,kOperation,"owned command batch and copy direction0..3 required");
++  const RileyCudaRowGatherParams stable_params = *params;
++  params = &stable_params;
++  if (params->reserved0 != 0 || !reserved_is_zero(params->reserved, 4)) {
++    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
++                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
++                            "params reserved fields must be zero");
++  }
++  if (params->input.dtype != RILEY_CUDA_DTYPE_BF16 ||
++      params->output.dtype != params->input.dtype ||
++      params->row_indices.dtype != RILEY_CUDA_DTYPE_U32) {
++    return validation_error(
++        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
++        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
++        "row gather requires matching F32/BF16 tensors and U32 indices");
++  }
++  if (params->input_row_count == 0 || params->output_row_count==0 || params->output_row_count>params->input_row_count || params->column_count == 0 || params->column_count%8!=0 || params->input.byte_offset%16!=0 || params->output.byte_offset%16!=0) {
++    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
++                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
++                            "input_row_count and column_count must be greater than zero");
++  }
++  uint64_t input_elements = 0;
++  uint64_t output_elements = 0;
++  if (!checked_multiply(params->input_row_count, params->column_count,
++                        &input_elements) ||
++      !checked_multiply(params->input_row_count, params->column_count,
++                        &output_elements)) {
++    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
++                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
++                            "row gather matrix shape overflows uint64_t");
++  }
++  uint64_t input_bytes = 0;
++  uint64_t output_bytes = 0;
++  uint64_t index_bytes = 0;
++  RileyCudaStatus status =
++      typed_bytes(input_elements, params->input.dtype, &input_bytes, error,
++                  kOperation);
++  if (status == RILEY_CUDA_STATUS_SUCCESS) {
++    status = typed_bytes(output_elements, params->input.dtype, &output_bytes,
++                         error, kOperation);
++  }
++  if (status == RILEY_CUDA_STATUS_SUCCESS) {
++    status = typed_bytes(1,
++                         RILEY_CUDA_DTYPE_U32, &index_bytes, error,
++                         kOperation);
++  }
++  if (status != RILEY_CUDA_STATUS_SUCCESS) {
++    return status;
++  }
++
++  ResolvedSpan input{};
++  ResolvedSpan row_indices{};
++  ResolvedSpan output{};
++  status = resolve_span(params->input, params->input.dtype, input_bytes,
++                        &input, error, kOperation);
++  if (status == RILEY_CUDA_STATUS_SUCCESS) {
++    status = resolve_span(params->row_indices, RILEY_CUDA_DTYPE_U32,
++                          index_bytes, &row_indices, error, kOperation);
++  }
++  if (status == RILEY_CUDA_STATUS_SUCCESS) {
++    status = resolve_span(params->output, params->input.dtype, output_bytes,
++                          &output, error, kOperation);
++  }
++  if (status == RILEY_CUDA_STATUS_SUCCESS) {
++    status = reject_overlap(output, input, false, error, kOperation);
++  }
++  if (status == RILEY_CUDA_STATUS_SUCCESS) {
++    status = reject_overlap(output, row_indices, false, error, kOperation);
++  }
++  if (status != RILEY_CUDA_STATUS_SUCCESS) {
++    return status;
++  }
++  const ResolvedSpan spans[] = {input, row_indices, output};
++  status = validate_contexts(stream, spans, 3, error, kOperation);
++  if (status != RILEY_CUDA_STATUS_SUCCESS) {
++    return status;
++  }
++  ExclusiveUses uses(stream);
++  if (!uses.add(input.buffer) || !uses.add(row_indices.buffer) ||
++      !uses.add(output.buffer)) {
++    return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
++                          kOperation, "batch buffer set overflow");
++  }
++  status = uses.acquire(error, kOperation);
++  if (status != RILEY_CUDA_STATUS_SUCCESS) {
++    return status;
++  }
++  if (direction>=2) {
++    return uses.release_completed()
++               ? RILEY_CUDA_STATUS_SUCCESS
++               : internal_error(error,
++                                RILEY_CUDA_ERROR_STAGE_VALIDATION,
++                                kOperation,
++                                "exclusive-use accounting was corrupted");
++  }
++
++  bool launch_attempted = false;
++  CurrentContext scope(stream->owner);
++  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
++  if (status == RILEY_CUDA_STATUS_SUCCESS) {
++    status = prior_launch_status(error, kOperation);
++  }
++  if (status == RILEY_CUDA_STATUS_SUCCESS) {
++    launch_attempted = true;
++    const uint64_t vectors=params->output_row_count*(params->column_count/8);
++    piecewise_prefill_rows<<<static_cast<uint32_t>((vectors+255)/256),256,0,stream->stream>>>(
++      reinterpret_cast<const uint4*>(input.data),reinterpret_cast<const uint32_t*>(row_indices.data),
++      reinterpret_cast<uint4*>(output.data),params->input_row_count,params->output_row_count,
++      params->column_count/8,direction==1);
++    status = launch_status(error, kOperation);
++  }
++  return complete_execution(&uses, &scope, stream, status, launch_attempted,
++                            error, kOperation);
++}
++
+ extern "C" RileyCudaStatus riley_cuda_bf16_argmax_execute(
+     const RileyCudaBf16ArgmaxParams* params, RileyCudaStream* stream,
+     RileyCudaErrorInfo* error) noexcept {
+--- a/kernels/src/cublas_gemm_probe.cu
++++ b/kernels/src/cublas_gemm_probe.cu
+@@ -2506,6 +2506,8 @@
+   if(gate->prefill_workspace && !uses.add(gate->prefill_workspace))
+     return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"merged MLP workspace resource set overflow");
+   // A bounded Down graph retains the private Lt workspace on every replay.
++  if(down->prefill_workspace && !uses.add(down->prefill_workspace))
++    return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"prefill Down workspace resource set overflow");
+   if(down->sm80_projection_workspace && !uses.add(down->sm80_projection_workspace))
+     return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"MLP workspace resource set overflow");
+   if(down->sm80_full_projection_workspace && !uses.add(down->sm80_full_projection_workspace))

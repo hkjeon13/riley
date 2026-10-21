@@ -1,0 +1,24 @@
+{
+  "archive_sha256": "aedd48dcadfaf14838e4c2fb4588c92dc7baa1633debeb5a9968adfbc8fc6b2e",
+  "archive_entries": 756,
+  "CRC_all_pass": true,
+  "entry_SHA_and_size_all_pass": true,
+  "qualified_source_count": 938,
+  "unchanged_sources_match_baseline_commit": true,
+  "archived_patch_reconstructs_every_changed_or_new_source_hash": true,
+  "changed_sources": [
+    "crates/riley-cuda/src/ffi.rs",
+    "crates/riley-cuda/src/gemm.rs",
+    "crates/riley-cuda/src/lib.rs",
+    "crates/riley-cuda/src/prefill_piece.rs",
+    "crates/riley-runtime/src/llama/batch_executor.rs",
+    "crates/riley-runtime/src/llama/executor/dispatch.rs",
+    "crates/riley-runtime/src/llama/executor/owner.rs",
+    "kernels/include/riley_cuda.h",
+    "kernels/src/batch_primitives.cu",
+    "kernels/src/cublas_gemm_probe.cu"
+  ],
+  "new_sources": [
+    "crates/riley-cuda/src/prefill_piece.rs"
+  ]
+}
