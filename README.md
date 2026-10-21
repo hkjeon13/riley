@@ -97,6 +97,10 @@ preserves the tested BF16 bytes but is slower across many shapes than the
 optimized merged-prefill control. It remains a component experiment and is
 excluded from qualified server throughput claims.
 
+[v16D coalesced prefill Gate/Up](docs/qwen-mlp-batch-v16d-20261021.md) passes
+2,676 layer0 BF16 cases and reduces actual-route GEMM time in a component
+screen. Whole-model qualification is required before adoption.
+
 Dated A100 matrices for other model families and their original numerical
 contracts are in [model coverage](docs/model-coverage-a100.md). Separate native
 preset screens are documented in [native HF performance](docs/hf-native-performance.md),

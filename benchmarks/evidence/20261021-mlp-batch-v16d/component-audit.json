@@ -1,0 +1,4180 @@
+{
+  "time_ns": 1792569497519728599,
+  "runtime_adopted": false,
+  "selected_for_independent_model_qualification": "v16G coalesced prefill merged Gate/Up",
+  "scope": "Layer0 actual checkpoint weights and six transformed finite seed states. Vendor GEMM timing only, not Rust/Graph or server throughput. Existing dispatcher classic/Lt choice matched.",
+  "cases": 2676,
+  "all_BF16_equal_to_original_native_groups_and_current_route": true,
+  "baseline_selection": {
+    "below161": "original65..130 groups",
+    "from161to256": "classic separate Gate/Up over coalesced rows",
+    "from257to512": "two pinned Lt21 calls",
+    "from513to576": "classic separate Gate/Up over coalesced rows"
+  },
+  "timings": [
+    {
+      "op": 0,
+      "M": 161,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 137.979,
+      "candidate_us": 114.674,
+      "percent_change": -16.890251415070413
+    },
+    {
+      "op": 0,
+      "M": 162,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 137.954,
+      "candidate_us": 114.716,
+      "percent_change": -16.84474534989925
+    },
+    {
+      "op": 0,
+      "M": 163,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 137.958,
+      "candidate_us": 114.808,
+      "percent_change": -16.780469418228726
+    },
+    {
+      "op": 0,
+      "M": 164,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 137.963,
+      "candidate_us": 114.824,
+      "percent_change": -16.771888114929368
+    },
+    {
+      "op": 0,
+      "M": 165,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 137.975,
+      "candidate_us": 114.803,
+      "percent_change": -16.794346801956873
+    },
+    {
+      "op": 0,
+      "M": 166,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 137.949,
+      "candidate_us": 114.647,
+      "percent_change": -16.891749849582094
+    },
+    {
+      "op": 0,
+      "M": 167,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 137.98,
+      "candidate_us": 114.708,
+      "percent_change": -16.866212494564426
+    },
+    {
+      "op": 0,
+      "M": 168,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 137.979,
+      "candidate_us": 114.727,
+      "percent_change": -16.851839772719046
+    },
+    {
+      "op": 0,
+      "M": 169,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.04,
+      "candidate_us": 114.806,
+      "percent_change": -16.831353230947542
+    },
+    {
+      "op": 0,
+      "M": 170,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.006,
+      "candidate_us": 114.869,
+      "percent_change": -16.765213106676523
+    },
+    {
+      "op": 0,
+      "M": 171,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.008,
+      "candidate_us": 114.81,
+      "percent_change": -16.809170482870563
+    },
+    {
+      "op": 0,
+      "M": 172,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.009,
+      "candidate_us": 114.839,
+      "percent_change": -16.788760153323324
+    },
+    {
+      "op": 0,
+      "M": 173,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.038,
+      "candidate_us": 114.867,
+      "percent_change": -16.78595748996653
+    },
+    {
+      "op": 0,
+      "M": 174,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.027,
+      "candidate_us": 114.932,
+      "percent_change": -16.732233548508614
+    },
+    {
+      "op": 0,
+      "M": 175,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.017,
+      "candidate_us": 114.91,
+      "percent_change": -16.74214046095771
+    },
+    {
+      "op": 0,
+      "M": 176,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.064,
+      "candidate_us": 115.036,
+      "percent_change": -16.679221230733564
+    },
+    {
+      "op": 0,
+      "M": 177,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.111,
+      "candidate_us": 114.985,
+      "percent_change": -16.744502610219314
+    },
+    {
+      "op": 0,
+      "M": 178,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.171,
+      "candidate_us": 114.942,
+      "percent_change": -16.81177671146623
+    },
+    {
+      "op": 0,
+      "M": 179,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.212,
+      "candidate_us": 115.022,
+      "percent_change": -16.778572048736716
+    },
+    {
+      "op": 0,
+      "M": 180,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.171,
+      "candidate_us": 115.05,
+      "percent_change": -16.73361269730985
+    },
+    {
+      "op": 0,
+      "M": 181,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.143,
+      "candidate_us": 115.022,
+      "percent_change": -16.737004408475276
+    },
+    {
+      "op": 0,
+      "M": 182,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.167,
+      "candidate_us": 114.984,
+      "percent_change": -16.778970376428525
+    },
+    {
+      "op": 0,
+      "M": 183,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.228,
+      "candidate_us": 114.997,
+      "percent_change": -16.806291055357825
+    },
+    {
+      "op": 0,
+      "M": 184,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.201,
+      "candidate_us": 115.052,
+      "percent_change": -16.750240591602072
+    },
+    {
+      "op": 0,
+      "M": 185,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.201,
+      "candidate_us": 115.018,
+      "percent_change": -16.77484243963502
+    },
+    {
+      "op": 0,
+      "M": 186,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.275,
+      "candidate_us": 115.041,
+      "percent_change": -16.8027481468089
+    },
+    {
+      "op": 0,
+      "M": 187,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.223,
+      "candidate_us": 115.056,
+      "percent_change": -16.760597006286947
+    },
+    {
+      "op": 0,
+      "M": 188,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.201,
+      "candidate_us": 114.946,
+      "percent_change": -16.826940470763596
+    },
+    {
+      "op": 0,
+      "M": 189,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.281,
+      "candidate_us": 115.213,
+      "percent_change": -16.681973662325277
+    },
+    {
+      "op": 0,
+      "M": 190,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.277,
+      "candidate_us": 115.26,
+      "percent_change": -16.645573739667462
+    },
+    {
+      "op": 0,
+      "M": 191,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.291,
+      "candidate_us": 115.392,
+      "percent_change": -16.558561294661256
+    },
+    {
+      "op": 0,
+      "M": 192,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.258,
+      "candidate_us": 115.268,
+      "percent_change": -16.628332537719338
+    },
+    {
+      "op": 0,
+      "M": 193,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.346,
+      "candidate_us": 115.393,
+      "percent_change": -16.591010943576258
+    },
+    {
+      "op": 0,
+      "M": 194,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.366,
+      "candidate_us": 115.49,
+      "percent_change": -16.53296330023273
+    },
+    {
+      "op": 0,
+      "M": 195,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.406,
+      "candidate_us": 115.577,
+      "percent_change": -16.4942271288817
+    },
+    {
+      "op": 0,
+      "M": 196,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.452,
+      "candidate_us": 115.615,
+      "percent_change": -16.494525178401176
+    },
+    {
+      "op": 0,
+      "M": 197,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.384,
+      "candidate_us": 115.796,
+      "percent_change": -16.3226962654642
+    },
+    {
+      "op": 0,
+      "M": 198,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.445,
+      "candidate_us": 115.864,
+      "percent_change": -16.310448192422978
+    },
+    {
+      "op": 0,
+      "M": 199,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.483,
+      "candidate_us": 115.806,
+      "percent_change": -16.375295162583136
+    },
+    {
+      "op": 0,
+      "M": 200,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.533,
+      "candidate_us": 115.812,
+      "percent_change": -16.401146297272128
+    },
+    {
+      "op": 0,
+      "M": 201,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.492,
+      "candidate_us": 115.969,
+      "percent_change": -16.263033243797477
+    },
+    {
+      "op": 0,
+      "M": 202,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.708,
+      "candidate_us": 116.01,
+      "percent_change": -16.363872307293015
+    },
+    {
+      "op": 0,
+      "M": 203,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.722,
+      "candidate_us": 116.05,
+      "percent_change": -16.343478323553583
+    },
+    {
+      "op": 0,
+      "M": 204,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.649,
+      "candidate_us": 116.237,
+      "percent_change": -16.16455942704239
+    },
+    {
+      "op": 0,
+      "M": 205,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.701,
+      "candidate_us": 116.246,
+      "percent_change": -16.18950115716541
+    },
+    {
+      "op": 0,
+      "M": 206,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.692,
+      "candidate_us": 116.373,
+      "percent_change": -16.092492717676578
+    },
+    {
+      "op": 0,
+      "M": 207,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.702,
+      "candidate_us": 116.153,
+      "percent_change": -16.257155628613862
+    },
+    {
+      "op": 0,
+      "M": 208,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.645,
+      "candidate_us": 116.45,
+      "percent_change": -16.00851094521981
+    },
+    {
+      "op": 0,
+      "M": 209,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.704,
+      "candidate_us": 116.425,
+      "percent_change": -16.062262083285272
+    },
+    {
+      "op": 0,
+      "M": 210,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.719,
+      "candidate_us": 116.567,
+      "percent_change": -15.968973248077045
+    },
+    {
+      "op": 0,
+      "M": 211,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.736,
+      "candidate_us": 116.631,
+      "percent_change": -15.933139199630952
+    },
+    {
+      "op": 0,
+      "M": 212,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.703,
+      "candidate_us": 116.683,
+      "percent_change": -15.875647967239349
+    },
+    {
+      "op": 0,
+      "M": 213,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.704,
+      "candidate_us": 116.877,
+      "percent_change": -15.736388280078451
+    },
+    {
+      "op": 0,
+      "M": 214,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.714,
+      "candidate_us": 116.957,
+      "percent_change": -15.68479028793056
+    },
+    {
+      "op": 0,
+      "M": 215,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.761,
+      "candidate_us": 116.841,
+      "percent_change": -15.796945827718167
+    },
+    {
+      "op": 0,
+      "M": 216,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.73,
+      "candidate_us": 117.066,
+      "percent_change": -15.615944640668921
+    },
+    {
+      "op": 0,
+      "M": 217,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.771,
+      "candidate_us": 117.135,
+      "percent_change": -15.591153771321087
+    },
+    {
+      "op": 0,
+      "M": 218,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.712,
+      "candidate_us": 117.146,
+      "percent_change": -15.54732106811234
+    },
+    {
+      "op": 0,
+      "M": 219,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.775,
+      "candidate_us": 117.185,
+      "percent_change": -15.557557196901461
+    },
+    {
+      "op": 0,
+      "M": 220,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.79,
+      "candidate_us": 117.312,
+      "percent_change": -15.475178326968797
+    },
+    {
+      "op": 0,
+      "M": 221,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.828,
+      "candidate_us": 117.095,
+      "percent_change": -15.654622986717381
+    },
+    {
+      "op": 0,
+      "M": 222,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.736,
+      "candidate_us": 117.365,
+      "percent_change": -15.404076807749966
+    },
+    {
+      "op": 0,
+      "M": 223,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.762,
+      "candidate_us": 117.465,
+      "percent_change": -15.347861806546458
+    },
+    {
+      "op": 0,
+      "M": 224,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.827,
+      "candidate_us": 117.568,
+      "percent_change": -15.31330360808777
+    },
+    {
+      "op": 0,
+      "M": 225,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.826,
+      "candidate_us": 117.679,
+      "percent_change": -15.232737383487239
+    },
+    {
+      "op": 0,
+      "M": 226,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.837,
+      "candidate_us": 117.712,
+      "percent_change": -15.215684579758992
+    },
+    {
+      "op": 0,
+      "M": 227,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.836,
+      "candidate_us": 117.781,
+      "percent_change": -15.165374974790403
+    },
+    {
+      "op": 0,
+      "M": 228,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.86,
+      "candidate_us": 117.962,
+      "percent_change": -15.049690335589805
+    },
+    {
+      "op": 0,
+      "M": 229,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.86,
+      "candidate_us": 117.974,
+      "percent_change": -15.041048538095925
+    },
+    {
+      "op": 0,
+      "M": 230,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.829,
+      "candidate_us": 118.01,
+      "percent_change": -14.996146338301076
+    },
+    {
+      "op": 0,
+      "M": 231,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.833,
+      "candidate_us": 118.201,
+      "percent_change": -14.86102007447797
+    },
+    {
+      "op": 0,
+      "M": 232,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.842,
+      "candidate_us": 118.243,
+      "percent_change": -14.83628873107562
+    },
+    {
+      "op": 0,
+      "M": 233,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.859,
+      "candidate_us": 118.312,
+      "percent_change": -14.79702431963359
+    },
+    {
+      "op": 0,
+      "M": 234,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.86,
+      "candidate_us": 118.43,
+      "percent_change": -14.712660233328535
+    },
+    {
+      "op": 0,
+      "M": 235,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.85,
+      "candidate_us": 118.436,
+      "percent_change": -14.702196615052209
+    },
+    {
+      "op": 0,
+      "M": 236,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.81,
+      "candidate_us": 118.7,
+      "percent_change": -14.487428859592244
+    },
+    {
+      "op": 0,
+      "M": 237,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.895,
+      "candidate_us": 118.656,
+      "percent_change": -14.57143885669031
+    },
+    {
+      "op": 0,
+      "M": 238,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.841,
+      "candidate_us": 118.629,
+      "percent_change": -14.557659480989049
+    },
+    {
+      "op": 0,
+      "M": 239,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.806,
+      "candidate_us": 118.836,
+      "percent_change": -14.386986153336323
+    },
+    {
+      "op": 0,
+      "M": 240,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.835,
+      "candidate_us": 118.763,
+      "percent_change": -14.457449490402274
+    },
+    {
+      "op": 0,
+      "M": 241,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.87,
+      "candidate_us": 118.974,
+      "percent_change": -14.327068481313454
+    },
+    {
+      "op": 0,
+      "M": 242,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.82,
+      "candidate_us": 119.065,
+      "percent_change": -14.230658406569653
+    },
+    {
+      "op": 0,
+      "M": 243,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.908,
+      "candidate_us": 119.089,
+      "percent_change": -14.26771676217352
+    },
+    {
+      "op": 0,
+      "M": 244,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.913,
+      "candidate_us": 119.19,
+      "percent_change": -14.198095210671436
+    },
+    {
+      "op": 0,
+      "M": 245,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.98,
+      "candidate_us": 119.164,
+      "percent_change": -14.25816664268239
+    },
+    {
+      "op": 0,
+      "M": 246,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.949,
+      "candidate_us": 119.273,
+      "percent_change": -14.160591296087066
+    },
+    {
+      "op": 0,
+      "M": 247,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.975,
+      "candidate_us": 119.442,
+      "percent_change": -14.055045871559635
+    },
+    {
+      "op": 0,
+      "M": 248,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 139.036,
+      "candidate_us": 119.492,
+      "percent_change": -14.0567910469231
+    },
+    {
+      "op": 0,
+      "M": 249,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 139.068,
+      "candidate_us": 119.52,
+      "percent_change": -14.05643282422988
+    },
+    {
+      "op": 0,
+      "M": 250,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.982,
+      "candidate_us": 119.564,
+      "percent_change": -13.971593443755314
+    },
+    {
+      "op": 0,
+      "M": 251,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 139.001,
+      "candidate_us": 119.711,
+      "percent_change": -13.877598002892066
+    },
+    {
+      "op": 0,
+      "M": 252,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.914,
+      "candidate_us": 119.807,
+      "percent_change": -13.754553176785622
+    },
+    {
+      "op": 0,
+      "M": 253,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.982,
+      "candidate_us": 119.812,
+      "percent_change": -13.793153070181752
+    },
+    {
+      "op": 0,
+      "M": 254,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 138.986,
+      "candidate_us": 119.876,
+      "percent_change": -13.749586289266535
+    },
+    {
+      "op": 0,
+      "M": 255,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 139.055,
+      "candidate_us": 119.91,
+      "percent_change": -13.767933551472444
+    },
+    {
+      "op": 0,
+      "M": 256,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 139.021,
+      "candidate_us": 119.981,
+      "percent_change": -13.695772581120835
+    },
+    {
+      "op": 0,
+      "M": 257,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.241,
+      "candidate_us": 164.498,
+      "percent_change": -17.84999076113285
+    },
+    {
+      "op": 0,
+      "M": 258,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.195,
+      "candidate_us": 164.576,
+      "percent_change": -17.792152651165118
+    },
+    {
+      "op": 0,
+      "M": 259,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.259,
+      "candidate_us": 164.576,
+      "percent_change": -17.818425139444415
+    },
+    {
+      "op": 0,
+      "M": 260,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.224,
+      "candidate_us": 164.697,
+      "percent_change": -17.743627137605877
+    },
+    {
+      "op": 0,
+      "M": 261,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.253,
+      "candidate_us": 164.694,
+      "percent_change": -17.757037347755087
+    },
+    {
+      "op": 0,
+      "M": 262,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.321,
+      "candidate_us": 164.798,
+      "percent_change": -17.733038473250428
+    },
+    {
+      "op": 0,
+      "M": 263,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.332,
+      "candidate_us": 165.846,
+      "percent_change": -17.214424056066925
+    },
+    {
+      "op": 0,
+      "M": 264,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.213,
+      "candidate_us": 164.695,
+      "percent_change": -17.740106786272626
+    },
+    {
+      "op": 0,
+      "M": 265,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.245,
+      "candidate_us": 164.68,
+      "percent_change": -17.760743089715092
+    },
+    {
+      "op": 0,
+      "M": 266,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.297,
+      "candidate_us": 164.752,
+      "percent_change": -17.746146971746946
+    },
+    {
+      "op": 0,
+      "M": 267,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.336,
+      "candidate_us": 164.786,
+      "percent_change": -17.74518808401885
+    },
+    {
+      "op": 0,
+      "M": 268,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.306,
+      "candidate_us": 164.831,
+      "percent_change": -17.71040308328259
+    },
+    {
+      "op": 0,
+      "M": 269,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.336,
+      "candidate_us": 164.792,
+      "percent_change": -17.74219311556585
+    },
+    {
+      "op": 0,
+      "M": 270,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.341,
+      "candidate_us": 164.824,
+      "percent_change": -17.72827329403367
+    },
+    {
+      "op": 0,
+      "M": 271,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.279,
+      "candidate_us": 164.755,
+      "percent_change": -17.73725652714463
+    },
+    {
+      "op": 0,
+      "M": 272,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.33,
+      "candidate_us": 164.826,
+      "percent_change": -17.722757450207173
+    },
+    {
+      "op": 0,
+      "M": 273,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.32,
+      "candidate_us": 164.882,
+      "percent_change": -17.690694888178903
+    },
+    {
+      "op": 0,
+      "M": 274,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.365,
+      "candidate_us": 164.852,
+      "percent_change": -17.72415342000848
+    },
+    {
+      "op": 0,
+      "M": 275,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.294,
+      "candidate_us": 164.936,
+      "percent_change": -17.65305001647578
+    },
+    {
+      "op": 0,
+      "M": 276,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.365,
+      "candidate_us": 164.995,
+      "percent_change": -17.65278366980261
+    },
+    {
+      "op": 0,
+      "M": 277,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.335,
+      "candidate_us": 164.926,
+      "percent_change": -17.674894551626032
+    },
+    {
+      "op": 0,
+      "M": 278,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.332,
+      "candidate_us": 165.008,
+      "percent_change": -17.632729668749867
+    },
+    {
+      "op": 0,
+      "M": 279,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.399,
+      "candidate_us": 165.035,
+      "percent_change": -17.64679464468386
+    },
+    {
+      "op": 0,
+      "M": 280,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.365,
+      "candidate_us": 164.997,
+      "percent_change": -17.651785491478044
+    },
+    {
+      "op": 0,
+      "M": 281,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.542,
+      "candidate_us": 165.066,
+      "percent_change": -17.690059937569192
+    },
+    {
+      "op": 0,
+      "M": 282,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.622,
+      "candidate_us": 165.112,
+      "percent_change": -17.69995314571683
+    },
+    {
+      "op": 0,
+      "M": 283,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.609,
+      "candidate_us": 165.14,
+      "percent_change": -17.680662383043643
+    },
+    {
+      "op": 0,
+      "M": 284,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.589,
+      "candidate_us": 165.092,
+      "percent_change": -17.69638414868212
+    },
+    {
+      "op": 0,
+      "M": 285,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.578,
+      "candidate_us": 165.152,
+      "percent_change": -17.6619569444306
+    },
+    {
+      "op": 0,
+      "M": 286,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.643,
+      "candidate_us": 165.204,
+      "percent_change": -17.662714373289866
+    },
+    {
+      "op": 0,
+      "M": 287,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.686,
+      "candidate_us": 165.137,
+      "percent_change": -17.713741865401676
+    },
+    {
+      "op": 0,
+      "M": 288,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.727,
+      "candidate_us": 165.19,
+      "percent_change": -17.70414543135702
+    },
+    {
+      "op": 0,
+      "M": 289,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.792,
+      "candidate_us": 165.203,
+      "percent_change": -17.724311725566753
+    },
+    {
+      "op": 0,
+      "M": 290,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.814,
+      "candidate_us": 165.259,
+      "percent_change": -17.70543886382424
+    },
+    {
+      "op": 0,
+      "M": 291,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.924,
+      "candidate_us": 165.275,
+      "percent_change": -17.742529513646954
+    },
+    {
+      "op": 0,
+      "M": 292,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.843,
+      "candidate_us": 165.174,
+      "percent_change": -17.759643104315302
+    },
+    {
+      "op": 0,
+      "M": 293,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.948,
+      "candidate_us": 165.331,
+      "percent_change": -17.72448593666024
+    },
+    {
+      "op": 0,
+      "M": 294,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.848,
+      "candidate_us": 165.425,
+      "percent_change": -17.636720305902976
+    },
+    {
+      "op": 0,
+      "M": 295,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.976,
+      "candidate_us": 165.362,
+      "percent_change": -17.720523843643022
+    },
+    {
+      "op": 0,
+      "M": 296,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 200.932,
+      "candidate_us": 165.305,
+      "percent_change": -17.73087412657017
+    },
+    {
+      "op": 0,
+      "M": 297,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.043,
+      "candidate_us": 165.347,
+      "percent_change": -17.75540556000458
+    },
+    {
+      "op": 0,
+      "M": 298,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.081,
+      "candidate_us": 165.483,
+      "percent_change": -17.7033135900458
+    },
+    {
+      "op": 0,
+      "M": 299,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.114,
+      "candidate_us": 165.46,
+      "percent_change": -17.728253627295963
+    },
+    {
+      "op": 0,
+      "M": 300,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.119,
+      "candidate_us": 165.428,
+      "percent_change": -17.746209955300095
+    },
+    {
+      "op": 0,
+      "M": 301,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.093,
+      "candidate_us": 165.481,
+      "percent_change": -17.709219117522736
+    },
+    {
+      "op": 0,
+      "M": 302,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.154,
+      "candidate_us": 165.617,
+      "percent_change": -17.66656392614614
+    },
+    {
+      "op": 0,
+      "M": 303,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.295,
+      "candidate_us": 165.548,
+      "percent_change": -17.758513624282767
+    },
+    {
+      "op": 0,
+      "M": 304,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.192,
+      "candidate_us": 165.507,
+      "percent_change": -17.73678873911487
+    },
+    {
+      "op": 0,
+      "M": 305,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.396,
+      "candidate_us": 165.547,
+      "percent_change": -17.800254225505963
+    },
+    {
+      "op": 0,
+      "M": 306,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.378,
+      "candidate_us": 165.682,
+      "percent_change": -17.72586876421456
+    },
+    {
+      "op": 0,
+      "M": 307,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.383,
+      "candidate_us": 165.716,
+      "percent_change": -17.711028239722314
+    },
+    {
+      "op": 0,
+      "M": 308,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.45,
+      "candidate_us": 165.676,
+      "percent_change": -17.758252668155873
+    },
+    {
+      "op": 0,
+      "M": 309,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.501,
+      "candidate_us": 165.778,
+      "percent_change": -17.728447997776698
+    },
+    {
+      "op": 0,
+      "M": 310,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.529,
+      "candidate_us": 165.832,
+      "percent_change": -17.713083476819712
+    },
+    {
+      "op": 0,
+      "M": 311,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.544,
+      "candidate_us": 165.853,
+      "percent_change": -17.708788155440004
+    },
+    {
+      "op": 0,
+      "M": 312,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.637,
+      "candidate_us": 165.826,
+      "percent_change": -17.760133308866934
+    },
+    {
+      "op": 0,
+      "M": 313,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.826,
+      "candidate_us": 165.895,
+      "percent_change": -17.80295898447176
+    },
+    {
+      "op": 0,
+      "M": 314,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.835,
+      "candidate_us": 166.024,
+      "percent_change": -17.742710629970027
+    },
+    {
+      "op": 0,
+      "M": 315,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.904,
+      "candidate_us": 165.974,
+      "percent_change": -17.795586021079323
+    },
+    {
+      "op": 0,
+      "M": 316,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.936,
+      "candidate_us": 165.993,
+      "percent_change": -17.799203708105548
+    },
+    {
+      "op": 0,
+      "M": 317,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 201.941,
+      "candidate_us": 166.089,
+      "percent_change": -17.753700338217605
+    },
+    {
+      "op": 0,
+      "M": 318,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.048,
+      "candidate_us": 166.107,
+      "percent_change": -17.788347323408303
+    },
+    {
+      "op": 0,
+      "M": 319,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.064,
+      "candidate_us": 166.091,
+      "percent_change": -17.802775358302313
+    },
+    {
+      "op": 0,
+      "M": 320,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.028,
+      "candidate_us": 166.079,
+      "percent_change": -17.794068148969444
+    },
+    {
+      "op": 0,
+      "M": 321,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.191,
+      "candidate_us": 166.313,
+      "percent_change": -17.74460782131747
+    },
+    {
+      "op": 0,
+      "M": 322,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.231,
+      "candidate_us": 166.268,
+      "percent_change": -17.783129193842683
+    },
+    {
+      "op": 0,
+      "M": 323,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.366,
+      "candidate_us": 166.319,
+      "percent_change": -17.81277487324947
+    },
+    {
+      "op": 0,
+      "M": 324,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.467,
+      "candidate_us": 166.367,
+      "percent_change": -17.830066134234237
+    },
+    {
+      "op": 0,
+      "M": 325,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.577,
+      "candidate_us": 166.436,
+      "percent_change": -17.840623565360325
+    },
+    {
+      "op": 0,
+      "M": 326,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.484,
+      "candidate_us": 166.462,
+      "percent_change": -17.790047608699954
+    },
+    {
+      "op": 0,
+      "M": 327,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.716,
+      "candidate_us": 166.542,
+      "percent_change": -17.84466938968804
+    },
+    {
+      "op": 0,
+      "M": 328,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.684,
+      "candidate_us": 166.577,
+      "percent_change": -17.814430344773147
+    },
+    {
+      "op": 0,
+      "M": 329,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.792,
+      "candidate_us": 166.636,
+      "percent_change": -17.8291056846424
+    },
+    {
+      "op": 0,
+      "M": 330,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.857,
+      "candidate_us": 166.708,
+      "percent_change": -17.819942126719813
+    },
+    {
+      "op": 0,
+      "M": 331,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.926,
+      "candidate_us": 166.671,
+      "percent_change": -17.866118683658083
+    },
+    {
+      "op": 0,
+      "M": 332,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 202.98,
+      "candidate_us": 166.799,
+      "percent_change": -17.824908858015565
+    },
+    {
+      "op": 0,
+      "M": 333,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 203.135,
+      "candidate_us": 166.9,
+      "percent_change": -17.837891057670994
+    },
+    {
+      "op": 0,
+      "M": 334,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 203.12,
+      "candidate_us": 166.84,
+      "percent_change": -17.861362741236707
+    },
+    {
+      "op": 0,
+      "M": 335,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 203.272,
+      "candidate_us": 166.932,
+      "percent_change": -17.87752371207053
+    },
+    {
+      "op": 0,
+      "M": 336,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.087,
+      "candidate_us": 168.487,
+      "percent_change": -17.846084832290686
+    },
+    {
+      "op": 0,
+      "M": 337,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 203.399,
+      "candidate_us": 167.026,
+      "percent_change": -17.882585460105503
+    },
+    {
+      "op": 0,
+      "M": 338,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 203.464,
+      "candidate_us": 167.104,
+      "percent_change": -17.87048323044862
+    },
+    {
+      "op": 0,
+      "M": 339,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 203.531,
+      "candidate_us": 167.157,
+      "percent_change": -17.87147903759132
+    },
+    {
+      "op": 0,
+      "M": 340,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 203.723,
+      "candidate_us": 167.296,
+      "percent_change": -17.88065166917826
+    },
+    {
+      "op": 0,
+      "M": 341,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 203.701,
+      "candidate_us": 167.277,
+      "percent_change": -17.881110058369863
+    },
+    {
+      "op": 0,
+      "M": 342,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 203.766,
+      "candidate_us": 167.348,
+      "percent_change": -17.872461549031726
+    },
+    {
+      "op": 0,
+      "M": 343,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 203.967,
+      "candidate_us": 167.434,
+      "percent_change": -17.91123073830572
+    },
+    {
+      "op": 0,
+      "M": 344,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 203.938,
+      "candidate_us": 167.441,
+      "percent_change": -17.89612529298119
+    },
+    {
+      "op": 0,
+      "M": 345,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 204.296,
+      "candidate_us": 167.699,
+      "percent_change": -17.91371343540744
+    },
+    {
+      "op": 0,
+      "M": 346,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 204.371,
+      "candidate_us": 167.747,
+      "percent_change": -17.92035073469328
+    },
+    {
+      "op": 0,
+      "M": 347,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.389,
+      "candidate_us": 169.292,
+      "percent_change": -17.97431064640074
+    },
+    {
+      "op": 0,
+      "M": 348,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 204.158,
+      "candidate_us": 167.47,
+      "percent_change": -17.970395478012126
+    },
+    {
+      "op": 0,
+      "M": 349,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 204.473,
+      "candidate_us": 167.846,
+      "percent_change": -17.91287847295242
+    },
+    {
+      "op": 0,
+      "M": 350,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 204.719,
+      "candidate_us": 167.917,
+      "percent_change": -17.976836541796317
+    },
+    {
+      "op": 0,
+      "M": 351,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.55,
+      "candidate_us": 169.377,
+      "percent_change": -17.99709513435004
+    },
+    {
+      "op": 0,
+      "M": 352,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 204.747,
+      "candidate_us": 168.014,
+      "percent_change": -17.940678007492174
+    },
+    {
+      "op": 0,
+      "M": 353,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.005,
+      "candidate_us": 168.122,
+      "percent_change": -17.991268505646197
+    },
+    {
+      "op": 0,
+      "M": 354,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.055,
+      "candidate_us": 168.215,
+      "percent_change": -17.96591158469679
+    },
+    {
+      "op": 0,
+      "M": 355,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.174,
+      "candidate_us": 168.283,
+      "percent_change": -17.980348387222566
+    },
+    {
+      "op": 0,
+      "M": 356,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.206,
+      "candidate_us": 168.32,
+      "percent_change": -17.975107940313638
+    },
+    {
+      "op": 0,
+      "M": 357,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.446,
+      "candidate_us": 168.41,
+      "percent_change": -18.02712148204394
+    },
+    {
+      "op": 0,
+      "M": 358,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.485,
+      "candidate_us": 168.513,
+      "percent_change": -17.99255420103657
+    },
+    {
+      "op": 0,
+      "M": 359,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.702,
+      "candidate_us": 168.58,
+      "percent_change": -18.046494443418137
+    },
+    {
+      "op": 0,
+      "M": 360,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.653,
+      "candidate_us": 168.702,
+      "percent_change": -17.967644527432125
+    },
+    {
+      "op": 0,
+      "M": 361,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.922,
+      "candidate_us": 168.777,
+      "percent_change": -18.03838346558406
+    },
+    {
+      "op": 0,
+      "M": 362,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.005,
+      "candidate_us": 168.85,
+      "percent_change": -18.035970000728142
+    },
+    {
+      "op": 0,
+      "M": 363,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.988,
+      "candidate_us": 170.076,
+      "percent_change": -18.22797469084755
+    },
+    {
+      "op": 0,
+      "M": 364,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.21,
+      "candidate_us": 168.945,
+      "percent_change": -18.07138354105039
+    },
+    {
+      "op": 0,
+      "M": 365,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.287,
+      "candidate_us": 168.988,
+      "percent_change": -18.081119993019435
+    },
+    {
+      "op": 0,
+      "M": 366,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.828,
+      "candidate_us": 170.14,
+      "percent_change": -18.134226379506135
+    },
+    {
+      "op": 0,
+      "M": 367,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.475,
+      "candidate_us": 169.165,
+      "percent_change": -18.069984259595596
+    },
+    {
+      "op": 0,
+      "M": 368,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.161,
+      "candidate_us": 170.297,
+      "percent_change": -18.18976657491077
+    },
+    {
+      "op": 0,
+      "M": 369,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.365,
+      "candidate_us": 169.334,
+      "percent_change": -17.944418869478838
+    },
+    {
+      "op": 0,
+      "M": 370,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.811,
+      "candidate_us": 169.424,
+      "percent_change": -18.07785852783459
+    },
+    {
+      "op": 0,
+      "M": 371,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.88,
+      "candidate_us": 169.44,
+      "percent_change": -18.097447795823662
+    },
+    {
+      "op": 0,
+      "M": 372,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.84,
+      "candidate_us": 169.501,
+      "percent_change": -18.05211757880487
+    },
+    {
+      "op": 0,
+      "M": 373,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.838,
+      "candidate_us": 169.611,
+      "percent_change": -17.99814347460331
+    },
+    {
+      "op": 0,
+      "M": 374,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.962,
+      "candidate_us": 169.713,
+      "percent_change": -17.997989969173076
+    },
+    {
+      "op": 0,
+      "M": 375,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.082,
+      "candidate_us": 169.649,
+      "percent_change": -18.07641417409528
+    },
+    {
+      "op": 0,
+      "M": 376,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.097,
+      "candidate_us": 169.847,
+      "percent_change": -17.986740512899758
+    },
+    {
+      "op": 0,
+      "M": 377,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.82,
+      "candidate_us": 169.663,
+      "percent_change": -18.75155636433291
+    },
+    {
+      "op": 0,
+      "M": 378,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.159,
+      "candidate_us": 169.806,
+      "percent_change": -18.03107757809218
+    },
+    {
+      "op": 0,
+      "M": 379,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.215,
+      "candidate_us": 170.004,
+      "percent_change": -17.957676809111312
+    },
+    {
+      "op": 0,
+      "M": 380,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.504,
+      "candidate_us": 170.19,
+      "percent_change": -17.9823039555864
+    },
+    {
+      "op": 0,
+      "M": 381,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.542,
+      "candidate_us": 170.187,
+      "percent_change": -17.998766514729546
+    },
+    {
+      "op": 0,
+      "M": 382,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.59,
+      "candidate_us": 170.344,
+      "percent_change": -17.94209740353582
+    },
+    {
+      "op": 0,
+      "M": 383,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.708,
+      "candidate_us": 170.34,
+      "percent_change": -17.990640707146564
+    },
+    {
+      "op": 0,
+      "M": 384,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.754,
+      "candidate_us": 170.43,
+      "percent_change": -17.96547840234123
+    },
+    {
+      "op": 0,
+      "M": 385,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 204.992,
+      "candidate_us": 197.661,
+      "percent_change": -3.5762371214486333
+    },
+    {
+      "op": 0,
+      "M": 386,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.067,
+      "candidate_us": 197.56,
+      "percent_change": -3.6607547777067984
+    },
+    {
+      "op": 0,
+      "M": 387,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.071,
+      "candidate_us": 197.63,
+      "percent_change": -3.628499397769558
+    },
+    {
+      "op": 0,
+      "M": 388,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.201,
+      "candidate_us": 199.641,
+      "percent_change": -3.6486310394254873
+    },
+    {
+      "op": 0,
+      "M": 389,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.107,
+      "candidate_us": 197.654,
+      "percent_change": -3.63371313509534
+    },
+    {
+      "op": 0,
+      "M": 390,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.024,
+      "candidate_us": 197.694,
+      "percent_change": -3.575191197128147
+    },
+    {
+      "op": 0,
+      "M": 391,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.236,
+      "candidate_us": 199.658,
+      "percent_change": -3.656700573259475
+    },
+    {
+      "op": 0,
+      "M": 392,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.267,
+      "candidate_us": 198.434,
+      "percent_change": -4.261652843916297
+    },
+    {
+      "op": 0,
+      "M": 393,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.134,
+      "candidate_us": 198.115,
+      "percent_change": -3.421665837940069
+    },
+    {
+      "op": 0,
+      "M": 394,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.552,
+      "candidate_us": 199.321,
+      "percent_change": -3.5008133545063713
+    },
+    {
+      "op": 0,
+      "M": 395,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.311,
+      "candidate_us": 199.659,
+      "percent_change": -3.6910728326041586
+    },
+    {
+      "op": 0,
+      "M": 396,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.167,
+      "candidate_us": 197.75,
+      "percent_change": -3.615103793495056
+    },
+    {
+      "op": 0,
+      "M": 397,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 204.646,
+      "candidate_us": 197.4,
+      "percent_change": -3.540748414334993
+    },
+    {
+      "op": 0,
+      "M": 398,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.328,
+      "candidate_us": 199.737,
+      "percent_change": -3.661348201883008
+    },
+    {
+      "op": 0,
+      "M": 399,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 204.636,
+      "candidate_us": 197.377,
+      "percent_change": -3.547274184405469
+    },
+    {
+      "op": 0,
+      "M": 400,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.163,
+      "candidate_us": 198.141,
+      "percent_change": -3.4226444339379047
+    },
+    {
+      "op": 0,
+      "M": 401,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.74,
+      "candidate_us": 197.822,
+      "percent_change": -4.313630647189715
+    },
+    {
+      "op": 0,
+      "M": 402,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.34,
+      "candidate_us": 199.828,
+      "percent_change": -3.623034629111599
+    },
+    {
+      "op": 0,
+      "M": 403,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 204.673,
+      "candidate_us": 197.455,
+      "percent_change": -3.5266009683739385
+    },
+    {
+      "op": 0,
+      "M": 404,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.29,
+      "candidate_us": 197.928,
+      "percent_change": -3.5861464270056986
+    },
+    {
+      "op": 0,
+      "M": 405,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.359,
+      "candidate_us": 198.079,
+      "percent_change": -3.5450114190271664
+    },
+    {
+      "op": 0,
+      "M": 406,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.475,
+      "candidate_us": 199.971,
+      "percent_change": -3.6168213037715335
+    },
+    {
+      "op": 0,
+      "M": 407,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.404,
+      "candidate_us": 199.931,
+      "percent_change": -3.603112765423999
+    },
+    {
+      "op": 0,
+      "M": 408,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.354,
+      "candidate_us": 197.975,
+      "percent_change": -3.593307167135784
+    },
+    {
+      "op": 0,
+      "M": 409,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.328,
+      "candidate_us": 197.969,
+      "percent_change": -3.5840216629003385
+    },
+    {
+      "op": 0,
+      "M": 410,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.345,
+      "candidate_us": 198.21,
+      "percent_change": -3.4746402395967713
+    },
+    {
+      "op": 0,
+      "M": 411,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.426,
+      "candidate_us": 198.035,
+      "percent_change": -3.597889264260601
+    },
+    {
+      "op": 0,
+      "M": 412,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.415,
+      "candidate_us": 198.085,
+      "percent_change": -3.5683859503930937
+    },
+    {
+      "op": 0,
+      "M": 413,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.337,
+      "candidate_us": 198.165,
+      "percent_change": -3.4927947715219343
+    },
+    {
+      "op": 0,
+      "M": 414,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.206,
+      "candidate_us": 197.664,
+      "percent_change": -4.142459482265304
+    },
+    {
+      "op": 0,
+      "M": 415,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.876,
+      "candidate_us": 200.007,
+      "percent_change": -3.3203464877511135
+    },
+    {
+      "op": 0,
+      "M": 416,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.52,
+      "candidate_us": 199.794,
+      "percent_change": -3.723014649190437
+    },
+    {
+      "op": 0,
+      "M": 417,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.959,
+      "candidate_us": 199.921,
+      "percent_change": -3.4006735633627994
+    },
+    {
+      "op": 0,
+      "M": 418,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.436,
+      "candidate_us": 197.973,
+      "percent_change": -3.632761541307261
+    },
+    {
+      "op": 0,
+      "M": 419,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 204.88,
+      "candidate_us": 198.01,
+      "percent_change": -3.3531823506442793
+    },
+    {
+      "op": 0,
+      "M": 420,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.545,
+      "candidate_us": 200.182,
+      "percent_change": -3.5476643619456016
+    },
+    {
+      "op": 0,
+      "M": 421,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.537,
+      "candidate_us": 197.773,
+      "percent_change": -3.7774220699922645
+    },
+    {
+      "op": 0,
+      "M": 422,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.958,
+      "candidate_us": 200.646,
+      "percent_change": -3.0498941814281255
+    },
+    {
+      "op": 0,
+      "M": 423,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.576,
+      "candidate_us": 200.255,
+      "percent_change": -3.989433108315432
+    },
+    {
+      "op": 0,
+      "M": 424,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 204.892,
+      "candidate_us": 197.874,
+      "percent_change": -3.4252191398395304
+    },
+    {
+      "op": 0,
+      "M": 425,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 204.895,
+      "candidate_us": 198.048,
+      "percent_change": -3.3417116083847898
+    },
+    {
+      "op": 0,
+      "M": 426,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.485,
+      "candidate_us": 198.312,
+      "percent_change": -3.4907657493247646
+    },
+    {
+      "op": 0,
+      "M": 427,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.465,
+      "candidate_us": 198.287,
+      "percent_change": -3.493539045579541
+    },
+    {
+      "op": 0,
+      "M": 428,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.476,
+      "candidate_us": 198.441,
+      "percent_change": -3.4237575191263248
+    },
+    {
+      "op": 0,
+      "M": 429,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.575,
+      "candidate_us": 198.365,
+      "percent_change": -3.5072358020187155
+    },
+    {
+      "op": 0,
+      "M": 430,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.562,
+      "candidate_us": 198.364,
+      "percent_change": -3.501619949212409
+    },
+    {
+      "op": 0,
+      "M": 431,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.654,
+      "candidate_us": 198.461,
+      "percent_change": -3.497622219844976
+    },
+    {
+      "op": 0,
+      "M": 432,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.525,
+      "candidate_us": 198.413,
+      "percent_change": -3.460406276608685
+    },
+    {
+      "op": 0,
+      "M": 433,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.6,
+      "candidate_us": 198.41,
+      "percent_change": -3.4970817120622555
+    },
+    {
+      "op": 0,
+      "M": 434,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.623,
+      "candidate_us": 198.556,
+      "percent_change": -3.436872334320562
+    },
+    {
+      "op": 0,
+      "M": 435,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.639,
+      "candidate_us": 198.516,
+      "percent_change": -3.4638371126099687
+    },
+    {
+      "op": 0,
+      "M": 436,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.602,
+      "candidate_us": 198.521,
+      "percent_change": -3.4440326455968395
+    },
+    {
+      "op": 0,
+      "M": 437,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.697,
+      "candidate_us": 198.558,
+      "percent_change": -3.4706388522924514
+    },
+    {
+      "op": 0,
+      "M": 438,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.896,
+      "candidate_us": 198.59,
+      "percent_change": -4.47627659983837
+    },
+    {
+      "op": 0,
+      "M": 439,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.708,
+      "candidate_us": 198.384,
+      "percent_change": -4.488994164885329
+    },
+    {
+      "op": 0,
+      "M": 440,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.201,
+      "candidate_us": 200.641,
+      "percent_change": -3.1660078860623275
+    },
+    {
+      "op": 0,
+      "M": 441,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.946,
+      "candidate_us": 200.765,
+      "percent_change": -3.4533003760591763
+    },
+    {
+      "op": 0,
+      "M": 442,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.951,
+      "candidate_us": 200.365,
+      "percent_change": -3.6479747632855775
+    },
+    {
+      "op": 0,
+      "M": 443,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.445,
+      "candidate_us": 200.479,
+      "percent_change": -3.3579985056279904
+    },
+    {
+      "op": 0,
+      "M": 444,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.764,
+      "candidate_us": 201.736,
+      "percent_change": -2.9013688608228616
+    },
+    {
+      "op": 0,
+      "M": 445,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.191,
+      "candidate_us": 200.842,
+      "percent_change": -3.5299316493027977
+    },
+    {
+      "op": 0,
+      "M": 446,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.432,
+      "candidate_us": 200.635,
+      "percent_change": -3.276736472675379
+    },
+    {
+      "op": 0,
+      "M": 447,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.193,
+      "candidate_us": 201.322,
+      "percent_change": -3.3003030841574965
+    },
+    {
+      "op": 0,
+      "M": 448,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.114,
+      "candidate_us": 200.924,
+      "percent_change": -3.454837252659604
+    },
+    {
+      "op": 0,
+      "M": 449,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.144,
+      "candidate_us": 198.97,
+      "percent_change": -3.4800915864638293
+    },
+    {
+      "op": 0,
+      "M": 450,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 205.383,
+      "candidate_us": 198.611,
+      "percent_change": -3.2972543978810442
+    },
+    {
+      "op": 0,
+      "M": 451,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.068,
+      "candidate_us": 199.09,
+      "percent_change": -3.3862608459343524
+    },
+    {
+      "op": 0,
+      "M": 452,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.298,
+      "candidate_us": 201.013,
+      "percent_change": -3.497393157879569
+    },
+    {
+      "op": 0,
+      "M": 453,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.591,
+      "candidate_us": 200.733,
+      "percent_change": -3.3036114282411155
+    },
+    {
+      "op": 0,
+      "M": 454,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.122,
+      "candidate_us": 199.11,
+      "percent_change": -3.401868796149854
+    },
+    {
+      "op": 0,
+      "M": 455,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.102,
+      "candidate_us": 199.091,
+      "percent_change": -3.4017137145685106
+    },
+    {
+      "op": 0,
+      "M": 456,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.076,
+      "candidate_us": 199.194,
+      "percent_change": -3.339544634018521
+    },
+    {
+      "op": 0,
+      "M": 457,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.29,
+      "candidate_us": 201.203,
+      "percent_change": -3.402467713284363
+    },
+    {
+      "op": 0,
+      "M": 458,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.264,
+      "candidate_us": 201.6,
+      "percent_change": -3.1997848884108726
+    },
+    {
+      "op": 0,
+      "M": 459,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.27,
+      "candidate_us": 200.189,
+      "percent_change": -3.8800595380995895
+    },
+    {
+      "op": 0,
+      "M": 460,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.153,
+      "candidate_us": 199.238,
+      "percent_change": -3.354304812445119
+    },
+    {
+      "op": 0,
+      "M": 461,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.222,
+      "candidate_us": 199.321,
+      "percent_change": -3.346393692234584
+    },
+    {
+      "op": 0,
+      "M": 462,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.654,
+      "candidate_us": 200.868,
+      "percent_change": -3.267936085989198
+    },
+    {
+      "op": 0,
+      "M": 463,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.786,
+      "candidate_us": 201.59,
+      "percent_change": -2.9819140846832792
+    },
+    {
+      "op": 0,
+      "M": 464,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.393,
+      "candidate_us": 200.355,
+      "percent_change": -4.316285644696816
+    },
+    {
+      "op": 0,
+      "M": 465,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.344,
+      "candidate_us": 199.46,
+      "percent_change": -3.3361764819912265
+    },
+    {
+      "op": 0,
+      "M": 466,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.53,
+      "candidate_us": 199.451,
+      "percent_change": -3.892931142485423
+    },
+    {
+      "op": 0,
+      "M": 467,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.327,
+      "candidate_us": 201.837,
+      "percent_change": -3.1152947049590374
+    },
+    {
+      "op": 0,
+      "M": 468,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.683,
+      "candidate_us": 201.472,
+      "percent_change": -3.455480321827842
+    },
+    {
+      "op": 0,
+      "M": 469,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.482,
+      "candidate_us": 199.589,
+      "percent_change": -3.338305518156548
+    },
+    {
+      "op": 0,
+      "M": 470,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.669,
+      "candidate_us": 201.578,
+      "percent_change": -3.398204812406258
+    },
+    {
+      "op": 0,
+      "M": 471,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.639,
+      "candidate_us": 201.572,
+      "percent_change": -3.3871903143707582
+    },
+    {
+      "op": 0,
+      "M": 472,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.528,
+      "candidate_us": 199.736,
+      "percent_change": -3.288658196467309
+    },
+    {
+      "op": 0,
+      "M": 473,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.604,
+      "candidate_us": 199.826,
+      "percent_change": -3.7465559430454265
+    },
+    {
+      "op": 0,
+      "M": 474,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.007,
+      "candidate_us": 201.762,
+      "percent_change": -3.466391077810793
+    },
+    {
+      "op": 0,
+      "M": 475,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.232,
+      "candidate_us": 199.577,
+      "percent_change": -3.2269482912448133
+    },
+    {
+      "op": 0,
+      "M": 476,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.911,
+      "candidate_us": 202.505,
+      "percent_change": -3.0663775483339872
+    },
+    {
+      "op": 0,
+      "M": 477,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.001,
+      "candidate_us": 201.805,
+      "percent_change": -3.4430457270539394
+    },
+    {
+      "op": 0,
+      "M": 478,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.301,
+      "candidate_us": 199.642,
+      "percent_change": -3.22780791174061
+    },
+    {
+      "op": 0,
+      "M": 479,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.053,
+      "candidate_us": 201.826,
+      "percent_change": -3.457018076755658
+    },
+    {
+      "op": 0,
+      "M": 480,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.285,
+      "candidate_us": 200.025,
+      "percent_change": -3.0346365465254377
+    },
+    {
+      "op": 0,
+      "M": 481,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.86,
+      "candidate_us": 200.331,
+      "percent_change": -3.156240935898691
+    },
+    {
+      "op": 0,
+      "M": 482,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.98,
+      "candidate_us": 202.043,
+      "percent_change": -3.319456407311694
+    },
+    {
+      "op": 0,
+      "M": 483,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 206.923,
+      "candidate_us": 200.189,
+      "percent_change": -3.2543506521749643
+    },
+    {
+      "op": 0,
+      "M": 484,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.481,
+      "candidate_us": 201.7,
+      "percent_change": -3.252574575141143
+    },
+    {
+      "op": 0,
+      "M": 485,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.888,
+      "candidate_us": 200.997,
+      "percent_change": -3.314765643038553
+    },
+    {
+      "op": 0,
+      "M": 486,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.525,
+      "candidate_us": 201.828,
+      "percent_change": -3.211605323102751
+    },
+    {
+      "op": 0,
+      "M": 487,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.025,
+      "candidate_us": 200.42,
+      "percent_change": -3.190435937688696
+    },
+    {
+      "op": 0,
+      "M": 488,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.559,
+      "candidate_us": 202.001,
+      "percent_change": -3.144433949146286
+    },
+    {
+      "op": 0,
+      "M": 489,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.01,
+      "candidate_us": 200.572,
+      "percent_change": -3.1099946862470307
+    },
+    {
+      "op": 0,
+      "M": 490,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.562,
+      "candidate_us": 202.296,
+      "percent_change": -3.004382389888871
+    },
+    {
+      "op": 0,
+      "M": 491,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.249,
+      "candidate_us": 200.546,
+      "percent_change": -3.2342737480036132
+    },
+    {
+      "op": 0,
+      "M": 492,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.106,
+      "candidate_us": 203.114,
+      "percent_change": -2.8655323137547373
+    },
+    {
+      "op": 0,
+      "M": 493,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.791,
+      "candidate_us": 200.548,
+      "percent_change": -3.947967105861838
+    },
+    {
+      "op": 0,
+      "M": 494,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.445,
+      "candidate_us": 203.218,
+      "percent_change": -2.973095562080741
+    },
+    {
+      "op": 0,
+      "M": 495,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 208.842,
+      "candidate_us": 200.807,
+      "percent_change": -3.8474061730877973
+    },
+    {
+      "op": 0,
+      "M": 496,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.942,
+      "candidate_us": 202.198,
+      "percent_change": -2.762308720700968
+    },
+    {
+      "op": 0,
+      "M": 497,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.475,
+      "candidate_us": 202.884,
+      "percent_change": -3.1464375223773766
+    },
+    {
+      "op": 0,
+      "M": 498,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.557,
+      "candidate_us": 202.556,
+      "percent_change": -2.40945860655144
+    },
+    {
+      "op": 0,
+      "M": 499,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.119,
+      "candidate_us": 202.673,
+      "percent_change": -3.082455444029475
+    },
+    {
+      "op": 0,
+      "M": 500,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.17,
+      "candidate_us": 203.551,
+      "percent_change": -2.6863316919252256
+    },
+    {
+      "op": 0,
+      "M": 501,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.407,
+      "candidate_us": 201.393,
+      "percent_change": -3.8269971872955555
+    },
+    {
+      "op": 0,
+      "M": 502,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.816,
+      "candidate_us": 203.173,
+      "percent_change": -3.1661074465245687
+    },
+    {
+      "op": 0,
+      "M": 503,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.637,
+      "candidate_us": 201.482,
+      "percent_change": -2.964307902734098
+    },
+    {
+      "op": 0,
+      "M": 504,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.793,
+      "candidate_us": 203.342,
+      "percent_change": -3.0749357700209257
+    },
+    {
+      "op": 0,
+      "M": 505,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.271,
+      "candidate_us": 202.026,
+      "percent_change": -2.530503543669871
+    },
+    {
+      "op": 0,
+      "M": 506,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.923,
+      "candidate_us": 203.507,
+      "percent_change": -3.0563587601168063
+    },
+    {
+      "op": 0,
+      "M": 507,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.999,
+      "candidate_us": 204.313,
+      "percent_change": -2.7076319411044825
+    },
+    {
+      "op": 0,
+      "M": 508,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 209.292,
+      "candidate_us": 201.917,
+      "percent_change": -3.523784951168707
+    },
+    {
+      "op": 0,
+      "M": 509,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 210.31,
+      "candidate_us": 203.4,
+      "percent_change": -3.2856259806951615
+    },
+    {
+      "op": 0,
+      "M": 510,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 207.857,
+      "candidate_us": 202.986,
+      "percent_change": -2.3434380367271745
+    },
+    {
+      "op": 0,
+      "M": 511,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 210.198,
+      "candidate_us": 203.699,
+      "percent_change": -3.0918467349832057
+    },
+    {
+      "op": 0,
+      "M": 512,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 210.898,
+      "candidate_us": 203.9,
+      "percent_change": -3.3181917324962784
+    },
+    {
+      "op": 0,
+      "M": 513,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 271.916,
+      "candidate_us": 255.987,
+      "percent_change": -5.858059106488767
+    },
+    {
+      "op": 0,
+      "M": 514,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.126,
+      "candidate_us": 256.391,
+      "percent_change": -5.782247929268047
+    },
+    {
+      "op": 0,
+      "M": 515,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.138,
+      "candidate_us": 256.411,
+      "percent_change": -5.779053274441637
+    },
+    {
+      "op": 0,
+      "M": 516,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.177,
+      "candidate_us": 256.481,
+      "percent_change": -5.766835551865157
+    },
+    {
+      "op": 0,
+      "M": 517,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.674,
+      "candidate_us": 259.181,
+      "percent_change": -5.640504743805385
+    },
+    {
+      "op": 0,
+      "M": 518,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.679,
+      "candidate_us": 259.717,
+      "percent_change": -5.4470855070828055
+    },
+    {
+      "op": 0,
+      "M": 519,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 271.816,
+      "candidate_us": 256.38,
+      "percent_change": -5.678841569296866
+    },
+    {
+      "op": 0,
+      "M": 520,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.4,
+      "candidate_us": 256.589,
+      "percent_change": -6.490889212827977
+    },
+    {
+      "op": 0,
+      "M": 521,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.549,
+      "candidate_us": 259.582,
+      "percent_change": -5.451485891407359
+    },
+    {
+      "op": 0,
+      "M": 522,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.966,
+      "candidate_us": 257.201,
+      "percent_change": -5.775444560861054
+    },
+    {
+      "op": 0,
+      "M": 523,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.172,
+      "candidate_us": 256.674,
+      "percent_change": -5.694193377717049
+    },
+    {
+      "op": 0,
+      "M": 524,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.161,
+      "candidate_us": 256.67,
+      "percent_change": -5.691851514360979
+    },
+    {
+      "op": 0,
+      "M": 525,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.209,
+      "candidate_us": 256.717,
+      "percent_change": -5.691215205963074
+    },
+    {
+      "op": 0,
+      "M": 526,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.556,
+      "candidate_us": 260.009,
+      "percent_change": -5.298372645289106
+    },
+    {
+      "op": 0,
+      "M": 527,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.637,
+      "candidate_us": 259.288,
+      "percent_change": -5.588831803435079
+    },
+    {
+      "op": 0,
+      "M": 528,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.087,
+      "candidate_us": 256.784,
+      "percent_change": -5.624303991002877
+    },
+    {
+      "op": 0,
+      "M": 529,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.226,
+      "candidate_us": 256.752,
+      "percent_change": -5.6842476471755
+    },
+    {
+      "op": 0,
+      "M": 530,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.207,
+      "candidate_us": 259.456,
+      "percent_change": -5.379512558030964
+    },
+    {
+      "op": 0,
+      "M": 531,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.508,
+      "candidate_us": 259.321,
+      "percent_change": -5.532443498914407
+    },
+    {
+      "op": 0,
+      "M": 532,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.132,
+      "candidate_us": 256.768,
+      "percent_change": -5.645789543309876
+    },
+    {
+      "op": 0,
+      "M": 533,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.189,
+      "candidate_us": 256.826,
+      "percent_change": -5.6442398480467615
+    },
+    {
+      "op": 0,
+      "M": 534,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.63,
+      "candidate_us": 257.679,
+      "percent_change": -6.172304555219754
+    },
+    {
+      "op": 0,
+      "M": 535,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.292,
+      "candidate_us": 256.786,
+      "percent_change": -5.694621949965473
+    },
+    {
+      "op": 0,
+      "M": 536,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.706,
+      "candidate_us": 260.35,
+      "percent_change": -5.225950652697787
+    },
+    {
+      "op": 0,
+      "M": 537,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.717,
+      "candidate_us": 258.292,
+      "percent_change": -5.978880083868132
+    },
+    {
+      "op": 0,
+      "M": 538,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.323,
+      "candidate_us": 256.895,
+      "percent_change": -5.665331242678729
+    },
+    {
+      "op": 0,
+      "M": 539,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.839,
+      "candidate_us": 257.612,
+      "percent_change": -6.268033284941355
+    },
+    {
+      "op": 0,
+      "M": 540,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.154,
+      "candidate_us": 257.078,
+      "percent_change": -5.539510718196327
+    },
+    {
+      "op": 0,
+      "M": 541,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.511,
+      "candidate_us": 260.17,
+      "percent_change": -5.224198665991531
+    },
+    {
+      "op": 0,
+      "M": 542,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.745,
+      "candidate_us": 256.82,
+      "percent_change": -5.838787145502211
+    },
+    {
+      "op": 0,
+      "M": 543,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.472,
+      "candidate_us": 257.154,
+      "percent_change": -5.621862062890859
+    },
+    {
+      "op": 0,
+      "M": 544,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.871,
+      "candidate_us": 260.783,
+      "percent_change": -5.125313328797865
+    },
+    {
+      "op": 0,
+      "M": 545,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.181,
+      "candidate_us": 256.842,
+      "percent_change": -5.635588082930109
+    },
+    {
+      "op": 0,
+      "M": 546,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.875,
+      "candidate_us": 260.828,
+      "percent_change": -5.110322874033657
+    },
+    {
+      "op": 0,
+      "M": 547,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.887,
+      "candidate_us": 258.333,
+      "percent_change": -6.022110903753164
+    },
+    {
+      "op": 0,
+      "M": 548,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.361,
+      "candidate_us": 258.538,
+      "percent_change": -5.075249393268488
+    },
+    {
+      "op": 0,
+      "M": 549,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.903,
+      "candidate_us": 258.395,
+      "percent_change": -6.00502722778582
+    },
+    {
+      "op": 0,
+      "M": 550,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.413,
+      "candidate_us": 257.425,
+      "percent_change": -5.501940068939437
+    },
+    {
+      "op": 0,
+      "M": 551,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.97,
+      "candidate_us": 261.024,
+      "percent_change": -5.071826017383718
+    },
+    {
+      "op": 0,
+      "M": 552,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.599,
+      "candidate_us": 257.486,
+      "percent_change": -5.544040880560819
+    },
+    {
+      "op": 0,
+      "M": 553,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.279,
+      "candidate_us": 257.625,
+      "percent_change": -6.0719194688619975
+    },
+    {
+      "op": 0,
+      "M": 554,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.965,
+      "candidate_us": 258.551,
+      "percent_change": -5.969487025621434
+    },
+    {
+      "op": 0,
+      "M": 555,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.547,
+      "candidate_us": 257.711,
+      "percent_change": -5.443464796897423
+    },
+    {
+      "op": 0,
+      "M": 556,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.663,
+      "candidate_us": 260.004,
+      "percent_change": -5.3370858106115415
+    },
+    {
+      "op": 0,
+      "M": 557,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.093,
+      "candidate_us": 257.263,
+      "percent_change": -5.450342346183124
+    },
+    {
+      "op": 0,
+      "M": 558,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.973,
+      "candidate_us": 258.928,
+      "percent_change": -5.835118357075064
+    },
+    {
+      "op": 0,
+      "M": 559,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.146,
+      "candidate_us": 257.443,
+      "percent_change": -5.402614772952763
+    },
+    {
+      "op": 0,
+      "M": 560,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 275.516,
+      "candidate_us": 259.9,
+      "percent_change": -5.667910393588771
+    },
+    {
+      "op": 0,
+      "M": 561,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.175,
+      "candidate_us": 257.499,
+      "percent_change": -5.392119041058141
+    },
+    {
+      "op": 0,
+      "M": 562,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.613,
+      "candidate_us": 260.203,
+      "percent_change": -5.247384501097918
+    },
+    {
+      "op": 0,
+      "M": 563,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.659,
+      "candidate_us": 257.986,
+      "percent_change": -5.381447155604624
+    },
+    {
+      "op": 0,
+      "M": 564,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 275.01,
+      "candidate_us": 260.72,
+      "percent_change": -5.196174684556909
+    },
+    {
+      "op": 0,
+      "M": 565,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.573,
+      "candidate_us": 258.018,
+      "percent_change": -5.339853910695491
+    },
+    {
+      "op": 0,
+      "M": 566,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 274.974,
+      "candidate_us": 259.108,
+      "percent_change": -5.770000072734149
+    },
+    {
+      "op": 0,
+      "M": 567,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.599,
+      "candidate_us": 258.438,
+      "percent_change": -5.194809958950697
+    },
+    {
+      "op": 0,
+      "M": 568,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 275.102,
+      "candidate_us": 259.005,
+      "percent_change": -5.851284250932376
+    },
+    {
+      "op": 0,
+      "M": 569,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.233,
+      "candidate_us": 258.392,
+      "percent_change": -5.084247684887577
+    },
+    {
+      "op": 0,
+      "M": 570,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 275.091,
+      "candidate_us": 258.994,
+      "percent_change": -5.851518224878305
+    },
+    {
+      "op": 0,
+      "M": 571,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.75,
+      "candidate_us": 258.31,
+      "percent_change": -5.294225481209902
+    },
+    {
+      "op": 0,
+      "M": 572,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.724,
+      "candidate_us": 258.481,
+      "percent_change": -5.222496003285371
+    },
+    {
+      "op": 0,
+      "M": 573,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 275.133,
+      "candidate_us": 259.239,
+      "percent_change": -5.776842472549637
+    },
+    {
+      "op": 0,
+      "M": 574,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 272.23,
+      "candidate_us": 260.07,
+      "percent_change": -4.466811152334427
+    },
+    {
+      "op": 0,
+      "M": 575,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 275.182,
+      "candidate_us": 258.628,
+      "percent_change": -6.015655093719808
+    },
+    {
+      "op": 0,
+      "M": 576,
+      "state": 0,
+      "mismatch": 0,
+      "old_route_mismatch": 0,
+      "original_us": 275.167,
+      "candidate_us": 259.418,
+      "percent_change": -5.723433405895317
+    }
+  ],
+  "whole_device_peak_MiB": 1109.0,
+  "receipt_sha256": "4e6cfcaf3343073a7680fc8ae12c90d75f0ac76bdba040688284d629984e58cb",
+  "initial_always_Lt21_comparator_is_not_actual_dispatch_for_every_M": true,
+  "original_accuracy_tolerance_unchanged": true
+}
