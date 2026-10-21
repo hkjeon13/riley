@@ -71,6 +71,21 @@ Gate/Up, Down and KV redesigns and selects a native-order QK/PV candidate for
 whole-model qualification. Its component timings do not replace the server
 measurements above.
 
+The latest completed server experiment is **v16B, not adopted**. Its fresh
+v15C controls and stock controls are shown together below; these are separate
+samples from the qualified table above.
+
+| Clients | v15C control tok/s | QK/PV candidate tok/s | Change | vLLM tok/s | Candidate / vLLM |
+|---:|---:|---:|---:|---:|---:|
+| 16 | 729.296 | 738.407 | +1.25% | 1130.970 | 65.29% |
+| 32 | 973.861 | 986.968 | +1.35% | 1672.321 | 59.02% |
+
+The original 4,480-file BF16 gate and GPU contracts passed. Paired tail flags
+remain: C16 TTFT p95 up to +4.74%, and C32 TPOT p99 +11.52% in one repeat.
+All five repetitions remain included. This does not meet the large throughput
+improvement objective. [v16B report and execution diagnosis](docs/qwen-mlp-decode-v16b-20261021.md) ·
+[audited raw evidence](benchmarks/evidence/20261021-mlp-decode-v16b/README.md).
+
 Dated A100 matrices for other model families and their original numerical
 contracts are in [model coverage](docs/model-coverage-a100.md). Separate native
 preset screens are documented in [native HF performance](docs/hf-native-performance.md),
