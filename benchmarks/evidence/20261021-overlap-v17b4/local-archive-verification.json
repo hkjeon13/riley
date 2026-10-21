@@ -1,0 +1,18 @@
+{
+  "archive_sha256": "ff68b26a35add42143904c65f75e0a745e88ebbce21bc9543f8f47ce988fd87a",
+  "archive_entries": 979,
+  "CRC_all_pass": true,
+  "entry_SHA_and_size_all_pass": true,
+  "source_count": 937,
+  "unchanged_sources_match_baseline_commit": true,
+  "archived_patch_reconstructs_all_changed_source_hashes": true,
+  "changed_sources": [
+    "crates/riley-cuda/src/lib.rs",
+    "crates/riley-cuda/src/owned_mlp.rs",
+    "crates/riley-cuda/src/runtime.rs",
+    "crates/riley-runtime/src/llama/batch_executor.rs",
+    "crates/riley-runtime/src/llama/executor/dispatch.rs",
+    "crates/riley-runtime/src/llama/forward.rs",
+    "crates/riley-server/src/engine.rs"
+  ]
+}

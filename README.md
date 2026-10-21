@@ -127,12 +127,14 @@ Decode projection and mixed execution/committed-event overlap are separate sourc
 |---|---:|---:|---:|---:|---:|---:|---|
 | v17A Gate/Up | 16 | 735.627 | 743.473 | +1.07% | 1155.362 | 64.35% | Rejected |
 | v17A Gate/Up | 32 | 978.131 | 981.322 | +0.33% | 1691.051 | 58.03% | Rejected |
+| v17B4 mixed/overlap | 16 | 746.287 | 748.243 | +0.26% | 1145.795 | 65.30% | Rejected |
+| v17B4 mixed/overlap | 32 | 975.412 | 985.618 | +1.05% | 1679.361 | 58.69% | Rejected |
 
 The original literal native/HF BF16 references and paired TTFT/TPOT p95/p99
 2% tail gates are retained. “Criteria pass” in an experiment receipt is
-qualification; application to main is recorded separately. The projection candidate is rejected on tails and will not be combined with B4. The independent mixed/overlap comparison is running. Main remains v15C.
+qualification; application to main is recorded separately. At least one independent candidate fails the original adoption gate, so the candidates are not combined. Main remains v15C; a large throughput gain is not established.
 
-[projection-v17a report](docs/qwen-projection-v17a-20261021.md)
+[projection-v17a report](docs/qwen-projection-v17a-20261021.md) · [overlap-v17b4 report](docs/qwen-overlap-v17b4-20261021.md)
 
 <!-- end v17 independent experiments -->
 

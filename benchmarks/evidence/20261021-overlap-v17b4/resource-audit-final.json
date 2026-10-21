@@ -1,0 +1,82 @@
+{
+  "time_ns": 1792581866898605764,
+  "resource_runs": [
+    {
+      "name": "final-teacher-C1-eager-r3",
+      "samples": 38,
+      "whole_device_peak_MiB": 9783.0,
+      "receipt_sha256": "f3c17ad9fea90c36d0f1f0e7d6088fa74120f6572891e090f7c1ed70b7f2e748"
+    },
+    {
+      "name": "final-teacher-allR-Graph-r3",
+      "samples": 49,
+      "whole_device_peak_MiB": 19353.0,
+      "receipt_sha256": "e6237eaa3197a9f83a8e21b546765161abc267d9b460c871aa3e4a0f59fa2ada"
+    },
+    {
+      "name": "teacher-body-allR-r3",
+      "samples": 109,
+      "whole_device_peak_MiB": 19435.0,
+      "receipt_sha256": "09d0f9019ab696a03b4739588b93ddffc00f54a0bb8cece7dbc56df26b82187e"
+    },
+    {
+      "name": "teacher-mixed-r3",
+      "samples": 66,
+      "whole_device_peak_MiB": 19205.0,
+      "receipt_sha256": "456c37c4d5c9cfd9651537ecd8f005f54f4c76bc86eadb6a0451d25cb71c87c9"
+    },
+    {
+      "name": "teacher-mixed-no-output-r3",
+      "samples": 60,
+      "whole_device_peak_MiB": 19205.0,
+      "receipt_sha256": "8320a0b17105a668e73649690bd68983a9879178527f68233396e0893b2bafc7"
+    },
+    {
+      "name": "memory_gpu",
+      "samples": 1,
+      "whole_device_peak_MiB": 504.0,
+      "receipt_sha256": "96ae55c204711a17aa49f8431e40bdf29e4ddf1854bbb0754ef5b071f19dfe37"
+    },
+    {
+      "name": "owned_hf_command_batch_gpu",
+      "samples": 1,
+      "whole_device_peak_MiB": 505.0,
+      "receipt_sha256": "baac40e0cae65dc30edff13099e1700bf0ba0501f737a47ff6f7909df442e841"
+    },
+    {
+      "name": "host_runtime_gpu",
+      "samples": 1,
+      "whole_device_peak_MiB": 504.0,
+      "receipt_sha256": "9d44cef158dda38ad01f521efc76e235e3ba9649d19cc37bf2fbbbba17dcc297"
+    },
+    {
+      "name": "sm80_prefill_alignment_gpu",
+      "samples": 2,
+      "whole_device_peak_MiB": 505.0,
+      "receipt_sha256": "b1e24433a8ace3817bb00bdf9372b5045cf52ddf3ac4b32f3dd011bf0946dd1d"
+    },
+    {
+      "name": "bounded576",
+      "samples": 103,
+      "whole_device_peak_MiB": 18785.0,
+      "receipt_sha256": "6aa88364af8db6042371503a75cf0ea8c6816da1392e7f84d03f32bd1ad6ef9d"
+    },
+    {
+      "name": "canonical",
+      "samples": 62,
+      "whole_device_peak_MiB": 19205.0,
+      "receipt_sha256": "21ceffca91e447f78573d4099890a7a024ae7daf50b91c293358afc3ad8b7611"
+    }
+  ],
+  "source937_verified": true,
+  "binary_sha256": "9459cfb3940901c1fcfa6df09fcc453b3b59eabccbcaf094cb4dc787df61d008",
+  "normal_arms": 30,
+  "normal_profile_arms": 34,
+  "stored_SSE_verified": 6490,
+  "normal_profile_peak_MiB": 18567.0,
+  "GPU6_foreign_work_preserved": true,
+  "all_finite_GPU_jobs_on_GPU7": false,
+  "qualification_GPU": 7,
+  "extra_canonical_GPU": 6,
+  "normal_profile_GPU": 7
+}

@@ -1,0 +1,30 @@
+[
+  {
+    "concurrency": 16,
+    "trace_sha256": "7e007f8e5cca1cf45c18eccec9e7ed02a3ab0acdb9b2b503131817d23e149bd3",
+    "prefill_staging_kernels_total": 2376,
+    "prefill_staging_inside_any_graph": 0,
+    "staging_names": [
+      "<unnamed>::hf_sm80_compact_prefill(const uint4 *, const uint4 *, const unsigned int *, uint4 *, uint4 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, void **, int, int, unsigned long)",
+      "<unnamed>::hf_sm80_vector_kv_gather(const uint4 *, const uint4 *, const unsigned int *, uint4 *, uint4 *, int, unsigned long)"
+    ],
+    "startup_mixed_entries": [
+      "12"
+    ],
+    "scope": "Independent expansion of marker set: includes compact fused prefill staging as well as kv_gather. Only separate measured64keep; no startup captured. Zero means no prefill staging in any executed Graph, without depending on72residual root classifier."
+  },
+  {
+    "concurrency": 32,
+    "trace_sha256": "e1e386155be43fe5e92235fee46875b4c4d3de86cada2e8cc0587b693a0d1e1a",
+    "prefill_staging_kernels_total": 2376,
+    "prefill_staging_inside_any_graph": 0,
+    "staging_names": [
+      "<unnamed>::hf_sm80_compact_prefill(const uint4 *, const uint4 *, const unsigned int *, uint4 *, uint4 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, void **, int, int, unsigned long)",
+      "<unnamed>::hf_sm80_vector_kv_gather(const uint4 *, const uint4 *, const unsigned int *, uint4 *, uint4 *, int, unsigned long)"
+    ],
+    "startup_mixed_entries": [
+      "24"
+    ],
+    "scope": "Independent expansion of marker set: includes compact fused prefill staging as well as kv_gather. Only separate measured64keep; no startup captured. Zero means no prefill staging in any executed Graph, without depending on72residual root classifier."
+  }
+]
