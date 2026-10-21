@@ -41,7 +41,7 @@ ms. TPOT은 요청별 평균 output-token 지연의 percentile이며 token-level
 
 독립 source937/빈 target, CPU524 pass/40ignored, 원래 native/HF full-vocabulary BF16 4,480파일 literal equality를 검증했다. 실제 GPU 계약6개를 실행했다. 기존 alignment120경우에 추가로 merged Gate/Up6행수×3finite입력×per-op/command-batch=36 raw cases, output suffix sentinel·alignment preflight 이후 owner 재사용·다른 stream 조기 read 거절·hot allocation0을 검사했다. eager104HFrows와 all-R Graph104rows, natural128 body1024rows, mixed output1024rows/no-output992rows 범위이며 전체104×32 Cartesian이나 새 early-EOS coverage로 확장해 주장하지 않는다.
 
-별도 before/after C16/C32 profile로 실제 qualified merged dimensions의 NVTX range와 Graph attribution을 확인한다. 정상 처리량과 분리하고 broad trace의 도착·batch work 차이를 고정 연산량 speedup으로 환산하지 않는다. 실제 binary/source/argv/runner hash와 stock FA2/FULL_AND_PIECEWISE startup을 감사한다.
+정확도 검사와64warm 뒤64keep 요청 구간만 Nsight start/stop으로 포착한 별도 before/after C16/C32 profile로 실제 qualified merged dimensions의 NVTX range와 Graph attribution을 확인한다. 정상 처리량과 분리하고 broad trace의 도착·batch work 차이를 고정 연산량 speedup으로 환산하지 않는다. 실제 binary/source/argv/runner hash와 stock FA2/FULL_AND_PIECEWISE startup을 감사한다.
 
 Qwen3-4B BF16 greedy, budget576, maxseq1024, KV blocks=C×64, prefixoff,12fixed prompts115..130tokens, 균형8/16/24/32output limits,64warm192keep/arm=3840outputtokens. stock vLLM0.27.1+cu129/Torch2.13+cu129 FA2는 Riley correctness reference가 아니다. 서버와 부하 CPU pinning을 분리했지만 전체 노드 CPU·I/O 격리의 증거는 아니다.
 

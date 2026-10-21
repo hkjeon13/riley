@@ -1,0 +1,793 @@
+{
+  "time_ns": 1792566170496370781,
+  "state": {
+    "phase": "complete",
+    "started_ns": 1792564070936972252,
+    "finished_ns": 1792564171257902163
+  },
+  "observed_returncode": 0,
+  "scope": "Generated finite weights/activations, qualified decode Lt31/native-fused families + classic prefill reference vs small double-buffered fused mixed Gate/Up. Not whole-model, allR, or HTTP throughput qualification.",
+  "expected": 240,
+  "observed_rows": 240,
+  "all_expected_cases_passed": true,
+  "nonzero_rows": [],
+  "timing_scope": "One CUDA-event screen per listed shape; not repeated medians or server throughput",
+  "timings": [
+    {
+      "prefill": 64,
+      "decode": 2,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 182.114,
+      "candidate_us": 191.783,
+      "percent_change": 5.3093117497830855
+    },
+    {
+      "prefill": 64,
+      "decode": 4,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 182.371,
+      "candidate_us": 191.758,
+      "percent_change": 5.147199938586722
+    },
+    {
+      "prefill": 64,
+      "decode": 8,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 183.23,
+      "candidate_us": 192.081,
+      "percent_change": 4.830540850297438
+    },
+    {
+      "prefill": 64,
+      "decode": 12,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 183.73,
+      "candidate_us": 192.506,
+      "percent_change": 4.776574321014548
+    },
+    {
+      "prefill": 64,
+      "decode": 16,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 184.312,
+      "candidate_us": 192.857,
+      "percent_change": 4.636160423629487
+    },
+    {
+      "prefill": 64,
+      "decode": 24,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 184.837,
+      "candidate_us": 194.413,
+      "percent_change": 5.180780904256199
+    },
+    {
+      "prefill": 64,
+      "decode": 30,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 185.799,
+      "candidate_us": 196.454,
+      "percent_change": 5.734691790590918
+    },
+    {
+      "prefill": 64,
+      "decode": 32,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 185.5,
+      "candidate_us": 196.31,
+      "percent_change": 5.82749326145553
+    },
+    {
+      "prefill": 115,
+      "decode": 2,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 197.349,
+      "candidate_us": 199.33,
+      "percent_change": 1.0038054411220854
+    },
+    {
+      "prefill": 115,
+      "decode": 4,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 197.617,
+      "candidate_us": 198.7,
+      "percent_change": 0.5480297747663343
+    },
+    {
+      "prefill": 115,
+      "decode": 8,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 198.04,
+      "candidate_us": 203.804,
+      "percent_change": 2.9105231266410847
+    },
+    {
+      "prefill": 115,
+      "decode": 12,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 198.774,
+      "candidate_us": 200.459,
+      "percent_change": 0.8476963788020653
+    },
+    {
+      "prefill": 115,
+      "decode": 16,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 199.577,
+      "candidate_us": 204.738,
+      "percent_change": 2.585969325122628
+    },
+    {
+      "prefill": 115,
+      "decode": 24,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 200.082,
+      "candidate_us": 206.7,
+      "percent_change": 3.307643866014942
+    },
+    {
+      "prefill": 115,
+      "decode": 30,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 202.201,
+      "candidate_us": 209.324,
+      "percent_change": 3.5227323307006397
+    },
+    {
+      "prefill": 115,
+      "decode": 32,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 201.229,
+      "candidate_us": 211.603,
+      "percent_change": 5.15532055518837
+    },
+    {
+      "prefill": 128,
+      "decode": 2,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 198.574,
+      "candidate_us": 200.615,
+      "percent_change": 1.0278284166104212
+    },
+    {
+      "prefill": 128,
+      "decode": 4,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 199.16,
+      "candidate_us": 200.053,
+      "percent_change": 0.448383209479819
+    },
+    {
+      "prefill": 128,
+      "decode": 8,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 199.454,
+      "candidate_us": 204.666,
+      "percent_change": 2.613133855425298
+    },
+    {
+      "prefill": 128,
+      "decode": 12,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 200.649,
+      "candidate_us": 202.471,
+      "percent_change": 0.908053366824646
+    },
+    {
+      "prefill": 128,
+      "decode": 16,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 201.055,
+      "candidate_us": 210.589,
+      "percent_change": 4.741986023724842
+    },
+    {
+      "prefill": 128,
+      "decode": 24,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 202.285,
+      "candidate_us": 212.139,
+      "percent_change": 4.871344884692386
+    },
+    {
+      "prefill": 128,
+      "decode": 30,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 203.656,
+      "candidate_us": 214.797,
+      "percent_change": 5.470499273284357
+    },
+    {
+      "prefill": 128,
+      "decode": 32,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 203.411,
+      "candidate_us": 218.904,
+      "percent_change": 7.616598905663907
+    },
+    {
+      "prefill": 129,
+      "decode": 2,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 261.245,
+      "candidate_us": 201.441,
+      "percent_change": -22.89192137648568
+    },
+    {
+      "prefill": 129,
+      "decode": 4,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 261.105,
+      "candidate_us": 200.587,
+      "percent_change": -23.17764883858985
+    },
+    {
+      "prefill": 129,
+      "decode": 8,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 261.593,
+      "candidate_us": 205.211,
+      "percent_change": -21.553329026388322
+    },
+    {
+      "prefill": 129,
+      "decode": 12,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 262.556,
+      "candidate_us": 202.911,
+      "percent_change": -22.71705845610079
+    },
+    {
+      "prefill": 129,
+      "decode": 16,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 263.124,
+      "candidate_us": 211.195,
+      "percent_change": -19.735561940377934
+    },
+    {
+      "prefill": 129,
+      "decode": 24,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 264.397,
+      "candidate_us": 227.01,
+      "percent_change": -14.140478144608293
+    },
+    {
+      "prefill": 129,
+      "decode": 30,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 265.589,
+      "candidate_us": 227.328,
+      "percent_change": -14.406093625865523
+    },
+    {
+      "prefill": 129,
+      "decode": 32,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 265.443,
+      "candidate_us": 228.865,
+      "percent_change": -13.779982896516385
+    },
+    {
+      "prefill": 130,
+      "decode": 2,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 261.264,
+      "candidate_us": 201.482,
+      "percent_change": -22.881835997305412
+    },
+    {
+      "prefill": 130,
+      "decode": 4,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 261.195,
+      "candidate_us": 200.622,
+      "percent_change": -23.19071957732728
+    },
+    {
+      "prefill": 130,
+      "decode": 8,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 261.734,
+      "candidate_us": 206.644,
+      "percent_change": -21.048086989080506
+    },
+    {
+      "prefill": 130,
+      "decode": 12,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 262.652,
+      "candidate_us": 205.723,
+      "percent_change": -21.67468741909446
+    },
+    {
+      "prefill": 130,
+      "decode": 16,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 263.263,
+      "candidate_us": 211.234,
+      "percent_change": -19.763126607233062
+    },
+    {
+      "prefill": 130,
+      "decode": 24,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 264.502,
+      "candidate_us": 227.51,
+      "percent_change": -13.985527519640694
+    },
+    {
+      "prefill": 130,
+      "decode": 30,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 265.868,
+      "candidate_us": 227.236,
+      "percent_change": -14.530518904117839
+    },
+    {
+      "prefill": 130,
+      "decode": 32,
+      "state": 0,
+      "mismatch": 0,
+      "original_us": 265.155,
+      "candidate_us": 228.773,
+      "percent_change": -13.721031095019887
+    }
+  ],
+  "receipt_sha256": "bfe88940852d4b31708dcc27c513c992795565fcc09b5b6c9bbeb2b50283c5bc",
+  "whole_device_peak_MiB": 1053.0,
+  "runtime_adopted": false,
+  "selected_tile_case_counts": {
+    "160": 204,
+    "176": 36
+  },
+  "current_candidate_comparison": {
+    "cases": 240,
+    "all_bytes_equal_to_both_original_and_C": true,
+    "receipt_sha256": "231da501b8892f1e3f3687f6204085229117c0c79284d005517c906b2f891ec4",
+    "whole_device_peak_MiB": 1057.0,
+    "scope": "Same Gate/Up+SiLU portion only; no Down, prefix Graph cost or whole-model/HTTP claim. CurrentC uses separate decode family then merged prefill Lt21 whenP>=65.",
+    "timings": [
+      {
+        "prefill": 64,
+        "decode": 2,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 182.676,
+        "current_candidate_us": 182.446,
+        "fused_us": 191.793,
+        "percent_change_vs_C": 5.1231597294542075
+      },
+      {
+        "prefill": 64,
+        "decode": 4,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 182.832,
+        "current_candidate_us": 182.893,
+        "fused_us": 191.71,
+        "percent_change_vs_C": 4.8208515361440885
+      },
+      {
+        "prefill": 64,
+        "decode": 8,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 183.104,
+        "current_candidate_us": 183.331,
+        "fused_us": 192.188,
+        "percent_change_vs_C": 4.831152396485039
+      },
+      {
+        "prefill": 64,
+        "decode": 12,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 184.096,
+        "current_candidate_us": 184.066,
+        "fused_us": 192.528,
+        "percent_change_vs_C": 4.597264024860648
+      },
+      {
+        "prefill": 64,
+        "decode": 16,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 184.459,
+        "current_candidate_us": 184.741,
+        "fused_us": 192.918,
+        "percent_change_vs_C": 4.426196675345473
+      },
+      {
+        "prefill": 64,
+        "decode": 24,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 184.801,
+        "current_candidate_us": 184.853,
+        "fused_us": 194.345,
+        "percent_change_vs_C": 5.134890967417349
+      },
+      {
+        "prefill": 64,
+        "decode": 30,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 186.391,
+        "current_candidate_us": 186.172,
+        "fused_us": 196.577,
+        "percent_change_vs_C": 5.5889177749608
+      },
+      {
+        "prefill": 64,
+        "decode": 32,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 185.915,
+        "current_candidate_us": 185.869,
+        "fused_us": 196.49,
+        "percent_change_vs_C": 5.7142395988572625
+      },
+      {
+        "prefill": 115,
+        "decode": 2,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 197.241,
+        "current_candidate_us": 193.81,
+        "fused_us": 199.309,
+        "percent_change_vs_C": 2.8373148960321837
+      },
+      {
+        "prefill": 115,
+        "decode": 4,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 197.544,
+        "current_candidate_us": 194.269,
+        "fused_us": 198.818,
+        "percent_change_vs_C": 2.341598505165532
+      },
+      {
+        "prefill": 115,
+        "decode": 8,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 198.243,
+        "current_candidate_us": 194.916,
+        "fused_us": 203.689,
+        "percent_change_vs_C": 4.500913213897273
+      },
+      {
+        "prefill": 115,
+        "decode": 12,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 199.189,
+        "current_candidate_us": 195.688,
+        "fused_us": 200.514,
+        "percent_change_vs_C": 2.4661706389763394
+      },
+      {
+        "prefill": 115,
+        "decode": 16,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 199.569,
+        "current_candidate_us": 196.41,
+        "fused_us": 204.551,
+        "percent_change_vs_C": 4.144900972455567
+      },
+      {
+        "prefill": 115,
+        "decode": 24,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 200.127,
+        "current_candidate_us": 196.796,
+        "fused_us": 206.492,
+        "percent_change_vs_C": 4.9269294091343285
+      },
+      {
+        "prefill": 115,
+        "decode": 30,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 201.859,
+        "current_candidate_us": 198.215,
+        "fused_us": 209.409,
+        "percent_change_vs_C": 5.647403072421353
+      },
+      {
+        "prefill": 115,
+        "decode": 32,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 201.94,
+        "current_candidate_us": 198.665,
+        "fused_us": 211.652,
+        "percent_change_vs_C": 6.537135378652503
+      },
+      {
+        "prefill": 128,
+        "decode": 2,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 198.53,
+        "current_candidate_us": 195.16,
+        "fused_us": 200.745,
+        "percent_change_vs_C": 2.8617544578807275
+      },
+      {
+        "prefill": 128,
+        "decode": 4,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 199.118,
+        "current_candidate_us": 195.383,
+        "fused_us": 200.038,
+        "percent_change_vs_C": 2.3825000127953855
+      },
+      {
+        "prefill": 128,
+        "decode": 8,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 199.727,
+        "current_candidate_us": 196.077,
+        "fused_us": 204.702,
+        "percent_change_vs_C": 4.3987821111094005
+      },
+      {
+        "prefill": 128,
+        "decode": 12,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 200.539,
+        "current_candidate_us": 197.06,
+        "fused_us": 202.29,
+        "percent_change_vs_C": 2.654014005886518
+      },
+      {
+        "prefill": 128,
+        "decode": 16,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 201.1,
+        "current_candidate_us": 197.555,
+        "fused_us": 210.764,
+        "percent_change_vs_C": 6.686239275138561
+      },
+      {
+        "prefill": 128,
+        "decode": 24,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 201.758,
+        "current_candidate_us": 197.91,
+        "fused_us": 212.348,
+        "percent_change_vs_C": 7.295235207922812
+      },
+      {
+        "prefill": 128,
+        "decode": 30,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 204.072,
+        "current_candidate_us": 200.126,
+        "fused_us": 214.803,
+        "percent_change_vs_C": 7.333879655816822
+      },
+      {
+        "prefill": 128,
+        "decode": 32,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 203.607,
+        "current_candidate_us": 200.083,
+        "fused_us": 219.085,
+        "percent_change_vs_C": 9.497058720630935
+      },
+      {
+        "prefill": 129,
+        "decode": 2,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 260.849,
+        "current_candidate_us": 205.512,
+        "fused_us": 201.564,
+        "percent_change_vs_C": -1.9210557047763643
+      },
+      {
+        "prefill": 129,
+        "decode": 4,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 261.274,
+        "current_candidate_us": 205.577,
+        "fused_us": 200.768,
+        "percent_change_vs_C": -2.33926947080656
+      },
+      {
+        "prefill": 129,
+        "decode": 8,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 261.654,
+        "current_candidate_us": 206.405,
+        "fused_us": 205.387,
+        "percent_change_vs_C": -0.49320510646544413
+      },
+      {
+        "prefill": 129,
+        "decode": 12,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 262.529,
+        "current_candidate_us": 207.245,
+        "fused_us": 202.953,
+        "percent_change_vs_C": -2.070978793215761
+      },
+      {
+        "prefill": 129,
+        "decode": 16,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 262.964,
+        "current_candidate_us": 207.818,
+        "fused_us": 211.34,
+        "percent_change_vs_C": 1.694752138890765
+      },
+      {
+        "prefill": 129,
+        "decode": 24,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 264.325,
+        "current_candidate_us": 208.271,
+        "fused_us": 227.221,
+        "percent_change_vs_C": 9.098722337723464
+      },
+      {
+        "prefill": 129,
+        "decode": 30,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 265.94,
+        "current_candidate_us": 209.893,
+        "fused_us": 227.546,
+        "percent_change_vs_C": 8.41047581386707
+      },
+      {
+        "prefill": 129,
+        "decode": 32,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 265.359,
+        "current_candidate_us": 209.832,
+        "fused_us": 229.218,
+        "percent_change_vs_C": 9.238819627130269
+      },
+      {
+        "prefill": 130,
+        "decode": 2,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 260.904,
+        "current_candidate_us": 205.365,
+        "fused_us": 201.423,
+        "percent_change_vs_C": -1.919509166605804
+      },
+      {
+        "prefill": 130,
+        "decode": 4,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 261.479,
+        "current_candidate_us": 205.977,
+        "fused_us": 200.786,
+        "percent_change_vs_C": -2.5201842924210016
+      },
+      {
+        "prefill": 130,
+        "decode": 8,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 262.049,
+        "current_candidate_us": 206.678,
+        "fused_us": 206.553,
+        "percent_change_vs_C": -0.06048055429218602
+      },
+      {
+        "prefill": 130,
+        "decode": 12,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 262.798,
+        "current_candidate_us": 207.394,
+        "fused_us": 205.708,
+        "percent_change_vs_C": -0.8129454082567489
+      },
+      {
+        "prefill": 130,
+        "decode": 16,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 262.958,
+        "current_candidate_us": 208.131,
+        "fused_us": 211.37,
+        "percent_change_vs_C": 1.5562314119472953
+      },
+      {
+        "prefill": 130,
+        "decode": 24,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 264.387,
+        "current_candidate_us": 208.431,
+        "fused_us": 227.785,
+        "percent_change_vs_C": 9.285566926224975
+      },
+      {
+        "prefill": 130,
+        "decode": 30,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 265.757,
+        "current_candidate_us": 209.837,
+        "fused_us": 227.353,
+        "percent_change_vs_C": 8.347431577843768
+      },
+      {
+        "prefill": 130,
+        "decode": 32,
+        "state": 0,
+        "mismatch": 0,
+        "original_us": 265.285,
+        "current_candidate_us": 210.003,
+        "fused_us": 229.117,
+        "percent_change_vs_C": 9.101774736551382
+      }
+    ]
+  }
+}

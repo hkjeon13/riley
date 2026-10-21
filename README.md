@@ -92,6 +92,11 @@ were all kept. C16's vLLM startup/continuation interruption is documented.
 [v16C implementation, all repeats and caveats](docs/qwen-mlp-prefill-v16c-20261021.md) ·
 [v16C audited evidence](benchmarks/evidence/20261021-mlp-prefill-v16c/README.md).
 
+[v16E small-tile mixed Gate/Up](docs/qwen-mlp-small-v16e-20261021.md) also
+preserves the tested BF16 bytes but is slower across many shapes than the
+optimized merged-prefill control. It remains a component experiment and is
+excluded from qualified server throughput claims.
+
 Dated A100 matrices for other model families and their original numerical
 contracts are in [model coverage](docs/model-coverage-a100.md). Separate native
 preset screens are documented in [native HF performance](docs/hf-native-performance.md),

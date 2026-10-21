@@ -45,6 +45,6 @@ GPU6에 새로 나타난 허용 범위 밖의 외부 작업은 중단하거나 c
 
 별도 C32 before/after trace의 kernel-duration 합계는1322.983/1329.129ms다. 기준 trace에서 Gate/Up358.624ms, Down193.363ms, KV projection171.511ms로 합계54.69%이며 attention QK/PV139.662ms는10.56%다. 후보 trace도 Gate/Up367.326ms, Down199.565ms, KV172.606ms로55.64%, attention128.224ms로9.65%다. 작은 attention 부분만 개선하는 후보이므로 전체 처리량을 같은11~26%만큼 높일 수 있다는 주장은 근거가 없다.
 
-실제 candidate PV는grid(2,16,R)/block(128,1,1), QK/softmax/PV 각각2232회로 관측됐다. 후보 미실행이 아니다. 다만 before의 decode QK/PV는2196회였고 Gate/Up 등의 count도 다르다. 서버의 도착·배치 구성에 따라 실제 work가 달라지므로 이 profile aggregate 차이를 고정 작업량의 kernel speedup이나 정상 HTTP 속도로 계산하지 않는다. trace는 cold/warm/64keep을 포함하는 별도 진단이다. DRAM/L2/SM hardware counter는 확보하지 못했으며 메모리 bandwidth 포화라고 확정하지 않는다.
+실제 candidate PV는grid(2,16,R)/block(128,1,1), QK/softmax/PV 각각2232회로 관측됐다. 후보 미실행이 아니다. 다만 before의 decode QK/PV는2196회였고 Gate/Up 등의 count도 다르다. 서버의 도착·배치 구성에 따라 실제 work가 달라지므로 이 profile aggregate 차이를 고정 작업량의 kernel speedup이나 정상 HTTP 속도로 계산하지 않는다. trace는 정확도 검사와64warm 이후 별도64keep 구간만 Nsight start/stop으로 포착한 진단이다. 정상192keep×5회와 분리하며 profiling overhead를 포함한다. DRAM/L2/SM hardware counter는 확보하지 못했으며 메모리 bandwidth 포화라고 확정하지 않는다.
 
 v16A에서 KV의 exact FP32 expansion·전치·행 병렬화는 느렸고 Tensor Core zero-inserted 재현은 BF16 원소1개 차이로 탈락했다. mixed Gate/Up은 각 native 누적 family를 보존했지만 큰 CTA와 staging 비용으로 느렸다. Down 긴 K pipeline도 이득이 없었다. 따라서 동일한 작은 tile 변경을 더 겹치기보다 실제 큰 비중의 prefill Gate/Up을 library merged GEMM으로 줄이는 v16C를 따로 검증한다. 새 수치 허용오차를 도입하지 않는다.
