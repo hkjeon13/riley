@@ -122,6 +122,8 @@ struct RileyCudaContext {
   std::atomic<uint64_t> pinned_host_live_allocations;
 };
 
+#include "command_batch_index.hpp"
+
 struct RileyCudaStream {
   // SmolLM2 owns roughly 332 physical weight buffers before activation,
   // cache, metadata, and GEMM-plan handles are counted. Keep a conservative
@@ -136,7 +138,7 @@ struct RileyCudaStream {
         deferred_close(),
         command_batch_owner(nullptr),
         command_batch_use_count(0),
-        command_batch_uses{} {}
+        command_batch_uses{}, command_batch_index{} {}
 
   RileyCudaContext* owner;
   cudaStream_t stream;
@@ -156,6 +158,8 @@ struct RileyCudaStream {
   size_t command_batch_use_count;
   std::atomic<uint32_t>*
       command_batch_uses[kCommandBatchUseCapacity];
+  RileyCudaCommandBatchIndex<std::atomic<uint32_t>, 2*kCommandBatchUseCapacity>
+      command_batch_index;
 };
 
 // An active ThreadLocal stream capture owns this wrapper until a single
@@ -2346,10 +2350,14 @@ inline RileyCudaStatus command_batch_register_use(
         RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
         "an active stream command batch is owned by another thread");
   }
-  for (size_t index = 0; index < stream->command_batch_use_count; ++index) {
-    if (stream->command_batch_uses[index] == active) {
-      return RILEY_CUDA_STATUS_SUCCESS;
-    }
+  constexpr size_t index_capacity = 2*RileyCudaStream::kCommandBatchUseCapacity;
+  const size_t slot = stream->command_batch_index.find(active);
+  if (slot == index_capacity) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
+                          "command-batch resource index was exhausted");
+  }
+  if (stream->command_batch_index.slots[slot] == active) {
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
   if (stream->command_batch_use_count ==
       RileyCudaStream::kCommandBatchUseCapacity) {
@@ -2364,6 +2372,7 @@ inline RileyCudaStatus command_batch_register_use(
                             busy_detail);
   }
   stream->command_batch_uses[stream->command_batch_use_count++] = active;
+  stream->command_batch_index.slots[slot] = active;
   return RILEY_CUDA_STATUS_SUCCESS;
 }
 

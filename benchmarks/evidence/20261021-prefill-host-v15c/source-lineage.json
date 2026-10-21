@@ -1,0 +1,25 @@
+{
+  "time_ns": 1792553293431713782,
+  "baseline_binary": "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020/riley-piecewise-v13b",
+  "baseline_sha256": "9dd87720ceb5c9f99532b8b01851557598032a6fe5ba037316e327eba1505566",
+  "binary": "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/riley-prefill-host-v15c",
+  "binary_sha256": "233c3a6a81bad76d65577bacd5837d59e2ebe1dd52a8fde73f3cd07a38cf937a",
+  "qualified_source_count": 937,
+  "changed_sources": [
+    "crates/riley-cuda/tests/owned_hf_command_batch_gpu.rs",
+    "crates/riley-cuda/tests/sm80_prefill_alignment_gpu.rs",
+    "crates/riley-runtime/src/llama/executor/dispatch.rs",
+    "kernels/src/command_batch_index.hpp",
+    "kernels/src/cublas_gemm_probe.cu",
+    "kernels/src/ffi_internal.hpp",
+    "kernels/src/hf_softmax_diagnostic.cuh",
+    "kernels/src/host_runtime.cu"
+  ],
+  "source_manifest_sha256": "0360889f8881ba60c4e8dbc5c52aa05214f54300aca4f531ed5b5fc71f6a7019",
+  "normal_inputs_sha256": {
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/riley-prefill-host-v15c": "233c3a6a81bad76d65577bacd5837d59e2ebe1dd52a8fde73f3cd07a38cf937a",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/measure-matched.py": "fbdfeee188a5eb2ddf8d08fd57a3aedc87e88fc8033bca75d4b4bef594bfb744",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/final-c16.argv.json": "314f9b13f0bbd71d2b9fb6782b5687a2877ef782e2f1b4fd81a97c1170f8ac9c",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/final-c32.argv.json": "38fd20c5c1fd43a22748261ba3e6e2cf8bbb305d4b42ab350401508eabb6de0a"
+  }
+}

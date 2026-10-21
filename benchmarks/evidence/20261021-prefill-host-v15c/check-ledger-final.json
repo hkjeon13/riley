@@ -1,0 +1,37 @@
+{
+  "time_ns": 1792555504491625634,
+  "source_sha256": "9cfccea89d1de77e59a980e8d10178274a51fa6f129bdd048e205eec4378a19f",
+  "argv": [
+    "/usr/bin/taskset",
+    "-c",
+    "48-51",
+    "g++",
+    "-std=c++17",
+    "-O2",
+    "-pthread",
+    "-DRILEY_LEDGER_INDEX_CHECK",
+    "-DRILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE=1",
+    "-I/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/source/kernels/src",
+    "-I/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/source/kernels/include",
+    "-I/usr/local/cuda-12.4/include",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/check-ledger-final.cpp",
+    "-L/usr/local/cuda-12.4/lib64",
+    "-L/usr/local/cuda-12.4/lib64/stubs",
+    "-lcuda",
+    "-lcudart",
+    "-o",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/check-ledger-final"
+  ],
+  "returncode": 0,
+  "output": {
+    "duplicate_register_ns": 11.649,
+    "capacity": 1024,
+    "duplicates": 2000000,
+    "foreign_thread_rejected": true,
+    "foreign_stream_rejected": true,
+    "overflow_unleased": true
+  },
+  "lifecycle_macro_enabled": true,
+  "qualified_source": "source937 unchanged",
+  "scope": "CPU only; no GPU use; helper recheck after archived performance evidence"
+}

@@ -1,0 +1,64 @@
+{
+  "time_ns": 1792555256894090280,
+  "resource_reruns": [
+    {
+      "name": "final-teacher-C1-eager-r2",
+      "samples": 74,
+      "whole_device_peak_MiB": 9783.0,
+      "receipt_sha256": "1551da05bd0a37c9177afdf7be0ceec26eaa7cf9f8fca1848aefee6443a659c4"
+    },
+    {
+      "name": "final-teacher-allR-Graph-r2",
+      "samples": 80,
+      "whole_device_peak_MiB": 19053.0,
+      "receipt_sha256": "0cd25c08fcb2667fa9943cf81777df143e5a997802efff9f30f24599133f99d9"
+    },
+    {
+      "name": "teacher-body-allR-r2",
+      "samples": 171,
+      "whole_device_peak_MiB": 19133.0,
+      "receipt_sha256": "a7557bda997fbc4ce62ecd7c720301e0475b6c7f8ce76f7a7d03a1725a86a1ce"
+    },
+    {
+      "name": "teacher-mixed-r2",
+      "samples": 115,
+      "whole_device_peak_MiB": 18905.0,
+      "receipt_sha256": "677a70183fd5f7d0e8272ca6cb9bc26bb52c9f047755ec7b21a60f2b5ef81dd5"
+    },
+    {
+      "name": "teacher-mixed-no-output-r2",
+      "samples": 115,
+      "whole_device_peak_MiB": 20347.0,
+      "receipt_sha256": "6fd47f2234d59a681e7d2f53880748c16fc7b0caeff3115633a5daba06a37520"
+    },
+    {
+      "name": "memory_gpu",
+      "samples": 1,
+      "whole_device_peak_MiB": 1946.0,
+      "receipt_sha256": "6265dd0a04c949692b4398a8070501092e6c4885324e0784cb3d41177628bfb3"
+    },
+    {
+      "name": "owned_hf_command_batch_gpu",
+      "samples": 2,
+      "whole_device_peak_MiB": 1945.0,
+      "receipt_sha256": "f99fc45d4e6875e3855fd8047200804746b61653fc91c102604735499c2833d0"
+    },
+    {
+      "name": "host_runtime_gpu",
+      "samples": 1,
+      "whole_device_peak_MiB": 1945.0,
+      "receipt_sha256": "b663c29f94758b1fcbfba9a9d73f0c5ce223e748d013e0019b194698938f4bad"
+    },
+    {
+      "name": "sm80_prefill_alignment_gpu",
+      "samples": 2,
+      "whole_device_peak_MiB": 2357.0,
+      "receipt_sha256": "40dfe4a902d6e48f7788bbad831722bc88d5324322ca8662b47ffb0f2377a6b4"
+    }
+  ],
+  "source937_verified": true,
+  "binary_sha256": "233c3a6a81bad76d65577bacd5837d59e2ebe1dd52a8fde73f3cd07a38cf937a",
+  "normal_and_profile_arms": 31,
+  "stored_SSE_verified": 6154,
+  "normal_and_profile_peak_MiB": 18267.0
+}

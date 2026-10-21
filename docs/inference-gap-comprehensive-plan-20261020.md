@@ -260,3 +260,12 @@ Q/K/V/O의 요청별 prefill을 native-M128 arithmetic family를 보존하는 �
 [v15B 보고서](qwen-prefill-host-v15b-20261021.md): prefill 구조와 O(1) resource index·embedding report completion 경계를 합쳤다. 정상 fresh5회 처리량은 C16 +3.06%, C32 +5.45%; TTFT p95는 -6.81%, -9.82%였다. C32 반복2 TPOT p99+2.40% 플래그와 일반 BF16 view의 정렬 적격성 보완이 남아 기본 코드는 v13B로 유지한다. 미적용 patch·30 정상 arms·5 별도 profiles·원래 HF/native bytes와 whole-device cap의5개 재검사를 압축 증거로 보존한다.
 
 실제 after trace의 prefill compact gather는 각 동시성에서6,912회, pointer-batched GEMM은13,824 NVTX ranges였다. 기존 Q gather/output scatter/scale-mask/BF16 scatter는0이다. generic context 복원 변경은 관측된 API 비용상 우선순위가 낮아 도입하지 않았다. 최종 C 후보는 비정렬 view를 기존 경로로 보내는 가드와120개의 실제 GPU view 검사를 더하고 같은 정확도·C16/C32 fresh5회 성능 gate를 다시 수행한다. +10% 처리량 목표 달성으로 승격하지 않는다.
+
+
+### 2026-10-21 v15C 최종 채택
+
+[v15C 결과](qwen-prefill-host-v15c-20261021.md): compact GQA/pointer-batched prefill과 native BF16 causal softmax, 고정 host resource index, embedding report iteration-completion 검사를 채택했다. 일반 BF16 view의 alignment guard와 실제 GPU120 view cases를 보완했다. 원래 native/HF literal BF16 4,480 files, CPU524, GPU 계약5 test functions와 실제 최종 binary의 C32 dispatch를 확인했다.
+
+새5회 정상 비교의 처리량은 C16 +4.14%, C32 +5.16%; TTFT p95 -6.83%/-9.66%, 이번 paired tail2% 초과 플래그0이다. B의 TPOT p99 플래그는 삭제하지 않으며 alignment guard가 tail 개선의 원인이라고 주장하지 않는다. vLLM 대비 처리량65.67%/58.21%로 +10% 목표와 parity에는 미달한다. GPU6/7 원래 context·idle20GiB 홀드를 유지했다. 루트 README는 최종 동시 campaign의 before/after/stock 처리량과 tail을 종합한다.
+
+다음 우선순위는 실제 mixed batch 분포의 Gate/Up+Down 및 decode KV/attention이다. 미시 benchmark 이득을 서버 개선율로 전용하지 않는다. 여러 iteration overlap은 EOS·취소·KV commit·pinned staging lifetime을 먼저 증명한다. 큰 실험 종료마다 재현 가능한 증거와 함께 commit·push한다.

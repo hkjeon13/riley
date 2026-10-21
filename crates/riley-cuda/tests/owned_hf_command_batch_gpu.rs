@@ -51,7 +51,7 @@ fn owned_gemm_batch_matches_integer_oracle_and_retains_leases() -> Result {
                     output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, m * n * 2)?,
                 };
                 if grouped {
-                    plan.execute_row_groups(&mut params, &slots, None, &mut commands)?;
+                    plan.execute_row_groups(&mut params, &slots, None, 0, &mut commands)?;
                 } else {
                     plan.execute(&mut params, &mut commands)?;
                 }

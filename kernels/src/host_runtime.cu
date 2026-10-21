@@ -1262,6 +1262,9 @@ extern "C" RileyCudaStatus riley_cuda_stream_command_batch_end(
                             "command-batch resource release was corrupted");
     }
   }
+  // Clear only after confirmed completion and successful resource release.
+  // Ambiguous completion keeps both the index and authoritative ledger live.
+  stream->command_batch_index.clear();
   // Publish inactivity before dropping the stream lease. During this final
   // window ordinary operations observe the still-busy stream and roll back;
   // after the release this function never dereferences the stream again.

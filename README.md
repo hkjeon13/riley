@@ -27,35 +27,44 @@ cuBLASLt. There is no Python in the serving process.
 
 Measured 2026-10-21 on the same physical A100 (GPU 7), sequentially, with
 five fresh processes per engine and concurrency. Values are the medians of
-the five run-level metrics. Riley uses the qualified v13B implementation;
-vLLM is stock 0.27.1 with FlashAttention 2 and FULL_AND_PIECEWISE graphs.
+five run-level metrics. The adopted v15C prefill/host implementation is compared
+with the previous v13B and stock vLLM 0.27.1 (FA2, FULL_AND_PIECEWISE).
 
-| Clients | Riley output tok/s | vLLM output tok/s | Riley / vLLM | TTFT p95 ms, Riley / vLLM | TPOT p95 ms, Riley / vLLM | E2E p95 ms, Riley / vLLM |
-|---:|---:|---:|---:|---:|---:|---:|
-| 16 | 719.189 | 1125.205 | 63.92% | 88.291 / 83.717 | 20.867 / 12.758 | 691.977 / 427.521 |
-| 32 | 933.316 | 1671.802 | 55.83% | 272.284 / 165.122 | 33.471 / 18.123 | 1061.863 / 559.312 |
+| Clients | Previous Riley tok/s | Latest Riley tok/s | Change | vLLM tok/s | Latest Riley / vLLM |
+|---:|---:|---:|---:|---:|---:|
+| 16 | 717.829 | 747.513 | +4.14% | 1138.307 | 65.67% |
+| 32 | 932.064 | 980.137 | +5.16% | 1683.754 | 58.21% |
+
+Latency, milliseconds (latest Riley / stock vLLM):
+
+| Clients | TTFT p95 | TTFT p99 | TPOT p95 | TPOT p99 | E2E p95 |
+|---:|---:|---:|---:|---:|---:|
+| 16 | 82.409 / 83.158 | 164.515 / 110.557 | 20.028 / 12.706 | 21.469 / 13.315 | 660.452 / 424.361 |
+| 32 | 245.456 / 162.982 | 335.009 / 216.597 | 31.542 / 17.574 | 38.458 / 22.718 | 1008.210 / 554.416 |
 
 Both engines use BF16, greedy sampling, token budget 576, maximum sequence
 length 1024 and prefix caching disabled. Each arm has 64 warm-up and 192
 measured requests: 12 fixed prompts of 115–130 tokens and balanced generation
 limits of 8/16/24/32 tokens. TPOT is the request-average output-token latency,
-not a token-level inter-token percentile. Riley additionally preserves literal
-full-vocabulary BF16 equality to the original native/Hugging Face reference;
-stock vLLM's numerical path is not Riley's correctness reference.
+not a token-level inter-token percentile. The Riley recipe explicitly selects
+`owned-hf-eager-bf16-v1`, `native-prefill-sm80-v5` and `segments-v1`; these results
+do not cover every model or the generic default settings.
 
-The v14 structural candidate was **rejected**: throughput changed by +0.76%
-at C16 and −0.27% at C32, with three paired tail regressions above 2%.
-These results do not establish throughput parity with vLLM. Method, repeated
-tails, correctness and resource receipts:
-[v14 comparison](docs/qwen-mixed-attention-structural-v14-20261021.md),
-[retained v13 design](docs/qwen-piecewise-graph-merged-gateup-v13-20261020.md),
-[evidence index](benchmarks/evidence/20261021-structural-v14/README.md).
+Riley preserves literal full-vocabulary BF16 equality to the original
+native/Hugging Face reference: 4,480 BF16 files, 524 CPU tests and five actual
+GPU contract tests passed, including 120 alignment/view cases. Stock vLLM's
+numerical path is not Riley's correctness reference. No paired TTFT/TPOT/E2E
+p95/p99 regression above 2% occurred in this final five-repeat comparison.
+The throughput gap remains substantial; the +10% improvement target is unmet.
 
-The subsequent [v15B prefill/host experiment](docs/qwen-prefill-host-v15b-20261021.md)
-improves throughput by 3.06% / 5.45%, but remains unadopted at this checkpoint:
-one C32 TPOT p99 pair regresses 2.40%, and general unaligned BF16 views require
-an eligibility guard. The table above uses its fresh v13B/stock controls.
-
+[Latest implementation, all repeats and caveats](docs/qwen-prefill-host-v15c-20261021.md) ·
+[Audited evidence](benchmarks/evidence/20261021-prefill-host-v15c/README.md).
+Earlier experiments remain separately documented: [v14 rejected](docs/qwen-mixed-attention-structural-v14-20261021.md)
+(+0.76% / −0.27%), [v15A screen](docs/qwen-prefill-host-v15a-20261021.md), and
+[v15B unadopted checkpoint](docs/qwen-prefill-host-v15b-20261021.md)
+(+3.06% / +5.45%, one C32 TPOT p99 pair +2.40%). Those samples were retained;
+the final alignment guard is a compatibility fix, not a proven cause of the
+different tail outcome.
 
 Dated A100 matrices for other model families and their original numerical
 contracts are in [model coverage](docs/model-coverage-a100.md). Separate native
@@ -113,7 +122,7 @@ curl -s http://127.0.0.1:8080/v1/completions \
 
 | | |
 |---|---|
-| Models | `LlamaForCausalLM` (SmolLM2), `Qwen2ForCausalLM` (Qwen2.5) |
+| Models | `LlamaForCausalLM` (SmolLM2), `Qwen2ForCausalLM` (Qwen2.5), dense `Qwen3ForCausalLM` (Qwen3) |
 | Precision | BF16 |
 | Hardware | One NVIDIA GPU; kernels built for `sm_89` by default |
 | API | `POST /v1/completions` with streaming; models, health and metrics endpoints |

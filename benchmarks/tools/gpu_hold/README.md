@@ -24,3 +24,11 @@ python3 control.py --lease-dir "$PWD/leases-v2" --index 6 run -- <실험 명령�
 기존 측정 harness는 holder를 외부 작업으로 오인하지 않도록 PID와 start ticks를 검증해 별도로 구분해야 한다. GPU 2/3의 기존 결과와 GPU 6/7의 결과를 같은 표본으로 합치지 않는다. 6번 공존 작업의 자원 사용도 성능 측정 기록에 남긴다.
 
 2026-10-21 검증에서는 GPU6의 공존 예측 작업을 보존하고 정확도·구성요소 검사만 실행했다. 정상 C16·C32 성능 비교는 모두 GPU7에서 순차 실행했다. 새 공존 작업은 살아 있는 고정 부모 PID/start ticks, 같은 UID, 정확한 script directory의 `*_predict.py` 자식 및2GiB 한도로 제한했으며 광범위한 descendant 허용은 하지 않았다. policy의 각 기존 항목별로 명시된 예외와 새 항목을 구분한다. 홀드는 시스템 차원의 배타적 GPU 할당이 아니다.
+
+`observe_finite.py`는 위 GPU6/7 환경의 직접 실행 파일을 관측하는 유한 검사 도구다.
+controller 안에서 실행하며 `RILEY_DIVERGENCE_NATIVE_OUTPUT` 환경 marker가 필요하다.
+Python/shell wrapper를 target으로 넘기지 않는다. 실제 child executable·UID·start ticks·
+thread group을 먼저 확인하고, 장치 전체22GiB cap과 허용된 공존 process를 검사한다.
+이미 확인한 process의 NVML 잔여 row는 teardown 때까지 기다리며 외부 작업을 종료하지
+않는다. 초기 binding 실패도 cleanup 범위에 포함한다. receipt와 samples에는 실제
+observer hash와 verified PID/start ticks를 남긴다. 이 도구는 시스템 배타 할당 기능이 아니다.

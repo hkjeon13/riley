@@ -1,0 +1,43 @@
+{
+  "scope": "Separate64-keep profile of exact final C binary, not a normal performance arm or a before/stock timing comparison",
+  "binary_sha256": "233c3a6a81bad76d65577bacd5837d59e2ebe1dd52a8fde73f3cd07a38cf937a",
+  "trace": "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/runs/profile-c32/c32-r0-owned-after/trace.sqlite",
+  "trace_sha256": "6aa030784d2241e943407188b50ce1ccb9d72eabd4de561c64fc8275e88fee00",
+  "kernel_counts": {
+    "hf_sm80_compact_prefill": {
+      "count": 2304,
+      "ms": 7.045096
+    },
+    "hf_q_gather": {
+      "count": 0,
+      "ms": 0.0
+    },
+    "hf_output_rows": {
+      "count": 0,
+      "ms": 0.0
+    },
+    "hf_scale_mask_tile": {
+      "count": 0,
+      "ms": 0.0
+    },
+    "hf_scatter_bf16_tile": {
+      "count": 0,
+      "ms": 0.0
+    }
+  },
+  "pointer_batched_ranges": 4608,
+  "geometries": {
+    "W0/BatchedEx/N130/M130/K128/B32/lda128/ldb4096/ldc130": 396,
+    "W0/BatchedEx/N128/M130/K130/B32/lda128/ldb130/ldc4096": 396,
+    "W0/BatchedEx/N115/M115/K128/B32/lda128/ldb4096/ldc115": 216,
+    "W0/BatchedEx/N128/M115/K115/B32/lda128/ldb115/ldc4096": 216,
+    "W0/BatchedEx/N126/M126/K128/B32/lda128/ldb4096/ldc126": 396,
+    "W0/BatchedEx/N128/M126/K126/B32/lda128/ldb126/ldc4096": 396,
+    "W0/BatchedEx/N128/M128/K128/B32/lda128/ldb4096/ldc128": 756,
+    "W0/BatchedEx/N128/M128/K128/B32/lda128/ldb128/ldc4096": 756,
+    "W0/BatchedEx/N120/M120/K128/B32/lda128/ldb4096/ldc120": 180,
+    "W0/BatchedEx/N128/M120/K120/B32/lda128/ldb120/ldc4096": 180,
+    "W0/BatchedEx/N125/M125/K128/B32/lda128/ldb4096/ldc125": 360,
+    "W0/BatchedEx/N128/M125/K125/B32/lda128/ldb125/ldc4096": 360
+  }
+}

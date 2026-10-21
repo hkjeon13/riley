@@ -1,0 +1,9 @@
+{
+  "time_ns": 1792555256997544173,
+  "adopted": true,
+  "scope": "SM80 qualified owned-hf-eager-bf16-v1 native-prefill-sm80-v5 segments-v1 lane, general command-batch resource index",
+  "reason": "Unchanged native/HF literal BF16 gates, compatibility/ownership GPU tests, five fresh paired C16/C32 throughput improvements and no >2% paired tail flags",
+  "prior_B_C32_tail_flag_preserved": true,
+  "alignment_guard_is_not_claimed_as_tail_cause": true,
+  "target_ten_percent_reached": false
+}

@@ -684,6 +684,14 @@ pub(in crate::llama) fn execute_packed(
         crate::host_trace::note_step_kind(capturing, replaying);
         // Staged step uploads also move the embedding into the recorded step.
         let embedding_in_step = config.staged_step_uploads() && (capturing || replaying);
+        // Host token admission is authoritative before KV mutation. For this
+        // qualified staged lane, enqueue the device's redundant report check at
+        // command completion instead of stopping the GPU between embedding and
+        // layer0. A malformed device report still fails before publication.
+        let defer_validated_embedding_report=in_command_batch && config.owned_decode_batch()==10
+            && config.staged_step_uploads()
+            && matches!(&*host_input,BatchHostInput::PerOperation(h) if h.staging.is_some())
+            && packed.input_token_ids().iter().all(|&t|(t as usize)<plan.dimensions().vocabulary_size());
         let step_capture = match (recorded, step_counts) {
             (Some(graph), _) => StepCaptureMode::Replay(graph, packed.output_token_indices()),
             (None, Some(counts)) if capturing => StepCaptureMode::Capture {
@@ -774,6 +782,7 @@ pub(in crate::llama) fn execute_packed(
             config.fused_kv_write(),
             config.fused_mlp_residual_norm(),
             embedding_in_step,
+            defer_validated_embedding_report,
             native_d128_two_stage_workspace.as_deref_mut(),
             #[cfg(feature="cuda-cublas-gemm-probe")]
             if owned_mlp_eligible && in_command_batch {owned_mlp_graphs.as_deref_mut()}else{None},
@@ -823,7 +832,7 @@ pub(in crate::llama) fn execute_packed(
                     .map_err(|source| batch_cuda(site, source))?;
                 host.staged_greedy_bytes.set(byte_len);
             }
-            if embedding_in_step {
+            if embedding_in_step || defer_validated_embedding_report {
                 embedding_error_scratch
                     .copy_to_pinned_in_active_command_batch(
                         0,
@@ -1199,6 +1208,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     fused_kv_write: bool,
     fused_mlp_residual_norm: bool,
     embedding_in_recorded_step: bool,
+    defer_validated_embedding_report: bool,
     mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
     #[cfg(feature="cuda-cublas-gemm-probe")]
     mut owned_mlp_graphs: Option<&mut riley_cuda::CudaOwnedHfMlpGraph>,
@@ -1307,11 +1317,12 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         })
     };
     if !embedding_in_recorded_step {
-        run_embedding(false, &mut *buffers, &mut *stream)?;
+        run_embedding(defer_validated_embedding_report, &mut *buffers, &mut *stream)?;
     }
 
-    // An embedding that reads its error report back on the host has run
-    // eagerly above; everything after it is recordable.
+    // The embedding was submitted above unless it belongs to the recorded
+    // step. Its report is checked eagerly or at iteration completion according
+    // to the validated staging lane; everything below is recordable.
     let capture_site = ExecutionSite::global(LlamaOp::IterationCompletion);
     match step_capture {
         StepCaptureMode::Disabled => {}
@@ -1352,8 +1363,8 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     }
 
     // Cache a whole decode body separately from the original layer segments.
-    // Embedding and its host error report ran above; dynamic metadata uploads,
-    // result download and sampling remain outside this graph.
+    // Embedding stays outside this body graph. Its report, dynamic metadata
+    // uploads, result download and sampling use the iteration completion path.
     #[cfg(feature="cuda-cublas-gemm-probe")]
     let owned_full_body = owned_segments.is_some() && owned_decode_batch >= 2
         && batch.host().row_positions().len() >= 2 && dense_rows <= 32
