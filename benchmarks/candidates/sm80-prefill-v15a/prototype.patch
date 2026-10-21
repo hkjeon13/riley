@@ -1,0 +1,102 @@
+diff --git a/kernels/src/cublas_gemm_probe.cu b/kernels/src/cublas_gemm_probe.cu
+index 6cc5b5e10..3f1c529ad 100644
+--- a/kernels/src/cublas_gemm_probe.cu
++++ b/kernels/src/cublas_gemm_probe.cu
+@@ -2595,6 +2595,20 @@ __global__ void hf_sm80_vector_kv_gather(const uint4* __restrict__ kin,const uin
+  }
+ }
+ __global__ void hf_kv_gather(const __nv_bfloat16*kin,const __nv_bfloat16*vin,const uint32_t*ids,__nv_bfloat16*k,__nv_bfloat16*v,int t,uint64_t physical,int h,int kvh,int d){int i=blockIdx.x*blockDim.x+threadIdx.x;if(i<t*h*d){int depth=i%d,row=(i/d)%t,head=i/(d*t);uint64_t id=ids[row/16];if(id>=physical){k[i]=v[i]=__float2bfloat16_rn(CUDART_NAN_F);}else{uint64_t j=((id*kvh+head/(h/kvh))*16+row%16)*d+depth;k[i]=kin[j];v[i]=vin[j];}}}
++// Compact prefill GQA operands and per-head pointer tables in existing K
++// scratch. Q and context stay row-major: their column stride is H*D.
++// Every head retains the original M/N/K; no padding or reduction merge.
++__global__ void hf_sm80_compact_prefill(const uint4* kin,const uint4* vin,const uint32_t* ids,uint4* k,uint4* v,const __nv_bfloat16* q,__nv_bfloat16* score,__nv_bfloat16* prob,__nv_bfloat16* out,void** tables,int m,int t,uint64_t physical){
++ int i=blockIdx.x*blockDim.x+threadIdx.x;
++ if(i<t*8*16){int depth=i%16,token=(i/16)%t,head=i/(16*t);uint64_t id=ids[token/16];uint4 kk,vv;
++  if(id>=physical){uint32_t nan=__bfloat16_as_ushort(__float2bfloat16_rn(CUDART_NAN_F));nan|=nan<<16;kk=vv=make_uint4(nan,nan,nan,nan);}
++  else {uint64_t src=((id*8+head)*16+token%16)*16+depth;kk=kin[src];vv=vin[src];}k[i]=kk;v[i]=vv;
++ }
++ if(i<32){auto* kb=reinterpret_cast<__nv_bfloat16*>(k);auto* vb=reinterpret_cast<__nv_bfloat16*>(v);
++  tables[i]=kb+(i/4)*t*128;tables[32+i]=const_cast<__nv_bfloat16*>(q)+i*128;tables[64+i]=score+i*m*t;
++  tables[96+i]=vb+(i/4)*t*128;tables[128+i]=prob+i*m*t;tables[160+i]=out+i*128;
++ }
++}
+ // Tile only independent softmax rows. Full BF16 QK/AV geometry is unchanged.
+ // Global score/probability tensors exceed INT32_MAX elements at 8k Q32.
+ __global__ void hf_scale_mask_tile(const __nv_bfloat16*in,float*out,int m,int t,int h,int start,int tile,float scale){
+@@ -2631,20 +2645,30 @@ extern "C" RileyCudaStatus riley_cuda_cublas_hf_attention_execute(
+   // layout. Keep GEMM dimensions/reduction unchanged and avoid identity copies.
+   const void* query_operand=m==1?spans[0].data:spans[5].data;
+   void* context_operand=m==1?spans[4].data:spans[12].data;
+-  if(m!=1)hf_q_gather<<<(m*h*d+255)/256,256,0,stream->stream>>>(static_cast<const __nv_bfloat16*>(spans[0].data),static_cast<__nv_bfloat16*>(spans[5].data),m,h,d);
++  const bool compact_prefill=plan->owned_sm80_attention_enabled && m>1 && t<=2048 && h==32 && kh==8 && d==128 &&
++      !(reinterpret_cast<uintptr_t>(spans[1].data)&15) && !(reinterpret_cast<uintptr_t>(spans[2].data)&15) &&
++      !(reinterpret_cast<uintptr_t>(spans[6].data)&15) && !(reinterpret_cast<uintptr_t>(spans[7].data)&15);
++  auto** tables=reinterpret_cast<void**>(static_cast<__nv_bfloat16*>(spans[6].data)+uint64_t(kh)*t*d);
++  if(m!=1 && !compact_prefill)hf_q_gather<<<(m*h*d+255)/256,256,0,stream->stream>>>(static_cast<const __nv_bfloat16*>(spans[0].data),static_cast<__nv_bfloat16*>(spans[5].data),m,h,d);
+   const bool sm80_staging=plan->owned_sm80_attention_enabled && h==32 && kh==8 && d==128 &&
+       !(reinterpret_cast<uintptr_t>(spans[1].data)&15) && !(reinterpret_cast<uintptr_t>(spans[2].data)&15) &&
+       !(reinterpret_cast<uintptr_t>(spans[6].data)&15) && !(reinterpret_cast<uintptr_t>(spans[7].data)&15);
+-  if(sm80_staging)hf_sm80_vector_kv_gather<<<(t*8*16+255)/256,256,0,stream->stream>>>(static_cast<const uint4*>(spans[1].data),static_cast<const uint4*>(spans[2].data),static_cast<const uint32_t*>(spans[3].data),static_cast<uint4*>(spans[6].data),static_cast<uint4*>(spans[7].data),t,physical);
++  if(compact_prefill)hf_sm80_compact_prefill<<<(t*8*16+255)/256,256,0,stream->stream>>>(static_cast<const uint4*>(spans[1].data),static_cast<const uint4*>(spans[2].data),static_cast<const uint32_t*>(spans[3].data),static_cast<uint4*>(spans[6].data),static_cast<uint4*>(spans[7].data),static_cast<const __nv_bfloat16*>(spans[0].data),static_cast<__nv_bfloat16*>(spans[8].data),static_cast<__nv_bfloat16*>(spans[11].data),static_cast<__nv_bfloat16*>(spans[4].data),tables,m,t,physical);
++  else if(sm80_staging)hf_sm80_vector_kv_gather<<<(t*8*16+255)/256,256,0,stream->stream>>>(static_cast<const uint4*>(spans[1].data),static_cast<const uint4*>(spans[2].data),static_cast<const uint32_t*>(spans[3].data),static_cast<uint4*>(spans[6].data),static_cast<uint4*>(spans[7].data),t,physical);
+   else hf_kv_gather<<<(t*h*d+255)/256,256,0,stream->stream>>>(static_cast<const __nv_bfloat16*>(spans[1].data),static_cast<const __nv_bfloat16*>(spans[2].data),static_cast<const uint32_t*>(spans[3].data),static_cast<__nv_bfloat16*>(spans[6].data),static_cast<__nv_bfloat16*>(spans[7].data),t,physical,h,kh,d);
+-  status=cublas_probe_error(cublasGemmStridedBatchedEx(plan->handle,CUBLAS_OP_T,CUBLAS_OP_N,t,m,d,&alpha,spans[6].data,CUDA_R_16BF,d,t*d,query_operand,CUDA_R_16BF,d,m*d,&beta,spans[8].data,CUDA_R_16BF,t,m*t,h,CUBLAS_COMPUTE_32F,CUBLAS_GEMM_DEFAULT_TENSOR_OP),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
++  if(compact_prefill)status=cublas_probe_error(cublasGemmBatchedEx(plan->handle,CUBLAS_OP_T,CUBLAS_OP_N,t,m,d,&alpha,const_cast<const void**>(tables),CUDA_R_16BF,d,const_cast<const void**>(tables+32),CUDA_R_16BF,h*d,&beta,tables+64,CUDA_R_16BF,t,h,CUBLAS_COMPUTE_32F,CUBLAS_GEMM_DEFAULT_TENSOR_OP),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
++  else status=cublas_probe_error(cublasGemmStridedBatchedEx(plan->handle,CUBLAS_OP_T,CUBLAS_OP_N,t,m,d,&alpha,spans[6].data,CUDA_R_16BF,d,t*d,query_operand,CUDA_R_16BF,d,m*d,&beta,spans[8].data,CUDA_R_16BF,t,m*t,h,CUBLAS_COMPUTE_32F,CUBLAS_GEMM_DEFAULT_TENSOR_OP),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
+   if(status==RILEY_CUDA_STATUS_SUCCESS){
+    // Singleton decode has no causal-mask exclusions. Fuse only the scale load;
+    // QK/PV dimensions, cuBLAS selection, warp reduction and BF16 rounding stay fixed.
+    const bool fused_d64 = plan->owned_weight_reuse_qualified && m==1 &&
+        h==9 && kh==3 && d==64 && t<=1024;
+    const bool fused_sm80=sm80_staging && m==1 && t<=2048;
+-   for(int start=0;start<m;start+=128){int tile=(m-start)<128?(m-start):128;uint64_t elements=uint64_t(h)*tile*t;
++   if(compact_prefill){int log=0;while((1<<log)<t)log++;int width=(1<<log)<32?(1<<log):32,warps=128/width,wb=log<=7?2:1,blocks=(h*m+warps*wb-1)/(warps*wb);dim3 threads(width,warps);
++#define PREFILL_SM(L) case L:softmax_warp_forward<__nv_bfloat16,__nv_bfloat16,float,L,false,false,32,false,false,true><<<blocks,threads,0,stream->stream>>>(static_cast<__nv_bfloat16*>(spans[11].data),static_cast<const __nv_bfloat16*>(spans[8].data),h*m,t,t,nullptr,-1,false,m);break;
++    switch(log){PREFILL_SM(0) PREFILL_SM(1) PREFILL_SM(2) PREFILL_SM(3) PREFILL_SM(4) PREFILL_SM(5) PREFILL_SM(6) PREFILL_SM(7) PREFILL_SM(8) PREFILL_SM(9) PREFILL_SM(10) PREFILL_SM(11)}
++#undef PREFILL_SM
++   }else for(int start=0;start<m;start+=128){int tile=(m-start)<128?(m-start):128;uint64_t elements=uint64_t(h)*tile*t;
+     if(!fused_d64 && !fused_sm80)hf_scale_mask_tile<<<(elements+255)/256,256,0,stream->stream>>>(static_cast<const __nv_bfloat16*>(spans[8].data),static_cast<float*>(spans[9].data),m,t,h,start,tile,scale);
+     if(t<=2048){int log=0;while((1<<log)<t)log++;int width=(1<<log)<32?(1<<log):32,warps=128/width,wb=log<=7?2:1,blocks=(h*tile+warps*wb-1)/(warps*wb);dim3 threads(width,warps);
+ #define HF_CASE(L) case L: if(fused_sm80){softmax_warp_forward<__nv_bfloat16,__nv_bfloat16,float,L,false,false,32,true><<<blocks,threads,0,stream->stream>>>(static_cast<__nv_bfloat16*>(spans[11].data),static_cast<const __nv_bfloat16*>(spans[8].data),h*tile,t,t);}else if(fused_d64){softmax_warp_forward<__nv_bfloat16,__nv_bfloat16,float,L,false,false,32,false,true><<<blocks,threads,0,stream->stream>>>(static_cast<__nv_bfloat16*>(spans[11].data),static_cast<const __nv_bfloat16*>(spans[8].data),h*tile,t,t);}else if(m==1){softmax_warp_forward<float,__nv_bfloat16,float,L,false,false,32><<<blocks,threads,0,stream->stream>>>(static_cast<__nv_bfloat16*>(spans[11].data),static_cast<const float*>(spans[9].data),h*tile,t,t);}else{softmax_warp_forward<float,float,float,L,false,false,32><<<blocks,threads,0,stream->stream>>>(static_cast<float*>(spans[10].data),static_cast<const float*>(spans[9].data),h*tile,t,t);}break;
+@@ -2657,8 +2681,9 @@ extern "C" RileyCudaStatus riley_cuda_cublas_hf_attention_execute(
+     }
+     if(m!=1 || t>2048)hf_scatter_bf16_tile<<<(elements+255)/256,256,0,stream->stream>>>(static_cast<const float*>(spans[10].data),static_cast<__nv_bfloat16*>(spans[11].data),m,t,h,start,tile);
+    }
+-   status=cublas_probe_error(cublasGemmStridedBatchedEx(plan->handle,CUBLAS_OP_N,CUBLAS_OP_N,d,m,t,&alpha,spans[7].data,CUDA_R_16BF,d,t*d,spans[11].data,CUDA_R_16BF,t,m*t,&beta,context_operand,CUDA_R_16BF,d,m*d,h,CUBLAS_COMPUTE_32F,CUBLAS_GEMM_DEFAULT_TENSOR_OP),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
+-   if(status==RILEY_CUDA_STATUS_SUCCESS && m!=1)hf_output_rows<<<(m*h*d+255)/256,256,0,stream->stream>>>(static_cast<const __nv_bfloat16*>(spans[12].data),static_cast<__nv_bfloat16*>(spans[4].data),m,h,d);
++   if(compact_prefill)status=cublas_probe_error(cublasGemmBatchedEx(plan->handle,CUBLAS_OP_N,CUBLAS_OP_N,d,m,t,&alpha,const_cast<const void**>(tables+96),CUDA_R_16BF,d,const_cast<const void**>(tables+128),CUDA_R_16BF,t,&beta,tables+160,CUDA_R_16BF,h*d,h,CUBLAS_COMPUTE_32F,CUBLAS_GEMM_DEFAULT_TENSOR_OP),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
++   else status=cublas_probe_error(cublasGemmStridedBatchedEx(plan->handle,CUBLAS_OP_N,CUBLAS_OP_N,d,m,t,&alpha,spans[7].data,CUDA_R_16BF,d,t*d,spans[11].data,CUDA_R_16BF,t,m*t,&beta,context_operand,CUDA_R_16BF,d,m*d,h,CUBLAS_COMPUTE_32F,CUBLAS_GEMM_DEFAULT_TENSOR_OP),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
++   if(status==RILEY_CUDA_STATUS_SUCCESS && m!=1 && !compact_prefill)hf_output_rows<<<(m*h*d+255)/256,256,0,stream->stream>>>(static_cast<const __nv_bfloat16*>(spans[12].data),static_cast<__nv_bfloat16*>(spans[4].data),m,h,d);
+   }
+   if(status==RILEY_CUDA_STATUS_SUCCESS){auto e=cudaGetLastError();if(e!=cudaSuccess)status=runtime_error(e,error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);}
+  }
+diff --git a/kernels/src/hf_softmax_diagnostic.cuh b/kernels/src/hf_softmax_diagnostic.cuh
+index a1a5dd766..bd45f847f 100644
+--- a/kernels/src/hf_softmax_diagnostic.cuh
++++ b/kernels/src/hf_softmax_diagnostic.cuh
+@@ -75,8 +75,8 @@ __device__ __forceinline__ void warp_reduce(acc_t* sum) {
+ // input_t=half,  acc_t=float, output_t=float => read half tensor, float accumulators, write float tensor.
+ // input_t_float, acc_t=float, output_t=half  => read float tensor, float accumulators, write half tensor.
+ 
+-template <typename input_t, typename output_t, typename acc_t, int log2_elements, bool is_log_softmax, bool is_masked, int WARP_SIZE_PARAM, bool scaled_bf16_d128 = false, bool scaled_bf16_d64 = false>
+-__global__ void softmax_warp_forward(output_t *dst, const input_t *src, int batch_size, int stride, int element_count, const bool *mask = nullptr, const int head_chunk_size = -1, bool is_transformer_mask = false)
++template <typename input_t, typename output_t, typename acc_t, int log2_elements, bool is_log_softmax, bool is_masked, int WARP_SIZE_PARAM, bool scaled_bf16_d128 = false, bool scaled_bf16_d64 = false, bool causal_prefill_d128 = false>
++__global__ void softmax_warp_forward(output_t *dst, const input_t *src, int batch_size, int stride, int element_count, const bool *mask = nullptr, const int head_chunk_size = -1, bool is_transformer_mask = false, int prefill_rows = 0)
+ {
+     // WARP_SIZE and WARP_BATCH must match the return values batches_per_warp and warp_size of method warp_softmax_forward_kernel.
+     constexpr int next_power_of_two = 1 << log2_elements;
+@@ -117,7 +117,13 @@ __global__ void softmax_warp_forward(output_t *dst, const input_t *src, int batc
+             int element_index = local_idx + it * WARP_SIZE;
+             if (element_index < batch_element_count) {
+                 elements[i][it] = src[i*element_count+it*WARP_SIZE];
+-                if constexpr (scaled_bf16_d64) {
++                if constexpr (causal_prefill_d128) {
++                    // Preserve eager BF16 QK/scale and FP32 softmax boundaries.
++                    // Only eliminate global float intermediates and cast pass.
++                    elements[i][it] = element_index > element_count-prefill_rows+(first_batch+i)%prefill_rows
++                        ? -3.3895313892515355e38f
++                        : hf_decode_scaled_bf16_d128(elements[i][it]);
++                } else if constexpr (scaled_bf16_d64) {
+                     // D64 eager scale is exactly 1/8, with the same BF16 boundary.
+                     elements[i][it] = __bfloat162float(__float2bfloat16_rn(elements[i][it] * 0.125f));
+                 } else if constexpr (scaled_bf16_d128) {

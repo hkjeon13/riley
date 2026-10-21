@@ -248,3 +248,9 @@ Q/K/V/O의 요청별 prefill을 native-M128 arithmetic family를 보존하는 �
 - R2~16 Gate/Up은 full pipeline에서 recipe와 fused epilogue를 비교한다. layer0의 반복 측정에서0.8% 빠른 Lt가 서버 전체를 빠르게 만들었다고 가정하지 않는다. dtype/tolerance/출력 조건을 완화하지 않는다.
 
 사용자 지시에 따라 **큰 실험 단위가 끝나면 코드·MD·재현 가능한 증거를 커밋하고 푸시한다.** 실패 실험도 미채택 사유와 전체 반복 표본을 보존한다. 마지막에는 committed source와 qualified source manifest의 일치 및 원격 tip을 확인한다. 다음 GPU 작업에도 원래 GPU6/7 holder를 종료하거나 context를 재시작하지 않는다.
+
+### 2026-10-21 v15A prefill 구조 실험 checkpoint
+
+[v15A 보고서](qwen-prefill-host-v15a-20261021.md)의 prefill-only 후보는 K/V GQA 확장과 Q/output 재배치를 제거하고 native BF16 경계의 causal softmax를 융합했다. CPU524, full-vocabulary BF16 2,464 files, attention 구성요소156조합을 통과했다. 한 번의 선별에서 C16+4.78%, C32+5.21%였지만 C16 TPOT p99+2.38%이고 C32에는 host trace가 있으므로 정상5회 결과로 채택하지 않는다. 재현 패치와 압축 증거를 커밋·푸시로 보존한다.
+
+기존 baseline의 Graph node 재분류로 other는 C16 407.503→96.909ms, C32 375.545→89.720ms가 됐다. Gate/Up+Down이 전체 GPU kernel 시간 합계의 약41~43%다. prefill attention 변경과 host resource index·completion 경계 개선을 결합한 후보를 독립 빌드하고 C16/C32의 before/after/stock 5회 정상 비교를 진행한다. 정확도·tail·GPU6/7 holder 기준은 유지하며, 최종 정상 수치는 루트 README에 별도로 반영한다.
