@@ -1,0 +1,74 @@
+[
+  {
+    "trace": "/mnt/efs/nlp/psyche/riley-overlap-v17b5-20261021/runs/profile-c16/c16-r0-owned-after/trace.sqlite",
+    "trace_sha256": "5aefe2bffc747d9453dea5fd11c050332cae926eeb0d3845861299ce01b1545a",
+    "all_kernel_sum_ms": 1683.84812,
+    "detected_mixed_root_kernel_sum_ms": 93.374561,
+    "detected_mixed_root_fraction_of_kernel_sum": 0.05545307791773999,
+    "detected_mixed_graphs": [
+      {
+        "graph": 1796,
+        "nodes": 1304,
+        "node_execution_counts": [
+          1
+        ],
+        "observed_complete_launches": 1,
+        "kernel_sum_ms": 22.422211,
+        "scope": "Uniform node execution counts establish complete launches; nonuniform counts remain unaggregated."
+      },
+      {
+        "graph": 1799,
+        "nodes": 1304,
+        "node_execution_counts": [
+          1
+        ],
+        "observed_complete_launches": 1,
+        "kernel_sum_ms": 22.678788,
+        "scope": "Uniform node execution counts establish complete launches; nonuniform counts remain unaggregated."
+      },
+      {
+        "graph": 1805,
+        "nodes": 1304,
+        "node_execution_counts": [
+          1
+        ],
+        "observed_complete_launches": 1,
+        "kernel_sum_ms": 22.457539,
+        "scope": "Uniform node execution counts establish complete launches; nonuniform counts remain unaggregated."
+      },
+      {
+        "graph": 1808,
+        "nodes": 1196,
+        "node_execution_counts": [
+          1
+        ],
+        "observed_complete_launches": 1,
+        "kernel_sum_ms": 25.816023,
+        "scope": "Uniform node execution counts establish complete launches; nonuniform counts remain unaggregated."
+      }
+    ],
+    "actual_mixed_graph_hit": true,
+    "scope": "Only separate measured64keep; startup/correctness/warmup not captured. Sums over actual detected Graph IDs, not an estimate of normal192keep causal speedup or all eligible mixed batches. No hardware counters."
+  },
+  {
+    "trace": "/mnt/efs/nlp/psyche/riley-overlap-v17b5-20261021/runs/profile-c32/c32-r0-owned-after/trace.sqlite",
+    "trace_sha256": "b4224a4dfc3c8fce84e79fb16432bb34ef5efc4a7deddfb343b797ebb5495ae1",
+    "all_kernel_sum_ms": 1334.405004,
+    "detected_mixed_root_kernel_sum_ms": 24.560862,
+    "detected_mixed_root_fraction_of_kernel_sum": 0.018405852740642152,
+    "detected_mixed_graphs": [
+      {
+        "graph": 3617,
+        "nodes": 1340,
+        "node_execution_counts": [
+          1
+        ],
+        "observed_complete_launches": 1,
+        "kernel_sum_ms": 24.560862,
+        "scope": "Uniform node execution counts establish complete launches; nonuniform counts remain unaggregated."
+      }
+    ],
+    "actual_mixed_graph_hit": true,
+    "scope": "Only separate measured64keep; startup/correctness/warmup not captured. Sums over actual detected Graph IDs, not an estimate of normal192keep causal speedup or all eligible mixed batches. No hardware counters."
+  }
+]

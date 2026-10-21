@@ -1,0 +1,527 @@
+--- a/crates/riley-cuda/src/lib.rs
++++ b/crates/riley-cuda/src/lib.rs
+@@ -170,6 +170,7 @@
+     silu_gated_multiply, silu_gated_multiply_merged_rows,
+ };
+ pub use runtime::{
++    CudaExecutionStreamKey, execution_stream_key,
+     CudaCommandBatch, CudaCommandStream, CudaContext, CudaDevice, CudaEvent, CudaExecutionStream,
+     CudaKernel, CudaPendingFill, CudaRuntime, CudaStepGraph, CudaStream, DeviceProperties,
+     abort_step_capture, begin_step_capture, end_step_capture, launch_step_graph,
+--- a/crates/riley-cuda/src/owned_mlp.rs
++++ b/crates/riley-cuda/src/owned_mlp.rs
+@@ -148,6 +148,15 @@
+     /// Merged weights retain their own allocation identity in the replay key.
+     pub fn execute_with_merged<S:CudaExecutionStream+?Sized>(&mut self,p:&mut CudaOwnedHfMlpParams<'_>,merged:CudaBufferSpan<'_>,stream:&mut S)->CudaResult<()> {
+         self.execute_impl(p,Some(merged),stream)
++    }
++    /// Records the original cold-owned arithmetic into a containing step Graph.
++    /// Individual native operators retain all span/context/lease validation.
++    pub fn execute_in_parent<S:CudaExecutionStream+?Sized>(&mut self,p:&mut CudaOwnedHfMlpParams<'_>,merged:Option<CudaBufferSpan<'_>>,s:&mut S)->CudaResult<()> {
++        if self.poisoned || p.active_rows==0 || p.active_rows>self.max_rows {
++            return Err(CudaError::invalid_state(OP,"invalid parent MLP state or row extent"));
++        }
++        let merged=merged.filter(|_|self.row_batch_mode==10 && (p.active_rows==1 || p.active_rows>=17));
++        let result=self.eager(p,merged,s);if result.is_err(){self.poisoned=true;}result
+     }
+     fn execute_impl<S:CudaExecutionStream+?Sized>(&mut self,p:&mut CudaOwnedHfMlpParams<'_>,merged:Option<CudaBufferSpan<'_>>,stream:&mut S)->CudaResult<()> {
+         let merged=merged.filter(|_|self.row_batch_mode==10 && (p.active_rows==1 || p.active_rows>=17));
+--- a/crates/riley-cuda/src/runtime.rs
++++ b/crates/riley-cuda/src/runtime.rs
+@@ -476,6 +476,13 @@
+ /// retaining a CUDA allocation; equality never aliases a later allocation.
+ #[derive(Clone, Debug)]
+ pub(crate) struct CudaResourceIdentity(Arc<()>);
++/// Retained opaque stream tag; never aliases a recycled native handle.
++#[derive(Clone,Debug,PartialEq,Eq)]
++pub struct CudaExecutionStreamKey(CudaResourceIdentity);
++/// A cache key retaining identity without owning the CUDA stream.
++pub fn execution_stream_key<S:CudaExecutionStream+?Sized>(s:&mut S)->CudaExecutionStreamKey {
++ CudaExecutionStreamKey(execution_stream_mut(s).identity.clone())
++}
+ impl CudaResourceIdentity {
+     pub(crate) fn new() -> Self { Self(Arc::new(())) }
+ }
+--- a/crates/riley-runtime/src/llama/batch_executor.rs
++++ b/crates/riley-runtime/src/llama/batch_executor.rs
+@@ -460,6 +460,26 @@
+             let rows=(0..active).map(|r|LlamaBatchRow::new(u64::MAX-r as u64,LlamaBatchRowKind::Decode,&token,length as u32,LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION,&tables[r],&valid,length as u32),Some(r as u32))).collect::<Vec<_>>();
+             if greedy{self.execute_greedy(&rows,stream)?;}else{self.execute(&rows,stream)?;}
+         }}
++        // Finite exact shapes captured only at startup; serving misses are eager.
++        // Same private dummy pages, no scheduler reservation or external token.
++        self.owner.forward.mixed_capture_allowed=true;
++        let mixed_warm=(||->LlamaBatchExecutorResult<()>{
++          for decode in [7usize,15,23,31] {if decode+1>count{continue;}
++            for length in [115usize,120,125,126,128,130] {
++              if decode+length>bounds.max_input_tokens(){continue;}
++              let prompt=vec![0u32;length];let pages=(length+15)/16;let mut pv=vec![16u16;pages];pv[pages-1]=((length-1)%16+1)as u16;
++              for context in [129usize,130,131] {
++                let mut dv=vec![16u16;9];dv[8]=(context-128)as u16;
++                let mut rows=(0..decode).map(|r|LlamaBatchRow::new(u64::MAX-r as u64,LlamaBatchRowKind::Decode,&token,context as u32,LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION,&tables[r],&dv,context as u32),Some(r as u32))).collect::<Vec<_>>();
++                rows.push(LlamaBatchRow::new(u64::MAX-decode as u64,LlamaBatchRowKind::Prefill,&prompt,length as u32,LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION,&tables[decode][..pages],&pv,length as u32),Some(decode as u32)));
++                if greedy{self.execute_greedy(&rows,stream)?;}else{self.execute(&rows,stream)?;}
++              }
++            }
++          } Ok(())
++        })();
++        self.owner.forward.mixed_capture_allowed=false;
++        mixed_warm?;
++        eprintln!("RILEY_MIXED_BODY_WARMUP entries={} sealed=true",self.owner.forward.mixed_graphs.len());
+         // Startup iterations never appear as externally consumed output/history.
+         self.shape_history=history;self.output_count=0;self.output_ready=false;
+         self.output_mode=BatchOutputMode::Logits;self.owner.forward.output_ready=false;
+--- a/crates/riley-runtime/src/llama/executor/dispatch.rs
++++ b/crates/riley-runtime/src/llama/executor/dispatch.rs
+@@ -515,6 +515,30 @@
+             None
+         }
+     }else{None};
++    // This is host staging only. The same command batch uploads all36 bytes
++    // before the mixed Graph; no new synchronization or hot allocation.
++    #[cfg(feature="cuda-cublas-gemm-probe")]
++    let fixed_prefill_staged=if config.owned_decode_graph() && !config.decode_step_capture()
++        && config.owned_decode_batch()==10 {
++        let decode=packed.row_kind_codes().iter().take_while(|&&k|k==LlamaBatchRowKind::Decode.code()).count();
++        let prefill=active.saturating_sub(decode);
++        let canonical=(2..=31).contains(&decode) && (65..=130).contains(&prefill)
++            && packed.prefill_token_count()==prefill && packed.output_count()==decode+1
++            && packed.row_sequence_slots().iter().enumerate().all(|(i,&slot)|slot as usize==if i<decode{i}else{decode})
++            && packed.position_ids()[decode..].iter().enumerate().all(|(i,&p)|p as usize==i)
++            && packed.position_ids()[..decode].iter().all(|&p|(23..216).contains(&p))
++            ; // Validated output permutations remain device-read data, not graph geometry.
++        if canonical {
++            let bytes=fixed_mixed_prefill_ids(packed.block_row_offsets(),packed.physical_block_ids(),decode,prefill)
++                .ok_or(LlamaBatchExecutorError::InvalidConfiguration{field:"mixed prefill table",reason:"fresh prefill pages exceed validated packed table"})?;
++            if let Some((_,pinned))=native_d128_two_stage_workspace.as_deref_mut().and_then(|w|w.materialized.as_mut())
++                .and_then(|w|w.hf.as_mut()).and_then(|h|h.mixed_prefill.as_mut()) {
++                pinned.write(0,&bytes).map_err(|e|batch_cuda(metadata_site,e))?;true
++            }else{false}
++        }else{false}
++    }else{false};
++    #[cfg(not(feature="cuda-cublas-gemm-probe"))]
++    let fixed_prefill_staged=false;
+     #[cfg(feature="cuda-cublas-gemm-probe")]
+     let owned_mlp_eligible=if config.owned_decode_batch()==10 && config.owned_decode_graph() {
+         let decode=packed.row_kind_codes().iter().take_while(|v|**v==LlamaBatchRowKind::Decode.code()).count();
+@@ -531,6 +555,14 @@
+                                       step_counts: Option<CudaBufferSpan<'_>>,
+                                       stream: &mut dyn CudaExecutionStream|
+      -> LlamaBatchExecutorResult<()> {
++        #[cfg(feature="cuda-cublas-gemm-probe")]
++        if in_command_batch && fixed_prefill_staged {
++            let (ids,pinned)=native_d128_two_stage_workspace.as_deref().and_then(|w|w.materialized.as_ref())
++                .and_then(|w|w.hf.as_ref()).and_then(|h|h.mixed_prefill.as_ref())
++                .ok_or(LlamaBatchExecutorError::InvalidConfiguration{field:"mixed prefill table",reason:"cold fixed table owner missing"})?;
++            ids.copy_from_pinned_in_active_command_batch(0,pinned,0,super::owner::MIXED_PREFILL_TABLE_BYTES as u64,stream)
++                .map_err(|e|batch_cuda(metadata_site,e))?;
++        }
+         if let Some((bytes,active_bytes))=staged_attention_metadata {
+             let prepared=native_d128_two_stage_workspace.as_deref_mut().and_then(|w|w.materialized.as_mut())
+                 .ok_or(LlamaBatchExecutorError::InvalidConfiguration{field:"staged attention metadata",reason:"prepared owner missing"})?;
+@@ -550,6 +582,7 @@
+             captured_steps: maximum_captured_steps,
+             captured_step_budget,
+             owned_decode_segments: maximum_owned_segments,
++            mixed_graphs, mixed_stream, mixed_capture_allowed,
+             ..
+         } = forward;
+         // A mixed step's output rows are fewer than its dense rows. Their LM
+@@ -752,7 +785,35 @@
+                 Some(&mut owned_segments[start..start+stride])
+             } else { Some(&mut owned_segments[..legacy_count]) }
+         } else { None };
+-        let fixed = execute_fixed_graph(
++        // A bounded startup-only cache for canonical mixed batches. Decode
++        // context lengths are device-read; prefill geometry is exact in the key.
++        let decode=packed.row_kind_codes().iter().take_while(|&&k|k==LlamaBatchRowKind::Decode.code()).count();
++        let prefill=actual_rows.saturating_sub(decode);
++        // RowGather consumes the per-step GPU output-index buffer. Its host
++        // mirror validates bounds/count only; no index value enters the graph.
++        let canonical_mixed=config.owned_decode_graph() && config.owned_decode_batch()==10 && in_command_batch
++            && (2..=31).contains(&decode) && (65..=130).contains(&prefill)
++            && packed.prefill_token_count()==prefill && packed.output_count()==decode+1
++            && packed.row_sequence_slots().iter().enumerate().all(|(i,&slot)|slot as usize==if i<decode{i}else{decode})
++            && packed.position_ids()[decode..].iter().enumerate().all(|(i,&p)|p as usize==i)
++            && packed.position_ids()[..decode].iter().all(|&p|(23..216).contains(&p))
++            && fixed_prefill_staged
++            && output_row_lm_head.is_some() && !capturing && !replaying;
++        let mixed_key=((dense_rows*32+decode)*131+prefill)*2+usize::from(produce_greedy_tokens);
++        let stream_key=riley_cuda::execution_stream_key(stream);
++        if mixed_stream.as_ref().is_some_and(|k|*k!=stream_key) {
++            mixed_graphs.clear(); // retire before any classic handle rebinding
++        }
++        *mixed_stream=Some(stream_key);
++        let mixed_index=if canonical_mixed {
++            mixed_graphs.iter().position(|(key,_)|*key==mixed_key).or_else(||{
++                if *mixed_capture_allowed && mixed_graphs.len()<24 {mixed_graphs.push((mixed_key,OwnedDecodeSegment::default()));Some(mixed_graphs.len()-1)}else{None}
++            })
++        }else{None};
++        let mixed_recording=mixed_index.is_some();
++        let mixed_segment=mixed_index.map(|i|&mut mixed_graphs[i].1);
++        let fixed = execute_owned_decode_segment(mixed_segment,stream,|stream| execute_fixed_graph(
++
+             plan,
+             weights,
+             gemms,
+@@ -787,6 +848,7 @@
+             #[cfg(feature="cuda-cublas-gemm-probe")]
+             if owned_mlp_eligible && in_command_batch {owned_mlp_graphs.as_deref_mut()}else{None},
+             if owned_mlp_eligible && config.owned_decode_batch()==10 {packed.row_kind_codes().iter().take_while(|v|**v==LlamaBatchRowKind::Decode.code()).count()}else{0},
++            mixed_recording,
+             layout,
+             key_cache,
+             value_cache,
+@@ -798,7 +860,7 @@
+             step_capture,
+             output_row_lm_head,
+             stream,
+-        );
++        ));
+         // Staged step uploads: the batch also copies this iteration's results
+         // back into the pinned staging buffer, after everything that produces
+         // them and outside any recording.
+@@ -1213,6 +1275,7 @@
+     #[cfg(feature="cuda-cublas-gemm-probe")]
+     mut owned_mlp_graphs: Option<&mut riley_cuda::CudaOwnedHfMlpGraph>,
+     piecewise_active_rows:usize,
++    mixed_recording:bool,
+     layout: KvLayout,
+     key_cache: &mut CudaDeviceBuffer,
+     value_cache: &mut CudaDeviceBuffer,
+@@ -1913,12 +1976,16 @@
+                     };
+                     let m=(end-begin) as u64;let t=u64::from(positions[end-1])+1;let table_begin=host.sequence_block_offsets()[slot] as u64;let table_len=t.div_ceil(16);
+                     if table_begin+table_len>host.block_ids().len() as u64 {return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"hf_attention_table",reason:"logical prefix exceeds packed block table"});}
+-                    let ids=batch.device_block_ids();let row_bytes=query_width*2;let rb=(begin as u64)*row_bytes;
++                    let ids=if mixed_recording {
++                        let (ids,_)=hf.mixed_prefill.as_ref().ok_or(LlamaBatchExecutorError::InvalidConfiguration{field:"mixed prefill table",reason:"captured prefill has no fixed table"})?;
++                        CudaBufferSpan::new(ids,CudaDType::U32,0,table_len*4).map_err(|e|batch_cuda(attention_site,e))?
++                    }else{batch.device_block_ids().subspan(table_begin*4,table_len*4).map_err(|e|batch_cuda(attention_site,e))?};
++                    let row_bytes=query_width*2;let rb=(begin as u64)*row_bytes;
+                     hf.plan.execute_hf_attention(
+                         CudaBufferSpan::new(&buffers.hidden_rotary,CudaDType::BF16,rb,m*row_bytes).map_err(|e|batch_cuda(attention_site,e))?,
+                         CudaBufferSpan::new(key_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
+                         CudaBufferSpan::new(value_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
+-                        ids.subspan(table_begin*4,table_len*4).map_err(|e|batch_cuda(attention_site,e))?,
++                        ids,
+                         CudaBufferSpanMut::new(&mut buffers.hidden_context,CudaDType::BF16,rb,m*row_bytes).map_err(|e|batch_cuda(attention_site,e))?,
+                         &mut hf.scratch,m,t,layout.physical_block_count() as u64,dimensions.query_heads() as u64,dimensions.key_value_heads() as u64,dimensions.head_dimension() as u64,stream,
+                     ).map_err(|e|batch_cuda(attention_site,e))?;
+@@ -2236,7 +2303,10 @@
+                 gate:&mut buffers.gate_raw,up:&mut buffers.up_raw,product:&mut buffers.gated_product,
+                 output:hidden_current,active_rows:if piecewise_rows>0 {piecewise_rows as u32}else{batch.host().row_sequence_slots().len() as u32},
+             };
+-            if let Some(w)=weights.merged_gate_up(layer_index) {
++            if mixed_recording {
++                let merged=weights.merged_gate_up(layer_index).map(|w|CudaBufferSpan::new(w,CudaDType::BF16,0,w.byte_len())).transpose().map_err(|e|batch_cuda(site,e))?;
++                graphs.execute_in_parent(&mut mlp_params,merged,stream)
++            }else if let Some(w)=weights.merged_gate_up(layer_index) {
+                 graphs.execute_with_merged(&mut mlp_params,CudaBufferSpan::new(w,CudaDType::BF16,0,w.byte_len()).map_err(|e|batch_cuda(site,e))?,stream)
+             }else{graphs.execute(&mut mlp_params,stream)}.map_err(|e|batch_cuda(site,e))?;
+             piecewise_rows==0 || piecewise_rows==batch.host().row_sequence_slots().len()
+@@ -2712,6 +2782,42 @@
+     }
+ }
+ 
++
++/// Copy only the fresh request's validated KV page ids into a fixed-size table.
++/// Decode reservations may have different lengths without changing this address.
++fn fixed_mixed_prefill_ids(offsets:&[u32],ids:&[u32],slot:usize,prefill:usize)
++    ->Option<[u8;super::owner::MIXED_PREFILL_TABLE_BYTES]> {
++    if !(65..=130).contains(&prefill){return None;}
++    let count=prefill.div_ceil(16);let start=*offsets.get(slot)? as usize;
++    let end=start.checked_add(count)?;
++    let declared_end=*offsets.get(slot.checked_add(1)?)? as usize;
++    if declared_end>ids.len() || end>declared_end{return None;}
++    let source=ids.get(start..end)?;
++    let mut bytes=[0;super::owner::MIXED_PREFILL_TABLE_BYTES];
++    for(chunk,id)in bytes.chunks_exact_mut(4).zip(source){chunk.copy_from_slice(&id.to_ne_bytes());}
++    Some(bytes)
++}
++#[cfg(test)]
++mod fixed_mixed_prefill_tests {
++    use super::fixed_mixed_prefill_ids;
++    #[test]
++    fn ragged_decode_reservations_do_not_change_the_fresh_prefill_table(){
++        let a=fixed_mixed_prefill_ids(&[0,1,3,12],&[41,42,43,17,3,29,5,31,7,37,11,13],2,130).unwrap();
++        let b=fixed_mixed_prefill_ids(&[0,4,7,16],&[91,92,93,94,95,96,97,17,3,29,5,31,7,37,11,13],2,130).unwrap();
++        assert_eq!(a,b);let expected:[u32;9]=[17,3,29,5,31,7,37,11,13];
++        for(word,id)in a.chunks_exact(4).zip(expected){assert_eq!(u32::from_ne_bytes(word.try_into().unwrap()),id);}
++    }
++    #[test]
++    fn truncated_or_invalid_tables_fail_before_any_copy(){
++        assert!(fixed_mixed_prefill_ids(&[0,2],&[1,2],0,130).is_none());
++        assert!(fixed_mixed_prefill_ids(&[0,9],&[1,2],0,130).is_none());
++        assert!(fixed_mixed_prefill_ids(&[0,99],&[1;9],0,130).is_none());
++        assert!(fixed_mixed_prefill_ids(&[0,9],&[1;9],0,131).is_none());
++        assert!(fixed_mixed_prefill_ids(&[0,9],&[1;9],usize::MAX,128).is_none());
++    }
++}
++
++#[allow(clippy::too_many_arguments)]
+ fn upload_prefix(
+     destination: &mut CudaDeviceBuffer,
+     source: &[u8],
+--- a/crates/riley-runtime/src/llama/executor/owner.rs
++++ b/crates/riley-runtime/src/llama/executor/owner.rs
+@@ -33,6 +33,8 @@
+ use crate::paged_kv::{KV_BLOCK_SIZE, KvLayout};
+ 
+ const F32_BYTES: u64 = 4;
++/// One fresh <=130-token prefill has at most nine KV pages.
++pub(in crate::llama) const MIXED_PREFILL_TABLE_BYTES: usize = 9 * 4;
+ pub(in crate::llama) const SUPPORTED_HEAD_DIMENSION: usize = 64;
+ const NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS: usize = 256;
+ const NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS: usize = 32_768;
+@@ -46,6 +48,8 @@
+     pub(in crate::llama) plan: riley_cuda::CudaPreparedCublasGemmProbe,
+     pub(in crate::llama) scratch: [CudaDeviceBuffer;8],
+     pub(in crate::llama) decode_chunk: Option<[CudaDeviceBuffer;3]>,
++    /// Fixed device address for the mixed Graph prefill table; data changes before replay.
++    pub(in crate::llama) mixed_prefill: Option<(CudaDeviceBuffer, riley_cuda::CudaPinnedHostBuffer)>,
+ }
+ 
+ pub(in crate::llama) struct MaterializedBf16ReferenceWorkspace {
+@@ -64,7 +68,7 @@
+ impl MaterializedBf16ReferenceWorkspace {
+     fn diagnostic_bytes(&self)->u64 {
+         #[cfg(feature="cuda-cublas-gemm-probe")]
+-        { self.hf.as_ref().map_or(0,|h|h.scratch.iter().chain(h.decode_chunk.iter().flat_map(|b|b.iter())).map(CudaDeviceBuffer::byte_len).sum()) }
++        { self.hf.as_ref().map_or(0,|h|h.scratch.iter().chain(h.decode_chunk.iter().flat_map(|b|b.iter())).chain(h.mixed_prefill.iter().map(|(ids,_)|ids)).map(CudaDeviceBuffer::byte_len).sum()) }
+         #[cfg(not(feature="cuda-cublas-gemm-probe"))] {0}
+     }
+ }
+@@ -528,7 +532,17 @@
+                         let r=bounds.max_rows().min(32) as u64;let kv=r*3*1024*64*2;let p=r*9*1024*2;
+                         Some([allocate_device(context,kv,attention_site)?,allocate_device(context,kv,attention_site)?,allocate_device(context,p,attention_site)?])
+                     }else{None};
+-                    Some(HfAttentionDiagnosticWorkspace {plan,scratch,decode_chunk})
++                    let mixed_prefill = if config.owned_decode_graph()
++                        && !config.decode_step_capture() && config.owned_decode_batch()==10
++                        && bounds.max_rows()>=3 && bounds.max_output_slots()>=3 && bounds.max_input_tokens()>=67
++                        && dimensions.hidden_size()==2560 && h==32 && d==128
++                        && dimensions.key_value_heads()==8 {
++                        eprintln!("RILEY_MIXED_FIXED_TABLE bytes=36 retained=true staged=true");
++                        Some((allocate_device(context,MIXED_PREFILL_TABLE_BYTES as u64,attention_site)?,
++                            context.allocate_pinned_host_buffer(MIXED_PREFILL_TABLE_BYTES as u64)
++                                .map_err(|e|owner_cuda(attention_site,e))?))
++                    } else {None};
++                    Some(HfAttentionDiagnosticWorkspace {plan,scratch,decode_chunk,mixed_prefill})
+                 } else {None};
+                 Some(MaterializedBf16ReferenceWorkspace {
+                     #[cfg(feature="cuda-cublas-gemm-probe")] hf,
+@@ -773,6 +787,10 @@
+                     record_close(&mut first,LlamaBatchExecutorResource::NativeD128PartialStates,hf.plan.close());
+                     for buffer in hf.scratch {record_close(&mut first,LlamaBatchExecutorResource::NativeD128PartialStates,buffer.close());}
+                     if let Some(chunk)=hf.decode_chunk {for buffer in chunk {record_close(&mut first,LlamaBatchExecutorResource::NativeD128PartialStates,buffer.close());}}
++                    if let Some((ids,pinned))=hf.mixed_prefill {
++                        record_close(&mut first,LlamaBatchExecutorResource::PhysicalBlockIds,ids.close());
++                        record_close(&mut first,LlamaBatchExecutorResource::HostWorkspace,pinned.close());
++                    }
+                 }
+                 drop(materialized.reference);
+             }
+--- a/crates/riley-runtime/src/llama/forward.rs
++++ b/crates/riley-runtime/src/llama/forward.rs
+@@ -961,10 +961,12 @@
+             captured_steps,
+             captured_step_budget: _,
+             owned_decode_segments,
++            mixed_graphs, mixed_stream:_, mixed_capture_allowed:_,
+         } = self;
+         // Recorded steps reference the plans and buffers closed below.
+         drop(captured_steps);
+         drop(owned_decode_segments);
++        drop(mixed_graphs);
+         let GemmPlans {
+             hidden,
+             key_value,
+@@ -3475,6 +3477,9 @@
+     /// shape variants, which hold their own). Destroyed before the plans.
+     pub(super) captured_steps: Vec<(usize, riley_cuda::CudaStepGraph)>,
+     pub(super) owned_decode_segments: Vec<OwnedDecodeSegment>,
++    pub(super) mixed_graphs: Vec<(usize,OwnedDecodeSegment)>,
++    pub(super) mixed_stream: Option<riley_cuda::CudaExecutionStreamKey>,
++    pub(super) mixed_capture_allowed: bool,
+     /// How many more steps may be recorded across every dense shape. Each
+     /// recorded step keeps several MiB of host and device memory, so the
+     /// total is bounded; shapes met after the budget is spent run eagerly.
+@@ -3813,6 +3818,7 @@
+             output_ready: false,
+             poisoned: false,
+             owned_decode_segments,
++            mixed_graphs:Vec::with_capacity(24), mixed_stream:None, mixed_capture_allowed:false,
+             captured_steps: Vec::new(),
+             captured_step_budget: MAX_RECORDED_STEPS,
+         })
+--- a/crates/riley-server/src/engine.rs
++++ b/crates/riley-server/src/engine.rs
+@@ -1669,10 +1669,8 @@
+ /// that was cancelled or reached a terminal event in the meantime gets no
+ /// further token, and a stream that cannot take a token marks its request for
+ /// cancellation.
+-fn deliver_staged_events() {
+-    OUTBOX.with(|outbox| {
+-        let mut outbox = outbox.borrow_mut();
+-        let staged = std::mem::take(&mut outbox.staged);
++fn deliver_owned_events(staged:Vec<StagedEvent>,asynchronous:bool)->Vec<EngineRequestId> {
++    let mut slow=Vec::new();
+         for item in staged {
+             let StagedEvent {
+                 request_id,
+@@ -1696,16 +1694,112 @@
+                 && cancellation
+                     .compare_exchange(
+                         REQUEST_LIVE,
+-                        REQUEST_CANCELLING,
++                        if asynchronous {REQUEST_CANCELLED}else{REQUEST_CANCELLING},
+                         Ordering::AcqRel,
+                         Ordering::Acquire,
+                     )
+                     .is_ok()
+             {
+-                outbox.slow_consumers.push(request_id);
+-            }
+-        }
+-    });
++                slow.push(request_id);
++            }
++        }
++    slow
++}
++fn deliver_staged_events() {
++    let staged=OUTBOX.with(|o|std::mem::take(&mut o.borrow_mut().staged));
++    let slow=deliver_owned_events(staged,false);
++    OUTBOX.with(|o|o.borrow_mut().slow_consumers.extend(slow));
++}
++struct DeliveryJob {events:Vec<StagedEvent>,after_submit:bool}
++thread_local! {
++    static OVERLAP_SENDER:std::cell::RefCell<Option<SyncSender<DeliveryJob>>>=const{std::cell::RefCell::new(None)};
++    static OVERLAP_SAW_SUBMIT:std::cell::Cell<bool>=const{std::cell::Cell::new(false)};
++    static OVERLAP_BROKEN:std::cell::Cell<bool>=const{std::cell::Cell::new(false)};
++}
++fn enqueue_overlap_pending(after_submit:bool)->bool {
++    let events=OUTBOX.with(|o|std::mem::take(&mut o.borrow_mut().staged));
++    if events.is_empty(){return true;}
++    let job=DeliveryJob{events,after_submit};
++    let result=OVERLAP_SENDER.with(|s|s.borrow().as_ref().expect("live overlap publisher").send(job));
++    if let Err(e)=result {
++        OUTBOX.with(|o|o.borrow_mut().staged=e.0.events);
++        OVERLAP_BROKEN.with(|b|b.set(true));return false;
++    } true
++}
++fn overlap_after_gpu_submit(){
++    OVERLAP_SAW_SUBMIT.with(|s|s.set(true));
++    let _=enqueue_overlap_pending(true);
++}
++struct OverlapDelivery {sender:Option<SyncSender<DeliveryJob>>,worker:Option<JoinHandle<()>>}
++impl OverlapDelivery {
++    fn start()->Option<Self> {
++        let(tx,rx)=std::sync::mpsc::sync_channel::<DeliveryJob>(2);
++        let worker=thread::Builder::new().name("riley-committed-events".into()).spawn(move||{
++            let(mut batches,mut submitted)=(0u64,0u64);
++            while let Ok(job)=rx.recv(){if job.after_submit{submitted+=1;}let _=deliver_owned_events(job.events,true);batches+=1;}
++            eprintln!("RILEY_OVERLAP_DELIVERY batches={batches} drained=true after_submit_batches={submitted}");
++        }).ok()?;
++        OVERLAP_SENDER.with(|s|*s.borrow_mut()=Some(tx.clone()));
++        OVERLAP_BROKEN.with(|b|b.set(false));
++        riley_runtime::submit_hook::set(Some(overlap_after_gpu_submit));
++        eprintln!("RILEY_OVERLAP_DELIVERY started=true capacity_batches=2 policy=later-token-after-submit-first-terminal-immediate");
++        Some(Self{sender:Some(tx),worker:Some(worker)})
++    }
++    fn begin_step(&self){OVERLAP_SAW_SUBMIT.with(|s|s.set(false));}
++    fn enqueue(&self,requests:&mut BTreeMap<EngineRequestId,RequestControl>,events:Vec<BackendEvent>)->Result<(),Vec<StagedEvent>> {
++        let urgent=events.iter().any(|e|matches!(e.event,GenerationEvent::Finished{..}|GenerationEvent::Failed{..}|GenerationEvent::TokenDelta{..}|GenerationEvent::CommittedToken{generated_index:0,..}));
++        stage_events(requests,events);
++        let broken=OVERLAP_BROKEN.with(|b|b.get());
++        let defer=OVERLAP_SAW_SUBMIT.with(|s|s.get())&&!urgent;
++        if broken || (!defer&&!enqueue_overlap_pending(false)) {
++            return Err(OUTBOX.with(|o|std::mem::take(&mut o.borrow_mut().staged)));
++        } Ok(())
++    }
++    fn finish(&mut self)->bool {
++        if self.sender.is_none(){return true;}
++        let delivered=enqueue_overlap_pending(false);
++        riley_runtime::submit_hook::set(None);
++        OVERLAP_SENDER.with(|s|drop(s.borrow_mut().take()));
++        drop(self.sender.take());
++        let joined=self.worker.take().is_none_or(|w|w.join().is_ok());delivered&&joined
++    }
++}
++impl Drop for OverlapDelivery {fn drop(&mut self){let _=self.finish();}}
++#[cfg(test)]
++mod overlap_delivery_tests {
++    use super::*;
++    fn fixture()->(BTreeMap<EngineRequestId,RequestControl>,Receiver<GenerationEvent>,Arc<AtomicU8>){
++        let(tx,rx)=std::sync::mpsc::sync_channel(8);let cancellation=Arc::new(AtomicU8::new(REQUEST_LIVE));let stats=Arc::new(EngineStats::default());stats.active_requests.store(1,Ordering::Release);
++        let mut requests=BTreeMap::new();requests.insert(EngineRequestId(1),RequestControl{cancellation:Arc::clone(&cancellation),events:tx,stats});(requests,rx,cancellation)
++    }
++    #[test]
++    fn terminal_bypasses_next_submit_but_keeps_prior_committed_token_order(){
++        let(mut requests,rx,_)=fixture();let mut delivery=OverlapDelivery::start().expect("publisher");OVERLAP_SAW_SUBMIT.with(|s|s.set(true));
++        assert!(delivery.enqueue(&mut requests,vec![BackendEvent::new(EngineRequestId(1),GenerationEvent::CommittedToken{text:"a".into(),token_id:1,generated_index:1,prompt_token_ids:None})]).is_ok());
++        assert!(matches!(rx.try_recv(),Err(TryRecvError::Empty)));
++        overlap_after_gpu_submit();
++        assert!(delivery.enqueue(&mut requests,vec![BackendEvent::new(EngineRequestId(1),GenerationEvent::CommittedToken{text:"b".into(),token_id:1,generated_index:2,prompt_token_ids:None}),BackendEvent::new(EngineRequestId(1),GenerationEvent::Failed{class:ServiceErrorClass::Internal})]).is_ok());
++        assert!(delivery.finish());
++        assert!(matches!(rx.recv_timeout(Duration::from_secs(5)),Ok(GenerationEvent::CommittedToken{text,..})if text=="a"));
++        assert!(matches!(rx.recv_timeout(Duration::from_secs(5)),Ok(GenerationEvent::CommittedToken{text,..})if text=="b"));
++        assert!(matches!(rx.recv_timeout(Duration::from_secs(5)),Ok(GenerationEvent::Failed{..})));
++    }
++    #[test]
++    fn first_committed_token_is_delivered_without_waiting_for_next_gpu_submit(){
++        let(mut requests,rx,_)=fixture();let mut delivery=OverlapDelivery::start().expect("publisher");OVERLAP_SAW_SUBMIT.with(|s|s.set(true));
++        assert!(delivery.enqueue(&mut requests,vec![BackendEvent::new(EngineRequestId(1),GenerationEvent::CommittedToken{text:"first".into(),token_id:1,generated_index:0,prompt_token_ids:None})]).is_ok());
++        assert!(matches!(rx.recv_timeout(Duration::from_secs(5)),Ok(GenerationEvent::CommittedToken{generated_index:0,..})));
++        assert!(delivery.finish());
++    }
++    #[test]
++    fn cancellation_suppresses_deferred_tokens_and_shutdown_drains_terminal(){
++        let(mut requests,rx,cancellation)=fixture();let mut delivery=OverlapDelivery::start().expect("publisher");OVERLAP_SAW_SUBMIT.with(|s|s.set(true));
++        assert!(delivery.enqueue(&mut requests,vec![BackendEvent::new(EngineRequestId(1),GenerationEvent::CommittedToken{text:"hidden".into(),token_id:1,generated_index:1,prompt_token_ids:None})]).is_ok());
++        cancellation.store(REQUEST_CANCELLED,Ordering::Release);overlap_after_gpu_submit();
++        assert!(delivery.enqueue(&mut requests,vec![BackendEvent::new(EngineRequestId(1),GenerationEvent::Failed{class:ServiceErrorClass::Cancelled})]).is_ok());assert!(delivery.finish());
++        assert!(matches!(rx.recv_timeout(Duration::from_secs(5)),Ok(GenerationEvent::Failed{class:ServiceErrorClass::Cancelled})));
++        assert!(rx.try_recv().is_err());
++    }
+ }
+ 
+ /// Delivers what is staged and cancels the requests whose stream could not
+@@ -1752,12 +1846,14 @@
+     lifecycle.store(LIFECYCLE_READY);
+     let mut failed = false;
+     let publish_after_submit = config.publish_after_submit;
++    let mut overlap_delivery=if !publish_after_submit {OverlapDelivery::start()}else{None};
+     if publish_after_submit {
+         riley_runtime::submit_hook::set(Some(deliver_staged_events));
+     }
+ 
+     loop {
+         if lifecycle.load() == LIFECYCLE_DRAINING {
++            if let Some(delivery)=overlap_delivery.as_mut(){if !delivery.finish(){failed=true;}}
+             if publish_after_submit {
+                 flush_staged_events(&mut backend, &mut requests);
+             }
+@@ -1823,6 +1919,7 @@
+ 
+         if !backend.is_idle() {
+             host_trace::lap_here(host_trace::CANCEL_COMMANDS);
++            if let Some(delivery)=overlap_delivery.as_ref(){delivery.begin_step();}
+             let step = backend.step();
+             if publish_after_submit {
+                 // Delivered already when the step submitted GPU work; this
+@@ -1837,6 +1934,13 @@
+                         if backend.is_idle() {
+                             // No iteration follows to carry the delivery.
+                             flush_staged_events(&mut backend, &mut requests);
++                        }
++                    } else if let Some(delivery)=overlap_delivery.as_ref() {
++                        if let Err(batch)=delivery.enqueue(&mut requests,events) {
++                            // A dead publisher cannot silently lose committed events.
++                            OUTBOX.with(|o|o.borrow_mut().staged.extend(batch));
++                            flush_staged_events(&mut backend,&mut requests);
++                            failed=true;lifecycle.store(LIFECYCLE_DRAINING);
+                         }
+                     } else {
+                         publish_events(&mut backend, &mut requests, events);
