@@ -1,0 +1,85 @@
+{
+  "time_ns": 1792603794415312125,
+  "resource_runs": [
+    {
+      "name": "final-teacher-C1-eager-r3",
+      "samples": 73,
+      "whole_device_peak_MiB": 9783.0,
+      "receipt_sha256": "7a7fed471acc4afc92b8908914325a7008d99d50b2916d98d5a136227c396cb5"
+    },
+    {
+      "name": "final-teacher-allR-Graph-r3",
+      "samples": 82,
+      "whole_device_peak_MiB": 19053.0,
+      "receipt_sha256": "e46758b48ca9b9355eeb91a84a447889c0503283769d5aea4e0f01c03127605c"
+    },
+    {
+      "name": "teacher-body-allR-r3",
+      "samples": 174,
+      "whole_device_peak_MiB": 19133.0,
+      "receipt_sha256": "f639674d8a4f795bdce2b77cdab719c7623c87d1d011b0f18e33c812107d31c2"
+    },
+    {
+      "name": "teacher-mixed-r3",
+      "samples": 113,
+      "whole_device_peak_MiB": 18905.0,
+      "receipt_sha256": "f344347a25ec2685be7d4c480de41432f58fefbd3c67747a61a12fca9db9c184"
+    },
+    {
+      "name": "teacher-mixed-no-output-r3",
+      "samples": 112,
+      "whole_device_peak_MiB": 18905.0,
+      "receipt_sha256": "23415c56ac407dc98f9532191b2ecda59719aa06f2cf831ed2e48fd1c0b77b75"
+    },
+    {
+      "name": "memory_gpu",
+      "samples": 1,
+      "whole_device_peak_MiB": 504.0,
+      "receipt_sha256": "3220432efa40f4e3c7386f7f0522e852a52e1072275dde3e9a102ced6748c2d2"
+    },
+    {
+      "name": "owned_hf_command_batch_gpu",
+      "samples": 2,
+      "whole_device_peak_MiB": 504.0,
+      "receipt_sha256": "a21a94ce2d78dacfffec550e8d2d628d7f51f8fb32aa005f4583cfe7a3d3949b"
+    },
+    {
+      "name": "host_runtime_gpu",
+      "samples": 1,
+      "whole_device_peak_MiB": 504.0,
+      "receipt_sha256": "d633c75dc90ff4b257811dc4ca208e8287322b14027d70b4cd6a8d614812301d"
+    },
+    {
+      "name": "sm80_prefill_alignment_gpu",
+      "samples": 2,
+      "whole_device_peak_MiB": 504.0,
+      "receipt_sha256": "e5c29474353829e1b27285f08e80b99326c8e214f9e56d3fa4c62d0a54f3cd17"
+    },
+    {
+      "name": "bounded576",
+      "samples": 173,
+      "whole_device_peak_MiB": 18483.0,
+      "receipt_sha256": "40e63287e2510cc27faacda294f0123908445ab14c651b6fac16718592148e45"
+    },
+    {
+      "name": "canonical",
+      "samples": 114,
+      "whole_device_peak_MiB": 18905.0,
+      "receipt_sha256": "0db6c2ca23328220213f11b6bbee270201a7d17537167ec39599193435f25848"
+    }
+  ],
+  "qualified_source_count": 937,
+  "all_source_hashes_equal": true,
+  "binary_sha256": "2f2751b896df84449b1500cfc291e1211e226c246c4e464113470bcf0eb1b277",
+  "normal_arms": 30,
+  "separate_profile_arms": 4,
+  "total_stored_SSE_structures_verified": 6490,
+  "Riley_native_HF_values_literal_equal": true,
+  "stock_HF_matches_reported_per_arm": true,
+  "normal_profile_peak_MiB": 18267.0,
+  "whole_device_cap_MiB": 22528,
+  "qualification_GPU": 7,
+  "extra_canonical_GPU": 6,
+  "normal_profile_GPU": 7,
+  "original_GPU6_7_holder_PID_and_context_retained": true
+}

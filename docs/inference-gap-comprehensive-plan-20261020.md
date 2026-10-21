@@ -269,3 +269,22 @@ Q/K/V/O의 요청별 prefill을 native-M128 arithmetic family를 보존하는 �
 새5회 정상 비교의 처리량은 C16 +4.14%, C32 +5.16%; TTFT p95 -6.83%/-9.66%, 이번 paired tail2% 초과 플래그0이다. B의 TPOT p99 플래그는 삭제하지 않으며 alignment guard가 tail 개선의 원인이라고 주장하지 않는다. vLLM 대비 처리량65.67%/58.21%로 +10% 목표와 parity에는 미달한다. GPU6/7 원래 context·idle20GiB 홀드를 유지했다. 루트 README는 최종 동시 campaign의 before/after/stock 처리량과 tail을 종합한다.
 
 다음 우선순위는 실제 mixed batch 분포의 Gate/Up+Down 및 decode KV/attention이다. 미시 benchmark 이득을 서버 개선율로 전용하지 않는다. 여러 iteration overlap은 EOS·취소·KV commit·pinned staging lifetime을 먼저 증명한다. 큰 실험 종료마다 재현 가능한 증거와 함께 commit·push한다.
+
+
+## 2026-10-22 structural experiment checkpoint
+
+v18A multi-prefill/variable-R MLP pieces and v18B4 real CPU–GPU overlap were
+implemented as independent candidates. Five fresh matched v15C/candidate/vLLM
+processes per C16/C32 produced changes of −1.17%/−0.02% and −0.29%/−0.26%,
+respectively, with original accuracy/resource gates preserved and paired tails
+above the existing2% policy. Neither candidate was adopted or combined. This
+checkpoint does not complete the throughput objective.
+
+Native trace intervals prove actual B4 overlap, but hidden result work is only
+2.815/1.003 ms within the separate 64-request windows. Projection arithmetic and
+pre-submit preparation remain. The next structural work needs measured GPU
+projection/backend/layout improvements or persistent GPU input/token metadata;
+its value is unmeasured and must be established independently before adoption.
+
+[Multi-prefill Graph results](qwen-piecewise-v18a-20261021.md) ·
+[Overlap results, startup corrections and supplemental attribution](qwen-overlap-v18b4-20261021.md).

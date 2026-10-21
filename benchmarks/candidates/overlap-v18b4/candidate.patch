@@ -1,0 +1,1033 @@
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -2361,6 +2361,7 @@
+         error: *mut ErrorInfo,
+     ) -> i32;
+     fn riley_cuda_hf_pack_qkv_execute(q:RawBufferSpan,k:RawBufferSpan,v:RawBufferSpan,out:RawBufferSpan,rows:u64,qw:u64,kw:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
++    fn riley_cuda_cpu_overlap_trace(begin:u32);
+     fn riley_cuda_row_gather_execute(
+         params: *const RawRowGatherParams,
+         stream: *mut RawStream,
+@@ -12679,3 +12680,8 @@
+ pub(super) fn hf_pack_qkv_execute(q:RawBufferSpan,k:RawBufferSpan,v:RawBufferSpan,out:RawBufferSpan,rows:u64,qw:u64,kw:u64,stream:&mut StreamHandle)->CudaResult<()>{
+  primitive_status("HF pack separate QKV",stream,|stream,error|unsafe{riley_cuda_hf_pack_qkv_execute(q,k,v,out,rows,qw,kw,stream,error)})
+ }
++
++pub(super) fn cpu_overlap_trace(begin:u32){
++ // SAFETY: diagnostic scalar-only API retains no Rust memory or resources.
++ unsafe {riley_cuda_cpu_overlap_trace(begin);}
++}
+--- a/crates/riley-cuda/src/lib.rs
++++ b/crates/riley-cuda/src/lib.rs
+@@ -264,3 +264,11 @@
+ mod owned_mlp;
+ #[cfg(feature="cuda-cublas-gemm-probe")]
+ pub use owned_mlp::{CudaOwnedHfMlpGraph,CudaOwnedHfMlpParams,CudaOwnedHfMlpGraphStats};
++
++/// Marks CPU-only work in an optional Nsight/NVTX collection.
++#[cfg(feature="cuda")]
++pub fn trace_cpu_overlap(begin:bool){ffi::cpu_overlap_trace(u32::from(begin));}
++
++/// Marks CPU-only planning nested inside result processing.
++#[cfg(feature="cuda")]
++pub fn trace_cpu_overlap_plan(begin:bool){ffi::cpu_overlap_trace(if begin{2}else{0});}
+--- a/crates/riley-runtime/src/host_trace.rs
++++ b/crates/riley-runtime/src/host_trace.rs
+@@ -106,3 +106,21 @@
+         eprintln!("{line}");
+     }
+ }
++
++/// Scoped CPU result processing range; contains no CUDA operation or wait.
++pub struct CpuOverlapRange(bool);
++impl CpuOverlapRange {
++    pub fn new()->Self{let active=enabled();#[cfg(feature="cuda")]if active{riley_cuda::trace_cpu_overlap(true);}Self(active)}
++}
++impl Drop for CpuOverlapRange {
++    fn drop(&mut self){#[cfg(feature="cuda")]if self.0{riley_cuda::trace_cpu_overlap(false);}}
++}
++
++/// Scoped CPU-only authoritative planning while a decode preview executes.
++pub struct CpuPlanOverlapRange(bool);
++impl CpuPlanOverlapRange {
++    pub fn new()->Self{let active=enabled();#[cfg(feature="cuda")]if active{riley_cuda::trace_cpu_overlap_plan(true);}Self(active)}
++}
++impl Drop for CpuPlanOverlapRange {
++    fn drop(&mut self){#[cfg(feature="cuda")]if self.0{riley_cuda::trace_cpu_overlap_plan(false);}}
++}
+--- a/crates/riley-runtime/src/llama/batch_executor.rs
++++ b/crates/riley-runtime/src/llama/batch_executor.rs
+@@ -489,7 +489,7 @@
+                 reason: "vllm-smol-p128-v1 requires an owned graph",
+             });
+         }
+-        self.execute_output(rows, BatchOutputMode::Logits, stream)
++        self.execute_output(rows, BatchOutputMode::Logits, stream,None)
+     }
+ 
+     /// Executes one mixed iteration and reduces gathered BF16 logits to exact
+@@ -509,7 +509,13 @@
+         rows: &[LlamaBatchRow<'_>],
+         stream: &mut CudaStream,
+     ) -> LlamaBatchExecutorResult<()> {
+-        self.execute_output(rows, BatchOutputMode::GreedyTokens, stream)
++        self.execute_output(rows, BatchOutputMode::GreedyTokens, stream,None)
++    }
++
++    /// Runs CPU-only work after GPU submission and before observing completion.
++    /// The callback borrows its state for this call; it cannot outlive the batch.
++    pub fn execute_greedy_with_overlap(&mut self,rows:&[LlamaBatchRow<'_>],stream:&mut CudaStream,after_submit:&mut dyn FnMut())->LlamaBatchExecutorResult<()> {
++        self.execute_output(rows,BatchOutputMode::GreedyTokens,stream,Some(after_submit))
+     }
+ 
+     fn execute_output(
+@@ -517,6 +523,7 @@
+         rows: &[LlamaBatchRow<'_>],
+         output_mode_requested: BatchOutputMode,
+         stream: &mut CudaStream,
++        after_submit:Option<&mut dyn FnMut()>,
+     ) -> LlamaBatchExecutorResult<()> {
+         if self.config.vllm_smol_p128_graph() {
+             self.output_ready = false;
+@@ -604,6 +611,7 @@
+             output_mode_requested,
+             &mut dispatch_disposition,
+             stream,
++            after_submit,
+         );
+         match result {
+             Ok(()) => {
+@@ -874,6 +882,7 @@
+     output_mode: BatchOutputMode,
+     dispatch_disposition: &mut BatchDispatchDisposition,
+     stream: &mut CudaStream,
++    after_submit:Option<&mut dyn FnMut()>,
+ ) -> LlamaBatchExecutorResult<()> {
+     dispatch_execute_packed(
+         packed,
+@@ -896,6 +905,7 @@
+         output_mode == BatchOutputMode::GreedyTokens,
+         dispatch_disposition,
+         stream,
++        after_submit,
+     )
+ }
+ // HOT_BATCH_EXECUTE_END
+--- a/crates/riley-runtime/src/llama/executor/dispatch.rs
++++ b/crates/riley-runtime/src/llama/executor/dispatch.rs
+@@ -91,6 +91,7 @@
+ pub(in crate::llama) fn execute_iteration_command_batch<'stream, F>(
+     stream: &'stream mut CudaStream,
+     dispatch_disposition: &mut BatchDispatchDisposition,
++    after_submit:Option<&mut dyn FnMut()>,
+     body: F,
+ ) -> LlamaBatchExecutorResult<()>
+ where
+@@ -107,6 +108,7 @@
+     };
+     // Everything is submitted; host work that does not feed this iteration
+     // overlaps the GPU from here until the batch completes.
++    if body_result.is_ok(){if let Some(after_submit)=after_submit{after_submit();}}
+     crate::submit_hook::run();
+     crate::host_trace::lap_here(crate::host_trace::SUBMIT);
+     let completion_result = command_batch
+@@ -276,6 +278,7 @@
+     produce_greedy_tokens: bool,
+     dispatch_disposition: &mut BatchDispatchDisposition,
+     stream: &mut CudaStream,
++    after_submit:Option<&mut dyn FnMut()>,
+ ) -> LlamaBatchExecutorResult<()> {
+     let bounds = config.metadata();
+     let active = packed.total_input_tokens();
+@@ -973,7 +976,7 @@
+                 }
+                 _ => None,
+             };
+-            execute_iteration_command_batch(stream, dispatch_disposition, |commands| {
++            execute_iteration_command_batch(stream, dispatch_disposition, after_submit, |commands| {
+                 if let (BatchHostInput::PerOperation(host), true) =
+                     (&*host_input, staged_token_ids.is_some())
+                 {
+@@ -1029,7 +1032,7 @@
+                     });
+                 }
+             }
+-            execute_iteration_command_batch(stream, dispatch_disposition, |commands| {
++            execute_iteration_command_batch(stream, dispatch_disposition, after_submit, |commands| {
+                 match (&mut *device, &*host_input) {
+                     (
+                         BatchDeviceInput::IterationBatch { slab },
+--- a/crates/riley-scheduler/src/execution.rs
++++ b/crates/riley-scheduler/src/execution.rs
+@@ -1051,6 +1051,7 @@
+         None,
+         IterationOutputMode::Logits,
+         None,
++        None,
+     )
+     .map(|(downloaded, _)| downloaded)
+ }
+@@ -1077,6 +1078,7 @@
+         stream,
+         None,
+         IterationOutputMode::GreedyTokens,
++        None,
+         None,
+     )
+     .map(|(downloaded, _)| downloaded)
+@@ -1109,6 +1111,7 @@
+         None,
+         IterationOutputMode::GreedyTokens,
+         Some(greedy_token_workspace),
++        None,
+     )
+     .map(|(downloaded, _)| downloaded)
+ }
+@@ -1139,6 +1142,7 @@
+         Some(timer),
+         IterationOutputMode::Logits,
+         None,
++        None,
+     )
+ }
+ 
+@@ -1161,6 +1165,7 @@
+         stream,
+         Some(timer),
+         IterationOutputMode::GreedyTokens,
++        None,
+         None,
+     )
+ }
+@@ -1187,7 +1192,15 @@
+         Some(timer),
+         IterationOutputMode::GreedyTokens,
+         Some(greedy_token_workspace),
++        None,
+     )
++}
++
++/// Executes an independently validated decode preview while CPU-only result
++/// processing runs after submission. Completion/error classification is unchanged.
++#[cfg(feature="cuda")]
++pub fn execute_llama_iteration_greedy_timed_with_overlap(plan:&IterationPlan,executor:&mut PreparedLlamaBatchExecutor,stream:&mut CudaStream,timer:&mut LlamaIterationCudaTimer,workspace:&mut Vec<u32>,callback:&mut dyn FnMut())->Result<(DownloadedLlamaIteration,IterationTiming),IterationExecutionFailure>{
++    execute_llama_iteration_inner(plan,executor,stream,Some(timer),IterationOutputMode::GreedyTokens,Some(workspace),Some(callback))
+ }
+ 
+ #[cfg(feature = "cuda")]
+@@ -1206,6 +1219,7 @@
+     mut timer: Option<&mut LlamaIterationCudaTimer>,
+     output_mode: IterationOutputMode,
+     mut greedy_token_workspace: Option<&mut Vec<u32>>,
++    after_submit:Option<&mut dyn FnMut()>,
+ ) -> Result<(DownloadedLlamaIteration, IterationTiming), IterationExecutionFailure> {
+     let iteration_id = plan.iteration_id();
+     let prepared = PreparedLlamaIteration::prepare(plan).map_err(|error| {
+@@ -1293,7 +1307,7 @@
+     }
+     let execution = match output_mode {
+         IterationOutputMode::Logits => executor.execute(prepared.rows(), stream),
+-        IterationOutputMode::GreedyTokens => executor.execute_greedy(prepared.rows(), stream),
++        IterationOutputMode::GreedyTokens => if let Some(callback)=after_submit {executor.execute_greedy_with_overlap(prepared.rows(),stream,callback)}else{executor.execute_greedy(prepared.rows(),stream)},
+     };
+     if let Err(source) = execution {
+         invalidate_timer(&mut timer);
+--- a/crates/riley-scheduler/src/lib.rs
++++ b/crates/riley-scheduler/src/lib.rs
+@@ -74,7 +74,7 @@
+ pub use execution::{
+     IterationExecutionFailure, LlamaIterationCudaTimer, execute_llama_iteration,
+     execute_llama_iteration_graph, execute_llama_iteration_greedy,
+-    execute_llama_iteration_greedy_timed, execute_llama_iteration_greedy_timed_with_workspace,
++    execute_llama_iteration_greedy_timed_with_overlap, execute_llama_iteration_greedy_timed, execute_llama_iteration_greedy_timed_with_workspace,
+     execute_llama_iteration_greedy_with_workspace, execute_llama_iteration_timed,
+ };
+ pub use metrics::{
+--- a/crates/riley-server/src/engine.rs
++++ b/crates/riley-server/src/engine.rs
+@@ -333,6 +333,14 @@
+     /// Returns a fatal backend error.  The worker fails all live requests and
+     /// enters shutdown.
+     fn step(&mut self) -> Result<Vec<BackendEvent>, BackendError>;
++
++    /// Optionally publishes an already committed result while later GPU work
++    /// runs. The bounded, nonblocking publisher must preserve event order.
++    /// Backends using the ordinary synchronous path keep their existing API.
++    fn step_with_publisher(&mut self,publisher:&mut dyn FnMut(Vec<BackendEvent>),may_preview:&dyn Fn()->bool)->Result<Vec<BackendEvent>,BackendError>{
++        let _=(publisher,may_preview);self.step()
++    }
++
+ 
+     /// Whether no admitted work remains.
+     #[must_use]
+@@ -1823,8 +1831,12 @@
+ 
+         if !backend.is_idle() {
+             host_trace::lap_here(host_trace::CANCEL_COMMANDS);
+-            let step = backend.step();
+-            if publish_after_submit {
++            let mut published_during_step=false;
++            let step={
++                let mut publisher=|events|{stage_events(&mut requests,events);deliver_staged_events();published_during_step=true;};
++                backend.step_with_publisher(&mut publisher,&||stats.waiting_requests.load(Ordering::Acquire)==0 && lifecycle.load()==LIFECYCLE_READY)
++            };
++            if publish_after_submit || published_during_step {
+                 // Delivered already when the step submitted GPU work; this
+                 // covers a step that returned without submitting and cancels
+                 // the slow consumers found at delivery.
+@@ -2730,6 +2742,74 @@
+         native_fallback_request_local: bool,
+     }
+ 
++    // A preview owns only completed host outputs. It never owns a scheduler
++    // reservation and cannot become a result until the entire real plan matches.
++    struct DecodePreview {
++        plan:riley_scheduler::IterationPlan,
++        downloaded:riley_scheduler::DownloadedLlamaIteration,
++        timing:riley_scheduler::IterationTiming,
++        shape:Option<BatchShapeExecutionSample>,
++    }
++    #[derive(Default)]
++    struct DecodeOverlapStats { submitted:u64,reused:u64,discarded:u64,cpu_callbacks:u64,planned_ahead:u64,deferred_cancels:u64,considered:u64,no_preview:u64,early_publications:u64,pending_batch_skips:u64,queued_admission_skips:u64 }
++
++    fn forecast_decode_plan(current:&riley_scheduler::IterationPlan,next_tokens:&[(SchedulerRequestId,u32)],max_position:usize)->Result<Option<riley_scheduler::IterationPlan>,BackendError>{
++        use riley_scheduler::{IterationId,IterationPlan,OwnedBlockTable,OutputSlot,WorkItem,WorkKind};
++        if next_tokens.is_empty() || next_tokens.len()>32{return Ok(None);}
++        let Some(id)=current.iteration_id().get().checked_add(1).and_then(IterationId::new)else{return Ok(None);};
++        let mut tokens=next_tokens.to_vec();tokens.sort_unstable_by_key(|v|v.0);
++        if tokens.windows(2).any(|w|w[0].0==w[1].0){return Err(internal("duplicate preview request"));}
++        let mut items=Vec::with_capacity(tokens.len());let mut tables=Vec::with_capacity(tokens.len());
++        for (rid,token) in tokens {
++            let item=current.prefill_items().iter().chain(current.decode_items()).find(|v|v.request_id()==rid && v.output_slot().is_some()).ok_or_else(||internal("preview request has no completed output"))?;
++            let old=&current.block_tables()[item.block_table_index()];
++            let Some(target)=item.target_logical_length().checked_add(1)else{return Ok(None);};
++            // A speculative write stays inside the request's already owned
++            // physical page. Crossing a page boundary uses the normal scheduler.
++            if target>max_position || target>u32::MAX as usize || old.logical_length() as usize!=item.target_logical_length() || old.valid_tokens().last().is_none_or(|v|*v>=16){return Ok(None);}
++            let mut valid=old.valid_tokens().to_vec();*valid.last_mut().expect("checked nonempty")+=1;
++            let index=tables.len();
++            tables.push(OwnedBlockTable::new(rid,old.version(),old.physical_block_ids().to_vec(),valid,target as u32).map_err(|e|internal(format!("preview block table: {e}")))?);
++            items.push(WorkItem::new(rid,WorkKind::Decode,vec![token],target,index,Some(OutputSlot::new(index as u32))).map_err(|e|internal(format!("preview work item: {e}")))?);
++        }
++        IterationPlan::new(id,Vec::new(),items,tables).map(Some).map_err(|e|internal(format!("preview plan: {e}")))
++    }
++
++    #[cfg(test)]
++    mod decode_overlap_tests {
++        use super::forecast_decode_plan;
++        use riley_scheduler::{IterationId,IterationPlan,OwnedBlockTable,OutputSlot,RequestId,WorkItem,WorkKind};
++        fn current(length:u32)->IterationPlan{
++            let mut items=vec![];let mut tables=vec![];
++            for i in 0..2 {let rid=RequestId::new(i+1).unwrap();let blocks=length.div_ceil(16) as usize;
++                let mut valid=vec![16;blocks];*valid.last_mut().unwrap()=((length-1)%16+1)as u16;
++                tables.push(OwnedBlockTable::new(rid,1,(0..blocks as u32).map(|b|b+i as u32*16).collect(),valid,length).unwrap());
++                items.push(WorkItem::new(rid,WorkKind::Decode,vec![9],length as usize,i as usize,Some(OutputSlot::new(i as u32))).unwrap());
++            }IterationPlan::new(IterationId::new(7).unwrap(),vec![],items,tables).unwrap()
++        }
++        #[test]fn preview_extends_only_owned_tail_and_keeps_current_immutable(){
++            let p=current(129);let saved=p.clone();let tokens=[(RequestId::new(2).unwrap(),22),(RequestId::new(1).unwrap(),11)];
++            let n=forecast_decode_plan(&p,&tokens,1024).unwrap().unwrap();assert_eq!(p,saved);assert_eq!(n.iteration_id().get(),8);
++            for(i,item)in n.decode_items().iter().enumerate(){assert_eq!(item.target_logical_length(),130);assert_eq!(item.input_tokens(),&[if i==0{11}else{22}]);assert_eq!(n.block_tables()[i].physical_block_ids(),p.block_tables()[i].physical_block_ids());assert_eq!(n.block_tables()[i].valid_tokens().last(),Some(&2));}
++        }
++        #[test]fn page_boundaries_and_context_limit_use_authoritative_execution(){
++            let t=[(RequestId::new(1).unwrap(),11),(RequestId::new(2).unwrap(),22)];
++            assert!(forecast_decode_plan(&current(128),&t,1024).unwrap().is_none());assert!(forecast_decode_plan(&current(129),&t,129).unwrap().is_none());assert!(forecast_decode_plan(&current(129),&[],1024).unwrap().is_none());
++        }
++        #[test]fn finished_rows_are_removed_and_bad_identity_is_rejected(){
++            let p=current(129);let rid=RequestId::new(2).unwrap();let n=forecast_decode_plan(&p,&[(rid,22)],1024).unwrap().unwrap();assert_eq!(n.decode_items().len(),1);assert_eq!(n.decode_items()[0].request_id(),rid);assert_eq!(n.decode_items()[0].output_slot(),Some(OutputSlot::new(0)));
++            assert!(forecast_decode_plan(&p,&[(rid,22),(rid,23)],1024).is_err());assert!(forecast_decode_plan(&p,&[(RequestId::new(3).unwrap(),1)],1024).is_err());
++        }
++        #[test]fn cached_plan_equality_rejects_token_page_order_and_iteration_drift(){
++            let p=current(129);let r1=RequestId::new(1).unwrap();let r2=RequestId::new(2).unwrap();let a=forecast_decode_plan(&p,&[(r1,11),(r2,22)],1024).unwrap().unwrap();
++            let b=forecast_decode_plan(&p,&[(r1,12),(r2,22)],1024).unwrap().unwrap();assert_ne!(a,b);
++            let c=forecast_decode_plan(&p,&[(r2,22)],1024).unwrap().unwrap();assert_ne!(a,c);
++            let mut tables=a.block_tables().to_vec();tables[0]=OwnedBlockTable::new(r1,1,(64..73).collect(),tables[0].valid_tokens().to_vec(),130).unwrap();
++            let d=IterationPlan::new(a.iteration_id(),vec![],a.decode_items().to_vec(),tables).unwrap();assert_ne!(a,d);
++            let e=IterationPlan::new(IterationId::new(9).unwrap(),vec![],a.decode_items().to_vec(),a.block_tables().to_vec()).unwrap();assert_ne!(a,e);
++        }
++    }
++
+     struct CudaBackend {
+         metadata: ModelMetadata,
+         model: LoadedModel,
+@@ -2745,6 +2825,10 @@
+         gpu_greedy: bool,
+         generation_audit: Option<Arc<dyn C02GenerationAuditSink>>,
+         greedy_token_workspace: Vec<u32>,
++        preview_workspace:Vec<u32>,
++        decode_preview:Option<DecodePreview>,
++        planned_next:Option<riley_scheduler::PlanningOutput>,
++        decode_overlap:DecodeOverlapStats,
+         requests: Vec<CudaRequest>,
+         samples: Vec<SampledIterationToken>,
+         pending_tokens: Vec<PendingToken>,
+@@ -2856,6 +2940,8 @@
+                 addressable_tokens,
+                 gpu_greedy: resources.gpu_greedy,
+                 generation_audit: resources.generation_audit,
++                preview_workspace:Vec::with_capacity(greedy_token_workspace.capacity()),
++                decode_preview:None,planned_next:None,decode_overlap:DecodeOverlapStats::default(),
+                 greedy_token_workspace,
+                 requests,
+                 samples,
+@@ -2995,6 +3081,308 @@
+             for completion in completions {
+                 events.extend(self.process_completion(completion)?);
+             }
++            Ok(events)
++        }
++
++        fn next_decode_preview(&mut self,plan:&riley_scheduler::IterationPlan,downloaded:&riley_scheduler::DownloadedLlamaIteration)->Result<Option<riley_scheduler::IterationPlan>,BackendError>{
++            let Some(executor)=self.executor.as_ref()else{return Ok(None);};
++            if self.decode_graph.is_some() || !executor.config().owned_decode_graph() || executor.config().owned_decode_batch()!=10 || executor.execution_completion_mode_id()!="iteration-batch" || !(2..=32).contains(&executor.config().metadata().max_rows()) || plan.output_slots().len()>32 {return Ok(None);}
++            // Do not spend a GPU forward on a known incomplete batch: queued
++            // or partially ingested prompts will change the next real plan.
++            if self.requests.len()!=plan.batch_size(){self.decode_overlap.pending_batch_skips+=1;return Ok(None);}
++            let max=executor.maximum_position_count().map_err(|e|internal(format!("preview position bound: {e}")))?;
++            let mut tokens=Vec::with_capacity(plan.output_slots().len());
++            for item in plan.prefill_items().iter().chain(plan.decode_items()){
++                let Some(slot)=item.output_slot()else{return Ok(None);};
++                let index=self.request_index_by_scheduler(item.request_id()).ok_or_else(||internal("unknown preview request"))?;
++                if self.requests[index].cancellation_deferred{continue;}
++                let state=&self.requests[index].state;
++                if item.target_logical_length()<state.request().prompt_token_ids.len() || !state.request().stop_strings.is_empty(){self.decode_overlap.pending_batch_skips+=1;return Ok(None);}
++                let token=downloaded.greedy_token_for_slot(slot).map_err(|e|internal(format!("preview token route: {e}")))?;
++                if state.generated_token_ids().len()+1>=state.request().max_new_tokens || state.request().eos_token_ids.contains(&token) || state.request().stop_token_ids.contains(&token){continue;}
++                tokens.push((item.request_id(),token));
++            }
++            self.decode_overlap.considered+=1;
++            let preview=forecast_decode_plan(plan,&tokens,max)?;if preview.is_none(){self.decode_overlap.no_preview+=1;}Ok(preview)
++        }
++
++        fn overlap_decode_and_finish(&mut self,current:&riley_scheduler::IterationPlan,downloaded:riley_scheduler::DownloadedLlamaIteration,current_timing:riley_scheduler::IterationTiming,current_shape:Option<BatchShapeExecutionSample>,selection:C02CommittedSamplingSelection,events:Vec<BackendEvent>,preview:riley_scheduler::IterationPlan,mut publisher:Option<&mut dyn FnMut(Vec<BackendEvent>)>,may_preview:&dyn Fn()->bool)->Result<Vec<BackendEvent>,BackendError>{
++            if !may_preview(){self.decode_overlap.queued_admission_skips+=1;return self.finish_cpu_iteration(current,downloaded,current_timing,current_shape,selection,events,false);}
++            // CUDA owners remain affine and alive locally. The callback touches
++            // CPU generation/scheduler state only. Logical KV pages can change
++            // owners, but their fixed arena cannot be freed or overwritten by a
++            // second GPU batch until this batch's completion guard returns.
++            let mut executor=self.executor.take().ok_or_else(||internal("preview executor unavailable"))?;
++            let mut stream=self.stream.take().ok_or_else(||internal("preview stream unavailable"))?;
++            let mut timer=self.timer.take().ok_or_else(||internal("preview timer unavailable"))?;
++            let mut workspace=std::mem::take(&mut self.preview_workspace);
++            let mut downloaded=Some(downloaded);let mut events=Some(events);let mut processed=None;
++            let execution={
++                let mut callback=||{
++                    let _range=riley_runtime::host_trace::CpuOverlapRange::new();self.decode_overlap.cpu_callbacks+=1;
++                    let result=self.finish_cpu_iteration(current,downloaded.take().expect("one CPU callback"),current_timing,current_shape,selection,events.take().expect("one CPU callback"),true);
++                    processed=Some(result.and_then(|mut events|{
++                        // Current GPU work and authoritative commit are complete.
++                        // Do not delay TTFT until the following preview completes.
++                        if let Some(publish)=publisher.as_deref_mut(){publish(std::mem::take(&mut events));self.decode_overlap.early_publications+=1;}
++                        if !may_preview(){self.decode_overlap.queued_admission_skips+=1;return Ok(events);}
++                        let _planning=riley_runtime::host_trace::CpuPlanOverlapRange::new();
++                        let now=self.now_ns();let planning=self.scheduler_mut()?.plan_iteration(now).map_err(|e|internal(format!("overlapped iteration planning failed: {e}")))?;
++                        self.decode_overlap.planned_ahead+=1;
++                        if planning.plan().is_some() || !planning.completions().is_empty(){self.planned_next=Some(planning);}
++                        Ok(events)
++                    }));
++                };
++                riley_scheduler::execute_llama_iteration_greedy_timed_with_overlap(&preview,&mut executor,&mut stream,&mut timer,&mut workspace,&mut callback)
++            };
++            let shape=executor.last_shape_observation().filter(|v|v.active_rows()==preview.total_tokens()).map(|v|BatchShapeExecutionSample{active_rows:v.active_rows(),selected_dense_rows:v.selected_dense_rows(),padding_rows:v.padding_rows(),gpu_execution_ns:execution.as_ref().map_or(0,|(_,t)|t.gpu_execution_ns())});
++            self.executor=Some(executor);self.stream=Some(stream);self.timer=Some(timer);self.preview_workspace=workspace;
++            let (mut downloaded,timing)=execution.map_err(|e|internal(format!("decode preview execution failed: {}",e.error())))?;
++            self.decode_overlap.submitted+=1;
++            let events=processed.ok_or_else(||internal("successful preview did not run CPU result processing"))??;
++            if self.planned_next.as_ref().and_then(|p|p.plan()).is_some() || !self.requests.is_empty(){self.decode_preview=Some(DecodePreview{plan:preview,downloaded,timing,shape});}
++            else{downloaded.restore_greedy_token_workspace(&mut self.preview_workspace).map_err(|e|internal(format!("unused preview workspace: {e}")))?;self.decode_overlap.discarded+=1;}
++            Ok(events)
++        }
++
++        #[allow(clippy::too_many_lines)]
++        fn step_inner(&mut self,publisher:Option<&mut dyn FnMut(Vec<BackendEvent>)>,may_preview:&dyn Fn()->bool) -> Result<Vec<BackendEvent>, BackendError> {
++            if let Some(event) = self.pending_events.pop_front() {
++                return Ok(vec![event]);
++            }
++            let now_ns = self.now_ns();
++            let planning=if let Some(planning)=self.planned_next.take(){planning}else{self.scheduler_mut()?.plan_iteration(now_ns).map_err(|source|internal(format!("iteration planning failed: {source}")))?};
++            let (plan, completions) = planning.into_parts();
++            let mut events = self.process_completions(&completions)?;
++            let Some(plan) = plan else {
++                return Ok(events);
++            };
++            self.snapshot_cancel_deltas(&plan)?;
++            let selection = self.sampling_selection_for_plan(&plan)?;
++            let gpu_greedy = selection.selected_backend == C02SamplingBackend::GpuGreedy;
++            let expected_active_rows = plan.total_tokens();
++            riley_runtime::host_trace::lap_here(riley_runtime::host_trace::PLAN);
++            let cached=if let Some(mut cached)=self.decode_preview.take(){
++                if gpu_greedy && cached.plan==plan {
++                    // Current output owns one token vector; preserve the spare
++                    // for the next speculative execution before returning it.
++                    if !self.preview_workspace.is_empty() || self.preview_workspace.capacity()!=0{return Err(internal("preview workspace handoff is not empty"));}
++                    std::mem::swap(&mut self.greedy_token_workspace,&mut self.preview_workspace);
++                    self.decode_overlap.reused+=1;Some(cached)
++                }else{
++                    cached.downloaded.restore_greedy_token_workspace(&mut self.preview_workspace).map_err(|e|internal(format!("discard preview workspace: {e}")))?;
++                    self.decode_overlap.discarded+=1;None
++                }
++            }else{None};
++            let (mut downloaded, timing, staged_shape) =
++                if let Some(cached)=cached{(cached.downloaded,cached.timing,cached.shape)}else if let Some(graph) = self.decode_graph.as_mut() {
++                    let execution = riley_scheduler::execute_llama_iteration_graph(
++                        &plan,
++                        graph,
++                        gpu_greedy.then_some(&mut self.greedy_token_workspace),
++                    );
++                    match execution {
++                        Ok(downloaded) => (
++                            downloaded,
++                            riley_scheduler::IterationTiming::default(),
++                            None,
++                        ),
++                        Err(failure) => {
++                            // No eager retry and no scheduler abort on unknown completion.
++                            return Err(internal(format!(
++                                "graph iteration failed: {}",
++                                failure.error()
++                            )));
++                        }
++                    }
++                } else {
++                    let executor = self
++                        .executor
++                        .as_mut()
++                        .ok_or_else(|| internal("batch executor is already closed"))?;
++                    let stream = self
++                        .stream
++                        .as_mut()
++                        .ok_or_else(|| internal("CUDA stream is already closed"))?;
++                    let timer = self
++                        .timer
++                        .as_mut()
++                        .ok_or_else(|| internal("CUDA timer is already closed"))?;
++                    let execution = if gpu_greedy {
++                        execute_llama_iteration_greedy_timed_with_workspace(
++                            &plan,
++                            executor,
++                            stream,
++                            timer,
++                            &mut self.greedy_token_workspace,
++                        )
++                    } else {
++                        execute_llama_iteration_timed(&plan, executor, stream, timer)
++                    };
++                    match execution {
++                        Ok((downloaded, timing)) => {
++                            let staged_shape = executor
++                                .last_shape_observation()
++                                .filter(|shape| shape.active_rows() == expected_active_rows)
++                                .map(|shape| BatchShapeExecutionSample {
++                                    active_rows: shape.active_rows(),
++                                    selected_dense_rows: shape.selected_dense_rows(),
++                                    padding_rows: shape.padding_rows(),
++                                    gpu_execution_ns: timing.gpu_execution_ns(),
++                                });
++                            (downloaded, timing, staged_shape)
++                        }
++                        Err(failure) => {
++                            events.extend(self.settle_execution_failure(&failure)?);
++                            return Ok(events);
++                        }
++                    }
++                };
++            let queue_quiet=may_preview();
++            if gpu_greedy && queue_quiet {
++                if let Some(preview)=self.next_decode_preview(&plan,&downloaded)? {
++                    return self.overlap_decode_and_finish(&plan,downloaded,timing,staged_shape,selection,events,preview,publisher,may_preview);
++                }
++            }
++            if gpu_greedy && !queue_quiet{self.decode_overlap.queued_admission_skips+=1;}
++            self.finish_cpu_iteration(&plan,downloaded,timing,staged_shape,selection,events,false)
++        }
++
++        fn finish_cpu_iteration(&mut self,plan:&riley_scheduler::IterationPlan,mut downloaded:riley_scheduler::DownloadedLlamaIteration,timing:riley_scheduler::IterationTiming,staged_shape:Option<BatchShapeExecutionSample>,selection:C02CommittedSamplingSelection,mut events:Vec<BackendEvent>,gpu_preview_pending:bool)->Result<Vec<BackendEvent>,BackendError>{
++            let gpu_greedy=selection.selected_backend==C02SamplingBackend::GpuGreedy;
++            let sampling = self.sample_iteration(&plan, &downloaded, selection);
++            riley_runtime::host_trace::lap_here(riley_runtime::host_trace::SAMPLE);
++            if gpu_greedy {
++                if let Err(source) =
++                    downloaded.restore_greedy_token_workspace(&mut self.greedy_token_workspace)
++                {
++                    let (iteration, abort) = downloaded.abort_data();
++                    let detail = format!("greedy-token workspace recovery failed: {source}");
++                    if gpu_preview_pending{return Err(internal(detail));}
++                    let now_ns = self.now_ns();
++                    self.scheduler_mut()?
++                        .abort_iteration(iteration, abort, now_ns)
++                        .map_err(|abort_source| {
++                            internal(format!(
++                                "workspace-recovery abort failed after {detail}: {abort_source}"
++                            ))
++                        })?;
++                    return Err(internal(detail));
++                }
++            }
++            if let Err(error) = sampling {
++                // The preview still owns the stream. Propagate this CPU error
++                // after its completion guard returns; shutdown then synchronizes
++                // and settles the remaining reservation with a true disposition.
++                if gpu_preview_pending{return Err(error);}
++                let (iteration, abort) = downloaded.abort_data();
++                let now_ns = self.now_ns();
++                let _ = self
++                    .scheduler_mut()?
++                    .abort_iteration(iteration, abort, now_ns)
++                    .map_err(|source| internal(format!("sampling abort failed: {source}")))?;
++                return Err(error);
++            }
++            let result = match downloaded.into_result(&self.samples, timing) {
++                Ok(result) => result,
++                Err(failure) => {
++                    let (iteration, abort) = failure.abort_data();
++                    let detail = format!("iteration result construction failed: {failure}");
++                    if gpu_preview_pending{return Err(internal(detail));}
++                    let now_ns = self.now_ns();
++                    self.scheduler_mut()?
++                        .abort_iteration(iteration, abort, now_ns)
++                        .map_err(|source| {
++                            internal(format!(
++                                "result-construction abort failed after {detail}: {source}"
++                            ))
++                        })?;
++                    return Err(internal(detail));
++                }
++            };
++            let now_ns = self.now_ns();
++            let updates = match self.scheduler_mut()?.complete_iteration(&result, now_ns) {
++                Ok(updates) => updates,
++                Err(source) => {
++                    let detail = format!("scheduler commit failed: {source}");
++                    if !gpu_preview_pending && self
++                        .scheduler
++                        .as_ref()
++                        .and_then(Scheduler::inflight_iteration_id)
++                        == Some(result.iteration_id())
++                    {
++                        let now_ns = self.now_ns();
++                        self.scheduler_mut()?
++                            .abort_iteration(
++                                result.iteration_id(),
++                                ExecutionAbort::DeviceQuiescedMutationUnknown,
++                                now_ns,
++                            )
++                            .map_err(|abort_source| {
++                                internal(format!(
++                                    "commit abort failed after {detail}: {abort_source}"
++                                ))
++                            })?;
++                    }
++                    return Err(internal(detail));
++                }
++            };
++            record_committed_batch_shape(
++                &mut self.batch_shapes,
++                staged_shape,
++                updates.iteration_metric().is_some(),
++            );
++            self.record_committed_audit_tokens(updates.token_events(),updates.completions())?;
++            riley_runtime::host_trace::lap_here(riley_runtime::host_trace::COMMIT);
++
++            // External publication starts only after the authoritative commit
++            // above returns successfully.
++            for token in updates.token_events() {
++                let pending = self
++                    .pending_tokens
++                    .iter()
++                    .find(|pending| pending.scheduler_id == token.request_id())
++                    .ok_or_else(|| internal("committed token has no staged publication"))?;
++                if pending.token_id != token.token_id() {
++                    return Err(internal("committed token differs from staged sample"));
++                }
++                let request_index = self
++                    .request_index_by_scheduler(token.request_id())
++                    .ok_or_else(|| internal("committed token targets unknown request"))?;
++                let text = pending.text_delta.clone();
++                let request = &mut self.requests[request_index];
++                let event = if request.include_token_ids {
++                    if token.generated_index() != request.next_delivery_index
++                        || (token.generated_index() == 0)
++                            != request.prompt_ids_for_delivery.is_some()
++                    {
++                        return Err(internal(
++                            "committed token delivery metadata is inconsistent",
++                        ));
++                    }
++                    request.next_delivery_index = request
++                        .next_delivery_index
++                        .checked_add(1)
++                        .ok_or_else(|| internal("committed token delivery index overflowed"))?;
++                    GenerationEvent::CommittedToken {
++                        text,
++                        token_id: token.token_id(),
++                        generated_index: token.generated_index(),
++                        prompt_token_ids: request.prompt_ids_for_delivery.take(),
++                    }
++                } else {
++                    GenerationEvent::TokenDelta { text }
++                };
++                events.push(BackendEvent::new(request.engine_id, event));
++            }
++            events.extend(self.process_completions(updates.completions())?);
++            if !updates.settlement_failures().is_empty() {
++                eprintln!(
++                    "riley scheduler contained {} settlement failure(s)",
++                    updates.settlement_failures().len()
++                );
++            }
++            riley_runtime::host_trace::lap_here(riley_runtime::host_trace::EVENTS);
+             Ok(events)
+         }
+ 
+@@ -3201,11 +3589,14 @@
+         fn record_committed_audit_tokens(
+             &mut self,
+             token_events: &[riley_scheduler::TokenEvent],
++            completions:&[RequestCompletion],
+         ) -> Result<(), BackendError> {
+             if self.generation_audit.is_none() {
+                 return Ok(());
+             }
+-            if token_events.len() != self.pending_tokens.len() {
++            let cancelled=|rid|completions.iter().any(|c|c.request_id()==rid && c.reason()==RequestFinishReason::Cancelled);
++            let expected=self.pending_tokens.iter().filter(|p|!cancelled(p.scheduler_id)).count();
++            if token_events.len()!=expected || token_events.iter().any(|v|cancelled(v.request_id())) {
+                 return Err(internal(
+                     "scheduler committed tokens do not exactly cover C02 audit staging",
+                 ));
+@@ -3620,6 +4011,7 @@
+                 .cancel(scheduler_id, now_ns)
+                 .map_err(|source| internal(format!("scheduler cancellation failed: {source}")))?;
+             if outcome.deferred_until_iteration_settles() {
++                self.decode_overlap.deferred_cancels+=1;
+                 self.requests[index].cancellation_deferred = true;
+                 return Ok(Vec::new());
+             }
+@@ -3629,219 +4021,8 @@
+             }
+         }
+ 
+-        #[allow(clippy::too_many_lines)]
+-        fn step(&mut self) -> Result<Vec<BackendEvent>, BackendError> {
+-            if let Some(event) = self.pending_events.pop_front() {
+-                return Ok(vec![event]);
+-            }
+-            let now_ns = self.now_ns();
+-            let planning = self
+-                .scheduler_mut()?
+-                .plan_iteration(now_ns)
+-                .map_err(|source| internal(format!("iteration planning failed: {source}")))?;
+-            let (plan, completions) = planning.into_parts();
+-            let mut events = self.process_completions(&completions)?;
+-            let Some(plan) = plan else {
+-                return Ok(events);
+-            };
+-            self.snapshot_cancel_deltas(&plan)?;
+-            let selection = self.sampling_selection_for_plan(&plan)?;
+-            let gpu_greedy = selection.selected_backend == C02SamplingBackend::GpuGreedy;
+-            let expected_active_rows = plan.total_tokens();
+-            riley_runtime::host_trace::lap_here(riley_runtime::host_trace::PLAN);
+-            let (mut downloaded, timing, staged_shape) =
+-                if let Some(graph) = self.decode_graph.as_mut() {
+-                    let execution = riley_scheduler::execute_llama_iteration_graph(
+-                        &plan,
+-                        graph,
+-                        gpu_greedy.then_some(&mut self.greedy_token_workspace),
+-                    );
+-                    match execution {
+-                        Ok(downloaded) => (
+-                            downloaded,
+-                            riley_scheduler::IterationTiming::default(),
+-                            None,
+-                        ),
+-                        Err(failure) => {
+-                            // No eager retry and no scheduler abort on unknown completion.
+-                            return Err(internal(format!(
+-                                "graph iteration failed: {}",
+-                                failure.error()
+-                            )));
+-                        }
+-                    }
+-                } else {
+-                    let executor = self
+-                        .executor
+-                        .as_mut()
+-                        .ok_or_else(|| internal("batch executor is already closed"))?;
+-                    let stream = self
+-                        .stream
+-                        .as_mut()
+-                        .ok_or_else(|| internal("CUDA stream is already closed"))?;
+-                    let timer = self
+-                        .timer
+-                        .as_mut()
+-                        .ok_or_else(|| internal("CUDA timer is already closed"))?;
+-                    let execution = if gpu_greedy {
+-                        execute_llama_iteration_greedy_timed_with_workspace(
+-                            &plan,
+-                            executor,
+-                            stream,
+-                            timer,
+-                            &mut self.greedy_token_workspace,
+-                        )
+-                    } else {
+-                        execute_llama_iteration_timed(&plan, executor, stream, timer)
+-                    };
+-                    match execution {
+-                        Ok((downloaded, timing)) => {
+-                            let staged_shape = executor
+-                                .last_shape_observation()
+-                                .filter(|shape| shape.active_rows() == expected_active_rows)
+-                                .map(|shape| BatchShapeExecutionSample {
+-                                    active_rows: shape.active_rows(),
+-                                    selected_dense_rows: shape.selected_dense_rows(),
+-                                    padding_rows: shape.padding_rows(),
+-                                    gpu_execution_ns: timing.gpu_execution_ns(),
+-                                });
+-                            (downloaded, timing, staged_shape)
+-                        }
+-                        Err(failure) => {
+-                            events.extend(self.settle_execution_failure(&failure)?);
+-                            return Ok(events);
+-                        }
+-                    }
+-                };
+-            let sampling = self.sample_iteration(&plan, &downloaded, selection);
+-            riley_runtime::host_trace::lap_here(riley_runtime::host_trace::SAMPLE);
+-            if gpu_greedy {
+-                if let Err(source) =
+-                    downloaded.restore_greedy_token_workspace(&mut self.greedy_token_workspace)
+-                {
+-                    let (iteration, abort) = downloaded.abort_data();
+-                    let detail = format!("greedy-token workspace recovery failed: {source}");
+-                    let now_ns = self.now_ns();
+-                    self.scheduler_mut()?
+-                        .abort_iteration(iteration, abort, now_ns)
+-                        .map_err(|abort_source| {
+-                            internal(format!(
+-                                "workspace-recovery abort failed after {detail}: {abort_source}"
+-                            ))
+-                        })?;
+-                    return Err(internal(detail));
+-                }
+-            }
+-            if let Err(error) = sampling {
+-                let (iteration, abort) = downloaded.abort_data();
+-                let now_ns = self.now_ns();
+-                let _ = self
+-                    .scheduler_mut()?
+-                    .abort_iteration(iteration, abort, now_ns)
+-                    .map_err(|source| internal(format!("sampling abort failed: {source}")))?;
+-                return Err(error);
+-            }
+-            let result = match downloaded.into_result(&self.samples, timing) {
+-                Ok(result) => result,
+-                Err(failure) => {
+-                    let (iteration, abort) = failure.abort_data();
+-                    let detail = format!("iteration result construction failed: {failure}");
+-                    let now_ns = self.now_ns();
+-                    self.scheduler_mut()?
+-                        .abort_iteration(iteration, abort, now_ns)
+-                        .map_err(|source| {
+-                            internal(format!(
+-                                "result-construction abort failed after {detail}: {source}"
+-                            ))
+-                        })?;
+-                    return Err(internal(detail));
+-                }
+-            };
+-            let now_ns = self.now_ns();
+-            let updates = match self.scheduler_mut()?.complete_iteration(&result, now_ns) {
+-                Ok(updates) => updates,
+-                Err(source) => {
+-                    let detail = format!("scheduler commit failed: {source}");
+-                    if self
+-                        .scheduler
+-                        .as_ref()
+-                        .and_then(Scheduler::inflight_iteration_id)
+-                        == Some(result.iteration_id())
+-                    {
+-                        let now_ns = self.now_ns();
+-                        self.scheduler_mut()?
+-                            .abort_iteration(
+-                                result.iteration_id(),
+-                                ExecutionAbort::DeviceQuiescedMutationUnknown,
+-                                now_ns,
+-                            )
+-                            .map_err(|abort_source| {
+-                                internal(format!(
+-                                    "commit abort failed after {detail}: {abort_source}"
+-                                ))
+-                            })?;
+-                    }
+-                    return Err(internal(detail));
+-                }
+-            };
+-            record_committed_batch_shape(
+-                &mut self.batch_shapes,
+-                staged_shape,
+-                updates.iteration_metric().is_some(),
+-            );
+-            self.record_committed_audit_tokens(updates.token_events())?;
+-            riley_runtime::host_trace::lap_here(riley_runtime::host_trace::COMMIT);
+-
+-            // External publication starts only after the authoritative commit
+-            // above returns successfully.
+-            for token in updates.token_events() {
+-                let pending = self
+-                    .pending_tokens
+-                    .iter()
+-                    .find(|pending| pending.scheduler_id == token.request_id())
+-                    .ok_or_else(|| internal("committed token has no staged publication"))?;
+-                if pending.token_id != token.token_id() {
+-                    return Err(internal("committed token differs from staged sample"));
+-                }
+-                let request_index = self
+-                    .request_index_by_scheduler(token.request_id())
+-                    .ok_or_else(|| internal("committed token targets unknown request"))?;
+-                let text = pending.text_delta.clone();
+-                let request = &mut self.requests[request_index];
+-                let event = if request.include_token_ids {
+-                    if token.generated_index() != request.next_delivery_index
+-                        || (token.generated_index() == 0)
+-                            != request.prompt_ids_for_delivery.is_some()
+-                    {
+-                        return Err(internal(
+-                            "committed token delivery metadata is inconsistent",
+-                        ));
+-                    }
+-                    request.next_delivery_index = request
+-                        .next_delivery_index
+-                        .checked_add(1)
+-                        .ok_or_else(|| internal("committed token delivery index overflowed"))?;
+-                    GenerationEvent::CommittedToken {
+-                        text,
+-                        token_id: token.token_id(),
+-                        generated_index: token.generated_index(),
+-                        prompt_token_ids: request.prompt_ids_for_delivery.take(),
+-                    }
+-                } else {
+-                    GenerationEvent::TokenDelta { text }
+-                };
+-                events.push(BackendEvent::new(request.engine_id, event));
+-            }
+-            events.extend(self.process_completions(updates.completions())?);
+-            if !updates.settlement_failures().is_empty() {
+-                eprintln!(
+-                    "riley scheduler contained {} settlement failure(s)",
+-                    updates.settlement_failures().len()
+-                );
+-            }
+-            riley_runtime::host_trace::lap_here(riley_runtime::host_trace::EVENTS);
+-            Ok(events)
+-        }
++        fn step(&mut self)->Result<Vec<BackendEvent>,BackendError>{self.step_inner(None,&||true)}
++        fn step_with_publisher(&mut self,publisher:&mut dyn FnMut(Vec<BackendEvent>),may_preview:&dyn Fn()->bool)->Result<Vec<BackendEvent>,BackendError>{self.step_inner(Some(publisher),may_preview)}
+ 
+         fn is_idle(&self) -> bool {
+             self.requests.is_empty() && self.pending_events.is_empty()
+@@ -3881,6 +4062,10 @@
+         }
+ 
+         fn shutdown(&mut self) -> Result<Vec<BackendEvent>, BackendError> {
++            eprintln!("RILEY_DECODE_OVERLAP submitted={} reused={} discarded={} cpu_callbacks={} planned_ahead={} deferred_cancels={} considered={} no_preview={} early_publications={} pending_batch_skips={} queued_admission_skips={}",self.decode_overlap.submitted,self.decode_overlap.reused,self.decode_overlap.discarded,self.decode_overlap.cpu_callbacks,self.decode_overlap.planned_ahead,self.decode_overlap.deferred_cancels,self.decode_overlap.considered,self.decode_overlap.no_preview,self.decode_overlap.early_publications,self.decode_overlap.pending_batch_skips,self.decode_overlap.queued_admission_skips);
++            self.decode_preview=None;
++            self.planned_next=None;
++
+             if self.scheduler.is_none()
+                 && self.executor.is_none()
+                 && self.decode_graph.is_none()
+@@ -4684,6 +4869,58 @@
+         assert_eq!(counters.admitted.load(Ordering::Acquire), 8);
+     }
+ 
++    struct EarlyPublishingBackend {
++        inner:MockBackend,permit:Arc<AtomicUsize>,returned:Arc<AtomicUsize>,fail_after:bool,observed_pressure:Option<Arc<AtomicUsize>>,
++    }
++    impl EngineBackend for EarlyPublishingBackend {
++        fn admit(&mut self,id:EngineRequestId,m:&RequestMetadata,r:&GenerationRequest)->Result<(),BackendError>{self.inner.admit(id,m,r)}
++        fn cancel(&mut self,id:EngineRequestId)->Result<Vec<BackendEvent>,BackendError>{self.inner.cancel(id)}
++        fn step(&mut self)->Result<Vec<BackendEvent>,BackendError>{self.inner.step()}
++        fn step_with_publisher(&mut self,publish:&mut dyn FnMut(Vec<BackendEvent>),may_preview:&dyn Fn()->bool)->Result<Vec<BackendEvent>,BackendError>{
++            let pressure=self.observed_pressure.take();if pressure.is_some(){assert!(may_preview(),"first admission must have left the command queue");}
++            let committed=self.inner.step()?;publish(committed);
++            if let Some(pressure)=pressure {
++                let deadline=Instant::now()+Duration::from_secs(2);
++                while may_preview() && Instant::now()<deadline{thread::yield_now();}
++                assert!(!may_preview(),"queued admission was not visible to the overlap hint");pressure.store(1,Ordering::Release);self.permit.store(1,Ordering::Release);
++            }
++            let deadline=Instant::now()+Duration::from_secs(2);
++            while self.permit.load(Ordering::Acquire)==0 && Instant::now()<deadline{thread::yield_now();}
++            assert_ne!(self.permit.load(Ordering::Acquire),0,"committed events were held until step completion");
++            self.returned.fetch_add(1,Ordering::AcqRel);
++            if self.fail_after{Err(BackendError::new(ServiceErrorClass::Internal,"later device step failed"))}else{Ok(Vec::new())}
++        }
++        fn is_idle(&self)->bool{self.inner.is_idle()}
++        fn shutdown(&mut self)->Result<Vec<BackendEvent>,BackendError>{self.inner.shutdown()}
++    }
++    #[test]
++    fn early_committed_publication_precedes_later_completion_and_is_never_repeated(){
++        for deferred in [false,true]{for fail_after in [false,true]{
++            let permit=Arc::new(AtomicUsize::new(0));let returned=Arc::new(AtomicUsize::new(0));
++            let backend=EarlyPublishingBackend{inner:MockBackend::new(Arc::new(MockCounters::default()),Duration::ZERO),permit:Arc::clone(&permit),returned:Arc::clone(&returned),fail_after,observed_pressure:None};
++            let engine=InferenceEngine::start(model(),EngineConfig{event_channel_capacity:8,publish_after_submit:deferred,..EngineConfig::default()},backend).expect("early publisher engine");
++            let handle=engine.submit(request(2)).expect("admitted");
++            assert_eq!(handle.recv_timeout(Duration::from_secs(2)),Ok(GenerationEvent::TokenDelta{text:"x".into()}));
++            assert_eq!(returned.load(Ordering::Acquire),0,"first committed token must not wait for later work");permit.store(1,Ordering::Release);
++            if fail_after{assert!(matches!(handle.recv_timeout(Duration::from_secs(2)),Ok(GenerationEvent::Failed{class:ServiceErrorClass::Internal})));}
++            else{assert_eq!(handle.recv_timeout(Duration::from_secs(2)),Ok(GenerationEvent::TokenDelta{text:"x".into()}));assert!(matches!(handle.recv_timeout(Duration::from_secs(2)),Ok(GenerationEvent::Finished{reason:FinishReason::Length,..})));}
++            assert!(handle.recv_timeout(Duration::from_millis(5)).is_err());let closed=engine.shutdown(Duration::from_secs(2));if fail_after{assert_eq!(closed,Err(EngineError::Internal));}else{closed.expect("shutdown");}
++        }}
++    }
++
++    #[test]
++    fn overlap_hint_tracks_a_real_queued_admission_while_the_step_is_busy(){
++        let pressure=Arc::new(AtomicUsize::new(0));
++        let backend=EarlyPublishingBackend{inner:MockBackend::new(Arc::new(MockCounters::default()),Duration::ZERO),permit:Arc::new(AtomicUsize::new(0)),returned:Arc::new(AtomicUsize::new(0)),fail_after:false,observed_pressure:Some(Arc::clone(&pressure))};
++        let engine=InferenceEngine::start(model(),EngineConfig{event_channel_capacity:8,..EngineConfig::default()},backend).expect("hint engine");
++        let first=engine.submit(request(2)).expect("first admitted");assert!(matches!(first.recv_timeout(Duration::from_secs(2)),Ok(GenerationEvent::TokenDelta{..})));
++        let second=thread::scope(|scope|scope.spawn(||engine.submit(request(1))).join().expect("submitter").expect("queued request admitted after busy step"));
++        assert_eq!(pressure.load(Ordering::Acquire),1);
++        assert!(matches!(first.recv_timeout(Duration::from_secs(2)),Ok(GenerationEvent::TokenDelta{..})));assert!(matches!(first.recv_timeout(Duration::from_secs(2)),Ok(GenerationEvent::Finished{..})));
++        assert!(matches!(second.recv_timeout(Duration::from_secs(2)),Ok(GenerationEvent::TokenDelta{..})));assert!(matches!(second.recv_timeout(Duration::from_secs(2)),Ok(GenerationEvent::Finished{..})));
++        engine.shutdown(Duration::from_secs(2)).expect("shutdown");
++    }
++
+     #[test]
+     fn after_submit_publication_keeps_order_and_terminal_last() {
+         let counters = Arc::new(MockCounters::default());
+--- a/kernels/include/riley_cuda.h
++++ b/kernels/include/riley_cuda.h
+@@ -3210,6 +3210,8 @@
+ int riley_cuda_cublas_hf_smol_exact_supported(const RileyCudaCublasGemmProbePlan*,uint64_t) RILEY_CUDA_NOEXCEPT;
+ RileyCudaStatus riley_cuda_cublas_hf_smol_exact_execute(RileyCudaCublasGemmProbePlan*,const RileyCudaBufferSpan*,uint64_t,const uint32_t*,const uint64_t*,uint64_t,uint64_t,uint64_t,uint64_t,uint64_t,RileyCudaStream*,RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+ 
++void riley_cuda_cpu_overlap_trace(uint32_t begin) RILEY_CUDA_NOEXCEPT;
++
+ #ifdef __cplusplus
+ }  // extern "C"
+ #endif
+--- a/kernels/src/version.cu
++++ b/kernels/src/version.cu
+@@ -1,3 +1,4 @@
++#include <nvtx3/nvToolsExt.h>
+ #include "riley_cuda.h"
+ 
+ #define RILEY_STRINGIFY_INNER(value) #value
+@@ -5,7 +6,7 @@
+ 
+ namespace {
+ 
+-// Compile-time metadata only: this translation unit intentionally contains no
++// Build metadata and CPU-only NVTX diagnostics. This unit contains no
+ // __global__, __device__, CUDA Runtime, or CUDA Driver API use.
+ constexpr char kBuildInfo[] =
+     "riley-cuda-native abi=" RILEY_STRINGIFY(
+@@ -23,3 +24,8 @@
+ extern "C" const char* riley_cuda_build_info(void) noexcept {
+   return kBuildInfo;
+ }
++
++// CPU-only diagnostic range. NVTX is header-only and inert without a collector.
++extern "C" void riley_cuda_cpu_overlap_trace(uint32_t begin) noexcept {
++ if(begin)nvtxRangePushA(begin==2?"RILEY_CPU_PLAN_OVERLAP":"RILEY_CPU_RESULT_OVERLAP");else nvtxRangePop();
++}

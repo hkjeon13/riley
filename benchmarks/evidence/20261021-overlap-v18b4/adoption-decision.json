@@ -1,0 +1,48 @@
+{
+  "time_ns": 1792603794480633928,
+  "eligible_for_integration": false,
+  "integrated_into_main": false,
+  "normal_completed_arms_excluded": 0,
+  "accuracy_threshold_changed": false,
+  "tail_flags": {
+    "16": [
+      {
+        "repeat": 0,
+        "metric": "ttft_ms_p95",
+        "percent_change": 5.2981367160969794
+      },
+      {
+        "repeat": 0,
+        "metric": "ttft_ms_p99",
+        "percent_change": 2.7503736307793236
+      },
+      {
+        "repeat": 3,
+        "metric": "ttft_ms_p99",
+        "percent_change": 7.063446021503683
+      },
+      {
+        "repeat": 4,
+        "metric": "tpot_ms_p99",
+        "percent_change": 2.319648628811999
+      }
+    ],
+    "32": [
+      {
+        "repeat": 0,
+        "metric": "tpot_ms_p99",
+        "percent_change": 3.003529513814751
+      },
+      {
+        "repeat": 1,
+        "metric": "tpot_ms_p99",
+        "percent_change": 11.520351231561365
+      }
+    ]
+  },
+  "throughput_changes": {
+    "16": -0.2879224770996891,
+    "32": -0.25608203103876237
+  },
+  "reason": "Require positive median throughput at both C16/C32 and no paired TTFT/TPOT p95/p99 regression greater than2%; original accuracy/resource/actual-dispatch gates passed. Main integration is a separate verified step."
+}

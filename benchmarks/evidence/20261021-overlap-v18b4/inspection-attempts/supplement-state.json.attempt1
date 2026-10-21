@@ -1,0 +1,7 @@
+{
+  "phase": "failed",
+  "started_ns": 1792603976597398382,
+  "concurrency": 16,
+  "error": "AssertionError(('profile-c16.outer.log', 1))",
+  "traceback": "Traceback (most recent call last):\n  File \"/mnt/efs/nlp/psyche/inspected-b4.py\", line 16, in <module>\n    args=json.loads((base/f'profile-c{c}.argv.json').read_text());args[args.index(str(base/'measure-profile.py'))]=str(w/'measure-profile.py');args[args.index('--out')+1]=str(w/f'runs/profile-c{c}');(w/f'profile-c{c}.argv.json').write_text(json.dumps(args,indent=2));s.update(phase='profiling',concurrency=c);save();run(['python3',str(w/'run-job.py'),f'profile-c{c}'],f'profile-c{c}.outer.log')\n  File \"/mnt/efs/nlp/psyche/inspected-b4.py\", line 7, in run\n    assert q.returncode==0,(name,q.returncode)\nAssertionError: ('profile-c16.outer.log', 1)\n"
+}

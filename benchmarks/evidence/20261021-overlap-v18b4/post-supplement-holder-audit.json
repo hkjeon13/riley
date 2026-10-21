@@ -1,0 +1,161 @@
+{
+  "time_ns": 1792604529310516662,
+  "passed": true,
+  "samples": [
+    {
+      "time_ns": 1792604526573506066,
+      "gpus": [
+        {
+          "index": 6,
+          "holder": {
+            "status": "running",
+            "phase": "idle",
+            "pid": 2027914,
+            "start_ticks": "6083215119",
+            "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+            "physical_index": 6,
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "updated_ns": 1792604526435658925,
+            "other_processes": [],
+            "policy": "idle20GiB/active64MiB; persistent CUDA context; no compute spin"
+          },
+          "processes": [
+            {
+              "pid": 2027914,
+              "MiB": 20894.0
+            }
+          ],
+          "foreign_pids": []
+        },
+        {
+          "index": 7,
+          "holder": {
+            "status": "running",
+            "phase": "idle",
+            "pid": 2027915,
+            "start_ticks": "6083215121",
+            "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+            "physical_index": 7,
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "updated_ns": 1792604526470376788,
+            "other_processes": [],
+            "policy": "idle20GiB/active64MiB; persistent CUDA context; no compute spin"
+          },
+          "processes": [
+            {
+              "pid": 2027915,
+              "MiB": 20894.0
+            }
+          ],
+          "foreign_pids": []
+        }
+      ]
+    },
+    {
+      "time_ns": 1792604527462728058,
+      "gpus": [
+        {
+          "index": 6,
+          "holder": {
+            "status": "running",
+            "phase": "idle",
+            "pid": 2027914,
+            "start_ticks": "6083215119",
+            "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+            "physical_index": 6,
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "updated_ns": 1792604527072889389,
+            "other_processes": [],
+            "policy": "idle20GiB/active64MiB; persistent CUDA context; no compute spin"
+          },
+          "processes": [
+            {
+              "pid": 2027914,
+              "MiB": 20894.0
+            }
+          ],
+          "foreign_pids": []
+        },
+        {
+          "index": 7,
+          "holder": {
+            "status": "running",
+            "phase": "idle",
+            "pid": 2027915,
+            "start_ticks": "6083215121",
+            "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+            "physical_index": 7,
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "updated_ns": 1792604527106465274,
+            "other_processes": [],
+            "policy": "idle20GiB/active64MiB; persistent CUDA context; no compute spin"
+          },
+          "processes": [
+            {
+              "pid": 2027915,
+              "MiB": 20894.0
+            }
+          ],
+          "foreign_pids": []
+        }
+      ]
+    },
+    {
+      "time_ns": 1792604528374657182,
+      "gpus": [
+        {
+          "index": 6,
+          "holder": {
+            "status": "running",
+            "phase": "idle",
+            "pid": 2027914,
+            "start_ticks": "6083215119",
+            "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+            "physical_index": 6,
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "updated_ns": 1792604527729023330,
+            "other_processes": [],
+            "policy": "idle20GiB/active64MiB; persistent CUDA context; no compute spin"
+          },
+          "processes": [
+            {
+              "pid": 2027914,
+              "MiB": 20894.0
+            }
+          ],
+          "foreign_pids": []
+        },
+        {
+          "index": 7,
+          "holder": {
+            "status": "running",
+            "phase": "idle",
+            "pid": 2027915,
+            "start_ticks": "6083215121",
+            "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+            "physical_index": 7,
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "updated_ns": 1792604528419884170,
+            "other_processes": [],
+            "policy": "idle20GiB/active64MiB; persistent CUDA context; no compute spin"
+          },
+          "processes": [
+            {
+              "pid": 2027915,
+              "MiB": 20894.0
+            }
+          ],
+          "foreign_pids": []
+        }
+      ]
+    }
+  ],
+  "context_restart_or_release": false,
+  "scope": "Original holder PID/start ticks/context maintained, three fresh idle20GiB samples, GPU7 finite jobs complete; GPU6 foreign work, if present, observed and untouched, no expanded admission"
+}

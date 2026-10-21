@@ -1,0 +1,17 @@
+{
+  "original_BF16_files": 4480,
+  "bounded576_files": 2048,
+  "canonical4096_files": 1024,
+  "canonical576_files": 0,
+  "two_prefill576_files": 0,
+  "total_literal_BF16_files": 7552,
+  "reference_and_tolerance_unchanged": true,
+  "CPU_passed": 530,
+  "CPU_ignored": 40,
+  "approved_C02_tmp_rechecks": 4,
+  "GPU_contract_functions": 5,
+  "existing_alignment_view_cases": 120,
+  "new_copy_ABI_same_graph_R_replays": 0,
+  "new_copy_ABI_invalid_or_busy_rejections": 0,
+  "scope": "Full-vocabulary/native BF16 regression gates; does not use stock vLLM as numerical oracle"
+}

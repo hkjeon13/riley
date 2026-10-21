@@ -1,0 +1,48 @@
+[
+  {
+    "concurrency": 16,
+    "trace": "/mnt/efs/nlp/psyche/riley-overlap-v18b4-20261021/runs/profile-c16/c16-r0-owned-after/trace.sqlite",
+    "trace_sha256": "676095f1bdf5914bca9a5b8805927c9a77e8a1ed489b69a8a81b79f5984be0f2",
+    "scope": "Separate 64-request Nsight window; not normal throughput, not hardware utilization/bandwidth counters",
+    "kernel_sum_ms": 1651.867751,
+    "actual_CPU_GPU_overlap": true,
+    "nvtx": {
+      "RILEY_CPU_RESULT_OVERLAP": {
+        "ranges": 37,
+        "cpu_range_union_ms": 2.846116,
+        "GPU_kernel_overlap_ms": 2.814727,
+        "overlap_fraction_of_CPU_range": 0.9889712857803407
+      },
+      "RILEY_CPU_PLAN_OVERLAP": {
+        "ranges": 37,
+        "cpu_range_union_ms": 0.65409,
+        "GPU_kernel_overlap_ms": 0.648293,
+        "overlap_fraction_of_CPU_range": 0.9911373052638016
+      }
+    },
+    "scope_detail": "Real CPU generation acceptance, authoritative commit, bounded publication and next authoritative planning; intersected with actual GPU kernel intervals. Does not imply all CPU time is hidden or all speculative outputs are reused."
+  },
+  {
+    "concurrency": 32,
+    "trace": "/mnt/efs/nlp/psyche/riley-overlap-v18b4-20261021/runs/profile-c32/c32-r0-owned-after/trace.sqlite",
+    "trace_sha256": "a83b4b2b2d7ca2813aefb4dadc79e3fcc500c3827b28aab0bbdbaedf591e6a4e",
+    "scope": "Separate 64-request Nsight window; not normal throughput, not hardware utilization/bandwidth counters",
+    "kernel_sum_ms": 1327.339033,
+    "actual_CPU_GPU_overlap": true,
+    "nvtx": {
+      "RILEY_CPU_RESULT_OVERLAP": {
+        "ranges": 18,
+        "cpu_range_union_ms": 1.022429,
+        "GPU_kernel_overlap_ms": 1.003069,
+        "overlap_fraction_of_CPU_range": 0.9810646998471287
+      },
+      "RILEY_CPU_PLAN_OVERLAP": {
+        "ranges": 18,
+        "cpu_range_union_ms": 0.216824,
+        "GPU_kernel_overlap_ms": 0.208978,
+        "overlap_fraction_of_CPU_range": 0.9638139689333284
+      }
+    },
+    "scope_detail": "Real CPU generation acceptance, authoritative commit, bounded publication and next authoritative planning; intersected with actual GPU kernel intervals. Does not imply all CPU time is hidden or all speculative outputs are reused."
+  }
+]

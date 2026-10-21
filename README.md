@@ -23,21 +23,29 @@ cuBLASLt. There is no Python in the serving process.
 
 ## Performance
 
-### Latest structural experiment · multi-prefill / variable-R Graph
+### Latest structural experiments · 2026-10-22
 
-Completed2026-10-22, five fresh runs per engine/concurrency on GPU7. The new
-prefill MLP Graph path passed accuracy checks but was **not adopted**.
+Both candidates passed the original accuracy gates but were **not adopted**.
+Each row uses its own fresh five-run matched v15C/candidate/stock campaign on
+GPU7; values are run-level medians. These are experimental results, with the
+accepted v15C runtime unchanged.
 
-| Clients | Current Riley tok/s | Candidate tok/s | Change | vLLM tok/s | Candidate / vLLM |
-|---:|---:|---:|---:|---:|---:|
-| 16 | 748.663 | 739.910 | -1.17% | 1136.356 | 65.11% |
-| 32 | 981.234 | 981.079 | -0.02% | 1684.366 | 58.25% |
+| Experiment | Clients | Matched v15C tok/s | Candidate tok/s | Change | vLLM tok/s | Candidate / vLLM |
+|---|---:|---:|---:|---:|---:|---:|
+| Multi-prefill Graph v18A | 16 | 748.663 | 739.910 | -1.17% | 1136.356 | 65.11% |
+| Multi-prefill Graph v18A | 32 | 981.234 | 981.079 | -0.02% | 1684.366 | 58.25% |
+| CPU–GPU overlap v18B4 | 16 | 756.053 | 753.877 | -0.29% | 1153.558 | 65.35% |
+| CPU–GPU overlap v18B4 | 32 | 992.120 | 989.579 | -0.26% | 1680.772 | 58.88% |
 
-9,600 literal BF16 reference files,526 CPU tests and five GPU contract functions
-passed. Actual multi-prefill replay was verified in separate profiles. Ten paired
-TTFT/TPOT tail checks exceeded+2%; current v15C remains the accepted runtime.
-[Implementation, limits and all repeats](docs/qwen-piecewise-v18a-20261021.md) ·
-[Audited evidence](benchmarks/evidence/20261021-piecewise-v18a/README.md).
+v18A supports multi-prefill/variable-R MLP Graph pieces and passes 9,600 literal
+BF16 files. v18B4 overlaps real result processing/planning with GPU execution
+and passes 7,552 files plus 530 CPU tests. Actual hidden CPU result work is only
+2.815/1.003 ms in the separate C16/C32 profile windows. Both retain paired tail
+regressions; neither closes the throughput gap. All completed normal arms are
+retained; supplemental inspected profiles are separate from timing results.
+
+[Graph implementation and evidence](docs/qwen-piecewise-v18a-20261021.md) ·
+[Overlap implementation, all repeats and caveats](docs/qwen-overlap-v18b4-20261021.md).
 
 ### A100 · Qwen3-4B · latest qualified checkpoint
 

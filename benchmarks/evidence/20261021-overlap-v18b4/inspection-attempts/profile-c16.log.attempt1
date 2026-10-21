@@ -1,0 +1,33 @@
+Exception in thread Thread-1 (observe):
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.10/threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "/mnt/efs/nlp/psyche/riley-overlap-v18b4-inspected-20261021/measure-profile.py", line 212, in observe
+    if support_process(pid,float(row.split(',')[1])):continue
+  File "/mnt/efs/nlp/psyche/riley-overlap-v18b4-inspected-20261021/measure-profile.py", line 38, in support_process
+    from holder import admitted_process
+ModuleNotFoundError: No module named 'holder'
+Warning: Directory "/mnt/efs/nlp/psyche/riley-overlap-v18b4-inspected-20261021/runs/profile-c16/tmp" used to store temporary files appears to be on a remote filesystem ("127.0.0.1:/").
+This may cause errors or significantly degrade profiling performance.
+Please set the NSYS_TMPDIR environment variable to a local directory.
+Traceback (most recent call last):
+  File "/mnt/efs/nlp/psyche/riley-overlap-v18b4-inspected-20261021/measure-profile.py", line 348, in main
+    if support_process(int(pid)):continue
+  File "/mnt/efs/nlp/psyche/riley-overlap-v18b4-inspected-20261021/measure-profile.py", line 38, in support_process
+    from holder import admitted_process
+ModuleNotFoundError: No module named 'holder'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/mnt/efs/nlp/psyche/riley-overlap-v18b4-inspected-20261021/measure-profile.py", line 498, in <module>
+    main()
+  File "/mnt/efs/nlp/psyche/riley-overlap-v18b4-inspected-20261021/measure-profile.py", line 484, in main
+    if not any(not support_process(int(pid)) for pid in live.split()):
+  File "/mnt/efs/nlp/psyche/riley-overlap-v18b4-inspected-20261021/measure-profile.py", line 484, in <genexpr>
+    if not any(not support_process(int(pid)) for pid in live.split()):
+  File "/mnt/efs/nlp/psyche/riley-overlap-v18b4-inspected-20261021/measure-profile.py", line 38, in support_process
+    from holder import admitted_process
+ModuleNotFoundError: No module named 'holder'

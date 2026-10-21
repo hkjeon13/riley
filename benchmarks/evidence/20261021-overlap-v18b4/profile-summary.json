@@ -1,0 +1,666 @@
+[
+  {
+    "concurrency": 16,
+    "mode": "before",
+    "kernel_sum_ms": 1677.957017,
+    "kernel_union_ms": 1676.235261,
+    "gpu_kernel_span_ms": 1864.311402,
+    "kernel_busy_fraction": 0.8991176362499123,
+    "categories": {
+      "other-unattributed": {
+        "count": 33701,
+        "ms": 593.5263039999728
+      },
+      "linear-GateUp": {
+        "count": 3636,
+        "ms": 314.85873700000093
+      },
+      "linear-Down": {
+        "count": 7272,
+        "ms": 160.93100600000014
+      },
+      "linear-KV": {
+        "count": 7128,
+        "ms": 141.62319299999982
+      },
+      "attention-QK-PV": {
+        "count": 7128,
+        "ms": 116.95608699999956
+      },
+      "norm": {
+        "count": 9782,
+        "ms": 84.79762299999823
+      },
+      "linear-O": {
+        "count": 4824,
+        "ms": 54.57561300000056
+      },
+      "linear-QKV": {
+        "count": 2412,
+        "ms": 49.79917299999997
+      },
+      "linear-LMhead": {
+        "count": 67,
+        "ms": 37.32313700000001
+      },
+      "RoPE": {
+        "count": 3672,
+        "ms": 36.20500999999969
+      },
+      "softmax": {
+        "count": 5940,
+        "ms": 31.389833999999812
+      },
+      "residual": {
+        "count": 7344,
+        "ms": 28.696672999999457
+      },
+      "SiLU": {
+        "count": 1260,
+        "ms": 23.332841000000005
+      },
+      "greedy": {
+        "count": 102,
+        "ms": 3.630747000000002
+      },
+      "KV-gather": {
+        "count": 72,
+        "ms": 0.31103899999999995
+      }
+    },
+    "cuda_api": {
+      "cudaStreamSynchronize_v3020": {
+        "count": 204,
+        "ms": 1300.040253
+      },
+      "cudaLaunchKernel_v7000": {
+        "count": 40319,
+        "ms": 192.7514910000003
+      },
+      "cudaGraphLaunch_v10000": {
+        "count": 1291,
+        "ms": 91.86538300000005
+      },
+      "cuLaunchKernel": {
+        "count": 6660,
+        "ms": 33.97319699999996
+      },
+      "cuCtxGetCurrent": {
+        "count": 168136,
+        "ms": 10.70476299999772
+      },
+      "cudaMemcpyAsync_v3020": {
+        "count": 992,
+        "ms": 5.071261999999996
+      },
+      "cudaGetLastError_v3020": {
+        "count": 48257,
+        "ms": 4.115306000000071
+      },
+      "cudaStreamGetCaptureInfo_v2_v11030": {
+        "count": 16632,
+        "ms": 4.108748000000169
+      },
+      "cudaOccupancyMaxActiveBlocksPerMultiprocessor_v6050": {
+        "count": 7418,
+        "ms": 3.9647370000000066
+      },
+      "cudaEventRecord_v3020": {
+        "count": 2976,
+        "ms": 3.0724439999999973
+      },
+      "cuCtxPushCurrent_v2": {
+        "count": 34046,
+        "ms": 3.0442689999999843
+      },
+      "cuCtxPopCurrent_v2": {
+        "count": 34046,
+        "ms": 2.998726000000247
+      },
+      "cuKernelGetFunction": {
+        "count": 6660,
+        "ms": 2.506871999999999
+      },
+      "cudaDeviceGetAttribute_v5000": {
+        "count": 6660,
+        "ms": 1.7284390000000052
+      },
+      "cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags": {
+        "count": 6660,
+        "ms": 1.4776960000000021
+      },
+      "cudaGetDevice_v3020": {
+        "count": 6660,
+        "ms": 1.3902080000000008
+      },
+      "cudaEventElapsedTime_v3020": {
+        "count": 204,
+        "ms": 1.0698430000000003
+      },
+      "cudaEventSynchronize_v3020": {
+        "count": 102,
+        "ms": 0.9121830000000002
+      },
+      "cuFuncGetAttribute": {
+        "count": 2412,
+        "ms": 0.3907689999999996
+      },
+      "cudaMemsetAsync_v3020": {
+        "count": 792,
+        "ms": 0.13506399999999985
+      }
+    },
+    "copy_directions": {
+      "Host-to-Device": {
+        "count": 788,
+        "bytes": 406822002,
+        "ms": 39.489879
+      },
+      "Device-to-Host": {
+        "count": 204,
+        "bytes": 13504,
+        "ms": 0.582335
+      }
+    },
+    "scope": "Profiler diagnostic, not HTTP throughput measurement; kernel-duration sums overlap CPU API waits",
+    "archive_entry": "runs/profile-c16/c16-r0-owned-before/trace.sqlite.v15-analysis.json"
+  },
+  {
+    "concurrency": 16,
+    "mode": "after",
+    "kernel_sum_ms": 1651.867751,
+    "kernel_union_ms": 1650.131788,
+    "gpu_kernel_span_ms": 1832.924308,
+    "kernel_busy_fraction": 0.9002727394676464,
+    "categories": {
+      "other-unattributed": {
+        "count": 32618,
+        "ms": 565.9917449999755
+      },
+      "linear-GateUp": {
+        "count": 3636,
+        "ms": 314.86720600000064
+      },
+      "linear-Down": {
+        "count": 7272,
+        "ms": 160.89906799999952
+      },
+      "linear-KV": {
+        "count": 7200,
+        "ms": 141.28905700000018
+      },
+      "attention-QK-PV": {
+        "count": 7200,
+        "ms": 118.1017449999993
+      },
+      "norm": {
+        "count": 9636,
+        "ms": 81.73746899999743
+      },
+      "linear-O": {
+        "count": 5040,
+        "ms": 57.000044000000585
+      },
+      "linear-QKV": {
+        "count": 2520,
+        "ms": 52.00340799999986
+      },
+      "linear-LMhead": {
+        "count": 70,
+        "ms": 39.00185100000001
+      },
+      "RoPE": {
+        "count": 3672,
+        "ms": 34.923804999999945
+      },
+      "softmax": {
+        "count": 5940,
+        "ms": 31.375414999999702
+      },
+      "residual": {
+        "count": 7344,
+        "ms": 27.610472999999434
+      },
+      "SiLU": {
+        "count": 1152,
+        "ms": 23.28663199999996
+      },
+      "greedy": {
+        "count": 102,
+        "ms": 3.623961000000001
+      },
+      "KV-gather": {
+        "count": 36,
+        "ms": 0.155872
+      }
+    },
+    "cuda_api": {
+      "cudaStreamSynchronize_v3020": {
+        "count": 204,
+        "ms": 1280.6782969999997
+      },
+      "cudaLaunchKernel_v7000": {
+        "count": 38040,
+        "ms": 188.17968500000111
+      },
+      "cudaGraphLaunch_v10000": {
+        "count": 1186,
+        "ms": 91.16100799999997
+      },
+      "cuLaunchKernel": {
+        "count": 6444,
+        "ms": 35.016216999999976
+      },
+      "cuCtxGetCurrent": {
+        "count": 161502,
+        "ms": 10.17837899999861
+      },
+      "cudaMemcpyAsync_v3020": {
+        "count": 984,
+        "ms": 4.887805000000004
+      },
+      "cudaGetLastError_v3020": {
+        "count": 45178,
+        "ms": 3.9686199999998943
+      },
+      "cudaStreamGetCaptureInfo_v2_v11030": {
+        "count": 16416,
+        "ms": 3.952660000000012
+      },
+      "cudaOccupancyMaxActiveBlocksPerMultiprocessor_v6050": {
+        "count": 6948,
+        "ms": 3.6383139999999923
+      },
+      "cudaEventRecord_v3020": {
+        "count": 2940,
+        "ms": 3.294051999999998
+      },
+      "cuCtxPopCurrent_v2": {
+        "count": 31978,
+        "ms": 2.8135010000002065
+      },
+      "cuCtxPushCurrent_v2": {
+        "count": 31978,
+        "ms": 2.6961560000000167
+      },
+      "cuKernelGetFunction": {
+        "count": 6444,
+        "ms": 2.665005000000003
+      },
+      "cudaDeviceGetAttribute_v5000": {
+        "count": 6444,
+        "ms": 1.608493000000001
+      },
+      "cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags": {
+        "count": 6444,
+        "ms": 1.5395890000000012
+      },
+      "cudaGetDevice_v3020": {
+        "count": 6444,
+        "ms": 1.3766090000000062
+      },
+      "cudaEventElapsedTime_v3020": {
+        "count": 204,
+        "ms": 1.042414
+      },
+      "cudaEventSynchronize_v3020": {
+        "count": 102,
+        "ms": 0.905398
+      },
+      "cuFuncGetAttribute": {
+        "count": 2232,
+        "ms": 0.4527560000000003
+      },
+      "cudaMemsetAsync_v3020": {
+        "count": 720,
+        "ms": 0.13404300000000008
+      }
+    },
+    "copy_directions": {
+      "Host-to-Device": {
+        "count": 780,
+        "bytes": 406817678,
+        "ms": 41.05804
+      },
+      "Device-to-Host": {
+        "count": 204,
+        "bytes": 13504,
+        "ms": 0.577597
+      }
+    },
+    "scope": "Profiler diagnostic, not HTTP throughput measurement; kernel-duration sums overlap CPU API waits",
+    "archive_entry": "runs/profile-c16/c16-r0-owned-after/trace.sqlite.v15-analysis.json"
+  },
+  {
+    "concurrency": 32,
+    "mode": "before",
+    "kernel_sum_ms": 1327.62584,
+    "kernel_union_ms": 1326.463378,
+    "gpu_kernel_span_ms": 1478.583876,
+    "kernel_busy_fraction": 0.8971174375230371,
+    "categories": {
+      "other-unattributed": {
+        "count": 29851,
+        "ms": 544.9939559999962
+      },
+      "linear-GateUp": {
+        "count": 2304,
+        "ms": 196.25584499999988
+      },
+      "linear-KV": {
+        "count": 4464,
+        "ms": 122.38918400000087
+      },
+      "linear-Down": {
+        "count": 4608,
+        "ms": 104.2263110000015
+      },
+      "attention-QK-PV": {
+        "count": 4464,
+        "ms": 94.10136199999998
+      },
+      "norm": {
+        "count": 6935,
+        "ms": 69.24329899999934
+      },
+      "linear-LMhead": {
+        "count": 59,
+        "ms": 35.42617699999999
+      },
+      "SiLU": {
+        "count": 2520,
+        "ms": 29.656787999999725
+      },
+      "RoPE": {
+        "count": 2340,
+        "ms": 29.61599899999998
+      },
+      "softmax": {
+        "count": 4608,
+        "ms": 27.112830000000095
+      },
+      "linear-O": {
+        "count": 2304,
+        "ms": 26.277537000000265
+      },
+      "linear-QKV": {
+        "count": 1152,
+        "ms": 23.80705599999997
+      },
+      "residual": {
+        "count": 4680,
+        "ms": 21.864141999999795
+      },
+      "greedy": {
+        "count": 65,
+        "ms": 2.333306
+      },
+      "KV-gather": {
+        "count": 72,
+        "ms": 0.32204800000000006
+      }
+    },
+    "cuda_api": {
+      "cudaStreamSynchronize_v3020": {
+        "count": 130,
+        "ms": 889.9830540000006
+      },
+      "cudaLaunchKernel_v7000": {
+        "count": 38074,
+        "ms": 211.98589400000031
+      },
+      "cudaGraphLaunch_v10000": {
+        "count": 1184,
+        "ms": 71.41211700000004
+      },
+      "cuLaunchKernel": {
+        "count": 6660,
+        "ms": 38.84504799999997
+      },
+      "cuCtxGetCurrent": {
+        "count": 161461,
+        "ms": 12.195567999998772
+      },
+      "cudaStreamGetCaptureInfo_v2_v11030": {
+        "count": 17712,
+        "ms": 5.419185000000093
+      },
+      "cudaGetLastError_v3020": {
+        "count": 45356,
+        "ms": 4.822255000000177
+      },
+      "cudaMemcpyAsync_v3020": {
+        "count": 671,
+        "ms": 4.051031999999998
+      },
+      "cudaEventRecord_v3020": {
+        "count": 3082,
+        "ms": 3.7701950000000077
+      },
+      "cudaOccupancyMaxActiveBlocksPerMultiprocessor_v6050": {
+        "count": 5833,
+        "ms": 3.6856029999999995
+      },
+      "cuCtxPopCurrent_v2": {
+        "count": 31621,
+        "ms": 3.2613690000002036
+      },
+      "cuCtxPushCurrent_v2": {
+        "count": 31621,
+        "ms": 3.218612000000026
+      },
+      "cuKernelGetFunction": {
+        "count": 6660,
+        "ms": 2.948960999999984
+      },
+      "cudaDeviceGetAttribute_v5000": {
+        "count": 6660,
+        "ms": 2.0025490000000072
+      },
+      "cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags": {
+        "count": 6660,
+        "ms": 1.867484000000004
+      },
+      "cudaGetDevice_v3020": {
+        "count": 6660,
+        "ms": 1.8310600000000075
+      },
+      "cudaEventElapsedTime_v3020": {
+        "count": 130,
+        "ms": 0.7295170000000003
+      },
+      "cudaEventSynchronize_v3020": {
+        "count": 65,
+        "ms": 0.583567
+      },
+      "cuFuncGetAttribute": {
+        "count": 2412,
+        "ms": 0.5041380000000011
+      },
+      "cudaMemsetAsync_v3020": {
+        "count": 864,
+        "ms": 0.16564199999999957
+      }
+    },
+    "copy_directions": {
+      "Host-to-Device": {
+        "count": 541,
+        "bytes": 232237634,
+        "ms": 23.02198
+      },
+      "Device-to-Host": {
+        "count": 130,
+        "bytes": 12320,
+        "ms": 0.370175
+      }
+    },
+    "scope": "Profiler diagnostic, not HTTP throughput measurement; kernel-duration sums overlap CPU API waits",
+    "archive_entry": "runs/profile-c32/c32-r0-owned-before/trace.sqlite.v15-analysis.json"
+  },
+  {
+    "concurrency": 32,
+    "mode": "after",
+    "kernel_sum_ms": 1327.339033,
+    "kernel_union_ms": 1326.137245,
+    "gpu_kernel_span_ms": 1463.102633,
+    "kernel_busy_fraction": 0.9063870265073879,
+    "categories": {
+      "other-unattributed": {
+        "count": 29281,
+        "ms": 537.1904899999876
+      },
+      "linear-GateUp": {
+        "count": 2340,
+        "ms": 199.53411900000043
+      },
+      "linear-KV": {
+        "count": 4464,
+        "ms": 122.55605000000062
+      },
+      "linear-Down": {
+        "count": 4680,
+        "ms": 105.8080170000009
+      },
+      "attention-QK-PV": {
+        "count": 4464,
+        "ms": 94.5731079999999
+      },
+      "norm": {
+        "count": 6862,
+        "ms": 66.69343599999982
+      },
+      "linear-LMhead": {
+        "count": 59,
+        "ms": 35.42560099999999
+      },
+      "RoPE": {
+        "count": 2376,
+        "ms": 30.349570999999948
+      },
+      "SiLU": {
+        "count": 2484,
+        "ms": 29.43221999999978
+      },
+      "linear-O": {
+        "count": 2448,
+        "ms": 28.023582000000136
+      },
+      "softmax": {
+        "count": 4644,
+        "ms": 27.20437100000015
+      },
+      "linear-QKV": {
+        "count": 1224,
+        "ms": 25.309975999999974
+      },
+      "residual": {
+        "count": 4752,
+        "ms": 22.391775999999886
+      },
+      "greedy": {
+        "count": 66,
+        "ms": 2.3694360000000003
+      },
+      "KV-gather": {
+        "count": 108,
+        "ms": 0.47728
+      }
+    },
+    "cuda_api": {
+      "cudaStreamSynchronize_v3020": {
+        "count": 132,
+        "ms": 956.4173469999996
+      },
+      "cudaLaunchKernel_v7000": {
+        "count": 36706,
+        "ms": 181.75502899999785
+      },
+      "cudaGraphLaunch_v10000": {
+        "count": 1150,
+        "ms": 63.79153499999999
+      },
+      "cuLaunchKernel": {
+        "count": 6624,
+        "ms": 37.58569299999998
+      },
+      "cuCtxGetCurrent": {
+        "count": 155694,
+        "ms": 9.628076999998383
+      },
+      "cudaGetLastError_v3020": {
+        "count": 43626,
+        "ms": 3.97226500000002
+      },
+      "cudaMemcpyAsync_v3020": {
+        "count": 684,
+        "ms": 3.689494000000001
+      },
+      "cudaStreamGetCaptureInfo_v2_v11030": {
+        "count": 14904,
+        "ms": 3.646571000000075
+      },
+      "cuKernelGetFunction": {
+        "count": 6624,
+        "ms": 2.8024120000000026
+      },
+      "cudaOccupancyMaxActiveBlocksPerMultiprocessor_v6050": {
+        "count": 5616,
+        "ms": 2.7739450000000057
+      },
+      "cudaEventRecord_v3020": {
+        "count": 2616,
+        "ms": 2.770601000000008
+      },
+      "cuCtxPopCurrent_v2": {
+        "count": 30560,
+        "ms": 2.7213300000001914
+      },
+      "cuCtxPushCurrent_v2": {
+        "count": 30560,
+        "ms": 2.5290880000000313
+      },
+      "cudaDeviceGetAttribute_v5000": {
+        "count": 6624,
+        "ms": 1.6988760000000085
+      },
+      "cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags": {
+        "count": 6624,
+        "ms": 1.6761760000000079
+      },
+      "cudaGetDevice_v3020": {
+        "count": 6624,
+        "ms": 1.3930169999999977
+      },
+      "cudaEventElapsedTime_v3020": {
+        "count": 132,
+        "ms": 0.7023139999999997
+      },
+      "cudaEventSynchronize_v3020": {
+        "count": 66,
+        "ms": 0.5739759999999999
+      },
+      "cuFuncGetAttribute": {
+        "count": 2376,
+        "ms": 0.39277400000000096
+      },
+      "cudaMemsetAsync_v3020": {
+        "count": 864,
+        "ms": 0.1535000000000003
+      }
+    },
+    "copy_directions": {
+      "Host-to-Device": {
+        "count": 552,
+        "bytes": 236960510,
+        "ms": 23.35495
+      },
+      "Device-to-Host": {
+        "count": 132,
+        "bytes": 12352,
+        "ms": 0.374174
+      }
+    },
+    "scope": "Profiler diagnostic, not HTTP throughput measurement; kernel-duration sums overlap CPU API waits",
+    "archive_entry": "runs/profile-c32/c32-r0-owned-after/trace.sqlite.v15-analysis.json"
+  }
+]

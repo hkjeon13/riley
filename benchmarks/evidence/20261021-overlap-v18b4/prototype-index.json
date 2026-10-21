@@ -1,0 +1,59 @@
+[
+  {
+    "root": "/mnt/efs/nlp/psyche/riley-overlap-v18b-20261021",
+    "qualified_source_count": 937,
+    "changed_sources": [
+      "crates/riley-cuda/src/ffi.rs",
+      "crates/riley-cuda/src/lib.rs",
+      "crates/riley-runtime/src/host_trace.rs",
+      "crates/riley-runtime/src/llama/batch_executor.rs",
+      "crates/riley-runtime/src/llama/executor/dispatch.rs",
+      "crates/riley-scheduler/src/execution.rs",
+      "crates/riley-scheduler/src/lib.rs",
+      "crates/riley-server/src/engine.rs",
+      "kernels/include/riley_cuda.h",
+      "kernels/src/version.cu"
+    ],
+    "GPU_arms": 0,
+    "scope": "CPU-only prototypes superseded before any GPU serving/numerical experiment; no measured arm excluded"
+  },
+  {
+    "root": "/mnt/efs/nlp/psyche/riley-overlap-v18b2-20261021",
+    "qualified_source_count": 937,
+    "changed_sources": [
+      "crates/riley-cuda/src/ffi.rs",
+      "crates/riley-cuda/src/lib.rs",
+      "crates/riley-runtime/src/host_trace.rs",
+      "crates/riley-runtime/src/llama/batch_executor.rs",
+      "crates/riley-runtime/src/llama/executor/dispatch.rs",
+      "crates/riley-scheduler/src/execution.rs",
+      "crates/riley-scheduler/src/lib.rs",
+      "crates/riley-server/src/engine.rs",
+      "kernels/include/riley_cuda.h",
+      "kernels/src/version.cu"
+    ],
+    "GPU_arms": 0,
+    "scope": "CPU-only prototypes superseded before any GPU serving/numerical experiment; no measured arm excluded"
+  },
+  {
+    "root": "/mnt/efs/nlp/psyche/riley-overlap-v18b3-20261021",
+    "qualified_source_count": 937,
+    "changed_sources": [
+      "crates/riley-cuda/src/ffi.rs",
+      "crates/riley-cuda/src/lib.rs",
+      "crates/riley-runtime/src/host_trace.rs",
+      "crates/riley-runtime/src/llama/batch_executor.rs",
+      "crates/riley-runtime/src/llama/executor/dispatch.rs",
+      "crates/riley-scheduler/src/execution.rs",
+      "crates/riley-scheduler/src/lib.rs",
+      "crates/riley-server/src/engine.rs",
+      "kernels/include/riley_cuda.h",
+      "kernels/src/version.cu"
+    ],
+    "numerical_BF16_files": 7552,
+    "functional_arms": 2,
+    "functional_SSE_values": 224,
+    "normal_comparison_arms": 0,
+    "scope": "Numerically and functionally qualified B3 prototype; superseded before normal comparison by pending-GPU error and queued-admission guards. All preflight receipts retained; no measured normal arm excluded."
+  }
+]

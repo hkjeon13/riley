@@ -1,0 +1,29 @@
+{
+  "time_ns": 1792601427950241810,
+  "baseline_commit": "57502e7a0fafd165966071e88b3e8a56cdea0e3d",
+  "baseline_binary": "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/riley-prefill-host-v15c",
+  "baseline_sha256": "233c3a6a81bad76d65577bacd5837d59e2ebe1dd52a8fde73f3cd07a38cf937a",
+  "binary": "/mnt/efs/nlp/psyche/riley-overlap-v18b4-20261021/riley-overlap-v18b4",
+  "binary_sha256": "2f2751b896df84449b1500cfc291e1211e226c246c4e464113470bcf0eb1b277",
+  "qualified_source_count": 937,
+  "changed_sources": [
+    "crates/riley-cuda/src/ffi.rs",
+    "crates/riley-cuda/src/lib.rs",
+    "crates/riley-runtime/src/host_trace.rs",
+    "crates/riley-runtime/src/llama/batch_executor.rs",
+    "crates/riley-runtime/src/llama/executor/dispatch.rs",
+    "crates/riley-scheduler/src/execution.rs",
+    "crates/riley-scheduler/src/lib.rs",
+    "crates/riley-server/src/engine.rs",
+    "kernels/include/riley_cuda.h",
+    "kernels/src/version.cu"
+  ],
+  "new_sources": [],
+  "source_manifest_sha256": "8679ee07a6b3e647203a3680d818bd9b36d922a5ea5d34c4bb4dc9b05c51fa0e",
+  "normal_inputs_sha256": {
+    "/mnt/efs/nlp/psyche/riley-overlap-v18b4-20261021/riley-overlap-v18b4": "2f2751b896df84449b1500cfc291e1211e226c246c4e464113470bcf0eb1b277",
+    "/mnt/efs/nlp/psyche/riley-overlap-v18b4-20261021/measure-matched.py": "fbdfeee188a5eb2ddf8d08fd57a3aedc87e88fc8033bca75d4b4bef594bfb744",
+    "/mnt/efs/nlp/psyche/riley-overlap-v18b4-20261021/final-c16.argv.json": "e1056262a71847f9193a197931d6d1ae3ef20123559b22b25b6d9982b85123e0",
+    "/mnt/efs/nlp/psyche/riley-overlap-v18b4-20261021/final-c32.argv.json": "1a0cd0430ca339d9dc625f2983efcc96d420a3616193f4f7450bb1b69191b0a8"
+  }
+}

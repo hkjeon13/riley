@@ -1,0 +1,2994 @@
+[
+  {
+    "concurrency": 16,
+    "mode": "before",
+    "archive_entry": "runs/profile-c16/c16-r0-owned-before/trace.sqlite.v15-analysis.json",
+    "trace": "/mnt/efs/nlp/psyche/riley-overlap-v18b4-inspected-20261021/runs/profile-c16/c16-r0-owned-before/trace.sqlite",
+    "scope": "Profiler diagnostic, not HTTP throughput measurement; kernel-duration sums overlap CPU API waits",
+    "kernel_count": 94160,
+    "kernel_sum_ms": 1670.620441,
+    "kernel_union_ms": 1668.943901,
+    "gpu_kernel_span_ms": 2029.003471,
+    "kernel_busy_fraction": 0.8225436401927181,
+    "nvtx_matmul_range_count": 17279,
+    "attributed_matmul_kernel_count": 23363,
+    "categories": {
+      "linear-GateUp": {
+        "count": 6012,
+        "ms": 490.55102799999975
+      },
+      "linear-Down": {
+        "count": 9648,
+        "ms": 256.45538600000407
+      },
+      "linear-KV": {
+        "count": 12960,
+        "ms": 189.3771569999995
+      },
+      "attention-QK-PV": {
+        "count": 11880,
+        "ms": 160.37037599999928
+      },
+      "linear-O": {
+        "count": 10116,
+        "ms": 138.58443099999738
+      },
+      "norm": {
+        "count": 9782,
+        "ms": 84.86437699999824
+      },
+      "linear-Q": {
+        "count": 2700,
+        "ms": 74.34403800000001
+      },
+      "linear-LMhead": {
+        "count": 102,
+        "ms": 57.10177900000003
+      },
+      "linear-QKV": {
+        "count": 2412,
+        "ms": 49.912489000000065
+      },
+      "other-unattributed": {
+        "count": 10158,
+        "ms": 45.44404199999895
+      },
+      "RoPE": {
+        "count": 3672,
+        "ms": 36.052115000000015
+      },
+      "softmax": {
+        "count": 5940,
+        "ms": 31.731490000000345
+      },
+      "residual": {
+        "count": 7344,
+        "ms": 28.622385999999576
+      },
+      "SiLU": {
+        "count": 1260,
+        "ms": 23.278833999999957
+      },
+      "greedy": {
+        "count": 102,
+        "ms": 3.6238579999999994
+      },
+      "KV-gather": {
+        "count": 72,
+        "ms": 0.30665500000000007
+      }
+    },
+    "cuda_api": {
+      "cudaStreamSynchronize_v3020": {
+        "count": 204,
+        "ms": 1229.9886459999989
+      },
+      "cudaLaunchKernel_v7000": {
+        "count": 40211,
+        "ms": 197.88129199999827
+      },
+      "cudaGraphLaunch_v10000": {
+        "count": 1291,
+        "ms": 91.66996999999974
+      },
+      "cuLaunchKernel": {
+        "count": 6588,
+        "ms": 33.39430999999999
+      },
+      "cuCtxGetCurrent": {
+        "count": 168358,
+        "ms": 10.360799999997791
+      },
+      "cudaStreamGetCaptureInfo_v2_v11030": {
+        "count": 28655,
+        "ms": 8.953410000000067
+      },
+      "cudaMemcpyAsync_v3020": {
+        "count": 998,
+        "ms": 5.029989
+      },
+      "cudaOccupancyMaxActiveBlocksPerMultiprocessor_v6050": {
+        "count": 7417,
+        "ms": 4.597555999999996
+      },
+      "cudaGetLastError_v3020": {
+        "count": 48149,
+        "ms": 4.320789999999871
+      },
+      "cudaEventRecord_v3020": {
+        "count": 2868,
+        "ms": 3.2002470000000023
+      },
+      "cuCtxPopCurrent_v2": {
+        "count": 33980,
+        "ms": 2.907672000000252
+      },
+      "cuKernelGetFunction": {
+        "count": 6588,
+        "ms": 2.8195719999999946
+      },
+      "cuCtxPushCurrent_v2": {
+        "count": 33980,
+        "ms": 2.7852579999999314
+      },
+      "cudaDeviceGetAttribute_v5000": {
+        "count": 6588,
+        "ms": 1.7283680000000081
+      },
+      "cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags": {
+        "count": 6588,
+        "ms": 1.670907000000005
+      },
+      "cudaGetDevice_v3020": {
+        "count": 6588,
+        "ms": 1.4902510000000053
+      },
+      "cudaEventElapsedTime_v3020": {
+        "count": 204,
+        "ms": 1.0577900000000005
+      },
+      "cudaEventSynchronize_v3020": {
+        "count": 102,
+        "ms": 0.9186959999999998
+      },
+      "cuFuncGetAttribute": {
+        "count": 2340,
+        "ms": 0.46158100000000013
+      },
+      "cudaMemsetAsync_v3020": {
+        "count": 720,
+        "ms": 0.13734300000000002
+      }
+    },
+    "copy_directions": {
+      "Host-to-Device": {
+        "count": 794,
+        "bytes": 406822434,
+        "ms": 40.899533
+      },
+      "Device-to-Host": {
+        "count": 204,
+        "bytes": 13504,
+        "ms": 0.575936
+      }
+    },
+    "copy_count": 998,
+    "copy_bytes": 406835938,
+    "copy_sum_ms": 41.475469,
+    "top_kernels": {
+      "void sm80_fused_gateup<(int)4, (int)16, (int)16, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, int)": {
+        "count": 3564,
+        "ms": 308.9381169999999
+      },
+      "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn": {
+        "count": 8064,
+        "ms": 241.94419099999953
+      },
+      "ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn": {
+        "count": 1332,
+        "ms": 102.465302
+      },
+      "void owned_sm80_tiled_kv<(int)4, (int)8>(const unsigned short *, const unsigned short *, unsigned short *, int)": {
+        "count": 4536,
+        "ms": 95.04775499999954
+      },
+      "void cutlass::Kernel2<cutlass_80_tensorop_s16816gemm_bf16_64x64_64x6_tn_align8>(T1::Params)": {
+        "count": 3636,
+        "ms": 79.41082900000022
+      },
+      "ampere_bf16_s16816gemm_bf16_128x128_ldg8_f2f_stages_64x3_tn": {
+        "count": 1980,
+        "ms": 78.63574800000012
+      },
+      "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x5_tn_align8>(T1::Params)": {
+        "count": 720,
+        "ms": 74.11739699999991
+      },
+      "<unnamed>::sm80_batched_pv_dispatch(const __nv_bfloat16 *, const unsigned int *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned long, unsigned long, unsigned long, const unsigned int *, const unsigned int *, const unsigned int *)": {
+        "count": 3564,
+        "ms": 63.30987800000001
+      },
+      "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn": {
+        "count": 174,
+        "ms": 62.82831800000002
+      },
+      "<unnamed>::sm80_batched_qk_dispatch(const __nv_bfloat16 *, const __nv_bfloat16 *, const unsigned int *, __nv_bfloat16 *, unsigned long, unsigned long, unsigned long, const unsigned int *, const unsigned int *, const unsigned int *)": {
+        "count": 3564,
+        "ms": 53.05051800000003
+      },
+      "hugging_face_qwen_prefill_warp_rms_norm_kernel(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, int, int, float)": {
+        "count": 2409,
+        "ms": 49.59828000000014
+      },
+      "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn": {
+        "count": 2880,
+        "ms": 49.25034299999974
+      },
+      "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_32x6_tn": {
+        "count": 1440,
+        "ms": 37.700049000000035
+      },
+      "void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, (bool)1, (bool)0, (bool)0>(cublasLt::cublasSplitKParams<T6>, const T4 *, const T5 *, T5 *, const T6 *, const T6 *, const T7 *, const T4 *, T7 *, void *, long, T6 *, int *)": {
+        "count": 8496,
+        "ms": 37.27519700000076
+      },
+      "void <unnamed>::qkv_split_head_norm_rope_kv_write_kernel<(bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, const float *, const unsigned int *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, <unnamed>::DeviceBatch, unsigned int, unsigned int, unsigned long, unsigned long, float, const unsigned int *)": {
+        "count": 3672,
+        "ms": 36.052115000000015
+      }
+    },
+    "matmul_geometries": {
+      "W0/GemmEx/N9728/M130/K2560/B1": {
+        "count": 216,
+        "ms": 17.818205999999996
+      },
+      "W0/GemmEx/N9728/M128/K2560/B1": {
+        "count": 288,
+        "ms": 14.857385999999995
+      },
+      "W0/GemmEx/N9728/M125/K2560/B1": {
+        "count": 288,
+        "ms": 14.809515000000014
+      },
+      "W0/LtMatmul/N9728/M386/K2560/B1": {
+        "count": 144,
+        "ms": 14.706346999999994
+      },
+      "W0/GemmEx/N2560/M130/K4096/B1": {
+        "count": 396,
+        "ms": 12.377908999999994
+      },
+      "W0/GemmEx/N1024/M130/K2560/B1": {
+        "count": 792,
+        "ms": 10.799286000000013
+      },
+      "W0/GemmEx/N9728/M254/K2560/B1": {
+        "count": 144,
+        "ms": 9.883158000000009
+      },
+      "W0/GemmEx/N9728/M241/K2560/B1": {
+        "count": 144,
+        "ms": 9.880191000000005
+      },
+      "W0/LtMatmul/N2560/M386/K9728/B1": {
+        "count": 144,
+        "ms": 8.636898000000002
+      },
+      "W0/LtMatmul/N2560/M12/K4096/B1": {
+        "count": 576,
+        "ms": 8.250180000000038
+      },
+      "W0/GemmEx/N2560/M128/K9728/B1": {
+        "count": 288,
+        "ms": 8.248740000000005
+      },
+      "W0/GemmEx/N2560/M125/K9728/B1": {
+        "count": 288,
+        "ms": 8.223267000000014
+      },
+      "W0/LtMatmul/N9728/M512/K2560/B1": {
+        "count": 72,
+        "ms": 7.499365000000002
+      },
+      "W0/LtMatmul/N9728/M499/K2560/B1": {
+        "count": 72,
+        "ms": 7.4585009999999965
+      },
+      "W0/LtMatmul/N9728/M495/K2560/B1": {
+        "count": 72,
+        "ms": 7.450915
+      },
+      "W0/LtMatmul/N9728/M502/K2560/B1": {
+        "count": 72,
+        "ms": 7.450534999999999
+      },
+      "W0/LtMatmul/N9728/M371/K2560/B1": {
+        "count": 72,
+        "ms": 7.4329659999999995
+      },
+      "W0/LtMatmul/N9728/M374/K2560/B1": {
+        "count": 72,
+        "ms": 7.431973
+      },
+      "W0/LtMatmul/N9728/M384/K2560/B1": {
+        "count": 72,
+        "ms": 7.431397000000001
+      },
+      "W0/GemmEx/N9728/M120/K2560/B1": {
+        "count": 144,
+        "ms": 7.375046000000002
+      },
+      "W0/GemmEx/N4096/M12/K2560/B1": {
+        "count": 288,
+        "ms": 7.363907999999998
+      },
+      "W0/LtMatmul/N9728/M258/K2560/B1": {
+        "count": 72,
+        "ms": 7.255398
+      },
+      "W0/LtMatmul/N2560/M13/K4096/B1": {
+        "count": 504,
+        "ms": 7.159722000000033
+      },
+      "W0/GemmEx/N2560/M130/K9728/B1": {
+        "count": 216,
+        "ms": 6.96755999999999
+      },
+      "W0/GemmEx/N4096/M128/K2560/B1": {
+        "count": 324,
+        "ms": 6.9267880000000055
+      },
+      "W0/LtMatmul/N2560/M15/K4096/B1": {
+        "count": 504,
+        "ms": 6.885288000000035
+      },
+      "W0/GemmEx/N151936/M15/K2560/B1": {
+        "count": 12,
+        "ms": 6.825895000000001
+      },
+      "W0/GemmEx/N4096/M13/K2560/B1": {
+        "count": 252,
+        "ms": 6.302282
+      },
+      "W0/GemmEx/N1024/M128/K2560/B1": {
+        "count": 1008,
+        "ms": 6.245259000000008
+      },
+      "W0/LtMatmul/N2560/M14/K4096/B1": {
+        "count": 432,
+        "ms": 5.989000000000031
+      },
+      "W0/BatchedEx/N128/M128/K128/B32/lda128/ldb128/ldc4096": {
+        "count": 756,
+        "ms": 5.833263999999947
+      },
+      "W0/GemmEx/N4096/M15/K2560/B1": {
+        "count": 252,
+        "ms": 5.809386999999995
+      },
+      "W0/LtMatmul/N1024/M256/K2560/B1": {
+        "count": 576,
+        "ms": 5.73255799999997
+      },
+      "W0/GemmEx/N151936/M16/K2560/B1": {
+        "count": 10,
+        "ms": 5.678699
+      },
+      "W0/GemmEx/N2560/M128/K4096/B1": {
+        "count": 504,
+        "ms": 5.573100999999987
+      },
+      "W0/GemmEx/N4096/M125/K2560/B1": {
+        "count": 252,
+        "ms": 5.389708000000002
+      },
+      "W0/BatchedEx/N128/M128/K128/B32/lda128/ldb4096/ldc128": {
+        "count": 756,
+        "ms": 5.343076999999979
+      },
+      "W0/LtMatmul/N2560/M256/K4096/B1": {
+        "count": 288,
+        "ms": 5.289648999999999
+      },
+      "W0/BatchedEx/N130/M130/K128/B32/lda128/ldb4096/ldc130": {
+        "count": 396,
+        "ms": 5.260043999999988
+      },
+      "W0/GemmEx/N4096/M14/K2560/B1": {
+        "count": 216,
+        "ms": 5.148231999999998
+      },
+      "W0/LtMatmul/N2560/M254/K9728/B1": {
+        "count": 144,
+        "ms": 5.0526959999999965
+      },
+      "W0/LtMatmul/N2560/M241/K9728/B1": {
+        "count": 144,
+        "ms": 5.008779000000002
+      },
+      "W0/GemmEx/N9728/M250/K2560/B1": {
+        "count": 72,
+        "ms": 4.943915999999999
+      },
+      "W0/GemmEx/N9728/M253/K2560/B1": {
+        "count": 72,
+        "ms": 4.942476000000003
+      },
+      "W0/GemmEx/N9728/M256/K2560/B1": {
+        "count": 72,
+        "ms": 4.9420670000000015
+      },
+      "W0/GemmEx/N9728/M245/K2560/B1": {
+        "count": 72,
+        "ms": 4.939858000000001
+      },
+      "W0/BatchedEx/N128/M130/K130/B32/lda128/ldb130/ldc4096": {
+        "count": 396,
+        "ms": 4.829902999999991
+      },
+      "W0/LtMatmul/N2560/M512/K9728/B1": {
+        "count": 72,
+        "ms": 4.502928
+      },
+      "W0/LtMatmul/N2560/M499/K9728/B1": {
+        "count": 72,
+        "ms": 4.474608
+      },
+      "W0/LtMatmul/N2560/M502/K9728/B1": {
+        "count": 72,
+        "ms": 4.472553999999998
+      },
+      "W0/LtMatmul/N2560/M495/K9728/B1": {
+        "count": 72,
+        "ms": 4.446831000000001
+      },
+      "W0/LtMatmul/N2560/M384/K9728/B1": {
+        "count": 72,
+        "ms": 4.347503999999998
+      },
+      "W0/LtMatmul/N2560/M374/K9728/B1": {
+        "count": 72,
+        "ms": 4.332015999999998
+      },
+      "W0/LtMatmul/N2560/M371/K9728/B1": {
+        "count": 72,
+        "ms": 4.329679
+      },
+      "W0/BatchedEx/N125/M125/K128/B32/lda128/ldb4096/ldc125": {
+        "count": 360,
+        "ms": 4.314034999999997
+      },
+      "W0/LtMatmul/N1024/M241/K2560/B1": {
+        "count": 432,
+        "ms": 4.258993999999999
+      },
+      "W0/LtMatmul/N4096/M386/K2560/B1": {
+        "count": 72,
+        "ms": 4.2016160000000005
+      },
+      "W0/LtMatmul/N2560/M258/K9728/B1": {
+        "count": 72,
+        "ms": 4.17173
+      },
+      "W0/GemmEx/N2560/M120/K9728/B1": {
+        "count": 144,
+        "ms": 4.094707000000004
+      },
+      "W0/LtMatmul/N2560/M241/K4096/B1": {
+        "count": 216,
+        "ms": 3.914769000000003
+      },
+      "W0/GemmEx/N4096/M126/K2560/B1": {
+        "count": 180,
+        "ms": 3.8592470000000008
+      },
+      "W0/GemmEx/N9728/M126/K2560/B1": {
+        "count": 72,
+        "ms": 3.700721000000001
+      },
+      "W0/GemmEx/N9728/M115/K2560/B1": {
+        "count": 72,
+        "ms": 3.676435000000001
+      },
+      "W0/BatchedEx/N128/M126/K126/B32/lda128/ldb126/ldc4096": {
+        "count": 396,
+        "ms": 3.6230899999999866
+      },
+      "W0/GemmEx/N1024/M125/K2560/B1": {
+        "count": 576,
+        "ms": 3.564499000000018
+      },
+      "W0/BatchedEx/N128/M125/K125/B32/lda128/ldb125/ldc4096": {
+        "count": 360,
+        "ms": 3.5484340000000034
+      },
+      "W0/GemmEx/N4096/M130/K2560/B1": {
+        "count": 144,
+        "ms": 3.428757
+      },
+      "W0/GemmEx/N151936/M14/K2560/B1": {
+        "count": 6,
+        "ms": 3.4066439999999996
+      },
+      "W0/BatchedEx/N126/M126/K128/B32/lda128/ldb4096/ldc126": {
+        "count": 396,
+        "ms": 3.165041
+      },
+      "W0/GemmEx/N2560/M125/K4096/B1": {
+        "count": 288,
+        "ms": 3.1142899999999964
+      },
+      "W0/GemmEx/N4096/M115/K2560/B1": {
+        "count": 144,
+        "ms": 3.0768540000000018
+      },
+      "W0/LtMatmul/N1024/M254/K2560/B1": {
+        "count": 288,
+        "ms": 2.8603480000000086
+      },
+      "W0/LtMatmul/N1024/M250/K2560/B1": {
+        "count": 288,
+        "ms": 2.8487600000000044
+      },
+      "W0/GemmEx/N2560/M126/K4096/B1": {
+        "count": 216,
+        "ms": 2.8262310000000013
+      },
+      "W0/GemmEx/N1024/M126/K2560/B1": {
+        "count": 432,
+        "ms": 2.801045000000005
+      },
+      "W0/GemmEx/N1024/M115/K2560/B1": {
+        "count": 432,
+        "ms": 2.6813320000000043
+      },
+      "W0/LtMatmul/N2560/M250/K4096/B1": {
+        "count": 144,
+        "ms": 2.6403069999999986
+      },
+      "W0/LtMatmul/N2560/M254/K4096/B1": {
+        "count": 144,
+        "ms": 2.6365319999999994
+      },
+      "W0/BatchedEx/N115/M115/K128/B32/lda128/ldb4096/ldc115": {
+        "count": 216,
+        "ms": 2.594296999999998
+      },
+      "W0/LtMatmul/N2560/M256/K9728/B1": {
+        "count": 72,
+        "ms": 2.5319260000000003
+      },
+      "W0/LtMatmul/N2560/M253/K9728/B1": {
+        "count": 72,
+        "ms": 2.525593
+      },
+      "W0/LtMatmul/N2560/M250/K9728/B1": {
+        "count": 72,
+        "ms": 2.523000000000002
+      },
+      "W0/LtMatmul/N2560/M245/K9728/B1": {
+        "count": 72,
+        "ms": 2.5099750000000003
+      },
+      "W0/LtMatmul/N2560/M502/K4096/B1": {
+        "count": 72,
+        "ms": 2.427765999999999
+      },
+      "W0/LtMatmul/N4096/M512/K2560/B1": {
+        "count": 36,
+        "ms": 2.3998619999999997
+      },
+      "W0/LtMatmul/N4096/M502/K2560/B1": {
+        "count": 36,
+        "ms": 2.350773
+      },
+      "W0/LtMatmul/N4096/M499/K2560/B1": {
+        "count": 36,
+        "ms": 2.3465190000000002
+      },
+      "W0/LtMatmul/N4096/M495/K2560/B1": {
+        "count": 36,
+        "ms": 2.3442800000000004
+      },
+      "W0/GemmEx/N2560/M115/K4096/B1": {
+        "count": 216,
+        "ms": 2.3214949999999974
+      },
+      "W0/BatchedEx/N128/M115/K115/B32/lda128/ldb115/ldc4096": {
+        "count": 216,
+        "ms": 2.115927000000001
+      },
+      "W0/LtMatmul/N2560/M11/K4096/B1": {
+        "count": 144,
+        "ms": 2.1024889999999985
+      },
+      "W0/GemmEx/N2560/M126/K9728/B1": {
+        "count": 72,
+        "ms": 2.0625839999999998
+      },
+      "W0/GemmEx/N2560/M115/K9728/B1": {
+        "count": 72,
+        "ms": 2.039704
+      },
+      "W0/LtMatmul/N1024/M502/K2560/B1": {
+        "count": 144,
+        "ms": 1.949525000000001
+      },
+      "W0/GemmEx/N4096/M11/K2560/B1": {
+        "count": 72,
+        "ms": 1.8932410000000002
+      },
+      "W0/LtMatmul/N2560/M374/K4096/B1": {
+        "count": 72,
+        "ms": 1.8739140000000003
+      },
+      "W0/LtMatmul/N2560/M371/K4096/B1": {
+        "count": 72,
+        "ms": 1.8711300000000004
+      },
+      "W0/GemmEx/N1024/M120/K2560/B1": {
+        "count": 288,
+        "ms": 1.7773069999999993
+      },
+      "W0/LtMatmul/N4096/M384/K2560/B1": {
+        "count": 36,
+        "ms": 1.667034
+      },
+      "W0/LtMatmul/N4096/M374/K2560/B1": {
+        "count": 36,
+        "ms": 1.654394
+      },
+      "W0/LtMatmul/N4096/M371/K2560/B1": {
+        "count": 36,
+        "ms": 1.6502649999999994
+      },
+      "W0/GemmEx/N2560/M1/K4096/B1": {
+        "count": 144,
+        "ms": 1.6136270000000006
+      },
+      "W0/GemmEx/N2560/M120/K4096/B1": {
+        "count": 144,
+        "ms": 1.5819140000000003
+      },
+      "W0/LtMatmul/N4096/M258/K2560/B1": {
+        "count": 36,
+        "ms": 1.5704280000000002
+      },
+      "W0/GemmEx/N4096/M120/K2560/B1": {
+        "count": 72,
+        "ms": 1.5351939999999995
+      },
+      "W0/LtMatmul/N1024/M371/K2560/B1": {
+        "count": 144,
+        "ms": 1.5223939999999991
+      },
+      "W0/LtMatmul/N1024/M374/K2560/B1": {
+        "count": 144,
+        "ms": 1.5214019999999995
+      },
+      "W0/GemmEx/N4096/M1/K2560/B1": {
+        "count": 72,
+        "ms": 1.5047619999999993
+      },
+      "W0/LtMatmul/N1024/M253/K2560/B1": {
+        "count": 144,
+        "ms": 1.4311280000000002
+      },
+      "W0/BatchedEx/N128/M120/K120/B32/lda128/ldb120/ldc4096": {
+        "count": 180,
+        "ms": 1.3807320000000005
+      },
+      "W0/LtMatmul/N2560/M253/K4096/B1": {
+        "count": 72,
+        "ms": 1.31641
+      },
+      "W0/BatchedEx/N120/M120/K128/B32/lda128/ldb4096/ldc120": {
+        "count": 180,
+        "ms": 1.2656269999999992
+      },
+      "W0/GemmEx/N1024/M1/K2560/B1": {
+        "count": 144,
+        "ms": 1.2529890000000006
+      },
+      "W0/GemmEx/N151936/M13/K2560/B1": {
+        "count": 2,
+        "ms": 1.127292
+      },
+      "W0/LtMatmul/N2560/M4/K4096/B1": {
+        "count": 72,
+        "ms": 1.0803819999999997
+      },
+      "W0/GemmEx/N151936/M1/K2560/B1": {
+        "count": 2,
+        "ms": 1.079997
+      },
+      "W0/LtMatmul/N2560/M8/K4096/B1": {
+        "count": 72,
+        "ms": 1.0732740000000003
+      },
+      "W0/GemmEx/N4096/M8/K2560/B1": {
+        "count": 36,
+        "ms": 0.960896
+      },
+      "W0/GemmEx/N4096/M4/K2560/B1": {
+        "count": 36,
+        "ms": 0.9596109999999999
+      },
+      "W0/GemmEx/N151936/M12/K2560/B1": {
+        "count": 1,
+        "ms": 0.569662
+      },
+      "W0/GemmEx/N151936/M8/K2560/B1": {
+        "count": 1,
+        "ms": 0.565758
+      },
+      "W0/GemmEx/N151936/M4/K2560/B1": {
+        "count": 1,
+        "ms": 0.559166
+      },
+      "W0/StridedBatchedEx/N128/M1/K158/B32": {
+        "count": 36,
+        "ms": 0.20374199999999998
+      },
+      "W0/StridedBatchedEx/N128/M1/K159/B32": {
+        "count": 36,
+        "ms": 0.20345599999999997
+      },
+      "W0/StridedBatchedEx/N158/M1/K128/B32": {
+        "count": 36,
+        "ms": 0.19283199999999998
+      },
+      "W0/StridedBatchedEx/N159/M1/K128/B32": {
+        "count": 36,
+        "ms": 0.13647900000000004
+      }
+    }
+  },
+  {
+    "concurrency": 16,
+    "mode": "after",
+    "archive_entry": "runs/profile-c16/c16-r0-owned-after/trace.sqlite.v15-analysis.json",
+    "trace": "/mnt/efs/nlp/psyche/riley-overlap-v18b4-inspected-20261021/runs/profile-c16/c16-r0-owned-after/trace.sqlite",
+    "scope": "Profiler diagnostic, not HTTP throughput measurement; kernel-duration sums overlap CPU API waits",
+    "kernel_count": 93691,
+    "kernel_sum_ms": 1672.80403,
+    "kernel_union_ms": 1671.109541,
+    "gpu_kernel_span_ms": 2095.453908,
+    "kernel_busy_fraction": 0.7974928652069402,
+    "nvtx_matmul_range_count": 16990,
+    "attributed_matmul_kernel_count": 22894,
+    "categories": {
+      "linear-GateUp": {
+        "count": 5940,
+        "ms": 490.7667020000004
+      },
+      "linear-Down": {
+        "count": 9576,
+        "ms": 258.41858800000324
+      },
+      "linear-KV": {
+        "count": 12816,
+        "ms": 189.5249800000021
+      },
+      "attention-QK-PV": {
+        "count": 11880,
+        "ms": 159.4655670000002
+      },
+      "linear-O": {
+        "count": 10044,
+        "ms": 138.3927849999977
+      },
+      "norm": {
+        "count": 9709,
+        "ms": 83.4467199999981
+      },
+      "linear-Q": {
+        "count": 2664,
+        "ms": 74.20740499999957
+      },
+      "linear-LMhead": {
+        "count": 102,
+        "ms": 57.127603000000015
+      },
+      "linear-QKV": {
+        "count": 2448,
+        "ms": 50.701863999999844
+      },
+      "other-unattributed": {
+        "count": 10158,
+        "ms": 46.08611699999874
+      },
+      "RoPE": {
+        "count": 3672,
+        "ms": 36.71796699999983
+      },
+      "softmax": {
+        "count": 5940,
+        "ms": 31.738841000000505
+      },
+      "residual": {
+        "count": 7344,
+        "ms": 29.077191999999418
+      },
+      "SiLU": {
+        "count": 1224,
+        "ms": 23.192186000000028
+      },
+      "greedy": {
+        "count": 102,
+        "ms": 3.6266179999999997
+      },
+      "KV-gather": {
+        "count": 72,
+        "ms": 0.31289500000000015
+      }
+    },
+    "cuda_api": {
+      "cudaStreamSynchronize_v3020": {
+        "count": 204,
+        "ms": 1241.4385200000008
+      },
+      "cudaLaunchKernel_v7000": {
+        "count": 39091,
+        "ms": 191.7807190000005
+      },
+      "cudaGraphLaunch_v10000": {
+        "count": 1256,
+        "ms": 92.57886899999986
+      },
+      "cuLaunchKernel": {
+        "count": 6696,
+        "ms": 33.51365200000005
+      },
+      "cuCtxGetCurrent": {
+        "count": 160825,
+        "ms": 10.238312999999073
+      },
+      "cudaStreamGetCaptureInfo_v2_v11030": {
+        "count": 26206,
+        "ms": 8.457385999999852
+      },
+      "cudaMemcpyAsync_v3020": {
+        "count": 1002,
+        "ms": 5.114779000000003
+      },
+      "cudaOccupancyMaxActiveBlocksPerMultiprocessor_v6050": {
+        "count": 7275,
+        "ms": 4.300501000000017
+      },
+      "cudaGetLastError_v3020": {
+        "count": 46738,
+        "ms": 4.020444999999907
+      },
+      "cudaEventRecord_v3020": {
+        "count": 2508,
+        "ms": 2.993305000000006
+      },
+      "cuCtxPushCurrent_v2": {
+        "count": 33189,
+        "ms": 2.8894650000000306
+      },
+      "cuKernelGetFunction": {
+        "count": 6696,
+        "ms": 2.887430000000002
+      },
+      "cuCtxPopCurrent_v2": {
+        "count": 33189,
+        "ms": 2.8800220000002144
+      },
+      "cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags": {
+        "count": 6696,
+        "ms": 1.896827000000006
+      },
+      "cudaDeviceGetAttribute_v5000": {
+        "count": 6696,
+        "ms": 1.7511630000000076
+      },
+      "cudaGetDevice_v3020": {
+        "count": 6696,
+        "ms": 1.4890140000000118
+      },
+      "cudaEventElapsedTime_v3020": {
+        "count": 204,
+        "ms": 1.0576239999999997
+      },
+      "cudaEventSynchronize_v3020": {
+        "count": 102,
+        "ms": 0.9017489999999997
+      },
+      "cuFuncGetAttribute": {
+        "count": 2448,
+        "ms": 0.4569830000000002
+      },
+      "cudaMemsetAsync_v3020": {
+        "count": 864,
+        "ms": 0.15973400000000013
+      }
+    },
+    "copy_directions": {
+      "Host-to-Device": {
+        "count": 798,
+        "bytes": 406826158,
+        "ms": 39.716136
+      },
+      "Device-to-Host": {
+        "count": 204,
+        "bytes": 13504,
+        "ms": 0.578975
+      }
+    },
+    "copy_count": 1002,
+    "copy_bytes": 406839662,
+    "copy_sum_ms": 40.295111,
+    "top_kernels": {
+      "void sm80_fused_gateup<(int)4, (int)16, (int)16, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, int)": {
+        "count": 3564,
+        "ms": 308.8655319999998
+      },
+      "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn": {
+        "count": 8064,
+        "ms": 242.19109900000063
+      },
+      "ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn": {
+        "count": 1440,
+        "ms": 113.30297400000008
+      },
+      "void owned_sm80_tiled_kv<(int)4, (int)8>(const unsigned short *, const unsigned short *, unsigned short *, int)": {
+        "count": 4464,
+        "ms": 93.75963099999932
+      },
+      "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x5_tn_align8>(T1::Params)": {
+        "count": 864,
+        "ms": 88.62047899999995
+      },
+      "void cutlass::Kernel2<cutlass_80_tensorop_s16816gemm_bf16_64x64_64x6_tn_align8>(T1::Params)": {
+        "count": 3636,
+        "ms": 79.43245400000009
+      },
+      "ampere_bf16_s16816gemm_bf16_128x128_ldg8_f2f_stages_64x3_tn": {
+        "count": 1692,
+        "ms": 66.2758060000003
+      },
+      "<unnamed>::sm80_batched_pv_dispatch(const __nv_bfloat16 *, const unsigned int *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned long, unsigned long, unsigned long, const unsigned int *, const unsigned int *, const unsigned int *)": {
+        "count": 3564,
+        "ms": 63.1537429999999
+      },
+      "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn": {
+        "count": 174,
+        "ms": 62.858082999999986
+      },
+      "<unnamed>::sm80_batched_qk_dispatch(const __nv_bfloat16 *, const __nv_bfloat16 *, const unsigned int *, __nv_bfloat16 *, unsigned long, unsigned long, unsigned long, const unsigned int *, const unsigned int *, const unsigned int *)": {
+        "count": 3564,
+        "ms": 52.20409200000006
+      },
+      "hugging_face_qwen_prefill_warp_rms_norm_kernel(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, int, int, float)": {
+        "count": 2336,
+        "ms": 48.200788000000216
+      },
+      "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn": {
+        "count": 2664,
+        "ms": 46.30613900000001
+      },
+      "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_32x6_tn": {
+        "count": 1584,
+        "ms": 41.01128200000008
+      },
+      "void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, (bool)1, (bool)0, (bool)0>(cublasLt::cublasSplitKParams<T6>, const T4 *, const T5 *, T5 *, const T6 *, const T6 *, const T7 *, const T4 *, T7 *, void *, long, T6 *, int *)": {
+        "count": 8352,
+        "ms": 36.90617200000049
+      },
+      "void <unnamed>::qkv_split_head_norm_rope_kv_write_kernel<(bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, const float *, const unsigned int *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, <unnamed>::DeviceBatch, unsigned int, unsigned int, unsigned long, unsigned long, float, const unsigned int *)": {
+        "count": 3672,
+        "ms": 36.71796699999983
+      }
+    },
+    "matmul_geometries": {
+      "W0/LtMatmul/N9728/M258/K2560/B1": {
+        "count": 360,
+        "ms": 36.354392
+      },
+      "W0/LtMatmul/N2560/M258/K9728/B1": {
+        "count": 360,
+        "ms": 20.893221000000043
+      },
+      "W0/LtMatmul/N9728/M384/K2560/B1": {
+        "count": 144,
+        "ms": 14.928913999999994
+      },
+      "W0/LtMatmul/N9728/M499/K2560/B1": {
+        "count": 144,
+        "ms": 14.925014000000001
+      },
+      "W0/GemmEx/N9728/M253/K2560/B1": {
+        "count": 216,
+        "ms": 14.874579999999998
+      },
+      "W0/GemmEx/N2560/M130/K4096/B1": {
+        "count": 396,
+        "ms": 12.406524999999984
+      },
+      "W0/GemmEx/N9728/M128/K2560/B1": {
+        "count": 216,
+        "ms": 11.130431000000003
+      },
+      "W0/GemmEx/N9728/M115/K2560/B1": {
+        "count": 216,
+        "ms": 11.024957000000008
+      },
+      "W0/GemmEx/N1024/M130/K2560/B1": {
+        "count": 792,
+        "ms": 10.80822200000003
+      },
+      "W0/LtMatmul/N2560/M12/K4096/B1": {
+        "count": 720,
+        "ms": 10.37948400000003
+      },
+      "W0/GemmEx/N9728/M246/K2560/B1": {
+        "count": 144,
+        "ms": 9.912707000000005
+      },
+      "W0/GemmEx/N4096/M12/K2560/B1": {
+        "count": 360,
+        "ms": 9.308097000000002
+      },
+      "W0/LtMatmul/N2560/M499/K9728/B1": {
+        "count": 144,
+        "ms": 8.949894999999996
+      },
+      "W0/LtMatmul/N2560/M384/K9728/B1": {
+        "count": 144,
+        "ms": 8.714921
+      },
+      "W0/GemmEx/N1024/M128/K2560/B1": {
+        "count": 1296,
+        "ms": 8.102244999999952
+      },
+      "W0/LtMatmul/N2560/M13/K4096/B1": {
+        "count": 576,
+        "ms": 8.011627000000033
+      },
+      "W0/LtMatmul/N4096/M258/K2560/B1": {
+        "count": 180,
+        "ms": 7.887275
+      },
+      "W0/LtMatmul/N2560/M253/K9728/B1": {
+        "count": 216,
+        "ms": 7.5971309999999885
+      },
+      "W0/LtMatmul/N9728/M509/K2560/B1": {
+        "count": 72,
+        "ms": 7.505578
+      },
+      "W0/LtMatmul/N9728/M382/K2560/B1": {
+        "count": 72,
+        "ms": 7.455403999999998
+      },
+      "W0/LtMatmul/N9728/M501/K2560/B1": {
+        "count": 72,
+        "ms": 7.451177000000002
+      },
+      "W0/GemmEx/N9728/M125/K2560/B1": {
+        "count": 144,
+        "ms": 7.415113999999997
+      },
+      "W0/GemmEx/N2560/M128/K4096/B1": {
+        "count": 648,
+        "ms": 7.079150999999984
+      },
+      "W0/GemmEx/N4096/M13/K2560/B1": {
+        "count": 288,
+        "ms": 6.901670999999995
+      },
+      "W0/LtMatmul/N2560/M14/K4096/B1": {
+        "count": 432,
+        "ms": 6.195694000000027
+      },
+      "W0/GemmEx/N2560/M128/K9728/B1": {
+        "count": 216,
+        "ms": 6.191759000000005
+      },
+      "W0/GemmEx/N4096/M125/K2560/B1": {
+        "count": 288,
+        "ms": 6.190737000000005
+      },
+      "W0/GemmEx/N2560/M115/K9728/B1": {
+        "count": 216,
+        "ms": 6.118896000000009
+      },
+      "W0/GemmEx/N9728/M130/K2560/B1": {
+        "count": 72,
+        "ms": 5.946125999999999
+      },
+      "W0/BatchedEx/N128/M128/K128/B32/lda128/ldb128/ldc4096": {
+        "count": 756,
+        "ms": 5.850321999999953
+      },
+      "W0/LtMatmul/N1024/M254/K2560/B1": {
+        "count": 576,
+        "ms": 5.727275999999968
+      },
+      "W0/GemmEx/N151936/M16/K2560/B1": {
+        "count": 10,
+        "ms": 5.69928
+      },
+      "W0/GemmEx/N151936/M14/K2560/B1": {
+        "count": 10,
+        "ms": 5.670957
+      },
+      "W0/GemmEx/N4096/M14/K2560/B1": {
+        "count": 216,
+        "ms": 5.527981999999995
+      },
+      "W0/GemmEx/N4096/M128/K2560/B1": {
+        "count": 252,
+        "ms": 5.407919000000006
+      },
+      "W0/BatchedEx/N128/M128/K128/B32/lda128/ldb4096/ldc128": {
+        "count": 756,
+        "ms": 5.359404999999995
+      },
+      "W0/LtMatmul/N2560/M254/K4096/B1": {
+        "count": 288,
+        "ms": 5.300910999999998
+      },
+      "W0/BatchedEx/N130/M130/K128/B32/lda128/ldb4096/ldc130": {
+        "count": 396,
+        "ms": 5.2555689999999835
+      },
+      "W0/LtMatmul/N2560/M246/K9728/B1": {
+        "count": 144,
+        "ms": 5.027152999999998
+      },
+      "W0/GemmEx/N9728/M241/K2560/B1": {
+        "count": 72,
+        "ms": 4.970674000000001
+      },
+      "W0/GemmEx/N9728/M254/K2560/B1": {
+        "count": 72,
+        "ms": 4.957076999999998
+      },
+      "W0/GemmEx/N9728/M250/K2560/B1": {
+        "count": 72,
+        "ms": 4.956401000000002
+      },
+      "W0/GemmEx/N9728/M245/K2560/B1": {
+        "count": 72,
+        "ms": 4.954805000000001
+      },
+      "W0/BatchedEx/N128/M130/K130/B32/lda128/ldb130/ldc4096": {
+        "count": 396,
+        "ms": 4.8383909999999855
+      },
+      "W0/LtMatmul/N4096/M499/K2560/B1": {
+        "count": 72,
+        "ms": 4.728946999999999
+      },
+      "W0/LtMatmul/N2560/M509/K9728/B1": {
+        "count": 72,
+        "ms": 4.495739
+      },
+      "W0/LtMatmul/N2560/M501/K9728/B1": {
+        "count": 72,
+        "ms": 4.472146
+      },
+      "W0/LtMatmul/N2560/M382/K9728/B1": {
+        "count": 72,
+        "ms": 4.354352000000001
+      },
+      "W0/BatchedEx/N125/M125/K128/B32/lda128/ldb4096/ldc125": {
+        "count": 360,
+        "ms": 4.342161999999997
+      },
+      "W0/LtMatmul/N1024/M253/K2560/B1": {
+        "count": 432,
+        "ms": 4.306421000000004
+      },
+      "W0/GemmEx/N2560/M125/K9728/B1": {
+        "count": 144,
+        "ms": 4.114259999999997
+      },
+      "W0/GemmEx/N151936/M15/K2560/B1": {
+        "count": 7,
+        "ms": 3.992627
+      },
+      "W0/LtMatmul/N2560/M253/K4096/B1": {
+        "count": 216,
+        "ms": 3.9702279999999948
+      },
+      "W0/LtMatmul/N2560/M15/K4096/B1": {
+        "count": 288,
+        "ms": 3.9507390000000053
+      },
+      "W0/GemmEx/N4096/M126/K2560/B1": {
+        "count": 180,
+        "ms": 3.8762760000000025
+      },
+      "W0/GemmEx/N9728/M126/K2560/B1": {
+        "count": 72,
+        "ms": 3.711191000000001
+      },
+      "W0/GemmEx/N9728/M120/K2560/B1": {
+        "count": 72,
+        "ms": 3.696148000000001
+      },
+      "W0/GemmEx/N1024/M115/K2560/B1": {
+        "count": 576,
+        "ms": 3.6727280000000078
+      },
+      "W0/BatchedEx/N128/M126/K126/B32/lda128/ldb126/ldc4096": {
+        "count": 396,
+        "ms": 3.631512999999982
+      },
+      "W0/GemmEx/N2560/M115/K4096/B1": {
+        "count": 288,
+        "ms": 3.5655909999999933
+      },
+      "W0/BatchedEx/N128/M125/K125/B32/lda128/ldb125/ldc4096": {
+        "count": 360,
+        "ms": 3.5590920000000015
+      },
+      "W0/LtMatmul/N4096/M384/K2560/B1": {
+        "count": 72,
+        "ms": 3.336214
+      },
+      "W0/GemmEx/N4096/M15/K2560/B1": {
+        "count": 144,
+        "ms": 3.321431999999999
+      },
+      "W0/BatchedEx/N126/M126/K128/B32/lda128/ldb4096/ldc126": {
+        "count": 396,
+        "ms": 3.178748000000001
+      },
+      "W0/GemmEx/N4096/M120/K2560/B1": {
+        "count": 144,
+        "ms": 3.086901000000003
+      },
+      "W0/GemmEx/N4096/M115/K2560/B1": {
+        "count": 144,
+        "ms": 3.085401000000001
+      },
+      "W0/LtMatmul/N1024/M246/K2560/B1": {
+        "count": 288,
+        "ms": 2.846681000000004
+      },
+      "W0/LtMatmul/N2560/M246/K4096/B1": {
+        "count": 144,
+        "ms": 2.625143999999999
+      },
+      "W0/BatchedEx/N115/M115/K128/B32/lda128/ldb4096/ldc115": {
+        "count": 216,
+        "ms": 2.584508999999999
+      },
+      "W0/LtMatmul/N2560/M254/K9728/B1": {
+        "count": 72,
+        "ms": 2.530041
+      },
+      "W0/LtMatmul/N2560/M250/K9728/B1": {
+        "count": 72,
+        "ms": 2.5241209999999996
+      },
+      "W0/LtMatmul/N2560/M241/K9728/B1": {
+        "count": 72,
+        "ms": 2.5093370000000004
+      },
+      "W0/LtMatmul/N2560/M245/K9728/B1": {
+        "count": 72,
+        "ms": 2.5080840000000006
+      },
+      "W0/LtMatmul/N2560/M501/K4096/B1": {
+        "count": 72,
+        "ms": 2.4302649999999995
+      },
+      "W0/LtMatmul/N4096/M509/K2560/B1": {
+        "count": 36,
+        "ms": 2.3641919999999996
+      },
+      "W0/LtMatmul/N4096/M501/K2560/B1": {
+        "count": 36,
+        "ms": 2.3516079999999997
+      },
+      "W0/GemmEx/N2560/M130/K9728/B1": {
+        "count": 72,
+        "ms": 2.322841
+      },
+      "W0/BatchedEx/N128/M115/K115/B32/lda128/ldb115/ldc4096": {
+        "count": 216,
+        "ms": 2.120830000000001
+      },
+      "W0/GemmEx/N2560/M126/K9728/B1": {
+        "count": 72,
+        "ms": 2.0595130000000004
+      },
+      "W0/GemmEx/N2560/M120/K9728/B1": {
+        "count": 72,
+        "ms": 2.051802
+      },
+      "W0/LtMatmul/N1024/M501/K2560/B1": {
+        "count": 144,
+        "ms": 1.9479970000000006
+      },
+      "W0/LtMatmul/N2560/M369/K4096/B1": {
+        "count": 72,
+        "ms": 1.8925390000000009
+      },
+      "W0/LtMatmul/N2560/M382/K4096/B1": {
+        "count": 72,
+        "ms": 1.8917720000000002
+      },
+      "W0/GemmEx/N1024/M125/K2560/B1": {
+        "count": 288,
+        "ms": 1.7868089999999999
+      },
+      "W0/LtMatmul/N4096/M382/K2560/B1": {
+        "count": 36,
+        "ms": 1.666111
+      },
+      "W0/GemmEx/N2560/M1/K4096/B1": {
+        "count": 144,
+        "ms": 1.6216579999999996
+      },
+      "W0/GemmEx/N2560/M125/K4096/B1": {
+        "count": 144,
+        "ms": 1.5614669999999995
+      },
+      "W0/LtMatmul/N1024/M382/K2560/B1": {
+        "count": 144,
+        "ms": 1.5321879999999999
+      },
+      "W0/LtMatmul/N1024/M369/K2560/B1": {
+        "count": 144,
+        "ms": 1.5159639999999994
+      },
+      "W0/GemmEx/N4096/M1/K2560/B1": {
+        "count": 72,
+        "ms": 1.504861
+      },
+      "W0/LtMatmul/N1024/M250/K2560/B1": {
+        "count": 144,
+        "ms": 1.4297250000000008
+      },
+      "W0/LtMatmul/N1024/M241/K2560/B1": {
+        "count": 144,
+        "ms": 1.4292430000000014
+      },
+      "W0/LtMatmul/N1024/M251/K2560/B1": {
+        "count": 144,
+        "ms": 1.4275790000000015
+      },
+      "W0/LtMatmul/N1024/M245/K2560/B1": {
+        "count": 144,
+        "ms": 1.4263640000000009
+      },
+      "W0/BatchedEx/N128/M120/K120/B32/lda128/ldb120/ldc4096": {
+        "count": 180,
+        "ms": 1.3847960000000001
+      },
+      "W0/LtMatmul/N2560/M250/K4096/B1": {
+        "count": 72,
+        "ms": 1.3161250000000002
+      },
+      "W0/LtMatmul/N2560/M251/K4096/B1": {
+        "count": 72,
+        "ms": 1.3156419999999998
+      },
+      "W0/LtMatmul/N2560/M245/K4096/B1": {
+        "count": 72,
+        "ms": 1.3119990000000001
+      },
+      "W0/LtMatmul/N2560/M241/K4096/B1": {
+        "count": 72,
+        "ms": 1.309692
+      },
+      "W0/BatchedEx/N120/M120/K128/B32/lda128/ldb4096/ldc120": {
+        "count": 180,
+        "ms": 1.2664589999999996
+      },
+      "W0/GemmEx/N1024/M1/K2560/B1": {
+        "count": 144,
+        "ms": 1.2510050000000004
+      },
+      "W0/GemmEx/N151936/M13/K2560/B1": {
+        "count": 2,
+        "ms": 1.1317400000000002
+      },
+      "W0/GemmEx/N151936/M1/K2560/B1": {
+        "count": 2,
+        "ms": 1.080892
+      },
+      "W0/LtMatmul/N2560/M4/K4096/B1": {
+        "count": 72,
+        "ms": 1.0800900000000002
+      },
+      "W0/LtMatmul/N2560/M8/K4096/B1": {
+        "count": 72,
+        "ms": 1.0720930000000002
+      },
+      "W0/LtMatmul/N2560/M11/K4096/B1": {
+        "count": 72,
+        "ms": 1.023584
+      },
+      "W0/GemmEx/N4096/M8/K2560/B1": {
+        "count": 36,
+        "ms": 0.961885
+      },
+      "W0/GemmEx/N4096/M4/K2560/B1": {
+        "count": 36,
+        "ms": 0.9573719999999999
+      },
+      "W0/GemmEx/N1024/M126/K2560/B1": {
+        "count": 144,
+        "ms": 0.8943660000000004
+      },
+      "W0/GemmEx/N1024/M120/K2560/B1": {
+        "count": 144,
+        "ms": 0.8908469999999998
+      },
+      "W0/GemmEx/N4096/M11/K2560/B1": {
+        "count": 36,
+        "ms": 0.8819490000000002
+      },
+      "W0/GemmEx/N4096/M130/K2560/B1": {
+        "count": 36,
+        "ms": 0.8605750000000002
+      },
+      "W0/GemmEx/N2560/M126/K4096/B1": {
+        "count": 72,
+        "ms": 0.7953240000000001
+      },
+      "W0/GemmEx/N2560/M120/K4096/B1": {
+        "count": 72,
+        "ms": 0.7908449999999999
+      },
+      "W0/GemmEx/N151936/M12/K2560/B1": {
+        "count": 1,
+        "ms": 0.568542
+      },
+      "W0/GemmEx/N151936/M8/K2560/B1": {
+        "count": 1,
+        "ms": 0.563935
+      },
+      "W0/GemmEx/N151936/M4/K2560/B1": {
+        "count": 1,
+        "ms": 0.557855
+      },
+      "W0/StridedBatchedEx/N128/M1/K158/B32": {
+        "count": 36,
+        "ms": 0.20390399999999995
+      },
+      "W0/StridedBatchedEx/N128/M1/K159/B32": {
+        "count": 36,
+        "ms": 0.20342399999999997
+      },
+      "W0/StridedBatchedEx/N158/M1/K128/B32": {
+        "count": 36,
+        "ms": 0.192672
+      },
+      "W0/StridedBatchedEx/N159/M1/K128/B32": {
+        "count": 36,
+        "ms": 0.13593600000000003
+      }
+    }
+  },
+  {
+    "concurrency": 32,
+    "mode": "before",
+    "archive_entry": "runs/profile-c32/c32-r0-owned-before/trace.sqlite.v15-analysis.json",
+    "trace": "/mnt/efs/nlp/psyche/riley-overlap-v18b4-inspected-20261021/runs/profile-c32/c32-r0-owned-before/trace.sqlite",
+    "scope": "Profiler diagnostic, not HTTP throughput measurement; kernel-duration sums overlap CPU API waits",
+    "kernel_count": 69056,
+    "kernel_sum_ms": 1319.824027,
+    "kernel_union_ms": 1318.631963,
+    "gpu_kernel_span_ms": 1639.688708,
+    "kernel_busy_fraction": 0.8041965261859936,
+    "nvtx_matmul_range_count": 15810,
+    "attributed_matmul_kernel_count": 21174,
+    "categories": {
+      "linear-GateUp": {
+        "count": 4392,
+        "ms": 360.81250799999987
+      },
+      "linear-Down": {
+        "count": 6696,
+        "ms": 196.2534709999983
+      },
+      "linear-KV": {
+        "count": 9720,
+        "ms": 170.39831600000198
+      },
+      "attention-QK-PV": {
+        "count": 9216,
+        "ms": 139.60518699999906
+      },
+      "linear-O": {
+        "count": 7164,
+        "ms": 105.32284400000138
+      },
+      "linear-Q": {
+        "count": 2268,
+        "ms": 69.06538699999984
+      },
+      "norm": {
+        "count": 6789,
+        "ms": 66.34368599999954
+      },
+      "linear-LMhead": {
+        "count": 65,
+        "ms": 38.745847000000005
+      },
+      "other-unattributed": {
+        "count": 7309,
+        "ms": 37.094553
+      },
+      "RoPE": {
+        "count": 2340,
+        "ms": 29.895437999999967
+      },
+      "SiLU": {
+        "count": 2448,
+        "ms": 29.368555999999725
+      },
+      "softmax": {
+        "count": 4608,
+        "ms": 26.92099399999995
+      },
+      "linear-QKV": {
+        "count": 1224,
+        "ms": 25.30740899999999
+      },
+      "residual": {
+        "count": 4680,
+        "ms": 22.059214999999774
+      },
+      "greedy": {
+        "count": 65,
+        "ms": 2.331896
+      },
+      "KV-gather": {
+        "count": 72,
+        "ms": 0.2987199999999999
+      }
+    },
+    "cuda_api": {
+      "cudaStreamSynchronize_v3020": {
+        "count": 130,
+        "ms": 911.1668960000005
+      },
+      "cudaLaunchKernel_v7000": {
+        "count": 35762,
+        "ms": 176.3908419999988
+      },
+      "cudaGraphLaunch_v10000": {
+        "count": 1114,
+        "ms": 62.786459000000036
+      },
+      "cuLaunchKernel": {
+        "count": 6516,
+        "ms": 33.1546460000001
+      },
+      "cuCtxGetCurrent": {
+        "count": 152313,
+        "ms": 9.422889999998583
+      },
+      "cudaStreamGetCaptureInfo_v2_v11030": {
+        "count": 25458,
+        "ms": 7.971277999999971
+      },
+      "cudaGetLastError_v3020": {
+        "count": 42462,
+        "ms": 3.862961999999713
+      },
+      "cudaMemcpyAsync_v3020": {
+        "count": 673,
+        "ms": 3.7061690000000005
+      },
+      "cudaOccupancyMaxActiveBlocksPerMultiprocessor_v6050": {
+        "count": 5473,
+        "ms": 3.1395400000000073
+      },
+      "cuKernelGetFunction": {
+        "count": 6516,
+        "ms": 2.8304140000000007
+      },
+      "cudaEventRecord_v3020": {
+        "count": 2506,
+        "ms": 2.695852999999994
+      },
+      "cuCtxPushCurrent_v2": {
+        "count": 29817,
+        "ms": 2.5659890000000694
+      },
+      "cuCtxPopCurrent_v2": {
+        "count": 29817,
+        "ms": 2.557519000000105
+      },
+      "cudaDeviceGetAttribute_v5000": {
+        "count": 6516,
+        "ms": 1.7422130000000027
+      },
+      "cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags": {
+        "count": 6516,
+        "ms": 1.6190110000000102
+      },
+      "cudaGetDevice_v3020": {
+        "count": 6516,
+        "ms": 1.435096000000007
+      },
+      "cudaEventElapsedTime_v3020": {
+        "count": 130,
+        "ms": 0.7028790000000001
+      },
+      "cudaEventSynchronize_v3020": {
+        "count": 65,
+        "ms": 0.5854090000000002
+      },
+      "cuFuncGetAttribute": {
+        "count": 2268,
+        "ms": 0.4283700000000002
+      },
+      "cudaMemsetAsync_v3020": {
+        "count": 792,
+        "ms": 0.14013599999999982
+      }
+    },
+    "copy_directions": {
+      "Host-to-Device": {
+        "count": 543,
+        "bytes": 232240166,
+        "ms": 23.007361
+      },
+      "Device-to-Host": {
+        "count": 130,
+        "bytes": 12320,
+        "ms": 0.370815
+      }
+    },
+    "copy_count": 673,
+    "copy_bytes": 232252486,
+    "copy_sum_ms": 23.378176,
+    "top_kernels": {
+      "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn": {
+        "count": 5400,
+        "ms": 160.68678900000052
+      },
+      "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn": {
+        "count": 1431,
+        "ms": 134.78475699999981
+      },
+      "ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn": {
+        "count": 1008,
+        "ms": 90.86865400000013
+      },
+      "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x5_tn_align8>(T1::Params)": {
+        "count": 792,
+        "ms": 81.70343
+      },
+      "void owned_sm80_tiled_kv<(int)8, (int)8>(const unsigned short *, const unsigned short *, unsigned short *, int)": {
+        "count": 2232,
+        "ms": 78.6579580000002
+      },
+      "void sm80_fused_gateup<(int)4, (int)16, (int)16, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, int)": {
+        "count": 900,
+        "ms": 76.78015099999998
+      },
+      "ampere_bf16_s16816gemm_bf16_128x128_ldg8_f2f_stages_64x3_tn": {
+        "count": 1800,
+        "ms": 71.71021099999992
+      },
+      "<unnamed>::sm80_batched_pv_dispatch(const __nv_bfloat16 *, const unsigned int *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned long, unsigned long, unsigned long, const unsigned int *, const unsigned int *, const unsigned int *)": {
+        "count": 2232,
+        "ms": 50.729720999999955
+      },
+      "void cutlass::Kernel2<cutlass_80_tensorop_s16816gemm_bf16_64x64_64x6_tn_align8>(T1::Params)": {
+        "count": 2304,
+        "ms": 50.163609999999885
+      },
+      "<unnamed>::sm80_batched_qk_dispatch(const __nv_bfloat16 *, const __nv_bfloat16 *, const unsigned int *, __nv_bfloat16 *, unsigned long, unsigned long, unsigned long, const unsigned int *, const unsigned int *, const unsigned int *)": {
+        "count": 2232,
+        "ms": 44.40098799999996
+      },
+      "hugging_face_qwen_prefill_warp_rms_norm_kernel(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, int, int, float)": {
+        "count": 2117,
+        "ms": 43.68874500000021
+      },
+      "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_32x6_tn": {
+        "count": 1368,
+        "ms": 42.54362400000006
+      },
+      "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn": {
+        "count": 2376,
+        "ms": 40.31483299999992
+      },
+      "void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, (bool)1, (bool)0, (bool)0>(cublasLt::cublasSplitKParams<T6>, const T4 *, const T5 *, T5 *, const T6 *, const T6 *, const T7 *, const T4 *, T7 *, void *, long, T6 *, int *)": {
+        "count": 6588,
+        "ms": 33.15310799999998
+      },
+      "void <unnamed>::qkv_split_head_norm_rope_kv_write_kernel<(bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, const float *, const unsigned int *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, <unnamed>::DeviceBatch, unsigned int, unsigned int, unsigned long, unsigned long, float, const unsigned int *)": {
+        "count": 2340,
+        "ms": 29.895437999999967
+      }
+    },
+    "matmul_geometries": {
+      "W0/LtMatmul/N9728/M499/K2560/B1": {
+        "count": 216,
+        "ms": 22.350340000000003
+      },
+      "W0/GemmEx/N9728/M128/K2560/B1": {
+        "count": 360,
+        "ms": 18.684715000000004
+      },
+      "W0/LtMatmul/N9728/M258/K2560/B1": {
+        "count": 144,
+        "ms": 14.528281000000005
+      },
+      "W0/LtMatmul/N2560/M499/K9728/B1": {
+        "count": 216,
+        "ms": 13.431164000000004
+      },
+      "W0/GemmEx/N2560/M130/K4096/B1": {
+        "count": 396,
+        "ms": 12.688668000000016
+      },
+      "W0/GemmEx/N9728/M130/K2560/B1": {
+        "count": 144,
+        "ms": 11.932226
+      },
+      "W0/GemmEx/N9728/M126/K2560/B1": {
+        "count": 216,
+        "ms": 11.192673999999997
+      },
+      "W0/GemmEx/N1024/M130/K2560/B1": {
+        "count": 792,
+        "ms": 10.81827000000002
+      },
+      "W0/GemmEx/N2560/M128/K9728/B1": {
+        "count": 360,
+        "ms": 10.291336000000006
+      },
+      "W0/GemmEx/N9728/M245/K2560/B1": {
+        "count": 144,
+        "ms": 9.902437999999998
+      },
+      "W0/GemmEx/N1024/M128/K2560/B1": {
+        "count": 1584,
+        "ms": 9.856579999999976
+      },
+      "W0/GemmEx/N9728/M516/K2560/B1": {
+        "count": 72,
+        "ms": 9.727779000000002
+      },
+      "W0/LtMatmul/N2560/M30/K4096/B1": {
+        "count": 720,
+        "ms": 9.377865000000044
+      },
+      "W0/GemmEx/N2560/M128/K4096/B1": {
+        "count": 792,
+        "ms": 8.763621999999996
+      },
+      "W0/GemmEx/N4096/M30/K2560/B1": {
+        "count": 360,
+        "ms": 8.567596999999997
+      },
+      "W0/LtMatmul/N2560/M258/K9728/B1": {
+        "count": 144,
+        "ms": 8.349069999999996
+      },
+      "W0/LtMatmul/N9728/M512/K2560/B1": {
+        "count": 72,
+        "ms": 7.500587999999999
+      },
+      "W0/LtMatmul/N9728/M507/K2560/B1": {
+        "count": 72,
+        "ms": 7.499048999999999
+      },
+      "W0/LtMatmul/N9728/M503/K2560/B1": {
+        "count": 72,
+        "ms": 7.4723320000000015
+      },
+      "W0/LtMatmul/N9728/M511/K2560/B1": {
+        "count": 72,
+        "ms": 7.4714360000000015
+      },
+      "W0/LtMatmul/N9728/M494/K2560/B1": {
+        "count": 72,
+        "ms": 7.449325999999997
+      },
+      "W0/LtMatmul/N9728/M370/K2560/B1": {
+        "count": 72,
+        "ms": 7.4320780000000015
+      },
+      "W0/GemmEx/N9728/M115/K2560/B1": {
+        "count": 144,
+        "ms": 7.4037890000000015
+      },
+      "W0/LtMatmul/N4096/M499/K2560/B1": {
+        "count": 108,
+        "ms": 7.040108000000003
+      },
+      "W0/LtMatmul/N2560/M516/K9728/B1": {
+        "count": 72,
+        "ms": 6.183376000000003
+      },
+      "W0/GemmEx/N2560/M126/K9728/B1": {
+        "count": 216,
+        "ms": 6.164786000000005
+      },
+      "W0/BatchedEx/N128/M128/K128/B32/lda128/ldb128/ldc4096": {
+        "count": 756,
+        "ms": 5.83745399999995
+      },
+      "W0/LtMatmul/N2560/M29/K4096/B1": {
+        "count": 432,
+        "ms": 5.638895000000013
+      },
+      "W0/BatchedEx/N128/M128/K128/B32/lda128/ldb4096/ldc128": {
+        "count": 756,
+        "ms": 5.447001000000023
+      },
+      "W0/GemmEx/N4096/M29/K2560/B1": {
+        "count": 216,
+        "ms": 5.324786999999999
+      },
+      "W0/BatchedEx/N130/M130/K128/B32/lda128/ldb4096/ldc130": {
+        "count": 396,
+        "ms": 5.303379000000015
+      },
+      "W0/LtMatmul/N2560/M245/K9728/B1": {
+        "count": 144,
+        "ms": 5.0268989999999985
+      },
+      "W0/GemmEx/N9728/M254/K2560/B1": {
+        "count": 72,
+        "ms": 4.961236000000001
+      },
+      "W0/GemmEx/N9728/M241/K2560/B1": {
+        "count": 72,
+        "ms": 4.941810000000001
+      },
+      "W0/LtMatmul/N2560/M499/K4096/B1": {
+        "count": 144,
+        "ms": 4.844338
+      },
+      "W0/BatchedEx/N128/M130/K130/B32/lda128/ldb130/ldc4096": {
+        "count": 396,
+        "ms": 4.833267999999989
+      },
+      "W0/GemmEx/N2560/M130/K9728/B1": {
+        "count": 144,
+        "ms": 4.654803
+      },
+      "W0/GemmEx/N4096/M128/K2560/B1": {
+        "count": 216,
+        "ms": 4.626676000000005
+      },
+      "W0/LtMatmul/N2560/M512/K9728/B1": {
+        "count": 72,
+        "ms": 4.508884
+      },
+      "W0/LtMatmul/N2560/M511/K9728/B1": {
+        "count": 72,
+        "ms": 4.495284
+      },
+      "W0/LtMatmul/N2560/M507/K9728/B1": {
+        "count": 72,
+        "ms": 4.493910999999999
+      },
+      "W0/LtMatmul/N2560/M503/K9728/B1": {
+        "count": 72,
+        "ms": 4.484083999999998
+      },
+      "W0/BatchedEx/N125/M125/K128/B32/lda128/ldb4096/ldc125": {
+        "count": 360,
+        "ms": 4.4504860000000015
+      },
+      "W0/LtMatmul/N2560/M494/K9728/B1": {
+        "count": 72,
+        "ms": 4.4419369999999985
+      },
+      "W0/LtMatmul/N2560/M370/K9728/B1": {
+        "count": 72,
+        "ms": 4.323156000000001
+      },
+      "W0/GemmEx/N2560/M115/K9728/B1": {
+        "count": 144,
+        "ms": 4.078740000000002
+      },
+      "W0/LtMatmul/N1024/M499/K2560/B1": {
+        "count": 288,
+        "ms": 3.8951580000000052
+      },
+      "W0/GemmEx/N4096/M126/K2560/B1": {
+        "count": 180,
+        "ms": 3.8524359999999995
+      },
+      "W0/GemmEx/N9728/M125/K2560/B1": {
+        "count": 72,
+        "ms": 3.7280539999999998
+      },
+      "W0/BatchedEx/N128/M126/K126/B32/lda128/ldb126/ldc4096": {
+        "count": 396,
+        "ms": 3.6280579999999905
+      },
+      "W0/BatchedEx/N128/M125/K125/B32/lda128/ldb125/ldc4096": {
+        "count": 360,
+        "ms": 3.5457170000000056
+      },
+      "W0/BatchedEx/N126/M126/K128/B32/lda128/ldb4096/ldc126": {
+        "count": 396,
+        "ms": 3.2462929999999988
+      },
+      "W0/LtMatmul/N4096/M258/K2560/B1": {
+        "count": 72,
+        "ms": 3.1525010000000004
+      },
+      "W0/GemmEx/N4096/M28/K2560/B1": {
+        "count": 108,
+        "ms": 2.8594490000000006
+      },
+      "W0/LtMatmul/N2560/M28/K4096/B1": {
+        "count": 216,
+        "ms": 2.8507459999999964
+      },
+      "W0/LtMatmul/N1024/M245/K2560/B1": {
+        "count": 288,
+        "ms": 2.838616000000003
+      },
+      "W0/LtMatmul/N1024/M241/K2560/B1": {
+        "count": 288,
+        "ms": 2.837560000000002
+      },
+      "W0/GemmEx/N1024/M126/K2560/B1": {
+        "count": 432,
+        "ms": 2.689751000000001
+      },
+      "W0/BatchedEx/N115/M115/K128/B32/lda128/ldb4096/ldc115": {
+        "count": 216,
+        "ms": 2.6417209999999987
+      },
+      "W0/LtMatmul/N2560/M245/K4096/B1": {
+        "count": 144,
+        "ms": 2.625558999999998
+      },
+      "W0/LtMatmul/N2560/M241/K4096/B1": {
+        "count": 144,
+        "ms": 2.6083140000000005
+      },
+      "W0/LtMatmul/N2560/M254/K9728/B1": {
+        "count": 72,
+        "ms": 2.5327290000000002
+      },
+      "W0/LtMatmul/N2560/M241/K9728/B1": {
+        "count": 72,
+        "ms": 2.5025849999999994
+      },
+      "W0/LtMatmul/N2560/M507/K4096/B1": {
+        "count": 72,
+        "ms": 2.4381990000000004
+      },
+      "W0/LtMatmul/N4096/M516/K2560/B1": {
+        "count": 36,
+        "ms": 2.4192890000000005
+      },
+      "W0/LtMatmul/N2560/M494/K4096/B1": {
+        "count": 72,
+        "ms": 2.3908110000000016
+      },
+      "W0/GemmEx/N2560/M126/K4096/B1": {
+        "count": 216,
+        "ms": 2.381815999999999
+      },
+      "W0/LtMatmul/N4096/M512/K2560/B1": {
+        "count": 36,
+        "ms": 2.368665
+      },
+      "W0/LtMatmul/N4096/M503/K2560/B1": {
+        "count": 36,
+        "ms": 2.3633219999999997
+      },
+      "W0/LtMatmul/N4096/M507/K2560/B1": {
+        "count": 36,
+        "ms": 2.3604409999999993
+      },
+      "W0/LtMatmul/N4096/M511/K2560/B1": {
+        "count": 36,
+        "ms": 2.359449
+      },
+      "W0/LtMatmul/N4096/M494/K2560/B1": {
+        "count": 36,
+        "ms": 2.336347
+      },
+      "W0/GemmEx/N4096/M125/K2560/B1": {
+        "count": 108,
+        "ms": 2.322421000000001
+      },
+      "W0/GemmEx/N4096/M115/K2560/B1": {
+        "count": 108,
+        "ms": 2.3056290000000015
+      },
+      "W0/BatchedEx/N128/M115/K115/B32/lda128/ldb115/ldc4096": {
+        "count": 216,
+        "ms": 2.114841
+      },
+      "W0/GemmEx/N2560/M125/K9728/B1": {
+        "count": 72,
+        "ms": 2.054907000000001
+      },
+      "W0/LtMatmul/N1024/M507/K2560/B1": {
+        "count": 144,
+        "ms": 1.9614969999999985
+      },
+      "W0/LtMatmul/N1024/M494/K2560/B1": {
+        "count": 144,
+        "ms": 1.9601569999999997
+      },
+      "W0/LtMatmul/N2560/M382/K4096/B1": {
+        "count": 72,
+        "ms": 1.8911620000000002
+      },
+      "W0/LtMatmul/N2560/M370/K4096/B1": {
+        "count": 72,
+        "ms": 1.8674520000000003
+      },
+      "W0/LtMatmul/N2560/M31/K4096/B1": {
+        "count": 144,
+        "ms": 1.8520589999999986
+      },
+      "W0/GemmEx/N1024/M115/K2560/B1": {
+        "count": 288,
+        "ms": 1.785916000000004
+      },
+      "W0/GemmEx/N4096/M130/K2560/B1": {
+        "count": 72,
+        "ms": 1.7011169999999993
+      },
+      "W0/GemmEx/N4096/M31/K2560/B1": {
+        "count": 72,
+        "ms": 1.6706829999999997
+      },
+      "W0/LtMatmul/N4096/M370/K2560/B1": {
+        "count": 36,
+        "ms": 1.64233
+      },
+      "W0/GemmEx/N2560/M1/K4096/B1": {
+        "count": 144,
+        "ms": 1.6151319999999998
+      },
+      "W0/GemmEx/N2560/M115/K4096/B1": {
+        "count": 144,
+        "ms": 1.549723
+      },
+      "W0/GemmEx/N4096/M120/K2560/B1": {
+        "count": 72,
+        "ms": 1.5418859999999992
+      },
+      "W0/LtMatmul/N1024/M382/K2560/B1": {
+        "count": 144,
+        "ms": 1.5339169999999998
+      },
+      "W0/LtMatmul/N1024/M370/K2560/B1": {
+        "count": 144,
+        "ms": 1.5201569999999998
+      },
+      "W0/GemmEx/N4096/M1/K2560/B1": {
+        "count": 72,
+        "ms": 1.5049890000000001
+      },
+      "W0/LtMatmul/N1024/M254/K2560/B1": {
+        "count": 144,
+        "ms": 1.430654000000001
+      },
+      "W0/LtMatmul/N1024/M253/K2560/B1": {
+        "count": 144,
+        "ms": 1.4215010000000015
+      },
+      "W0/LtMatmul/N1024/M243/K2560/B1": {
+        "count": 144,
+        "ms": 1.4162840000000012
+      },
+      "W0/BatchedEx/N128/M120/K120/B32/lda128/ldb120/ldc4096": {
+        "count": 180,
+        "ms": 1.386394999999998
+      },
+      "W0/LtMatmul/N2560/M253/K4096/B1": {
+        "count": 72,
+        "ms": 1.3301070000000004
+      },
+      "W0/LtMatmul/N2560/M243/K4096/B1": {
+        "count": 72,
+        "ms": 1.3231010000000003
+      },
+      "W0/LtMatmul/N2560/M254/K4096/B1": {
+        "count": 72,
+        "ms": 1.3200320000000003
+      },
+      "W0/BatchedEx/N120/M120/K128/B32/lda128/ldb4096/ldc120": {
+        "count": 180,
+        "ms": 1.3021729999999998
+      },
+      "W0/GemmEx/N1024/M1/K2560/B1": {
+        "count": 144,
+        "ms": 1.251131
+      },
+      "W0/LtMatmul/N2560/M4/K4096/B1": {
+        "count": 72,
+        "ms": 1.0799960000000004
+      },
+      "W0/GemmEx/N151936/M1/K2560/B1": {
+        "count": 2,
+        "ms": 1.077629
+      },
+      "W0/LtMatmul/N2560/M8/K4096/B1": {
+        "count": 72,
+        "ms": 1.0736620000000001
+      },
+      "W0/LtMatmul/N2560/M12/K4096/B1": {
+        "count": 72,
+        "ms": 1.0519329999999996
+      },
+      "W0/LtMatmul/N2560/M16/K4096/B1": {
+        "count": 72,
+        "ms": 1.0240919999999996
+      },
+      "W0/LtMatmul/N2560/M20/K4096/B1": {
+        "count": 72,
+        "ms": 0.9949400000000005
+      },
+      "W0/LtMatmul/N2560/M24/K4096/B1": {
+        "count": 72,
+        "ms": 0.9784290000000004
+      },
+      "W0/GemmEx/N4096/M27/K2560/B1": {
+        "count": 36,
+        "ms": 0.970366
+      },
+      "W0/GemmEx/N4096/M20/K2560/B1": {
+        "count": 36,
+        "ms": 0.9655669999999998
+      },
+      "W0/GemmEx/N4096/M8/K2560/B1": {
+        "count": 36,
+        "ms": 0.9627489999999999
+      },
+      "W0/GemmEx/N4096/M16/K2560/B1": {
+        "count": 36,
+        "ms": 0.9625900000000001
+      },
+      "W0/GemmEx/N4096/M24/K2560/B1": {
+        "count": 36,
+        "ms": 0.9617260000000001
+      },
+      "W0/GemmEx/N4096/M4/K2560/B1": {
+        "count": 36,
+        "ms": 0.9613100000000001
+      },
+      "W0/GemmEx/N4096/M12/K2560/B1": {
+        "count": 36,
+        "ms": 0.9609570000000001
+      },
+      "W0/LtMatmul/N2560/M27/K4096/B1": {
+        "count": 72,
+        "ms": 0.9581729999999994
+      },
+      "W0/GemmEx/N1024/M125/K2560/B1": {
+        "count": 144,
+        "ms": 0.8980140000000002
+      },
+      "W0/GemmEx/N2560/M125/K4096/B1": {
+        "count": 72,
+        "ms": 0.7826229999999997
+      },
+      "W0/GemmEx/N151936/M16/K2560/B1": {
+        "count": 1,
+        "ms": 0.572382
+      },
+      "W0/GemmEx/N151936/M12/K2560/B1": {
+        "count": 1,
+        "ms": 0.56995
+      },
+      "W0/GemmEx/N151936/M8/K2560/B1": {
+        "count": 1,
+        "ms": 0.563391
+      },
+      "W0/GemmEx/N151936/M4/K2560/B1": {
+        "count": 1,
+        "ms": 0.562686
+      },
+      "W0/StridedBatchedEx/N128/M1/K159/B32": {
+        "count": 36,
+        "ms": 0.204191
+      },
+      "W0/StridedBatchedEx/N128/M1/K158/B32": {
+        "count": 36,
+        "ms": 0.20371099999999998
+      },
+      "W0/StridedBatchedEx/N158/M1/K128/B32": {
+        "count": 36,
+        "ms": 0.19363099999999997
+      },
+      "W0/StridedBatchedEx/N159/M1/K128/B32": {
+        "count": 36,
+        "ms": 0.13615900000000006
+      }
+    }
+  },
+  {
+    "concurrency": 32,
+    "mode": "after",
+    "archive_entry": "runs/profile-c32/c32-r0-owned-after/trace.sqlite.v15-analysis.json",
+    "trace": "/mnt/efs/nlp/psyche/riley-overlap-v18b4-inspected-20261021/runs/profile-c32/c32-r0-owned-after/trace.sqlite",
+    "scope": "Profiler diagnostic, not HTTP throughput measurement; kernel-duration sums overlap CPU API waits",
+    "kernel_count": 68990,
+    "kernel_sum_ms": 1318.228204,
+    "kernel_union_ms": 1316.993518,
+    "gpu_kernel_span_ms": 1774.808075,
+    "kernel_busy_fraction": 0.7420484144461649,
+    "nvtx_matmul_range_count": 15487,
+    "attributed_matmul_kernel_count": 20635,
+    "categories": {
+      "linear-GateUp": {
+        "count": 4284,
+        "ms": 358.5904309999997
+      },
+      "linear-Down": {
+        "count": 6624,
+        "ms": 197.35504499999846
+      },
+      "linear-KV": {
+        "count": 9648,
+        "ms": 170.24797300000228
+      },
+      "attention-QK-PV": {
+        "count": 9288,
+        "ms": 138.95301299999997
+      },
+      "linear-O": {
+        "count": 7164,
+        "ms": 105.70582900000062
+      },
+      "linear-Q": {
+        "count": 2160,
+        "ms": 68.18147299999978
+      },
+      "norm": {
+        "count": 6716,
+        "ms": 63.78086899999964
+      },
+      "linear-LMhead": {
+        "count": 66,
+        "ms": 39.27070100000001
+      },
+      "other-unattributed": {
+        "count": 7386,
+        "ms": 37.6052739999998
+      },
+      "RoPE": {
+        "count": 2376,
+        "ms": 30.2331549999999
+      },
+      "SiLU": {
+        "count": 2412,
+        "ms": 29.404396999999875
+      },
+      "softmax": {
+        "count": 4644,
+        "ms": 27.00511800000006
+      },
+      "linear-QKV": {
+        "count": 1296,
+        "ms": 26.803389999999986
+      },
+      "residual": {
+        "count": 4752,
+        "ms": 22.275928999999714
+      },
+      "greedy": {
+        "count": 66,
+        "ms": 2.3677680000000003
+      },
+      "KV-gather": {
+        "count": 108,
+        "ms": 0.4478390000000001
+      }
+    },
+    "cuda_api": {
+      "cudaStreamSynchronize_v3020": {
+        "count": 132,
+        "ms": 908.5078529999996
+      },
+      "cudaLaunchKernel_v7000": {
+        "count": 34358,
+        "ms": 173.05324099999967
+      },
+      "cudaGraphLaunch_v10000": {
+        "count": 1080,
+        "ms": 70.75217200000002
+      },
+      "cuLaunchKernel": {
+        "count": 6624,
+        "ms": 33.532568999999974
+      },
+      "cuCtxGetCurrent": {
+        "count": 145956,
+        "ms": 9.071923999998818
+      },
+      "cudaStreamGetCaptureInfo_v2_v11030": {
+        "count": 23839,
+        "ms": 7.671523000000139
+      },
+      "cudaMemcpyAsync_v3020": {
+        "count": 672,
+        "ms": 3.8859359999999965
+      },
+      "cudaGetLastError_v3020": {
+        "count": 40696,
+        "ms": 3.601598999999901
+      },
+      "cuKernelGetFunction": {
+        "count": 6624,
+        "ms": 3.001117999999994
+      },
+      "cudaOccupancyMaxActiveBlocksPerMultiprocessor_v6050": {
+        "count": 5151,
+        "ms": 2.808798000000001
+      },
+      "cudaEventRecord_v3020": {
+        "count": 2292,
+        "ms": 2.765521000000005
+      },
+      "cuCtxPopCurrent_v2": {
+        "count": 28742,
+        "ms": 2.50677200000012
+      },
+      "cuCtxPushCurrent_v2": {
+        "count": 28742,
+        "ms": 2.3661240000001
+      },
+      "cudaDeviceGetAttribute_v5000": {
+        "count": 6624,
+        "ms": 1.7181740000000019
+      },
+      "cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags": {
+        "count": 6624,
+        "ms": 1.6794659999999997
+      },
+      "cudaGetDevice_v3020": {
+        "count": 6624,
+        "ms": 1.5086780000000026
+      },
+      "cudaEventElapsedTime_v3020": {
+        "count": 132,
+        "ms": 0.715171
+      },
+      "cudaEventSynchronize_v3020": {
+        "count": 66,
+        "ms": 0.586654
+      },
+      "cuFuncGetAttribute": {
+        "count": 2376,
+        "ms": 0.47430100000000036
+      },
+      "cudaMemsetAsync_v3020": {
+        "count": 936,
+        "ms": 0.17628899999999958
+      }
+    },
+    "copy_directions": {
+      "Host-to-Device": {
+        "count": 540,
+        "bytes": 236957206,
+        "ms": 24.588631
+      },
+      "Device-to-Host": {
+        "count": 132,
+        "bytes": 12352,
+        "ms": 0.373694
+      }
+    },
+    "copy_count": 672,
+    "copy_bytes": 236969558,
+    "copy_sum_ms": 24.962325,
+    "top_kernels": {
+      "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn": {
+        "count": 5472,
+        "ms": 162.91594600000033
+      },
+      "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn": {
+        "count": 1468,
+        "ms": 138.14005299999977
+      },
+      "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x5_tn_align8>(T1::Params)": {
+        "count": 936,
+        "ms": 96.19525299999992
+      },
+      "ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn": {
+        "count": 1008,
+        "ms": 94.27017800000002
+      },
+      "void owned_sm80_tiled_kv<(int)8, (int)8>(const unsigned short *, const unsigned short *, unsigned short *, int)": {
+        "count": 2232,
+        "ms": 78.90454200000025
+      },
+      "void sm80_fused_gateup<(int)4, (int)16, (int)16, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, int)": {
+        "count": 900,
+        "ms": 76.65542699999986
+      },
+      "ampere_bf16_s16816gemm_bf16_128x128_ldg8_f2f_stages_64x3_tn": {
+        "count": 1548,
+        "ms": 59.9123700000001
+      },
+      "void cutlass::Kernel2<cutlass_80_tensorop_s16816gemm_bf16_64x64_64x6_tn_align8>(T1::Params)": {
+        "count": 2340,
+        "ms": 50.778804000000044
+      },
+      "<unnamed>::sm80_batched_pv_dispatch(const __nv_bfloat16 *, const unsigned int *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned long, unsigned long, unsigned long, const unsigned int *, const unsigned int *, const unsigned int *)": {
+        "count": 2232,
+        "ms": 50.15197499999991
+      },
+      "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_32x6_tn": {
+        "count": 1440,
+        "ms": 45.68998899999997
+      },
+      "<unnamed>::sm80_batched_qk_dispatch(const __nv_bfloat16 *, const __nv_bfloat16 *, const unsigned int *, __nv_bfloat16 *, unsigned long, unsigned long, unsigned long, const unsigned int *, const unsigned int *, const unsigned int *)": {
+        "count": 2232,
+        "ms": 44.03099299999997
+      },
+      "hugging_face_qwen_prefill_warp_rms_norm_kernel(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, int, int, float)": {
+        "count": 1971,
+        "ms": 40.75849700000008
+      },
+      "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn": {
+        "count": 2160,
+        "ms": 36.32448399999996
+      },
+      "void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, (bool)1, (bool)0, (bool)0>(cublasLt::cublasSplitKParams<T6>, const T4 *, const T5 *, T5 *, const T6 *, const T6 *, const T7 *, const T4 *, T7 *, void *, long, T6 *, int *)": {
+        "count": 6444,
+        "ms": 32.87094600000022
+      },
+      "void <unnamed>::qkv_split_head_norm_rope_kv_write_kernel<(bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, const float *, const unsigned int *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, <unnamed>::DeviceBatch, unsigned int, unsigned int, unsigned long, unsigned long, float, const unsigned int *)": {
+        "count": 2376,
+        "ms": 30.2331549999999
+      }
+    },
+    "matmul_geometries": {
+      "W0/LtMatmul/N9728/M258/K2560/B1": {
+        "count": 288,
+        "ms": 29.015944000000005
+      },
+      "W0/LtMatmul/N2560/M258/K9728/B1": {
+        "count": 288,
+        "ms": 16.68539100000002
+      },
+      "W0/LtMatmul/N9728/M506/K2560/B1": {
+        "count": 144,
+        "ms": 14.957845000000008
+      },
+      "W0/GemmEx/N2560/M130/K4096/B1": {
+        "count": 396,
+        "ms": 12.632253000000011
+      },
+      "W0/GemmEx/N9728/M126/K2560/B1": {
+        "count": 216,
+        "ms": 11.193086999999995
+      },
+      "W0/GemmEx/N1024/M130/K2560/B1": {
+        "count": 792,
+        "ms": 10.816090999999993
+      },
+      "W0/GemmEx/N9728/M514/K2560/B1": {
+        "count": 72,
+        "ms": 9.745091
+      },
+      "W0/LtMatmul/N2560/M506/K9728/B1": {
+        "count": 144,
+        "ms": 8.975876999999995
+      },
+      "W0/LtMatmul/N9728/M510/K2560/B1": {
+        "count": 72,
+        "ms": 7.513692000000001
+      },
+      "W0/LtMatmul/N9728/M499/K2560/B1": {
+        "count": 72,
+        "ms": 7.494219000000001
+      },
+      "W0/GemmEx/N9728/M128/K2560/B1": {
+        "count": 144,
+        "ms": 7.4767829999999975
+      },
+      "W0/LtMatmul/N9728/M508/K2560/B1": {
+        "count": 72,
+        "ms": 7.470378000000003
+      },
+      "W0/GemmEx/N9728/M125/K2560/B1": {
+        "count": 144,
+        "ms": 7.457387999999999
+      },
+      "W0/LtMatmul/N9728/M373/K2560/B1": {
+        "count": 72,
+        "ms": 7.442216999999998
+      },
+      "W0/LtMatmul/N9728/M497/K2560/B1": {
+        "count": 72,
+        "ms": 7.441002999999999
+      },
+      "W0/LtMatmul/N9728/M496/K2560/B1": {
+        "count": 72,
+        "ms": 7.440362000000001
+      },
+      "W0/LtMatmul/N9728/M488/K2560/B1": {
+        "count": 72,
+        "ms": 7.419592999999999
+      },
+      "W0/GemmEx/N9728/M115/K2560/B1": {
+        "count": 144,
+        "ms": 7.413449000000002
+      },
+      "W0/LtMatmul/N2560/M29/K4096/B1": {
+        "count": 504,
+        "ms": 6.589616000000032
+      },
+      "W0/LtMatmul/N4096/M258/K2560/B1": {
+        "count": 144,
+        "ms": 6.292334000000003
+      },
+      "W0/GemmEx/N1024/M128/K2560/B1": {
+        "count": 1008,
+        "ms": 6.26830299999997
+      },
+      "W0/LtMatmul/N2560/M514/K9728/B1": {
+        "count": 72,
+        "ms": 6.183339999999999
+      },
+      "W0/GemmEx/N2560/M126/K9728/B1": {
+        "count": 216,
+        "ms": 6.169423000000009
+      },
+      "W0/GemmEx/N4096/M29/K2560/B1": {
+        "count": 252,
+        "ms": 6.140913000000003
+      },
+      "W0/BatchedEx/N128/M128/K128/B32/lda128/ldb128/ldc4096": {
+        "count": 756,
+        "ms": 5.83560199999995
+      },
+      "W0/GemmEx/N2560/M128/K4096/B1": {
+        "count": 504,
+        "ms": 5.565740999999984
+      },
+      "W0/BatchedEx/N128/M128/K128/B32/lda128/ldb4096/ldc128": {
+        "count": 756,
+        "ms": 5.442831000000033
+      },
+      "W0/BatchedEx/N130/M130/K128/B32/lda128/ldb4096/ldc130": {
+        "count": 396,
+        "ms": 5.322733000000022
+      },
+      "W0/GemmEx/N9728/M256/K2560/B1": {
+        "count": 72,
+        "ms": 4.946002000000002
+      },
+      "W0/GemmEx/N9728/M254/K2560/B1": {
+        "count": 72,
+        "ms": 4.9431550000000035
+      },
+      "W0/GemmEx/N9728/M246/K2560/B1": {
+        "count": 72,
+        "ms": 4.940881000000001
+      },
+      "W0/GemmEx/N9728/M245/K2560/B1": {
+        "count": 72,
+        "ms": 4.940616
+      },
+      "W0/BatchedEx/N128/M130/K130/B32/lda128/ldb130/ldc4096": {
+        "count": 396,
+        "ms": 4.829236999999991
+      },
+      "W0/GemmEx/N4096/M28/K2560/B1": {
+        "count": 180,
+        "ms": 4.782541000000001
+      },
+      "W0/LtMatmul/N2560/M28/K4096/B1": {
+        "count": 360,
+        "ms": 4.753487000000009
+      },
+      "W0/LtMatmul/N4096/M506/K2560/B1": {
+        "count": 72,
+        "ms": 4.716595000000002
+      },
+      "W0/LtMatmul/N2560/M510/K9728/B1": {
+        "count": 72,
+        "ms": 4.500046000000001
+      },
+      "W0/LtMatmul/N2560/M508/K9728/B1": {
+        "count": 72,
+        "ms": 4.488274999999999
+      },
+      "W0/LtMatmul/N2560/M499/K9728/B1": {
+        "count": 72,
+        "ms": 4.480784999999999
+      },
+      "W0/LtMatmul/N2560/M497/K9728/B1": {
+        "count": 72,
+        "ms": 4.4713780000000005
+      },
+      "W0/LtMatmul/N2560/M496/K9728/B1": {
+        "count": 72,
+        "ms": 4.449715
+      },
+      "W0/LtMatmul/N2560/M488/K9728/B1": {
+        "count": 72,
+        "ms": 4.435573
+      },
+      "W0/BatchedEx/N125/M125/K128/B32/lda128/ldb4096/ldc125": {
+        "count": 360,
+        "ms": 4.418641999999994
+      },
+      "W0/LtMatmul/N2560/M373/K9728/B1": {
+        "count": 72,
+        "ms": 4.331475000000001
+      },
+      "W0/GemmEx/N2560/M128/K9728/B1": {
+        "count": 144,
+        "ms": 4.123027999999998
+      },
+      "W0/GemmEx/N2560/M125/K9728/B1": {
+        "count": 144,
+        "ms": 4.101652
+      },
+      "W0/GemmEx/N2560/M115/K9728/B1": {
+        "count": 144,
+        "ms": 4.0765009999999995
+      },
+      "W0/GemmEx/N4096/M128/K2560/B1": {
+        "count": 180,
+        "ms": 3.8566590000000005
+      },
+      "W0/GemmEx/N4096/M126/K2560/B1": {
+        "count": 180,
+        "ms": 3.8488539999999993
+      },
+      "W0/LtMatmul/N2560/M30/K4096/B1": {
+        "count": 288,
+        "ms": 3.7453959999999973
+      },
+      "W0/GemmEx/N4096/M30/K2560/B1": {
+        "count": 144,
+        "ms": 3.645842999999998
+      },
+      "W0/BatchedEx/N128/M126/K126/B32/lda128/ldb126/ldc4096": {
+        "count": 396,
+        "ms": 3.625683999999986
+      },
+      "W0/GemmEx/N1024/M126/K2560/B1": {
+        "count": 576,
+        "ms": 3.584407000000008
+      },
+      "W0/BatchedEx/N128/M125/K125/B32/lda128/ldb125/ldc4096": {
+        "count": 360,
+        "ms": 3.5396390000000046
+      },
+      "W0/BatchedEx/N126/M126/K128/B32/lda128/ldb4096/ldc126": {
+        "count": 396,
+        "ms": 3.257303000000004
+      },
+      "W0/GemmEx/N2560/M126/K4096/B1": {
+        "count": 288,
+        "ms": 3.1975909999999947
+      },
+      "W0/LtMatmul/N1024/M256/K2560/B1": {
+        "count": 288,
+        "ms": 2.8546160000000063
+      },
+      "W0/LtMatmul/N2560/M31/K4096/B1": {
+        "count": 216,
+        "ms": 2.7968549999999968
+      },
+      "W0/LtMatmul/N2560/M256/K4096/B1": {
+        "count": 144,
+        "ms": 2.647193000000001
+      },
+      "W0/BatchedEx/N115/M115/K128/B32/lda128/ldb4096/ldc115": {
+        "count": 216,
+        "ms": 2.6174630000000025
+      },
+      "W0/LtMatmul/N2560/M256/K9728/B1": {
+        "count": 72,
+        "ms": 2.5295920000000014
+      },
+      "W0/LtMatmul/N2560/M254/K9728/B1": {
+        "count": 72,
+        "ms": 2.5279950000000007
+      },
+      "W0/LtMatmul/N2560/M246/K9728/B1": {
+        "count": 72,
+        "ms": 2.5139460000000002
+      },
+      "W0/LtMatmul/N2560/M245/K9728/B1": {
+        "count": 72,
+        "ms": 2.505311999999999
+      },
+      "W0/GemmEx/N4096/M31/K2560/B1": {
+        "count": 108,
+        "ms": 2.499447000000001
+      },
+      "W0/LtMatmul/N2560/M506/K4096/B1": {
+        "count": 72,
+        "ms": 2.4397029999999997
+      },
+      "W0/LtMatmul/N2560/M497/K4096/B1": {
+        "count": 72,
+        "ms": 2.424474
+      },
+      "W0/GemmEx/N2560/M1/K4096/B1": {
+        "count": 216,
+        "ms": 2.4225789999999994
+      },
+      "W0/LtMatmul/N2560/M496/K4096/B1": {
+        "count": 72,
+        "ms": 2.3966949999999994
+      },
+      "W0/LtMatmul/N4096/M499/K2560/B1": {
+        "count": 36,
+        "ms": 2.3869369999999996
+      },
+      "W0/LtMatmul/N2560/M488/K4096/B1": {
+        "count": 72,
+        "ms": 2.3853679999999997
+      },
+      "W0/LtMatmul/N4096/M514/K2560/B1": {
+        "count": 36,
+        "ms": 2.380345
+      },
+      "W0/LtMatmul/N4096/M510/K2560/B1": {
+        "count": 36,
+        "ms": 2.36758
+      },
+      "W0/LtMatmul/N4096/M508/K2560/B1": {
+        "count": 36,
+        "ms": 2.3657209999999997
+      },
+      "W0/LtMatmul/N4096/M497/K2560/B1": {
+        "count": 36,
+        "ms": 2.3468099999999987
+      },
+      "W0/LtMatmul/N4096/M496/K2560/B1": {
+        "count": 36,
+        "ms": 2.339927
+      },
+      "W0/LtMatmul/N4096/M488/K2560/B1": {
+        "count": 36,
+        "ms": 2.3146489999999997
+      },
+      "W0/GemmEx/N4096/M125/K2560/B1": {
+        "count": 108,
+        "ms": 2.311743
+      },
+      "W0/GemmEx/N4096/M1/K2560/B1": {
+        "count": 108,
+        "ms": 2.2551260000000006
+      },
+      "W0/BatchedEx/N128/M115/K115/B32/lda128/ldb115/ldc4096": {
+        "count": 216,
+        "ms": 2.111639000000003
+      },
+      "W0/LtMatmul/N1024/M496/K2560/B1": {
+        "count": 144,
+        "ms": 1.9638330000000002
+      },
+      "W0/LtMatmul/N1024/M488/K2560/B1": {
+        "count": 144,
+        "ms": 1.9559020000000014
+      },
+      "W0/LtMatmul/N1024/M506/K2560/B1": {
+        "count": 144,
+        "ms": 1.9545210000000015
+      },
+      "W0/LtMatmul/N1024/M497/K2560/B1": {
+        "count": 144,
+        "ms": 1.9439630000000008
+      },
+      "W0/LtMatmul/N2560/M380/K4096/B1": {
+        "count": 72,
+        "ms": 1.9096959999999998
+      },
+      "W0/LtMatmul/N2560/M369/K4096/B1": {
+        "count": 72,
+        "ms": 1.8905870000000005
+      },
+      "W0/LtMatmul/N2560/M378/K4096/B1": {
+        "count": 72,
+        "ms": 1.8802159999999997
+      },
+      "W0/GemmEx/N1024/M1/K2560/B1": {
+        "count": 216,
+        "ms": 1.8719650000000008
+      },
+      "W0/GemmEx/N1024/M125/K2560/B1": {
+        "count": 288,
+        "ms": 1.7905889999999989
+      },
+      "W0/GemmEx/N1024/M115/K2560/B1": {
+        "count": 288,
+        "ms": 1.7830040000000023
+      },
+      "W0/LtMatmul/N4096/M373/K2560/B1": {
+        "count": 36,
+        "ms": 1.6443469999999996
+      },
+      "W0/GemmEx/N151936/M1/K2560/B1": {
+        "count": 3,
+        "ms": 1.620186
+      },
+      "W0/GemmEx/N2560/M125/K4096/B1": {
+        "count": 144,
+        "ms": 1.5612410000000014
+      },
+      "W0/GemmEx/N2560/M115/K4096/B1": {
+        "count": 144,
+        "ms": 1.5474829999999993
+      },
+      "W0/GemmEx/N4096/M120/K2560/B1": {
+        "count": 72,
+        "ms": 1.5392940000000006
+      },
+      "W0/GemmEx/N4096/M115/K2560/B1": {
+        "count": 72,
+        "ms": 1.5348760000000004
+      },
+      "W0/LtMatmul/N1024/M378/K2560/B1": {
+        "count": 144,
+        "ms": 1.525018999999999
+      },
+      "W0/LtMatmul/N1024/M369/K2560/B1": {
+        "count": 144,
+        "ms": 1.5200269999999994
+      },
+      "W0/LtMatmul/N1024/M380/K2560/B1": {
+        "count": 144,
+        "ms": 1.518847999999999
+      },
+      "W0/LtMatmul/N1024/M254/K2560/B1": {
+        "count": 144,
+        "ms": 1.4253390000000001
+      },
+      "W0/LtMatmul/N1024/M245/K2560/B1": {
+        "count": 144,
+        "ms": 1.4212780000000007
+      },
+      "W0/LtMatmul/N1024/M243/K2560/B1": {
+        "count": 144,
+        "ms": 1.4210840000000007
+      },
+      "W0/LtMatmul/N1024/M246/K2560/B1": {
+        "count": 144,
+        "ms": 1.418107000000001
+      },
+      "W0/BatchedEx/N128/M120/K120/B32/lda128/ldb120/ldc4096": {
+        "count": 180,
+        "ms": 1.386428999999999
+      },
+      "W0/LtMatmul/N2560/M254/K4096/B1": {
+        "count": 72,
+        "ms": 1.3201880000000004
+      },
+      "W0/BatchedEx/N120/M120/K128/B32/lda128/ldb4096/ldc120": {
+        "count": 180,
+        "ms": 1.311964
+      },
+      "W0/LtMatmul/N2560/M245/K4096/B1": {
+        "count": 72,
+        "ms": 1.3093320000000002
+      },
+      "W0/LtMatmul/N2560/M246/K4096/B1": {
+        "count": 72,
+        "ms": 1.3078980000000004
+      },
+      "W0/LtMatmul/N2560/M243/K4096/B1": {
+        "count": 72,
+        "ms": 1.3061090000000002
+      },
+      "W0/LtMatmul/N2560/M4/K4096/B1": {
+        "count": 72,
+        "ms": 1.0777259999999995
+      },
+      "W0/LtMatmul/N2560/M8/K4096/B1": {
+        "count": 72,
+        "ms": 1.0680920000000003
+      },
+      "W0/LtMatmul/N2560/M12/K4096/B1": {
+        "count": 72,
+        "ms": 1.0512939999999993
+      },
+      "W0/LtMatmul/N2560/M16/K4096/B1": {
+        "count": 72,
+        "ms": 1.0245439999999997
+      },
+      "W0/LtMatmul/N2560/M20/K4096/B1": {
+        "count": 72,
+        "ms": 1.0047669999999997
+      },
+      "W0/LtMatmul/N2560/M24/K4096/B1": {
+        "count": 72,
+        "ms": 0.9781080000000001
+      },
+      "W0/GemmEx/N4096/M4/K2560/B1": {
+        "count": 36,
+        "ms": 0.96483
+      },
+      "W0/GemmEx/N4096/M24/K2560/B1": {
+        "count": 36,
+        "ms": 0.9635830000000001
+      },
+      "W0/GemmEx/N4096/M16/K2560/B1": {
+        "count": 36,
+        "ms": 0.963488
+      },
+      "W0/GemmEx/N4096/M20/K2560/B1": {
+        "count": 36,
+        "ms": 0.9630689999999998
+      },
+      "W0/GemmEx/N4096/M12/K2560/B1": {
+        "count": 36,
+        "ms": 0.9602859999999998
+      },
+      "W0/GemmEx/N4096/M8/K2560/B1": {
+        "count": 36,
+        "ms": 0.96019
+      },
+      "W0/LtMatmul/N2560/M26/K4096/B1": {
+        "count": 72,
+        "ms": 0.9561890000000001
+      },
+      "W0/GemmEx/N1024/M120/K2560/B1": {
+        "count": 144,
+        "ms": 0.903678
+      },
+      "W0/GemmEx/N4096/M26/K2560/B1": {
+        "count": 36,
+        "ms": 0.8354859999999998
+      },
+      "W0/GemmEx/N2560/M120/K4096/B1": {
+        "count": 72,
+        "ms": 0.7800940000000001
+      },
+      "W0/GemmEx/N151936/M16/K2560/B1": {
+        "count": 1,
+        "ms": 0.57251
+      },
+      "W0/GemmEx/N151936/M12/K2560/B1": {
+        "count": 1,
+        "ms": 0.568606
+      },
+      "W0/GemmEx/N151936/M8/K2560/B1": {
+        "count": 1,
+        "ms": 0.563006
+      },
+      "W0/GemmEx/N151936/M4/K2560/B1": {
+        "count": 1,
+        "ms": 0.558111
+      },
+      "W0/StridedBatchedEx/N128/M1/K157/B32": {
+        "count": 36,
+        "ms": 0.2025280000000001
+      },
+      "W0/StridedBatchedEx/N128/M1/K159/B32": {
+        "count": 36,
+        "ms": 0.20233600000000002
+      },
+      "W0/StridedBatchedEx/N128/M1/K158/B32": {
+        "count": 36,
+        "ms": 0.20102400000000006
+      },
+      "W0/StridedBatchedEx/N158/M1/K128/B32": {
+        "count": 36,
+        "ms": 0.19327999999999995
+      },
+      "W0/StridedBatchedEx/N159/M1/K128/B32": {
+        "count": 36,
+        "ms": 0.13603200000000004
+      },
+      "W0/StridedBatchedEx/N157/M1/K128/B32": {
+        "count": 36,
+        "ms": 0.135679
+      }
+    }
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "scope": "Supplemental diagnostic only; all30 normal and original4 CPU-overlap profile arms retained. Missing LD_PRELOAD files affected eager GEMM classification in original4 profiles, not normal timing/numerical gates or native CPU NVTX overlap proof.",
+  "original_archive_sha256": "2cc368b3ad6f76e60500b461b661788a070730c3f098aaec4f60e624c6d7c6be",
+  "candidate_binary_sha256": "2f2751b896df84449b1500cfc291e1211e226c246c4e464113470bcf0eb1b277",
+  "instrumentation": {
+    "pointer-inspection.so": {
+      "origin": "/mnt/efs/nlp/psyche/riley-piecewise-v18a-20261021/pointer-inspection.so",
+      "sha256": "58efd0bc70d8821dd7eff4e3aaa1e5a2671310921e7d5141c2c3c6ed3dd69799"
+    },
+    "call-inspection-nvtx.so": {
+      "origin": "/mnt/efs/nlp/psyche/riley-piecewise-v18a-20261021/call-inspection-nvtx.so",
+      "sha256": "5baf7b607a160365616cd50185ea1f670c0edc1be63626461e31621e2c2015a3"
+    }
+  },
+  "normal_completed_arms_repeated": 0
+}
