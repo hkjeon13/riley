@@ -1,0 +1,48 @@
+{
+  "time_ns": 1792553279746766074,
+  "resource_reruns": [
+    {
+      "name": "final-teacher-C1-eager-resource-r2",
+      "samples": 71,
+      "whole_device_peak_MiB": 9783.0,
+      "receipt_sha256": "74102a495c2e0e703f48ff6c9c5b6a6ab1a2b5c43bb4d8ec03f13ec7e81cb233"
+    },
+    {
+      "name": "final-teacher-allR-Graph-resource-r2",
+      "samples": 79,
+      "whole_device_peak_MiB": 19053.0,
+      "receipt_sha256": "57d0cdb28b01a40ea64182e19716ffde431607b0e2876897171d2a9fb1ff8d69"
+    },
+    {
+      "name": "teacher-body-allR-resource-r2",
+      "samples": 190,
+      "whole_device_peak_MiB": 19133.0,
+      "receipt_sha256": "061d3db8eb8bee7ee8f71111aa84f118f090c22aa732b7b5e4293d465809d503"
+    },
+    {
+      "name": "teacher-mixed-resource-r2",
+      "samples": 114,
+      "whole_device_peak_MiB": 18905.0,
+      "receipt_sha256": "4aa0d66fce260392f41a9f04e6b7c214221ed572e4af63c7965af3ff49cdc284"
+    },
+    {
+      "name": "teacher-mixed-no-output-resource-r2",
+      "samples": 118,
+      "whole_device_peak_MiB": 18905.0,
+      "receipt_sha256": "60e0aff8ff171d15ca891597d6efbcff42a604bc2eeb89d039955b65c204f31a"
+    },
+    {
+      "name": "prefill-inplace-r4",
+      "samples": 2,
+      "whole_device_peak_MiB": 505.0,
+      "verified_before_sampling": {
+        "3745702": "6098179468"
+      }
+    }
+  ],
+  "source936_verified": true,
+  "binary_sha256": "7d9e89a57f6d8ed248a853ba693b3a77e502b941ee03d16ddd9b3d454b6662a2",
+  "normal_and_profile_arms": 35,
+  "stored_SSE_verified": 7239,
+  "normal_and_profile_peak_MiB": 18267.0
+}

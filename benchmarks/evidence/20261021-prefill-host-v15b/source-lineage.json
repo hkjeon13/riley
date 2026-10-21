@@ -1,0 +1,42 @@
+{
+  "time_ns": 1792549596842134289,
+  "baseline_root": "/mnt/efs/nlp/psyche/riley-piecewise-v13b-20261020",
+  "baseline_binary_sha256": "9dd87720ceb5c9f99532b8b01851557598032a6fe5ba037316e327eba1505566",
+  "source_file_count": 936,
+  "changed_sources": [
+    "crates/riley-runtime/src/llama/executor/dispatch.rs",
+    "kernels/src/command_batch_index.hpp",
+    "kernels/src/cublas_gemm_probe.cu",
+    "kernels/src/ffi_internal.hpp",
+    "kernels/src/hf_softmax_diagnostic.cuh",
+    "kernels/src/host_runtime.cu"
+  ],
+  "binary": "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/riley-prefill-host-v15b",
+  "binary_sha256": "7d9e89a57f6d8ed248a853ba693b3a77e502b941ee03d16ddd9b3d454b6662a2",
+  "source_manifest_sha256": "c9b0cff4a227c36f860485787d73bfd1eb556ae698119600de5fcf8eec6ab7c9",
+  "scripts_sha256": {
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/final-holds.py": "88bd43389dd98fad3c53c573940c9727e2e11a2c307ab19790c1a73f0e7f3853",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/audit-complete.py": "120293cb5dfae51d55a6b6ab4f20b84f00b8121366ce0c13cb8e85483ce0a23c",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/run-job.py": "16acd40d608ca42453d9a311ab18db014e986d0511b4c02a7929e8d78c19bf40",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/run-teacher-final.py": "0adf2e1026ac46d2e8181e753171555c7952ac537dba5a4387dd0c63cfc30a35",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/audit-teachers-e.py": "ba60550fb6b7a852ef3dcd1c091641c700d9a97e3048868e673945a89b5c336c",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/analyze-profiles.py": "4365aaa08aac6dd8c37c50bce43fab163e9223d79239eff501d9c4a2d4fbf9cd",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/measure-matched.py": "fbdfeee188a5eb2ddf8d08fd57a3aedc87e88fc8033bca75d4b4bef594bfb744",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/analyze-final.py": "f8a37fd0683c690f089a393cd6c9a6dab09530f40d0588b5cb336821ad1f8f8d",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/prepare-body-teacher.py": "0daaf33d7ec574c1fdafbf798f484ca1cfde8322e8b3f1353c92fda20f05604a",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/recheck-c02.py": "92ffa269ce9fc40cfcb65d048e83c0e696cd825f06effe4f6048a612eae85a90",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/queue-qualification-b.py": "0403168c3c5cf0c9b64362a4b1e434d9c6ee422c56aef14679ad1ed2bafb34b6",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/observe-finite.py": "730fe302fb1986d6b290e0781cd8bb83a33f0884474682d5e504fd7edc86b162",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/holder.py": "446ea0456b699bbca73730caff276bd841553584cdf16d41fa83522f29343309",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/prepare-mixed-teacher.py": "bf91de3be38273cf88fd3f15307c84ebbce6adc320f63269893b0da915663286",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/build-teacher-final.py": "31590d2eeb0485e04cfad8f37db2580bb61facf1b747d72f8cd2642122f04513",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/measure-profile.py": "24c1e1be367848e6800d764aeb42468d3547ddd645779ffb393b32d5e9956de0",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/stock-runtime-proof.py": "12de58c78095f6e6f6a6dd646fbdf47e48d98ee6f66c548d79b55ca96cc5b71b",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/baseline-host-c32.argv.json": "f084fbe4b18ec9c361869d8a4ca36be37dce839ffbeb205921b676efd990d0fb",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/final-c32.argv.json": "b5fa6fdedf3d6c1bbfaf48c18b19cc3fc79006bc6d294e6cb3da332c9044a166",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/screen-c16.argv.json": "7af9a890d951dea261cbc34a1e1973f6dd64505b7b879ff5e26a23da559f26cf",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/screen-c32.argv.json": "97bba5926ff7ee404bf11fb0679c6f9b222de2ada52bd4f5acf337d1f506b419",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/final-c16.argv.json": "f6bccb799e2c8e949af594cad2eed4ca706b45110a757b4a95f2c9e705025a79",
+    "/mnt/efs/nlp/psyche/riley-prefill-host-v15b-20261021/build.sh": "4627564e5339a381498b8eb9bc61ab82412c838b1472d28db61e32f5a2e3433f"
+  }
+}

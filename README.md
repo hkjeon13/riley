@@ -32,8 +32,8 @@ vLLM is stock 0.27.1 with FlashAttention 2 and FULL_AND_PIECEWISE graphs.
 
 | Clients | Riley output tok/s | vLLM output tok/s | Riley / vLLM | TTFT p95 ms, Riley / vLLM | TPOT p95 ms, Riley / vLLM | E2E p95 ms, Riley / vLLM |
 |---:|---:|---:|---:|---:|---:|---:|
-| 16 | 717.594 | 1149.627 | 62.42% | 88.177 / 83.390 | 20.994 / 12.380 | 689.143 / 414.511 |
-| 32 | 933.101 | 1674.932 | 55.71% | 270.162 / 163.738 | 33.801 / 17.755 | 1063.540 / 559.684 |
+| 16 | 719.189 | 1125.205 | 63.92% | 88.291 / 83.717 | 20.867 / 12.758 | 691.977 / 427.521 |
+| 32 | 933.316 | 1671.802 | 55.83% | 272.284 / 165.122 | 33.471 / 18.123 | 1061.863 / 559.312 |
 
 Both engines use BF16, greedy sampling, token budget 576, maximum sequence
 length 1024 and prefix caching disabled. Each arm has 64 warm-up and 192
@@ -50,6 +50,17 @@ tails, correctness and resource receipts:
 [v14 comparison](docs/qwen-mixed-attention-structural-v14-20261021.md),
 [retained v13 design](docs/qwen-piecewise-graph-merged-gateup-v13-20261020.md),
 [evidence index](benchmarks/evidence/20261021-structural-v14/README.md).
+
+The subsequent [v15B prefill/host experiment](docs/qwen-prefill-host-v15b-20261021.md)
+improves throughput by 3.06% / 5.45%, but remains unadopted at this checkpoint:
+one C32 TPOT p99 pair regresses 2.40%, and general unaligned BF16 views require
+an eligibility guard. The table above uses its fresh v13B/stock controls.
+
+
+Dated A100 matrices for other model families and their original numerical
+contracts are in [model coverage](docs/model-coverage-a100.md). Separate native
+preset screens are documented in [native HF performance](docs/hf-native-performance.md),
+including their modified-baseline and acceptance status.
 
 ### RTX 4090 · Qwen2.5-3B-Instruct · historical campaign
 

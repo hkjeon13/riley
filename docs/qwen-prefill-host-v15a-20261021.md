@@ -6,7 +6,7 @@
 
 v14D는 일부 decode softmax/PV와 R2~16 Gate/Up 경로만 바꿨다. 새 softmax/PV kernel은 D C32 trace의 GPU kernel 시간 합계 중 2.63%였고, hot-buffer 구성요소 이득은 cache-displacement/이종 context 진단에서 유지되지 않았다. R2~16에서는 기존 fused Gate/Up 1 kernel이 Lt+SiLU 2 kernels로 바뀌었다. 동기화 수 감소도 전체 GPU 작업 감소와 같지 않았다. [원래의 부정적 결과](qwen-mixed-attention-structural-v14-20261021.md)를 유지한다.
 
-기존 **v13B baseline** trace를 Graph node 단위로 다시 분류했다. 첫 실행의 node 순서, 36 layers의 72 residual 경계, QKV pack·PV·SiLU 경계와 source 실행 순서를 함께 사용한다. kernel 이름이나 grid만으로 GEMM의 역할을 추정하지 않는다. node별 근거를 JSON으로 보존한다. parser에 driver API 상관관계도 추가했지만 아래 baseline 재분류 이득은 Graph node 매핑에서 나온다.
+기존 **v13B baseline** trace를 Graph node 단위로 다시 분류했다. 첫 실행의 node 순서, 36 layers의 72 residual 경계, QKV pack·PV·SiLU 경계와 source 실행 순서를 함께 사용한다. kernel 이름이나 grid만으로 GEMM의 역할을 추정하지 않는다. node별 근거를 JSON으로 보존한다. 이 trace에는 별도 driver API table이 없으므로 아래 재분류 이득은 Graph node 매핑에서 나온다. 후속 진단에는 모든 CUDA API 수집을 명시해 driver 호출 비용을 따로 확인한다.
 
 | GPU kernel 시간 합계, ms | C16 baseline | C32 baseline |
 |---|---:|---:|

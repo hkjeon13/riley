@@ -254,3 +254,9 @@ Q/K/V/O의 요청별 prefill을 native-M128 arithmetic family를 보존하는 �
 [v15A 보고서](qwen-prefill-host-v15a-20261021.md)의 prefill-only 후보는 K/V GQA 확장과 Q/output 재배치를 제거하고 native BF16 경계의 causal softmax를 융합했다. CPU524, full-vocabulary BF16 2,464 files, attention 구성요소156조합을 통과했다. 한 번의 선별에서 C16+4.78%, C32+5.21%였지만 C16 TPOT p99+2.38%이고 C32에는 host trace가 있으므로 정상5회 결과로 채택하지 않는다. 재현 패치와 압축 증거를 커밋·푸시로 보존한다.
 
 기존 baseline의 Graph node 재분류로 other는 C16 407.503→96.909ms, C32 375.545→89.720ms가 됐다. Gate/Up+Down이 전체 GPU kernel 시간 합계의 약41~43%다. prefill attention 변경과 host resource index·completion 경계 개선을 결합한 후보를 독립 빌드하고 C16/C32의 before/after/stock 5회 정상 비교를 진행한다. 정확도·tail·GPU6/7 holder 기준은 유지하며, 최종 정상 수치는 루트 README에 별도로 반영한다.
+
+### 2026-10-21 v15B prefill+host checkpoint
+
+[v15B 보고서](qwen-prefill-host-v15b-20261021.md): prefill 구조와 O(1) resource index·embedding report completion 경계를 합쳤다. 정상 fresh5회 처리량은 C16 +3.06%, C32 +5.45%; TTFT p95는 -6.81%, -9.82%였다. C32 반복2 TPOT p99+2.40% 플래그와 일반 BF16 view의 정렬 적격성 보완이 남아 기본 코드는 v13B로 유지한다. 미적용 patch·30 정상 arms·5 별도 profiles·원래 HF/native bytes와 whole-device cap의5개 재검사를 압축 증거로 보존한다.
+
+실제 after trace의 prefill compact gather는 각 동시성에서6,912회, pointer-batched GEMM은13,824 NVTX ranges였다. 기존 Q gather/output scatter/scale-mask/BF16 scatter는0이다. generic context 복원 변경은 관측된 API 비용상 우선순위가 낮아 도입하지 않았다. 최종 C 후보는 비정렬 view를 기존 경로로 보내는 가드와120개의 실제 GPU view 검사를 더하고 같은 정확도·C16/C32 fresh5회 성능 gate를 다시 수행한다. +10% 처리량 목표 달성으로 승격하지 않는다.
