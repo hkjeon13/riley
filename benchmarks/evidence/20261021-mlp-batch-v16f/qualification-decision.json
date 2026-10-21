@@ -1,0 +1,84 @@
+{
+  "time_ns": 1792568859673580523,
+  "adopted": false,
+  "original_native_HF_files4480_all_equal": true,
+  "GPU_contract_functions": 6,
+  "new_merged_raw_cases": 66,
+  "CPU_passed": 524,
+  "CPU_ignored": 40,
+  "normal_arms": 0,
+  "bounded_constructor_rejected_before_any_logits": true,
+  "reason": "Guard incorrectly treated preallocated empty OwnedDecodeSegment slots as prepared Graphs; .is_empty() conflated slots with graph handles. G changes guard to actual graph/warmed/replayed state and rebuilds independently.",
+  "resources": [
+    {
+      "name": "final-teacher-C1-eager-r3",
+      "returncode": 0,
+      "status": "complete",
+      "peak_whole_device_MiB": 9783.0,
+      "receipt_sha256": "481cad5bcebd6bb5df21b002925a380db1e6318eaf81699e7da3909c6216c417"
+    },
+    {
+      "name": "final-teacher-allR-Graph-r3",
+      "returncode": 0,
+      "status": "complete",
+      "peak_whole_device_MiB": 19135.0,
+      "receipt_sha256": "949e6846d58564c4792d50b0db5a3af1126abdf8cf8270d010a9b65cff6d433d"
+    },
+    {
+      "name": "teacher-body-allR-r3",
+      "returncode": 0,
+      "status": "complete",
+      "peak_whole_device_MiB": 19215.0,
+      "receipt_sha256": "47854583a7c84074cc2647277152f42967d346a933964b1d509575d52aae6561"
+    },
+    {
+      "name": "teacher-mixed-r3",
+      "returncode": 0,
+      "status": "complete",
+      "peak_whole_device_MiB": 18987.0,
+      "receipt_sha256": "4c820e39a033e72b43cc1890627e482477414fd84db21becd331c4dd99e3f090"
+    },
+    {
+      "name": "teacher-mixed-no-output-r3",
+      "returncode": 0,
+      "status": "complete",
+      "peak_whole_device_MiB": 18987.0,
+      "receipt_sha256": "0c986e993674914659e908e75401ce14fc86a91712557b4d08afeadcb1b9cb52"
+    },
+    {
+      "name": "memory_gpu",
+      "returncode": 0,
+      "status": "complete",
+      "peak_whole_device_MiB": 504.0,
+      "receipt_sha256": "fd4f23404f3acdf0dc8f13e92d21d7059bd2f4d430878fb5afb86d274103aef0"
+    },
+    {
+      "name": "owned_hf_command_batch_gpu",
+      "returncode": 0,
+      "status": "complete",
+      "peak_whole_device_MiB": 504.0,
+      "receipt_sha256": "880cc18adffa431a13151e1c3d72b6def81713ba5ac75dbd75413a734694324e"
+    },
+    {
+      "name": "host_runtime_gpu",
+      "returncode": 0,
+      "status": "complete",
+      "peak_whole_device_MiB": 504.0,
+      "receipt_sha256": "c55a3105358d3154fa8314cae9e0315dcbfea3c14a33f6e8f3540000bfed4a0f"
+    },
+    {
+      "name": "sm80_prefill_alignment_gpu",
+      "returncode": 0,
+      "status": "complete",
+      "peak_whole_device_MiB": 1079.0,
+      "receipt_sha256": "ec84683de4199c3cc3be59e9b06625611357e068cc3ecfe616f08e6db9a56d5e"
+    },
+    {
+      "name": "bounded576",
+      "returncode": 101,
+      "status": "failed",
+      "peak_whole_device_MiB": 12785.0,
+      "receipt_sha256": "830ee1a6ea77968645a3c1cf287d3334db3c117ca20aeceafe0a57cc2172433e"
+    }
+  ]
+}

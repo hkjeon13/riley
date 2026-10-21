@@ -1,0 +1,19 @@
+{
+  "time_ns": 1792568859372389253,
+  "baseline_commit": "57502e7a0fafd165966071e88b3e8a56cdea0e3d",
+  "baseline_binary": "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/riley-prefill-host-v15c",
+  "baseline_sha256": "233c3a6a81bad76d65577bacd5837d59e2ebe1dd52a8fde73f3cd07a38cf937a",
+  "binary": "/mnt/efs/nlp/psyche/riley-mlp-batch-v16f-20261021/riley-mlp-batch-v16f",
+  "binary_sha256": "43d503c633826287df41acc625b49b9f0f49d74dcab9c8f32a1173e2645d3620",
+  "qualified_source_count": 937,
+  "changed_sources": [
+    "crates/riley-cuda/src/gemm.rs",
+    "crates/riley-cuda/tests/sm80_prefill_alignment_gpu.rs",
+    "crates/riley-runtime/src/llama/executor/dispatch.rs",
+    "crates/riley-runtime/src/llama/executor/owner.rs",
+    "crates/riley-runtime/src/llama/forward.rs",
+    "kernels/src/cublas_gemm_probe.cu"
+  ],
+  "source_manifest_sha256": "bf63674b18f75fa2141133925fc7ef1bbc6674dd3eec9f8ac9bdb2f7fed5ea8d",
+  "scope": "Original numerical suite passed; serving-capacity constructor failed before output or normal benchmark; source matches prebuild snapshot"
+}

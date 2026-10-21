@@ -101,6 +101,10 @@ excluded from qualified server throughput claims.
 2,676 layer0 BF16 cases and reduces actual-route GEMM time in a component
 screen. Whole-model qualification is required before adoption.
 
+[v16F serving-capacity qualification](docs/qwen-mlp-batch-v16f-20261021.md)
+passes the original numerical suite but fails an added cold scratch-constructor
+check before logits. It is unadopted and has no normal throughput measurements.
+
 Dated A100 matrices for other model families and their original numerical
 contracts are in [model coverage](docs/model-coverage-a100.md). Separate native
 preset screens are documented in [native HF performance](docs/hf-native-performance.md),
