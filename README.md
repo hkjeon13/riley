@@ -33,6 +33,11 @@ not beat the selected layout. These are operator results; full-model accuracy
 and fresh C16/C32 HTTP comparisons remain pending. The accepted runtime remains
 v15C. [Implementation, full operator table and evidence](docs/qwen-weight-layout-v19-screen-20261022.md).
 
+A separate lossless BF16 format reduces Gate/Up/Down stored weight bytes by
+17.58%/16.41%, but decoding makes Gate/Up 31–35% slower and Down about twice
+as slow. All 360 operator comparisons are exact; this candidate is rejected.
+[Lossless format implementation and results](docs/qwen-lossless-projection-v19-20261022.md).
+
 ### Latest structural experiments · 2026-10-22
 
 Both candidates passed the original accuracy gates but were **not adopted**.
