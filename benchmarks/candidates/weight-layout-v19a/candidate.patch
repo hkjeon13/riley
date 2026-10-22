@@ -1,0 +1,432 @@
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -2715,6 +2715,8 @@
+     fn riley_cuda_cublas_hf_attention_chunk_wide_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,tokens:*const u64,requests:u64,physical:u64,sequences:u64,ids:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+     #[cfg(feature = "cuda-cublas-gemm-probe")]
+     fn riley_cuda_owned_hf_mlp_register_uses(gate:*mut RawCublasGemmProbePlan,
++        down:*mut RawCublasGemmProbePlan,buffers:*const RawBufferSpan,
++        stream:*mut RawStream,error:*mut ErrorInfo)->i32;    fn riley_cuda_owned_hf_mlp_register_packed_uses(gate:*mut RawCublasGemmProbePlan,
+         down:*mut RawCublasGemmProbePlan,buffers:*const RawBufferSpan,
+         stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+     #[cfg(feature = "cuda-cublas-gemm-probe")]
+@@ -10255,6 +10257,13 @@
+         let status=unsafe {riley_cuda_cublas_hf_sm80_fused_gate_up_execute(self.as_ptr(),spans.as_ptr(),4,rows,stream.as_ptr(),&mut error)};
+         status_result(status,"private exact SM80 GateUp SiLU",&error)
+     }
++    pub(super) fn sm80_fused_gate_up_packed(&mut self,spans:&[RawBufferSpan;5],rows:u64,stream:&mut StreamHandle)->CudaResult<()> {
++        let mut error=ErrorInfo::new();
++        // SAFETY: retained caller borrows; native validates ranges, contexts,
++        // aliases and registers exclusive uses until capture/commands fence.
++        let status=unsafe {riley_cuda_cublas_hf_sm80_fused_gate_up_execute(self.as_ptr(),spans.as_ptr(),5,rows,stream.as_ptr(),&mut error)};
++        status_result(status,"private exact SM80 GateUp SiLU",&error)
++    }
+
+     pub(super) fn smol_fused_qkv_supported(&self,rows:u64)->bool {
+         // SAFETY: immutable qualified live-plan metadata; no CUDA operation.
+@@ -10309,6 +10318,12 @@
+         // SAFETY: both plan owners and all eight validated spans remain live
+         // for this synchronous registration; the native batch retains uses.
+         let status=unsafe{riley_cuda_owned_hf_mlp_register_uses(self.as_ptr(),down.as_ptr(),buffers.as_ptr(),stream.as_ptr(),&mut error)};
++        status_result(status,"register owned MLP graph resources",&error)
++    }    pub(super) fn register_mlp_packed_uses(&self,down:&Self,buffers:&[RawBufferSpan;9],stream:&mut StreamHandle)->CudaResult<()> {
++        let mut error=ErrorInfo::new();
++        // SAFETY: both plan owners and all eight validated spans remain live
++        // for this synchronous registration; the native batch retains uses.
++        let status=unsafe{riley_cuda_owned_hf_mlp_register_packed_uses(self.as_ptr(),down.as_ptr(),buffers.as_ptr(),stream.as_ptr(),&mut error)};
+         status_result(status,"register owned MLP graph resources",&error)
+     }
+     pub(super) fn prepare_sm80_attention(&mut self)->CudaResult<()> {
+--- a/crates/riley-cuda/src/gemm.rs
++++ b/crates/riley-cuda/src/gemm.rs
+@@ -1979,9 +1979,9 @@
+
+ #[cfg(feature = "cuda-cublas-gemm-probe")]
+ impl CudaPreparedCublasGemmProbe {
+-    pub(crate) fn register_mlp_uses(&self,down:&Self,buffers:[ffi::RawBufferSpan;8],stream:&mut CudaStream)->CudaResult<()> {
++    pub(crate) fn register_mlp_uses(&self,down:&Self,buffers:[ffi::RawBufferSpan;8],packed:Option<ffi::RawBufferSpan>,stream:&mut CudaStream)->CudaResult<()> {
+         if self.poisoned || down.poisoned {return Err(CudaError::invalid_state("owned MLP graph","poisoned GEMM plan"));}
+-        self.native.register_mlp_uses(&down.native,&buffers,&mut stream.native)
++        if let Some(packed)=packed {let b=[buffers[0],buffers[1],buffers[2],buffers[3],buffers[4],buffers[5],buffers[6],buffers[7],packed];self.native.register_mlp_packed_uses(&down.native,&b,&mut stream.native)}else{self.native.register_mlp_uses(&down.native,&buffers,&mut stream.native)}
+     }
+
+     /// Private request-row execution; no plan or buffer is allocated while dispatching.
+@@ -2211,6 +2211,16 @@
+         let result=self.native.sm80_fused_gate_up(&spans,rows,&mut stream.native);
+         if result.is_err(){self.poisoned=true;}result.map(|_|true)
+     }
++    pub fn try_execute_hf_sm80_fused_gate_up_packed<S:CudaExecutionStream+?Sized>(&mut self,packed:CudaBufferSpan<'_>,gate:CudaBufferSpan<'_>,up:CudaBufferSpan<'_>,input:CudaBufferSpan<'_>,output:CudaBufferSpanMut<'_>,rows:u64,stream:&mut S)->CudaResult<bool> {
++        const OP:&str="CudaPreparedCublasGemmProbe::try_execute_hf_sm80_fused_gate_up";
++        if self.poisoned{return Err(CudaError::invalid_argument(OP,"prepared plan is poisoned"));}
++        if !(2..=16).contains(&rows) || !self.native.sm80_fused_gate_up_supported(rows){return Ok(false);}
++        if [gate,up,input].iter().any(|v|v.byte_offset()%32!=0){return Ok(false);}
++        let stream=execution_stream_mut(stream);ensure_same_context(&self.context,&stream.context,OP)?;
++        let spans=[gate.raw(),up.raw(),input.raw(),output.raw(),packed.raw()];
++        let result=self.native.sm80_fused_gate_up_packed(&spans,rows,&mut stream.native);
++        if result.is_err(){self.poisoned=true;}result.map(|_|true)
++    }
+
+     /// Fuses independent decode groups even when prefill shares this iteration.
+     /// Non-singleton groups retain the existing mode10 prefill merge/recipe.
+@@ -2225,6 +2235,14 @@
+     #[allow(clippy::too_many_arguments)]
+     pub fn try_execute_hf_sm80_fused_gate_up_groups_from<S:CudaExecutionStream+?Sized>(
+         &mut self,gate:CudaBufferSpan<'_>,up:CudaBufferSpan<'_>,input:CudaBufferSpan<'_>,
++        gate_raw:&mut CudaDeviceBuffer,up_raw:&mut CudaDeviceBuffer,product:&mut CudaDeviceBuffer,
++        groups:crate::batch::ValidatedRequestRowGroups<'_>,first_row:usize,stream:&mut S,
++    )->CudaResult<bool>{
++        self.try_execute_hf_sm80_fused_gate_up_groups_packed_from(None,gate,up,input,gate_raw,up_raw,product,groups,first_row,stream)
++    }
++    #[allow(clippy::too_many_arguments)]
++    pub fn try_execute_hf_sm80_fused_gate_up_groups_packed_from<S:CudaExecutionStream+?Sized>(
++        &mut self,packed:Option<CudaBufferSpan<'_>>,gate:CudaBufferSpan<'_>,up:CudaBufferSpan<'_>,input:CudaBufferSpan<'_>,
+         gate_raw:&mut CudaDeviceBuffer,up_raw:&mut CudaDeviceBuffer,product:&mut CudaDeviceBuffer,
+         groups:crate::batch::ValidatedRequestRowGroups<'_>,first_row:usize,stream:&mut S,
+     )->CudaResult<bool>{
+@@ -2257,7 +2275,7 @@
+             let(end,mode,fused)=range(begin)?;let rows=(end-begin)as u64;let in_span=input.subspan(begin as u64*2560*2,rows*2560*2)?;let offset=begin as u64*9728*2;let bytes=rows*9728*2;
+             if fused{
+                 let out=CudaBufferSpanMut::new(product,CudaDType::BF16,offset,bytes)?;
+-                self.native.sm80_fused_gate_up(&[gate.raw(),up.raw(),in_span.raw(),out.raw()],rows,&mut stream.native)?;
++                if let Some(packed)=packed.filter(|_|rows<=16){self.native.sm80_fused_gate_up_packed(&[gate.raw(),up.raw(),in_span.raw(),out.raw(),packed.raw()],rows,&mut stream.native)?;}else{self.native.sm80_fused_gate_up(&[gate.raw(),up.raw(),in_span.raw(),out.raw()],rows,&mut stream.native)?;}
+             }else{
+                 for(weight,out)in[(gate,&mut *gate_raw),(up,&mut *up_raw)]{
+                     let out=CudaBufferSpanMut::new(out,CudaDType::BF16,offset,bytes)?;
+--- a/crates/riley-cuda/src/owned_mlp.rs
++++ b/crates/riley-cuda/src/owned_mlp.rs
+@@ -33,6 +33,7 @@
+     stream: CudaResourceIdentity,
+     rows: u32,
+     bindings: [Binding; 8],
++    packed: Option<Binding>,
+ }
+ /// Logical counters; captures and capacity fallbacks are explicit.
+ #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+@@ -143,14 +144,17 @@
+         p: &mut CudaOwnedHfMlpParams<'_>,
+         stream: &mut S,
+     ) -> CudaResult<()> {
+-        self.execute_impl(p,None,stream)
++        self.execute_impl(p,None,None,stream)
+     }
+     /// Merged weights retain their own allocation identity in the replay key.
+     pub fn execute_with_merged<S:CudaExecutionStream+?Sized>(&mut self,p:&mut CudaOwnedHfMlpParams<'_>,merged:CudaBufferSpan<'_>,stream:&mut S)->CudaResult<()> {
+-        self.execute_impl(p,Some(merged),stream)
+-    }
+-    fn execute_impl<S:CudaExecutionStream+?Sized>(&mut self,p:&mut CudaOwnedHfMlpParams<'_>,merged:Option<CudaBufferSpan<'_>>,stream:&mut S)->CudaResult<()> {
++        self.execute_impl(p,Some(merged),None,stream)
++    }
++    /// Packed weights keep their own identity and command-batch lease.
++    pub fn execute_with_projection<S:CudaExecutionStream+?Sized>(&mut self,p:&mut CudaOwnedHfMlpParams<'_>,merged:CudaBufferSpan<'_>,packed:Option<CudaBufferSpan<'_>>,stream:&mut S)->CudaResult<()> {self.execute_impl(p,Some(merged),packed,stream)}
++    fn execute_impl<S:CudaExecutionStream+?Sized>(&mut self,p:&mut CudaOwnedHfMlpParams<'_>,merged:Option<CudaBufferSpan<'_>>,packed:Option<CudaBufferSpan<'_>>,stream:&mut S)->CudaResult<()> {
+         let merged=merged.filter(|_|self.row_batch_mode==10 && (p.active_rows==1 || p.active_rows>=17));
++        let packed=packed.filter(|_|self.row_batch_mode==10 && (2..=16).contains(&p.active_rows));
+         let weight_half=self.hidden*self.intermediate*2;
+         let gate_weight=if let Some(w)=merged {w.subspan(0,weight_half)?}else{p.gate_weight};
+         let up_weight=if let Some(w)=merged {w.subspan(weight_half,weight_half)?}else{p.up_weight};
+@@ -185,6 +189,7 @@
+         let key = Key {
+             stream: stream.identity.clone(),
+             rows: p.active_rows,
++            packed: packed.map(binding),
+             bindings: [
+                 binding(p.input),
+                 binding(gate_weight),
+@@ -235,6 +240,7 @@
+                     self.down_plan.config().output_bytes(),
+                 ),
+             ],
++            packed.map(|p|p.raw()),
+             stream,
+         )?;
+         // A classic cuBLAS handle can change its internal workspace when its
+@@ -266,7 +272,7 @@
+         }
+         if !self.capture_allowed || self.entries.len() == self.max_entries {
+             self.stats.eager_fallbacks = self.stats.eager_fallbacks.saturating_add(1);
+-            let result = self.eager(p, merged, stream);
++            let result = self.eager(p, merged, packed, stream);
+             if result.is_err() {
+                 self.poisoned = true;
+             }
+@@ -274,7 +280,7 @@
+         }
+         // Prime shape-specific lazy cuBLAS state outside capture. This computes the
+         // same pure MLP twice on a cold miss; no residual/metadata state is modified.
+-        if let Err(e) = self.eager(p, merged, stream) {
++        if let Err(e) = self.eager(p, merged, packed, stream) {
+             self.poisoned = true;
+             return Err(e);
+         }
+@@ -282,7 +288,7 @@
+             self.poisoned = true;
+             return Err(e);
+         }
+-        if let Err(e) = self.eager(p, merged, stream) {
++        if let Err(e) = self.eager(p, merged, packed, stream) {
+             let _ = crate::abort_step_capture(stream);
+             self.poisoned = true;
+             return Err(e);
+@@ -306,6 +312,7 @@
+         &mut self,
+         p: &mut CudaOwnedHfMlpParams<'_>,
+         merged: Option<CudaBufferSpan<'_>>,
++        packed: Option<CudaBufferSpan<'_>>,
+         s: &mut S,
+     ) -> CudaResult<()> {
+         let mut slots = [0u32; 32];
+@@ -325,6 +332,7 @@
+                 element_count:rows*self.intermediate,row_width:self.intermediate,
+             },s)?;
+             true
++        }else if let Some(packed)=packed{self.gate_plan.try_execute_hf_sm80_fused_gate_up_packed(packed,p.gate_weight,p.up_weight,p.input.subspan(0,rows*self.hidden*2)?,CudaBufferSpanMut::new(p.product,CudaDType::BF16,0,rows*self.intermediate*2)?,rows,s)?
+         }else{self.row_batch_mode==10 && self.gate_plan.try_execute_hf_sm80_fused_gate_up(
+             p.gate_weight,p.up_weight,p.input.subspan(0,rows*self.hidden*2)?,
+             CudaBufferSpanMut::new(p.product,CudaDType::BF16,0,rows*self.intermediate*2)?,rows,s)?};
+--- a/crates/riley-cuda/tests/sm80_prefill_alignment_gpu.rs
++++ b/crates/riley-cuda/tests/sm80_prefill_alignment_gpu.rs
+@@ -123,3 +123,29 @@
+     staging.close()?; stream.close()?; c.close()?;
+     Ok(())
+ }
++
++// A packed weight is a separate immutable operand, including on replay.
++#[test]
++#[ignore = "A100 SM80/CUDA12.4: packed Gate/Up bytes and rejected spans"]
++fn packed_gate_up_preserves_bytes_and_rejects_invalid_storage() -> Result {
++ let rt=CudaRuntime::initialize()?;let c=rt.device(0)?.create_context()?;let mut s=c.create_stream()?;let mut h=c.allocate_pinned_host_buffer(4*1024*1024)?;
++ let g=finite_bf16(9728*2560,11);let u=finite_bf16(9728*2560,13);let mut packed=vec![0u8;g.len()+u.len()];
++ for it in 0..40 {for tile in 0..304 {for row in 0..64 {let a=if row<32{&g}else{&u};let from=((tile*32+row%32)*2560+it*64)*2;let to=(((it*304+tile)*64+row)*64)*2;packed[to..to+128].copy_from_slice(&a[from..from+128]);}}}
++ let wg=upload(&c,&mut s,&mut h,&g)?;let wu=upload(&c,&mut s,&mut h,&u)?;
++ let wp=upload(&c,&mut s,&mut h,&packed)?;let input=upload(&c,&mut s,&mut h,&finite_bf16(16*2560,17))?;let mut out=c.allocate_device_buffer(16*9728*2)?;
++ let mut plan=c.prepare_owned_hf_gemm(CudaGemmConfig::new(16,9728,2560,0)?)?;plan.prepare_sm80_prefill()?;
++ fn span(b:&CudaDeviceBuffer)->riley_cuda::CudaResult<CudaBufferSpan<'_>>{CudaBufferSpan::new(b,CudaDType::BF16,0,b.byte_len())}
++ for rows in [2u64,8,16] {
++  assert!(plan.try_execute_hf_sm80_fused_gate_up(span(&wg)?,span(&wu)?,CudaBufferSpan::new(&input,CudaDType::BF16,0,rows*2560*2)?,CudaBufferSpanMut::new(&mut out,CudaDType::BF16,0,rows*9728*2)?,rows,&mut s)?);
++  let mut gold=vec![0u8;(rows*9728*2)as usize];out.download_to_slice(0,&mut gold,&mut h,&mut s)?;
++  let stable=c.allocation_stats()?;
++  {let mut b=s.begin_command_batch()?;assert!(plan.try_execute_hf_sm80_fused_gate_up_packed(span(&wp)?,span(&wg)?,span(&wu)?,CudaBufferSpan::new(&input,CudaDType::BF16,0,rows*2560*2)?,CudaBufferSpanMut::new(&mut out,CudaDType::BF16,0,rows*9728*2)?,rows,&mut b.commands())?);b.finish()?;}
++  let mut got=vec![0u8;gold.len()];out.download_to_slice(0,&mut got,&mut h,&mut s)?;assert_eq!(got,gold);assert_eq!(c.allocation_stats()?,stable);
++ }
++ plan.close()?;
++ for (off,len) in [(0,wp.byte_len()-2),(2,wp.byte_len()-2)] {
++  let mut p=c.prepare_owned_hf_gemm(CudaGemmConfig::new(16,9728,2560,0)?)?;p.prepare_sm80_prefill()?;
++  assert!(p.try_execute_hf_sm80_fused_gate_up_packed(CudaBufferSpan::new(&wp,CudaDType::BF16,off,len)?,span(&wg)?,span(&wu)?,CudaBufferSpan::new(&input,CudaDType::BF16,0,2*2560*2)?,CudaBufferSpanMut::new(&mut out,CudaDType::BF16,0,2*9728*2)?,2,&mut s).is_err());assert!(p.close().is_err());
++ }
++ out.close()?;input.close()?;wp.close()?;wu.close()?;wg.close()?;h.close()?;s.close()?;c.close()?;Ok(())
++}
+--- a/crates/riley-runtime/src/cuda_weights.rs
++++ b/crates/riley-runtime/src/cuda_weights.rs
+@@ -222,6 +222,7 @@
+     /// output axis for the merged-QKV projection mode.
+     merged_qkv: Vec<CudaDeviceBuffer>,
+     merged_gate_up: Vec<CudaDeviceBuffer>,
++    packed_gate_up: Vec<CudaDeviceBuffer>,
+     negative_zero_bias: Option<CudaDeviceBuffer>,
+ }
+
+@@ -296,6 +297,7 @@
+             total_physical_bytes,
+             merged_qkv: Vec::new(),
+             merged_gate_up: Vec::new(),
++            packed_gate_up: Vec::new(),
+             negative_zero_bias: None,
+         })
+     }
+@@ -545,6 +547,34 @@
+         Ok(())
+     }
+
++    /// One cold BF16 permutation per eligible layer, shared by all shapes.
++    /// The 3GiB copy budget bounds residency; remaining layers keep the original path.
++    pub(crate) fn upload_packed_gate_up(&mut self,weights:&LoadedWeights,layer_count:usize,context:&CudaContext,stream:&mut CudaStream,staging_bytes:u64)->CudaWeightUploadResult<()> {
++        if !self.packed_gate_up.is_empty(){return Ok(());}
++        const HALF:usize=9728*2560*2;const TOTAL:usize=2*HALF;
++        let count=layer_count.min((3u64*1024*1024*1024/TOTAL as u64)as usize);
++        let mut staging=context.allocate_pinned_host_buffer(staging_bytes)?;
++        let mut packed=Vec::with_capacity(count);
++        for layer in 0..count {
++            let gate=weights.view(WeightSlot::Decoder{layer,parameter:riley_model::DecoderWeight::GateWeight})?;
++            let up=weights.view(WeightSlot::Decoder{layer,parameter:riley_model::DecoderWeight::UpWeight})?;
++            let g=gate.view().storage();let u=up.view().storage();
++            if g.len()!=HALF||u.len()!=HALF{return Err(CudaWeightUploadError::TotalLengthOverflow);}
++            let mut bytes=vec![0u8;TOTAL];
++            for it in 0..40 {for tile in 0..304 {for row in 0..64 {
++                let src=if row<32{g}else{u};let from=((tile*32+row%32)*2560+it*64)*2;
++                let to=(((it*304+tile)*64+row)*64)*2;
++                bytes[to..to+128].copy_from_slice(&src[from..from+128]);
++            }}}
++            let mut buffer=context.allocate_device_buffer(TOTAL as u64)?;
++            buffer.upload_from_slice(0,&bytes,&mut staging,stream)?;packed.push(buffer);
++        }
++        staging.close()?;self.packed_gate_up=packed;
++        eprintln!("RILEY_V19_PACKED_GATE_UP layers={} bytes={}",count,count*TOTAL);
++        Ok(())
++    }
++    pub(crate) fn packed_gate_up(&self,layer:usize)->Option<&CudaDeviceBuffer>{self.packed_gate_up.get(layer)}
++
+     /// The merged `Q|K|V` projection weight of one layer, when uploaded.
+     pub(crate) fn merged_qkv(&self, layer: usize) -> Option<&CudaDeviceBuffer> {
+         self.merged_qkv.get(layer)
+@@ -635,7 +665,7 @@
+     ) -> impl Iterator<Item = &mut CudaDeviceBuffer> {
+         self.physical
+             .iter_mut()
+-            .filter_map(|tensor| tensor.buffer.as_mut())
++            .filter_map(|tensor| tensor.buffer.as_mut()).chain(self.packed_gate_up.iter_mut())
+     }
+
+     /// Cold graph binding of one actual physical weight. The exclusive borrow
+@@ -685,6 +715,7 @@
+                 }
+             }
+         }
++        for buffer in self.packed_gate_up {if let Err(error)=buffer.close(){if first_error.is_none(){first_error=Some(error);}}}
+         for buffer in self.merged_gate_up {
+             if let Err(error) = buffer.close() {
+                 if first_error.is_none() {
+--- a/crates/riley-runtime/src/llama/executor/dispatch.rs
++++ b/crates/riley-runtime/src/llama/executor/dispatch.rs
+@@ -2237,7 +2237,7 @@
+                 output:hidden_current,active_rows:if piecewise_rows>0 {piecewise_rows as u32}else{batch.host().row_sequence_slots().len() as u32},
+             };
+             if let Some(w)=weights.merged_gate_up(layer_index) {
+-                graphs.execute_with_merged(&mut mlp_params,CudaBufferSpan::new(w,CudaDType::BF16,0,w.byte_len()).map_err(|e|batch_cuda(site,e))?,stream)
++                graphs.execute_with_projection(&mut mlp_params,CudaBufferSpan::new(w,CudaDType::BF16,0,w.byte_len()).map_err(|e|batch_cuda(site,e))?,weights.packed_gate_up(layer_index).map(|w|CudaBufferSpan::new(w,CudaDType::BF16,0,w.byte_len())).transpose().map_err(|e|batch_cuda(site,e))?,stream)
+             }else{graphs.execute(&mut mlp_params,stream)}.map_err(|e|batch_cuda(site,e))?;
+             piecewise_rows==0 || piecewise_rows==batch.host().row_sequence_slots().len()
+         }else{false};
+@@ -2331,7 +2331,8 @@
+             }else if owned_decode_batch==10 && hidden==2560 && plan.dimensions().intermediate_size()==9728 && fused_silu_multiply {
+                 if let (PreparedLlamaGemm::ClassicRequestRows(native),Some(groups))=(&mut gemms.intermediate,batch.host().request_row_groups()) {
+                     let bytes=native.config().input_bytes();
+-                    native.try_execute_hf_sm80_fused_gate_up_groups_from(
++                    native.try_execute_hf_sm80_fused_gate_up_groups_packed_from(
++                        weights.packed_gate_up(layer_index).map(|w|CudaBufferSpan::new(w,CudaDType::BF16,0,w.byte_len())).transpose().map_err(|e|batch_cuda(gate_site,e))?,
+                         weight_span(weights,layer.gate_weight(),gate_site)?,weight_span(weights,layer.up_weight(),gate_site)?,
+                         span(&buffers.hidden_norm,CudaDType::BF16,bytes,gate_site)?,
+                         &mut buffers.gate_raw,&mut buffers.up_raw,&mut buffers.gated_product,groups,piecewise_rows,stream)
+--- a/crates/riley-runtime/src/llama/executor/owner.rs
++++ b/crates/riley-runtime/src/llama/executor/owner.rs
+@@ -419,6 +419,7 @@
+             forward.weights.upload_merged_gate_up(model.weights(),forward.plan.layers().len(),context,stream,
+                 config.forward().upload_staging_bytes(),false)
+                 .map_err(|source|crate::llama::LlamaForwardError::Weight{site:None,source})?;
++            forward.weights.upload_packed_gate_up(model.weights(),forward.plan.layers().len(),context,stream,config.forward().upload_staging_bytes()).map_err(|source|crate::llama::LlamaForwardError::Weight{site:None,source})?;
+             forward.gemms.prepare_sm80_merged_decode(context)?;
+             for shape in shape_variants.iter_mut(){shape.gemms.prepare_sm80_merged_decode(context)?;}
+         }
+--- a/kernels/src/cublas_gemm_probe.cu
++++ b/kernels/src/cublas_gemm_probe.cu
+@@ -2094,6 +2094,32 @@
+ template<int W,int R,int P,int S>__device__ __forceinline__ void gateup_stage(__nv_bfloat16*dst,const __nv_bfloat16*wg,const __nv_bfloat16*wu,const __nv_bfloat16*x,int rows,int col,int first,int it){
+  constexpr int N=W*16,L=64+P;for(int i=threadIdx.x;i<(N+R)*8;i+=W*32){int row=i/8,k=i%8*8;bool weight=row<N,valid=it<40&&(weight||first+row-N<rows);const __nv_bfloat16*src=wg;if(valid)src=weight?((row<N/2?wg:wu)+(col+row%(N/2))*2560+it*64+k):(x+(first+row-N)*2560+it*64+k);sm80_down_copy16(dst+row*L+k,src,valid);}asm volatile("cp.async.commit_group;");
+ }
++template<int W,int R,int P,int S>__device__ __forceinline__ void v19_kmajor_gate_stage(__nv_bfloat16*dst,const __nv_bfloat16*wg,const __nv_bfloat16*wu,const __nv_bfloat16*x,int rows,int col,int first,int it){
++ constexpr int N=W*16,L=64+P;for(int i=threadIdx.x;i<(N+R)*8;i+=W*32){int row=i/8,k=i%8*8;bool weight=row<N,valid=it<40&&(weight||first+row-N<rows);const __nv_bfloat16*src=wg;if(valid)src=weight?(wg+size_t(it)*304*64*64+size_t(col/32)*64*64+row*64+k):(x+(first+row-N)*2560+it*64+k);sm80_down_copy16(dst+row*L+k,src,valid);}asm volatile("cp.async.commit_group;");
++}
++template<int W,int R,int P,int S>__global__ void v19_kmajor_gate(const __nv_bfloat16*wg,const __nv_bfloat16*wu,const __nv_bfloat16*x,__nv_bfloat16*y,int rows){
++#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
++ using namespace nvcuda;constexpr int N=W*16,L=64+P,Stage=(N+R)*L,RB=R/16;__shared__ __align__(32)__nv_bfloat16 shared[Stage*S];auto results=reinterpret_cast<float (*)[RB][256]>(shared);int col=blockIdx.x*(N/2),first=blockIdx.y*R,warp=threadIdx.x/32,lane=threadIdx.x%32;
++ wmma::fragment<wmma::matrix_a,16,16,16,__nv_bfloat16,wmma::row_major>a;wmma::fragment<wmma::matrix_b,16,16,16,__nv_bfloat16,wmma::col_major>b;wmma::fragment<wmma::accumulator,16,16,16,float>c[RB][2];
++ #pragma unroll
++ for(int rb=0;rb<RB;rb++){wmma::fill_fragment(c[rb][0],0.f);wmma::fill_fragment(c[rb][1],0.f);}
++ #pragma unroll
++ for(int st=0;st<S;st++)v19_kmajor_gate_stage<W,R,P,S>(shared+st*Stage,wg,wu,x,rows,col,first,st);
++ for(int it=0;it<40;it++){asm volatile("cp.async.wait_group %0;"::"n"(S-1));__syncthreads();auto*t=shared+it%S*Stage;
++ #pragma unroll
++ for(int j=0;j<4;j++){wmma::load_matrix_sync(a,t+warp*16*L+j*16,L);
++ #pragma unroll
++ for(int rb=0;rb<RB;rb++){wmma::load_matrix_sync(b,t+(N+rb*16)*L+j*16,L);wmma::mma_sync(c[rb][j/2],a,b,c[rb][j/2]);}}
++ __syncthreads();v19_kmajor_gate_stage<W,R,P,S>(t,wg,wu,x,rows,col,first,it+S);}
++ asm volatile("cp.async.wait_group 0;");__syncthreads();
++ #pragma unroll
++ for(int rb=0;rb<RB;rb++){for(int i=0;i<c[rb][0].num_elements;i++)c[rb][0].x[i]=__fadd_rn(c[rb][0].x[i],c[rb][1].x[i]);wmma::store_matrix_sync(results[warp][rb],c[rb][0],16,wmma::mem_col_major);}
++ __syncthreads();if(warp<W/2){
++ #pragma unroll
++ for(int rb=0;rb<RB;rb++)for(int i=lane;i<256;i+=32){int row=first+rb*16+i/16;if(row<rows){float g=__bfloat162float(__float2bfloat16_rn(__fmaf_rn(1.f,results[warp][rb][i],0.f)));float u=__bfloat162float(__float2bfloat16_rn(__fmaf_rn(1.f,results[warp+W/2][rb][i],0.f)));float activated=__bfloat162float(__float2bfloat16_rn(g/(1.f+expf(-g))));y[row*9728+col+warp*16+i%16]=__float2bfloat16_rn(__fmul_rn(activated,u));}}}
++#endif
++}
++
+ template<int W,int R,int P,int S>__global__ void sm80_fused_gateup(const __nv_bfloat16*wg,const __nv_bfloat16*wu,const __nv_bfloat16*x,__nv_bfloat16*y,int rows){
+ #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+  using namespace nvcuda;constexpr int N=W*16,L=64+P,Stage=(N+R)*L,RB=R/16;__shared__ __align__(32)__nv_bfloat16 shared[Stage*S];auto results=reinterpret_cast<float (*)[RB][256]>(shared);int col=blockIdx.x*(N/2),first=blockIdx.y*R,warp=threadIdx.x/32,lane=threadIdx.x%32;
+@@ -2515,6 +2541,53 @@
+   return command_batch_register_use(stream,&down->active_uses,error,kExecuteOperation,
+       "owned MLP down plan already has an active use");
+ }
++extern "C" RileyCudaStatus riley_cuda_owned_hf_mlp_register_packed_uses(
++    RileyCudaCublasGemmProbePlan* gate, RileyCudaCublasGemmProbePlan* down,
++    const RileyCudaBufferSpan* buffers, RileyCudaStream* stream,
++    RileyCudaErrorInfo* error) noexcept {
++  clear_error(error);
++  if (gate == nullptr || down == nullptr || buffers == nullptr || stream == nullptr ||
++      !gate->owned_command_batches || !down->owned_command_batches ||
++      !command_batch_is_owned_by_current_thread(stream) ||
++      riley_cuda_internal::thread_has_active_step_capture() ||
++      riley_cuda_internal::thread_has_active_graph_capture()) {
++    return validation_error(error,RILEY_CUDA_STATUS_INVALID_STATE,
++        RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,
++        "owned MLP replay requires an owned command batch without nested capture");
++  }
++  if (gate->owner != down->owner || gate->config.m != down->config.m ||
++      (gate->config.n != down->config.k && gate->config.n != 2*down->config.k) || gate->config.k != down->config.n) {
++    return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,
++        RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"MLP plan dimensions differ");
++  }
++  const bool merged=gate->config.n==2*down->config.k;
++  const uint64_t bytes[9] = {gate->input_bytes,gate->weight_bytes/(merged?2:1),
++      gate->weight_bytes/(merged?2:1),down->weight_bytes,gate->output_bytes,
++      down->input_bytes,down->input_bytes,down->output_bytes,2*gate->weight_bytes};
++  ResolvedSpan spans[9]{};
++  for (size_t i=0;i<9;++i) {
++    RileyCudaStatus status=resolve_attention_span(&buffers[i],RILEY_CUDA_DTYPE_BF16,
++        bytes[i],&spans[i],error,"MLP operand must be BF16");
++    if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
++  }
++  RileyCudaStatus status=validate_span_relationships(gate,stream,spans,9,error);
++  if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
++  ExclusiveProbeUses uses(gate,stream);
++  for(const auto& span:spans)if(!uses.add(span.buffer))return internal_error(
++      error,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"MLP resource set overflow");
++  // Captured library nodes retain both merged Gate/Up and Down workspaces.
++  if(gate->prefill_workspace && !uses.add(gate->prefill_workspace))
++    return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"merged MLP workspace resource set overflow");
++  // A bounded Down graph retains the private Lt workspace on every replay.
++  if(down->sm80_projection_workspace && !uses.add(down->sm80_projection_workspace))
++    return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"MLP workspace resource set overflow");
++  if(down->sm80_full_projection_workspace && !uses.add(down->sm80_full_projection_workspace))
++    return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"full MLP workspace resource set overflow");
++  status=uses.acquire(error);
++  if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
++  return command_batch_register_use(stream,&down->active_uses,error,kExecuteOperation,
++      "owned MLP down plan already has an active use");
++}
+
+ extern "C" RileyCudaStatus riley_cuda_cublas_gemm_probe_plan_close(
+     RileyCudaCublasGemmProbePlan** plan,
+@@ -3652,17 +3725,19 @@
+ }
+ extern "C" RileyCudaStatus riley_cuda_cublas_hf_sm80_fused_gate_up_execute(RileyCudaCublasGemmProbePlan*plan,const RileyCudaBufferSpan*raw,uint64_t count,uint64_t rows,RileyCudaStream*stream,RileyCudaErrorInfo*error) noexcept {
+  clear_error(error);
+- if(!riley_cuda_cublas_hf_sm80_fused_gate_up_supported(plan,rows)||!plan->handle||!raw||count!=4)
++ if(!riley_cuda_cublas_hf_sm80_fused_gate_up_supported(plan,rows)||!plan->handle||!raw||(count!=4&&count!=5)||(count==5&&rows>16))
+   return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"qualified SM80 GateUp requires R2..32 and four BF16 spans");
+- const uint64_t sizes[4]={9728*2560*2,9728*2560*2,rows*2560*2,rows*9728*2};ResolvedSpan spans[4]{};RileyCudaStatus status=RILEY_CUDA_STATUS_SUCCESS;
+- for(size_t i=0;i<4;i++){status=resolve_attention_span(raw+i,RILEY_CUDA_DTYPE_BF16,sizes[i],spans+i,error,"SM80 GateUp span geometry mismatch");if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;}
++ const uint64_t sizes[5]={9728*2560*2,9728*2560*2,rows*2560*2,rows*9728*2,19456*2560*2};ResolvedSpan spans[5]{};RileyCudaStatus status=RILEY_CUDA_STATUS_SUCCESS;
++ for(size_t i=0;i<count;i++){status=resolve_attention_span(raw+i,RILEY_CUDA_DTYPE_BF16,sizes[i],spans+i,error,"SM80 GateUp span geometry mismatch");if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;}
+  for(size_t i=0;i<3;i++)if(reinterpret_cast<uintptr_t>(spans[i].data)&uintptr_t(31))return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"SM80 GateUp vector sources require32-byte alignment");
+- status=validate_span_relationships(plan,stream,spans,4,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+- ExclusiveProbeUses uses(plan,stream);for(auto&span:spans)if(!uses.add(span.buffer))return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"SM80 GateUp use ledger overflow");
++ if(count==5 && (reinterpret_cast<uintptr_t>(spans[4].data)&uintptr_t(31)))return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"packed GateUp requires32-byte aligned weight storage");
++ status=validate_span_relationships(plan,stream,spans,count,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
++ ExclusiveProbeUses uses(plan,stream);for(size_t i=0;i<count;i++)if(!uses.add(spans[i].buffer))return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,kExecuteOperation,"SM80 GateUp use ledger overflow");
+  status=uses.acquire(error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;CurrentContext scope(plan->owner);status=scope.enter(error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);bool attempted=false;
+  if(status==RILEY_CUDA_STATUS_SUCCESS){attempted=true;
+   auto*wg=static_cast<const __nv_bfloat16*>(spans[0].data);auto*wu=static_cast<const __nv_bfloat16*>(spans[1].data);auto*x=static_cast<const __nv_bfloat16*>(spans[2].data);auto*y=static_cast<__nv_bfloat16*>(spans[3].data);
+-  if(rows<=16)sm80_fused_gateup<4,16,16,2><<<304,128,0,stream->stream>>>(wg,wu,x,y,rows);
++  if(count==5)v19_kmajor_gate<4,16,16,2><<<304,128,0,stream->stream>>>(static_cast<const __nv_bfloat16*>(spans[4].data),static_cast<const __nv_bfloat16*>(spans[4].data),x,y,rows);
++  else if(rows<=16)sm80_fused_gateup<4,16,16,2><<<304,128,0,stream->stream>>>(wg,wu,x,y,rows);
+   else sm80_fused_gateup<4,32,8,2><<<304,128,0,stream->stream>>>(wg,wu,x,y,rows);
+   auto e=cudaGetLastError();if(e!=cudaSuccess)status=runtime_error(e,error,RILEY_CUDA_ERROR_STAGE_LAUNCH,kExecuteOperation);
+  }

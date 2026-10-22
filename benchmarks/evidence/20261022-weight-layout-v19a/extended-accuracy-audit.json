@@ -1,0 +1,24 @@
+{
+  "time_ns": 1792640377438656835,
+  "original_BF16_files": 4480,
+  "bounded576_files": 2048,
+  "canonical_files": 1024,
+  "GPU7_confirmation_files": 208,
+  "total_literal_BF16_files": 7760,
+  "reference_and_tolerance_unchanged": true,
+  "CPU_passed": 524,
+  "CPU_ignored": 40,
+  "approved_C02_private_tmp_rechecks": 4,
+  "GPU_contract_test_functions": 6,
+  "additional_packed_Graph_identity_contract": true,
+  "original_alignment_view_cases": 120,
+  "test_only_poison_close_expectation_amendment": {
+    "time_ns": 1792635115190152601,
+    "file": "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/source/crates/riley-cuda/tests/sm80_prefill_alignment_gpu.rs",
+    "before_sha256": "a00efbfeae8c418aa506fc85f91628dd2ba2bb25193a1b6d963bea35ed2faadd",
+    "after_sha256": "edba551a07d63f2424ee121c89c38c8dd3549690f745a1258f6248e1d1597123",
+    "reason": "Invalid packed spans correctly reject and poison the plan. The test must also require close() to report poisoned state, matching existing close contract. Numerical/unaligned original120 checks passed; no native or model execution source changed.",
+    "production_binary_unchanged": "9d2e280d320e868eae87a515cfc533406d7239b4f1b333ddcb4a035308fb05ec"
+  },
+  "production_binary_unchanged_after_test_amendment": true
+}

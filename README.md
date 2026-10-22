@@ -29,9 +29,10 @@ A cold K-major Gate/Up weight layout reduces operator latency by **4.28–5.07%*
 for R2–16 across actual Qwen layers 0/17/35; all 3,348 numerical cases preserve
 literal BF16 outputs. Down packing is slower, and none of 70 transposed-weight
 cuBLASLt candidates is both exact and faster. Additional tile/stage variants do
-not beat the selected layout. These are operator results; full-model accuracy
-and fresh C16/C32 HTTP comparisons remain pending. The accepted runtime remains
-v15C. [Implementation, full operator table and evidence](docs/qwen-weight-layout-v19-screen-20261022.md).
+not beat the selected layout. These are operator results; the server passes
+7,760 literal BF16 files. A fresh five-repeat comparison improves C16 by2.49%
+but loses0.18% at C32 and flags two C32 TPOTp99 pairs; capacity-aware dispatch
+is being validated. The accepted runtime remains v15C. [Implementation, full operator table and evidence](docs/qwen-weight-layout-v19-screen-20261022.md).
 
 A separate lossless BF16 format reduces Gate/Up/Down stored weight bytes by
 17.58%/16.41%, but decoding makes Gate/Up 31–35% slower and Down about twice
@@ -40,7 +41,7 @@ as slow. All 360 operator comparisons are exact; this candidate is rejected.
 
 ### Latest structural experiments · 2026-10-22
 
-Both candidates passed the original accuracy gates but were **not adopted**.
+The candidates below passed the original accuracy gates but were **not adopted**.
 Each row uses its own fresh five-run matched v15C/candidate/stock campaign on
 GPU7; values are run-level medians. These are experimental results, with the
 accepted v15C runtime unchanged.
@@ -51,6 +52,8 @@ accepted v15C runtime unchanged.
 | Multi-prefill Graph v18A | 32 | 981.234 | 981.079 | -0.02% | 1684.366 | 58.25% |
 | CPU–GPU overlap v18B4 | 16 | 756.053 | 753.877 | -0.29% | 1153.558 | 65.35% |
 | CPU–GPU overlap v18B4 | 32 | 992.120 | 989.579 | -0.26% | 1680.772 | 58.88% |
+| Packed Gate/Up v19A | 16 | 732.961 | 751.208 | +2.49% | 1140.859 | 65.85% |
+| Packed Gate/Up v19A | 32 | 979.213 | 977.470 | -0.18% | 1667.614 | 58.61% |
 
 v18A supports multi-prefill/variable-R MLP Graph pieces and passes 9,600 literal
 BF16 files. v18B4 overlaps real result processing/planning with GPU execution
@@ -61,6 +64,7 @@ retained; supplemental inspected profiles are separate from timing results.
 
 [Graph implementation and evidence](docs/qwen-piecewise-v18a-20261021.md) ·
 [Overlap implementation, all repeats and caveats](docs/qwen-overlap-v18b4-20261021.md).
+[Packed backend implementation, memory cost and all pairs](docs/qwen-weight-layout-v19a-20261022.md).
 
 ### A100 · Qwen3-4B · latest qualified checkpoint
 

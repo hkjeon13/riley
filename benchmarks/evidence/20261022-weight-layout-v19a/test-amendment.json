@@ -1,0 +1,8 @@
+{
+  "time_ns": 1792635115190152601,
+  "file": "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/source/crates/riley-cuda/tests/sm80_prefill_alignment_gpu.rs",
+  "before_sha256": "a00efbfeae8c418aa506fc85f91628dd2ba2bb25193a1b6d963bea35ed2faadd",
+  "after_sha256": "edba551a07d63f2424ee121c89c38c8dd3549690f745a1258f6248e1d1597123",
+  "reason": "Invalid packed spans correctly reject and poison the plan. The test must also require close() to report poisoned state, matching existing close contract. Numerical/unaligned original120 checks passed; no native or model execution source changed.",
+  "production_binary_unchanged": "9d2e280d320e868eae87a515cfc533406d7239b4f1b333ddcb4a035308fb05ec"
+}

@@ -1,0 +1,28 @@
+{
+  "time_ns": 1792640377670570316,
+  "eligible_for_integration": false,
+  "integrated_into_main": false,
+  "normal_completed_arms_excluded": 0,
+  "normal_completed_arms_repeated": 0,
+  "accuracy_threshold_changed": false,
+  "tail_flags": {
+    "16": [],
+    "32": [
+      {
+        "repeat": 0,
+        "metric": "tpot_ms_p99",
+        "percent_change": 6.2619361820935415
+      },
+      {
+        "repeat": 2,
+        "metric": "tpot_ms_p99",
+        "percent_change": 4.423172226950722
+      }
+    ]
+  },
+  "throughput_changes": {
+    "16": 2.489468861059918,
+    "32": -0.17807512417885585
+  },
+  "reason": "Both positive median throughput and no paired TTFT/TPOT p95/p99 regression >2%; unchanged accuracy/resource/actual-dispatch gates. Exact main integration is a separate step."
+}

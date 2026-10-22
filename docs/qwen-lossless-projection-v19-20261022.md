@@ -15,7 +15,7 @@
 
 시간은 5쌍의 before/after 교대 실행, CUDA Graph32연산 ×8replay이며 각 측정 전3warm replay다. 표의 각 µs는 중앙값, 변화는 pair별 비율의 중앙값이다. cold packing/upload는 이 시간에서 제외했다. 입력은 합성 finite activation이고 실제 가중치만 checkpoint에서 가져왔다.
 
-Gate/Up 가중치 tile 저장량은99,614,720→82,104,320B(**17.58% 감소**), Down W4는49,807,360→41,635,840B(**16.41% 감소**)다. 원래 row-major/prefill 사본을 제거한 메모리 절감 결과는 아니다. 모든 R/레이어에서 압축 Gate/Up은 약31~35% 느렸고 Down W4는 약111~116% 느렸다. 세 레이어의 host packing은 Gate/Up 약0.45~0.58초, Down W4 약0.24~0.25초였다. cold 시간을 정상 HTTP 시간으로 합산하거나 속도 이득으로 환산하지 않는다.
+Gate/Up 가중치 tile 저장량은99,614,720→82,104,320B(**17.58% 감소**), Down W4는49,807,360→41,635,840B(**16.41% 감소**)다. 원래 row-major/prefill 사본을 제거한 메모리 절감 결과는 아니다. 모든 R/레이어에서 압축 Gate/Up은 약31~35% 느렸고 Down W4는 약110~116% 느렸다. 세 레이어의 host packing은 Gate/Up 약0.45~0.58초, Down W4 약0.24~0.25초였다. cold 시간을 정상 HTTP 시간으로 합산하거나 속도 이득으로 환산하지 않는다.
 
 이 구현에는 bit 복원 계산과 추가 shared-memory 동기화가 들어간다. `cuobjdump` 정적 결과에서 같은 자체 K-major 대조 대비 Gate R16 레지스터는62→93, Down W4 R16은56→70으로 증가했다. local spill은0이다. 복원·레지스터·동기화의 실제 기여도는 별도 hardware counter 없이 분리 확정하지 않는다. 전송량 감소만으로 빠른 backend라고 판단할 수 없다는 실제 반례다.
 

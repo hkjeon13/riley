@@ -1,0 +1,235 @@
+{
+  "time_ns": 1792640377545559121,
+  "resource_runs": [
+    {
+      "name": "observed-bounded576.samples.jsonl",
+      "samples": 205,
+      "whole_device_peak_MiB": 21555.0,
+      "sha256": "a84dbd784887cb04fd1ac470ea0d8e94858fabf891768bcc92ef420e865dd1a5"
+    },
+    {
+      "name": "observed-final-teacher-C1-eager-r3.samples.jsonl",
+      "samples": 79,
+      "whole_device_peak_MiB": 9783.0,
+      "sha256": "09b98268cb909cdb2af25bb326205544f0d59afc622ff997e10345c917896dae"
+    },
+    {
+      "name": "observed-final-teacher-allR-Graph-r3.samples.jsonl",
+      "samples": 97,
+      "whole_device_peak_MiB": 22125.0,
+      "sha256": "84a772fc5e142db105b94dfacc95669e5ed1a037552303b71e938d831076edce"
+    },
+    {
+      "name": "observed-teacher-body-allR-r3.samples.jsonl",
+      "samples": 206,
+      "whole_device_peak_MiB": 22205.0,
+      "sha256": "d51a85590b8722d4b607fd802e69de9b7fe7a6b1593a6111ec0a9b96acfd99c7"
+    },
+    {
+      "name": "observed-teacher-mixed-r3.samples.jsonl",
+      "samples": 136,
+      "whole_device_peak_MiB": 21977.0,
+      "sha256": "3526c27ec7a5d42ebd5fac369c7147be8de3522e9d93cdc8d802e1874940c736"
+    },
+    {
+      "name": "observed-teacher-mixed-no-output-r3.samples.jsonl",
+      "samples": 133,
+      "whole_device_peak_MiB": 21977.0,
+      "sha256": "b447ab2b8c5b685b2dffd691ad4147624fd6eff07d734bb6ddccfb4795c86f5b"
+    },
+    {
+      "name": "observed-canonical.samples.jsonl",
+      "samples": 138,
+      "whole_device_peak_MiB": 21977.0,
+      "sha256": "3f46460d0a1aa513d078ad15d98ce61ce4435f00a7cee880bd912596b6030eef"
+    },
+    {
+      "name": "observed-contracts-r4-host_runtime_gpu.samples.jsonl",
+      "samples": 2,
+      "whole_device_peak_MiB": 504.0,
+      "sha256": "fa1d09e1cad364722ebaff118589f9a0d9e070815af2be59e1d6c3de696f9818"
+    },
+    {
+      "name": "observed-contracts-r4-memory_gpu.samples.jsonl",
+      "samples": 2,
+      "whole_device_peak_MiB": 504.0,
+      "sha256": "5cfb6ee353e7646ae802ba8da1fab16392a910f01a57e7f3c033129563eb1db4"
+    },
+    {
+      "name": "observed-contracts-r4-owned_hf_command_batch_gpu.samples.jsonl",
+      "samples": 2,
+      "whole_device_peak_MiB": 504.0,
+      "sha256": "10b11722aca5b2b6b9ce9d5d610b9cc32dfba15afd65afdb97e45c4f4d5e4b43"
+    },
+    {
+      "name": "observed-contracts-r4-sm80_prefill_alignment_gpu.samples.jsonl",
+      "samples": 3,
+      "whole_device_peak_MiB": 915.0,
+      "sha256": "4795776a562daea747d6d3bf6582ad99a548db1fb8e679119b945d85f0e43015"
+    },
+    {
+      "name": "observed-gpu7-allR-confirmation.samples.jsonl",
+      "samples": 98,
+      "whole_device_peak_MiB": 22125.0,
+      "sha256": "adfb386b08c4a81ea8d38726100bd7d369b0c24f2969b39e0680ce2048c2f1af"
+    },
+    {
+      "name": "packed-contract-v3/observed-contract.samples.jsonl",
+      "samples": 3,
+      "whole_device_peak_MiB": 1359.0,
+      "sha256": "19dbc39ea846330ed1d38f186f0f5cc2ea1de875f72dba6f973c579bc9d2f5d9"
+    }
+  ],
+  "qualified_source_count": 937,
+  "all_source_hashes_equal": true,
+  "changed_sources": [
+    "crates/riley-cuda/src/ffi.rs",
+    "crates/riley-cuda/src/gemm.rs",
+    "crates/riley-cuda/src/owned_mlp.rs",
+    "crates/riley-cuda/tests/sm80_prefill_alignment_gpu.rs",
+    "crates/riley-runtime/src/cuda_weights.rs",
+    "crates/riley-runtime/src/llama/executor/dispatch.rs",
+    "crates/riley-runtime/src/llama/executor/owner.rs",
+    "kernels/src/cublas_gemm_probe.cu"
+  ],
+  "binary_sha256": "9d2e280d320e868eae87a515cfc533406d7239b4f1b333ddcb4a035308fb05ec",
+  "normal_arms": 30,
+  "separate_profile_arms": 4,
+  "total_stored_SSE_structures_verified": 6490,
+  "Riley_native_HF_values_literal_equal": true,
+  "stock_HF_matches_reported_per_arm": true,
+  "normal_profile_peak_MiB": 21339.0,
+  "whole_device_cap_MiB": 22528,
+  "primary_qualification_GPU": 6,
+  "extra_confirmation_GPU": 7,
+  "normal_profile_GPU": 7,
+  "original_GPU6_7_holder_PID_and_context_retained": true,
+  "completed_normal_arms_excluded": 0,
+  "completed_normal_arms_repeated": 0,
+  "IPC_continuation": {
+    "reason": "New EFS IPC parent directory was missing; stock server failed before warm/measured requests",
+    "created_directories": [
+      "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/ipc6",
+      "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/ipc7"
+    ],
+    "failed_stock_measured_arms": 0,
+    "original_completed_arms_retained": 2,
+    "completed_normal_arms_repeated": 0,
+    "unchanged_runner_sha256": "fbdfeee188a5eb2ddf8d08fd57a3aedc87e88fc8033bca75d4b4bef594bfb744",
+    "original_partial_result_sha256": "e158d9157db5e84062e9c36eea2da01dd7c91b0911a954510bd7bfcce51e366f",
+    "continuations": [
+      {
+        "tag": "r0-stock",
+        "argv": [
+          "python3",
+          "/mnt/efs/nlp/psyche/riley-w0-a100-gpu67-20261019/control.py",
+          "--lease-dir",
+          "/mnt/efs/nlp/psyche/riley-w0-a100-gpu67-20261019/leases-v2",
+          "--index",
+          "7",
+          "run",
+          "--",
+          "python3",
+          "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/measure-matched.py",
+          "--out",
+          "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/continuations/r0-stock",
+          "--binary",
+          "/mnt/efs/nlp/psyche/riley-w0-a100-gpu67-20261019/riley-baseline",
+          "--baseline-server",
+          "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/riley-prefill-host-v15c",
+          "--candidate-binary",
+          "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/riley-weight-layout-v19a",
+          "--native-reference",
+          "/mnt/efs/nlp/psyche/riley-w0-a100-gpu67-20261019/runs/qwen7-bootstrap/native-reference.json",
+          "--model",
+          "/mnt/efs/nlp/psyche/riley-261013/models/Qwen3-4B",
+          "--reference",
+          "/mnt/efs/nlp/psyche/riley-w0-a100-gpu67-20261019/qwen4b-serving-HF-GPU7-clean",
+          "--gpu",
+          "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+          "--workload",
+          "fixed",
+          "--concurrency",
+          "16",
+          "--repeats",
+          "1",
+          "--keep",
+          "192",
+          "--warm",
+          "64",
+          "--modes",
+          "vllm",
+          "--batch-policy",
+          "bounded-projections-sm80-v2",
+          "--candidate-mode",
+          "native-prefill-sm80-v5",
+          "--candidate-extra",
+          "[\"--sampling-backend\", \"gpu-greedy\", \"--batch-token-budget\", \"576\", \"--step-uploads\", \"staged-batch-v1\", \"--mlp-activation\", \"fused-silu-multiply-v1\", \"--owned-decode-graph\", \"segments-v1\"]",
+          "--baseline-extra",
+          "[\"--sampling-backend\", \"gpu-greedy\", \"--batch-token-budget\", \"576\", \"--step-uploads\", \"staged-batch-v1\", \"--mlp-activation\", \"fused-silu-multiply-v1\", \"--owned-decode-graph\", \"segments-v1\"]",
+          "--repeat-start",
+          "0"
+        ],
+        "result_sha256": "1e3a6325819c39caaf187beb5c05f0c70742c4f94e2f2268bb1dbe1dcc796a4d",
+        "arms": 1
+      },
+      {
+        "tag": "r1-r4",
+        "argv": [
+          "python3",
+          "/mnt/efs/nlp/psyche/riley-w0-a100-gpu67-20261019/control.py",
+          "--lease-dir",
+          "/mnt/efs/nlp/psyche/riley-w0-a100-gpu67-20261019/leases-v2",
+          "--index",
+          "7",
+          "run",
+          "--",
+          "python3",
+          "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/measure-matched.py",
+          "--out",
+          "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/continuations/r1-r4",
+          "--binary",
+          "/mnt/efs/nlp/psyche/riley-w0-a100-gpu67-20261019/riley-baseline",
+          "--baseline-server",
+          "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/riley-prefill-host-v15c",
+          "--candidate-binary",
+          "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/riley-weight-layout-v19a",
+          "--native-reference",
+          "/mnt/efs/nlp/psyche/riley-w0-a100-gpu67-20261019/runs/qwen7-bootstrap/native-reference.json",
+          "--model",
+          "/mnt/efs/nlp/psyche/riley-261013/models/Qwen3-4B",
+          "--reference",
+          "/mnt/efs/nlp/psyche/riley-w0-a100-gpu67-20261019/qwen4b-serving-HF-GPU7-clean",
+          "--gpu",
+          "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+          "--workload",
+          "fixed",
+          "--concurrency",
+          "16",
+          "--repeats",
+          "5",
+          "--keep",
+          "192",
+          "--warm",
+          "64",
+          "--modes",
+          "owned-before,owned-after,vllm",
+          "--batch-policy",
+          "bounded-projections-sm80-v2",
+          "--candidate-mode",
+          "native-prefill-sm80-v5",
+          "--candidate-extra",
+          "[\"--sampling-backend\", \"gpu-greedy\", \"--batch-token-budget\", \"576\", \"--step-uploads\", \"staged-batch-v1\", \"--mlp-activation\", \"fused-silu-multiply-v1\", \"--owned-decode-graph\", \"segments-v1\"]",
+          "--baseline-extra",
+          "[\"--sampling-backend\", \"gpu-greedy\", \"--batch-token-budget\", \"576\", \"--step-uploads\", \"staged-batch-v1\", \"--mlp-activation\", \"fused-silu-multiply-v1\", \"--owned-decode-graph\", \"segments-v1\"]",
+          "--repeat-start",
+          "1"
+        ],
+        "result_sha256": "2172a7212734ef23fd4634a7bf2ba119d980f0e5ffecc653553bc8c37e381f47",
+        "arms": 12
+      }
+    ],
+    "raw_failed_startup": "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/failed-startup-c16-r0-vllm",
+    "moved_arms_have_original_path_symlinks": true
+  }
+}

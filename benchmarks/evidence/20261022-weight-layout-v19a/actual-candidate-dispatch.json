@@ -1,0 +1,42 @@
+{
+  "time_ns": 1792640222486636260,
+  "profiles": [
+    {
+      "trace": "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/runs/profile-c16/c16-r0-owned-before/trace.sqlite",
+      "trace_sha256": "615a97227dbadc1e170ef1e5ca97d62a6cbfeb2217515e016ad9a5cfa4aa9c53",
+      "before": true,
+      "packed_kernel_launches": 0,
+      "packed_kernel_ms": 0.0,
+      "packed_kernels_in_graph": 0,
+      "total_kernel_ms": 1684.048079
+    },
+    {
+      "trace": "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/runs/profile-c16/c16-r0-owned-after/trace.sqlite",
+      "trace_sha256": "90aea3d0686b9a6d0d0bfcdefe7c56cef435e1e5c76f503d2b5b3feed819d8dd",
+      "before": false,
+      "packed_kernel_launches": 3168,
+      "packed_kernel_ms": 248.648414,
+      "packed_kernels_in_graph": 3168,
+      "total_kernel_ms": 1637.021452
+    },
+    {
+      "trace": "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/runs/profile-c32/c32-r0-owned-before/trace.sqlite",
+      "trace_sha256": "e880e8aa91897e27cee29f83e40935e0cf9e898b94aa682a5eff3dcbd332614e",
+      "before": true,
+      "packed_kernel_launches": 0,
+      "packed_kernel_ms": 0.0,
+      "packed_kernels_in_graph": 0,
+      "total_kernel_ms": 1302.837305
+    },
+    {
+      "trace": "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022/runs/profile-c32/c32-r0-owned-after/trace.sqlite",
+      "trace_sha256": "60ecb03fb17239ab884359aab5503e1c6373f89e073188c6152cd70daa1a030b",
+      "before": false,
+      "packed_kernel_launches": 800,
+      "packed_kernel_ms": 61.644941,
+      "packed_kernels_in_graph": 800,
+      "total_kernel_ms": 1333.107409
+    }
+  ],
+  "scope": "Separate64warm64keep diagnostic windows; actual packed GateUp launches verified, 32/36 layers eligible for R2..16 by source. No normal-arm throughput inferred from aggregate kernel sums. Down and R17..32 unchanged."
+}

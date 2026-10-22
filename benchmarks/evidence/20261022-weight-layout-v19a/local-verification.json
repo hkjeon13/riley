@@ -1,0 +1,32 @@
+{
+  "archive_sha256": "160cdf63e7ceb42039b653a59a785a6dbb67031adc2f8339770fc2bd5a77f29f",
+  "archive_CRC_all_entries_valid": true,
+  "archive_manifest_all_entries_valid": true,
+  "archive_entries": 917,
+  "all_eight_changed_sources_reconstructed": true,
+  "patch_sha256": "c64860fa461e856af40d71946026559404249f4fd73d2ea44b4ece1fe1fb6891",
+  "base_file_sha256": {
+    "crates/riley-cuda/src/ffi.rs": "c8f0f7882b6570ce1ca26628945643d82275918697af0f1b95ebe1336a6c570e",
+    "crates/riley-cuda/src/gemm.rs": "4cef93d4bc2a75d173d182a1395e830c8c1a1d2265bf0360929e8851806788d0",
+    "crates/riley-cuda/src/owned_mlp.rs": "4839a176903f34f5a122aa638d87de1a5d4cf455c87896c1883dc0f4fc66898c",
+    "crates/riley-cuda/tests/sm80_prefill_alignment_gpu.rs": "37d5fd3bd52293511977c2ff41ea048cf9ddab266cf96f6068695f20af2e51d7",
+    "crates/riley-runtime/src/cuda_weights.rs": "666ae85397c90961317de138e72782dbf56ed2f588ee0f28568b86b303766405",
+    "crates/riley-runtime/src/llama/executor/dispatch.rs": "aa22c998fb533079bacbfbe0243e89ab371132e0cde4a81eee86258457836cd8",
+    "crates/riley-runtime/src/llama/executor/owner.rs": "6c6b249b7f42e3188f362eeaf98609bc848ae199e6eed9d0d2ff107afebabf2e",
+    "kernels/src/cublas_gemm_probe.cu": "d402118c8272ee3f40b0e55efd122349dbe37e28777da0a2dfaeeed01578024c"
+  },
+  "qualified_changed_source_sha256": {
+    "crates/riley-cuda/src/ffi.rs": "17295ba2e0d4b4c9365dfa8a56b2cc5a3b1b4d19e3e3a5fe7173997a34dee79d",
+    "crates/riley-cuda/src/gemm.rs": "79dc8fe7cab84cf21861aa9cc87a2e917f8a9a2ec78338057122901153b118a8",
+    "crates/riley-cuda/src/owned_mlp.rs": "b3a783ac9a709a091dc4bdecf72b1a692c3bf02eb5fb6b29ac5359d9191cc3c9",
+    "crates/riley-cuda/tests/sm80_prefill_alignment_gpu.rs": "edba551a07d63f2424ee121c89c38c8dd3549690f745a1258f6248e1d1597123",
+    "crates/riley-runtime/src/cuda_weights.rs": "ba365cc121a95ab5366811f998d10563f4aaa09360255f4439f964d41da7fea2",
+    "crates/riley-runtime/src/llama/executor/dispatch.rs": "d1fe6096a3c09ed6fb2303ec927b09e18017c4ae8ecc8503c5c46daba6c8a0d4",
+    "crates/riley-runtime/src/llama/executor/owner.rs": "7b3830cd64edffa9cbc022e0e990ac3858bd9a5ce84b62452df6044765b793d4",
+    "kernels/src/cublas_gemm_probe.cu": "132fc070cf8d41cbecaa49aa3b33803bda5f05a8adbc3588277cd62a466cf9e5"
+  },
+  "integration_status": "A rejected: C32 no throughput benefit and two paired TPOT p99 flags; main remains v15C pending capacity-aware B",
+  "archive_raw_patch_sha256": "3d73582a4e22558b668004133c56e56dcccbd4005970bfc16ccd0104ee7bff69",
+  "blank_context_prefixes_normalized": true,
+  "reconstructed_source_diff_check": true
+}
