@@ -1,0 +1,123 @@
+{
+  "started_ns": 1792632186921250921,
+  "source_revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+  "shards": [
+    {
+      "path": "model-00001-of-00003.safetensors",
+      "bytes": 3957900840,
+      "sha256": "328a91d3122359d5547f9d79521205bc0a46e1f79a792dfe650e99fc2d651223"
+    },
+    {
+      "path": "model-00002-of-00003.safetensors",
+      "bytes": 3987450520,
+      "sha256": "6cd087b316306a68c562436b5492edbcf6e16c6dba3a1308279caa5a58e21ca5"
+    },
+    {
+      "path": "model-00003-of-00003.safetensors",
+      "bytes": 99630640,
+      "sha256": "e4bf436957184f4eeb86a80e9db394503f1f56446b2e6b7edeac5b81470f4ca1"
+    }
+  ],
+  "weights": [
+    {
+      "name": "model.layers.0.mlp.gate_proj.weight",
+      "shape": [
+        9728,
+        2560
+      ],
+      "offset": 827744808,
+      "bytes": 49807360,
+      "sha256": "fe440e8f6cc7c56de2d5a97fef5ee04f65388dd8460821ef2ed1645c39c6a47a",
+      "file": "layer0-gate.bf16"
+    },
+    {
+      "name": "model.layers.0.mlp.up_proj.weight",
+      "shape": [
+        9728,
+        2560
+      ],
+      "offset": 877552168,
+      "bytes": 49807360,
+      "sha256": "9a957c5a0f2bd6a240eaf6e5de83dd91a58ed1acd1829fcb72ab95aa7624181d",
+      "file": "layer0-up.bf16"
+    },
+    {
+      "name": "model.layers.0.mlp.down_proj.weight",
+      "shape": [
+        2560,
+        9728
+      ],
+      "offset": 777937448,
+      "bytes": 49807360,
+      "sha256": "edf534353405dab5179894b9641d12c6e53c4c6a8100b8c079257a9f3584945f",
+      "file": "layer0-down.bf16"
+    },
+    {
+      "name": "model.layers.17.mlp.gate_proj.weight",
+      "shape": [
+        9728,
+        2560
+      ],
+      "offset": 301516952,
+      "bytes": 49807360,
+      "sha256": "0781e55bed848c6184338fb7289d5cb528e6c78df3889dfec4b18aaad1700355",
+      "file": "layer17-gate.bf16"
+    },
+    {
+      "name": "model.layers.17.mlp.up_proj.weight",
+      "shape": [
+        9728,
+        2560
+      ],
+      "offset": 351324312,
+      "bytes": 49807360,
+      "sha256": "8ddf234c77201601375172010b04d6ae0276782c36becef4f4fb2df618ba79a0",
+      "file": "layer17-up.bf16"
+    },
+    {
+      "name": "model.layers.17.mlp.down_proj.weight",
+      "shape": [
+        2560,
+        9728
+      ],
+      "offset": 251709592,
+      "bytes": 49807360,
+      "sha256": "f111579d714632692e16eaf807f6d5faf156ae30cc07a374d873a54493591402",
+      "file": "layer17-down.bf16"
+    },
+    {
+      "name": "model.layers.35.mlp.gate_proj.weight",
+      "shape": [
+        9728,
+        2560
+      ],
+      "offset": 3885213848,
+      "bytes": 49807360,
+      "sha256": "23d831607ad001c7d208602dd306ff9c3022909ced62c49c43267d03a18a72e5",
+      "file": "layer35-gate.bf16"
+    },
+    {
+      "name": "model.layers.35.mlp.up_proj.weight",
+      "shape": [
+        9728,
+        2560
+      ],
+      "offset": 49813040,
+      "bytes": 49807360,
+      "sha256": "2fa275f5d8b3256422e38c8f6a8af143b2cb07c374805ddcb5c86f0968b08e30",
+      "file": "layer35-up.bf16"
+    },
+    {
+      "name": "model.layers.35.mlp.down_proj.weight",
+      "shape": [
+        2560,
+        9728
+      ],
+      "offset": 5680,
+      "bytes": 49807360,
+      "sha256": "d1076cc049bcfac953dbe2a9b61597d1981a63e78e2d22c065ad60c78229141f",
+      "file": "layer35-down.bf16"
+    }
+  ],
+  "finished_ns": 1792632218983835741
+}

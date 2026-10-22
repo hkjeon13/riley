@@ -1,0 +1,31 @@
+{
+  "time_ns": 1792632857603351565,
+  "runs": {
+    "v2": {
+      "samples": 44,
+      "whole_device_peak_MiB": 1361.0,
+      "foreign_GPU_process_samples": 0,
+      "GPU": 7
+    },
+    "nn": {
+      "samples": 3,
+      "whole_device_peak_MiB": 1123.0,
+      "foreign_GPU_process_samples": 0,
+      "GPU": 7
+    },
+    "real-gpu6": {
+      "samples": 122,
+      "whole_device_peak_MiB": 1361.0,
+      "foreign_GPU_process_samples": 0,
+      "GPU": 6
+    },
+    "tune": {
+      "samples": 16,
+      "whole_device_peak_MiB": 1361.0,
+      "foreign_GPU_process_samples": 0,
+      "GPU": 6
+    }
+  },
+  "cap_MiB": 22528,
+  "GPU7_admission_rejection_at_real_weights": true
+}

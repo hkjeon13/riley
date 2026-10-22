@@ -23,6 +23,16 @@ cuBLASLt. There is no Python in the serving process.
 
 ## Performance
 
+### Weight-layout operator experiment · 2026-10-22
+
+A cold K-major Gate/Up weight layout reduces operator latency by **4.28–5.07%**
+for R2–16 across actual Qwen layers 0/17/35; all 3,348 numerical cases preserve
+literal BF16 outputs. Down packing is slower, and none of 70 transposed-weight
+cuBLASLt candidates is both exact and faster. Additional tile/stage variants do
+not beat the selected layout. These are operator results; full-model accuracy
+and fresh C16/C32 HTTP comparisons remain pending. The accepted runtime remains
+v15C. [Implementation, full operator table and evidence](docs/qwen-weight-layout-v19-screen-20261022.md).
+
 ### Latest structural experiments · 2026-10-22
 
 Both candidates passed the original accuracy gates but were **not adopted**.
