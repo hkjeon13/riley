@@ -29,15 +29,42 @@ A cold K-major Gate/Up weight layout reduces operator latency by **4.28–5.07%*
 for R2–16 across actual Qwen layers 0/17/35; all 3,348 numerical cases preserve
 literal BF16 outputs. Down packing is slower, and none of 70 transposed-weight
 cuBLASLt candidates is both exact and faster. Additional tile/stage variants do
-not beat the selected layout. These are operator results; the server passes
-7,760 literal BF16 files. A fresh five-repeat comparison improves C16 by2.49%
-but loses0.18% at C32 and flags two C32 TPOTp99 pairs; capacity-aware dispatch
-is being validated. The accepted runtime remains v15C. [Implementation, full operator table and evidence](docs/qwen-weight-layout-v19-screen-20261022.md).
+not beat the selected layout. These are operator results. The server experiments
+are complete: v19A passes 7,760 literal BF16 files; capacity-aware v19B passes
+10,096. Fresh matched results and the unchanged tail-gate decision are below. [Implementation, full operator table and evidence](docs/qwen-weight-layout-v19-screen-20261022.md).
 
 A separate lossless BF16 format reduces Gate/Up/Down stored weight bytes by
 17.58%/16.41%, but decoding makes Gate/Up 31–35% slower and Down about twice
 as slow. All 360 operator comparisons are exact; this candidate is rejected.
 [Lossless format implementation and results](docs/qwen-lossless-projection-v19-20261022.md).
+
+### Latest capacity-aware comparison · 2026-10-22
+
+v19B preserves accuracy but does **not** meet the preregistered adoption gates;
+the accepted runtime remains v15C. Its exact qualified patch is retained.
+C16 enables packed Gate/Up with 2.96875 GiB extra weights; C32 uses the original
+projection path with no packed allocation or launches. Each engine/concurrency
+has five fresh processes on the same physical GPU7, 64 warm-up + 192 measured requests; values are
+run-level medians. No completed normal arm is excluded or repeated.
+
+| C | Matched v15C tok/s | v19B tok/s | Change | vLLM tok/s | v19B/vLLM |
+|---|---:|---:|---:|---:|---:|
+| 16 | 749.718 | 758.596 | +1.18% | 1147.495 | 66.11% |
+| 32 | 980.833 | 976.130 | -0.48% | 1688.063 | 57.83% |
+
+| Clients | Metric ms | v15C | v19B | vLLM |
+|---|---|---:|---:|---:|
+| 16 | TTFT p95 / p99 | 79.808 / 163.501 | 81.099 / 162.441 | 84.171 / 111.642 |
+| 16 | TPOT p95 / p99 | 19.999 / 21.457 | 19.774 / 21.082 | 12.671 / 13.328 |
+| 32 | TTFT p95 / p99 | 250.153 / 334.932 | 253.244 / 340.307 | 165.031 / 218.328 |
+| 32 | TPOT p95 / p99 | 31.664 / 38.560 | 31.715 / 38.285 | 17.341 / 22.687 |
+
+Tail flags (>2% paired TTFT/TPOT p95/p99): C16=4,
+C32=6. The original accuracy and tail
+thresholds are unchanged. 524 CPU tests and 10,096 literal BF16 files pass.
+C32 differences are baseline-path variation, not a packed-kernel speedup.
+The large throughput improvement target remains unmet.
+[Implementation, every pair and evidence](docs/qwen-weight-layout-v19b-20261022.md).
 
 ### Latest structural experiments · 2026-10-22
 
@@ -66,7 +93,7 @@ retained; supplemental inspected profiles are separate from timing results.
 [Overlap implementation, all repeats and caveats](docs/qwen-overlap-v18b4-20261021.md).
 [Packed backend implementation, memory cost and all pairs](docs/qwen-weight-layout-v19a-20261022.md).
 
-### A100 · Qwen3-4B · latest qualified checkpoint
+### A100 · Qwen3-4B · accepted v15C adoption comparison · 2026-10-21
 
 Measured 2026-10-21 on the same physical A100 (GPU 7), sequentially, with
 five fresh processes per engine and concurrency. Values are the medians of

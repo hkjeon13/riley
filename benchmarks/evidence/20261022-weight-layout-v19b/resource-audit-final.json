@@ -1,0 +1,127 @@
+{
+  "time_ns": 1792645036674357301,
+  "resource_runs": [
+    {
+      "name": "observed-teacher-mixed-r3.samples.jsonl",
+      "samples": 118,
+      "whole_device_peak_MiB": 18905.0,
+      "sha256": "bee75fa35a51f8165e374f8225c2ffaba00c5fc41d0a85544ff9d5f31b6d4d4a"
+    },
+    {
+      "name": "observed-teacher-mixed-no-output-r3.samples.jsonl",
+      "samples": 115,
+      "whole_device_peak_MiB": 18905.0,
+      "sha256": "c754019a43ecbc37addb8dd7160d828e548086396b865f0112bce11846e00f95"
+    },
+    {
+      "name": "observed-sm80_prefill_alignment_gpu.samples.jsonl",
+      "samples": 2,
+      "whole_device_peak_MiB": 915.0,
+      "sha256": "cc084727807936ca1c5a351fe2469a60f6ec1a4c8524d0d12cd07ec227b3bd65"
+    },
+    {
+      "name": "observed-owned_hf_command_batch_gpu.samples.jsonl",
+      "samples": 2,
+      "whole_device_peak_MiB": 504.0,
+      "sha256": "c0a2e012d29f5b6a90247a29a6fae8a4e3d458f419c42f58ab10d63e89645995"
+    },
+    {
+      "name": "observed-c16-no-output576.samples.jsonl",
+      "samples": 93,
+      "whole_device_peak_MiB": 18833.0,
+      "sha256": "f33e65531ddc242da036163f655add5ad15476534a577ae49c80ccad07aa04a0"
+    },
+    {
+      "name": "observed-memory_gpu.samples.jsonl",
+      "samples": 1,
+      "whole_device_peak_MiB": 504.0,
+      "sha256": "627d6a463cdffb18d8c8369940a295edb21e8eeaab564e5359a549d9d2a748b9"
+    },
+    {
+      "name": "observed-final-teacher-allR-Graph-r3.samples.jsonl",
+      "samples": 82,
+      "whole_device_peak_MiB": 19053.0,
+      "sha256": "d4d6ce42293105944e06732a1e40f41babe9802daa365442a8acf0f16490f16d"
+    },
+    {
+      "name": "observed-host_runtime_gpu.samples.jsonl",
+      "samples": 1,
+      "whole_device_peak_MiB": 504.0,
+      "sha256": "7d861d65cc0574cf1873dbc90b7982dd68a4745faad4f45ec23af804a2855044"
+    },
+    {
+      "name": "observed-canonical.samples.jsonl",
+      "samples": 115,
+      "whole_device_peak_MiB": 18905.0,
+      "sha256": "0d0c6102aa53f1d69aa2eefc4533a3d97aa0cb304af1b953299f1100fafbdb8d"
+    },
+    {
+      "name": "observed-c16-mixed576.samples.jsonl",
+      "samples": 94,
+      "whole_device_peak_MiB": 18833.0,
+      "sha256": "e2aaacf04f401c92f2c1375087d5c55e5494b353b4a36352a63c76a809be77ce"
+    },
+    {
+      "name": "observed-bounded576.samples.jsonl",
+      "samples": 174,
+      "whole_device_peak_MiB": 18483.0,
+      "sha256": "053dfa7ddaee3e478293586a2519c5d4382b58b275f66f8dcc91516d14a0420d"
+    },
+    {
+      "name": "observed-final-teacher-C1-eager-r3.samples.jsonl",
+      "samples": 72,
+      "whole_device_peak_MiB": 9783.0,
+      "sha256": "b49ae06b395265375b0e503be7ad7ff6c02315346e6a83f3bb141c646de56320"
+    },
+    {
+      "name": "observed-c16-body576.samples.jsonl",
+      "samples": 117,
+      "whole_device_peak_MiB": 18931.0,
+      "sha256": "8ca702623944212c6e6e100bf31f97a541c30362c6580e37a5a40a622f48c496"
+    },
+    {
+      "name": "observed-c16-canonical576.samples.jsonl",
+      "samples": 94,
+      "whole_device_peak_MiB": 18821.0,
+      "sha256": "2fd24ac2a91b18c64697d213f9da7a4d609658c581bf5dceeb74c0727c67d2b5"
+    },
+    {
+      "name": "observed-teacher-body-allR-r3.samples.jsonl",
+      "samples": 185,
+      "whole_device_peak_MiB": 19133.0,
+      "sha256": "6ef37d797d9625e0134f98483c1df60688b6c3e30e6c86bc37c04d3e4f6cb402"
+    },
+    {
+      "name": "packed-contract-v3/observed-contract.samples.jsonl",
+      "samples": 2,
+      "whole_device_peak_MiB": 1367.0,
+      "sha256": "7394039c97b5f7138aae7796aac4f681464d93a2f0f5782b4c41aa5dedef7829"
+    }
+  ],
+  "qualified_source_count": 937,
+  "all_source_hashes_equal": true,
+  "changed_sources": [
+    "crates/riley-cuda/src/ffi.rs",
+    "crates/riley-cuda/src/gemm.rs",
+    "crates/riley-cuda/src/owned_mlp.rs",
+    "crates/riley-cuda/tests/sm80_prefill_alignment_gpu.rs",
+    "crates/riley-runtime/src/cuda_weights.rs",
+    "crates/riley-runtime/src/llama/executor/dispatch.rs",
+    "crates/riley-runtime/src/llama/executor/owner.rs",
+    "kernels/src/cublas_gemm_probe.cu"
+  ],
+  "binary_sha256": "6d19091a3ea8d879730a2ced7c2a7c9a174d5d5fe35e6dd578732c97732c698f",
+  "normal_arms": 30,
+  "separate_profile_arms": 4,
+  "total_stored_SSE_structures_verified": 6490,
+  "Riley_native_HF_values_literal_equal": true,
+  "stock_HF_matches_reported_per_arm": true,
+  "normal_profile_peak_MiB": 18835.0,
+  "whole_device_cap_MiB": 22528,
+  "primary_qualification_GPU": 7,
+  "additional_capacity16_qualification_GPU": 7,
+  "normal_profile_GPU": 7,
+  "original_GPU6_7_holder_PID_and_context_retained": true,
+  "completed_normal_arms_excluded": 0,
+  "completed_normal_arms_repeated": 0
+}

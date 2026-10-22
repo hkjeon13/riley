@@ -1,0 +1,87 @@
+{
+  "time_ns": 1792645036764855274,
+  "eligible_for_integration": false,
+  "integrated_into_main": false,
+  "normal_completed_arms_excluded": 0,
+  "normal_completed_arms_repeated": 0,
+  "accuracy_threshold_changed": false,
+  "registered_policy": {
+    "registered_ns": 1792641664352366847,
+    "scope": "Capacity-aware policy: accelerate configured capacities<=16; capacity32 intentionally retains original projection execution and allocates no packed weights. C16/C32 fresh matched5repeat validation remains required.",
+    "original_numerical_reference_and_tolerance_unchanged": true,
+    "original_required_BF16_files": 7552,
+    "additional_capacity16_budget576_BF16_files": 2544,
+    "C16_require_positive_median_throughput": true,
+    "C16_require_all_five_throughput_pairs_positive": true,
+    "C32_claims_throughput_improvement": false,
+    "C32_require_no_packed_allocations_or_launches": true,
+    "C32_max_median_throughput_regression_percent": 2.0,
+    "any_paired_TTFT_TPOT_p95_p99_over_2_percent_prevents_adoption": true,
+    "whole_device_cap_MiB": 22528,
+    "completed_normal_arms_excluded": 0,
+    "completed_normal_arms_repeated": 0,
+    "reason": "Unlike A, B does not seek to accelerate capacity32; pre-register noninferiority and exact fallback verification for that lane. Original literal accuracy and hard per-pair latency tail gates are not relaxed. The10%throughput target remains a target and will be reported honestly."
+  },
+  "C16_all_five_throughput_pairs_positive": false,
+  "tail_flags": {
+    "16": [
+      {
+        "repeat": 1,
+        "metric": "ttft_ms_p95",
+        "percent_change": 4.800825574294154
+      },
+      {
+        "repeat": 1,
+        "metric": "ttft_ms_p99",
+        "percent_change": 3.194014367860487
+      },
+      {
+        "repeat": 1,
+        "metric": "tpot_ms_p99",
+        "percent_change": 2.512618621295193
+      },
+      {
+        "repeat": 3,
+        "metric": "ttft_ms_p95",
+        "percent_change": 2.504277595366422
+      }
+    ],
+    "32": [
+      {
+        "repeat": 2,
+        "metric": "ttft_ms_p95",
+        "percent_change": 3.710404261971245
+      },
+      {
+        "repeat": 2,
+        "metric": "ttft_ms_p99",
+        "percent_change": 2.328657620002761
+      },
+      {
+        "repeat": 2,
+        "metric": "tpot_ms_p95",
+        "percent_change": 2.1234515429538137
+      },
+      {
+        "repeat": 2,
+        "metric": "tpot_ms_p99",
+        "percent_change": 3.4842659366386197
+      },
+      {
+        "repeat": 4,
+        "metric": "ttft_ms_p95",
+        "percent_change": 4.1201895979269265
+      },
+      {
+        "repeat": 4,
+        "metric": "ttft_ms_p99",
+        "percent_change": 2.714860127861729
+      }
+    ]
+  },
+  "throughput_changes": {
+    "16": 1.184165981142038,
+    "32": -0.4794928256360409
+  },
+  "reason": "Preregistered capacity-aware B policy: C16 positive median and all five pairs; C32 original-path noninferiority >=-2%; zero paired TTFT/TPOT p95/p99 >2% flags, unchanged accuracy/resource/actual-dispatch gates. Main integration is a separate step."
+}

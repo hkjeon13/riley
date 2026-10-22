@@ -1,0 +1,29 @@
+{
+  "time_ns": 1792642857114458026,
+  "baseline_commit": "57502e7a0fafd165966071e88b3e8a56cdea0e3d",
+  "baseline_binary": "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/riley-prefill-host-v15c",
+  "baseline_sha256": "233c3a6a81bad76d65577bacd5837d59e2ebe1dd52a8fde73f3cd07a38cf937a",
+  "binary": "/mnt/efs/nlp/psyche/riley-weight-layout-v19b-20261022/riley-weight-layout-v19b",
+  "binary_sha256": "6d19091a3ea8d879730a2ced7c2a7c9a174d5d5fe35e6dd578732c97732c698f",
+  "qualified_source_count": 937,
+  "changed_sources": [
+    "crates/riley-cuda/src/ffi.rs",
+    "crates/riley-cuda/src/gemm.rs",
+    "crates/riley-cuda/src/owned_mlp.rs",
+    "crates/riley-cuda/tests/sm80_prefill_alignment_gpu.rs",
+    "crates/riley-runtime/src/cuda_weights.rs",
+    "crates/riley-runtime/src/llama/executor/dispatch.rs",
+    "crates/riley-runtime/src/llama/executor/owner.rs",
+    "kernels/src/cublas_gemm_probe.cu"
+  ],
+  "new_sources": [],
+  "source_manifest_sha256": "1f08eba219078d718eb5f831f9423ef34e242a7572f40813189183d0fadda7c6",
+  "normal_inputs_sha256": {
+    "/mnt/efs/nlp/psyche/riley-weight-layout-v19b-20261022/riley-weight-layout-v19b": "6d19091a3ea8d879730a2ced7c2a7c9a174d5d5fe35e6dd578732c97732c698f",
+    "/mnt/efs/nlp/psyche/riley-weight-layout-v19b-20261022/measure-matched.py": "fbdfeee188a5eb2ddf8d08fd57a3aedc87e88fc8033bca75d4b4bef594bfb744",
+    "/mnt/efs/nlp/psyche/riley-weight-layout-v19b-20261022/final-c16.argv.json": "5eb3e84177135c80cddf24ace1ddafa1617923f2c34cda1cdfb75dfaa97cf913",
+    "/mnt/efs/nlp/psyche/riley-weight-layout-v19b-20261022/final-c32.argv.json": "50e403cc001a2a586ef9d2377a80eae5d034f4085bc74c04e4bafb57fc45145e",
+    "/mnt/efs/nlp/psyche/riley-weight-layout-v19b-20261022/adoption-policy.json": "1556ecd4c1ed0f8755e6a5b0bc8f1269be0f31693f11745aeeb8fcc06f7d2131",
+    "/mnt/efs/nlp/psyche/riley-weight-layout-v19b-20261022/route-policy-lineage.json": "abd1bedbf74ca21b87b64e04522af30e7437e14a6fa393b96774b91a037bc816"
+  }
+}

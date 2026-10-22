@@ -10,6 +10,8 @@
 
 실행 업데이트 v13 (2026-10-21 KST): [mixed MLP piecewise Graph·decode Gate/Up 구현·검증 결과](qwen-piecewise-graph-merged-gateup-v13-20261020.md). 직전 v12B와의 fresh5회 비교에서 처리량은 C16 +1.40%·C32 +2.37%, C16 TPOT p95·p99는 -2.00%·-3.29%였다. 반복별 TTFT/TPOT p95·p99의 2% 초과 악화는 없었다. 원래 정확도와 GPU6/7 context 홀드를 유지했다. vLLM 대비 처리량은61.49%·55.40%로 격차가 크며, R2~16 Gate/Up과 mixed attention·host 실행 구조가 남아 있다.
 
+실행 업데이트 v19 (2026-10-22 KST): [가중치 배치·backend 연산 실험](qwen-weight-layout-v19-screen-20261022.md), [무손실 포맷 미채택](qwen-lossless-projection-v19-20261022.md), [v19A 서버 비교](qwen-weight-layout-v19a-20261022.md)와 [capacity-aware v19B 최종 비교](qwen-weight-layout-v19b-20261022.md)를 완료했다. B는10096 literal BF16파일과 GPU6/7 홀드를 유지했고, fresh5회 처리량 변화는 C16 +1.18%, C32 -0.48%다. 기존 tail/처리량 채택 기준을 통과하지 못해 기본 runtime은 v15C를 유지한다. B안의 구현은 검증된 미적용 패치로 보존한다. 큰 처리량 개선 목표에는 미달했다. 구현 패치와 반복별 성능·정확도·자원 증거를 함께 보존한다.
+
 ## 1. 목표와 판단
 
 목표는 original native/HF 정확도 기준과 GPU 6·7의 기존 CUDA context 홀드를 유지하면서 C16 초기 TTFT p95를 안정화하고, C16·C32의 vLLM 대비 처리량 격차를 줄이는 것이다. 개별 커널의 소폭 개선을 반복하는 대신 **실제 활성 행의 가중치 재사용 → prefill 투영 → 수치 경계를 보존하는 융합 → 실행 범위 확대** 순서로 진행한다.

@@ -1,6 +1,6 @@
 # Model-owned K-major Gate/Up backend v19A
 
-2026-10-22. 구조 변경을 실제 서버와 decode Graph에 연결했다. **C16은 +2.49%, C32는 -0.18%이며, C32 paired TPOT p99 두 건이 기준을 넘어 전체 구성의 기본 경로로 채택하지 않는다.** 기존 v15C가 이 체크포인트의 accepted runtime이다. 성능이 확인된 용량에서만 선택하는 v19B를 별도로 검증한다.
+2026-10-22. 구조 변경을 실제 서버와 decode Graph에 연결했다. **C16은 +2.49%, C32는 -0.18%이며, C32 paired TPOT p99 두 건이 기준을 넘어 전체 구성의 기본 경로로 채택하지 않는다.** 기존 v15C가 이 체크포인트의 accepted runtime이다. 성능이 확인된 용량에서만 선택하는 [v19B 최종 비교](qwen-weight-layout-v19b-20261022.md)도 완료했으며, B 역시 반복별 tail 기준을 통과하지 못해 미채택했다.
 
 ## 바뀐 구조
 

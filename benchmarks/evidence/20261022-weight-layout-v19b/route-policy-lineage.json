@@ -1,0 +1,10 @@
+{
+  "time_ns": 1792640605961226885,
+  "parent_root": "/mnt/efs/nlp/psyche/riley-weight-layout-v19a-20261022",
+  "production_change_from_A": [
+    "crates/riley-runtime/src/llama/executor/owner.rs"
+  ],
+  "condition": "Allocate/enable packed GateUp only when configured max sequence rows <=16; capacity32 has no packed copies or launches. Original numerical kernels/references and all timing parameters unchanged.",
+  "reason": "A: C16+2.489% all5positive/no tailflags; C32-0.178% and two TPOTp99>2% flags, low observed packed-kernel coverage",
+  "original_A_results_preserved": true
+}
