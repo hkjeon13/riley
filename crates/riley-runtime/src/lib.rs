@@ -28,6 +28,7 @@ pub use kernel::{
 pub use riley_cuda::{
     AttentionBackend, AttentionPreference, AttentionSelectionTrace, CudaContext, CudaError,
     CudaEvent, CudaRuntime, CudaStream,
+    set_native_d128_attention_flashinfer,
 };
 
 /// Static build information that does not initialize a CUDA device.

@@ -1,6 +1,7 @@
 # 개선 계획: 배치 불변 고정 split varlen attention
 
 작성: 2026-10-23 KST. 상태: 계획이며 구현 전이다.
+실행 업데이트(2026-10-24): [고정 query tile·unsplit 경로의 구현 및 qualification](phase2-flashinfer-resume-20261024.md). 이 계획의 split-256 구현에 앞서 작은 unsplit 후보로 주 목표를 충족했다. 6셀 × 5회 × 3엔진 대조에서 모든 채택 게이트를 통과했으며, 고정 KV split과 1024토큰을 넘는 문맥 확장은 후속 범위로 남긴다.
 전제는 [Phase 0](phase0-contract-cost-and-aa-20261022.md)과 [Phase 1](phase1-native-attention-and-burst-20261022.md)의 측정과 결정이다. native(배치 불변)가 제품 기본이고, HF-literal은 검증 모드다.
 
 ## 1. 왜 이 계획인가

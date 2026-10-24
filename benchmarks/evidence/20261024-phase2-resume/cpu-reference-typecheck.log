@@ -1,0 +1,61 @@
+    Checking riley-cuda v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-cuda)
+warning: unused variable: `singleton_batch`
+   --> crates/riley-cuda/src/gemm.rs:740:9
+    |
+740 |         singleton_batch: bool,
+    |         ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_singleton_batch`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `hf_head_norm`
+    --> crates/riley-cuda/src/primitives.rs:1517:5
+     |
+1517 |     hf_head_norm:bool,
+     |     ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_hf_head_norm`
+
+warning: function `exact_decode_chunk_tokens_bounded` is never used
+    --> crates/riley-cuda/src/gemm.rs:2952:4
+     |
+2952 | fn exact_decode_chunk_tokens_bounded<const MAX:usize>(positions:&[u32],slots:&[u32],begin:usize,requests:usize)->Option<([u64;MAX],u64)>{
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: function `exact_decode_chunk_tokens` is never used
+    --> crates/riley-cuda/src/gemm.rs:2957:4
+     |
+2957 | fn exact_decode_chunk_tokens(p:&[u32],s:&[u32],begin:usize,requests:usize)->Option<([u64;8],u64)>{exact_decode_chunk_tokens_bounded::<8>(...
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `exact_wide_decode_chunk_tokens` is never used
+    --> crates/riley-cuda/src/gemm.rs:2958:4
+     |
+2958 | fn exact_wide_decode_chunk_tokens(p:&[u32],s:&[u32],begin:usize,requests:usize)->Option<([u64;32],u64)>{exact_decode_chunk_tokens_bounded...
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `identity` is never read
+   --> crates/riley-cuda/src/memory.rs:342:16
+    |
+341 | pub struct CudaDeviceBuffer {
+    |            ---------------- field in this struct
+342 |     pub(crate) identity: crate::runtime::CudaResourceIdentity,
+    |                ^^^^^^^^
+
+warning: associated function `new` is never used
+   --> crates/riley-cuda/src/runtime.rs:480:19
+    |
+479 | impl CudaResourceIdentity {
+    | ------------------------- associated function in this implementation
+480 |     pub(crate) fn new() -> Self { Self(Arc::new(())) }
+    |                   ^^^
+
+warning: field `identity` is never read
+   --> crates/riley-cuda/src/runtime.rs:502:16
+    |
+501 | pub struct CudaStream {
+    |            ---------- field in this struct
+502 |     pub(crate) identity: CudaResourceIdentity,
+    |                ^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 8 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.12s

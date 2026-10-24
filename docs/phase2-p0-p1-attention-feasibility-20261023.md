@@ -2,6 +2,7 @@
 
 2026-10-23 KST, aws-a100 GPU7(holder 유지). 계획은 [plan-fixed-split-varlen-attention-20261023.md](plan-fixed-split-varlen-attention-20261023.md)를 따른다. 진단용 측정이며 서버 성능 결과가 아니다.
 근거: [`benchmarks/evidence/20261023-phase2/`](../benchmarks/evidence/20261023-phase2/).
+후속: [2026-10-24 구현·서빙 불변성 수정·90-arm qualification](phase2-flashinfer-resume-20261024.md). 실제 채택 후보는 고정 query tile 64의 unsplit 경로이며, 아래 Python split-256 타당성 측정과 구분한다.
 
 ## 측정 조건
 

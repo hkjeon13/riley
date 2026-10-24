@@ -10,12 +10,13 @@ use std::error::Error;
 
 use riley_cuda::{
     CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDeviceBuffer,
-    CudaExecutionStream, CudaPinnedHostBuffer, CudaRuntime, CudaStream, DecodePartialReductionOrder,
-    NativeBf16RaggedPagedSplitGqaD128TwoStageParams,
+    CudaExecutionStream, CudaPinnedHostBuffer, CudaRuntime, CudaStream,
+    DecodePartialReductionOrder, NativeBf16RaggedPagedSplitGqaD128TwoStageParams,
     NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout, PackedBatchHostV1, PackedBatchV1,
+    begin_step_capture, end_step_capture, launch_step_graph,
     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge_prompt_mma,
-    begin_step_capture, end_step_capture, launch_step_graph, set_native_d128_attention_flashinfer,
+    set_native_d128_attention_flashinfer,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -150,10 +151,10 @@ fn download(
 
 /// The query of a logical row is a function of the row alone, so the same row
 /// carries the same query in every arrangement.
-fn row_query(row: Row, row_width: usize, random_seed: Option<u64>) -> Vec<u8> {
+fn row_query(row: Row, row_width: usize, random_seed: Option<u64>, random_scale: f32) -> Vec<u8> {
     let seed = row.sequence as usize * 7_919 + row.position as usize * 104_729;
     if let Some(fixture) = random_seed {
-        return random_pattern(row_width, fixture.wrapping_add(seed as u64), 4.0);
+        return random_pattern(row_width, fixture.wrapping_add(seed as u64), random_scale);
     }
     pattern(row_width, 11, seed % 9_973, 29, 9.0)
 }
@@ -161,6 +162,7 @@ fn row_query(row: Row, row_width: usize, random_seed: Option<u64>) -> Vec<u8> {
 struct Pools {
     heads: Heads,
     random_seed: Option<u64>,
+    random_scale: f32,
     graph: bool,
     pages_per_sequence: usize,
     page_capacity: usize,
@@ -215,7 +217,7 @@ fn run(
     )?;
     let mut query_bytes: Vec<u8> = rows
         .iter()
-        .flat_map(|row| row_query(*row, row_width, pools.random_seed))
+        .flat_map(|row| row_query(*row, row_width, pools.random_seed, pools.random_scale))
         .collect();
     query_bytes.resize(output_rows * row_width * 2, 0);
     let query = upload(context, stream, staging, &query_bytes)?;
@@ -352,7 +354,10 @@ fn run(
     ] {
         buffer.close()?;
     }
-    Ok(bytes.chunks_exact(row_width * 2).map(<[u8]>::to_vec).collect())
+    Ok(bytes
+        .chunks_exact(row_width * 2)
+        .map(<[u8]>::to_vec)
+        .collect())
 }
 
 fn rows(sequence: u32, positions: impl IntoIterator<Item = u32>) -> Vec<Row> {
@@ -371,6 +376,7 @@ fn flashinfer_rows_are_batch_invariant_and_close_to_the_page_path() -> TestResul
         check_geometry(&runtime, heads, 60, 64, None)?;
         check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15))?;
     }
+    check_high_amplitude_against_f64(&runtime)?;
     set_native_d128_attention_flashinfer(0);
     Ok(())
 }
@@ -387,8 +393,19 @@ fn run_kinds(
 ) -> TestResult<(std::collections::HashMap<Row, Vec<u8>>, Vec<Vec<u8>>)> {
     let addresses: Vec<Row> = rows.iter().map(|(row, _)| *row).collect();
     let kinds: Vec<u32> = rows.iter().map(|(_, kind)| *kind).collect();
-    let output = run(context, stream, staging, pools, &addresses, Some((&kinds, with_list)))?;
-    let by_row = addresses.iter().copied().zip(output.iter().cloned()).collect();
+    let output = run(
+        context,
+        stream,
+        staging,
+        pools,
+        &addresses,
+        Some((&kinds, with_list)),
+    )?;
+    let by_row = addresses
+        .iter()
+        .copied()
+        .zip(output.iter().cloned())
+        .collect();
     Ok((by_row, output[rows.len()..].to_vec()))
 }
 
@@ -416,24 +433,43 @@ fn check_geometry(
     let mut pools = Pools {
         heads,
         random_seed,
+        random_scale: 4.0,
         graph: false,
         pages_per_sequence,
         page_capacity,
-        key_pool: upload(&context, &mut stream, &mut staging, &random_seed.map_or_else(
-            || pattern(pool_elements, 5, 3, 31, 10.0),
-            |seed| random_pattern(pool_elements, seed, 4.0),
-        ))?,
-        value_pool: upload(&context, &mut stream, &mut staging, &random_seed.map_or_else(
-            || pattern(pool_elements, 13, 9, 37, 24.0),
-            |seed| random_pattern(pool_elements, seed ^ 0xd1b5_4a32_d192_ed03, 2.0),
-        ))?,
-        offsets: upload(&context, &mut stream, &mut staging, &encode_u32(&sequence_block_offsets))?,
+        key_pool: upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &random_seed.map_or_else(
+                || pattern(pool_elements, 5, 3, 31, 10.0),
+                |seed| random_pattern(pool_elements, seed, 4.0),
+            ),
+        )?,
+        value_pool: upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &random_seed.map_or_else(
+                || pattern(pool_elements, 13, 9, 37, 24.0),
+                |seed| random_pattern(pool_elements, seed ^ 0xd1b5_4a32_d192_ed03, 2.0),
+            ),
+        )?,
+        offsets: upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &encode_u32(&sequence_block_offsets),
+        )?,
         ids: upload(&context, &mut stream, &mut staging, &encode_u32(&block_ids))?,
         valid: upload(
             &context,
             &mut stream,
             &mut staging,
-            &valid_tokens.iter().flat_map(|value| value.to_ne_bytes()).collect::<Vec<u8>>(),
+            &valid_tokens
+                .iter()
+                .flat_map(|value| value.to_ne_bytes())
+                .collect::<Vec<u8>>(),
         )?,
         sequence_block_offsets,
         block_ids,
@@ -442,10 +478,15 @@ fn check_geometry(
 
     let last = (pages_per_sequence * PAGE_SIZE - 1) as u32;
     let prompt = |sequence: u32, positions: std::ops::Range<u32>| -> Vec<(Row, u32)> {
-        positions.map(|position| (Row { sequence, position }, 1)).collect()
+        positions
+            .map(|position| (Row { sequence, position }, 1))
+            .collect()
     };
     let decode = |sequence: u32, positions: &[u32]| -> Vec<(Row, u32)> {
-        positions.iter().map(|&position| (Row { sequence, position }, 0)).collect()
+        positions
+            .iter()
+            .map(|&position| (Row { sequence, position }, 0))
+            .collect()
     };
     // Prompt runs from position 0, across pages and query tiles, a late long
     // run and a short one; decode rows of every page class of other
@@ -454,38 +495,79 @@ fn check_geometry(
     let run_b = prompt(1, 60..101);
     let run_c = prompt(2, last - 40..last + 1);
     let run_d = prompt(3, 15..18);
-    let decodes = [decode(4, &[0, 15, 16, 255, last]), decode(5, &[64, 127, 300, last - 1])].concat();
+    let decodes = [
+        decode(4, &[0, 15, 16, 255, last]),
+        decode(5, &[64, 127, 300, last - 1]),
+    ]
+    .concat();
     let mut reference = Vec::new();
     for part in [&run_a, &decodes[..3], &run_b, &run_c, &decodes[3..], &run_d] {
         reference.extend_from_slice(part);
     }
 
     set_native_d128_attention_flashinfer(0);
-    let (page_path, _) = run_kinds(&context, &mut stream, &mut staging, &pools, &reference, true)?;
+    let (page_path, _) = run_kinds(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &reference,
+        true,
+    )?;
     set_native_d128_attention_flashinfer(1);
-    let (flashinfer, padding) = run_kinds(&context, &mut stream, &mut staging, &pools, &reference, true)?;
-    assert!(padding.iter().flatten().all(|byte| *byte == 0), "padding rows must be zeros");
+    let (flashinfer, padding) = run_kinds(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &reference,
+        true,
+    )?;
+    assert!(
+        padding.iter().flatten().all(|byte| *byte == 0),
+        "padding rows must be zeros"
+    );
     pools.graph = true;
-    let (graph_output, graph_padding) =
-        run_kinds(&context, &mut stream, &mut staging, &pools, &reference, true)?;
+    let (graph_output, graph_padding) = run_kinds(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &reference,
+        true,
+    )?;
     assert!(graph_padding.iter().flatten().all(|byte| *byte == 0));
-    assert_eq!(graph_output, flashinfer, "captured attention must match eager attention");
+    assert_eq!(
+        graph_output, flashinfer,
+        "captured attention must match eager attention"
+    );
     pools.graph = false;
 
     let mut checked = 0_usize;
-    let mut expect = |output: &std::collections::HashMap<Row, Vec<u8>>, rows: &[(Row, u32)], what: &str| {
-        for (row, _) in rows {
-            assert_eq!(output[row], flashinfer[row], "{row:?}: output depends on {what}");
-            checked += 1;
-        }
-    };
+    let mut expect =
+        |output: &std::collections::HashMap<Row, Vec<u8>>, rows: &[(Row, u32)], what: &str| {
+            for (row, _) in rows {
+                assert_eq!(
+                    output[row], flashinfer[row],
+                    "{row:?}: output depends on {what}"
+                );
+                checked += 1;
+            }
+        };
     // Other orders and query-tile alignments, with and without the list.
     for (lead, with_list) in [(1, false), (2, true), (5, false)] {
         let mut rows = decodes[..lead].to_vec();
         for part in [&run_d, &run_c, &decodes[lead..], &run_b, &run_a] {
             rows.extend_from_slice(part);
         }
-        let (output, _) = run_kinds(&context, &mut stream, &mut staging, &pools, &rows, with_list)?;
+        let (output, _) = run_kinds(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pools,
+            &rows,
+            with_list,
+        )?;
         expect(&output, &rows, "order or alignment");
     }
     // Decode rows alone (a decode-only step), each run alone, and run A in
@@ -508,8 +590,20 @@ fn check_geometry(
     let long_end = (last + 1).min(420);
     let long_run = prompt(3, 20..long_end);
     let mut long_checked = 0_usize;
-    let (long_whole, _) = run_kinds(&context, &mut stream, &mut staging, &pools, &long_run, false)?;
-    for cuts in [vec![256], vec![100, 356], vec![17, 81, 300], vec![64, 128, 192, 256, 320]] {
+    let (long_whole, _) = run_kinds(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &long_run,
+        false,
+    )?;
+    for cuts in [
+        vec![256],
+        vec![100, 356],
+        vec![17, 81, 300],
+        vec![64, 128, 192, 256, 320],
+    ] {
         let mut begin = 0_usize;
         for end in cuts.iter().copied().chain(std::iter::once(long_run.len())) {
             let end = end.min(long_run.len());
@@ -521,7 +615,10 @@ fn check_geometry(
             let (output, _) = run_kinds(&context, &mut stream, &mut staging, &pools, &rows, true)?;
             let chunk_rows = &long_run[begin..end];
             for (row, _) in chunk_rows {
-                assert_eq!(output[row], long_whole[row], "{row:?}: long prompt output depends on the chunk {cuts:?}");
+                assert_eq!(
+                    output[row], long_whole[row],
+                    "{row:?}: long prompt output depends on the chunk {cuts:?}"
+                );
             }
             expect(&output, &[], "nothing");
             long_checked += chunk_rows.len();
@@ -530,7 +627,14 @@ fn check_geometry(
     }
     // Each decode row as a single-row step.
     for row in &decodes {
-        let (output, _) = run_kinds(&context, &mut stream, &mut staging, &pools, std::slice::from_ref(row), false)?;
+        let (output, _) = run_kinds(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pools,
+            std::slice::from_ref(row),
+            false,
+        )?;
         expect(&output, std::slice::from_ref(row), "being alone");
     }
 
@@ -541,7 +645,11 @@ fn check_geometry(
     for (row, kind) in &reference {
         let mut row_worst = 0.0_f32;
         let mut worst_element = 0_usize;
-        for (index, (a, b)) in flashinfer[row].chunks_exact(2).zip(page_path[row].chunks_exact(2)).enumerate() {
+        for (index, (a, b)) in flashinfer[row]
+            .chunks_exact(2)
+            .zip(page_path[row].chunks_exact(2))
+            .enumerate()
+        {
             let x = bf16_value(u16::from_ne_bytes([a[0], a[1]]));
             let y = bf16_value(u16::from_ne_bytes([b[0], b[1]]));
             if (x - y).abs() > row_worst {
@@ -557,21 +665,204 @@ fn check_geometry(
             );
             reported += 1;
         }
-        for (a, b) in flashinfer[row].chunks_exact(2).zip(page_path[row].chunks_exact(2)) {
+        for (a, b) in flashinfer[row]
+            .chunks_exact(2)
+            .zip(page_path[row].chunks_exact(2))
+        {
             let x = bf16_value(u16::from_ne_bytes([a[0], a[1]]));
             let y = bf16_value(u16::from_ne_bytes([b[0], b[1]]));
-            assert!(x.is_finite() && y.is_finite(), "non-finite attention output");
+            assert!(
+                x.is_finite() && y.is_finite(),
+                "non-finite attention output"
+            );
             worst = worst.max((x - y).abs());
             elements += 1;
             identical += usize::from(a == b);
         }
     }
-    assert!(worst <= 0.03125, "the FlashInfer path differs from the page path by {worst}");
+    assert!(
+        worst <= 0.03125,
+        "the FlashInfer path differs from the page path by {worst}"
+    );
     println!(
         "flashinfer query_heads={} key_value_heads={} pages={pages_per_sequence} random_seed={random_seed:?} invariant_rows={checked} long_chunk_rows={long_checked} elements={elements} identical_to_page_path={identical} max_abs_difference={worst}",
         heads.query, heads.key_value,
     );
 
+    let Pools {
+        key_pool,
+        value_pool,
+        offsets,
+        ids,
+        valid,
+        ..
+    } = pools;
+    for buffer in [key_pool, value_pool, offsets, ids, valid] {
+        buffer.close()?;
+    }
+    staging.close()?;
+    stream.close()?;
+    context.synchronize()?;
+    context.close()?;
+    Ok(())
+}
+
+// A large cross-mode difference is not by itself an accuracy oracle. Check
+// the high-amplitude fixture that exceeded the page-path proximity bound
+// against a separately implemented f64 softmax over the actual BF16 inputs.
+fn check_high_amplitude_against_f64(runtime: &CudaRuntime) -> TestResult {
+    let context = runtime.device(0)?.create_context()?;
+    let mut stream = context.create_stream()?;
+    let mut staging = context.allocate_pinned_host_buffer(128 << 20)?;
+    let heads = Heads {
+        query: 32,
+        key_value: 8,
+    };
+    let pages_per_sequence = 60;
+    let physical_blocks = SEQUENCES * pages_per_sequence;
+    let seed = 0x9e37_79b9_7f4a_7c15;
+    let elements = physical_blocks * heads.key_value * PAGE_SIZE * HEAD_SIZE;
+    let keys = random_pattern(elements, seed, 12.0);
+    let values = random_pattern(elements, seed ^ 0xd1b5_4a32_d192_ed03, 2.0);
+    let offsets: Vec<u32> = (0..=SEQUENCES)
+        .map(|s| (s * pages_per_sequence) as u32)
+        .collect();
+    let ids: Vec<u32> = (0..physical_blocks)
+        .map(|b| ((b * 29 + 5) % physical_blocks) as u32)
+        .collect();
+    let valid = vec![PAGE_SIZE as u16; physical_blocks];
+    let pools = Pools {
+        heads,
+        random_seed: Some(seed),
+        random_scale: 12.0,
+        graph: false,
+        pages_per_sequence,
+        page_capacity: 64,
+        key_pool: upload(&context, &mut stream, &mut staging, &keys)?,
+        value_pool: upload(&context, &mut stream, &mut staging, &values)?,
+        offsets: upload(&context, &mut stream, &mut staging, &encode_u32(&offsets))?,
+        ids: upload(&context, &mut stream, &mut staging, &encode_u32(&ids))?,
+        valid: upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &valid
+                .iter()
+                .flat_map(|v| v.to_ne_bytes())
+                .collect::<Vec<_>>(),
+        )?,
+        sequence_block_offsets: offsets,
+        block_ids: ids,
+        valid_tokens: valid,
+    };
+    let mut mixed: Vec<_> = rows(0, 0..70).into_iter().map(|r| (r, 1)).collect();
+    mixed.extend(rows(3, 128..398).into_iter().map(|r| (r, 1)));
+    let decodes: Vec<_> = [(4, 255), (4, 959), (5, 64), (5, 127), (5, 300), (5, 958)]
+        .into_iter()
+        .map(|(sequence, position)| (Row { sequence, position }, 0))
+        .collect();
+    mixed.extend_from_slice(&decodes);
+    set_native_d128_attention_flashinfer(0);
+    let (page, _) = run_kinds(&context, &mut stream, &mut staging, &pools, &mixed, true)?;
+    set_native_d128_attention_flashinfer(1);
+    let (candidate, _) = run_kinds(&context, &mut stream, &mut staging, &pools, &mixed, true)?;
+    for row in &decodes {
+        let (alone, _) = run_kinds(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pools,
+            std::slice::from_ref(row),
+            false,
+        )?;
+        assert_eq!(
+            alone[&row.0], candidate[&row.0],
+            "high-amplitude row depends on its neighbours"
+        );
+    }
+    let sampled: Vec<Row> = decodes
+        .iter()
+        .map(|r| r.0)
+        .chain([
+            Row {
+                sequence: 0,
+                position: 0,
+            },
+            Row {
+                sequence: 0,
+                position: 69,
+            },
+            Row {
+                sequence: 3,
+                position: 128,
+            },
+            Row {
+                sequence: 3,
+                position: 397,
+            },
+        ])
+        .collect();
+    let decode = |bytes: &[u8]| -> Vec<f64> {
+        bytes
+            .chunks_exact(2)
+            .map(|b| f64::from(bf16_value(u16::from_ne_bytes([b[0], b[1]]))))
+            .collect()
+    };
+    let keys = decode(&keys);
+    let values = decode(&values);
+    let mut candidate_error = 0.0_f64;
+    let mut page_error = 0.0_f64;
+    let mut checked = 0;
+    for row in sampled {
+        let query = decode(&row_query(row, heads.row_width(), Some(seed), 12.0));
+        let actual = decode(&candidate[&row]);
+        let baseline = decode(&page[&row]);
+        for head in 0..heads.query {
+            let kv_head = head / (heads.query / heads.key_value);
+            let offset = |token: usize| {
+                let logical = pools.sequence_block_offsets[row.sequence as usize] as usize
+                    + token / PAGE_SIZE;
+                ((pools.block_ids[logical] as usize * heads.key_value + kv_head) * PAGE_SIZE
+                    + token % PAGE_SIZE)
+                    * HEAD_SIZE
+            };
+            let mut scores: Vec<f64> = (0..=row.position as usize)
+                .map(|token| {
+                    let at = offset(token);
+                    (0..HEAD_SIZE)
+                        .map(|d| query[head * HEAD_SIZE + d] * keys[at + d])
+                        .sum::<f64>()
+                        * f64::from(SCALE)
+                })
+                .collect();
+            let maximum = scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            for score in &mut scores {
+                *score = (*score - maximum).exp();
+            }
+            let denominator: f64 = scores.iter().sum();
+            let mut numerator = [0.0_f64; HEAD_SIZE];
+            for (token, weight) in scores.into_iter().enumerate() {
+                let at = offset(token);
+                for d in 0..HEAD_SIZE {
+                    numerator[d] += weight * values[at + d];
+                }
+            }
+            for d in 0..HEAD_SIZE {
+                let expected = numerator[d] / denominator;
+                candidate_error =
+                    candidate_error.max((actual[head * HEAD_SIZE + d] - expected).abs());
+                page_error = page_error.max((baseline[head * HEAD_SIZE + d] - expected).abs());
+                checked += 1;
+            }
+        }
+    }
+    assert!(
+        candidate_error <= 0.0078125,
+        "high-amplitude attention differs from f64 reference by {candidate_error}"
+    );
+    println!(
+        "high_amplitude_f64 elements={checked} candidate_max_abs={candidate_error} page_max_abs={page_error}"
+    );
     let Pools {
         key_pool,
         value_pool,

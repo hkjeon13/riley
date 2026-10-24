@@ -1,4 +1,6 @@
 mod inference_profile;
+mod native_attention;
+use native_attention::NativeAttentionMode;
 
 #[cfg(any(feature = "cuda", test))]
 use std::collections::BTreeMap;
@@ -51,7 +53,9 @@ usage:
   riley serve --model PATH [options]
 
 serve options:
-  --inference-profile MODE       native-bf16-v1: opt-in optimized BF16 defaults; explicit options override
+  --inference-profile MODE       native-bf16-v1 | native-bf16-varlen-v1: opt-in BF16 defaults;
+                                 explicit options override
+  --native-attention-mode MODE   page-v1 | fixed-tile-unsplit-v1 (D128 tensor-core native route)
   --model-id ID                  public model ID (default: checkpoint source model)
   --bind ADDRESS                 listener address (default: 127.0.0.1:8080)
   --device ORDINAL               CUDA device ordinal (default: 0)
@@ -218,6 +222,7 @@ struct ServeOptions {
     prompt_attention_mma: bool,
     dense_prompt_attention: bool,
     d128_tensor_core_producer: bool,
+    native_attention_mode: Option<NativeAttentionMode>,
     fused_mlp_residual_norm: bool,
     output_row_lm_head: bool,
     decode_step_capture: bool,
@@ -477,6 +482,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut query_key_rope = None;
     let mut kv_cache_write = None;
     let mut prompt_attention = None;
+    let mut native_attention_mode = None;
     let mut decode_attention_producer = None;
     let mut mlp_residual_norm = None;
     let mut lm_head_rows = None;
@@ -832,6 +838,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     }
                 },
                 "--decode-attention-producer",
+            )?,
+            "--native-attention-mode" => set_once(
+                &mut native_attention_mode,
+                NativeAttentionMode::parse(&parse_utf8(
+                    next_value(&mut arguments, "--native-attention-mode")?,
+                    "--native-attention-mode",
+                )?)?,
+                "--native-attention-mode",
             )?,
             "--prompt-attention" => set_once(
                 &mut prompt_attention,
@@ -1415,6 +1429,18 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         );
     }
     let d128_global_merge = decode_attention_merge.unwrap_or(false);
+    if native_attention_mode.is_some()
+        && (decode_attention_backend != DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+            || !d128_tensor_core_producer || !d128_global_merge)
+    {
+        return Err("--native-attention-mode requires native D128 attention, tensor-core-v1 producer and global-max-v1 merge".into());
+    }
+    if native_attention_mode == Some(NativeAttentionMode::FixedTileUnsplit)
+        && (batch_token_budget > 256 || max_sequence_tokens.is_none_or(|n| n > 1024)
+            || max_active_sequences > 32)
+    {
+        return Err("fixed-tile-unsplit-v1 requires an explicit context bound <=1024, batch budget <=256 and at most 32 active sequences".into());
+    }
     if d128_global_merge {
         if decode_attention_backend
             != DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
@@ -1547,6 +1573,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         prompt_attention_mma,
         dense_prompt_attention,
         d128_tensor_core_producer,
+        native_attention_mode,
         fused_mlp_residual_norm,
         output_row_lm_head: lm_head_rows.unwrap_or(false),
         decode_step_capture,
@@ -2210,6 +2237,11 @@ fn run_serve(
         &model,
         max_sequence_tokens,
     )?;
+    if options.native_attention_mode == Some(NativeAttentionMode::FixedTileUnsplit)
+        && model.spec().blocks().iter().any(|block| block.attention().head_dimension() != 128)
+    {
+        return Err("fixed-tile-unsplit-v1 requires head dimension 128 in every layer".into());
+    }
     validate_reduction_profile_context(options.reduction_profile, max_sequence_tokens)?;
     let default_output_tokens = 1_024_usize.min(max_sequence_tokens - 1);
     let max_output_tokens = options.max_output_tokens.unwrap_or(default_output_tokens);
@@ -2456,6 +2488,10 @@ fn run_serve(
             shutdown_signals,
             shutdown_metrics_path,
         });
+    }
+    if let Some(mode) = options.native_attention_mode {
+        riley_runtime::set_native_d128_attention_flashinfer(mode.setting());
+        eprintln!("RILEY_NATIVE_ATTENTION mode={}", mode.cli_id());
     }
     let resources = CudaEngineResources::prepare(
         metadata,
@@ -5560,6 +5596,7 @@ mod tests {
                 prompt_attention_mma: false,
                 dense_prompt_attention: false,
                 d128_tensor_core_producer: false,
+                native_attention_mode: None,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
@@ -5974,6 +6011,7 @@ mod tests {
                 prompt_attention_mma: false,
                 dense_prompt_attention: false,
                 d128_tensor_core_producer: false,
+                native_attention_mode: None,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
@@ -6256,6 +6294,7 @@ mod tests {
                 prompt_attention_mma: false,
                 dense_prompt_attention: false,
                 d128_tensor_core_producer: false,
+                native_attention_mode: None,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
@@ -6751,6 +6790,7 @@ mod tests {
                 prompt_attention_mma: false,
                 dense_prompt_attention: false,
                 d128_tensor_core_producer: false,
+                native_attention_mode: None,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 decode_step_capture: false,
@@ -7025,22 +7065,140 @@ mod owned_hf_cli_tests {
 
 #[cfg(test)]
 mod native_profile_cli_tests {
- use super::*;
- fn parse(extra:&[&str])->Result<CliCommand,String>{let mut a=vec!["serve","--model","/models/fixture","--inference-profile","native-bf16-v1"];a.extend_from_slice(extra);parse_arguments(a.into_iter().map(OsString::from))}
- #[test]
- fn native_profile_selects_the_measured_route_and_keeps_default_launch_unchanged(){
-  let CliCommand::Serve(p)=parse(&[]).unwrap()else{panic!("serve")};
-  assert_eq!(p.max_sequence_tokens,Some(1024));assert_eq!(p.batch_token_budget,256);assert_eq!(p.prefill_chunk_tokens,256);
-  assert_eq!(p.decode_attention_backend,DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage);
-  assert_eq!(p.projection_bias_backend,ProjectionBiasBackendMode::MergedQkvStrictStagedV1);
-  assert_eq!(p.sampling_backend,SamplingBackendMode::GpuGreedy);
-  assert!(p.decode_step_capture && p.fused_silu_multiply && p.merged_gate_up && p.fused_qkv_rope && p.fused_kv_write && p.fused_mlp_residual_norm && p.bit_equivalent_gemm_selection);
-  let CliCommand::Serve(d)=parse_arguments(["serve","--model","/models/fixture"].map(OsString::from)).unwrap()else{panic!("serve")};assert_eq!(d.batch_token_budget,512);assert!(!d.merged_gate_up);assert!(!d.decode_step_capture);
- }
- #[test]
- fn explicit_overrides_still_require_consistent_execution_options(){
-  let CliCommand::Serve(p)=parse(&["--max-sequence-tokens","512","--sampling-backend","cpu"]).unwrap()else{panic!("serve")};assert_eq!(p.max_sequence_tokens,Some(512));assert_eq!(p.sampling_backend,SamplingBackendMode::Cpu);
-  assert!(parse(&["--metadata-transport","packed-async"]).is_err());
-  assert!(parse(&["--numerics-profile","owned-hf-eager-bf16-v1"]).is_err());
- }
+    use super::*;
+    fn parse(extra: &[&str]) -> Result<CliCommand, String> {
+        let mut a = vec![
+            "serve",
+            "--model",
+            "/models/fixture",
+            "--inference-profile",
+            "native-bf16-v1",
+        ];
+        a.extend_from_slice(extra);
+        parse_arguments(a.into_iter().map(OsString::from))
+    }
+    #[test]
+    fn native_profile_selects_the_measured_route_and_keeps_default_launch_unchanged() {
+        let CliCommand::Serve(p) = parse(&[]).unwrap() else {
+            panic!("serve")
+        };
+        assert_eq!(p.max_sequence_tokens, Some(1024));
+        assert_eq!(p.batch_token_budget, 256);
+        assert_eq!(p.prefill_chunk_tokens, 256);
+        assert_eq!(
+            p.decode_attention_backend,
+            DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+        );
+        assert_eq!(
+            p.projection_bias_backend,
+            ProjectionBiasBackendMode::MergedQkvStrictStagedV1
+        );
+        assert_eq!(p.sampling_backend, SamplingBackendMode::GpuGreedy);
+        assert_eq!(p.native_attention_mode, Some(NativeAttentionMode::Page));
+        assert!(
+            p.dense_prompt_attention
+                && p.publish_after_submit
+                && p.startup_warmup
+                && p.staged_step_uploads
+        );
+        assert!(
+            p.decode_step_capture
+                && p.fused_silu_multiply
+                && p.merged_gate_up
+                && p.fused_qkv_rope
+                && p.fused_kv_write
+                && p.fused_mlp_residual_norm
+                && p.bit_equivalent_gemm_selection
+        );
+        let CliCommand::Serve(d) =
+            parse_arguments(["serve", "--model", "/models/fixture"].map(OsString::from)).unwrap()
+        else {
+            panic!("serve")
+        };
+        assert_eq!(d.batch_token_budget, 512);
+        assert!(!d.merged_gate_up);
+        assert!(!d.decode_step_capture);
+    }
+    #[test]
+    fn explicit_overrides_still_require_consistent_execution_options() {
+        let CliCommand::Serve(p) =
+            parse(&["--max-sequence-tokens", "512", "--sampling-backend", "cpu"]).unwrap()
+        else {
+            panic!("serve")
+        };
+        assert_eq!(p.max_sequence_tokens, Some(512));
+        assert_eq!(p.sampling_backend, SamplingBackendMode::Cpu);
+        assert!(parse(&["--metadata-transport", "packed-async"]).is_err());
+        assert!(parse(&["--numerics-profile", "owned-hf-eager-bf16-v1"]).is_err());
+    }
+    #[test]
+    fn varlen_profile_selects_explicit_attention_and_bounds_qualification_scope() {
+        let profile = |extra: &[&str]| {
+            let mut argv = vec![
+                "serve",
+                "--model",
+                "/models/fixture",
+                "--inference-profile",
+                "native-bf16-varlen-v1",
+            ];
+            argv.extend_from_slice(extra);
+            parse_arguments(argv.into_iter().map(OsString::from))
+        };
+        let CliCommand::Serve(options) = profile(&[]).unwrap() else {
+            panic!("serve")
+        };
+        assert_eq!(
+            options.native_attention_mode,
+            Some(NativeAttentionMode::FixedTileUnsplit)
+        );
+        for extra in [
+            &["--max-sequence-tokens", "1025"][..],
+            &["--max-active-sequences", "33"],
+            &[
+                "--batch-token-budget",
+                "512",
+                "--batch-shape-buckets",
+                "1,2,4,8,16,32,64,128,256,512",
+            ],
+        ] {
+            assert!(
+                profile(extra)
+                    .unwrap_err()
+                    .contains("fixed-tile-unsplit-v1")
+            );
+        }
+        let CliCommand::Serve(page) = profile(&[
+            "--native-attention-mode",
+            "page-v1",
+            "--max-sequence-tokens",
+            "2048",
+        ])
+        .unwrap() else {
+            panic!("serve")
+        };
+        assert_eq!(page.native_attention_mode, Some(NativeAttentionMode::Page));
+        assert!(profile(&["--native-attention-mode", "unknown"]).is_err());
+        assert!(
+            profile(&[
+                "--native-attention-mode",
+                "page-v1",
+                "--native-attention-mode",
+                "page-v1"
+            ])
+            .is_err()
+        );
+        assert!(
+            parse_arguments(
+                [
+                    "serve",
+                    "--model",
+                    "/a",
+                    "--native-attention-mode",
+                    "fixed-tile-unsplit-v1"
+                ]
+                .map(OsString::from)
+            )
+            .is_err()
+        );
+    }
 }

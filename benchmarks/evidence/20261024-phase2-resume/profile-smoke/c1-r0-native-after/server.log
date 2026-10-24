@@ -1,0 +1,7 @@
+RILEY_NATIVE_ATTENTION mode=fixed-tile-unsplit-v1
+RILEY_GRAPH prepared=false policy=Disabled fallback=true gpu_iteration_timing=true numerics=existing
+riley startup warm-up: 17 internal requests in 0.45 s
+RILEY_DECODE_ATTENTION requested_backend=native-bf16-paged-split-gqa-d128-two-stage resolved_ragged_backend=riley.cuda.ragged-paged-attention.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16.transition-v2 fallback_reason=none query_heads=32 key_value_heads=8 head_size=128 page_size=16 graph=false
+RILEY_PROJECTION_BIAS requested_backend=merged-qkv-strict-staged-v1 resolved_backend=merged-qkv-strict-staged-v1 fallback_reason=none
+riley listening on http://127.0.0.1:50223 (graceful_signals=SIGINT,SIGTERM graceful_stdin_shutdown=false)
+riley graceful shutdown requested by SIGTERM

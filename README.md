@@ -23,26 +23,46 @@ cuBLASLt. There is no Python in the serving process.
 
 ## Performance
 
-### FlashInfer attention candidate · 2026-10-24 screen
+### Qualified native attention · 2026-10-24
 
-The fixed-query-tile attention prototype had batch-dependent tokens despite
-passing its initial kernel tests. Disabling scalar FMA contraction in its
-translation unit fixes the observed natural-C8/C32 failures: both screen
-arms match their canonical outputs for 192/192 measured requests. The GPU
-test now also covers nonperiodic input and two-layer CUDA Graph replay.
+Qwen3-4B BF16 greedy on A100: **90 fresh-process arms**, five repeats per
+engine in six cells, 64 warm-up + 192 measured requests. Each cell compares
+page-native, fixed-tile native and stock vLLM 0.27.1 sequentially on the same
+physical GPU. Values are run-level medians; change is the median paired
+change against page-native. Native/stock token budgets are 256/576, context
+is 1024, and prefix caching is disabled. All preregistered G1–G5 gates pass.
 
-| Natural output | Candidate screen tok/s | Earlier native tok/s | Earlier vLLM tok/s | Candidate / earlier vLLM |
+| Workload | Clients | Page-native tok/s | Fixed-tile native tok/s | vLLM tok/s | Native / vLLM | Paired change |
+|---|---:|---:|---:|---:|---:|---:|
+| Fixed | 1 | 123.8 | 124.8 | 115.6 | 1.079x | +0.56% |
+| Fixed | 8 | 716.9 | 767.2 | 710.5 | 1.080x | +7.02% |
+| Fixed | 16 | 1155.7 | 1285.2 | 1129.8 | 1.138x | +11.45% |
+| Fixed | 32 | 1696.1 | 1940.3 | 1686.9 | 1.150x | +14.27% |
+| Natural | 8 | 817.9 | 847.7 | 830.5 | 1.021x | +3.63% |
+| Natural | 32 | 2118.3 | 2370.9 | 2303.3 | 1.029x | +11.98% |
+
+All 30 candidate arms match their own canonical outputs for **5760/5760**
+measured requests, with zero cross-concurrency mismatches. HF-reference
+correctness is 12/15 (36/45 with concurrent repeats). This is a separate
+numerics mode: measured natural-workload HF token-exact agreement changes
+from 128/192 to 64/192; HF-literal validation uses a separate profile.
+
+High-concurrency TTFT still trails vLLM, despite better throughput and TPOT:
+
+| C32 workload | Native TPOT p50 ms | vLLM TPOT p50 ms | Native TTFT p95 ms | vLLM TTFT p95 ms |
 |---|---:|---:|---:|---:|
-| 8 clients | 848.3 | 818.2 | 828.5 | 1.024x |
-| 32 clients | 2370.3 | 2106.7 | 2304.7 | 1.028x |
+| Fixed | 13.35 | 15.75 | 226.2 | 162.8 |
+| Natural | 11.59 | 11.99 | 248.0 | 223.3 |
 
-**Screen only:** candidate values are one run on 2026-10-24; the native and
-vLLM columns are the 2026-10-22 Phase 0 medians below. These cross-campaign
-ratios do not establish a qualified win. A preregistered, same-campaign
-five-repeat comparison across all six cells is running. This experimental
-mode remains off by default. It uses a fixed 64-row query tile with no KV
-split, rather than the planned 256-token split implementation.
-[Implementation, tests, limitations and evidence](docs/phase2-flashinfer-resume-20261024.md).
+Select the optimized route with `--inference-profile native-bf16-varlen-v1`
+(head dimension 128, context ≤1024, batch budget ≤256, active sequences ≤32).
+It fixes the query tile at 64, uses no KV split, and disables scalar FMA
+contraction in the FlashInfer translation unit to preserve batch invariance.
+`native-bf16-v1` explicitly selects the page path. Both profiles include the
+published benchmark defaults; explicit options remain subject to validation.
+The ordinary server invocation retains its existing defaults.
+
+[Implementation, all gates, latency, accuracy and evidence](docs/phase2-flashinfer-resume-20261024.md).
 
 ### Native BF16 vs vLLM · 2026-10-22 baseline
 
@@ -63,7 +83,7 @@ compile/CUDA Graph path. Native/stock token budgets are 256/576.
 | Natural output | 8 | 818.2 | 828.5 | 0.988x |
 | Natural output | 32 | 2106.7 | 2304.7 | 0.914x |
 
-The remaining native gap is long-context/mixed attention and burst TTFT.
+At this baseline, the native gap was long-context/mixed attention and burst TTFT.
 The concurrency-scaled prefill burst policy passed invariance and throughput
 non-inferiority checks, but missed its preregistered fixed-C32 TTFT goal
 (-5.28% vs the required -10%); it remains opt-in. Fused, segment, direct and

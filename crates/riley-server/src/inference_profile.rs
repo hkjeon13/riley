@@ -34,7 +34,12 @@ const NATIVE_BF16: &[(&str, &str)] = &[
     ("--kv-cache-write", "fused-split-v1"),
     ("--decode-attention-producer", "tensor-core-v1"),
     ("--prefill-plateau-rows", "128,192"),
+    ("--prefill-plateau-min-decode-rows", "6"),
     ("--sampling-backend", "gpu-greedy"),
+    ("--event-publication", "after-submit-v1"),
+    ("--startup-warmup", "step-shapes-v1"),
+    ("--step-uploads", "staged-batch-v1"),
+    ("--prompt-attention", "dense-v1"),
 ];
 
 pub(super) fn expand(
@@ -49,20 +54,26 @@ pub(super) fn expand(
         result.extend(source);
         return Ok(result);
     }
-    let mut selected = false;
+    let mut selected = None;
     let mut explicit = BTreeSet::new();
     while let Some(flag) = source.next() {
         if flag == "--inference-profile" {
-            if selected {
+            if selected.is_some() {
                 return Err("--inference-profile may occur only once".into());
             }
             let value = source
                 .next()
-                .ok_or("--inference-profile requires native-bf16-v1")?;
-            if value != "native-bf16-v1" {
-                return Err("--inference-profile requires native-bf16-v1".into());
-            }
-            selected = true;
+                .ok_or("--inference-profile requires native-bf16-v1 or native-bf16-varlen-v1")?;
+            selected = Some(match value.to_str() {
+                Some("native-bf16-v1") => false,
+                Some("native-bf16-varlen-v1") => true,
+                _ => {
+                    return Err(
+                        "--inference-profile requires native-bf16-v1 or native-bf16-varlen-v1"
+                            .into(),
+                    );
+                }
+            });
             continue;
         }
         if let Some(name) = flag.to_str() {
@@ -79,11 +90,23 @@ pub(super) fn expand(
             }
         }
     }
-    if selected && !explicit.contains("--help") && !explicit.contains("-h") {
+    if let Some(varlen) =
+        selected.filter(|_| !explicit.contains("--help") && !explicit.contains("-h"))
+    {
         for &(flag, value) in NATIVE_BF16 {
             if !explicit.contains(flag) {
                 result.extend([OsString::from(flag), OsString::from(value)]);
             }
+        }
+        if !explicit.contains("--native-attention-mode") {
+            result.extend([
+                OsString::from("--native-attention-mode"),
+                OsString::from(if varlen {
+                    "fixed-tile-unsplit-v1"
+                } else {
+                    "page-v1"
+                }),
+            ]);
         }
     }
     Ok(result)
@@ -92,6 +115,22 @@ pub(super) fn expand(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_defaults_match_the_published_phase0_argv() {
+        let expanded =
+            expand(["serve", "--inference-profile", "native-bf16-v1"].map(OsString::from)).unwrap();
+        let expected: Vec<String> = serde_json::from_str(include_str!(
+            "../../../benchmarks/evidence/20261022-phase0/native-extra.json"
+        ))
+        .unwrap();
+        for pair in expected.chunks_exact(2) {
+            let at = expanded
+                .iter()
+                .position(|v| v == pair[0].as_str())
+                .unwrap_or_else(|| panic!("missing published option {}", pair[0]));
+            assert_eq!(expanded[at + 1], OsString::from(&pair[1]), "{}", pair[0]);
+        }
+    }
     #[test]
     fn profile_leaves_explicit_values_and_duplicates_for_normal_validation() {
         let a = expand(
