@@ -23,6 +23,27 @@ cuBLASLt. There is no Python in the serving process.
 
 ## Performance
 
+### FlashInfer attention candidate · 2026-10-24 screen
+
+The fixed-query-tile attention prototype had batch-dependent tokens despite
+passing its initial kernel tests. Disabling scalar FMA contraction in its
+translation unit fixes the observed natural-C8/C32 failures: both screen
+arms match their canonical outputs for 192/192 measured requests. The GPU
+test now also covers nonperiodic input and two-layer CUDA Graph replay.
+
+| Natural output | Candidate screen tok/s | Earlier native tok/s | Earlier vLLM tok/s | Candidate / earlier vLLM |
+|---|---:|---:|---:|---:|
+| 8 clients | 848.3 | 818.2 | 828.5 | 1.024x |
+| 32 clients | 2370.3 | 2106.7 | 2304.7 | 1.028x |
+
+**Screen only:** candidate values are one run on 2026-10-24; the native and
+vLLM columns are the 2026-10-22 Phase 0 medians below. These cross-campaign
+ratios do not establish a qualified win. A preregistered, same-campaign
+five-repeat comparison across all six cells is running. This experimental
+mode remains off by default. It uses a fixed 64-row query tile with no KV
+split, rather than the planned 256-token split implementation.
+[Implementation, tests, limitations and evidence](docs/phase2-flashinfer-resume-20261024.md).
+
 ### Native BF16 vs vLLM · 2026-10-22 baseline
 
 Qwen3-4B on one A100 GPU7, BF16 greedy, three fresh processes per

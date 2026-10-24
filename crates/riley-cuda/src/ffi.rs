@@ -2524,6 +2524,11 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_set_native_d128_fused_decode_min_rows(rows: u64);
+    fn riley_cuda_set_native_d128_decode_segment_mode(mode: u64);
+    fn riley_cuda_set_native_d128_prompt_direct(mode: u64);
+    fn riley_cuda_set_native_d128_attention_flashinfer(mode: u64);
+    fn riley_cuda_set_native_d128_prompt_direct_max_pages(pages: u64);
     fn riley_cuda_hf_prefill_attention_plan_create(
         context: *mut RawContext,
         config: *const RawHfPrefillAttentionConfig,
@@ -9078,6 +9083,31 @@ pub(super) fn native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
             }
         },
     )
+}
+
+pub(super) fn set_native_d128_prompt_direct_max_pages(pages: u64) {
+    // SAFETY: the native setter stores one atomic integer.
+    unsafe { riley_cuda_set_native_d128_prompt_direct_max_pages(pages) }
+}
+
+pub(super) fn set_native_d128_attention_flashinfer(mode: u64) {
+    // SAFETY: the native setter stores one atomic integer.
+    unsafe { riley_cuda_set_native_d128_attention_flashinfer(mode) }
+}
+
+pub(super) fn set_native_d128_prompt_direct(mode: u64) {
+    // SAFETY: the native setter stores one atomic integer.
+    unsafe { riley_cuda_set_native_d128_prompt_direct(mode) }
+}
+
+pub(super) fn set_native_d128_decode_segment_mode(mode: u64) {
+    // SAFETY: the native setter stores one atomic integer.
+    unsafe { riley_cuda_set_native_d128_decode_segment_mode(mode) }
+}
+
+pub(super) fn set_native_d128_fused_decode_min_rows(rows: u64) {
+    // SAFETY: the native setter stores one atomic integer.
+    unsafe { riley_cuda_set_native_d128_fused_decode_min_rows(rows) }
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -1334,6 +1334,7 @@ extern "C" RileyCudaStatus riley_cuda_stream_command_batch_step_capture_begin(
         error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
     if (status == RILEY_CUDA_STATUS_SUCCESS) {
       thread_step_capture_active() = true;
+      ++riley_cuda_internal::thread_step_capture_generation();
       riley_cuda_internal::thread_step_capture_dynamic() = {};
     riley_cuda_internal::thread_deferred_qkv_split() = {};
     }

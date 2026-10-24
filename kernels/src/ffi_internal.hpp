@@ -1683,6 +1683,13 @@ inline bool& thread_step_capture_active() noexcept {
   return active;
 }
 
+// Increases with every step capture this host thread begins, so work shared
+// by the launches of one step is recorded into each captured step.
+inline uint64_t& thread_step_capture_generation() noexcept {
+  static thread_local uint64_t generation = 0;
+  return generation;
+}
+
 inline bool thread_has_active_step_capture() noexcept {
   return thread_step_capture_active();
 }
@@ -2263,12 +2270,20 @@ inline bool thread_has_active_command_batch() noexcept {
   return thread_command_batch_count() != 0;
 }
 
+// Increases with every command batch this host thread begins, so work that
+// is shared by all launches of one batch (one iteration) can be done once.
+inline uint64_t& thread_command_batch_generation() noexcept {
+  thread_local uint64_t generation = 0;
+  return generation;
+}
+
 inline bool try_publish_thread_command_batch() noexcept {
   uint32_t& count = thread_command_batch_count();
   if (count == std::numeric_limits<uint32_t>::max()) {
     return false;
   }
   ++count;
+  ++thread_command_batch_generation();
   return true;
 }
 

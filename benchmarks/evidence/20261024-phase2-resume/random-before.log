@@ -1,0 +1,23 @@
+
+running 1 test
+flashinfer query_heads=16 key_value_heads=2 pages=20 random_seed=None invariant_rows=741 long_chunk_rows=1200 elements=335872 identical_to_page_path=313596 max_abs_difference=0.001953125
+flashinfer query_heads=16 key_value_heads=2 pages=60 random_seed=None invariant_rows=741 long_chunk_rows=1600 elements=335872 identical_to_page_path=310765 max_abs_difference=0.001953125
+MISMATCH heads=Heads { query: 16, key_value: 2 } pages=60 row=Row { sequence: 4, position: 255 } kind=0 max=0.0546875 at head=8 depth=122
+MISMATCH heads=Heads { query: 16, key_value: 2 } pages=60 row=Row { sequence: 4, position: 959 } kind=0 max=0.075927734 at head=4 depth=120
+MISMATCH heads=Heads { query: 16, key_value: 2 } pages=60 row=Row { sequence: 5, position: 64 } kind=0 max=0.041015625 at head=3 depth=32
+MISMATCH heads=Heads { query: 16, key_value: 2 } pages=60 row=Row { sequence: 5, position: 127 } kind=0 max=0.0546875 at head=1 depth=37
+MISMATCH heads=Heads { query: 16, key_value: 2 } pages=60 row=Row { sequence: 5, position: 300 } kind=0 max=0.044921875 at head=3 depth=26
+MISMATCH heads=Heads { query: 16, key_value: 2 } pages=60 row=Row { sequence: 5, position: 958 } kind=0 max=0.07128906 at head=5 depth=68
+
+thread 'flashinfer_rows_are_batch_invariant_and_close_to_the_page_path' panicked at crates/riley-cuda/tests/flashinfer_attention_gpu.rs:537:5:
+the FlashInfer path differs from the page path by 0.075927734
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test flashinfer_rows_are_batch_invariant_and_close_to_the_page_path ... FAILED
+
+failures:
+
+failures:
+    flashinfer_rows_are_batch_invariant_and_close_to_the_page_path
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.53s
+

@@ -1,0 +1,41 @@
+{
+ "flashinfer": "0.6.16.post3",
+ "invariance": {
+  "None": {
+   "reversed": 0,
+   "decode_only": 28,
+   "half": 9,
+   "single_each": 7
+  },
+  "128": {
+   "reversed": 0,
+   "decode_only": 28,
+   "half": 9,
+   "single_each": 7
+  },
+  "256": {
+   "reversed": 0,
+   "decode_only": 28,
+   "half": 9,
+   "single_each": 7
+  },
+  "512": {
+   "reversed": 0,
+   "decode_only": 28,
+   "half": 9,
+   "single_each": 7
+  }
+ },
+ "timing_us": {
+  "flashinfer split=None decode32": 39.1,
+  "flashinfer split=None mixed31+224": 45.4,
+  "flashinfer split=128 decode32": 37.6,
+  "flashinfer split=128 mixed31+224": 45.5,
+  "flashinfer split=256 decode32": 37.7,
+  "flashinfer split=256 mixed31+224": 45.4,
+  "flashinfer split=512 decode32": 37.0,
+  "flashinfer split=512 mixed31+224": 45.3,
+  "fa2 decode32": 108.1,
+  "fa2 mixed31+224": 90.4
+ }
+}

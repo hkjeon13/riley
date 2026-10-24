@@ -1,0 +1,57 @@
+{
+ "flashinfer": "0.6.16.post3",
+ "invariance": {
+  "tile=16 split=None": {
+   "reversed": 0,
+   "decode_only": 0,
+   "half": 0,
+   "single_each": 5
+  },
+  "tile=16 split=256": {
+   "reversed": 0,
+   "decode_only": 0,
+   "half": 0,
+   "single_each": 0
+  },
+  "tile=64 split=None": {
+   "reversed": 0,
+   "decode_only": 0,
+   "half": 2,
+   "single_each": 5
+  },
+  "tile=64 split=256": {
+   "reversed": 0,
+   "decode_only": 0,
+   "half": 0,
+   "single_each": 0
+  },
+  "tile=128 split=None": {
+   "reversed": 0,
+   "decode_only": 0,
+   "half": 4,
+   "single_each": 6
+  },
+  "tile=128 split=256": {
+   "reversed": 0,
+   "decode_only": 0,
+   "half": 0,
+   "single_each": 0
+  }
+ },
+ "timing_us": {
+  "flashinfer tile=16 split=None decode32": 37.7,
+  "flashinfer tile=16 split=None mixed31+224": 51.2,
+  "flashinfer tile=16 split=256 decode32": 37.7,
+  "flashinfer tile=16 split=256 mixed31+224": 51.1,
+  "flashinfer tile=64 split=None decode32": 38.2,
+  "flashinfer tile=64 split=None mixed31+224": 45.4,
+  "flashinfer tile=64 split=256 decode32": 38.0,
+  "flashinfer tile=64 split=256 mixed31+224": 45.3,
+  "flashinfer tile=128 split=None decode32": 53.5,
+  "flashinfer tile=128 split=None mixed31+224": 59.3,
+  "flashinfer tile=128 split=256 decode32": 53.6,
+  "flashinfer tile=128 split=256 mixed31+224": 59.5,
+  "fa2 decode32": 105.6,
+  "fa2 mixed31+224": 90.6
+ }
+}

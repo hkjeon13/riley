@@ -1,0 +1,30 @@
+
+running 1 test
+flashinfer query_heads=16 key_value_heads=2 pages=20 random_seed=None invariant_rows=741 long_chunk_rows=1200 elements=335872 identical_to_page_path=313596 max_abs_difference=0.001953125
+flashinfer query_heads=16 key_value_heads=2 pages=60 random_seed=None invariant_rows=741 long_chunk_rows=1600 elements=335872 identical_to_page_path=310765 max_abs_difference=0.001953125
+flashinfer query_heads=16 key_value_heads=2 pages=60 random_seed=Some(11400714819323198485) invariant_rows=741 long_chunk_rows=1600 elements=335872 identical_to_page_path=246865 max_abs_difference=0.0078125
+flashinfer query_heads=12 key_value_heads=2 pages=20 random_seed=None invariant_rows=741 long_chunk_rows=1200 elements=251904 identical_to_page_path=235062 max_abs_difference=0.001953125
+flashinfer query_heads=12 key_value_heads=2 pages=60 random_seed=None invariant_rows=741 long_chunk_rows=1600 elements=251904 identical_to_page_path=233286 max_abs_difference=0.001953125
+flashinfer query_heads=12 key_value_heads=2 pages=60 random_seed=Some(11400714819323198485) invariant_rows=741 long_chunk_rows=1600 elements=251904 identical_to_page_path=185095 max_abs_difference=0.0078125
+flashinfer query_heads=28 key_value_heads=4 pages=20 random_seed=None invariant_rows=741 long_chunk_rows=1200 elements=587776 identical_to_page_path=552379 max_abs_difference=0.001953125
+flashinfer query_heads=28 key_value_heads=4 pages=60 random_seed=None invariant_rows=741 long_chunk_rows=1600 elements=587776 identical_to_page_path=536866 max_abs_difference=0.001953125
+flashinfer query_heads=28 key_value_heads=4 pages=60 random_seed=Some(11400714819323198485) invariant_rows=741 long_chunk_rows=1600 elements=587776 identical_to_page_path=432301 max_abs_difference=0.005859375
+flashinfer query_heads=40 key_value_heads=8 pages=20 random_seed=None invariant_rows=741 long_chunk_rows=1200 elements=839680 identical_to_page_path=714914 max_abs_difference=0.001953125
+flashinfer query_heads=40 key_value_heads=8 pages=60 random_seed=None invariant_rows=741 long_chunk_rows=1600 elements=839680 identical_to_page_path=738141 max_abs_difference=0.00390625
+flashinfer query_heads=40 key_value_heads=8 pages=60 random_seed=Some(11400714819323198485) invariant_rows=741 long_chunk_rows=1600 elements=839680 identical_to_page_path=615513 max_abs_difference=0.005859375
+flashinfer query_heads=16 key_value_heads=8 pages=20 random_seed=None invariant_rows=741 long_chunk_rows=1200 elements=335872 identical_to_page_path=285990 max_abs_difference=0.001953125
+flashinfer query_heads=16 key_value_heads=8 pages=60 random_seed=None invariant_rows=741 long_chunk_rows=1600 elements=335872 identical_to_page_path=295157 max_abs_difference=0.001953125
+flashinfer query_heads=16 key_value_heads=8 pages=60 random_seed=Some(11400714819323198485) invariant_rows=741 long_chunk_rows=1600 elements=335872 identical_to_page_path=246363 max_abs_difference=0.0078125
+flashinfer query_heads=32 key_value_heads=8 pages=20 random_seed=None invariant_rows=741 long_chunk_rows=1200 elements=671744 identical_to_page_path=570846 max_abs_difference=0.001953125
+flashinfer query_heads=32 key_value_heads=8 pages=60 random_seed=None invariant_rows=741 long_chunk_rows=1600 elements=671744 identical_to_page_path=590138 max_abs_difference=0.00390625
+flashinfer query_heads=32 key_value_heads=8 pages=60 random_seed=Some(11400714819323198485) invariant_rows=741 long_chunk_rows=1600 elements=671744 identical_to_page_path=493529 max_abs_difference=0.005859375
+flashinfer query_heads=24 key_value_heads=8 pages=20 random_seed=None invariant_rows=741 long_chunk_rows=1200 elements=503808 identical_to_page_path=429068 max_abs_difference=0.001953125
+flashinfer query_heads=24 key_value_heads=8 pages=60 random_seed=None invariant_rows=741 long_chunk_rows=1600 elements=503808 identical_to_page_path=443628 max_abs_difference=0.00390625
+flashinfer query_heads=24 key_value_heads=8 pages=60 random_seed=Some(11400714819323198485) invariant_rows=741 long_chunk_rows=1600 elements=503808 identical_to_page_path=369701 max_abs_difference=0.005859375
+flashinfer query_heads=4 key_value_heads=4 pages=20 random_seed=None invariant_rows=741 long_chunk_rows=1200 elements=83968 identical_to_page_path=78984 max_abs_difference=0.001953125
+flashinfer query_heads=4 key_value_heads=4 pages=60 random_seed=None invariant_rows=741 long_chunk_rows=1600 elements=83968 identical_to_page_path=76508 max_abs_difference=0.001953125
+flashinfer query_heads=4 key_value_heads=4 pages=60 random_seed=Some(11400714819323198485) invariant_rows=741 long_chunk_rows=1600 elements=83968 identical_to_page_path=61745 max_abs_difference=0.0041503906
+test flashinfer_rows_are_batch_invariant_and_close_to_the_page_path ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.05s
+

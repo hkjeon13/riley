@@ -997,6 +997,64 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge<
     )
 }
 
+/// Selects the D128 attention of the tensor-core producer with the global-max
+/// merge: `1` runs every row through one pinned FlashInfer paged-prefill
+/// launch with a fixed 64-row query tile and no KV split, planned on the GPU
+/// from the packed batch (an experimental, separately selected numerical
+/// mode; serving qualification is required), `0` keeps Riley's producers and merge. Overrides
+/// `RILEY_NATIVE_D128_ATTENTION_FLASHINFER`.
+pub fn set_native_d128_attention_flashinfer(mode: u64) {
+    #[cfg(feature = "cuda")]
+    ffi::set_native_d128_attention_flashinfer(mode);
+    #[cfg(not(feature = "cuda"))]
+    let _ = mode;
+}
+
+/// Bounds the direct prompt mode to prompt rows whose own context spans at
+/// most `pages` pages; longer rows keep the segment-state path (`0`: every
+/// prompt row is direct). Overrides `RILEY_NATIVE_D128_PROMPT_DIRECT_MAX_PAGES`.
+pub fn set_native_d128_prompt_direct_max_pages(pages: u64) {
+    #[cfg(feature = "cuda")]
+    ffi::set_native_d128_prompt_direct_max_pages(pages);
+    #[cfg(not(feature = "cuda"))]
+    let _ = pages;
+}
+
+/// Selects the prompt-row attention of the tensor-core producer with the
+/// global-max merge and row kinds: `1` folds each prompt row's whole context
+/// in one kernel and writes its output directly (a separately selected
+/// numerical mode, independent of the batch), `0` keeps four-page segment
+/// states folded by the merge. Overrides `RILEY_NATIVE_D128_PROMPT_DIRECT`.
+pub fn set_native_d128_prompt_direct(mode: u64) {
+    #[cfg(feature = "cuda")]
+    ffi::set_native_d128_prompt_direct(mode);
+    #[cfg(not(feature = "cuda"))]
+    let _ = mode;
+}
+
+/// Selects the decode-row attention states of the tensor-core producer with
+/// the global-max merge: `1` folds each row's pages four at a time into one
+/// state per segment (a separately selected numerical mode that rounds
+/// differently and stays independent of the batch), `0` keeps one state per
+/// page. Overrides `RILEY_NATIVE_D128_DECODE_SEGMENT_MODE`.
+pub fn set_native_d128_decode_segment_mode(mode: u64) {
+    #[cfg(feature = "cuda")]
+    ffi::set_native_d128_decode_segment_mode(mode);
+    #[cfg(not(feature = "cuda"))]
+    let _ = mode;
+}
+
+/// Sets the fewest launched rows at which the tensor-core producer and the
+/// global-max merge run as one fused decode kernel (`0`: never), overriding
+/// `RILEY_NATIVE_D128_FUSED_DECODE_MIN_ROWS`. The fused kernel writes the same
+/// bytes as the two-kernel path; prompt rows keep the prompt producer.
+pub fn set_native_d128_fused_decode_min_rows(rows: u64) {
+    #[cfg(feature = "cuda")]
+    ffi::set_native_d128_fused_decode_min_rows(rows);
+    #[cfg(not(feature = "cuda"))]
+    let _ = rows;
+}
+
 /// The tensor-core producer for generated rows together with the generic
 /// prompt-row tensor-core producer: a prompt row (row-kind word `1`, see
 /// [`native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma`]) folds

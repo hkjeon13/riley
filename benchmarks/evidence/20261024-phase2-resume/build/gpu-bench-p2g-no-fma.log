@@ -1,0 +1,12 @@
+
+running 1 test
+ATTN mode=page shape=decode32 rows=32 us_per_layer=59.7
+ATTN mode=page shape=mixed31+224 rows=255 us_per_layer=184.4
+ATTN mode=direct shape=decode32 rows=32 us_per_layer=59.5
+ATTN mode=direct shape=mixed31+224 rows=255 us_per_layer=178.5
+ATTN mode=flashinfer shape=decode32 rows=32 us_per_layer=57.6
+ATTN mode=flashinfer shape=mixed31+224 rows=255 us_per_layer=69.1
+test attention_step_shapes_timing ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.22s
+

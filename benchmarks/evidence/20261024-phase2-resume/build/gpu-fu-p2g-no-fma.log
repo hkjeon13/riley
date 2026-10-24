@@ -1,0 +1,22 @@
+
+running 1 test
+fused-decode query_heads=16 key_value_heads=2 pages=20 capacity=24 identical_rows=369
+fused-decode query_heads=16 key_value_heads=2 pages=120 capacity=128 identical_rows=369
+fused-decode query_heads=12 key_value_heads=2 pages=20 capacity=24 identical_rows=369
+fused-decode query_heads=12 key_value_heads=2 pages=120 capacity=128 identical_rows=369
+fused-decode query_heads=28 key_value_heads=4 pages=20 capacity=24 identical_rows=369
+fused-decode query_heads=28 key_value_heads=4 pages=120 capacity=128 identical_rows=369
+fused-decode query_heads=40 key_value_heads=8 pages=20 capacity=24 identical_rows=369
+fused-decode query_heads=40 key_value_heads=8 pages=120 capacity=128 identical_rows=369
+fused-decode query_heads=16 key_value_heads=8 pages=20 capacity=24 identical_rows=369
+fused-decode query_heads=16 key_value_heads=8 pages=120 capacity=128 identical_rows=369
+fused-decode query_heads=32 key_value_heads=8 pages=20 capacity=24 identical_rows=369
+fused-decode query_heads=32 key_value_heads=8 pages=120 capacity=128 identical_rows=369
+fused-decode query_heads=24 key_value_heads=8 pages=20 capacity=24 identical_rows=369
+fused-decode query_heads=24 key_value_heads=8 pages=120 capacity=128 identical_rows=369
+fused-decode query_heads=4 key_value_heads=4 pages=20 capacity=24 identical_rows=369
+fused-decode query_heads=4 key_value_heads=4 pages=120 capacity=128 identical_rows=369
+test fused_decode_matches_the_two_kernel_path_byte_for_byte ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.69s
+

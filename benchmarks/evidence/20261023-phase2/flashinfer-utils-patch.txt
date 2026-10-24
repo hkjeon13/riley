@@ -1,0 +1,7 @@
+389-inline uint32_t FA2DetermineCtaTileQ(int64_t avg_packed_qo_len, uint32_t head_dim) {
+390-  // Riley probe: force one CTA tile for every batch (batch-invariance test).
+391:  if (const char* forced = std::getenv("RILEY_FI_FORCE_CTA_TILE_Q")) {
+392-    return static_cast<uint32_t>(std::atoi(forced));
+393-  }
+394-  if (head_dim >= 512) {
+395-    if (avg_packed_qo_len <= 32) {

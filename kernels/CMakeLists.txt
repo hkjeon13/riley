@@ -25,6 +25,7 @@ add_library(riley_cuda_native STATIC
     src/attention_online.cu
     src/batch_primitives.cu
     src/decode_attention.cu
+    src/fi_attention.cu
     src/fixed37_gemm.cu
     src/fixed37_attention.cu
     src/fixed37_primitives.cu
@@ -163,3 +164,18 @@ install(FILES include/riley_cuda.h
 )
 
 set_source_files_properties(src/graph_numerics.cu PROPERTIES COMPILE_OPTIONS "--use_fast_math")
+
+# Only the FlashInfer attention wrapper sees the vendored FlashInfer and
+# libcu++ headers, so every other source keeps the toolkit's own libcu++.
+# FlashInfer reports configuration errors with C++ exceptions; the wrapper
+# catches them at its boundary. BF16 loads need the enable define. Keep
+# scalar multiply/add contraction off: online softmax rescales by
+# exp2(old_max * scale - new_max * scale). Equal maxima must give exactly
+# one even when masked query tiles add iterations; an FMA can leave a
+# rounding residual in that subtraction. Tensor-core MMA is unaffected.
+set(RILEY_FLASHINFER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/flashinfer")
+set_source_files_properties(src/fi_attention.cu PROPERTIES
+    INCLUDE_DIRECTORIES "${RILEY_FLASHINFER_DIR}/include;${RILEY_FLASHINFER_DIR}/cccl/libcudacxx/include"
+    COMPILE_OPTIONS "--expt-relaxed-constexpr;-use_fast_math;--fmad=false;-Xcompiler=-fexceptions"
+    COMPILE_DEFINITIONS "FLASHINFER_ENABLE_BF16;FLASHINFER_ENABLE_F16;NDEBUG"
+)

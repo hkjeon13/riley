@@ -1,0 +1,67 @@
+warning: method `pack_decode_first` is never used
+   --> crates/riley-runtime/src/llama/batch.rs:538:19
+    |
+458 | impl PreparedLlamaBatchMetadata {
+    | ------------------------------- method in this implementation
+...
+538 |     pub(crate) fn pack_decode_first<'batch>(&'batch mut self,rows:&[LlamaBatchRow<'_>])->LlamaBatchResult<LlamaPackedBatchMetadata<'batch...
+    |                   ^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib) generated 1 warning
+warning: function `owned_prefill_shape_valid` is never used
+  --> crates/riley-server/src/engine.rs:28:4
+   |
+28 | fn owned_prefill_shape_valid(owned: bool, prompt: usize, batch: usize, chunk: usize) -> bool {
+   |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-server` (lib) generated 1 warning
+   Compiling riley-server v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.21s
+     Running unittests src/main.rs (target/debug/deps/riley-8f94594011edf74e)
+
+running 38 tests
+test inference_profile::tests::option_like_paths_and_unselected_commands_are_preserved ... ok
+test inference_profile::tests::profile_leaves_explicit_values_and_duplicates_for_normal_validation ... ok
+test tests::admission_timeout_cli_rejects_unbounded_invalid_and_duplicate_budgets ... ok
+test owned_hf_cli_tests::owned_hf_cli_has_explicit_completion_and_rejects_arithmetic_overrides ... ok
+test tests::admission_timeout_cli_accepts_explicit_budget_and_preserves_default ... ok
+test graph_policy_cli_tests::graph_policy_is_explicit_and_closed ... ok
+test graph_numerics_cli_tests::numerical_profile_requires_explicit_required_graph ... ok
+test native_profile_cli_tests::native_profile_selects_the_measured_route_and_keeps_default_launch_unchanged ... ok
+test native_profile_cli_tests::explicit_overrides_still_require_consistent_execution_options ... ok
+test tests::c02_linux_process_identity_parser_handles_a_parenthesized_comm ... ok
+test tests::c02_generation_audit_marker_binds_only_a_safe_create_only_leaf ... ok
+test tests::c02_runtime_identity_is_all_or_none_and_fail_closed ... ok
+test tests::c02_generation_audit_v2_schema_is_narrow_and_canonical ... ok
+test tests::c02_shutdown_artifact_requires_one_safe_nonhidden_audit_child ... ok
+test tests::fixed37_profile_rejects_an_advertised_context_above_its_ragged_limit ... ok
+test tests::custom_batch_shape_buckets_require_active_policy_and_exact_budget_bound ... ok
+test tests::fused_residual_norm_requires_explicit_per_operation_completion ... ok
+test tests::materialized_bf16_reference_cli_requires_eager_canonical_and_rejects_native_overrides ... ok
+test tests::native_d128_two_stage_receipt_pins_geometry_and_no_fallback ... ok
+test tests::native_d128_two_stage_cli_is_explicit_eager_and_fail_closed ... ok
+test tests::owned_decode_graph_requires_exact_iteration_profile ... ok
+test tests::prefill_burst_percent_scales_with_active_sequences ... ok
+test tests::c02_native_fallback_event_v1_is_a_closed_committed_sampling_projection ... ok
+test tests::projection_bias_backend_cli_is_explicit_eager_and_fail_closed ... ok
+test tests::projection_bias_receipt_binds_the_prepared_backend_without_fallback ... ok
+test tests::reduction_profile_values_and_duplicates_fail_closed ... ok
+test tests::prefill_plateau_flags_build_a_validated_policy ... ok
+test tests::c02_receipt_bytes_and_startup_artifact_are_canonical_and_create_only ... ok
+test tests::serve_defaults_are_bounded_and_model_is_required ... ok
+test signal::tests::synchronously_receives_sigint_and_sigterm ... ok
+test tests::c02_generation_audit_writer_refuses_schema_oversize_without_evidence ... ok
+test tests::serve_explicit_options_and_duplicate_rejection_are_deterministic ... ok
+test tests::tensor_core_producer_requires_the_global_merge_and_excludes_the_prompt_producer ... ok
+test tests::version_and_help_are_exact_commands ... ok
+test tests::shutdown_metrics_path_is_absolute_and_create_only ... ok
+test tests::c02_shutdown_writer_binds_raw_final_metrics_to_a_nonhidden_marker ... ok
+test tests::c02_audit_directory_is_private_held_and_descriptor_relative ... ok
+test tests::c02_generation_audit_writer_creates_a_bound_leaf_and_marker_once ... ok
+
+test result: ok. 38 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+

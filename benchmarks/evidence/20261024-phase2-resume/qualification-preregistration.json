@@ -1,0 +1,29 @@
+{
+  "date_kst": "2026-10-24",
+  "candidate_binary": "/mnt/efs/nlp/psyche/riley-phase2-20261023/build/riley-p2g-no-fma",
+  "candidate_sha256": "a5058be586ec2443661be239dfabe4dbbf27eea194de6a6907c2b6015a6eb819",
+  "runner_sha256": "3aebf2d2e49641a681a9ff38fff191fb7cd63d25102b0e7d5b74c507f2adb832",
+  "scope": "Qwen3-4B BF16 greedy, A100 SM80; qualification of the fixed-64-query-tile unsplit FlashInfer mode with scalar FMA contraction disabled",
+  "plan_deviation": "This candidate folds each row's full KV context without KV splitting. It is not the planned fixed-split-256 backend. The completed screen demonstrates sufficient server benefit to qualify this smaller implementation first.",
+  "measurements": {
+    "cells": ["fixed-c1", "fixed-c8", "fixed-c16", "fixed-c32", "natural-c8", "natural-c32"],
+    "fresh_process_repeats_per_engine_per_cell": 5,
+    "engines": ["native-v15c", "native-after-p2g-no-fma", "stock-vllm-0.27.1"],
+    "warm_requests": 64,
+    "measured_requests": 192,
+    "native_token_budget": 256,
+    "vllm_token_budget": 576,
+    "prefix_caching": false,
+    "exclusion_policy": "Retain every completed normal arm. Interrupted arms remain evidence and are reported separately. No selective reruns or threshold changes.",
+    "gpu_assignment": {"fixed-c1-c8-c16": 6, "fixed-c32-and-natural-c8-c32": 7},
+    "comparison": "Each cell's three engines run sequentially on the same physical GPU, alternating engine order by repeat. GPU6 and GPU7 campaigns run independently. Both original persistent holders remain alive."
+  },
+  "gates": {
+    "G1": "Pass the enhanced GPU test: 8 head geometries, 20/60 pages, periodic and nonperiodic BF16 inputs, ordering/neighbours/chunks/step kind, eager versus twice-replayed two-layer graph, padding zero; normalized-input maximum difference to page path <=0.03125. A separate exploratory high-amplitude fixture exceeded the page-path difference threshold and is retained, not represented as passing.",
+    "G2": "Every native-after measured arm matches its own canonical for 192/192 requests; zero correctness and cross-concurrency mismatches. Compare canonical values across campaign roots as well.",
+    "G3": "HF correctness token matches >=11/15 for C1 and >=33/45 for higher concurrency whenever correctness is measured (repeat 0); do not substitute measured-workload HF agreement.",
+    "G4": "Natural C32 run-level median throughput >=1.00 times stock vLLM in this campaign and median paired throughput improvement >=5% over native v15C.",
+    "G5": "For every cell, median paired throughput change >=-1.3%, TPOT p50 change <=+1.5%, TPOT p99 change <=+10%."
+  },
+  "decision": "Accept only if G1-G5 all pass. Otherwise retain the default page path and publish the failure without relaxing the preregistered thresholds."
+}
