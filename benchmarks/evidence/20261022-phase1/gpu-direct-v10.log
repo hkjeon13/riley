@@ -1,0 +1,22 @@
+
+running 1 test
+prompt-direct query_heads=16 key_value_heads=2 pages=20 invariant_rows=846 prompt_elements=249856 identical_to_segment_path=239669 max_abs_difference=0.001953125 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=16 key_value_heads=2 pages=120 invariant_rows=846 prompt_elements=249856 identical_to_segment_path=237213 max_abs_difference=0.001953125 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=12 key_value_heads=2 pages=20 invariant_rows=846 prompt_elements=187392 identical_to_segment_path=179581 max_abs_difference=0.001953125 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=12 key_value_heads=2 pages=120 invariant_rows=846 prompt_elements=187392 identical_to_segment_path=177763 max_abs_difference=0.001953125 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=28 key_value_heads=4 pages=20 invariant_rows=846 prompt_elements=437248 identical_to_segment_path=420673 max_abs_difference=0.001953125 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=28 key_value_heads=4 pages=120 invariant_rows=846 prompt_elements=437248 identical_to_segment_path=425728 max_abs_difference=0.001953125 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=40 key_value_heads=8 pages=20 invariant_rows=846 prompt_elements=624640 identical_to_segment_path=559994 max_abs_difference=0.0009765625 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=40 key_value_heads=8 pages=120 invariant_rows=846 prompt_elements=624640 identical_to_segment_path=583141 max_abs_difference=0.0009765625 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=16 key_value_heads=8 pages=20 invariant_rows=846 prompt_elements=249856 identical_to_segment_path=224212 max_abs_difference=0.0009765625 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=16 key_value_heads=8 pages=120 invariant_rows=846 prompt_elements=249856 identical_to_segment_path=233349 max_abs_difference=0.0009765625 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=32 key_value_heads=8 pages=20 invariant_rows=846 prompt_elements=499712 identical_to_segment_path=446694 max_abs_difference=0.0009765625 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=32 key_value_heads=8 pages=120 invariant_rows=846 prompt_elements=499712 identical_to_segment_path=466423 max_abs_difference=0.0009765625 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=24 key_value_heads=8 pages=20 invariant_rows=846 prompt_elements=374784 identical_to_segment_path=335449 max_abs_difference=0.0009765625 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=24 key_value_heads=8 pages=120 invariant_rows=846 prompt_elements=374784 identical_to_segment_path=350187 max_abs_difference=0.0009765625 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=4 key_value_heads=4 pages=20 invariant_rows=846 prompt_elements=62464 identical_to_segment_path=60208 max_abs_difference=0.0009765625 hybrid_short_rows=44 hybrid_long_rows=78
+prompt-direct query_heads=4 key_value_heads=4 pages=120 invariant_rows=846 prompt_elements=62464 identical_to_segment_path=60778 max_abs_difference=0.0009765625 hybrid_short_rows=44 hybrid_long_rows=78
+test direct_prompt_rows_are_batch_invariant_and_close_to_the_segment_path ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.21s
+

@@ -18,10 +18,9 @@ mod signal;
 
 const DEFAULT_MAX_WEIGHT_BYTES: u64 = 2 * 1_024 * 1_024 * 1_024;
 const MAX_BATCH_SHAPE_BUCKETS: usize = 24;
-// Must stay aligned with the native runtime owner's qualified eager workspace
-// envelope. Keeping this parser-side fact prevents the default 512-token
-// batch budget from reaching CUDA preparation only to fail there.
-const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_BATCH_TOKENS: usize = 256;
+// Must stay aligned with the native runtime owner's dense-row bound (which
+// also caps budget x sequence tokens at the qualified 256 x 32768 workspace).
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_BATCH_TOKENS: usize = 1024;
 const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_DEFAULT_MAX_WEIGHT_BYTES: u64 =
     8 * 1_024 * 1_024 * 1_024;
 #[cfg(any(feature = "cuda", test))]
@@ -76,6 +75,16 @@ serve options:
   --prefill-coalescing-wait-us N longest a ready prompt is held back (default: 10000)
   --prefill-coalescing-min-decode-rows N
                                  fewest decode rows for coalescing to apply (default: 4)
+  --prefill-burst-steady-budget N
+                                 iteration budget while more than --prefill-burst-max-decode-rows
+                                 rows are decoding; with fewer, the whole --batch-token-budget is
+                                 open to prompts, so a burst starts in fewer, larger steps; a
+                                 prompt's output does not change (default: off)
+  --prefill-burst-max-decode-rows N
+                                 most decode rows at which the whole budget stays open (default: 8)
+  --prefill-burst-max-decode-percent P
+                                 the same bound as P percent of --max-active-sequences, rounded up
+                                 (exclusive with --prefill-burst-max-decode-rows)
   --prefill-plateau-defer-tokens N
                                  largest overflow put off by --prefill-plateau-rows (default: 32)
   --prefill-plateau-min-decode-rows N
@@ -181,6 +190,7 @@ struct ServeOptions {
     prefill_chunk_tokens: usize,
     prefill_plateau: Option<riley_scheduler::PrefillPlateauPolicy>,
     prefill_coalescing: Option<riley_scheduler::PrefillCoalescingPolicy>,
+    prefill_burst: Option<riley_scheduler::PrefillBurstPolicy>,
     physical_kv_blocks: Option<usize>,
     residual_rmsnorm: ResidualRmsNormMode,
     execution_completion: ExecutionCompletionMode,
@@ -437,6 +447,9 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut prefill_coalescing_tokens = None;
     let mut prefill_coalescing_wait_us = None;
     let mut prefill_coalescing_min_decode_rows = None;
+    let mut prefill_burst_steady_budget = None;
+    let mut prefill_burst_max_decode_rows = None;
+    let mut prefill_burst_max_decode_percent = None;
     let mut physical_kv_blocks = None;
     let mut residual_rmsnorm = None;
     let mut execution_completion = None;
@@ -615,6 +628,30 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     "--prefill-coalescing-min-decode-rows",
                 )?,
                 "--prefill-coalescing-min-decode-rows",
+            )?,
+            "--prefill-burst-steady-budget" => set_once(
+                &mut prefill_burst_steady_budget,
+                parse_number(
+                    next_value(&mut arguments, "--prefill-burst-steady-budget")?,
+                    "--prefill-burst-steady-budget",
+                )?,
+                "--prefill-burst-steady-budget",
+            )?,
+            "--prefill-burst-max-decode-rows" => set_once(
+                &mut prefill_burst_max_decode_rows,
+                parse_number(
+                    next_value(&mut arguments, "--prefill-burst-max-decode-rows")?,
+                    "--prefill-burst-max-decode-rows",
+                )?,
+                "--prefill-burst-max-decode-rows",
+            )?,
+            "--prefill-burst-max-decode-percent" => set_once(
+                &mut prefill_burst_max_decode_percent,
+                parse_number(
+                    next_value(&mut arguments, "--prefill-burst-max-decode-percent")?,
+                    "--prefill-burst-max-decode-percent",
+                )?,
+                "--prefill-burst-max-decode-percent",
             )?,
             "--prefill-plateau-min-decode-rows" => set_once(
                 &mut prefill_plateau_min_decode_rows,
@@ -1177,6 +1214,44 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             .map_err(|error| format!("invalid --prefill-coalescing-tokens policy: {error}"))
         })
         .transpose()?;
+    if prefill_burst_steady_budget.is_none()
+        && (prefill_burst_max_decode_rows.is_some() || prefill_burst_max_decode_percent.is_some())
+    {
+        return Err(
+            "--prefill-burst-max-decode-rows and --prefill-burst-max-decode-percent require --prefill-burst-steady-budget"
+                .to_owned(),
+        );
+    }
+    if prefill_burst_max_decode_rows.is_some() && prefill_burst_max_decode_percent.is_some() {
+        return Err(
+            "--prefill-burst-max-decode-rows and --prefill-burst-max-decode-percent are exclusive"
+                .to_owned(),
+        );
+    }
+    if prefill_burst_max_decode_percent.is_some_and(|percent: usize| percent == 0 || percent > 100) {
+        return Err("--prefill-burst-max-decode-percent must be 1 to 100".to_owned());
+    }
+    let prefill_burst = prefill_burst_steady_budget
+        .map(|steady_budget: usize| {
+            if steady_budget < max_active_sequences {
+                return Err(
+                    "--prefill-burst-steady-budget must hold every active sequence's decode row"
+                        .to_owned(),
+                );
+            }
+            riley_scheduler::PrefillBurstPolicy {
+                steady_budget,
+                // A share of the active sequences scales the bound with
+                // concurrency: few-client servers rarely see a large step.
+                max_decode_rows: prefill_burst_max_decode_percent.map_or_else(
+                    || prefill_burst_max_decode_rows.unwrap_or(8),
+                    |percent: usize| (max_active_sequences * percent).div_ceil(100),
+                ),
+            }
+            .validate(batch_token_budget)
+            .map_err(|error| format!("invalid --prefill-burst-steady-budget policy: {error}"))
+        })
+        .transpose()?;
     let prefill_plateau = prefill_plateau_rows
         .map(|boundaries| {
             riley_scheduler::PrefillPlateauPolicy {
@@ -1393,7 +1468,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             || prompt_attention_mma || dense_prompt_attention || d128_tensor_core_producer
             || d128_global_merge || merged_gate_up
             || gemm_reduction_policy.unwrap_or(false) || bit_equivalent_gemm_selection
-            || prefill_plateau.is_some() || prefill_coalescing.is_some()
+            || prefill_plateau.is_some() || prefill_coalescing.is_some() || prefill_burst.is_some()
             || projection_bias_backend != ProjectionBiasBackendMode::StrictStagedV1 || fused_qkv_rope
             || c02_runtime_config.is_some() {
             return Err("owned-hf-eager-bf16-v1 requires synchronous metadata and separate norms without graph, C02, or component overrides".to_owned());
@@ -1444,6 +1519,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         prefill_chunk_tokens,
         prefill_plateau,
         prefill_coalescing,
+        prefill_burst,
         physical_kv_blocks,
         residual_rmsnorm,
         execution_completion,
@@ -2395,6 +2471,7 @@ fn run_serve(
     .with_execution_graph_policy(options.execution_graph_policy)
     .with_prefill_plateau_policy(options.prefill_plateau.clone())
     .and_then(|engine| engine.with_prefill_coalescing_policy(options.prefill_coalescing))
+    .and_then(|engine| engine.with_prefill_burst_policy(options.prefill_burst))
     .map_err(|error| format!("invalid prefill plateau or coalescing policy: {error}"))?;
     let native_d128_two_stage_startup_receipt = if options.decode_attention_backend
         == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
@@ -5455,6 +5532,7 @@ mod tests {
                 prefill_chunk_tokens: 512,
                 prefill_plateau: None,
                 prefill_coalescing: None,
+                prefill_burst: None,
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
@@ -5868,6 +5946,7 @@ mod tests {
                 prefill_chunk_tokens: 32,
                 prefill_plateau: None,
                 prefill_coalescing: None,
+                prefill_burst: None,
                 physical_kv_blocks: Some(512),
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
@@ -6149,6 +6228,7 @@ mod tests {
                 prefill_chunk_tokens: 512,
                 prefill_plateau: None,
                 prefill_coalescing: None,
+                prefill_burst: None,
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
@@ -6363,7 +6443,9 @@ mod tests {
         let mut exact=base.to_vec(); exact.extend(["--numerics-profile","owned-hf-eager-bf16-v1"]);
         assert!(parse_arguments(args(&exact)).is_err());
         exact.extend(["--execution-completion","iteration-batch"]);
-        assert!(parse_arguments(args(&exact)).is_ok());
+        // The numerical profile is available only in builds that include
+        // its CUDA implementation; CPU-only parser tests must reject it.
+        assert_eq!(parse_arguments(args(&exact)).is_ok(), cfg!(feature = "owned-hf-eager"));
     }
 
     #[test]
@@ -6375,6 +6457,42 @@ mod tests {
         for extra in [["--decode-step-graph","capture-v1"],["--decode-attention-merge","global-max-v1"]] {
             let mut input=base.to_vec();input.extend(extra);assert!(parse_arguments(args(&input)).is_err());
         }
+    }
+
+    #[test]
+    fn prefill_burst_percent_scales_with_active_sequences() {
+        let burst = |active: &str, extra: &[&str]| {
+            let mut argv = vec![
+                "serve",
+                "--model",
+                "/qwen25-3b",
+                "--max-active-sequences",
+                active,
+                "--batch-token-budget",
+                "512",
+                "--prefill-chunk-tokens",
+                "512",
+                "--prefill-burst-steady-budget",
+                "256",
+            ];
+            argv.extend_from_slice(extra);
+            parse_arguments(args(&argv))
+        };
+        for (active, rows) in [("32", 10), ("16", 5), ("8", 3), ("1", 1)] {
+            let CliCommand::Serve(options) =
+                burst(active, &["--prefill-burst-max-decode-percent", "31"]).unwrap()
+            else {
+                panic!("serve expected");
+            };
+            assert_eq!(options.prefill_burst.unwrap().max_decode_rows, rows);
+        }
+        assert!(burst("8", &["--prefill-burst-max-decode-percent", "0"]).is_err());
+        assert!(burst("8", &["--prefill-burst-max-decode-percent", "101"]).is_err());
+        assert!(burst(
+            "8",
+            &["--prefill-burst-max-decode-percent", "31", "--prefill-burst-max-decode-rows", "3"]
+        )
+        .is_err());
     }
 
     #[test]
@@ -6409,6 +6527,8 @@ mod tests {
         assert_eq!(options.max_weight_bytes, 8 * 1_024 * 1_024 * 1_024);
         assert!(native_bf16_paged_split_gqa_d128_two_stage_context_supported(32_768));
         assert!(!native_bf16_paged_split_gqa_d128_two_stage_context_supported(32_769));
+        // The default 512-token budget is within the dense-row bound; the
+        // runtime owner then bounds budget x sequence tokens.
         assert!(
             parse_arguments(args(&[
                 "serve",
@@ -6417,7 +6537,7 @@ mod tests {
                 "--decode-attention-backend",
                 "native-bf16-paged-split-gqa-d128-two-stage",
             ]))
-            .is_err()
+            .is_ok()
         );
         assert!(
             parse_arguments(args(&[
@@ -6441,7 +6561,9 @@ mod tests {
                 "--decode-attention-backend",
                 "native-bf16-paged-split-gqa-d128-two-stage",
                 "--batch-token-budget",
-                "257",
+                "1025",
+                "--prefill-chunk-tokens",
+                "1025",
             ]))
             .is_err()
         );
@@ -6601,6 +6723,7 @@ mod tests {
                 prefill_chunk_tokens: 512,
                 prefill_plateau: None,
                 prefill_coalescing: None,
+                prefill_burst: None,
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Fused,
                 execution_completion: ExecutionCompletionMode::PerOperation,

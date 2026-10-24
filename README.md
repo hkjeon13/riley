@@ -23,6 +23,33 @@ cuBLASLt. There is no Python in the serving process.
 
 ## Performance
 
+### Native BF16 vs vLLM · 2026-10-22 baseline
+
+Qwen3-4B on one A100 GPU7, BF16 greedy, three fresh processes per
+engine/cell, 64 warm-up + 192 measured requests; run-level median tok/s.
+Native BF16 preserves batch-invariant tokens; HF-literal is a separate,
+slower validation profile. These numbers require the explicit
+[native flags](benchmarks/evidence/20261022-phase0/native-extra.json),
+not the default server invocation. vLLM is stock 0.27.1 with its normal
+compile/CUDA Graph path. Native/stock token budgets are 256/576.
+
+| Workload | Clients | Riley native tok/s | vLLM tok/s | Riley / vLLM |
+|---|---:|---:|---:|---:|
+| Fixed output | 1 | 124.0 | 116.3 | 1.066x |
+| Fixed output | 8 | 717.8 | 719.3 | 0.998x |
+| Fixed output | 16 | 1153.2 | 1148.2 | 1.004x |
+| Fixed output | 32 | 1698.5 | 1683.5 | 1.009x |
+| Natural output | 8 | 818.2 | 828.5 | 0.988x |
+| Natural output | 32 | 2106.7 | 2304.7 | 0.914x |
+
+The remaining native gap is long-context/mixed attention and burst TTFT.
+The concurrency-scaled prefill burst policy passed invariance and throughput
+non-inferiority checks, but missed its preregistered fixed-C32 TTFT goal
+(-5.28% vs the required -10%); it remains opt-in. Fused, segment, direct and
+hybrid attention experiments also missed their overall adoption gates.
+[Baseline, latency and accuracy](docs/phase0-contract-cost-and-aa-20261022.md) ·
+[Burst and attention qualification](docs/phase1-native-attention-and-burst-20261022.md).
+
 ### Weight-layout operator experiment · 2026-10-22
 
 A cold K-major Gate/Up weight layout reduces operator latency by **4.28–5.07%**

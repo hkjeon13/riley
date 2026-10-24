@@ -11,25 +11,41 @@ pub enum OverloadPolicy {
     Wait,
 }
 
-/// Iteration sizes at which the executor's cost steps up, and how much prefill
-/// an iteration may put off to stay below one.
-///
-/// A step whose row count just passes a boundary costs every decoding request
-/// the whole step-up for a handful of prompt tokens. With this policy the
-/// scheduler trims those tokens from the tail of the prefill selection and
-/// runs them in the next iteration instead. A request is trimmed at most once,
-/// so the delay is bounded by one iteration per request, and chunking a prompt
-/// differently never changes which tokens it is given.
-/// Holds newly admitted prompts back for a short time so that several of them
-/// start in the same iteration.
-///
-/// An iteration that carries prompt tokens costs noticeably more than a pure
-/// decode iteration even for a handful of tokens, and it delays every
-/// sequence that is decoding. With this policy the scheduler starts no new
-/// prompt while fewer than `min_tokens` prompt tokens are ready and the
-/// oldest ready prompt has waited less than `max_wait_ns`; a prompt that has
-/// already started always continues. Only when and with which rows a prompt
-/// runs changes, never which tokens it is given.
+/// Step size by decode load. An iteration that carries more than
+/// `max_decode_rows` decode rows is limited to `steady_budget` tokens; with
+/// fewer, the whole iteration budget is open to prompts. A burst of prompts
+/// that arrives while little is decoding then starts in fewer, larger steps,
+/// and the steps that delay many decoding sequences keep the steady size.
+/// Only when prompt tokens run changes, never which tokens they are given.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PrefillBurstPolicy {
+    /// Iteration budget while more than `max_decode_rows` rows are decoding.
+    pub steady_budget: usize,
+    /// Most decode rows at which the whole iteration budget stays open.
+    pub max_decode_rows: usize,
+}
+
+impl PrefillBurstPolicy {
+    /// Validates the policy against the scheduler's iteration budget.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SchedulerError::InvalidConfiguration`] for a zero steady
+    /// budget or one that is not below the iteration budget.
+    pub fn validate(self, iteration_token_budget: usize) -> SchedulerResult<Self> {
+        validate_nonzero("prefill_burst.steady_budget", self.steady_budget)?;
+        if self.steady_budget >= iteration_token_budget {
+            return Err(SchedulerError::InvalidConfiguration {
+                field: "prefill_burst.steady_budget",
+                reason: "must be below the iteration token budget",
+            });
+        }
+        Ok(self)
+    }
+}
+
+/// Holds newly admitted prompts back until enough prompt tokens are ready
+/// or the oldest ready prompt reaches `max_wait_ns`. Started prompts continue.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PrefillCoalescingPolicy {
     /// Ready prompt tokens that start the waiting prompts at once.
@@ -60,6 +76,8 @@ impl PrefillCoalescingPolicy {
     }
 }
 
+/// Trims small prefill overflows at executor cost boundaries for at most one
+/// iteration per request, preserving the tokens given to each request.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PrefillPlateauPolicy {
     /// Strictly ascending iteration token counts; one more token than a

@@ -2552,6 +2552,19 @@ mod cuda_backend {
             Ok(self)
         }
 
+        /// Installs the scheduler's prefill burst policy before worker startup.
+        ///
+        /// # Errors
+        ///
+        /// Returns the scheduler's configuration error for an invalid policy.
+        pub fn with_prefill_burst_policy(
+            mut self,
+            policy: Option<riley_scheduler::PrefillBurstPolicy>,
+        ) -> Result<Self, riley_scheduler::SchedulerError> {
+            self.scheduler.set_prefill_burst_policy(policy)?;
+            Ok(self)
+        }
+
         /// Loaded model metadata copied before resources move to the worker.
         #[must_use]
         pub const fn metadata(&self) -> &ModelMetadata {

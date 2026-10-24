@@ -1,0 +1,20 @@
+{
+  "title": "Segment decode numerics mode (four-page states for decode rows): verification and 5-pair qualification (Qwen3-4B, A100 GPU7)",
+  "registered": "2026-10-23 KST, before the GPU test and any serving arm of this experiment",
+  "user_decision": "2026-10-23: proceed with a new batch-invariant numerics mode (decode rows with four-page segment states), re-verifying HF token agreement and concurrency invariance, pre-registered.",
+  "mode": "RILEY_NATIVE_D128_DECODE_SEGMENT_MODE=1 (experiment selection by environment; a server flag follows only if adopted). Decode rows: one single-warp CTA per (4-page segment, KV head, row); each page scored and weighted exactly as by the tensor-core producer; pages folded in ascending order with an online rescale; the global-max merge folds segment states. Prompt rows unchanged.",
+  "binaries": {
+    "baseline": "v15C riley-prefill-host-v15c sha256 233c3a6a81bad76d65577bacd5837d59e2ebe1dd52a8fde73f3cd07a38cf937a, native-extra.json",
+    "candidate": "riley-phase1-v8 (sha recorded at build) = Phase 1 source with the segment kernel, same native-extra.json, environment RILEY_NATIVE_D128_DECODE_SEGMENT_MODE=1; burst and fused modes off"
+  },
+  "gates": {
+    "G1_gpu_unit_test": "segment_decode_attention_gpu passes for all 8 geometries at 20 and 120 pages: identical bytes per row across batch order, separate calls and prompt neighbours (with and without the generated-row list); padding rows zero; max |segment - page mode| <= 0.03125",
+    "G2_serving_invariance": "candidate arms only: measured 192/192 equal to the candidate's own canonical outputs in every arm, and no mismatch among its correctness outputs across C1/C8/C16/C32 and natural C8/C32 (per-mode canonical sets)",
+    "G3_hf_agreement": "candidate HF token matches on the 15-prompt correctness set at every concurrency >= 11 of 15 per pass (C1 >= 11/15, C>1 >= 33/45), i.e. at most one prompt per pass below the baseline native level (12/15) and the Phase 0 vLLM level (12/15)",
+    "G4_primary_performance": "natural C32: median-of-5 paired throughput change >= +2.0%",
+    "G5_noninferiority": "every cell: median-of-5 paired throughput change >= -1.3%, TPOT p50 change <= +1.5%, TPOT p99 change <= +10%"
+  },
+  "cells": "fixed C1/C8/C16/C32 and natural C8/C32, 5 fresh pairs each, 64 warm + 192 measured, runner order alternation",
+  "reporting": "All pairs and metrics; measured-workload HF matches; share of measured outputs equal to the per-page mode's outputs (informational); nothing excluded or repeated; an aborted arm is preserved and continued under a new label",
+  "decision": "All gates pass -> adopt as the recommended Qwen3-4B native attention mode and add an explicit server flag; any gate fails -> keep the per-page mode and record why"
+}

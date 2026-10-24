@@ -1,0 +1,11 @@
+ crates/riley-cuda/src/batch.rs                   |   35 +
+ crates/riley-cuda/src/ffi.rs                     |   18 +
+ crates/riley-cuda/src/lib.rs                     |    2 +
+ crates/riley-runtime/src/llama/executor/owner.rs |   32 +-
+ crates/riley-scheduler/src/config.rs             |   33 +
+ crates/riley-scheduler/src/lib.rs                |    4 +-
+ crates/riley-scheduler/src/scheduler.rs          |   24 +-
+ crates/riley-server/src/engine.rs                |   13 +
+ crates/riley-server/src/main.rs                  |  137 ++-
+ kernels/src/batch_primitives.cu                  | 1000 +++++++++++++++++++++-
+ 10 files changed, 1274 insertions(+), 24 deletions(-)

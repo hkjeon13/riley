@@ -1,0 +1,45 @@
+{
+  "title": "Riley Phase 0: A/A gate calibration and numerics-contract cost (Qwen3-4B, A100 GPU7)",
+  "registered_local": "2026-10-22 KST, before any Phase 0 measurement arm (one native smoke run is excluded by design and labelled smoke)",
+  "host": "aws-a100 (ldccai-a100-02), physical GPU7 GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0, persistent holder PID 2027915 via control.py idle20GiB/active64MiB",
+  "runner": "measure-phase0.py = v19B measure-matched.py (sha fbdfeee1...) + native mode + per-token arrival times; strict arms keep the original same-device eager assertion",
+  "binaries": {
+    "v15C": "/mnt/efs/nlp/psyche/riley-prefill-host-v15c-20261021/riley-prefill-host-v15c sha256 233c3a6a81bad76d65577bacd5837d59e2ebe1dd52a8fde73f3cd07a38cf937a (accepted strict runtime; also used for native arms so only the numerics contract differs)",
+    "vllm": "0.27.1+cu129, stock argv identical to v19B (FA2/FULL_AND_PIECEWISE default, budget 576, blocks C*64, gpu-memory-utilization 0.5, prefix caching off)"
+  },
+  "common": {
+    "model": "Qwen3-4B BF16, greedy, original EOS",
+    "workload_fixed": "12 fixed prompts 115-130 tokens, max_tokens 8/16/24/32 balanced, 64 warm + 192 measured per arm",
+    "workload_natural": "3 natural prompts 16/128/398 tokens, max_tokens 32/64/128",
+    "sequence_bound": 1024,
+    "kv_blocks": "C*64 of 16 tokens",
+    "fresh_process_per_arm": true,
+    "order": "runner alternation: mode order reversed when (repeat + concurrency_index) is odd",
+    "exclusions": "none; a failed or aborted arm is preserved and reported, a continuation gets its own label"
+  },
+  "part_A_aa_calibration": {
+    "label": "aa-c16-c32",
+    "arms": "owned-before vs owned-after, both v15C with identical argv (native-prefill-sm80-v5 + strict extras)",
+    "cells": "fixed workload, C16 and C32, 10 fresh pairs each",
+    "analysis": [
+      "per pair: percent change after/before for throughput, TTFT p95/p99, TPOT p95/p99 (request-level, as in v15C-v19B), token-level ITL p95/p99",
+      "false-flag probability of the v19B tail rule (any of 5 pairs with >2% worsening in TTFT/TPOT p95/p99) over all 252 five-pair subsets per C, and for either C",
+      "probability that all 5 throughput pairs are positive (v19B C16 rule) over the same subsets",
+      "2.5/97.5 percentiles of the median-of-5 paired change per metric over subsets = A/A noise band",
+      "proposed replacement gate derived from the band; it applies to future candidates only and does not re-decide v16-v19"
+    ]
+  },
+  "part_B_contract_cost": {
+    "labels": ["cost-fixed", "cost-natural"],
+    "engines": {
+      "strict": "owned-before = accepted v15C argv (owned-hf-eager-bf16-v1, native-prefill-sm80-v5, budget 576, segments-v1 graph)",
+      "native": "v15C binary with the 2026-10-14 A100 Qwen3-4B screening flag set (screen37: qwen3b-fast + merged gate/up, after-submit events, step-shape warmup, staged uploads, plateau 128,192 min-decode 6, dense prompt attention); budget 256 as screened, not re-tuned",
+      "vllm": "stock 0.27.1 as in v19B"
+    },
+    "cells_primary": "fixed workload C1/C8/C16/C32, 3 fresh repeats per engine",
+    "cells_secondary": "natural workload C8/C32, 3 fresh repeats per engine",
+    "metrics": "median over repeats of output tok/s; ratios native/vLLM, strict/vLLM, native/strict; TTFT/TPOT/ITL p50/p95/p99; HF token matches; strict eager matches; native cross-concurrency invariance",
+    "known_asymmetries": "native budget 256 vs 576 for strict and vLLM; native flags tuned on other A100 workloads in 2026-10-13/14; natural outputs end at each engine's own EOS so output-token counts can differ",
+    "decision": "measurement only, no adoption; input for the user's choice of the product numerics contract"
+  }
+}

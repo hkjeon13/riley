@@ -12,7 +12,8 @@ use riley_runtime::paged_kv::{
 };
 
 use crate::config::{
-    OverloadPolicy, PrefillCoalescingPolicy, PrefillPlateauPolicy, SchedulerConfig,
+    OverloadPolicy, PrefillBurstPolicy, PrefillCoalescingPolicy, PrefillPlateauPolicy,
+    SchedulerConfig,
 };
 use crate::error::{SchedulerError, SchedulerResult};
 use crate::metrics::{
@@ -523,6 +524,7 @@ pub struct Scheduler {
     prefill_plateau: Option<PrefillPlateauPolicy>,
     atomic_prefill_chunks: bool,
     prefill_coalescing: Option<PrefillCoalescingPolicy>,
+    prefill_burst: Option<PrefillBurstPolicy>,
     inflight: Option<InflightPlan>,
     metrics: SchedulerMetrics,
     metrics_degraded: bool,
@@ -662,6 +664,7 @@ impl Scheduler {
             prefill_plateau: None,
             atomic_prefill_chunks: false,
             prefill_coalescing: None,
+            prefill_burst: None,
             inflight: None,
             metrics,
             metrics_degraded: false,
@@ -713,6 +716,20 @@ impl Scheduler {
         policy: Option<PrefillCoalescingPolicy>,
     ) -> SchedulerResult<()> {
         self.prefill_coalescing = policy.map(PrefillCoalescingPolicy::validate).transpose()?;
+        Ok(())
+    }
+
+    /// Installs or clears the prefill burst policy for later iterations.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SchedulerError::InvalidConfiguration`] for an invalid policy.
+    pub fn set_prefill_burst_policy(
+        &mut self,
+        policy: Option<PrefillBurstPolicy>,
+    ) -> SchedulerResult<()> {
+        let budget = self.config.iteration_token_budget;
+        self.prefill_burst = policy.map(|policy| policy.validate(budget)).transpose()?;
         Ok(())
     }
 
@@ -1599,7 +1616,10 @@ impl Scheduler {
 
         let mut selected = Vec::new();
         try_reserve_exact(&mut selected, self.active_sequences, "iteration candidates")?;
-        let mut budget = self.config.iteration_token_budget;
+        let mut budget = match self.prefill_burst {
+            Some(policy) if decode.len() > policy.max_decode_rows => policy.steady_budget,
+            _ => self.config.iteration_token_budget,
+        };
         let mut aged_request = None;
         let can_override = !decode.is_empty() && !self.aging_override_last_iteration;
         if can_override {

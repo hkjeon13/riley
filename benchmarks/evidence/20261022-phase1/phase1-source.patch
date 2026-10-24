@@ -1,0 +1,1775 @@
+diff --git a/crates/riley-cuda/src/batch.rs b/crates/riley-cuda/src/batch.rs
+index 79a91004b..c27c807b5 100644
+--- a/crates/riley-cuda/src/batch.rs
++++ b/crates/riley-cuda/src/batch.rs
+@@ -997,6 +997,51 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge<
+     )
+ }
+ 
++/// Bounds the direct prompt mode to prompt rows whose own context spans at
++/// most `pages` pages; longer rows keep the segment-state path (`0`: every
++/// prompt row is direct). Overrides `RILEY_NATIVE_D128_PROMPT_DIRECT_MAX_PAGES`.
++pub fn set_native_d128_prompt_direct_max_pages(pages: u64) {
++    #[cfg(feature = "cuda")]
++    ffi::set_native_d128_prompt_direct_max_pages(pages);
++    #[cfg(not(feature = "cuda"))]
++    let _ = pages;
++}
++
++/// Selects the prompt-row attention of the tensor-core producer with the
++/// global-max merge and row kinds: `1` folds each prompt row's whole context
++/// in one kernel and writes its output directly (a separately selected
++/// numerical mode, independent of the batch), `0` keeps four-page segment
++/// states folded by the merge. Overrides `RILEY_NATIVE_D128_PROMPT_DIRECT`.
++pub fn set_native_d128_prompt_direct(mode: u64) {
++    #[cfg(feature = "cuda")]
++    ffi::set_native_d128_prompt_direct(mode);
++    #[cfg(not(feature = "cuda"))]
++    let _ = mode;
++}
++
++/// Selects the decode-row attention states of the tensor-core producer with
++/// the global-max merge: `1` folds each row's pages four at a time into one
++/// state per segment (a separately selected numerical mode that rounds
++/// differently and stays independent of the batch), `0` keeps one state per
++/// page. Overrides `RILEY_NATIVE_D128_DECODE_SEGMENT_MODE`.
++pub fn set_native_d128_decode_segment_mode(mode: u64) {
++    #[cfg(feature = "cuda")]
++    ffi::set_native_d128_decode_segment_mode(mode);
++    #[cfg(not(feature = "cuda"))]
++    let _ = mode;
++}
++
++/// Sets the fewest launched rows at which the tensor-core producer and the
++/// global-max merge run as one fused decode kernel (`0`: never), overriding
++/// `RILEY_NATIVE_D128_FUSED_DECODE_MIN_ROWS`. The fused kernel writes the same
++/// bytes as the two-kernel path; prompt rows keep the prompt producer.
++pub fn set_native_d128_fused_decode_min_rows(rows: u64) {
++    #[cfg(feature = "cuda")]
++    ffi::set_native_d128_fused_decode_min_rows(rows);
++    #[cfg(not(feature = "cuda"))]
++    let _ = rows;
++}
++
+ /// The tensor-core producer for generated rows together with the generic
+ /// prompt-row tensor-core producer: a prompt row (row-kind word `1`, see
+ /// [`native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma`]) folds
+diff --git a/crates/riley-cuda/src/ffi.rs b/crates/riley-cuda/src/ffi.rs
+index 9a0ad0400..c327f1b68 100644
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -2524,6 +2524,10 @@ unsafe extern "C" {
+         stream: *mut RawStream,
+         error: *mut ErrorInfo,
+     ) -> i32;
++    fn riley_cuda_set_native_d128_fused_decode_min_rows(rows: u64);
++    fn riley_cuda_set_native_d128_decode_segment_mode(mode: u64);
++    fn riley_cuda_set_native_d128_prompt_direct(mode: u64);
++    fn riley_cuda_set_native_d128_prompt_direct_max_pages(pages: u64);
+     fn riley_cuda_hf_prefill_attention_plan_create(
+         context: *mut RawContext,
+         config: *const RawHfPrefillAttentionConfig,
+@@ -9080,6 +9084,26 @@ pub(super) fn native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+     )
+ }
+ 
++pub(super) fn set_native_d128_prompt_direct_max_pages(pages: u64) {
++    // SAFETY: the native setter stores one atomic integer.
++    unsafe { riley_cuda_set_native_d128_prompt_direct_max_pages(pages) }
++}
++
++pub(super) fn set_native_d128_prompt_direct(mode: u64) {
++    // SAFETY: the native setter stores one atomic integer.
++    unsafe { riley_cuda_set_native_d128_prompt_direct(mode) }
++}
++
++pub(super) fn set_native_d128_decode_segment_mode(mode: u64) {
++    // SAFETY: the native setter stores one atomic integer.
++    unsafe { riley_cuda_set_native_d128_decode_segment_mode(mode) }
++}
++
++pub(super) fn set_native_d128_fused_decode_min_rows(rows: u64) {
++    // SAFETY: the native setter stores one atomic integer.
++    unsafe { riley_cuda_set_native_d128_fused_decode_min_rows(rows) }
++}
++
+ #[allow(clippy::too_many_arguments)]
+ pub(super) fn ragged_paged_kv_cache_write_execute(
+     key_source: RawBufferSpan,
+diff --git a/crates/riley-cuda/src/lib.rs b/crates/riley-cuda/src/lib.rs
+index f0aca618e..e08988e6a 100644
+--- a/crates/riley-cuda/src/lib.rs
++++ b/crates/riley-cuda/src/lib.rs
+@@ -51,6 +51,8 @@ pub use batch::{
+     native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge,
+     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge,
+     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge_prompt_mma,
++    set_native_d128_decode_segment_mode, set_native_d128_fused_decode_min_rows,
++    set_native_d128_prompt_direct, set_native_d128_prompt_direct_max_pages,
+     native_bf16_ragged_paged_split_gqa_d128_two_stage,
+     native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, ragged_paged_attention,
+     ragged_paged_kv_cache_write, row_gather, validate_replayed_decode_step,
+diff --git a/crates/riley-runtime/src/llama/executor/owner.rs b/crates/riley-runtime/src/llama/executor/owner.rs
+index 2bb9b66f7..113cfbb06 100644
+--- a/crates/riley-runtime/src/llama/executor/owner.rs
++++ b/crates/riley-runtime/src/llama/executor/owner.rs
+@@ -34,7 +34,11 @@ use crate::paged_kv::{KV_BLOCK_SIZE, KvLayout};
+ 
+ const F32_BYTES: u64 = 4;
+ pub(in crate::llama) const SUPPORTED_HEAD_DIMENSION: usize = 64;
+-const NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS: usize = 256;
++const NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS: usize = 1024;
++// The partial-state workspace grows with dense rows times pages per row; the
++// qualified envelope is 256 rows at 32768 tokens, so more rows are taken only
++// with proportionally shorter sequences.
++const NATIVE_D128_TWO_STAGE_MAX_ROW_TOKENS: usize = 256 * 32_768;
+ const NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS: usize = 32_768;
+ 
+ /// Cold-owned workspace for the explicit eager native D128 two-stage ragged
+@@ -956,7 +960,7 @@ fn validate_batch_attention_geometry(
+     if bounds.max_input_tokens() > NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS {
+         return Err(LlamaBatchExecutorError::InvalidConfiguration {
+             field: "max_input_tokens",
+-            reason: "native D128 two-stage requires a batch token budget at most 256",
++            reason: "native D128 two-stage requires a batch token budget at most 1024",
+         });
+     }
+     if maximum_sequence_tokens > NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS {
+@@ -965,6 +969,16 @@ fn validate_batch_attention_geometry(
+             reason: "native D128 two-stage workspace is qualified through 32768 tokens",
+         });
+     }
++    if bounds
++        .max_input_tokens()
++        .checked_mul(maximum_sequence_tokens)
++        .is_none_or(|row_tokens| row_tokens > NATIVE_D128_TWO_STAGE_MAX_ROW_TOKENS)
++    {
++        return Err(LlamaBatchExecutorError::InvalidConfiguration {
++            field: "max_input_tokens",
++            reason: "native D128 two-stage workspace allows a batch token budget times sequence tokens of at most 256 x 32768",
++        });
++    }
+     Ok(())
+ }
+ 
+@@ -1106,7 +1120,7 @@ mod tests {
+ 
+     #[test]
+     fn native_d128_geometry_admission_is_exact_and_bounded() {
+-        let (config, bounds) = native_config(NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS);
++        let (config, bounds) = native_config(256);
+         validate_batch_attention_geometry(
+             config,
+             16,
+@@ -1186,6 +1200,18 @@ mod tests {
+                 ..
+             })
+         ));
++        // More dense rows are admitted only with proportionally shorter
++        // sequences, so the workspace stays within the 256 x 32768 envelope.
++        let (wide, wide_bounds) = native_config(NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS);
++        validate_batch_attention_geometry(wide, 32, 8, 128, 8_192, wide_bounds)
++            .expect("1024 rows at 8192 tokens stay within the workspace envelope");
++        assert!(matches!(
++            validate_batch_attention_geometry(wide, 32, 8, 128, 8_193, wide_bounds),
++            Err(LlamaBatchExecutorError::InvalidConfiguration {
++                field: "max_input_tokens",
++                ..
++            })
++        ));
+     }
+ 
+     #[test]
+diff --git a/crates/riley-scheduler/src/config.rs b/crates/riley-scheduler/src/config.rs
+index ee655fffe..f1d73381a 100644
+--- a/crates/riley-scheduler/src/config.rs
++++ b/crates/riley-scheduler/src/config.rs
+@@ -30,6 +30,39 @@ pub enum OverloadPolicy {
+ /// oldest ready prompt has waited less than `max_wait_ns`; a prompt that has
+ /// already started always continues. Only when and with which rows a prompt
+ /// runs changes, never which tokens it is given.
++/// Step size by decode load. An iteration that carries more than
++/// `max_decode_rows` decode rows is limited to `steady_budget` tokens; with
++/// fewer, the whole iteration budget is open to prompts. A burst of prompts
++/// that arrives while little is decoding then starts in fewer, larger steps,
++/// and the steps that delay many decoding sequences keep the steady size.
++/// Only when prompt tokens run changes, never which tokens they are given.
++#[derive(Clone, Copy, Debug, Eq, PartialEq)]
++pub struct PrefillBurstPolicy {
++    /// Iteration budget while more than `max_decode_rows` rows are decoding.
++    pub steady_budget: usize,
++    /// Most decode rows at which the whole iteration budget stays open.
++    pub max_decode_rows: usize,
++}
++
++impl PrefillBurstPolicy {
++    /// Validates the policy against the scheduler's iteration budget.
++    ///
++    /// # Errors
++    ///
++    /// Returns [`SchedulerError::InvalidConfiguration`] for a zero steady
++    /// budget or one that is not below the iteration budget.
++    pub fn validate(self, iteration_token_budget: usize) -> SchedulerResult<Self> {
++        validate_nonzero("prefill_burst.steady_budget", self.steady_budget)?;
++        if self.steady_budget >= iteration_token_budget {
++            return Err(SchedulerError::InvalidConfiguration {
++                field: "prefill_burst.steady_budget",
++                reason: "must be below the iteration token budget",
++            });
++        }
++        Ok(self)
++    }
++}
++
+ #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+ pub struct PrefillCoalescingPolicy {
+     /// Ready prompt tokens that start the waiting prompts at once.
+diff --git a/crates/riley-scheduler/src/lib.rs b/crates/riley-scheduler/src/lib.rs
+index 2a75a21f6..7b2a70a9b 100644
+--- a/crates/riley-scheduler/src/lib.rs
++++ b/crates/riley-scheduler/src/lib.rs
+@@ -64,7 +64,9 @@ pub mod metrics;
+ pub mod plan;
+ mod scheduler;
+ 
+-pub use config::{OverloadPolicy, PrefillCoalescingPolicy, PrefillPlateauPolicy, SchedulerConfig};
++pub use config::{
++    OverloadPolicy, PrefillBurstPolicy, PrefillCoalescingPolicy, PrefillPlateauPolicy, SchedulerConfig,
++};
+ pub use error::{SchedulerError, SchedulerResult};
+ pub use execution::{
+     DownloadedLlamaIteration, IterationAdapterError, IterationAdapterResult,
+diff --git a/crates/riley-scheduler/src/scheduler.rs b/crates/riley-scheduler/src/scheduler.rs
+index 4ecb5e873..140b5bc4b 100644
+--- a/crates/riley-scheduler/src/scheduler.rs
++++ b/crates/riley-scheduler/src/scheduler.rs
+@@ -12,7 +12,8 @@ use riley_runtime::paged_kv::{
+ };
+ 
+ use crate::config::{
+-    OverloadPolicy, PrefillCoalescingPolicy, PrefillPlateauPolicy, SchedulerConfig,
++    OverloadPolicy, PrefillBurstPolicy, PrefillCoalescingPolicy, PrefillPlateauPolicy,
++    SchedulerConfig,
+ };
+ use crate::error::{SchedulerError, SchedulerResult};
+ use crate::metrics::{
+@@ -523,6 +524,7 @@ pub struct Scheduler {
+     prefill_plateau: Option<PrefillPlateauPolicy>,
+     atomic_prefill_chunks: bool,
+     prefill_coalescing: Option<PrefillCoalescingPolicy>,
++    prefill_burst: Option<PrefillBurstPolicy>,
+     inflight: Option<InflightPlan>,
+     metrics: SchedulerMetrics,
+     metrics_degraded: bool,
+@@ -662,6 +664,7 @@ impl Scheduler {
+             prefill_plateau: None,
+             atomic_prefill_chunks: false,
+             prefill_coalescing: None,
++            prefill_burst: None,
+             inflight: None,
+             metrics,
+             metrics_degraded: false,
+@@ -716,6 +719,20 @@ impl Scheduler {
+         Ok(())
+     }
+ 
++    /// Installs or clears the prefill burst policy for later iterations.
++    ///
++    /// # Errors
++    ///
++    /// Returns [`SchedulerError::InvalidConfiguration`] for an invalid policy.
++    pub fn set_prefill_burst_policy(
++        &mut self,
++        policy: Option<PrefillBurstPolicy>,
++    ) -> SchedulerResult<()> {
++        let budget = self.config.iteration_token_budget;
++        self.prefill_burst = policy.map(|policy| policy.validate(budget)).transpose()?;
++        Ok(())
++    }
++
+     #[must_use]
+     pub fn pool_stats(&self) -> KvBlockPoolStats {
+         self.pool.stats()
+@@ -1599,7 +1616,10 @@ impl Scheduler {
+ 
+         let mut selected = Vec::new();
+         try_reserve_exact(&mut selected, self.active_sequences, "iteration candidates")?;
+-        let mut budget = self.config.iteration_token_budget;
++        let mut budget = match self.prefill_burst {
++            Some(policy) if decode.len() > policy.max_decode_rows => policy.steady_budget,
++            _ => self.config.iteration_token_budget,
++        };
+         let mut aged_request = None;
+         let can_override = !decode.is_empty() && !self.aging_override_last_iteration;
+         if can_override {
+diff --git a/crates/riley-server/src/engine.rs b/crates/riley-server/src/engine.rs
+index dccbf4b8a..734bd3f69 100644
+--- a/crates/riley-server/src/engine.rs
++++ b/crates/riley-server/src/engine.rs
+@@ -2552,6 +2552,19 @@ mod cuda_backend {
+             Ok(self)
+         }
+ 
++        /// Installs the scheduler's prefill burst policy before worker startup.
++        ///
++        /// # Errors
++        ///
++        /// Returns the scheduler's configuration error for an invalid policy.
++        pub fn with_prefill_burst_policy(
++            mut self,
++            policy: Option<riley_scheduler::PrefillBurstPolicy>,
++        ) -> Result<Self, riley_scheduler::SchedulerError> {
++            self.scheduler.set_prefill_burst_policy(policy)?;
++            Ok(self)
++        }
++
+         /// Loaded model metadata copied before resources move to the worker.
+         #[must_use]
+         pub const fn metadata(&self) -> &ModelMetadata {
+diff --git a/crates/riley-server/src/main.rs b/crates/riley-server/src/main.rs
+index 9d1e01ee4..981b1cee3 100644
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -18,10 +18,9 @@ mod signal;
+ 
+ const DEFAULT_MAX_WEIGHT_BYTES: u64 = 2 * 1_024 * 1_024 * 1_024;
+ const MAX_BATCH_SHAPE_BUCKETS: usize = 24;
+-// Must stay aligned with the native runtime owner's qualified eager workspace
+-// envelope. Keeping this parser-side fact prevents the default 512-token
+-// batch budget from reaching CUDA preparation only to fail there.
+-const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_BATCH_TOKENS: usize = 256;
++// Must stay aligned with the native runtime owner's dense-row bound (which
++// also caps budget x sequence tokens at the qualified 256 x 32768 workspace).
++const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_BATCH_TOKENS: usize = 1024;
+ const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_DEFAULT_MAX_WEIGHT_BYTES: u64 =
+     8 * 1_024 * 1_024 * 1_024;
+ #[cfg(any(feature = "cuda", test))]
+@@ -76,6 +75,16 @@ serve options:
+   --prefill-coalescing-wait-us N longest a ready prompt is held back (default: 10000)
+   --prefill-coalescing-min-decode-rows N
+                                  fewest decode rows for coalescing to apply (default: 4)
++  --prefill-burst-steady-budget N
++                                 iteration budget while more than --prefill-burst-max-decode-rows
++                                 rows are decoding; with fewer, the whole --batch-token-budget is
++                                 open to prompts, so a burst starts in fewer, larger steps; a
++                                 prompt's output does not change (default: off)
++  --prefill-burst-max-decode-rows N
++                                 most decode rows at which the whole budget stays open (default: 8)
++  --prefill-burst-max-decode-percent P
++                                 the same bound as P percent of --max-active-sequences, rounded up
++                                 (exclusive with --prefill-burst-max-decode-rows)
+   --prefill-plateau-defer-tokens N
+                                  largest overflow put off by --prefill-plateau-rows (default: 32)
+   --prefill-plateau-min-decode-rows N
+@@ -181,6 +190,7 @@ struct ServeOptions {
+     prefill_chunk_tokens: usize,
+     prefill_plateau: Option<riley_scheduler::PrefillPlateauPolicy>,
+     prefill_coalescing: Option<riley_scheduler::PrefillCoalescingPolicy>,
++    prefill_burst: Option<riley_scheduler::PrefillBurstPolicy>,
+     physical_kv_blocks: Option<usize>,
+     residual_rmsnorm: ResidualRmsNormMode,
+     execution_completion: ExecutionCompletionMode,
+@@ -437,6 +447,9 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+     let mut prefill_coalescing_tokens = None;
+     let mut prefill_coalescing_wait_us = None;
+     let mut prefill_coalescing_min_decode_rows = None;
++    let mut prefill_burst_steady_budget = None;
++    let mut prefill_burst_max_decode_rows = None;
++    let mut prefill_burst_max_decode_percent = None;
+     let mut physical_kv_blocks = None;
+     let mut residual_rmsnorm = None;
+     let mut execution_completion = None;
+@@ -616,6 +629,30 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+                 )?,
+                 "--prefill-coalescing-min-decode-rows",
+             )?,
++            "--prefill-burst-steady-budget" => set_once(
++                &mut prefill_burst_steady_budget,
++                parse_number(
++                    next_value(&mut arguments, "--prefill-burst-steady-budget")?,
++                    "--prefill-burst-steady-budget",
++                )?,
++                "--prefill-burst-steady-budget",
++            )?,
++            "--prefill-burst-max-decode-rows" => set_once(
++                &mut prefill_burst_max_decode_rows,
++                parse_number(
++                    next_value(&mut arguments, "--prefill-burst-max-decode-rows")?,
++                    "--prefill-burst-max-decode-rows",
++                )?,
++                "--prefill-burst-max-decode-rows",
++            )?,
++            "--prefill-burst-max-decode-percent" => set_once(
++                &mut prefill_burst_max_decode_percent,
++                parse_number(
++                    next_value(&mut arguments, "--prefill-burst-max-decode-percent")?,
++                    "--prefill-burst-max-decode-percent",
++                )?,
++                "--prefill-burst-max-decode-percent",
++            )?,
+             "--prefill-plateau-min-decode-rows" => set_once(
+                 &mut prefill_plateau_min_decode_rows,
+                 parse_number(
+@@ -1177,6 +1214,44 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+             .map_err(|error| format!("invalid --prefill-coalescing-tokens policy: {error}"))
+         })
+         .transpose()?;
++    if prefill_burst_steady_budget.is_none()
++        && (prefill_burst_max_decode_rows.is_some() || prefill_burst_max_decode_percent.is_some())
++    {
++        return Err(
++            "--prefill-burst-max-decode-rows and --prefill-burst-max-decode-percent require --prefill-burst-steady-budget"
++                .to_owned(),
++        );
++    }
++    if prefill_burst_max_decode_rows.is_some() && prefill_burst_max_decode_percent.is_some() {
++        return Err(
++            "--prefill-burst-max-decode-rows and --prefill-burst-max-decode-percent are exclusive"
++                .to_owned(),
++        );
++    }
++    if prefill_burst_max_decode_percent.is_some_and(|percent: usize| percent == 0 || percent > 100) {
++        return Err("--prefill-burst-max-decode-percent must be 1 to 100".to_owned());
++    }
++    let prefill_burst = prefill_burst_steady_budget
++        .map(|steady_budget: usize| {
++            if steady_budget < max_active_sequences {
++                return Err(
++                    "--prefill-burst-steady-budget must hold every active sequence's decode row"
++                        .to_owned(),
++                );
++            }
++            riley_scheduler::PrefillBurstPolicy {
++                steady_budget,
++                // A share of the active sequences scales the bound with
++                // concurrency: few-client servers rarely see a large step.
++                max_decode_rows: prefill_burst_max_decode_percent.map_or_else(
++                    || prefill_burst_max_decode_rows.unwrap_or(8),
++                    |percent: usize| (max_active_sequences * percent).div_ceil(100),
++                ),
++            }
++            .validate(batch_token_budget)
++            .map_err(|error| format!("invalid --prefill-burst-steady-budget policy: {error}"))
++        })
++        .transpose()?;
+     let prefill_plateau = prefill_plateau_rows
+         .map(|boundaries| {
+             riley_scheduler::PrefillPlateauPolicy {
+@@ -1393,7 +1468,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+             || prompt_attention_mma || dense_prompt_attention || d128_tensor_core_producer
+             || d128_global_merge || merged_gate_up
+             || gemm_reduction_policy.unwrap_or(false) || bit_equivalent_gemm_selection
+-            || prefill_plateau.is_some() || prefill_coalescing.is_some()
++            || prefill_plateau.is_some() || prefill_coalescing.is_some() || prefill_burst.is_some()
+             || projection_bias_backend != ProjectionBiasBackendMode::StrictStagedV1 || fused_qkv_rope
+             || c02_runtime_config.is_some() {
+             return Err("owned-hf-eager-bf16-v1 requires synchronous metadata and separate norms without graph, C02, or component overrides".to_owned());
+@@ -1444,6 +1519,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+         prefill_chunk_tokens,
+         prefill_plateau,
+         prefill_coalescing,
++        prefill_burst,
+         physical_kv_blocks,
+         residual_rmsnorm,
+         execution_completion,
+@@ -2395,6 +2471,7 @@ fn run_serve(
+     .with_execution_graph_policy(options.execution_graph_policy)
+     .with_prefill_plateau_policy(options.prefill_plateau.clone())
+     .and_then(|engine| engine.with_prefill_coalescing_policy(options.prefill_coalescing))
++    .and_then(|engine| engine.with_prefill_burst_policy(options.prefill_burst))
+     .map_err(|error| format!("invalid prefill plateau or coalescing policy: {error}"))?;
+     let native_d128_two_stage_startup_receipt = if options.decode_attention_backend
+         == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+@@ -5455,6 +5532,7 @@ mod tests {
+                 prefill_chunk_tokens: 512,
+                 prefill_plateau: None,
+                 prefill_coalescing: None,
++                prefill_burst: None,
+                 physical_kv_blocks: None,
+                 residual_rmsnorm: ResidualRmsNormMode::Separate,
+                 execution_completion: ExecutionCompletionMode::IterationBatch,
+@@ -5868,6 +5946,7 @@ mod tests {
+                 prefill_chunk_tokens: 32,
+                 prefill_plateau: None,
+                 prefill_coalescing: None,
++                prefill_burst: None,
+                 physical_kv_blocks: Some(512),
+                 residual_rmsnorm: ResidualRmsNormMode::Separate,
+                 execution_completion: ExecutionCompletionMode::IterationBatch,
+@@ -6149,6 +6228,7 @@ mod tests {
+                 prefill_chunk_tokens: 512,
+                 prefill_plateau: None,
+                 prefill_coalescing: None,
++                prefill_burst: None,
+                 physical_kv_blocks: None,
+                 residual_rmsnorm: ResidualRmsNormMode::Separate,
+                 execution_completion: ExecutionCompletionMode::IterationBatch,
+@@ -6378,7 +6458,43 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn native_d128_two_stage_cli_is_explicit_eager_and_fail_closed() {
++    fn prefill_burst_percent_scales_with_active_sequences() {
++        let burst = |active: &str, extra: &[&str]| {
++            let mut argv = vec![
++                "serve",
++                "--model",
++                "/qwen25-3b",
++                "--max-active-sequences",
++                active,
++                "--batch-token-budget",
++                "512",
++                "--prefill-chunk-tokens",
++                "512",
++                "--prefill-burst-steady-budget",
++                "256",
++            ];
++            argv.extend_from_slice(extra);
++            parse_arguments(args(&argv))
++        };
++        for (active, rows) in [("32", 10), ("16", 5), ("8", 3), ("1", 1)] {
++            let CliCommand::Serve(options) =
++                burst(active, &["--prefill-burst-max-decode-percent", "31"]).unwrap()
++            else {
++                panic!("serve expected");
++            };
++            assert_eq!(options.prefill_burst.unwrap().max_decode_rows, rows);
++        }
++        assert!(burst("8", &["--prefill-burst-max-decode-percent", "0"]).is_err());
++        assert!(burst("8", &["--prefill-burst-max-decode-percent", "101"]).is_err());
++        assert!(burst(
++            "8",
++            &["--prefill-burst-max-decode-percent", "31", "--prefill-burst-max-decode-rows", "3"]
++        )
++        .is_err());
++    }
++
++    #[test]
++        fn native_d128_two_stage_cli_is_explicit_eager_and_fail_closed() {
+         let CliCommand::Serve(options) = parse_arguments(args(&[
+             "serve",
+             "--model",
+@@ -6409,6 +6525,8 @@ mod tests {
+         assert_eq!(options.max_weight_bytes, 8 * 1_024 * 1_024 * 1_024);
+         assert!(native_bf16_paged_split_gqa_d128_two_stage_context_supported(32_768));
+         assert!(!native_bf16_paged_split_gqa_d128_two_stage_context_supported(32_769));
++        // The default 512-token budget is within the dense-row bound; the
++        // runtime owner then bounds budget x sequence tokens.
+         assert!(
+             parse_arguments(args(&[
+                 "serve",
+@@ -6417,7 +6535,7 @@ mod tests {
+                 "--decode-attention-backend",
+                 "native-bf16-paged-split-gqa-d128-two-stage",
+             ]))
+-            .is_err()
++            .is_ok()
+         );
+         assert!(
+             parse_arguments(args(&[
+@@ -6441,7 +6559,9 @@ mod tests {
+                 "--decode-attention-backend",
+                 "native-bf16-paged-split-gqa-d128-two-stage",
+                 "--batch-token-budget",
+-                "257",
++                "1025",
++                "--prefill-chunk-tokens",
++                "1025",
+             ]))
+             .is_err()
+         );
+@@ -6601,6 +6721,7 @@ mod tests {
+                 prefill_chunk_tokens: 512,
+                 prefill_plateau: None,
+                 prefill_coalescing: None,
++                prefill_burst: None,
+                 physical_kv_blocks: None,
+                 residual_rmsnorm: ResidualRmsNormMode::Fused,
+                 execution_completion: ExecutionCompletionMode::PerOperation,
+diff --git a/kernels/src/batch_primitives.cu b/kernels/src/batch_primitives.cu
+index 37efa165c..c73557022 100644
+--- a/kernels/src/batch_primitives.cu
++++ b/kernels/src/batch_primitives.cu
+@@ -4,9 +4,11 @@
+ #include <cuda_bf16.h>
+ #include <math_constants.h>
+ 
++#include <atomic>
+ #include <cmath>
+ #include <cstddef>
+ #include <cstdint>
++#include <cstdlib>
+ #include <cstring>
+ #include <limits>
+ 
+@@ -3671,7 +3673,8 @@ void native_bf16_prefill_mma_generic_partial_state_kernel(
+     const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
+     const __nv_bfloat16* value_pool, float* partial_states,
+     DeviceBatch batch, uint64_t partial_state_capacity, float scale,
+-    const uint32_t* row_kinds, D128Heads heads, uint32_t group_heads) {
++    const uint32_t* row_kinds, D128Heads heads, uint32_t group_heads,
++    uint64_t skip_max_pages = 0) {
+   constexpr uint32_t kPage = 16;
+   constexpr uint32_t kSteps = kHead / 16;
+   constexpr uint32_t kDims = kHead / 8;
+@@ -3719,7 +3722,9 @@ void native_bf16_prefill_mma_generic_partial_state_kernel(
+         static_cast<uint64_t>(batch.row_positions[run_last_row]) / kPage + 1;
+     const uint64_t this_run_begin = run_begin;
+     run_begin = run_end;
+-    if (first_page >= run_pages) {
++    // A run whose rows all lie within `skip_max_pages` pages was written by
++    // the direct prompt kernel.
++    if (first_page >= run_pages || run_pages <= skip_max_pages) {
+       continue;
+     }
+     const uint64_t end_page =
+@@ -3931,6 +3936,276 @@ void native_bf16_prefill_mma_generic_partial_state_kernel(
+   }
+ }
+ 
++// Direct prompt-row attention, a separately selected numerical mode: the
++// prompt-row producer above with one CTA per `(16-row tile, key_value_head)`
++// folding every page of the row's context with the same online softmax, then
++// dividing and writing BF16 outputs, with no partial states and no merge. A
++// row's result depends only on its own query and context: pages past a row's
++// position are fully masked and leave its accumulators unchanged.
++template <uint32_t kHead>
++__global__ __launch_bounds__(256)
++void native_bf16_prefill_mma_direct_kernel(
++    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
++    const __nv_bfloat16* value_pool, __nv_bfloat16* output,
++    DeviceBatch batch, uint64_t partial_state_capacity, float scale,
++    const uint32_t* row_kinds, D128Heads heads, uint32_t group_heads,
++    uint64_t direct_max_pages) {
++  constexpr uint32_t kPage = 16;
++  constexpr uint32_t kSteps = kHead / 16;
++  constexpr uint32_t kDims = kHead / 8;
++  __shared__ __align__(16) __nv_bfloat16 key_tile[kPage][kHead];
++  __shared__ __align__(16) __nv_bfloat16 value_tile[kHead][kPage];
++  const uint32_t lane = threadIdx.x % kWarpSize;
++  const uint32_t warp = threadIdx.x / kWarpSize;
++  const uint32_t group = lane / 4;
++  const uint32_t pair = lane % 4;
++  const uint64_t key_value_head = blockIdx.y;
++  const uint64_t query_head = key_value_head * group_heads + warp;
++  // The whole context of each row is folded here: no segment split.
++  constexpr uint64_t first_page = 0;
++  const uint64_t tile_begin =
++      static_cast<uint64_t>(blockIdx.x) * kNativeBf16PrefillD128MmaTileRows;
++  const uint64_t row_count = active_rows(batch);
++  const uint64_t tile_end =
++      row_count < tile_begin + kNativeBf16PrefillD128MmaTileRows
++          ? row_count
++          : tile_begin + kNativeBf16PrefillD128MmaTileRows;
++  // Everything that steers the loops and barriers below is CTA-uniform.
++  if (row_kinds == nullptr || key_value_head >= heads.key_value) {
++    return;
++  }
++  const uint64_t lane_row0 = tile_begin + group;
++  const uint64_t lane_row1 = lane_row0 + 8;
++  uint64_t run_begin = tile_begin;
++  while (run_begin < tile_end) {
++    if (row_kinds[run_begin] != kNativeBf16RaggedD128PromptRowKind) {
++      ++run_begin;
++      continue;
++    }
++    const uint32_t sequence = batch.row_sequence_slots[run_begin];
++    uint64_t run_end = run_begin + 1;
++    while (run_end < tile_end &&
++           row_kinds[run_end] == kNativeBf16RaggedD128PromptRowKind &&
++           batch.row_sequence_slots[run_end] == sequence &&
++           batch.row_positions[run_end] ==
++               batch.row_positions[run_end - 1] + 1) {
++      ++run_end;
++    }
++    const uint64_t run_last_row = run_end - 1;
++    const uint64_t run_pages =
++        static_cast<uint64_t>(batch.row_positions[run_last_row]) / kPage + 1;
++    const uint64_t this_run_begin = run_begin;
++    run_begin = run_end;
++    // Only rows whose own context spans at most `direct_max_pages` pages are
++    // written here; their pages all lie below that bound.
++    const uint64_t end_page =
++        run_pages < direct_max_pages ? run_pages : direct_max_pages;
++    const bool live0 = lane_row0 >= this_run_begin && lane_row0 < run_end;
++    const bool live1 = lane_row1 >= this_run_begin && lane_row1 < run_end;
++    const uint64_t position0 = live0 ? batch.row_positions[lane_row0] : 0;
++    const uint64_t position1 = live1 ? batch.row_positions[lane_row1] : 0;
++
++    uint32_t query_operand[kSteps][4];
++#pragma unroll
++    for (uint32_t step = 0; step < kSteps; ++step) {
++      const __nv_bfloat16* q0 =
++          query +
++          ((live0 ? lane_row0 : this_run_begin) * heads.query + query_head) *
++              kHead +
++          step * 16 + 2 * pair;
++      const __nv_bfloat16* q1 =
++          query +
++          ((live1 ? lane_row1 : this_run_begin) * heads.query + query_head) *
++              kHead +
++          step * 16 + 2 * pair;
++      query_operand[step][0] =
++          live0 ? *reinterpret_cast<const uint32_t*>(q0) : 0;
++      query_operand[step][1] =
++          live1 ? *reinterpret_cast<const uint32_t*>(q1) : 0;
++      query_operand[step][2] =
++          live0 ? *reinterpret_cast<const uint32_t*>(q0 + 8) : 0;
++      query_operand[step][3] =
++          live1 ? *reinterpret_cast<const uint32_t*>(q1 + 8) : 0;
++    }
++
++    float numerator[kDims][4];
++#pragma unroll
++    for (uint32_t dim = 0; dim < kDims; ++dim) {
++      numerator[dim][0] = 0.0F;
++      numerator[dim][1] = 0.0F;
++      numerator[dim][2] = 0.0F;
++      numerator[dim][3] = 0.0F;
++    }
++    float maximum0 = -CUDART_INF_F;
++    float maximum1 = -CUDART_INF_F;
++    float denominator0 = 0.0F;
++    float denominator1 = 0.0F;
++    for (uint64_t page = first_page; page < end_page; ++page) {
++      // Tokens at or past the page's valid count are staged as zero, so a
++      // masked key multiplies a zero probability with a finite value.
++      {
++        uint64_t block_head_base = 0;
++        uint64_t token_count = 0;
++        const bool valid = resolve_ragged_partial_block(
++            batch, run_last_row, page, key_value_head, &block_head_base,
++            &token_count, heads, kHead);
++        // Sixteen bytes (eight elements of one token) to a load.
++        for (uint32_t vector = threadIdx.x; vector < kPage * (kHead / 8);
++             vector += blockDim.x) {
++          const uint32_t token = vector / (kHead / 8);
++          const uint32_t column = 8 * (vector % (kHead / 8));
++          const bool present = valid && token < token_count;
++          const uint64_t element = block_head_base + token * kHead + column;
++          const uint4 zero = make_uint4(0U, 0U, 0U, 0U);
++          const uint4 key_words =
++              present ? *reinterpret_cast<const uint4*>(key_pool + element)
++                      : zero;
++          const uint4 value_words =
++              present ? *reinterpret_cast<const uint4*>(value_pool + element)
++                      : zero;
++          *reinterpret_cast<uint4*>(&key_tile[token][column]) = key_words;
++          const uint32_t value_pairs[4] = {value_words.x, value_words.y,
++                                           value_words.z, value_words.w};
++#pragma unroll
++          for (uint32_t part = 0; part < 4; ++part) {
++            value_tile[column + 2 * part][token] = __ushort_as_bfloat16(
++                static_cast<uint16_t>(value_pairs[part]));
++            value_tile[column + 2 * part + 1][token] = __ushort_as_bfloat16(
++                static_cast<uint16_t>(value_pairs[part] >> 16));
++          }
++        }
++      }
++      __syncthreads();
++      float score[2][4] = {{0.0F, 0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 0.0F, 0.0F}};
++#pragma unroll
++      for (uint32_t step = 0; step < kSteps; ++step) {
++#pragma unroll
++        for (uint32_t half = 0; half < 2; ++half) {
++          const __nv_bfloat16* key_operand =
++              &key_tile[half * 8 + group][step * 16 + 2 * pair];
++          mma_m16n8k16_bf16(
++              score[half], query_operand[step][0], query_operand[step][1],
++              query_operand[step][2], query_operand[step][3],
++              *reinterpret_cast<const uint32_t*>(key_operand),
++              *reinterpret_cast<const uint32_t*>(key_operand + 8));
++        }
++      }
++      float page_maximum0 = -CUDART_INF_F;
++      float page_maximum1 = -CUDART_INF_F;
++#pragma unroll
++      for (uint32_t half = 0; half < 2; ++half) {
++#pragma unroll
++        for (uint32_t element = 0; element < 2; ++element) {
++          const uint64_t key_position =
++              page * kPage + half * 8 + 2 * pair + element;
++          score[half][element] = (live0 && key_position <= position0)
++                                     ? score[half][element] * scale
++                                     : -CUDART_INF_F;
++          score[half][2 + element] = (live1 && key_position <= position1)
++                                         ? score[half][2 + element] * scale
++                                         : -CUDART_INF_F;
++          page_maximum0 = fmaxf(page_maximum0, score[half][element]);
++          page_maximum1 = fmaxf(page_maximum1, score[half][2 + element]);
++        }
++      }
++      // A row's sixteen scores of this page sit in the four lanes of its group.
++      page_maximum0 = fmaxf(page_maximum0,
++                            __shfl_xor_sync(kFullWarpMask, page_maximum0, 1));
++      page_maximum0 = fmaxf(page_maximum0,
++                            __shfl_xor_sync(kFullWarpMask, page_maximum0, 2));
++      page_maximum1 = fmaxf(page_maximum1,
++                            __shfl_xor_sync(kFullWarpMask, page_maximum1, 1));
++      page_maximum1 = fmaxf(page_maximum1,
++                            __shfl_xor_sync(kFullWarpMask, page_maximum1, 2));
++      const float next_maximum0 = fmaxf(maximum0, page_maximum0);
++      const float next_maximum1 = fmaxf(maximum1, page_maximum1);
++      const bool empty0 = next_maximum0 == -CUDART_INF_F;
++      const bool empty1 = next_maximum1 == -CUDART_INF_F;
++      const float alpha0 = empty0 ? 1.0F : expf(maximum0 - next_maximum0);
++      const float alpha1 = empty1 ? 1.0F : expf(maximum1 - next_maximum1);
++      maximum0 = next_maximum0;
++      maximum1 = next_maximum1;
++      float page_sum0 = 0.0F;
++      float page_sum1 = 0.0F;
++      uint32_t probability_operand[4];
++#pragma unroll
++      for (uint32_t half = 0; half < 2; ++half) {
++        float probability[4];
++#pragma unroll
++        for (uint32_t element = 0; element < 2; ++element) {
++          probability[element] = __bfloat162float(__float2bfloat16_rn(
++              empty0 ? 0.0F : expf(score[half][element] - next_maximum0)));
++          probability[2 + element] = __bfloat162float(__float2bfloat16_rn(
++              empty1 ? 0.0F
++                     : expf(score[half][2 + element] - next_maximum1)));
++          page_sum0 += probability[element];
++          page_sum1 += probability[2 + element];
++        }
++        probability_operand[half * 2] =
++            pack_bf16_pair(probability[0], probability[1]);
++        probability_operand[half * 2 + 1] =
++            pack_bf16_pair(probability[2], probability[3]);
++      }
++      page_sum0 += __shfl_xor_sync(kFullWarpMask, page_sum0, 1);
++      page_sum0 += __shfl_xor_sync(kFullWarpMask, page_sum0, 2);
++      page_sum1 += __shfl_xor_sync(kFullWarpMask, page_sum1, 1);
++      page_sum1 += __shfl_xor_sync(kFullWarpMask, page_sum1, 2);
++      denominator0 = fmaf(denominator0, alpha0, page_sum0);
++      denominator1 = fmaf(denominator1, alpha1, page_sum1);
++#pragma unroll
++      for (uint32_t dim = 0; dim < kDims; ++dim) {
++        numerator[dim][0] *= alpha0;
++        numerator[dim][1] *= alpha0;
++        numerator[dim][2] *= alpha1;
++        numerator[dim][3] *= alpha1;
++        const __nv_bfloat16* value_operand =
++            &value_tile[dim * 8 + group][2 * pair];
++        mma_m16n8k16_bf16(
++            numerator[dim], probability_operand[0], probability_operand[1],
++            probability_operand[2], probability_operand[3],
++            *reinterpret_cast<const uint32_t*>(value_operand),
++            *reinterpret_cast<const uint32_t*>(value_operand + 8));
++      }
++      // The tiles are overwritten by the next page (or the next run).
++      __syncthreads();
++    }
++
++    // Rows past their own context saw only masked pages (no-ops), so each
++    // row's result is its full-context softmax: normalized and written as
++    // BF16, like the merge's final step.
++    const float inverse0 =
++        isnan(denominator0) ? CUDART_NAN_F
++                            : (denominator0 > 0.0F ? 1.0F / denominator0 : 0.0F);
++    const float inverse1 =
++        isnan(denominator1) ? CUDART_NAN_F
++                            : (denominator1 > 0.0F ? 1.0F / denominator1 : 0.0F);
++    const bool short0 = position0 / kPage + 1 <= direct_max_pages;
++    const bool short1 = position1 / kPage + 1 <= direct_max_pages;
++    // Outside the workspace bound the two-stage path reports NaN.
++    const bool outside0 = position0 / kPage + 1 > partial_state_capacity;
++    const bool outside1 = position1 / kPage + 1 > partial_state_capacity;
++    __nv_bfloat16* const output0 =
++        output + (lane_row0 * heads.query + query_head) * kHead;
++    __nv_bfloat16* const output1 =
++        output + (lane_row1 * heads.query + query_head) * kHead;
++#pragma unroll
++    for (uint32_t dim = 0; dim < kDims; ++dim) {
++      if (live0 && short0) {
++        output0[dim * 8 + 2 * pair] = __float2bfloat16_rn(
++            outside0 ? CUDART_NAN_F : numerator[dim][0] * inverse0);
++        output0[dim * 8 + 2 * pair + 1] = __float2bfloat16_rn(
++            outside0 ? CUDART_NAN_F : numerator[dim][1] * inverse0);
++      }
++      if (live1 && short1) {
++        output1[dim * 8 + 2 * pair] = __float2bfloat16_rn(
++            outside1 ? CUDART_NAN_F : numerator[dim][2] * inverse1);
++        output1[dim * 8 + 2 * pair + 1] = __float2bfloat16_rn(
++            outside1 ? CUDART_NAN_F : numerator[dim][3] * inverse1);
++      }
++    }
++  }
++}
++
+ // Tensor-core partial-state producer for the D128 two-stage attention. One
+ // single-warp CTA owns a `(logical_block, key_value_head, row)` page, the
+ // launch geometry of the shared-KV producer, and writes the page's state
+@@ -4631,7 +4906,8 @@ native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
+     __nv_bfloat16* output, uint64_t active_row_count,
+     uint64_t partial_state_capacity, uint64_t launch_partial_state_count,
+     const uint32_t* dynamic_counts, const uint32_t* row_kinds,
+-    D128Heads heads) {
++    D128Heads heads, bool prompt_rows_only, bool decode_segments,
++    uint64_t direct_max_pages) {
+   __shared__ float page_weights[kNativeBf16RaggedD128GlobalMergeMaximumPages];
+   if (dynamic_counts != nullptr) {
+     active_row_count = dynamic_counts[0];
+@@ -4642,6 +4918,22 @@ native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
+   const uint32_t depth = threadIdx.x;
+   const uint64_t output_base =
+       (row * heads.query + query_head) * kHead;
++  // The direct prompt kernel has already written the prompt rows whose own
++  // context spans at most `direct_max_pages` pages.
++  if (direct_max_pages != 0 && row < active_row_count && row_kinds != nullptr &&
++      row_kinds[row] == kNativeBf16RaggedD128PromptRowKind &&
++      static_cast<uint64_t>(row_positions[row]) / RILEY_CUDA_PAGED_KV_BLOCK_SIZE +
++              1 <=
++          direct_max_pages) {
++    return;
++  }
++  // Next to the fused decode kernel, which owns every other row (and the
++  // zeroing of inactive rows), only prompt rows are merged here.
++  if (prompt_rows_only &&
++      (row >= active_row_count || row_kinds == nullptr ||
++       row_kinds[row] != kNativeBf16RaggedD128PromptRowKind)) {
++    return;
++  }
+   // Every early exit below depends only on CTA-uniform values.
+   if (row >= active_row_count) {
+     output[output_base + depth] = __float2bfloat16_rn(0.0F);
+@@ -4650,10 +4942,12 @@ native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
+   const uint64_t logical_page_count =
+       static_cast<uint64_t>(row_positions[row]) /
+           RILEY_CUDA_PAGED_KV_BLOCK_SIZE + 1;
+-  // A prompt row holds one state per four-page segment.
++  // A prompt row holds one state per four-page segment, and so does every
++  // row in the segment decode mode.
+   const uint64_t page_count =
+-      (row_kinds != nullptr &&
+-       row_kinds[row] == kNativeBf16RaggedD128PromptRowKind)
++      (decode_segments ||
++       (row_kinds != nullptr &&
++        row_kinds[row] == kNativeBf16RaggedD128PromptRowKind))
+           ? (logical_page_count + kNativeBf16PrefillD128MmaSegmentPages - 1) /
+                 kNativeBf16PrefillD128MmaSegmentPages
+           : logical_page_count;
+@@ -4749,6 +5043,564 @@ native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel(
+       __float2bfloat16_rn(numerator * inverse_denominator);
+ }
+ 
++// Page softmax of the tensor-core producer for one warp: the page maxima,
++// exp weights and denominators of query heads `2 * pair` and `2 * pair + 1`.
++// The same operations in the same order as
++// `native_bf16_ragged_paged_split_gqa_d128_tensor_core_partial_state_kernel`.
++__device__ __forceinline__ void native_d128_tensor_core_page_softmax(
++    const __nv_bfloat16* query, const __nv_bfloat16* key_pool, uint64_t row,
++    uint64_t key_value_head, uint64_t block_head_base, uint64_t token_count,
++    float scale, D128Heads heads, uint32_t group_heads, uint32_t lane,
++    float* maximum0, float* maximum1, float weight[4], float* denominator0,
++    float* denominator1) {
++  constexpr uint32_t kHead = 128;
++  constexpr uint32_t kSteps = kHead / 16;
++  const uint32_t group = lane / 4;
++  const uint32_t pair = lane % 4;
++  const bool live_head = group < group_heads;
++  const __nv_bfloat16* const query_head =
++      query +
++      (row * heads.query + key_value_head * group_heads +
++       (live_head ? group : 0)) *
++          kHead +
++      2 * pair;
++  const __nv_bfloat16* const key_low =
++      key_pool + block_head_base + group * kHead + 2 * pair;
++  const __nv_bfloat16* const key_high = key_low + 8 * kHead;
++  float dot[4] = {0.0F, 0.0F, 0.0F, 0.0F};
++#pragma unroll
++  for (uint32_t step = 0; step < kSteps; ++step) {
++    mma_m16n8k16_bf16(
++        dot, *reinterpret_cast<const uint32_t*>(key_low + 16 * step),
++        *reinterpret_cast<const uint32_t*>(key_high + 16 * step),
++        *reinterpret_cast<const uint32_t*>(key_low + 16 * step + 8),
++        *reinterpret_cast<const uint32_t*>(key_high + 16 * step + 8),
++        live_head ? *reinterpret_cast<const uint32_t*>(query_head + 16 * step)
++                  : 0U,
++        live_head
++            ? *reinterpret_cast<const uint32_t*>(query_head + 16 * step + 8)
++            : 0U);
++  }
++  float score[4];
++#pragma unroll
++  for (uint32_t element = 0; element < 4; ++element) {
++    const bool present = (element < 2 ? group : group + 8) < token_count;
++    score[element] = present ? staged_attention_score(dot[element], scale)
++                             : -CUDART_INF_F;
++  }
++  float max0 = fmaxf(score[0], score[2]);
++  float max1 = fmaxf(score[1], score[3]);
++#pragma unroll
++  for (uint32_t offset = 4; offset < kWarpSize; offset *= 2) {
++    max0 = fmaxf(max0, __shfl_xor_sync(kFullWarpMask, max0, offset));
++    max1 = fmaxf(max1, __shfl_xor_sync(kFullWarpMask, max1, offset));
++  }
++  weight[0] = expf(score[0] - max0);
++  weight[1] = expf(score[1] - max1);
++  weight[2] = expf(score[2] - max0);
++  weight[3] = expf(score[3] - max1);
++  float sum0 = weight[0] + weight[2];
++  float sum1 = weight[1] + weight[3];
++#pragma unroll
++  for (uint32_t offset = 4; offset < kWarpSize; offset *= 2) {
++    sum0 += __shfl_xor_sync(kFullWarpMask, sum0, offset);
++    sum1 += __shfl_xor_sync(kFullWarpMask, sum1, offset);
++  }
++  *maximum0 = max0;
++  *maximum1 = max1;
++  *denominator0 = sum0;
++  *denominator1 = sum1;
++}
++
++// Page numerator of the tensor-core producer from the weights of
++// `native_d128_tensor_core_page_softmax` (consumed): the three exact BF16
++// weight pieces times V, in the producer's order.
++__device__ __forceinline__ void native_d128_tensor_core_page_numerator(
++    const __nv_bfloat16* value_pool, uint64_t block_head_base,
++    uint64_t token_count, uint32_t lane, float weight[4],
++    float numerator[8][4]) {
++  constexpr uint32_t kHead = 128;
++  constexpr uint32_t kSteps = kHead / 16;
++  const uint32_t group = lane / 4;
++  const uint32_t pair = lane % 4;
++  const uint32_t source_even = 8 * pair + group / 2;
++  const uint32_t source_odd = source_even + 4;
++  const uint32_t source_shift = 16 * (group % 2);
++  uint32_t weight_operand[3][2];
++#pragma unroll
++  for (uint32_t piece = 0; piece < 3; ++piece) {
++    float rounded[4];
++#pragma unroll
++    for (uint32_t element = 0; element < 4; ++element) {
++      rounded[element] = __bfloat162float(__float2bfloat16_rn(weight[element]));
++      weight[element] -= rounded[element];
++    }
++    const uint32_t low_tokens = pack_bf16_pair(rounded[0], rounded[1]);
++    const uint32_t high_tokens = pack_bf16_pair(rounded[2], rounded[3]);
++    const uint32_t even_low = __shfl_sync(kFullWarpMask, low_tokens, source_even);
++    const uint32_t even_high =
++        __shfl_sync(kFullWarpMask, high_tokens, source_even);
++    const uint32_t odd_low = __shfl_sync(kFullWarpMask, low_tokens, source_odd);
++    const uint32_t odd_high = __shfl_sync(kFullWarpMask, high_tokens, source_odd);
++    weight_operand[piece][0] = ((even_low >> source_shift) & 0xffffU) |
++                               (((odd_low >> source_shift) & 0xffffU) << 16);
++    weight_operand[piece][1] = ((even_high >> source_shift) & 0xffffU) |
++                               (((odd_high >> source_shift) & 0xffffU) << 16);
++  }
++  const uint16_t* const value_token = reinterpret_cast<const uint16_t*>(
++      value_pool + block_head_base + 2 * pair * kHead + group);
++  const bool present0 = 2 * pair < token_count;
++  const bool present1 = 2 * pair + 1 < token_count;
++  const bool present2 = 2 * pair + 8 < token_count;
++  const bool present3 = 2 * pair + 9 < token_count;
++#pragma unroll
++  for (uint32_t step = 0; step < kSteps; ++step) {
++    numerator[step][0] = 0.0F;
++    numerator[step][1] = 0.0F;
++    numerator[step][2] = 0.0F;
++    numerator[step][3] = 0.0F;
++    const uint16_t* const token0 = value_token + 16 * step;
++    const uint16_t* const token1 = token0 + kHead;
++    const uint16_t* const token2 = token0 + 8 * kHead;
++    const uint16_t* const token3 = token2 + kHead;
++    const uint32_t value0 =
++        (present0 ? static_cast<uint32_t>(token0[0]) : 0U) |
++        ((present1 ? static_cast<uint32_t>(token1[0]) : 0U) << 16);
++    const uint32_t value1 =
++        (present0 ? static_cast<uint32_t>(token0[8]) : 0U) |
++        ((present1 ? static_cast<uint32_t>(token1[8]) : 0U) << 16);
++    const uint32_t value2 =
++        (present2 ? static_cast<uint32_t>(token2[0]) : 0U) |
++        ((present3 ? static_cast<uint32_t>(token3[0]) : 0U) << 16);
++    const uint32_t value3 =
++        (present2 ? static_cast<uint32_t>(token2[8]) : 0U) |
++        ((present3 ? static_cast<uint32_t>(token3[8]) : 0U) << 16);
++#pragma unroll
++    for (uint32_t piece = 0; piece < 3; ++piece) {
++      mma_m16n8k16_bf16(numerator[step], value0, value1, value2, value3,
++                        weight_operand[piece][0], weight_operand[piece][1]);
++    }
++  }
++}
++
++// Segment decode producer for the D128 two-stage attention, a separately
++// selected numerical mode. One single-warp CTA owns a `(4-page segment,
++// key_value_head, row)` and writes one `[m, l, n[128]]` state per segment
++// instead of per page: each page is scored and weighted exactly as by the
++// tensor-core producer, and the segment's pages are folded in ascending
++// order with an online rescale,
++//   M' = max(M, m_p), L = L * exp(M - M') + l_p * exp(m_p - M'),
++//   N = N * exp(M - M') + n_p * exp(m_p - M').
++// The merge then folds a quarter of the states. A state depends only on its
++// own row and pages, so the output stays independent of the batch; it rounds
++// differently from the per-page producer. An unresolvable page makes the
++// segment's state NaN. Prompt rows (row kinds) keep the prompt producer.
++constexpr uint64_t kNativeBf16RaggedD128DecodeSegmentPages =
++    kNativeBf16PrefillD128MmaSegmentPages;
++
++__global__ __launch_bounds__(kWarpSize) void
++native_bf16_ragged_paged_split_gqa_d128_tensor_core_segment_state_kernel(
++    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
++    const __nv_bfloat16* value_pool, float* partial_states, DeviceBatch batch,
++    uint64_t partial_state_capacity, float scale, D128Heads heads,
++    const uint32_t* row_kinds, const uint32_t* generated_rows) {
++  const uint32_t group_heads =
++      static_cast<uint32_t>(heads.query / heads.key_value);
++  const uint32_t lane = threadIdx.x;
++  const uint32_t group = lane / 4;
++  const uint32_t pair = lane % 4;
++  const uint64_t segment = blockIdx.x;
++  const uint64_t key_value_head = blockIdx.y;
++  uint64_t row = blockIdx.z;
++  // Every exit before the shuffles below is uniform across the warp.
++  if (generated_rows != nullptr) {
++    if (row >= generated_rows[0]) {
++      return;
++    }
++    row = generated_rows[1 + row];
++  }
++  if (row >= active_rows(batch) || key_value_head >= heads.key_value) {
++    return;
++  }
++  if (row_kinds != nullptr &&
++      row_kinds[row] == kNativeBf16RaggedD128PromptRowKind) {
++    return;
++  }
++  const uint64_t page_count =
++      static_cast<uint64_t>(batch.row_positions[row]) /
++          RILEY_CUDA_PAGED_KV_BLOCK_SIZE + 1;
++  const uint64_t first_page = segment * kNativeBf16RaggedD128DecodeSegmentPages;
++  if (first_page >= page_count || first_page >= partial_state_capacity) {
++    return;
++  }
++  const uint64_t end_page =
++      page_count < first_page + kNativeBf16RaggedD128DecodeSegmentPages
++          ? page_count
++          : first_page + kNativeBf16RaggedD128DecodeSegmentPages;
++  float* const state0 =
++      partial_states +
++      ((row * partial_state_capacity + segment) * heads.query +
++       key_value_head * group_heads + 2 * pair) *
++          kNativeBf16RaggedPagedSplitGqaD128StateStride;
++  float* const state1 = state0 + kNativeBf16RaggedPagedSplitGqaD128StateStride;
++  float maximum0 = -CUDART_INF_F;
++  float maximum1 = -CUDART_INF_F;
++  float denominator0 = 0.0F;
++  float denominator1 = 0.0F;
++  float numerator[8][4];
++#pragma unroll
++  for (uint32_t step = 0; step < 8; ++step) {
++    numerator[step][0] = 0.0F;
++    numerator[step][1] = 0.0F;
++    numerator[step][2] = 0.0F;
++    numerator[step][3] = 0.0F;
++  }
++  bool invalid = false;
++  for (uint64_t page = first_page; page < end_page; ++page) {
++    uint64_t block_head_base = 0;
++    uint64_t token_count = 0;
++    if (!resolve_ragged_partial_block(batch, row, page, key_value_head,
++                                      &block_head_base, &token_count, heads,
++                                      128)) {
++      invalid = true;
++      continue;
++    }
++    float page_maximum0;
++    float page_maximum1;
++    float page_denominator0;
++    float page_denominator1;
++    float weight[4];
++    float page_numerator[8][4];
++    native_d128_tensor_core_page_softmax(
++        query, key_pool, row, key_value_head, block_head_base, token_count,
++        scale, heads, group_heads, lane, &page_maximum0, &page_maximum1,
++        weight, &page_denominator0, &page_denominator1);
++    native_d128_tensor_core_page_numerator(value_pool, block_head_base,
++                                           token_count, lane, weight,
++                                           page_numerator);
++    const float next0 = fmaxf(maximum0, page_maximum0);
++    const float next1 = fmaxf(maximum1, page_maximum1);
++    const float old_scale0 = expf(maximum0 - next0);
++    const float old_scale1 = expf(maximum1 - next1);
++    const float page_scale0 = expf(page_maximum0 - next0);
++    const float page_scale1 = expf(page_maximum1 - next1);
++    denominator0 =
++        fmaf(denominator0, old_scale0, page_denominator0 * page_scale0);
++    denominator1 =
++        fmaf(denominator1, old_scale1, page_denominator1 * page_scale1);
++#pragma unroll
++    for (uint32_t step = 0; step < 8; ++step) {
++      numerator[step][0] = fmaf(numerator[step][0], old_scale0,
++                                page_numerator[step][0] * page_scale0);
++      numerator[step][1] = fmaf(numerator[step][1], old_scale1,
++                                page_numerator[step][1] * page_scale1);
++      numerator[step][2] = fmaf(numerator[step][2], old_scale0,
++                                page_numerator[step][2] * page_scale0);
++      numerator[step][3] = fmaf(numerator[step][3], old_scale1,
++                                page_numerator[step][3] * page_scale1);
++    }
++    maximum0 = next0;
++    maximum1 = next1;
++  }
++  if (invalid) {
++    maximum0 = CUDART_NAN_F;
++    maximum1 = CUDART_NAN_F;
++    denominator0 = CUDART_NAN_F;
++    denominator1 = CUDART_NAN_F;
++#pragma unroll
++    for (uint32_t step = 0; step < 8; ++step) {
++      numerator[step][0] = CUDART_NAN_F;
++      numerator[step][1] = CUDART_NAN_F;
++      numerator[step][2] = CUDART_NAN_F;
++      numerator[step][3] = CUDART_NAN_F;
++    }
++  }
++  const bool store0 = 2 * pair < group_heads;
++  const bool store1 = 2 * pair + 1 < group_heads;
++  if (group == 0) {
++    if (store0) {
++      state0[0] = maximum0;
++      state0[1] = denominator0;
++    }
++    if (store1) {
++      state1[0] = maximum1;
++      state1[1] = denominator1;
++    }
++  }
++#pragma unroll
++  for (uint32_t step = 0; step < 8; ++step) {
++    if (store0) {
++      state0[2 + 16 * step + group] = numerator[step][0];
++      state0[2 + 16 * step + group + 8] = numerator[step][2];
++    }
++    if (store1) {
++      state1[2 + 16 * step + group] = numerator[step][1];
++      state1[2 + 16 * step + group + 8] = numerator[step][3];
++    }
++  }
++}
++
++// Fused D128 decode attention: the tensor-core producer and the global-max
++// merge in one CTA per `(key_value_head, row)`, without the FP32 page states
++// in global memory. Bit-identical to the two-kernel path:
++//   A. warps produce each page's maxima and denominators exactly as the
++//      producer does (kept in shared memory);
++//   B. per query head, the merge's stride-128 fold and adjacent trees over
++//      the same values give `M`, the page weights and the denominator;
++//   C. warps recompute each page's numerator (the same deterministic
++//      operations), and the pages are folded per output element in
++//      ascending order with the merge's `fmaf`.
++// A row's result depends only on its own pages, as before. Prompt rows (row
++// kinds) are left to the prompt producer and the merge; this kernel writes
++// every other output row, zeroing the inactive ones like the merge.
++constexpr uint32_t kNativeBf16RaggedD128FusedDecodeWarps = 8;
++constexpr uint32_t kNativeBf16RaggedD128FusedDecodeThreads =
++    kNativeBf16RaggedD128FusedDecodeWarps * kWarpSize;
++
++__global__ __launch_bounds__(kNativeBf16RaggedD128FusedDecodeThreads) void
++native_bf16_ragged_paged_split_gqa_d128_tensor_core_fused_decode_kernel(
++    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
++    const __nv_bfloat16* value_pool, __nv_bfloat16* output, DeviceBatch batch,
++    uint64_t partial_state_capacity, uint64_t launch_partial_state_count,
++    float scale, D128Heads heads, const uint32_t* row_kinds) {
++  constexpr uint32_t kHead = 128;
++  constexpr uint32_t kWarps = kNativeBf16RaggedD128FusedDecodeWarps;
++  constexpr uint32_t kThreads = kNativeBf16RaggedD128FusedDecodeThreads;
++  constexpr uint32_t kGroupMaximum = kNativeBf16RaggedD128MaximumGroupHeads;
++  constexpr uint64_t kPages = kNativeBf16RaggedD128GlobalMergeMaximumPages;
++  constexpr uint32_t kElementsPerThread = kGroupMaximum * kHead / kThreads;
++  __shared__ float page_maximum[kGroupMaximum][kPages];
++  __shared__ float page_denominator[kGroupMaximum][kPages];
++  __shared__ float page_weight[kGroupMaximum][kPages];
++  __shared__ float inverse_denominator[kGroupMaximum];
++  __shared__ float reduction[kNativeBf16RaggedD128GlobalMergeThreads];
++  __shared__ float numerators[kWarps][kGroupMaximum][kHead];
++  const uint32_t group_heads =
++      static_cast<uint32_t>(heads.query / heads.key_value);
++  const uint64_t key_value_head = blockIdx.x;
++  const uint64_t row = blockIdx.y;
++  const uint32_t thread = threadIdx.x;
++  const uint32_t warp = thread / kWarpSize;
++  const uint32_t lane = thread % kWarpSize;
++  const uint32_t group = lane / 4;
++  const uint32_t pair = lane % 4;
++  __nv_bfloat16* const head_output =
++      output + (row * heads.query + key_value_head * group_heads) * kHead;
++  // Every early exit below depends only on CTA-uniform values.
++  if (row >= active_rows(batch)) {
++    for (uint32_t element = thread; element < group_heads * kHead;
++         element += kThreads) {
++      head_output[element] = __float2bfloat16_rn(0.0F);
++    }
++    return;
++  }
++  if (row_kinds != nullptr &&
++      row_kinds[row] == kNativeBf16RaggedD128PromptRowKind) {
++    return;
++  }
++  const uint64_t page_count =
++      static_cast<uint64_t>(batch.row_positions[row]) /
++          RILEY_CUDA_PAGED_KV_BLOCK_SIZE + 1;
++  if (page_count > partial_state_capacity ||
++      page_count > launch_partial_state_count || page_count > kPages) {
++    for (uint32_t element = thread; element < group_heads * kHead;
++         element += kThreads) {
++      head_output[element] = __float2bfloat16_rn(CUDART_NAN_F);
++    }
++    return;
++  }
++
++  // A. Page maxima and denominators.
++  for (uint64_t page = warp; page < page_count; page += kWarps) {
++    uint64_t block_head_base = 0;
++    uint64_t token_count = 0;
++    const bool valid_block = resolve_ragged_partial_block(
++        batch, row, page, key_value_head, &block_head_base, &token_count,
++        heads, kHead);
++    float maximum0 = CUDART_NAN_F;
++    float maximum1 = CUDART_NAN_F;
++    float denominator0 = CUDART_NAN_F;
++    float denominator1 = CUDART_NAN_F;
++    if (valid_block) {
++      float weight[4];
++      native_d128_tensor_core_page_softmax(
++          query, key_pool, row, key_value_head, block_head_base, token_count,
++          scale, heads, group_heads, lane, &maximum0, &maximum1, weight,
++          &denominator0, &denominator1);
++    }
++    if (group == 0) {
++      if (2 * pair < group_heads) {
++        page_maximum[2 * pair][page] = maximum0;
++        page_denominator[2 * pair][page] = denominator0;
++      }
++      if (2 * pair + 1 < group_heads) {
++        page_maximum[2 * pair + 1][page] = maximum1;
++        page_denominator[2 * pair + 1][page] = denominator1;
++      }
++    }
++  }
++  __syncthreads();
++
++  // B. The merge's maximum, weights and denominator, per query head, with
++  // its 128 fold slots (at most one page per slot).
++  for (uint32_t head = 0; head < group_heads; ++head) {
++    if (thread < kNativeBf16RaggedD128GlobalMergeThreads) {
++      float local_maximum = -CUDART_INF_F;
++      for (uint64_t page = thread; page < page_count;
++           page += kNativeBf16RaggedD128GlobalMergeThreads) {
++        local_maximum = native_d128_nan_propagating_max(
++            local_maximum, page_maximum[head][page]);
++      }
++      reduction[thread] = local_maximum;
++    }
++    __syncthreads();
++    for (uint32_t offset = kNativeBf16RaggedD128GlobalMergeThreads / 2;
++         offset != 0; offset /= 2) {
++      if (thread < offset) {
++        reduction[thread] = native_d128_nan_propagating_max(
++            reduction[thread], reduction[thread + offset]);
++      }
++      __syncthreads();
++    }
++    const float maximum = reduction[0];
++    __syncthreads();
++    if (thread < kNativeBf16RaggedD128GlobalMergeThreads) {
++      float local_denominator = 0.0F;
++      for (uint64_t page = thread; page < page_count;
++           page += kNativeBf16RaggedD128GlobalMergeThreads) {
++        const float weight = expf(page_maximum[head][page] - maximum);
++        page_weight[head][page] = weight;
++        local_denominator =
++            fmaf(weight, page_denominator[head][page], local_denominator);
++      }
++      reduction[thread] = local_denominator;
++    }
++    __syncthreads();
++    for (uint32_t offset = kNativeBf16RaggedD128GlobalMergeThreads / 2;
++         offset != 0; offset /= 2) {
++      if (thread < offset) {
++        reduction[thread] += reduction[thread + offset];
++      }
++      __syncthreads();
++    }
++    if (thread == 0) {
++      const float denominator = reduction[0];
++      inverse_denominator[head] =
++          isnan(denominator)
++              ? CUDART_NAN_F
++              : (denominator > 0.0F ? 1.0F / denominator : 0.0F);
++    }
++    __syncthreads();
++  }
++
++  // C. Page numerators, folded in ascending page order.
++  float accumulator[kElementsPerThread];
++#pragma unroll
++  for (uint32_t slot = 0; slot < kElementsPerThread; ++slot) {
++    accumulator[slot] = 0.0F;
++  }
++  for (uint64_t chunk = 0; chunk < page_count; chunk += kWarps) {
++    const uint64_t page = chunk + warp;
++    if (page < page_count) {
++      uint64_t block_head_base = 0;
++      uint64_t token_count = 0;
++      const bool valid_block = resolve_ragged_partial_block(
++          batch, row, page, key_value_head, &block_head_base, &token_count,
++          heads, kHead);
++      float numerator[8][4];
++      if (valid_block) {
++        float maximum0;
++        float maximum1;
++        float denominator0;
++        float denominator1;
++        float weight[4];
++        native_d128_tensor_core_page_softmax(
++            query, key_pool, row, key_value_head, block_head_base,
++            token_count, scale, heads, group_heads, lane, &maximum0,
++            &maximum1, weight, &denominator0, &denominator1);
++        native_d128_tensor_core_page_numerator(value_pool, block_head_base,
++                                               token_count, lane, weight,
++                                               numerator);
++      } else {
++#pragma unroll
++        for (uint32_t step = 0; step < 8; ++step) {
++          numerator[step][0] = CUDART_NAN_F;
++          numerator[step][1] = CUDART_NAN_F;
++          numerator[step][2] = CUDART_NAN_F;
++          numerator[step][3] = CUDART_NAN_F;
++        }
++      }
++#pragma unroll
++      for (uint32_t step = 0; step < 8; ++step) {
++        if (2 * pair < group_heads) {
++          numerators[warp][2 * pair][16 * step + group] = numerator[step][0];
++          numerators[warp][2 * pair][16 * step + group + 8] =
++              numerator[step][2];
++        }
++        if (2 * pair + 1 < group_heads) {
++          numerators[warp][2 * pair + 1][16 * step + group] =
++              numerator[step][1];
++          numerators[warp][2 * pair + 1][16 * step + group + 8] =
++              numerator[step][3];
++        }
++      }
++    }
++    __syncthreads();
++    const uint64_t chunk_pages =
++        page_count - chunk < kWarps ? page_count - chunk : kWarps;
++#pragma unroll
++    for (uint32_t slot = 0; slot < kElementsPerThread; ++slot) {
++      const uint32_t element = thread + slot * kThreads;
++      const uint32_t head = element / kHead;
++      const uint32_t depth = element % kHead;
++      if (head < group_heads) {
++        for (uint64_t index = 0; index < chunk_pages; ++index) {
++          accumulator[slot] =
++              fmaf(page_weight[head][chunk + index],
++                   numerators[index][head][depth], accumulator[slot]);
++        }
++      }
++    }
++    __syncthreads();
++  }
++#pragma unroll
++  for (uint32_t slot = 0; slot < kElementsPerThread; ++slot) {
++    const uint32_t element = thread + slot * kThreads;
++    const uint32_t head = element / kHead;
++    if (head < group_heads) {
++      head_output[element] = __float2bfloat16_rn(accumulator[slot] *
++                                                 inverse_denominator[head]);
++    }
++  }
++}
++
++// Minimum launched rows for the fused decode kernel, from
++// RILEY_NATIVE_D128_FUSED_DECODE_MIN_ROWS (unset or 0: never). Both paths
++// give identical bytes, so the choice may follow the batch size.
++std::atomic<uint64_t>& native_d128_fused_decode_min_rows_setting() {
++  static std::atomic<uint64_t> value{[] {
++    const char* text = std::getenv("RILEY_NATIVE_D128_FUSED_DECODE_MIN_ROWS");
++    return text == nullptr ? 0ULL : std::strtoull(text, nullptr, 10);
++  }()};
++  return value;
++}
++
++uint64_t native_d128_fused_decode_min_rows() {
++  return native_d128_fused_decode_min_rows_setting().load(
++      std::memory_order_relaxed);
++}
++
++// Segment decode mode, from RILEY_NATIVE_D128_DECODE_SEGMENT_MODE (unset or
++// 0: per-page states; 1: four-page segment states). It changes the rounding
++// of decode-row outputs, so it is a separately selected numerical mode.
++std::atomic<uint64_t>& native_d128_decode_segment_mode_setting() {
++  static std::atomic<uint64_t> value{[] {
++    const char* text = std::getenv("RILEY_NATIVE_D128_DECODE_SEGMENT_MODE");
++    return text == nullptr ? 0ULL : std::strtoull(text, nullptr, 10);
++  }()};
++  return value;
++}
++
+ struct NativeBf16RaggedPagedSplitGqaD128ByteCounts {
+   uint64_t query_bytes;
+   uint64_t pool_bytes;
+@@ -4871,6 +5723,56 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_execute(
+       &v3_params, stream, error);
+ }
+ 
++// Overrides RILEY_NATIVE_D128_FUSED_DECODE_MIN_ROWS for later launches (0:
++// never fuse). Both paths give identical bytes.
++// Direct prompt-row attention, from RILEY_NATIVE_D128_PROMPT_DIRECT (unset or
++// 0: prompt rows write segment states that the merge folds; 1: one kernel
++// folds each prompt row's whole context and writes its output). A separately
++// selected numerical mode.
++std::atomic<uint64_t>& native_d128_prompt_direct_setting() {
++  static std::atomic<uint64_t> value{[] {
++    const char* text = std::getenv("RILEY_NATIVE_D128_PROMPT_DIRECT");
++    return text == nullptr ? 0ULL : std::strtoull(text, nullptr, 10);
++  }()};
++  return value;
++}
++
++// Hybrid bound of the direct prompt mode, from
++// RILEY_NATIVE_D128_PROMPT_DIRECT_MAX_PAGES (unset or 0: every prompt row is
++// direct). A prompt row whose own context spans more pages keeps the
++// segment-state path; the choice depends only on the row itself.
++std::atomic<uint64_t>& native_d128_prompt_direct_max_pages_setting() {
++  static std::atomic<uint64_t> value{[] {
++    const char* text = std::getenv("RILEY_NATIVE_D128_PROMPT_DIRECT_MAX_PAGES");
++    return text == nullptr ? 0ULL : std::strtoull(text, nullptr, 10);
++  }()};
++  return value;
++}
++
++extern "C" void riley_cuda_set_native_d128_prompt_direct_max_pages(
++    uint64_t pages) noexcept {
++  native_d128_prompt_direct_max_pages_setting().store(
++      pages, std::memory_order_relaxed);
++}
++
++extern "C" void riley_cuda_set_native_d128_prompt_direct(
++    uint64_t mode) noexcept {
++  native_d128_prompt_direct_setting().store(mode, std::memory_order_relaxed);
++}
++
++// Overrides RILEY_NATIVE_D128_DECODE_SEGMENT_MODE for later launches.
++extern "C" void riley_cuda_set_native_d128_decode_segment_mode(
++    uint64_t mode) noexcept {
++  native_d128_decode_segment_mode_setting().store(mode,
++                                                  std::memory_order_relaxed);
++}
++
++extern "C" void riley_cuda_set_native_d128_fused_decode_min_rows(
++    uint64_t rows) noexcept {
++  native_d128_fused_decode_min_rows_setting().store(rows,
++                                                    std::memory_order_relaxed);
++}
++
+ extern "C" RileyCudaStatus
+ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+     const RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3* params,
+@@ -5143,6 +6045,36 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+     generated_rows =
+         reinterpret_cast<const uint32_t*>(batch.row_positions.data) + first_word;
+   }
++  // The fused decode kernel replaces the tensor-core producer and the
++  // global-max merge for every row but prompt rows, when its shared-memory
++  // page bound covers the workspace capacity.
++  // The segment decode mode replaces the per-page tensor-core producer for
++  // generated rows; the merge then folds segment states for every row.
++  const bool segment_decode =
++      native_d128_decode_segment_mode_setting().load(
++          std::memory_order_relaxed) == 1 &&
++      !head64 && params->reserved[0] == 2 && params->reserved[1] == 1;
++  const bool prompt_direct =
++      native_d128_prompt_direct_setting().load(std::memory_order_relaxed) ==
++          1 &&
++      params->reserved[0] == 2 && params->reserved[1] == 1 && row_kinds != nullptr;
++  const uint64_t direct_bound =
++      native_d128_prompt_direct_max_pages_setting().load(
++          std::memory_order_relaxed);
++  // 0: no direct prompt rows; UINT64_MAX: every prompt row is direct.
++  const uint64_t direct_max_pages =
++      !prompt_direct ? 0
++                     : (direct_bound == 0 ? UINT64_MAX : direct_bound);
++  const bool prompt_segments = !prompt_direct || direct_bound != 0;
++  const uint64_t fused_min_rows = native_d128_fused_decode_min_rows();
++  const bool fused_decode =
++      !segment_decode && !prompt_direct && fused_min_rows != 0 &&
++      launch_rows >= fused_min_rows && !head64 &&
++      params->reserved[0] == 2 && params->reserved[1] == 1 &&
++      params->partial_state_capacity <=
++          kNativeBf16RaggedD128GlobalMergeMaximumPages &&
++      params->query_head_count / params->key_value_head_count <=
++          kNativeBf16RaggedD128MaximumGroupHeads;
+   bool launch_attempted = false;
+   CurrentContext scope(stream->owner);
+   status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+@@ -5160,7 +6092,43 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+     // reserved[0] selects the producer: 2 is the tensor-core producer (its
+     // own rounding); 1 and 0 are the two launch geometries of the per-token
+     // producer, which write bit-identical partial states.
+-    if (params->reserved[0] == 2) {
++    if (fused_decode) {
++      native_bf16_ragged_paged_split_gqa_d128_tensor_core_fused_decode_kernel<<<
++          dim3(static_cast<uint32_t>(params->key_value_head_count),
++               static_cast<uint32_t>(params->output_row_count), 1),
++          kNativeBf16RaggedD128FusedDecodeThreads, 0, stream->stream>>>(
++          reinterpret_cast<const __nv_bfloat16*>(query.data),
++          reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
++          reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
++          reinterpret_cast<__nv_bfloat16*>(output.data),
++          device_batch(params->batch, batch), params->partial_state_capacity,
++          launch_extent, params->scale, heads, row_kinds);
++      status = launch_status(error, kOperation);
++    }
++    if (fused_decode) {
++      if (status == RILEY_CUDA_STATUS_SUCCESS && row_kinds != nullptr) {
++        // Prompt rows keep the prompt producer; the merge below takes them.
++        const uint32_t group_heads = static_cast<uint32_t>(
++            params->query_head_count / params->key_value_head_count);
++        const dim3 prefill_grid(
++            static_cast<uint32_t>(
++                (launch_rows + kNativeBf16PrefillD128MmaTileRows - 1) /
++                kNativeBf16PrefillD128MmaTileRows),
++            static_cast<uint32_t>(params->key_value_head_count),
++            static_cast<uint32_t>(
++                (launch_extent + kNativeBf16PrefillD128MmaSegmentPages - 1) /
++                kNativeBf16PrefillD128MmaSegmentPages));
++        native_bf16_prefill_mma_generic_partial_state_kernel<128><<<
++            prefill_grid, group_heads * kWarpSize, 0, stream->stream>>>(
++            reinterpret_cast<const __nv_bfloat16*>(query.data),
++            reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
++            reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
++            reinterpret_cast<float*>(partial_states.data),
++            device_batch(params->batch, batch),
++            params->partial_state_capacity, params->scale, row_kinds, heads,
++            group_heads);
++      }
++    } else if (params->reserved[0] == 2) {
+       const uint64_t tensor_core_rows =
+           generated_rows != nullptr && generated_row_capacity < launch_rows
+               ? generated_row_capacity
+@@ -5169,7 +6137,23 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+           static_cast<uint32_t>(launch_extent),
+           static_cast<uint32_t>(params->key_value_head_count),
+           static_cast<uint32_t>(tensor_core_rows));
+-      if (head64) {
++      if (segment_decode) {
++        const dim3 segment_grid(
++            static_cast<uint32_t>(
++                (launch_extent + kNativeBf16RaggedD128DecodeSegmentPages - 1) /
++                kNativeBf16RaggedD128DecodeSegmentPages),
++            static_cast<uint32_t>(params->key_value_head_count),
++            static_cast<uint32_t>(tensor_core_rows));
++        native_bf16_ragged_paged_split_gqa_d128_tensor_core_segment_state_kernel<<<
++            segment_grid, kWarpSize, 0, stream->stream>>>(
++            reinterpret_cast<const __nv_bfloat16*>(query.data),
++            reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
++            reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
++            reinterpret_cast<float*>(partial_states.data),
++            device_batch(params->batch, batch),
++            params->partial_state_capacity, params->scale, heads,
++            row_kinds, generated_rows);
++      } else if (head64) {
+         native_bf16_ragged_paged_split_gqa_d128_tensor_core_partial_state_kernel<
+             64><<<tensor_core_grid, kWarpSize, 0, stream->stream>>>(
+             reinterpret_cast<const __nv_bfloat16*>(query.data),
+@@ -5193,9 +6177,44 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+       if (row_kinds != nullptr) {
+         status = launch_status(error, kOperation);
+       }
+-      if (row_kinds != nullptr && status == RILEY_CUDA_STATUS_SUCCESS) {
++      if (row_kinds != nullptr && status == RILEY_CUDA_STATUS_SUCCESS &&
++          prompt_direct) {
++        // Direct prompt rows: one CTA per 16-row tile and KV head folds the
++        // whole context and writes the outputs; the merge skips these rows.
++        const uint32_t group_heads = static_cast<uint32_t>(
++            params->query_head_count / params->key_value_head_count);
++        const dim3 direct_grid(
++            static_cast<uint32_t>(
++                (launch_rows + kNativeBf16PrefillD128MmaTileRows - 1) /
++                kNativeBf16PrefillD128MmaTileRows),
++            static_cast<uint32_t>(params->key_value_head_count), 1);
++        if (head64) {
++          native_bf16_prefill_mma_direct_kernel<64><<<
++              direct_grid, group_heads * kWarpSize, 0, stream->stream>>>(
++              reinterpret_cast<const __nv_bfloat16*>(query.data),
++              reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
++              reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
++              reinterpret_cast<__nv_bfloat16*>(output.data),
++              device_batch(params->batch, batch),
++              params->partial_state_capacity, params->scale, row_kinds, heads,
++              group_heads, direct_max_pages);
++        } else {
++          native_bf16_prefill_mma_direct_kernel<128><<<
++              direct_grid, group_heads * kWarpSize, 0, stream->stream>>>(
++              reinterpret_cast<const __nv_bfloat16*>(query.data),
++              reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
++              reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
++              reinterpret_cast<__nv_bfloat16*>(output.data),
++              device_batch(params->batch, batch),
++              params->partial_state_capacity, params->scale, row_kinds, heads,
++              group_heads, direct_max_pages);
++        }
++      }
++      if (row_kinds != nullptr && status == RILEY_CUDA_STATUS_SUCCESS &&
++          prompt_segments) {
+         // Prompt rows: one CTA per 16-row tile, KV head and 4-page segment,
+-        // one warp per query head of the KV head.
++        // one warp per query head of the KV head. Runs the direct kernel
++        // wrote entirely are skipped.
+         const uint32_t group_heads = static_cast<uint32_t>(
+             params->query_head_count / params->key_value_head_count);
+         const dim3 prefill_grid(
+@@ -5215,7 +6234,7 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+               reinterpret_cast<float*>(partial_states.data),
+               device_batch(params->batch, batch),
+               params->partial_state_capacity, params->scale, row_kinds, heads,
+-              group_heads);
++              group_heads, prompt_direct ? direct_max_pages : 0);
+         } else {
+           native_bf16_prefill_mma_generic_partial_state_kernel<128><<<
+               prefill_grid, group_heads * kWarpSize, 0, stream->stream>>>(
+@@ -5225,7 +6244,7 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+               reinterpret_cast<float*>(partial_states.data),
+               device_batch(params->batch, batch),
+               params->partial_state_capacity, params->scale, row_kinds, heads,
+-              group_heads);
++              group_heads, prompt_direct ? direct_max_pages : 0);
+         }
+       }
+     } else if (params->reserved[0] == 1) {
+@@ -5281,7 +6300,8 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+   }
+   // reserved[1] selects the page-merge stage: 0 keeps the ordered transition +
+   // replay pair, 1 runs the single global-max merge kernel.
+-  if (status == RILEY_CUDA_STATUS_SUCCESS && params->reserved[1] == 1) {
++  if (status == RILEY_CUDA_STATUS_SUCCESS && params->reserved[1] == 1 &&
++      (!fused_decode || row_kinds != nullptr)) {
+     const dim3 merge_grid(static_cast<uint32_t>(params->query_head_count),
+                           static_cast<uint32_t>(params->output_row_count), 1);
+     if (head64) {
+@@ -5292,7 +6312,8 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+           reinterpret_cast<__nv_bfloat16*>(output.data),
+           params->batch.active_row_count, params->partial_state_capacity,
+           launch_extent, dynamic.counts, row_kinds,
+-          D128Heads{params->query_head_count, params->key_value_head_count});
++          D128Heads{params->query_head_count, params->key_value_head_count},
++          fused_decode, segment_decode, direct_max_pages);
+     } else {
+       native_bf16_ragged_paged_split_gqa_d128_global_merge_kernel<128><<<
+           merge_grid, kNativeBf16RaggedD128GlobalMergeThreads, 0,
+@@ -5302,7 +6323,8 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+           reinterpret_cast<__nv_bfloat16*>(output.data),
+           params->batch.active_row_count, params->partial_state_capacity,
+           launch_extent, dynamic.counts, row_kinds,
+-          D128Heads{params->query_head_count, params->key_value_head_count});
++          D128Heads{params->query_head_count, params->key_value_head_count},
++          fused_decode, segment_decode, direct_max_pages);
+     }
+     status = launch_status(error, kOperation);
+   }

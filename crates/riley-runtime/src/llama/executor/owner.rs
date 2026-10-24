@@ -34,7 +34,11 @@ use crate::paged_kv::{KV_BLOCK_SIZE, KvLayout};
 
 const F32_BYTES: u64 = 4;
 pub(in crate::llama) const SUPPORTED_HEAD_DIMENSION: usize = 64;
-const NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS: usize = 256;
+const NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS: usize = 1024;
+// The partial-state workspace grows with dense rows times pages per row; the
+// qualified envelope is 256 rows at 32768 tokens, so more rows are taken only
+// with proportionally shorter sequences.
+const NATIVE_D128_TWO_STAGE_MAX_ROW_TOKENS: usize = 256 * 32_768;
 const NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS: usize = 32_768;
 
 /// Cold-owned workspace for the explicit eager native D128 two-stage ragged
@@ -956,13 +960,23 @@ fn validate_batch_attention_geometry(
     if bounds.max_input_tokens() > NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS {
         return Err(LlamaBatchExecutorError::InvalidConfiguration {
             field: "max_input_tokens",
-            reason: "native D128 two-stage requires a batch token budget at most 256",
+            reason: "native D128 two-stage requires a batch token budget at most 1024",
         });
     }
     if maximum_sequence_tokens > NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS {
         return Err(LlamaBatchExecutorError::InvalidConfiguration {
             field: "max_sequence_tokens",
             reason: "native D128 two-stage workspace is qualified through 32768 tokens",
+        });
+    }
+    if bounds
+        .max_input_tokens()
+        .checked_mul(maximum_sequence_tokens)
+        .is_none_or(|row_tokens| row_tokens > NATIVE_D128_TWO_STAGE_MAX_ROW_TOKENS)
+    {
+        return Err(LlamaBatchExecutorError::InvalidConfiguration {
+            field: "max_input_tokens",
+            reason: "native D128 two-stage workspace allows a batch token budget times sequence tokens of at most 256 x 32768",
         });
     }
     Ok(())
@@ -1106,7 +1120,7 @@ mod tests {
 
     #[test]
     fn native_d128_geometry_admission_is_exact_and_bounded() {
-        let (config, bounds) = native_config(NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS);
+        let (config, bounds) = native_config(256);
         validate_batch_attention_geometry(
             config,
             16,
@@ -1183,6 +1197,18 @@ mod tests {
             ),
             Err(LlamaBatchExecutorError::InvalidConfiguration {
                 field: "max_sequence_tokens",
+                ..
+            })
+        ));
+        // More dense rows are admitted only with proportionally shorter
+        // sequences, so the workspace stays within the 256 x 32768 envelope.
+        let (wide, wide_bounds) = native_config(NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS);
+        validate_batch_attention_geometry(wide, 32, 8, 128, 8_192, wide_bounds)
+            .expect("1024 rows at 8192 tokens stay within the workspace envelope");
+        assert!(matches!(
+            validate_batch_attention_geometry(wide, 32, 8, 128, 8_193, wide_bounds),
+            Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "max_input_tokens",
                 ..
             })
         ));

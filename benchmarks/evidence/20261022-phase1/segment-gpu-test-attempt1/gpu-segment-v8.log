@@ -1,0 +1,12 @@
+
+running 1 test
+Error: CudaError { kind: InvalidArgument, domain: Rust, stage: Validation, native_code: 0, operation: "PackedBatchHostV1::new", message: "duplicate row address (0,15)" }
+test segment_decode_is_batch_invariant_and_close_to_the_page_mode ... FAILED
+
+failures:
+
+failures:
+    segment_decode_is_batch_invariant_and_close_to_the_page_mode
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.91s
+

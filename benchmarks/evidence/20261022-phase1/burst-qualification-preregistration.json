@@ -1,0 +1,25 @@
+{
+  "title": "Prefill burst policy: K screen and 5-pair qualification (Qwen3-4B, A100 GPU7)",
+  "registered": "2026-10-22 KST, before the K screen and qualification arms",
+  "binaries": {
+    "baseline": "v15C riley-prefill-host-v15c sha256 233c3a6a81bad76d65577bacd5837d59e2ebe1dd52a8fde73f3cd07a38cf937a with native-extra.json (budget 256)",
+    "candidate": "riley-phase1-v3 sha256 bfe682f83384090c369836544916c6fd012c86642fa42bfc9c902ec14e2ae60a with native-burst-kK.json (budget 512, chunk 512, buckets to 512, steady budget 256, max decode rows K); fused decode off"
+  },
+  "k_screen": {
+    "values": [10, 12, 14],
+    "cells": "fixed C16 and C32, 3 fresh pairs each, 64 warm + 192 measured",
+    "selection_rule": "Among K in {8, 10, 12, 14, 16} (8 and 16 from the earlier screen), keep those with median paired throughput change >= -1.0% at both C16 and C32, TPOT p50 change <= +1.5% at both, and fixed C32 ITL p99 <= 27.0 ms (the Phase 0 vLLM level). Pick the one with the lowest fixed C32 TTFT p95. If none qualifies, report and stop before qualification."
+  },
+  "qualification": {
+    "cells": "fixed C1/C8/C16/C32 and natural C8/C32, 5 fresh pairs each, runner order alternation",
+    "gate": {
+      "primary": "fixed C32 TTFT p95: median-of-5 paired change <= -10%",
+      "throughput_noninferiority": "every cell: median-of-5 paired throughput change >= -1.3% (about 1.5x the Phase 0 A/A 97.5% band at C32)",
+      "tpot_p50_noninferiority": "every cell: median-of-5 paired TPOT p50 change <= +1.5%",
+      "tail_bounds": "every cell: median-of-5 paired TPOT p99 change <= +10%; fixed C32 candidate ITL p99 median <= 27.0 ms",
+      "correctness": "native canonical outputs: measured 192/192 in every arm and no cross-concurrency mismatch (baseline and candidate share one canonical set)"
+    },
+    "reporting": "All pairs and every metric reported; nothing excluded or repeated; vLLM numbers are quoted from Phase 0 for reference only and are not part of the gate",
+    "decision": "Gate pass -> recommend the burst flags for the Qwen3-4B native configuration; fail -> keep budget 256 and record the trade-off"
+  }
+}

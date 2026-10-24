@@ -1,0 +1,22 @@
+
+running 1 test
+segment-decode query_heads=16 key_value_heads=2 pages=20 rows=31 invariant_rows=124 elements=63488 identical_to_page_mode=63481 max_abs_difference=0.00000023841858
+segment-decode query_heads=16 key_value_heads=2 pages=120 rows=31 invariant_rows=124 elements=63488 identical_to_page_mode=63488 max_abs_difference=0
+segment-decode query_heads=12 key_value_heads=2 pages=20 rows=31 invariant_rows=124 elements=47616 identical_to_page_mode=47612 max_abs_difference=0.000000029802322
+segment-decode query_heads=12 key_value_heads=2 pages=120 rows=31 invariant_rows=124 elements=47616 identical_to_page_mode=47613 max_abs_difference=0.0000009536743
+segment-decode query_heads=28 key_value_heads=4 pages=20 rows=31 invariant_rows=124 elements=111104 identical_to_page_mode=111098 max_abs_difference=0.0000076293945
+segment-decode query_heads=28 key_value_heads=4 pages=120 rows=31 invariant_rows=124 elements=111104 identical_to_page_mode=111084 max_abs_difference=0.00012207031
+segment-decode query_heads=40 key_value_heads=8 pages=20 rows=31 invariant_rows=124 elements=158720 identical_to_page_mode=158704 max_abs_difference=0.0000076293945
+segment-decode query_heads=40 key_value_heads=8 pages=120 rows=31 invariant_rows=124 elements=158720 identical_to_page_mode=158704 max_abs_difference=0.0000038146973
+segment-decode query_heads=16 key_value_heads=8 pages=20 rows=31 invariant_rows=124 elements=63488 identical_to_page_mode=63488 max_abs_difference=0
+segment-decode query_heads=16 key_value_heads=8 pages=120 rows=31 invariant_rows=124 elements=63488 identical_to_page_mode=63476 max_abs_difference=0.00024414063
+segment-decode query_heads=32 key_value_heads=8 pages=20 rows=31 invariant_rows=124 elements=126976 identical_to_page_mode=126965 max_abs_difference=0.00012207031
+segment-decode query_heads=32 key_value_heads=8 pages=120 rows=31 invariant_rows=124 elements=126976 identical_to_page_mode=126969 max_abs_difference=0.0000009536743
+segment-decode query_heads=24 key_value_heads=8 pages=20 rows=31 invariant_rows=124 elements=95232 identical_to_page_mode=95228 max_abs_difference=0.00012207031
+segment-decode query_heads=24 key_value_heads=8 pages=120 rows=31 invariant_rows=124 elements=95232 identical_to_page_mode=95224 max_abs_difference=0.0000038146973
+segment-decode query_heads=4 key_value_heads=4 pages=20 rows=31 invariant_rows=124 elements=15872 identical_to_page_mode=15872 max_abs_difference=0
+segment-decode query_heads=4 key_value_heads=4 pages=120 rows=31 invariant_rows=124 elements=15872 identical_to_page_mode=15872 max_abs_difference=0
+test segment_decode_is_batch_invariant_and_close_to_the_page_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.00s
+
