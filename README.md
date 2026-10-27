@@ -282,6 +282,34 @@ A separate host-counter audit found multi-prefill in 48/89 (C16) and 41/77 (C32)
 
 <!-- end v17 independent experiments -->
 
+### A100 · model coverage against vLLM 0.27.1 · 2026-10-14
+
+Eight cells (C1/C8/C16/C32 × fixed/natural), warm-up 32 and 192 measured
+requests, Riley and vLLM interleaved twice in the same run on one A100-SXM4-40GB.
+Pass = C8–C32 throughput ≥ vLLM and TPOT p50 ≤ vLLM, C1 within ±3 %, TTFT p50
+≤ vLLM in every cell. Every model below serves over `/v1/completions` and gives
+the same tokens for all 15 fixture prompts at C1, C8 and C32.
+
+| Model | Result | Cells that miss (throughput / TPOT p50 vs vLLM) | 300 s stability |
+|---|---|---|---|
+| Qwen2.5-1.5B-Instruct | **pass** | – | pass 8/8 |
+| Qwen2.5-3B-Instruct | **pass** | – | pass 8/8 |
+| Qwen2.5-7B-Instruct | **pass** | – | pass 8/8 |
+| SmolLM2-135M | **pass** | – | pass 8/8 |
+| Qwen2.5-0.5B-Instruct | miss | C1 fixed TPOT 1.13× | pass 8/8 |
+| SmolLM2-360M | miss | C1 fixed TPOT 1.12×, C32 fixed TPOT 1.03× | – |
+| Qwen2.5-Coder-7B-Instruct | miss | C8/C16/C32 natural 0.96–1.01× (shorter outputs: an earlier EOS on one prompt) | – |
+| Llama-3.2-1B-Instruct | miss | C32 natural 1.00× / TPOT 1.06× | – |
+| Qwen3-0.6B | miss | C1 TPOT 1.04–1.11×, C32 fixed TPOT 1.15×, C32 natural TPOT 1.05× | – |
+| Qwen3-1.7B | miss | C32 natural 0.96× / TPOT 1.10× | – |
+| SmolLM2-1.7B | miss | C16 natural 0.99×, C32 natural 0.93× / TPOT 1.11× | – |
+| Qwen3-4B/8B, Llama-3.2-3B, Llama-3.1-8B | screening only (miss by 1–12 %) | – | – |
+
+The common remaining gap is long-context decode attention (C32 natural) and,
+for the smallest models, per-kernel latency at one row. Full tables, flags,
+evidence names and the rejected levers are in
+[model coverage](docs/model-coverage-a100.md).
+
 Dated A100 matrices for other model families and their original numerical
 contracts are in [model coverage](docs/model-coverage-a100.md). Separate native
 preset screens are documented in [native HF performance](docs/hf-native-performance.md),

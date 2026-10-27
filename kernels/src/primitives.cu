@@ -1017,8 +1017,9 @@ bool use_wide_rms_norm(uint64_t row_count, uint64_t hidden_size) noexcept {
          row_count <= 256;
 }
 
-// The wide form for the other hidden sizes that are a multiple of 256 columns
-// (up to 4096): 1024 threads, four per lane of the 256-thread kernels. Thread
+// The wide form for the other hidden sizes above 256 columns (up to 4096,
+// multiple of 256 or not): 1024 threads, four per lane of the 256-thread
+// kernels. A lane's columns are lane, lane + 256, ... below hidden_size. Thread
 // (lane, slot) loads that lane's columns number slot, slot + 4, ... (at most
 // four of them), stages them in shared memory, and the first 256 threads then
 // run the original per-thread accumulation over their lane's columns in
@@ -1044,9 +1045,14 @@ void wide_bf16_general_rms_norm_kernel(
     return;
   }
   const uint64_t base = row * hidden_size;
-  const uint32_t columns_per_lane = hidden_size / kWideRmsNormLanes;
   const uint32_t lane = threadIdx.x % kWideRmsNormLanes;
   const uint32_t slot = threadIdx.x / kWideRmsNormLanes;
+  // Columns of this lane: the last lanes have one fewer when hidden_size is
+  // not a multiple of 256.
+  const uint32_t columns_per_lane =
+      lane < hidden_size
+          ? (hidden_size - lane + kWideRmsNormLanes - 1) / kWideRmsNormLanes
+          : 0;
   float values[kWideGeneralSlots];
   uint32_t count = 0;
   for (uint32_t index = slot; index < columns_per_lane;
@@ -1110,9 +1116,8 @@ bool use_wide_general_rms_norm(uint64_t row_count,
                                uint64_t hidden_size) noexcept {
   return std::is_same<T, __nv_bfloat16>::value &&
          hidden_size != kWideRmsNormHiddenSize &&
-         hidden_size % kWideRmsNormLanes == 0 &&
-         hidden_size / kWideRmsNormLanes >= 2 &&
-         hidden_size / kWideRmsNormLanes <= kWideGeneralMaxColumnsPerLane &&
+         hidden_size > kWideRmsNormLanes &&
+         hidden_size <= kWideRmsNormLanes * kWideGeneralMaxColumnsPerLane &&
          row_count != 0 && row_count <= 256;
 }
 
