@@ -55,7 +55,7 @@ usage:
 serve options:
   --inference-profile MODE       native-bf16-v1 | native-bf16-varlen-v1: opt-in BF16 defaults;
                                  explicit options override
-  --native-attention-mode MODE   page-v1 | fixed-tile-unsplit-v1 (D128 tensor-core native route)
+  --native-attention-mode MODE   page-v1 | fixed-tile-unsplit-v1 (D64/D128 tensor-core native route)
   --model-id ID                  public model ID (default: checkpoint source model)
   --bind ADDRESS                 listener address (default: 127.0.0.1:8080)
   --device ORDINAL               CUDA device ordinal (default: 0)
@@ -2238,9 +2238,13 @@ fn run_serve(
         max_sequence_tokens,
     )?;
     if options.native_attention_mode == Some(NativeAttentionMode::FixedTileUnsplit)
-        && model.spec().blocks().iter().any(|block| block.attention().head_dimension() != 128)
+        && model
+            .spec()
+            .blocks()
+            .iter()
+            .any(|block| !matches!(block.attention().head_dimension(), 64 | 128))
     {
-        return Err("fixed-tile-unsplit-v1 requires head dimension 128 in every layer".into());
+        return Err("fixed-tile-unsplit-v1 requires head dimension 64 or 128 in every layer".into());
     }
     validate_reduction_profile_context(options.reduction_profile, max_sequence_tokens)?;
     let default_output_tokens = 1_024_usize.min(max_sequence_tokens - 1);

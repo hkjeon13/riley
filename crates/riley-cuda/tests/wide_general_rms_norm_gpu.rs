@@ -72,7 +72,9 @@ fn wide_general_rms_norm_matches_the_256_thread_kernels() -> TestResult {
     let mut staging = context.allocate_pinned_host_buffer(1 << 24)?;
     let epsilon = 1.0e-6_f32;
 
-    for hidden in [512_usize, 576, 896, 960, 1000, 1024, 1536, 2560, 3072, 3584, 4095, 4096] {
+    for hidden in [
+        512_usize, 576, 896, 960, 1000, 1024, 1536, 2560, 3072, 3584, 4095, 4096, 4097, 5120, 6000, 8192,
+    ] {
         let row_bytes = (hidden * 2) as u64;
         let left = upload(
             &context,

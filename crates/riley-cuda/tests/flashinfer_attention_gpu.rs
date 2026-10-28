@@ -1,4 +1,5 @@
-//! FlashInfer attention mode of the D128 two-stage attention: every row's
+//! FlashInfer attention mode of the D128 two-stage attention (head size 64
+//! and 128): every row's
 //! output bytes (prompt and decode) must not depend on its tile alignment,
 //! neighbouring rows, run order, the chunk a prompt arrives in or whether the
 //! step also holds prompt rows; padding rows are zeros; and the output stays
@@ -21,56 +22,90 @@ use riley_cuda::{
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
-/// Query and key/value head counts of one checked geometry.
+/// Query and key/value head counts and head size of one checked geometry.
 #[derive(Clone, Copy, Debug)]
 struct Heads {
     query: usize,
     key_value: usize,
+    head: usize,
 }
 
 impl Heads {
     const fn row_width(self) -> usize {
-        self.query * HEAD_SIZE
+        self.query * self.head
     }
 }
 
-/// Qwen2.5-3B first, then groups of 6, 7, 5, 2, 4, 3 and 1 query heads per
-/// key/value head.
-const GEOMETRIES: [Heads; 8] = [
+/// Head size 128: Qwen2.5-3B first, then groups of 6, 7, 5, 2, 4, 3 and 1
+/// query heads per key/value head. Head size 64: Llama-3.2-1B,
+/// SmolLM2-1.7B, SmolLM2-360M, SmolLM2-135M and Qwen2.5-0.5B.
+const GEOMETRIES: [Heads; 13] = [
     Heads {
         query: 16,
         key_value: 2,
+        head: 128,
     },
     Heads {
         query: 12,
         key_value: 2,
+        head: 128,
     },
     Heads {
         query: 28,
         key_value: 4,
+        head: 128,
     },
     Heads {
         query: 40,
         key_value: 8,
+        head: 128,
     },
     Heads {
         query: 16,
         key_value: 8,
+        head: 128,
     },
     Heads {
         query: 32,
         key_value: 8,
+        head: 128,
     },
     Heads {
         query: 24,
         key_value: 8,
+        head: 128,
     },
     Heads {
         query: 4,
         key_value: 4,
+        head: 128,
+    },
+    Heads {
+        query: 32,
+        key_value: 8,
+        head: 64,
+    },
+    Heads {
+        query: 32,
+        key_value: 32,
+        head: 64,
+    },
+    Heads {
+        query: 15,
+        key_value: 5,
+        head: 64,
+    },
+    Heads {
+        query: 9,
+        key_value: 3,
+        head: 64,
+    },
+    Heads {
+        query: 14,
+        key_value: 2,
+        head: 64,
     },
 ];
-const HEAD_SIZE: usize = 128;
 const PAGE_SIZE: usize = 16;
 const SCALE: f32 = 0.088_388_346;
 const SEQUENCES: usize = 6;
@@ -309,7 +344,7 @@ fn run(
             )?,
             query_head_count: u64::try_from(pools.heads.query)?,
             key_value_head_count: u64::try_from(pools.heads.key_value)?,
-            head_size: u64::try_from(HEAD_SIZE)?,
+            head_size: u64::try_from(pools.heads.head)?,
             output_row_count: u64::try_from(output_rows)?,
             partial_state_capacity: u64::try_from(pools.page_capacity)?,
             scale: SCALE,
@@ -376,7 +411,8 @@ fn flashinfer_rows_are_batch_invariant_and_close_to_the_page_path() -> TestResul
         check_geometry(&runtime, heads, 60, 64, None)?;
         check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15))?;
     }
-    check_high_amplitude_against_f64(&runtime)?;
+    check_high_amplitude_against_f64(&runtime, 128)?;
+    check_high_amplitude_against_f64(&runtime, 64)?;
     set_native_d128_attention_flashinfer(0);
     Ok(())
 }
@@ -422,7 +458,7 @@ fn check_geometry(
     let mut staging = context.allocate_pinned_host_buffer(128 << 20)?;
 
     let physical_blocks = SEQUENCES * pages_per_sequence;
-    let pool_elements = physical_blocks * heads.key_value * PAGE_SIZE * HEAD_SIZE;
+    let pool_elements = physical_blocks * heads.key_value * PAGE_SIZE * heads.head;
     let sequence_block_offsets: Vec<u32> = (0..=SEQUENCES)
         .map(|sequence| (sequence * pages_per_sequence) as u32)
         .collect();
@@ -660,8 +696,8 @@ fn check_geometry(
         if row_worst > 0.03125 && reported < 12 {
             println!(
                 "MISMATCH heads={heads:?} pages={pages_per_sequence} row={row:?} kind={kind} max={row_worst} at head={} depth={}",
-                worst_element / HEAD_SIZE,
-                worst_element % HEAD_SIZE
+                worst_element / heads.head,
+                worst_element % heads.head
             );
             reported += 1;
         }
@@ -710,18 +746,19 @@ fn check_geometry(
 // A large cross-mode difference is not by itself an accuracy oracle. Check
 // the high-amplitude fixture that exceeded the page-path proximity bound
 // against a separately implemented f64 softmax over the actual BF16 inputs.
-fn check_high_amplitude_against_f64(runtime: &CudaRuntime) -> TestResult {
+fn check_high_amplitude_against_f64(runtime: &CudaRuntime, head: usize) -> TestResult {
     let context = runtime.device(0)?.create_context()?;
     let mut stream = context.create_stream()?;
     let mut staging = context.allocate_pinned_host_buffer(128 << 20)?;
     let heads = Heads {
         query: 32,
         key_value: 8,
+        head,
     };
     let pages_per_sequence = 60;
     let physical_blocks = SEQUENCES * pages_per_sequence;
     let seed = 0x9e37_79b9_7f4a_7c15;
-    let elements = physical_blocks * heads.key_value * PAGE_SIZE * HEAD_SIZE;
+    let elements = physical_blocks * heads.key_value * PAGE_SIZE * heads.head;
     let keys = random_pattern(elements, seed, 12.0);
     let values = random_pattern(elements, seed ^ 0xd1b5_4a32_d192_ed03, 2.0);
     let offsets: Vec<u32> = (0..=SEQUENCES)
@@ -824,13 +861,13 @@ fn check_high_amplitude_against_f64(runtime: &CudaRuntime) -> TestResult {
                     + token / PAGE_SIZE;
                 ((pools.block_ids[logical] as usize * heads.key_value + kv_head) * PAGE_SIZE
                     + token % PAGE_SIZE)
-                    * HEAD_SIZE
+                    * heads.head
             };
             let mut scores: Vec<f64> = (0..=row.position as usize)
                 .map(|token| {
                     let at = offset(token);
-                    (0..HEAD_SIZE)
-                        .map(|d| query[head * HEAD_SIZE + d] * keys[at + d])
+                    (0..heads.head)
+                        .map(|d| query[head * heads.head + d] * keys[at + d])
                         .sum::<f64>()
                         * f64::from(SCALE)
                 })
@@ -840,18 +877,18 @@ fn check_high_amplitude_against_f64(runtime: &CudaRuntime) -> TestResult {
                 *score = (*score - maximum).exp();
             }
             let denominator: f64 = scores.iter().sum();
-            let mut numerator = [0.0_f64; HEAD_SIZE];
+            let mut numerator = vec![0.0_f64; heads.head];
             for (token, weight) in scores.into_iter().enumerate() {
                 let at = offset(token);
-                for d in 0..HEAD_SIZE {
+                for d in 0..heads.head {
                     numerator[d] += weight * values[at + d];
                 }
             }
-            for d in 0..HEAD_SIZE {
+            for d in 0..heads.head {
                 let expected = numerator[d] / denominator;
                 candidate_error =
-                    candidate_error.max((actual[head * HEAD_SIZE + d] - expected).abs());
-                page_error = page_error.max((baseline[head * HEAD_SIZE + d] - expected).abs());
+                    candidate_error.max((actual[head * heads.head + d] - expected).abs());
+                page_error = page_error.max((baseline[head * heads.head + d] - expected).abs());
                 checked += 1;
             }
         }

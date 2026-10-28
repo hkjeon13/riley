@@ -1,6 +1,6 @@
 #pragma once
 
-// Batch-invariant D128 attention through a pinned FlashInfer paged-prefill
+// Batch-invariant D64/D128 attention through a pinned FlashInfer paged-prefill
 // kernel (third_party/flashinfer). One launch serves prompt and decode rows:
 // a GPU planner turns Riley's device row metadata into FlashInfer's request,
 // page and work lists, then the kernel with a fixed 64-row query tile and no
@@ -40,15 +40,15 @@ uint64_t workspace_bytes(uint64_t output_rows, uint64_t page_capacity,
 // row below the active count. The plan writes rows from the active count to
 // `output_rows` as zeros and the rows of a request whose pages do not
 // resolve as NaN. `query` and
-// `output` are `[rows, query_heads, 128]` BF16; the pools are Riley's paged
-// layout `[block, kv_head, 16, 128]`.
+// `output` are `[rows, query_heads, head_size]` BF16; the pools are Riley's
+// paged layout `[block, kv_head, 16, head_size]`. `head_size` is 64 or 128.
 cudaError_t paged_attention(const __nv_bfloat16* query,
                             const __nv_bfloat16* key_pool,
                             const __nv_bfloat16* value_pool,
                             __nv_bfloat16* output, const RowBatch& batch,
                             uint64_t output_rows, uint64_t page_capacity,
                             uint32_t query_heads, uint32_t key_value_heads,
-                            float scale, void* workspace,
+                            uint32_t head_size, float scale, void* workspace,
                             uint64_t workspace_size, bool plan,
                             cudaStream_t stream);
 

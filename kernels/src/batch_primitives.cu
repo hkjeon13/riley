@@ -6069,13 +6069,13 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
   // The segment decode mode replaces the per-page tensor-core producer for
   // generated rows; the merge then folds segment states for every row.
   // The FlashInfer mode replaces every attention launch below (producers,
-  // prompt producer and merge) when its planner workspace fits the
-  // partial-state workspace, which it reuses.
+  // prompt producer and merge) for head size 64 or 128 when its planner
+  // workspace fits the partial-state workspace, which it reuses.
   const uint64_t flashinfer_group =
       params->query_head_count / params->key_value_head_count;
   const bool flashinfer_attention =
       native_d128_flashinfer_setting().load(std::memory_order_relaxed) == 1 &&
-      !head64 && params->reserved[0] == 2 && params->reserved[1] == 1 &&
+      params->reserved[0] == 2 && params->reserved[1] == 1 &&
       flashinfer_group <= kNativeBf16RaggedD128MaximumGroupHeads &&
       params->output_row_count <= 1024 &&
       riley_fi::workspace_bytes(params->output_row_count,
@@ -6203,7 +6203,8 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
           reinterpret_cast<__nv_bfloat16*>(output.data), rows,
           params->output_row_count, params->partial_state_capacity,
           static_cast<uint32_t>(params->query_head_count),
-          static_cast<uint32_t>(params->key_value_head_count), params->scale,
+          static_cast<uint32_t>(params->key_value_head_count),
+          static_cast<uint32_t>(params->head_size), params->scale,
           partial_states.data, partial_states.used_bytes, !reuse_plan,
           stream->stream);
       status = runtime_error(result, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,

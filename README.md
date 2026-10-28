@@ -292,8 +292,9 @@ the same tokens for all 15 fixture prompts at C1, C8 and C32.
 
 Two Riley configurations are used. *Fast* is the HF-literal `qwen3b-fast`
 flag set plus the D1 flags. *Native* is the server defaults plus
-`--inference-profile native-bf16-varlen-v1` (FlashInfer fixed-tile attention,
-head dim 128 only); it changes the numerics, so its token checks were rerun.
+`--inference-profile native-bf16-varlen-v1` (FlashInfer fixed-tile attention);
+it changes the numerics, so its token checks were rerun. The native results
+below are head dim 128; head dim 64 support is new and not yet qualified.
 
 | Model | Config | Result | Throughput vs vLLM (8 cells) | Cells that miss (TPOT p50 vs vLLM) | 300 s stability |
 |---|---|---|---|---|---|
@@ -305,23 +306,31 @@ head dim 128 only); it changes the numerics, so its token checks were rerun.
 | Qwen3-8B | native | **pass** | 0.99–1.13× (C1 tie) | – | pass 8/8 |
 | Llama-3.1-8B-Instruct | native | **pass** | 0.98–1.15× (C1 tie) | – | pass 8/8 |
 | Qwen2.5-Coder-7B-Instruct | native | **pass** | 1.05–1.28× | – | pass 8/8 |
+| Qwen2.5-14B-Instruct | native | **pass** (vLLM at memory 0.9, a separate condition) | 1.00–1.11× | – | pass 8/8 |
 | Qwen3-1.7B | native | miss | 0.99–1.51× | C1 fixed 1.06× | – |
-| Llama-3.2-3B-Instruct | native | miss | 1.00–1.09× | C32 natural 1.005× | – |
+| Llama-3.2-3B-Instruct | native | miss | 1.00–1.09× | C32 natural 1.002–1.014× (three repeats) | – |
 | Qwen3-0.6B | native (screen) | miss | 1.00–2.12× | C1 fixed 1.11×, C1 natural 1.04× | – |
 | Qwen2.5-0.5B-Instruct | fast | miss | – | C1 fixed 1.13× | pass 8/8 |
 | SmolLM2-360M | fast | miss | – | C1 fixed 1.12×, C32 fixed 1.03× | – |
 | Llama-3.2-1B-Instruct | fast | miss | – | C32 natural 1.06× | – |
 | SmolLM2-1.7B | fast | miss | – | C16 natural 1.02×, C32 natural 1.11× | – |
-| Qwen2.5-14B-Instruct | native | running (vLLM at memory 0.9, a separate condition) | – | – | – |
 
 TTFT p50 is 0.3–0.9× vLLM in every cell of the native runs; TTFT p95/p99 at
 C32 stays above vLLM. FP32 HF greedy agreement of the native runs is no lower
 than the earlier Riley configuration for every model (Qwen3-1.7B and Qwen3-8B
 are one prompt below vLLM or HF BF16).
 
+Qwen2.5-14B went from miss to pass after the wide RMSNorm path was extended
+from hidden size 4096 to 8192: its residual RMSNorm took 2.05 ms per decode
+step against vLLM's 0.47 ms. The change is bit-identical to the old kernel.
+
 What is left: one-row (C1) kernel latency of the smallest models, closed with
-evidence after two levers under 1 %, and long-context decode attention for the
-head-dim-64 models, which cannot use the native profile. Full tables, flags,
+evidence after two levers under 1 %; Llama-3.2-3B C32 natural, where no real
+lever has been tried yet; and long-context decode attention for the
+head-dim-64 models. The FlashInfer fixed-tile attention now also takes head
+dim 64 and passes its GPU test (batch-invariant on five head-dim-64
+geometries). A C32-natural screen of Llama-3.2-1B and SmolLM2-1.7B with it was
+still running at the time of this commit. Full tables, flags,
 evidence names and the rejected levers are in
 [model coverage](docs/model-coverage-a100.md).
 

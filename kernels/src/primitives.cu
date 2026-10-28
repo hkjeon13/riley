@@ -1017,19 +1017,20 @@ bool use_wide_rms_norm(uint64_t row_count, uint64_t hidden_size) noexcept {
          row_count <= 256;
 }
 
-// The wide form for the other hidden sizes above 256 columns (up to 4096,
+// The wide form for the other hidden sizes above 256 columns (up to 8192,
 // multiple of 256 or not): 1024 threads, four per lane of the 256-thread
 // kernels. A lane's columns are lane, lane + 256, ... below hidden_size. Thread
 // (lane, slot) loads that lane's columns number slot, slot + 4, ... (at most
-// four of them), stages them in shared memory, and the first 256 threads then
+// eight of them), stages them in shared memory, and the first 256 threads then
 // run the original per-thread accumulation over their lane's columns in
 // ascending order and the original pairwise tree. Every arithmetic statement
 // and its order match rms_norm_kernel / residual_rms_norm_kernel launched with
 // 256 threads, so the outputs are bit-identical; a thread waits on at most
-// four sequential global loads instead of hidden_size / 256.
-constexpr uint32_t kWideGeneralSlots = 4;
+// eight sequential global loads instead of hidden_size / 256.
+constexpr uint32_t kWideGeneralSlots = kWideRmsNormThreads / kWideRmsNormLanes;
+constexpr uint32_t kWideGeneralMaxItems = 8;
 constexpr uint32_t kWideGeneralMaxColumnsPerLane =
-    kWideGeneralSlots * kWideGeneralSlots;
+    kWideGeneralSlots * kWideGeneralMaxItems;
 
 template <bool kResidual>
 __global__ __launch_bounds__(kWideRmsNormThreads)
@@ -1053,7 +1054,7 @@ void wide_bf16_general_rms_norm_kernel(
       lane < hidden_size
           ? (hidden_size - lane + kWideRmsNormLanes - 1) / kWideRmsNormLanes
           : 0;
-  float values[kWideGeneralSlots];
+  float values[kWideGeneralMaxItems];
   uint32_t count = 0;
   for (uint32_t index = slot; index < columns_per_lane;
        index += kWideGeneralSlots) {
