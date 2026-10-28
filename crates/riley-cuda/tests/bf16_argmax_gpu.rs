@@ -511,3 +511,111 @@ fn bounded_argmax_matches_cpu_oracle_and_ignores_columns_past_the_bound() -> Tes
     stream.close()?;
     close_context(context)
 }
+
+#[test]
+#[ignore = "remote GPU"]
+/// Model-sized vocabularies: each thread of the row's block holds several
+/// 8-logit groups in flight, and odd sizes leave rows that start off a
+/// 16-byte boundary. Planted equal maxima far apart (lowest ID wins) and a
+/// maximum in the unaligned head or tail are compared with the CPU oracle.
+fn deterministic_bf16_argmax_matches_cpu_bytes_for_model_vocabularies() -> TestResult {
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    for (vocabulary_size, row_count) in [
+        (151_936_usize, 3_usize),
+        (152_064, 2),
+        (49_152, 4),
+        (128_256, 2),
+        (32_768 + 3, 5),
+        (8_192 * 4 + 1, 3),
+    ] {
+        // Pseudo-random finite logits in [-8, 8) as BF16 bits.
+        let mut bits: Vec<u16> = (0..row_count * vocabulary_size)
+            .map(|i| {
+                let unit = ((i.wrapping_mul(2_654_435_761) >> 7) % 4096) as f32 / 256.0 - 8.0;
+                (unit.to_bits() >> 16) as u16
+            })
+            .collect();
+        for row in 0..row_count {
+            let at = |token: usize| row * vocabulary_size + token;
+            match row % 4 {
+                // Equal maxima: the lower ID in the last load slot of one
+                // thread, the higher in the first group.
+                0 => {
+                    bits[at(vocabulary_size - 9)] = 0x4180;
+                    bits[at(5)] = 0x4180;
+                }
+                // Maximum in the last (possibly unaligned) column.
+                1 => bits[at(vocabulary_size - 1)] = 0x4190,
+                // Maximum in the first column; an equal value much later.
+                2 => {
+                    bits[at(0)] = 0x41a0;
+                    bits[at(vocabulary_size / 2 + 3)] = 0x41a0;
+                }
+                // Equal maxima inside the same 8-logit group.
+                _ => {
+                    bits[at(4096 * 8 + 2)] = 0x41b0;
+                    bits[at(4096 * 8 + 1)] = 0x41b0;
+                }
+            }
+        }
+        let expected = cpu_bf16_argmax_bytes(&bits, row_count, vocabulary_size);
+        let logits_bytes = bf16_bit_bytes(&bits);
+        let mut staging =
+            context.allocate_pinned_host_buffer(u64::try_from(logits_bytes.len())?)?;
+        let logits = upload(&context, &mut stream, &mut staging, &logits_bytes)?;
+        let result_byte_len = u64::try_from(row_count * 8)?;
+        let mut results = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &vec![0xa5; usize::try_from(result_byte_len)?],
+        )?;
+        // Every row on its own (one row per call, as at one client) and all
+        // rows together.
+        let mut single_rows = Vec::new();
+        for row in 0..row_count {
+            let row_bytes = u64::try_from(vocabulary_size * 2)?;
+            let mut params = Bf16ArgmaxParams {
+                logits: CudaBufferSpan::new(
+                    &logits,
+                    CudaDType::BF16,
+                    u64::try_from(row)? * row_bytes,
+                    row_bytes,
+                )?,
+                results: CudaBufferSpanMut::new(&mut results, CudaDType::U32, 0, 8)?,
+                row_count: 1,
+                vocabulary_size: u64::try_from(vocabulary_size)?,
+            };
+            deterministic_bf16_argmax(&mut params, &mut stream)?;
+            single_rows.extend_from_slice(&download(&context, &mut stream, &mut results)?[..8]);
+        }
+        let mut params = Bf16ArgmaxParams {
+            logits: CudaBufferSpan::new(&logits, CudaDType::BF16, 0, logits.byte_len())?,
+            results: CudaBufferSpanMut::new(&mut results, CudaDType::U32, 0, result_byte_len)?,
+            row_count: u64::try_from(row_count)?,
+            vocabulary_size: u64::try_from(vocabulary_size)?,
+        };
+        deterministic_bf16_argmax(&mut params, &mut stream)?;
+        let together = download(&context, &mut stream, &mut results)?;
+        eprintln!(
+            "argmax vocabulary={vocabulary_size} rows={row_count} single-row match={} all-rows match={}",
+            single_rows == expected,
+            together == expected
+        );
+        assert_eq!(
+            single_rows, expected,
+            "vocabulary {vocabulary_size}: single-row calls differ"
+        );
+        assert_eq!(
+            together, expected,
+            "vocabulary {vocabulary_size}: multi-row call differs"
+        );
+        logits.close()?;
+        results.close()?;
+        staging.close()?;
+    }
+    stream.close()?;
+    close_context(context)
+}

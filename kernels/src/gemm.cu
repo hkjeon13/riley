@@ -560,8 +560,15 @@ RileyCudaStatus query_plan_environment(
   return RILEY_CUDA_STATUS_SUCCESS;
 }
 
+bool select_anchor_override(RileyCudaGemmPlan* plan) noexcept;
+
 RileyCudaStatus select_deterministic_algorithm(
     RileyCudaGemmPlan* plan, RileyCudaErrorInfo* error) noexcept {
+  // With bit-equivalent selection, a projection may name its anchor
+  // algorithm for this GPU instead of taking the first heuristic.
+  if (select_anchor_override(plan)) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
   cublasLtMatmulHeuristicResult_t
       candidates[kMaximumHeuristicResults]{};
   int returned_results = 0;
@@ -834,22 +841,17 @@ constexpr EquivalentCandidate kEquivalentCandidates[] = {
     {80, 3072, 1024, 49, 64, 21, 15, 18, 4, 4},
     {80, 3072, 1024, 193, 256, 6, 20, 15, 4, 4},
     // 4096 -> 2560 (rows searched up to 256)
-    {80, 4096, 2560, 1, 48, 6, 18, 15, 5, 4},
-    {80, 4096, 2560, 49, 64, 21, 18, 16, 5, 4},
-    {80, 4096, 2560, 97, 128, 21, 17, 15, 5, 4},
-    {80, 4096, 2560, 129, 160, 6, 18, 12, 5, 4},
-    {80, 4096, 2560, 161, 256, 6, 23, 15, 5, 4},
+    {80, 4096, 2560, 1, 16, 21, 15, 18, 1, 0},
+    {80, 4096, 2560, 129, 160, 6, 18, 16, 1, 0},
+    {80, 4096, 2560, 161, 192, 21, 18, 18, 1, 0},
+    {80, 4096, 2560, 193, 224, 6, 17, 12, 1, 0},
+    {80, 4096, 2560, 225, 256, 6, 18, 16, 1, 0},
     // 6144 -> 2048 (rows searched up to 256)
-    {80, 6144, 2048, 1, 8, 6, 18, 16, 5, 4},
-    {80, 6144, 2048, 9, 64, 21, 18, 16, 5, 4},
-    {80, 6144, 2048, 129, 144, 6, 18, 12, 5, 4},
-    {80, 6144, 2048, 145, 160, 6, 23, 15, 5, 4},
-    {80, 6144, 2048, 161, 176, 21, 23, 15, 5, 4},
-    {80, 6144, 2048, 177, 192, 6, 24, 15, 5, 4},
-    {80, 6144, 2048, 193, 208, 6, 18, 12, 5, 4},
-    {80, 6144, 2048, 209, 224, 6, 17, 12, 5, 4},
-    {80, 6144, 2048, 225, 240, 6, 23, 15, 5, 4},
-    {80, 6144, 2048, 241, 256, 21, 23, 15, 5, 4},
+    {80, 6144, 2048, 65, 112, 21, 17, 18, 3, 4},
+    {80, 6144, 2048, 113, 128, 6, 17, 16, 3, 4},
+    {80, 6144, 2048, 129, 176, 21, 19, 16, 3, 4},
+    {80, 6144, 2048, 177, 192, 21, 20, 11, 3, 4},
+    {80, 6144, 2048, 193, 256, 21, 20, 17, 3, 4},
     // 9728 -> 2560 (rows searched up to 256)
     {80, 9728, 2560, 1, 64, 6, 18, 16, 5, 4},
     {80, 9728, 2560, 97, 112, 21, 18, 15, 5, 4},
@@ -928,11 +930,9 @@ constexpr EquivalentCandidate kEquivalentCandidates[] = {
     {80, 3072, 16384, 193, 208, 21, 17, 18, 1, 0},
     {80, 3072, 16384, 209, 256, 21, 20, 11, 1, 0},
     // 3072 -> 3072 (rows searched up to 256)
-    {80, 3072, 3072, 1, 8, 6, 18, 12, 4, 4},
-    {80, 3072, 3072, 9, 32, 6, 18, 15, 4, 4},
-    {80, 3072, 3072, 33, 64, 6, 18, 16, 4, 4},
-    {80, 3072, 3072, 129, 160, 6, 18, 12, 4, 4},
-    {80, 3072, 3072, 161, 256, 6, 23, 15, 4, 4},
+    {80, 3072, 3072, 129, 192, 21, 18, 18, 1, 0},
+    {80, 3072, 3072, 193, 208, 21, 17, 16, 1, 0},
+    {80, 3072, 3072, 209, 256, 21, 18, 16, 1, 0},
     // 3072 -> 5120 (rows searched up to 256)
     {80, 3072, 5120, 1, 48, 21, 15, 18, 1, 0},
     {80, 3072, 5120, 49, 64, 6, 15, 18, 1, 0},
@@ -981,12 +981,8 @@ constexpr EquivalentCandidate kEquivalentCandidates[] = {
     {80, 5120, 5120, 209, 240, 21, 23, 12, 2, 1},
     {80, 5120, 5120, 241, 256, 21, 24, 15, 2, 1},
     // 5120 -> 7168 (rows searched up to 256)
-    {80, 5120, 7168, 1, 32, 6, 15, 17, 3, 1},
-    {80, 5120, 7168, 33, 64, 6, 18, 16, 3, 1},
-    {80, 5120, 7168, 65, 128, 6, 17, 15, 3, 1},
-    {80, 5120, 7168, 129, 144, 21, 18, 15, 3, 1},
-    {80, 5120, 7168, 145, 176, 21, 18, 18, 3, 1},
-    {80, 5120, 7168, 177, 192, 21, 21, 10, 3, 1},
+    {80, 5120, 7168, 65, 128, 21, 20, 17, 1, 0},
+    {80, 5120, 7168, 129, 192, 6, 21, 15, 1, 0},
     // 576 -> 3072 (rows searched up to 256)
     {80, 576, 3072, 1, 48, 6, 15, 17, 1, 0},
     {80, 576, 3072, 49, 128, 21, 15, 18, 1, 0},
@@ -997,10 +993,12 @@ constexpr EquivalentCandidate kEquivalentCandidates[] = {
     // 576 -> 960 (rows searched up to 256)
     {80, 576, 960, 241, 256, 31, 15, 17, 1, 0},
     // 8192 -> 2048 (rows searched up to 256)
-    {80, 8192, 2048, 1, 8, 21, 15, 12, 5, 4},
-    {80, 8192, 2048, 9, 64, 21, 18, 18, 5, 4},
-    {80, 8192, 2048, 65, 128, 21, 20, 17, 5, 4},
-    {80, 8192, 2048, 129, 256, 6, 23, 15, 5, 4},
+    {80, 8192, 2048, 65, 112, 21, 17, 18, 2, 4},
+    {80, 8192, 2048, 113, 128, 21, 18, 18, 2, 4},
+    {80, 8192, 2048, 129, 192, 6, 18, 16, 2, 4},
+    {80, 8192, 2048, 193, 224, 21, 20, 12, 2, 4},
+    {80, 8192, 2048, 225, 240, 21, 20, 11, 2, 4},
+    {80, 8192, 2048, 241, 256, 21, 20, 12, 2, 4},
     // 8192 -> 3072 (rows searched up to 256)
     {80, 8192, 3072, 1, 64, 6, 18, 16, 4, 4},
     {80, 8192, 3072, 65, 80, 6, 18, 15, 4, 4},
@@ -1218,6 +1216,95 @@ bool try_equivalent_candidate(RileyCudaGemmPlan* plan,
 
 // Only the entries found on this GPU generation are tried, in table order;
 // the first one that reproduces the anchor's bits on this device is taken.
+// Anchor overrides (config.reserved[0] == 1 only). For some projections the
+// first heuristic at the anchor row count is a split-K family that is slower
+// on this GPU than a plain one at every row count, and every configuration in
+// its equivalence class shares that cost. An entry names the anchor
+// algorithm of such a projection at its anchor row count (`m`); the
+// equivalence table above then lists configurations bit-identical to THAT
+// anchor. An override changes the output bits of the projection, so entries
+// exist only for shapes whose models were first qualified with them; the
+// compute-capability tag keeps other GPUs on their own anchors.
+struct AnchorOverride {
+  uint32_t compute_capability;
+  uint64_t k;
+  uint64_t n;
+  uint64_t m;
+  int32_t id;
+  uint32_t tile;
+  uint32_t stages;
+  uint32_t split_k;
+  uint32_t reduction;
+};
+constexpr AnchorOverride kAnchorOverrides[] = {
+    {80, 3072, 3072, 128, 21, 15, 18, 1, 0},
+    {80, 4096, 2560, 128, 6, 15, 18, 1, 0},
+    {80, 5120, 7168, 128, 21, 18, 18, 1, 0},
+    {80, 6144, 2048, 128, 21, 15, 18, 3, 4},
+    {80, 8192, 2048, 128, 21, 15, 18, 2, 4},
+    // Sentinel: compute capability 0 matches no device.
+    {0, 0, 0, 0, 0, 0, 0, 0, 0},
+};
+
+bool select_anchor_override(RileyCudaGemmPlan* plan) noexcept {
+  if (plan->config.reserved[0] != 1) {
+    return false;
+  }
+  int device = 0;
+  int major = 0;
+  int minor = 0;
+  if (cudaGetDevice(&device) != cudaSuccess ||
+      cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor,
+                             device) != cudaSuccess ||
+      cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor,
+                             device) != cudaSuccess) {
+    (void)cudaGetLastError();
+    return false;
+  }
+  const uint32_t compute_capability =
+      static_cast<uint32_t>(major * 10 + minor);
+  for (const AnchorOverride& entry : kAnchorOverrides) {
+    if (entry.compute_capability != compute_capability ||
+        entry.k != plan->config.k || entry.n != plan->config.n ||
+        entry.m != plan->config.m) {
+      continue;
+    }
+    cublasLtMatmulAlgo_t algorithm{};
+    if (cublasLtMatmulAlgoInit(plan->handle, CUBLAS_COMPUTE_32F, CUDA_R_32F,
+                               CUDA_R_16BF, CUDA_R_16BF, CUDA_R_16BF,
+                               CUDA_R_16BF, entry.id,
+                               &algorithm) != CUBLAS_STATUS_SUCCESS ||
+        cublasLtMatmulAlgoConfigSetAttribute(
+            &algorithm, CUBLASLT_ALGO_CONFIG_TILE_ID, &entry.tile,
+            sizeof(entry.tile)) != CUBLAS_STATUS_SUCCESS ||
+        cublasLtMatmulAlgoConfigSetAttribute(
+            &algorithm, CUBLASLT_ALGO_CONFIG_STAGES_ID, &entry.stages,
+            sizeof(entry.stages)) != CUBLAS_STATUS_SUCCESS ||
+        cublasLtMatmulAlgoConfigSetAttribute(
+            &algorithm, CUBLASLT_ALGO_CONFIG_SPLITK_NUM, &entry.split_k,
+            sizeof(entry.split_k)) != CUBLAS_STATUS_SUCCESS ||
+        cublasLtMatmulAlgoConfigSetAttribute(
+            &algorithm, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME,
+            &entry.reduction,
+            sizeof(entry.reduction)) != CUBLAS_STATUS_SUCCESS) {
+      continue;
+    }
+    cublasLtMatmulHeuristicResult_t checked{};
+    if (cublasLtMatmulAlgoCheck(plan->handle, plan->operation,
+                                plan->weight_layout, plan->input_layout,
+                                plan->output_layout, plan->output_layout,
+                                &algorithm, &checked) != CUBLAS_STATUS_SUCCESS ||
+        checked.state != CUBLAS_STATUS_SUCCESS ||
+        checked.workspaceSize > plan->config.max_workspace_bytes) {
+      continue;
+    }
+    if (record_algorithm(plan, algorithm, checked.workspaceSize)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool select_equivalent_candidate(RileyCudaGemmPlan* plan,
                                  const cublasLtMatmulAlgo_t& anchor_algorithm,
                                  cublasLtMatmulAlgo_t* selected,
