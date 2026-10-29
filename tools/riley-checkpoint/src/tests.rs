@@ -21,7 +21,7 @@ impl Drop for Temp {
     }
 }
 
-fn fixture(root: &Path) -> Vec<u8> {
+pub(crate) fn fixture(root: &Path) -> Vec<u8> {
     let config = json!({
         "architectures":["LlamaForCausalLM"], "attention_bias":false,
         "bos_token_id":0,"eos_token_id":0,"hidden_act":"silu","hidden_size":4,

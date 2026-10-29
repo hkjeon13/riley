@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+#[cfg(feature = "hub")]
+use std::io::Write;
 use std::path::Path;
 
 use riley_checkpoint::{Plan, Result, prepare, verify};
@@ -7,8 +9,10 @@ const HELP: &str = "riley-checkpoint (offline by default)\n\
 prepare --manifest PLAN.json --source REGULAR_DIRECTORY --destination NEW_DIRECTORY\n\
 verify --checkpoint DIRECTORY\n\
 download --manifest PLAN.json --destination NEW_DIRECTORY --allow-network [--token-env HF_TOKEN]\n\
-Download requires the separately compiled `hub` feature. Branches/tags are rejected.\n\
-The manifest is an independently trusted explicit file/size/SHA-256 allowlist.\n\
+plan --repository OWNER/MODEL [--revision main] --output NEW_PLAN.json --allow-network [--token-env HF_TOKEN]\n\
+Download and plan require the separately compiled `hub` feature. Downloads accept only commits.\n\
+The manifest is an explicit file/size/SHA-256 allowlist; `plan` derives it from the Hub's\n\
+LFS SHA-256 and git blob ids at the commit the revision resolves to.\n\
 Never serve or edit a checkpoint until this command succeeds; verify after an interruption.";
 
 fn fail(message: impl Into<String>) -> Box<dyn std::error::Error + Send + Sync> {
@@ -23,6 +27,13 @@ fn parse(args: &[String]) -> Result<(&str, BTreeMap<String, String>)> {
         "download" => &[
             "--manifest",
             "--destination",
+            "--allow-network",
+            "--token-env",
+        ],
+        "plan" => &[
+            "--repository",
+            "--revision",
+            "--output",
             "--allow-network",
             "--token-env",
         ],
@@ -52,7 +63,10 @@ fn parse(args: &[String]) -> Result<(&str, BTreeMap<String, String>)> {
         }
         index += 1;
     }
-    for flag in allowed.iter().filter(|flag| **flag != "--token-env") {
+    for flag in allowed
+        .iter()
+        .filter(|flag| !matches!(**flag, "--token-env" | "--revision"))
+    {
         if !values.contains_key(*flag) {
             return Err(fail(format!("required flag: {flag}")));
         }
@@ -76,13 +90,14 @@ fn run(args: &[String]) -> Result<()> {
                 Path::new(&values["--destination"]),
             )?;
         }
-        "download" => {
+        "download" | "plan" => {
             #[cfg(not(feature = "hub"))]
-            return Err(fail("download is unavailable: build with --features hub"));
+            return Err(fail(format!(
+                "{command} is unavailable: build with --features hub"
+            )));
             #[cfg(feature = "hub")]
             {
                 riley_checkpoint::hub::check_network_permission(true)?;
-                let plan = Plan::read(Path::new(&values["--manifest"]))?;
                 let token = values
                     .get("--token-env")
                     .map(|name| {
@@ -91,6 +106,22 @@ fn run(args: &[String]) -> Result<()> {
                         })
                     })
                     .transpose()?;
+                if command == "plan" {
+                    let bytes = riley_checkpoint::hub::plan(
+                        &values["--repository"],
+                        values.get("--revision").map_or("main", String::as_str),
+                        token,
+                    )?;
+                    // create_new: never overwrite an existing plan.
+                    std::fs::OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(&values["--output"])?
+                        .write_all(&bytes)?;
+                    println!("checkpoint plan: written");
+                    return Ok(());
+                }
+                let plan = Plan::read(Path::new(&values["--manifest"]))?;
                 riley_checkpoint::hub::download(
                     &plan,
                     Path::new(&values["--destination"]),

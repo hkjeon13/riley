@@ -651,7 +651,7 @@ impl EngineBackend for HfExactBackend {
             .encode(
                 &request.prompt,
                 EncodeOptions {
-                    add_special_tokens: true,
+                    add_special_tokens: request.add_special_tokens,
                 },
             )
             .map_err(|_| private_request_error("prompt tokenization failed"))?;

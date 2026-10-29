@@ -25,6 +25,10 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
+use crate::chat::{
+    ChatChunkShaper, ChatCompletionRequest, ChatRequestError, ChatTemplate, chat_response,
+    normalize_chat_request,
+};
 use crate::domain::{
     FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestLimits,
     RequestMetadata, ServiceErrorClass,
@@ -763,6 +767,7 @@ struct ConnectionJob {
 struct RuntimeEndpointConfig {
     runtime_config_body: Option<Arc<[u8]>>,
     c02_metrics_enabled: bool,
+    chat_template: Option<Arc<ChatTemplate>>,
 }
 
 impl ServerHandle {
@@ -1005,6 +1010,29 @@ pub fn start_server_with_c02_metrics(
     runtime_config_body: Option<Arc<[u8]>>,
     c02_metrics_enabled: bool,
 ) -> Result<ServerHandle, ServerStartError> {
+    start_server_with_chat(
+        config,
+        backend,
+        runtime_config_body,
+        c02_metrics_enabled,
+        None,
+    )
+}
+
+/// Starts the server like [`start_server_with_c02_metrics`] and, when a chat
+/// template is given, also serves `POST /v1/chat/completions`.
+///
+/// # Errors
+///
+/// Returns an error for invalid bounds, invalid public model metadata, a cold
+/// host-allocation failure, or a listener bind/setup failure.
+pub fn start_server_with_chat(
+    config: ServerConfig,
+    backend: Arc<dyn CompletionBackend>,
+    runtime_config_body: Option<Arc<[u8]>>,
+    c02_metrics_enabled: bool,
+    chat_template: Option<Arc<ChatTemplate>>,
+) -> Result<ServerHandle, ServerStartError> {
     let config = config.validate()?;
     backend
         .model_metadata()
@@ -1031,6 +1059,7 @@ pub fn start_server_with_c02_metrics(
     let runtime_endpoints = Arc::new(RuntimeEndpointConfig {
         runtime_config_body,
         c02_metrics_enabled,
+        chat_template,
     });
 
     let mut worker_threads = Vec::new();
@@ -1333,6 +1362,18 @@ fn route_request(
                 request.body(),
             );
         }
+        (HttpMethod::Post, "/v1/chat/completions") => {
+            handle_chat_completion(
+                stream,
+                backend,
+                stopping,
+                observations,
+                metrics,
+                config,
+                runtime_endpoints.chat_template.as_deref(),
+                request.body(),
+            );
+        }
         (HttpMethod::Post, "/v1/c02/metrics") if runtime_endpoints.c02_metrics_enabled => {
             let _ = write_public_error(
                 stream,
@@ -1342,7 +1383,7 @@ fn route_request(
                 None,
             );
         }
-        (HttpMethod::Get, "/v1/completions")
+        (HttpMethod::Get, "/v1/completions" | "/v1/chat/completions")
         | (HttpMethod::Post, "/healthz" | "/readyz" | "/metrics" | "/v1/config" | "/v1/models") => {
             let _ = write_public_error(
                 stream,
@@ -1810,6 +1851,107 @@ fn handle_completion(
             return;
         }
     };
+    serve_generation(
+        stream,
+        backend,
+        observations,
+        metrics,
+        config,
+        request,
+        GenerationDelivery {
+            stopping,
+            include_usage,
+            chat: false,
+        },
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn handle_chat_completion(
+    stream: &mut TcpStream,
+    backend: &dyn CompletionBackend,
+    stopping: &AtomicBool,
+    observations: &Arc<ObservationBuffer>,
+    metrics: &Arc<ServiceMetrics>,
+    config: ServerConfig,
+    chat_template: Option<&ChatTemplate>,
+    body: &[u8],
+) {
+    if stopping.load(Ordering::Acquire) {
+        let _ = write_api_error(stream, &ApiError::ShuttingDown);
+        return;
+    }
+    let Some(chat_template) = chat_template else {
+        let _ = write_public_error(
+            stream,
+            404,
+            "chat_template_unavailable",
+            "this model has no usable chat template; use /v1/completions",
+            None,
+        );
+        return;
+    };
+    let Ok(request) = serde_json::from_slice::<ChatCompletionRequest>(body) else {
+        let _ = write_public_error(
+            stream,
+            400,
+            "invalid_json",
+            "request body must be valid chat completion JSON",
+            None,
+        );
+        return;
+    };
+    let include_usage = request
+        .stream_options
+        .as_ref()
+        .and_then(|options| options.include_usage)
+        .unwrap_or(false);
+    let request = match normalize_chat_request(request, chat_template, config.request_limits) {
+        Ok(request) => request,
+        Err(ChatRequestError::Invalid(error)) => {
+            let _ = write_api_error(stream, &ApiError::InvalidRequest(error));
+            return;
+        }
+        Err(ChatRequestError::Template(message)) => {
+            let _ = write_public_error(stream, 400, "invalid_messages", &message, Some("messages"));
+            return;
+        }
+    };
+    serve_generation(
+        stream,
+        backend,
+        observations,
+        metrics,
+        config,
+        request,
+        GenerationDelivery {
+            stopping,
+            include_usage,
+            chat: true,
+        },
+    );
+}
+
+/// Per-request delivery choices shared by both completion endpoints.
+struct GenerationDelivery<'a> {
+    stopping: &'a AtomicBool,
+    include_usage: bool,
+    chat: bool,
+}
+
+fn serve_generation(
+    stream: &mut TcpStream,
+    backend: &dyn CompletionBackend,
+    observations: &Arc<ObservationBuffer>,
+    metrics: &Arc<ServiceMetrics>,
+    config: ServerConfig,
+    request: GenerationRequest,
+    GenerationDelivery {
+        stopping,
+        include_usage,
+        chat,
+    }: GenerationDelivery<'_>,
+) {
     let model = backend.model_metadata();
     if request.model_id != model.model_id {
         let _ = write_public_error(
@@ -1848,6 +1990,7 @@ fn handle_completion(
         include_usage,
         maximum_output_tokens: request.max_new_tokens,
         maximum_prompt_tokens: model.context_window_tokens,
+        chat,
     };
     let admission_started = Instant::now();
     let submitted = match backend.submit(request) {
@@ -1894,6 +2037,8 @@ struct DeliveryOptions {
     include_usage: bool,
     maximum_output_tokens: usize,
     maximum_prompt_tokens: usize,
+    /// Re-shape responses for `/v1/chat/completions`.
+    chat: bool,
 }
 
 struct RequestTracker {
@@ -1983,6 +2128,7 @@ fn stream_completion(
         delivery.maximum_output_tokens,
         delivery.maximum_prompt_tokens,
     );
+    let mut chat_shaper = delivery.chat.then(ChatChunkShaper::default);
     loop {
         let Some(wait) = event_wait(stopping, deadline) else {
             if client_disconnected(stream) {
@@ -2065,7 +2211,7 @@ fn stream_completion(
                     ),
                     GenerationEvent::Failed { class } => (None, Some(*class), None),
                 };
-                let Ok(frame) = encoder.encode_event(&event) else {
+                let Ok(mut frame) = encoder.encode_event(&event) else {
                     let _ = write_stream_error(stream, &mut encoder, &ApiError::Internal);
                     tracker.finish(
                         backend,
@@ -2076,6 +2222,9 @@ fn stream_completion(
                     );
                     return;
                 };
+                if let Some(shaper) = chat_shaper.as_mut() {
+                    frame = shaper.shape(&frame);
+                }
                 // Preserve the historical visible-text observation. Raw-token
                 // arrival timing belongs to the opt-in HTTP client's clock.
                 if matches!(&event, GenerationEvent::TokenDelta { .. })
@@ -2344,25 +2493,32 @@ fn collect_completion(
                     match CompletionResponse::new(submitted.metadata(), text, reason, usage) {
                         Ok(mut response) => {
                             tokens.attach(&mut response);
-                            if delivery.include_token_ids {
-                                match serde_json::to_vec(&response) {
-                                    Ok(body) if body.len() <= maximum_bytes => {
-                                        write_response(stream, 200, JSON_CONTENT_TYPE, &body)
-                                    }
-                                    _ => {
-                                        let _ = write_api_error(stream, &ApiError::Internal);
-                                        tracker.finish(
-                                            backend,
-                                            RequestObservationStatus::Failed,
-                                            Some(reason),
-                                            Some(ServiceErrorClass::Internal),
-                                            None,
-                                        );
-                                        return;
-                                    }
-                                }
+                            let body = if delivery.chat {
+                                serde_json::to_value(&response).and_then(|mut value| {
+                                    chat_response(&mut value);
+                                    serde_json::to_vec(&value)
+                                })
                             } else {
-                                write_json(stream, 200, &response)
+                                serde_json::to_vec(&response)
+                            };
+                            match body {
+                                Ok(body)
+                                    if !delivery.include_token_ids
+                                        || body.len() <= maximum_bytes =>
+                                {
+                                    write_response(stream, 200, JSON_CONTENT_TYPE, &body)
+                                }
+                                _ => {
+                                    let _ = write_api_error(stream, &ApiError::Internal);
+                                    tracker.finish(
+                                        backend,
+                                        RequestObservationStatus::Failed,
+                                        Some(reason),
+                                        Some(ServiceErrorClass::Internal),
+                                        None,
+                                    );
+                                    return;
+                                }
                             }
                         }
                         Err(_) => write_api_error(
@@ -2577,8 +2733,9 @@ mod tests {
         ObservationBuffer, OperationalMetricsSnapshot, RequestCancellation, RequestObservation,
         RequestObservationStatus, ServerConfig, ServerShutdownError, SubmittedRequest,
         c02_capture_metrics_json_bytes, start_server, start_server_with_c02_metrics,
-        start_server_with_runtime_config,
+        start_server_with_chat, start_server_with_runtime_config,
     };
+    use crate::chat::ChatTemplate;
     use crate::domain::{
         FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestLimits,
         RequestMetadata, ServiceErrorClass, TokenUsage,
@@ -2645,6 +2802,7 @@ mod tests {
         shutdown_delay: Mutex<Option<Duration>>,
         engine_metrics: Mutex<EngineMetricsSnapshot>,
         c02_metrics: Mutex<C02CaptureMetrics>,
+        submitted: Mutex<Vec<GenerationRequest>>,
     }
 
     impl TestBackend {
@@ -2671,7 +2829,15 @@ mod tests {
                 shutdown_delay: Mutex::new(None),
                 engine_metrics: Mutex::new(EngineMetricsSnapshot::default()),
                 c02_metrics: Mutex::new(C02CaptureMetrics::default()),
+                submitted: Mutex::new(Vec::new()),
             })
+        }
+
+        fn record_submission(&self, request: GenerationRequest) {
+            self.submitted
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(request);
         }
 
         fn cancellations(&self) -> usize {
@@ -2757,8 +2923,9 @@ mod tests {
 
         fn submit(
             &self,
-            _request: GenerationRequest,
+            request: GenerationRequest,
         ) -> Result<SubmittedRequest, ServiceErrorClass> {
+            self.record_submission(request);
             let script = self
                 .scripts
                 .lock()
@@ -2907,8 +3074,12 @@ mod tests {
     }
 
     fn post_body(body: &[u8]) -> Vec<u8> {
+        post_body_to("/v1/completions", body)
+    }
+
+    fn post_body_to(path: &str, body: &[u8]) -> Vec<u8> {
         let mut request = format!(
-            "POST /v1/completions HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+            "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
             body.len()
         )
         .into_bytes();
@@ -3316,6 +3487,120 @@ mod tests {
                 .expect("graceful shutdown with final metrics"),
             OperationalMetricsSnapshot::default()
         );
+    }
+
+    #[test]
+    fn chat_completions_render_the_template_and_answer_in_chat_shape() {
+        let backend = TestBackend::new([
+            Script::Complete(vec!["Par".to_owned(), "is".to_owned()]),
+            Script::Complete(vec!["Par".to_owned(), "is".to_owned()]),
+        ]);
+        let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
+        let template = ChatTemplate::compile(&riley_model::ChatTemplateSource {
+            template: "{{ bos_token }}{% for m in messages %}<{{ m.role }}>{{ m.content }}\n\
+{% endfor %}{% if add_generation_prompt %}<assistant>{% endif %}"
+                .to_owned(),
+            bos_token: Some("<s>".to_owned()),
+            eos_token: None,
+        })
+        .expect("compile template");
+        let server = start_server_with_chat(
+            test_config(),
+            backend_trait,
+            None,
+            false,
+            Some(Arc::new(template)),
+        )
+        .expect("start server");
+        let request = |stream: bool| {
+            serde_json::to_vec(&json!({
+                "model": "fixture-model",
+                "messages": [{"role": "user", "content": "Capital of France?"}],
+                "stream": stream
+            }))
+            .expect("encode request")
+        };
+
+        let response = send_request(
+            server.local_address(),
+            &post_body_to("/v1/chat/completions", &request(false)),
+        );
+        assert_eq!(response_status(&response), 200);
+        let json: Value = serde_json::from_slice(response_body(&response)).expect("chat JSON");
+        assert_eq!(json["object"], "chat.completion");
+        assert_eq!(
+            json["choices"][0]["message"],
+            json!({"role": "assistant", "content": "Paris"})
+        );
+        assert_eq!(json["choices"][0]["finish_reason"], "stop");
+
+        let response = send_request(
+            server.local_address(),
+            &post_body_to("/v1/chat/completions", &request(true)),
+        );
+        assert_eq!(response_status(&response), 200);
+        let body = std::str::from_utf8(response_body(&response)).expect("UTF-8 SSE");
+        assert!(body.ends_with("data: [DONE]\n\n"));
+        let chunks: Vec<Value> = body
+            .split("\n\n")
+            .filter_map(|frame| frame.strip_prefix("data: "))
+            .filter(|data| *data != "[DONE]")
+            .map(|data| serde_json::from_str(data).expect("chunk JSON"))
+            .collect();
+        assert!(
+            chunks
+                .iter()
+                .all(|chunk| chunk["object"] == "chat.completion.chunk")
+        );
+        assert_eq!(chunks[0]["choices"][0]["delta"]["role"], "assistant");
+        let streamed: String = chunks
+            .iter()
+            .filter_map(|chunk| chunk["choices"][0]["delta"]["content"].as_str())
+            .collect();
+        assert_eq!(streamed, "Paris");
+
+        let submitted = backend
+            .submitted
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(submitted.len(), 2);
+        for request in submitted.iter() {
+            assert_eq!(request.prompt, "<s><user>Capital of France?\n<assistant>");
+            assert!(!request.add_special_tokens);
+        }
+        drop(submitted);
+
+        let invalid = serde_json::to_vec(&json!({
+            "model": "fixture-model",
+            "messages": [{"role": "user", "content": "x"}],
+            "tools": [{"type": "function"}]
+        }))
+        .expect("encode request");
+        let response = send_request(
+            server.local_address(),
+            &post_body_to("/v1/chat/completions", &invalid),
+        );
+        assert_eq!(response_status(&response), 400);
+        server.shutdown_with_metrics().expect("graceful shutdown");
+    }
+
+    #[test]
+    fn chat_completions_without_a_template_point_to_completions() {
+        let backend: Arc<dyn CompletionBackend> = TestBackend::new([]);
+        let server = start_server(test_config(), backend).expect("start server");
+        let body = serde_json::to_vec(&json!({
+            "model": "fixture-model",
+            "messages": [{"role": "user", "content": "x"}]
+        }))
+        .expect("encode request");
+        let response = send_request(
+            server.local_address(),
+            &post_body_to("/v1/chat/completions", &body),
+        );
+        assert_eq!(response_status(&response), 404);
+        let json: Value = serde_json::from_slice(response_body(&response)).expect("error JSON");
+        assert_eq!(json["error"]["code"], "chat_template_unavailable");
+        server.shutdown_with_metrics().expect("graceful shutdown");
     }
 
     #[test]

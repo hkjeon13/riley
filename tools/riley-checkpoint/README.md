@@ -7,14 +7,21 @@ numerical/profile change is introduced.
 
 ## Contract and commands
 
-Obtain a reviewed `riley-checkpoint-v1` manifest independently of the download.
-Its existing production schema is the explicit allowlist: `source_model`, a full
-40-character lowercase commit `source_revision`, `dtype`, empty `transforms`, and
-`files` entries containing `path`, `bytes`, and lowercase `sha256`. Config,
-tokenizer and exactly one supported weight layout must be included. This tool
-**does not trust-on-first-use downloaded hashes**, resolve branches/tags, guess
-files, transform weights, or invent provenance. Metadata authenticity remains
-an operator responsibility.
+A `riley-checkpoint-v1` manifest is the explicit allowlist: `source_model`, a
+full 40-character lowercase commit `source_revision`, `dtype`, empty
+`transforms`, and `files` entries containing `path`, `bytes`, and lowercase
+`sha256`. Config, tokenizer and exactly one supported weight layout must be
+included; `tokenizer_config.json`, `generation_config.json` and
+`chat_template.jinja` are optional. `download` and `prepare` never resolve
+branches/tags, guess files, transform weights, or invent provenance.
+
+Write the manifest by hand from a source you trust, or let `plan` (Hub
+feature) derive it from the Hub's own metadata. `plan` resolves a branch or tag
+to its commit once, then pins weight files by the Hub's LFS size and SHA-256,
+and downloads each JSON file, which must match the Hub's size and git blob id
+(SHA-1) before its SHA-256 is recorded. It refuses a model whose `config.json`
+Riley cannot load before any weight is listed, and never overwrites `--output`.
+Trusting `plan` means trusting the Hub's metadata for that commit.
 
 ```sh
 manifest=tools/riley-checkpoint/Cargo.toml
@@ -34,6 +41,8 @@ Online transport is separately compiled and separately authorized:
 
 ```sh
 cargo build --locked --manifest-path "$manifest" --release --features hub
+"$bin" plan --repository Qwen/Qwen3-4B --revision main \
+  --output /trusted/qwen-plan.json --allow-network
 "$bin" download --manifest /trusted/qwen-plan.json \
   --destination /models/qwen-new --allow-network
 # For gated models, optionally append --token-env HF_TOKEN.

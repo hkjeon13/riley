@@ -1320,7 +1320,7 @@ impl InferenceEngine {
                 .encode(
                     &request.prompt,
                     riley_model::EncodeOptions {
-                        add_special_tokens: true,
+                        add_special_tokens: request.add_special_tokens,
                     },
                 )
                 .ok()
@@ -3495,7 +3495,7 @@ mod cuda_backend {
                 .encode(
                     &request.prompt,
                     EncodeOptions {
-                        add_special_tokens: true,
+                        add_special_tokens: request.add_special_tokens,
                     },
                 )
                 .map_err(|_| private_request_error("prompt tokenization failed"))?;
@@ -4150,6 +4150,7 @@ mod tests {
             stop_sequences: Vec::new(),
             stream: true,
             include_token_ids: false,
+            add_special_tokens: true,
         }
     }
 

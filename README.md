@@ -92,30 +92,37 @@ are kept in the [performance experiment log](docs/performance-experiments.md).
 The quickest start is the container image. It needs an NVIDIA driver 550 or
 newer and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html),
 and carries kernels for `sm_80` (A100), `sm_86` (RTX 30xx/A10) and `sm_89`
-(RTX 40xx/L4/L40). Every model in the table above is a bundled preset: the
-first start downloads the pinned checkpoint into the `/models` volume and checks
-every file against its SHA-256, later starts reuse it.
+(RTX 40xx/L4/L40). Pass a Hugging Face model id, as with vLLM:
 
 ```bash
 docker run --gpus '"device=0"' -p 8080:8080 -v riley-models:/models \
-  riley:cu124 serve --preset qwen3-4b
+  riley:cu124 serve --model Qwen/Qwen2.5-7B-Instruct
 ```
 
 ```bash
-curl -s http://localhost:8080/v1/completions -H 'Content-Type: application/json' \
-  -d '{"model": "qwen3-4b", "prompt": "The capital of France is", "max_tokens": 16, "temperature": 0}'
+curl -s http://localhost:8080/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "What is the capital of France?"}], "max_tokens": 32}'
 ```
 
-`serve --preset NAME` adds `--model-id NAME`, the native profile shown under
-[Usage](#start-the-server), a fitting `--max-weight-bytes` and
+The first start resolves the id (optionally `@branch`, `@tag` or `@commit`) to
+a commit, checks that Riley supports the model's `config.json`, and downloads
+it into `/models/hub`; every weight file is checked against the Hub's own LFS
+SHA-256 and every JSON file against its git blob id. Later starts reuse the
+download and, if the Hub is unreachable, fall back to the newest one. Supported
+are the dense Llama, Qwen2.5/Qwen3 and SmolLM2 architectures in BF16
+safetensors; other models are refused before any weight is downloaded.
+
+`serve --model` adds `--model-id` (the id as given), the native profile shown
+under [Usage](#start-the-server), a fitting `--max-weight-bytes` and
 `--bind 0.0.0.0:8080`; any `riley serve` option you add is passed through and
 wins over these. Other commands:
 
 | Command | What it does |
 |---|---|
+| `serve --model NAME` | Also takes a bundled preset name, e.g. `qwen3-4b`: the 16 models of the table above at the measured commits |
+| `serve --model /models/DIR ...` | Serve a checkpoint you prepared yourself |
 | `presets` | List the bundled presets and their Hub repositories |
-| `download NAME...` | Download and verify presets into `/models` without serving |
-| `serve --model /models/DIR --model-id ID ...` | Serve a checkpoint you prepared yourself |
+| `download MODEL...` | Download and verify Hub ids or presets into `/models` without serving |
 | `riley-checkpoint ...` | The checkpoint tool described under [Prepare a model](#prepare-a-model) |
 
 Set `-e HF_TOKEN=...` for gated repositories. The container runs as UID 65532;
@@ -182,8 +189,18 @@ safetensors) directly, but only from a directory that has a
 and the exact Hub commit. A server will not start on a checkpoint whose files
 do not match.
 
-1. Write a manifest plan for the model (`plan.json`). It names the Hub
-   repository, the full 40-character commit, and each file:
+1. Write a manifest plan for the model (`plan.json`). The checkpoint tool
+   (built in step 2) writes it from the Hub's own metadata: weight files are
+   pinned by their LFS SHA-256, JSON files by matching their git blob id, at
+   the commit the revision resolves to:
+
+   ```bash
+   tools/riley-checkpoint/target/release/riley-checkpoint plan \
+     --repository Qwen/Qwen3-4B --revision main --output plan.json --allow-network
+   ```
+
+   Or write it by hand. It names the Hub repository, the full 40-character
+   commit, and each file:
 
    ```json
    {
@@ -200,12 +217,13 @@ do not match.
    }
    ```
 
-   List the config, the tokenizer (plus `tokenizer_config.json` for Qwen) and
-   one weight layout: `model.safetensors`, or `model.safetensors.index.json`
-   with every shard it names. The tool never trusts hashes it downloads
-   itself, so take sizes and SHA-256 values from a source you trust: the Hub
-   file page shows them for weight (LFS) files, and `sha256sum` gives them for
-   files you have already reviewed.
+   List the config, the tokenizer (plus `tokenizer_config.json` for Qwen, and
+   for chat on other models), optionally `generation_config.json` and
+   `chat_template.jinja`, and one weight layout: `model.safetensors`, or
+   `model.safetensors.index.json` with every shard it names. Take sizes and
+   SHA-256 values from a source you trust: the Hub file page shows them for
+   weight (LFS) files, and `sha256sum` gives them for files you have already
+   reviewed.
 
 2. Build the checkpoint tool and let it download, check and load the files:
 
@@ -295,10 +313,32 @@ reply = client.completions.create(
 print(reply.choices[0].text)
 ```
 
-The prompt is raw text: for a chat model, apply its chat template on the
-client. Supported fields are `max_tokens`, `temperature`, `top_p`, `seed`,
-`stop`, `stream`, `stream_options.include_usage` and `return_token_ids`.
-Closing the connection cancels the request. Full reference: [HTTP API](docs/api.md).
+The prompt is raw text. Supported fields are `max_tokens`, `temperature`,
+`top_p`, `seed`, `stop`, `stream`, `stream_options.include_usage` and
+`return_token_ids`. Closing the connection cancels the request. Full
+reference: [HTTP API](docs/api.md).
+
+### Chat
+
+`POST /v1/chat/completions` renders `messages` with the checkpoint's own chat
+template (`chat_template.jinja` or the `chat_template` of
+`tokenizer_config.json`), the same way Transformers' `apply_chat_template`
+does, and answers in the OpenAI chat shape, streaming included:
+
+```python
+reply = client.chat.completions.create(
+    model="qwen3-4b",
+    messages=[{"role": "user", "content": "What is the capital of France?"}],
+    max_tokens=64,
+)
+print(reply.choices[0].message.content)
+```
+
+Besides the completion fields it takes `max_completion_tokens`,
+`add_generation_prompt` and `chat_template_kwargs` (for example
+`{"enable_thinking": false}` for Qwen3). `max_tokens` defaults to the server's
+`--max-output-tokens`. Tool calling, images and `n > 1` are not supported. A
+checkpoint without a chat template serves `/v1/completions` only.
 
 Other endpoints: `GET /v1/models`, `/healthz`, `/readyz`, `/metrics` (JSON
 counters) and `/v1/config` (effective configuration).
@@ -317,7 +357,7 @@ status 0.
 | Qualified models | Qwen2.5 0.5B / 1.5B / 3B / 7B / Coder-7B / 14B Instruct, Qwen3 0.6B / 1.7B / 4B / 8B, SmolLM2 135M / 360M / 1.7B, Llama-3.2 1B / 3B Instruct, Llama-3.1-8B Instruct |
 | Precision | BF16 |
 | Hardware | One NVIDIA GPU (A100 and RTX 4090 measured) |
-| API | `POST /v1/completions` with streaming; models, health and metrics endpoints |
+| API | `POST /v1/chat/completions` and `POST /v1/completions` with streaming; models, health and metrics endpoints |
 
 Not supported yet: chat-completions endpoint, quantised weights, multiple GPUs.
 

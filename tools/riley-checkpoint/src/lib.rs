@@ -27,7 +27,8 @@ pub(crate) fn invalid(message: impl Into<String>) -> Box<dyn Error + Send + Sync
 }
 
 /// An independently supplied manifest is both the download allowlist and the
-/// expected-byte contract. It is never derived from downloaded, untrusted bytes.
+/// expected-byte contract. Hand-written plans come from an independent source;
+/// `hub::plan` derives one from the Hub's own LFS SHA-256 and git blob ids.
 pub struct Plan {
     bytes: Vec<u8>,
     provenance: CheckpointProvenance,
@@ -98,7 +99,7 @@ impl Plan {
     }
 }
 
-fn safe_segment(value: &str) -> bool {
+pub(crate) fn safe_segment(value: &str) -> bool {
     !value.is_empty()
         && value.as_bytes()[0].is_ascii_alphanumeric()
         && !value.contains("..")
@@ -118,6 +119,7 @@ fn allowed_payload(name: &str) -> bool {
     matches!(
         name,
         "config.json"
+            | "chat_template.jinja"
             | "generation_config.json"
             | "tokenizer.json"
             | "tokenizer_config.json"
@@ -209,7 +211,7 @@ pub(crate) fn publish_with(
     Ok(())
 }
 
-fn hex_digest(bytes: &[u8]) -> String {
+pub(crate) fn hex_digest(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut output = String::with_capacity(bytes.len() * 2);
     for &byte in bytes {

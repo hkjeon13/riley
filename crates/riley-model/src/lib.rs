@@ -6,6 +6,7 @@
 //! approximated.
 
 mod artifact;
+mod chat_template;
 mod checkpoint;
 mod config;
 mod error;
@@ -21,6 +22,7 @@ mod strict_json;
 mod tokenizer;
 mod weights;
 
+pub use chat_template::{CHAT_TEMPLATE_FILENAME, ChatTemplateSource};
 pub use config::{ConfigWarning, LlamaConfig, ModelConfig, ModelFamily, Qwen2Config};
 pub use error::{ArtifactKind, ModelError, ModelResult};
 pub use ir::{

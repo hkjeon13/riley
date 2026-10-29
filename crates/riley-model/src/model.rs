@@ -4,8 +4,9 @@ use std::sync::Arc;
 
 use crate::artifact::VerifiedArtifactSession;
 use crate::{
-    CheckpointProvenance, LoadLimits, LoadedWeights, MistralTokenizer, ModelConfig, ModelError,
-    ModelResult, ModelSpec, Qwen2Tokenizer, Qwen2TokenizerConfig, SmolLm2Tokenizer, Tokenizer,
+    CHAT_TEMPLATE_FILENAME, ChatTemplateSource, CheckpointProvenance, LoadLimits, LoadedWeights,
+    MistralTokenizer, ModelConfig, ModelError, ModelResult, ModelSpec, Qwen2Tokenizer,
+    Qwen2TokenizerConfig, SmolLm2Tokenizer, Tokenizer,
 };
 
 /// Required Hugging Face configuration filename.
@@ -18,7 +19,8 @@ pub const TOKENIZER_FILENAME: &str = "tokenizer.json";
 /// read, and only for a Llama-family checkpoint whose manifest lists the file.
 pub const GENERATION_CONFIG_FILENAME: &str = "generation_config.json";
 
-/// Required Qwen chat/tokenizer metadata filename.
+/// Tokenizer metadata: required for Qwen, optional for other families, which
+/// read only its chat template and special-token strings.
 pub const TOKENIZER_CONFIG_FILENAME: &str = "tokenizer_config.json";
 
 /// A checksum-verified, Python-free model artifact ready for runtime planning.
@@ -32,6 +34,7 @@ pub struct LoadedModel {
     spec: ModelSpec,
     tokenizer: Arc<dyn Tokenizer>,
     qwen2_tokenizer_config: Option<Qwen2TokenizerConfig>,
+    chat_template: Option<ChatTemplateSource>,
     weights: LoadedWeights,
     verified_files: BTreeSet<PathBuf>,
 }
@@ -86,6 +89,7 @@ impl LoadedModel {
             limits.tokenizer_bytes(),
             "tokenizer.json",
         )?;
+        let mut chat_template = None;
         let (tokenizer, qwen2_tokenizer_config): (
             Arc<dyn Tokenizer>,
             Option<Qwen2TokenizerConfig>,
@@ -157,9 +161,14 @@ impl LoadedModel {
                 })?;
                 tokenizer_config.validate_tokenizer(&tokenizer)?;
                 validate_qwen_context_bound(&spec, &tokenizer_config)?;
+                chat_template = Some(ChatTemplateSource::from_tokenizer_config(
+                    tokenizer_config_artifact.bytes(),
+                )?);
                 (Arc::new(tokenizer), Some(tokenizer_config))
             }
         };
+
+        let chat_template = read_chat_template(&mut session, limits, chat_template)?;
 
         let weights = LoadedWeights::load_verified_subset(&mut session, &spec, limits)?;
         let verified_files = session.finish_exact()?;
@@ -169,6 +178,7 @@ impl LoadedModel {
             spec,
             tokenizer,
             qwen2_tokenizer_config,
+            chat_template,
             weights,
             verified_files,
         })
@@ -205,6 +215,12 @@ impl LoadedModel {
         self.qwen2_tokenizer_config.as_ref()
     }
 
+    /// Returns the checkpoint's chat template, if its manifest lists one.
+    #[must_use]
+    pub const fn chat_template(&self) -> Option<&ChatTemplateSource> {
+        self.chat_template.as_ref()
+    }
+
     /// Returns validated canonical weight bindings and borrowed tensor views.
     #[must_use]
     pub const fn weights(&self) -> &LoadedWeights {
@@ -222,6 +238,39 @@ impl LoadedModel {
     pub const fn verified_files(&self) -> &BTreeSet<PathBuf> {
         &self.verified_files
     }
+}
+
+/// Completes the chat template: other families read `tokenizer_config.json`
+/// only for it, and a listed `chat_template.jinja` replaces the template text.
+fn read_chat_template(
+    session: &mut VerifiedArtifactSession,
+    limits: LoadLimits,
+    mut chat_template: Option<ChatTemplateSource>,
+) -> ModelResult<Option<ChatTemplateSource>> {
+    let tokenizer_config = Path::new(TOKENIZER_CONFIG_FILENAME);
+    if chat_template.is_none() && session.provenance().lists(tokenizer_config) {
+        let artifact = session.read_once(
+            tokenizer_config,
+            limits.config_bytes(),
+            "tokenizer_config.json",
+        )?;
+        chat_template = Some(ChatTemplateSource::from_tokenizer_config(artifact.bytes())?);
+    }
+    let template_file = Path::new(CHAT_TEMPLATE_FILENAME);
+    if session.provenance().lists(template_file) {
+        let artifact =
+            session.read_once(template_file, limits.config_bytes(), "chat_template.jinja")?;
+        let template = std::str::from_utf8(artifact.bytes())
+            .map_err(|_| ModelError::InvalidArtifact {
+                artifact: CHAT_TEMPLATE_FILENAME.to_owned(),
+                reason: "template is not UTF-8".to_owned(),
+            })?
+            .to_owned();
+        chat_template
+            .get_or_insert_with(ChatTemplateSource::default)
+            .template = template;
+    }
+    Ok(chat_template.filter(|source| !source.template.is_empty()))
 }
 
 fn validate_manifest_dtype(provenance: &CheckpointProvenance, spec: &ModelSpec) -> ModelResult<()> {

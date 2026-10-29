@@ -72,6 +72,9 @@ pub struct GenerationRequest {
     pub stream: bool,
     /// Whether delivery must expose authoritative committed token identities.
     pub include_token_ids: bool,
+    /// Whether tokenization adds the tokenizer's own special tokens (BOS);
+    /// false for chat prompts, whose template already wrote them.
+    pub add_special_tokens: bool,
 }
 
 /// Stable metadata shared by streaming and non-streaming responses.

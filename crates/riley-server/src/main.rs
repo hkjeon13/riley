@@ -2178,7 +2178,8 @@ fn run_serve(
     use riley_server::engine::{
         CudaBackendConfig, CudaEngineResources, EngineConfig, InferenceEngine,
     };
-    use riley_server::service::{CompletionBackend, ServerConfig, start_server_with_c02_metrics};
+    use riley_server::chat::ChatTemplate;
+    use riley_server::service::{CompletionBackend, ServerConfig, start_server_with_chat};
 
     #[cfg(not(unix))]
     return Err("serve currently requires POSIX SIGINT/SIGTERM support".to_owned());
@@ -2491,6 +2492,18 @@ fn run_serve(
     let model_id = options
         .model_id
         .unwrap_or_else(|| model.provenance().source_model().to_owned());
+    // A template that does not compile disables only the chat endpoint.
+    let chat_template = match model.chat_template().map(ChatTemplate::compile) {
+        Some(Ok(template)) => Some(Arc::new(template)),
+        Some(Err(error)) => {
+            eprintln!("RILEY_CHAT disabled: {error}");
+            None
+        }
+        None => {
+            eprintln!("RILEY_CHAT disabled: the checkpoint lists no chat template");
+            None
+        }
+    };
     let created_unix_seconds = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -2677,11 +2690,12 @@ fn run_serve(
         ..ServerConfig::default()
     };
     let backend: Arc<dyn CompletionBackend> = engine;
-    let server = start_server_with_c02_metrics(
+    let server = start_server_with_chat(
         server_config,
         backend,
         runtime_config_body,
         c02_audit_root.is_some(),
+        chat_template,
     )
     .map_err(|error| format!("HTTP server startup failed: {error}"))?;
     if let Some(receipt) = native_d128_two_stage_startup_receipt {
@@ -2777,6 +2791,7 @@ fn warm_up_step_shapes(
         stop_sequences: Vec::new(),
         stream: false,
         include_token_ids: false,
+        add_special_tokens: true,
     };
     let finish = |handle: &riley_server::engine::GenerationHandle| loop {
         match handle.recv_timeout(Duration::from_secs(60)) {

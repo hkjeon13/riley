@@ -208,6 +208,7 @@ pub fn normalize_completion_request(
         stop_sequences,
         stream: request.stream.unwrap_or(false),
         include_token_ids: request.return_token_ids.unwrap_or(false),
+        add_special_tokens: true,
     })
 }
 
@@ -400,7 +401,7 @@ pub struct ValidationError {
 }
 
 impl ValidationError {
-    const fn new(
+    pub(crate) const fn new(
         parameter: &'static str,
         code: ValidationErrorCode,
         message: &'static str,

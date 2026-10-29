@@ -12,12 +12,15 @@ resolver = "3"
 
 [features]
 default = []
-hub = ["dep:hf-hub", "dep:yoke-derive"]
+hub = ["dep:hf-hub", "dep:yoke-derive", "dep:serde_json", "dep:sha1", "dep:ureq"]
 
 [dependencies]
 riley-model = { path = "../../crates/riley-model", default-features = false }
 sha2 = { version = "=0.11.0", default-features = false }
 hf-hub = { version = "=0.4.3", default-features = false, features = ["ureq"], optional = true }
+serde_json = { version = "=1.0.145", optional = true }
+sha1 = { version = "=0.11.0", default-features = false, optional = true }
+ureq = { version = "=2.12.1", default-features = false, features = ["tls"], optional = true }
 
 # yoke-derive 0.8.3 uses str::from_utf8 unavailable on the pinned Rust 1.85.
 yoke-derive = { version = "=0.8.2", default-features = false, optional = true }
