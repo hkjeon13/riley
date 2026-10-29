@@ -2360,6 +2360,7 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_bf16_argmax_fp32_ties_execute(logits:RawBufferSpan,results:RawBufferSpan,hidden:RawBufferSpan,weight:RawBufferSpan,row_indices:RawBufferSpan,row_count:u64,vocabulary_size:u64,candidate_count:u64,hidden_size:u64,hidden_rows:u64,rows_gathered:u32,window_ulps:u32,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
     fn riley_cuda_hf_pack_qkv_execute(q:RawBufferSpan,k:RawBufferSpan,v:RawBufferSpan,out:RawBufferSpan,rows:u64,qw:u64,kw:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
     fn riley_cuda_row_gather_execute(
         params: *const RawRowGatherParams,
@@ -2528,6 +2529,7 @@ unsafe extern "C" {
     fn riley_cuda_set_native_d128_decode_segment_mode(mode: u64);
     fn riley_cuda_set_native_d128_prompt_direct(mode: u64);
     fn riley_cuda_set_native_d128_attention_flashinfer(mode: u64);
+    fn riley_cuda_set_native_flashinfer_kv_chunk(tokens: u64);
     fn riley_cuda_set_native_d128_prompt_direct_max_pages(pages: u64);
     fn riley_cuda_hf_prefill_attention_plan_create(
         context: *mut RawContext,
@@ -9095,6 +9097,11 @@ pub(super) fn set_native_d128_attention_flashinfer(mode: u64) {
     unsafe { riley_cuda_set_native_d128_attention_flashinfer(mode) }
 }
 
+pub(super) fn set_native_flashinfer_kv_chunk(tokens: u64) {
+    // SAFETY: the native setter stores one atomic integer.
+    unsafe { riley_cuda_set_native_flashinfer_kv_chunk(tokens) }
+}
+
 pub(super) fn set_native_d128_prompt_direct(mode: u64) {
     // SAFETY: the native setter stores one atomic integer.
     unsafe { riley_cuda_set_native_d128_prompt_direct(mode) }
@@ -12706,6 +12713,12 @@ mod aggregate_replay_fault_tests {
 }
 
 #[cfg(feature="cuda-cublas-gemm-probe")]
+#[allow(clippy::too_many_arguments)]
+pub(super) fn bf16_argmax_fp32_ties_execute(logits:RawBufferSpan,results:RawBufferSpan,hidden:RawBufferSpan,weight:RawBufferSpan,row_indices:RawBufferSpan,row_count:u64,vocabulary_size:u64,candidate_count:u64,hidden_size:u64,hidden_rows:u64,rows_gathered:bool,window_ulps:u32,stream:&mut StreamHandle)->CudaResult<()>{
+ primitive_status("execute deterministic CUDA BF16 argmax with FP32 ties",stream,|stream,error|
+  // SAFETY: every borrowed opaque resource remains live for the synchronously completing native operation.
+  unsafe{riley_cuda_bf16_argmax_fp32_ties_execute(logits,results,hidden,weight,row_indices,row_count,vocabulary_size,candidate_count,hidden_size,hidden_rows,u32::from(rows_gathered),window_ulps,stream,error)})
+}
 pub(super) fn hf_pack_qkv_execute(q:RawBufferSpan,k:RawBufferSpan,v:RawBufferSpan,out:RawBufferSpan,rows:u64,qw:u64,kw:u64,stream:&mut StreamHandle)->CudaResult<()>{
  primitive_status("HF pack separate QKV",stream,|stream,error|unsafe{riley_cuda_hf_pack_qkv_execute(q,k,v,out,rows,qw,kw,stream,error)})
 }

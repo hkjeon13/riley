@@ -1010,6 +1010,17 @@ pub fn set_native_d128_attention_flashinfer(mode: u64) {
     let _ = mode;
 }
 
+/// Splits each row's context in the FlashInfer mode into fixed chunks of
+/// `tokens` tokens (a multiple of 16) starting at position 0, whose BF16
+/// partial outputs are merged in order; `0` folds the whole context in one
+/// pass. Overrides `RILEY_NATIVE_FLASHINFER_KV_CHUNK`.
+pub fn set_native_flashinfer_kv_chunk(tokens: u64) {
+    #[cfg(feature = "cuda")]
+    ffi::set_native_flashinfer_kv_chunk(tokens);
+    #[cfg(not(feature = "cuda"))]
+    let _ = tokens;
+}
+
 /// Bounds the direct prompt mode to prompt rows whose own context spans at
 /// most `pages` pages; longer rows keep the segment-state path (`0`: every
 /// prompt row is direct). Overrides `RILEY_NATIVE_D128_PROMPT_DIRECT_MAX_PAGES`.
@@ -1714,6 +1725,11 @@ fn validate_packed_host(
         }
     }
 
+    // The pairwise scans below are quadratic. Above a few dozen entries a
+    // sorted copy first proves there is no duplicate, and the scans then skip
+    // their inner loops; when one exists they run unchanged, so the reported
+    // error is the same.
+    let block_ids_unique = sorted_unique(block_ids.iter().copied());
     for (logical_index, &physical_id) in block_ids.iter().enumerate() {
         if u64::from(physical_id) >= physical_block_count {
             return Err(CudaError::out_of_range(
@@ -1721,7 +1737,7 @@ fn validate_packed_host(
                 format!("physical block id {physical_id} is outside the pool"),
             ));
         }
-        if block_ids[..logical_index].contains(&physical_id) {
+        if !block_ids_unique && block_ids[..logical_index].contains(&physical_id) {
             return Err(CudaError::invalid_argument(
                 OPERATION,
                 format!("physical block id {physical_id} appears more than once"),
@@ -1754,6 +1770,12 @@ fn validate_packed_host(
         }
     }
 
+    let row_addresses_unique = sorted_unique(
+        row_sequence_slots
+            .iter()
+            .zip(row_positions)
+            .map(|(&slot, &position)| (u64::from(slot) << 32) | u64::from(position)),
+    );
     for row in 0..row_sequence_slots.len() {
         let sequence_slot = usize::try_from(row_sequence_slots[row])
             .expect("U32 sequence slots fit every supported host usize");
@@ -1771,7 +1793,7 @@ fn validate_packed_host(
                 format!("row {row} position is outside its post-write sequence length"),
             ));
         }
-        for earlier in 0..row {
+        for earlier in 0..if row_addresses_unique { 0 } else { row } {
             if row_sequence_slots[earlier] == row_sequence_slots[row]
                 && row_positions[earlier] == row_positions[row]
             {
@@ -1791,6 +1813,17 @@ fn validate_packed_host(
         block_count,
         active_row_count,
     })
+}
+
+/// True when `values` holds no repeated value and has more than 64 entries;
+/// false (run the pairwise scan) otherwise.
+fn sorted_unique<T: Ord>(values: impl ExactSizeIterator<Item = T>) -> bool {
+    if values.len() <= 64 {
+        return false;
+    }
+    let mut sorted: Vec<T> = values.collect();
+    sorted.sort_unstable();
+    sorted.windows(2).all(|pair| pair[0] != pair[1])
 }
 
 fn sequence_logical_length(
@@ -2089,6 +2122,36 @@ mod tests {
         let duplicate = PackedBatchHostV1::new(&[0, 1], &[0], &[2], &[0, 0], &[1, 1], 1)
             .expect_err("duplicate row address must fail");
         assert_eq!(duplicate.kind(), CudaErrorKind::InvalidArgument);
+    }
+
+    #[test]
+    fn large_batches_keep_the_pairwise_errors() {
+        // One sequence of 100 full blocks plus a 1-token tail, 101 rows.
+        let blocks: Vec<u32> = (0..101).rev().collect();
+        let mut valid = vec![16_u16; 101];
+        valid[100] = 1;
+        let slots = vec![0_u32; 101];
+        let positions: Vec<u32> = (1500..1601).collect();
+        let offsets = [0, 101];
+        PackedBatchHostV1::new(&offsets, &blocks, &valid, &slots, &positions, 101)
+            .expect("unique large batch is accepted");
+
+        let mut duplicate_block = blocks.clone();
+        duplicate_block[90] = duplicate_block[3];
+        let error = PackedBatchHostV1::new(&offsets, &duplicate_block, &valid, &slots, &positions, 101)
+            .expect_err("duplicate physical block must fail");
+        assert_eq!(error.kind(), CudaErrorKind::InvalidArgument);
+        assert!(error.to_string().contains(&format!(
+            "physical block id {} appears more than once",
+            blocks[3]
+        )));
+
+        let mut duplicate_row = positions.clone();
+        duplicate_row[80] = duplicate_row[7];
+        let error = PackedBatchHostV1::new(&offsets, &blocks, &valid, &slots, &duplicate_row, 101)
+            .expect_err("duplicate row address must fail");
+        assert_eq!(error.kind(), CudaErrorKind::InvalidArgument);
+        assert!(error.to_string().contains(&format!("duplicate row address (0,{})", positions[7])));
     }
 
     #[test]

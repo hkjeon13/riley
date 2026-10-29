@@ -1012,10 +1012,30 @@ __device__ __forceinline__ void reduce_argmax_warp(
 // partitioned.
 constexpr uint32_t kArgmaxThreads = 1024;
 
+// Optional FP32 tie break of the greedy selection. BF16 rounding of the
+// LM head's FP32 accumulators is monotone, so it can merge the largest logits
+// into one value but never reorder them; only tokens sharing the row maximum
+// are rescored. Each candidate's logit is recomputed as an FP32 dot product of
+// the row's normalized hidden state and its LM-head row, in a fixed order that
+// depends only on the hidden size, and the largest wins (lowest token on
+// equal scores). Rows without a tie keep their token.
+struct ArgmaxTieRefine {
+  const __nv_bfloat16* hidden;    // [hidden rows, hidden_size]
+  const __nv_bfloat16* weight;    // [vocabulary_size, hidden_size]
+  const uint32_t* row_indices;    // output row -> hidden row, or null
+  uint64_t hidden_size;
+  uint64_t hidden_row_count;
+  // Candidates are the logits within this many BF16 steps (at the row
+  // maximum's exponent) of the maximum; zero means exact ties only.
+  uint32_t window_ulps;
+};
+constexpr uint32_t kArgmaxTieCandidates = 64;
+
+template <bool kRefineTies>
 __global__ __launch_bounds__(kArgmaxThreads) void bf16_argmax_kernel(
     const __nv_bfloat16* logits, RileyCudaBf16ArgmaxResult* results,
     uint64_t row_count, uint64_t vocabulary_size, uint64_t candidate_count,
-    const uint32_t* dynamic_counts) {
+    const uint32_t* dynamic_counts, ArgmaxTieRefine refine = {}) {
   constexpr uint32_t kWarpCount = kArgmaxThreads / kWarpSize;
   // In a dynamic step capture the output row count is read on the device.
   if (dynamic_counts != nullptr) {
@@ -1057,25 +1077,35 @@ __global__ __launch_bounds__(kArgmaxThreads) void bf16_argmax_kernel(
     const uint64_t group_count = (vocabulary_size - head) / 8;
     const uint64_t tail_begin = head + group_count * 8;
     const uint64_t single_count = head + (vocabulary_size - tail_begin);
-    for (uint64_t single = threadIdx.x; single < single_count;
-         single += blockDim.x) {
-      const uint64_t column =
-          single < head ? single : tail_begin + (single - head);
-      consider(column, row_logits[column]);
-    }
-    for (uint64_t group = threadIdx.x; group < group_count;
-         group += blockDim.x) {
-      const uint64_t first_column = head + group * 8;
-      const uint4 packed =
-          *reinterpret_cast<const uint4*>(row_logits + first_column);
-      const uint32_t words[4] = {packed.x, packed.y, packed.z, packed.w};
-#pragma unroll
-      for (uint32_t element = 0; element < 8; ++element) {
-        const uint16_t bits = static_cast<uint16_t>(
-            words[element / 2] >> (16 * (element % 2)));
-        consider(first_column + element, __ushort_as_bfloat16(bits));
+    // Visits the columns of thread `owner`, every `step`-th of them from
+    // the `first`-th on (the selection loop visits all of its own).
+    const auto visit_columns = [&](uint64_t owner, uint64_t first,
+                                   uint64_t step, auto&& visit) {
+      const uint64_t stride = step * blockDim.x;
+      for (uint64_t single = owner + first * blockDim.x;
+           single < single_count; single += stride) {
+        const uint64_t column =
+            single < head ? single : tail_begin + (single - head);
+        visit(column, row_logits[column]);
       }
-    }
+      for (uint64_t group = owner + first * blockDim.x; group < group_count;
+           group += stride) {
+        const uint64_t first_column = head + group * 8;
+        const uint4 packed =
+            *reinterpret_cast<const uint4*>(row_logits + first_column);
+        const uint32_t words[4] = {packed.x, packed.y, packed.z, packed.w};
+#pragma unroll
+        for (uint32_t element = 0; element < 8; ++element) {
+          const uint16_t bits = static_cast<uint16_t>(
+              words[element / 2] >> (16 * (element % 2)));
+          visit(first_column + element, __ushort_as_bfloat16(bits));
+        }
+      }
+    };
+    visit_columns(threadIdx.x, 0, 1, consider);
+    // The reductions below overwrite the per-thread selection.
+    const float own_value = selected_value;
+    const uint32_t own_token = selected_token;
 
     reduce_argmax_warp(&selected_value, &selected_token, &non_finite);
     if (lane == 0) {
@@ -1105,9 +1135,100 @@ __global__ __launch_bounds__(kArgmaxThreads) void bf16_argmax_kernel(
           results[row].token_id = selected_token;
           results[row].status = RILEY_CUDA_BF16_ARGMAX_STATUS_SUCCESS;
         }
+        if (kRefineTies) {
+          warp_values[0] = selected_value;
+          warp_tokens[0] = selected_token;
+          warp_non_finite[0] = non_finite;
+        }
       }
     }
     __syncthreads();
+    if constexpr (kRefineTies) {
+      __shared__ uint32_t tie_tokens[kArgmaxTieCandidates];
+      __shared__ uint32_t tie_count;
+      __shared__ float tie_partials[kWarpCount];
+      const float row_max = warp_values[0];
+      const uint32_t row_token = warp_tokens[0];
+      const bool row_valid = warp_non_finite[0] == 0 &&
+                             row_token != RILEY_CUDA_BF16_ARGMAX_INVALID_TOKEN_ID;
+      // Every column equal to the row maximum was seen by a thread whose own
+      // maximum equals it, so only those threads' columns (normally one
+      // thread's) are revisited, each by its whole warp, to collect the tied
+      // tokens; the selection loop is unchanged.
+      const float floor_value =
+          refine.window_ulps == 0
+              ? row_max
+              : row_max - static_cast<float>(refine.window_ulps) *
+                              ldexpf(1.0f, ilogbf(row_max) - 7);
+      const bool on_max = row_valid &&
+                          own_token != RILEY_CUDA_BF16_ARGMAX_INVALID_TOKEN_ID &&
+                          own_value >= floor_value;
+      if (threadIdx.x == 0) {
+        tie_count = 0;
+      }
+      __syncthreads();
+      for (uint32_t holders = __ballot_sync(kFullWarpMask, on_max);
+           holders != 0; holders &= holders - 1) {
+        const uint32_t owner = warp * kWarpSize + (__ffs(holders) - 1);
+        visit_columns(owner, lane, kWarpSize,
+                      [&](uint64_t column, __nv_bfloat16 logit) {
+          if (column < candidate_count &&
+              __bfloat162float(logit) >= floor_value) {
+            const uint32_t slot = atomicAdd(&tie_count, 1u);
+            if (slot < kArgmaxTieCandidates) {
+              tie_tokens[slot] = static_cast<uint32_t>(column);
+            }
+          }
+        });
+      }
+      __syncthreads();
+      const uint64_t hidden_row =
+          refine.row_indices != nullptr ? refine.row_indices[row] : row;
+      // Past the slot capacity the candidate set would depend on which
+      // threads won the slots, so the lowest-token rule stays.
+      const uint32_t count = tie_count;
+      if (count > 1 && count <= kArgmaxTieCandidates &&
+          hidden_row < refine.hidden_row_count) {
+        const __nv_bfloat16* hidden_values =
+            refine.hidden + hidden_row * refine.hidden_size;
+        float best_score = -CUDART_INF_F;
+        uint32_t best_token = RILEY_CUDA_BF16_ARGMAX_INVALID_TOKEN_ID;
+        for (uint32_t candidate = 0; candidate < count; ++candidate) {
+          const uint32_t token = tie_tokens[candidate];
+          const __nv_bfloat16* weight_row =
+              refine.weight + static_cast<uint64_t>(token) * refine.hidden_size;
+          float partial = 0.0f;
+          for (uint64_t k = threadIdx.x; k < refine.hidden_size;
+               k += blockDim.x) {
+            partial = fmaf(__bfloat162float(hidden_values[k]),
+                           __bfloat162float(weight_row[k]), partial);
+          }
+          for (uint32_t offset = kWarpSize / 2; offset != 0; offset /= 2) {
+            partial += __shfl_down_sync(kFullWarpMask, partial, offset);
+          }
+          if (lane == 0) {
+            tie_partials[warp] = partial;
+          }
+          __syncthreads();
+          if (threadIdx.x == 0) {
+            float score = 0.0f;
+            for (uint32_t w = 0; w < kWarpCount; ++w) {
+              score += tie_partials[w];
+            }
+            if (score > best_score ||
+                (score == best_score && token < best_token)) {
+              best_score = score;
+              best_token = token;
+            }
+          }
+          __syncthreads();
+        }
+        if (threadIdx.x == 0 && isfinite(best_score)) {
+          results[row].token_id = best_token;
+        }
+      }
+      __syncthreads();
+    }
   }
 }
 
@@ -2449,7 +2570,7 @@ extern "C" RileyCudaStatus riley_cuda_bf16_argmax_execute(
         dynamic.counts != nullptr ? dynamic.output_rows : params->row_count;
     const uint32_t blocks = static_cast<uint32_t>(
         launch_rows < kMaximumBlocks ? launch_rows : kMaximumBlocks);
-    bf16_argmax_kernel<<<blocks, kArgmaxThreads, 0, stream->stream>>>(
+    bf16_argmax_kernel<false><<<blocks, kArgmaxThreads, 0, stream->stream>>>(
         reinterpret_cast<const __nv_bfloat16*>(logits.data),
         reinterpret_cast<RileyCudaBf16ArgmaxResult*>(results.data),
         params->row_count, params->vocabulary_size,
@@ -6080,7 +6201,9 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
       params->output_row_count <= 1024 &&
       riley_fi::workspace_bytes(params->output_row_count,
                                 params->partial_state_capacity,
-                                static_cast<uint32_t>(flashinfer_group)) <=
+                                static_cast<uint32_t>(params->query_head_count),
+                                static_cast<uint32_t>(params->key_value_head_count),
+                                static_cast<uint32_t>(params->head_size)) <=
           partial_states.used_bytes;
   const bool segment_decode =
       native_d128_decode_segment_mode_setting().load(
@@ -7046,7 +7169,7 @@ cudaError_t riley_cuda_internal::enqueue_decode_kv_attention(cudaStream_t stream
 }
 
 cudaError_t riley_cuda_internal::enqueue_decode_argmax(cudaStream_t stream,const void* logits,void* output,uint64_t vocab) noexcept {
-  bf16_argmax_kernel<<<1,kArgmaxThreads,0,stream>>>(static_cast<const __nv_bfloat16*>(logits),static_cast<RileyCudaBf16ArgmaxResult*>(output),1,vocab,vocab,nullptr);
+  bf16_argmax_kernel<false><<<1,kArgmaxThreads,0,stream>>>(static_cast<const __nv_bfloat16*>(logits),static_cast<RileyCudaBf16ArgmaxResult*>(output),1,vocab,vocab,nullptr);
   return cudaGetLastError();
 }
 
@@ -7066,6 +7189,57 @@ __global__ void hf_pack_qkv_bits_kernel(const uint16_t* query,const uint16_t* ke
 }
 }
 // Shape-preserving bit copy; command-batch leases are handled by ExclusiveUses.
+
+// deterministic BF16 argmax whose row-maximum ties are broken by FP32
+// rescoring (see ArgmaxTieRefine). hidden is BF16 [hidden_rows, hidden_size]:
+// the output rows' normalized hidden states, in output order when
+// rows_gathered is nonzero, otherwise at row_indices[row] (U32 [row_count]).
+// weight is the BF16 [vocabulary_size, hidden_size] LM head.
+extern "C" RileyCudaStatus riley_cuda_bf16_argmax_fp32_ties_execute(
+ RileyCudaBufferSpan logits_span,RileyCudaBufferSpan results_span,RileyCudaBufferSpan hidden_span,
+ RileyCudaBufferSpan weight_span,RileyCudaBufferSpan row_indices_span,uint64_t row_count,uint64_t vocabulary_size,
+ uint64_t candidate_count,uint64_t hidden_size,uint64_t hidden_rows,uint32_t rows_gathered,uint32_t window_ulps,
+ RileyCudaStream* stream,RileyCudaErrorInfo* error) noexcept {
+ constexpr const char* op="execute deterministic BF16 argmax with FP32 ties";clear_error(error);
+ if(window_ulps>16||vocabulary_size==0||vocabulary_size>UINT32_MAX||candidate_count>vocabulary_size||hidden_size==0||hidden_size>65536||
+    (rows_gathered!=0&&row_count>hidden_rows))
+   return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"invalid argmax tie-refine shape");
+ if(logits_span.dtype!=RILEY_CUDA_DTYPE_BF16||results_span.dtype!=RILEY_CUDA_DTYPE_U32||hidden_span.dtype!=RILEY_CUDA_DTYPE_BF16||
+    weight_span.dtype!=RILEY_CUDA_DTYPE_BF16||row_indices_span.dtype!=RILEY_CUDA_DTYPE_U32)
+   return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"requires BF16 logits/hidden/weight, U32 results and row indices");
+ uint64_t logit_elements=0,weight_elements=0,hidden_elements=0;
+ if(!checked_multiply(row_count,vocabulary_size,&logit_elements)||!checked_multiply(vocabulary_size,hidden_size,&weight_elements)||
+    !checked_multiply(hidden_rows,hidden_size,&hidden_elements)||logit_elements>UINT64_MAX/2||weight_elements>UINT64_MAX/2||hidden_elements>UINT64_MAX/2)
+   return validation_error(error,RILEY_CUDA_STATUS_OUT_OF_RANGE,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"argmax tie-refine shape overflows uint64_t");
+ ResolvedSpan spans[5]{};
+ RileyCudaStatus status=resolve_span(logits_span,RILEY_CUDA_DTYPE_BF16,logit_elements*2,&spans[0],error,op);
+ if(status==RILEY_CUDA_STATUS_SUCCESS)status=resolve_span(results_span,RILEY_CUDA_DTYPE_U32,row_count*8,&spans[1],error,op);
+ if(status==RILEY_CUDA_STATUS_SUCCESS)status=resolve_span(hidden_span,RILEY_CUDA_DTYPE_BF16,hidden_elements*2,&spans[2],error,op);
+ if(status==RILEY_CUDA_STATUS_SUCCESS)status=resolve_span(weight_span,RILEY_CUDA_DTYPE_BF16,weight_elements*2,&spans[3],error,op);
+ if(status==RILEY_CUDA_STATUS_SUCCESS)status=resolve_span(row_indices_span,RILEY_CUDA_DTYPE_U32,row_count*4,&spans[4],error,op);
+ for(int i=0;i<5&&status==RILEY_CUDA_STATUS_SUCCESS;i++)if(i!=1)status=reject_overlap(spans[1],spans[i],false,error,op);
+ if(status==RILEY_CUDA_STATUS_SUCCESS)status=validate_contexts(stream,spans,5,error,op);
+ if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+ if(riley_cuda_internal::thread_has_active_step_capture()&&!command_batch_is_active(stream))return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"step capture requires an active owned command batch");
+ ExclusiveUses uses(stream);for(auto& span:spans)if(!uses.add(span.buffer))return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"buffer set overflow");
+ status=uses.acquire(error,op);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+ if(row_count==0)return uses.release_completed()?RILEY_CUDA_STATUS_SUCCESS:internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"exclusive-use accounting was corrupted");
+ CurrentContext scope(stream->owner);bool launched=false;status=scope.enter(error,RILEY_CUDA_ERROR_STAGE_LAUNCH,op);
+ if(status==RILEY_CUDA_STATUS_SUCCESS)status=prior_launch_status(error,op);
+ if(status==RILEY_CUDA_STATUS_SUCCESS){
+  launched=true;
+  const auto& dynamic=riley_cuda_internal::thread_step_capture_dynamic();
+  const uint64_t launch_rows=dynamic.counts!=nullptr?dynamic.output_rows:row_count;
+  const uint32_t blocks=static_cast<uint32_t>(launch_rows<kMaximumBlocks?launch_rows:kMaximumBlocks);
+  ArgmaxTieRefine refine{reinterpret_cast<const __nv_bfloat16*>(spans[2].data),reinterpret_cast<const __nv_bfloat16*>(spans[3].data),
+   rows_gathered!=0?nullptr:reinterpret_cast<const uint32_t*>(spans[4].data),hidden_size,hidden_rows,window_ulps};
+  bf16_argmax_kernel<true><<<blocks,kArgmaxThreads,0,stream->stream>>>(
+   reinterpret_cast<const __nv_bfloat16*>(spans[0].data),reinterpret_cast<RileyCudaBf16ArgmaxResult*>(spans[1].data),
+   row_count,vocabulary_size,candidate_count!=0?candidate_count:vocabulary_size,dynamic.counts,refine);
+  status=launch_status(error,op);
+ }
+ return complete_execution(&uses,&scope,stream,status,launched,error,op);
+}
 
 extern "C" RileyCudaStatus riley_cuda_hf_pack_qkv_execute(
  RileyCudaBufferSpan q,RileyCudaBufferSpan k,RileyCudaBufferSpan v,RileyCudaBufferSpan out,

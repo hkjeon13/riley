@@ -17,7 +17,7 @@ use riley_cuda::{
     begin_step_capture, end_step_capture, launch_step_graph,
     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge_prompt_mma,
-    set_native_d128_attention_flashinfer,
+    set_native_d128_attention_flashinfer, set_native_flashinfer_kv_chunk,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -413,6 +413,22 @@ fn flashinfer_rows_are_batch_invariant_and_close_to_the_page_path() -> TestResul
     }
     check_high_amplitude_against_f64(&runtime, 128)?;
     check_high_amplitude_against_f64(&runtime, 64)?;
+    // Fixed KV chunks: 256 tokens (the screened size) and 64 tokens (many
+    // chunks per row at both context lengths).
+    for chunk in [256, 64] {
+        set_native_flashinfer_kv_chunk(chunk);
+        for heads in GEOMETRIES
+            .into_iter()
+            .filter(|heads| heads.head == 64)
+            .chain([GEOMETRIES[0]])
+        {
+            check_geometry(&runtime, heads, 20, 24, None)?;
+            check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15))?;
+        }
+        check_high_amplitude_against_f64(&runtime, 64)?;
+        println!("kv_chunk={chunk} done");
+    }
+    set_native_flashinfer_kv_chunk(0);
     set_native_d128_attention_flashinfer(0);
     Ok(())
 }

@@ -2157,6 +2157,120 @@ pub fn deterministic_bf16_argmax_bounded<S: CudaExecutionStream + ?Sized>(
     bf16_argmax(params, candidate_count, stream)
 }
 
+/// Where [`deterministic_bf16_argmax_fp32_ties`] finds each output row's
+/// normalized hidden state and the LM head that produced its logits.
+#[derive(Debug)]
+pub struct Bf16ArgmaxTieSource<'a> {
+    /// BF16 `[hidden_rows, hidden_size]` normalized hidden states.
+    pub hidden: CudaBufferSpan<'a>,
+    /// BF16 `[vocabulary_size, hidden_size]` LM-head weight.
+    pub weight: CudaBufferSpan<'a>,
+    /// U32 `[row_count]` hidden row of each output row; ignored when
+    /// `rows_gathered` (the hidden rows are already in output order) but
+    /// still validated.
+    pub row_indices: CudaBufferSpan<'a>,
+    pub hidden_size: u64,
+    pub hidden_rows: u64,
+    pub rows_gathered: bool,
+    /// Rescore every logit within this many BF16 steps (at the row
+    /// maximum's exponent) of the maximum, not only exact ties; at most 16.
+    pub window_ulps: u32,
+}
+
+/// [`deterministic_bf16_argmax`] (optionally bounded by `candidate_count`,
+/// zero for none) whose row-maximum ties are broken in FP32: the tokens
+/// sharing a row's largest BF16 logit are rescored as FP32 dot products of
+/// the row's hidden state and their LM-head rows, in a fixed order, and the
+/// largest wins (lower token id on equal scores). BF16 rounding of the LM
+/// head's FP32 accumulators cannot reorder logits, only merge them, so rows
+/// without a tie select the same token as the plain argmax. The selection
+/// of a row depends only on that row.
+///
+/// # Errors
+///
+/// As [`deterministic_bf16_argmax`], plus dtype and capacity errors of the
+/// tie source.
+pub fn deterministic_bf16_argmax_fp32_ties<S: CudaExecutionStream + ?Sized>(
+    params: &mut Bf16ArgmaxParams<'_>,
+    source: &Bf16ArgmaxTieSource<'_>,
+    candidate_count: u64,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "deterministic_bf16_argmax_fp32_ties";
+    if candidate_count > params.vocabulary_size {
+        return Err(CudaError::invalid_argument(
+            OPERATION,
+            "candidate_count must be at most vocabulary_size",
+        ));
+    }
+    if source.hidden_size == 0 || source.window_ulps > 16 || (source.rows_gathered && params.row_count > source.hidden_rows) {
+        return Err(CudaError::invalid_argument(OPERATION, "invalid tie source shape"));
+    }
+    let stream = execution_stream_mut(stream);
+    validate_bf16_argmax_descriptor(
+        params.logits.dtype,
+        params.logits.byte_len,
+        params.results.dtype,
+        params.results.byte_len,
+        params.row_count,
+        params.vocabulary_size,
+    )?;
+    let hidden_bytes = source
+        .hidden_rows
+        .checked_mul(source.hidden_size)
+        .and_then(|v| v.checked_mul(2))
+        .ok_or_else(|| CudaError::invalid_argument(OPERATION, "hidden shape overflows"))?;
+    let weight_bytes = params
+        .vocabulary_size
+        .checked_mul(source.hidden_size)
+        .and_then(|v| v.checked_mul(2))
+        .ok_or_else(|| CudaError::invalid_argument(OPERATION, "weight shape overflows"))?;
+    for (name, dtype, want, bytes, need) in [
+        ("hidden", source.hidden.dtype, CudaDType::BF16, source.hidden.byte_len, hidden_bytes),
+        ("weight", source.weight.dtype, CudaDType::BF16, source.weight.byte_len, weight_bytes),
+        ("row_indices", source.row_indices.dtype, CudaDType::U32, source.row_indices.byte_len, params.row_count * 4),
+    ] {
+        if dtype != want {
+            return Err(CudaError::invalid_argument(OPERATION, "tie source dtype mismatch"));
+        }
+        require_capacity(OPERATION, name, bytes, need)?;
+    }
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.logits.buffer,
+            params.results.buffer,
+            source.hidden.buffer,
+            source.weight.buffer,
+            source.row_indices.buffer,
+        ],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::bf16_argmax_fp32_ties_execute(
+            params.logits.raw(),
+            params.results.raw(),
+            source.hidden.raw(),
+            source.weight.raw(),
+            source.row_indices.raw(),
+            params.row_count,
+            params.vocabulary_size,
+            candidate_count,
+            source.hidden_size,
+            source.hidden_rows,
+            source.rows_gathered,
+            source.window_ulps,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = (params, source, candidate_count);
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
 fn bf16_argmax<S: CudaExecutionStream + ?Sized>(
     params: &mut Bf16ArgmaxParams<'_>,
     candidate_count: u64,

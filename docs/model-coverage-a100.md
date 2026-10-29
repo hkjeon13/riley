@@ -4,6 +4,8 @@
 모델별 결과표와, 닫은 항목의 근거를 정리한다. 측정 원본은 호스트 `aws-a100`의
 `/mnt/efs/nlp/psyche/riley-261013/evidence/` 아래에 있고, 각 표 옆에 디렉터리 이름을 적었다.
 
+모델별 원래 수치(처리량, TTFT·TPOT·E2E p50, Riley / vLLM)를 한 번에 비교하는 표는 [A100 성능 수치](model-coverage-a100-perf-table.md)에 있다.
+
 상태 표기: **충족** = 판정 측정으로 확인, **미충족** = 판정 측정에서 기준 미달, **미측정** = 아직 판정 측정 없음.
 
 ## 0. 요약 (2026-10-14 08:00 기준, 진행 중)
@@ -680,11 +682,403 @@ qual-nv 판정(`qual-nv-llama32-3b-attempt01`)에서 남은 미달은 c32-natura
   - 모든 형상에서 행 출력이 배치와 무관하다(행 741개).
   - per-page 경로와의 최대 차이는 ≤ 0.0039다.
   - 고진폭 f64 기준 오차는 D64에서 0.0025, per-page 경로는 0.065다.
-- 스크리닝 `scr62.sh`(판정 아님): Llama-3.2-1B·SmolLM2-1.7B c32-natural, server defaults + native 프로필, 이어서 토큰 점검 attempt 62. 결과 대기.
+- 스크리닝 `scr62.sh`(판정 아님, c32-natural, server defaults + native 프로필):
+  - Llama-3.2-1B: 처리량 1.078, TPOT 0.960(fast 구성의 qual에서는 TPOT 1.055 미달).
+  - SmolLM2-1.7B: 처리량 0.975, TPOT 1.031(이전 1.11).
+  - 토큰 점검 attempt 62: 두 모델 모두 동시성 불변 15/15.
+  - Llama attempt 62는 `MC_SPECIAL=0`(BOS 없이 만든 HF 기준)으로 잘못 돌려 HF·FP32 비교 수치가 무효다. 이전 Llama 점검은 모두 `MC_SPECIAL=1`이었다.
+  - SmolLM2-1.7B의 FP32 일치 Riley / HF BF16 / vLLM = 11 / 12 / 13.
+
+#### Llama-3.2-1B 판정 — **미충족**: C1 (`q63.sh`, `qual-nv-llama32-1b-attempt01`, 바이너리 `riley-mc-1ecc5c30`)
+
+| 셀 | 처리량 비 | TPOT p50 비 | TTFT p50 비 | 판정 |
+|---|---|---|---|---|
+| c1-fixed | 1.045 | 1.133 | 0.301 | **미달** |
+| c1-natural | 0.961 | 1.071 | 0.291 | **미달** |
+| c8-fixed | 1.296 | 0.849 | 0.481 | 충족, 도전 목표 충족 |
+| c8-natural | 1.067 | 0.966 | 0.538 | 충족 |
+| c16-fixed | 1.424 | 0.759 | 0.385 | 충족, 도전 목표 충족 |
+| c16-natural | 1.075 | 0.959 | 0.511 | 충족 |
+| c32-fixed | 1.406 | 0.818 | 0.293 | 충족, 도전 목표 충족 |
+| c32-natural | 1.074 | 0.955 | 0.390 | 충족 |
+
+- 요청 오류 0. 다른 프로세스 표시(FLAGGED) 레인 없음.
+- C1 원인: KV 분할이 없는 fixed-tile에서 decode 행 하나가 64행 타일 중 4행만 채우고, 문맥 전체를 warp 하나가 접는다. fast 구성(per-page split + merge)에서 C1은 동률이었다.
+
+#### 레버 시도 — 16행 query 타일 (`s65.sh`, 바이너리 `riley-mc-638fe665`) — **실패, 되돌림**
+
+- 변경: head size 64이거나 group이 1이면 16행 타일(query warp 1, KV warp 4)을 쓴다. 그 밖에는 64행 타일 그대로다. 타일은 모델 형상으로만 정해지므로 배치와 무관하다.
+- GPU 테스트 `mc-native-test-65`: 통과.
+- 스크리닝(c1·c32, 두 순서). 괄호는 64행 타일의 값이다.
+
+| 모델 | c1-fixed TPOT 비 | c1-natural TPOT 비 | c32-natural 처리량 / TPOT 비 |
+|---|---|---|---|
+| Llama-3.2-1B | 1.122 (1.133) | 1.062 (1.071) | 1.044 / 1.008 (1.074 / 0.955) |
+| SmolLM2-1.7B | 1.122 | 1.112 | 0.965 / 1.043 (0.975 / 1.031) |
+
+- C1은 1% 미만으로만 줄었다. c32-natural은 두 모델 모두 나빠졌고, Llama는 충족에서 미달로 바뀌었다. 그래서 되돌렸다.
+- 토큰 점검 attempt 65(Llama는 `MC_SPECIAL=1`): 두 모델 모두 동시성 불변 15/15. FP32 일치 Riley / HF BF16 / vLLM: Llama-3.2-1B 13 / 13 / 11(HF BF16 eager와 15/15 같음), SmolLM2-1.7B 12 / 12 / 13.
+
+#### 레버 시도 — 고정 크기 KV 청크 분할 (`s66.sh`, 바이너리 `riley-mc-92a5d2de`) — **실패**
+
+- 변경: `RILEY_NATIVE_FLASHINFER_KV_CHUNK=C`(또는 `set_native_flashinfer_kv_chunk`)이면 각 행의 문맥을 위치 0, C, 2C…에서 자른다. 청크별 BF16 부분 출력을 FlashInfer `VariableLengthMergeStates`가 순서대로 합친다.
+- 청크 경계는 행 자신의 문맥으로만 정해지므로 배치와 무관하다. 기본값 0은 기존과 같다.
+- 첫 시도는 테스트가 `unsafe` 금지로 컴파일되지 않았다(`mc-native-test-66-try1.log`). setter로 바꿔 다시 돌렸다.
+- GPU 테스트 `mc-native-test-66`: 청크 256·64에서 D64 형상 5개와 Qwen2.5-3B 형상 모두 배치 무관. f64 기준 오차 0.0038(청크 없음 0.0025).
+- 스크리닝(c1·c32, 두 순서). 괄호는 청크 없는 값이다.
+
+| 설정 | c1-fixed TPOT 비 | c1-natural TPOT 비 | c32-natural 처리량 / TPOT 비 |
+|---|---|---|---|
+| Llama-3.2-1B, 청크 256 | 1.150 (1.133) | 1.086 (1.071) | 0.989 / 1.045 (1.074 / 0.955) |
+| Llama-3.2-1B, 청크 128 | 1.144 | 1.084 | 0.942 / 1.116 |
+| SmolLM2-1.7B, 청크 256 | 1.148 (1.122) | 1.149 (1.112) | 0.871 / 1.169 (0.975 / 1.031) |
+
+- 모든 셀이 나빠졌다. C1 Riley TPOT도 3.02 → 3.06 ms다. 따라서 C1 격차는 어텐션의 행당 작업량이 아니다.
+- 비교: fast + D1 구성(`qual-llama32-1b-attempt01`)에서는 C1이 2.63 ms(vLLM 2.67)로 이겼다. native 경로가 C1에 약 0.4 ms를 더한다. 원인은 nsys(`prof67`)로 진단한다.
+
+### 4.15 C1 원인 — 6144x2048·8192x2048 anchor override (2026-10-28)
+
+- 진단 `prof67`(nsys, Llama-3.2-1B c1-fixed, 같은 바이너리 `riley-mc-92a5d2de`): native와 fast + D1의 스텝당 GPU 시간이 같다(graph launch당 3.32 / 3.36 ms). 어텐션 차이는 스텝당 약 10 µs다. 따라서 C1 퇴보(fast 판정 2.63 ms → native 3.02 ms)는 프로필이 아니라 바이너리 차이에서 왔다.
+- 원인 후보: 4.10의 A100 anchor override(`e800dfb0`) 중 8192x2048(Llama-3.2-1B·SmolLM2-1.7B의 down)과 6144x2048(Qwen3-1.7B의 down).
+  - 새 anchor는 128행 split-K 구성이다. 65행 미만에는 더 빠른 동등 구성이 표에 없어, 1행 decode가 그 구성을 그대로 쓴다.
+  - 4.10에서 C8/C32 효과 1% 미만으로 기록된 레버이고, C1은 재지 않았다.
+- 조치: 두 override를 빼고 이전 표 행으로 되돌렸다(`kernels/src/gemm.cu`). 세 모델 모두 아직 판정을 통과하지 않아, 통과한 모델의 출력은 바뀌지 않는다.
+- 바이너리 `riley-mc-a49e9fa7`.
+
+스크리닝 `s68`(판정 아님, c1·c32, 두 순서, server defaults + native 프로필). 처리량 비 / TPOT p50 비:
+
+| 모델 | c1-fixed | c1-natural | c32-fixed | c32-natural |
+|---|---|---|---|---|
+| Llama-3.2-1B | 1.181 / 0.985 | 1.096 / 0.933 | 1.354 / 0.843 | 1.135 / 0.912 |
+| SmolLM2-1.7B | 1.156 / 0.980 | 1.058 / 0.970 | 1.139 / 0.921 | 1.003 / **1.021** |
+| Qwen3-1.7B | 1.145 / 0.996 | 1.046 / 0.964 | 1.311 / 0.807 | 1.058 / 0.977 |
+
+토큰 점검 attempt 68: 세 모델 모두 동시성 불변 15/15. FP32 일치 Riley / HF BF16 / vLLM:
+
+| 모델 | Riley | HF BF16 | vLLM |
+|---|---|---|---|
+| Llama-3.2-1B | 14 | 13 | 11 |
+| Qwen3-1.7B | 13 | 13 | 13 |
+| SmolLM2-1.7B | 12 | 12 | 13 |
+
+- SmolLM2-1.7B는 vLLM보다 1 낮다. 엄격하게 읽으면 미충족이다.
+- 다음: Llama-3.2-1B·Qwen3-1.7B 8셀 판정과 안정성(`q69.sh`).
+
+판정 `q69`. 바이너리 `riley-mc-a49e9fa7`, server defaults + native 프로필, warmup 32 + 192, 두 순서 평균, GPU 7 단독. 처리량 비 / TPOT p50 비 / TTFT p50 비:
+
+| 셀 | Llama-3.2-1B (`qual-nv-llama32-1b-attempt02`) | Qwen3-1.7B (`qual-nv-qwen3-1-7b-attempt02`) |
+|---|---|---|
+| c1-fixed | 1.176 / 0.989 / 0.318 | 1.152 / 0.996 / 0.355 |
+| c1-natural | 1.098 / 0.934 / 0.289 (FLAGGED: vLLM r1 레인에 외부 프로세스) | 1.050 / 0.961 / 0.344 |
+| c8-fixed | 1.402 / 0.794 / 0.435 | 1.367 / 0.786 / 0.479 |
+| c8-natural | 1.181 / 0.870 / 0.509 | 1.124 / 0.902 / 0.603 |
+| c16-fixed | 1.518 / 0.701 / 0.385 | 1.481 / 0.701 / 0.426 |
+| c16-natural | 1.157 / 0.886 / 0.540 | 1.093 / 0.927 / 0.616 |
+| c32-fixed | 1.313 / 0.865 / 0.335 | 1.275 / 0.824 / 0.458 |
+| c32-natural | 1.144 / 0.915 / 0.385 | 1.061 / 0.963 / 0.498 |
+
+- 두 모델 모두 MANDATORY MET이다. 오류 0이고, 모든 셀에서 같은 프롬프트의 Riley 출력이 반복 간에 같다.
+- stretch: Llama-3.2-1B는 c8 이상 6셀, Qwen3-1.7B는 4셀에서 충족한다. C1은 TPOT −5%에 못 미친다.
+- TTFT p95/p99: c32에서 vLLM보다 높다(Llama c32-natural p99 111.7 vs 87.9 ms, Qwen3-1.7B 179.0 vs 127.5 ms). 다른 통과 모델과 같은 형태이며 개선 항목으로 남긴다.
+- 안정성(`stab-nv-llama32-1b`, `stab-nv-qwen3-1-7b`, 8셀 × 300 s + cancel·재요청·reclaim): 16셀 모두 PASS. GPU 메모리·RSS 증가 ≤ 8 MiB.
+- 결론: Llama-3.2-1B, Qwen3-1.7B 통과.
+
+### 4.16 3072x3072 override 제거와 남은 네 모델 스크리닝 (2026-10-28, `s70`)
+
+- 변경: `kAnchorOverrides`에서 3072x3072(Llama-3.2-3B)도 뺐다. 남은 override는 4096x2560(Qwen3-4B)과 5120x7168(14B)뿐이다. 두 모델은 이 override로 통과했다.
+- 바이너리 `riley-mc-b023fc37`. 스크리닝(판정 아님), c1·c32, 두 순서, server defaults + native 프로필. head dim 64 모델도 이제 native 프로필을 쓴다.
+
+처리량 비 / TPOT p50 비:
+
+| 모델 | c1-fixed | c1-natural | c32-fixed | c32-natural |
+|---|---|---|---|---|
+| Llama-3.2-3B | 1.091 / 0.984 | 1.026 / 0.975 | 1.072 / 0.935 | 1.003 / **1.010** |
+| Qwen3-0.6B | 1.198 / **1.110** | 0.999 / **1.039** | 1.579 / 0.729 | 1.195 / 0.902 |
+| Qwen2.5-0.5B | 1.296 / **1.073** | 1.099 / 0.967 | 1.657 / 0.850 | 1.462 / 0.737 |
+| SmolLM2-360M | 1.351 / **1.078** | 1.131 / 0.934 | 1.684 / 0.828 | 1.433 / 0.737 |
+
+- Llama-3.2-3B c32-natural는 3072x3072 override를 빼도 1.010이다. 이 override는 원인이 아니다(4.13의 1.002–1.014와 같은 범위).
+- 작은 세 모델은 c32에서 크게 이긴다. c1-fixed만 7–11% 진다. Riley TPOT는 fixed·natural이 같다(Qwen2.5-0.5B 1.87/1.88 ms). vLLM은 fixed가 natural보다 0.2 ms 낮다(1.74/1.94). 진단 `prof71`(nsys, Qwen2.5-0.5B c1-fixed, Riley vs vLLM).
+
+토큰 점검 attempt 70: 네 모델 모두 동시성 불변 15/15. FP32 일치 Riley / HF BF16 / vLLM:
+
+| 모델 | Riley | HF BF16 | vLLM |
+|---|---|---|---|
+| Llama-3.2-3B | 10 | 10 | 10 |
+| Qwen3-0.6B | 12 | **14** | **13** |
+| Qwen2.5-0.5B | 10 | 10 | 2 |
+| SmolLM2-360M | 13 | **14** | **14** |
+
+- Qwen3-0.6B와 SmolLM2-360M은 native 경로의 FP32 일치가 HF BF16·vLLM보다 낮다. 엄격하게 읽으면 미충족이다. 15개 프롬프트에서 1–2개 차이다.
+
+진단 `prof71`(nsys, Qwen2.5-0.5B c1-fixed, 바이너리 `b023fc37`, 판정 수치 아님):
+
+- Riley 커널 합 419.7 ms / 224 step = 1.87 ms/step(GPU busy 83.5%). TPOT과 같다. C1은 GPU 시간이 정한다.
+- vLLM 커널 합 425.6 ms / 240 step = 1.77 ms/step. vLLM은 GPU idle 39%지만 CPU 작업이 겹쳐 TPOT에 드러나지 않는다.
+- layer당 차이(×24 layer):
+  - RMSNorm: Riley `wide_bf16_general_rms_norm_kernel` 3.4 µs × 2, vLLM triton fused add-RMSNorm 2.1–2.2 µs × 2. 약 60 µs/step.
+  - QKV·O·down GEMM: Riley 7.3 + 7.3 + 10.9 µs + `splitKreduce` 2.1 µs, vLLM 8.4 µs × 3. 약 55 µs/step.
+  - 어텐션: Riley FlashInfer 9.5 µs, vLLM `flash_fwd_splitkv` 8.2 µs. 약 31 µs/step.
+  - gate_up GEMM(17.0 vs 16.8 µs)과 lm_head(195 vs 194 µs)는 같다.
+- 레버 1(`s72`): hidden 257–1024 RMSNorm을 1024-thread shared-memory 커널에서 256-thread 레지스터 커널(`canonical_narrow`, 기존 576 전용)로 옮긴다. 순서와 트리가 같아 비트 동일하다(`wide_general_rms_norm_gpu`가 512/576/896/960/1000/1024에서 256-thread 기준과 비교).
+
+`s72` 결과(바이너리 `riley-mc-fa82148a`, c1 스크리닝, 판정 아님):
+
+- GPU 테스트 `mc-native-test-72`: 576/896/960/1024 모두 다른 비트 0개. 토큰 점검 attempt 72는 attempt 70과 같다(SmolLM2-135M도 12/15로 그대로).
+- Riley c1 TPOT p50:
+
+  | 모델 | s70 | s72 |
+  |---|---|---|
+  | Qwen2.5-0.5B | 1.87 ms | 1.93 ms |
+  | SmolLM2-360M | 1.95 ms | 2.02 ms |
+  | Qwen3-0.6B | 2.31 ms | 2.36 ms |
+
+  vLLM은 같은 값(1.72–1.74, 1.81, 2.08)이다. 세 모델 모두 3% 느려졌으므로 실패로 기록하고 되돌렸다. 코드는 호스트 `s72-primitives.cu`에 보존했고, 바이너리는 `riley-mc-fa82148a`다.
+- 4.2의 기록과 맞는 결과다. 896·960 폭에 1024-thread 형태를 쓰게 한 것이 바로 256-thread 형태가 느려서였다. 이 시도는 이미 진 형태를 다시 잰 셈이다.
+- nsys의 graph-node 추적은 커널마다 오버헤드를 더한다. 그래서 `prof71`의 RMSNorm 3.4 µs는 실제 차이를 부풀린 값이다.
+- **결론(C1)**: 작은 모델의 C1 fixed TPOT은 4.2 "C1 후속"의 종료 근거가 그대로 유효하다. 근거는 비트 동치 GEMM 중 최선을 이미 쓴다는 것, 연속 두 레버가 1% 미만이었다는 것, 이번 레버가 −3%라는 것이다. native 프로필과 override 제거 뒤의 격차는 다음과 같다: Qwen2.5-0.5B +7.3%, SmolLM2-360M +7.8%, Qwen3-0.6B +11.0%(s70).
+
+### 4.17 c32-natural 진단 — SmolLM2-1.7B, Llama-3.2-3B (2026-10-28, `prof73`, `trace74`)
+
+`prof73`(nsys, c32-natural, 바이너리 `b023fc37`, native 프로필, 판정 수치 아님):
+
+| 모델 / 엔진 | launch당 span | launch당 커널 합 | 차이(GPU idle) | GPU busy |
+|---|---|---|---|---|
+| SmolLM2-1.7B Riley | 6.32 ms | 5.85 ms | 0.47 ms | 92.9% |
+| SmolLM2-1.7B vLLM | 5.17 ms | 4.90 ms | 0.26 ms | 95.0% |
+| Llama-3.2-3B Riley | 8.99 ms | 8.39 ms | 0.60 ms | 93.6% |
+
+- vLLM의 launch 수에는 prefill·sampler graph가 섞여 있어 launch당 값은 Riley와 직접 비교하지 않는다. 비교할 것은 idle 비율이다(Riley 7%, vLLM 5%).
+- 어텐션은 비슷하다: Riley FlashInfer 67.9 µs, vLLM `flash_fwd_splitkv` 64.8 µs(SmolLM2-1.7B, 호출당).
+- Llama-3.2-3B의 vLLM 요약은 `a100_prof_sum.py`가 MEMCPY 테이블 없는 trace에서 실패했다. 원본 trace는 `evidence/prof73-l32-3b-vllm-attempt01`에 있다.
+- 다음: 스텝 사이 호스트 구간을 단계별로 나눈다(`trace74`, `RILEY_HOST_STEP_TRACE=1`, Riley만).
+
+`trace74`(`RILEY_HOST_STEP_TRACE=1`, c32-natural, Riley만, 정상 상태 128스텝 평균, µs/step):
+
+| 모델 | plan | pack | submit | download | sample | commit | 그 외 | 합(wait 제외) | wait |
+|---|---|---|---|---|---|---|---|---|---|
+| SmolLM2-1.7B | 42 | 44 | 95 | 26 | 19 | 11 | 24 | 약 260 | 6,350–6,500 |
+| Llama-3.2-3B | 42 | 44 | 96 | 25 | 22 | 11 | 25 | 약 265 | 8,970–9,170 |
+
+- wait를 뺀 호스트 구간은 스텝의 약 4%(SmolLM2-1.7B)와 3%(Llama-3.2-3B)다. 남은 격차는 각각 2.1%와 1.0%다.
+- pack의 대부분은 `PackedBatchHostV1::new`의 검증이다. 블록 id 중복 검사가 블록 수 B에 대해 O(B²)다(`block_ids[..i].contains`). c32-natural에서 B는 약 1,000이다. 행 주소 중복 검사도 O(R²)다.
+- `perf`는 쓸 수 없다(`perf_event_paranoid=4`, 시스템 설정이라 바꾸지 않는다).
+- 레버 `s75`: 64개 초과일 때 정렬한 사본으로 중복이 없음을 먼저 확인하고, 그러면 두 pairwise 검사의 안쪽 루프를 건너뛴다. 중복이 있으면 기존 검사가 그대로 돌아 같은 오류를 낸다.
+  - 단위 테스트 `large_batches_keep_the_pairwise_errors`(101블록·101행: 통과, 중복 블록·중복 행 오류 문구 동일)를 추가했다.
+  - 호스트만 바뀌고 수치는 그대로다.
+
+`s75` 결과(바이너리 `riley-mc-6f7ab3e9`, 스크리닝, 판정 아님):
+
+- `trace75`(SmolLM2-1.7B c32-natural): pack 44 → 17–18 µs/step. 다른 단계는 그대로다(plan 43–46, submit 103–111).
+- c32-natural TPOT p50, Riley / vLLM / 비:
+
+  | 모델 | 이전 | `s75` |
+  |---|---|---|
+  | SmolLM2-1.7B | 6.66 / 6.53 / 1.021 (`s68`) | 6.61 / 6.78 / 0.976 |
+  | Llama-3.2-3B | 9.25 / 9.16 / 1.010 (`s70`) | 9.20 / 9.16 / **1.005** |
+
+- Riley 쪽 개선은 0.5–0.75%다. SmolLM2-1.7B 비가 크게 바뀐 것은 대부분 vLLM 쪽 변동(+3.8%)이다.
+- SmolLM2-1.7B는 c1·c32 네 셀 모두 충족이라 8셀 판정을 돌린다(`q76`: 토큰 점검 attempt 76, `qual-nv-smol-1-7b-attempt01`, 통과 시 안정성).
+- **Llama-3.2-3B c32-natural 종료**: override 제거(`s70`, 변화 없음)와 이번 레버(−0.5%)가 연속 두 레버 1% 미만이다. 남은 격차는 TPOT +0.5%(`s75`)이고, 반복 측정 범위는 +0.2–1.4%(4.13)다. 다른 일곱 셀은 `qual-nv-llama32-3b-attempt01`(4.13)에서 충족이다.
+
+`q76` 결과(바이너리 `riley-mc-6f7ab3e9`, 서버 기본값 + native 프로필, GPU 7 단독):
+
+- 토큰(attempt 76): C1·C8·C32 15/15 동일, HF BF16 일치 11/11/11. FP32 일치는 Riley 12, HF BF16 12, vLLM 13(평균 접두 비율 0.861 / 0.829 / 0.884)이다. HF BF16과 같고 vLLM보다 한 프롬프트 낮다(`s68`의 12/12/13과 같다).
+- 판정 `qual-nv-smol-1-7b-attempt01`: **MANDATORY MET**(stretch 전 셀은 아님). R/V:
+
+  | 셀 | tok/s | TPOT p50 | TTFT p50 |
+  |---|---|---|---|
+  | c1-fixed | 1.153 | 0.980 | 0.370 |
+  | c1-natural | 1.062 | 0.970 | 0.350 |
+  | c8-fixed | 1.226 | 0.866 | 0.548 |
+  | c8-natural | 1.089 | 0.937 | 0.643 |
+  | c16-fixed | 1.439 | 0.718 | 0.464 |
+  | c16-natural | 1.061 | 0.954 | 0.628 |
+  | c32-fixed | 1.159 | 0.878 | 0.552 |
+  | c32-natural | 1.017 | 0.996 | 0.573 |
+
+  TTFT p95/p99는 c16·c32에서 vLLM보다 높다(c32-natural p99 175.2 / 129.1 ms).
+- 안정성 `stab-nv-smol-1-7b`: 8셀 × 300 s 모두 PASS, 취소 8–64건, GPU 메모리·RSS 증가 없음(RSS 3783–3817 MB).
+- SmolLM2-1.7B는 통과다. FP32 일치가 vLLM보다 한 프롬프트 낮은 점은 Qwen3-1.7B·Qwen3-8B와 같은 성격으로 남긴다.
+
+### 4.18 TTFT p95/p99 (native 프로필) — 근거와 함께 종료 (2026-10-29)
+
+2.7의 종료는 fast 경로 기준이었다. native 프로필(이 문서의 Qwen3·Llama·D64 판정)에 대해서도 같은 질문을 정리한다.
+
+- 현상: 모든 판정에서 TTFT p50은 vLLM의 0.35–0.87배다. p95/p99는 c16·c32에서 vLLM보다 높다(예: SmolLM2-1.7B c32-natural p99 175.2 / 129.1 ms, Llama-3.2-1B 111.7 / 87.9 ms, Qwen3-1.7B 179.0 / 127.5 ms).
+- 원인은 2.7과 같다. native 프로필도 스텝당 prompt 토큰 예산이 256이라, 동시에 들어온 요청 묶음의 뒤쪽이 여러 prefill 스텝을 기다린다.
+- native 경로에서 시도한 레버(Qwen3-4B, [Phase 1](phase1-native-attention-and-burst-20261022.md)):
+
+  | 레버 | C32 TTFT p95 | 필수 기준 영향 | 처리 |
+  |---|---|---|---|
+  | budget 512 상시(실험 B) | −18…−20% (fixed), −3% (natural) | fixed C32 처리량 −8.8%, TPOT p50 +16% | 기각(필수 기준 위반) |
+  | 버스트 K=16(실험 C) | −18% (fixed), −9% (natural) | C16 처리량 −2.6%, TPOT +2.1%, ITL p99 28.7 ms | 기각 |
+  | 버스트 K=10, 5쌍 판정 | −8.97% (fixed) | 처리량·TPOT 영향 1% 안팎, C8 ITL p99 +40–76% | 미채택(사전 등록 게이트 −10% 미달) |
+  | 버스트 P=31, 5쌍 판정 | −5.28% (fixed), −13.9% (natural) | 처리량 +0.45% 이상, TPOT p50 ≤ 0% | 미채택(사전 등록 게이트 미달), opt-in 플래그로 유지 |
+
+- vLLM 수준(fixed C32 p95 163 ms, Riley 기준선 약 260 ms)에 닿으려면 약 −37%가 필요하다. 필수 기준(처리량·TPOT p50)을 지키는 레버 중 가장 큰 효과는 −9%였다. 효과를 키우는 레버(budget 512 상시, K=16)는 처리량·TPOT 필수 기준을 깨뜨렸다.
+- 판단: 꼬리 TTFT는 필수 기준과 맞바꾸는 관계이고, 필수 기준을 지키는 범위에서 연속 두 판정 레버(K=10, P=31)가 vLLM과의 격차를 닫지 못했다. 이 항목은 위 측정 근거로 종료한다. 버스트 플래그는 opt-in으로 남아 있어, 꼬리 TTFT를 더 중시하는 배포에서는 켤 수 있다.
+
+### 4.19 FP32 일치 — BF16 logit 동률 진단과 FP32 tie break (2026-10-29, `fm78`, `tb80`)
+
+FP32 엄격 기준(HF BF16 eager와 vLLM 이상)에 못 미치는 모델: Qwen3-0.6B(12 / 14 / 13), SmolLM2-360M(13 / 14 / 14), SmolLM2-1.7B(12 / 12 / 13), Qwen3-8B(14 / 13 / 15), Qwen2.5-14B(10 / 12 / 6), SmolLM2-135M(fast, 11 / 12 / –). Qwen3-1.7B는 attempt 68에서 13 / 13 / 13이다.
+
+진단 `fm78`(`a100_fp32_margin.py`, 판정 아님): 각 엔진이 FP32 기준과 처음 갈라지는 지점에서 FP32 HF를 teacher-forcing으로 돌려, 기준 토큰과 엔진 토큰의 FP32 logit을 비교했다(`evidence/hf-token-*/fp32-margin.json`).
+
+| 모델 | Riley 분기 | 그중 FP32 logit이 BF16으로 같은 값(동률) | FP32 차이 범위 |
+|---|---|---|---|
+| Qwen3-0.6B | 3 | 1 | 0.07–0.14 |
+| SmolLM2-360M | 2 | 1 | 0.03–0.04 |
+| SmolLM2-1.7B | 3 | 1 | 0.005–0.05 |
+| SmolLM2-135M | 4 | 4 | 0.002–0.05 |
+| Qwen3-8B | 1 | 1 | 0.16 |
+| Qwen3-4B | 1 | 1 | 0.07 |
+| Qwen3-1.7B | 2 | 1 | 0.04–0.05 |
+| Qwen2.5-14B | 4 | 2 | 0.05–0.18 |
+
+- 모든 분기는 FP32에서도 1·2위 차이가 0.2 이하인 근소한 경우다. HF BF16과 vLLM의 분기도 같은 성격이다.
+- Riley의 argmax는 BF16 logit에서 같은 값이면 낮은 토큰 id를 고른다. 위 동률 분기에서는 이 규칙이 FP32와 다른 쪽을 골랐을 수 있다.
+
+레버(`--greedy-tie-break fp32-rescore-v1`, 기본은 `lowest-token-v1`):
+
+- LM head의 FP32 누산값을 BF16으로 반올림하는 것은 단조라 순서를 뒤집지 않고 합칠 뿐이다. 그래서 행의 최댓값을 공유하는 토큰만 다시 본다.
+- 그 토큰들을 출력 행의 정규화된 hidden과 LM head 행의 FP32 내적(고정 순서)으로 다시 계산해 가장 큰 쪽을 고른다. 같으면 낮은 id, 후보가 64개를 넘으면 기존 규칙이다.
+- 동률이 없는 행은 토큰이 같다. 한 행의 선택은 그 행에만 의존해 배치 불변이다.
+- argmax 커널 안에서 동률 여부만 추가로 추적하고, 동률인 행에서만 두 번째 패스를 돈다.
+- GPU 테스트 `fp32_tie_break_rescores_only_tied_maxima_per_row`(`bf16_argmax_gpu`): 동률 없음·2개·3개·상한 밖·FP32 동점·64개 초과, gathered와 index map, 행 단독 실행이 CPU oracle과 같다. 6/6 통과(`mc-native-test-79.log`, 바이너리 `riley-mc-e432223e`).
+
+스크리닝 계획 `tb80`(판정 아님, 실행 전 기록): native 프로필 12개 모델에 플래그를 켜고 토큰 점검 attempt 80(C1/C8/C32 불변성, HF BF16). FP32 일치는 직전 attempt와 같은 FP32 기준·vLLM 토큰(복사, 두 엔진은 바뀌지 않음)으로 계산한다. 개선되고 나빠진 모델이 없으면 native 프로필 기본값 후보로 두고, 성능 영향은 별도 스크리닝으로 본다.
+
+`tb80` 결과(바이너리 `riley-mc-e432223e`): Qwen3-0.6B와 SmolLM2-360M에서 C1/C8/C32 불변성이 13/15로 깨졌다. 원인은 기록된 decode 스텝(`--decode-step-graph capture-v1`)이 tie source의 hidden 행 수를 기록 시점의 출력 행 수로 고정해, 재생 때 그보다 뒤쪽 행이 재점수 대상에서 빠진 것이다. hidden 행 상한을 버퍼 용량으로 바꿨다(`riley-mc-c002a450`, GPU 테스트 6/6). `tb80` 증거는 보존한다(attempt 80; SmolLM2-1.7B와 Qwen3-8B는 불변성 15/15였다).
+
+`tb81` 결과(바이너리 `riley-mc-c002a450`, attempt 81, 12개 모델 모두 C1/C8/C32 불변 15/15). FP32 일치 Riley(이전 → 플래그) / HF BF16 / vLLM:
+
+| 모델 | Riley | HF BF16 | vLLM | 기준 |
+|---|---|---|---|---|
+| Qwen3-0.6B | 12 → 13 | 14 | 13 | 미달(HF −1) |
+| SmolLM2-360M | 13 → 13 | 14 | 14 | 미달(−1) |
+| SmolLM2-1.7B | 12 → 12 | 12 | 13 | 미달(vLLM −1) |
+| Qwen3-8B | 14 → **15** | 13 | 15 | **충족**(이전 미달) |
+| Qwen2.5-14B | 10 → **13** | 12 | 6 | **충족**(이전 미달) |
+| Qwen3-1.7B | 13 → 13 | 13 | 13 | 충족 |
+| Qwen3-4B | 14 → 13 | 13 | 13 | 충족 |
+| Qwen2.5-0.5B | 10 → 11 | 10 | 2 | 충족 |
+| Llama-3.2-1B | 14 → 13 | 13 | 11 | 충족 |
+| Llama-3.2-3B | 10 → 13 | 10 | 10 | 충족 |
+| Llama-3.1-8B | 13 → 14 | 12 | 13 | 충족 |
+| Qwen2.5-Coder-7B | 13 → 13 | 13 | 9 | 충족 |
+
+- 합계 +8 프롬프트(오른 모델 6, 내린 모델 2: Qwen3-4B·Llama-3.2-1B 각 −1, 둘 다 기준은 그대로 충족). 기준 미달은 5개 모델에서 3개로 줄었다.
+- 남은 미달 세 모델의 분기 중 동률이 아닌 것은 hidden 상태 자체의 BF16 오차에서 나오며, argmax 단계에서는 바꿀 수 없다.
+- 다음: 플래그의 성능 영향 스크리닝. 영향이 없으면 native 프로필 기본값으로 올리고, 출력이 바뀌므로 모델별 판정을 다시 돌린다.
+
+성능 스크리닝 `p82`(판정 아님, 실행 전 기록: 같은 바이너리 `riley-mc-c002a450`, Riley만, native 프로필, c1·c32 두 워크로드, off/on/on/off 순서. 통과: 모든 셀에서 on의 처리량과 TPOT p50이 off 두 번의 범위 안이거나 off 평균의 0.5% 이내). tok/s, TPOT p50 ms:
+
+| 모델 | 셀 | off1 | on1 | on2 | off2 |
+|---|---|---|---|---|---|
+| Qwen3-0.6B | c1-fixed | 416.4 / 2.31 | 409.5 / 2.35 | 408.5 / 2.35 | 416.9 / 2.30 |
+| Qwen3-0.6B | c1-natural | 406.1 / 2.31 | 399.8 / 2.36 | 399.5 / 2.36 | 406.1 / 2.31 |
+| Qwen3-0.6B | c32-fixed | 6117.0 / 4.14 | 6094.1 / 4.19 | 6108.3 / 4.20 | 5982.7 / 4.16 |
+| Qwen3-0.6B | c32-natural | 6815.0 / 4.07 | 6770.3 / 4.09 | 6765.8 / 4.09 | 6794.9 / 4.05 |
+| Llama-3.2-3B | c1-fixed | 156.9 / 6.20 | 155.9 / 6.25 | 156.0 / 6.24 | 156.7 / 6.21 |
+| Llama-3.2-3B | c1-natural | 156.4 / 6.20 | 155.5 / 6.24 | 155.4 / 6.25 | 156.4 / 6.20 |
+| Llama-3.2-3B | c32-fixed | 2416.6 / 10.71 | 2401.0 / 10.79 | 2406.4 / 10.76 | 2400.0 / 10.69 |
+| Llama-3.2-3B | c32-natural | 2984.1 / 9.21 | 2976.9 / 9.23 | 2968.5 / 9.26 | 2992.8 / 9.19 |
+
+- **불통과**: 셀마다 TPOT이 스텝당 약 40–50 µs 늘었다(Qwen3-0.6B C1 처리량 −1.8%, Llama-3.2-3B C1 −0.6%).
+
+진단 `ac83`(판정 아님; GPU 테스트 `fp32_tie_break_launch_cost_screen`, 어휘 151936, hidden 1024, 1행·32행, 동률 없음·있음; nsys 커널 시간, `evidence/ac83-nsys*`). 동률 없는 경우 BF16 argmax 커널 평균은 28.4 µs였다.
+
+| 구현 | 플래그 커널 평균 | 비고 |
+|---|---|---|
+| `c002a450`(루프 안 동률 추적, 동률이면 행 전체 재스캔) | 50.8 µs | 동률 행의 재스캔이 약 +40 µs |
+| 루프 밖 집계 + 전체 재스캔 | — | 단위 테스트 실패: 표가 warp reduction 뒤의 값으로 매겨져 동률을 놓쳤다(`mc-native-test-83-own-vote-bug.log`). reduction 전 스레드별 선택으로 고쳤다 |
+| 최대값을 가진 스레드만 자기 열을 다시 봄(스레드 하나) | 36.2 µs | 행 전체 재스캔이 필요 없다: 최댓값과 같은 열은 자기 최댓값이 그 값인 스레드만 봤다 |
+| 같은 방식, 그 스레드의 열을 warp 32개가 나눠 봄 | **30.3 µs** | 동률 없음 +1.2 µs, 동률 +2.8 µs(wall) |
+
+- 선택 루프는 기본 argmax와 같다. 7/7 GPU 테스트 통과(`mc-native-test-83.log`).
+- 부수 관찰: 1행 argmax 자체가 28 µs로, Qwen3-0.6B C1 TPOT(2.31 ms)의 약 1.2%다. 블록 하나가 151936개를 혼자 훑는다. C1 격차의 후보 레버로 남긴다.
+
+계획 `p84`(판정 아님, 실행 전 기록): 새 바이너리로 `p82`와 같은 조건·순서·통과 규칙. 이어서 `tb84`: 동률 집계 방식이 바뀌었으므로(이전 구현의 표 오류 포함) 12개 모델의 토큰 점검을 attempt 84로 다시 돌리고 FP32 일치를 `tb81`과 같은 기준 파일로 계산한다.
+
+`p84` 결과(`riley-mc-abcbfcfd`, tok/s / TPOT p50 ms, off1 · on1 · on2 · off2):
+
+| 모델 | 셀 | off1 | on1 | on2 | off2 |
+|---|---|---|---|---|---|
+| Qwen3-0.6B | c1-fixed | 416.2 / 2.31 | 416.5 / 2.30 | 415.9 / 2.31 | 417.3 / 2.30 |
+| Qwen3-0.6B | c1-natural | 405.8 / 2.31 | 405.7 / 2.32 | 406.1 / 2.31 | 405.7 / 2.32 |
+| Qwen3-0.6B | c32-fixed | 6101.4 / 4.12 | 6112.6 / 4.15 | **5934.7** / 4.15 | 6086.6 / 4.14 |
+| Qwen3-0.6B | c32-natural | 6806.2 / 4.05 | 6837.9 / 4.05 | 6847.8 / 4.04 | 6809.5 / 4.05 |
+| Llama-3.2-3B | c1-fixed | 157.0 / 6.20 | 157.1 / 6.20 | 156.9 / 6.20 | 156.8 / 6.21 |
+| Llama-3.2-3B | c1-natural | 156.0 / 6.22 | 156.1 / 6.22 | 156.1 / 6.22 | 156.4 / 6.20 |
+| Llama-3.2-3B | c32-fixed | 2385.9 / 10.73 | 2401.8 / 10.67 | 2408.5 / 10.72 | 2374.2 / 10.79 |
+| Llama-3.2-3B | c32-natural | 2985.0 / 9.20 | 2992.3 / 9.19 | 2986.3 / 9.23 | 2980.0 / 9.21 |
+
+- p82의 스텝당 40–50 µs 증가는 사라졌다(C1 TPOT 차이 0).
+- 규칙대로는 **불통과**: Qwen3-0.6B c32-fixed on2의 처리량이 off 평균보다 2.6% 낮다(TPOT p50은 범위 안, 같은 셀의 on1은 off 두 번보다 높다). 그 밖의 셀은 통과. 이 결과로 기본값을 올리지 않는다.
+
+`tb84` 결과(attempt 84, `riley-mc-abcbfcfd`): 12개 모델 모두 C1/C8/C32 불변 15/15. FP32 일치는 `tb81`과 모두 같다(Qwen3-0.6B 13, SmolLM2-360M 13, SmolLM2-1.7B 12, 나머지 9개 충족). 이전 구현의 표 오류는 이 프롬프트들의 결과를 바꾸지 않았다.
+
+`ac85`(판정 아님): 1행 argmax의 행 읽기를 스레드당 4개씩 미리 띄우는 변경. 커널 평균 28.4 → 27.4 µs(nsys)로 1 µs뿐이라 되돌렸다. 커널은 메모리 지연보다 원소별 연산에 묶여 있다. C1에서 줄이려면 한 행을 여러 블록으로 나눠야 하고, 상한은 Qwen3-0.6B C1 TPOT의 약 1.2%다.
+
+정리: `--greedy-tie-break fp32-rescore-v1`은 opt-in으로 둔다. 비용 규칙을 한 셀에서 넘지 못했고(`p84`), 남은 FP32 미달 세 모델(Qwen3-0.6B, SmolLM2-360M, SmolLM2-1.7B)은 이 플래그로 바뀌지 않는다. 플래그로 충족되는 Qwen3-8B와 Qwen2.5-14B는 플래그를 켠 설정으로 판정을 다시 돌려야 기준 충족으로 셀 수 있다.
+
+레버 `fp32-window1-v1` / `fp32-window2-v1`(같은 플래그의 새 값): `fm78`의 남은 분기는 FP32 차이가 0.005–0.14로, logit 16–32 구간의 BF16 한 칸(0.125)보다 작다. 그래서 동률이 아니어도 BF16에서 이웃한 두 값의 순서가 FP32와 반대일 수 있다. 행 최댓값의 지수 기준 BF16 N칸 안의 logit을 모두 같은 방식(FP32 내적, 고정 순서, 같으면 낮은 id, 후보 64개 초과면 기존 규칙)으로 다시 본다. 행 단위라 배치 불변이다. GPU 테스트 `fp32_window_rescores_logits_near_the_maximum` 포함 8/8(`mc-native-test-87.log`, 바이너리 `riley-mc-b74361d3`).
+
+계획 `tw88`(판정 아님, 실행 전 기록): native 프로필 12개 모델, window 1은 attempt 88, window 2는 attempt 89. 각각 토큰 점검(C1/C8/C32 불변성, HF BF16)과 `tb81`과 같은 FP32 기준·vLLM 토큰으로 FP32 일치. 채택 조건: 12개 모델 모두 불변 15/15이고 기준 미달 모델이 없거나 줄며, 기준을 충족하던 모델이 미달로 떨어지지 않는다. 채택하면 비용 스크리닝(`p84`와 같은 규칙)과 모델별 판정 재실행이 뒤따른다.
+
+`tw88`/`tw89` 결과(`riley-mc-b74361d3`): 두 window 모두 12개 모델 불변 15/15이고, FP32 일치가 모든 모델에서 `tb81`(정확한 동률만)과 같다(Qwen3-0.6B 13, SmolLM2-360M 13, SmolLM2-1.7B 12, 나머지 9개 충족). 채택 조건의 "미달 모델이 줄어든다"를 만족하지 못해 채택하지 않는다.
+
+- 해석: 남은 분기에서는 Riley 자신의 hidden 상태로 FP32 내적을 다시 계산해도 Riley의 토큰이 이긴다. 차이는 argmax나 LM head의 반올림이 아니라 그 앞의 hidden 상태(BF16 레이어 연산)에서 생긴다.
+- FP32 미달 세 모델(Qwen3-0.6B HF BF16 대비 −1, SmolLM2-360M HF BF16·vLLM 대비 −1, SmolLM2-1.7B vLLM 대비 −1)에 대한 레버: (1) 동률 FP32 재점수 — Qwen3-0.6B 12 → 13, 나머지 두 모델 변화 없음; (2) BF16 1·2칸 window 재점수 — 세 모델 모두 변화 없음. 두 레버가 연속으로 남은 격차를 줄이지 못해, 이 항목은 이 근거로 **종료(근거와 함께)**로 둔다. 세 모델 모두 15개 중 1개 차이이며, HF BF16·vLLM과 같은 성격(FP32 차이 0.2 이하의 근소한 분기, `fm78`)이다.
 
 ## 5. 남은 일
 
-- C1 TPOT(작은 모델): Qwen3-0.6B(+10.9%), Qwen3-1.7B(+6.4%), Qwen2.5-0.5B, SmolLM2-360M. 4.2에서 근거와 함께 종료한 항목이다.
-- Llama-3.2-3B c32-natural TPOT(+0.2–1.4%, 4.13): 아직 실제 레버를 시도하지 않았다.
-- c32-natural(긴 문맥 decode 어텐션): head dim 64 모델(Llama-3.2-1B, SmolLM2-1.7B). 4.14에서 D64 FlashInfer 경로를 만들었고 스크리닝 중이다. Qwen3-0.6B(head dim 128)는 `tn52` 다음에 native 프로필로 스크리닝한다.
-- 작은 모델의 C1(Qwen2.5-0.5B, SmolLM2-360M): 4.2의 "C1 후속"에서 근거와 함께 종료.
+- C1 TPOT(작은 모델): Qwen3-0.6B(+11.0%), Qwen2.5-0.5B(+7.3%), SmolLM2-360M(+7.8%). 4.2와 4.16에서 근거와 함께 종료했다.
+- Llama-3.2-3B c32-natural TPOT(+0.5%, `s75`): 4.17에서 연속 두 레버 1% 미만으로 종료했다.
+- TTFT p95/p99(c16·c32): fast 경로는 2.7, native 프로필은 4.18에서 근거와 함께 종료했다.
+- FP32 엄격 기준(2026-10-29 갱신, 4.19): Qwen3-1.7B는 attempt 68에서 이미 충족이었다. Qwen3-8B·Qwen2.5-14B는 `--greedy-tie-break fp32-rescore-v1`로 충족하지만, 이 플래그는 비용 규칙(`p84`)을 한 셀에서 넘지 못해 opt-in으로 남아 기본 판정에는 들어가지 않는다. Qwen3-0.6B(13 vs HF BF16 14), SmolLM2-360M(13 vs 14), SmolLM2-1.7B(12 vs vLLM 13)은 연속 두 레버(동률 재점수, window 재점수)가 남은 격차를 줄이지 못해 근거와 함께 종료했다. 분기는 argmax 앞의 hidden 상태에서 생긴다.
+- Qwen2.5-14B: 표준 조건(gpu-memory-utilization 0.6, 40 GB의 24 GB)에는 BF16 가중치(약 29.5 GB)가 들어가지 않아 vLLM이 로드되지 않는다. 그래서 별도 메모리 조건의 실험(4.12)으로만 비교할 수 있다. 표준 조건 비교는 물리적으로 불가능하다.
+- 도전 목표(처리량 +10%, TPOT −5%)는 모든 셀에서 달성되지 않았다. 필수 기준이 아니며 셀별 충족 여부는 각 판정표의 `+stretch` 표시에 있다.
+
+### 상태 요약(2026-10-29)
+
+| 항목 | 상태 | 근거 |
+|---|---|---|
+| 서빙·동시성 불변 15/15·안정성 | 전 모델 충족 | 판정표, `tb84`, `st77` 등 |
+| C8/C16/C32 필수 성능 | 통과 모델 충족, Llama-3.2-3B c32-natural만 +0.5%로 종료 | 4.17 |
+| C1 ±3% | 작은 세 모델 c1-fixed +7–11% 종료 | 4.2, 4.16(배치 불변 GEMM 중 최선 사용, 연속 두 레버 1% 미만, s72 −3%) |
+| TTFT p95/p99 | 종료 | 4.18 |
+| FP32 일치 | 세 모델 종료, 두 모델은 opt-in 플래그로만 충족 | 4.19 |
+| Qwen2.5-14B vLLM 조건 | 표준 조건 불가(메모리) | 4.12 |
+| 도전 목표 | 일부 셀만 | 판정표 |
+
+C1 격차의 상한 분해(`prof71` 재분석, Qwen2.5-0.5B c1-fixed, 레이어당 µs, nsys 커널 이름·grid로 매칭, 2026-10-29):
+
+| 연산 | Riley | vLLM | 차이 | vLLM 커널 |
+|---|---|---|---|---|
+| QKV / O / down GEMM | 7.3 / 7.3 / 10.9 + split-K reduce 2.1 | 6.2 / 6.5 / 12.5 | +2.4 | cuBLAS `gemvx::kernel`(M=1 전용 GEMV) |
+| gate_up GEMM | 17.0 | 16.8 | +0.2 | 같은 계열 GEMM |
+| RMSNorm × 2 | 3.4 × 2 | 2.2 + 2.1 | +2.5 | Triton fused add-RMSNorm |
+| 어텐션 + QK RoPE·KV 쓰기 | 9.5 + 3.8 | 8.0 + 2.5 + 2.3 | +0.5 | FA2 split-KV, reshape_and_cache, Triton RoPE |
+| SiLU 게이트 | 2.2 | 1.8 | +0.4 | |
+| 합 × 24레이어 | | | 약 +144 µs/step | |
+| 샘플링(스텝당) | argmax 30 | 약 47(gumbel·penalty 등 6개) | −17 | |
+
+- vLLM은 M=1에서 cuBLAS GEMV를 쓴다. 이 경로는 M>1의 GEMM과 누산 순서가 달라 배치 불변이 아니다. Riley native는 모든 M에서 같은 비트를 내는 구성만 쓰므로, GEMM 차이 약 58 µs/step(TPOT의 3.1%)은 배치 불변 계약 아래에서 남는 하한이다.
+- 나머지(RMSNorm, 어텐션, SiLU 약 82 µs)를 vLLM과 똑같이 맞춰도 Qwen2.5-0.5B는 +7.3% → 약 +3%, Qwen3-0.6B는 +11.0% → 약 +7%다. 그러니 C1 ±3%는 배치 불변 계약(2026-10-22 사용자 결정: native 배치 불변이 제품 기본)과 함께 달성할 수 없다. 이것이 C1 종료의 정량 근거다.
+- RMSNorm만 새 numerics로 줄이는 레버(이론상 약 −3%)는 이전 두 시도(256-thread 레지스터 형태 4.4 µs, `s72` −3%)가 실패했다. 성공해도 C1 기준에는 닿지 않는다.
+
+안정성(8셀 × 300 s + 취소·재요청·회수) 증거, 범위 안 16개 모델 전부 8/8 PASS:
+
+| 모델 | 증거 |
+|---|---|
+| Qwen2.5-1.5B / 3B / 7B | `d1-stab-1-5b-attempt20`, `d1-stab-3b-attempt20`, `d1-stab-7b-attempt20`(7B 재판정 설정은 `stab-7b`) |
+| Qwen2.5-0.5B | `stab-q25-0-5b`, native 프로필 `stab-nv-q25-0-5b`(`st77`) |
+| Qwen2.5-14B / Coder-7B | `stab-nv-14b`, `stab-nv-coder-7b` |
+| Qwen3-0.6B / 1.7B / 4B / 8B | `stab-nv-qwen3-0-6b`(`st77`), `stab-nv-qwen3-1-7b`, `stab-nv-qwen3-4b`, `stab-nv-qwen3-8b` |
+| SmolLM2-135M / 360M / 1.7B | `stab-smol-135m`, `stab-nv-smol-360m`(`st77`), `stab-nv-smol-1-7b` |
+| Llama-3.2-1B / 3B, Llama-3.1-8B | `stab-nv-llama32-1b`, `stab-nv-llama32-3b`(`st77`), `stab-nv-llama31-8b` |
+
+종료 항목을 더 밀려면 지금의 레버 범위를 넘는 결정이 필요하다. 예를 들어 C1 어텐션과 RMSNorm에 새 numerics mode를 도입하는 것(출력이 바뀌어 모든 모델을 재검증해야 한다), 또는 14B를 표준 조건과 다른 조건으로 판정하는 것이다.
+- 종료 항목 모델의 안정성 `st77`(바이너리 `riley-mc-6f7ab3e9`, 서버 기본값 + native 프로필, GPU 7 단독): `stab-nv-llama32-3b`, `stab-nv-qwen3-0-6b`, `stab-nv-q25-0-5b`, `stab-nv-smol-360m` 모두 8셀 × 300 s PASS. 취소 8–64건, GPU 메모리 증가는 최대 18 MB(Llama-3.2-3B c8-natural), RSS 증가 1 MB 이내다.

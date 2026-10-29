@@ -177,6 +177,8 @@ pub struct PreparedLlamaBatchExecutorConfig {
     fused_kv_write: bool,
     fused_mlp_residual_norm: bool,
     output_row_lm_head: bool,
+    greedy_fp32_ties: bool,
+    greedy_fp32_window_ulps: u32,
     serving_sequence_token_bound: Option<usize>,
     owned_mlp_graphs: bool,
     decode_step_capture: bool,
@@ -212,6 +214,8 @@ impl PreparedLlamaBatchExecutorConfig {
             fused_kv_write: false,
             fused_mlp_residual_norm: false,
             output_row_lm_head: false,
+            greedy_fp32_ties: false,
+            greedy_fp32_window_ulps: 0,
             serving_sequence_token_bound: None,
             owned_mlp_graphs: false,
             decode_step_capture: false,
@@ -464,6 +468,37 @@ impl PreparedLlamaBatchExecutorConfig {
     pub const fn with_output_row_lm_head(mut self) -> Self {
         self.output_row_lm_head = true;
         self
+    }
+
+    /// Breaks greedy ties of the largest BF16 logit by FP32 rescoring of the
+    /// tied tokens from the output row's normalized hidden state and the LM
+    /// head. Rows without a tie select the same token; a row's token depends
+    /// only on that row.
+    #[must_use]
+    pub const fn with_greedy_fp32_ties(mut self) -> Self {
+        self.greedy_fp32_ties = true;
+        self
+    }
+
+    /// As [`Self::with_greedy_fp32_ties`], rescoring every logit within
+    /// `ulps` BF16 steps of the row maximum instead of exact ties only.
+    #[must_use]
+    pub const fn with_greedy_fp32_window(mut self, ulps: u32) -> Self {
+        self.greedy_fp32_ties = true;
+        self.greedy_fp32_window_ulps = ulps;
+        self
+    }
+
+    /// BF16 steps below the row maximum rescored in FP32 (zero: ties only).
+    #[must_use]
+    pub const fn greedy_fp32_window_ulps(self) -> u32 {
+        self.greedy_fp32_window_ulps
+    }
+
+    /// Whether greedy ties of the largest BF16 logit are rescored in FP32.
+    #[must_use]
+    pub const fn greedy_fp32_ties(self) -> bool {
+        self.greedy_fp32_ties
     }
 
     /// Whether mixed steps run the LM head on output rows only.
@@ -911,6 +946,8 @@ pub(in crate::llama) const fn normalize_prepared_config(
         fused_kv_write: config.fused_kv_write,
         fused_mlp_residual_norm: config.fused_mlp_residual_norm,
         output_row_lm_head: config.output_row_lm_head,
+        greedy_fp32_ties: config.greedy_fp32_ties,
+        greedy_fp32_window_ulps: config.greedy_fp32_window_ulps,
         serving_sequence_token_bound: config.serving_sequence_token_bound,
         owned_mlp_graphs: config.owned_mlp_graphs,
         decode_step_capture: config.decode_step_capture,

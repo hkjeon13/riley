@@ -2,9 +2,10 @@ use std::error::Error;
 
 use riley_cuda::{
     BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE, BF16_ARGMAX_STATUS_SUCCESS,
-    Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice,
+    Bf16ArgmaxParams, Bf16ArgmaxTieSource, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice,
     CudaDeviceBuffer, CudaErrorKind, CudaPinnedHostBuffer, CudaRuntime, CudaStream,
-    ResidualAddParams, deterministic_bf16_argmax, deterministic_bf16_argmax_bounded, residual_add,
+    ResidualAddParams, deterministic_bf16_argmax, deterministic_bf16_argmax_bounded,
+    deterministic_bf16_argmax_fp32_ties, residual_add,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -616,6 +617,382 @@ fn deterministic_bf16_argmax_matches_cpu_bytes_for_model_vocabularies() -> TestR
         results.close()?;
         staging.close()?;
     }
+    stream.close()?;
+    close_context(context)
+}
+
+fn bf16_of(value: f32) -> u16 {
+    let bits = value.to_bits();
+    assert_eq!(bits & 0xffff, 0, "fixture values must be exact in BF16");
+    u16::try_from(bits >> 16).expect("upper half")
+}
+
+/// Tie-refined selection of one row: the plain argmax, unless the row's
+/// maximum is shared by 2..=64 selectable tokens, which are then ranked by
+/// their (integer-exact) FP32 dot product, lowest token on equal scores.
+#[allow(clippy::float_cmp, clippy::cast_precision_loss)]
+fn cpu_fp32_tie_token(
+    row: &[u16],
+    hidden: &[f32],
+    weight: &[f32],
+    candidate_count: usize,
+) -> u32 {
+    let value = |token: usize| f32::from_bits(u32::from(row[token]) << 16);
+    let maximum = (0..candidate_count).map(value).fold(f32::NEG_INFINITY, f32::max);
+    let tied: Vec<usize> = (0..candidate_count).filter(|&t| value(t) == maximum).collect();
+    let pick = if tied.len() < 2 || tied.len() > 64 {
+        tied[0]
+    } else {
+        let hidden_size = hidden.len();
+        let score = |t: usize| -> f32 {
+            (0..hidden_size).map(|k| hidden[k] * weight[t * hidden_size + k]).sum()
+        };
+        let mut best = tied[0];
+        for &t in &tied[1..] {
+            if score(t) > score(best) {
+                best = t;
+            }
+        }
+        best
+    };
+    u32::try_from(pick).expect("small fixture token")
+}
+
+#[test]
+#[ignore = "remote GPU"]
+#[allow(clippy::cast_precision_loss, clippy::too_many_lines)]
+fn fp32_tie_break_rescores_only_tied_maxima_per_row() -> TestResult {
+    const ROWS: usize = 6;
+    const VOCABULARY: usize = 2053;
+    const HIDDEN: usize = 96;
+    const BOUND: usize = 2000;
+
+    // Small integers keep every FP32 dot product exact, so the oracle does
+    // not depend on summation order.
+    let weight: Vec<f32> = (0..VOCABULARY * HIDDEN)
+        .map(|i| ((i / HIDDEN * 7 + i % HIDDEN * 3) % 5) as f32 - 2.0)
+        .collect();
+    let mut weight = weight;
+    // Rows 1/2: a later tied token scores strictly higher; row 4: equal rows.
+    for k in 0..HIDDEN {
+        weight[1500 * HIDDEN + k] = 2.0;
+        weight[5 * HIDDEN + k] = -1.0;
+        weight[700 * HIDDEN + k] = 2.0;
+        weight[10 * HIDDEN + k] = 1.0;
+        weight[2052 * HIDDEN + k] = 0.0;
+        weight[40 * HIDDEN + k] = 1.0;
+        weight[41 * HIDDEN + k] = 1.0;
+    }
+    let hidden: Vec<f32> = (0..ROWS * HIDDEN).map(|i| ((i % 7) as f32) - 1.0).collect();
+    let mut logits = vec![bf16_of(-8.0); ROWS * VOCABULARY];
+    let at = |row: usize, token: usize| row * VOCABULARY + token;
+    logits[at(0, 900)] = bf16_of(4.0); // no tie
+    logits[at(0, 901)] = bf16_of(3.0);
+    logits[at(1, 5)] = bf16_of(3.0);
+    logits[at(1, 1500)] = bf16_of(3.0);
+    logits[at(2, 10)] = bf16_of(6.0);
+    logits[at(2, 700)] = bf16_of(6.0);
+    logits[at(2, 2052)] = bf16_of(6.0); // past the bound in the bounded run
+    logits[at(3, 100)] = bf16_of(5.0);
+    logits[at(3, 2052)] = bf16_of(5.0); // only tie partner is past the bound
+    logits[at(4, 41)] = bf16_of(2.0);
+    logits[at(4, 40)] = bf16_of(2.0);
+    for token in 200..270 {
+        logits[at(5, token)] = bf16_of(1.0); // 70 tied: over capacity
+    }
+    let weight_bits: Vec<u16> = weight.iter().map(|&v| bf16_of(v)).collect();
+    let hidden_bits: Vec<u16> = hidden.iter().map(|&v| bf16_of(v)).collect();
+
+    let expected = |candidate_count: usize, hidden_of: &dyn Fn(usize) -> usize| -> Vec<u32> {
+        (0..ROWS)
+            .map(|row| {
+                let h = hidden_of(row);
+                cpu_fp32_tie_token(
+                    &logits[row * VOCABULARY..(row + 1) * VOCABULARY],
+                    &hidden[h * HIDDEN..(h + 1) * HIDDEN],
+                    &weight,
+                    candidate_count,
+                )
+            })
+            .collect()
+    };
+    let unbounded = expected(VOCABULARY, &|row| row);
+    // The plain argmax would pick 900, 5, 10, 100, 40, 200.
+    assert_eq!(unbounded, vec![900, 1500, 700, 2052, 40, 200], "oracle fixture");
+    // Bounded, row 3 keeps one selectable token and is not rescored.
+    assert_eq!(expected(BOUND, &|row| row), vec![900, 1500, 700, 100, 40, 200]);
+
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let weight_bytes = bf16_bit_bytes(&weight_bits);
+    let mut staging = context.allocate_pinned_host_buffer(u64::try_from(weight_bytes.len())?)?;
+    let logits_buffer = upload(&context, &mut stream, &mut staging, &bf16_bit_bytes(&logits))?;
+    let weight_buffer = upload(&context, &mut stream, &mut staging, &weight_bytes)?;
+    // Gathered hidden rows in output order, and the same rows reversed behind
+    // an index map.
+    let gathered = upload(&context, &mut stream, &mut staging, &bf16_bit_bytes(&hidden_bits))?;
+    let reversed_bits: Vec<u16> = (0..ROWS)
+        .rev()
+        .flat_map(|row| hidden_bits[row * HIDDEN..(row + 1) * HIDDEN].to_vec())
+        .collect();
+    let reversed = upload(&context, &mut stream, &mut staging, &bf16_bit_bytes(&reversed_bits))?;
+    let indices: Vec<u32> = (0..ROWS).map(|row| u32::try_from(ROWS - 1 - row).expect("small")).collect();
+    let indices_buffer = upload(&context, &mut stream, &mut staging, &u32_bytes(&indices))?;
+    let mut results = context.allocate_device_buffer(u64::try_from(ROWS * 8)?)?;
+
+    let mut run = |hidden: &CudaDeviceBuffer,
+                   gathered_rows: bool,
+                   row_count: usize,
+                   logits_offset: usize,
+                   candidate_count: usize,
+                   stream: &mut CudaStream,
+                   results: &mut CudaDeviceBuffer|
+     -> TestResult<Vec<u32>> {
+        {
+            let mut params = Bf16ArgmaxParams {
+                logits: CudaBufferSpan::new(
+                    &logits_buffer,
+                    CudaDType::BF16,
+                    u64::try_from(logits_offset * VOCABULARY * 2)?,
+                    u64::try_from(row_count * VOCABULARY * 2)?,
+                )?,
+                results: CudaBufferSpanMut::new(results, CudaDType::U32, 0, u64::try_from(row_count * 8)?)?,
+                row_count: u64::try_from(row_count)?,
+                vocabulary_size: u64::try_from(VOCABULARY)?,
+            };
+            let source = Bf16ArgmaxTieSource {
+                hidden: CudaBufferSpan::new(
+                    hidden,
+                    CudaDType::BF16,
+                    u64::try_from(logits_offset * HIDDEN * 2)?,
+                    u64::try_from(row_count * HIDDEN * 2)?,
+                )?,
+                weight: CudaBufferSpan::new(&weight_buffer, CudaDType::BF16, 0, weight_buffer.byte_len())?,
+                row_indices: CudaBufferSpan::new(&indices_buffer, CudaDType::U32, 0, u64::try_from(row_count * 4)?)?,
+                hidden_size: u64::try_from(HIDDEN)?,
+                hidden_rows: u64::try_from(row_count)?,
+                rows_gathered: gathered_rows,
+                window_ulps: 0,
+            };
+            deterministic_bf16_argmax_fp32_ties(
+                &mut params,
+                &source,
+                u64::try_from(candidate_count)?,
+                stream,
+            )?;
+        }
+        let bytes = download(&context, stream, results)?;
+        Ok(bytes
+            .chunks_exact(8)
+            .take(row_count)
+            .map(|word| {
+                let status = u32::from_ne_bytes(word[4..8].try_into().expect("word"));
+                assert_eq!(status, BF16_ARGMAX_STATUS_SUCCESS);
+                u32::from_ne_bytes(word[0..4].try_into().expect("word"))
+            })
+            .collect())
+    };
+
+    assert_eq!(run(&gathered, true, ROWS, 0, 0, &mut stream, &mut results)?, unbounded);
+    assert_eq!(
+        run(&gathered, true, ROWS, 0, BOUND, &mut stream, &mut results)?,
+        expected(BOUND, &|row| row)
+    );
+    // Hidden rows found through the index map select the same tokens.
+    assert_eq!(run(&reversed, false, ROWS, 0, 0, &mut stream, &mut results)?, unbounded);
+    // A row alone selects what it selects inside the batch.
+    for row in 0..ROWS {
+        assert_eq!(
+            run(&gathered, true, 1, row, 0, &mut stream, &mut results)?,
+            vec![unbounded[row]],
+            "row {row} alone"
+        );
+    }
+
+    logits_buffer.close()?;
+    weight_buffer.close()?;
+    gathered.close()?;
+    reversed.close()?;
+    indices_buffer.close()?;
+    results.close()?;
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+/// Timing screen, not a correctness check: wall time per launch of the plain
+/// and the FP32-tie argmax at a Qwen3 vocabulary, with and without a tied
+/// row maximum. Run with `--nocapture` to read the numbers.
+#[test]
+#[ignore = "remote GPU"]
+#[allow(clippy::cast_precision_loss)]
+fn fp32_tie_break_launch_cost_screen() -> TestResult {
+    const VOCABULARY: usize = 151_936;
+    const HIDDEN: usize = 1024;
+    const ITERATIONS: u32 = 2000;
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    for rows in [1usize, 32] {
+        for tie in [false, true] {
+            let mut logits: Vec<u16> = (0..rows * VOCABULARY)
+                .map(|i| bf16_of(((i * 2_654_435_761) % 64) as f32 / 16.0))
+                .collect();
+            for row in 0..rows {
+                logits[row * VOCABULARY + 77_777] = bf16_of(20.0);
+                if tie {
+                    logits[row * VOCABULARY + 99] = bf16_of(20.0);
+                }
+            }
+            let weight_bits = vec![bf16_of(0.015_625); VOCABULARY * HIDDEN];
+            let hidden_bits = vec![bf16_of(1.0); rows * HIDDEN];
+            let weight_bytes = bf16_bit_bytes(&weight_bits);
+            let mut staging =
+                context.allocate_pinned_host_buffer(u64::try_from(weight_bytes.len())?)?;
+            let logits_buffer =
+                upload(&context, &mut stream, &mut staging, &bf16_bit_bytes(&logits))?;
+            let weight_buffer = upload(&context, &mut stream, &mut staging, &weight_bytes)?;
+            let hidden_buffer =
+                upload(&context, &mut stream, &mut staging, &bf16_bit_bytes(&hidden_bits))?;
+            let indices: Vec<u32> = (0..rows).map(|r| u32::try_from(r).expect("small")).collect();
+            let indices_buffer = upload(&context, &mut stream, &mut staging, &u32_bytes(&indices))?;
+            let mut results = context.allocate_device_buffer(u64::try_from(rows * 8)?)?;
+            for refine in [false, true] {
+                let mut launch = |stream: &mut CudaStream| -> TestResult {
+                    let mut params = Bf16ArgmaxParams {
+                        logits: CudaBufferSpan::new(
+                            &logits_buffer,
+                            CudaDType::BF16,
+                            0,
+                            logits_buffer.byte_len(),
+                        )?,
+                        results: CudaBufferSpanMut::new(
+                            &mut results,
+                            CudaDType::U32,
+                            0,
+                            u64::try_from(rows * 8)?,
+                        )?,
+                        row_count: u64::try_from(rows)?,
+                        vocabulary_size: u64::try_from(VOCABULARY)?,
+                    };
+                    if refine {
+                        let source = Bf16ArgmaxTieSource {
+                            hidden: CudaBufferSpan::new(
+                                &hidden_buffer,
+                                CudaDType::BF16,
+                                0,
+                                hidden_buffer.byte_len(),
+                            )?,
+                            weight: CudaBufferSpan::new(
+                                &weight_buffer,
+                                CudaDType::BF16,
+                                0,
+                                weight_buffer.byte_len(),
+                            )?,
+                            row_indices: CudaBufferSpan::new(
+                                &indices_buffer,
+                                CudaDType::U32,
+                                0,
+                                indices_buffer.byte_len(),
+                            )?,
+                            hidden_size: u64::try_from(HIDDEN)?,
+                            hidden_rows: u64::try_from(rows)?,
+                            rows_gathered: true,
+                            window_ulps: 0,
+                        };
+                        deterministic_bf16_argmax_fp32_ties(&mut params, &source, 0, stream)?;
+                    } else {
+                        deterministic_bf16_argmax(&mut params, stream)?;
+                    }
+                    Ok(())
+                };
+                for _ in 0..100 {
+                    launch(&mut stream)?;
+                }
+                context.synchronize()?;
+                let start = std::time::Instant::now();
+                for _ in 0..ITERATIONS {
+                    launch(&mut stream)?;
+                }
+                context.synchronize()?;
+                let micros = start.elapsed().as_secs_f64() * 1e6 / f64::from(ITERATIONS);
+                println!("ARGMAX-COST rows={rows} tie={tie} refine={refine} us/launch={micros:.2}");
+            }
+            logits_buffer.close()?;
+            weight_buffer.close()?;
+            hidden_buffer.close()?;
+            indices_buffer.close()?;
+            results.close()?;
+            staging.close()?;
+        }
+    }
+    stream.close()?;
+    close_context(context)
+}
+
+/// Window mode: a logit one BF16 step below the row maximum is rescored and
+/// wins when its FP32 score is larger; two steps below stays out of a
+/// one-step window. Exact mode keeps the maximum.
+#[test]
+#[ignore = "remote GPU"]
+fn fp32_window_rescores_logits_near_the_maximum() -> TestResult {
+    const VOCABULARY: usize = 300;
+    const HIDDEN: usize = 32;
+    let mut weight = vec![0.0f32; VOCABULARY * HIDDEN];
+    for k in 0..HIDDEN {
+        weight[10 * HIDDEN + k] = 1.0; // row max, FP32 score 32
+        weight[20 * HIDDEN + k] = 2.0; // one step below, score 64
+        weight[30 * HIDDEN + k] = 3.0; // two steps below, score 96
+    }
+    let hidden = vec![1.0f32; HIDDEN];
+    // At exponent 2 (values in [4, 8)) one BF16 step is 1/32.
+    let mut logits = vec![bf16_of(-8.0); VOCABULARY];
+    logits[10] = bf16_of(4.5);
+    logits[20] = bf16_of(4.5 - 1.0 / 32.0);
+    logits[30] = bf16_of(4.5 - 2.0 / 32.0);
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let weight_bits: Vec<u16> = weight.iter().map(|&v| bf16_of(v)).collect();
+    let weight_bytes = bf16_bit_bytes(&weight_bits);
+    let mut staging = context.allocate_pinned_host_buffer(u64::try_from(weight_bytes.len())?)?;
+    let logits_buffer = upload(&context, &mut stream, &mut staging, &bf16_bit_bytes(&logits))?;
+    let weight_buffer = upload(&context, &mut stream, &mut staging, &weight_bytes)?;
+    let hidden_bits: Vec<u16> = hidden.iter().map(|&v| bf16_of(v)).collect();
+    let hidden_buffer = upload(&context, &mut stream, &mut staging, &bf16_bit_bytes(&hidden_bits))?;
+    let indices_buffer = upload(&context, &mut stream, &mut staging, &u32_bytes(&[0]))?;
+    let mut results = context.allocate_device_buffer(8)?;
+    let mut picks = Vec::new();
+    for window_ulps in [0u32, 1, 2] {
+        {
+            let mut params = Bf16ArgmaxParams {
+                logits: CudaBufferSpan::new(&logits_buffer, CudaDType::BF16, 0, logits_buffer.byte_len())?,
+                results: CudaBufferSpanMut::new(&mut results, CudaDType::U32, 0, 8)?,
+                row_count: 1,
+                vocabulary_size: u64::try_from(VOCABULARY)?,
+            };
+            let source = Bf16ArgmaxTieSource {
+                hidden: CudaBufferSpan::new(&hidden_buffer, CudaDType::BF16, 0, hidden_buffer.byte_len())?,
+                weight: CudaBufferSpan::new(&weight_buffer, CudaDType::BF16, 0, weight_buffer.byte_len())?,
+                row_indices: CudaBufferSpan::new(&indices_buffer, CudaDType::U32, 0, 4)?,
+                hidden_size: u64::try_from(HIDDEN)?,
+                hidden_rows: 1,
+                rows_gathered: true,
+                window_ulps,
+            };
+            deterministic_bf16_argmax_fp32_ties(&mut params, &source, 0, &mut stream)?;
+        }
+        let bytes = download(&context, &mut stream, &mut results)?;
+        picks.push(u32::from_ne_bytes(bytes[0..4].try_into()?));
+    }
+    assert_eq!(picks, vec![10, 20, 30]);
+    logits_buffer.close()?;
+    weight_buffer.close()?;
+    hidden_buffer.close()?;
+    indices_buffer.close()?;
+    results.close()?;
+    staging.close()?;
     stream.close()?;
     close_context(context)
 }

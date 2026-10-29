@@ -13,14 +13,14 @@ use riley_cuda::hf_pack_separate_qkv;
 use std::mem;
 
 use riley_cuda::{
-    AttentionReductionProfile, Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut,
+    AttentionReductionProfile, Bf16ArgmaxParams, Bf16ArgmaxTieSource, CudaBufferSpan, CudaBufferSpanMut,
     CudaCommandStream, CudaDType, CudaDeviceBuffer, CudaExecutionStream, CudaStepGraph, CudaStream,
     DecodePartialReductionOrder, EmbeddingParams, GatedMultiplyParams, IndexedRopeParams,
     MergedGatedMultiplyParams, NativeBf16RaggedPagedSplitGqaD128TwoStageParams, PackedBatchHostV1,
     PackedBatchV1, QkvRopeParams, QkvSplitBiasParams, RaggedPagedAttentionParams,
     RaggedPagedKvCacheWriteParams, ResidualAddParams, ResidualRmsNormParams, RmsNormParams,
     RowGatherParams, SiluParams, abort_step_capture, begin_step_capture, deterministic_bf16_argmax,
-    deterministic_bf16_argmax_bounded, embedding, embedding_deferred_report, end_step_capture,
+    deterministic_bf16_argmax_bounded, deterministic_bf16_argmax_fp32_ties, embedding, embedding_deferred_report, end_step_capture,
     fixed37_ragged_paged_attention, gated_multiply, grouped_ragged_paged_attention, indexed_rope,
     launch_step_graph, native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma,
     native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge,
@@ -138,6 +138,9 @@ pub(in crate::llama) struct OutputPrimitiveDispatch<'a> {
     pub(in crate::llama) greedy_candidate_count: Option<usize>,
     /// The LM head already wrote the output rows into `gathered_logits`.
     pub(in crate::llama) logits_already_gathered: bool,
+    /// With FP32 greedy tie breaking: the output rows' normalized hidden
+    /// states and the LM head.
+    pub(in crate::llama) tie_source: Option<Bf16ArgmaxTieSource<'a>>,
 }
 
 /// Output-row LM head of a mixed step: where the output rows' normalized
@@ -170,6 +173,7 @@ pub(in crate::llama) fn dispatch_output_primitives<S: CudaExecutionStream + ?Siz
         produce_greedy_tokens,
         greedy_candidate_count,
         logits_already_gathered,
+        tie_source,
     } = dispatch;
     let output_indices = output_indices.ok_or(LlamaBatchExecutorError::InvalidConfiguration {
         field: "output_token_indices",
@@ -236,13 +240,22 @@ pub(in crate::llama) fn dispatch_output_primitives<S: CudaExecutionStream + ?Siz
             row_count: usize_u64(output_count, LlamaBatchExecutorResource::GreedyResults)?,
             vocabulary_size: usize_u64(vocabulary_size, LlamaBatchExecutorResource::GreedyResults)?,
         };
-        match greedy_candidate_count {
-            Some(count) => deterministic_bf16_argmax_bounded(
+        match (greedy_candidate_count, tie_source.as_ref()) {
+            (count, Some(source)) => deterministic_bf16_argmax_fp32_ties(
+                &mut argmax,
+                source,
+                match count {
+                    Some(count) => usize_u64(count, LlamaBatchExecutorResource::GreedyResults)?,
+                    None => 0,
+                },
+                stream,
+            ),
+            (Some(count), None) => deterministic_bf16_argmax_bounded(
                 &mut argmax,
                 usize_u64(count, LlamaBatchExecutorResource::GreedyResults)?,
                 stream,
             ),
-            None => deterministic_bf16_argmax(&mut argmax, stream),
+            (None, None) => deterministic_bf16_argmax(&mut argmax, stream),
         }
         .map_err(|source| dispatch_cuda(site, source))?;
     }
@@ -876,6 +889,41 @@ pub(in crate::llama) fn execute_packed(
                     produce_greedy_tokens: produce_greedy_tokens,
                     greedy_candidate_count: config.greedy_candidate_count(),
                     logits_already_gathered,
+                    tie_source: if config.greedy_fp32_ties() && produce_greedy_tokens {
+                        let tie_site = ExecutionSite::global(LlamaOp::OutputGather);
+                        let hidden_size = plan.dimensions().hidden_size();
+                        // The output-row LM head reads its rows, in output
+                        // order, from `hidden_rotary`; the dense one reads
+                        // every row of `hidden_norm`. The bound is the
+                        // buffer's capacity, not this step's row count: a
+                        // recorded step replays it for other output counts.
+                        let hidden = if logits_already_gathered {
+                            &buffers.hidden_rotary
+                        } else {
+                            &buffers.hidden_norm
+                        };
+                        let hidden_rows = usize::try_from(hidden.byte_len()).unwrap_or(usize::MAX)
+                            / (hidden_size * 2);
+                        Some(Bf16ArgmaxTieSource {
+                            hidden: span(
+                                hidden,
+                                CudaDType::BF16,
+                                usize_u64(hidden_rows * hidden_size * 2, LlamaBatchExecutorResource::GreedyResults)?,
+                                tie_site,
+                            )?,
+                            weight: weight_span(weights, plan.lm_head_weight(), tie_site)?,
+                            row_indices: output_indices.ok_or(LlamaBatchExecutorError::InvalidConfiguration {
+                                field: "output_token_indices",
+                                reason: "non-empty output has no cold-prepared device index buffer",
+                            })?,
+                            hidden_size: usize_u64(hidden_size, LlamaBatchExecutorResource::GreedyResults)?,
+                            hidden_rows: usize_u64(hidden_rows, LlamaBatchExecutorResource::GreedyResults)?,
+                            rows_gathered: logits_already_gathered,
+                            window_ulps: config.greedy_fp32_window_ulps(),
+                        })
+                    } else {
+                        None
+                    },
                 },
                 stream,
             )

@@ -30,10 +30,12 @@ struct RowBatch {
   const uint32_t* dynamic_counts;
 };
 
-// Bytes of planner workspace for `output_rows` rows, `page_capacity` pages
-// per row and `group_heads` query heads per KV head.
+// Bytes of planner workspace (and KV-chunk partial states, see
+// RILEY_NATIVE_FLASHINFER_KV_CHUNK) for `output_rows` rows, `page_capacity`
+// pages per row and the head geometry.
 uint64_t workspace_bytes(uint64_t output_rows, uint64_t page_capacity,
-                         uint32_t group_heads);
+                         uint32_t query_heads, uint32_t key_value_heads,
+                         uint32_t head_size);
 
 // Plans (when `plan`; otherwise the workspace and `output` must already hold
 // the plan and padding of the same batch) and runs the attention for every

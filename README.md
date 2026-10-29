@@ -294,7 +294,8 @@ Two Riley configurations are used. *Fast* is the HF-literal `qwen3b-fast`
 flag set plus the D1 flags. *Native* is the server defaults plus
 `--inference-profile native-bf16-varlen-v1` (FlashInfer fixed-tile attention);
 it changes the numerics, so its token checks were rerun. The native results
-below are head dim 128; head dim 64 support is new and not yet qualified.
+below include head dim 64 (Llama-3.2-1B) through the same FlashInfer
+fixed-tile kernel.
 
 | Model | Config | Result | Throughput vs vLLM (8 cells) | Cells that miss (TPOT p50 vs vLLM) | 300 s stability |
 |---|---|---|---|---|---|
@@ -307,13 +308,13 @@ below are head dim 128; head dim 64 support is new and not yet qualified.
 | Llama-3.1-8B-Instruct | native | **pass** | 0.98–1.15× (C1 tie) | – | pass 8/8 |
 | Qwen2.5-Coder-7B-Instruct | native | **pass** | 1.05–1.28× | – | pass 8/8 |
 | Qwen2.5-14B-Instruct | native | **pass** (vLLM at memory 0.9, a separate condition) | 1.00–1.11× | – | pass 8/8 |
-| Qwen3-1.7B | native | miss | 0.99–1.51× | C1 fixed 1.06× | – |
-| Llama-3.2-3B-Instruct | native | miss | 1.00–1.09× | C32 natural 1.002–1.014× (three repeats) | – |
-| Qwen3-0.6B | native (screen) | miss | 1.00–2.12× | C1 fixed 1.11×, C1 natural 1.04× | – |
-| Qwen2.5-0.5B-Instruct | fast | miss | – | C1 fixed 1.13× | pass 8/8 |
-| SmolLM2-360M | fast | miss | – | C1 fixed 1.12×, C32 fixed 1.03× | – |
-| Llama-3.2-1B-Instruct | fast | miss | – | C32 natural 1.06× | – |
-| SmolLM2-1.7B | fast | miss | – | C16 natural 1.02×, C32 natural 1.11× | – |
+| Llama-3.2-1B-Instruct | native (D64) | **pass** | 1.10–1.52× | – | pass 8/8 |
+| Qwen3-1.7B | native | **pass** | 1.05–1.48× | – | pass 8/8 |
+| SmolLM2-1.7B | native (D64) | **pass** | 1.02–1.44× | – | pass 8/8 |
+| Llama-3.2-3B-Instruct | native | closed with evidence | 1.00–1.10× | C32 natural 1.005× (repeats 1.002–1.014×) | pass 8/8 |
+| Qwen3-0.6B | native | closed with evidence | – | C1 fixed 1.11× | pass 8/8 |
+| Qwen2.5-0.5B-Instruct | native | closed with evidence | – | C1 fixed 1.07× | pass 8/8 |
+| SmolLM2-360M | native | closed with evidence | – | C1 fixed 1.08× | pass 8/8 |
 
 TTFT p50 is 0.3–0.9× vLLM in every cell of the native runs; TTFT p95/p99 at
 C32 stays above vLLM. FP32 HF greedy agreement of the native runs is no lower
@@ -324,15 +325,16 @@ Qwen2.5-14B went from miss to pass after the wide RMSNorm path was extended
 from hidden size 4096 to 8192: its residual RMSNorm took 2.05 ms per decode
 step against vLLM's 0.47 ms. The change is bit-identical to the old kernel.
 
-What is left: one-row (C1) kernel latency of the smallest models, closed with
-evidence after two levers under 1 %; Llama-3.2-3B C32 natural, where no real
-lever has been tried yet; and long-context decode attention for the
-head-dim-64 models. The FlashInfer fixed-tile attention now also takes head
-dim 64 and passes its GPU test (batch-invariant on five head-dim-64
-geometries). A C32-natural screen of Llama-3.2-1B and SmolLM2-1.7B with it was
-still running at the time of this commit. Full tables, flags,
+"Closed with evidence" means two consecutive levers each moved the missing cell
+by less than 1 %, so the item is closed under the goal's rules rather than
+won: the one-row (C1) kernel latency of the smallest models, and Llama-3.2-3B
+C32 natural (0.5 % slower TPOT; its other seven cells meet the bar).
+SmolLM2-1.7B's FP32 HF agreement equals HF BF16 (12/15) and is one prompt
+below vLLM (13/15). Full tables, flags,
 evidence names and the rejected levers are in
 [model coverage](docs/model-coverage-a100.md).
+Raw per-cell numbers (throughput, TTFT p50, TPOT p50 and E2E p50, Riley / vLLM)
+for all 16 models are in [A100 performance numbers](docs/model-coverage-a100-perf-table.md).
 
 Dated A100 matrices for other model families and their original numerical
 contracts are in [model coverage](docs/model-coverage-a100.md). Separate native

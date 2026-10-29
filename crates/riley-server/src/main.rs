@@ -152,6 +152,11 @@ serve options:
   --lm-head-rows ID              dense-v1 or output-rows-v1: in steps that mix prefill and decode,
                                  run the LM head on output rows only, bit-identical
                                  (default: dense-v1)
+  --greedy-tie-break ID          lowest-token-v1, fp32-rescore-v1, fp32-window1-v1 or fp32-window2-v1:
+                                 tokens sharing a row's largest BF16 logit (window N: within N BF16
+                                 steps of it) are rescored in FP32 from the hidden state and LM head;
+                                 other rows are unchanged; needs --sampling-backend gpu-greedy
+                                 (default: lowest-token-v1)
   --owned-decode-batch MODE      disabled, grouped-v1, lt-mlp-v2, bounded-gateup-sm80-v1 or bounded-projections-sm80-v2 / native-kv-sm80-v3 / native-attention-sm80-v4 / native-prefill-sm80-v5: explicit owned decode batching
   --owned-decode-graph MODE      disabled or segments-v1: reuse exact owned decode segments
   --decode-step-graph MODE       disabled or capture-v1: record pure-decode steps of the native
@@ -225,6 +230,8 @@ struct ServeOptions {
     native_attention_mode: Option<NativeAttentionMode>,
     fused_mlp_residual_norm: bool,
     output_row_lm_head: bool,
+    greedy_fp32_ties: bool,
+    greedy_fp32_window_ulps: u32,
     decode_step_capture: bool,
     owned_decode_graph: bool,
     owned_decode_batch: u8,
@@ -486,6 +493,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut decode_attention_producer = None;
     let mut mlp_residual_norm = None;
     let mut lm_head_rows = None;
+    let mut greedy_tie_break = None;
     let mut decode_step_graph = None;
     let mut logit_observation_dir = None;
     let mut max_weight_bytes = None;
@@ -782,6 +790,26 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     }
                 },
                 "--lm-head-rows",
+            )?,
+            "--greedy-tie-break" => set_once(
+                &mut greedy_tie_break,
+                match parse_utf8(
+                    next_value(&mut arguments, "--greedy-tie-break")?,
+                    "--greedy-tie-break",
+                )?
+                .as_str()
+                {
+                    "lowest-token-v1" => None,
+                    "fp32-rescore-v1" => Some(0),
+                    "fp32-window1-v1" => Some(1),
+                    "fp32-window2-v1" => Some(2),
+                    _ => {
+                        return Err(
+                            "--greedy-tie-break requires lowest-token-v1, fp32-rescore-v1, fp32-window1-v1 or fp32-window2-v1".to_owned(),
+                        );
+                    }
+                },
+                "--greedy-tie-break",
             )?,
             "--mlp-residual-norm" => set_once(
                 &mut mlp_residual_norm,
@@ -1576,6 +1604,8 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         native_attention_mode,
         fused_mlp_residual_norm,
         output_row_lm_head: lm_head_rows.unwrap_or(false),
+        greedy_fp32_ties: greedy_tie_break.flatten().is_some(),
+        greedy_fp32_window_ulps: greedy_tie_break.flatten().unwrap_or(0),
         decode_step_capture,
         owned_decode_graph,
         owned_decode_batch,
@@ -2401,6 +2431,11 @@ fn run_serve(
     };
     let executor = if options.output_row_lm_head {
         executor.with_output_row_lm_head()
+    } else {
+        executor
+    };
+    let executor = if options.greedy_fp32_ties {
+        executor.with_greedy_fp32_window(options.greedy_fp32_window_ulps)
     } else {
         executor
     };
@@ -5603,6 +5638,8 @@ mod tests {
                 native_attention_mode: None,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
+                greedy_fp32_ties: false,
+                greedy_fp32_window_ulps: 0,
                 decode_step_capture: false,
                 owned_decode_graph: false,
                 owned_decode_batch: 0,
@@ -6018,6 +6055,8 @@ mod tests {
                 native_attention_mode: None,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
+                greedy_fp32_ties: false,
+                greedy_fp32_window_ulps: 0,
                 decode_step_capture: false,
                 owned_decode_graph: false,
                 owned_decode_batch: 0,
@@ -6301,6 +6340,8 @@ mod tests {
                 native_attention_mode: None,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
+                greedy_fp32_ties: false,
+                greedy_fp32_window_ulps: 0,
                 decode_step_capture: false,
                 owned_decode_graph: false,
                 owned_decode_batch: 0,
@@ -6797,6 +6838,8 @@ mod tests {
                 native_attention_mode: None,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
+                greedy_fp32_ties: false,
+                greedy_fp32_window_ulps: 0,
                 decode_step_capture: false,
                 owned_decode_graph: false,
                 owned_decode_batch: 0,
