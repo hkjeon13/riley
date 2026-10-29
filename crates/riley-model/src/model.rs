@@ -382,6 +382,11 @@ fn validate_qwen_context_bound(
     spec: &ModelSpec,
     tokenizer_config: &Qwen2TokenizerConfig,
 ) -> ModelResult<()> {
+    // Outside the pinned profile the bound is advisory, as in HF tokenizers
+    // and vLLM (DeepSeek-R1-Distill-Qwen ships 16384 for a 131072 model).
+    if !tokenizer_config.has_pinned_chat_profile() {
+        return Ok(());
+    }
     let tokenizer_max = usize::try_from(tokenizer_config.model_max_length()).map_err(|_| {
         ModelError::NumericOverflow {
             field: "tokenizer_config.model_max_length".to_owned(),

@@ -1,7 +1,7 @@
 # Riley
 
 **A Rust-native LLM inference server for a single NVIDIA GPU — higher
-throughput and lower time to first token than vLLM 0.27.1 on all 16 qualified
+throughput and lower time to first token than vLLM 0.27.1 on all 22 qualified
 models.**
 
 Riley (Rust Inference LLM Engine) serves Llama- and Qwen-style models over an
@@ -14,14 +14,14 @@ cuBLASLt. There is no Python in the serving process.
 
 ## Performance
 
-**16 models on one A100-SXM4-40GB, against vLLM 0.27.1 on the same GPU in the
+**22 qualified models on one A100-SXM4-40GB, against vLLM 0.27.1 on the same GPU in the
 same run:**
 
 | | Riley vs vLLM |
 |---|---|
-| **Throughput** at 8–32 concurrent clients | **higher in all 96 cells — 1.01× to 2.97×** |
-| **Time to first token** (p50) | **lower in all 128 cells — 1.1× to 8.2× faster** |
-| **Time per output token** (p50) at 8–32 clients | lower in 94 of 96 cells |
+| **Throughput** at 8–32 concurrent clients | **higher in all 132 cells — 1.01× to 2.97×** |
+| **Time to first token** (p50) | **lower in all 176 cells — 1.1× to 8.2× faster** |
+| **Time per output token** (p50) at 8–32 clients | lower in 130 of 132 cells |
 | One client | within ±3 % (tie) to 1.5× faster on throughput |
 | **Output** | identical tokens for a request whatever else is in the batch |
 
@@ -37,25 +37,31 @@ Concurrency 32, fixed-length output (Riley / vLLM):
 | SmolLM2-135M | **10048** / 5194 | **1.93×** | **8.6** / 57.0 | **2.37** / 3.05 |
 | Qwen2.5-0.5B | **7767** / 4780 | **1.62×** | **9.6** / 54.6 | **3.22** / 3.77 |
 | Qwen3-0.6B | **5999** / 3821 | **1.57×** | **12.1** / 48.4 | **4.18** / 5.62 |
+| Qwen2.5-Coder-1.5B | **4210** / 2824 | **1.49×** | **17.8** / 45.8 | **6.00** / 8.86 |
+| DeepSeek-R1-Distill-Qwen-1.5B | **4199** / 2839 | **1.48×** | **17.8** / 48.1 | **6.03** / 8.65 |
 | Qwen2.5-1.5B | **3957** / 2816 | **1.41×** | **19.2** / 45.6 | **6.49** / 8.50 |
 | SmolLM2-360M | **6058** / 4429 | **1.37×** | **12.9** / 61.3 | 4.08 / 3.94 |
 | Llama-3.2-1B | **5767** / 4393 | **1.31×** | **12.8** / 38.2 | **4.41** / 5.10 |
 | Qwen3-1.7B | **3693** / 2897 | **1.27×** | **20.2** / 44.2 | **6.87** / 8.33 |
+| Qwen2.5-Coder-3B | **2521** / 2019 | **1.25×** | **29.8** / 54.5 | **10.09** / 12.86 |
 | Qwen2.5-3B | **2403** / 2006 | **1.20×** | **31.6** / 53.4 | **10.78** / 12.55 |
 | SmolLM2-1.7B | **3475** / 2997 | **1.16×** | **22.2** / 40.2 | **7.37** / 8.39 |
 | Qwen2.5-Coder-7B | **1404** / 1207 | **1.16×** | **55.6** / 82.9 | **18.22** / 21.35 |
 | Qwen3-4B | **1947** / 1693 | **1.15×** | **39.5** / 59.2 | **13.24** / 15.44 |
 | Llama-3.1-8B | **1248** / 1082 | **1.15×** | **61.7** / 93.6 | **20.43** / 23.89 |
+| DeepSeek-R1-Distill-Qwen-7B | **1383** / 1212 | **1.14×** | **55.6** / 81.5 | **18.55** / 21.31 |
 | Qwen3-8B | **1254** / 1114 | **1.13×** | **60.7** / 88.1 | **20.38** / 23.23 |
 | Qwen2.5-14B | **696** / 628 | **1.11×** | **112.5** / 158.2 | **36.56** / 41.09 |
+| Qwen2.5-Coder-14B | **697** / 626 | **1.11×** | **114.4** / 161.3 | **36.87** / 41.08 |
 | Qwen2.5-7B | **1325** / 1206 | **1.10×** | **58.0** / 82.3 | **19.45** / 21.53 |
+| DeepSeek-R1-Distill-Qwen-14B | **692** / 628 | **1.10×** | **115.4** / 164.3 | **36.90** / 41.08 |
 | Llama-3.2-3B | **2435** / 2232 | **1.09×** | **31.2** / 44.3 | **10.55** / 11.56 |
 
 More charts and every cell:
 
 - [Per-model comparison](docs/model-coverage-a100-perf-by-model.md): throughput,
-  TTFT, TPOT and E2E against concurrency for all 16 models, with one table of
-  every number.
+  TTFT, TPOT and E2E against concurrency for all 23 measured models, with one
+  table of every number.
 - [Model coverage](docs/model-coverage-a100.md): pass criteria, flags, accuracy
   checks, 300 s stability runs and evidence names.
 
@@ -63,11 +69,15 @@ How it was measured: 8 cells per model (1/8/16/32 clients × fixed-length or
 natural-length output), 32 warm-up + 192 measured requests, Riley and vLLM run
 alternately twice in the same session and averaged. Prefix caching is off on
 both. vLLM uses its normal compile + CUDA Graph path with
-`--gpu-memory-utilization 0.6` (0.9 for Qwen2.5-14B, which does not load at 0.6).
+`--gpu-memory-utilization 0.6` (0.9 for the 14B models, which do not load at 0.6).
 
 Known limits: tail TTFT (p95/p99) at 32 clients is still higher than vLLM's.
 At one client with fixed-length output, the smallest models (Qwen2.5-0.5B,
-Qwen3-0.6B, SmolLM2-360M) are 11–13 % behind on TPOT. Ten models were measured
+Qwen3-0.6B, SmolLM2-360M) are 11–13 % behind on TPOT. Qwen3-14B was measured
+but does not qualify: it is 4–20 % behind on TPOT in 7 of 8 cells (Riley still
+has the lower TTFT in all 8); the other 14B models, including Qwen2.5-14B on the
+same code, tie or win. DeepSeek-R1-Distill-Llama-8B does not load yet (its
+Llama 3 tokenizer is rejected). Seventeen models were measured
 with the native profile shown under [Usage](#start-the-server); six
 Qwen2.5/SmolLM2 models used earlier flag sets, listed in the
 [measurement sources](docs/model-coverage-a100-perf-table.md#측정-출처).
@@ -119,7 +129,7 @@ wins over these. Other commands:
 
 | Command | What it does |
 |---|---|
-| `serve --model NAME` | Also takes a bundled preset name, e.g. `qwen3-4b`: the 16 models of the table above at the measured commits |
+| `serve --model NAME` | Also takes a bundled preset name, e.g. `qwen3-4b`: 16 of the models in the table above at the measured commits |
 | `serve --model /models/DIR ...` | Serve a checkpoint you prepared yourself |
 | `presets` | List the bundled presets and their Hub repositories |
 | `download MODEL...` | Download and verify Hub ids or presets into `/models` without serving |
@@ -354,7 +364,7 @@ status 0.
 | | |
 |---|---|
 | Architectures | `LlamaForCausalLM` (Llama 3.x, SmolLM2), `Qwen2ForCausalLM` (Qwen2.5), dense `Qwen3ForCausalLM` (Qwen3) |
-| Qualified models | Qwen2.5 0.5B / 1.5B / 3B / 7B / Coder-7B / 14B Instruct, Qwen3 0.6B / 1.7B / 4B / 8B, SmolLM2 135M / 360M / 1.7B, Llama-3.2 1B / 3B Instruct, Llama-3.1-8B Instruct |
+| Qualified models | Qwen2.5 0.5B / 1.5B / 3B / 7B / 14B Instruct, Qwen2.5-Coder 1.5B / 3B / 7B / 14B Instruct, DeepSeek-R1-Distill-Qwen 1.5B / 7B / 14B, Qwen3 0.6B / 1.7B / 4B / 8B, SmolLM2 135M / 360M / 1.7B, Llama-3.2 1B / 3B Instruct, Llama-3.1-8B Instruct |
 | Precision | BF16 |
 | Hardware | One NVIDIA GPU (A100 and RTX 4090 measured) |
 | API | `POST /v1/chat/completions` and `POST /v1/completions` with streaming; models, health and metrics endpoints |

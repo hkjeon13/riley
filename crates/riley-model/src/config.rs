@@ -655,6 +655,7 @@ struct RawQwen2Config {
     torch_dtype: String,
     transformers_version: Option<String>,
     use_cache: Option<bool>,
+    use_mrope: Option<bool>,
     use_sliding_window: Option<bool>,
     vocab_size: u64,
     #[serde(rename = "_name_or_path")]
@@ -998,6 +999,9 @@ fn validate_qwen2_execution_values(raw: &RawQwen2Config) -> ModelResult<f64> {
     if raw.use_sliding_window.unwrap_or(false) {
         return unsupported("use_sliding_window", "true");
     }
+    if raw.use_mrope.unwrap_or(false) {
+        return unsupported("use_mrope", "true");
+    }
     if raw.sliding_window == Some(0) {
         return invalid("sliding_window", "must be positive when present");
     }
@@ -1157,6 +1161,12 @@ fn collect_qwen2_warnings(raw: &RawQwen2Config) -> Vec<ConfigWarning> {
         raw.use_cache.is_some(),
         "use_cache",
         "KV-cache policy is selected by the runtime",
+    );
+    push_warning(
+        &mut warnings,
+        raw.use_mrope.is_some(),
+        "use_mrope",
+        "multimodal RoPE is disabled",
     );
     push_warning(
         &mut warnings,
@@ -1612,6 +1622,23 @@ mod tests {
             error,
             ModelError::UnsupportedConfig { field, value }
                 if field == "use_sliding_window" && value == "true"
+        ));
+
+        // DeepSeek-R1-Distill-Qwen configs carry the neutral `use_mrope: false`.
+        let mrope_off = QWEN2_5_CONFIG.replace(
+            "\"use_sliding_window\": false",
+            "\"use_sliding_window\": false, \"use_mrope\": false",
+        );
+        Qwen2Config::from_json_slice(mrope_off.as_bytes()).unwrap();
+        let mrope_on = QWEN2_5_CONFIG.replace(
+            "\"use_sliding_window\": false",
+            "\"use_sliding_window\": false, \"use_mrope\": true",
+        );
+        let error = Qwen2Config::from_json_slice(mrope_on.as_bytes()).unwrap_err();
+        assert!(matches!(
+            error,
+            ModelError::UnsupportedConfig { field, value }
+                if field == "use_mrope" && value == "true"
         ));
 
         for rope_scaling in [

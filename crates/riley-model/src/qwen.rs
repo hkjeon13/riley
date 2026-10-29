@@ -296,16 +296,23 @@ impl Qwen2TokenizerConfig {
                 ));
             }
         };
-        let raw_added: BTreeMap<String, RawConfigAddedToken> = object
-            .get("added_tokens_decoder")
-            .cloned()
-            .map(serde_json::from_value)
-            .transpose()
-            .map_err(|error| invalid_config(format!("added_tokens_decoder: {error}")))?
-            .ok_or_else(|| invalid_config("tokenizer_config has no added_tokens_decoder"))?;
-        if raw_added.is_empty() || raw_added.len() > limits.added_tokens() {
-            return Err(invalid_config("added_tokens_decoder has an invalid size"));
-        }
+        // Older exports (DeepSeek-R1-Distill-Qwen) omit added_tokens_decoder
+        // and keep the added tokens only in tokenizer.json, which then stays
+        // the single source; an empty map skips the cross-check.
+        let raw_added: BTreeMap<String, RawConfigAddedToken> =
+            match object.get("added_tokens_decoder") {
+                None => BTreeMap::new(),
+                Some(value) => {
+                    let raw_added: BTreeMap<String, RawConfigAddedToken> =
+                        serde_json::from_value(value.clone()).map_err(|error| {
+                            invalid_config(format!("added_tokens_decoder: {error}"))
+                        })?;
+                    if raw_added.is_empty() || raw_added.len() > limits.added_tokens() {
+                        return Err(invalid_config("added_tokens_decoder has an invalid size"));
+                    }
+                    raw_added
+                }
+            };
         let mut added_tokens = BTreeMap::new();
         for (key, token) in raw_added {
             let id: u32 = key
@@ -373,6 +380,10 @@ impl Qwen2TokenizerConfig {
     /// Returns an error when content, special identity, or the exclusive
     /// addressable-ID upper bound differs.
     pub fn validate_tokenizer(&self, tokenizer: &Qwen2Tokenizer) -> ModelResult<()> {
+        // Only a completions-only config without added_tokens_decoder is empty.
+        if self.added_tokens.is_empty() {
+            return Ok(());
+        }
         // The added tokens end the vocabulary: one past the last added ID.
         let expected_count = self
             .added_tokens
@@ -1053,6 +1064,41 @@ mod tests {
                 resource: "Qwen chat messages",
                 ..
             })
+        ));
+    }
+
+    #[test]
+    fn completions_only_config_without_added_tokens_defers_to_tokenizer_json() {
+        // DeepSeek-R1-Distill-Qwen tokenizer_config shape: no added_tokens_decoder,
+        // AddedToken objects for special tokens, a bound below the model context.
+        let config = json!({
+            "add_bos_token": true,
+            "bos_token": {"__type": "AddedToken", "content": "<|begin|>", "lstrip": false,
+                          "normalized": true, "rstrip": false, "single_word": false},
+            "eos_token": {"__type": "AddedToken", "content": "<|end|>", "lstrip": false,
+                          "normalized": true, "rstrip": false, "single_word": false},
+            "model_max_length": 16_384,
+            "tokenizer_class": "LlamaTokenizerFast"
+        });
+        let config = Qwen2TokenizerConfig::from_json_slice_completions_only_with_limits(
+            serde_json::to_string(&config).unwrap().as_bytes(),
+            LoadLimits::default(),
+        )
+        .unwrap();
+        assert!(!config.has_pinned_chat_profile());
+        assert_eq!(config.eos_token(), "<|end|>");
+        assert_eq!(config.pad_token(), "<|end|>");
+        let tokenizer = Qwen2Tokenizer::from_json_slice(tokenizer_fixture().as_bytes()).unwrap();
+        config.validate_tokenizer(&tokenizer).unwrap();
+
+        let empty = json!({"eos_token": "<|end|>", "model_max_length": 16_384,
+                           "added_tokens_decoder": {}});
+        assert!(matches!(
+            Qwen2TokenizerConfig::from_json_slice_completions_only_with_limits(
+                serde_json::to_string(&empty).unwrap().as_bytes(),
+                LoadLimits::default(),
+            ),
+            Err(ModelError::InvalidTokenizer { .. })
         ));
     }
 }
