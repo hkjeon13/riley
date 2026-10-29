@@ -25,7 +25,10 @@ same run:**
 | One client | within ±3 % (tie) to 1.5× faster on throughput |
 | **Output** | identical tokens for a request whatever else is in the batch |
 
-![Throughput vs concurrency, Riley vs vLLM, per model](docs/images/a100-perf/throughput.png)
+![Throughput vs concurrency, Riley vs vLLM, per model](docs/images/a100-perf/en/throughput.png)
+
+Blue is Riley, orange is vLLM; solid lines are fixed-length output, dashed
+lines natural-length output. Each panel has its own y-axis scale.
 
 Concurrency 32, fixed-length output (Riley / vLLM):
 
