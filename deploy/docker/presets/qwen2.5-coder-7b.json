@@ -1,0 +1,55 @@
+{
+  "format": "riley-checkpoint-v1",
+  "source_model": "Qwen/Qwen2.5-Coder-7B-Instruct",
+  "source_revision": "c03e6d358207e414f1eca0bb1891e29f1db0e242",
+  "converter_revision": null,
+  "transforms": [],
+  "dtype": "bf16",
+  "files": [
+    {
+      "path": "config.json",
+      "bytes": 663,
+      "sha256": "c0242402ad6a13b331ea320feea8c7e3776ffb7a4eff0757b9cd667e116d9a28"
+    },
+    {
+      "path": "generation_config.json",
+      "bytes": 242,
+      "sha256": "1a628a5775bc69cde01c6749a531150ca4d3189652c618a174f7077923acf3b1"
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 7031645,
+      "sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "bytes": 7305,
+      "sha256": "959e7f1d9a1b7641a6d6ce05ca97b75c7894fcb66cbe5a040406458fb1128ee4"
+    },
+    {
+      "path": "model.safetensors.index.json",
+      "bytes": 27752,
+      "sha256": "998a078123ffc97763690de7f2a677eb89168af5eaf8a5e12e6bc24d18e25bdb"
+    },
+    {
+      "path": "model-00001-of-00004.safetensors",
+      "bytes": 4877660776,
+      "sha256": "0b6f069918b07c064cbba8ae4f00f529aa9bbf84b7cdfcb7fc2694a40f6aa8ef"
+    },
+    {
+      "path": "model-00002-of-00004.safetensors",
+      "bytes": 4932751008,
+      "sha256": "c3d46733e7aa054ea7b063fbccd0a5a08446e7bd1814bef26936c5aa1331da62"
+    },
+    {
+      "path": "model-00003-of-00004.safetensors",
+      "bytes": 4330865200,
+      "sha256": "9fe45dacee087385b3d2d6dd27a7413a8a56d95f145772facc148fa86fc73446"
+    },
+    {
+      "path": "model-00004-of-00004.safetensors",
+      "bytes": 1089994880,
+      "sha256": "5aa6e5cbe642377fd441fb4e60e83cca96b2bcd9820e245b9ea06d94653f17f2"
+    }
+  ]
+}

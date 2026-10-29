@@ -1,0 +1,344 @@
+{
+  "cli help": {
+    "rc": 0,
+    "out": "Riley inference server (OpenAI-compatible HTTP API).\n\n  serve --preset NAME [riley serve options]\n      Download the preset into /models/NAME on first use, then serve it with\n      --model-id NAME --inference-profile native-bf16-varlen-v1 --bind 0.0.0.0:8080\n      and a weight limit that fits the checkpoint. Options you pass win.\n  serve --model DIR --model-id ID [options]\n      Serve a checkpoint you prepared yourself (listens on 0.0.0.0:8080).\n  download NAME...      Download and verify presets into /models.\n  presets               List bundled presets.\n  riley-checkpoint ...  Run the checkpoint tool (prepare, verify, download).\n  --version, --help     Passed to riley; so is any other command.\n\nGated models need HF_TOKEN in the environment. Presets:\n  llama-3.1-8b       unsloth/Meta-Llama-3.1-8B-Instruct\n  llama-3.2-1b       unsloth/Llama-3.2-1B-Instruct\n  llama-3.2-3b       unsloth/Llama-3.2-3B-Instruct\n  qwen2.5-0.5b       Qwen/Qwen2.5-0.5B-Instruct\n  qwen2.5-1.5b       Qwen/Qwen2.5-1.5B-Instruct\n  qwen2.5-14b        Qwen/Qwen2.5-14B-Instruct\n  qwen2.5-3b         Qwen/Qwen2.5-3B-Instruct\n  qwen2.5-7b         Qwen/Qwen2.5-7B-Instruct\n  qwen2.5-coder-7b   Qwen/Qwen2.5-Coder-7B-Instruct\n  qwen3-0.6b         Qwen/Qwen3-0.6B\n  qwen3-1.7b         Qwen/Qwen3-1.7B\n  qwen3-4b           Qwen/Qwen3-4B\n  qwen3-8b           Qwen/Qwen3-8B\n  smollm2-1.7b       HuggingFaceTB/SmolLM2-1.7B\n  smollm2-135m       HuggingFaceTB/SmolLM2-135M\n  smollm2-360m       HuggingFaceTB/SmolLM2-360M\n"
+  },
+  "cli presets": {
+    "rc": 0,
+    "out": "  llama-3.1-8b       unsloth/Meta-Llama-3.1-8B-Instruct\n  llama-3.2-1b       unsloth/Llama-3.2-1B-Instruct\n  llama-3.2-3b       unsloth/Llama-3.2-3B-Instruct\n  qwen2.5-0.5b       Qwen/Qwen2.5-0.5B-Instruct\n  qwen2.5-1.5b       Qwen/Qwen2.5-1.5B-Instruct\n  qwen2.5-14b        Qwen/Qwen2.5-14B-Instruct\n  qwen2.5-3b         Qwen/Qwen2.5-3B-Instruct\n  qwen2.5-7b         Qwen/Qwen2.5-7B-Instruct\n  qwen2.5-coder-7b   Qwen/Qwen2.5-Coder-7B-Instruct\n  qwen3-0.6b         Qwen/Qwen3-0.6B\n  qwen3-1.7b         Qwen/Qwen3-1.7B\n  qwen3-4b           Qwen/Qwen3-4B\n  qwen3-8b           Qwen/Qwen3-8B\n  smollm2-1.7b       HuggingFaceTB/SmolLM2-1.7B\n  smollm2-135m       HuggingFaceTB/SmolLM2-135M\n  smollm2-360m       HuggingFaceTB/SmolLM2-360M\n"
+  },
+  "cli riley-checkpoint --help": {
+    "rc": 0,
+    "out": "riley-checkpoint (offline by default)\nprepare --manifest PLAN.json --source REGULAR_DIRECTORY --destination NEW_DIRECTORY\nverify --checkpoint DIRECTORY\ndownload --manifest PLAN.json --destination NEW_DIRECTORY --allow-network [--token-env HF_TOKEN]\nDownload requires the separately compiled `hub` feature. Branches/tags are rejected.\nThe manifest is an independently trusted explicit file/size/SHA-256 allowlist.\nNever serve or edit a checkpoint until this command succeeds; verify after an interruption.\n"
+  },
+  "cli --version": {
+    "rc": 0,
+    "out": "riley 0.1.0 (server=true, cuda=true, cuda_abi=1)\n"
+  },
+  "download first": {
+    "ready": true,
+    "ready_s": 37.5,
+    "texts": [
+      " Paris. It is the largest city in Europe and the second largest city in the world. It is located in the south of France, on the banks of the",
+      " \n    if n <= 1: \n        return n \n    else: \n        return(fibonacci(n-1) + fibonacci(n-2))"
+    ],
+    "stop_s": 0.7,
+    "exit_code": "0",
+    "downloaded": true
+  },
+  "download restart": {
+    "ready": true,
+    "ready_s": 14.9,
+    "texts": [
+      " Paris. It is the largest city in Europe and the second largest city in the world. It is located in the south of France, on the banks of the",
+      " \n    if n <= 1: \n        return n \n    else: \n        return(fibonacci(n-1) + fibonacci(n-2))"
+    ],
+    "stop_s": 0.7,
+    "exit_code": "0",
+    "downloaded": false
+  },
+  "preset smollm2-135m": {
+    "image_ready": true,
+    "image_ready_s": 4.9,
+    "image": [
+      " the capital of the country.\n\nThe capital of France is the capital of the country.\n\nThe capital of France is the capital of the country.",
+      "\n    if n == 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n -"
+    ],
+    "image_stop": {
+      "stop_s": 0.6,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 5.0,
+    "host": [
+      " the capital of the country.\n\nThe capital of France is the capital of the country.\n\nThe capital of France is the capital of the country.",
+      "\n    if n == 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n -"
+    ],
+    "identical": true
+  },
+  "preset smollm2-360m": {
+    "image_ready": true,
+    "image_ready_s": 9.8,
+    "image": [
+      " the city of Paris. It is the largest city in France and the second largest in Europe. It is also the capital of the region of France known as the",
+      "\n    if n == 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n-"
+    ],
+    "image_stop": {
+      "stop_s": 0.7,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 9.0,
+    "host": [
+      " the city of Paris. It is the largest city in France and the second largest in Europe. It is also the capital of the region of France known as the",
+      "\n    if n == 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n-"
+    ],
+    "identical": true
+  },
+  "preset smollm2-1.7b": {
+    "image_ready": true,
+    "image_ready_s": 33.3,
+    "image": [
+      " Paris.\n\nThe capital of the United States is Washington, D.C.\n\nThe capital of the United Kingdom is London.\n\nThe capital",
+      "\n    if n == 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n-"
+    ],
+    "image_stop": {
+      "stop_s": 0.7,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 33.0,
+    "host": [
+      " Paris.\n\nThe capital of the United States is Washington, D.C.\n\nThe capital of the United Kingdom is London.\n\nThe capital",
+      "\n    if n == 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n-"
+    ],
+    "identical": true
+  },
+  "preset qwen2.5-0.5b": {
+    "image_ready": true,
+    "image_ready_s": 14.9,
+    "image": [
+      " Paris. It is the largest city in Europe and the second largest city in the world. It is located in the south of France, on the banks of the",
+      " \n    if n <= 1: \n        return n \n    else: \n        return(fibonacci(n-1) + fibonacci(n-2))"
+    ],
+    "image_stop": {
+      "stop_s": 0.7,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 15.0,
+    "host": [
+      " Paris. It is the largest city in Europe and the second largest city in the world. It is located in the south of France, on the banks of the",
+      " \n    if n <= 1: \n        return n \n    else: \n        return(fibonacci(n-1) + fibonacci(n-2))"
+    ],
+    "identical": true
+  },
+  "preset qwen2.5-1.5b": {
+    "image_ready": true,
+    "image_ready_s": 39.8,
+    "image": [
+      " Paris. The capital of France is also the capital of which country?\nA) Germany\nB) Italy\nC) Spain\nD) Belgium\nE)",
+      " \n    if n <= 1: \n        return n \n    else: \n        return(fibonacci(n-1) + fibonacci(n-2))"
+    ],
+    "image_stop": {
+      "stop_s": 0.8,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 36.0,
+    "host": [
+      " Paris. The capital of France is also the capital of which country?\nA) Germany\nB) Italy\nC) Spain\nD) Belgium\nE)",
+      " \n    if n <= 1: \n        return n \n    else: \n        return(fibonacci(n-1) + fibonacci(n-2))"
+    ],
+    "identical": true
+  },
+  "preset qwen2.5-3b": {
+    "image_ready": true,
+    "image_ready_s": 65.0,
+    "image": [
+      " Paris. The capital of Germany is Berlin. The capital of Italy is Rome. The capital of Spain is Madrid. The capital of Portugal is Lisbon. The capital",
+      " \n    if n <= 1: \n        return n \n    else: \n        return(fibonacci(n-1) + fibonacci(n-2))"
+    ],
+    "image_stop": {
+      "stop_s": 1.2,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 60.0,
+    "host": [
+      " Paris. The capital of Germany is Berlin. The capital of Italy is Rome. The capital of Spain is Madrid. The capital of Portugal is Lisbon. The capital",
+      " \n    if n <= 1: \n        return n \n    else: \n        return(fibonacci(n-1) + fibonacci(n-2))"
+    ],
+    "identical": true
+  },
+  "preset qwen2.5-7b": {
+    "image_ready": true,
+    "image_ready_s": 142.5,
+    "image": [
+      " Paris. Which of the following statements is correct?\nA. The capital of France is London.\nB. The capital of France is Paris.\nC. The capital",
+      " \n    a = 0\n    b = 1\n    if n < 0: \n        print(\"Incorrect input\") \n    elif n =="
+    ],
+    "image_stop": {
+      "stop_s": 2.2,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 132.1,
+    "host": [
+      " Paris. Which of the following statements is correct?\nA. The capital of France is London.\nB. The capital of France is Paris.\nC. The capital",
+      " \n    a = 0\n    b = 1\n    if n < 0: \n        print(\"Incorrect input\") \n    elif n =="
+    ],
+    "identical": true
+  },
+  "preset qwen2.5-14b": {
+    "image_ready": true,
+    "image_ready_s": 238.5,
+    "image": [
+      " Paris. The capital of Spain is Madrid. The capital of Italy is Rome. The capital of Germany is Berlin. The capital of the United Kingdom is London.",
+      " \n    if n<0: \n        print(\"Incorrect input\") \n    elif n==1: \n        return 0\n    elif n==2"
+    ],
+    "image_stop": {
+      "stop_s": 3.2,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 230.1,
+    "host": [
+      " Paris. The capital of Spain is Madrid. The capital of Italy is Rome. The capital of Germany is Berlin. The capital of the United Kingdom is London.",
+      " \n    if n<0: \n        print(\"Incorrect input\") \n    elif n==1: \n        return 0\n    elif n==2"
+    ],
+    "identical": true
+  },
+  "preset qwen2.5-coder-7b": {
+    "image_ready": true,
+    "image_ready_s": 140.4,
+    "image": [
+      " Paris. Paris is located in the northern part of France, on the Seine River. It is the largest city in France and one of the most important cultural",
+      " # n\ubc88\uc9f8 \ud53c\ubcf4\ub098\uce58 \uc218\ub97c \ubc18\ud658\ud558\ub294 \ud568\uc218\n    if n <= 1:\n        return n\n    else:\n        return fibonacci(n-"
+    ],
+    "image_stop": {
+      "stop_s": 1.6,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 140.1,
+    "host": [
+      " Paris. Paris is located in the northern part of France, on the Seine River. It is the largest city in France and one of the most important cultural",
+      " # n\ubc88\uc9f8 \ud53c\ubcf4\ub098\uce58 \uc218\ub97c \ubc18\ud658\ud558\ub294 \ud568\uc218\n    if n <= 1:\n        return n\n    else:\n        return fibonacci(n-"
+    ],
+    "identical": true
+  },
+  "preset qwen3-0.6b": {
+    "image_ready": true,
+    "image_ready_s": 19.0,
+    "image": [
+      " Paris. The capital of Italy is Rome. The capital of Spain is Madrid. The capital of China is Beijing. The capital of Japan is Tokyo. The capital",
+      "\n    if n == 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n"
+    ],
+    "image_stop": {
+      "stop_s": 0.9,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 19.0,
+    "host": [
+      " Paris. The capital of Italy is Rome. The capital of Spain is Madrid. The capital of China is Beijing. The capital of Japan is Tokyo. The capital",
+      "\n    if n == 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n"
+    ],
+    "identical": true
+  },
+  "preset qwen3-1.7b": {
+    "image_ready": true,
+    "image_ready_s": 44.8,
+    "image": [
+      " Paris. The capital of the United States is Washington, D.C. The capital of the United Kingdom is London. The capital of the Russian Federation is Moscow.",
+      "\n    if n <= 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n"
+    ],
+    "image_stop": {
+      "stop_s": 1.0,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 42.0,
+    "host": [
+      " Paris. The capital of the United States is Washington, D.C. The capital of the United Kingdom is London. The capital of the Russian Federation is Moscow.",
+      "\n    if n <= 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n"
+    ],
+    "identical": true
+  },
+  "preset qwen3-4b": {
+    "image_ready": true,
+    "image_ready_s": 98.1,
+    "image": [
+      " Paris. The capital of Germany is Berlin. The capital of Italy is Rome. The capital of Spain is Madrid. The capital of Portugal is Lisbon. The capital",
+      "\n    if n <= 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n"
+    ],
+    "image_stop": {
+      "stop_s": 1.3,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 92.0,
+    "host": [
+      " Paris. The capital of Germany is Berlin. The capital of Italy is Rome. The capital of Spain is Madrid. The capital of Portugal is Lisbon. The capital",
+      "\n    if n <= 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n"
+    ],
+    "identical": true
+  },
+  "preset qwen3-8b": {
+    "image_ready": true,
+    "image_ready_s": 141.2,
+    "image": [
+      " Paris. The capital of Italy is Rome. The capital of Germany is Berlin. The capital of Spain is Madrid. The capital of Portugal is Lisbon. The capital",
+      "\n    if n == 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n"
+    ],
+    "image_stop": {
+      "stop_s": 1.8,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 140.1,
+    "host": [
+      " Paris. The capital of Italy is Rome. The capital of Germany is Berlin. The capital of Spain is Madrid. The capital of Portugal is Lisbon. The capital",
+      "\n    if n == 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n"
+    ],
+    "identical": true
+  },
+  "preset llama-3.2-1b": {
+    "image_ready": true,
+    "image_ready_s": 42.4,
+    "image": [
+      " Paris. The Eiffel Tower is located in Paris. The Eiffel Tower is one of the most famous landmarks in the world. It was built for",
+      " \n    \"\"\"\n    This function generates the first n numbers in the Fibonacci sequence.\n    \n    Args:\n        n (int): The number of Fibonacci numbers to generate"
+    ],
+    "image_stop": {
+      "stop_s": 0.9,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 35.0,
+    "host": [
+      " Paris. The Eiffel Tower is located in Paris. The Eiffel Tower is one of the most famous landmarks in the world. It was built for",
+      " \n    \"\"\"\n    This function generates the first n numbers in the Fibonacci sequence.\n    \n    Args:\n        n (int): The number of Fibonacci numbers to generate"
+    ],
+    "identical": true
+  },
+  "preset llama-3.2-3b": {
+    "image_ready": true,
+    "image_ready_s": 78.1,
+    "image": [
+      " Paris. The capital of Italy is Rome. The capital of Spain is Madrid. The capital of Germany is Berlin. The capital of the United Kingdom is London.",
+      " \n    fib_sequence = [0, 1] \n    while len(fib_sequence) < n: \n        fib_sequence.append(fib_sequence[-1"
+    ],
+    "image_stop": {
+      "stop_s": 1.4,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 65.0,
+    "host": [
+      " Paris. The capital of Italy is Rome. The capital of Spain is Madrid. The capital of Germany is Berlin. The capital of the United Kingdom is London.",
+      " \n    fib_sequence = [0, 1] \n    while len(fib_sequence) < n: \n        fib_sequence.append(fib_sequence[-1"
+    ],
+    "identical": true
+  },
+  "preset llama-3.1-8b": {
+    "image_ready": true,
+    "image_ready_s": 150.4,
+    "image": [
+      " a city of romance, art, fashion, and cuisine. Paris is a must-visit destination for anyone who loves history, architecture, and culture. From the",
+      " \n    \"\"\"Return the nth Fibonacci number.\"\"\"\n    if n <= 0: \n        return \"Input should be a positive integer.\"\n    elif n == "
+    ],
+    "image_stop": {
+      "stop_s": 3.1,
+      "exit_code": "0"
+    },
+    "host_ready": true,
+    "host_ready_s": 142.1,
+    "host": [
+      " a city of romance, art, fashion, and cuisine. Paris is a must-visit destination for anyone who loves history, architecture, and culture. From the",
+      " \n    \"\"\"Return the nth Fibonacci number.\"\"\"\n    if n <= 0: \n        return \"Input should be a positive integer.\"\n    elif n == "
+    ],
+    "identical": true
+  }
+}

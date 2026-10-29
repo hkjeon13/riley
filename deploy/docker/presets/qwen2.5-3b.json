@@ -1,0 +1,40 @@
+{
+  "format": "riley-checkpoint-v1",
+  "source_model": "Qwen/Qwen2.5-3B-Instruct",
+  "source_revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+  "converter_revision": null,
+  "transforms": [],
+  "dtype": "bf16",
+  "files": [
+    {
+      "path": "config.json",
+      "bytes": 661,
+      "sha256": "eed00b17e22553979d090fa492e587e92885e328914c8e0b0b78f0a0d3576b3b"
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 7031645,
+      "sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "bytes": 7305,
+      "sha256": "5b5d4f65d0acd3b2d56a35b56d374a36cbc1c8fa5cf3b3febbbfabf22f359583"
+    },
+    {
+      "path": "model.safetensors.index.json",
+      "bytes": 35581,
+      "sha256": "bc8aaa0c87d4335177e01c765f1de0db81661c67c1a72fbfb0d521b09f5ddc56"
+    },
+    {
+      "path": "model-00001-of-00002.safetensors",
+      "bytes": 3968658944,
+      "sha256": "67347b23fb4165b652eb6611f5e1f2a06dfcddba8e909df1b2b0b1857bee06c2"
+    },
+    {
+      "path": "model-00002-of-00002.safetensors",
+      "bytes": 2203268048,
+      "sha256": "a40d941d0e7e0b966ad8b62bb6d6b7c88cce1299197b599d9d0a4ce59aabfc1d"
+    }
+  ]
+}

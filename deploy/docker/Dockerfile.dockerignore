@@ -1,0 +1,17 @@
+# Build context for deploy/docker/Dockerfile (BuildKit reads this file instead
+# of the root .dockerignore, which excludes tools/ and deploy/).
+.git
+.github
+.idea
+.venv
+**/.venv
+**/__pycache__
+**/*.pyc
+**/target
+archive
+artifacts
+benchmarks
+docs
+experiments
+tests
+a100-between-experiments.jsonl

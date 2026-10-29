@@ -118,6 +118,7 @@ fn allowed_payload(name: &str) -> bool {
     matches!(
         name,
         "config.json"
+            | "generation_config.json"
             | "tokenizer.json"
             | "tokenizer_config.json"
             | "model.safetensors"
@@ -134,8 +135,30 @@ pub fn verify(root: &Path) -> Result<()> {
         // preparation tool's no-observed-symlink policy on root ancestors.
         regular_file(&root.join(entry.path()))?;
     }
-    drop(LoadedModel::load(root, LoadLimits::production())?);
+    drop(LoadedModel::load(root, load_limits(&plan)?)?);
     Ok(())
+}
+
+/// Production limits, widened to the weight bytes the trusted plan lists so
+/// real checkpoints (shards above 512 MiB) load as they do under `riley serve`.
+fn load_limits(plan: &Plan) -> Result<LoadLimits> {
+    let production = LoadLimits::production();
+    let weights = plan
+        .provenance
+        .files()
+        .values()
+        .filter(|entry| {
+            entry
+                .path()
+                .extension()
+                .is_some_and(|ext| ext == "safetensors")
+        })
+        .try_fold(0_u64, |total, entry| total.checked_add(entry.byte_len()))
+        .ok_or_else(|| invalid("planned weight bytes overflow"))?;
+    Ok(production.with_weight_byte_limits(
+        weights.max(production.shard_bytes()),
+        weights.max(production.total_weight_bytes()),
+    )?)
 }
 
 /// Copy a caller-owned regular-file tree. This function never falls back to Hub.

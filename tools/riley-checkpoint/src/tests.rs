@@ -104,6 +104,54 @@ fn offline_prepare_passes_real_loader_and_copies_not_external_hardlinks() {
 }
 
 #[test]
+fn generation_config_is_an_allowed_payload_the_loader_reads() {
+    let source = Temp::new();
+    let parent = Temp::new();
+    let mut plan: Value = serde_json::from_slice(&fixture(&source.0)).unwrap();
+    let generation = br#"{"bos_token_id":0,"eos_token_id":[0]}"#;
+    fs::write(source.0.join("generation_config.json"), generation).unwrap();
+    plan["files"].as_array_mut().unwrap().push(json!({
+        "path":"generation_config.json","bytes":generation.len(),
+        "sha256":hex_digest(Sha256::digest(generation).as_ref())
+    }));
+    let plan = Plan::from_bytes(serde_json::to_vec(&plan).unwrap()).unwrap();
+    let target = parent.0.join("ready");
+    prepare(&plan, &source.0, &target).unwrap();
+    verify(&target).unwrap();
+    assert_eq!(
+        fs::read(target.join("generation_config.json")).unwrap(),
+        generation
+    );
+}
+
+#[test]
+fn load_limits_cover_planned_weights_and_never_drop_below_production() {
+    let digest = "0".repeat(64);
+    let plan = |shard_bytes: u64| {
+        Plan::from_bytes(
+            serde_json::to_vec(&json!({"format":"riley-checkpoint-v1",
+                "source_model":"fixture/tiny-llama",
+                "source_revision":"1111111111111111111111111111111111111111",
+                "converter_revision":null,"dtype":"bf16","transforms":[],"files":[
+                    {"path":"config.json","bytes":10,"sha256":digest},
+                    {"path":"tokenizer.json","bytes":10,"sha256":digest},
+                    {"path":"model.safetensors.index.json","bytes":10,"sha256":digest},
+                    {"path":"model-00001-of-00002.safetensors","bytes":shard_bytes,"sha256":digest},
+                    {"path":"model-00002-of-00002.safetensors","bytes":shard_bytes,"sha256":digest}]}))
+            .unwrap(),
+        )
+        .unwrap()
+    };
+    let production = LoadLimits::production();
+    let large = load_limits(&plan(4_000_000_000)).unwrap();
+    assert_eq!(large.shard_bytes(), 8_000_000_000);
+    assert_eq!(large.total_weight_bytes(), 8_000_000_000);
+    let small = load_limits(&plan(10)).unwrap();
+    assert_eq!(small.shard_bytes(), production.shard_bytes());
+    assert_eq!(small.total_weight_bytes(), production.total_weight_bytes());
+}
+
+#[test]
 fn checksum_failure_never_publishes_and_removes_only_owned_destination() {
     let source = Temp::new();
     let parent = Temp::new();

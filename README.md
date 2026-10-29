@@ -87,6 +87,52 @@ are kept in the [performance experiment log](docs/performance-experiments.md).
 
 ## Installation
 
+### Docker
+
+The quickest start is the container image. It needs an NVIDIA driver 550 or
+newer and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html),
+and carries kernels for `sm_80` (A100), `sm_86` (RTX 30xx/A10) and `sm_89`
+(RTX 40xx/L4/L40). Every model in the table above is a bundled preset: the
+first start downloads the pinned checkpoint into the `/models` volume and checks
+every file against its SHA-256, later starts reuse it.
+
+```bash
+docker run --gpus '"device=0"' -p 8080:8080 -v riley-models:/models \
+  riley:cu124 serve --preset qwen3-4b
+```
+
+```bash
+curl -s http://localhost:8080/v1/completions -H 'Content-Type: application/json' \
+  -d '{"model": "qwen3-4b", "prompt": "The capital of France is", "max_tokens": 16, "temperature": 0}'
+```
+
+`serve --preset NAME` adds `--model-id NAME`, the native profile shown under
+[Usage](#start-the-server), a fitting `--max-weight-bytes` and
+`--bind 0.0.0.0:8080`; any `riley serve` option you add is passed through and
+wins over these. Other commands:
+
+| Command | What it does |
+|---|---|
+| `presets` | List the bundled presets and their Hub repositories |
+| `download NAME...` | Download and verify presets into `/models` without serving |
+| `serve --model /models/DIR --model-id ID ...` | Serve a checkpoint you prepared yourself |
+| `riley-checkpoint ...` | The checkpoint tool described under [Prepare a model](#prepare-a-model) |
+
+Set `-e HF_TOKEN=...` for gated repositories. The container runs as UID 65532;
+a named volume works as is, while a host directory mounted at `/models` must be
+writable by that user (or run with `--user "$(id -u):$(id -g)"`).
+
+Build the image yourself from the repository root:
+
+```bash
+docker build -f deploy/docker/Dockerfile -t riley:cu124 .
+```
+
+Pass `--build-arg RILEY_CUDA_ARCHITECTURES=80` to compile for fewer GPUs and
+build faster. Presets live in [`deploy/docker/presets`](deploy/docker/presets);
+each is a `riley-checkpoint` manifest cross-checked against the Hub's own
+size, LFS SHA-256 and git blob ids at the pinned commit.
+
 ### Requirements
 
 | | Needed | Tested with |
@@ -110,7 +156,7 @@ git clone https://github.com/hkjeon13/riley.git
 cd riley
 export CUDA_HOME=/usr/local/cuda
 export RILEY_CUDA_ARCHITECTURES=80
-cargo build --locked --release --features cuda,server
+cargo build --locked --release -p riley-server --features server,hf-exact-probe
 ```
 
 The binary links the CUDA runtime and cuBLASLt dynamically, so put them on the

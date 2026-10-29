@@ -1,0 +1,30 @@
+{
+  "format": "riley-checkpoint-v1",
+  "source_model": "unsloth/Llama-3.2-1B-Instruct",
+  "source_revision": "5a8abab4a5d6f164389b1079fb721cfab8d7126c",
+  "converter_revision": null,
+  "transforms": [],
+  "dtype": "bf16",
+  "files": [
+    {
+      "path": "config.json",
+      "bytes": 894,
+      "sha256": "dfb67fd8afe73a1c75245824ef9d64a6ba8983025447e3bf76aa1ea57ee46152"
+    },
+    {
+      "path": "generation_config.json",
+      "bytes": 239,
+      "sha256": "6d4f979915331212d7672c68b22a4ddad9e21ed8126cf2bd1ea6b2b88f595c1c"
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 17209920,
+      "sha256": "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b"
+    },
+    {
+      "path": "model.safetensors",
+      "bytes": 2471645608,
+      "sha256": "1ff795ff6a07e6a68085d206fb84417da2f083f68391c2843cd2b8ac6df8538f"
+    }
+  ]
+}

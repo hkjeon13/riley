@@ -1,0 +1,50 @@
+{
+  "format": "riley-checkpoint-v1",
+  "source_model": "unsloth/Meta-Llama-3.1-8B-Instruct",
+  "source_revision": "a2856192dd7c25b842431f39c179a6c2c2f627d1",
+  "converter_revision": null,
+  "transforms": [],
+  "dtype": "bf16",
+  "files": [
+    {
+      "path": "config.json",
+      "bytes": 956,
+      "sha256": "073b48b1c601acd5e592000aaf13131055f26bb22e8fc71befced9b9213b6799"
+    },
+    {
+      "path": "generation_config.json",
+      "bytes": 239,
+      "sha256": "280388b9a56fc9ad1f05d9096dc399ff6b5cf4a9c0a0a48d9ccc1dbc15290f7f"
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 17209920,
+      "sha256": "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b"
+    },
+    {
+      "path": "model.safetensors.index.json",
+      "bytes": 23950,
+      "sha256": "146776fce3f6db1103aa6f249e65ee5544c5923ce6f971b092eee79aa6e5d37b"
+    },
+    {
+      "path": "model-00001-of-00004.safetensors",
+      "bytes": 4976698672,
+      "sha256": "2b1879f356aed350030bb40eb45ad362c89d9891096f79a3ab323d3ba5607668"
+    },
+    {
+      "path": "model-00002-of-00004.safetensors",
+      "bytes": 4999802720,
+      "sha256": "09d433f650646834a83c580877bd60c6d1f88f7755305c12576b5c7058f9af15"
+    },
+    {
+      "path": "model-00003-of-00004.safetensors",
+      "bytes": 4915916176,
+      "sha256": "fc1cdddd6bfa91128d6e94ee73d0ce62bfcdb7af29e978ddcab30c66ae9ea7fa"
+    },
+    {
+      "path": "model-00004-of-00004.safetensors",
+      "bytes": 1168138808,
+      "sha256": "92ecfe1a2414458b4821ac8c13cf8cb70aed66b5eea8dc5ad9eeb4ff309d6d7b"
+    }
+  ]
+}
