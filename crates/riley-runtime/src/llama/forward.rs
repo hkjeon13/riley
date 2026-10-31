@@ -961,10 +961,13 @@ impl PreparedLlamaForward {
             captured_steps,
             captured_step_budget: _,
             owned_decode_segments,
+            tensor_parallel_group,
         } = self;
-        // Recorded steps reference the plans and buffers closed below.
+        // Recorded steps reference the plans and buffers closed below, and
+        // the peer all-reduce group they launch.
         drop(captured_steps);
         drop(owned_decode_segments);
+        drop(tensor_parallel_group);
         let GemmPlans {
             hidden,
             key_value,
@@ -1696,6 +1699,20 @@ pub(super) fn execute_profile_residual_rms_norm<S: CudaExecutionStream + ?Sized>
             residual_rms_norm(params, stream)
         }
     }
+}
+
+/// The spec one tensor-parallel rank executes (the whole spec for one rank).
+fn tensor_parallel_rank_spec(
+    model: &LoadedModel,
+    shard: crate::cuda_weights::TensorParallelShard,
+) -> LlamaForwardResult<riley_model::ModelSpec> {
+    model
+        .spec()
+        .tensor_parallel_rank_spec(shard.size())
+        .map_err(|_| LlamaForwardError::InvalidConfiguration {
+            field: "tensor_parallel_size",
+            reason: "the size must divide every block's query heads, KV heads and intermediate size",
+        })
 }
 
 pub(super) fn execute_projection_bias<S: CudaExecutionStream + ?Sized>(
@@ -2527,6 +2544,7 @@ pub struct PreparedLlamaForwardConfig {
     first_heuristic_gemm_reductions: bool,
     bit_equivalent_gemm_selection: bool,
     owned_hf_eager_bf16: bool,
+    tensor_parallel: crate::cuda_weights::TensorParallelShard,
 }
 
 impl PreparedLlamaForwardConfig {
@@ -2554,8 +2572,21 @@ impl PreparedLlamaForwardConfig {
             first_heuristic_gemm_reductions: false,
             bit_equivalent_gemm_selection: false,
             owned_hf_eager_bf16: false,
+            tensor_parallel: crate::cuda_weights::TensorParallelShard::WHOLE,
         }
     }
+
+    /// Prepares one tensor-parallel rank: the rank's slice of the weights and
+    /// a plan with its share of attention heads and MLP columns. The batch
+    /// executor all-reduces the attention output and down projections.
+    #[must_use]
+    pub const fn with_tensor_parallel(mut self, shard: crate::cuda_weights::TensorParallelShard) -> Self {
+        self.tensor_parallel = shard;
+        self
+    }
+
+    #[must_use]
+    pub const fn tensor_parallel(self) -> crate::cuda_weights::TensorParallelShard { self.tensor_parallel }
 
     /// Selects the owned BF16 eager arithmetic profile for batch preparation.
     /// It requires the matching batch attention selector; the batch owner
@@ -3479,6 +3510,9 @@ pub struct PreparedLlamaForward {
     /// recorded step keeps several MiB of host and device memory, so the
     /// total is bounded; shapes met after the budget is spent run eagerly.
     pub(super) captured_step_budget: usize,
+    /// Peer all-reduce of a tensor-parallel group, attached after preparation
+    /// when the weights hold one rank's slice.
+    pub(super) tensor_parallel_group: Option<std::sync::Arc<riley_cuda::CudaPeerAllReduceGroup>>,
 }
 
 impl fmt::Debug for PreparedLlamaForward {
@@ -3599,14 +3633,16 @@ impl PreparedLlamaForward {
             sequence_length,
         );
 
-        let mut weights = CudaUploadedWeights::upload(
+        let rank_spec = tensor_parallel_rank_spec(model, config.tensor_parallel)?;
+        let mut weights = CudaUploadedWeights::upload_sharded(
             model.weights(),
             context,
             stream,
             config.upload_staging_bytes,
+            config.tensor_parallel,
         )
         .map_err(|source| LlamaForwardError::Weight { site: None, source })?;
-        let plan = LlamaExecutionPlan::prepare(model.spec(), &weights, sequence_length)?;
+        let plan = LlamaExecutionPlan::prepare(&rank_spec, &weights, sequence_length)?;
         // The owned wide-query path packs separate Q/K/V outputs, never merged weights.
         if config.projection_bias_mode.merges_qkv() && !config.owned_hf_eager_bf16 {
             weights
@@ -3815,7 +3851,39 @@ impl PreparedLlamaForward {
             owned_decode_segments,
             captured_steps: Vec::new(),
             captured_step_budget: MAX_RECORDED_STEPS,
+            tensor_parallel_group: None,
         })
+    }
+
+    /// Attaches the all-reduce group of a tensor-parallel rank. The group size
+    /// must equal the shard size the weights were uploaded with, and the
+    /// rank's device must be `device_ordinal`.
+    pub(super) fn attach_tensor_parallel_group(
+        &mut self,
+        group: std::sync::Arc<riley_cuda::CudaPeerAllReduceGroup>,
+        device_ordinal: u32,
+    ) -> LlamaForwardResult<()> {
+        let shard = self.weights.shard();
+        let rank = u32::try_from(shard.rank()).unwrap_or(u32::MAX);
+        if shard.size() < 2
+            || usize::try_from(group.rank_count()).ok() != Some(shard.size())
+            || group.device_ordinal(rank) != Some(device_ordinal)
+        {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "tensor_parallel_group",
+                reason: "the group must match the weights' shard size and this rank's device",
+            });
+        }
+        self.tensor_parallel_group = Some(group);
+        Ok(())
+    }
+
+    /// The group and this rank, when tensor-parallel.
+    pub(super) fn tensor_parallel_reduce(
+        &self,
+    ) -> Option<(std::sync::Arc<riley_cuda::CudaPeerAllReduceGroup>, u32)> {
+        let rank = u32::try_from(self.weights.shard().rank()).ok()?;
+        self.tensor_parallel_group.clone().map(|group| (group, rank))
     }
 
     /// Immutable fixed-S topology and dimensions.
@@ -3841,7 +3909,8 @@ impl PreparedLlamaForward {
                 reason: "batch shape variants must be non-zero and smaller than the maximum plan",
             });
         }
-        let plan = LlamaExecutionPlan::prepare(model.spec(), &self.weights, dense_rows)?;
+        let rank_spec = tensor_parallel_rank_spec(model, self.weights.shard())?;
+        let plan = LlamaExecutionPlan::prepare(&rank_spec, &self.weights, dense_rows)?;
         if plan.dimensions() != self.plan.dimensions()
             || plan.layers().len() != self.plan.layers().len()
             || plan.rope_theta().to_bits() != self.plan.rope_theta().to_bits()

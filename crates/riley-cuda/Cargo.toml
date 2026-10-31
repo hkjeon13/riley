@@ -41,6 +41,11 @@ path = "tests/abi_link.rs"
 required-features = ["cuda"]
 
 [[test]]
+name = "peer_all_reduce_gpu"
+path = "tests/peer_all_reduce_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
 name = "host_runtime_gpu"
 path = "tests/host_runtime_gpu.rs"
 required-features = ["cuda"]

@@ -2199,11 +2199,109 @@ mod cuda_backend {
 
     const _: () = assert!(ENGINE_BATCH_SHAPE_BUCKET_CAPACITY == MAX_LLAMA_BATCH_SHAPE_BUCKETS);
 
+    /// Prepares every rank of a tensor-parallel group, each on its own device
+    /// and host thread, links them with a peer all-reduce group and returns
+    /// rank 0, which drives the others.
+    fn prepare_tensor_parallel(
+        model: &LoadedModel,
+        runtime: &CudaRuntime,
+        context: &CudaContext,
+        stream: &mut CudaStream,
+        executor_config: PreparedLlamaBatchExecutorConfig,
+        devices: &[u32],
+    ) -> Result<PreparedLlamaBatchExecutor, BackendError> {
+        use riley_runtime::TensorParallelShard;
+        let size = devices.len();
+        let mut contexts = Vec::with_capacity(size);
+        for &ordinal in &devices[1..] {
+            let follower = runtime
+                .device(ordinal)
+                .and_then(|device| device.create_context())
+                .map_err(|source| internal(format!("CUDA context for device {ordinal} failed: {source}")))?;
+            contexts.push(follower);
+        }
+        let shard = |rank| {
+            TensorParallelShard::new(rank, size)
+                .ok_or_else(|| internal("tensor-parallel rank out of range".to_owned()))
+        };
+        let leader_config = executor_config.with_tensor_parallel(shard(0)?);
+        let follower_configs = (1..size)
+            .map(|rank| shard(rank).map(|shard| executor_config.with_tensor_parallel(shard)))
+            .collect::<Result<Vec<_>, _>>()?;
+        // Every rank uploads its slice concurrently.
+        let (leader, followers) = std::thread::scope(|scope| {
+            let handles: Vec<_> = contexts
+                .iter()
+                .zip(follower_configs)
+                .map(|(follower_context, follower_config)| {
+                    scope.spawn(move || {
+                        let mut follower_stream = follower_context.create_stream().map_err(|source| {
+                            internal(format!("CUDA stream creation failed: {source}"))
+                        })?;
+                        let executor = PreparedLlamaBatchExecutor::prepare(
+                            model,
+                            follower_context,
+                            &mut follower_stream,
+                            follower_config,
+                        )
+                        .map_err(|source| {
+                            internal(format!("batch executor preparation failed: {source}"))
+                        })?;
+                        Ok::<_, BackendError>((executor, follower_stream))
+                    })
+                })
+                .collect();
+            let leader = PreparedLlamaBatchExecutor::prepare(model, context, stream, leader_config)
+                .map_err(|source| internal(format!("batch executor preparation failed: {source}")));
+            let followers = handles
+                .into_iter()
+                .map(|handle| {
+                    handle
+                        .join()
+                        .map_err(|_| internal("tensor-parallel preparation thread panicked".to_owned()))?
+                })
+                .collect::<Result<Vec<_>, _>>();
+            (leader, followers)
+        });
+        let mut leader = leader?;
+        let mut followers = followers?;
+        let hidden = model
+            .spec()
+            .blocks()
+            .first()
+            .map_or(0, |block| block.attention().hidden_size());
+        let max_elements = u64::try_from(leader.batch_token_budget().saturating_mul(hidden))
+            .map_err(|_| internal("tensor-parallel staging size overflows".to_owned()))?;
+        let mut group_contexts = vec![context];
+        group_contexts.extend(contexts.iter());
+        let group = std::sync::Arc::new(
+            riley_runtime::CudaPeerAllReduceGroup::new(&group_contexts, max_elements)
+                .map_err(|source| internal(format!("tensor-parallel peer group failed: {source}")))?,
+        );
+        for (rank, (executor, _)) in followers.iter_mut().enumerate() {
+            executor
+                .attach_tensor_parallel(std::sync::Arc::clone(&group), devices[rank + 1], None)
+                .map_err(|source| internal(format!("tensor-parallel attach failed: {source}")))?;
+        }
+        leader
+            .attach_tensor_parallel(
+                group,
+                devices[0],
+                Some(riley_runtime::llama::TensorParallelFollowers::spawn(followers)),
+            )
+            .map_err(|source| internal(format!("tensor-parallel attach failed: {source}")))?;
+        eprintln!("RILEY_TENSOR_PARALLEL size={size} devices={devices:?}");
+        Ok(leader)
+    }
+
     /// Cold CUDA, scheduler, and fixed-batch preparation settings.
     #[derive(Clone, Debug)]
     pub struct CudaBackendConfig {
         /// Visible CUDA device ordinal.
         pub device_ordinal: u32,
+        /// Tensor-parallel CUDA ordinals in rank order (rank 0 is
+        /// `device_ordinal`); empty for one GPU.
+        pub tensor_parallel_devices: Vec<u32>,
         /// Bounded continuous scheduler policy.
         pub scheduler: SchedulerConfig,
         /// Fixed-M runtime metadata and forward policy.
@@ -2470,11 +2568,21 @@ mod cuda_backend {
             } else {
                 config.executor
             };
-            let mut executor =
+            let mut executor = if config.tensor_parallel_devices.len() > 1 {
+                prepare_tensor_parallel(
+                    &model,
+                    &runtime,
+                    &context,
+                    &mut stream,
+                    executor_config,
+                    &config.tensor_parallel_devices,
+                )?
+            } else {
                 PreparedLlamaBatchExecutor::prepare(&model, &context, &mut stream, executor_config)
                     .map_err(|source| {
                         internal(format!("batch executor preparation failed: {source}"))
-                    })?;
+                    })?
+            };
             // Complete qualified decode graph capture before accepting requests.
             if let Err(source)=executor.warm_owned_qwen_decode_graphs(config.gpu_greedy,&mut stream){
                 let _=executor.close();return Err(internal(format!("decode graph warmup failed: {source}")));

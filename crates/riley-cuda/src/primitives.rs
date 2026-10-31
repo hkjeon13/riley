@@ -1392,6 +1392,55 @@ pub fn row_bias_add_in_place<S: CudaExecutionStream + ?Sized>(
     }
 }
 
+/// Sums `data` over every rank of `group` in place (tensor parallelism).
+///
+/// `data` holds `element_count` BF16 values in this rank's context; afterwards
+/// each element is the rank-ordered FP32 sum of all ranks' values, rounded to
+/// BF16, identical on every rank. Every rank must make the same call with the
+/// same `element_count` on its own stream; the call only enqueues work and may
+/// be recorded in a CUDA graph.
+///
+/// # Errors
+///
+/// Fails for a non-BF16 or too small span, a rank outside the group, an
+/// element count above the group capacity, a stream of another context than
+/// the rank's, or a CUDA launch failure.
+pub fn peer_all_reduce_bf16_in_place<S: CudaExecutionStream + ?Sized>(
+    group: &crate::CudaPeerAllReduceGroup,
+    rank: u32,
+    data: &mut CudaBufferSpanMut<'_>,
+    element_count: u64,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "peer_all_reduce_bf16_in_place";
+    let stream = execution_stream_mut(stream);
+    require_dtype(OPERATION, "data", data.dtype, CudaDType::BF16)?;
+    let data_bytes = required_vector_bytes(OPERATION, element_count, CudaDType::BF16)?;
+    require_capacity(OPERATION, "data", data.byte_len, data_bytes)?;
+    if element_count > group.max_elements() {
+        return Err(CudaError::out_of_range(
+            OPERATION,
+            "element_count exceeds the group's staging capacity",
+        ));
+    }
+    let context = group
+        .context(rank)
+        .ok_or_else(|| CudaError::out_of_range(OPERATION, "rank is outside the group"))?;
+    crate::runtime::ensure_same_context(context, &stream.context, OPERATION)?;
+    validate_resources(OPERATION, stream, &[data.buffer])?;
+    #[cfg(feature = "cuda")]
+    {
+        group
+            .native()
+            .execute_bf16(rank, data.raw(), element_count, &mut stream.native)
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = (rank, data);
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
 /// A merged BF16 `Q|K|V` projection matrix, its three biases, and the three
 /// contiguous outputs it is split into.
 #[derive(Debug)]

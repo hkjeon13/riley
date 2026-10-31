@@ -239,8 +239,15 @@ The method mattered as much as any single change.
 - Single-client throughput on large models, where the remaining 2 to 3% is
   spread over small per-step costs.
 - The small-model kernel branch has not been merged into `main`.
-- Only one GPU model (RTX 4090) and BF16 have been measured. There is no
-  quantisation, multi-GPU or chat-completions endpoint.
+- BF16 only, no quantisation. The A100 campaign (October) added 24 qualified
+  models and a chat-completions endpoint; tensor parallelism over two A100s
+  runs Qwen2.5-32B but is still 1–5 % behind vLLM at one and eight clients.
+- Quality checks (GSM8K and HF agreement, October 31) found measurement
+  mistakes rather than engine errors: vLLM applied the checkpoint's sampling
+  defaults, the HF eager reference disagreed with sdpa and FP32, some
+  manifests lacked `generation_config.json`, and DeepSeek-R1-Distill's BOS
+  was dropped by transformers 5.19. The corrected numbers are in
+  [model coverage, section 6](model-coverage-a100.md#6-품질과-큰-모델-2026-10-31).
 - The 30-minute soak has not been repeated on the final Qwen2.5-3B build.
 
 The measurement logs behind this book were removed from the tree to keep the

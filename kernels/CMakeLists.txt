@@ -37,6 +37,7 @@ add_library(riley_cuda_native STATIC
     src/host_runtime.cu
     src/memory.cu
     src/primitives.cu
+    src/peer_all_reduce.cu
     src/smoke_fill.cu
     src/version.cu
 )

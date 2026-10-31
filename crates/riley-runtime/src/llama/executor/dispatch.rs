@@ -292,6 +292,7 @@ pub(in crate::llama) fn execute_packed(
 ) -> LlamaBatchExecutorResult<()> {
     let bounds = config.metadata();
     let active = packed.total_input_tokens();
+    let tensor_parallel_group = forward.tensor_parallel_reduce();
     if dense_rows != forward.plan.sequence_length()
         && !shape_variants
             .iter()
@@ -810,6 +811,7 @@ pub(in crate::llama) fn execute_packed(
             packed.position_ids(),
             step_capture,
             output_row_lm_head,
+            tensor_parallel_group.as_ref().map(|(group, rank)| (&**group, *rank)),
             stream,
         );
         // Staged step uploads: the batch also copies this iteration's results
@@ -1236,6 +1238,25 @@ fn execute_owned_decode_segment<S: CudaExecutionStream + ?Sized>(
     Ok(())
 }
 
+/// Sums a row-parallel projection's partial output over the tensor-parallel
+/// group, in place; nothing without tensor parallelism.
+fn tensor_parallel_all_reduce<S: CudaExecutionStream + ?Sized>(
+    tensor_parallel: Option<(&riley_cuda::CudaPeerAllReduceGroup, u32)>,
+    output: &mut CudaDeviceBuffer,
+    element_count: u64,
+    stream: &mut S,
+    site: ExecutionSite,
+) -> LlamaBatchExecutorResult<()> {
+    let Some((group, rank)) = tensor_parallel else {
+        return Ok(());
+    };
+    let byte_len = output.byte_len();
+    let mut data = CudaBufferSpanMut::new(output, CudaDType::BF16, 0, byte_len)
+        .map_err(|source| batch_cuda(site, source))?;
+    riley_cuda::peer_all_reduce_bf16_in_place(group, rank, &mut data, element_count, stream)
+        .map_err(|source| batch_cuda(site, source))
+}
+
 fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     plan: &LlamaExecutionPlan,
     weights: &CudaUploadedWeights,
@@ -1271,6 +1292,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     positions_host: &[u32],
     step_capture: StepCaptureMode<'_>,
     output_row_lm_head: Option<OutputRowLmHead<'_>>,
+    tensor_parallel: Option<(&riley_cuda::CudaPeerAllReduceGroup, u32)>,
     stream: &mut S,
 ) -> LlamaBatchExecutorResult<()> {
     let dense_rows = usize_u64(
@@ -2169,6 +2191,8 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             output_site,
         batch.host(),None,owned_decode_batch,
 )?;
+        // Tensor parallelism: each rank holds partial sums of its heads.
+        tensor_parallel_all_reduce(tensor_parallel, hidden_projection, dense_rows * hidden, stream, output_site)?;
         execute_projection_bias(
             weights,
             layer.output_bias(),
@@ -2478,6 +2502,13 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         batch.host(),None,owned_decode_batch,piecewise_rows,
 )?;
         }
+        tensor_parallel_all_reduce(
+            tensor_parallel,
+            hidden_current,
+            dense_rows * hidden,
+            stream,
+            ExecutionSite::layer(layer_index, LlamaOp::DownProjection),
+        )?;
         let mlp_residual_site = ExecutionSite::layer(layer_index, LlamaOp::MlpResidual);
         if norm_after_mlp {
             // The norm that follows this residual: the next layer's input norm,

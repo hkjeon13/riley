@@ -571,6 +571,22 @@ struct RileyCudaEvent {
   RileyCudaDeferredCloseNode deferred_close;
 };
 
+// Tensor-parallel all-reduce group (peer_all_reduce.cu). Each rank owns a
+// BF16 staging buffer and a signal area in its own context; the arrays are
+// indexed by rank. The group retains one child count on every context.
+struct RileyCudaPeerAllReduceGroup {
+  static constexpr uint32_t kMaximumRanks = 8;
+  static constexpr uint32_t kMaximumBlocks = 64;
+  // start flags [block][source], end flags [block][source], epoch [block].
+  static constexpr size_t kSignalWords =
+      2 * kMaximumBlocks * kMaximumRanks + kMaximumBlocks;
+  uint32_t rank_count;
+  uint64_t max_elements;
+  RileyCudaContext* contexts[kMaximumRanks];
+  void* staging[kMaximumRanks];
+  uint32_t* signals[kMaximumRanks];
+};
+
 struct RileyCudaSmokeBuffer {
   RileyCudaContext* owner;
   float* device_data;

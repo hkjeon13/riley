@@ -161,6 +161,14 @@ _Static_assert(offsetof(RileyCudaRowBiasAddInPlaceParams, row_count) == 104,
                "row-bias dimension offset changed");
 _Static_assert(offsetof(RileyCudaRowBiasAddInPlaceParams, reserved) == 120,
                "row-bias reserved tail changed");
+_Static_assert(sizeof(RileyCudaPeerAllReduceParams) == 104,
+               "peer all-reduce params ABI size changed");
+_Static_assert(offsetof(RileyCudaPeerAllReduceParams, data) == 8,
+               "peer all-reduce data offset changed");
+_Static_assert(offsetof(RileyCudaPeerAllReduceParams, element_count) == 56,
+               "peer all-reduce element-count offset changed");
+_Static_assert(offsetof(RileyCudaPeerAllReduceParams, reserved) == 72,
+               "peer all-reduce reserved tail changed");
 _Static_assert(sizeof(RileyCudaSiluParams) == 152,
                "SiLU params ABI size changed");
 _Static_assert(sizeof(RileyCudaGatedMultiplyParams) == 200,

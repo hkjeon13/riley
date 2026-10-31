@@ -114,6 +114,10 @@ pub enum LlamaBatchExecutorError {
     },
     OutputNotReady,
     Poisoned,
+    /// A tensor-parallel follower rank failed or stopped.
+    TensorParallelFollower {
+        reason: String,
+    },
     InvalidDownloadLength {
         expected_bytes: usize,
         actual_bytes: usize,
@@ -186,6 +190,9 @@ impl fmt::Display for LlamaBatchExecutorError {
             Self::Poisoned => formatter.write_str(
                 "the Llama batch executor was poisoned by a native CUDA execution failure",
             ),
+            Self::TensorParallelFollower { reason } => {
+                write!(formatter, "tensor-parallel follower rank failed: {reason}")
+            }
             Self::InvalidDownloadLength {
                 expected_bytes,
                 actual_bytes,

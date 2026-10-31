@@ -24,6 +24,7 @@ pub use graph_resources::{
 #[cfg(any(feature = "cuda", test))]
 mod hf_eager_allowlist;
 mod memory;
+mod peer_all_reduce;
 mod prefill;
 mod primitives;
 mod runtime;
@@ -144,6 +145,7 @@ pub use graph::{
     PackedParentKvWriteGraph, PackedParentKvWriteResources, ParentAttentionGraph,
     ParentAttentionResources, PointwiseGraphOperation, RopeGraphGeometry,
 };
+pub use peer_all_reduce::CudaPeerAllReduceGroup;
 pub use memory::{
     CudaAllocationStats, CudaDeviceBuffer, CudaPendingD2H, CudaPendingH2D, CudaPinnedHostBuffer,
 };
@@ -171,7 +173,8 @@ pub use primitives::{
     embedding_deferred_report, fixed37_log_softmax, fixed37_residual_rms_norm, fixed37_rms_norm,
     gated_multiply, hugging_face_qwen_p2051_rms_norm, hugging_face_smollm2_residual_rms_norm,
     hugging_face_smollm2_rms_norm, qkv_split_bias, qkv_split_bias_rope, residual_add,
-    residual_rms_norm, rms_norm, rope, rope_table, row_bias_add_in_place, silu,
+    peer_all_reduce_bf16_in_place, residual_rms_norm, rms_norm, rope, rope_table,
+    row_bias_add_in_place, silu,
     silu_gated_multiply, silu_gated_multiply_merged_rows,
 };
 pub use runtime::{

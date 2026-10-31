@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::error;
 use std::fmt;
@@ -52,6 +53,113 @@ pub enum CudaWeightUploadError {
     ForeignPhysicalWeightId,
     /// A physical ID index was absent from its uploaded-weight owner.
     MissingPhysicalWeight { index: usize },
+    /// A tensor-parallel split does not divide the tensor's split axis.
+    IndivisibleShard {
+        /// Canonical slot whose tensor cannot be split.
+        slot: WeightSlot,
+        /// Tensor-parallel group size.
+        size: usize,
+    },
+}
+
+/// The slice of a checkpoint one tensor-parallel rank holds.
+///
+/// Query/key/value, gate and up projections (and their biases) keep the
+/// rank's rows (output features); the attention output and down projections
+/// keep the rank's columns (input features) and produce partial sums the
+/// ranks all-reduce. Norms, embeddings and the LM head stay whole.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TensorParallelShard {
+    rank: usize,
+    size: usize,
+}
+
+impl TensorParallelShard {
+    /// The whole checkpoint (no tensor parallelism).
+    pub const WHOLE: Self = Self { rank: 0, size: 1 };
+
+    /// Rank `rank` of a `size`-way group; `None` unless `rank < size`.
+    #[must_use]
+    pub const fn new(rank: usize, size: usize) -> Option<Self> {
+        if rank < size {
+            Some(Self { rank, size })
+        } else {
+            None
+        }
+    }
+
+    /// This rank's index.
+    #[must_use]
+    pub const fn rank(&self) -> usize {
+        self.rank
+    }
+
+    /// Group size.
+    #[must_use]
+    pub const fn size(&self) -> usize {
+        self.size
+    }
+
+    fn axis(slot: WeightSlot) -> Option<usize> {
+        use riley_model::DecoderWeight as W;
+        match slot {
+            WeightSlot::Decoder { parameter, .. } => match parameter {
+                W::QueryWeight
+                | W::QueryBias
+                | W::KeyWeight
+                | W::KeyBias
+                | W::ValueWeight
+                | W::ValueBias
+                | W::GateWeight
+                | W::GateBias
+                | W::UpWeight
+                | W::UpBias => Some(0),
+                W::OutputWeight | W::DownWeight => Some(1),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// The rank's bytes and shape of one tensor (row-major storage).
+    fn slice<'a>(
+        &self,
+        slot: WeightSlot,
+        bytes: &'a [u8],
+        shape: &[usize],
+    ) -> CudaWeightUploadResult<(Cow<'a, [u8]>, Vec<usize>)> {
+        let indivisible = CudaWeightUploadError::IndivisibleShard {
+            slot,
+            size: self.size,
+        };
+        let axis = match Self::axis(slot) {
+            Some(axis) if self.size > 1 => axis,
+            _ => return Ok((Cow::Borrowed(bytes), shape.to_vec())),
+        };
+        let extent = *shape.get(axis).ok_or(indivisible)?;
+        if extent % self.size != 0 {
+            return Err(CudaWeightUploadError::IndivisibleShard { slot, size: self.size });
+        }
+        let part = extent / self.size;
+        let mut rank_shape = shape.to_vec();
+        rank_shape[axis] = part;
+        // Elements after the split axis form one contiguous run.
+        let inner: usize = shape[axis + 1..].iter().product();
+        let outer: usize = shape[..axis].iter().product();
+        let element = bytes.len() / (outer * extent * inner).max(1);
+        let run = part * inner * element;
+        let stride = extent * inner * element;
+        let start = self.rank * run;
+        if outer == 1 {
+            return Ok((Cow::Borrowed(&bytes[start..start + run]), rank_shape));
+        }
+        let mut gathered = Vec::with_capacity(outer * run);
+        for row in 0..outer {
+            let base = row * stride + start;
+            gathered.extend_from_slice(&bytes[base..base + run]);
+        }
+        Ok((Cow::Owned(gathered), rank_shape))
+    }
 }
 
 impl fmt::Display for CudaWeightUploadError {
@@ -89,6 +197,11 @@ impl fmt::Display for CudaWeightUploadError {
                     "uploaded CUDA weights omit physical index {index}"
                 )
             }
+            Self::IndivisibleShard { slot, size } => write!(
+                formatter,
+                "tensor-parallel size {size} does not divide the split axis of {}",
+                slot.name()
+            ),
         }
     }
 }
@@ -223,6 +336,8 @@ pub struct CudaUploadedWeights {
     merged_qkv: Vec<CudaDeviceBuffer>,
     merged_gate_up: Vec<CudaDeviceBuffer>,
     negative_zero_bias: Option<CudaDeviceBuffer>,
+    /// The checkpoint slice these weights hold.
+    shard: TensorParallelShard,
 }
 
 impl CudaUploadedWeights {
@@ -243,6 +358,29 @@ impl CudaUploadedWeights {
         context: &CudaContext,
         stream: &mut CudaStream,
         staging_capacity_bytes: u64,
+    ) -> CudaWeightUploadResult<Self> {
+        Self::upload_sharded(
+            weights,
+            context,
+            stream,
+            staging_capacity_bytes,
+            TensorParallelShard::WHOLE,
+        )
+    }
+
+    /// Uploads one tensor-parallel rank's slice of every physical tensor
+    /// (see [`TensorParallelShard`]); later merged Q|K|V and gate|up uploads
+    /// slice the same way.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::upload`], plus [`CudaWeightUploadError::IndivisibleShard`].
+    pub fn upload_sharded(
+        weights: &LoadedWeights,
+        context: &CudaContext,
+        stream: &mut CudaStream,
+        staging_capacity_bytes: u64,
+        shard: TensorParallelShard,
     ) -> CudaWeightUploadResult<Self> {
         if staging_capacity_bytes == 0 {
             return Err(CudaWeightUploadError::EmptyStagingCapacity);
@@ -266,11 +404,12 @@ impl CudaUploadedWeights {
             } else {
                 let view = bound.view();
                 let dtype = cuda_dtype(slot, view.dtype())?;
-                let bytes = view.storage();
+                let (bytes, shape) =
+                    shard.slice(slot, view.storage(), view.shape().dimensions())?;
                 let byte_len = u64::try_from(bytes.len())
                     .map_err(|_| CudaWeightUploadError::HostLengthOverflow { slot })?;
                 let mut buffer = context.allocate_device_buffer(byte_len)?;
-                buffer.upload_from_slice(0, bytes, &mut staging, stream)?;
+                buffer.upload_from_slice(0, &bytes, &mut staging, stream)?;
                 total_physical_bytes = total_physical_bytes
                     .checked_add(byte_len)
                     .ok_or(CudaWeightUploadError::TotalLengthOverflow)?;
@@ -278,7 +417,7 @@ impl CudaUploadedWeights {
                 physical.push(CudaUploadedTensor {
                     source: source.clone(),
                     dtype,
-                    shape: view.shape().dimensions().to_vec(),
+                    shape,
                     byte_len,
                     buffer: Some(buffer),
                 });
@@ -297,6 +436,7 @@ impl CudaUploadedWeights {
             merged_qkv: Vec::new(),
             merged_gate_up: Vec::new(),
             negative_zero_bias: None,
+            shard,
         })
     }
 
@@ -332,24 +472,25 @@ impl CudaUploadedWeights {
                 riley_model::DecoderWeight::KeyWeight,
                 riley_model::DecoderWeight::ValueWeight,
             ];
+            let mut sliced = Vec::with_capacity(parts.len());
             let mut total = 0_u64;
             for parameter in parts {
                 let slot = WeightSlot::Decoder { layer, parameter };
-                let bytes = weights.view(slot)?.view().storage().len();
-                total = u64::try_from(bytes)
+                let bound = weights.view(slot)?;
+                let view = bound.view();
+                let (bytes, _) = self.shard.slice(slot, view.storage(), view.shape().dimensions())?;
+                total = u64::try_from(bytes.len())
                     .ok()
                     .and_then(|bytes| total.checked_add(bytes))
                     .ok_or(CudaWeightUploadError::TotalLengthOverflow)?;
+                sliced.push((slot, bytes));
             }
             let mut buffer = context.allocate_device_buffer(total)?;
             let mut offset = 0_u64;
-            for parameter in parts {
-                let slot = WeightSlot::Decoder { layer, parameter };
-                let bound = weights.view(slot)?;
-                let bytes = bound.view().storage();
+            for (slot, bytes) in &sliced {
                 buffer.upload_from_slice(offset, bytes, &mut staging, stream)?;
                 offset += u64::try_from(bytes.len())
-                    .map_err(|_| CudaWeightUploadError::HostLengthOverflow { slot })?;
+                    .map_err(|_| CudaWeightUploadError::HostLengthOverflow { slot: *slot })?;
             }
             merged.push(buffer);
             // Releasing layer by layer keeps the peak at one extra layer
@@ -514,24 +655,25 @@ impl CudaUploadedWeights {
                 riley_model::DecoderWeight::GateWeight,
                 riley_model::DecoderWeight::UpWeight,
             ];
+            let mut sliced = Vec::with_capacity(parts.len());
             let mut total = 0_u64;
             for parameter in parts {
                 let slot = WeightSlot::Decoder { layer, parameter };
-                let bytes = weights.view(slot)?.view().storage().len();
-                total = u64::try_from(bytes)
+                let bound = weights.view(slot)?;
+                let view = bound.view();
+                let (bytes, _) = self.shard.slice(slot, view.storage(), view.shape().dimensions())?;
+                total = u64::try_from(bytes.len())
                     .ok()
                     .and_then(|bytes| total.checked_add(bytes))
                     .ok_or(CudaWeightUploadError::TotalLengthOverflow)?;
+                sliced.push((slot, bytes));
             }
             let mut buffer = context.allocate_device_buffer(total)?;
             let mut offset = 0_u64;
-            for parameter in parts {
-                let slot = WeightSlot::Decoder { layer, parameter };
-                let bound = weights.view(slot)?;
-                let bytes = bound.view().storage();
+            for (slot, bytes) in &sliced {
                 buffer.upload_from_slice(offset, bytes, &mut staging, stream)?;
                 offset += u64::try_from(bytes.len())
-                    .map_err(|_| CudaWeightUploadError::HostLengthOverflow { slot })?;
+                    .map_err(|_| CudaWeightUploadError::HostLengthOverflow { slot: *slot })?;
             }
             merged.push(buffer);
             // Releasing layer by layer keeps the peak at one extra layer
@@ -543,6 +685,11 @@ impl CudaUploadedWeights {
         staging.close()?;
         self.merged_gate_up = merged;
         Ok(())
+    }
+
+    /// The checkpoint slice these weights hold.
+    pub(crate) const fn shard(&self) -> TensorParallelShard {
+        self.shard
     }
 
     /// The merged `Q|K|V` projection weight of one layer, when uploaded.
@@ -735,5 +882,63 @@ fn cuda_dtype(slot: WeightSlot, dtype: DType) -> CudaWeightUploadResult<CudaDTyp
         DType::BF16 => Ok(CudaDType::BF16),
         DType::F32 => Ok(CudaDType::F32),
         dtype => Err(CudaWeightUploadError::UnsupportedDType { slot, dtype }),
+    }
+}
+
+#[cfg(test)]
+mod tensor_parallel_tests {
+    use super::{CudaWeightUploadError, TensorParallelShard};
+    use riley_model::{DecoderWeight, WeightSlot};
+
+    fn slot(parameter: DecoderWeight) -> WeightSlot {
+        WeightSlot::Decoder { layer: 0, parameter }
+    }
+
+    // A 4x6 matrix of 2-byte elements whose bytes encode (row, column).
+    fn matrix() -> Vec<u8> {
+        (0..4_u8).flat_map(|row| (0..6_u8).flat_map(move |column| [row, column])).collect()
+    }
+
+    #[test]
+    fn rows_split_keeps_a_contiguous_block_of_output_features() {
+        let shard = TensorParallelShard::new(1, 2).unwrap();
+        let bytes = matrix();
+        let (slice, shape) = shard.slice(slot(DecoderWeight::QueryWeight), &bytes, &[4, 6]).unwrap();
+        assert_eq!(shape, [2, 6]);
+        assert_eq!(&slice[..], &bytes[24..48]);
+    }
+
+    #[test]
+    fn columns_split_gathers_each_row_s_input_features() {
+        let shard = TensorParallelShard::new(2, 3).unwrap();
+        let bytes = matrix();
+        let (slice, shape) = shard.slice(slot(DecoderWeight::DownWeight), &bytes, &[4, 6]).unwrap();
+        assert_eq!(shape, [4, 2]);
+        let expected: Vec<u8> = (0..4_u8).flat_map(|row| [row, 4, row, 5]).collect();
+        assert_eq!(&slice[..], &expected[..]);
+    }
+
+    #[test]
+    fn biases_split_norms_and_whole_shards_stay_whole() {
+        let bytes: Vec<u8> = (0..8).collect();
+        let shard = TensorParallelShard::new(1, 2).unwrap();
+        let (bias, _) = shard.slice(slot(DecoderWeight::GateBias), &bytes, &[4]).unwrap();
+        assert_eq!(&bias[..], &[4, 5, 6, 7]);
+        let (norm, shape) = shard.slice(slot(DecoderWeight::QueryNormScale), &bytes, &[4]).unwrap();
+        assert_eq!((&norm[..], shape.as_slice()), (&bytes[..], &[4][..]));
+        let (output_bias, _) = shard.slice(slot(DecoderWeight::OutputBias), &bytes, &[4]).unwrap();
+        assert_eq!(&output_bias[..], &bytes[..]);
+        let (whole, _) = TensorParallelShard::WHOLE.slice(slot(DecoderWeight::DownWeight), &bytes, &[2, 2]).unwrap();
+        assert_eq!(&whole[..], &bytes[..]);
+    }
+
+    #[test]
+    fn indivisible_axes_and_out_of_range_ranks_are_rejected() {
+        let shard = TensorParallelShard::new(0, 4).unwrap();
+        assert!(matches!(
+            shard.slice(slot(DecoderWeight::UpWeight), &matrix(), &[6, 4]),
+            Err(CudaWeightUploadError::IndivisibleShard { size: 4, .. })
+        ));
+        assert!(TensorParallelShard::new(2, 2).is_none());
     }
 }

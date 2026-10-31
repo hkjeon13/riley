@@ -2516,6 +2516,230 @@ extern "C" RileyCudaStatus riley_cuda_row_bias_add_in_place_execute(
                             error, kOperation);
 }
 
+namespace {
+
+// One-shot peer all-reduce. Block b of every rank handles the same element
+// range, so it only meets block b of the other ranks: a start barrier (each
+// rank's staging copy is complete), the rank-ordered FP32 sum, then an end
+// barrier (no peer still reads this rank's staging buffer, which the next
+// call overwrites). Flags carry a per-block epoch kept in device memory, so
+// recorded graph replays keep counting.
+struct PeerAllReducePointers {
+  const __nv_bfloat16* staging[RileyCudaPeerAllReduceGroup::kMaximumRanks];
+  uint32_t* signals[RileyCudaPeerAllReduceGroup::kMaximumRanks];
+};
+
+constexpr uint32_t kPeerReduceThreads = 512;
+constexpr uint64_t kPeerReduceTimeoutNs = UINT64_C(10000000000);
+
+__device__ __forceinline__ void peer_store_release(uint32_t* address,
+                                                   uint32_t value) {
+  asm volatile("st.release.sys.global.u32 [%0], %1;" ::"l"(address), "r"(value)
+               : "memory");
+}
+
+__device__ __forceinline__ uint32_t peer_load_acquire(const uint32_t* address) {
+  uint32_t value = 0;
+  asm volatile("ld.acquire.sys.global.u32 %0, [%1];"
+               : "=r"(value)
+               : "l"(address)
+               : "memory");
+  return value;
+}
+
+__device__ __forceinline__ uint64_t peer_global_timer() {
+  uint64_t value = 0;
+  asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(value));
+  return value;
+}
+
+// Thread t < ranks posts this rank's arrival in rank t's flag row and waits
+// for rank t's arrival in this rank's row.
+__device__ __forceinline__ void peer_barrier(const PeerAllReducePointers& peers,
+                                             uint32_t rank, uint32_t ranks,
+                                             uint32_t flag_offset,
+                                             uint32_t epoch) {
+  const uint32_t source = threadIdx.x;
+  if (source < ranks) {
+    peer_store_release(peers.signals[source] + flag_offset + rank, epoch);
+    const uint32_t* own = peers.signals[rank] + flag_offset + source;
+    const uint64_t started = peer_global_timer();
+    while (peer_load_acquire(own) != epoch) {
+      if (peer_global_timer() - started > kPeerReduceTimeoutNs) {
+        __trap();
+      }
+    }
+  }
+  __syncthreads();
+}
+
+__global__ void peer_all_reduce_bf16_kernel(PeerAllReducePointers peers,
+                                            uint32_t rank, uint32_t ranks,
+                                            __nv_bfloat16* output,
+                                            uint64_t element_count) {
+  using Group = RileyCudaPeerAllReduceGroup;
+  __shared__ uint32_t epoch;
+  uint32_t* own = peers.signals[rank];
+  const uint32_t block = blockIdx.x;
+  const uint32_t start_flags = block * Group::kMaximumRanks;
+  const uint32_t end_flags = (Group::kMaximumBlocks + block) * Group::kMaximumRanks;
+  uint32_t* epoch_slot = own + 2 * Group::kMaximumBlocks * Group::kMaximumRanks + block;
+  if (threadIdx.x == 0) {
+    epoch = *epoch_slot + 1;
+  }
+  __syncthreads();
+  const uint32_t current = epoch;
+  peer_barrier(peers, rank, ranks, start_flags, current);
+
+  // Eight BF16 per 16-byte vector when the whole range is vector-aligned
+  // (staging is allocation-aligned; the output span is checked by the host).
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  const uint64_t first = static_cast<uint64_t>(block) * blockDim.x + threadIdx.x;
+  const bool vector = (element_count % 8) == 0 &&
+                      (reinterpret_cast<uintptr_t>(output) % 16) == 0;
+  if (vector) {
+    const uint64_t vectors = element_count / 8;
+    for (uint64_t index = first; index < vectors; index += stride) {
+      float sum[8] = {};
+      for (uint32_t source = 0; source < ranks; ++source) {
+        const uint4 packed =
+            __ldcv(reinterpret_cast<const uint4*>(peers.staging[source]) + index);
+        const __nv_bfloat162* pairs = reinterpret_cast<const __nv_bfloat162*>(&packed);
+        for (int pair = 0; pair < 4; ++pair) {
+          const float2 values = __bfloat1622float2(pairs[pair]);
+          sum[2 * pair] += values.x;
+          sum[2 * pair + 1] += values.y;
+        }
+      }
+      uint4 result;
+      __nv_bfloat162* out_pairs = reinterpret_cast<__nv_bfloat162*>(&result);
+      for (int pair = 0; pair < 4; ++pair) {
+        out_pairs[pair] = __floats2bfloat162_rn(sum[2 * pair], sum[2 * pair + 1]);
+      }
+      reinterpret_cast<uint4*>(output)[index] = result;
+    }
+  } else {
+    for (uint64_t index = first; index < element_count; index += stride) {
+      float sum = 0.0F;
+      for (uint32_t source = 0; source < ranks; ++source) {
+        const unsigned short bits = __ldcv(
+            reinterpret_cast<const unsigned short*>(peers.staging[source]) + index);
+        sum += __bfloat162float(__ushort_as_bfloat16(bits));
+      }
+      output[index] = __float2bfloat16_rn(sum);
+    }
+  }
+  __syncthreads();
+  peer_barrier(peers, rank, ranks, end_flags, current);
+  if (threadIdx.x == 0) {
+    *epoch_slot = current;
+  }
+}
+
+}  // namespace
+
+extern "C" RileyCudaStatus riley_cuda_peer_all_reduce_bf16_execute(
+    RileyCudaPeerAllReduceGroup* group,
+    const RileyCudaPeerAllReduceParams* params, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "execute peer all-reduce";
+  using Group = RileyCudaPeerAllReduceGroup;
+  clear_error(error);
+  if (group == nullptr || params == nullptr ||
+      params->struct_size < sizeof(*params)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "group or params is null, or params has an incompatible struct_size");
+  }
+  if (params->reserved0 != 0 || params->reserved1 != 0 ||
+      !reserved_is_zero(params->reserved, 4)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params reserved fields must be zero");
+  }
+  if (params->data.dtype != RILEY_CUDA_DTYPE_BF16) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "data must use BF16 dtype");
+  }
+  if (params->rank >= group->rank_count) {
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "rank is outside the group");
+  }
+  if (params->element_count > group->max_elements) {
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "element_count exceeds the group's staging capacity");
+  }
+  if (stream == nullptr || !same_context(stream->owner, group->contexts[params->rank])) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "stream must belong to the rank's context");
+  }
+  uint64_t data_bytes = 0;
+  RileyCudaStatus status = element_bytes(params->element_count, RILEY_CUDA_DTYPE_BF16,
+                                         &data_bytes, error, kOperation);
+  ResolvedSpan data{};
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->data, data_bytes, &data, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = validate_contexts(stream, &data, 1, error, kOperation);
+  }
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  ExclusiveUses uses(stream);
+  if (!uses.add(data.buffer)) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                          "primitive buffer set overflow");
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  if (params->element_count == 0) {
+    return uses.release_completed()
+               ? RILEY_CUDA_STATUS_SUCCESS
+               : internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                                kOperation, "exclusive-use accounting was corrupted");
+  }
+  PeerAllReducePointers peers{};
+  for (uint32_t index = 0; index < group->rank_count; ++index) {
+    peers.staging[index] = static_cast<const __nv_bfloat16*>(group->staging[index]);
+    peers.signals[index] = group->signals[index];
+  }
+  // The block count depends only on element_count, so every rank launches
+  // the same blocks and the per-block epochs stay aligned.
+  const uint64_t vectors = (params->element_count + 7) / 8;
+  const uint64_t wanted = (vectors + kPeerReduceThreads - 1) / kPeerReduceThreads;
+  const uint32_t blocks = static_cast<uint32_t>(
+      wanted < Group::kMaximumBlocks ? (wanted == 0 ? 1 : wanted) : Group::kMaximumBlocks);
+
+  bool launch_attempted = false;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = prior_launch_status(error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    status = runtime_error(
+        cudaMemcpyAsync(group->staging[params->rank], data.data, data_bytes,
+                        cudaMemcpyDeviceToDevice, stream->stream),
+        error, RILEY_CUDA_ERROR_STAGE_LAUNCH, "stage peer all-reduce input");
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    peer_all_reduce_bf16_kernel<<<blocks, kPeerReduceThreads, 0, stream->stream>>>(
+        peers, params->rank, group->rank_count,
+        reinterpret_cast<__nv_bfloat16*>(data.data), params->element_count);
+    status = launch_status(error, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
 extern "C" RileyCudaStatus riley_cuda_silu_execute(
     const RileyCudaSiluParams* params, RileyCudaStream* stream,
     RileyCudaErrorInfo* error) noexcept {

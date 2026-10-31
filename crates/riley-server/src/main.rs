@@ -59,6 +59,8 @@ serve options:
   --model-id ID                  public model ID (default: checkpoint source model)
   --bind ADDRESS                 listener address (default: 127.0.0.1:8080)
   --device ORDINAL               CUDA device ordinal (default: 0)
+  --tensor-parallel-devices LIST tensor parallelism over 2..8 NVLink peer GPUs, CUDA ordinals in
+                                 rank order (e.g. 4,5); excludes --device
   --max-active-sequences N       active scheduler capacity (default: 8)
   --max-waiting-requests N       waiting scheduler capacity (default: 64)
   --admission-timeout-ms MS      bounded queue/command wait, 1..3600000 (default: 30000)
@@ -190,6 +192,7 @@ struct ServeOptions {
     model_id: Option<String>,
     bind_address: String,
     device_ordinal: u32,
+    tensor_parallel_devices: Vec<u32>,
     max_active_sequences: usize,
     max_waiting_requests: usize,
     admission_timeout_ms: u64,
@@ -446,6 +449,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut model_id = None;
     let mut bind_address = None;
     let mut device_ordinal = None;
+    let mut tensor_parallel_devices: Option<Vec<u32>> = None;
     let mut max_active_sequences = None;
     let mut max_waiting_requests = None;
     let mut admission_timeout_ms = None;
@@ -533,6 +537,25 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 parse_number(next_value(&mut arguments, "--device")?, "--device")?,
                 "--device",
             )?,
+            "--tensor-parallel-devices" => {
+                const OPTION: &str = "--tensor-parallel-devices";
+                let list = parse_utf8(next_value(&mut arguments, OPTION)?, OPTION)?;
+                let devices = list
+                    .split(',')
+                    .map(|ordinal| {
+                        ordinal
+                            .parse::<u32>()
+                            .map_err(|_| format!("{OPTION} requires comma-separated CUDA ordinals"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let mut distinct = devices.clone();
+                distinct.sort_unstable();
+                distinct.dedup();
+                if !(2..=8).contains(&devices.len()) || distinct.len() != devices.len() {
+                    return Err(format!("{OPTION} requires 2 to 8 distinct CUDA ordinals"));
+                }
+                set_once(&mut tensor_parallel_devices, devices, OPTION)?;
+            }
             "--max-active-sequences" => set_once(
                 &mut max_active_sequences,
                 parse_number(
@@ -1563,7 +1586,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         model_path: model_path.ok_or_else(|| "serve requires --model PATH".to_owned())?,
         model_id,
         bind_address,
-        device_ordinal: device_ordinal.unwrap_or(0),
+        device_ordinal: match (&tensor_parallel_devices, device_ordinal) {
+            (Some(_), Some(_)) => {
+                return Err("--tensor-parallel-devices excludes --device".to_owned());
+            }
+            (Some(devices), None) => devices[0],
+            (None, ordinal) => ordinal.unwrap_or(0),
+        },
+        tensor_parallel_devices: tensor_parallel_devices.unwrap_or_default(),
         max_active_sequences,
         max_waiting_requests: max_waiting_requests.unwrap_or(64),
         admission_timeout_ms: admission_timeout_ms.unwrap_or(30_000),
@@ -2526,6 +2556,9 @@ fn run_serve(
                 "C02 evidence mode is not available with the HF-exact numerics profile".to_owned(),
             );
         }
+        if !options.tensor_parallel_devices.is_empty() {
+            return Err("the HF-exact numerics profile runs on one GPU".to_owned());
+        }
         return run_serve_hf_exact(HfExactServe {
             metadata,
             model,
@@ -2550,6 +2583,7 @@ fn run_serve(
         model,
         CudaBackendConfig {
             device_ordinal: options.device_ordinal,
+            tensor_parallel_devices: options.tensor_parallel_devices.clone(),
             scheduler,
             executor,
             gpu_greedy: options.sampling_backend == SamplingBackendMode::GpuGreedy,
@@ -5605,6 +5639,27 @@ mod tests {
     }
 
     #[test]
+    fn tensor_parallel_devices_take_two_to_eight_distinct_ordinals_and_exclude_device() {
+        let Ok(CliCommand::Serve(options)) = parse_arguments(args(&[
+            "serve", "--model", "/m", "--tensor-parallel-devices", "4,5",
+        ])) else {
+            panic!("tensor-parallel serve must parse");
+        };
+        assert_eq!(options.tensor_parallel_devices, [4, 5]);
+        assert_eq!(options.device_ordinal, 4);
+        for value in ["4", "4,4", "0,1,2,3,4,5,6,7,8", "4,x", ""] {
+            assert!(
+                parse_arguments(args(&["serve", "--model", "/m", "--tensor-parallel-devices", value])).is_err(),
+                "{value}"
+            );
+        }
+        assert!(parse_arguments(args(&[
+            "serve", "--model", "/m", "--device", "1", "--tensor-parallel-devices", "4,5",
+        ]))
+        .is_err());
+    }
+
+    #[test]
     fn serve_defaults_are_bounded_and_model_is_required() {
         assert_eq!(
             parse_arguments(args(&["serve", "--model", "/models/fixture"])),
@@ -5613,6 +5668,7 @@ mod tests {
                 model_id: None,
                 bind_address: "127.0.0.1:8080".to_owned(),
                 device_ordinal: 0,
+                tensor_parallel_devices: Vec::new(),
                 max_active_sequences: 8,
                 max_waiting_requests: 64,
                 admission_timeout_ms: 30_000,
@@ -6030,6 +6086,7 @@ mod tests {
                 model_id: Some("fixture".to_owned()),
                 bind_address: "0.0.0.0:9000".to_owned(),
                 device_ordinal: 2,
+                tensor_parallel_devices: Vec::new(),
                 max_active_sequences: 4,
                 max_waiting_requests: 9,
                 admission_timeout_ms: 30_000,
@@ -6315,6 +6372,7 @@ mod tests {
                 model_id: None,
                 bind_address: "127.0.0.1:8080".to_owned(),
                 device_ordinal: 0,
+                tensor_parallel_devices: Vec::new(),
                 max_active_sequences: 8,
                 max_waiting_requests: 64,
                 admission_timeout_ms: 30_000,
@@ -6813,6 +6871,7 @@ mod tests {
                 model_id: None,
                 bind_address: "127.0.0.1:8080".to_owned(),
                 device_ordinal: 0,
+                tensor_parallel_devices: Vec::new(),
                 max_active_sequences: 8,
                 max_waiting_requests: 64,
                 admission_timeout_ms: 30_000,

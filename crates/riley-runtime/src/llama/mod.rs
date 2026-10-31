@@ -18,6 +18,8 @@ mod executor;
 #[cfg(any(feature = "cuda", test))]
 mod forward;
 #[cfg(any(feature = "cuda", test))]
+mod tensor_parallel;
+#[cfg(any(feature = "cuda", test))]
 mod gemm_policy;
 #[cfg(feature = "cuda")]
 mod generation;
@@ -112,6 +114,8 @@ pub use batch_executor::{
     OwnedLlamaDecodeExecutor, PreparedLlamaBatchAllocationReport, PreparedLlamaBatchExecutor,
     PreparedLlamaBatchExecutorConfig, RaggedAttentionImplementation, ResidualNormImplementation,
 };
+#[cfg(feature = "cuda")]
+pub use tensor_parallel::TensorParallelFollowers;
 
 pub use error::{
     ExecutionSite, LlamaBufferRole, LlamaDimension, LlamaOp, LlamaPlanError, LlamaPlanResult,

@@ -12,6 +12,8 @@ pub mod submit_hook;
 
 #[cfg(any(feature = "cuda", test))]
 mod cuda_weights;
+#[cfg(any(feature = "cuda", test))]
+pub use cuda_weights::TensorParallelShard;
 
 #[cfg(feature = "cuda")]
 pub use cuda_weights::{
@@ -27,7 +29,7 @@ pub use kernel::{
 #[cfg(feature = "cuda")]
 pub use riley_cuda::{
     AttentionBackend, AttentionPreference, AttentionSelectionTrace, CudaContext, CudaError,
-    CudaEvent, CudaRuntime, CudaStream,
+    CudaEvent, CudaPeerAllReduceGroup, CudaRuntime, CudaStream,
     set_native_d128_attention_flashinfer,
 };
 

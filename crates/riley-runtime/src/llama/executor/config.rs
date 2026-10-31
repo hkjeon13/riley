@@ -555,6 +555,16 @@ impl PreparedLlamaBatchExecutorConfig {
         self.forward
     }
 
+    /// Prepares one rank of a tensor-parallel group (see
+    /// [`PreparedLlamaForwardConfig::with_tensor_parallel`]); the group is
+    /// attached after preparation with
+    /// [`super::super::PreparedLlamaBatchExecutor::attach_tensor_parallel`].
+    #[must_use]
+    pub const fn with_tensor_parallel(mut self, shard: crate::cuda_weights::TensorParallelShard) -> Self {
+        self.forward = self.forward.with_tensor_parallel(shard);
+        self
+    }
+
     /// Selects one complete reduction implementation without cross-profile fallback.
     #[must_use]
     pub const fn with_reduction_profile(mut self, profile: LlamaReductionProfile) -> Self {

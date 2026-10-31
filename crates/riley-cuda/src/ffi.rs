@@ -66,6 +66,7 @@ const FIXED37_LOG_SOFTMAX_PARAMS_SIZE: u32 = 152;
 const RESIDUAL_ADD_PARAMS_SIZE: u32 = 200;
 const RESIDUAL_RMS_NORM_PARAMS_SIZE: u32 = 304;
 const ROW_BIAS_ADD_IN_PLACE_PARAMS_SIZE: u32 = 152;
+const PEER_ALL_REDUCE_PARAMS_SIZE: u32 = 104;
 const QKV_SPLIT_BIAS_PARAMS_SIZE: u32 = 560;
 const SILU_PARAMS_SIZE: u32 = 152;
 const GATED_MULTIPLY_PARAMS_SIZE: u32 = 200;
@@ -405,6 +406,23 @@ struct RawEvent {
 struct RawSmokeBuffer {
     _private: [u8; 0],
     _not_send_sync: PhantomData<*mut ()>,
+}
+
+#[repr(C)]
+struct RawPeerAllReduceGroup {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
+#[repr(C)]
+struct RawPeerAllReduceParams {
+    struct_size: u32,
+    reserved0: u32,
+    data: RawBufferSpan,
+    element_count: u64,
+    rank: u32,
+    reserved1: u32,
+    reserved: [u64; 4],
 }
 
 #[repr(C)]
@@ -2766,6 +2784,23 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn riley_cuda_smoke_invalid_launch(stream: *mut RawStream, error: *mut ErrorInfo) -> i32;
+    fn riley_cuda_peer_all_reduce_group_create(
+        contexts: *const *mut RawContext,
+        rank_count: u32,
+        max_elements: u64,
+        out_group: *mut *mut RawPeerAllReduceGroup,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_peer_all_reduce_bf16_execute(
+        group: *mut RawPeerAllReduceGroup,
+        params: *const RawPeerAllReduceParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_peer_all_reduce_group_close(
+        group: *mut *mut RawPeerAllReduceGroup,
+        error: *mut ErrorInfo,
+    ) -> i32;
 }
 
 pub(super) fn abi_version() -> u32 {
@@ -10405,6 +10440,91 @@ impl Drop for CublasGemmProbePlanHandle {
     }
 }
 
+pub(super) struct PeerAllReduceGroupHandle {
+    pointer: Option<NonNull<RawPeerAllReduceGroup>>,
+}
+
+// SAFETY: execute only reads the group's immutable per-rank pointers, each
+// rank on its own stream and host thread; close requires `&mut self`.
+unsafe impl Send for PeerAllReduceGroupHandle {}
+// SAFETY: see Send; concurrent execute calls never mutate native group state.
+unsafe impl Sync for PeerAllReduceGroupHandle {}
+
+impl PeerAllReduceGroupHandle {
+    pub(super) fn create(contexts: &[&ContextHandle], max_elements: u64) -> CudaResult<Self> {
+        let pointers: Vec<*mut RawContext> = contexts.iter().map(|context| context.as_ptr()).collect();
+        let rank_count = u32::try_from(pointers.len()).map_err(|_| {
+            CudaError::out_of_range("create CUDA peer all-reduce group", "too many contexts")
+        })?;
+        let mut pointer = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: every context handle is live for the call, and native
+        // returns either null or one newly owned group.
+        let status = unsafe {
+            riley_cuda_peer_all_reduce_group_create(
+                pointers.as_ptr(),
+                rank_count,
+                max_elements,
+                &mut pointer,
+                &mut error,
+            )
+        };
+        status_result(status, "create CUDA peer all-reduce group", &error)?;
+        let pointer = NonNull::new(pointer).ok_or_else(|| {
+            missing_output("create CUDA peer all-reduce group", "native group handle is null")
+        })?;
+        Ok(Self {
+            pointer: Some(pointer),
+        })
+    }
+
+    fn as_ptr(&self) -> *mut RawPeerAllReduceGroup {
+        self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr)
+    }
+
+    pub(super) fn execute_bf16(
+        &self,
+        rank: u32,
+        data: RawBufferSpan,
+        element_count: u64,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let params = RawPeerAllReduceParams {
+            struct_size: PEER_ALL_REDUCE_PARAMS_SIZE,
+            reserved0: 0,
+            data,
+            element_count,
+            rank,
+            reserved1: 0,
+            reserved: [0; 4],
+        };
+        let group = self.as_ptr();
+        primitive_status("execute CUDA peer all-reduce", stream, |stream, error| {
+            // SAFETY: the group, descriptor and borrowed buffer remain live for
+            // the synchronously returning native enqueue.
+            unsafe { riley_cuda_peer_all_reduce_bf16_execute(group, &params, stream, error) }
+        })
+    }
+
+    fn close(&mut self) -> CudaResult<()> {
+        let Some(pointer) = self.pointer else {
+            return Ok(());
+        };
+        let mut raw = pointer.as_ptr();
+        let mut error = ErrorInfo::new();
+        // SAFETY: raw is the owned group; native nulls it once consumed.
+        let status = unsafe { riley_cuda_peer_all_reduce_group_close(&mut raw, &mut error) };
+        self.pointer = NonNull::new(raw);
+        status_result(status, "close CUDA peer all-reduce group", &error)
+    }
+}
+
+impl Drop for PeerAllReduceGroupHandle {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
 pub(super) struct SmokeHandle {
     pointer: Option<NonNull<RawSmokeBuffer>>,
 }
@@ -10821,6 +10941,10 @@ const _: () = assert!(size_of::<RawResidualRmsNormParams>() == 304);
 const _: () = assert!(offset_of!(RawResidualRmsNormParams, residual_output) == 152);
 const _: () = assert!(offset_of!(RawResidualRmsNormParams, row_count) == 248);
 const _: () = assert!(offset_of!(RawResidualRmsNormParams, epsilon) == 264);
+const _: () = assert!(size_of::<RawPeerAllReduceParams>() == 104);
+const _: () = assert!(offset_of!(RawPeerAllReduceParams, data) == 8);
+const _: () = assert!(offset_of!(RawPeerAllReduceParams, element_count) == 56);
+const _: () = assert!(offset_of!(RawPeerAllReduceParams, reserved) == 72);
 const _: () = assert!(size_of::<RawRowBiasAddInPlaceParams>() == 152);
 const _: () = assert!(offset_of!(RawRowBiasAddInPlaceParams, matrix) == 8);
 const _: () = assert!(offset_of!(RawRowBiasAddInPlaceParams, row_count) == 104);

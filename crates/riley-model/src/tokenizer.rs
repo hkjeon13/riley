@@ -40,7 +40,9 @@ pub struct EncodeOptions {
     ///
     /// The supported `SmolLM2` and Qwen artifacts have no such template, so
     /// for them this flag adds nothing. The Llama 3 artifact's template puts
-    /// its begin-of-text token first. Special-token text already present in
+    /// its begin-of-text token first, as does `add_bos_token` in the
+    /// `LlamaTokenizerFast` metadata of artifacts without a template
+    /// (DeepSeek-R1-Distill). Special-token text already present in
     /// the input is still recognized exactly.
     pub add_special_tokens: bool,
 }
@@ -192,7 +194,8 @@ pub struct SmolLm2Tokenizer {
     byte_decoder: BTreeMap<char, u8>,
     maximum_decoded_token_bytes: usize,
     profile: TokenizerProfile,
-    /// Token the post-processor template puts before the input (Llama 3).
+    /// Token put before the input when special tokens are requested: from
+    /// the post-processor template (Llama 3) or tokenizer metadata.
     bos_token_id: Option<u32>,
 }
 
@@ -260,6 +263,30 @@ impl SmolLm2Tokenizer {
         self.bos_token_id
     }
 
+    /// Prepends the special added token with this content when special
+    /// tokens are requested, for artifacts whose post-processor has no
+    /// template and whose metadata asks for one (`add_bos_token`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a template already sets a token, or when the
+    /// content is not a special added token.
+    pub(crate) fn set_bos_token_content(&mut self, content: &str) -> ModelResult<()> {
+        if self.bos_token_id.is_some() {
+            return Err(invalid(
+                "begin-of-sequence token is already set by the post_processor template",
+            ));
+        }
+        let id = self
+            .special_ids
+            .iter()
+            .copied()
+            .find(|id| self.token_for_id(*id) == Some(content))
+            .ok_or_else(|| invalid("bos_token is not a special added token"))?;
+        self.bos_token_id = Some(id);
+        Ok(())
+    }
+
     fn from_json_slice_with_profile(
         input: &[u8],
         limits: LoadLimits,
@@ -285,7 +312,7 @@ impl SmolLm2Tokenizer {
         )?;
 
         let bos_template = match profile {
-            TokenizerProfile::Llama3 => Some(llama3_bos_template(&raw.post_processor)?),
+            TokenizerProfile::Llama3 => llama3_bos_template(&raw.post_processor)?,
             TokenizerProfile::SmolLm2 | TokenizerProfile::Qwen2 => None,
         };
         let (byte_encoder, byte_decoder) = byte_maps();
@@ -929,8 +956,9 @@ fn validate_pipeline(raw: &RawTokenizer, profile: TokenizerProfile) -> ModelResu
 /// returns the content and ID of the one special token it puts before the
 /// input. The accepted shape is a `TemplateProcessing` (alone, or after a
 /// `ByteLevel` step in a `Sequence`) whose `single` template is exactly
-/// `[special token, sequence A]`.
-fn llama3_bos_template(value: &serde_json::Value) -> ModelResult<(String, u32)> {
+/// `[special token, sequence A]`. A `Sequence` of `ByteLevel` steps only
+/// (DeepSeek-R1-Distill-Llama) has no template and returns `None`.
+fn llama3_bos_template(value: &serde_json::Value) -> ModelResult<Option<(String, u32)>> {
     let unsupported = || invalid("unsupported Llama 3 post_processor");
     let template = match value.get("type").and_then(serde_json::Value::as_str) {
         Some("TemplateProcessing") => value,
@@ -949,7 +977,11 @@ fn llama3_bos_template(value: &serde_json::Value) -> ModelResult<(String, u32)> 
                     _ => return Err(unsupported()),
                 }
             }
-            template.ok_or_else(unsupported)?
+            match template {
+                Some(template) => template,
+                None if !processors.is_empty() => return Ok(None),
+                None => return Err(unsupported()),
+            }
         }
         _ => return Err(unsupported()),
     };
@@ -985,7 +1017,7 @@ fn llama3_bos_template(value: &serde_json::Value) -> ModelResult<(String, u32)> 
         .as_u64()
         .and_then(|id| u32::try_from(id).ok())
         .ok_or_else(unsupported)?;
-    Ok((content.to_owned(), id))
+    Ok(Some((content.to_owned(), id)))
 }
 
 #[derive(Deserialize)]
@@ -2486,6 +2518,54 @@ mod tests {
                     .replace("\"ignore_merges\":true", "\"ignore_merges\":false")
                     .as_bytes(),
                 LoadLimits::default(),
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn llama3_profile_without_template_takes_bos_from_metadata_only() {
+        // DeepSeek-R1-Distill-Llama: ByteLevel post-processing only, the
+        // begin-of-sequence token comes from tokenizer_config metadata.
+        let post = LLAMA3_FIXTURE
+            .split("\"post_processor\":")
+            .nth(1)
+            .and_then(|rest| rest.split("\n      \"decoder\"").next())
+            .unwrap();
+        let fixture = LLAMA3_FIXTURE.replace(
+            post,
+            r#"{"type":"Sequence","processors":[{"type":"ByteLevel","add_prefix_space":true,"trim_offsets":false,"use_regex":true}]},"#,
+        );
+        let mut tokenizer = SmolLm2Tokenizer::from_llama3_json_slice_with_limits(
+            fixture.as_bytes(),
+            LoadLimits::default(),
+        )
+        .expect("Llama 3 tokenizer without template");
+        assert_eq!(tokenizer.bos_token_id(), None);
+        assert_eq!(
+            tokenizer.encode("abc", EncodeOptions::default()).unwrap(),
+            [9]
+        );
+        assert!(tokenizer.set_bos_token_content("abc").is_err());
+        assert!(tokenizer.set_bos_token_content("<|missing|>").is_err());
+        tokenizer
+            .set_bos_token_content("<|begin_of_text|>")
+            .unwrap();
+        assert_eq!(
+            tokenizer.encode("abc", EncodeOptions::default()).unwrap(),
+            [20, 9]
+        );
+        assert!(
+            tokenizer
+                .set_bos_token_content("<|begin_of_text|>")
+                .is_err()
+        );
+
+        let empty = LLAMA3_FIXTURE.replace(post, r#"{"type":"Sequence","processors":[]},"#);
+        assert!(
+            SmolLm2Tokenizer::from_llama3_json_slice_with_limits(
+                empty.as_bytes(),
+                LoadLimits::default()
             )
             .is_err()
         );

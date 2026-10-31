@@ -99,6 +99,16 @@ impl Qwen2Tokenizer {
     pub fn is_special_id(&self, id: u32) -> bool {
         self.inner.is_special_id(id)
     }
+
+    /// Returns the token prepended when special tokens are requested.
+    #[must_use]
+    pub const fn bos_token_id(&self) -> Option<u32> {
+        self.inner.bos_token_id()
+    }
+
+    pub(crate) fn set_bos_token_content(&mut self, content: &str) -> ModelResult<()> {
+        self.inner.set_bos_token_content(content)
+    }
 }
 
 impl Tokenizer for Qwen2Tokenizer {

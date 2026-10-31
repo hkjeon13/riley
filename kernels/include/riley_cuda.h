@@ -3206,6 +3206,49 @@ RileyCudaStatus riley_cuda_graph_resources_record_attention_chain(
     RileyCudaPinnedHostBuffer*,float,uint32_t,RileyCudaDeviceBuffer* const*,uint64_t,
     RileyCudaDeviceBuffer* const*,const uint64_t*,RileyCudaDeviceBuffer*,const uint64_t*,RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
 
+/* Tensor-parallel deterministic all-reduce over CUDA peer access.
+ *
+ * A group spans `rank_count` (2..8) contexts on distinct devices of one
+ * process, every pair of which can access each other's memory (NVLink). Create
+ * enables peer access between every pair and allocates, in each rank's
+ * context, a BF16 staging buffer of `max_elements` and a signal area. Create
+ * and close are broad control operations and fail during graph capture.
+ *
+ * Execute is an in-place sum of the BF16 `data` span of every rank: the span
+ * is copied to the rank's staging buffer, all ranks meet at a device-side
+ * barrier, and each output element is the FP32 sum of the ranks' values in
+ * rank order 0..rank_count-1, rounded once to BF16. The term order depends
+ * only on rank_count, never on element_count, so results are independent of
+ * batch size and bit-identical on every rank. Every rank must execute the
+ * same sequence of element counts on its own stream; launches can be
+ * recorded in CUDA graphs (the barrier epoch lives in device memory). A
+ * barrier that waits longer than ten seconds traps the kernel. */
+typedef struct RileyCudaPeerAllReduceGroup RileyCudaPeerAllReduceGroup;
+
+typedef struct RileyCudaPeerAllReduceParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RileyCudaBufferSpan data;
+  uint64_t element_count;
+  uint32_t rank;
+  uint32_t reserved1;
+  uint64_t reserved[4];
+} RileyCudaPeerAllReduceParams;
+
+RileyCudaStatus riley_cuda_peer_all_reduce_group_create(
+    RileyCudaContext* const* contexts, uint32_t rank_count,
+    uint64_t max_elements, RileyCudaPeerAllReduceGroup** out_group,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+RileyCudaStatus riley_cuda_peer_all_reduce_bf16_execute(
+    RileyCudaPeerAllReduceGroup* group,
+    const RileyCudaPeerAllReduceParams* params, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+RileyCudaStatus riley_cuda_peer_all_reduce_group_close(
+    RileyCudaPeerAllReduceGroup** group,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
 /* Private qualified exact H9/KV3/D64 singleton attention. */
 int riley_cuda_cublas_hf_smol_exact_supported(const RileyCudaCublasGemmProbePlan*,uint64_t) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_cublas_hf_smol_exact_execute(RileyCudaCublasGemmProbePlan*,const RileyCudaBufferSpan*,uint64_t,const uint32_t*,const uint64_t*,uint64_t,uint64_t,uint64_t,uint64_t,uint64_t,RileyCudaStream*,RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;

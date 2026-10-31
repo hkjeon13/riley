@@ -603,6 +603,46 @@ impl ModelSpec {
         }
     }
 
+    /// Returns the spec one rank of a `size`-way tensor-parallel group
+    /// executes: every block keeps `query_heads / size` query heads,
+    /// `key_value_heads / size` KV heads and `intermediate_size / size` MLP
+    /// columns; the residual width, embedding, norms and LM head are whole.
+    /// `size` 1 returns the spec unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ModelError::UnsupportedConfig`] when `size` is zero or does
+    /// not divide a block's query heads, KV heads or intermediate size.
+    pub fn tensor_parallel_rank_spec(&self, size: usize) -> ModelResult<Self> {
+        let unsupported = |field: &str, value: usize| ModelError::UnsupportedConfig {
+            field: format!("tensor_parallel_size for {field}"),
+            value: format!("{size} does not divide {value}"),
+        };
+        if size == 0 {
+            return Err(ModelError::UnsupportedConfig {
+                field: "tensor_parallel_size".to_owned(),
+                value: "0".to_owned(),
+            });
+        }
+        let mut spec = self.clone();
+        for block in spec.blocks.iter_mut() {
+            let attention = &mut block.attention;
+            if attention.query_heads % size != 0 {
+                return Err(unsupported("num_attention_heads", attention.query_heads));
+            }
+            if attention.key_value_heads % size != 0 {
+                return Err(unsupported("num_key_value_heads", attention.key_value_heads));
+            }
+            if block.mlp.intermediate_size % size != 0 {
+                return Err(unsupported("intermediate_size", block.mlp.intermediate_size));
+            }
+            attention.query_heads /= size;
+            attention.key_value_heads /= size;
+            block.mlp.intermediate_size /= size;
+        }
+        Ok(spec)
+    }
+
     /// Returns the canonical architecture.
     #[must_use]
     pub const fn architecture(&self) -> ModelArchitecture {

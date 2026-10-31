@@ -1094,3 +1094,97 @@ C1 격차의 상한 분해(`prof71` 재분석, Qwen2.5-0.5B c1-fixed, 레이어�
 
 종료 항목을 더 밀려면 지금의 레버 범위를 넘는 결정이 필요하다. 예를 들어 C1 어텐션과 RMSNorm에 새 numerics mode를 도입하는 것(출력이 바뀌어 모든 모델을 재검증해야 한다), 또는 14B를 표준 조건과 다른 조건으로 판정하는 것이다.
 - 종료 항목 모델의 안정성 `st77`(바이너리 `riley-mc-6f7ab3e9`, 서버 기본값 + native 프로필, GPU 7 단독): `stab-nv-llama32-3b`, `stab-nv-qwen3-0-6b`, `stab-nv-q25-0-5b`, `stab-nv-smol-360m` 모두 8셀 × 300 s PASS. 취소 8–64건, GPU 메모리 증가는 최대 18 MB(Llama-3.2-3B c8-natural), RSS 증가 1 MB 이내다.
+
+## 6. 품질과 큰 모델 (2026-10-31)
+
+2026-10-30 사용자 요청: Qwen3-14B 속도, Llama 3 토크나이저, 더 큰 모델(단일 GPU 한계 확인 뒤 tensor parallel), vLLM 대비 품질(GSM8K 정확도와 토큰 일치 둘 다). 측정은 aws-a100 GPU 4–7, vLLM 0.27.1, transformers 5.19다.
+
+### 6.1 정정한 것
+
+| 무엇이 틀렸나 | 영향 | 정정 |
+|---|---|---|
+| vLLM `serve`는 temperature 0에서도 `generation_config.json`의 기본값을 적용한다. Qwen2.5 계열 9개 모델은 repetition penalty 1.05/1.1이 켜진 채 측정됐다 | 10-29 vLLM 토큰 일치 수. 속도는 영향 없음(GPU 6 A/B: `--generation-config vllm`로 vLLM 속도 차이 없음) | 품질 측정과 32B 측정은 `--generation-config vllm`(평범한 greedy) |
+| HF 기준 v1이 `attn_implementation='eager'` BF16. transformers 5.19에서 이 경로는 `sdpa` BF16·FP32와 다른 토큰을 낸다(Qwen2.5-1.5B: 첫 분기에서 FP32 logit이 Riley 토큰을 20개 중 16개에서 선호, 최대 8.9 logit 차) | 10-29 HF 일치 수 전부 | `hf_sdpa.py`로 sdpa BF16 기준을 다시 만들었다(`hf-sdpa.json`, `agreement-sdpa.json`) |
+| 호스트 매니페스트 6개(Qwen2.5-3B, -32B, Coder-1.5B/3B/14B, Qwen3-14B)에 `generation_config.json`이 없어 Riley가 `<\|endoftext\|>`(151643)에서 멈추지 않았다 | 해당 모델 GSM8K(Qwen2.5-3B Riley 51.3 % vs vLLM 70.3 %). 속도 표는 영향 없음(모든 요청이 양쪽 다 max_tokens까지 생성) | 매니페스트 5개 보완 후 `-eos` 라벨로 재측정. `riley-checkpoint plan`은 원래 이 파일을 포함한다 |
+| DeepSeek-R1-Distill의 BOS는 `tokenizer_config.json`의 `add_bos_token`(LlamaTokenizerFast)에서 온다. transformers 5.19와 그 위의 vLLM은 이 BOS를 빠뜨린다. R1-Llama-8B는 디코드가 byte-level 문자(`Ġ`)로 깨진다 | vLLM의 R1 GSM8K, R1 토큰 일치 | Riley 로더가 BOS를 넣도록 고쳤다(R1-Llama 로드 가능). vLLM은 BOS 텍스트를 앞에 붙여 재측정(`a100_quality_bos.py`) |
+
+### 6.2 GSM8K 정확도
+
+GSM8K test 1319문항, train 첫 네 예제로 4-shot, greedy, max_tokens 256, stop `Question:`. 두 서버에 같은 요청을 동시성 32로 보냈다. Riley는 `bin/riley-fix-535f043c`(서버 기본값 + native 프로필), vLLM은 `--generation-config vllm`. 정정 뒤 라벨(`-eos`, `-bos`)이 있으면 그 값이다. 증거는 `evidence/quality-<라벨>/summary.json`.
+
+| 모델 | Riley | vLLM | 차이(pt) |
+|---|---:|---:|---:|
+| Qwen2.5-0.5B | 32.5 | 33.0 | −0.5 |
+| Qwen2.5-1.5B | 61.2 | 61.3 | −0.1 |
+| Qwen2.5-3B (`-eos`) | 69.8 | 70.7 | −0.9 |
+| Qwen2.5-7B | 85.6 | 86.5 | −0.9 |
+| Qwen2.5-14B | 86.6 | 86.5 | +0.1 |
+| Qwen2.5-Coder-1.5B (`-eos`) | 47.8 | 48.1 | −0.2 |
+| Qwen2.5-Coder-3B (`-eos`) | 68.2 | 68.0 | +0.2 |
+| Qwen2.5-Coder-7B | 75.4 | 75.0 | +0.4 |
+| Qwen2.5-Coder-14B (`-eos`) | 84.4 | 84.6 | −0.2 |
+| DeepSeek-R1-Distill-Qwen-1.5B (`-bos`) | 62.4 | 61.3 | +1.1 |
+| DeepSeek-R1-Distill-Qwen-7B (`-bos`) | 76.8 | 76.6 | +0.2 |
+| DeepSeek-R1-Distill-Qwen-14B (`-bos`) | 88.3 | 88.7 | −0.5 |
+| DeepSeek-R1-Distill-Llama-8B (`-bos`) | 67.2 | 42.9 | (vLLM 토크나이저 깨짐) |
+| Qwen3-0.6B | 38.7 | 38.2 | +0.5 |
+| Qwen3-1.7B | 66.9 | 67.6 | −0.7 |
+| Qwen3-4B | 85.9 | 85.8 | +0.2 |
+| Qwen3-8B | 87.7 | 87.6 | +0.2 |
+| Qwen3-14B (`-eos`) | 91.1 | 91.7 | −0.7 |
+| SmolLM2-135M | 1.6 | 1.9 | −0.3 |
+| SmolLM2-360M | 5.4 | 4.9 | +0.5 |
+| SmolLM2-1.7B | 30.8 | 29.8 | +1.0 |
+| Llama-3.2-1B | 33.9 | 32.7 | +1.2 |
+| Llama-3.2-3B | 66.0 | 66.0 | +0.1 |
+| Llama-3.1-8B | 77.3 | 78.0 | −0.8 |
+
+- R1-Llama-8B의 vLLM 값은 BOS를 붙이고 다시 디코드해도 42.9 %였다(BOS 없이 33.7 %). 원인은 transformers 5.19의 토크나이저 로드라서 vLLM 엔진 자체의 정확도로 볼 수 없다.
+- 정정 전 값(eos 누락, vLLM BOS 누락)은 같은 디렉터리의 라벨 없는 증거에 남겨 두었다.
+
+### 6.3 HF BF16(sdpa) 대비 토큰 일치
+
+GSM8K test 첫 200문항을 0-shot `Question: ...\nAnswer:`로, max 128토큰, greedy. 기준은 transformers 5.19 sdpa BF16(batch 1, KV cache). 수는 128토큰이 모두 같은 프롬프트 수(200개 중)다. `sdpa=eager`는 같은 HF에서 두 어텐션 구현이 서로 같은 수로, 이 기준이 얼마나 민감한지 보여 준다.
+
+| 모델 | Riley | vLLM | sdpa=eager |
+|---|---:|---:|---:|
+| Qwen2.5-0.5B | 51 | 49 | 29 |
+| Qwen2.5-1.5B | 79 | 71 | 1 |
+| Qwen2.5-3B (`-eos`) | 92 | 95 | 76 |
+| Qwen2.5-7B | 40 | 90 | 0 |
+| Qwen2.5-14B | 79 | 78 | 79 |
+| Qwen2.5-Coder-1.5B (`-eos`) | 120 | 121 | 64 |
+| Qwen2.5-Coder-3B (`-eos`) | 134 | 137 | 115 |
+| Qwen2.5-Coder-7B | 120 | 148 | 116 |
+| Qwen2.5-Coder-14B (`-eos`) | 151 | 146 | 140 |
+| Qwen3-0.6B | 76 | 73 | 64 |
+| Qwen3-1.7B | 94 | 81 | 74 |
+| Qwen3-4B | 84 | 81 | 89 |
+| Qwen3-8B | 92 | 98 | 93 |
+| Qwen3-14B (`-eos`) | 105 | 98 | 98 |
+| SmolLM2-135M | 110 | 101 | 111 |
+| SmolLM2-360M | 104 | 110 | 110 |
+| SmolLM2-1.7B | 98 | 96 | 102 |
+| Llama-3.2-1B | 107 | 109 | 109 |
+| Llama-3.2-3B | 111 | 112 | 109 |
+| Llama-3.1-8B | 81 | 81 | 78 |
+
+- 20개 모델 중 18개는 Riley와 vLLM의 차이가 ±13 이내이고 어느 쪽도 일관되게 앞서지 않는다.
+- 열린 항목: hidden 3584인 Qwen2.5-7B(40 vs 90)와 Qwen2.5-Coder-7B(120 vs 148)는 Riley가 뚜렷하게 낮다. GSM8K 차이는 −0.9 / +0.4 pt로 작아서 정확도 문제로는 보이지 않지만, 이 크기의 GEMM 구성에서 누산 정밀도가 HF와 덜 맞는지 아직 확인하지 않았다.
+- DeepSeek-R1-Distill은 표에서 뺐다. HF 기준에 BOS를 붙이면 vLLM(BOS 없음)과 비교가 성립하지 않고, R1-Llama는 HF 토크나이저 자체가 깨져 Riley·vLLM 모두 0이다. Riley 단독 값은 R1-Qwen 1.5B 82, 7B 17, 14B 122다.
+
+### 6.4 Qwen3-14B와 DeepSeek-R1-Distill-Llama-8B
+
+- Qwen3-14B: sm80 GEMM 등가 표에 5120x34816(gate|up), 17408x5120(down), 5120x151936(LM head)이 없어 anchor 구성으로 돌았다(M=1 gate|up 334.6 vs 255.8 µs). `gemm-equiv-a100-attempt03`의 항목을 `kernels/src/gemm.cu`에 넣은 뒤 `qual-nv-qwen3-14b-attempt04`에서 8셀 모두 충족(c1-fixed TPOT 22.5 vs vLLM 22.3 ms).
+- DeepSeek-R1-Distill-Llama-8B: `tokenizer.json` post_processor에 BOS 템플릿이 없고, BOS는 `tokenizer_config.json`의 `add_bos_token`에서 온다. 로더가 템플릿을 선택 사항으로 받고 이 메타데이터의 BOS를 쓰도록 고쳤다(`tokenizer.rs`, `model.rs`, `qwen.rs`). `qual-nv-r1-llama-8b-attempt03`에서 8셀 모두 충족.
+- 이로써 단일 GPU 충족 모델은 22개에서 24개가 됐다([성능 표](model-coverage-a100-perf-table.md)).
+
+### 6.5 단일 GPU 한계와 Qwen2.5-32B tensor parallel
+
+- 단일 GPU: Qwen2.5-32B-Instruct BF16(약 65 GB)은 40 GB A100 한 장에 Riley와 vLLM 모두 올라가지 않는다(`evidence/limit-Qwen2.5-32B-Instruct-gpu4`). 14B가 한 장의 상한이다.
+- TP=2(GPU 6·7, NVLink, `--tensor-parallel-devices 6,7`) 대 vLLM `--tensor-parallel-size 2 --gpu-memory-utilization 0.9 --generation-config vllm`, `evidence/tp2-q25-32b-gemm4-attempt01`(바이너리 `bin/riley-tp-gemm4`):
+  - TTFT p50은 8셀 모두 낮다(0.57–0.89배).
+  - C32는 처리량·TPOT 모두 앞선다(fixed 549.7 vs 512.4 tok/s).
+  - C1은 처리량 3–5 %, C8은 1–4 % 뒤처지고 TPOT은 둘 다 4–5 % 길다. C16은 fixed가 앞서고 natural은 TPOT +1.1 %다. 그래서 필수 기준은 미충족이다.
+  - 모든 셀에서 반복·동시성에 관계없이 출력이 같다.
+- 설계, 개선 시도(GEMM 표 항목 추가 +1.1 %, 복사 통합 기각)와 다음 후보는 [tensor-parallel 설계](tensor-parallel-design.md#status-2026-10-31)에 있다.

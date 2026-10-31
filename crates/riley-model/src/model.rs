@@ -97,7 +97,7 @@ impl LoadedModel {
             ModelConfig::Llama(llama_config) => {
                 // The SmolLM2 artifact shape, else the Llama 3 one; the error
                 // reported for neither is the SmolLM2 one.
-                let tokenizer = SmolLm2Tokenizer::from_json_slice_with_limits(
+                let mut tokenizer = SmolLm2Tokenizer::from_json_slice_with_limits(
                     tokenizer_artifact.bytes(),
                     limits,
                 )
@@ -108,6 +108,21 @@ impl LoadedModel {
                     )
                     .map_err(|_| error)
                 })?;
+                let tokenizer_config = Path::new(TOKENIZER_CONFIG_FILENAME);
+                if tokenizer.bos_token_id().is_none()
+                    && session.provenance().lists(tokenizer_config)
+                {
+                    let artifact = session.read_once(
+                        tokenizer_config,
+                        limits.config_bytes(),
+                        "tokenizer_config.json",
+                    )?;
+                    if let Some(content) = metadata_bos_token(artifact.bytes()) {
+                        tokenizer.set_bos_token_content(&content)?;
+                    }
+                    chat_template =
+                        Some(ChatTemplateSource::from_tokenizer_config(artifact.bytes())?);
+                }
                 validate_dense_tokenizer_coherence(&spec, &tokenizer, llama_config.pad_token_id())?;
                 (Arc::new(tokenizer), None)
             }
@@ -137,7 +152,7 @@ impl LoadedModel {
                 (Arc::new(tokenizer), None)
             }
             ModelConfig::Qwen2(_) => {
-                let tokenizer = Qwen2Tokenizer::from_json_slice_with_limits(
+                let mut tokenizer = Qwen2Tokenizer::from_json_slice_with_limits(
                     tokenizer_artifact.bytes(),
                     limits,
                 )?;
@@ -161,6 +176,9 @@ impl LoadedModel {
                 })?;
                 tokenizer_config.validate_tokenizer(&tokenizer)?;
                 validate_qwen_context_bound(&spec, &tokenizer_config)?;
+                if let Some(content) = metadata_bos_token(tokenizer_config_artifact.bytes()) {
+                    tokenizer.set_bos_token_content(&content)?;
+                }
                 chat_template = Some(ChatTemplateSource::from_tokenizer_config(
                     tokenizer_config_artifact.bytes(),
                 )?);
@@ -242,6 +260,25 @@ impl LoadedModel {
 
 /// Completes the chat template: other families read `tokenizer_config.json`
 /// only for it, and a listed `chat_template.jinja` replaces the template text.
+/// The begin-of-sequence token that Hugging Face `LlamaTokenizerFast` adds
+/// from `tokenizer_config.json` when the artifact itself has no template:
+/// `add_bos_token: true` and the `bos_token` content (DeepSeek-R1-Distill).
+/// Other tokenizer classes keep the artifact's own post-processing.
+fn metadata_bos_token(input: &[u8]) -> Option<String> {
+    let config: serde_json::Value = serde_json::from_slice(input).ok()?;
+    let class = config.get("tokenizer_class")?.as_str()?;
+    if !matches!(class, "LlamaTokenizerFast" | "LlamaTokenizer")
+        || config.get("add_bos_token")?.as_bool() != Some(true)
+    {
+        return None;
+    }
+    match config.get("bos_token")? {
+        serde_json::Value::String(content) => Some(content.clone()),
+        serde_json::Value::Object(token) => token.get("content")?.as_str().map(str::to_owned),
+        _ => None,
+    }
+}
+
 fn read_chat_template(
     session: &mut VerifiedArtifactSession,
     limits: LoadLimits,
@@ -407,6 +444,22 @@ fn validate_qwen_context_bound(
 #[cfg(test)]
 mod tests {
     use super::LoadedModel;
+
+    #[test]
+    fn metadata_bos_token_follows_llama_fast_add_bos_token_only() {
+        use super::metadata_bos_token;
+        let deepseek = br#"{"add_bos_token": true, "tokenizer_class": "LlamaTokenizerFast",
+            "bos_token": {"__type": "AddedToken", "content": "<|begin|>", "normalized": true}}"#;
+        assert_eq!(metadata_bos_token(deepseek).as_deref(), Some("<|begin|>"));
+        for other in [
+            br#"{"add_bos_token": false, "tokenizer_class": "LlamaTokenizerFast", "bos_token": "<s>"}"#.as_slice(),
+            br#"{"add_bos_token": true, "tokenizer_class": "PreTrainedTokenizer", "bos_token": "<s>"}"#,
+            br#"{"add_bos_token": true, "tokenizer_class": "GPT2Tokenizer", "bos_token": "<s>"}"#,
+            br#"{"tokenizer_class": "LlamaTokenizerFast", "bos_token": "<s>"}"#,
+        ] {
+            assert_eq!(metadata_bos_token(other), None);
+        }
+    }
 
     fn assert_send_sync<T: Send + Sync>() {}
 

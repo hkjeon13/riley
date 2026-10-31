@@ -108,6 +108,7 @@ fn cuda_config() -> TestResult<CudaBackendConfig> {
     .with_grouped_ragged_attention_heads();
     Ok(CudaBackendConfig {
         device_ordinal: 0,
+        tensor_parallel_devices: Vec::new(),
         scheduler,
         executor,
         gpu_greedy: false,

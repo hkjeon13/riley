@@ -63,7 +63,7 @@ use super::forward::PreparedLlamaForwardConfig;
 const BF16_BYTES: u64 = 2;
 const BF16_BYTES_USIZE: usize = 2;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum BatchOutputMode {
+pub(super) enum BatchOutputMode {
     Logits,
     GreedyTokens,
 }
@@ -93,6 +93,8 @@ pub struct PreparedLlamaBatchExecutor {
     output_count: usize,
     output_mode: BatchOutputMode,
     output_ready: bool,
+    /// Ranks 1.. of a tensor-parallel group this leader (rank 0) drives.
+    followers: Option<super::tensor_parallel::TensorParallelFollowers>,
 }
 
 impl fmt::Debug for PreparedLlamaBatchExecutor {
@@ -185,7 +187,29 @@ impl PreparedLlamaBatchExecutor {
             output_count: 0,
             output_mode: BatchOutputMode::Logits,
             output_ready: false,
+            followers: None,
         })
+    }
+
+    /// Attaches the peer all-reduce group of a tensor-parallel rank prepared
+    /// with [`PreparedLlamaBatchExecutorConfig::with_tensor_parallel`] on
+    /// device `device_ordinal`. Rank 0 also takes the follower ranks, which it
+    /// drives from then on.
+    ///
+    /// # Errors
+    ///
+    /// Returns when the group does not match the uploaded shard or device.
+    pub fn attach_tensor_parallel(
+        &mut self,
+        group: std::sync::Arc<riley_cuda::CudaPeerAllReduceGroup>,
+        device_ordinal: u32,
+        followers: Option<super::tensor_parallel::TensorParallelFollowers>,
+    ) -> LlamaBatchExecutorResult<()> {
+        self.owner
+            .forward
+            .attach_tensor_parallel_group(group, device_ordinal)?;
+        self.followers = followers;
+        Ok(())
     }
 
     #[must_use]
@@ -512,7 +536,7 @@ impl PreparedLlamaBatchExecutor {
         self.execute_output(rows, BatchOutputMode::GreedyTokens, stream)
     }
 
-    fn execute_output(
+    pub(super) fn execute_output(
         &mut self,
         rows: &[LlamaBatchRow<'_>],
         output_mode_requested: BatchOutputMode,
@@ -541,6 +565,7 @@ impl PreparedLlamaBatchExecutor {
             output_count,
             output_mode,
             output_ready,
+            followers,
         } = self;
         let PreparedLlamaBatchOwner {
             #[cfg(feature="cuda-cublas-gemm-probe")]
@@ -583,6 +608,15 @@ impl PreparedLlamaBatchExecutor {
         )?;
 
         let mut dispatch_disposition = BatchDispatchDisposition::PreDispatch;
+        // Followers start the same iteration before this rank dispatches, so
+        // the ranks' all-reduces meet; host validation above already passed.
+        if let Some(followers) = followers.as_mut() {
+            if let Err(error) = followers.dispatch(rows, output_mode_requested) {
+                *poisoned = true;
+                forward.poisoned = true;
+                return Err(error);
+            }
+        }
         let result = execute_packed(
             packed,
             *config,
@@ -605,6 +639,16 @@ impl PreparedLlamaBatchExecutor {
             &mut dispatch_disposition,
             stream,
         );
+        let result = match (result, followers.as_mut().map(|followers| followers.wait())) {
+            (Ok(()), Some(Err(error))) => {
+                // A rank that did not run this iteration leaves the group
+                // unusable: its KV state and barrier epochs differ.
+                *poisoned = true;
+                forward.poisoned = true;
+                Err(error)
+            }
+            (result, _) => result,
+        };
         match result {
             Ok(()) => {
                 shape_history.record_success(shape_bucket_index, active_rows, selected_dense_rows);
@@ -847,7 +891,9 @@ impl PreparedLlamaBatchExecutor {
     /// Returns the first CUDA cleanup failure after attempting every owned
     /// device resource and the underlying prepared forward.
     pub fn close(self) -> LlamaBatchExecutorResult<()> {
-        self.owner.close()
+        let followers = self.followers.map_or(Ok(()), |followers| followers.close());
+        let owner = self.owner.close();
+        owner.and(followers)
     }
 }
 

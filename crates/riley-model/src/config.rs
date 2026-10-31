@@ -1612,6 +1612,28 @@ mod tests {
     }
 
     #[test]
+    fn tensor_parallel_rank_spec_divides_heads_and_intermediate_only() {
+        let spec = ModelConfig::from_json_slice(SMOL_CONFIG.as_bytes())
+            .unwrap()
+            .to_model_spec();
+        let rank = spec.tensor_parallel_rank_spec(3).unwrap();
+        for (whole, part) in spec.blocks().iter().zip(rank.blocks()) {
+            assert_eq!(part.attention().query_heads(), whole.attention().query_heads() / 3);
+            assert_eq!(part.attention().key_value_heads(), 1);
+            assert_eq!(part.attention().head_dimension(), whole.attention().head_dimension());
+            assert_eq!(part.attention().hidden_size(), whole.attention().hidden_size());
+            assert_eq!(part.mlp().intermediate_size(), 512);
+        }
+        assert_eq!(spec.tensor_parallel_rank_spec(1).unwrap(), spec);
+        // 9 query heads, 3 KV heads: two ranks cannot split them.
+        assert!(matches!(
+            spec.tensor_parallel_rank_spec(2),
+            Err(ModelError::UnsupportedConfig { .. })
+        ));
+        assert!(spec.tensor_parallel_rank_spec(0).is_err());
+    }
+
+    #[test]
     fn qwen2_rejects_sliding_window_rope_extensions_and_other_families() {
         let sliding = QWEN2_5_CONFIG.replace(
             "\"use_sliding_window\": false",
