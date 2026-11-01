@@ -1183,12 +1183,16 @@ GSM8K test 첫 200문항을 0-shot `Question: ...\nAnswer:`로, max 128토큰, g
 ### 6.5 단일 GPU 한계와 Qwen2.5-32B tensor parallel
 
 - 단일 GPU: Qwen2.5-32B-Instruct BF16(약 65 GB)은 40 GB A100 한 장에 Riley와 vLLM 모두 올라가지 않는다(`evidence/limit-Qwen2.5-32B-Instruct-gpu4`). 14B가 한 장의 상한이다.
-- TP=2(GPU 6·7, NVLink, `--tensor-parallel-devices 6,7`) 대 vLLM `--tensor-parallel-size 2 --gpu-memory-utilization 0.9 --generation-config vllm`, `evidence/tp2-q25-32b-gemm4-attempt01`(바이너리 `bin/riley-tp-gemm4`):
-  - TTFT p50은 8셀 모두 낮다(0.57–0.89배).
-  - C32는 처리량·TPOT 모두 앞선다(fixed 549.7 vs 512.4 tok/s).
-  - C1은 처리량 3–5 %, C8은 1–4 % 뒤처지고 TPOT은 둘 다 4–5 % 길다. C16은 fixed가 앞서고 natural은 TPOT +1.1 %다. 그래서 필수 기준은 미충족이다.
-  - 모든 셀에서 반복·동시성에 관계없이 출력이 같다.
-- 설계, 개선 시도(GEMM 표 항목 추가 +1.1 %, 복사 통합 기각)와 다음 후보는 [tensor-parallel 설계](tensor-parallel-design.md#status-2026-10-31)에 있다.
+- TP=2(GPU 6·7, NVLink, `--tensor-parallel-devices 6,7`) 대 vLLM `--tensor-parallel-size 2 --gpu-memory-utilization 0.9 --generation-config vllm`, `evidence/tp2-q25-32b-ll-attempt01`(바이너리 `bin/riley-tp-ll`, 2026-11-01):
+  - 처리량은 8셀 모두 vLLM 이상이다(C1 35.2 vs 34.7, C8 fixed 221.9 vs 216.5, C32 fixed 557.9 vs 511.5 tok/s).
+  - TTFT p50은 8셀 모두 낮다(0.54–0.94배).
+  - C1은 승/동률, C16·C32는 4셀 모두 승이다.
+  - C8 두 셀은 TPOT p50만 0.1 %, 0.3 %(0.02 ms, 0.08 ms) 길어 미달이다. 그래서 필수 기준은 아직 미충족이다. Riley의 C8 TPOT은 두 반복이 같았다.
+  - 모든 셀에서 반복·동시성에 관계없이 출력이 같다. 검증 프롬프트 32개는 이전 바이너리와 C1·C8 모두 32/32 같은 토큰이다.
+- 10-31 측정(`tp2-q25-32b-gemm4-attempt01`)의 C1·C8 차이(처리량 −1~−5 %, TPOT +4~5 %)는 all-reduce 지연이었다. 한 행에 호출당 14.2 µs, decode 한 step에 128번(64층 × 2)이라 step 29 ms 중 약 1.8 ms였다.
+  - staging 복사와 barrier를 없앤 low-latency 경로를 넣었다. 데이터와 epoch를 함께 실은 16바이트 패킷을 peer 버퍼에 직접 쓴다.
+  - 그 결과 호출당 3.1 µs(1행), 4.0 µs(8행)가 됐다. 합산 순서는 같아서 결과가 비트 단위로 같다.
+- 설계, 마이크로벤치 표, 기각한 시도는 [tensor-parallel 설계](tensor-parallel-design.md#status-2026-11-01)에 있다.
 
 ### 6.6 Qwen2.5-7B 계열의 낮은 HF 일치: FlashInfer logit 범위 (2026-11-01)
 
@@ -1200,6 +1204,18 @@ GSM8K test 첫 200문항을 0-shot `Question: ...\nAnswer:`로, max 128토큰, g
 - **FP32 기준(Qwen2.5-7B, 200개 중 128토큰 일치):** Riley 35 → 87. 같은 기준에서 vLLM 98, HF BF16 sdpa 86이다. 첫 토큰부터 다른 프롬프트는 23 → 5다.
 - **HF sdpa 일치(6.3, `-fi16`):** Qwen2.5-7B 40 → 88(vLLM 94), Coder-7B 120 → 159(vLLM 149), R1-Distill-Qwen-7B 17 → 80. GSM8K는 86.3 / 75.9 / 76.4 %로 수정 전과 1 pt 안쪽이다(6.2).
 - **다른 모델:** Qwen2.5-14B, Llama-3.1-8B, Qwen3-8B는 수정 전후 200개 출력이 모두 같다. 이 모델들의 logit은 원래 5e4 안쪽이다.
-- **속도:** Qwen2.5-7B, 서버 시작 포함 200요청 2회씩 수정 전 144.1 / 145.0초, 수정본 144.2 / 143.4초. 성능 표의 7B 계열 값은 수정 전 바이너리로 잰 것이고, 정식 8셀 재측정은 하지 않았다.
+- **속도:** Qwen2.5-7B, 서버 시작 포함 200요청 2회씩 수정 전 144.1 / 145.0초, 수정본 144.2 / 143.4초.
+  - 정식 8셀 재측정(`evidence/g7-q25-7b-attempt01`, GPU 7, `bin/riley-tp-ll`): 필수 기준 **충족**, 8셀 모두 승이다. 처리량 1.027–1.144배, TPOT p50 0.855–0.970배, TTFT p50 0.57–0.83배이고, c16-fixed와 c32-fixed는 도전 목표까지 넘었다. C1 fixed는 84.3 vs 80.4 tok/s다.
+  - 같은 날 GPU 5에서 잰 7B 계열 3개 모델(`fi16-{q25-7b,coder-7b,r1-qwen-7b}-attempt01`)은 Riley 쪽 값만 유효하다. GPU 4·5의 vLLM이 10-30부터 원인 불명으로 느리다(C1 19.9 tok/s). 세 모델의 Riley 값은 서로 거의 같고(C1 83.8–84.3, c32-natural 1,720–1,765 tok/s), GPU 7 측정과도 맞는다.
 - **열린 항목(기본 경로 아님):** page 어텐션 경로(`staged_attention_score`, `staged_decode_score`)는 HF eager 계약대로 점수를 BF16으로 두 번 반올림한다. Qwen2.5-7B에서 page-v1 모드는 FP32 일치 8이고, 점수 staging을 뺀 실험 빌드는 82다. 같은 고진폭 테스트에서 page 경로 오차는 0.99다. 기본 native 프로필은 이 경로를 쓰지 않는다.
 - 증거: 호스트 `evidence/quality-{q25-7b,coder-7b,r1-qwen-7b}-fi16`(`agreement-sdpa.json`은 같은 라벨의 수정 전 `hf-sdpa.json`을 복사해 계산), 진단 스크립트 `tmp-diff/hf7b/`(`attnerr*.py`, `fp32ref.py`, `pos0.py`, `bis*.sh`).
+
+### 6.7 최종 빌드 30분 soak (2026-11-01)
+
+`bin/riley-tp-ll`(FlashInfer 수정 + low-latency all-reduce), Qwen2.5-7B, GPU 4, 서버 기본값 + native 프로필, c32-natural, 1800초(`evidence/soak-tpll-q25-7b-attempt01`, 판정 기준은 `a100_stability.py`에 미리 적은 것).
+
+| 요청(오류) | 30초 창 tok/s 최소–최대(마지막) | 취소 64건 | GPU MiB 워밍업 후 → 끝 | RSS MiB 2분기 → 4분기 | 판정 |
+|---|---|---|---|---|---|
+| 48,931 (0) | 1,961–2,035 (2,028) | 64/64 닫힘, 서버 생존 | 17,325 → 17,327 | 15,130 → 15,130 | 8/8 통과 |
+
+재요청 96건도 오류가 없었고, 프롬프트마다 출력은 하나였다. 종료 코드는 0이다.

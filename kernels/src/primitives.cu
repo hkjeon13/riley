@@ -2526,6 +2526,7 @@ namespace {
 // recorded graph replays keep counting.
 struct PeerAllReducePointers {
   const __nv_bfloat16* staging[RileyCudaPeerAllReduceGroup::kMaximumRanks];
+  uint4* low_latency[RileyCudaPeerAllReduceGroup::kMaximumRanks];
   uint32_t* signals[RileyCudaPeerAllReduceGroup::kMaximumRanks];
 };
 
@@ -2636,6 +2637,97 @@ __global__ void peer_all_reduce_bf16_kernel(PeerAllReducePointers peers,
   }
 }
 
+// Low-latency one-shot variant for small reduces (decode steps). Each 16-byte
+// packet carries four BF16 and the call's epoch twice, so a receiver knows the
+// data has arrived when both flags match; 8-byte halves of a vector store are
+// written atomically. Every rank first stores its own input into each peer's
+// receive buffer, then sums its own value and the received ones in rank order,
+// exactly as the staged kernel does. No staging copy and no barrier: the
+// buffer alternates by epoch parity, and a rank only rewrites a parity after
+// receiving the peer's next packets, which the peer sends only once its
+// previous kernel, and so its last read of that parity, has completed.
+__device__ __forceinline__ void peer_store_packet(uint4* address, uint4 value) {
+  asm volatile("st.volatile.global.v4.u32 [%0], {%1, %2, %3, %4};" ::"l"(address),
+               "r"(value.x), "r"(value.y), "r"(value.z), "r"(value.w)
+               : "memory");
+}
+
+__device__ __forceinline__ uint4 peer_load_packet(const uint4* address) {
+  uint4 value;
+  asm volatile("ld.volatile.global.v4.u32 {%0, %1, %2, %3}, [%4];"
+               : "=r"(value.x), "=r"(value.y), "=r"(value.z), "=r"(value.w)
+               : "l"(address)
+               : "memory");
+  return value;
+}
+
+__global__ void peer_all_reduce_bf16_low_latency_kernel(
+    PeerAllReducePointers peers, uint32_t rank, uint32_t ranks,
+    uint64_t slice_packets, __nv_bfloat16* output, uint64_t packet_count) {
+  using Group = RileyCudaPeerAllReduceGroup;
+  __shared__ uint32_t epoch;
+  const uint32_t block = blockIdx.x;
+  uint32_t* epoch_slot = peers.signals[rank] +
+                         2 * Group::kMaximumBlocks * Group::kMaximumRanks +
+                         Group::kMaximumBlocks + block;
+  if (threadIdx.x == 0) {
+    epoch = *epoch_slot + 1;
+  }
+  __syncthreads();
+  const uint32_t current = epoch;
+  const uint64_t parity_slices = static_cast<uint64_t>(current & 1U) * ranks;
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  const uint64_t first = static_cast<uint64_t>(block) * blockDim.x + threadIdx.x;
+  uint2* data = reinterpret_cast<uint2*>(output);
+  for (uint64_t index = first; index < packet_count; index += stride) {
+    const uint2 own = data[index];
+    const uint4 packet = make_uint4(own.x, current, own.y, current);
+    for (uint32_t target = 0; target < ranks; ++target) {
+      if (target != rank) {
+        peer_store_packet(
+            peers.low_latency[target] + (parity_slices + rank) * slice_packets + index,
+            packet);
+      }
+    }
+  }
+  for (uint64_t index = first; index < packet_count; index += stride) {
+    const uint2 own = data[index];
+    float sum[4] = {};
+    for (uint32_t source = 0; source < ranks; ++source) {
+      uint2 bits = own;
+      if (source != rank) {
+        const uint4* slot =
+            peers.low_latency[rank] + (parity_slices + source) * slice_packets + index;
+        const uint64_t started = peer_global_timer();
+        uint4 packet = peer_load_packet(slot);
+        while (packet.y != current || packet.w != current) {
+          if (peer_global_timer() - started > kPeerReduceTimeoutNs) {
+            __trap();
+          }
+          packet = peer_load_packet(slot);
+        }
+        bits = make_uint2(packet.x, packet.z);
+      }
+      const __nv_bfloat162* pairs = reinterpret_cast<const __nv_bfloat162*>(&bits);
+      for (int pair = 0; pair < 2; ++pair) {
+        const float2 values = __bfloat1622float2(pairs[pair]);
+        sum[2 * pair] += values.x;
+        sum[2 * pair + 1] += values.y;
+      }
+    }
+    uint2 result;
+    __nv_bfloat162* out_pairs = reinterpret_cast<__nv_bfloat162*>(&result);
+    for (int pair = 0; pair < 2; ++pair) {
+      out_pairs[pair] = __floats2bfloat162_rn(sum[2 * pair], sum[2 * pair + 1]);
+    }
+    data[index] = result;
+  }
+  __syncthreads();
+  if (threadIdx.x == 0) {
+    *epoch_slot = current;
+  }
+}
+
 }  // namespace
 
 extern "C" RileyCudaStatus riley_cuda_peer_all_reduce_bf16_execute(
@@ -2690,6 +2782,14 @@ extern "C" RileyCudaStatus riley_cuda_peer_all_reduce_bf16_execute(
   if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
+  // The path depends only on element_count, so every rank takes the same one.
+  const bool low_latency = params->element_count % 4 == 0 &&
+                           params->element_count / 4 <= group->low_latency_packets;
+  if (low_latency && reinterpret_cast<uintptr_t>(data.data) % 8 != 0) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "a low-latency reduce needs an 8-byte aligned span");
+  }
   ExclusiveUses uses(stream);
   if (!uses.add(data.buffer)) {
     return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
@@ -2708,6 +2808,7 @@ extern "C" RileyCudaStatus riley_cuda_peer_all_reduce_bf16_execute(
   PeerAllReducePointers peers{};
   for (uint32_t index = 0; index < group->rank_count; ++index) {
     peers.staging[index] = static_cast<const __nv_bfloat16*>(group->staging[index]);
+    peers.low_latency[index] = static_cast<uint4*>(group->low_latency[index]);
     peers.signals[index] = group->signals[index];
   }
   // The block count depends only on element_count, so every rank launches
@@ -2722,6 +2823,20 @@ extern "C" RileyCudaStatus riley_cuda_peer_all_reduce_bf16_execute(
   status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = prior_launch_status(error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS && low_latency) {
+    launch_attempted = true;
+    const uint64_t packets = params->element_count / 4;
+    const uint64_t wanted_packets = (packets + kPeerReduceThreads - 1) / kPeerReduceThreads;
+    const uint32_t packet_blocks = static_cast<uint32_t>(
+        wanted_packets < Group::kMaximumBlocks ? wanted_packets : Group::kMaximumBlocks);
+    peer_all_reduce_bf16_low_latency_kernel<<<packet_blocks, kPeerReduceThreads, 0,
+                                              stream->stream>>>(
+        peers, params->rank, group->rank_count, group->low_latency_packets,
+        reinterpret_cast<__nv_bfloat16*>(data.data), packets);
+    status = launch_status(error, kOperation);
+    return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                              error, kOperation);
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;

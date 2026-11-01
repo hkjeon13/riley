@@ -5,11 +5,13 @@
 //! parallelism will.
 
 use std::error::Error;
+use std::sync::Barrier;
 use std::thread;
+use std::time::Instant;
 
 use riley_cuda::{
     CudaBufferSpanMut, CudaContext, CudaDType, CudaPeerAllReduceGroup, CudaRuntime,
-    peer_all_reduce_bf16_in_place,
+    begin_step_capture, end_step_capture, launch_step_graph, peer_all_reduce_bf16_in_place,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -158,5 +160,88 @@ fn group_rejects_a_repeated_device() -> TestResult {
     let runtime = CudaRuntime::initialize()?;
     let context = runtime.device(ordinals[0])?.create_context()?;
     assert!(CudaPeerAllReduceGroup::new(&[&context, &context], 16).is_err());
+    Ok(())
+}
+
+// A decode step of a 64-layer model at TP=2 makes 128 reduces; each graph
+// replays that many back to back, as a recorded step does.
+const CALLS_PER_GRAPH: usize = 128;
+const REPLAYS: usize = 50;
+
+fn time_rank(
+    group: &CudaPeerAllReduceGroup,
+    context: &CudaContext,
+    rank: u32,
+    rows: u64,
+    barrier: &Barrier,
+) -> TestResult<f64> {
+    let mut stream = context.create_stream()?;
+    let elements = rows * HIDDEN;
+    let mut buffer = context.allocate_device_buffer(elements * 2)?;
+    let graph = {
+        let mut batch = stream.begin_command_batch()?;
+        let graph = {
+            let mut commands = batch.commands();
+            begin_step_capture(&mut commands)?;
+            for _ in 0..CALLS_PER_GRAPH {
+                let mut span =
+                    CudaBufferSpanMut::new(&mut buffer, CudaDType::BF16, 0, elements * 2)?;
+                peer_all_reduce_bf16_in_place(group, rank, &mut span, elements, &mut commands)?;
+            }
+            end_step_capture(&mut commands)?
+        };
+        batch.finish()?;
+        graph
+    };
+    let mut replay = |count: usize| -> TestResult {
+        let mut batch = stream.begin_command_batch()?;
+        {
+            let mut commands = batch.commands();
+            for _ in 0..count {
+                launch_step_graph(&mut commands, &graph)?;
+            }
+        }
+        batch.finish()?;
+        Ok(())
+    };
+    replay(1)?;
+    barrier.wait();
+    let started = Instant::now();
+    replay(REPLAYS)?;
+    Ok(started.elapsed().as_secs_f64() * 1e6 / (REPLAYS * CALLS_PER_GRAPH) as f64)
+}
+
+/// Per-call latency of recorded back-to-back reduces (run with --ignored).
+#[test]
+#[ignore = "timing only; prints microseconds per call"]
+fn recorded_reduce_latency() -> TestResult {
+    let ordinals = devices();
+    let runtime = CudaRuntime::initialize()?;
+    let contexts = ordinals
+        .iter()
+        .map(|ordinal| runtime.device(*ordinal)?.create_context())
+        .collect::<Result<Vec<_>, _>>()?;
+    let references: Vec<&CudaContext> = contexts.iter().collect();
+    let group = CudaPeerAllReduceGroup::new(&references, 256 * HIDDEN)?;
+    for rows in [1_u64, 8, 32, 64, 100, 256] {
+        let barrier = Barrier::new(contexts.len());
+        let times = thread::scope(|scope| {
+            let handles: Vec<_> = contexts
+                .iter()
+                .enumerate()
+                .map(|(rank, context)| {
+                    let (group, barrier) = (&group, &barrier);
+                    scope.spawn(move || {
+                        time_rank(group, context, u32::try_from(rank).expect("rank"), rows, barrier)
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|handle| handle.join().expect("rank thread"))
+                .collect::<Result<Vec<_>, _>>()
+        })?;
+        println!("peer_all_reduce rows={rows} hidden={HIDDEN} us_per_call={times:.2?}");
+    }
     Ok(())
 }

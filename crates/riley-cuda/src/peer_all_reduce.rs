@@ -7,6 +7,11 @@
 //! of the ranks' values in rank order, rounded once to BF16. The term order
 //! depends only on the rank count, so the result is the same whatever the
 //! element count (batch size) and bit-identical on every rank.
+//!
+//! Reduces of at most 2^19 elements (decode steps) push each rank's values to
+//! its peers in packets that carry the call's epoch, with no staging copy or
+//! barrier; larger ones stage the input and synchronize at start and end. Both
+//! paths compute the same sum.
 
 use std::fmt;
 use std::sync::Arc;

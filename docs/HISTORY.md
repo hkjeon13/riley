@@ -241,7 +241,10 @@ The method mattered as much as any single change.
 - The small-model kernel branch has not been merged into `main`.
 - BF16 only, no quantisation. The A100 campaign (October) added 24 qualified
   models and a chat-completions endpoint; tensor parallelism over two A100s
-  runs Qwen2.5-32B but is still 1–5 % behind vLLM at one and eight clients.
+  runs Qwen2.5-32B. A low-latency all-reduce (November 1: data and epoch in
+  one 16-byte packet, no staging copy, no barrier; 14.2 → 3.1 µs per call)
+  put its throughput at or above vLLM in every cell; eight clients still miss
+  by 0.1–0.3 % on TPOT.
 - Quality checks (GSM8K and HF agreement, October 31) found mostly
   measurement mistakes: vLLM applied the checkpoint's sampling defaults, the
   HF eager reference disagreed with sdpa and FP32, some manifests lacked
@@ -251,7 +254,9 @@ The method mattered as much as any single change.
   last-layer logits (about 1e5). A power-of-two rescale fixed it without
   changing any other model's output. The corrected numbers are in
   [model coverage, section 6](model-coverage-a100.md#6-품질과-큰-모델-2026-10-31).
-- The 30-minute soak has not been repeated on the final Qwen2.5-3B build.
+- The 30-minute soak was repeated on the final build (November 1, Qwen2.5-7B,
+  32 clients, server defaults): 48,931 requests without an error, no
+  throughput decay, GPU memory and RSS flat, clean exit.
 
 The measurement logs behind this book were removed from the tree to keep the
 repository small. They remain in the git history at commit `f90683ec`, under

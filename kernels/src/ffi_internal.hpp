@@ -572,18 +572,27 @@ struct RileyCudaEvent {
 };
 
 // Tensor-parallel all-reduce group (peer_all_reduce.cu). Each rank owns a
-// BF16 staging buffer and a signal area in its own context; the arrays are
-// indexed by rank. The group retains one child count on every context.
+// BF16 staging buffer, a low-latency receive buffer and a signal area in its
+// own context; the arrays are indexed by rank. The group retains one child
+// count on every context.
 struct RileyCudaPeerAllReduceGroup {
   static constexpr uint32_t kMaximumRanks = 8;
   static constexpr uint32_t kMaximumBlocks = 64;
-  // start flags [block][source], end flags [block][source], epoch [block].
+  // Reduces of at most this many elements (and a multiple of four) take the
+  // low-latency path: 16-byte packets of four BF16 and two epoch flags.
+  static constexpr uint64_t kLowLatencyElements = UINT64_C(1) << 19;
+  // start flags [block][source], end flags [block][source], epoch [block],
+  // low-latency epoch [block].
   static constexpr size_t kSignalWords =
-      2 * kMaximumBlocks * kMaximumRanks + kMaximumBlocks;
+      2 * kMaximumBlocks * kMaximumRanks + 2 * kMaximumBlocks;
   uint32_t rank_count;
   uint64_t max_elements;
+  // Packets per (parity, source) slice of a low-latency receive buffer.
+  uint64_t low_latency_packets;
   RileyCudaContext* contexts[kMaximumRanks];
   void* staging[kMaximumRanks];
+  // [parity 2][source rank][packet] of uint4, written by the source rank.
+  void* low_latency[kMaximumRanks];
   uint32_t* signals[kMaximumRanks];
 };
 

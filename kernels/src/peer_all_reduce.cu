@@ -52,7 +52,8 @@ RileyCudaStatus free_rank_memory(Group* group, RileyCudaErrorInfo* error,
                                  uint32_t stage, const char* operation) noexcept {
   RileyCudaStatus first = RILEY_CUDA_STATUS_SUCCESS;
   for (uint32_t rank = 0; rank < group->rank_count; ++rank) {
-    if (group->staging[rank] == nullptr && group->signals[rank] == nullptr) {
+    if (group->staging[rank] == nullptr && group->low_latency[rank] == nullptr &&
+        group->signals[rank] == nullptr) {
       continue;
     }
     CurrentContext scope(group->contexts[rank]);
@@ -62,6 +63,15 @@ RileyCudaStatus free_rank_memory(Group* group, RileyCudaErrorInfo* error,
         status = runtime_error(cudaFree(group->staging[rank]), error, stage,
                                "free peer all-reduce staging buffer");
         group->staging[rank] = nullptr;
+      }
+      if (group->low_latency[rank] != nullptr) {
+        const RileyCudaStatus buffer_status = runtime_error(
+            cudaFree(group->low_latency[rank]), error, stage,
+            "free peer all-reduce low-latency buffer");
+        group->low_latency[rank] = nullptr;
+        if (status == RILEY_CUDA_STATUS_SUCCESS) {
+          status = buffer_status;
+        }
       }
       if (group->signals[rank] != nullptr) {
         const RileyCudaStatus signal_status = runtime_error(
@@ -175,6 +185,11 @@ extern "C" RileyCudaStatus riley_cuda_peer_all_reduce_group_create(
   }
 
   const size_t staging_bytes = static_cast<size_t>(max_elements) * 2;
+  const uint64_t low_latency_elements =
+      max_elements < Group::kLowLatencyElements ? max_elements : Group::kLowLatencyElements;
+  group->low_latency_packets = low_latency_elements / 4;
+  const size_t low_latency_bytes =
+      static_cast<size_t>(2 * rank_count * group->low_latency_packets) * 16;
   const size_t signal_bytes = Group::kSignalWords * sizeof(uint32_t);
   for (uint32_t rank = 0;
        status == RILEY_CUDA_STATUS_SUCCESS && rank < rank_count; ++rank) {
@@ -198,6 +213,17 @@ extern "C" RileyCudaStatus riley_cuda_peer_all_reduce_group_create(
       status = runtime_error(cudaMalloc(&group->staging[rank], staging_bytes),
                              error, RILEY_CUDA_ERROR_STAGE_CREATE,
                              "allocate peer all-reduce staging buffer");
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS && low_latency_bytes != 0) {
+      status = runtime_error(cudaMalloc(&group->low_latency[rank], low_latency_bytes),
+                             error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                             "allocate peer all-reduce low-latency buffer");
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS && low_latency_bytes != 0) {
+      // Zero flags never match an epoch, which starts at one.
+      status = runtime_error(cudaMemset(group->low_latency[rank], 0, low_latency_bytes),
+                             error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                             "clear peer all-reduce low-latency buffer");
     }
     if (status == RILEY_CUDA_STATUS_SUCCESS) {
       void* signals = nullptr;

@@ -1404,7 +1404,9 @@ pub fn row_bias_add_in_place<S: CudaExecutionStream + ?Sized>(
 ///
 /// Fails for a non-BF16 or too small span, a rank outside the group, an
 /// element count above the group capacity, a stream of another context than
-/// the rank's, or a CUDA launch failure.
+/// the rank's, a span that is not 8-byte aligned for a reduce small enough
+/// for the low-latency path (at most 2^19 elements, a multiple of four), or a
+/// CUDA launch failure.
 pub fn peer_all_reduce_bf16_in_place<S: CudaExecutionStream + ?Sized>(
     group: &crate::CudaPeerAllReduceGroup,
     rank: u32,

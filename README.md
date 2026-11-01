@@ -90,15 +90,16 @@ against vLLM `--tensor-parallel-size 2`:
 
 | Clients | Throughput tok/s (fixed / natural) | TTFT p50 ms (fixed) | TPOT p50 ms (fixed) |
 |---|---|---:|---:|
-| 1 | 33.6 / 33.5 vs 34.6 / 35.2 | **39.7** / 45.5 | 29.19 / **28.00** |
-| 8 | 214.2 / 237.2 vs 216.5 / 246.1 | **99.1** / 127.1 | 32.66 / **31.17** |
-| 16 | **366.7** / 426.5 vs 353.2 / 429.0 | **110.3** / 144.3 | 37.41 / 37.39 |
-| 32 | **549.7** / **702.2** vs 512.4 / 685.6 | **141.0** / 202.6 | **46.39** / 49.96 |
+| 1 | **35.2** / 35.2 vs 34.7 / 35.3 | **39.5** / 42.3 | **27.77** / 27.99 |
+| 8 | **221.9** / **247.3** vs 216.5 / 246.2 | **95.9** / 114.8 | 31.44 / **31.42** |
+| 16 | **375.6** / **443.2** vs 352.9 / 429.4 | **107.6** / 144.6 | **36.51** / 37.44 |
+| 32 | **557.9** / **724.4** vs 511.5 / 687.1 | **139.6** / 192.6 | **46.42** / 50.26 |
 
-Riley first, vLLM second. TTFT is lower in all 8 cells and 32 clients are
-ahead, but 1 and 8 clients are 1–5 % behind on throughput and 4–5 % on TPOT,
-so 32B does not qualify yet.
-Details are in the [tensor-parallel design](docs/tensor-parallel-design.md#status-2026-10-31).
+Riley first, vLLM second. Throughput is at or above vLLM and TTFT is lower in
+all 8 cells. The two 8-client cells still miss, by TPOT p50 alone (+0.1 % and
++0.3 %), so 32B does not qualify yet. The low-latency all-reduce (no staging
+copy, no barrier) took 1-client TPOT from 29.19 to 27.77 ms.
+Details are in the [tensor-parallel design](docs/tensor-parallel-design.md#status-2026-11-01).
 
 ### Output quality
 
