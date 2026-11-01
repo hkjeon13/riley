@@ -411,8 +411,12 @@ fn flashinfer_rows_are_batch_invariant_and_close_to_the_page_path() -> TestResul
         check_geometry(&runtime, heads, 60, 64, None)?;
         check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15))?;
     }
-    check_high_amplitude_against_f64(&runtime, 128)?;
-    check_high_amplitude_against_f64(&runtime, 64)?;
+    check_high_amplitude_against_f64(&runtime, HIGH_AMPLITUDE, 12.0)?;
+    check_high_amplitude_against_f64(&runtime, HIGH_AMPLITUDE_D64, 12.0)?;
+    // Qwen2.5-7B's last layer reaches |QK| ~ 1e5, beyond FlashInfer's finite
+    // -5e4 mask value in raw QK units.
+    let largest = check_high_amplitude_against_f64(&runtime, QWEN25_7B, 192.0)?;
+    assert!(largest > 5.0e4, "fixture must exceed the mask range, got {largest}");
     // Fixed KV chunks: 256 tokens (the screened size) and 64 tokens (many
     // chunks per row at both context lengths).
     for chunk in [256, 64] {
@@ -425,7 +429,7 @@ fn flashinfer_rows_are_batch_invariant_and_close_to_the_page_path() -> TestResul
             check_geometry(&runtime, heads, 20, 24, None)?;
             check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15))?;
         }
-        check_high_amplitude_against_f64(&runtime, 64)?;
+        check_high_amplitude_against_f64(&runtime, HIGH_AMPLITUDE_D64, 12.0)?;
         println!("kv_chunk={chunk} done");
     }
     set_native_flashinfer_kv_chunk(0);
@@ -759,23 +763,40 @@ fn check_geometry(
     Ok(())
 }
 
+const HIGH_AMPLITUDE: Heads = Heads {
+    query: 32,
+    key_value: 8,
+    head: 128,
+};
+const HIGH_AMPLITUDE_D64: Heads = Heads {
+    query: 32,
+    key_value: 8,
+    head: 64,
+};
+const QWEN25_7B: Heads = Heads {
+    query: 28,
+    key_value: 4,
+    head: 128,
+};
+
 // A large cross-mode difference is not by itself an accuracy oracle. Check
 // the high-amplitude fixture that exceeded the page-path proximity bound
 // against a separately implemented f64 softmax over the actual BF16 inputs.
-fn check_high_amplitude_against_f64(runtime: &CudaRuntime, head: usize) -> TestResult {
+// Queries and keys are uniform in [-amplitude / 2, amplitude / 2]; returns
+// the largest |QK| (before scaling) of the checked rows.
+fn check_high_amplitude_against_f64(
+    runtime: &CudaRuntime,
+    heads: Heads,
+    amplitude: f32,
+) -> TestResult<f64> {
     let context = runtime.device(0)?.create_context()?;
     let mut stream = context.create_stream()?;
     let mut staging = context.allocate_pinned_host_buffer(128 << 20)?;
-    let heads = Heads {
-        query: 32,
-        key_value: 8,
-        head,
-    };
     let pages_per_sequence = 60;
     let physical_blocks = SEQUENCES * pages_per_sequence;
     let seed = 0x9e37_79b9_7f4a_7c15;
     let elements = physical_blocks * heads.key_value * PAGE_SIZE * heads.head;
-    let keys = random_pattern(elements, seed, 12.0);
+    let keys = random_pattern(elements, seed, amplitude);
     let values = random_pattern(elements, seed ^ 0xd1b5_4a32_d192_ed03, 2.0);
     let offsets: Vec<u32> = (0..=SEQUENCES)
         .map(|s| (s * pages_per_sequence) as u32)
@@ -787,7 +808,7 @@ fn check_high_amplitude_against_f64(runtime: &CudaRuntime, head: usize) -> TestR
     let pools = Pools {
         heads,
         random_seed: Some(seed),
-        random_scale: 12.0,
+        random_scale: amplitude,
         graph: false,
         pages_per_sequence,
         page_capacity: 64,
@@ -866,8 +887,9 @@ fn check_high_amplitude_against_f64(runtime: &CudaRuntime, head: usize) -> TestR
     let mut candidate_error = 0.0_f64;
     let mut page_error = 0.0_f64;
     let mut checked = 0;
+    let mut largest_logit = 0.0_f64;
     for row in sampled {
-        let query = decode(&row_query(row, heads.row_width(), Some(seed), 12.0));
+        let query = decode(&row_query(row, heads.row_width(), Some(seed), amplitude));
         let actual = decode(&candidate[&row]);
         let baseline = decode(&page[&row]);
         for head in 0..heads.query {
@@ -882,10 +904,11 @@ fn check_high_amplitude_against_f64(runtime: &CudaRuntime, head: usize) -> TestR
             let mut scores: Vec<f64> = (0..=row.position as usize)
                 .map(|token| {
                     let at = offset(token);
-                    (0..heads.head)
+                    let logit = (0..heads.head)
                         .map(|d| query[head * heads.head + d] * keys[at + d])
-                        .sum::<f64>()
-                        * f64::from(SCALE)
+                        .sum::<f64>();
+                    largest_logit = largest_logit.max(logit.abs());
+                    logit * f64::from(SCALE)
                 })
                 .collect();
             let maximum = scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
@@ -914,7 +937,7 @@ fn check_high_amplitude_against_f64(runtime: &CudaRuntime, head: usize) -> TestR
         "high-amplitude attention differs from f64 reference by {candidate_error}"
     );
     println!(
-        "high_amplitude_f64 elements={checked} candidate_max_abs={candidate_error} page_max_abs={page_error}"
+        "high_amplitude_f64 heads={heads:?} amplitude={amplitude} max_raw_logit={largest_logit} elements={checked} candidate_max_abs={candidate_error} page_max_abs={page_error}"
     );
     let Pools {
         key_pool,
@@ -931,5 +954,5 @@ fn check_high_amplitude_against_f64(runtime: &CudaRuntime, head: usize) -> TestR
     stream.close()?;
     context.synchronize()?;
     context.close()?;
-    Ok(())
+    Ok(largest_logit)
 }

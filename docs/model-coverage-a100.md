@@ -1117,14 +1117,14 @@ GSM8K test 1319문항, train 첫 네 예제로 4-shot, greedy, max_tokens 256, s
 | Qwen2.5-0.5B | 32.5 | 33.0 | −0.5 |
 | Qwen2.5-1.5B | 61.2 | 61.3 | −0.1 |
 | Qwen2.5-3B (`-eos`) | 69.8 | 70.7 | −0.9 |
-| Qwen2.5-7B | 85.6 | 86.5 | −0.9 |
+| Qwen2.5-7B (`-fi16`) | 86.3 | 86.2 | +0.1 |
 | Qwen2.5-14B | 86.6 | 86.5 | +0.1 |
 | Qwen2.5-Coder-1.5B (`-eos`) | 47.8 | 48.1 | −0.2 |
 | Qwen2.5-Coder-3B (`-eos`) | 68.2 | 68.0 | +0.2 |
-| Qwen2.5-Coder-7B | 75.4 | 75.0 | +0.4 |
+| Qwen2.5-Coder-7B (`-fi16`) | 75.9 | 76.2 | −0.3 |
 | Qwen2.5-Coder-14B (`-eos`) | 84.4 | 84.6 | −0.2 |
 | DeepSeek-R1-Distill-Qwen-1.5B (`-bos`) | 62.4 | 61.3 | +1.1 |
-| DeepSeek-R1-Distill-Qwen-7B (`-bos`) | 76.8 | 76.6 | +0.2 |
+| DeepSeek-R1-Distill-Qwen-7B (Riley `-fi16`, vLLM `-bos`) | 76.4 | 76.6 | −0.2 |
 | DeepSeek-R1-Distill-Qwen-14B (`-bos`) | 88.3 | 88.7 | −0.5 |
 | DeepSeek-R1-Distill-Llama-8B (`-bos`) | 67.2 | 42.9 | (vLLM 토크나이저 깨짐) |
 | Qwen3-0.6B | 38.7 | 38.2 | +0.5 |
@@ -1141,6 +1141,7 @@ GSM8K test 1319문항, train 첫 네 예제로 4-shot, greedy, max_tokens 256, s
 
 - R1-Llama-8B의 vLLM 값은 BOS를 붙이고 다시 디코드해도 42.9 %였다(BOS 없이 33.7 %). 원인은 transformers 5.19의 토크나이저 로드라서 vLLM 엔진 자체의 정확도로 볼 수 없다.
 - 정정 전 값(eos 누락, vLLM BOS 누락)은 같은 디렉터리의 라벨 없는 증거에 남겨 두었다.
+- `-fi16`은 6.6의 FlashInfer logit 범위 수정 뒤 재측정(`bin/riley-fi16`)이다. 수정 전 값은 Qwen2.5-7B 85.6 / 86.5, Coder-7B 75.4 / 75.0, R1-Qwen-7B Riley 76.8이었다.
 
 ### 6.3 HF BF16(sdpa) 대비 토큰 일치
 
@@ -1151,11 +1152,11 @@ GSM8K test 첫 200문항을 0-shot `Question: ...\nAnswer:`로, max 128토큰, g
 | Qwen2.5-0.5B | 51 | 49 | 29 |
 | Qwen2.5-1.5B | 79 | 71 | 1 |
 | Qwen2.5-3B (`-eos`) | 92 | 95 | 76 |
-| Qwen2.5-7B | 40 | 90 | 0 |
+| Qwen2.5-7B (`-fi16`) | 88 | 94 | 0 |
 | Qwen2.5-14B | 79 | 78 | 79 |
 | Qwen2.5-Coder-1.5B (`-eos`) | 120 | 121 | 64 |
 | Qwen2.5-Coder-3B (`-eos`) | 134 | 137 | 115 |
-| Qwen2.5-Coder-7B | 120 | 148 | 116 |
+| Qwen2.5-Coder-7B (`-fi16`) | 159 | 149 | 116 |
 | Qwen2.5-Coder-14B (`-eos`) | 151 | 146 | 140 |
 | Qwen3-0.6B | 76 | 73 | 64 |
 | Qwen3-1.7B | 94 | 81 | 74 |
@@ -1169,9 +1170,9 @@ GSM8K test 첫 200문항을 0-shot `Question: ...\nAnswer:`로, max 128토큰, g
 | Llama-3.2-3B | 111 | 112 | 109 |
 | Llama-3.1-8B | 81 | 81 | 78 |
 
-- 20개 모델 중 18개는 Riley와 vLLM의 차이가 ±13 이내이고 어느 쪽도 일관되게 앞서지 않는다.
-- 열린 항목: hidden 3584인 Qwen2.5-7B(40 vs 90)와 Qwen2.5-Coder-7B(120 vs 148)는 Riley가 뚜렷하게 낮다. GSM8K 차이는 −0.9 / +0.4 pt로 작아서 정확도 문제로는 보이지 않지만, 이 크기의 GEMM 구성에서 누산 정밀도가 HF와 덜 맞는지 아직 확인하지 않았다.
-- DeepSeek-R1-Distill은 표에서 뺐다. HF 기준에 BOS를 붙이면 vLLM(BOS 없음)과 비교가 성립하지 않고, R1-Llama는 HF 토크나이저 자체가 깨져 Riley·vLLM 모두 0이다. Riley 단독 값은 R1-Qwen 1.5B 82, 7B 17, 14B 122다.
+- 20개 모델 모두 Riley와 vLLM의 차이가 ±13 이내이고 어느 쪽도 일관되게 앞서지 않는다.
+- `-fi16` 행은 6.6의 수정 뒤 값이다. 수정 전 Riley는 Qwen2.5-7B 40, Coder-7B 120이었다(그때 vLLM 90, 148). 같은 프롬프트를 다시 돌린 vLLM도 90→94, 148→149로 조금 움직였다. 동시성 32에서 배치 구성이 매번 달라서다.
+- DeepSeek-R1-Distill은 표에서 뺐다. HF 기준에 BOS를 붙이면 vLLM(BOS 없음)과 비교가 성립하지 않고, R1-Llama는 HF 토크나이저 자체가 깨져 Riley·vLLM 모두 0이다. Riley 단독 값은 R1-Qwen 1.5B 82, 7B 80(`-fi16`, 수정 전 17), 14B 122다.
 
 ### 6.4 Qwen3-14B와 DeepSeek-R1-Distill-Llama-8B
 
@@ -1188,3 +1189,17 @@ GSM8K test 첫 200문항을 0-shot `Question: ...\nAnswer:`로, max 128토큰, g
   - C1은 처리량 3–5 %, C8은 1–4 % 뒤처지고 TPOT은 둘 다 4–5 % 길다. C16은 fixed가 앞서고 natural은 TPOT +1.1 %다. 그래서 필수 기준은 미충족이다.
   - 모든 셀에서 반복·동시성에 관계없이 출력이 같다.
 - 설계, 개선 시도(GEMM 표 항목 추가 +1.1 %, 복사 통합 기각)와 다음 후보는 [tensor-parallel 설계](tensor-parallel-design.md#status-2026-10-31)에 있다.
+
+### 6.6 Qwen2.5-7B 계열의 낮은 HF 일치: FlashInfer logit 범위 (2026-11-01)
+
+6.3의 Qwen2.5-7B(Riley 40 vs vLLM 90)와 Coder-7B(120 vs 148)를 따라간 결과, 원인은 GEMM이 아니라 어텐션이었다.
+
+- **원인:** vendored FlashInfer 0.6.16.post3은 마스크 값과 running max 초기값에 진짜 무한대 대신 `-math::inf = -5e4`(`math.cuh`)를 쓴다. 이 값은 스케일 전 raw QK 단위다. Qwen2.5-7B(heads 28/4, D128)는 L00에서 |QK|가 4–5e4, 마지막 층 L27에서 약 1.05e5에 이른다. 그 범위의 정상 logit이 마스크된 값처럼 처리돼, L27 어텐션 출력이 FP64 기준과 약 50 % 달랐다. FA2 경로와 HF에는 이 한계가 없다. Riley의 native 프로필(`fixed-tile-unsplit-v1`)은 prefill과 decode 모두 이 FlashInfer 커널을 쓴다.
+- **수정:** `kernels/src/fi_attention.cu`의 variant가 raw logit을 마스크 전에 2⁴로 나누고 지수 스케일 `sm_scale_log2`에 2⁴를 곱한다. 둘 다 2의 거듭제곱이라, 기존에 맞게 처리되던 logit은 `s * sm_scale_log2`와 running max가 비트 단위로 같다. 쓸 수 있는 범위는 |QK| < 8e5로 넓어진다.
+- **테스트:** `crates/riley-cuda/tests/flashinfer_attention_gpu.rs`에 Qwen2.5-7B 모양(28/4/128, 진폭 192, 최대 raw logit 158263) 케이스를 넣었다. FP64 기준 대비 최대 오차가 수정 전 소스에서 1.0(실패), 수정본에서 0.0019(통과, 허용 0.0078)다. 기존 32/8/128·32/8/64 케이스와 배치 불변 검사도 그대로 통과한다.
+- **FP32 기준(Qwen2.5-7B, 200개 중 128토큰 일치):** Riley 35 → 87. 같은 기준에서 vLLM 98, HF BF16 sdpa 86이다. 첫 토큰부터 다른 프롬프트는 23 → 5다.
+- **HF sdpa 일치(6.3, `-fi16`):** Qwen2.5-7B 40 → 88(vLLM 94), Coder-7B 120 → 159(vLLM 149), R1-Distill-Qwen-7B 17 → 80. GSM8K는 86.3 / 75.9 / 76.4 %로 수정 전과 1 pt 안쪽이다(6.2).
+- **다른 모델:** Qwen2.5-14B, Llama-3.1-8B, Qwen3-8B는 수정 전후 200개 출력이 모두 같다. 이 모델들의 logit은 원래 5e4 안쪽이다.
+- **속도:** Qwen2.5-7B, 서버 시작 포함 200요청 2회씩 수정 전 144.1 / 145.0초, 수정본 144.2 / 143.4초. 성능 표의 7B 계열 값은 수정 전 바이너리로 잰 것이고, 정식 8셀 재측정은 하지 않았다.
+- **열린 항목(기본 경로 아님):** page 어텐션 경로(`staged_attention_score`, `staged_decode_score`)는 HF eager 계약대로 점수를 BF16으로 두 번 반올림한다. Qwen2.5-7B에서 page-v1 모드는 FP32 일치 8이고, 점수 staging을 뺀 실험 빌드는 82다. 같은 고진폭 테스트에서 page 경로 오차는 0.99다. 기본 native 프로필은 이 경로를 쓰지 않는다.
+- 증거: 호스트 `evidence/quality-{q25-7b,coder-7b,r1-qwen-7b}-fi16`(`agreement-sdpa.json`은 같은 라벨의 수정 전 `hf-sdpa.json`을 복사해 계산), 진단 스크립트 `tmp-diff/hf7b/`(`attnerr*.py`, `fp32ref.py`, `pos0.py`, `bis*.sh`).

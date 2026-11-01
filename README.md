@@ -105,9 +105,13 @@ Details are in the [tensor-parallel design](docs/tensor-parallel-design.md#statu
 GSM8K (1319 questions, 4-shot, greedy) on the same servers, Riley / vLLM:
 the two engines are within 1.2 points on every model except where vLLM's
 tokenizer is broken (DeepSeek-R1-Distill-Llama-8B: Riley 67.2 %, vLLM 42.9 %,
-see below). For example Qwen2.5-7B 85.6 / 86.5 %, Qwen3-8B 87.7 / 87.6 %,
+see below). For example Qwen2.5-7B 86.3 / 86.2 %, Qwen3-8B 87.7 / 87.6 %,
 Qwen3-14B 91.1 / 91.7 %, Llama-3.1-8B 77.3 / 78.0 %. Every model is listed in
 [model coverage, section 6](docs/model-coverage-a100.md#6-품질과-큰-모델-2026-10-31).
+Token agreement with Hugging Face BF16 is in the same range as vLLM's on all
+20 compared models, after a fix for FlashInfer's finite mask value, which
+Qwen2.5-7B's attention logits exceeded
+([section 6.6](docs/model-coverage-a100.md#66-qwen25-7b-계열의-낮은-hf-일치-flashinfer-logit-범위-2026-11-01)).
 
 Older campaigns (RTX 4090, Qwen3-4B kernel experiments, rejected candidates)
 are kept in the [performance experiment log](docs/performance-experiments.md).

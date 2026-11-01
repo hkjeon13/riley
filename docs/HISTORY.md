@@ -242,11 +242,14 @@ The method mattered as much as any single change.
 - BF16 only, no quantisation. The A100 campaign (October) added 24 qualified
   models and a chat-completions endpoint; tensor parallelism over two A100s
   runs Qwen2.5-32B but is still 1–5 % behind vLLM at one and eight clients.
-- Quality checks (GSM8K and HF agreement, October 31) found measurement
-  mistakes rather than engine errors: vLLM applied the checkpoint's sampling
-  defaults, the HF eager reference disagreed with sdpa and FP32, some
-  manifests lacked `generation_config.json`, and DeepSeek-R1-Distill's BOS
-  was dropped by transformers 5.19. The corrected numbers are in
+- Quality checks (GSM8K and HF agreement, October 31) found mostly
+  measurement mistakes: vLLM applied the checkpoint's sampling defaults, the
+  HF eager reference disagreed with sdpa and FP32, some manifests lacked
+  `generation_config.json`, and DeepSeek-R1-Distill's BOS was dropped by
+  transformers 5.19. One was an engine error (November 1): FlashInfer's finite
+  `-5e4` mask value, in raw QK units, was smaller than Qwen2.5-7B's
+  last-layer logits (about 1e5). A power-of-two rescale fixed it without
+  changing any other model's output. The corrected numbers are in
   [model coverage, section 6](model-coverage-a100.md#6-품질과-큰-모델-2026-10-31).
 - The 30-minute soak has not been repeated on the final Qwen2.5-3B build.
 

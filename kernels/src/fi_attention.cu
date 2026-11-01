@@ -92,10 +92,31 @@ struct PagedParams {
   }
 };
 
-using Variant = flashinfer::DefaultAttention</*use_custom_mask=*/false,
-                                             /*use_sliding_window=*/false,
-                                             /*use_logits_soft_cap=*/false,
-                                             /*use_alibi=*/false>;
+// FlashInfer masks logits and seeds the running maximum with a finite
+// -math::inf (-5e4) in raw QK units, so a real logit beyond that range is
+// taken for a masked one. Qwen2.5-7B's last layer reaches |QK| ~ 1.05e5 and
+// its attention output was then about 50 % off. The variant divides each raw
+// logit by 2^4 before the mask and multiplies the exponent scale by 2^4. Both
+// factors are exact powers of two, so s * sm_scale_log2 (and the running
+// maximum) are bit-identical to the default variant for every logit the
+// default handled correctly, and the usable range grows to |QK| < 8e5.
+constexpr float kLogitRangeShift = 16.0F;
+
+using DefaultVariant = flashinfer::DefaultAttention</*use_custom_mask=*/false,
+                                                    /*use_sliding_window=*/false,
+                                                    /*use_logits_soft_cap=*/false,
+                                                    /*use_alibi=*/false>;
+
+struct Variant : DefaultVariant {
+  template <typename Params>
+  __device__ __host__ Variant(const Params& params, uint32_t batch_idx, uint8_t* smem_ptr)
+      : DefaultVariant(params, batch_idx, smem_ptr) {
+    sm_scale_log2 *= kLogitRangeShift;
+  }
+
+  REGISTER_LOGITS_TRANSFORM(params, logits, batch_idx, qo_idx, kv_idx, qo_head_idx, kv_head_idx,
+                            { return logits * (1.0F / kLogitRangeShift); })
+};
 
 // Fixed KV chunk in tokens (a multiple of the page size), or 0 for no KV
 // split, from RILEY_NATIVE_FLASHINFER_KV_CHUNK. A row's chunks start at
