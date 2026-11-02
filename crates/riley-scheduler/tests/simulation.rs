@@ -1325,3 +1325,273 @@ fn long_run_reclaims_kv_and_bounds_tombstones_and_metric_windows() {
         Some(RequestState::Finished)
     );
 }
+
+fn cached_scheduler(config: SchedulerConfig, physical_blocks: usize, max: usize) -> Scheduler {
+    let mut scheduler = scheduler_with(config, physical_blocks);
+    scheduler.enable_prefix_cache(max).expect("prefix cache");
+    scheduler
+}
+
+fn wide_config() -> SchedulerConfig {
+    let mut config = compact_config();
+    config.iteration_token_budget = 64;
+    config.max_prefill_chunk_tokens = 64;
+    config
+}
+
+fn settle_plan(
+    scheduler: &mut Scheduler,
+    plan: &IterationPlan,
+    clock: &mut u64,
+) -> Vec<RequestCompletion> {
+    let outputs = plan
+        .prefill_items()
+        .iter()
+        .chain(plan.decode_items())
+        .filter_map(WorkItem::output_slot)
+        .map(|slot| IterationOutput::new(slot, 1000 + slot.get(), false))
+        .collect();
+    let result = IterationResult::new(plan.iteration_id(), outputs, 1, 0).expect("result");
+    *clock += 1;
+    let updates = scheduler.complete_iteration(&result, *clock).expect("commit");
+    *clock += 1;
+    let (_, finished, failures) = updates.into_parts();
+    assert!(failures.is_empty());
+    finished
+}
+
+fn run_to_completion(scheduler: &mut Scheduler, clock: &mut u64) -> Vec<RequestCompletion> {
+    let mut completions = Vec::new();
+    loop {
+        let (plan, mut finished) = scheduler
+            .plan_iteration(*clock)
+            .expect("plan")
+            .into_parts();
+        completions.append(&mut finished);
+        let Some(plan) = plan else {
+            return completions;
+        };
+        completions.append(&mut settle_plan(scheduler, &plan, clock));
+    }
+}
+
+#[test]
+fn a_repeated_prompt_reuses_full_blocks_and_always_runs_its_last_token() {
+    let mut scheduler = cached_scheduler(wide_config(), 64, 64);
+    let mut clock = 1;
+    let shared = prompt(1, 40);
+    scheduler
+        .submit(RequestDescriptor::new(shared.clone(), 2), clock)
+        .expect("first");
+    let first = run_to_completion(&mut scheduler, &mut clock);
+    assert_eq!(first[0].cached_prompt_tokens(), 0);
+    assert_eq!(scheduler.metrics_snapshot().unwrap().gauges.prefix_cache_blocks, 2);
+    assert_eq!(scheduler.metrics_snapshot().unwrap().gauges.allocated_kv_blocks, 0);
+
+    // Same 40 tokens: two listed blocks, 8 tokens to run.
+    scheduler
+        .submit(RequestDescriptor::new(shared.clone(), 2), clock)
+        .expect("second");
+    let plan = take_plan(&mut scheduler, clock);
+    assert_eq!(plan.prefill_items().len(), 1);
+    assert_eq!(plan.prefill_items()[0].input_tokens(), &shared[32..]);
+    assert_eq!(plan.prefill_items()[0].target_logical_length(), 40);
+    assert_eq!(plan.block_tables()[0].physical_block_ids().len(), 3);
+    settle_plan(&mut scheduler, &plan, &mut clock);
+    let second = run_to_completion(&mut scheduler, &mut clock);
+    assert_eq!(second[0].cached_prompt_tokens(), 32);
+
+    // A prompt of exactly two blocks keeps its last token out of the cache.
+    scheduler
+        .submit(RequestDescriptor::new(shared[..32].to_vec(), 1), clock)
+        .expect("aligned");
+    let plan = take_plan(&mut scheduler, clock);
+    assert_eq!(plan.prefill_items()[0].input_tokens(), &shared[16..32]);
+    let aligned = settle_plan(&mut scheduler, &plan, &mut clock);
+    assert_eq!(aligned[0].cached_prompt_tokens(), 16);
+    let metrics = scheduler.metrics_snapshot().unwrap();
+    assert_eq!(metrics.prefix_cache_hit_tokens, 48);
+
+    // One changed token inside the second block stops the reuse there.
+    let mut changed = shared.clone();
+    changed[20] = 9_999;
+    scheduler
+        .submit(RequestDescriptor::new(changed, 1), clock)
+        .expect("changed");
+    let result = run_to_completion(&mut scheduler, &mut clock);
+    assert_eq!(result[0].cached_prompt_tokens(), 16);
+    let closed = scheduler.close(clock, None).expect("close");
+    assert_eq!(closed.final_metrics().gauges.prefix_cache_blocks, 0);
+    assert_eq!(closed.final_metrics().gauges.allocated_kv_blocks, 0);
+}
+
+#[test]
+fn requests_running_together_share_blocks_and_finish_in_any_order() {
+    let mut scheduler = cached_scheduler(wide_config(), 64, 64);
+    let mut clock = 1;
+    let shared = prompt(1, 32);
+    scheduler
+        .submit(RequestDescriptor::new(shared.clone(), 1), clock)
+        .expect("seed");
+    run_to_completion(&mut scheduler, &mut clock);
+
+    let mut ids = Vec::new();
+    for length in [3_usize, 9] {
+        let mut request = shared.clone();
+        request.extend(prompt(500 + u32::try_from(length).unwrap(), length));
+        let submission = scheduler
+            .submit(RequestDescriptor::new(request, length), clock)
+            .expect("reader");
+        ids.push(submission.request_id());
+    }
+    let plan = take_plan(&mut scheduler, clock);
+    let tables = plan.block_tables();
+    assert_eq!(
+        tables[0].physical_block_ids()[..2],
+        tables[1].physical_block_ids()[..2]
+    );
+    assert_ne!(
+        tables[0].physical_block_ids()[2],
+        tables[1].physical_block_ids()[2]
+    );
+    settle_plan(&mut scheduler, &plan, &mut clock);
+    let finished = run_to_completion(&mut scheduler, &mut clock);
+    assert_eq!(finished.len(), 2);
+    assert!(finished.iter().all(|done| done.cached_prompt_tokens() == 32));
+    assert_eq!(scheduler.metrics_snapshot().unwrap().gauges.allocated_kv_blocks, 0);
+}
+
+#[test]
+fn prompt_blocks_listed_by_one_chunk_serve_a_request_that_has_not_started() {
+    let mut config = compact_config();
+    config.max_prefill_chunk_tokens = 16;
+    config.iteration_token_budget = 16;
+    let mut scheduler = cached_scheduler(config, 64, 64);
+    let mut clock = 1;
+    let shared = prompt(1, 33);
+    scheduler
+        .submit(RequestDescriptor::new(shared.clone(), 1), clock)
+        .expect("first");
+    scheduler
+        .submit(RequestDescriptor::new(shared.clone(), 1), clock)
+        .expect("second");
+    let finished = run_to_completion(&mut scheduler, &mut clock);
+    assert_eq!(finished.len(), 2);
+    let reused: usize = finished
+        .iter()
+        .map(RequestCompletion::cached_prompt_tokens)
+        .sum();
+    assert_eq!(reused, 16, "the second request starts after the first block");
+}
+
+#[test]
+fn listed_blocks_yield_to_admitted_requests() {
+    let mut config = compact_config();
+    config.max_promised_kv_blocks = 4;
+    let mut scheduler = cached_scheduler(config, 4, 4);
+    let mut clock = 1;
+    scheduler
+        .submit(RequestDescriptor::new(prompt(1, 49), 1), clock)
+        .expect("seed");
+    run_to_completion(&mut scheduler, &mut clock);
+    assert_eq!(scheduler.metrics_snapshot().unwrap().gauges.prefix_cache_blocks, 3);
+
+    scheduler
+        .submit(RequestDescriptor::new(prompt(100, 63), 1), clock)
+        .expect("unrelated");
+    let finished = run_to_completion(&mut scheduler, &mut clock);
+    assert_eq!(finished.len(), 1);
+    assert_eq!(finished[0].reason(), RequestFinishReason::Length);
+    let metrics = scheduler.metrics_snapshot().unwrap();
+    assert!(metrics.prefix_cache_evicted_blocks >= 3);
+    assert_eq!(metrics.gauges.allocated_kv_blocks, 0);
+}
+
+#[test]
+fn a_device_failure_empties_the_cache_and_readers_keep_their_blocks() {
+    let mut scheduler = cached_scheduler(compact_config(), 64, 64);
+    let mut clock = 1;
+    let shared = prompt(1, 40);
+    scheduler
+        .submit(RequestDescriptor::new(shared.clone(), 1), clock)
+        .expect("seed");
+    run_to_completion(&mut scheduler, &mut clock);
+
+    scheduler
+        .submit(RequestDescriptor::new(shared.clone(), 3), clock)
+        .expect("reader");
+    let plan = take_plan(&mut scheduler, clock);
+    clock += 1;
+    scheduler
+        .abort_iteration(
+            plan.iteration_id(),
+            ExecutionAbort::DeviceQuiescedMutationUnknown,
+            clock,
+        )
+        .expect("abort");
+    let metrics = scheduler.metrics_snapshot().unwrap();
+    assert_eq!(metrics.gauges.prefix_cache_blocks, 0);
+    assert_eq!(metrics.gauges.allocated_kv_blocks, 0);
+    assert_eq!(scheduler.pool_stats().allocated_block_count(), 0);
+
+    scheduler
+        .submit(RequestDescriptor::new(shared, 1), clock)
+        .expect("after failure");
+    let finished = run_to_completion(&mut scheduler, &mut clock);
+    assert_eq!(finished[0].cached_prompt_tokens(), 0);
+}
+
+#[test]
+fn a_waiting_reader_never_continues_from_an_entry_of_the_emptied_cache() {
+    let mut config = wide_config();
+    config.iteration_token_budget = 33;
+    config.max_prefill_chunk_tokens = 33;
+    let mut scheduler = cached_scheduler(config, 64, 64);
+    let mut clock = 1;
+    let shared = prompt(1, 40);
+    scheduler
+        .submit(RequestDescriptor::new(shared.clone(), 1), clock)
+        .expect("seed");
+    run_to_completion(&mut scheduler, &mut clock);
+
+    // Ahead in the queue and failing; the reader behind it has adopted the
+    // listed blocks but is not in the failing plan.
+    scheduler
+        .submit(RequestDescriptor::new(prompt(300, 33), 1), clock)
+        .expect("failing");
+    scheduler
+        .submit(RequestDescriptor::new(shared.clone(), 1), clock)
+        .expect("reader");
+    let plan = take_plan(&mut scheduler, clock);
+    assert_eq!(plan.prefill_items().len(), 1);
+    clock += 1;
+    let aborted = scheduler
+        .abort_iteration(
+            plan.iteration_id(),
+            ExecutionAbort::DeviceQuiescedMutationUnknown,
+            clock,
+        )
+        .expect("abort");
+    assert_eq!(aborted.completions().len(), 1);
+
+    // New entries reuse the emptied index positions.
+    let mut other = prompt(700, 48);
+    other.push(1);
+    scheduler
+        .submit(RequestDescriptor::new(other, 1), clock)
+        .expect("refill");
+    let finished = run_to_completion(&mut scheduler, &mut clock);
+    assert_eq!(finished.len(), 2);
+    assert!(finished.iter().any(|done| done.cached_prompt_tokens() == 32));
+    assert!(finished.iter().any(|done| done.cached_prompt_tokens() == 0));
+    assert_eq!(scheduler.metrics_snapshot().unwrap().gauges.allocated_kv_blocks, 0);
+}
+
+#[test]
+fn prefix_cache_settings_fail_closed() {
+    let mut scheduler = scheduler_with(compact_config(), 64);
+    assert!(scheduler.enable_prefix_cache(0).is_err());
+    assert!(scheduler.enable_prefix_cache(65).is_err());
+    scheduler.set_atomic_prefill_chunks(true).expect("atomic");
+    assert!(scheduler.enable_prefix_cache(8).is_err());
+}

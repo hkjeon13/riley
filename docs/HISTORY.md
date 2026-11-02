@@ -257,6 +257,15 @@ The method mattered as much as any single change.
 - The 30-minute soak was repeated on the final build (November 1, Qwen2.5-7B,
   32 clients, server defaults): 48,931 requests without an error, no
   throughput decay, GPU memory and RSS flat, clean exit.
+- The [prefix cache](prefix-cache.md) (November 2) was the first speed-up that
+  applies to every model. The paged KV table made sharing a matter of reference
+  counts, and a probe showed prefill output independent of its split before any
+  code was written. Three separate block alias checks assumed every block was
+  unique and had to be narrowed to written blocks. The first eight-prefix run
+  had no hits at one client, because the 64-block pool was smaller than the
+  prefixes; the cache's blocks are now added to the default pool. On Qwen2.5-7B
+  at 32 clients throughput went from 765 to 2156 tok/s, with outputs identical
+  in all 20 cells.
 
 The measurement logs behind this book were removed from the tree to keep the
 repository small. They remain in the git history at commit `f90683ec`, under

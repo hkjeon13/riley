@@ -2673,6 +2673,21 @@ mod cuda_backend {
             Ok(self)
         }
 
+        /// Keeps up to `max_blocks` prompt KV blocks for later requests.
+        ///
+        /// # Errors
+        ///
+        /// Returns the scheduler's configuration error for an invalid bound.
+        pub fn with_prefix_cache(
+            mut self,
+            max_blocks: Option<usize>,
+        ) -> Result<Self, riley_scheduler::SchedulerError> {
+            if let Some(max_blocks) = max_blocks {
+                self.scheduler.enable_prefix_cache(max_blocks)?;
+            }
+            Ok(self)
+        }
+
         /// Loaded model metadata copied before resources move to the worker.
         #[must_use]
         pub const fn metadata(&self) -> &ModelMetadata {
@@ -3055,7 +3070,11 @@ mod cuda_backend {
                         u64::try_from(completion.generated_token_ids().len())
                             .map_err(|_| internal("completion token count overflowed"))?,
                     )
-                    .map_err(|_| internal("usage arithmetic overflowed"))?;
+                    .map_err(|_| internal("usage arithmetic overflowed"))?
+                    .with_cached_prompt_tokens(
+                        u64::try_from(completion.cached_prompt_tokens())
+                            .map_err(|_| internal("cached token count overflowed"))?,
+                    );
                     let reason = match completion.reason() {
                         RequestFinishReason::Length => FinishReason::Length,
                         RequestFinishReason::Stop => FinishReason::Stop,

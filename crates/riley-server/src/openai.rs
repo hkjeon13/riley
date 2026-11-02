@@ -603,6 +603,16 @@ pub struct CompletionUsage {
     pub completion_tokens: u64,
     /// Sum of prompt and generated token counts.
     pub total_tokens: u64,
+    /// Present when the prefix cache served part of the prompt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens_details: Option<PromptTokensDetails>,
+}
+
+/// OpenAI-compatible breakdown of the prompt token count.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct PromptTokensDetails {
+    /// Prompt tokens served from the prefix cache.
+    pub cached_tokens: u64,
 }
 
 impl From<TokenUsage> for CompletionUsage {
@@ -611,6 +621,11 @@ impl From<TokenUsage> for CompletionUsage {
             prompt_tokens: value.prompt_tokens(),
             completion_tokens: value.completion_tokens(),
             total_tokens: value.total_tokens(),
+            prompt_tokens_details: (value.cached_prompt_tokens() != 0).then(|| {
+                PromptTokensDetails {
+                    cached_tokens: value.cached_prompt_tokens(),
+                }
+            }),
         }
     }
 }

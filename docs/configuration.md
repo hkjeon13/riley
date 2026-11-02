@@ -81,6 +81,14 @@ in the last bits:
 The D128 backend accepts only the Qwen2.5-3B attention geometry and a step
 budget of at most 256. Other models use the default backend.
 
+## Prefix cache
+
+`--prefix-cache-blocks N` keeps up to N prompt KV blocks for requests that
+start with the same tokens. It needs `--decode-attention-producer tensor-core-v1`,
+which both `--inference-profile` values set. N blocks are added to the default
+`--kv-blocks`; with an explicit `--kv-blocks` the cache shares that pool. It is
+off by default. See [prefix-cache.md](prefix-cache.md).
+
 ## Recommended configuration for Qwen2.5-3B
 
 This is the configuration behind [performance.md](performance.md):

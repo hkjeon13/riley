@@ -23,6 +23,7 @@ use crate::plan::{
     IterationId, IterationOutput, IterationPlan, IterationResult, OutputSlot, OwnedBlockTable,
     RequestId, WorkItem, WorkKind,
 };
+use crate::prefix_cache::{EntryId, PrefixCache, ROOT};
 
 /// Model-token input and bounded output capacity for one request.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -111,6 +112,7 @@ pub struct RequestCompletion {
     request_id: RequestId,
     reason: RequestFinishReason,
     generated_token_ids: Vec<u32>,
+    cached_prompt_tokens: usize,
     completed_at_ns: u64,
 }
 
@@ -128,6 +130,12 @@ impl RequestCompletion {
     #[must_use]
     pub fn generated_token_ids(&self) -> &[u32] {
         &self.generated_token_ids
+    }
+
+    /// Prompt tokens served from the prefix cache instead of being executed.
+    #[must_use]
+    pub const fn cached_prompt_tokens(&self) -> usize {
+        self.cached_prompt_tokens
     }
 
     #[must_use]
@@ -444,6 +452,12 @@ struct RequestRecord {
     sequence: Option<SequenceState>,
     cancellation_deferred: bool,
     plateau_deferred: bool,
+    cached_prompt_tokens: usize,
+    // Index entry of the sequence's last shared block.
+    prefix_tip: EntryId,
+    // False once `prefix_tip` stops being a place to continue from: another
+    // request listed this one's next block, or the index was emptied.
+    prefix_linked: bool,
 }
 
 impl RequestRecord {
@@ -525,6 +539,7 @@ pub struct Scheduler {
     atomic_prefill_chunks: bool,
     prefill_coalescing: Option<PrefillCoalescingPolicy>,
     prefill_burst: Option<PrefillBurstPolicy>,
+    prefix_cache: Option<PrefixCache>,
     inflight: Option<InflightPlan>,
     metrics: SchedulerMetrics,
     metrics_degraded: bool,
@@ -665,6 +680,7 @@ impl Scheduler {
             atomic_prefill_chunks: false,
             prefill_coalescing: None,
             prefill_burst: None,
+            prefix_cache: None,
             inflight: None,
             metrics,
             metrics_degraded: false,
@@ -730,6 +746,41 @@ impl Scheduler {
     ) -> SchedulerResult<()> {
         let budget = self.config.iteration_token_budget;
         self.prefill_burst = policy.map(|policy| policy.validate(budget)).transpose()?;
+        Ok(())
+    }
+
+    /// Keeps up to `max_blocks` full prompt blocks for later requests.
+    ///
+    /// A request that starts with listed tokens reuses their KV blocks and
+    /// executes only the rest of its prompt. Listed blocks stay in the pool
+    /// until admitted requests need the room, so the cache never costs a
+    /// request its promise.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SchedulerError::InvalidConfiguration`] for a zero bound or one
+    /// past the KV pool, after work has started, or with atomic prefill chunks,
+    /// whose complete prompts the cache would split.
+    pub fn enable_prefix_cache(&mut self, max_blocks: usize) -> SchedulerResult<()> {
+        if max_blocks == 0 || max_blocks > self.pool.layout().physical_block_count() {
+            return Err(SchedulerError::InvalidConfiguration {
+                field: "prefix_cache.max_blocks",
+                reason: "must be positive and within the physical KV pool",
+            });
+        }
+        if self.atomic_prefill_chunks {
+            return Err(SchedulerError::InvalidConfiguration {
+                field: "prefix_cache",
+                reason: "atomic prefill chunks need the whole prompt executed",
+            });
+        }
+        if !self.requests.is_empty() {
+            return Err(SchedulerError::InvalidConfiguration {
+                field: "prefix_cache",
+                reason: "must be enabled before the first request",
+            });
+        }
+        self.prefix_cache = Some(PrefixCache::new(max_blocks)?);
         Ok(())
     }
 
@@ -877,6 +928,9 @@ impl Scheduler {
             sequence: None,
             cancellation_deferred: false,
             plateau_deferred: false,
+            cached_prompt_tokens: 0,
+            prefix_tip: ROOT,
+            prefix_linked: true,
         };
 
         let state = if can_admit {
@@ -930,6 +984,7 @@ impl Scheduler {
         )?;
         self.expire_waiting(now_ns)?;
         self.admit_waiting(now_ns)?;
+        self.adopt_cached_prefixes()?;
 
         let (candidates, used_aging_override, plateau_deferred) = self.select_candidates(now_ns)?;
         if candidates.is_empty() {
@@ -1179,6 +1234,9 @@ impl Scheduler {
             return Err(SchedulerError::NoIterationInFlight);
         };
 
+        if abort == ExecutionAbort::DeviceQuiescedMutationUnknown {
+            self.drop_prefix_cache_entries()?;
+        }
         for item in inflight.items {
             let request_id = item.request_id;
             let previous_state = item.previous_state;
@@ -1347,6 +1405,7 @@ impl Scheduler {
                 "request cancellation",
             );
         }
+        self.drop_prefix_cache_entries()?;
         self.drain_completion_outbox_into(&mut completions);
         self.refresh_metric_gauges();
         Ok(completions)
@@ -1571,6 +1630,102 @@ impl Scheduler {
         }
     }
 
+    /// Gives requests that have not started the blocks of their prompt that
+    /// the cache lists. The last prompt token always runs, since its logits
+    /// choose the first output token.
+    fn adopt_cached_prefixes(&mut self) -> SchedulerResult<()> {
+        let Some(cache) = self.prefix_cache.as_mut() else {
+            return Ok(());
+        };
+        for record in &mut self.requests {
+            if record.state != RequestState::Admitted || !record.prefix_linked {
+                continue;
+            }
+            let Some(sequence) = record.sequence.as_mut() else {
+                continue;
+            };
+            let prompt = &record.descriptor.prompt_token_ids;
+            let reusable = prompt.len().saturating_sub(1) / KV_BLOCK_SIZE * KV_BLOCK_SIZE;
+            let adopted_from = record.prefill_cursor;
+            while record.prefill_cursor < reusable {
+                let start = record.prefill_cursor;
+                let tokens = &prompt[start..start + KV_BLOCK_SIZE];
+                let Some((entry, block)) = cache.find(record.prefix_tip, tokens)? else {
+                    break;
+                };
+                sequence.adopt_shared_block(&mut self.pool, block)?;
+                record.prefix_tip = entry;
+                record.prefill_cursor = start + KV_BLOCK_SIZE;
+            }
+            let adopted = record.prefill_cursor - adopted_from;
+            if adopted != 0 {
+                record.cached_prompt_tokens += adopted;
+                cache.touch_path(record.prefix_tip)?;
+                observe_metric(
+                    &mut self.metrics_degraded,
+                    self.metrics.record_prefix_cache_hit(adopted),
+                    "prefix cache hit",
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Lists the prompt blocks a committed prefill step has completed.
+    ///
+    /// A request stops listing at the first key another request listed
+    /// meanwhile: it holds a private copy of that block, not the listed one,
+    /// and entries below a block must be held together with it.
+    fn publish_prompt_blocks(&mut self, index: usize) -> SchedulerResult<()> {
+        let Some(cache) = self.prefix_cache.as_mut() else {
+            return Ok(());
+        };
+        let record = &mut self.requests[index];
+        let Some(sequence) = record.sequence.as_mut() else {
+            return Ok(());
+        };
+        let full_blocks = record.prefill_cursor / KV_BLOCK_SIZE;
+        let first = sequence.shared_block_count();
+        let mut next = first;
+        while record.prefix_linked && next < full_blocks {
+            let start = next * KV_BLOCK_SIZE;
+            let tokens = &record.descriptor.prompt_token_ids[start..start + KV_BLOCK_SIZE];
+            if cache.find(record.prefix_tip, tokens)?.is_some() {
+                record.prefix_linked = false;
+                break;
+            }
+            if !cache.has_room() {
+                if !cache.evict_one(&mut self.pool)? {
+                    record.prefix_linked = false;
+                    break;
+                }
+                observe_metric(
+                    &mut self.metrics_degraded,
+                    self.metrics.record_prefix_cache_eviction(),
+                    "prefix cache eviction",
+                );
+            }
+            let block = sequence.share_next_block(&mut self.pool)?;
+            record.prefix_tip = cache.insert(record.prefix_tip, tokens, block)?;
+            next += 1;
+        }
+        if next != first {
+            cache.touch_path(record.prefix_tip)?;
+        }
+        Ok(())
+    }
+
+    /// Unlists every block. Requests keep the blocks they hold.
+    fn drop_prefix_cache_entries(&mut self) -> SchedulerResult<()> {
+        if let Some(cache) = self.prefix_cache.as_mut() {
+            cache.clear(&mut self.pool)?;
+            for record in &mut self.requests {
+                record.prefix_linked = false;
+            }
+        }
+        Ok(())
+    }
+
     #[allow(clippy::too_many_lines)]
     fn select_candidates(
         &self,
@@ -1594,7 +1749,7 @@ impl Scheduler {
                             ready_since_ns: record.ready_since_ns,
                             remaining_tokens: remaining,
                             plateau_deferred: record.plateau_deferred,
-                            started: record.prefill_cursor != 0,
+                            started: record.state == RequestState::Prefilling,
                         });
                     }
                 }
@@ -1911,6 +2066,20 @@ impl Scheduler {
                     },
                 );
             };
+            let needed_blocks = sequence.additional_blocks_for(payload.target_logical_length);
+            if let Some(cache) = self.prefix_cache.as_mut() {
+                while self.pool.stats().free_block_count() < needed_blocks {
+                    match cache.evict_one(&mut self.pool) {
+                        Ok(true) => observe_metric(
+                            &mut self.metrics_degraded,
+                            self.metrics.record_prefix_cache_eviction(),
+                            "prefix cache eviction",
+                        ),
+                        Ok(false) => break,
+                        Err(error) => return self.rollback_prepared_plan(inflight_items, error),
+                    }
+                }
+            }
             let reservation = match sequence
                 .reserve_to(&mut self.pool, payload.target_logical_length)
                 .map_err(SchedulerError::from)
@@ -2136,6 +2305,7 @@ impl Scheduler {
             request_id,
             reason: RequestFinishReason::ExecutorFailure,
             generated_token_ids: std::mem::take(&mut record.generated_token_ids),
+            cached_prompt_tokens: record.cached_prompt_tokens,
             completed_at_ns,
         });
         self.remember_terminal(request_id, RequestState::Failed);
@@ -2361,6 +2531,7 @@ impl Scheduler {
         }
         if item.kind == WorkKind::Prefill {
             self.requests[index].prefill_cursor = item.target_logical_length;
+            self.publish_prompt_blocks(index)?;
         }
         let Some(output) = item.output else {
             let record = &mut self.requests[index];
@@ -2465,6 +2636,7 @@ impl Scheduler {
             request_id,
             reason,
             generated_token_ids: std::mem::take(&mut record.generated_token_ids),
+            cached_prompt_tokens: record.cached_prompt_tokens,
             completed_at_ns: now_ns,
         });
         self.remember_terminal(request_id, terminal_state);
@@ -2698,12 +2870,14 @@ impl Scheduler {
 
     fn current_gauges(&self) -> SchedulerGauges {
         let pool = self.pool.stats();
+        let prefix_cache_blocks = self.prefix_cache.as_ref().map_or(0, PrefixCache::len);
         SchedulerGauges {
             waiting_requests: self.waiting.len(),
             waiting_prompt_tokens: self.waiting_prompt_tokens,
             active_sequences: self.active_sequences,
             promised_kv_blocks: self.promised_kv_blocks,
-            allocated_kv_blocks: pool.allocated_block_count(),
+            allocated_kv_blocks: pool.allocated_block_count().saturating_sub(prefix_cache_blocks),
+            prefix_cache_blocks,
             physical_kv_blocks: pool.physical_block_count(),
             retained_terminal_requests: self.terminal.len(),
             pending_completions: self.completion_outbox.len(),

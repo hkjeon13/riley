@@ -101,6 +101,26 @@ all 8 cells. The two 8-client cells still miss, by TPOT p50 alone (+0.1 % and
 copy, no barrier) took 1-client TPOT from 29.19 to 27.77 ms.
 Details are in the [tensor-parallel design](docs/tensor-parallel-design.md#status-2026-11-01).
 
+### Shared prompts: the prefix cache
+
+The tables above run with prefix caching off. With `--prefix-cache-blocks N`,
+requests that start with the same tokens reuse each other's prompt KV blocks.
+It is off by default. On Qwen2.5-7B, with 448 of 477 prompt tokens shared and
+both engines' caches on:
+
+| Clients | Throughput tok/s | TTFT p50 ms | TTFT p95 ms | TPOT p50 ms |
+|---|---:|---:|---:|---:|
+| 1 | **83.6** vs 81.5 | **16.1** / 20.3 | **16.3** / 22.3 | **11.81** / 12.00 |
+| 8 | **615** vs 609 | **39.4** / 41.9 | 57.8 / **49.7** | **12.06** / 12.16 |
+| 32 | **2156** vs 2026 | **41.7** / 59.5 | 115 / **102** | **13.53** / 13.87 |
+
+Riley first, vLLM second. Compared with its own cache-off run, Riley at 32
+clients goes from 765 to 2156 tok/s, and every output stayed identical. Without
+a shared prefix it costs nothing measurable. See the
+[prefix cache](docs/prefix-cache.md) for sizing, guarantees and limits; clients
+can infer each other's recent prefixes, so enable it only among clients that
+may share that knowledge.
+
 ### Output quality
 
 GSM8K (1319 questions, 4-shot, greedy) on the same servers, Riley / vLLM:

@@ -1729,19 +1729,33 @@ fn validate_packed_host(
     // sorted copy first proves there is no duplicate, and the scans then skip
     // their inner loops; when one exists they run unchanged, so the reported
     // error is the same.
-    let block_ids_unique = sorted_unique(block_ids.iter().copied());
-    for (logical_index, &physical_id) in block_ids.iter().enumerate() {
-        if u64::from(physical_id) >= physical_block_count {
-            return Err(CudaError::out_of_range(
-                OPERATION,
-                format!("physical block id {physical_id} is outside the pool"),
-            ));
-        }
-        if !block_ids_unique && block_ids[..logical_index].contains(&physical_id) {
-            return Err(CudaError::invalid_argument(
-                OPERATION,
-                format!("physical block id {physical_id} appears more than once"),
-            ));
+    if let Some(physical_id) = block_ids
+        .iter()
+        .find(|&&physical_id| u64::from(physical_id) >= physical_block_count)
+    {
+        return Err(CudaError::out_of_range(
+            OPERATION,
+            format!("physical block id {physical_id} is outside the pool"),
+        ));
+    }
+    // Sequences may share full blocks, which they only read; a sequence never
+    // lists a block twice.
+    if !sorted_unique(block_ids.iter().copied()) {
+        for pair in sequence_block_offsets.windows(2) {
+            let start = usize::try_from(pair[0])
+                .expect("U32 CSR offsets fit every supported host usize");
+            let end = usize::try_from(pair[1])
+                .expect("U32 CSR offsets fit every supported host usize");
+            let sequence_blocks = &block_ids[start..end];
+            let sequence_unique = sorted_unique(sequence_blocks.iter().copied());
+            for (logical_index, physical_id) in sequence_blocks.iter().enumerate() {
+                if !sequence_unique && sequence_blocks[..logical_index].contains(physical_id) {
+                    return Err(CudaError::invalid_argument(
+                        OPERATION,
+                        format!("physical block id {physical_id} appears more than once"),
+                    ));
+                }
+            }
         }
     }
 
@@ -2145,6 +2159,21 @@ mod tests {
             "physical block id {} appears more than once",
             blocks[3]
         )));
+
+        // Two sequences may read one block; each still lists it once.
+        let shared_offsets = [0, 2, 4];
+        let shared_valid = [16_u16, 1, 16, 1];
+        let shared_slots = [0_u32, 1];
+        let shared_positions = [16_u32, 16];
+        PackedBatchHostV1::new(
+            &shared_offsets,
+            &[7, 8, 7, 9],
+            &shared_valid,
+            &shared_slots,
+            &shared_positions,
+            10,
+        )
+        .expect("a block shared between sequences is accepted");
 
         let mut duplicate_row = positions.clone();
         duplicate_row[80] = duplicate_row[7];

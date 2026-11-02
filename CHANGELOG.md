@@ -19,6 +19,10 @@ Serving work since `0.1.0-rc2`, measured in [docs/performance.md](docs/performan
 - A reference-exact route that reproduces Hugging Face Transformers output
   byte for byte, used as a correctness anchor.
 - `riley-checkpoint`, a tool that prepares and verifies checkpoint directories.
+- An opt-in [prefix cache](docs/prefix-cache.md) (`--prefix-cache-blocks`):
+  requests with the same leading tokens share read-only prompt KV blocks, and
+  `usage.prompt_tokens_details.cached_tokens` reports the reuse. Outputs are
+  unchanged.
 - Documentation rewritten for users; development records were removed from the
   tree and summarised in [docs/HISTORY.md](docs/HISTORY.md).
 

@@ -82,6 +82,9 @@ at start-up. A request holds a list of blocks, so requests of different
 lengths share memory without copying or fragmentation, and GPU memory does not
 grow under load.
 
+With `--prefix-cache-blocks`, requests that start with the same tokens also
+share blocks; see [prefix-cache.md](prefix-cache.md).
+
 ### Attention
 
 For Qwen2.5-3B the decode attention is a two-stage kernel: each page of a

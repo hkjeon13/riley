@@ -62,6 +62,7 @@ pub mod error;
 pub mod execution;
 pub mod metrics;
 pub mod plan;
+mod prefix_cache;
 mod scheduler;
 
 pub use config::{

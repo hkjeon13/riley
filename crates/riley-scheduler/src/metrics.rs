@@ -18,6 +18,8 @@ pub struct SchedulerGauges {
     pub allocated_kv_blocks: usize,
     /// Physical blocks in the fixed KV pool.
     pub physical_kv_blocks: usize,
+    /// KV blocks listed in the prefix cache, which `allocated_kv_blocks` leaves out.
+    pub prefix_cache_blocks: usize,
     /// Terminal request identities retained for bounded idempotency lookup.
     pub retained_terminal_requests: usize,
     /// Completion payloads awaiting explicit recovery after a failed operation.
@@ -122,6 +124,10 @@ pub struct SchedulerMetricsSnapshot {
     pub prefill_tokens: u64,
     /// Cumulative decode input tokens committed by completed iterations.
     pub decode_tokens: u64,
+    /// Prompt tokens served from the prefix cache.
+    pub prefix_cache_hit_tokens: u64,
+    /// Blocks evicted from the prefix cache.
+    pub prefix_cache_evicted_blocks: u64,
     /// Latest ownership and queue gauges.
     pub gauges: SchedulerGauges,
     /// Rolling queue wait for successfully admitted requests in nanoseconds.
@@ -184,6 +190,8 @@ pub struct SchedulerMetrics {
     iterations_aborted: u64,
     prefill_tokens: u64,
     decode_tokens: u64,
+    prefix_cache_hit_tokens: u64,
+    prefix_cache_evicted_blocks: u64,
     gauges: SchedulerGauges,
     queue_wait_ns: RollingWindow,
     scheduler_cpu_ns: RollingWindow,
@@ -213,6 +221,8 @@ impl SchedulerMetrics {
             iterations_aborted: 0,
             prefill_tokens: 0,
             decode_tokens: 0,
+            prefix_cache_hit_tokens: 0,
+            prefix_cache_evicted_blocks: 0,
             gauges: SchedulerGauges::default(),
             queue_wait_ns: RollingWindow::new(window_samples, "queue wait window")?,
             scheduler_cpu_ns: RollingWindow::new(window_samples, "scheduler CPU window")?,
@@ -296,6 +306,33 @@ impl SchedulerMetrics {
     /// Returns a metric-overflow error without mutating the counter.
     pub fn record_admission_timeout(&mut self) -> SchedulerResult<()> {
         checked_increment(&mut self.admission_timeouts, "admission_timeouts")
+    }
+
+    /// Records prompt tokens served from the prefix cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns a metric-overflow error without mutating the counter.
+    pub fn record_prefix_cache_hit(&mut self, tokens: usize) -> SchedulerResult<()> {
+        self.prefix_cache_hit_tokens = self
+            .prefix_cache_hit_tokens
+            .checked_add(tokens as u64)
+            .ok_or(SchedulerError::ArithmeticOverflow {
+                field: "prefix_cache_hit_tokens",
+            })?;
+        Ok(())
+    }
+
+    /// Records one block evicted from the prefix cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns a metric-overflow error without mutating the counter.
+    pub fn record_prefix_cache_eviction(&mut self) -> SchedulerResult<()> {
+        checked_increment(
+            &mut self.prefix_cache_evicted_blocks,
+            "prefix_cache_evicted_blocks",
+        )
     }
 
     /// Records rollback of a planned iteration.
@@ -432,6 +469,8 @@ impl SchedulerMetrics {
             iterations_aborted: self.iterations_aborted,
             prefill_tokens: self.prefill_tokens,
             decode_tokens: self.decode_tokens,
+            prefix_cache_hit_tokens: self.prefix_cache_hit_tokens,
+            prefix_cache_evicted_blocks: self.prefix_cache_evicted_blocks,
             gauges: self.gauges,
             queue_wait_ns: self.queue_wait_ns.snapshot()?,
             scheduler_cpu_ns: self.scheduler_cpu_ns.snapshot()?,

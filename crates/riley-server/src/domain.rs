@@ -239,6 +239,7 @@ pub struct TokenUsage {
     prompt_tokens: u64,
     completion_tokens: u64,
     total_tokens: u64,
+    cached_prompt_tokens: u64,
 }
 
 impl TokenUsage {
@@ -256,7 +257,21 @@ impl TokenUsage {
             prompt_tokens,
             completion_tokens,
             total_tokens,
+            cached_prompt_tokens: 0,
         })
+    }
+
+    /// Records how many prompt tokens came from the prefix cache.
+    #[must_use]
+    pub const fn with_cached_prompt_tokens(mut self, cached_prompt_tokens: u64) -> Self {
+        self.cached_prompt_tokens = cached_prompt_tokens;
+        self
+    }
+
+    /// Prompt tokens served from the prefix cache instead of being executed.
+    #[must_use]
+    pub const fn cached_prompt_tokens(self) -> u64 {
+        self.cached_prompt_tokens
     }
 
     /// Number of tokens in the encoded prompt.

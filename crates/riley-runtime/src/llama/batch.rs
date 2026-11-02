@@ -810,6 +810,7 @@ impl PreparedLlamaBatchMetadata {
                 reason: "block count must exactly address the target logical length",
             });
         }
+        let first_written = (target_length - row.input_token_ids.len()) / KV_BLOCK_SIZE;
 
         let mut valid_token_sum = 0_usize;
         for (block_index, (&physical_id, &valid_tokens)) in table
@@ -825,13 +826,17 @@ impl PreparedLlamaBatchMetadata {
                     reason: "physical block ID is outside the prepared pool",
                 });
             }
-            if self.physical_block_marks[physical_index] == epoch {
+            // Full shared blocks may be read by several rows of an iteration,
+            // but a row's written blocks must not appear in any other row.
+            let write = block_index >= first_written;
+            let mark = self.physical_block_marks[physical_index];
+            if mark >> 1 == epoch && (write || mark & 1 == 1) {
                 return Err(LlamaBatchError::InvalidBatch {
                     field: "block_table.physical_block_ids",
-                    reason: "physical block IDs must be unique across the iteration",
+                    reason: "physical blocks written by a row must not alias another row",
                 });
             }
-            self.physical_block_marks[physical_index] = epoch;
+            self.physical_block_marks[physical_index] = epoch << 1 | u64::from(write);
 
             let expected_valid = if block_index + 1 == required_blocks {
                 let tail = target_length % KV_BLOCK_SIZE;
@@ -1450,6 +1455,36 @@ mod tests {
     }
 
     #[test]
+    fn rows_may_read_one_shared_block_but_not_write_a_read_block() {
+        let token = [1];
+        let valid = [16, 1];
+        let row = |tag, ids: &'static [u32], slot| {
+            LlamaBatchRow::new(
+                tag,
+                LlamaBatchRowKind::Prefill,
+                &token,
+                17,
+                LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION, ids, &valid, 17),
+                Some(slot),
+            )
+        };
+        let mut prepared = PreparedLlamaBatchMetadata::prepare(config()).expect("prepare");
+        assert!(prepared.pack(&[row(1, &[0, 1], 0), row(2, &[0, 2], 1)]).is_ok());
+        for rows in [
+            [row(1, &[0, 1], 0), row(2, &[1, 2], 1)],
+            [row(1, &[1, 0], 0), row(2, &[2, 0], 1)],
+        ] {
+            assert!(matches!(
+                prepared.pack(&rows),
+                Err(LlamaBatchError::InvalidBatch {
+                    field: "block_table.physical_block_ids",
+                    reason: "physical blocks written by a row must not alias another row"
+                })
+            ));
+        }
+    }
+
+    #[test]
     fn rejects_noncanonical_or_aliased_block_tables() {
         let token = [1];
         let ids = [0];
@@ -1494,7 +1529,7 @@ mod tests {
             prepared.pack(&rows),
             Err(LlamaBatchError::InvalidBatch {
                 field: "block_table.physical_block_ids",
-                reason: "physical block IDs must be unique across the iteration"
+                reason: "physical blocks written by a row must not alias another row"
             })
         ));
 

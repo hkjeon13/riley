@@ -475,6 +475,7 @@ impl IterationPlan {
                 reason: "each block table must be referenced exactly once",
             });
         }
+        validate_physical_block_aliases([&prefill_items, &decode_items], &block_tables)?;
         let output_slot_bound =
             u32::try_from(output_slots.len()).map_err(|_| SchedulerError::ArithmeticOverflow {
                 field: "iteration output slot count",
@@ -561,32 +562,6 @@ fn validate_iteration_block_tables(
         });
     }
 
-    let block_entry_count = block_tables.iter().try_fold(0_usize, |count, table| {
-        count.checked_add(table.physical_block_ids.len())
-    });
-    let Some(block_entry_count) = block_entry_count else {
-        return Err(SchedulerError::ArithmeticOverflow {
-            field: "iteration physical block entry count",
-        });
-    };
-    let mut physical_block_ids = HashSet::new();
-    physical_block_ids
-        .try_reserve(block_entry_count)
-        .map_err(|_| SchedulerError::HostAllocation {
-            resource: "iteration physical block identity set",
-            requested_elements: block_entry_count,
-        })?;
-    for table in block_tables {
-        for &physical_block_id in &table.physical_block_ids {
-            if !physical_block_ids.insert(physical_block_id) {
-                return Err(SchedulerError::InvalidPlan {
-                    field: "block_tables",
-                    reason: "physical block IDs must be unique across the iteration",
-                });
-            }
-        }
-    }
-
     let mut referenced_block_tables = Vec::new();
     referenced_block_tables
         .try_reserve_exact(block_tables.len())
@@ -596,6 +571,52 @@ fn validate_iteration_block_tables(
         })?;
     referenced_block_tables.resize(block_tables.len(), false);
     Ok(referenced_block_tables)
+}
+
+/// Requests may read the same full KV block, but a block that a work item
+/// writes belongs to that item alone.
+fn validate_physical_block_aliases(
+    items: [&[WorkItem]; 2],
+    block_tables: &[OwnedBlockTable],
+) -> SchedulerResult<()> {
+    let block_entry_count = block_tables.iter().try_fold(0_usize, |count, table| {
+        count.checked_add(table.physical_block_ids.len())
+    });
+    let Some(block_entry_count) = block_entry_count else {
+        return Err(SchedulerError::ArithmeticOverflow {
+            field: "iteration physical block entry count",
+        });
+    };
+    let mut written = HashSet::new();
+    written
+        .try_reserve(block_entry_count)
+        .map_err(|_| SchedulerError::HostAllocation {
+            resource: "iteration physical block identity set",
+            requested_elements: block_entry_count,
+        })?;
+    let alias = || SchedulerError::InvalidPlan {
+        field: "block_tables",
+        reason: "physical blocks written by a work item must not alias another table",
+    };
+    let first_written = |item: &WorkItem| {
+        (item.target_logical_length.saturating_sub(item.input_tokens.len()) / KV_BLOCK_SIZE)
+            .min(block_tables[item.block_table_index].physical_block_ids.len())
+    };
+    for item in items.into_iter().flatten() {
+        let ids = &block_tables[item.block_table_index].physical_block_ids;
+        for physical_block_id in &ids[first_written(item)..] {
+            if !written.insert(*physical_block_id) {
+                return Err(alias());
+            }
+        }
+    }
+    for item in items.into_iter().flatten() {
+        let ids = &block_tables[item.block_table_index].physical_block_ids;
+        if ids[..first_written(item)].iter().any(|id| written.contains(id)) {
+            return Err(alias());
+        }
+    }
+    Ok(())
 }
 
 /// Runtime output routed back to one stable plan slot.
@@ -874,9 +895,62 @@ mod tests {
             error,
             SchedulerError::InvalidPlan {
                 field: "block_tables",
-                reason: "physical block IDs must be unique across the iteration",
+                reason: "physical blocks written by a work item must not alias another table",
             }
         );
+    }
+
+    fn reading(request: u64, block_table_index: usize) -> WorkItem {
+        WorkItem::new(
+            RequestId::new(request).unwrap(),
+            WorkKind::Prefill,
+            vec![1],
+            17,
+            block_table_index,
+            None,
+        )
+        .unwrap()
+    }
+
+    fn reading_table(request: u64, shared: u32, written: u32) -> OwnedBlockTable {
+        OwnedBlockTable::new(
+            RequestId::new(request).unwrap(),
+            BLOCK_TABLE_V1_VERSION,
+            vec![shared, written],
+            vec![16, 1],
+            17,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn iteration_allows_shared_reads_and_rejects_writes_to_a_read_block() {
+        IterationPlan::new(
+            IterationId::new(1).unwrap(),
+            vec![reading(1, 0), reading(2, 1)],
+            Vec::new(),
+            vec![reading_table(1, 7, 8), reading_table(2, 7, 9)],
+        )
+        .expect("two requests read one full block");
+        for tables in [
+            vec![reading_table(1, 7, 8), reading_table(2, 7, 8)],
+            vec![reading_table(1, 7, 8), reading_table(2, 9, 7)],
+        ] {
+            let error = IterationPlan::new(
+                IterationId::new(1).unwrap(),
+                vec![reading(1, 0), reading(2, 1)],
+                Vec::new(),
+                tables,
+            )
+            .unwrap_err();
+            assert_eq!(
+                error,
+                SchedulerError::InvalidPlan {
+                    field: "block_tables",
+                    reason: "physical blocks written by a work item must not alias another table",
+                }
+            );
+        }
     }
 
     #[test]

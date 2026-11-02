@@ -116,6 +116,10 @@ Errors use the OpenAI envelope:
 | 503 | The server is not ready or is shutting down |
 | 500 | Internal error |
 
+When the [prefix cache](prefix-cache.md) served part of a prompt, `usage` also
+carries `"prompt_tokens_details": { "cached_tokens": N }`. The field is absent
+otherwise. `prompt_tokens` always counts the whole prompt.
+
 ## `GET /metrics`
 
 A JSON object, free of prompt text:

@@ -14,6 +14,8 @@ use std::time::Instant;
 
 /// Fixed token capacity of every PR10 physical block.
 pub const KV_BLOCK_SIZE: usize = 16;
+// Sequence IDs start at 1, so no sequence can claim a shared block as its own.
+const SHARED_BLOCK_OWNER: u64 = 0;
 /// Address-translation table format understood by the PR10 exact path.
 pub const BLOCK_TABLE_V1_VERSION: u16 = 1;
 /// Initial optional block-metadata descriptor format.
@@ -99,6 +101,12 @@ pub enum PagedKvError {
     },
     UnsupportedMetadataVersion {
         version: u16,
+    },
+    NotShared {
+        physical_index: u32,
+    },
+    SharedPrefixNotExtendable {
+        reason: &'static str,
     },
 }
 
@@ -223,6 +231,12 @@ impl fmt::Display for PagedKvError {
                     formatter,
                     "unsupported optional block metadata version {version}"
                 )
+            }
+            Self::NotShared { physical_index } => {
+                write!(formatter, "physical block {physical_index} is not shared")
+            }
+            Self::SharedPrefixNotExtendable { reason } => {
+                write!(formatter, "shared prefix cannot be extended: {reason}")
             }
         }
     }
@@ -454,6 +468,8 @@ impl SequenceId {
 #[must_use = "pass the orphan token back to its pool to reclaim physical blocks"]
 pub struct SequenceReclaimToken {
     owner: SequenceId,
+    block_ids: Box<[Option<BlockId>]>,
+    shared_block_count: usize,
 }
 
 impl SequenceReclaimToken {
@@ -595,6 +611,8 @@ impl<'a> BlockMetadataView<'a> {
 struct BlockSlot {
     generation: u64,
     owner: Option<SequenceId>,
+    // Holders of a shared block. Zero while one sequence owns it exclusively.
+    shared_references: u32,
     sidecar: Option<OptionalBlockMetadata>,
 }
 
@@ -730,6 +748,7 @@ impl KvBlockPool {
             slots.push(BlockSlot {
                 generation: 0,
                 owner: None,
+                shared_references: 0,
                 sidecar: None,
             });
         }
@@ -886,6 +905,10 @@ impl KvBlockPool {
                 actual_cookie: owner.pool_cookie(),
             });
         }
+        let shared = &token.block_ids[..token.shared_block_count];
+        for block in shared.iter().flatten() {
+            self.shared_references(*block)?;
+        }
         let mut released = 0;
         for index in (0..self.slots.len()).rev() {
             if self.slots[index].owner == Some(owner) {
@@ -893,7 +916,54 @@ impl KvBlockPool {
                 released += 1;
             }
         }
+        for block in shared.iter().flatten() {
+            self.release_shared_block(*block)?;
+        }
         Ok(released)
+    }
+
+    /// Checks that `block` is a live shared block and returns its holder count.
+    ///
+    /// # Errors
+    ///
+    /// Distinguishes foreign, stale, already-freed, and exclusively owned handles.
+    pub fn shared_references(&self, block: BlockId) -> PagedKvResult<u32> {
+        self.validate_block_index(block)?;
+        let slot = &self.slots[block.physical_index as usize];
+        if slot.generation != block.generation {
+            return Err(PagedKvError::StaleBlock {
+                physical_index: block.physical_index,
+                handle_generation: block.generation,
+                current_generation: slot.generation,
+            });
+        }
+        if slot.owner.is_none() {
+            return Err(PagedKvError::DoubleFree {
+                physical_index: block.physical_index,
+                generation: block.generation,
+            });
+        }
+        if slot.shared_references == 0 {
+            return Err(PagedKvError::NotShared {
+                physical_index: block.physical_index,
+            });
+        }
+        Ok(slot.shared_references)
+    }
+
+    /// Drops one hold on a shared block; the last hold frees it.
+    ///
+    /// # Errors
+    ///
+    /// Returns the [`Self::shared_references`] failures without releasing.
+    pub fn release_shared_block(&mut self, block: BlockId) -> PagedKvResult<()> {
+        let references = self.shared_references(block)?;
+        let index = block.physical_index as usize;
+        self.slots[index].shared_references = references - 1;
+        if references == 1 {
+            self.release_slot(index);
+        }
+        Ok(())
     }
 
     fn validate_block_index(&self, block: BlockId) -> PagedKvResult<()> {
@@ -1131,6 +1201,8 @@ pub struct SequenceState {
     physical_block_ids: Box<[u32]>,
     valid_tokens: Box<[u16]>,
     allocated_block_count: usize,
+    // The leading table entries are shared, full and never written again.
+    shared_block_count: usize,
     logical_length: u32,
     next_reservation_nonce: u64,
     pending: Option<PendingReservation>,
@@ -1156,6 +1228,7 @@ impl SequenceState {
             )?,
             valid_tokens: boxed_filled(maximum_blocks, 0, "sequence_valid_tokens")?,
             allocated_block_count: 0,
+            shared_block_count: 0,
             logical_length: 0,
             next_reservation_nonce: 1,
             pending: None,
@@ -1191,6 +1264,97 @@ impl SequenceState {
     #[must_use]
     pub const fn maximum_block_count(&self) -> usize {
         self.block_ids.len()
+    }
+
+    /// Leading blocks held through shared references.
+    #[must_use]
+    pub const fn shared_block_count(&self) -> usize {
+        self.shared_block_count
+    }
+
+    /// Blocks [`Self::reserve_to`] would take from the free list.
+    #[must_use]
+    pub fn additional_blocks_for(&self, target_logical_length: usize) -> usize {
+        blocks_for_length(target_logical_length).saturating_sub(self.allocated_block_count)
+    }
+
+    /// Appends one full shared block to a sequence that holds nothing else.
+    ///
+    /// The block's keys and values become this sequence's next
+    /// [`KV_BLOCK_SIZE`] tokens without any device work.
+    ///
+    /// # Errors
+    ///
+    /// Returns for poison, a pending reservation, private blocks already in the
+    /// table, capacity, or a handle that is not a live shared block.
+    pub fn adopt_shared_block(
+        &mut self,
+        pool: &mut KvBlockPool,
+        block: BlockId,
+    ) -> PagedKvResult<()> {
+        self.ensure_mutable(pool)?;
+        if self.pending.is_some() {
+            return Err(PagedKvError::ReservationInProgress);
+        }
+        if self.allocated_block_count != self.shared_block_count {
+            return Err(PagedKvError::SharedPrefixNotExtendable {
+                reason: "the sequence already holds private blocks",
+            });
+        }
+        let index = self.allocated_block_count;
+        if index == self.block_ids.len() {
+            return Err(PagedKvError::CapacityExceeded {
+                requested_tokens: (index + 1) * KV_BLOCK_SIZE,
+                maximum_tokens: self.maximum_logical_length as usize,
+            });
+        }
+        let references = pool.shared_references(block)?;
+        let incremented =
+            references
+                .checked_add(1)
+                .ok_or(PagedKvError::ArithmeticOverflow {
+                    field: "shared block references",
+                })?;
+        pool.slots[block.physical_index as usize].shared_references = incremented;
+        self.block_ids[index] = Some(block);
+        self.physical_block_ids[index] = block.physical_index();
+        self.valid_tokens[index] = KV_BLOCK_SIZE as u16;
+        self.allocated_block_count = index + 1;
+        self.shared_block_count = index + 1;
+        self.logical_length = ((index + 1) * KV_BLOCK_SIZE) as u32;
+        Ok(())
+    }
+
+    /// Turns the first private block into a shared block with two holders:
+    /// this sequence and the caller, who owes a matching
+    /// [`KvBlockPool::release_shared_block`].
+    ///
+    /// # Errors
+    ///
+    /// Returns for poison, a pending reservation, a block not yet fully
+    /// committed, or stale ownership state.
+    pub fn share_next_block(&mut self, pool: &mut KvBlockPool) -> PagedKvResult<BlockId> {
+        self.ensure_mutable(pool)?;
+        if self.pending.is_some() {
+            return Err(PagedKvError::ReservationInProgress);
+        }
+        let index = self.shared_block_count;
+        if (index + 1) * KV_BLOCK_SIZE > self.logical_length as usize {
+            return Err(PagedKvError::SharedPrefixNotExtendable {
+                reason: "only a fully committed block can be shared",
+            });
+        }
+        let block = self.allocated_block(index)?;
+        pool.validate_block(block, self.sequence_id)?;
+        pool.clear_sidecar(block, self.sequence_id)?;
+        let slot = &mut pool.slots[block.physical_index as usize];
+        slot.owner = Some(SequenceId {
+            pool_cookie: self.pool_cookie,
+            value: SHARED_BLOCK_OWNER,
+        });
+        slot.shared_references = 2;
+        self.shared_block_count = index + 1;
+        Ok(block)
     }
 
     #[must_use]
@@ -1316,8 +1480,7 @@ impl SequenceState {
             });
         }
         if self.allocated_block_count != 0 {
-            let tail = self.allocated_block(self.allocated_block_count - 1)?;
-            pool.validate_block(tail, self.sequence_id)?;
+            self.validate_held_block(pool, self.allocated_block_count - 1)?;
         }
         let nonce = self.next_reservation_nonce;
         let next_nonce = nonce
@@ -1425,10 +1588,9 @@ impl SequenceState {
         self.validate_reservation(&reservation)?;
         self.poisoned = true;
         for index in 0..self.allocated_block_count {
-            let block = self.allocated_block(index)?;
-            pool.validate_block(block, self.sequence_id)?;
+            self.validate_held_block(pool, index)?;
         }
-        for index in 0..self.allocated_block_count {
+        for index in self.shared_block_count..self.allocated_block_count {
             let block = self.allocated_block(index)?;
             pool.clear_sidecar(block, self.sequence_id)?;
         }
@@ -1472,16 +1634,23 @@ impl SequenceState {
                 requested_tokens: target_logical_length,
             });
         }
+        // Shared blocks stay full, so the kept length cannot end inside one.
+        if target_logical_length < self.shared_block_count * KV_BLOCK_SIZE {
+            return Err(PagedKvError::InvalidTruncateLength {
+                committed_tokens: self.logical_length as usize,
+                requested_tokens: target_logical_length,
+            });
+        }
         let target_blocks = blocks_for_length(target_logical_length);
         for index in target_blocks..self.allocated_block_count {
-            let block = self.allocated_block(index)?;
-            pool.validate_block(block, self.sequence_id)?;
+            self.validate_held_block(pool, index)?;
         }
         if target_blocks != 0 && target_logical_length != self.logical_length as usize {
-            let tail = self.allocated_block(target_blocks - 1)?;
-            pool.validate_block(tail, self.sequence_id)?;
+            self.validate_held_block(pool, target_blocks - 1)?;
         }
-        if target_blocks != 0 && target_logical_length != self.logical_length as usize {
+        if target_blocks > self.shared_block_count
+            && target_logical_length != self.logical_length as usize
+        {
             let tail = self.allocated_block(target_blocks - 1)?;
             pool.clear_sidecar(tail, self.sequence_id)?;
         }
@@ -1507,8 +1676,7 @@ impl SequenceState {
             self.rollback_pending(pool)?;
         }
         for index in 0..self.allocated_block_count {
-            let block = self.allocated_block(index)?;
-            pool.validate_block(block, self.sequence_id)?;
+            self.validate_held_block(pool, index)?;
         }
         self.release_tail(pool, 0)?;
         self.logical_length = 0;
@@ -1535,6 +1703,8 @@ impl SequenceState {
     pub fn abandon_for_reclaim(self) -> SequenceReclaimToken {
         SequenceReclaimToken {
             owner: self.sequence_id,
+            block_ids: self.block_ids,
+            shared_block_count: self.shared_block_count,
         }
     }
 
@@ -1639,6 +1809,15 @@ impl SequenceState {
             })
     }
 
+    fn validate_held_block(&self, pool: &KvBlockPool, index: usize) -> PagedKvResult<()> {
+        let block = self.allocated_block(index)?;
+        if index < self.shared_block_count {
+            pool.shared_references(block).map(|_| ())
+        } else {
+            pool.validate_block(block, self.sequence_id)
+        }
+    }
+
     fn table_view(&self, block_count: usize, logical_length: u32) -> BlockTableV1<'_> {
         BlockTableV1 {
             physical_block_ids: &self.physical_block_ids[..block_count],
@@ -1691,7 +1870,12 @@ impl SequenceState {
         while self.allocated_block_count > retained_block_count {
             let index = self.allocated_block_count - 1;
             let block = self.allocated_block(index)?;
-            pool.release_block(block, self.sequence_id)?;
+            if index < self.shared_block_count {
+                pool.release_shared_block(block)?;
+                self.shared_block_count = index;
+            } else {
+                pool.release_block(block, self.sequence_id)?;
+            }
             self.block_ids[index] = None;
             self.physical_block_ids[index] = EMPTY_PHYSICAL_BLOCK_ID;
             self.valid_tokens[index] = 0;
@@ -1752,6 +1936,94 @@ mod tests {
             u32::try_from(target).expect("test target fits U32")
         );
         sequence.commit(pool, reservation).expect("commit");
+    }
+
+    #[test]
+    fn shared_blocks_outlive_their_writer_and_free_with_the_last_holder() {
+        let mut pool = pool(4);
+        let mut writer = pool.create_sequence(64).expect("writer");
+        reserve_and_commit(&mut writer, &mut pool, 20);
+        let first = writer.share_next_block(&mut pool).expect("share");
+        assert_eq!(pool.shared_references(first), Ok(2));
+        assert_eq!(writer.shared_block_count(), 1);
+        assert!(matches!(
+            writer.share_next_block(&mut pool),
+            Err(PagedKvError::SharedPrefixNotExtendable { .. })
+        ));
+
+        let mut reader = pool.create_sequence(64).expect("reader");
+        reader.adopt_shared_block(&mut pool, first).expect("adopt");
+        assert_eq!(reader.logical_length(), 16);
+        assert_eq!(pool.shared_references(first), Ok(3));
+        reserve_and_commit(&mut reader, &mut pool, 17);
+        assert_eq!(pool.stats().allocated_block_count(), 3);
+        let table = reader.block_table().expect("table");
+        assert_eq!(table.physical_block_ids()[0], first.physical_index());
+        assert_eq!(table.valid_tokens(), [16, 1]);
+
+        writer.close(&mut pool).expect("close writer");
+        assert_eq!(pool.shared_references(first), Ok(2));
+        reader.close(&mut pool).expect("close reader");
+        assert_eq!(pool.shared_references(first), Ok(1));
+        assert_eq!(pool.stats().allocated_block_count(), 1);
+        pool.release_shared_block(first).expect("release");
+        assert_eq!(pool.stats().allocated_block_count(), 0);
+        assert!(matches!(
+            pool.shared_references(first),
+            Err(PagedKvError::DoubleFree { .. })
+        ));
+    }
+
+    #[test]
+    fn adoption_requires_a_table_of_shared_blocks() {
+        let mut pool = pool(3);
+        let mut writer = pool.create_sequence(32).expect("writer");
+        reserve_and_commit(&mut writer, &mut pool, 16);
+        let shared = writer.share_next_block(&mut pool).expect("share");
+        let mut private = pool.create_sequence(32).expect("private");
+        reserve_and_commit(&mut private, &mut pool, 1);
+        assert!(matches!(
+            private.adopt_shared_block(&mut pool, shared),
+            Err(PagedKvError::SharedPrefixNotExtendable { .. })
+        ));
+        assert_eq!(pool.shared_references(shared), Ok(2));
+        let tail = private.block_id(0).expect("tail");
+        let mut other = pool.create_sequence(32).expect("other");
+        assert!(matches!(
+            other.adopt_shared_block(&mut pool, tail),
+            Err(PagedKvError::NotShared { .. })
+        ));
+    }
+
+    #[test]
+    fn reclaim_token_releases_shared_holds_but_not_other_holders() {
+        let mut pool = pool(4);
+        let mut writer = pool.create_sequence(64).expect("writer");
+        reserve_and_commit(&mut writer, &mut pool, 16);
+        let shared = writer.share_next_block(&mut pool).expect("share");
+        let mut reader = pool.create_sequence(64).expect("reader");
+        reader.adopt_shared_block(&mut pool, shared).expect("adopt");
+        reserve_and_commit(&mut reader, &mut pool, 17);
+        let token = reader.abandon_for_reclaim();
+        assert_eq!(pool.reclaim_sequence(&token), Ok(1));
+        assert_eq!(pool.shared_references(shared), Ok(2));
+        let token = writer.abandon_for_reclaim();
+        assert_eq!(pool.reclaim_sequence(&token), Ok(0));
+        assert_eq!(pool.shared_references(shared), Ok(1));
+    }
+
+    #[test]
+    fn truncation_cannot_cut_into_a_shared_block() {
+        let mut pool = pool(3);
+        let mut sequence = pool.create_sequence(48).expect("sequence");
+        reserve_and_commit(&mut sequence, &mut pool, 20);
+        sequence.share_next_block(&mut pool).expect("share");
+        assert!(matches!(
+            sequence.truncate_to(&mut pool, 15),
+            Err(PagedKvError::InvalidTruncateLength { .. })
+        ));
+        sequence.truncate_to(&mut pool, 16).expect("keep the shared block");
+        assert_eq!(sequence.allocated_block_count(), 1);
     }
 
     #[test]

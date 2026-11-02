@@ -943,7 +943,7 @@ mod source_contract_tests {
             (
                 "execution dispatch",
                 include_str!("executor/dispatch.rs"),
-                17,
+                21,
             ),
             (
                 "batch allocation",

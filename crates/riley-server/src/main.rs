@@ -97,6 +97,9 @@ serve options:
                                  fewest decode rows for --prefill-plateau-rows to apply
                                  (default: 12)
   --kv-blocks N                  physical 16-token KV blocks (default: full active promise)
+  --prefix-cache-blocks N        keep up to N prompt KV blocks for requests that start with the
+                                 same tokens, on top of the default --kv-blocks; needs
+                                 --decode-attention-producer tensor-core-v1 (default: no cache)
   --residual-rmsnorm MODE        fused E0 candidate or separate path (default: separate)
   --execution-completion MODE    per-operation or iteration-batch (default: iteration-batch)
   --batch-shape-policy MODE      fixed-max or power-of-two (default: fixed-max)
@@ -204,6 +207,7 @@ struct ServeOptions {
     prefill_coalescing: Option<riley_scheduler::PrefillCoalescingPolicy>,
     prefill_burst: Option<riley_scheduler::PrefillBurstPolicy>,
     physical_kv_blocks: Option<usize>,
+    prefix_cache_blocks: Option<usize>,
     residual_rmsnorm: ResidualRmsNormMode,
     execution_completion: ExecutionCompletionMode,
     batch_shape_policy: BatchShapePolicyMode,
@@ -467,6 +471,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut prefill_burst_max_decode_rows = None;
     let mut prefill_burst_max_decode_percent = None;
     let mut physical_kv_blocks = None;
+    let mut prefix_cache_blocks = None;
     let mut residual_rmsnorm = None;
     let mut execution_completion = None;
     let mut batch_shape_policy = None;
@@ -613,6 +618,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 &mut physical_kv_blocks,
                 parse_number(next_value(&mut arguments, "--kv-blocks")?, "--kv-blocks")?,
                 "--kv-blocks",
+            )?,
+            "--prefix-cache-blocks" => set_once(
+                &mut prefix_cache_blocks,
+                parse_number(
+                    next_value(&mut arguments, "--prefix-cache-blocks")?,
+                    "--prefix-cache-blocks",
+                )?,
+                "--prefix-cache-blocks",
             )?,
             "--residual-rmsnorm" => set_once(
                 &mut residual_rmsnorm,
@@ -1486,6 +1499,11 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     {
         return Err("--native-attention-mode requires native D128 attention, tensor-core-v1 producer and global-max-v1 merge".into());
     }
+    // Only this route has been shown to give a prompt's tokens the same keys
+    // and values wherever the prompt is split.
+    if prefix_cache_blocks.is_some() && !d128_tensor_core_producer {
+        return Err("--prefix-cache-blocks requires --decode-attention-producer tensor-core-v1".into());
+    }
     if native_attention_mode == Some(NativeAttentionMode::FixedTileUnsplit)
         && (batch_token_budget > 256 || max_sequence_tokens.is_none_or(|n| n > 1024)
             || max_active_sequences > 32)
@@ -1605,6 +1623,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         prefill_coalescing,
         prefill_burst,
         physical_kv_blocks,
+        prefix_cache_blocks,
         residual_rmsnorm,
         execution_completion,
         batch_shape_policy,
@@ -2319,7 +2338,14 @@ fn run_serve(
         .max_active_sequences
         .checked_mul(blocks_per_sequence)
         .ok_or_else(|| "KV block promise overflowed".to_owned())?;
-    let physical_kv_blocks = options.physical_kv_blocks.unwrap_or(full_active_promise);
+    // The cache's blocks come on top of the promise, so that a small active
+    // set does not leave it a pool too small to hold a few prompts.
+    let physical_kv_blocks = match options.physical_kv_blocks {
+        Some(blocks) => blocks,
+        None => full_active_promise
+            .checked_add(options.prefix_cache_blocks.unwrap_or(0))
+            .ok_or_else(|| "KV block count overflowed".to_owned())?,
+    };
     validate_positive("--kv-blocks", physical_kv_blocks)?;
     let maximum_live_requests = options
         .max_active_sequences
@@ -2594,7 +2620,8 @@ fn run_serve(
     .with_prefill_plateau_policy(options.prefill_plateau.clone())
     .and_then(|engine| engine.with_prefill_coalescing_policy(options.prefill_coalescing))
     .and_then(|engine| engine.with_prefill_burst_policy(options.prefill_burst))
-    .map_err(|error| format!("invalid prefill plateau or coalescing policy: {error}"))?;
+    .and_then(|engine| engine.with_prefix_cache(options.prefix_cache_blocks))
+    .map_err(|error| format!("invalid prefill plateau, coalescing or prefix cache policy: {error}"))?;
     let native_d128_two_stage_startup_receipt = if options.decode_attention_backend
         == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
     {
@@ -5680,6 +5707,7 @@ mod tests {
                 prefill_coalescing: None,
                 prefill_burst: None,
                 physical_kv_blocks: None,
+                prefix_cache_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
                 batch_shape_policy: BatchShapePolicyMode::FixedMaximum,
@@ -6384,6 +6412,7 @@ mod tests {
                 prefill_coalescing: None,
                 prefill_burst: None,
                 physical_kv_blocks: None,
+                prefix_cache_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
                 batch_shape_policy: BatchShapePolicyMode::PowerOfTwo,
@@ -6883,6 +6912,7 @@ mod tests {
                 prefill_coalescing: None,
                 prefill_burst: None,
                 physical_kv_blocks: None,
+                prefix_cache_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Fused,
                 execution_completion: ExecutionCompletionMode::PerOperation,
                 batch_shape_policy: BatchShapePolicyMode::FixedMaximum,
