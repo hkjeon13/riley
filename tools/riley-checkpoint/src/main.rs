@@ -8,6 +8,7 @@ use riley_checkpoint::{Plan, Result, prepare, verify};
 const HELP: &str = "riley-checkpoint (offline by default)\n\
 prepare --manifest PLAN.json --source REGULAR_DIRECTORY --destination NEW_DIRECTORY\n\
 verify --checkpoint DIRECTORY\n\
+merge-lora --checkpoint DIRECTORY --adapter PEFT_DIRECTORY --destination NEW_DIRECTORY [--scale 1.0]\n\
 download --manifest PLAN.json --destination NEW_DIRECTORY --allow-network [--token-env HF_TOKEN]\n\
 plan --repository OWNER/MODEL [--revision main] --output NEW_PLAN.json --allow-network [--token-env HF_TOKEN]\n\
 Download and plan require the separately compiled `hub` feature. Downloads accept only commits.\n\
@@ -24,6 +25,7 @@ fn parse(args: &[String]) -> Result<(&str, BTreeMap<String, String>)> {
     let allowed: &[&str] = match command {
         "prepare" => &["--manifest", "--source", "--destination"],
         "verify" => &["--checkpoint"],
+        "merge-lora" => &["--checkpoint", "--adapter", "--destination", "--scale"],
         "download" => &[
             "--manifest",
             "--destination",
@@ -65,7 +67,7 @@ fn parse(args: &[String]) -> Result<(&str, BTreeMap<String, String>)> {
     }
     for flag in allowed
         .iter()
-        .filter(|flag| !matches!(**flag, "--token-env" | "--revision"))
+        .filter(|flag| !matches!(**flag, "--token-env" | "--revision" | "--scale"))
     {
         if !values.contains_key(*flag) {
             return Err(fail(format!("required flag: {flag}")));
@@ -82,6 +84,20 @@ fn run(args: &[String]) -> Result<()> {
     let (command, values) = parse(args)?;
     match command {
         "verify" => verify(Path::new(&values["--checkpoint"]))?,
+        "merge-lora" => {
+            let scale = values
+                .get("--scale")
+                .map_or(Ok(1.0), |value| value.parse::<f32>())
+                .map_err(|_| fail("--scale must be a number"))?;
+            riley_checkpoint::lora::merge_lora(
+                Path::new(&values["--checkpoint"]),
+                Path::new(&values["--adapter"]),
+                Path::new(&values["--destination"]),
+                scale,
+            )?;
+            println!("checkpoint merge-lora: verified");
+            return Ok(());
+        }
         "prepare" => {
             let plan = Plan::read(Path::new(&values["--manifest"]))?;
             prepare(

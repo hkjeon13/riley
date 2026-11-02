@@ -55,6 +55,23 @@ location and ambient cached credentials are not configurable: only the official
 Hub endpoint and a fresh private transport cache are used. No implicit `.get()`
 network fallback occurs. Errors omit transport URLs and credential details.
 
+### Merging a LoRA adapter
+
+`merge-lora` writes a new checkpoint with a PEFT adapter folded into its
+weights; Riley then serves it like any other model, and there is no adapter
+switching at run time.
+
+```sh
+"$bin" merge-lora --checkpoint /models/qwen --adapter /trusted/adapter \
+  --destination /models/qwen-lora [--scale 1.0]
+```
+
+Each target weight becomes `W + scale * (alpha / r) * B @ A`, computed in F32
+and rounded to BF16 (nearest, ties to even). The input is verified first. The
+new manifest names `<source_model>-lora`, and its `converter_revision` hashes
+the adapter, its configuration and the scale. An adapter that names a module
+the checkpoint lacks, or uses an unsupported PEFT option, is refused.
+
 ## Atomicity, ownership and filesystem limits
 
 The tool atomically reserves the destination with an exclusive directory create

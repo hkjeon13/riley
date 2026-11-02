@@ -16,6 +16,7 @@ use sha2::{Digest, Sha256};
 
 #[cfg(feature = "hub")]
 pub mod hub;
+pub mod lora;
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 const MAX_PLAN_BYTES: u64 = 16 * 1024 * 1024;

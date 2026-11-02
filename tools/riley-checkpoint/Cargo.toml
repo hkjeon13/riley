@@ -12,13 +12,13 @@ resolver = "3"
 
 [features]
 default = []
-hub = ["dep:hf-hub", "dep:yoke-derive", "dep:serde_json", "dep:sha1", "dep:ureq"]
+hub = ["dep:hf-hub", "dep:yoke-derive", "dep:sha1", "dep:ureq"]
 
 [dependencies]
 riley-model = { path = "../../crates/riley-model", default-features = false }
+serde_json = "=1.0.145"
 sha2 = { version = "=0.11.0", default-features = false }
 hf-hub = { version = "=0.4.3", default-features = false, features = ["ureq"], optional = true }
-serde_json = { version = "=1.0.145", optional = true }
 sha1 = { version = "=0.11.0", default-features = false, optional = true }
 ureq = { version = "=2.12.1", default-features = false, features = ["tls"], optional = true }
 
