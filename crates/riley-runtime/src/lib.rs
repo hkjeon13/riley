@@ -1,6 +1,7 @@
 //! Model, tensor, and backend orchestration boundary.
 
 pub mod generation;
+pub mod grammar;
 pub mod host_trace;
 mod kernel;
 pub mod llama;

@@ -819,6 +819,7 @@ impl EngineBackend for HfExactBackend {
                 token_id,
                 generated_index: token.generated_index(),
                 prompt_token_ids: request.prompt_ids_for_delivery.take(),
+                logprob: None,
             }
         } else {
             GenerationEvent::TokenDelta { text }

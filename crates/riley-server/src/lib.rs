@@ -5,6 +5,8 @@ pub mod benchmark;
 #[cfg(feature = "server")]
 pub mod chat;
 #[cfg(feature = "server")]
+pub mod structured;
+#[cfg(feature = "server")]
 pub mod domain;
 #[cfg(feature = "server")]
 pub mod engine;

@@ -26,8 +26,8 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use crate::chat::{
-    ChatChunkShaper, ChatCompletionRequest, ChatRequestError, ChatTemplate, chat_response,
-    normalize_chat_request,
+    ChatChunkShaper, ChatCompletionRequest, ChatRequestError, ChatTemplate, ToolStyle,
+    chat_response, normalize_chat_request,
 };
 use crate::domain::{
     FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestLimits,
@@ -40,7 +40,8 @@ use crate::http::{
 };
 use crate::openai::{
     ApiError, CompletionRequest, CompletionResponse, CompletionTokenCollector, ErrorObject,
-    ErrorResponse, ModelListResponse, ModelObject, SseStreamEncoder, normalize_completion_request,
+    ErrorResponse, LogprobShape, ModelListResponse, ModelObject, SseStreamEncoder,
+    normalize_completion_request,
 };
 
 const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
@@ -385,6 +386,8 @@ pub struct ServerConfig {
     pub maximum_non_streaming_bytes: usize,
     /// Number of recent request observations retained in memory.
     pub observation_capacity: usize,
+    /// Bearer token required on every `/v1` endpoint, when set.
+    pub api_key: Option<&'static str>,
 }
 
 impl Default for ServerConfig {
@@ -402,6 +405,7 @@ impl Default for ServerConfig {
             request_limits: RequestLimits::default(),
             maximum_non_streaming_bytes: 16 * 1_024 * 1_024,
             observation_capacity: 1_024,
+            api_key: None,
         }
     }
 }
@@ -1335,6 +1339,16 @@ fn route_request(
     request: &HttpRequest,
 ) {
     let path = request.target().split('?').next().unwrap_or_default();
+    if path.starts_with("/v1/") && !authorized(config.api_key, request.authorization()) {
+        let _ = write_public_error(
+            stream,
+            401,
+            "invalid_api_key",
+            "a valid bearer token is required",
+            None,
+        );
+        return;
+    }
     match (request.method(), path) {
         (HttpMethod::Get, "/healthz") => write_health(stream, backend.status(), false),
         (HttpMethod::Get, "/readyz") => write_health(stream, backend.status(), true),
@@ -1397,6 +1411,22 @@ fn route_request(
             let _ = write_public_error(stream, 404, "not_found", "endpoint not found", None);
         }
     }
+}
+
+/// Compares in time independent of where the keys differ.
+fn authorized(expected: Option<&str>, header: Option<&str>) -> bool {
+    let Some(expected) = expected else {
+        return true;
+    };
+    let Some(presented) = header.and_then(|value| value.strip_prefix("Bearer ")) else {
+        return false;
+    };
+    expected.len() == presented.len()
+        && expected
+            .bytes()
+            .zip(presented.bytes())
+            .fold(0_u8, |difference, (left, right)| difference | (left ^ right))
+            == 0
 }
 
 #[derive(Serialize)]
@@ -1862,6 +1892,7 @@ fn handle_completion(
             stopping,
             include_usage,
             chat: false,
+            tool_style: None,
         },
     );
 }
@@ -1906,10 +1937,15 @@ fn handle_chat_completion(
         .as_ref()
         .and_then(|options| options.include_usage)
         .unwrap_or(false);
+    let tool_style = chat_template.tool_parsing(&request);
     let request = match normalize_chat_request(request, chat_template, config.request_limits) {
         Ok(request) => request,
         Err(ChatRequestError::Invalid(error)) => {
             let _ = write_api_error(stream, &ApiError::InvalidRequest(error));
+            return;
+        }
+        Err(ChatRequestError::Schema { parameter, message }) => {
+            let _ = write_public_error(stream, 400, "invalid_schema", &message, Some(parameter));
             return;
         }
         Err(ChatRequestError::Template(message)) => {
@@ -1928,6 +1964,7 @@ fn handle_chat_completion(
             stopping,
             include_usage,
             chat: true,
+            tool_style,
         },
     );
 }
@@ -1937,6 +1974,7 @@ struct GenerationDelivery<'a> {
     stopping: &'a AtomicBool,
     include_usage: bool,
     chat: bool,
+    tool_style: Option<ToolStyle>,
 }
 
 fn serve_generation(
@@ -1950,6 +1988,7 @@ fn serve_generation(
         stopping,
         include_usage,
         chat,
+        tool_style,
     }: GenerationDelivery<'_>,
 ) {
     let model = backend.model_metadata();
@@ -1987,10 +2026,19 @@ fn serve_generation(
     let streaming = request.stream;
     let delivery = DeliveryOptions {
         include_token_ids: request.include_token_ids,
+        expose_token_ids: request.expose_token_ids,
+        logprobs: request.logprobs_top.map(|_| {
+            if chat {
+                LogprobShape::Chat
+            } else {
+                LogprobShape::Legacy
+            }
+        }),
         include_usage,
         maximum_output_tokens: request.max_new_tokens,
         maximum_prompt_tokens: model.context_window_tokens,
         chat,
+        tool_style,
     };
     let admission_started = Instant::now();
     let submitted = match backend.submit(request) {
@@ -2034,11 +2082,15 @@ fn serve_generation(
 #[derive(Clone, Copy)]
 struct DeliveryOptions {
     include_token_ids: bool,
+    expose_token_ids: bool,
+    logprobs: Option<LogprobShape>,
     include_usage: bool,
     maximum_output_tokens: usize,
     maximum_prompt_tokens: usize,
     /// Re-shape responses for `/v1/chat/completions`.
     chat: bool,
+    /// Parse tool calls out of chat output in this format.
+    tool_style: Option<ToolStyle>,
 }
 
 struct RequestTracker {
@@ -2127,8 +2179,11 @@ fn stream_completion(
         delivery.include_usage,
         delivery.maximum_output_tokens,
         delivery.maximum_prompt_tokens,
-    );
-    let mut chat_shaper = delivery.chat.then(ChatChunkShaper::default);
+    )
+    .with_response_options(delivery.expose_token_ids, delivery.logprobs);
+    let mut chat_shaper = delivery
+        .chat
+        .then(|| ChatChunkShaper::new(delivery.tool_style));
     loop {
         let Some(wait) = event_wait(stopping, deadline) else {
             if client_disconnected(stream) {
@@ -2338,7 +2393,8 @@ fn collect_completion(
         delivery.include_token_ids,
         delivery.maximum_output_tokens,
         delivery.maximum_prompt_tokens,
-    );
+    )
+    .with_response_options(delivery.expose_token_ids, delivery.logprobs);
     loop {
         let Some(wait) = event_wait(stopping, deadline) else {
             if client_disconnected(stream) {
@@ -2495,7 +2551,7 @@ fn collect_completion(
                             tokens.attach(&mut response);
                             let body = if delivery.chat {
                                 serde_json::to_value(&response).and_then(|mut value| {
-                                    chat_response(&mut value);
+                                    chat_response(&mut value, delivery.tool_style);
                                     serde_json::to_vec(&value)
                                 })
                             } else {
@@ -2972,6 +3028,7 @@ mod tests {
                             token_id: 17,
                             generated_index: 0,
                             prompt_token_ids: Some(vec![1, 2]),
+                            logprob: None,
                         });
                         while !worker_cancellation.is_cancelled() {
                             thread::sleep(Duration::from_millis(2));
@@ -3052,8 +3109,19 @@ mod tests {
         }
     }
 
+    #[test]
+    fn bearer_tokens_are_compared_exactly() {
+        assert!(super::authorized(None, None));
+        assert!(super::authorized(Some("key"), Some("Bearer key")));
+        assert!(!super::authorized(Some("key"), None));
+        assert!(!super::authorized(Some("key"), Some("key")));
+        assert!(!super::authorized(Some("key"), Some("Bearer kex")));
+        assert!(!super::authorized(Some("key"), Some("Bearer keys")));
+    }
+
     fn test_config() -> ServerConfig {
         ServerConfig {
+            api_key: None,
             bind_address: SocketAddr::from(([127, 0, 0, 1], 0)),
             worker_threads: 4,
             connection_queue_capacity: 32,
@@ -3105,12 +3173,14 @@ mod tests {
                 token_id: 17,
                 generated_index: 0,
                 prompt_token_ids: Some(vec![1, 2]),
+                logprob: None,
             },
             GenerationEvent::CommittedToken {
                 text: "가".to_owned(),
                 token_id: 18,
                 generated_index: 1,
                 prompt_token_ids: None,
+                logprob: None,
             },
             GenerationEvent::Finished {
                 reason: FinishReason::Length,
@@ -3184,6 +3254,7 @@ mod tests {
             token_id: 9999,
             generated_index: 0,
             prompt_token_ids: None,
+            logprob: None,
         }];
         let mut bad_usage = committed_fixture();
         *bad_usage.last_mut().expect("terminal") = GenerationEvent::Finished {
@@ -3279,6 +3350,7 @@ mod tests {
                 token_id: 17,
                 generated_index: index,
                 prompt_token_ids: (index == 0).then(|| vec![1, 2]),
+                logprob: None,
             })
             .collect();
         let backend = TestBackend::new([Script::CountedEvents(events, Arc::clone(&delivered))]);

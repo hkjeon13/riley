@@ -1,0 +1,211 @@
+{
+ "model": "q05",
+ "at": 1793605550.8590214,
+ "results": [
+  {
+   "name": "auth: wrong key is 401",
+   "passed": true,
+   "detail": "401"
+  },
+  {
+   "name": "auth: missing key is 401",
+   "passed": true,
+   "detail": "401"
+  },
+  {
+   "name": "plain chat",
+   "passed": true,
+   "detail": "{'id': 'cmpl-0000000000000030', 'object': 'chat.completion', 'created': 1793605535, 'model': 'q05', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': 'A city in Korea is a bustling metropolis with a rich history, diverse culture, and a vibrant economy. Here are some key features of a typical Korean city:\\n\\n1. Population: A city in Ko"
+  },
+  {
+   "name": "completions accepts user",
+   "passed": true,
+   "detail": "b'{\"id\":\"cmpl-0000000000000031\",\"object\":\"text_completion\",\"created\":1793605535,\"model\":\"q05\",\"choices\":[{\"text\":\"\\\\n\\\\nI am trying\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}],\"usage\":{\"prompt_t'"
+  },
+  {
+   "name": "chat logprobs present",
+   "passed": true,
+   "detail": "{'id': 'cmpl-0000000000000032', 'object': 'chat.completion', 'created': 1793605535, 'model': 'q05', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': {'content': [{'token': 'Title', 'logprob': -0.388681024312973, 'bytes': [84, 105, 116, 108, 101], 'top_logprobs': [{'token': 'Title', 'logprob': -0.388681024312973, 'bytes': [84, 105, 116, 108, 101]}, {'token': 'Book', 'logprob': -2.263"
+  },
+  {
+   "name": "greedy token is the most likely",
+   "passed": true,
+   "detail": "[{'token': 'Title', 'logprob': -0.388681024312973, 'bytes': [84, 105, 116, 108, 101], 'top_logprobs': [{'token': 'Title', 'logprob': -0.388681024312973, 'bytes': [84, 105, 116, 108, 101]}, {'token': 'Book', 'logprob': -2.263680934906006, 'bytes': [66, 111, 111, 107]}, {'token': '**', 'logprob': -2.888680934906006, 'bytes': [42, 42]}, {'token': 'The', 'logprob': -3.888680934906006, 'bytes': [84, 10"
+  },
+  {
+   "name": "top_logprobs sorted, five each, negative",
+   "passed": true,
+   "detail": "[{'token': 'Title', 'logprob': -0.388681024312973, 'bytes': [84, 105, 116, 108, 101], 'top_logprobs': [{'token': 'Title', 'logprob': -0.388681024312973, 'bytes': [84, 105, 116, 108, 101]}, {'token': 'Book', 'logprob': -2.263680934906006, 'bytes': [66, 111, 111, 107]}, {'token': '**', 'logprob': -2.888680934906006, 'bytes': [42, 42]}, {'token': 'The', 'logprob': -3.888680934906006, 'bytes': [84, 10"
+  },
+  {
+   "name": "token bytes rebuild the text",
+   "passed": true,
+   "detail": "('Title: \"The Whispering Winds of Time\"\\n\\nIn the vast and mysterious realm of the Forgotten Lands, there exists a', 'Title: \"The Whispering Winds of Time\"\\n\\nIn the vast and mysterious realm of the Forgotten Lands, there exists a')"
+  },
+  {
+   "name": "top mass at most one",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "legacy logprobs shape",
+   "passed": true,
+   "detail": "b'{\"id\":\"cmpl-0000000000000033\",\"object\":\"text_completion\",\"created\":1793605535,\"model\":\"q05\",\"choices\":[{\"text\":\" Paris. It is the\",\"index\":0,\"logprobs\":{\"tokens\":[\" Paris\",\".\",\" It\",\" is\",\" the\"],\"token_logprobs\":[-1.2613266706466675,-0.6594275236129761,-1.7421247959136963,-0.5271506905555725,-1.100'"
+  },
+  {
+   "name": "sampled logprobs",
+   "passed": true,
+   "detail": "{'id': 'cmpl-0000000000000034', 'object': 'chat.completion', 'created': 1793605535, 'model': 'q05', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': {'content': [{'token': 'Book', 'logprob': -2.263680934906006, 'bytes': [66, 111, 111, 107], 'top_logprobs': []}, {'token': ' Title', 'logprob': -0.07991065829992294, 'bytes': [32, 84, 105, 116, 108, 101], 'top_logprobs': []}, {'token': "
+  },
+  {
+   "name": "streamed logprobs",
+   "passed": true,
+   "detail": "[{'id': 'cmpl-0000000000000035', 'object': 'chat.completion.chunk', 'created': 1793605536, 'model': 'q05', 'choices': [{'finish_reason': None, 'index': 0, 'logprobs': {'content': [{'token': ' realm', 'logprob': -1.5762356519699097, 'bytes': [32, 114, 101, 97, 108, 109], 'top_logprobs': [{'token': ' realm', 'logprob': -1.5762356519699097, 'bytes': [32, 114, 101, 97, 108, 109]}, {'token': ' world', "
+  },
+  {
+   "name": "json_object 0",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"city\": \"Seoul, South Korea\", \"description\": \"Seoul is the capital and largest city of South Korea. It is known for its rich history, modern architecture, and vibrant culture. The city is home to many famous landmarks such as the Seoul National Palace Museum, the Seoul Tower, and the Seoul Nationa"
+  },
+  {
+   "name": "json_object 1",
+   "passed": true,
+   "detail": "{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"book\": {\"title\": \"The Enchanted Forest\", \"author\": \"Aurora\", \"genre\": \"Fantasy\", \"setting\": \"A mystical forest in the heart of a distant kingdom\", \"characters\": [\"The Whispering Woods\", \"The Whispering Woods\", \"The Whispering Woods\", \"The Whispering Woods\", \"The Whispering Woods\", \"The Whisperi"
+  },
+  {
+   "name": "json_object 2",
+   "passed": true,
+   "detail": "{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"water_cycle_summary\": \"The water cycle is a continuous process that involves the movement of water on, above, and below the surface of the Earth. It includes several key steps: evaporation, condensation, precipitation, collection, and runoff. The cycle is driven by the sun\\'s heat, with water v"
+  },
+  {
+   "name": "json_object 3",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"language\": \"Python\", \"creator\": \"Guido van Rossum\"}'}}"
+  },
+  {
+   "name": "json_object 4",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"recipe\": \"Here\\'s a simple recipe for a classic Chinese tea: Green Tea. Ingredients: 1 cup fresh green tea leaves, 1 cup boiling water, 1 teaspoon honey, 1 teaspoon sugar, 1 teaspoon black pepper. Instructions: 1. Place the tea leaves in a teacup and add boiling water. 2. Add honey, sugar, and bl"
+  },
+  {
+   "name": "json_object 5",
+   "passed": true,
+   "detail": "{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"description\": \"Mars is a planet located in the outer solar system, approximately 150 million miles from Earth. It is the fourth planet from the Sun and the second-smallest planet in the solar system. Mars is known for its red color due to the presence of iron oxide, or rust, in its atmosphere. "
+  },
+  {
+   "name": "json_object 6",
+   "passed": true,
+   "detail": "{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"colors\": [{\"name\": \"Red\", \"description\": \"A bright, fiery color that often symbolizes passion, energy, and danger. It\\'s often associated with the sun and is used in various forms of advertising and branding.\"}, {\"name\": \"Blue\", \"description\": \"A deep, calming color that evokes feelings of trus"
+  },
+  {
+   "name": "json_object 7",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"answer\": \"William Shakespeare\", \"source\": \"William Shakespeare\", \"credit\": \"William Shakespeare\", \"category\": []}'}}"
+  },
+  {
+   "name": "json_schema 0",
+   "passed": true,
+   "detail": "{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Korean City\", \"age\": 25, \"kind\": \"human\", \"tags\": [\"city\", \"Korea\"], \"note\": \"The city is a bustling metropolis with a rich history and culture. It is a place where people come from all over the world to experience the unique flavors of Korean cuisine, the vibrant nightlife, and the ric"
+  },
+  {
+   "name": "json_schema 1",
+   "passed": true,
+   "detail": "{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\":\"Lucile Sparks\", \"age\":26, \"kind\":\"human\", \"tags\":[\"adult\", \"travel\", \"cosmetic\"], \"note\":\"Lucile Sparks is a 35-year-old woman who has traveled to Tibet in recent years. She comes to a decision to travel to Tibet because she wants to try and make amends for her past glitz virginity cheat"
+  },
+  {
+   "name": "json_schema 2",
+   "passed": true,
+   "detail": "{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\":\"Ella\",\"age\":25,\"kind\":\"human\",\"tags\":[\"water cycle\"],\"note\":\"Ella is a character created by Alibaba Cloud, and she is a young woman who lives in a small village in the mountains. She is passionate about exploring the natural world and loves to learn about the water cycle. Ella is a curio"
+  },
+  {
+   "name": "json_schema 3",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\":\"Dr. Loopy\u8bf8\u845b\",\"age\":55,\"kind\":\"human\",\"tags\":[\"computer\"],\"note\":\"Dr. Loopy\u8bf8\u845b, a 55-year-old human. He is a well-respected expert in the field of programming. His main interest lies in learning and inventing new programming languages.\"}'}}"
+  },
+  {
+   "name": "json_schema 4",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Lily\", \"age\": 25, \"kind\": \"human\", \"tags\": [\"tea\", \"recipe\", \"craft\"]}'}}"
+  },
+  {
+   "name": "json_schema 5",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Mars, journeying through space, harbors\u5777\",\"age\":30,\"kind\":\"human\",\"note\":\"Mars is a planet that embodies the love and courage of brave explorers, reaching towards the stars with a heart full of scientific curiosity. A journey through the vast, constant darkness of space is nothing to hint"
+  },
+  {
+   "name": "json_schema 6",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\":\"Red, Blue, Green\",\"age\":25,\"kind\":\"human\",\"tags\":[\"color\",\"coloring\"]}'}}"
+  },
+  {
+   "name": "json_schema 7",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\":\"Elizabethan theater troupe\",\"age\":25,\"kind\":\"human\",\"tags\":[\"Hamlet\",\"Elizabethan theater\"]}'}}"
+  },
+  {
+   "name": "most schema outputs finish inside max_tokens",
+   "passed": false,
+   "detail": "5"
+  },
+  {
+   "name": "streamed json_schema",
+   "passed": false,
+   "detail": "{\"name\": \"Lila\", \"age\": 16, \"kind\": \"human\", \"tags\": [\"girl\", \"teenager\", \"young adult\"], \"note\": \"Lila is a young woman who is 16 years old. She is a human, but she has a unique personality and a strong sense of curiosity. Lila is always eager to learn and explore the world around her. She is also a bit of a perfectionist, always striving to do her best and achieve her goals. Despite her youthful"
+  },
+  {
+   "name": "unenforceable schema is 400",
+   "passed": true,
+   "detail": "{'error': {'message': 'unsupported JSON Schema: pattern on type string', 'type': 'invalid_request_error', 'param': 'response_format', 'code': 'invalid_schema'}}"
+  },
+  {
+   "name": "response_format text",
+   "passed": true,
+   "detail": "{'id': 'cmpl-0000000000000047', 'object': 'chat.completion', 'created': 1793605545, 'model': 'q05', 'choices': [{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': 'Hello! How can I assist you today?'}}], 'usage': {'prompt_tokens': 32, 'completion_tokens': 10, 'total_tokens': 42}}"
+  },
+  {
+   "name": "mixed batches leave plain outputs identical",
+   "passed": true,
+   "detail": "[]"
+  },
+  {
+   "name": "schema output is concurrency-invariant",
+   "passed": true,
+   "detail": "[]"
+  },
+  {
+   "name": "tool_choice required",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000b8', 'object': 'chat.completion', 'created': 1793605550, 'model': 'q05', 'choices': [{'finish_reason': 'tool_calls', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'call_cmpl-00000000000000b8_0', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{\"city\":\"Seoul\",\"unit\":\"fahrenheit\"}'}}]}}], 'usage'"
+  },
+  {
+   "name": "required call has valid arguments",
+   "passed": true,
+   "detail": "[{'id': 'call_cmpl-00000000000000b8_0', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{\"city\":\"Seoul\",\"unit\":\"fahrenheit\"}'}}]"
+  },
+  {
+   "name": "named tool_choice",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000b9', 'object': 'chat.completion', 'created': 1793605550, 'model': 'q05', 'choices': [{'finish_reason': 'tool_calls', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'call_cmpl-00000000000000b9_0', 'type': 'function', 'function': {'name': 'add', 'arguments': '{\"a\":1,\"b\":1}'}}]}}], 'usage': {'prompt_tokens': 250, 'compl"
+  },
+  {
+   "name": "auto tool call (model's own choice)",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000ba', 'object': 'chat.completion', 'created': 1793605550, 'model': 'q05', 'choices': [{'finish_reason': 'tool_calls', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'call_cmpl-00000000000000ba_0', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{\"city\":\"Seoul\",\"unit\":\"fahrenheit\"}'}}]}}], 'usage'"
+  },
+  {
+   "name": "tool_choice none",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000bb', 'object': 'chat.completion', 'created': 1793605550, 'model': 'q05', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': \"As an AI language model, I don't have real-time access to the latest weather information. However, I can tell\"}}], 'usage': {'prompt_tokens': 38, 'completion_tokens': 24, 'total_tokens'"
+  },
+  {
+   "name": "streamed tool call",
+   "passed": true,
+   "detail": "[{'id': 'cmpl-00000000000000bc', 'object': 'chat.completion.chunk', 'created': 1793605550, 'model': 'q05', 'choices': [{'finish_reason': 'tool_calls', 'index': 0, 'logprobs': None, 'delta': {'tool_calls': [{'id': 'call_cmpl-00000000000000bc_0', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{\"city\":\"Seoul\",\"unit\":\"fahrenheit\"}'}, 'index': 0}]}}]}, {'id': 'cmpl-00000000000000"
+  },
+  {
+   "name": "tool result round trip",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000bd', 'object': 'chat.completion', 'created': 1793605550, 'model': 'q05', 'choices': [{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': 'The current temperature in Seoul is 21 degrees Celsius, and the sky is clear.'}}], 'usage': {'prompt_tokens': 309, 'completion_tokens': 19, 'total_tokens': 328}}"
+  }
+ ]
+}

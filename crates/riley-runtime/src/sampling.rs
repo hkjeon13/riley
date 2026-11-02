@@ -342,6 +342,7 @@ pub struct SamplingWorkspace {
     log_probabilities: Vec<f64>,
     candidate_ids: Vec<usize>,
     history_seen: Vec<bool>,
+    raw_logits: Vec<f32>,
 }
 
 impl SamplingWorkspace {
@@ -373,6 +374,7 @@ impl SamplingWorkspace {
             )?,
             candidate_ids: allocate_filled(vocabulary_size, 0, "candidate token IDs")?,
             history_seen: allocate_filled(vocabulary_size, false, "history markers")?,
+            raw_logits: allocate_filled(vocabulary_size, 0.0, "raw logits")?,
         })
     }
 
@@ -492,6 +494,57 @@ impl SamplingWorkspace {
             .process_bf16_native(logits_bf16_native, constraints, unique_history, params)
             .map_err(SamplingFailure::Processing)?;
         distribution.sample(rng).map_err(SamplingFailure::Rng)
+    }
+
+    /// Log-softmax of the raw logits of the first `addressable` tokens, before
+    /// temperature, top-p and any token mask, for a validated row. Returns the
+    /// value of `selected` and fills `top` with the `top_count` most likely
+    /// tokens, highest first and lowest token ID on ties.
+    ///
+    /// The normalizer uses `approximate_exp`, which vectorizes where `exp`
+    /// calls would cost milliseconds per token on a large vocabulary.
+    pub fn raw_logprobs_bf16_native(
+        &mut self,
+        logits_bf16_native: &[u8],
+        addressable: usize,
+        selected: u32,
+        top_count: usize,
+        top: &mut Vec<(u32, f64)>,
+    ) -> f64 {
+        top.clear();
+        let values = &mut self.raw_logits[..addressable];
+        for (value, bytes) in values
+            .iter_mut()
+            .zip(logits_bf16_native.chunks_exact(BF16_BYTES))
+        {
+            *value = decode_finite_bf16(bytes);
+        }
+        let maximum = values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        const LANES: usize = 16;
+        let mut lanes = [0.0_f32; LANES];
+        for chunk in values.chunks(LANES) {
+            for (lane, value) in lanes.iter_mut().zip(chunk) {
+                *lane += approximate_exp(*value - maximum);
+            }
+        }
+        let sum: f64 = lanes.iter().copied().map(f64::from).sum();
+        let normalizer = f64::from(maximum) + sum.ln();
+        if top_count != 0 {
+            for (token_id, &value) in values.iter().enumerate() {
+                let logit = f64::from(value);
+                if top.len() < top_count || top.last().is_some_and(|last| logit > last.1) {
+                    let at = top.partition_point(|entry| entry.1 >= logit);
+                    top.insert(at, (u32::try_from(token_id).unwrap_or(u32::MAX), logit));
+                    top.truncate(top_count);
+                }
+            }
+        }
+        for entry in top.iter_mut() {
+            entry.1 -= normalizer;
+        }
+        values.get(selected as usize).map_or(f64::NEG_INFINITY, |value| {
+            f64::from(*value) - normalizer
+        })
     }
 
     /// Greedy selection in one pass over the row, for requests whose
@@ -861,6 +914,28 @@ fn allocate_filled<T: Clone>(
     Ok(output)
 }
 
+/// `e^x` for `x <= 0`, branch-free so that a loop over it vectorizes, with a
+/// relative error below 1e-4, which moves a log probability by the same
+/// amount and is well under the resolution of BF16 logits.
+#[inline]
+fn approximate_exp(x: f32) -> f32 {
+    let scaled = x.max(-87.0) * std::f32::consts::LOG2_E;
+    let whole = scaled.floor();
+    let part = scaled - whole;
+    // Taylor series of 2^part on [0, 1).
+    let mantissa = 1.0
+        + part
+            * (0.693_147_2
+                + part
+                    * (0.240_226_5
+                        + part
+                            * (0.055_504_11
+                                + part * (0.009_618_13 + part * 0.001_333_55))));
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let power = f32::from_bits((((whole as i32) + 127) as u32) << 23);
+    mantissa * power
+}
+
 fn decode_finite_bf16(bytes: &[u8]) -> f32 {
     let bits = u16::from_ne_bytes([bytes[0], bytes[1]]);
     f32::from_bits(u32::from(bits) << 16)
@@ -940,6 +1015,38 @@ mod tests {
         workspace
             .process_bf16_native(&bf16_bytes(values), TokenConstraints::AllowAll, &[], params)
             .expect("test distribution must process")
+    }
+
+    #[test]
+    fn raw_logprobs_ignore_masks_and_order_ties_by_token_id() {
+        let row: Vec<u8> = [1.0_f32, 3.0, 3.0, -2.0]
+            .iter()
+            .flat_map(|value| ((value.to_bits() >> 16) as u16).to_ne_bytes())
+            .collect();
+        let mut workspace = SamplingWorkspace::new(4).unwrap();
+        let mut top = Vec::new();
+        let value = workspace.raw_logprobs_bf16_native(&row, 4, 0, 2, &mut top);
+        let exponentials = [1.0_f64, 3.0, 3.0, -2.0].map(f64::exp);
+        let total: f64 = exponentials.iter().sum();
+        assert!((value - (exponentials[0] / total).ln()).abs() < 1e-3);
+        assert_eq!(top.iter().map(|entry| entry.0).collect::<Vec<_>>(), [1, 2]);
+        assert!((top[0].1 - (exponentials[1] / total).ln()).abs() < 1e-3);
+        let outside = workspace.raw_logprobs_bf16_native(&row, 3, 3, 0, &mut top);
+        assert_eq!(outside, f64::NEG_INFINITY);
+        assert!(top.is_empty());
+    }
+
+    #[test]
+    fn approximate_exp_tracks_exp_over_its_range() {
+        let mut x = -80.0_f32;
+        while x <= 0.0 {
+            let exact = f64::from(x).exp();
+            let error = (f64::from(super::approximate_exp(x)) - exact).abs() / exact;
+            assert!(error < 1e-4, "{x}: {error}");
+            x += 0.037;
+        }
+        assert_eq!(super::approximate_exp(-1000.0) > 0.0, true);
+        assert!(super::approximate_exp(-1000.0) < 1e-37);
     }
 
     #[test]

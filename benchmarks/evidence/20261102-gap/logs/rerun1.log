@@ -1,0 +1,35 @@
+4 MiB
+DIED
+RILEY_NATIVE_ATTENTION mode=fixed-tile-unsplit-v1
+riley: CUDA backend preparation failed: backend Internal: batch executor preparation failed: layer=0 op=kv_cache_write: CUDA OutOfMemory error during allocate CUDA device buffer (Runtime/Create, native code 2): allocate CUDA device buffer: out of memory
+4 MiB
+urllib.error.URLError: <urlopen error [Errno 111] Connection refused>
+Traceback (most recent call last):
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/api_check.py", line 106, in <module>
+    status, plain = chat(messages=user(PROMPTS[0]))
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/api_check.py", line 43, in chat
+    status, data = post("/v1/chat/completions", body)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/api_check.py", line 34, in post
+    connection.request("POST", path, json.dumps(body), headers)
+  File "/usr/lib/python3.10/http/client.py", line 1312, in request
+    self._send_request(method, url, body, headers, encode_chunked)
+  File "/usr/lib/python3.10/http/client.py", line 1358, in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+  File "/usr/lib/python3.10/http/client.py", line 1307, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "/usr/lib/python3.10/http/client.py", line 1067, in _send_output
+    self.send(msg)
+  File "/usr/lib/python3.10/http/client.py", line 1005, in send
+    self.connect()
+  File "/usr/lib/python3.10/http/client.py", line 971, in connect
+    self.sock = self._create_connection(
+  File "/usr/lib/python3.10/socket.py", line 845, in create_connection
+    raise err
+  File "/usr/lib/python3.10/socket.py", line 833, in create_connection
+    sock.connect(sa)
+ConnectionRefusedError: [Errno 111] Connection refused
+READY 3852586 after 430s
+40/40 checks passed
+READY 3903771 after 442s
+40/40 checks passed
+RERUN1_DONE

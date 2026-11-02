@@ -266,6 +266,14 @@ The method mattered as much as any single change.
   prefixes; the cache's blocks are now added to the default pool. On Qwen2.5-7B
   at 32 clients throughput went from 765 to 2156 tok/s, with outputs identical
   in all 20 cells.
+- The agent API and [serving validation](serving-validation.md) (November 2)
+  followed a review of what Riley still lacked. Open-loop and burst tests moved
+  the known weakness: tail TTFT on short prompts was not one, and long prompts
+  were, because the fast attention stopped at 1,024 tokens. Lifting that limit
+  to 8,192 halved RAG TTFT, though vLLM stays ahead. JSON Schema and tool calling
+  got a byte-level grammar. Comparing with vLLM showed schemas at half its speed
+  at 32 clients; checking the GPU's own token against the grammar before
+  downloading any logits took that from 1194 to 2048 tok/s.
 
 The measurement logs behind this book were removed from the tree to keep the
 repository small. They remain in the git history at commit `f90683ec`, under

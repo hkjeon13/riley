@@ -128,6 +128,7 @@ fn engine_config() -> EngineConfig {
 
 fn server_config() -> ServerConfig {
     ServerConfig {
+        api_key: None,
         bind_address: SocketAddr::from(([127, 0, 0, 1], 0)),
         worker_threads: 6,
         connection_queue_capacity: 8,

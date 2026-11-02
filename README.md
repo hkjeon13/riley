@@ -74,8 +74,12 @@ alternately twice in the same session and averaged. Prefix caching is off on
 both. vLLM uses its normal compile + CUDA Graph path with
 `--gpu-memory-utilization 0.6` (0.9 for the 14B models, which do not load at 0.6).
 
-Known limits: tail TTFT (p95/p99) at 32 clients is still higher than vLLM's.
-At one client with fixed-length output, the smallest models (Qwen2.5-0.5B,
+Known limits: with prompts of 2,000 tokens or more, vLLM's first token arrives
+about 1.4× sooner at one client and 2× sooner at the p95 under load; with
+400-token prompts its tail TTFT is lower under load. `logprobs` run 1.7× slower
+than vLLM's. See [serving validation](docs/serving-validation.md), which covers
+open-loop arrivals, long prompts and outputs, structured output and a 30-minute
+mixed soak. At one client with fixed-length output, the smallest models (Qwen2.5-0.5B,
 Qwen3-0.6B, SmolLM2-360M) are 11–13 % behind on TPOT. Eighteen models were measured
 with the native profile shown under [Usage](#start-the-server); six
 Qwen2.5/SmolLM2 models used earlier flag sets, listed in the
@@ -146,6 +150,11 @@ are kept in the [performance experiment log](docs/performance-experiments.md).
 - **Verified checkpoints**: Hugging Face safetensors are loaded directly, and
   only if every file matches a hashed manifest.
 - **Streaming, cancellation and bounded queues** built into the server.
+- **Agent API**: JSON Schema `response_format` enforced by a grammar, OpenAI
+  `tools` with forced `tool_choice`, `logprobs`, Bearer API keys, and contexts
+  of up to 8,192 tokens. See the [API reference](docs/api.md).
+- **LoRA adapters** merged into a checkpoint with
+  [`riley-checkpoint merge-lora`](tools/riley-checkpoint/README.md).
 
 ## Installation
 

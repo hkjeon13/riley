@@ -160,7 +160,9 @@ impl TensorParallelFollowers {
             match follower.replies.recv() {
                 Ok(Ok(())) => {}
                 Ok(Err(message)) => {
-                    first_error.get_or_insert(follower_failed(message));
+                    // The error vocabulary is value-only; the detail goes to the log.
+                    eprintln!("riley tensor-parallel follower failed: {message}");
+                    first_error.get_or_insert(follower_failed("a follower iteration failed"));
                 }
                 Err(_) => {
                     first_error.get_or_insert(follower_failed("a follower thread has stopped"));
@@ -206,8 +208,6 @@ impl Drop for TensorParallelFollowers {
     }
 }
 
-fn follower_failed(reason: impl Into<String>) -> LlamaBatchExecutorError {
-    LlamaBatchExecutorError::TensorParallelFollower {
-        reason: reason.into(),
-    }
+fn follower_failed(reason: &'static str) -> LlamaBatchExecutorError {
+    LlamaBatchExecutorError::TensorParallelFollower { reason }
 }

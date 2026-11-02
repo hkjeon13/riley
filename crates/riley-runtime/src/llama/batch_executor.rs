@@ -791,6 +791,68 @@ impl PreparedLlamaBatchExecutor {
         }
     }
 
+    /// Downloads one vocabulary row of a greedy iteration's gathered logits.
+    ///
+    /// A greedy step leaves the logits on the device. A request that needs
+    /// its row on the CPU fetches just that row, so its batch keeps the GPU
+    /// path and the other rows pay nothing. Call after the greedy tokens have
+    /// been downloaded, which proves the step finished.
+    ///
+    /// # Errors
+    ///
+    /// Returns when the iteration did not produce greedy tokens, the slot is
+    /// outside the output, the destination length differs from one row, or
+    /// the synchronous CUDA transfer fails.
+    pub fn download_greedy_row_logits(
+        &mut self,
+        output_slot: usize,
+        destination: &mut [u8],
+        stream: &mut CudaStream,
+    ) -> LlamaBatchExecutorResult<()> {
+        if self.is_poisoned() {
+            return Err(LlamaBatchExecutorError::Poisoned);
+        }
+        if !self.output_ready {
+            return Err(LlamaBatchExecutorError::OutputNotReady);
+        }
+        if self.output_mode != BatchOutputMode::GreedyTokens || output_slot >= self.output_count {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "output_slot",
+                reason: "no greedy logits row at this output slot",
+            });
+        }
+        let row_bytes = self.vocabulary_size().saturating_mul(2);
+        if destination.len() != row_bytes {
+            return Err(LlamaBatchExecutorError::InvalidDownloadLength {
+                expected_bytes: row_bytes,
+                actual_bytes: destination.len(),
+            });
+        }
+        let gathered = self.owner.gathered_logits.as_mut().ok_or(
+            LlamaBatchExecutorError::InvalidConfiguration {
+                field: "gathered_logits",
+                reason: "non-empty output has no cold-prepared device buffer",
+            },
+        )?;
+        let offset = u64::try_from(output_slot.saturating_mul(row_bytes)).map_err(|_| {
+            LlamaBatchExecutorError::InvalidConfiguration {
+                field: "output_slot",
+                reason: "row offset overflowed",
+            }
+        })?;
+        match gathered.download_to_slice(offset, destination, &mut self.owner.forward.io_staging, stream)
+        {
+            Ok(()) => Ok(()),
+            Err(source) => {
+                poison_for_cuda_error(&mut self.owner.poisoned, &source);
+                Err(batch_cuda(
+                    ExecutionSite::global(LlamaOp::OutputGather),
+                    source,
+                ))
+            }
+        }
+    }
+
     /// Downloads and validates one exact greedy token ID per output slot.
     ///
     /// Device traffic is eight bytes per row: a token ID and a status word.

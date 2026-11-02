@@ -238,7 +238,7 @@ fn visible_utf8_prefix(bytes: &[u8]) -> &str {
 }
 
 /// One event returned by a backend after its state transition is committed.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BackendEvent {
     request_id: EngineRequestId,
     event: GenerationEvent,
@@ -278,6 +278,13 @@ pub trait EngineBackend: 'static {
     /// Text-only and mock backends reject opt-in token requests by default.
     #[must_use]
     fn supports_token_ids(&self) -> bool {
+        false
+    }
+
+    /// Whether grammars and log probabilities are honored. A backend that
+    /// cannot honor them must refuse the request, not ignore the field.
+    #[must_use]
+    fn supports_token_constraints(&self) -> bool {
         false
     }
 
@@ -592,6 +599,8 @@ pub enum C02GpuGreedyIneligibility {
     RepetitionPenalty,
     /// At least one output request needs a finish-token mask.
     FinishTokenMask,
+    /// At least one output request has a grammar or wants log probabilities.
+    RequestLogits,
 }
 
 #[cfg(any(feature = "cuda", feature = "server", test))]
@@ -605,6 +614,7 @@ impl C02GpuGreedyIneligibility {
             Self::NonZeroTemperature => "nonzero-temperature",
             Self::RepetitionPenalty => "repetition-penalty",
             Self::FinishTokenMask => "finish-token-mask",
+            Self::RequestLogits => "request-logits",
         }
     }
 }
@@ -1922,7 +1932,10 @@ fn process_command<B: EngineBackend>(
         let _ = admitted.try_send(Err(EngineError::Overloaded));
         return;
     }
-    if request.include_token_ids && !backend.supports_token_ids() {
+    if (request.include_token_ids && !backend.supports_token_ids())
+        || ((request.grammar.is_some() || request.logprobs_top.is_some())
+            && !backend.supports_token_constraints())
+    {
         let _ = admitted.try_send(Err(EngineError::InvalidRequest));
         return;
     }
@@ -2160,8 +2173,8 @@ impl crate::service::CompletionBackend for InferenceEngine {
 #[cfg(feature = "cuda")]
 mod cuda_backend {
     use super::c02_native_fallback_request_is_local;
-    use std::collections::VecDeque;
-    use std::sync::Arc;
+    use std::collections::{HashMap, VecDeque};
+    use std::sync::{Arc, Mutex};
     use std::time::Instant;
 
     use riley_model::{DecodeOptions, EncodeOptions, LoadedModel};
@@ -2172,6 +2185,7 @@ mod cuda_backend {
     use riley_runtime::llama::{
         MAX_LLAMA_BATCH_SHAPE_BUCKETS, PreparedLlamaBatchExecutor, PreparedLlamaBatchExecutorConfig,
     };
+    use riley_runtime::grammar::{Grammar, GrammarAutomaton, GrammarCursor, TokenIndex};
     use riley_runtime::sampling::{SamplingParams, SamplingWorkspace, TokenConstraints};
     use riley_runtime::{CudaContext, CudaRuntime, CudaStream};
     use riley_scheduler::{
@@ -2183,7 +2197,7 @@ mod cuda_backend {
 
     use crate::domain::{
         FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestMetadata,
-        ServiceErrorClass, TokenUsage,
+        ServiceErrorClass, TokenLogprob, TokenProbability, TokenUsage,
     };
 
     use super::{
@@ -2762,6 +2776,8 @@ mod cuda_backend {
         include_token_ids: bool,
         prompt_ids_for_delivery: Option<Vec<u32>>,
         next_delivery_index: usize,
+        logprobs_top: Option<u8>,
+        structured: Option<StructuredRequest>,
     }
 
     struct C02RequestAudit {
@@ -2862,8 +2878,14 @@ mod cuda_backend {
         scheduler_id: SchedulerRequestId,
         token_id: u32,
         text_delta: String,
+        logprob: Option<Box<TokenLogprob>>,
         selection: C02CommittedSamplingSelection,
         native_fallback_request_local: bool,
+    }
+
+    struct StructuredRequest {
+        automaton: Arc<Mutex<GrammarAutomaton>>,
+        cursor: GrammarCursor,
     }
 
     struct CudaBackend {
@@ -2878,6 +2900,10 @@ mod cuda_backend {
         sampling: SamplingWorkspace,
         allowed_tokens: Vec<bool>,
         addressable_tokens: usize,
+        token_index: TokenIndex,
+        automata: HashMap<Arc<Grammar>, Arc<Mutex<GrammarAutomaton>>>,
+        top_logprobs: Vec<(u32, f64)>,
+        row_logits: Vec<u8>,
         gpu_greedy: bool,
         generation_audit: Option<Arc<dyn C02GenerationAuditSink>>,
         greedy_token_workspace: Vec<u32>,
@@ -2891,10 +2917,35 @@ mod cuda_backend {
         clock: Instant,
     }
 
+    /// Distinct grammars kept between requests.
+    const MAX_CACHED_AUTOMATA: usize = 64;
+
+    fn token_index(model: &LoadedModel, vocabulary_size: usize) -> Result<TokenIndex, BackendError> {
+        let tokenizer = model.tokenizer();
+        let mut buffer = vec![0_u8; tokenizer.maximum_decoded_token_bytes()];
+        let mut tokens = Vec::with_capacity(vocabulary_size);
+        for id in 0..vocabulary_size {
+            let id = u32::try_from(id).map_err(|_| internal("token ID overflowed"))?;
+            // A gap in the ID space decodes to nothing, like a special token.
+            let count = tokenizer
+                .decode_token_bytes_into(
+                    id,
+                    DecodeOptions {
+                        skip_special_tokens: true,
+                    },
+                    &mut buffer,
+                )
+                .unwrap_or(0);
+            tokens.push(buffer[..count].to_vec());
+        }
+        Ok(TokenIndex::new(&tokens))
+    }
+
     impl CudaBackend {
         fn new(resources: CudaEngineResources) -> Result<Self, BackendError> {
             let vocabulary_size = resources.executor.vocabulary_size();
             let addressable_tokens = resources.model.tokenizer().addressable_token_count();
+            let token_index = token_index(&resources.model, addressable_tokens)?;
             if addressable_tokens == 0 || addressable_tokens > vocabulary_size {
                 return Err(internal(format!(
                     "tokenizer addressable bound {addressable_tokens} is outside model vocabulary {vocabulary_size}"
@@ -2990,6 +3041,10 @@ mod cuda_backend {
                 sampling,
                 allowed_tokens,
                 addressable_tokens,
+                token_index,
+                automata: HashMap::new(),
+                top_logprobs: Vec::new(),
+                row_logits: Vec::new(),
                 gpu_greedy: resources.gpu_greedy,
                 generation_audit: resources.generation_audit,
                 greedy_token_workspace,
@@ -3167,63 +3222,184 @@ mod cuda_backend {
                     .request_index_by_scheduler(item.request_id())
                     .ok_or_else(|| internal("iteration references unknown request"))?;
                 let request = &mut self.requests[request_index];
-                let (token_id, token_logprob) = if gpu_greedy {
-                    (
-                        downloaded.greedy_token_for_slot(slot).map_err(|source| {
-                            internal(format!("greedy token routing failed: {source}"))
-                        })?,
-                        Some(0.0),
-                    )
+                let mut logprob = None;
+                // The device's choice stands whenever the grammar admits it:
+                // the unconstrained maximum is then also the masked one, and
+                // the row is not worth a download. End-of-sequence and masked
+                // finishes keep their rules on the full path below.
+                let device_token = if gpu_greedy {
+                    let token_id = downloaded.greedy_token_for_slot(slot).map_err(|source| {
+                        internal(format!("greedy token routing failed: {source}"))
+                    })?;
+                    let admitted = match request.structured.as_mut() {
+                        None => true,
+                        Some(structured) => {
+                            let mut automaton = structured
+                                .automaton
+                                .lock()
+                                .map_err(|_| internal("grammar automaton lock poisoned"))?;
+                            request.state.masked_finish_token_ids().is_empty()
+                                && !self
+                                    .model
+                                    .spec()
+                                    .special_tokens()
+                                    .eos()
+                                    .contains(&token_id)
+                                && automaton.allows(
+                                    &mut structured.cursor,
+                                    &self.token_index,
+                                    token_id,
+                                )
+                        }
+                    };
+                    admitted.then_some(token_id)
                 } else {
-                    let logits = downloaded
-                        .logits_for_slot(slot)
-                        .map_err(|source| internal(format!("logit routing failed: {source}")))?;
-                    self.allowed_tokens.fill(false);
-                    self.allowed_tokens[..self.addressable_tokens].fill(true);
-                    for &masked_id in request.state.masked_finish_token_ids() {
-                        let index = usize::try_from(masked_id)
-                            .map_err(|_| internal("masked token ID cannot index vocabulary"))?;
-                        let allowed = self
-                            .allowed_tokens
-                            .get_mut(index)
-                            .ok_or_else(|| internal("masked token ID is outside vocabulary"))?;
-                        *allowed = false;
-                    }
-                    // Greedy rows skip the vocabulary-sized distribution; the
-                    // selection and its errors are those of the full path.
-                    let greedy = self
-                        .sampling
-                        .greedy_bf16_native(
-                            logits,
-                            TokenConstraints::AllowedMask(&self.allowed_tokens),
-                            request.state.history_token_ids(),
-                            request.state.request().sampling_params,
-                        )
-                        .map_err(|source| internal(format!("sampling failed: {source}")))?;
-                    let sample = if let Some(sample) = greedy {
-                        request
-                            .state
-                            .pre_step()
-                            .map_err(|source| internal(format!("sampling RNG failed: {source}")))?;
-                        sample
+                    None
+                };
+                let (token_id, token_logprob) = if let (Some(token_id), None) =
+                    (device_token, request.logprobs_top)
+                {
+                    (token_id, Some(0.0))
+                } else {
+                    let logits = if gpu_greedy {
+                        let (executor, stream) = self
+                            .executor
+                            .as_mut()
+                            .zip(self.stream.as_mut())
+                            .ok_or_else(|| internal("batch executor is already closed"))?;
+                        let index = usize::try_from(slot.get())
+                            .map_err(|_| internal("output slot overflowed"))?;
+                        self.row_logits.resize(self.sampling.vocabulary_size() * 2, 0);
+                        executor
+                            .download_greedy_row_logits(index, &mut self.row_logits, stream)
+                            .map_err(|source| internal(format!("logit row download failed: {source}")))?;
+                        self.row_logits.as_slice()
                     } else {
-                        let distribution = self
+                        downloaded
+                            .logits_for_slot(slot)
+                            .map_err(|source| internal(format!("logit routing failed: {source}")))?
+                    };
+                    let (sampled_id, sampled_logprob) = if let Some(token_id) = device_token {
+                        (token_id, Some(0.0))
+                    } else {
+                        self.allowed_tokens.fill(false);
+                        self.allowed_tokens[..self.addressable_tokens].fill(true);
+                        for &masked_id in request.state.masked_finish_token_ids() {
+                            let index = usize::try_from(masked_id)
+                                .map_err(|_| internal("masked token ID cannot index vocabulary"))?;
+                            let allowed = self
+                                .allowed_tokens
+                                .get_mut(index)
+                                .ok_or_else(|| internal("masked token ID is outside vocabulary"))?;
+                            *allowed = false;
+                        }
+                        if let Some(structured) = request.structured.as_mut() {
+                            let mut automaton = structured
+                                .automaton
+                                .lock()
+                                .map_err(|_| internal("grammar automaton lock poisoned"))?;
+                            let complete = automaton.is_accepting(&mut structured.cursor);
+                            let continuable = automaton.apply_mask(
+                                &mut structured.cursor,
+                                &self.token_index,
+                                &mut self.allowed_tokens,
+                            );
+                            // End-of-sequence is the only way out of a complete
+                            // sentence, and of a vocabulary that cannot continue.
+                            if complete || !continuable {
+                                for &token_id in self.model.spec().special_tokens().eos() {
+                                    if let Some(allowed) =
+                                        self.allowed_tokens.get_mut(token_id as usize)
+                                    {
+                                        *allowed = true;
+                                    }
+                                }
+                            }
+                        }
+                        // Greedy rows skip the vocabulary-sized distribution; the
+                        // selection and its errors are those of the full path.
+                        let greedy = self
                             .sampling
-                            .process_bf16_native(
+                            .greedy_bf16_native(
                                 logits,
                                 TokenConstraints::AllowedMask(&self.allowed_tokens),
                                 request.state.history_token_ids(),
                                 request.state.request().sampling_params,
                             )
                             .map_err(|source| internal(format!("sampling failed: {source}")))?;
-                        distribution
-                            .sample(request.state.sampling_rng().map_err(|source| {
-                                internal(format!("sampling RNG failed: {source}"))
-                            })?)
-                            .map_err(|source| internal(format!("sampling RNG failed: {source}")))?
+                        let sample = if let Some(sample) = greedy {
+                            request
+                                .state
+                                .pre_step()
+                                .map_err(|source| internal(format!("sampling RNG failed: {source}")))?;
+                            sample
+                        } else {
+                            let distribution = self
+                                .sampling
+                                .process_bf16_native(
+                                    logits,
+                                    TokenConstraints::AllowedMask(&self.allowed_tokens),
+                                    request.state.history_token_ids(),
+                                    request.state.request().sampling_params,
+                                )
+                                .map_err(|source| internal(format!("sampling failed: {source}")))?;
+                            distribution
+                                .sample(request.state.sampling_rng().map_err(|source| {
+                                    internal(format!("sampling RNG failed: {source}"))
+                                })?)
+                                .map_err(|source| internal(format!("sampling RNG failed: {source}")))?
+                        };
+                        (sample.token_id(), sample.token_logprob())
                     };
-                    (sample.token_id(), sample.token_logprob())
+                    if let Some(top) = request.logprobs_top {
+                        let selected = self.sampling.raw_logprobs_bf16_native(
+                            logits,
+                            self.addressable_tokens,
+                            sampled_id,
+                            usize::from(top),
+                            &mut self.top_logprobs,
+                        );
+                        let mut display = vec![0_u8; request.decoded_token_bytes.len()];
+                        let mut describe = |token_id: u32, logprob: f64| {
+                            let count = self
+                                .model
+                                .tokenizer()
+                                .decode_token_bytes_into(
+                                    token_id,
+                                    DecodeOptions {
+                                        skip_special_tokens: false,
+                                    },
+                                    &mut display,
+                                )
+                                .unwrap_or(0);
+                            TokenProbability {
+                                bytes: display[..count].to_vec(),
+                                #[allow(clippy::cast_possible_truncation)]
+                                logprob: logprob as f32,
+                            }
+                        };
+                        let chosen = describe(sampled_id, selected);
+                        let top = self
+                            .top_logprobs
+                            .iter()
+                            .map(|&(token_id, value)| describe(token_id, value))
+                            .collect();
+                        logprob = Some(Box::new(TokenLogprob { chosen, top }));
+                    }
+                    (sampled_id, sampled_logprob)
                 };
+                if let Some(structured) = request.structured.as_mut() {
+                    let mut automaton = structured
+                        .automaton
+                        .lock()
+                        .map_err(|_| internal("grammar automaton lock poisoned"))?;
+                    if !automaton.advance(
+                        &mut structured.cursor,
+                        self.token_index.token_bytes(token_id),
+                    ) {
+                        return Err(internal("sampled token left its grammar"));
+                    }
+                }
                 let needs_decoding = request
                     .state
                     .token_needs_decoding(token_id)
@@ -3263,6 +3439,7 @@ mod cuda_backend {
                     scheduler_id: item.request_id(),
                     token_id,
                     text_delta: generated.text_delta().to_owned(),
+                    logprob,
                     selection,
                     native_fallback_request_local,
                 });
@@ -3311,7 +3488,21 @@ mod cuda_backend {
                 let request_index = self
                     .request_index_by_scheduler(item.request_id())
                     .ok_or_else(|| internal("iteration references unknown request"))?;
-                let state = &self.requests[request_index].state;
+                let request = &self.requests[request_index];
+                // The executor can hand single rows back from an eager greedy
+                // step; a graph-owned one cannot.
+                if self.decode_graph.is_some()
+                    && (request.structured.is_some() || request.logprobs_top.is_some())
+                {
+                    return Ok(C02CommittedSamplingSelection {
+                        iteration_id: plan.iteration_id().get(),
+                        configured_backend,
+                        selected_backend: C02SamplingBackend::CpuNormative,
+                        ineligibility_reason: Some(super::C02GpuGreedyIneligibility::RequestLogits),
+                        committed: false,
+                    });
+                }
+                let state = &request.state;
                 let params = state.request().sampling_params;
                 if let Some(reason) = gpu_greedy_ineligibility(
                     true,
@@ -3600,6 +3791,10 @@ mod cuda_backend {
             true
         }
 
+        fn supports_token_constraints(&self) -> bool {
+            true
+        }
+
         fn admit(
             &mut self,
             request_id: EngineRequestId,
@@ -3729,6 +3924,27 @@ mod cuda_backend {
                     now_ns,
                 )
                 .map_err(|source| scheduler_admission_error(&source))?;
+            let structured = match request.grammar.as_ref() {
+                Some(grammar) => {
+                    if self.automata.len() >= MAX_CACHED_AUTOMATA {
+                        self.automata
+                            .retain(|_, automaton| Arc::strong_count(automaton) > 1);
+                    }
+                    let automaton = Arc::clone(
+                        self.automata
+                            .entry(Arc::clone(grammar))
+                            .or_insert_with(|| {
+                                Arc::new(Mutex::new(GrammarAutomaton::new(Arc::clone(grammar))))
+                            }),
+                    );
+                    let cursor = automaton
+                        .lock()
+                        .map_err(|_| internal("grammar automaton lock poisoned"))?
+                        .start();
+                    Some(StructuredRequest { automaton, cursor })
+                }
+                None => None,
+            };
             self.requests.push(CudaRequest {
                 engine_id: request_id,
                 scheduler_id: submission.request_id(),
@@ -3742,6 +3958,8 @@ mod cuda_backend {
                 include_token_ids: request.include_token_ids,
                 prompt_ids_for_delivery,
                 next_delivery_index: 0,
+                logprobs_top: request.logprobs_top,
+                structured,
             });
             Ok(())
         }
@@ -3947,6 +4165,7 @@ mod cuda_backend {
                     .request_index_by_scheduler(token.request_id())
                     .ok_or_else(|| internal("committed token targets unknown request"))?;
                 let text = pending.text_delta.clone();
+                let logprob = pending.logprob.clone();
                 let request = &mut self.requests[request_index];
                 let event = if request.include_token_ids {
                     if token.generated_index() != request.next_delivery_index
@@ -3966,6 +4185,7 @@ mod cuda_backend {
                         token_id: token.token_id(),
                         generated_index: token.generated_index(),
                         prompt_token_ids: request.prompt_ids_for_delivery.take(),
+                        logprob,
                     }
                 } else {
                     GenerationEvent::TokenDelta { text }
@@ -4277,6 +4497,9 @@ mod tests {
             stop_sequences: Vec::new(),
             stream: true,
             include_token_ids: false,
+            expose_token_ids: false,
+            logprobs_top: None,
+            grammar: None,
             add_special_tokens: true,
         }
     }
@@ -4681,6 +4904,7 @@ mod tests {
                             token_id: 17 + u32::try_from(index).expect("small index"),
                             generated_index: index,
                             prompt_token_ids: (index == 0).then(|| vec![1, 2]),
+                            logprob: None,
                         },
                     )
                 })
@@ -4688,7 +4912,7 @@ mod tests {
             super::publish_events(&mut backend, &mut requests, events);
             assert!(
                 matches!(receiver.try_recv(), Ok(GenerationEvent::CommittedToken {
-                token_id:17, generated_index:0, text, prompt_token_ids:Some(ids),
+                token_id:17, generated_index:0, text, prompt_token_ids:Some(ids), logprob:None,
             }) if text.is_empty() && ids == [1,2])
             );
             if capacity == 1 {
@@ -4718,6 +4942,7 @@ mod tests {
                                 token_id: 19,
                                 generated_index: 2,
                                 prompt_token_ids: None,
+                                logprob: None,
                             },
                         ),
                         BackendEvent::new(

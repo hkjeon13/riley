@@ -1,0 +1,36 @@
+VLLM_READY
+{"prompts": 18, "invariant_c8": 40, "of_c8": 54, "invariant_c32": 39, "of_c32": 54, "hf_identical": 16, "hf_first_token": 17, "hf_common_prefix": [32, 32, 0, 32, 32, 32, 14, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32]}
+riley: CUDA backend preparation failed: backend Internal: batch executor preparation failed: layer=0 op=kv_cache_write: CUDA OutOfMemory error during allocate CUDA device buffer (Runtime/Create, native code 2): allocate CUDA device buffer: out of memory
+urllib.error.URLError: <urlopen error [Errno 111] Connection refused>
+Traceback (most recent call last):
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/api_check.py", line 106, in <module>
+    status, plain = chat(messages=user(PROMPTS[0]))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/api_check.py", line 43, in chat
+    status, data = post("/v1/chat/completions", body)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/api_check.py", line 34, in post
+    connection.request("POST", path, json.dumps(body), headers)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1386, in request
+    self._send_request(method, url, body, headers, encode_chunked)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1432, in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1381, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1141, in _send_output
+    self.send(msg)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1085, in send
+    self.connect()
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1051, in connect
+    self.sock = self._create_connection(
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/socket.py", line 865, in create_connection
+    raise exceptions[0]
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/socket.py", line 850, in create_connection
+    sock.connect(sa)
+ConnectionRefusedError: [Errno 111] Connection refused
+READY 3438517 after 42s
+  auto -> {"role": "assistant", "content": "{\"type\": \"function\", \"function\": \"get_weather\", \"parameters\": {\"city\": \"Seoul\", \"unit\": \"celsius\"}}"}
+FAIL tool result round trip  {'id': 'cmpl-00000000000000be', 'object': 'chat.completion', 'created': 1793613808, 'model': 'm', 'choices': [{'finish_reason': 'tool_calls', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'conte
+39/40 checks passed
+G7_DONE

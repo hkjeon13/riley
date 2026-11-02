@@ -1,0 +1,206 @@
+{
+ "model": "m",
+ "at": 1793630262.5277653,
+ "results": [
+  {
+   "name": "plain chat",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000ae', 'object': 'chat.completion', 'created': 1793630237, 'model': 'm', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '<think>\\nOkay, the user wants me to describe a city in Korea. Let me think about which city to choose. There are several major cities in Korea: Seoul, Busan, Incheon, Daegu, Gwangju, and "
+  },
+  {
+   "name": "completions accepts user",
+   "passed": true,
+   "detail": "b'{\"id\":\"cmpl-00000000000000af\",\"object\":\"text_completion\",\"created\":1793630238,\"model\":\"m\",\"choices\":[{\"text\":\"\\\\\" is a string\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}],\"usage\":{\"prompt_toke'"
+  },
+  {
+   "name": "chat logprobs present",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000b0', 'object': 'chat.completion', 'created': 1793630238, 'model': 'm', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': {'content': [{'token': '<think>', 'logprob': -7.795627607265487e-05, 'bytes': [60, 116, 104, 105, 110, 107, 62], 'top_logprobs': [{'token': '<think>', 'logprob': -7.795627607265487e-05, 'bytes': [60, 116, 104, 105, 110, 107, 62]}, {'token"
+  },
+  {
+   "name": "greedy token is the most likely",
+   "passed": true,
+   "detail": "[{'token': '<think>', 'logprob': -7.795627607265487e-05, 'bytes': [60, 116, 104, 105, 110, 107, 62], 'top_logprobs': [{'token': '<think>', 'logprob': -7.795627607265487e-05, 'bytes': [60, 116, 104, 105, 110, 107, 62]}, {'token': '</think>', 'logprob': -14.000078201293945, 'bytes': [60, 47, 116, 104, 105, 110, 107, 62]}, {'token': '\u00eancia', 'logprob': -14.125078201293945, 'bytes': [195, 170, 110, 99"
+  },
+  {
+   "name": "top_logprobs sorted, five each, negative",
+   "passed": true,
+   "detail": "[{'token': '<think>', 'logprob': -7.795627607265487e-05, 'bytes': [60, 116, 104, 105, 110, 107, 62], 'top_logprobs': [{'token': '<think>', 'logprob': -7.795627607265487e-05, 'bytes': [60, 116, 104, 105, 110, 107, 62]}, {'token': '</think>', 'logprob': -14.000078201293945, 'bytes': [60, 47, 116, 104, 105, 110, 107, 62]}, {'token': '\u00eancia', 'logprob': -14.125078201293945, 'bytes': [195, 170, 110, 99"
+  },
+  {
+   "name": "token bytes rebuild the text",
+   "passed": true,
+   "detail": "('<think>\\nOkay, the user wants me to invent a fictional book. Let me start by thinking about what makes a good', '<think>\\nOkay, the user wants me to invent a fictional book. Let me start by thinking about what makes a good')"
+  },
+  {
+   "name": "top mass at most one",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "legacy logprobs shape",
+   "passed": true,
+   "detail": "b'{\"id\":\"cmpl-00000000000000b1\",\"object\":\"text_completion\",\"created\":1793630238,\"model\":\"m\",\"choices\":[{\"text\":\" Paris. The capital of\",\"index\":0,\"logprobs\":{\"tokens\":[\" Paris\",\".\",\" The\",\" capital\",\" of\"],\"token_logprobs\":[-0.43219876289367676,-0.21555569767951965,-0.23924899101257324,-0.638905525207'"
+  },
+  {
+   "name": "sampled logprobs",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000b2', 'object': 'chat.completion', 'created': 1793630238, 'model': 'm', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': {'content': [{'token': '<think>', 'logprob': -7.795627607265487e-05, 'bytes': [60, 116, 104, 105, 110, 107, 62], 'top_logprobs': []}, {'token': '\\n', 'logprob': -2.421059264179348e-07, 'bytes': [10], 'top_logprobs': []}, {'token': 'Okay',"
+  },
+  {
+   "name": "streamed logprobs",
+   "passed": true,
+   "detail": "[{'id': 'cmpl-00000000000000b3', 'object': 'chat.completion.chunk', 'created': 1793630238, 'model': 'm', 'choices': [{'finish_reason': None, 'index': 0, 'logprobs': {'content': [{'token': ' me', 'logprob': -9.610631968826056e-05, 'bytes': [32, 109, 101], 'top_logprobs': [{'token': ' me', 'logprob': -9.610631968826056e-05, 'bytes': [32, 109, 101]}, {'token': \"'s\", 'logprob': -9.250096321105955, 'by"
+  },
+  {
+   "name": "json_object 0",
+   "passed": true,
+   "detail": "{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"city\": \"Seoul\", \"population\": 9733573, \"location\": \"South Korea\", \"famous_for\": [\"Gyeongbokgung Palace\", \"Namsan Tower\", \"Hagwon Street\", \"Gwangjang Market\", \"Seoul Tower\"], \"culture\": \"Korean culture, including traditional Korean music, dance, and cuisine such as kimchi and bibimbap\", \"economy"
+  },
+  {
+   "name": "json_object 1",
+   "passed": true,
+   "detail": "{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"title\": \"The Whispering Veil\", \"author\": \"Dr. Elara Morn\", \"genre\": \"Fantasy\", \"summary\": \"In a world where reality is woven from dreams, a young scholar discovers a hidden realm that can alter the fabric of existence. When she accidentally opens a portal to the Veil, she must navigate a labyri"
+  },
+  {
+   "name": "json_object 2",
+   "passed": true,
+   "detail": "{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"water_cycle\": \"The water cycle, also known as the hydrological cycle, is the continuous movement of water on, above, and below the surface of the Earth. It involves processes such as evaporation, condensation, precipitation, infiltration, runoff, and transpiration. Water evaporates from the sur"
+  },
+  {
+   "name": "json_object 3",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"language\": \"Python\", \"creator\": \"Guido van Rossum\"}'}}"
+  },
+  {
+   "name": "json_object 4",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"recipe\": \"Tea Recipe\", \"ingredients\": [\"Tea leaves\", \"Water\", \"Hot water\"], \"instructions\": \"1. Boil water. 2. Add tea leaves to a cup. 3. Pour hot water over the tea leaves. 4. Let it steep for 3-5 minutes. 5. Strain and enjoy.\"}'}}"
+  },
+  {
+   "name": "json_object 5",
+   "passed": true,
+   "detail": "{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Mars\", \"distance_from_sun\": \"1.524 astronomical units\", \"diameter\": \"6,779 km\", \"mass\": \"6.39 \u00d7 10^23 kg\", \"atmosphere\": \"primarily carbon dioxide, with traces of nitrogen and argon\", \"surface_temperature_range\": \"-80\u00b0C to 20\u00b0C\", \"moons\": \"2\", \"rover_explorations\": [\"Curiosity\", \"Persev"
+  },
+  {
+   "name": "json_object 6",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{}'}}"
+  },
+  {
+   "name": "json_object 7",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"author\": \"William Shakespeare\"}'}}"
+  },
+  {
+   "name": "json_schema 0",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Ji-hoon\", \"age\": 32, \"kind\": \"human\", \"tags\": [\"Korean\", \"city\", \"description\"], \"note\": \"Ji-hoon is a 32-year-old Korean man who is passionate about \"}'}}"
+  },
+  {
+   "name": "json_schema 1",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"The Labyrinth of Echoes\", \"age\": 23, \"kind\": \"human\", \"tags\": [\"magic\", \"adventure\", \"mystery\"], \"note\": \"A young scholar discovers a hidden library that leads to a w\"}'}}"
+  },
+  {
+   "name": "json_schema 2",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Mira\", \"age\": 32, \"kind\": \"human\", \"tags\": [\"water cycle\", \"weather\", \"science\"], \"note\": \"Mira is a curious and inquisitive character who loves to ask\"}'}}"
+  },
+  {
+   "name": "json_schema 3",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Pascal\", \"age\": 45, \"kind\": \"human\", \"note\": \"Pascal is a programming language created by Niklaus Wirth in\"}'}}"
+  },
+  {
+   "name": "json_schema 4",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"TeaMaster\", \"age\": 28, \"kind\": \"robot\", \"tags\": [\"tea\", \"recipe\", \"bot\"], \"note\": \"TeaMaster is a high-tech robot designed to brew the perfect\u676f\"}'}}"
+  },
+  {
+   "name": "json_schema 5",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Mars\", \"age\": 0, \"kind\": \"robot\", \"tags\": [\"alien\", \"red planet\", \"robot\"], \"note\": \"Mars is a planet with a thin atmosphere and cold climate, ro\"}'}}"
+  },
+  {
+   "name": "json_schema 6",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Luna\", \"age\": 22, \"kind\": \"human\", \"tags\": [\"artist\", \"sailor\", \"sailor\"], \"note\": \"Luna is a young artist who loves the sea. She sails the seas\"}'}}"
+  },
+  {
+   "name": "json_schema 7",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"The Historian\", \"age\": 72, \"kind\": \"robot\", \"tags\": [\"mystery\", \"archivist\"], \"note\": \"A sentient robot with a deep knowledge of literature and a s\"}'}}"
+  },
+  {
+   "name": "most schema outputs finish inside max_tokens",
+   "passed": true,
+   "detail": "8"
+  },
+  {
+   "name": "streamed json_schema",
+   "passed": true,
+   "detail": "{\"name\": \"Lira\", \"age\": 24, \"kind\": \"human\", \"tags\": [\"rogue\", \"sailor\", \"sailor's daughter\"], \"note\": \"Lira is a rogue who has been sailing the seas for years, and\"}"
+  },
+  {
+   "name": "unenforceable schema is 400",
+   "passed": true,
+   "detail": "{'error': {'message': 'unsupported JSON Schema: uniqueItems on type array', 'type': 'invalid_request_error', 'param': 'response_format', 'code': 'invalid_schema'}}"
+  },
+  {
+   "name": "pattern is enforced",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000c5', 'object': 'chat.completion', 'created': 1793630250, 'model': 'm', 'choices': [{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"phone\": \"123-4567\"}'}}], 'usage': {'prompt_tokens': 14, 'completion_tokens': 14, 'total_tokens': 28}}"
+  },
+  {
+   "name": "response_format text",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000c6', 'object': 'chat.completion', 'created': 1793630250, 'model': 'm', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '<think>\\nOkay, the user said \"Say hi.\" I need to respond appropriately. Since they asked to say hi, I should greet them back. Let me make sure the greeting is friendly and welcoming. Mayb"
+  },
+  {
+   "name": "mixed batches leave plain outputs identical",
+   "passed": true,
+   "detail": "[]"
+  },
+  {
+   "name": "schema output is concurrency-invariant",
+   "passed": true,
+   "detail": "[]"
+  },
+  {
+   "name": "tool_choice required",
+   "passed": true,
+   "detail": "{'id': 'cmpl-0000000000000137', 'object': 'chat.completion', 'created': 1793630260, 'model': 'm', 'choices': [{'finish_reason': 'tool_calls', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'call_cmpl-0000000000000137_0', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{\"city\":\"Seoul\"}'}}]}}], 'usage': {'prompt_tokens': 23"
+  },
+  {
+   "name": "required call has valid arguments",
+   "passed": true,
+   "detail": "[{'id': 'call_cmpl-0000000000000137_0', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{\"city\":\"Seoul\"}'}}]"
+  },
+  {
+   "name": "named tool_choice",
+   "passed": true,
+   "detail": "{'id': 'cmpl-0000000000000138', 'object': 'chat.completion', 'created': 1793630260, 'model': 'm', 'choices': [{'finish_reason': 'tool_calls', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'call_cmpl-0000000000000138_0', 'type': 'function', 'function': {'name': 'add', 'arguments': '{\"a\":5,\"b\":3}'}}]}}], 'usage': {'prompt_tokens': 234, 'complet"
+  },
+  {
+   "name": "auto tool call (model's own choice)",
+   "passed": true,
+   "detail": "{'id': 'cmpl-0000000000000139', 'object': 'chat.completion', 'created': 1793630260, 'model': 'm', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '<think>\\nOkay, the user is asking for the current weather in Seoul. Let me check the tools provided. There\\'s a function called get_weather that takes a city and an optional unit. The req"
+  },
+  {
+   "name": "tool_choice none",
+   "passed": true,
+   "detail": "{'id': 'cmpl-000000000000013a', 'object': 'chat.completion', 'created': 1793630261, 'model': 'm', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '<think>\\nOkay, the user is asking about the current weather in Seoul. I need to provide an accurate and up-to'}}], 'usage': {'prompt_tokens': 17, 'completion_tokens': 24, 'total_tokens': "
+  },
+  {
+   "name": "streamed tool call",
+   "passed": true,
+   "detail": "[{'id': 'cmpl-000000000000013b', 'object': 'chat.completion.chunk', 'created': 1793630261, 'model': 'm', 'choices': [{'finish_reason': 'tool_calls', 'index': 0, 'logprobs': None, 'delta': {'tool_calls': [{'id': 'call_cmpl-000000000000013b_0', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{\"city\":\"Seoul\"}'}, 'index': 0}]}}]}, {'id': 'cmpl-000000000000013b', 'object': 'chat.c"
+  },
+  {
+   "name": "tool result round trip",
+   "passed": true,
+   "detail": "{'id': 'cmpl-000000000000013c', 'object': 'chat.completion', 'created': 1793630261, 'model': 'm', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': \"<think>\\nOkay, the user asked for the weather in Seoul. I called the get_weather function with the city set to Seoul. The response came back with a temperature of 21\u00b0C and clear sky. Now "
+  }
+ ]
+}

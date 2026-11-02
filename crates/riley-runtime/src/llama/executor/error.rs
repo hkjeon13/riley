@@ -116,7 +116,7 @@ pub enum LlamaBatchExecutorError {
     Poisoned,
     /// A tensor-parallel follower rank failed or stopped.
     TensorParallelFollower {
-        reason: String,
+        reason: &'static str,
     },
     InvalidDownloadLength {
         expected_bytes: usize,

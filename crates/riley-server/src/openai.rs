@@ -9,11 +9,12 @@ use std::error;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::domain::{
     FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestLimits,
-    RequestMetadata, SamplingParameters, ServiceErrorClass, TokenUsage,
+    RequestMetadata, SamplingParameters, ServiceErrorClass, TokenLogprob, TokenProbability,
+    TokenUsage,
 };
 
 /// OpenAI-compatible default for `max_tokens`.
@@ -97,9 +98,12 @@ pub struct CompletionRequest {
     /// Prompt echoing is unsupported; false is accepted as a neutral value.
     #[serde(default)]
     pub echo: Option<bool>,
-    /// Log probabilities are not implemented.
+    /// Number of top alternatives per token, 0 to 5, as an integer.
     #[serde(default)]
     pub logprobs: Option<Value>,
+    /// End-user label; accepted and ignored.
+    #[serde(default)]
+    pub user: Option<String>,
     /// Suffix insertion is not implemented.
     #[serde(default)]
     pub suffix: Option<String>,
@@ -196,6 +200,8 @@ pub fn normalize_completion_request(
     }
 
     let stop_sequences = normalize_stops(request.stop, limits)?;
+    let logprobs_top = request.logprobs.as_ref().and_then(logprobs_count);
+    let expose_token_ids = request.return_token_ids.unwrap_or(false);
     Ok(GenerationRequest {
         model_id: request.model,
         prompt,
@@ -207,9 +213,19 @@ pub fn normalize_completion_request(
         },
         stop_sequences,
         stream: request.stream.unwrap_or(false),
-        include_token_ids: request.return_token_ids.unwrap_or(false),
+        include_token_ids: expose_token_ids || logprobs_top.is_some(),
+        expose_token_ids,
+        logprobs_top,
+        grammar: None,
         add_special_tokens: true,
     })
+}
+
+fn logprobs_count(value: &Value) -> Option<u8> {
+    value
+        .as_u64()
+        .filter(|count| *count <= 5)
+        .and_then(|count| u8::try_from(count).ok())
 }
 
 fn validate_supported_options(request: &CompletionRequest) -> Result<(), ValidationError> {
@@ -220,11 +236,15 @@ fn validate_supported_options(request: &CompletionRequest) -> Result<(), Validat
             "stream options require stream=true",
         ));
     }
-    if request.logprobs.is_some() {
+    if request
+        .logprobs
+        .as_ref()
+        .is_some_and(|value| !value.is_null() && logprobs_count(value).is_none())
+    {
         return Err(ValidationError::new(
             "logprobs",
             ValidationErrorCode::UnsupportedParameter,
-            "logprobs is not supported",
+            "logprobs must be an integer from 0 to 5",
         ));
     }
     if request.suffix.is_some() {
@@ -631,9 +651,71 @@ impl From<TokenUsage> for CompletionUsage {
 }
 
 /// Validates bounded token delivery independently of text detokenization.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// How log probabilities appear in a response.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LogprobShape {
+    /// `tokens`, `token_logprobs`, `top_logprobs` and `text_offset` arrays.
+    Legacy,
+    /// One `content` entry per token.
+    Chat,
+}
+
+fn token_text(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+fn chat_token(token: &TokenProbability) -> Value {
+    json!({"token": token_text(&token.bytes), "logprob": token.logprob, "bytes": token.bytes})
+}
+
+fn logprobs_value(shape: LogprobShape, tokens: &[TokenLogprob]) -> Value {
+    match shape {
+        LogprobShape::Chat => {
+            let content: Vec<Value> = tokens
+                .iter()
+                .map(|token| {
+                    let mut entry = chat_token(&token.chosen);
+                    entry["top_logprobs"] = token.top.iter().map(chat_token).collect();
+                    entry
+                })
+                .collect();
+            json!({"content": content})
+        }
+        LogprobShape::Legacy => {
+            let mut offset = 0_usize;
+            let mut offsets = Vec::with_capacity(tokens.len());
+            for token in tokens {
+                offsets.push(offset);
+                offset += token_text(&token.chosen.bytes).chars().count();
+            }
+            let top: Vec<Value> = tokens
+                .iter()
+                .map(|token| {
+                    Value::Object(
+                        token
+                            .top
+                            .iter()
+                            .map(|entry| (token_text(&entry.bytes), json!(entry.logprob)))
+                            .collect(),
+                    )
+                })
+                .collect();
+            json!({
+                "tokens": tokens.iter().map(|token| token_text(&token.chosen.bytes)).collect::<Vec<_>>(),
+                "token_logprobs": tokens.iter().map(|token| token.chosen.logprob).collect::<Vec<_>>(),
+                "top_logprobs": top,
+                "text_offset": offsets,
+            })
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct CompletionTokenCollector {
     enabled: bool,
+    expose_token_ids: bool,
+    logprob_shape: Option<LogprobShape>,
+    logprobs: Vec<TokenLogprob>,
     maximum_output_tokens: usize,
     maximum_prompt_tokens: usize,
     prompt_token_ids: Option<Vec<u32>>,
@@ -648,11 +730,24 @@ impl CompletionTokenCollector {
     ) -> Self {
         Self {
             enabled,
+            expose_token_ids: enabled,
+            logprob_shape: None,
+            logprobs: Vec::new(),
             maximum_output_tokens,
             maximum_prompt_tokens,
             prompt_token_ids: None,
             token_ids: Vec::new(),
         }
+    }
+
+    pub(crate) fn with_response_options(
+        mut self,
+        expose_token_ids: bool,
+        logprob_shape: Option<LogprobShape>,
+    ) -> Self {
+        self.expose_token_ids = expose_token_ids;
+        self.logprob_shape = logprob_shape;
+        self
     }
 
     pub(crate) fn observe(&mut self, event: &GenerationEvent) -> Result<(), TokenObservationError> {
@@ -662,6 +757,7 @@ impl CompletionTokenCollector {
                 token_id,
                 generated_index,
                 prompt_token_ids,
+                logprob,
                 ..
             } => {
                 if !self.enabled
@@ -690,6 +786,9 @@ impl CompletionTokenCollector {
                         .map_err(|_| TokenObservationError)?;
                 }
                 self.token_ids.push(*token_id);
+                if let Some(logprob) = logprob {
+                    self.logprobs.push((**logprob).clone());
+                }
                 Ok(())
             }
             _ => Ok(()),
@@ -710,7 +809,10 @@ impl CompletionTokenCollector {
     }
 
     pub(crate) fn attach(self, response: &mut CompletionResponse) {
-        if self.enabled {
+        if let Some(shape) = self.logprob_shape {
+            response.choices[0].logprobs = Some(logprobs_value(shape, &self.logprobs));
+        }
+        if self.enabled && self.expose_token_ids {
             response.choices[0].token_ids = Some(self.token_ids);
             response.choices[0].prompt_token_ids = self.prompt_token_ids;
         }
@@ -736,7 +838,7 @@ pub struct CompletionChoice {
     pub text: String,
     /// Always zero because `n=1` is the only supported value.
     pub index: u32,
-    /// Always null because log probabilities are unsupported.
+    /// Present when the request asked for log probabilities.
     pub logprobs: Option<Value>,
     /// Successful terminal reason.
     pub finish_reason: CompletionFinishReason,
@@ -803,7 +905,7 @@ pub struct CompletionChunkChoice {
     pub text: String,
     /// Always zero because `n=1` is the only supported value.
     pub index: u32,
-    /// Always null because log probabilities are unsupported.
+    /// Present on token chunks when the request asked for log probabilities.
     pub logprobs: Option<Value>,
     /// Null for deltas and present only in the terminal finish chunk.
     pub finish_reason: Option<CompletionFinishReason>,
@@ -943,7 +1045,7 @@ pub enum SseStreamPhase {
 }
 
 /// Stateful SSE encoder enforcing delta → finish → `[DONE]` ordering.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SseStreamEncoder {
     metadata: RequestMetadata,
     phase: SseStreamPhase,
@@ -984,6 +1086,19 @@ impl SseStreamEncoder {
         }
     }
 
+    /// Sets what token chunks show besides text.
+    #[must_use]
+    pub fn with_response_options(
+        mut self,
+        expose_token_ids: bool,
+        logprob_shape: Option<LogprobShape>,
+    ) -> Self {
+        self.tokens = self
+            .tokens
+            .with_response_options(expose_token_ids, logprob_shape);
+        self
+    }
+
     /// Current ordering phase.
     #[must_use]
     pub const fn phase(&self) -> SseStreamPhase {
@@ -1007,13 +1122,20 @@ impl SseStreamEncoder {
                 text,
                 token_id,
                 prompt_token_ids,
+                logprob,
                 ..
             } => {
                 let mut chunk = CompletionChunk::delta(&self.metadata, text.clone());
-                chunk.choices[0].token_ids = Some(vec![*token_id]);
-                chunk.choices[0]
-                    .prompt_token_ids
-                    .clone_from(prompt_token_ids);
+                if self.tokens.expose_token_ids {
+                    chunk.choices[0].token_ids = Some(vec![*token_id]);
+                    chunk.choices[0]
+                        .prompt_token_ids
+                        .clone_from(prompt_token_ids);
+                }
+                if let (Some(shape), Some(logprob)) = (self.tokens.logprob_shape, logprob) {
+                    chunk.choices[0].logprobs =
+                        Some(logprobs_value(shape, std::slice::from_ref(logprob)));
+                }
                 serialize_sse_json(&chunk).map_err(SseEncodingError::Json)
             }
             GenerationEvent::Finished { reason, usage } => match reason {
@@ -1314,6 +1436,7 @@ mod tests {
             token_id: 17,
             generated_index: index,
             prompt_token_ids: prompt,
+            logprob: None,
         }
     }
 
@@ -1472,7 +1595,7 @@ mod tests {
             ("frequency_penalty", |request| {
                 request.frequency_penalty = Some(-0.5);
             }),
-            ("logprobs", |request| request.logprobs = Some(json!(1))),
+            ("logprobs", |request| request.logprobs = Some(json!(6))),
             ("suffix", |request| request.suffix = Some("tail".to_owned())),
         ];
         for (parameter, mutate) in cases {
@@ -1485,7 +1608,7 @@ mod tests {
         }
 
         let mut request = minimal_request();
-        request.unsupported_fields = BTreeMap::from([("user".to_owned(), json!("client"))]);
+        request.unsupported_fields = BTreeMap::from([("wat".to_owned(), json!("client"))]);
         let error = normalize_completion_request(request, RequestLimits::default())
             .expect_err("unknown field must fail explicitly");
         assert_eq!(error.parameter(), "request");
@@ -1618,7 +1741,7 @@ mod tests {
         assert!(!json.contains("CUDA_ERROR"));
 
         let mut request = minimal_request();
-        request.logprobs = Some(json!(5));
+        request.logprobs = Some(json!(6));
         let validation = normalize_completion_request(request, RequestLimits::default())
             .expect_err("logprobs must fail");
         let response = ApiError::InvalidRequest(validation).response();

@@ -6,6 +6,9 @@
 
 use std::error;
 use std::fmt;
+use std::sync::Arc;
+
+use riley_runtime::grammar::Grammar;
 
 /// Default upper bound for a public request identifier.
 pub const MAX_REQUEST_ID_BYTES: usize = 128;
@@ -70,11 +73,36 @@ pub struct GenerationRequest {
     pub stop_sequences: Vec<String>,
     /// Whether the HTTP response should use SSE.
     pub stream: bool,
-    /// Whether delivery must expose authoritative committed token identities.
+    /// Whether delivery must carry authoritative committed token identities.
     pub include_token_ids: bool,
+    /// Whether responses show those identities; log probabilities need them
+    /// without showing them.
+    pub expose_token_ids: bool,
+    /// Per-token log probabilities, with this many top alternatives.
+    pub logprobs_top: Option<u8>,
+    /// Grammar every generated token must keep the output inside.
+    pub grammar: Option<Arc<Grammar>>,
     /// Whether tokenization adds the tokenizer's own special tokens (BOS);
     /// false for chat prompts, whose template already wrote them.
     pub add_special_tokens: bool,
+}
+
+/// One token and its raw log probability.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TokenProbability {
+    /// Decoded token bytes, which may split a UTF-8 character.
+    pub bytes: Vec<u8>,
+    /// Natural-log probability under the unprocessed logits.
+    pub logprob: f32,
+}
+
+/// Log probabilities of one generated token.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TokenLogprob {
+    /// The token that was generated.
+    pub chosen: TokenProbability,
+    /// The most likely tokens at this position, highest first.
+    pub top: Vec<TokenProbability>,
 }
 
 /// Stable metadata shared by streaming and non-streaming responses.
@@ -338,7 +366,7 @@ pub enum ServiceErrorClass {
 }
 
 /// Ordered messages produced by generation before transport encoding.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum GenerationEvent {
     /// Newly visible UTF-8 completion text.
@@ -356,6 +384,8 @@ pub enum GenerationEvent {
         generated_index: usize,
         /// Actual submitted prompt IDs, present only with the first token.
         prompt_token_ids: Option<Vec<u32>>,
+        /// Present when the request asked for log probabilities.
+        logprob: Option<Box<TokenLogprob>>,
     },
     /// Successful terminal event. No later token delta is valid.
     Finished {

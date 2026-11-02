@@ -1,0 +1,47 @@
+READY 337793 after 75s
+{"prompts": 18, "invariant_c8": 54, "of_c8": 54, "invariant_c32": 54, "of_c32": 54, "hf_identical": 10, "hf_first_token": 17, "hf_common_prefix": [32, 17, 32, 32, 27, 32, 32, 14, 19, 32, 32, 32, 32, 24, 32, 2, 17, 0]}
+  auto -> {"role": "assistant", "content": "<think>\nOkay, the user is asking for the current weather in Seoul. Let me check the tools provided. There's a function called get_weather that takes a city and an optional unit. The required para
+40/40 checks passed
+READY 352235 after 132s
+Traceback (most recent call last):
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/structured_parity.py", line 51, in <module>
+    main()
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/structured_parity.py", line 43, in main
+    replies = list(pool.map(lambda job: call(args.address, args.model, *job), jobs))
+  File "/usr/lib/python3.10/concurrent/futures/_base.py", line 621, in result_iterator
+    yield _result_or_cancel(fs.pop())
+  File "/usr/lib/python3.10/concurrent/futures/_base.py", line 319, in _result_or_cancel
+    return fut.result(timeout)
+  File "/usr/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/usr/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/usr/lib/python3.10/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/structured_parity.py", line 43, in <lambda>
+    replies = list(pool.map(lambda job: call(args.address, args.model, *job), jobs))
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/structured_parity.py", line 30, in call
+    choice = reply["choices"][0]
+KeyError: 'choices'
+READY 361594 after 132s
+Traceback (most recent call last):
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/structured_parity.py", line 51, in <module>
+    main()
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/structured_parity.py", line 43, in main
+    replies = list(pool.map(lambda job: call(args.address, args.model, *job), jobs))
+  File "/usr/lib/python3.10/concurrent/futures/_base.py", line 621, in result_iterator
+    yield _result_or_cancel(fs.pop())
+  File "/usr/lib/python3.10/concurrent/futures/_base.py", line 319, in _result_or_cancel
+    return fut.result(timeout)
+  File "/usr/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/usr/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/usr/lib/python3.10/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/structured_parity.py", line 43, in <lambda>
+    replies = list(pool.map(lambda job: call(args.address, args.model, *job), jobs))
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/structured_parity.py", line 30, in call
+    choice = reply["choices"][0]
+KeyError: 'choices'
+R2_DONE

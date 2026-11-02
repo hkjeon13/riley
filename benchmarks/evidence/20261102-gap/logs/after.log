@@ -1,0 +1,59 @@
+READY 3609434 after 132s
+{"seconds": 1800.0, "rate": 8.0, "counts": {"schema": 1753, "plain": 7879, "tools": 707, "reason": 720, "cancel": 758, "logprobs": 1120, "long": 1441}, "problems": [], "problem_count": 0, "rss_growth_second_half_mb": 0.0, "final_health": {"status": "ok", "ready": true, "accepting": true, "active_requests": 0, "waiting_requests": 0}, "kv_allocated_blocks": 0, "counters": {"cancellations": 789, "disconnects": 758, "overloads": 0, "dropped_observations": 13354}}
+TIMEOUT
+Traceback (most recent call last):
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/api_check.py", line 106, in <module>
+    status, plain = chat(messages=user(PROMPTS[0]))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/api_check.py", line 43, in chat
+    status, data = post("/v1/chat/completions", body)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/api_check.py", line 34, in post
+    connection.request("POST", path, json.dumps(body), headers)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1386, in request
+    self._send_request(method, url, body, headers, encode_chunked)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1432, in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1381, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1141, in _send_output
+    self.send(msg)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1085, in send
+    self.connect()
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1051, in connect
+    self.sock = self._create_connection(
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/socket.py", line 865, in create_connection
+    raise exceptions[0]
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/socket.py", line 850, in create_connection
+    sock.connect(sa)
+ConnectionRefusedError: [Errno 111] Connection refused
+TIMEOUT
+Traceback (most recent call last):
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/api_check.py", line 106, in <module>
+    status, plain = chat(messages=user(PROMPTS[0]))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/api_check.py", line 43, in chat
+    status, data = post("/v1/chat/completions", body)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/src/benchmarks/live/api_check.py", line 34, in post
+    connection.request("POST", path, json.dumps(body), headers)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1386, in request
+    self._send_request(method, url, body, headers, encode_chunked)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1432, in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1381, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1141, in _send_output
+    self.send(msg)
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1085, in send
+    self.connect()
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/http/client.py", line 1051, in connect
+    self.sock = self._create_connection(
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/socket.py", line 865, in create_connection
+    raise exceptions[0]
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/uv-python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/socket.py", line 850, in create_connection
+    sock.connect(sa)
+ConnectionRefusedError: [Errno 111] Connection refused
+AFTER_DONE

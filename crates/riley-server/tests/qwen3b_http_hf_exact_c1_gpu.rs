@@ -403,6 +403,7 @@ fn qwen3b_http_hf_exact_c1_tokens_logits_and_lifecycle() -> TestResult {
     let backend: Arc<dyn CompletionBackend> = engine.clone();
     let server = start_server(
         ServerConfig {
+            api_key: None,
             bind_address: SocketAddr::from(([127, 0, 0, 1], 0)),
             worker_threads: 6,
             connection_queue_capacity: 8,

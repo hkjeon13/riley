@@ -100,6 +100,8 @@ serve options:
   --prefix-cache-blocks N        keep up to N prompt KV blocks for requests that start with the
                                  same tokens, on top of the default --kv-blocks; needs
                                  --decode-attention-producer tensor-core-v1 (default: no cache)
+  --api-key-env NAME             require this environment variable's value as a bearer token on
+                                 every /v1 endpoint (default: no authentication)
   --residual-rmsnorm MODE        fused E0 candidate or separate path (default: separate)
   --execution-completion MODE    per-operation or iteration-batch (default: iteration-batch)
   --batch-shape-policy MODE      fixed-max or power-of-two (default: fixed-max)
@@ -208,6 +210,7 @@ struct ServeOptions {
     prefill_burst: Option<riley_scheduler::PrefillBurstPolicy>,
     physical_kv_blocks: Option<usize>,
     prefix_cache_blocks: Option<usize>,
+    api_key_env: Option<String>,
     residual_rmsnorm: ResidualRmsNormMode,
     execution_completion: ExecutionCompletionMode,
     batch_shape_policy: BatchShapePolicyMode,
@@ -472,6 +475,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut prefill_burst_max_decode_percent = None;
     let mut physical_kv_blocks = None;
     let mut prefix_cache_blocks = None;
+    let mut api_key_env = None;
     let mut residual_rmsnorm = None;
     let mut execution_completion = None;
     let mut batch_shape_policy = None;
@@ -626,6 +630,11 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     "--prefix-cache-blocks",
                 )?,
                 "--prefix-cache-blocks",
+            )?,
+            "--api-key-env" => set_once(
+                &mut api_key_env,
+                next_value(&mut arguments, "--api-key-env")?.to_string_lossy().into_owned(),
+                "--api-key-env",
             )?,
             "--residual-rmsnorm" => set_once(
                 &mut residual_rmsnorm,
@@ -1505,10 +1514,10 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         return Err("--prefix-cache-blocks requires --decode-attention-producer tensor-core-v1".into());
     }
     if native_attention_mode == Some(NativeAttentionMode::FixedTileUnsplit)
-        && (batch_token_budget > 256 || max_sequence_tokens.is_none_or(|n| n > 1024)
+        && (batch_token_budget > 512 || max_sequence_tokens.is_none_or(|n| n > 8192)
             || max_active_sequences > 32)
     {
-        return Err("fixed-tile-unsplit-v1 requires an explicit context bound <=1024, batch budget <=256 and at most 32 active sequences".into());
+        return Err("fixed-tile-unsplit-v1 requires an explicit context bound <=8192, batch budget <=512 and at most 32 active sequences".into());
     }
     if d128_global_merge {
         if decode_attention_backend
@@ -1624,6 +1633,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         prefill_burst,
         physical_kv_blocks,
         prefix_cache_blocks,
+        api_key_env,
         residual_rmsnorm,
         execution_completion,
         batch_shape_policy,
@@ -2740,7 +2750,19 @@ fn run_serve(
         max_output_tokens,
         ..RequestLimits::default()
     };
+    let api_key = match options.api_key_env.as_deref() {
+        Some(name) => {
+            let key = std::env::var(name)
+                .ok()
+                .filter(|key| !key.is_empty())
+                .ok_or_else(|| format!("--api-key-env: {name} is unset or empty"))?;
+            // Lives as long as the server, and keeps ServerConfig `Copy`.
+            Some(&*Box::leak(key.into_boxed_str()))
+        }
+        None => None,
+    };
     let server_config = ServerConfig {
+        api_key,
         bind_address,
         request_limits,
         // A streaming response holds its worker for the whole generation, so
@@ -2852,6 +2874,9 @@ fn warm_up_step_shapes(
         stop_sequences: Vec::new(),
         stream: false,
         include_token_ids: false,
+        expose_token_ids: false,
+        logprobs_top: None,
+        grammar: None,
         add_special_tokens: true,
     };
     let finish = |handle: &riley_server::engine::GenerationHandle| loop {
@@ -5708,6 +5733,7 @@ mod tests {
                 prefill_burst: None,
                 physical_kv_blocks: None,
                 prefix_cache_blocks: None,
+                api_key_env: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
                 batch_shape_policy: BatchShapePolicyMode::FixedMaximum,
@@ -6126,6 +6152,8 @@ mod tests {
                 prefill_coalescing: None,
                 prefill_burst: None,
                 physical_kv_blocks: Some(512),
+                prefix_cache_blocks: None,
+                api_key_env: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
                 batch_shape_policy: BatchShapePolicyMode::PowerOfTwo,
@@ -6413,6 +6441,7 @@ mod tests {
                 prefill_burst: None,
                 physical_kv_blocks: None,
                 prefix_cache_blocks: None,
+                api_key_env: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
                 batch_shape_policy: BatchShapePolicyMode::PowerOfTwo,
@@ -6913,6 +6942,7 @@ mod tests {
                 prefill_burst: None,
                 physical_kv_blocks: None,
                 prefix_cache_blocks: None,
+                api_key_env: None,
                 residual_rmsnorm: ResidualRmsNormMode::Fused,
                 execution_completion: ExecutionCompletionMode::PerOperation,
                 batch_shape_policy: BatchShapePolicyMode::FixedMaximum,
@@ -7303,13 +7333,13 @@ mod native_profile_cli_tests {
             Some(NativeAttentionMode::FixedTileUnsplit)
         );
         for extra in [
-            &["--max-sequence-tokens", "1025"][..],
+            &["--max-sequence-tokens", "8193"][..],
             &["--max-active-sequences", "33"],
             &[
                 "--batch-token-budget",
-                "512",
+                "1024",
                 "--batch-shape-buckets",
-                "1,2,4,8,16,32,64,128,256,512",
+                "1,2,4,8,16,32,64,128,256,512,1024",
             ],
         ] {
             assert!(

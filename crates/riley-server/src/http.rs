@@ -85,6 +85,7 @@ pub enum HttpMethod {
 pub struct HttpRequest {
     method: HttpMethod,
     target: String,
+    authorization: Option<String>,
     body: Vec<u8>,
 }
 
@@ -99,6 +100,12 @@ impl HttpRequest {
     #[must_use]
     pub fn target(&self) -> &str {
         &self.target
+    }
+
+    /// The `Authorization` header value, if any.
+    #[must_use]
+    pub fn authorization(&self) -> Option<&str> {
+        self.authorization.as_deref()
     }
 
     /// Fixed-length request body.
@@ -204,10 +211,11 @@ impl From<io::Error> for HttpReadError {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 struct ParsedHeaders {
     content_length: Option<usize>,
     content_type_json: bool,
+    authorization: Option<String>,
 }
 
 /// Reads exactly one bounded, non-pipelined HTTP/1.1 request.
@@ -306,6 +314,7 @@ pub fn read_request(
     Ok(HttpRequest {
         method,
         target,
+        authorization: headers.authorization,
         body: bytes,
     })
 }
@@ -402,6 +411,13 @@ fn parse_head(
                 });
             }
             parsed.content_length = Some(parse_decimal_usize(value)?);
+        } else if name.eq_ignore_ascii_case("authorization") {
+            if parsed.authorization.is_some() {
+                return Err(HttpReadError::Malformed {
+                    reason: "Authorization must occur at most once",
+                });
+            }
+            parsed.authorization = Some(value.to_owned());
         } else if name.eq_ignore_ascii_case("content-type") {
             if content_type_seen {
                 return Err(HttpReadError::Malformed {

@@ -17,10 +17,16 @@ prints the complete list; this page explains what matters.
 | `--max-output-tokens N` | min(1024, context − 1) | Upper bound for `max_tokens` |
 | `--kv-blocks N` | enough for every active sequence | KV-cache size, in 16-token blocks |
 | `--max-weight-bytes N` | 2 GiB (8 GiB with the D128 backend) | Refuse checkpoints larger than this |
+| `--api-key-env NAME` | off | Require `Authorization: Bearer` with the value of this environment variable on `/v1/*` |
 
 GPU memory is reserved at start-up from these bounds and does not grow with
 load. Lower `--max-sequence-tokens` and `--max-active-sequences` to what you
 actually serve: with Qwen2.5-3B, 32 sequences of 1,024 tokens use about 8.5 GiB.
+
+A long context multiplies this. Qwen3-4B with 32 sequences of 8,192 tokens
+needs about 48 GiB of KV alone and fails with `op=kv_cache_write` on a 40 GB
+GPU. Pass `--kv-blocks` to serve the same limits from less memory; sequences
+then wait for blocks instead of being promised their whole context up front.
 
 ## Step size
 
@@ -80,6 +86,12 @@ in the last bits:
 
 The D128 backend accepts only the Qwen2.5-3B attention geometry and a step
 budget of at most 256. Other models use the default backend.
+
+`--inference-profile native-bf16-varlen-v1` allows a context up to 8,192 tokens,
+a step budget up to 512 and 32 active sequences. For long prompts, pass
+`--max-sequence-tokens 8192`. A budget of 512 also needs matching
+`--batch-shape-buckets`; it shortens long-prompt TTFT and lengthens short-prompt
+TTFT ([measurements](serving-validation.md#load)).
 
 ## Prefix cache
 
