@@ -1,0 +1,62 @@
+== evidence/prof/riley.sqlite: 110152 kernels, 89 bursts, using 6 with [4418, 4418, 4418, 4418, 4418, 4418]
+per request: span 278.4 ms, GPU busy 271.4 ms, idle 7.0 ms
+  gemm         212.60 ms
+  attention     45.09 ms
+  norm           9.19 ms
+  rope           4.23 ms
+  other          0.67 ms
+  copy           0.01 ms
+     90.87 ms     290x    313.4 us  ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn
+     45.33 ms     280x    161.9 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_64x3_tn_align8>
+     30.26 ms     560x     54.0 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x5_tn_align8>
+     25.78 ms     392x     65.8 us  void flashinfer::BatchPrefillWithPagedKVCacheKernel<flashinfer::KernelTraits<
+     19.26 ms      88x    218.8 us  ampere_bf16_s16816gemm_bf16_64x64_ldg8_f2f_stages_64x5_tn
+     11.51 ms     392x     29.4 us  <unnamed>::silu_gated_multiply_merged_rows_bf16_kernel
+      9.56 ms      56x    170.7 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x5_tn_align8>
+      9.19 ms     798x     11.5 us  void <unnamed>::wide_bf16_general_rms_norm_kernel<
+      8.60 ms      84x    102.4 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x64_64x6_tn_align8>
+      7.80 ms     392x     19.9 us  void flashinfer::PersistentVariableLengthMergeStatesKernel<
+      4.58 ms     168x     27.2 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_64x6_tn_align8>
+      4.23 ms     392x     10.8 us  <unnamed>::qkv_split_bias_rope_kv_write_kernel
+      2.27 ms     392x      5.8 us  void cublasLt::splitKreduce_kernel<
+      1.89 ms      56x     33.7 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x128_64x6_tn_align8>
+      0.37 ms      14x     26.3 us  riley_fi::<unnamed>::plan_kernel
+      0.13 ms       4x     31.5 us  void <unnamed>::bf16_argmax_kernel<
+      0.10 ms      14x      7.3 us  void <unnamed>::embedding_kernel<__nv_bfloat16>
+      0.03 ms      14x      1.8 us  <unnamed>::finalize_embedding_error
+      0.02 ms      14x      1.8 us  <unnamed>::validate_embedding_tokens
+      0.02 ms      14x      1.7 us  <unnamed>::reset_embedding_error
+      0.01 ms       4x      3.4 us  void <unnamed>::row_gather_kernel<__nv_bfloat16>
+== evidence/prof/vllm.sqlite: 27006 kernels, 21 bursts, using 6 with [1665, 1665, 1665, 1665, 1665, 1665]
+per request: span 203.3 ms, GPU busy 198.6 ms, idle 4.7 ms
+  gemm         172.53 ms
+  attention     14.73 ms
+  act            6.29 ms
+  norm           3.47 ms
+  other          1.54 ms
+  copy           0.15 ms
+    119.44 ms     140x    853.1 us  ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn
+     17.09 ms      84x    203.4 us  ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_32x6_tn
+     12.70 ms     140x     90.7 us  void flash::flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<
+     11.06 ms     168x     65.8 us  ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn
+     10.65 ms      56x    190.1 us  ampere_bf16_s16816gemm_bf16_256x128_ldg8_relu_f2f_stages_64x3_tn
+      7.74 ms      28x    276.3 us  ampere_bf16_s16816gemm_bf16_128x256_ldg8_f2f_stages_64x3_tn
+      6.29 ms     140x     45.0 us  triton_poi_fused_mul_silu_slice_1
+      3.78 ms       5x    755.2 us  ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn
+      2.51 ms      84x     29.9 us  ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_relu_f2f_stages_64x6_tn
+      1.92 ms     140x     13.7 us  triton_red_fused_fused_add_rms_norm_2
+      1.50 ms     140x     10.7 us  triton_red_fused_fused_add_rms_norm_0
+      1.18 ms     135x      8.8 us  triton_poi_fused_3
+      1.04 ms     140x      7.4 us  void vllm::reshape_and_cache_flash_kernel<__nv_bfloat16, __nv_bfloat16, 
+      0.99 ms      84x     11.8 us  void flash::flash_fwd_splitkv_combine_kernel<Flash_fwd_kernel_traits<
+      0.27 ms      84x      3.2 us  void cublasLt::splitKreduce_kernel<
+      0.09 ms      15x      5.9 us  void at::native::index_elementwise_kernel<
+      0.06 ms       5x     12.9 us  _gumbel_sample_kernel
+      0.04 ms       5x      8.8 us  triton_red_fused__to_copy_embedding_rms_norm_0
+      0.04 ms       5x      8.6 us  triton_poi_fused_1
+      0.04 ms       5x      7.8 us  _apply_write_kernel
+      0.04 ms       5x      7.4 us  _gather_block_tables_kernel
+      0.03 ms       5x      6.8 us  void at::native::reduce_kernel<
+      0.03 ms       5x      6.2 us  _combine_sampled_and_draft_tokens_kernel
+      0.03 ms       5x      6.1 us  _get_num_sampled_and_rejected_kernel
+      0.03 ms       5x      5.8 us  _post_update_kernel

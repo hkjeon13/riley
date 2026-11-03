@@ -2548,6 +2548,7 @@ unsafe extern "C" {
     fn riley_cuda_set_native_d128_prompt_direct(mode: u64);
     fn riley_cuda_set_native_d128_attention_flashinfer(mode: u64);
     fn riley_cuda_set_native_flashinfer_kv_chunk(tokens: u64);
+    fn riley_cuda_set_native_flashinfer_full_grid(mode: u32);
     fn riley_cuda_set_native_d128_prompt_direct_max_pages(pages: u64);
     fn riley_cuda_hf_prefill_attention_plan_create(
         context: *mut RawContext,
@@ -9135,6 +9136,11 @@ pub(super) fn set_native_d128_attention_flashinfer(mode: u64) {
 pub(super) fn set_native_flashinfer_kv_chunk(tokens: u64) {
     // SAFETY: the native setter stores one atomic integer.
     unsafe { riley_cuda_set_native_flashinfer_kv_chunk(tokens) }
+}
+
+pub(super) fn set_native_flashinfer_full_grid(full: bool) {
+    // SAFETY: the native setter stores one atomic integer.
+    unsafe { riley_cuda_set_native_flashinfer_full_grid(u32::from(full)) }
 }
 
 pub(super) fn set_native_d128_prompt_direct(mode: u64) {

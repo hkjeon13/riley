@@ -1,0 +1,29 @@
+== evidence/prof/merge1.sqlite: 65972 kernels, 79 bursts, using 6 with [4418, 4418, 4418, 4418, 4418, 4418]
+per request: span 269.8 ms, GPU busy 263.4 ms, idle 6.4 ms
+  gemm         214.03 ms
+  attention     35.48 ms
+  norm           9.28 ms
+  rope           4.28 ms
+  other          0.68 ms
+  copy           0.01 ms
+     91.59 ms     290x    315.8 us  ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn
+     45.73 ms     280x    163.3 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_64x3_tn_align8>
+     30.45 ms     560x     54.4 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x5_tn_align8>
+     21.24 ms     392x     54.2 us  void riley_fi::<unnamed>::strided_paged_kernel<flashinfer::KernelTraits<
+     19.26 ms      88x    218.9 us  ampere_bf16_s16816gemm_bf16_64x64_ldg8_f2f_stages_64x5_tn
+     11.62 ms     392x     29.6 us  <unnamed>::silu_gated_multiply_merged_rows_bf16_kernel
+      9.59 ms      56x    171.3 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x5_tn_align8>
+      9.28 ms     798x     11.6 us  void <unnamed>::wide_bf16_general_rms_norm_kernel<
+      8.60 ms      84x    102.4 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x64_64x6_tn_align8>
+      4.60 ms     168x     27.4 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_64x6_tn_align8>
+      4.28 ms     392x     10.9 us  <unnamed>::qkv_split_bias_rope_kv_write_kernel
+      2.63 ms     392x      6.7 us  void riley_fi::<unnamed>::merge_parts_kernel<
+      2.30 ms     392x      5.9 us  void cublasLt::splitKreduce_kernel<
+      1.90 ms      56x     33.9 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x128_64x6_tn_align8>
+      0.37 ms      14x     26.6 us  riley_fi::<unnamed>::plan_kernel
+      0.13 ms       4x     32.0 us  void <unnamed>::bf16_argmax_kernel<
+      0.10 ms      14x      7.4 us  void <unnamed>::embedding_kernel<__nv_bfloat16>
+      0.03 ms      14x      1.8 us  <unnamed>::finalize_embedding_error
+      0.03 ms      14x      1.8 us  <unnamed>::validate_embedding_tokens
+      0.02 ms      14x      1.7 us  <unnamed>::reset_embedding_error
+      0.01 ms       4x      3.4 us  void <unnamed>::row_gather_kernel<__nv_bfloat16>

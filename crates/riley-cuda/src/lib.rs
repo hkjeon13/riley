@@ -54,7 +54,7 @@ pub use batch::{
     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge_prompt_mma,
     set_native_d128_decode_segment_mode, set_native_d128_fused_decode_min_rows,
     set_native_d128_attention_flashinfer, set_native_d128_prompt_direct,
-    set_native_flashinfer_kv_chunk,
+    set_native_flashinfer_full_grid, set_native_flashinfer_kv_chunk,
     set_native_d128_prompt_direct_max_pages,
     native_bf16_ragged_paged_split_gqa_d128_two_stage,
     native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, ragged_paged_attention,

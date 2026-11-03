@@ -6,3 +6,6 @@ Fixed KV split, 2026-11-03.
 - `kv3/`: Riley and vLLM on GPU 7, Qwen2.5-7B long check.
 - `kv4/`: soak on the split build, long check on two GPUs.
 - `curve/`: TTFT against prompt length on GPU 6.
+- `grid/`: strided attention grid against `kv1`; `c32-*` repeat closed-c32.
+- `merge/`: per-thread merge (`merge1`) against the strided grid (`grid1`).
+- `prof/`: Nsight Systems summaries (`summary*.txt`, `steps-*.txt`, `layer-*.txt`).

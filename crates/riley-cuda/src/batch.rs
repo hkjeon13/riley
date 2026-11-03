@@ -1021,6 +1021,16 @@ pub fn set_native_flashinfer_kv_chunk(tokens: u64) {
     let _ = tokens;
 }
 
+/// For tests: `true` launches the FlashInfer mode with one CTA per possible
+/// work item, as FlashInfer's own launcher does, instead of a resident-sized
+/// grid striding over the planned items. Both write the same bytes.
+pub fn set_native_flashinfer_full_grid(full: bool) {
+    #[cfg(feature = "cuda")]
+    ffi::set_native_flashinfer_full_grid(full);
+    #[cfg(not(feature = "cuda"))]
+    let _ = full;
+}
+
 /// Bounds the direct prompt mode to prompt rows whose own context spans at
 /// most `pages` pages; longer rows keep the segment-state path (`0`: every
 /// prompt row is direct). Overrides `RILEY_NATIVE_D128_PROMPT_DIRECT_MAX_PAGES`.

@@ -17,7 +17,8 @@ use riley_cuda::{
     begin_step_capture, end_step_capture, launch_step_graph,
     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge_prompt_mma,
-    set_native_d128_attention_flashinfer, set_native_flashinfer_kv_chunk,
+    set_native_d128_attention_flashinfer, set_native_flashinfer_full_grid,
+    set_native_flashinfer_kv_chunk,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -584,6 +585,17 @@ fn check_geometry(
         padding.iter().flatten().all(|byte| *byte == 0),
         "padding rows must be zeros"
     );
+    set_native_flashinfer_full_grid(true);
+    let (full_grid, _) = run_kinds(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &reference,
+        true,
+    )?;
+    set_native_flashinfer_full_grid(false);
+    assert_eq!(full_grid, flashinfer, "the strided grid must match one CTA per item");
     if page_capacity > pages_per_sequence {
         // Every row fits one chunk that is smaller than the page capacity,
         // so the partial states and the merge run and must change nothing.

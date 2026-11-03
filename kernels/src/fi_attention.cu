@@ -5,6 +5,7 @@
 #include "fi_attention.hpp"
 
 #include <flashinfer/attention/prefill.cuh>
+#include <flashinfer/attention/state.cuh>
 #include <flashinfer/attention/variants.cuh>
 #include <flashinfer/fastdiv.cuh>
 #include <flashinfer/page.cuh>
@@ -82,6 +83,8 @@ struct PagedParams {
   uint32_t* total_num_rows;
   uint32_t padded_batch_size;
   bool partition_kv;
+  // Riley's: the planned work item count, read by strided_paged_kernel.
+  const uint32_t* work_count;
 
   __host__ __device__ __forceinline__ uint32_t get_qo_len(uint32_t batch_idx) const {
     return q_indptr[batch_idx + 1] - q_indptr[batch_idx];
@@ -131,6 +134,14 @@ std::atomic<uint64_t>& kv_chunk_setting() {
   return value;
 }
 
+// 1 launches one CTA per possible work item through FlashInfer's own launcher,
+// the reference for strided_paged_kernel; see
+// riley_cuda_set_native_flashinfer_full_grid.
+std::atomic<uint32_t>& full_grid_setting() {
+  static std::atomic<uint32_t> value{0};
+  return value;
+}
+
 // A chunk that holds `page_capacity` pages cannot split any row, and a row in
 // one chunk has the same bytes without the partial states and the merge.
 uint32_t kv_chunk_tokens(uint64_t page_capacity) {
@@ -156,7 +167,7 @@ uint64_t max_work_items(uint64_t rows, uint64_t page_capacity,
 struct Layout {
   uint64_t q_indptr, kv_indptr, last_page_len, o_indptr, kv_indices;
   uint64_t request_indices, qo_tile_indices, kv_tile_indices;
-  uint64_t kv_chunk_size, total_rows, block_valid, merge_indptr, tmp_v, tmp_s;
+  uint64_t kv_chunk_size, total_rows, work_count, block_valid, merge_indptr, tmp_v, tmp_s;
   uint64_t bytes;
 };
 
@@ -185,6 +196,7 @@ Layout layout_for(uint64_t rows, uint64_t page_capacity, uint32_t query_heads,
   layout.kv_tile_indices = take(4 * work);
   layout.kv_chunk_size = take(4);
   layout.total_rows = take(4);
+  layout.work_count = take(4);
   layout.block_valid = take(work);
   layout.merge_indptr = take(chunk == 0 ? 0 : 4 * (rows + 1));
   layout.tmp_v = take(partial_rows * query_heads * head_size * 2);
@@ -249,7 +261,7 @@ __global__ __launch_bounds__(kPlannerThreads) void plan_kernel(
     uint32_t chunk, IdType* q_indptr, IdType* kv_indptr, IdType* last_page_len,
     IdType* o_indptr, IdType* kv_indices, IdType* request_indices,
     IdType* qo_tile_indices, IdType* kv_tile_indices, IdType* kv_chunk_size,
-    uint32_t* total_rows, bool* block_valid, IdType* merge_indptr,
+    uint32_t* total_rows, uint32_t* work_count, bool* block_valid, IdType* merge_indptr,
     __nv_bfloat16* partial_output, __nv_bfloat16* output) {
   __shared__ uint32_t scratch[32];
   __shared__ uint8_t request_valid[kPlannerThreads];
@@ -381,6 +393,7 @@ __global__ __launch_bounds__(kPlannerThreads) void plan_kernel(
   if (thread == 0) {
     kv_chunk_size[0] = chunk != 0 ? static_cast<IdType>(chunk) : 1 << 30;
     total_rows[0] = static_cast<uint32_t>(active);
+    work_count[0] = total_tiles;
   }
   for (uint32_t item = total_tiles + thread; item < work_capacity;
        item += blockDim.x) {
@@ -423,6 +436,172 @@ __global__ __launch_bounds__(kPlannerThreads) void plan_kernel(
     }
   }
   (void)row_request;
+}
+
+// FlashInfer's paged-prefill work items with `gridDim.x` CTAs striding over
+// the planned count. Each item runs FlashInfer's device function with the
+// same arguments as its own CTA would, so the bytes do not depend on the
+// grid. One CTA per possible item (the bound for the longest context, with
+// chunks) mostly ran empty CTAs: 9,088 for 256 Qwen2.5-7B rows at 8,192
+// tokens, about 30 us per layer.
+template <typename KTraits>
+__global__ __launch_bounds__(KTraits::NUM_THREADS) void strided_paged_kernel(
+    const __grid_constant__ PagedParams params) {
+  extern __shared__ uint8_t smem[];
+  auto& storage = reinterpret_cast<typename KTraits::SharedStoragePaged&>(smem);
+  const uint32_t items = *params.work_count;
+  for (uint32_t item = blockIdx.x; item < items; item += gridDim.x) {
+    flashinfer::BatchPrefillWithPagedKVCacheDevice<KTraits>(
+        params, storage, threadIdx, item, blockIdx.z, gridDim.z);
+    __syncthreads();
+  }
+}
+
+constexpr uint32_t kMergeVector = 8;
+constexpr uint32_t kMergeThreads = 256;
+
+// FlashInfer's VariableLengthMergeStates with one thread per 8 values of a row
+// and head instead of one 128-thread CTA per row and head. In FlashInfer's CTA
+// thread slot y folds parts y, y + slots, ... and the CTA then folds the
+// slots' BF16-staged results in slot order; this replays both folds with the
+// same state_t operations, so the bytes are the same. FlashInfer's persistent
+// CTAs took 37 us for 256 Qwen2.5-7B rows of two parts and 8 us to copy rows
+// of one part.
+template <uint32_t kHead>
+__global__ __launch_bounds__(kMergeThreads) void merge_parts_kernel(
+    const DTypeO* parts, const float* lse, const IdType* indptr, DTypeO* output,
+    const uint32_t* rows, uint32_t heads) {
+  constexpr uint32_t kLanes = kHead / kMergeVector;
+  constexpr uint32_t kSlots = 128 / kLanes;
+  const uint64_t index = static_cast<uint64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  const uint64_t pair = index / kLanes;
+  if (pair >= static_cast<uint64_t>(*rows) * heads) {
+    return;
+  }
+  const uint32_t lane = static_cast<uint32_t>(index % kLanes);
+  const uint32_t row = static_cast<uint32_t>(pair / heads);
+  const uint32_t head = static_cast<uint32_t>(pair % heads);
+  const uint32_t first = static_cast<uint32_t>(indptr[row]);
+  const uint32_t count = static_cast<uint32_t>(indptr[row + 1]) - first;
+  DTypeO* const out = output + pair * kHead + lane * kMergeVector;
+  const auto part_values = [&](uint32_t part) {
+    return parts + (static_cast<uint64_t>(first + part) * heads + head) * kHead +
+           lane * kMergeVector;
+  };
+  if (count == 0) {
+    flashinfer::vec_t<DTypeO, kMergeVector> zeros;
+    zeros.fill(DTypeO(0.F));
+    zeros.store(out);
+    return;
+  }
+  if (count == 1) {
+    flashinfer::vec_t<DTypeO, kMergeVector> copy;
+    copy.cast_load(part_values(0));
+    copy.store(out);
+    return;
+  }
+  flashinfer::state_t<kMergeVector> total;
+  for (uint32_t slot = 0; slot < kSlots; ++slot) {
+    flashinfer::state_t<kMergeVector> state;
+    for (uint32_t part = slot; part < count; part += kSlots) {
+      flashinfer::vec_t<float, kMergeVector> values;
+      values.cast_load(part_values(part));
+      state.merge(values, lse[static_cast<uint64_t>(first + part) * heads + head], 1);
+    }
+    state.normalize();
+    alignas(16) DTypeO staged[kMergeVector];
+    state.o.cast_store(staged);
+    flashinfer::vec_t<float, kMergeVector> values;
+    values.cast_load(staged);
+    total.merge(values, state.get_lse(), 1);
+  }
+  total.normalize();
+  total.o.cast_store(out);
+}
+
+// BatchPrefillWithPagedKVCacheDispatched with strided_paged_kernel: the same
+// KernelTraits choice (FlashInfer 0.6.16's rule for BF16, no position encoding
+// and equal head sizes up to 256), on a grid of at most the resident CTAs,
+// then merge_parts_kernel.
+template <uint32_t kHead>
+cudaError_t launch_strided(PagedParams params, DTypeO* tmp_v, float* tmp_s,
+                           uint32_t work_capacity, cudaStream_t stream) {
+  static_assert(kHead / 16 <= 16, "the KV tile rule below assumes no VO split");
+  constexpr uint32_t kNumMmaQ = flashinfer::get_num_mma_q(kCtaTileQ);
+  constexpr uint32_t kWarpsQ = flashinfer::get_num_warps_q(kCtaTileQ);
+  constexpr uint32_t kWarpsKv = flashinfer::get_num_warps_kv(kCtaTileQ);
+  constexpr uint32_t kSmemPerMmaKv = 2 * kHead * 16 * kWarpsKv * sizeof(DTypeKV);
+  constexpr uint32_t kFixedSmem = kCtaTileQ * kHead * sizeof(DTypeQ);
+  int device = 0;
+  int sms = 0;
+  int smem_per_sm = 0;
+  int smem_per_block = 0;
+  cudaError_t status = cudaGetDevice(&device);
+  if (status == cudaSuccess) {
+    status = cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, device);
+  }
+  if (status == cudaSuccess) {
+    status = cudaDeviceGetAttribute(&smem_per_sm,
+                                    cudaDevAttrMaxSharedMemoryPerMultiprocessor, device);
+  }
+  if (status == cudaSuccess) {
+    status = cudaDeviceGetAttribute(&smem_per_block,
+                                    cudaDevAttrMaxSharedMemoryPerBlockOptin, device);
+  }
+  if (status != cudaSuccess) {
+    return status;
+  }
+  const int ctas_per_sm =
+      smem_per_sm >= static_cast<int>(2 * (kFixedSmem + kSmemPerMmaKv)) ? 2 : 1;
+  const int smem_per_cta = min(smem_per_sm / ctas_per_sm, smem_per_block);
+  const int mma_kv_smem = (smem_per_cta - static_cast<int>(kFixedSmem)) /
+                          static_cast<int>(kSmemPerMmaKv);
+  if (mma_kv_smem < 1) {
+    return cudaErrorNotSupported;
+  }
+  const uint32_t num_kv_heads = params.paged_kv.num_heads;
+  const uint32_t resident = static_cast<uint32_t>(sms * ctas_per_sm);
+  const dim3 blocks(work_capacity < resident ? work_capacity : resident, 1, num_kv_heads);
+  const dim3 threads(32, kWarpsQ, kWarpsKv);
+  DISPATCH_NUM_MMA_KV(min(static_cast<uint32_t>(mma_kv_smem), 8U / kNumMmaQ), kNumMmaKv, {
+    using KTraits = flashinfer::KernelTraits<
+        flashinfer::MaskMode::kCausal, kCtaTileQ, kNumMmaQ, kNumMmaKv, kHead / 16,
+        kHead / 16, kWarpsQ, kWarpsKv, flashinfer::PosEncodingMode::kNone, DTypeQ,
+        DTypeKV, DTypeO, float, IdType, Variant>;
+    if constexpr (KTraits::IsInvalid()) {
+      return cudaErrorNotSupported;
+    } else {
+      const size_t smem = sizeof(typename KTraits::SharedStoragePaged);
+      if (smem > static_cast<size_t>(smem_per_block)) {
+        return cudaErrorNotSupported;
+      }
+      auto* kernel = strided_paged_kernel<KTraits>;
+      status = cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                    static_cast<int>(smem));
+      if (status != cudaSuccess) {
+        return status;
+      }
+      DTypeO* const output = params.o;
+      params.partition_kv = tmp_v != nullptr;
+      if (tmp_v != nullptr) {
+        params.o = tmp_v;
+        params.lse = tmp_s;
+      }
+      kernel<<<blocks, threads, smem, stream>>>(params);
+      status = cudaGetLastError();
+      if (status != cudaSuccess || tmp_v == nullptr) {
+        return status;
+      }
+      const uint64_t merge_threads = static_cast<uint64_t>(params.max_total_num_rows) *
+                                     params.num_qo_heads * (kHead / kMergeVector);
+      merge_parts_kernel<kHead>
+          <<<static_cast<uint32_t>((merge_threads + kMergeThreads - 1) / kMergeThreads),
+             kMergeThreads, 0, stream>>>(tmp_v, tmp_s, params.merge_indptr, output,
+                                         params.total_num_rows, params.num_qo_heads);
+      return cudaGetLastError();
+    }
+  });
+  return cudaErrorNotSupported;
 }
 
 }  // namespace
@@ -473,6 +652,7 @@ cudaError_t run_paged_attention(const __nv_bfloat16* query,
       ids(layout.qo_tile_indices), ids(layout.kv_tile_indices),
       ids(layout.kv_chunk_size),
       reinterpret_cast<uint32_t*>(base + layout.total_rows),
+      reinterpret_cast<uint32_t*>(base + layout.work_count),
       reinterpret_cast<bool*>(base + layout.block_valid), ids(layout.merge_indptr),
       reinterpret_cast<__nv_bfloat16*>(base + layout.tmp_v), output);
   const cudaError_t status = cudaGetLastError();
@@ -511,15 +691,17 @@ cudaError_t run_paged_attention(const __nv_bfloat16* query,
   params.total_num_rows = reinterpret_cast<uint32_t*>(base + layout.total_rows);
   params.padded_batch_size = work;
   params.partition_kv = false;
+  params.work_count = reinterpret_cast<const uint32_t*>(base + layout.work_count);
+  DTypeO* const tmp_v = chunk != 0 ? reinterpret_cast<DTypeO*>(base + layout.tmp_v) : nullptr;
+  float* const tmp_s = chunk != 0 ? reinterpret_cast<float*>(base + layout.tmp_s) : nullptr;
+  if (full_grid_setting().load(std::memory_order_relaxed) == 0) {
+    return launch_strided<kHead>(params, tmp_v, tmp_s, work, stream);
+  }
   try {
     return flashinfer::BatchPrefillWithPagedKVCacheDispatched<
         kCtaTileQ, kHead, kHead, flashinfer::PosEncodingMode::kNone,
         /*USE_FP16_QK_REDUCTION=*/false, flashinfer::MaskMode::kCausal, Variant,
-        PagedParams>(
-        params,
-        chunk != 0 ? reinterpret_cast<DTypeO*>(base + layout.tmp_v) : nullptr,
-        chunk != 0 ? reinterpret_cast<float*>(base + layout.tmp_s) : nullptr,
-        /*enable_pdl=*/false, stream);
+        PagedParams>(params, tmp_v, tmp_s, /*enable_pdl=*/false, stream);
   } catch (...) {
     // FlashInfer rejects an unsupported configuration with an exception.
     return cudaErrorNotSupported;
@@ -557,4 +739,11 @@ cudaError_t paged_attention(const __nv_bfloat16* query,
 // multiple of 16; 0 for no KV split).
 extern "C" void riley_cuda_set_native_flashinfer_kv_chunk(uint64_t tokens) noexcept {
   riley_fi::kv_chunk_setting().store(tokens, std::memory_order_relaxed);
+}
+
+// 1 runs later launches with one CTA per possible work item, as FlashInfer's
+// launcher does; 0 (the default) strides a resident-sized grid over them.
+// For tests: both write the same bytes.
+extern "C" void riley_cuda_set_native_flashinfer_full_grid(uint32_t mode) noexcept {
+  riley_fi::full_grid_setting().store(mode, std::memory_order_relaxed);
 }

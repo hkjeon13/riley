@@ -89,9 +89,56 @@ TTFT at one client grows with prompt length, on GPU 6, median of 6 requests:
 - Splitting attention does not help TTFT: rows of a prompt read the context
   written so far, and rag-c1 stayed at 324–350 ms for every split size tried.
 - More tokens per step help little, and even 512 stays well above vLLM. The
-  cost is in the forward pass per token, not in the number of steps. Which
-  kernel carries it is not known: the Nsight Systems 2023.4 on this host lost
-  the kernel events or failed to convert its capture.
+  cost is in the forward pass per token, not in the number of steps.
+
+Nsight Systems 2026.5.1 on one 2,629-token request with 4 output tokens
+(`benchmarks/evidence/20261102-gap/prof/`) shows GPU kernel time of 271 ms for
+Riley against 199 ms for vLLM. The GPU is idle for 7 and 5 ms, so host work does
+not explain the gap. Riley runs 11 prompt steps of 256 rows; the vLLM server
+default on A100 runs 2 of up to 2,048.
+
+| Part | Riley ms | vLLM ms | Why Riley is slower |
+|---|---:|---:|---|
+| Projections (GEMM) | 213 | 173 | 256 rows fill the GPU poorly. Per layer at 256 rows: QKV 151 and o_proj 129 TFLOP/s, against 244 and 194 at 2,048 rows |
+| Attention and merge | 34 | 14 | The attention costs 38 µs at a 256-token context, where the work is a few µs. The merge costs 8 µs per layer when every row has one part and 37 µs with two |
+| RMSNorm, SiLU, RoPE and KV write | 25 | 12 | Scalar BF16 loads. Per 256 rows RMSNorm takes 13.5 µs (vLLM 5.7), SiLU 38.9 µs (21) |
+
+Two changes to this attention followed, both writing the same bytes as before,
+which a GPU test checks against FlashInfer's own launch and merge:
+
+- **Strided grid.** The attention launched one block per possible work item:
+  9,088 blocks for 256 rows on an 8,192-token server, most of which exit at
+  once. It now launches at most the blocks that fit on the GPU, and they stride
+  over the planned items. Attention went from 25.8 to 21.0 ms per request.
+- **Merge.** FlashInfer's merge gives each row and head one block of 128
+  threads; it now uses one thread per 8 values and replays the same fold. The
+  merge went from 7.9 to 2.6 ms per request (20 to 6.7 µs a call).
+
+Two runs each on GPUs 6 and 7, Riley only:
+
+| Cell | Before | Strided grid | And merge |
+|---|---:|---:|---:|
+| rag-c1 TTFT p50 ms | 327.6 | 323.3 | **317.0** |
+| rag6k-c1 TTFT p50 ms | 561.3 | 556.9 | **543.4** |
+| rag-r3 TTFT p50 ms | 417.7 | 405.3 | **391.2** |
+| rag-c8 TPOT p50 ms | 17.6 | 17.5 | **17.1** |
+| reason-c8 tok/s | 565.7 | 565.4 | 565.7 |
+| closed-c32 tok/s | 2256 | 2251 | 2256 |
+
+TTFT at 3,497 tokens and one client went from 331.6 to 322.0 ms (vLLM 234.5),
+or 96 to 93 µs per token. Each build matched the one before on 32 of 32
+requests, passed the API checks 40/40 and gave the same 54/54 and 12/18 in the
+long check. The short-row cost on a long-context server (reason-c8) did not
+move with either change, so its cause is still unknown.
+
+What remains, in order of risk:
+
+1. Vectorize RMSNorm, SiLU and the RoPE/KV write while keeping each reduction
+   order, so bytes stay the same: about 8–10 ms.
+2. Larger prompt steps when few rows are decoding. This would recover most of
+   the GEMM gap (about 40 ms), but a step of 1,024 rows fails on the GEMM
+   equivalence table (`NotSupported`), so it needs new verified GEMM shapes
+   first.
 
 A step of 512 needs `--batch-token-budget 512 --prefill-chunk-tokens 512` and
 matching `--batch-shape-buckets`, and it raises short-prompt TTFT (closed-c32
