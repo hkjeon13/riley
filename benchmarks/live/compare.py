@@ -32,11 +32,10 @@ SCENARIOS = {
     "rag-c8": (LONG, "--prompt-words 1500,3000 --max-tokens 128 --concurrency 8 --requests 64 --warmup 8"),
     "rag-r1": (LONG, "--prompt-words 1500,3000 --max-tokens 128 --rate 1 --requests 64 --warmup 8"),
     "rag-r3": (LONG, "--prompt-words 1500,3000 --max-tokens 128 --rate 3 --requests 64 --warmup 8"),
+    "rag6k-c1": (LONG, "--prompt-words 3000,5000 --max-tokens 128 --concurrency 1 --requests 16 --warmup 4"),
     "reason-c8": (LONG, "--prompt-words 30 --max-tokens 1024 --concurrency 8 --requests 32 --warmup 8"),
     "reason-c32": (LONG, "--prompt-words 30 --max-tokens 1024 --concurrency 32 --requests 64 --warmup 32"),
 }
-PORT = 18300
-
 parser = argparse.ArgumentParser()
 parser.add_argument("root")
 parser.add_argument("label")
@@ -47,7 +46,9 @@ parser.add_argument("--order", default="rvvr")
 parser.add_argument("--scenarios", default=",".join(SCENARIOS))
 parser.add_argument("--riley-short", default="")
 parser.add_argument("--riley-long", default="")
+parser.add_argument("--port", type=int, default=18300)
 args = parser.parse_args()
+PORT = args.port
 OUT = f"{args.root}/evidence/{args.label}"
 os.makedirs(OUT, exist_ok=True)
 MODEL = f"{args.root}/models/{args.model}"

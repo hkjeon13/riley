@@ -2,7 +2,9 @@
 
 What was added for agent and RAG workloads on 2026-11-02, how it behaves under
 load, and where it still trails vLLM. Everything here ran on A100-SXM4-40GB
-GPUs of `aws-a100` (physical 6 and 7) with vLLM 0.27.1 as the baseline.
+GPUs of `aws-a100` with vLLM 0.27.1 as the baseline. vLLM runs on GPUs 4 and 5
+of this host are capped near 20 tok/s for reasons not found, so every vLLM
+number here comes from GPUs 6 and 7.
 Evidence is in `benchmarks/evidence/20261102-gap/`; the scripts are in
 `benchmarks/live/`.
 
@@ -26,11 +28,13 @@ load tables were not repeated after it.
 | open-rN | 72 | 64 | Poisson arrivals, N requests/s |
 | burst-rN | 72 | 64 | Mean rate N, arriving 1 s on, 3 s off |
 | mid-* | 397 | 64 | As above |
-| rag-* | mean 2,640 (1,500–3,000 words) | 128 | 16 to 64 requests |
+| rag-* | about 1,780 and 3,500 (1,500 and 3,000 words, alternating) | 128 | 16 to 64 requests |
+| rag6k-c1 | about 3,500 and 5,800 (3,000 and 5,000 words, alternating) | 128 | 1 client, 16 requests |
 | reason-cN | 72 | up to 1,024 (mean 837) | N clients |
 
 Short cells ran with `--max-sequence-tokens 1024`; rag and reason with
-`--max-sequence-tokens 8192`.
+`--max-sequence-tokens 8192`. Because prompt lengths alternate, the TTFT p50 of
+rag-c1 and rag6k-c1 is the longer prompt.
 
 ## Load
 
@@ -48,15 +52,16 @@ Riley / vLLM, times in ms:
 | mid-r8 | 484 / 483 | **54.0** / 59.5 | 85.8 / **82.0** | 106.9 / **95.7** | **13.4** / 14.6 |
 | mid-r16 | 940 / 939 | **64.3** / 76.0 | 153.9 / **130.3** | 203.5 / **158.8** | **15.7** / 19.2 |
 | mid-c32 | **1369** / 1297 | **102.3** / 357.9 | 708.3 / **360.6** | 748.4 / **362.0** | **18.7** / 19.2 |
-| rag-c1 | 67 / **74** | 320.8 / **233.1** | 332.4 / **242.3** | 332.4 / **242.3** | 14.0 / **12.3** |
-| rag-c8 | 320 / **348** | 638.4 / **415.2** | 1285.1 / **702.2** | 1472.9 / **834.4** | **18.5** / 19.9 |
-| rag-r1 | 112 / 113 | 323.5 / **237.8** | 468.4 / **261.7** | 536.3 / **362.7** | 15.0 / **13.9** |
-| rag-r3 | 314 / **319** | 439.6 / **257.4** | 884.4 / **445.0** | 1080.0 / **511.8** | **19.4** / 21.6 |
-| reason-c8 | 580 / **594** | **26.9** / 40.4 | **27.3** / 40.8 | **27.9** / 40.8 | 12.4 / 12.4 |
-| reason-c32 | **2098** / 2059 | **28.9** / 46.6 | **30.6** / 73.2 | **32.7** / 74.4 | **13.6** / 13.7 |
+| rag-c1 | 71 / **74** | 326.7 / **231.6** | 335.0 / **234.2** | 335.0 / **234.2** | 12.3 / 12.3 |
+| rag-c8 | 339 / **348** | 590.6 / **375.1** | 1240.9 / **639.0** | 1454.0 / **771.0** | **17.6** / 20.0 |
+| rag-r1 | 112 / 113 | 329.3 / **234.6** | 478.6 / **260.5** | 526.0 / **355.0** | **13.4** / 13.8 |
+| rag-r3 | 317 / **319** | 416.8 / **260.3** | 845.9 / **449.7** | 1033.4 / **518.9** | **18.1** / 21.6 |
+| rag6k-c1 | 64 / **68** | 560.1 / **395.0** | 565.3 / **402.5** | 565.3 / **402.5** | **12.4** / 12.5 |
+| reason-c8 | 566 / **594** | **27.4** / 40.2 | **27.7** / 40.6 | **34.7** / 40.8 | 12.7 / **12.3** |
+| reason-c32 | 2080 / 2078 | **29.2** / 46.5 | **33.2** / 67.8 | **35.0** / 68.8 | **13.6** / 13.7 |
 
 No request failed in any cell. Riley's inter-token p99 stays lower under long
-prompts (rag-c8 23.8 against 128.5 ms), because prompt work is cut into steps
+prompts (rag-c8 24.1 against 129.5 ms), because prompt work is cut into steps
 that never stall decoding.
 
 - **Short prompts:** Riley leads on every TTFT percentile, closed or open loop.
@@ -64,14 +69,34 @@ that never stall decoding.
   workload.
 - **Prompts of 400 tokens:** median TTFT leads, tail TTFT does not.
 - **Prompts of 2,000 tokens or more:** this is the remaining gap. vLLM reaches
-  the first token about 1.4× sooner at one client and 2× sooner at the p95
-  under load, and at one client it also decodes faster at this context length
-  (TPOT 12.3 against 14.0 ms).
+  the first token about 1.4× sooner at one client and 1.9× sooner at the p95
+  under load. Decoding is no longer behind: TPOT is level at one client and
+  lower under load.
 
-Raising `--batch-token-budget` to 512 narrows the RAG gap (rag-c1 TTFT 296,
-rag-r3 316 ms) but raises short-prompt TTFT (closed-c32 p50 40 to 72, closed-c8
-32 to 46 ms). The default stays 256; use 512 only for a server that mostly
-receives long prompts.
+### Prompt speed
+
+TTFT at one client grows with prompt length, on GPU 6, median of 6 requests:
+
+| Prompt tokens | 110 | 512 | 971 | 1,780 | 2,581 | 3,497 | 5,802 | Cost per token |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Riley, default (256 per step) | **16.1** | 57.6 | 88.5 | 161.2 | 249.0 | 331.6 | 566.0 | 96 µs |
+| Riley, 128 per step | **16.0** | 75.9 | 128.2 | 231.7 | 348.4 | 469.7 | 794.4 | 136 µs |
+| Riley, 512 per step | 16.3 | 53.4 | 82.2 | 152.6 | 233.9 | 310.3 | 535.1 | 90 µs |
+| vLLM | 20.9 | **44.1** | **70.2** | **115.2** | **176.6** | **234.5** | **395.9** | **66 µs** |
+
+- The fit has an intercept near zero, so no fixed cost per request explains the
+  gap. Riley leads only below about 200 tokens.
+- Splitting attention does not help TTFT: rows of a prompt read the context
+  written so far, and rag-c1 stayed at 324–350 ms for every split size tried.
+- More tokens per step help little, and even 512 stays well above vLLM. The
+  cost is in the forward pass per token, not in the number of steps. Which
+  kernel carries it is not known: the Nsight Systems 2023.4 on this host lost
+  the kernel events or failed to convert its capture.
+
+A step of 512 needs `--batch-token-budget 512 --prefill-chunk-tokens 512` and
+matching `--batch-shape-buckets`, and it raises short-prompt TTFT (closed-c32
+p50 40 to 72, closed-c8 32 to 46 ms). The default stays 256; use 512 only for a
+server that mostly receives long prompts.
 
 ## Long context
 
@@ -81,23 +106,55 @@ of 512. Compared with `page-v1` on the same cells:
 
 | Cell | `page-v1` | Now |
 |---|---:|---:|
-| rag-c1 TTFT p50 | 618 | 321 |
-| rag-c8 tok/s | 196 | 320 |
-| rag-r3 TTFT p50 | 6041 | 440 |
-| reason-c32 tok/s | 1877 | 2098 |
+| rag-c1 TTFT p50 | 618 | 327 |
+| rag-c8 tok/s | 196 | 339 |
+| rag-r3 TTFT p50 | 6041 | 417 |
+| reason-c32 tok/s | 1877 | 2080 |
+
+Without a split, every attention call scans the whole context, so decoding
+slowed down as context grew (TPOT 14.05 ms at rag-c1 against vLLM's 12.3). The
+context of each row is now cut at fixed token positions and the parts are merged
+in order. The cuts depend only on the row, so output stays independent of the
+batch.
+
+`--attention-kv-chunk-tokens` sets the size. A split was rejected earlier
+because it slows short rows, which those screens tested; on long context it
+pays for itself. Qwen2.5-7B, two runs each, 8,192-token server:
+
+| Split size | No split | 256 | 512 | 1,024 |
+|---|---:|---:|---:|---:|
+| rag-c1 TPOT ms | 14.05 | **11.99** | 12.01 | 12.33 |
+| rag-c8 tok/s | 319 | 323 | 336 | **336** |
+| rag-r3 TPOT ms | 19.55 | 19.23 | 18.26 | **18.09** |
+| rag-r3 TTFT p50 ms | 452 | 472 | 441 | **412** |
+| reason-c32 tok/s | 2097 | **2108** | 2094 | 2078 |
+
+The default is 1,024:
+
+- A row of up to 1,024 tokens is one part and keeps the same bytes, confirmed by
+  a GPU test across query and KV head counts. A server with a context of 1,024
+  or less skips the split path, so the speed tables of the model matrix still
+  apply.
+- 32 mixed requests matched the unsplit build, 32/32, at 8,192 tokens.
+- On an 8,192-token server, requests under 1,024 tokens still pay about 1 %
+  (reason-c32) to 2.4 % (reason-c8), because the step keeps room for rows with
+  more parts. Use a smaller server context for short-only traffic.
 
 Output correctness, 18 prompts of 670 to 6,080 tokens, 32 output tokens:
 
 | | Same tokens at C8 | Same tokens at C32 | Same text as HF BF16 | Same first token as HF |
 |---|---:|---:|---:|---:|
-| Riley, Qwen2.5-7B | **54/54** | **54/54** | 10/18 | 17/18 |
+| Riley, Qwen2.5-7B | **54/54** | **54/54** | 12/18 | **18/18** |
 | vLLM, Qwen2.5-7B | 40/54 | 39/54 | **16/18** | 17/18 |
-| Riley, Qwen3-4B | **54/54** | **54/54** | 10/18 | 17/18 |
+| Riley, Qwen3-4B | **54/54** | **54/54** | 12/18 | 17/18 |
 
 Riley's output does not depend on the batch; vLLM's changed in about a quarter
-of these runs. Riley's agreement with HF on long prompts is below vLLM's on
-Qwen2.5-7B. The sample is small and the cause is not established, so treat this
-as open.
+of these runs. The split moved agreement with HF from 10/18 to 12/18 on both
+models, but it stays below vLLM's on Qwen2.5-7B. The sample is small and the
+cause is not established, so treat this as open.
+
+With two GPUs (`--tensor-parallel-devices`) the same check on Qwen2.5-7B gave
+54/54 at both concurrencies and 13/18 identical text.
 
 KV memory grows with the context: see
 [configuration](configuration.md#capacity). Qwen3-4B at 32 sequences of 8,192
@@ -177,8 +234,8 @@ long-prompt and long-output kinds, plus 758 clients that disconnected mid-stream
   half.
 - At the end no request was active and no KV block stayed allocated.
 
-A further 10 minutes on the final build (4,806 requests, 250 disconnects) gave
-the same result.
+A further 10 minutes on the build with the KV split (4,806 requests, 250
+disconnects) gave the same result.
 
 ## Two GPUs
 

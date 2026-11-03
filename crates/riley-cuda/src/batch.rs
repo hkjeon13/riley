@@ -999,9 +999,9 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge<
 
 /// Selects the D128 attention of the tensor-core producer with the global-max
 /// merge: `1` runs every row through one pinned FlashInfer paged-prefill
-/// launch with a fixed 64-row query tile and no KV split, planned on the GPU
-/// from the packed batch (an experimental, separately selected numerical
-/// mode; serving qualification is required), `0` keeps Riley's producers and merge. Overrides
+/// launch with a fixed 64-row query tile, planned on the GPU from the packed
+/// batch (a separately selected numerical mode), `0` keeps Riley's producers
+/// and merge. See [`set_native_flashinfer_kv_chunk`] for the KV split. Overrides
 /// `RILEY_NATIVE_D128_ATTENTION_FLASHINFER`.
 pub fn set_native_d128_attention_flashinfer(mode: u64) {
     #[cfg(feature = "cuda")]
@@ -1013,7 +1013,7 @@ pub fn set_native_d128_attention_flashinfer(mode: u64) {
 /// Splits each row's context in the FlashInfer mode into fixed chunks of
 /// `tokens` tokens (a multiple of 16) starting at position 0, whose BF16
 /// partial outputs are merged in order; `0` folds the whole context in one
-/// pass. Overrides `RILEY_NATIVE_FLASHINFER_KV_CHUNK`.
+/// pass. A row within one chunk has the same bytes either way. Overrides `RILEY_NATIVE_FLASHINFER_KV_CHUNK`.
 pub fn set_native_flashinfer_kv_chunk(tokens: u64) {
     #[cfg(feature = "cuda")]
     ffi::set_native_flashinfer_kv_chunk(tokens);

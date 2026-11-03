@@ -1,0 +1,13 @@
+flashinfer query_heads=9 key_value_heads=3 pages=20 random_seed=None invariant_rows=741 long_chunk_rows=1200 elements=94464 identical_to_page_path=71796 max_abs_difference=0.001953125
+flashinfer query_heads=9 key_value_heads=3 pages=60 random_seed=Some(11400714819323198485) invariant_rows=741 long_chunk_rows=1600 elements=94464 identical_to_page_path=64251 max_abs_difference=0.00390625
+flashinfer query_heads=14 key_value_heads=2 pages=20 random_seed=None invariant_rows=741 long_chunk_rows=1200 elements=146944 identical_to_page_path=112373 max_abs_difference=0.001953125
+flashinfer query_heads=14 key_value_heads=2 pages=60 random_seed=Some(11400714819323198485) invariant_rows=741 long_chunk_rows=1600 elements=146944 identical_to_page_path=100481 max_abs_difference=0.00390625
+flashinfer query_heads=16 key_value_heads=2 pages=20 random_seed=None invariant_rows=741 long_chunk_rows=1200 elements=335872 identical_to_page_path=262059 max_abs_difference=0.001953125
+flashinfer query_heads=16 key_value_heads=2 pages=60 random_seed=Some(11400714819323198485) invariant_rows=741 long_chunk_rows=1600 elements=335872 identical_to_page_path=229088 max_abs_difference=0.0078125
+high_amplitude_f64 heads=Heads { query: 32, key_value: 8, head: 64 } amplitude=12 max_raw_logit=467.6188135147095 elements=20480 candidate_max_abs=0.0037555847064613124 page_max_abs=0.06532970431311473
+kv_chunk=64 done
+test flashinfer_rows_are_batch_invariant_and_close_to_the_page_path ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.13s
+
+GT_DONE

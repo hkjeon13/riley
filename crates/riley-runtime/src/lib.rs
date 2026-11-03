@@ -32,6 +32,7 @@ pub use riley_cuda::{
     AttentionBackend, AttentionPreference, AttentionSelectionTrace, CudaContext, CudaError,
     CudaEvent, CudaPeerAllReduceGroup, CudaRuntime, CudaStream,
     set_native_d128_attention_flashinfer,
+    set_native_flashinfer_kv_chunk,
 };
 
 /// Static build information that does not initialize a CUDA device.

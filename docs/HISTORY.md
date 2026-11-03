@@ -274,6 +274,13 @@ The method mattered as much as any single change.
   got a byte-level grammar. Comparing with vLLM showed schemas at half its speed
   at 32 clients; checking the GPU's own token against the grammar before
   downloading any logits took that from 1194 to 2048 tok/s.
+- The fixed KV split (November 3) came from asking why long context was slow.
+  The kernel path already existed; it had been rejected because screens at short
+  context showed only its cost. On long context it removed the decode gap
+  (rag-c1 TPOT 14.05 to 12.33 ms, vLLM 12.3), and at 1,024 tokens it leaves
+  shorter rows byte-identical. It did not move TTFT, which was the expected win.
+  The first comparison also went wrong: vLLM on GPU 4 hit the known 20 tok/s cap
+  and had to be repeated on GPU 7.
 
 The measurement logs behind this book were removed from the tree to keep the
 repository small. They remain in the git history at commit `f90683ec`, under

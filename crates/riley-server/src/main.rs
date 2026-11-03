@@ -41,6 +41,8 @@ const NATIVE_BF16_PAGED_SPLIT_GQA_D64_TWO_STAGE_HEAD_SIZE: usize = 64;
 const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE: usize = 16;
 #[cfg(any(feature = "cuda", test))]
 const FIXED37_MAX_SEQUENCE_TOKENS: usize = 8_192;
+/// Rows up to this length keep the bytes of the unsplit attention.
+const DEFAULT_ATTENTION_KV_CHUNK_TOKENS: u64 = 1_024;
 #[cfg(feature = "cuda")]
 const _: () =
     assert!(FIXED37_MAX_SEQUENCE_TOKENS == riley_runtime::llama::LLAMA_FIXED37_MAX_SEQUENCE_TOKENS);
@@ -56,6 +58,7 @@ serve options:
   --inference-profile MODE       native-bf16-v1 | native-bf16-varlen-v1: opt-in BF16 defaults;
                                  explicit options override
   --native-attention-mode MODE   page-v1 | fixed-tile-unsplit-v1 (D64/D128 tensor-core native route)
+  --attention-kv-chunk-tokens N  fixed-tile context split, multiple of 16 (default: 1024)
   --model-id ID                  public model ID (default: checkpoint source model)
   --bind ADDRESS                 listener address (default: 127.0.0.1:8080)
   --device ORDINAL               CUDA device ordinal (default: 0)
@@ -238,6 +241,7 @@ struct ServeOptions {
     dense_prompt_attention: bool,
     d128_tensor_core_producer: bool,
     native_attention_mode: Option<NativeAttentionMode>,
+    attention_kv_chunk_tokens: Option<u64>,
     fused_mlp_residual_norm: bool,
     output_row_lm_head: bool,
     greedy_fp32_ties: bool,
@@ -503,6 +507,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut kv_cache_write = None;
     let mut prompt_attention = None;
     let mut native_attention_mode = None;
+    let mut attention_kv_chunk_tokens = None;
     let mut decode_attention_producer = None;
     let mut mlp_residual_norm = None;
     let mut lm_head_rows = None;
@@ -919,6 +924,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     "--native-attention-mode",
                 )?)?,
                 "--native-attention-mode",
+            )?,
+            "--attention-kv-chunk-tokens" => set_once(
+                &mut attention_kv_chunk_tokens,
+                parse_number(
+                    next_value(&mut arguments, "--attention-kv-chunk-tokens")?,
+                    "--attention-kv-chunk-tokens",
+                )?,
+                "--attention-kv-chunk-tokens",
             )?,
             "--prompt-attention" => set_once(
                 &mut prompt_attention,
@@ -1513,6 +1526,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     if prefix_cache_blocks.is_some() && !d128_tensor_core_producer {
         return Err("--prefix-cache-blocks requires --decode-attention-producer tensor-core-v1".into());
     }
+    if let Some(tokens) = attention_kv_chunk_tokens {
+        if native_attention_mode != Some(NativeAttentionMode::FixedTileUnsplit) {
+            return Err("--attention-kv-chunk-tokens requires fixed-tile-unsplit-v1".into());
+        }
+        if tokens % 16 != 0 {
+            return Err("--attention-kv-chunk-tokens must be a multiple of 16".into());
+        }
+    }
     if native_attention_mode == Some(NativeAttentionMode::FixedTileUnsplit)
         && (batch_token_budget > 512 || max_sequence_tokens.is_none_or(|n| n > 8192)
             || max_active_sequences > 32)
@@ -1661,6 +1682,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         dense_prompt_attention,
         d128_tensor_core_producer,
         native_attention_mode,
+        attention_kv_chunk_tokens,
         fused_mlp_residual_norm,
         output_row_lm_head: lm_head_rows.unwrap_or(false),
         greedy_fp32_ties: greedy_tie_break.flatten().is_some(),
@@ -2612,6 +2634,13 @@ fn run_serve(
     }
     if let Some(mode) = options.native_attention_mode {
         riley_runtime::set_native_d128_attention_flashinfer(mode.setting());
+        if mode == NativeAttentionMode::FixedTileUnsplit {
+            riley_runtime::set_native_flashinfer_kv_chunk(
+                options
+                    .attention_kv_chunk_tokens
+                    .unwrap_or(DEFAULT_ATTENTION_KV_CHUNK_TOKENS),
+            );
+        }
         eprintln!("RILEY_NATIVE_ATTENTION mode={}", mode.cli_id());
     }
     let resources = CudaEngineResources::prepare(
@@ -5761,6 +5790,7 @@ mod tests {
                 dense_prompt_attention: false,
                 d128_tensor_core_producer: false,
                 native_attention_mode: None,
+                attention_kv_chunk_tokens: None,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 greedy_fp32_ties: false,
@@ -6181,6 +6211,7 @@ mod tests {
                 dense_prompt_attention: false,
                 d128_tensor_core_producer: false,
                 native_attention_mode: None,
+                attention_kv_chunk_tokens: None,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 greedy_fp32_ties: false,
@@ -6469,6 +6500,7 @@ mod tests {
                 dense_prompt_attention: false,
                 d128_tensor_core_producer: false,
                 native_attention_mode: None,
+                attention_kv_chunk_tokens: None,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 greedy_fp32_ties: false,
@@ -6970,6 +7002,7 @@ mod tests {
                 dense_prompt_attention: false,
                 d128_tensor_core_producer: false,
                 native_attention_mode: None,
+                attention_kv_chunk_tokens: None,
                 fused_mlp_residual_norm: false,
                 output_row_lm_head: false,
                 greedy_fp32_ties: false,

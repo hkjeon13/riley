@@ -89,9 +89,15 @@ budget of at most 256. Other models use the default backend.
 
 `--inference-profile native-bf16-varlen-v1` allows a context up to 8,192 tokens,
 a step budget up to 512 and 32 active sequences. For long prompts, pass
-`--max-sequence-tokens 8192`. A budget of 512 also needs matching
-`--batch-shape-buckets`; it shortens long-prompt TTFT and lengthens short-prompt
-TTFT ([measurements](serving-validation.md#load)).
+`--max-sequence-tokens 8192`. A budget of 512 also needs
+`--prefill-chunk-tokens 512` and matching `--batch-shape-buckets`; it shortens
+long-prompt TTFT a little and lengthens short-prompt TTFT
+([measurements](serving-validation.md#prompt-speed)).
+
+`--attention-kv-chunk-tokens N`, a multiple of 16 with default 1,024, sets where
+this attention cuts a row's context. Rows that fit in one part keep the same
+bytes, and a server whose context is no longer than `N` skips the split
+([measurements](serving-validation.md#long-context)).
 
 ## Prefix cache
 

@@ -407,9 +407,9 @@ fn rows(sequence: u32, positions: impl IntoIterator<Item = u32>) -> Vec<Row> {
 fn flashinfer_rows_are_batch_invariant_and_close_to_the_page_path() -> TestResult {
     let runtime = CudaRuntime::initialize()?;
     for heads in GEOMETRIES {
-        check_geometry(&runtime, heads, 20, 24, None)?;
-        check_geometry(&runtime, heads, 60, 64, None)?;
-        check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15))?;
+        check_geometry(&runtime, heads, 20, 24, None, 0)?;
+        check_geometry(&runtime, heads, 60, 64, None, 0)?;
+        check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15), 0)?;
     }
     check_high_amplitude_against_f64(&runtime, HIGH_AMPLITUDE, 12.0)?;
     check_high_amplitude_against_f64(&runtime, HIGH_AMPLITUDE_D64, 12.0)?;
@@ -426,8 +426,8 @@ fn flashinfer_rows_are_batch_invariant_and_close_to_the_page_path() -> TestResul
             .filter(|heads| heads.head == 64)
             .chain([GEOMETRIES[0]])
         {
-            check_geometry(&runtime, heads, 20, 24, None)?;
-            check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15))?;
+            check_geometry(&runtime, heads, 20, 24, None, chunk)?;
+            check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15), chunk)?;
         }
         check_high_amplitude_against_f64(&runtime, HIGH_AMPLITUDE_D64, 12.0)?;
         println!("kv_chunk={chunk} done");
@@ -472,6 +472,7 @@ fn check_geometry(
     pages_per_sequence: usize,
     page_capacity: usize,
     random_seed: Option<u64>,
+    outer_chunk: u64,
 ) -> TestResult {
     let context = runtime.device(0)?.create_context()?;
     let mut stream = context.create_stream()?;
@@ -583,6 +584,23 @@ fn check_geometry(
         padding.iter().flatten().all(|byte| *byte == 0),
         "padding rows must be zeros"
     );
+    if page_capacity > pages_per_sequence {
+        // Every row fits one chunk that is smaller than the page capacity,
+        // so the partial states and the merge run and must change nothing.
+        set_native_flashinfer_kv_chunk((pages_per_sequence * PAGE_SIZE) as u64);
+        let (one_chunk, _) = run_kinds(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pools,
+            &reference,
+            true,
+        )?;
+        set_native_flashinfer_kv_chunk(outer_chunk);
+        if outer_chunk == 0 {
+            assert_eq!(one_chunk, flashinfer, "one chunk must match no split");
+        }
+    }
     pools.graph = true;
     let (graph_output, graph_padding) = run_kinds(
         &context,

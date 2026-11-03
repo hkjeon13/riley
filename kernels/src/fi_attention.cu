@@ -131,9 +131,13 @@ std::atomic<uint64_t>& kv_chunk_setting() {
   return value;
 }
 
-uint32_t kv_chunk_tokens() {
+// A chunk that holds `page_capacity` pages cannot split any row, and a row in
+// one chunk has the same bytes without the partial states and the merge.
+uint32_t kv_chunk_tokens(uint64_t page_capacity) {
   const uint64_t chunk = kv_chunk_setting().load(std::memory_order_relaxed);
-  return chunk % kPage == 0 && chunk <= (1ULL << 20) ? static_cast<uint32_t>(chunk) : 0U;
+  return chunk % kPage == 0 && chunk <= (1ULL << 20) && chunk < page_capacity * kPage
+             ? static_cast<uint32_t>(chunk)
+             : 0U;
 }
 
 // Chunks of the longest context `page_capacity` pages can hold.
@@ -430,7 +434,8 @@ uint64_t workspace_bytes(uint64_t output_rows, uint64_t page_capacity,
     return UINT64_MAX;
   }
   return layout_for(output_rows, page_capacity, query_heads,
-                    query_heads / key_value_heads, head_size, kv_chunk_tokens())
+                    query_heads / key_value_heads, head_size,
+                    kv_chunk_tokens(page_capacity))
       .bytes;
 }
 
@@ -449,7 +454,7 @@ cudaError_t run_paged_attention(const __nv_bfloat16* query,
     return cudaErrorInvalidValue;
   }
   const uint32_t group_heads = query_heads / key_value_heads;
-  const uint32_t chunk = kv_chunk_tokens();
+  const uint32_t chunk = kv_chunk_tokens(page_capacity);
   const Layout layout =
       layout_for(output_rows, page_capacity, query_heads, group_heads, kHead, chunk);
   if (workspace == nullptr || workspace_size < layout.bytes) {

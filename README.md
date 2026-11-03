@@ -337,7 +337,7 @@ The configuration behind the performance numbers above is the native profile:
 
 | Option | What it sets |
 |---|---|
-| `--inference-profile native-bf16-varlen-v1` | Fast BF16 kernels, CUDA graphs and fixed-tile attention, with 1,024-token context and a 256-row step budget. Any option you pass explicitly overrides the profile's value |
+| `--inference-profile native-bf16-varlen-v1` | Fast BF16 kernels, CUDA graphs and fixed-tile attention, with up to 8,192-token context and a 512-row step budget (defaults 1,024 and 256). Any option you pass explicitly overrides the profile's value |
 | `--max-active-sequences 32` | Requests generating at once (profile limit: 32). Further requests queue |
 | `--max-output-tokens 128` | Upper bound for a request's `max_tokens` |
 | `--max-weight-bytes` | Largest checkpoint the server accepts (default 2 GiB; 32 GiB here) |
