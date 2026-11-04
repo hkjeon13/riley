@@ -1,0 +1,90 @@
+== evidence/prof/bur1.sqlite: 65972 kernels, 79 bursts, using 6 with [4418, 4418, 4418, 4418, 4418, 4418]
+per request: span 256.6 ms, GPU busy 249.8 ms, idle 6.8 ms
+  gemm         213.36 ms
+  attention     28.85 ms
+  norm           4.59 ms
+  rope           2.65 ms
+  other          0.66 ms
+  copy           0.01 ms
+     91.14 ms     290x    314.3 us  ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn
+     45.80 ms     280x    163.6 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_64x3_tn_align8>
+     30.19 ms     560x     53.9 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x5_tn_align8>
+     21.25 ms     392x     54.2 us  void riley_fi::<unnamed>::strided_paged_kernel<flashinfer::KernelTraits<
+     19.28 ms      88x    219.1 us  ampere_bf16_s16816gemm_bf16_64x64_ldg8_f2f_stages_64x5_tn
+      9.58 ms      56x    171.0 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x5_tn_align8>
+step  ms     BatchPrefill   MergeStates       Kernel2        ampere      rms_norm          silu   attn grid
+   0  18.97          0.0           0.0          89.4         311.2           6.0          16.0   0
+   1  19.25          0.0           0.0          89.3         311.1           6.0          16.1   0
+   2  19.58          0.0           0.0          89.6         312.5           6.1          16.0   0
+   3  19.99          0.0           0.0          90.3         314.3           6.1          16.1   0
+   4  20.42          0.0           0.0          91.0         315.3           6.1          16.1   0
+   5  20.57          0.0           0.0          91.0         315.4           6.1          16.0   0
+   6  20.73          0.0           0.0          91.0         315.6           6.1          16.1   0
+   7  20.94          0.0           0.0          91.0         315.3           6.1          16.1   0
+   8  21.32          0.0           0.0          91.0         315.4           6.1          16.2   0
+   9  21.48          0.0           0.0          90.9         315.6           6.2          16.1   0
+  10  15.20          0.0           0.0         102.3         800.4           5.1           7.8   0
+  11  12.76          0.0           0.0          52.4         212.8           4.8           3.0   0
+  12  12.71          0.0           0.0          52.4         212.8           4.9           3.0   0
+  13  12.29          0.0           0.0          52.6         212.4           4.9           3.0   0
+RUN_DONE
+== evidence/prof/gA.sqlite: 65988 kernels, 87 bursts, using 6 with [4418, 4418, 4418, 4418, 4418, 4418]
+per request: span 259.5 ms, GPU busy 252.0 ms, idle 7.4 ms
+  gemm         215.46 ms
+  attention     29.00 ms
+  norm           4.59 ms
+  rope           2.65 ms
+  other          0.69 ms
+  copy           0.01 ms
+    128.18 ms     560x    228.9 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_64x3_tn_align8>
+     30.23 ms     560x     54.0 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x5_tn_align8>
+     21.38 ms     392x     54.5 us  void riley_fi::<unnamed>::strided_paged_kernel<flashinfer::KernelTraits<
+     19.31 ms      88x    219.4 us  ampere_bf16_s16816gemm_bf16_64x64_ldg8_f2f_stages_64x5_tn
+     10.75 ms      10x   1074.6 us  ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn
+      9.58 ms      56x    171.1 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x5_tn_align8>
+step  ms     BatchPrefill   MergeStates       Kernel2        ampere      rms_norm          silu   attn grid
+   0  19.08          0.0           0.0         139.3        1065.3           6.0          16.1   0
+   1  19.30          0.0           0.0         139.3        1063.3           6.0          16.1   0
+   2  19.75          0.0           0.0         140.3        1068.1           6.1          16.1   0
+   3  20.22          0.0           0.0         141.5        1077.6           6.1          16.1   0
+   4  20.61          0.0           0.0         141.9        1076.5           6.1          16.1   0
+   5  20.81          0.0           0.0         142.3        1081.6           6.2          16.1   0
+   6  20.99          0.0           0.0         142.4        1077.5           6.2          16.1   0
+   7  21.19          0.0           0.0         142.5        1079.6           6.2          16.1   0
+   8  21.62          0.0           0.0         142.9        1080.0           6.2          16.1   0
+   9  21.84          0.0           0.0         143.2        1080.8           6.2          16.1   0
+  10  15.01          0.0           0.0         102.4         799.0           5.1           7.7   0
+  11  12.79          0.0           0.0          52.5         212.8           4.7           3.0   0
+  12  12.71          0.0           0.0          52.3         212.7           4.7           3.0   0
+  13  12.23          0.0           0.0          52.5         212.5           4.7           3.0   0
+RUN_DONE
+== evidence/prof/lm1.sqlite: 65872 kernels, 79 bursts, using 6 with [4408, 4408, 4408, 4408, 4408, 4408]
+per request: span 246.0 ms, GPU busy 239.6 ms, idle 6.5 ms
+  gemm         203.03 ms
+  attention     28.95 ms
+  norm           4.61 ms
+  rope           2.64 ms
+  other          0.68 ms
+  copy           0.01 ms
+     80.65 ms     280x    288.0 us  ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn
+     45.93 ms     280x    164.0 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_64x3_tn_align8>
+     30.19 ms     560x     53.9 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x5_tn_align8>
+     21.35 ms     392x     54.5 us  void riley_fi::<unnamed>::strided_paged_kernel<flashinfer::KernelTraits<
+     19.28 ms      88x    219.1 us  ampere_bf16_s16816gemm_bf16_64x64_ldg8_f2f_stages_64x5_tn
+      9.58 ms      56x    171.0 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x5_tn_align8>
+step  ms     BatchPrefill   MergeStates       Kernel2        ampere      rms_norm          silu   attn grid
+   0  17.88          0.0           0.0          89.3         284.6           6.1          16.0   0
+   1  18.10          0.0           0.0          89.3         284.6           6.1          16.0   0
+   2  18.43          0.0           0.0          89.5         285.4           6.1          16.0   0
+   3  19.02          0.0           0.0          90.8         289.0           6.2          16.1   0
+   4  19.34          0.0           0.0          91.1         288.9           6.2          16.2   0
+   5  19.51          0.0           0.0          91.1         289.1           6.2          16.1   0
+   6  19.70          0.0           0.0          91.0         288.9           6.2          16.2   0
+   7  19.88          0.0           0.0          91.0         288.9           6.2          16.1   0
+   8  20.26          0.0           0.0          91.1         289.1           6.2          16.1   0
+   9  20.45          0.0           0.0          91.1         289.0           6.2          16.0   0
+  10  15.30          0.0           0.0         102.2         800.5           5.1           7.7   0
+  11  12.78          0.0           0.0          52.5         212.5           4.8           3.0   0
+  12  12.71          0.0           0.0          52.4         212.8           4.8           3.0   0
+  13  12.24          0.0           0.0          52.3         212.5           4.8           3.0   0
+RUN_DONE

@@ -75,7 +75,7 @@ both. vLLM uses its normal compile + CUDA Graph path with
 `--gpu-memory-utilization 0.6` (0.9 for the 14B models, which do not load at 0.6).
 
 Known limits: with prompts of 2,000 tokens or more, vLLM's first token arrives
-about 1.3× sooner at one client and 1.8× sooner at the p95 under load; with
+about 1.25× sooner at one client and 1.8× sooner at the p95 under load; with
 400-token prompts its tail TTFT is lower under load. `logprobs` run 1.7× slower
 than vLLM's. See [serving validation](docs/serving-validation.md), which covers
 open-loop arrivals, long prompts and outputs, structured output and a 30-minute

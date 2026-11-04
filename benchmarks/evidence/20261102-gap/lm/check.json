@@ -1,0 +1,206 @@
+{
+ "model": "m",
+ "at": 1793754396.933688,
+ "results": [
+  {
+   "name": "plain chat",
+   "passed": true,
+   "detail": "{'id': 'cmpl-0000000000000050', 'object': 'chat.completion', 'created': 1793754366, 'model': 'm', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': \"Certainly! Let's describe the vibrant city of Seoul, the capital and largest metropolis of South Korea.\\n\\nSeoul is a bustling metropolis that seamlessly blends ancient traditions with mo"
+  },
+  {
+   "name": "completions accepts user",
+   "passed": true,
+   "detail": "b'{\"id\":\"cmpl-0000000000000051\",\"object\":\"text_completion\",\"created\":1793754366,\"model\":\"m\",\"choices\":[{\"text\":\", I\\'m trying\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens'"
+  },
+  {
+   "name": "chat logprobs present",
+   "passed": true,
+   "detail": "{'id': 'cmpl-0000000000000052', 'object': 'chat.completion', 'created': 1793754366, 'model': 'm', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': {'content': [{'token': 'Certainly', 'logprob': -0.6005185842514038, 'bytes': [67, 101, 114, 116, 97, 105, 110, 108, 121], 'top_logprobs': [{'token': 'Certainly', 'logprob': -0.6005185842514038, 'bytes': [67, 101, 114, 116, 97, 105, 110, 1"
+  },
+  {
+   "name": "greedy token is the most likely",
+   "passed": true,
+   "detail": "[{'token': 'Certainly', 'logprob': -0.6005185842514038, 'bytes': [67, 101, 114, 116, 97, 105, 110, 108, 121], 'top_logprobs': [{'token': 'Certainly', 'logprob': -0.6005185842514038, 'bytes': [67, 101, 114, 116, 97, 105, 110, 108, 121]}, {'token': 'Sure', 'logprob': -0.8505185842514038, 'bytes': [83, 117, 114, 101]}, {'token': 'Title', 'logprob': -3.8505184650421143, 'bytes': [84, 105, 116, 108, 10"
+  },
+  {
+   "name": "top_logprobs sorted, five each, negative",
+   "passed": true,
+   "detail": "[{'token': 'Certainly', 'logprob': -0.6005185842514038, 'bytes': [67, 101, 114, 116, 97, 105, 110, 108, 121], 'top_logprobs': [{'token': 'Certainly', 'logprob': -0.6005185842514038, 'bytes': [67, 101, 114, 116, 97, 105, 110, 108, 121]}, {'token': 'Sure', 'logprob': -0.8505185842514038, 'bytes': [83, 117, 114, 101]}, {'token': 'Title', 'logprob': -3.8505184650421143, 'bytes': [84, 105, 116, 108, 10"
+  },
+  {
+   "name": "token bytes rebuild the text",
+   "passed": true,
+   "detail": "('Certainly! Here\\'s a fictional book concept:\\n\\n**Title:** \"Whispers of the Forgotten\"\\n\\n**Genre:** Fantasy,', 'Certainly! Here\\'s a fictional book concept:\\n\\n**Title:** \"Whispers of the Forgotten\"\\n\\n**Genre:** Fantasy,')"
+  },
+  {
+   "name": "top mass at most one",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "legacy logprobs shape",
+   "passed": true,
+   "detail": "b'{\"id\":\"cmpl-0000000000000053\",\"object\":\"text_completion\",\"created\":1793754367,\"model\":\"m\",\"choices\":[{\"text\":\" Paris. Which of the\",\"index\":0,\"logprobs\":{\"tokens\":[\" Paris\",\".\",\" Which\",\" of\",\" the\"],\"token_logprobs\":[-0.6994929313659668,-0.7925735712051392,-1.8177036046981812,-0.0872664600610733,-0'"
+  },
+  {
+   "name": "sampled logprobs",
+   "passed": true,
+   "detail": "{'id': 'cmpl-0000000000000054', 'object': 'chat.completion', 'created': 1793754367, 'model': 'm', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': {'content': [{'token': 'Sure', 'logprob': -0.8505185842514038, 'bytes': [83, 117, 114, 101], 'top_logprobs': []}, {'token': ',', 'logprob': -0.8981472253799438, 'bytes': [44], 'top_logprobs': []}, {'token': ' let', 'logprob': -0.070171192"
+  },
+  {
+   "name": "streamed logprobs",
+   "passed": true,
+   "detail": "[{'id': 'cmpl-0000000000000055', 'object': 'chat.completion.chunk', 'created': 1793754367, 'model': 'm', 'choices': [{'finish_reason': None, 'index': 0, 'logprobs': {'content': [{'token': ' of', 'logprob': -0.03705082833766937, 'bytes': [32, 111, 102], 'top_logprobs': [{'token': ' of', 'logprob': -0.03705082833766937, 'bytes': [32, 111, 102]}, {'token': ' in', 'logprob': -3.537050724029541, 'bytes"
+  },
+  {
+   "name": "json_object 0",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"city\": {\"name\": \"Seoul\", \"country\": \"Korea\", \"population\": \"9.7 million\", \"notable_features\": [\"Gyeongbokgung Palace\", \"N Seoul Tower\", \"Myeong-dong shopping district\", \"Han River\"], \"climate\": \"Temperate\", \"cuisine\": [\"Kimchi\", \"Bibimbap\", \"Ramen\", \"Bulgogi\"], \"culture\": \"Rich in history and mod"
+  },
+  {
+   "name": "json_object 1",
+   "passed": true,
+   "detail": "{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"book\": {\"title\": \"Whispers of the Woven Moon\", \"author\": \"Elena M. Voss\", \"genre\": \"Fantasy\", \"summary\": \"In a world where magic is woven into the fabric of reality, a young weaver discovers she can manipulate the very threads of destiny. As she learns to harness her power, she must navigate a "
+  },
+  {
+   "name": "json_object 2",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"summary\": \"The water cycle, also known as the hydrological cycle, is a continuous process by which water circulates between the Earth\\'s oceans, atmosphere, and land. It involves several key steps: evaporation (water turning into vapor), transpiration (evaporation from plants), condensation (vapo"
+  },
+  {
+   "name": "json_object 3",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"language\":\"Python\", \"creator\":\"Guido van Rossum\"}'}}"
+  },
+  {
+   "name": "json_object 4",
+   "passed": true,
+   "detail": "{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"recipe\": {\"name\": \"Basic Black Tea\", \"ingredients\": [\"2 teaspoons black tea leaves\", \"1 cup (8 ounces) of water\", \"Sweetener of your choice (optional)\", \"Lemon slice (optional)\"], \"instructions\": [\"Boil the water in a kettle or pot.\", \"Place the black tea leaves in a teapot or heat-resistant cu"
+  },
+  {
+   "name": "json_object 5",
+   "passed": true,
+   "detail": "{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"description\": \"Mars is the fourth planet from the Sun and is often referred to as the \\'Red Planet\\' due to its reddish appearance, caused by iron oxide, or rust, on its surface. It has a thin atmosphere composed primarily of carbon dioxide, with traces of nitrogen and argon. Mars has a diamete"
+  },
+  {
+   "name": "json_object 6",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"colors\":[\"Red\",\"Blue\",\"Green\"]}'}}"
+  },
+  {
+   "name": "json_object 7",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"answer\": \"Hamlet was written by William Shakespeare.\"}'}}"
+  },
+  {
+   "name": "json_schema 0",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Eunji\", \"age\": 28, \"kind\": \"human\", \"note\": \"A young woman who has a deep love for her hometown, Busan, a\"}'}}"
+  },
+  {
+   "name": "json_schema 1",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Elena Maris\", \"age\": 32, \"kind\": \"human\", \"tags\": [\"mysterious\", \"inventive\"], \"note\": \"Elena is a character who lives in a fictional world inspired\"}'}}"
+  },
+  {
+   "name": "json_schema 2",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Aqua the Water Molecule\", \"age\": 100, \"kind\": \"robot\", \"tags\": [\"water cycle\", \"education\", \"environment\"], \"note\": \"Aqua is a friendly robot who loves to teach about the water,\"}'}}"
+  },
+  {
+   "name": "json_schema 3",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"EiraScript\", \"age\": 18, \"kind\": \"human\", \"tags\": [\"character\", \"programming language\"], \"note\": \"Invented for this creative task.\"}'}}"
+  },
+  {
+   "name": "json_schema 4",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Lian Hua\", \"age\": 35, \"kind\": \"human\", \"note\": \"Lian Hua is a traditional Chinese herbalist who has a deep, \"}'}}"
+  },
+  {
+   "name": "json_schema 5",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Marsia\", \"age\": 23, \"kind\": \"robot\"}'}}"
+  },
+  {
+   "name": "json_schema 6",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Lila\", \"age\": 27, \"kind\": \"human\", \"note\": \"Lila is a free-spirited artist who loves to express herself.\"}'}}"
+  },
+  {
+   "name": "json_schema 7",
+   "passed": true,
+   "detail": "{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"name\": \"Eleanor Waverly\", \"age\": 58, \"kind\": \"human\", \"note\": \"A prolific historical novelist and passionate playwright, E.\"}'}}"
+  },
+  {
+   "name": "most schema outputs finish inside max_tokens",
+   "passed": true,
+   "detail": "8"
+  },
+  {
+   "name": "streamed json_schema",
+   "passed": true,
+   "detail": "{\"name\": \"Luna Starwhisper\", \"age\": 25, \"kind\": \"human\", \"note\": \"A mysterious and talented young woman with a deep connection\"}"
+  },
+  {
+   "name": "unenforceable schema is 400",
+   "passed": true,
+   "detail": "{'error': {'message': 'unsupported JSON Schema: uniqueItems on type array', 'type': 'invalid_request_error', 'param': 'response_format', 'code': 'invalid_schema'}}"
+  },
+  {
+   "name": "pattern is enforced",
+   "passed": true,
+   "detail": "{'id': 'cmpl-0000000000000067', 'object': 'chat.completion', 'created': 1793754382, 'model': 'm', 'choices': [{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': '{\"phone\": \"123-4567\"}'}}], 'usage': {'prompt_tokens': 35, 'completion_tokens': 16, 'total_tokens': 51}}"
+  },
+  {
+   "name": "response_format text",
+   "passed": true,
+   "detail": "{'id': 'cmpl-0000000000000068', 'object': 'chat.completion', 'created': 1793754382, 'model': 'm', 'choices': [{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': 'Hi there! How can I assist you today?'}}], 'usage': {'prompt_tokens': 32, 'completion_tokens': 11, 'total_tokens': 43}}"
+  },
+  {
+   "name": "mixed batches leave plain outputs identical",
+   "passed": true,
+   "detail": "[]"
+  },
+  {
+   "name": "schema output is concurrency-invariant",
+   "passed": true,
+   "detail": "[]"
+  },
+  {
+   "name": "tool_choice required",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000d9', 'object': 'chat.completion', 'created': 1793754395, 'model': 'm', 'choices': [{'finish_reason': 'tool_calls', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'call_cmpl-00000000000000d9_0', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{\"city\":\"Seoul\",\"unit\":\"celsius\"}'}}]}}], 'usage': {'p"
+  },
+  {
+   "name": "required call has valid arguments",
+   "passed": true,
+   "detail": "[{'id': 'call_cmpl-00000000000000d9_0', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{\"city\":\"Seoul\",\"unit\":\"celsius\"}'}}]"
+  },
+  {
+   "name": "named tool_choice",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000da', 'object': 'chat.completion', 'created': 1793754395, 'model': 'm', 'choices': [{'finish_reason': 'tool_calls', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'call_cmpl-00000000000000da_0', 'type': 'function', 'function': {'name': 'add', 'arguments': '{\"a\":1,\"b\":2}'}}]}}], 'usage': {'prompt_tokens': 250, 'complet"
+  },
+  {
+   "name": "auto tool call (model's own choice)",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000db', 'object': 'chat.completion', 'created': 1793754395, 'model': 'm', 'choices': [{'finish_reason': 'tool_calls', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'call_cmpl-00000000000000db_0', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{\"city\":\"Seoul\",\"unit\":\"celsius\"}'}}]}}], 'usage': {'p"
+  },
+  {
+   "name": "tool_choice none",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000dc', 'object': 'chat.completion', 'created': 1793754396, 'model': 'm', 'choices': [{'finish_reason': 'length', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': \"I don't have real-time data access, so I can't provide the current weather in Seoul. However, you can\"}}], 'usage': {'prompt_tokens': 38, 'completion_tokens': 24, 'total_tokens': 62}}"
+  },
+  {
+   "name": "streamed tool call",
+   "passed": true,
+   "detail": "[{'id': 'cmpl-00000000000000dd', 'object': 'chat.completion.chunk', 'created': 1793754396, 'model': 'm', 'choices': [{'finish_reason': 'tool_calls', 'index': 0, 'logprobs': None, 'delta': {'tool_calls': [{'id': 'call_cmpl-00000000000000dd_0', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{\"city\":\"Seoul\",\"unit\":\"celsius\"}'}, 'index': 0}]}}]}, {'id': 'cmpl-00000000000000dd', "
+  },
+  {
+   "name": "tool result round trip",
+   "passed": true,
+   "detail": "{'id': 'cmpl-00000000000000de', 'object': 'chat.completion', 'created': 1793754396, 'model': 'm', 'choices': [{'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'message': {'role': 'assistant', 'content': 'The current temperature in Seoul is 21 degrees Celsius and the sky is clear.'}}], 'usage': {'prompt_tokens': 309, 'completion_tokens': 18, 'total_tokens': 327}}"
+  }
+ ]
+}

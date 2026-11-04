@@ -811,6 +811,7 @@ pub(in crate::llama) fn execute_packed(
             packed.position_ids(),
             step_capture,
             output_row_lm_head,
+            packed.output_count() != 0,
             tensor_parallel_group.as_ref().map(|(group, rank)| (&**group, *rank)),
             stream,
         );
@@ -1292,6 +1293,9 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     positions_host: &[u32],
     step_capture: StepCaptureMode<'_>,
     output_row_lm_head: Option<OutputRowLmHead<'_>>,
+    // False for a step whose rows request no token (a prompt chunk that does
+    // not reach the prompt's end): nothing reads its logits.
+    logits_read: bool,
     tensor_parallel: Option<(&riley_cuda::CudaPeerAllReduceGroup, u32)>,
     stream: &mut S,
 ) -> LlamaBatchExecutorResult<()> {
@@ -2618,8 +2622,10 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     }
     let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
     // No token is requested from this partial prefill: the next iteration
-    // consumes only KV. Batch-only storage deliberately has no dense logits.
-    if buffers.logits.byte_len() == 0 && output_row_lm_head.is_none() {
+    // consumes only KV. Batch-only storage deliberately has no dense logits,
+    // and a step without output rows skips the LM head (about 1 ms over 256
+    // rows of a 152K vocabulary).
+    if (buffers.logits.byte_len() == 0 || !logits_read) && output_row_lm_head.is_none() {
         return Ok(());
     }
     if let Some(output_rows) = output_row_lm_head {

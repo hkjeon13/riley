@@ -70,7 +70,7 @@ that never stall decoding.
 - **Prompts of 400 tokens:** median TTFT leads, tail TTFT does not.
 - **Prompts of 2,000 tokens or more:** this is the remaining gap. vLLM reaches
   the first token about 1.4× sooner at one client and 1.9× sooner at the p95
-  under load; after the kernel changes under Prompt speed, 1.3× and 1.8×. Decoding is no longer behind: TPOT is level at one client and
+  under load; after the changes under Prompt speed, 1.25× and 1.8×. Decoding is no longer behind: TPOT is level at one client and
   lower under load.
 
 ### Prompt speed
@@ -84,6 +84,7 @@ TTFT at one client grows with prompt length, on GPU 6, median of 6 requests:
 | Riley, 512 per step | 16.3 | 53.4 | 82.2 | 152.6 | 233.9 | 310.3 | 535.1 | 90 µs |
 | Riley, grid and merge (below) | 15.9 | 55.4 | 87.5 | 156.1 | 241.5 | 322.0 | 549.5 | 93 µs |
 | Riley, vectorized kernels (below) | **15.4** | 52.6 | 82.5 | 148.6 | 231.0 | 307.0 | 526.0 | 89 µs |
+| Riley, no LM head on prompt chunks (below) | **15.4** | 50.6 | 79.2 | 142.2 | 219.9 | 293.0 | 501.2 | 85 µs |
 | vLLM | 20.9 | **44.1** | **70.2** | **115.2** | **176.6** | **234.5** | **395.9** | **66 µs** |
 
 - The fit has an intercept near zero, so no fixed cost per request explains the
@@ -170,18 +171,43 @@ The norm also runs on every decode step, so decode cells gained too. The build
 matched the one before on 32 of 32 requests, passed the API checks 40/40 and
 gave the same 54/54 and 12/18 in the long check (`vec/`).
 
-What remains: after these changes the projections are most of the gap, 214
-against 173 ms of GEMM per request. Attention and merge are about 10 ms behind;
-norms and activations are level with vLLM. At 256 rows the merged gate|up GEMM runs at 220 TFLOP/s and the
-down projection at 212, against 281 and 254 in vLLM's 2,048-row steps. The
-equivalence table already picks, per row count, the fastest algorithm that
-reproduces the anchor's bytes, so what remains is one of:
+A step that carries only part of a prompt emits no token, yet it ran the LM
+head on all 256 rows: 1.07 ms per step for Qwen2.5-7B's 152,064-token
+vocabulary, 10.7 ms of a 2,629-token request. Such a step now skips it; nothing
+read those logits. GPU time per request went from 249.8 to 239.6 ms. Two runs
+each on GPUs 6 and 7 (`lm/`):
 
-1. Larger prompt steps. 512 rows recover about 4 % for a lone long prompt (see
-   below). A step of 1,024 rows fails on the GEMM equivalence table
-   (`NotSupported`), so it needs new verified GEMM shapes first.
-2. New anchor algorithms for the projections. This changes output bits and
-   needs the models qualified again.
+| Cell | Before | No LM head on prompt chunks |
+|---|---:|---:|
+| rag-c1 TTFT p50 ms | 303.5 | **288.3** |
+| rag6k-c1 TTFT p50 ms | 520.2 | **493.6** |
+| closed-c32 tok/s | 2309 | 2311 |
+| reason-c8 tok/s | 571.7 | 571.5 |
+
+Outputs matched on 32 of 32 requests, the API checks passed 40/40 and the long
+check gave the same 54/54 and 12/18 with the same common prefixes.
+
+What remains is mostly the projections at 256 rows (203 ms of GEMM per request
+against vLLM's 173) and attention (about 10 ms behind). Two ways to change
+their numerics were measured and dropped:
+
+- **Other GEMM anchors.** `benchmarks/profiling/gemm_anchor_search.cu`
+  enumerates every cuBLASLt configuration Riley's recording contract accepts,
+  groups row-count invariant ones by output bytes and finds, per row count,
+  the fastest member of each group (`search/`). For gate|up, Q|K|V and down the
+  current anchor's group already holds the fastest kernels at 256 rows. Only
+  o_proj had a faster group on the probe, a split-K one, and anchoring on it
+  made decoding slower in the server (TPOT 12.2 to 12.6 ms, closed-c32 2307 to
+  2254 tok/s; `gemm/`). The probe's random data also misranks kernels: it put
+  the gate|up anchor at 443 µs and another tiling at 302, while in the server
+  they take 288 and 294. Search results need a server profile before use.
+- **Smaller attention chunks.** `--attention-kv-chunk-tokens` 512 and 256 were
+  slower than 1,024 (TTFT at 3,497 tokens 292.6 and 294.0 against 290.7 ms), and
+  256 lowered agreement with HF (11/18, first token 17/18; `kc/`).
+
+Larger prompt steps remain the lever for the GEMM part: 512 rows recover about
+4 % for a lone long prompt (below), and a step of 1,024 rows fails on the GEMM
+equivalence table (`NotSupported`), so it needs new verified GEMM shapes first.
 
 A step of 512 needs `--batch-token-budget 512 --prefill-chunk-tokens 512` and
 matching `--batch-shape-buckets`, and it raises short-prompt TTFT (closed-c32
