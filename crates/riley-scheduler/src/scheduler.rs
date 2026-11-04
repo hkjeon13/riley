@@ -1772,7 +1772,15 @@ impl Scheduler {
         let mut selected = Vec::new();
         try_reserve_exact(&mut selected, self.active_sequences, "iteration candidates")?;
         let mut budget = match self.prefill_burst {
-            Some(policy) if decode.len() > policy.max_decode_rows => policy.steady_budget,
+            Some(policy)
+                if decode.len() > policy.max_decode_rows
+                    || (policy.min_prompt_tokens > 0
+                        && !prefill
+                            .iter()
+                            .any(|item| item.remaining_tokens >= policy.min_prompt_tokens)) =>
+            {
+                policy.steady_budget
+            }
             _ => self.config.iteration_token_budget,
         };
         let mut aged_request = None;

@@ -177,7 +177,8 @@ down projection at 212, against 281 and 254 in vLLM's 2,048-row steps. The
 equivalence table already picks, per row count, the fastest algorithm that
 reproduces the anchor's bytes, so what remains is one of:
 
-1. Larger prompt steps. A step of 1,024 rows fails on the GEMM equivalence table
+1. Larger prompt steps. 512 rows recover about 4 % for a lone long prompt (see
+   below). A step of 1,024 rows fails on the GEMM equivalence table
    (`NotSupported`), so it needs new verified GEMM shapes first.
 2. New anchor algorithms for the projections. This changes output bits and
    needs the models qualified again.
@@ -186,6 +187,27 @@ A step of 512 needs `--batch-token-budget 512 --prefill-chunk-tokens 512` and
 matching `--batch-shape-buckets`, and it raises short-prompt TTFT (closed-c32
 p50 40 to 72, closed-c8 32 to 46 ms). The default stays 256; use 512 only for a
 server that mostly receives long prompts.
+
+Opening 512 only while nothing is decoding (`--prefill-burst-steady-budget 256
+--prefill-burst-max-decode-rows 0`) still raised closed-c8 TTFT p50 from 31 to
+44 ms: closed-loop clients with equal output lengths finish together, and the
+next short prompts then share a 512-row step. `--prefill-burst-min-prompt-tokens
+512` adds a second condition, a ready prompt with at least 512 tokens left. Two
+runs each on GPUs 6 and 7, outputs identical on 32 of 32 requests (`b0/`, `b1/`):
+
+| Cell | Steps of 256 | Only while idle | And a long prompt |
+|---|---:|---:|---:|
+| rag-c1 TTFT p50 ms | 302.7 | 288.1 | 291.1 |
+| rag6k-c1 TTFT p50 ms | 519.3 | 498.9 | 496.7 |
+| rag-c8 TPOT p50 ms | 16.7 | 16.7 | 16.8 |
+| closed-c8 TTFT p50 ms | 31.1 | 44.2 | 32.0 |
+| closed-c32 TTFT p95 ms | 38.4 | 56.5 | 38.4 |
+| reason-c8 TTFT p50 ms | 26.9 | 27.5 | 27.5 |
+
+With both conditions a long prompt alone gains about 4 % and short prompts lose
+about 0.6 ms, which the 512-row shapes cost even when steps stay at 256. The
+default stays as it is; the options suit a server whose traffic is mostly long
+prompts from few clients.
 
 ## Long context
 

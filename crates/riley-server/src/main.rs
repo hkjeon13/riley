@@ -94,6 +94,10 @@ serve options:
   --prefill-burst-max-decode-percent P
                                  the same bound as P percent of --max-active-sequences, rounded up
                                  (exclusive with --prefill-burst-max-decode-rows)
+  --prefill-burst-min-prompt-tokens N
+                                 open the whole budget only while a ready prompt has at least N
+                                 tokens left, so short prompts arriving together keep the steady
+                                 budget (default: 0, any prompt)
   --prefill-plateau-defer-tokens N
                                  largest overflow put off by --prefill-plateau-rows (default: 32)
   --prefill-plateau-min-decode-rows N
@@ -477,6 +481,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut prefill_burst_steady_budget = None;
     let mut prefill_burst_max_decode_rows = None;
     let mut prefill_burst_max_decode_percent = None;
+    let mut prefill_burst_min_prompt_tokens = None;
     let mut physical_kv_blocks = None;
     let mut prefix_cache_blocks = None;
     let mut api_key_env = None;
@@ -708,6 +713,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     "--prefill-burst-max-decode-rows",
                 )?,
                 "--prefill-burst-max-decode-rows",
+            )?,
+            "--prefill-burst-min-prompt-tokens" => set_once(
+                &mut prefill_burst_min_prompt_tokens,
+                parse_number(
+                    next_value(&mut arguments, "--prefill-burst-min-prompt-tokens")?,
+                    "--prefill-burst-min-prompt-tokens",
+                )?,
+                "--prefill-burst-min-prompt-tokens",
             )?,
             "--prefill-burst-max-decode-percent" => set_once(
                 &mut prefill_burst_max_decode_percent,
@@ -1315,10 +1328,12 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         })
         .transpose()?;
     if prefill_burst_steady_budget.is_none()
-        && (prefill_burst_max_decode_rows.is_some() || prefill_burst_max_decode_percent.is_some())
+        && (prefill_burst_max_decode_rows.is_some()
+            || prefill_burst_max_decode_percent.is_some()
+            || prefill_burst_min_prompt_tokens.is_some())
     {
         return Err(
-            "--prefill-burst-max-decode-rows and --prefill-burst-max-decode-percent require --prefill-burst-steady-budget"
+            "--prefill-burst-max-decode-rows, --prefill-burst-max-decode-percent and --prefill-burst-min-prompt-tokens require --prefill-burst-steady-budget"
                 .to_owned(),
         );
     }
@@ -1347,6 +1362,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     || prefill_burst_max_decode_rows.unwrap_or(8),
                     |percent: usize| (max_active_sequences * percent).div_ceil(100),
                 ),
+                min_prompt_tokens: prefill_burst_min_prompt_tokens.unwrap_or(0),
             }
             .validate(batch_token_budget)
             .map_err(|error| format!("invalid --prefill-burst-steady-budget policy: {error}"))
@@ -6739,6 +6755,20 @@ mod tests {
             "8",
             &["--prefill-burst-max-decode-percent", "31", "--prefill-burst-max-decode-rows", "3"]
         )
+        .is_err());
+        let CliCommand::Serve(options) =
+            burst("8", &["--prefill-burst-min-prompt-tokens", "512"]).unwrap()
+        else {
+            panic!("serve expected");
+        };
+        assert_eq!(options.prefill_burst.unwrap().min_prompt_tokens, 512);
+        assert!(parse_arguments(args(&[
+            "serve",
+            "--model",
+            "/m",
+            "--prefill-burst-min-prompt-tokens",
+            "512",
+        ]))
         .is_err());
     }
 

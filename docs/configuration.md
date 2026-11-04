@@ -45,6 +45,17 @@ A larger budget finishes prompt bursts in fewer steps (better tail
 time-to-first-token) but makes every step that carries prompt tokens slower for
 the requests already decoding. For Qwen2.5-3B, 256 was the best trade-off.
 
+`--prefill-burst-steady-budget N` keeps steps at N rows while more than
+`--prefill-burst-max-decode-rows` rows are decoding and opens the whole budget
+otherwise. With `--prefill-burst-min-prompt-tokens M` the budget also opens only
+while a ready prompt has at least M tokens left, so short prompts that arrive
+together keep the steady size. For Qwen2.5-7B on an A100, a budget of 512 with
+`--prefill-burst-steady-budget 256 --prefill-burst-max-decode-rows 0
+--prefill-burst-min-prompt-tokens 512` cut a lone 3,500-token prompt's TTFT by
+about 4 % and cost short prompts about 0.6 ms
+([serving validation](serving-validation.md#prompt-speed)). Outputs do not
+change.
+
 `--prefill-plateau-rows` exists because step cost is not smooth in the row
 count: with Qwen2.5-3B on an RTX 4090 a step costs about 1 ms more from row 129
 and again from row 193. With `--prefill-plateau-rows 128,192`, a step that

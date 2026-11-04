@@ -66,7 +66,42 @@ fn burst(steady_budget: usize, max_decode_rows: usize) -> PrefillBurstPolicy {
     PrefillBurstPolicy {
         steady_budget,
         max_decode_rows,
+        min_prompt_tokens: 0,
     }
+}
+
+#[test]
+fn short_prompts_keep_the_steady_budget_when_a_prompt_length_is_required() {
+    let mut scheduler = scheduler(Some(PrefillBurstPolicy {
+        min_prompt_tokens: 12,
+        ..burst(8, 2)
+    }));
+    for _ in 0..4 {
+        submit(&mut scheduler, 8, 1);
+    }
+    // No decode rows, but no prompt has 12 tokens left: one 8-token prompt.
+    let first = plan(&mut scheduler, 2);
+    assert_eq!(first.decode_items().len(), 0);
+    assert_eq!(first.total_tokens(), 8);
+}
+
+#[test]
+fn a_long_prompt_opens_the_whole_budget_when_a_prompt_length_is_required() {
+    let mut scheduler = scheduler(Some(PrefillBurstPolicy {
+        min_prompt_tokens: 12,
+        ..burst(8, 2)
+    }));
+    submit(&mut scheduler, 20, 1);
+    submit(&mut scheduler, 8, 1);
+    submit(&mut scheduler, 8, 1);
+    // The 20-token prompt opens the budget: two 8-token chunks.
+    let first = plan(&mut scheduler, 2);
+    assert_eq!(first.total_tokens(), 16);
+    settle(&mut scheduler, &first, 3);
+    // It still has 12 tokens left: 1 decode row + 8 + 7.
+    let second = plan(&mut scheduler, 4);
+    assert_eq!(second.decode_items().len(), 1);
+    assert_eq!(second.total_tokens(), 16);
 }
 
 #[test]

@@ -23,6 +23,11 @@ pub struct PrefillBurstPolicy {
     pub steady_budget: usize,
     /// Most decode rows at which the whole iteration budget stays open.
     pub max_decode_rows: usize,
+    /// Fewest prompt tokens one ready request must have left for the whole
+    /// budget to open; 0 opens it for any prompt. Short prompts that arrive
+    /// together then keep the steady size, and only a long prompt runs in
+    /// larger steps.
+    pub min_prompt_tokens: usize,
 }
 
 impl PrefillBurstPolicy {
