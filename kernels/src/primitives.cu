@@ -1122,6 +1122,164 @@ bool use_wide_general_rms_norm(uint64_t row_count,
          row_count != 0 && row_count <= 256;
 }
 
+// Vector form of the wide kernels for hidden sizes that are multiples of 8 on
+// 16-byte aligned rows. The 1024-thread kernels fit two blocks on an SM, so 256
+// rows took two waves on an A100, and each warp moved 64 bytes per load. Here
+// a 256-thread block loads groups of eight consecutive columns with 16-byte
+// loads (thread t takes groups t, t + 256, ...) and stages the values per
+// column in shared memory. Thread t then runs the accumulation of lane t over
+// columns t, t + 256, ... in ascending order and the reduction of
+// wide_bf16_general_rms_norm_kernel, and stores its groups from registers with
+// the same per-column arithmetic, so the outputs are bit-identical.
+constexpr uint32_t kVectorRmsNormGroupWidth = 8;
+constexpr uint32_t kVectorRmsNormMaxGroupsPerThread =
+    kWideGeneralMaxColumnsPerLane / kVectorRmsNormGroupWidth;
+
+union Bf16x8 {
+  uint4 bits;
+  __nv_bfloat16 values[kVectorRmsNormGroupWidth];
+};
+
+template <bool kResidual>
+__global__ __launch_bounds__(kWideRmsNormLanes)
+void vector_bf16_rms_norm_kernel(
+    const __nv_bfloat16* left, const __nv_bfloat16* right,
+    const __nv_bfloat16* weight, __nv_bfloat16* residual_output,
+    __nv_bfloat16* normalized_output, uint64_t row_count, uint32_t hidden_size,
+    float epsilon) {
+  extern __shared__ float staged_row[];
+  __shared__ float partial_sums[kWideRmsNormLanes];
+  const uint64_t row = blockIdx.x;
+  if (row >= row_count) {
+    return;
+  }
+  const uint64_t base = row * hidden_size;
+  const uint32_t lane = threadIdx.x;
+  const uint32_t groups = hidden_size / kVectorRmsNormGroupWidth;
+  float values[kVectorRmsNormMaxGroupsPerThread][kVectorRmsNormGroupWidth];
+#pragma unroll
+  for (uint32_t item = 0; item < kVectorRmsNormMaxGroupsPerThread; ++item) {
+    const uint32_t group = lane + kWideRmsNormLanes * item;
+    if (group < groups) {
+      const uint32_t column = kVectorRmsNormGroupWidth * group;
+      Bf16x8 input;
+      input.bits = *reinterpret_cast<const uint4*>(left + base + column);
+      if constexpr (kResidual) {
+        Bf16x8 other;
+        other.bits = *reinterpret_cast<const uint4*>(right + base + column);
+        Bf16x8 stored;
+#pragma unroll
+        for (uint32_t j = 0; j < kVectorRmsNormGroupWidth; ++j) {
+          const float value = round_to_storage<__nv_bfloat16>(
+              __bfloat162float(input.values[j]) +
+              __bfloat162float(other.values[j]));
+          stored.values[j] = __float2bfloat16_rn(value);
+          values[item][j] = value;
+        }
+        *reinterpret_cast<uint4*>(residual_output + base + column) =
+            stored.bits;
+      } else {
+#pragma unroll
+        for (uint32_t j = 0; j < kVectorRmsNormGroupWidth; ++j) {
+          values[item][j] = __bfloat162float(input.values[j]);
+        }
+      }
+      float4* staged = reinterpret_cast<float4*>(staged_row + column);
+      staged[0] = make_float4(values[item][0], values[item][1],
+                              values[item][2], values[item][3]);
+      staged[1] = make_float4(values[item][4], values[item][5],
+                              values[item][6], values[item][7]);
+    }
+  }
+  __syncthreads();
+  {
+    const uint32_t columns_per_lane =
+        lane < hidden_size
+            ? (hidden_size - lane + kWideRmsNormLanes - 1) / kWideRmsNormLanes
+            : 0;
+    float sum = 0.0F;
+    for (uint32_t index = 0; index < columns_per_lane; ++index) {
+      const float value = staged_row[lane + kWideRmsNormLanes * index];
+      sum += value * value;
+    }
+    partial_sums[lane] = sum;
+  }
+  __syncthreads();
+  if (threadIdx.x < 32) {
+    const uint32_t index = threadIdx.x;
+    const float a0 = __fadd_rn(partial_sums[index], partial_sums[index + 128]);
+    const float a1 = __fadd_rn(partial_sums[index + 64], partial_sums[index + 192]);
+    const float b0 = __fadd_rn(partial_sums[index + 32], partial_sums[index + 160]);
+    const float b1 = __fadd_rn(partial_sums[index + 96], partial_sums[index + 224]);
+    float sum = __fadd_rn(__fadd_rn(a0, a1), __fadd_rn(b0, b1));
+    for (uint32_t offset = 16; offset != 0; offset /= 2) {
+      sum += __shfl_down_sync(0xffffffffU, sum, offset);
+    }
+    if (threadIdx.x == 0) partial_sums[0] = sum;
+  }
+  __syncthreads();
+  const float inverse_rms =
+      rsqrtf(partial_sums[0] / static_cast<float>(hidden_size) + epsilon);
+#pragma unroll
+  for (uint32_t item = 0; item < kVectorRmsNormMaxGroupsPerThread; ++item) {
+    const uint32_t group = lane + kWideRmsNormLanes * item;
+    if (group < groups) {
+      const uint32_t column = kVectorRmsNormGroupWidth * group;
+      Bf16x8 scale;
+      scale.bits = *reinterpret_cast<const uint4*>(weight + column);
+      Bf16x8 stored;
+#pragma unroll
+      for (uint32_t j = 0; j < kVectorRmsNormGroupWidth; ++j) {
+        const float normalized = values[item][j] * inverse_rms;
+        const float normalized_for_weight =
+            round_to_storage<__nv_bfloat16>(normalized);
+        stored.values[j] = __float2bfloat16_rn(
+            normalized_for_weight * __bfloat162float(scale.values[j]));
+      }
+      *reinterpret_cast<uint4*>(normalized_output + base + column) =
+          stored.bits;
+    }
+  }
+}
+
+bool aligned_16(const void* pointer) noexcept {
+  return (reinterpret_cast<uintptr_t>(pointer) & 15U) == 0;
+}
+
+// The vector form covers the hidden sizes of both wide kernels; the general
+// kernel's reduction is that of the 2048-column kernel and of the 256-thread
+// kernels. `right` and `residual_output` are null for the plain norm.
+template <typename T>
+bool use_vector_rms_norm(uint64_t row_count, uint64_t hidden_size,
+                         const void* left, const void* right,
+                         const void* weight, const void* residual_output,
+                         const void* normalized_output) noexcept {
+  return std::is_same<T, __nv_bfloat16>::value &&
+         hidden_size > kWideRmsNormLanes &&
+         hidden_size <= kWideRmsNormLanes * kWideGeneralMaxColumnsPerLane &&
+         hidden_size % kVectorRmsNormGroupWidth == 0 && row_count != 0 &&
+         row_count <= 256 && aligned_16(left) && aligned_16(right) &&
+         aligned_16(weight) && aligned_16(residual_output) &&
+         aligned_16(normalized_output);
+}
+
+template <bool kResidual>
+void launch_vector_rms_norm(const void* left, const void* right,
+                            const void* weight, void* residual_output,
+                            void* normalized_output, uint64_t row_count,
+                            uint64_t hidden_size, float epsilon,
+                            cudaStream_t stream) {
+  vector_bf16_rms_norm_kernel<kResidual>
+      <<<static_cast<uint32_t>(row_count), kWideRmsNormLanes,
+         hidden_size * sizeof(float), stream>>>(
+          reinterpret_cast<const __nv_bfloat16*>(left),
+          reinterpret_cast<const __nv_bfloat16*>(right),
+          reinterpret_cast<const __nv_bfloat16*>(weight),
+          reinterpret_cast<__nv_bfloat16*>(residual_output),
+          reinterpret_cast<__nv_bfloat16*>(normalized_output), row_count,
+          static_cast<uint32_t>(hidden_size), epsilon);
+}
+
 __global__ void row_bias_add_in_place_kernel(__nv_bfloat16* matrix,
                                              const __nv_bfloat16* bias,
                                              uint64_t column_count,
@@ -1197,6 +1355,36 @@ __global__ void silu_gated_multiply_merged_rows_bf16_kernel(
         __float2bfloat16_rn(value / (1.0F + expf(-value))));
     output[index] =
         __float2bfloat16_rn(activated * __bfloat162float(gate[width]));
+  }
+}
+
+// Eight-wide form of the merged-row multiply for row widths that are multiples
+// of 8 on 16-byte aligned buffers: a thread forms eight consecutive outputs of
+// one row with 16-byte loads and stores. Same arithmetic per element.
+__global__ void silu_gated_multiply_merged_rows_bf16x8_kernel(
+    const __nv_bfloat16* merged, __nv_bfloat16* output, uint32_t vector_count,
+    uint32_t vectors_per_row) {
+  const uint32_t first = blockIdx.x * blockDim.x + threadIdx.x;
+  const uint32_t stride = gridDim.x * blockDim.x;
+  const uint4* merged_vectors = reinterpret_cast<const uint4*>(merged);
+  for (uint32_t index = first; index < vector_count; index += stride) {
+    const uint32_t row = index / vectors_per_row;
+    const uint32_t gate_index = index + row * vectors_per_row;
+    union {
+      uint4 bits;
+      __nv_bfloat16 values[8];
+    } gate, up, stored;
+    gate.bits = merged_vectors[gate_index];
+    up.bits = merged_vectors[gate_index + vectors_per_row];
+#pragma unroll
+    for (uint32_t j = 0; j < 8; ++j) {
+      const float value = __bfloat162float(gate.values[j]);
+      const float activated = __bfloat162float(
+          __float2bfloat16_rn(value / (1.0F + expf(-value))));
+      stored.values[j] =
+          __float2bfloat16_rn(activated * __bfloat162float(up.values[j]));
+    }
+    reinterpret_cast<uint4*>(output)[index] = stored.bits;
   }
 }
 
@@ -1327,6 +1515,13 @@ void launch_rms_norm(const ResolvedSpan& input, const ResolvedSpan& weight,
             row_count, hidden_size, epsilon);
     return;
   }
+  if (use_vector_rms_norm<T>(row_count, hidden_size, input.data, nullptr,
+                             weight.data, nullptr, output.data)) {
+    launch_vector_rms_norm<false>(input.data, nullptr, weight.data, nullptr,
+                                  output.data, row_count, hidden_size, epsilon,
+                                  stream);
+    return;
+  }
   if (use_wide_rms_norm<T>(row_count, hidden_size)) {
     wide_bf16_rms_norm_kernel
         <<<static_cast<uint32_t>(row_count), kWideRmsNormThreads, 0, stream>>>(
@@ -1425,6 +1620,14 @@ void launch_residual_rms_norm(
             reinterpret_cast<__nv_bfloat16*>(residual_output.data),
             reinterpret_cast<__nv_bfloat16*>(normalized_output.data),
             row_count, hidden_size, epsilon);
+    return;
+  }
+  if (use_vector_rms_norm<T>(row_count, hidden_size, left.data, right.data,
+                             weight.data, residual_output.data,
+                             normalized_output.data)) {
+    launch_vector_rms_norm<true>(left.data, right.data, weight.data,
+                                 residual_output.data, normalized_output.data,
+                                 row_count, hidden_size, epsilon, stream);
     return;
   }
   if (use_wide_rms_norm<T>(row_count, hidden_size)) {
@@ -3035,7 +3238,17 @@ extern "C" RileyCudaStatus riley_cuda_gated_multiply_execute(
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
-    if (merged_width != 0) {
+    if (merged_width != 0 && merged_width % 8 == 0 &&
+        ((reinterpret_cast<uintptr_t>(activated_gate.data) |
+          reinterpret_cast<uintptr_t>(output.data)) & 15U) == 0) {
+      silu_gated_multiply_merged_rows_bf16x8_kernel
+          <<<block_count(params->element_count / 8), kThreads, 0,
+             stream->stream>>>(
+              reinterpret_cast<const __nv_bfloat16*>(activated_gate.data),
+              reinterpret_cast<__nv_bfloat16*>(output.data),
+              static_cast<uint32_t>(params->element_count / 8),
+              static_cast<uint32_t>(merged_width / 8));
+    } else if (merged_width != 0) {
       silu_gated_multiply_merged_rows_bf16_kernel
           <<<block_count(params->element_count), kThreads, 0, stream->stream>>>(
               reinterpret_cast<const __nv_bfloat16*>(activated_gate.data),

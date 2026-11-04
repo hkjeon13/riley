@@ -1,0 +1,44 @@
+== evidence/prof/vec1.sqlite: 65972 kernels, 79 bursts, using 6 with [4418, 4418, 4418, 4418, 4418, 4418]
+per request: span 256.8 ms, GPU busy 250.5 ms, idle 6.3 ms
+  gemm         213.95 ms
+  attention     29.00 ms
+  norm           4.61 ms
+  rope           2.65 ms
+  other          0.68 ms
+  copy           0.01 ms
+     91.47 ms     290x    315.4 us  ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn
+     45.97 ms     280x    164.2 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_64x3_tn_align8>
+     30.23 ms     560x     54.0 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x5_tn_align8>
+     21.38 ms     392x     54.6 us  void riley_fi::<unnamed>::strided_paged_kernel<flashinfer::KernelTraits<
+     19.28 ms      88x    219.1 us  ampere_bf16_s16816gemm_bf16_64x64_ldg8_f2f_stages_64x5_tn
+      9.58 ms      56x    171.2 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x5_tn_align8>
+      8.62 ms      84x    102.6 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x64_64x6_tn_align8>
+      4.97 ms     392x     12.7 us  <unnamed>::silu_gated_multiply_merged_rows_bf16x8_kernel
+      4.61 ms     798x      5.8 us  void <unnamed>::vector_bf16_rms_norm_kernel<
+      4.61 ms     168x     27.4 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_64x6_tn_align8>
+      2.65 ms     392x      6.7 us  <unnamed>::qkv_split_bias_rope_kv_write_x2_kernel
+      2.64 ms     392x      6.7 us  void riley_fi::<unnamed>::merge_parts_kernel<
+      2.31 ms     392x      5.9 us  void cublasLt::splitKreduce_kernel<
+      1.88 ms      56x     33.6 us  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x128_64x6_tn_align8>
+      0.38 ms      14x     26.9 us  riley_fi::<unnamed>::plan_kernel
+      0.13 ms       4x     32.2 us  void <unnamed>::bf16_argmax_kernel<
+      0.10 ms      14x      7.5 us  void <unnamed>::embedding_kernel<__nv_bfloat16>
+      0.03 ms      14x      1.8 us  <unnamed>::finalize_embedding_error
+      0.03 ms      14x      1.8 us  <unnamed>::validate_embedding_tokens
+      0.02 ms      14x      1.7 us  <unnamed>::reset_embedding_error
+      0.01 ms       4x      3.4 us  void <unnamed>::row_gather_kernel<__nv_bfloat16>
+step  ms     BatchPrefill   MergeStates       Kernel2        ampere      rms_norm          silu   attn grid
+   0  18.89          0.0           0.0          89.2         311.5           6.1          16.0   0
+   1  19.16          0.0           0.0          89.3         311.5           6.0          15.9   0
+   2  19.53          0.0           0.0          89.7         312.7           6.1          16.0   0
+   3  20.00          0.0           0.0          90.4         315.0           6.1          16.1   0
+   4  20.40          0.0           0.0          91.1         316.2           6.2          16.1   0
+   5  20.61          0.0           0.0          91.2         316.4           6.2          16.1   0
+   6  20.88          0.0           0.0          91.6         317.9           6.2          16.2   0
+   7  21.07          0.0           0.0          91.6         317.8           6.2          16.2   0
+   8  21.58          0.0           0.0          92.2         319.7           6.3          16.2   0
+   9  21.74          0.0           0.0          92.1         319.5           6.2          16.1   0
+  10  15.24          0.0           0.0         102.5         801.7           5.1           7.7   0
+  11  12.75          0.0           0.0          52.4         212.6           4.8           3.0   0
+  12  12.70          0.0           0.0          52.4         212.3           4.7           3.0   0
+  13  12.23          0.0           0.0          52.4         212.5           4.7           3.0   0

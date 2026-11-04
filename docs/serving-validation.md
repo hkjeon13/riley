@@ -70,7 +70,7 @@ that never stall decoding.
 - **Prompts of 400 tokens:** median TTFT leads, tail TTFT does not.
 - **Prompts of 2,000 tokens or more:** this is the remaining gap. vLLM reaches
   the first token about 1.4× sooner at one client and 1.9× sooner at the p95
-  under load. Decoding is no longer behind: TPOT is level at one client and
+  under load; after the kernel changes under Prompt speed, 1.3× and 1.8×. Decoding is no longer behind: TPOT is level at one client and
   lower under load.
 
 ### Prompt speed
@@ -82,6 +82,8 @@ TTFT at one client grows with prompt length, on GPU 6, median of 6 requests:
 | Riley, default (256 per step) | **16.1** | 57.6 | 88.5 | 161.2 | 249.0 | 331.6 | 566.0 | 96 µs |
 | Riley, 128 per step | **16.0** | 75.9 | 128.2 | 231.7 | 348.4 | 469.7 | 794.4 | 136 µs |
 | Riley, 512 per step | 16.3 | 53.4 | 82.2 | 152.6 | 233.9 | 310.3 | 535.1 | 90 µs |
+| Riley, grid and merge (below) | 15.9 | 55.4 | 87.5 | 156.1 | 241.5 | 322.0 | 549.5 | 93 µs |
+| Riley, vectorized kernels (below) | **15.4** | 52.6 | 82.5 | 148.6 | 231.0 | 307.0 | 526.0 | 89 µs |
 | vLLM | 20.9 | **44.1** | **70.2** | **115.2** | **176.6** | **234.5** | **395.9** | **66 µs** |
 
 - The fit has an intercept near zero, so no fixed cost per request explains the
@@ -101,7 +103,7 @@ default on A100 runs 2 of up to 2,048.
 |---|---:|---:|---|
 | Projections (GEMM) | 213 | 173 | 256 rows fill the GPU poorly. Per layer at 256 rows: QKV 151 and o_proj 129 TFLOP/s, against 244 and 194 at 2,048 rows |
 | Attention and merge | 34 | 14 | The attention costs 38 µs at a 256-token context, where the work is a few µs. The merge costs 8 µs per layer when every row has one part and 37 µs with two |
-| RMSNorm, SiLU, RoPE and KV write | 25 | 12 | Scalar BF16 loads. Per 256 rows RMSNorm takes 13.5 µs (vLLM 5.7), SiLU 38.9 µs (21) |
+| RMSNorm, SiLU, RoPE and KV write | 25 | 12 | Scalar BF16 loads. Per 256 rows RMSNorm takes 13.5 µs (vLLM 5.7), SiLU 38.9 µs (21). Fixed below: now 12 ms |
 
 Two changes to this attention followed, both writing the same bytes as before,
 which a GPU test checks against FlashInfer's own launch and merge:
@@ -131,14 +133,54 @@ requests, passed the API checks 40/40 and gave the same 54/54 and 12/18 in the
 long check. The short-row cost on a long-context server (reason-c8) did not
 move with either change, so its cause is still unknown.
 
-What remains, in order of risk:
+A third change rewrote the three element-wise kernels of each layer, each
+keeping its arithmetic and reduction order, so bytes stay the same. GPU tests
+compare every output against the kernels they replace, over 17 hidden sizes
+for the norm and every BF16 gate pattern for SiLU:
 
-1. Vectorize RMSNorm, SiLU and the RoPE/KV write while keeping each reduction
-   order, so bytes stay the same: about 8–10 ms.
-2. Larger prompt steps when few rows are decoding. This would recover most of
-   the GEMM gap (about 40 ms), but a step of 1,024 rows fails on the GEMM
-   equivalence table (`NotSupported`), so it needs new verified GEMM shapes
-   first.
+- **RMSNorm.** The wide kernel used 1,024 threads per row, so only two blocks
+  fit on an SM and 256 rows took two waves, and each warp loaded 64 bytes at a
+  time. It now uses 256 threads with 16-byte loads, stages the row in shared
+  memory per column and replays the same per-lane sums and tree. Hidden sizes
+  that are not a multiple of 8, or unaligned rows, keep the wide kernel.
+- **SiLU.** One thread now forms 8 outputs with 16-byte loads and stores.
+- **RoPE and KV write.** One work item now forms two adjacent rotary pairs or
+  two value elements with BF16x2 loads and 32-bit index arithmetic, and looks
+  up the cache slot once.
+
+Per call RMSNorm went from 11.6 to 5.8 µs, SiLU from 29.4 to 12.7 µs and
+RoPE with the KV write from 10.8 to 6.7 µs, about vLLM's cost for the same
+work. GPU kernel time per 2,629-token request went from 267.0 to 250.5 ms.
+Two runs each on GPUs 6 and 7, Riley only:
+
+| Cell | Grid and merge | Vectorized |
+|---|---:|---:|
+| rag-c1 TTFT p50 ms | 317.8 | **301.8** |
+| rag6k-c1 TTFT p50 ms | 542.9 | **517.5** |
+| rag-r3 TTFT p50 ms | 378.5 | **350.3** |
+| rag-c8 tok/s | 344.6 | **358.8** |
+| rag-c8 TPOT p50 ms | 17.2 | **16.6** |
+| mid-r16 TTFT p50 ms | 63.9 | **59.5** |
+| closed-c8 tok/s | 650.4 | **657.9** |
+| closed-c32 tok/s | 2256 | **2313** |
+| reason-c8 tok/s | 565.8 | **571.5** |
+| reason-c32 tok/s | 2078 | **2109** |
+
+The norm also runs on every decode step, so decode cells gained too. The build
+matched the one before on 32 of 32 requests, passed the API checks 40/40 and
+gave the same 54/54 and 12/18 in the long check (`vec/`).
+
+What remains: after these changes the projections are most of the gap, 214
+against 173 ms of GEMM per request. Attention and merge are about 10 ms behind;
+norms and activations are level with vLLM. At 256 rows the merged gate|up GEMM runs at 220 TFLOP/s and the
+down projection at 212, against 281 and 254 in vLLM's 2,048-row steps. The
+equivalence table already picks, per row count, the fastest algorithm that
+reproduces the anchor's bytes, so what remains is one of:
+
+1. Larger prompt steps. A step of 1,024 rows fails on the GEMM equivalence table
+   (`NotSupported`), so it needs new verified GEMM shapes first.
+2. New anchor algorithms for the projections. This changes output bits and
+   needs the models qualified again.
 
 A step of 512 needs `--batch-token-budget 512 --prefill-chunk-tokens 512` and
 matching `--batch-shape-buckets`, and it raises short-prompt TTFT (closed-c32

@@ -1388,6 +1388,129 @@ __global__ void qkv_split_bias_rope_kv_write_kernel(
   }
 }
 
+// Two-wide form of qkv_split_bias_rope_kv_write_kernel for head sizes that are
+// multiples of 4 on 4-byte aligned buffers: a work item forms two adjacent
+// rotary pairs (units u and u + 1 of one head) or two adjacent value elements
+// with BF16x2 loads and stores, 32-bit index arithmetic and one cache-slot
+// lookup. The arithmetic per element is that of the one-wide kernel.
+__global__ void qkv_split_bias_rope_kv_write_x2_kernel(
+    const __nv_bfloat162* merged, const __nv_bfloat162* query_bias,
+    const __nv_bfloat162* key_bias, const __nv_bfloat162* value_bias,
+    const float* cos, const float* sin, const uint32_t* positions,
+    __nv_bfloat162* query, __nv_bfloat162* key, __nv_bfloat162* value,
+    __nv_bfloat162* key_pool, __nv_bfloat162* value_pool, DeviceBatch batch,
+    uint32_t key_value_head_count, uint32_t query_width,
+    uint32_t key_value_width, uint32_t head_size,
+    uint64_t table_position_count, uint32_t rotated_row_count,
+    uint32_t work_item_count, const uint32_t* dynamic_counts) {
+  if (dynamic_counts != nullptr) {
+    rotated_row_count = dynamic_counts[0];
+  }
+  // Widths below are in BF16x2 units.
+  const uint32_t half = head_size / 2;
+  const uint32_t half2 = half / 2;
+  const uint32_t head2 = head_size / 2;
+  const uint32_t query2 = query_width / 2;
+  const uint32_t key_value2 = key_value_width / 2;
+  const uint32_t merged2 = query2 + 2 * key_value2;
+  const uint32_t query_items = query2 / 2;
+  const uint32_t key_items = key_value2 / 2;
+  const uint32_t work_width = query_items + key_items + key_value2;
+  const uint32_t first = blockIdx.x * blockDim.x + threadIdx.x;
+  const uint32_t stride = gridDim.x * blockDim.x;
+  for (uint32_t work = first; work < work_item_count; work += stride) {
+    const uint32_t row = work / work_width;
+    const uint32_t column = work - row * work_width;
+    const uint32_t merged_row = row * merged2;
+    if (column >= query_items + key_items) {
+      const uint32_t local2 = column - query_items - key_items;
+      const float2 projected = __bfloat1622float2(
+          merged[merged_row + query2 + key_value2 + local2]);
+      const float2 bias = __bfloat1622float2(value_bias[local2]);
+      __nv_bfloat162 stored;
+      stored.x = __float2bfloat16_rn(__fadd_rn(projected.x, bias.x));
+      stored.y = __float2bfloat16_rn(__fadd_rn(projected.y, bias.y));
+      value[row * key_value2 + local2] = stored;
+      uint64_t cache_base = 0;
+      if (resolve_row_cache_base(batch, row, batch.row_positions[row],
+                                 local2 / head2, key_value_head_count,
+                                 head_size, &cache_base)) {
+        value_pool[cache_base / 2 + local2 % head2] = stored;
+      }
+      continue;
+    }
+    if (row >= rotated_row_count) {
+      continue;
+    }
+    const bool is_query = column < query_items;
+    const uint32_t item = is_query ? column : column - query_items;
+    const uint32_t head = item / half2;
+    const uint32_t unit2 = item - head * half2;
+    const uint32_t first2 = head * head2 + unit2;
+    const uint32_t second2 = first2 + half2;
+    const uint32_t section = is_query ? 0 : query2;
+    const __nv_bfloat162* bias = is_query ? query_bias : key_bias;
+    __nv_bfloat162* output = is_query ? query : key;
+    const uint32_t output_row = row * (is_query ? query2 : key_value2);
+    const uint64_t position = positions[row];
+    __nv_bfloat162 first_output;
+    __nv_bfloat162 second_output;
+    first_output.x = first_output.y = __float2bfloat16_rn(CUDART_NAN_F);
+    second_output = first_output;
+    if (position < table_position_count) {
+      const float2 first_projected =
+          __bfloat1622float2(merged[merged_row + section + first2]);
+      const float2 second_projected =
+          __bfloat1622float2(merged[merged_row + section + second2]);
+      const float2 first_bias = __bfloat1622float2(bias[first2]);
+      const float2 second_bias = __bfloat1622float2(bias[second2]);
+      const float first_values[2] = {
+          __bfloat162float(__float2bfloat16_rn(
+              __fadd_rn(first_projected.x, first_bias.x))),
+          __bfloat162float(__float2bfloat16_rn(
+              __fadd_rn(first_projected.y, first_bias.y)))};
+      const float second_values[2] = {
+          __bfloat162float(__float2bfloat16_rn(
+              __fadd_rn(second_projected.x, second_bias.x))),
+          __bfloat162float(__float2bfloat16_rn(
+              __fadd_rn(second_projected.y, second_bias.y)))};
+      __nv_bfloat16 first_stored[2];
+      __nv_bfloat16 second_stored[2];
+#pragma unroll
+      for (uint32_t lane = 0; lane < 2; ++lane) {
+        const uint64_t table_index = position * half + 2 * unit2 + lane;
+        const float cosine = round_to_storage<__nv_bfloat16>(cos[table_index]);
+        const float sine = round_to_storage<__nv_bfloat16>(sin[table_index]);
+        const float first_cosine =
+            multiply_in_storage<__nv_bfloat16>(first_values[lane], cosine);
+        const float second_sine =
+            multiply_in_storage<__nv_bfloat16>(second_values[lane], sine);
+        const float second_cosine =
+            multiply_in_storage<__nv_bfloat16>(second_values[lane], cosine);
+        const float first_sine =
+            multiply_in_storage<__nv_bfloat16>(first_values[lane], sine);
+        first_stored[lane] = __float2bfloat16_rn(first_cosine - second_sine);
+        second_stored[lane] = __float2bfloat16_rn(second_cosine + first_sine);
+      }
+      first_output.x = first_stored[0];
+      first_output.y = first_stored[1];
+      second_output.x = second_stored[0];
+      second_output.y = second_stored[1];
+    }
+    output[output_row + first2] = first_output;
+    output[output_row + second2] = second_output;
+    if (!is_query) {
+      uint64_t cache_base = 0;
+      if (resolve_row_cache_base(batch, row, batch.row_positions[row], head,
+                                 key_value_head_count, head_size,
+                                 &cache_base)) {
+        key_pool[cache_base / 2 + unit2] = first_output;
+        key_pool[cache_base / 2 + unit2 + half2] = second_output;
+      }
+    }
+  }
+}
+
 // Head-norm form of the merged QKV split (Qwen3: no Q/K/V bias, an RMS norm
 // with a learned scale over every query head and every key head before the
 // rotary embedding). One block per (row, head slot); slots are the query
@@ -2799,6 +2922,38 @@ riley_cuda_ragged_paged_kv_cache_write_execute(
                   split.table_position_count, split.rotated_row_count,
                   split.norm_epsilon, dynamic.counts);
           }
+        } else if (split.head_size % 4 == 0 && work_items / 2 < (1ULL << 31) &&
+                   ((reinterpret_cast<uintptr_t>(split.merged) |
+                     reinterpret_cast<uintptr_t>(split.query_bias) |
+                     reinterpret_cast<uintptr_t>(split.key_bias) |
+                     reinterpret_cast<uintptr_t>(split.value_bias) |
+                     reinterpret_cast<uintptr_t>(split.query) |
+                     reinterpret_cast<uintptr_t>(split.key) |
+                     reinterpret_cast<uintptr_t>(split.value) |
+                     reinterpret_cast<uintptr_t>(key_pool.data) |
+                     reinterpret_cast<uintptr_t>(value_pool.data)) & 3U) == 0) {
+        qkv_split_bias_rope_kv_write_x2_kernel
+            <<<block_count(work_items / 2), kThreads, 0, stream->stream>>>(
+                static_cast<const __nv_bfloat162*>(split.merged),
+                static_cast<const __nv_bfloat162*>(split.query_bias),
+                static_cast<const __nv_bfloat162*>(split.key_bias),
+                static_cast<const __nv_bfloat162*>(split.value_bias),
+                static_cast<const float*>(split.cos),
+                static_cast<const float*>(split.sin),
+                static_cast<const uint32_t*>(split.positions),
+                static_cast<__nv_bfloat162*>(split.query),
+                static_cast<__nv_bfloat162*>(split.key),
+                static_cast<__nv_bfloat162*>(split.value),
+                reinterpret_cast<__nv_bfloat162*>(key_pool.data),
+                reinterpret_cast<__nv_bfloat162*>(value_pool.data),
+                device_batch(params->batch, batch),
+                static_cast<uint32_t>(params->key_value_head_count),
+                static_cast<uint32_t>(split.query_width),
+                static_cast<uint32_t>(split.key_value_width),
+                static_cast<uint32_t>(split.head_size),
+                split.table_position_count,
+                static_cast<uint32_t>(split.rotated_row_count),
+                static_cast<uint32_t>(work_items / 2), dynamic.counts);
         } else {
         qkv_split_bias_rope_kv_write_kernel
             <<<block_count(work_items), kThreads, 0, stream->stream>>>(

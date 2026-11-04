@@ -2,8 +2,8 @@ use std::error::Error;
 
 use riley_cuda::{
     CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice, CudaDeviceBuffer,
-    CudaPinnedHostBuffer, CudaRuntime, CudaStream, GatedMultiplyParams, SiluParams, gated_multiply,
-    silu, silu_gated_multiply,
+    CudaPinnedHostBuffer, CudaRuntime, CudaStream, GatedMultiplyParams, MergedGatedMultiplyParams,
+    SiluParams, gated_multiply, silu, silu_gated_multiply, silu_gated_multiply_merged_rows,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -119,6 +119,85 @@ fn bf16_silu_gated_multiply_matches_separate_kernels_for_every_gate_pattern() ->
     stream.close()?;
     context.synchronize()?;
     assert!(context.allocation_stats()?.is_zero());
+    context.close()?;
+    Ok(())
+}
+
+// The merged-row multiply (scalar for widths that are not multiples of 8,
+// eight-wide otherwise) must store the bytes of the two-buffer multiply for
+// every gate bit pattern; the 4-byte-offset case takes the scalar form.
+#[test]
+#[ignore = "remote GPU"]
+fn bf16_merged_rows_multiply_matches_the_two_buffer_multiply() -> TestResult {
+    const UPS: [u16; 6] = [0x3f80, 0xbf00, 0x3eab, 0x4489, 0x0001, 0x7f80];
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let element_count = 65_536_usize * UPS.len();
+    let byte_len = u64::try_from(element_count * 2)?;
+    let mut staging = context.allocate_pinned_host_buffer(byte_len * 2 + 16)?;
+    let mut gate_bytes = Vec::with_capacity(element_count * 2);
+    let mut up_bytes = Vec::with_capacity(element_count * 2);
+    for (index, up) in UPS.iter().enumerate() {
+        for gate in 0..=u16::MAX {
+            // Rotate the gate patterns per block so every row mixes them.
+            let gate = gate.wrapping_add(u16::try_from(index)?.wrapping_mul(977));
+            gate_bytes.extend_from_slice(&gate.to_ne_bytes());
+            up_bytes.extend_from_slice(&up.to_ne_bytes());
+        }
+    }
+    let gate = upload(&context, &mut stream, &mut staging, &gate_bytes)?;
+    let up = upload(&context, &mut stream, &mut staging, &up_bytes)?;
+    let mut separate = context.allocate_device_buffer(byte_len)?;
+    {
+        let mut params = GatedMultiplyParams {
+            activated_gate: CudaBufferSpan::new(&gate, CudaDType::BF16, 0, byte_len)?,
+            up: CudaBufferSpan::new(&up, CudaDType::BF16, 0, byte_len)?,
+            output: CudaBufferSpanMut::new(&mut separate, CudaDType::BF16, 0, byte_len)?,
+            element_count: u64::try_from(element_count)?,
+        };
+        silu_gated_multiply(&mut params, &mut stream)?;
+    }
+    let expected = download(&context, &mut stream, &mut separate)?;
+    for (width, offset) in [(18_944_usize, 0_u64), (1536, 0), (3584, 4), (12, 0), (3, 0)] {
+        let elements = element_count / width * width;
+        let mut merged_bytes = vec![0_u8; usize::try_from(offset)?];
+        for row in 0..elements / width {
+            merged_bytes.extend_from_slice(&gate_bytes[row * width * 2..(row + 1) * width * 2]);
+            merged_bytes.extend_from_slice(&up_bytes[row * width * 2..(row + 1) * width * 2]);
+        }
+        let merged = upload(&context, &mut stream, &mut staging, &merged_bytes)?;
+        let out_len = u64::try_from(elements * 2)?;
+        let mut output = context.allocate_device_buffer(out_len + offset)?;
+        {
+            let mut params = MergedGatedMultiplyParams {
+                merged: CudaBufferSpan::new(&merged, CudaDType::BF16, offset, out_len * 2)?,
+                output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, offset, out_len)?,
+                element_count: u64::try_from(elements)?,
+                row_width: u64::try_from(width)?,
+            };
+            silu_gated_multiply_merged_rows(&mut params, &mut stream)?;
+        }
+        let actual = download(&context, &mut stream, &mut output)?;
+        let actual = &actual[usize::try_from(offset)?..];
+        let differing = expected[..elements * 2]
+            .chunks_exact(2)
+            .zip(actual.chunks_exact(2))
+            .filter(|(left, right)| left != right)
+            .count();
+        println!(
+            "merged-rows width={width} offset={offset} elements={elements} differing={differing}"
+        );
+        assert_eq!(differing, 0, "merged-row multiply differs at width {width}");
+        merged.close()?;
+        output.close()?;
+    }
+    for buffer in [gate, up, separate] {
+        buffer.close()?;
+    }
+    staging.close()?;
+    stream.close()?;
+    context.synchronize()?;
     context.close()?;
     Ok(())
 }

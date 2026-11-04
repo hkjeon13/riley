@@ -1,5 +1,6 @@
-//! The wide BF16 RMS norm kernels for hidden sizes other than 2048 must store
-//! the same bytes as the 256-thread kernels they replace.
+//! The wide and vector BF16 RMS norm kernels must store the same bytes as the
+//! 256-thread kernels they replace. Hidden sizes that are multiples of 8 take
+//! the vector form; the others take the 1024-thread wide form.
 //!
 //! Up to 256 rows the primitives launch the wide form; above 256 rows they
 //! launch the 256-thread kernels. Each case therefore runs 300 rows in one
@@ -73,7 +74,8 @@ fn wide_general_rms_norm_matches_the_256_thread_kernels() -> TestResult {
     let epsilon = 1.0e-6_f32;
 
     for hidden in [
-        512_usize, 576, 896, 960, 1000, 1024, 1536, 2560, 3072, 3584, 4095, 4096, 4097, 5120, 6000, 8192,
+        512_usize, 576, 896, 960, 1000, 1024, 1536, 2048, 2560, 3072, 3584, 4095, 4096, 4097, 5120,
+        6000, 8192,
     ] {
         let row_bytes = (hidden * 2) as u64;
         let left = upload(
