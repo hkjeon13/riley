@@ -773,6 +773,12 @@ disconnects, 1,120 with `logprobs`) also had no problem: resident memory grew
 0.7 MiB over the second half, and no request or KV block was left at the end
 (`stage3/`). The API checks passed 40/40 with and without the burst options.
 
+The 0.1.0 candidate (`lp16`) repeated it on Qwen2.5-3B, whose generated rows
+split at 256, on a GPU shared with another tenant's training: 14,378 requests
+and 758 disconnects without a problem or overload, 0.7 MiB resident growth over
+the second half, no request or KV block left, and 40/40 API checks with and
+without the burst options (`stage16/`).
+
 ## Two GPUs
 
 Qwen2.5-32B-Instruct, `--tensor-parallel-devices 0,1`, 72-token prompts, 64
