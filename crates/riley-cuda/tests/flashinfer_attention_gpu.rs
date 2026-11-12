@@ -18,7 +18,7 @@ use riley_cuda::{
     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge_prompt_mma,
     set_native_d128_attention_flashinfer, set_native_flashinfer_full_grid,
-    set_native_flashinfer_kv_chunk,
+    set_native_flashinfer_generated_kv_chunk, set_native_flashinfer_kv_chunk,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -408,9 +408,9 @@ fn rows(sequence: u32, positions: impl IntoIterator<Item = u32>) -> Vec<Row> {
 fn flashinfer_rows_are_batch_invariant_and_close_to_the_page_path() -> TestResult {
     let runtime = CudaRuntime::initialize()?;
     for heads in GEOMETRIES {
-        check_geometry(&runtime, heads, 20, 24, None, 0)?;
-        check_geometry(&runtime, heads, 60, 64, None, 0)?;
-        check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15), 0)?;
+        check_geometry(&runtime, heads, 20, 24, None, 0, None)?;
+        check_geometry(&runtime, heads, 60, 64, None, 0, None)?;
+        check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15), 0, None)?;
     }
     check_high_amplitude_against_f64(&runtime, HIGH_AMPLITUDE, 12.0)?;
     check_high_amplitude_against_f64(&runtime, HIGH_AMPLITUDE_D64, 12.0)?;
@@ -427,12 +427,22 @@ fn flashinfer_rows_are_batch_invariant_and_close_to_the_page_path() -> TestResul
             .filter(|heads| heads.head == 64)
             .chain([GEOMETRIES[0]])
         {
-            check_geometry(&runtime, heads, 20, 24, None, chunk)?;
-            check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15), chunk)?;
+            check_geometry(&runtime, heads, 20, 24, None, chunk, None)?;
+            check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15), chunk, None)?;
         }
         check_high_amplitude_against_f64(&runtime, HIGH_AMPLITUDE_D64, 12.0)?;
         println!("kv_chunk={chunk} done");
     }
+    // The served default of two-KV-head models: prompt rows split at 512,
+    // generated rows at 256.
+    set_native_flashinfer_kv_chunk(512);
+    assert!(!set_native_flashinfer_generated_kv_chunk(Some(128)));
+    assert!(set_native_flashinfer_generated_kv_chunk(Some(256)));
+    for heads in GEOMETRIES {
+        check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15), 512, Some(256))?;
+    }
+    assert!(set_native_flashinfer_generated_kv_chunk(None));
+    println!("kv_chunk=512 generated=256 done");
     set_native_flashinfer_kv_chunk(0);
     set_native_d128_attention_flashinfer(0);
     Ok(())
@@ -474,6 +484,7 @@ fn check_geometry(
     page_capacity: usize,
     random_seed: Option<u64>,
     outer_chunk: u64,
+    generated_chunk: Option<u64>,
 ) -> TestResult {
     let context = runtime.device(0)?.create_context()?;
     let mut stream = context.create_stream()?;
@@ -596,6 +607,22 @@ fn check_geometry(
     )?;
     set_native_flashinfer_full_grid(false);
     assert_eq!(full_grid, flashinfer, "the strided grid must match one CTA per item");
+    if let Some(generated) = generated_chunk {
+        // Prompt rows take the bytes of the prompt chunk alone and every other
+        // row those of the generated-row chunk alone.
+        set_native_flashinfer_generated_kv_chunk(None);
+        let (prompt_only, _) =
+            run_kinds(&context, &mut stream, &mut staging, &pools, &reference, true)?;
+        set_native_flashinfer_kv_chunk(generated);
+        let (generated_only, _) =
+            run_kinds(&context, &mut stream, &mut staging, &pools, &reference, true)?;
+        set_native_flashinfer_kv_chunk(outer_chunk);
+        set_native_flashinfer_generated_kv_chunk(Some(generated));
+        for (row, kind) in &reference {
+            let expected = if *kind == 1 { &prompt_only } else { &generated_only };
+            assert_eq!(flashinfer[row], expected[row], "{row:?} kind {kind}: wrong KV chunk");
+        }
+    }
     if page_capacity > pages_per_sequence {
         // Every row fits one chunk that is smaller than the page capacity,
         // so the partial states and the merge run and must change nothing.

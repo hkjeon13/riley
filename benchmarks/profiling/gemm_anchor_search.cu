@@ -54,9 +54,13 @@
 
 namespace {
 
-constexpr size_t kWorkspace = 16u << 20;
+// RILEY_SEARCH_WORKSPACE_MIB overrides the 16 MiB recording-contract cap,
+// e.g. for split-K anchors whose partials outgrow it at wide row counts.
+const size_t kWorkspace = (std::getenv("RILEY_SEARCH_WORKSPACE_MIB")
+                               ? std::strtoull(std::getenv("RILEY_SEARCH_WORKSPACE_MIB"), nullptr, 10)
+                               : 16u) << 20;
 constexpr uint32_t kAlignment = 256;
-constexpr uint64_t kMaxRows = 512;
+constexpr uint64_t kMaxRows = 2048;
 
 struct Config {
   int32_t id;
@@ -227,7 +231,7 @@ std::vector<Config> enumerate() {
       for (uint32_t s : stages) {
         all.push_back({ids[i], t, s, 1, CUBLASLT_REDUCTION_SCHEME_NONE});
         if (!split_support) continue;
-        for (uint32_t k : {2u, 3u, 4u, 6u, 8u})
+        for (uint32_t k : {2u, 3u, 4u, 5u, 6u, 8u})
           for (uint32_t r : {uint32_t(CUBLASLT_REDUCTION_SCHEME_INPLACE),
                              uint32_t(CUBLASLT_REDUCTION_SCHEME_OUTPUT_TYPE)})
             if (reductions & r) all.push_back({ids[i], t, s, k, r});
@@ -350,6 +354,56 @@ int main(int argc, char** argv) {
                     named[i].name().c_str(), best[i] > 1e29 ? -1.0 : best[i],
                     i == 0 ? "" : (same ? "same-bytes" : "DIFFERENT"));
       }
+    }
+    return 0;
+  }
+  // gemm_anchor_search K N wide: configurations whose 512-, 1024- and
+  // 2048-row products reproduce the anchor's 256-row bytes on every row, for
+  // prompt steps above 256 rows. The input repeats its first 256 rows, so a
+  // match also shows the row bytes do not depend on the row's position.
+  if (argc > 3 && std::string(argv[3]) == "wide") {
+    for (uint64_t block = 1; block < kMaxRows / 256; ++block)
+      CHECK_CUDA(cudaMemcpy(static_cast<uint16_t*>(input) + block * 256 * K, input, 256 * K * 2,
+                            cudaMemcpyDeviceToDevice));
+    std::vector<uint16_t> reference;
+    if (!bits(anchor, 256, &reference)) {
+      std::fprintf(stderr, "anchor fails at 256 rows\n");
+      return 1;
+    }
+    const std::vector<Config> all = enumerate();
+    std::printf("shape %llu -> %llu: %zu configurations, anchor %s\n", (unsigned long long)K,
+                (unsigned long long)N, all.size(), anchor.name().c_str());
+    const uint64_t wide_rows[] = {512, 1024, 2048};
+    std::vector<std::pair<Config, std::vector<double>>> matches;
+    for (const Config& c : all) {
+      bool same = true;
+      for (uint64_t m : wide_rows) {
+        std::vector<uint16_t> got;
+        if (!bits(c, m, &got)) {
+          same = false;
+          break;
+        }
+        for (uint64_t block = 0; same && block < m / 256; ++block)
+          same = std::equal(reference.begin(), reference.end(), got.begin() + block * 256 * N);
+        if (!same) break;
+      }
+      if (!same) continue;
+      std::vector<double> times;
+      for (uint64_t m : wide_rows) times.push_back(time_us(c, m, 10));
+      matches.push_back({c, times});
+    }
+    std::sort(matches.begin(), matches.end(), [](auto& a, auto& b) { return a.second[2] < b.second[2]; });
+    std::printf("%zu anchor-equivalent at 512/1024/2048 rows; anchor %.1f/%.1f/%.1f us\n", matches.size(),
+                time_us(anchor, 512, 10), time_us(anchor, 1024, 10), time_us(anchor, 2048, 10));
+    for (size_t i = 0; i < std::min<size_t>(matches.size(), 16); ++i)
+      std::printf("  %-24s %8.1f %8.1f %8.1f us\n", matches[i].first.name().c_str(), matches[i].second[0],
+                  matches[i].second[1], matches[i].second[2]);
+    for (size_t column = 0; column < 3 && !matches.empty(); ++column) {
+      const auto best = std::min_element(matches.begin(), matches.end(), [&](auto& a, auto& b) {
+        return a.second[column] < b.second[column];
+      });
+      std::printf("best m=%llu %s %.1f us\n", (unsigned long long)wide_rows[column], best->first.name().c_str(),
+                  best->second[column]);
     }
     return 0;
   }

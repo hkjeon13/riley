@@ -9,7 +9,7 @@ OpenAI-compatible completions API. The server, scheduler and KV-cache manager
 are Rust; the arithmetic runs in ahead-of-time compiled CUDA kernels and
 cuBLASLt. There is no Python in the serving process.
 
-> Status: pre-release (0.1.0 release candidates). Results below are BF16,
+> Status: 0.1.0 (2026-11-12). Results below are BF16,
 > greedy decoding, one GPU unless stated; they are model- and
 > workload-specific.
 
@@ -76,8 +76,7 @@ both. vLLM uses its normal compile + CUDA Graph path with
 
 Known limits: with prompts of 2,000 tokens or more, vLLM's first token arrives
 about 1.25× sooner at one client and 1.8× sooner at the p95 under load; with
-400-token prompts its tail TTFT is lower under load. `logprobs` run 1.7× slower
-than vLLM's. See [serving validation](docs/serving-validation.md), which covers
+400-token prompts its tail TTFT is lower under load. See [serving validation](docs/serving-validation.md), which covers
 open-loop arrivals, long prompts and outputs, structured output and a 30-minute
 mixed soak. At one client with fixed-length output, the smallest models (Qwen2.5-0.5B,
 Qwen3-0.6B, SmolLM2-360M) are 11–13 % behind on TPOT. Eighteen models were measured
@@ -337,7 +336,7 @@ The configuration behind the performance numbers above is the native profile:
 
 | Option | What it sets |
 |---|---|
-| `--inference-profile native-bf16-varlen-v1` | Fast BF16 kernels, CUDA graphs and fixed-tile attention, with up to 8,192-token context and a 512-row step budget (defaults 1,024 and 256). Any option you pass explicitly overrides the profile's value |
+| `--inference-profile native-bf16-varlen-v1` | Fast BF16 kernels, CUDA graphs and fixed-tile attention, with up to 8,192-token context and a 1,024-row step budget (defaults 1,024 and 256). Any option you pass explicitly overrides the profile's value |
 | `--max-active-sequences 32` | Requests generating at once (profile limit: 32). Further requests queue |
 | `--max-output-tokens 128` | Upper bound for a request's `max_tokens` |
 | `--max-weight-bytes` | Largest checkpoint the server accepts (default 2 GiB; 32 GiB here) |

@@ -28,6 +28,11 @@ struct RowBatch {
   uint64_t physical_block_count;
   // Non-null in a dynamic step capture: `[0]` is the step's active row count.
   const uint32_t* dynamic_counts;
+  // Null, or one word per row: 1 for a prompt row at a position that takes the
+  // prompt-row producer (at least 256 unless every prompt row does), anything
+  // else for the other rows. A request whose last row is 1 takes the prompt KV
+  // chunk, every other request the generated-row chunk.
+  const uint32_t* row_kinds;
 };
 
 // Bytes of planner workspace (and KV-chunk partial states, see

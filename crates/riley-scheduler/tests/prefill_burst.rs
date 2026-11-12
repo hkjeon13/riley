@@ -105,6 +105,30 @@ fn a_long_prompt_opens_the_whole_budget_when_a_prompt_length_is_required() {
 }
 
 #[test]
+fn a_started_long_prompt_keeps_the_whole_budget_for_its_last_chunk() {
+    let mut scheduler = scheduler(Some(PrefillBurstPolicy {
+        min_prompt_tokens: 12,
+        ..burst(8, 4)
+    }));
+    submit(&mut scheduler, 20, 1);
+    submit(&mut scheduler, 8, 1);
+    submit(&mut scheduler, 8, 1);
+    // 8 + 8, then 1 decode row + 8 + 7: the long prompt has 5 tokens left.
+    for now in [2, 4] {
+        let step = plan(&mut scheduler, now);
+        assert_eq!(step.total_tokens(), 16);
+        settle(&mut scheduler, &step, now + 1);
+    }
+    submit(&mut scheduler, 8, 5);
+    // Neither prompt has 12 tokens left, but the long one has started: the
+    // budget stays open for 2 decode rows, its last 5 and the new prompt's 8
+    // (the steady budget would stop at 8 tokens).
+    let last = plan(&mut scheduler, 6);
+    assert_eq!(last.decode_items().len(), 2);
+    assert_eq!(last.total_tokens(), 15);
+}
+
+#[test]
 fn a_burst_with_few_decode_rows_uses_the_whole_budget() {
     let mut scheduler = scheduler(Some(burst(8, 2)));
     for _ in 0..4 {

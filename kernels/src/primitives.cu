@@ -1258,7 +1258,7 @@ bool use_vector_rms_norm(uint64_t row_count, uint64_t hidden_size,
          hidden_size > kWideRmsNormLanes &&
          hidden_size <= kWideRmsNormLanes * kWideGeneralMaxColumnsPerLane &&
          hidden_size % kVectorRmsNormGroupWidth == 0 && row_count != 0 &&
-         row_count <= 256 && aligned_16(left) && aligned_16(right) &&
+         row_count <= kMaximumBlocks && aligned_16(left) && aligned_16(right) &&
          aligned_16(weight) && aligned_16(residual_output) &&
          aligned_16(normalized_output);
 }

@@ -997,6 +997,37 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge<
     )
 }
 
+/// Partial-state bytes a fixed-tile (FlashInfer) step of `output_rows` rows
+/// needs, which is only its planner workspace; `None` when the two-stage
+/// layout applies (the mode is off, an opt-in mode that keeps its own partial
+/// states is on, or the head grouping is unsupported).
+#[must_use]
+pub fn native_flashinfer_partial_state_bytes(
+    output_rows: u64,
+    page_capacity: u64,
+    query_heads: u64,
+    key_value_heads: u64,
+    head_size: u64,
+) -> Option<u64> {
+    #[cfg(feature = "cuda")]
+    {
+        let narrow = |value: u64| u32::try_from(value).ok();
+        let bytes = ffi::native_flashinfer_partial_state_bytes(
+            output_rows,
+            page_capacity,
+            narrow(query_heads)?,
+            narrow(key_value_heads)?,
+            narrow(head_size)?,
+        );
+        (bytes != u64::MAX).then_some(bytes)
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = (output_rows, page_capacity, query_heads, key_value_heads, head_size);
+        None
+    }
+}
+
 /// Selects the D128 attention of the tensor-core producer with the global-max
 /// merge: `1` runs every row through one pinned FlashInfer paged-prefill
 /// launch with a fixed 64-row query tile, planned on the GPU from the packed
@@ -1019,6 +1050,26 @@ pub fn set_native_flashinfer_kv_chunk(tokens: u64) {
     ffi::set_native_flashinfer_kv_chunk(tokens);
     #[cfg(not(feature = "cuda"))]
     let _ = tokens;
+}
+
+/// Splits the context of the rows that are not prompt rows at or past
+/// position 256 (generated rows, and the first 256 prompt positions) at
+/// `tokens` instead of the [`set_native_flashinfer_kv_chunk`] chunk; prompt
+/// rows keep that chunk. `tokens` is a multiple of 16 of at least 256, `0`
+/// for no split, or `None` to follow the prompt chunk (the default). A prompt
+/// row below position 256 lies within one part of either chunk, so its bytes
+/// do not depend on which chunk its request takes. Returns `false` and keeps
+/// the setting for any other value.
+pub fn set_native_flashinfer_generated_kv_chunk(tokens: Option<u64>) -> bool {
+    let tokens = tokens.unwrap_or(u64::MAX);
+    #[cfg(feature = "cuda")]
+    {
+        ffi::set_native_flashinfer_generated_kv_chunk(tokens)
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        tokens == u64::MAX || tokens == 0 || (tokens % 16 == 0 && tokens >= 256)
+    }
 }
 
 /// For tests: `true` launches the FlashInfer mode with one CTA per possible
@@ -1534,7 +1585,14 @@ fn validate_native_bf16_ragged_paged_split_gqa_d128_two_stage(
         (
             "partial_states",
             params.partial_states.byte_len(),
-            layout.partial_state_bytes(),
+            native_flashinfer_partial_state_bytes(
+                params.output_row_count,
+                params.partial_state_capacity,
+                params.query_head_count,
+                params.key_value_head_count,
+                params.head_size,
+            )
+            .map_or(layout.partial_state_bytes(), |bytes| bytes.min(layout.partial_state_bytes())),
         ),
         (
             "reduction_steps",

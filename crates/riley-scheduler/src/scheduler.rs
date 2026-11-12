@@ -1748,6 +1748,7 @@ impl Scheduler {
                             request_id: record.request_id,
                             ready_since_ns: record.ready_since_ns,
                             remaining_tokens: remaining,
+                            prompt_tokens: record.descriptor.prompt_token_ids.len(),
                             plateau_deferred: record.plateau_deferred,
                             started: record.state == RequestState::Prefilling,
                         });
@@ -1757,6 +1758,7 @@ impl Scheduler {
                     request_id: record.request_id,
                     ready_since_ns: record.ready_since_ns,
                     remaining_tokens: 1,
+                    prompt_tokens: 0,
                     plateau_deferred: false,
                     started: true,
                 }),
@@ -1775,9 +1777,10 @@ impl Scheduler {
             Some(policy)
                 if decode.len() > policy.max_decode_rows
                     || (policy.min_prompt_tokens > 0
-                        && !prefill
-                            .iter()
-                            .any(|item| item.remaining_tokens >= policy.min_prompt_tokens)) =>
+                        && !prefill.iter().any(|item| {
+                            item.remaining_tokens >= policy.min_prompt_tokens
+                                || (item.started && item.prompt_tokens >= policy.min_prompt_tokens)
+                        })) =>
             {
                 policy.steady_budget
             }
@@ -2901,6 +2904,8 @@ struct ReadyRequest {
     request_id: RequestId,
     ready_since_ns: u64,
     remaining_tokens: usize,
+    /// The whole prompt's length, for the burst's long-prompt test.
+    prompt_tokens: usize,
     plateau_deferred: bool,
     /// A prompt some of whose tokens have already run.
     started: bool,

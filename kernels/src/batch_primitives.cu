@@ -1642,6 +1642,146 @@ void qkv_split_head_norm_rope_kv_write_kernel(
   }
 }
 
+// qkv_split_head_norm_rope_kv_write_kernel<false> with one warp per (row,
+// head slot) and four columns per lane, four slots per block: the block form
+// spends 128 threads and seven barriers on 128 columns. Every stored byte is
+// the same. Lane l holds columns l, l+32, l+64 and l+96, so the block's tree
+// from offset 64 is replayed as (sq[l] + sq[l+64]) + (sq[l+32] + sq[l+96])
+// in the lane and then the shuffles 16..1; the normalization and the rotation
+// are the block form's expressions per column (products rounded on their
+// own, so nothing is contracted).
+constexpr uint32_t kHeadNormWarpSlots = 4;
+
+__global__ __launch_bounds__(kHeadNormWarpSlots * kWarpSize)
+void qkv_split_head_norm_rope_kv_write_warp_kernel(
+    const __nv_bfloat16* merged, const __nv_bfloat16* query_scale,
+    const __nv_bfloat16* key_scale, const float* cos, const float* sin,
+    const uint32_t* positions, __nv_bfloat16* query, __nv_bfloat16* key,
+    __nv_bfloat16* value, __nv_bfloat16* key_pool, __nv_bfloat16* value_pool,
+    DeviceBatch batch, uint32_t query_head_count,
+    uint32_t key_value_head_count, uint64_t table_position_count,
+    uint64_t rotated_row_count, float epsilon,
+    const uint32_t* dynamic_counts, uint64_t row_count) {
+  __shared__ float normalized[kHeadNormWarpSlots][kHeadNormSplitHeadSize];
+  if (dynamic_counts != nullptr) {
+    rotated_row_count = dynamic_counts[0];
+  }
+  const uint32_t head_size = kHeadNormSplitHeadSize;
+  const uint32_t half = head_size / 2;
+  const uint32_t lane = threadIdx.x % kWarpSize;
+  const uint32_t warp = threadIdx.x / kWarpSize;
+  const uint32_t slots = query_head_count + 2 * key_value_head_count;
+  const uint64_t item =
+      static_cast<uint64_t>(blockIdx.x) * kHeadNormWarpSlots + warp;
+  if (item >= row_count * slots) {
+    return;
+  }
+  const uint64_t row = item / slots;
+  const uint32_t slot = static_cast<uint32_t>(item % slots);
+  const uint64_t query_width =
+      static_cast<uint64_t>(query_head_count) * head_size;
+  const uint64_t key_value_width =
+      static_cast<uint64_t>(key_value_head_count) * head_size;
+  const uint64_t merged_row = row * (query_width + 2 * key_value_width);
+  if (slot >= query_head_count + key_value_head_count) {
+    const uint32_t head = slot - query_head_count - key_value_head_count;
+    uint64_t cache_base = 0;
+    const bool cached =
+        value_pool != nullptr &&
+        resolve_row_cache_base(batch, row, batch.row_positions[row], head,
+                               key_value_head_count, head_size, &cache_base);
+#pragma unroll
+    for (uint32_t part = 0; part < 4; ++part) {
+      const uint32_t column = lane + part * kWarpSize;
+      const uint64_t local = static_cast<uint64_t>(head) * head_size + column;
+      const __nv_bfloat16 stored =
+          merged[merged_row + query_width + key_value_width + local];
+      value[row * key_value_width + local] = stored;
+      if (cached) {
+        value_pool[cache_base + column] = stored;
+      }
+    }
+    return;
+  }
+  if (row >= rotated_row_count) {
+    return;
+  }
+  const bool is_query = slot < query_head_count;
+  const uint32_t head = is_query ? slot : slot - query_head_count;
+  const uint64_t section = is_query ? 0 : query_width;
+  const __nv_bfloat16* scale = is_query ? query_scale : key_scale;
+  const uint64_t head_base = static_cast<uint64_t>(head) * head_size;
+  float projected[4];
+#pragma unroll
+  for (uint32_t part = 0; part < 4; ++part) {
+    projected[part] = __bfloat162float(
+        merged[merged_row + section + head_base + lane + part * kWarpSize]);
+  }
+  const float low = __fadd_rn(__fmul_rn(projected[0], projected[0]),
+                              __fmul_rn(projected[2], projected[2]));
+  const float high = __fadd_rn(__fmul_rn(projected[1], projected[1]),
+                               __fmul_rn(projected[3], projected[3]));
+  float sum = __fadd_rn(low, high);
+  for (uint32_t offset = kWarpSize / 2; offset != 0; offset /= 2) {
+    sum = __fadd_rn(sum, __shfl_down_sync(0xffffffffU, sum, offset));
+  }
+  sum = __shfl_sync(0xffffffffU, sum, 0);
+  const float inverse_rms =
+      rsqrtf(sum / static_cast<float>(head_size) + epsilon);
+#pragma unroll
+  for (uint32_t part = 0; part < 4; ++part) {
+    const uint32_t column = lane + part * kWarpSize;
+    const float normalized_for_weight =
+        round_to_storage<__nv_bfloat16>(projected[part] * inverse_rms);
+    normalized[warp][column] = round_to_storage<__nv_bfloat16>(
+        normalized_for_weight * __bfloat162float(scale[column]));
+  }
+  __syncwarp();
+  __nv_bfloat16* output = is_query ? query : key;
+  const uint64_t output_base =
+      row * (is_query ? query_width : key_value_width) + head_base;
+  const uint64_t position = positions[row];
+  uint64_t cache_base = 0;
+  const bool cached =
+      !is_query && key_pool != nullptr &&
+      resolve_row_cache_base(batch, row, batch.row_positions[row], head,
+                             key_value_head_count, head_size, &cache_base);
+#pragma unroll
+  for (uint32_t part = 0; part < 2; ++part) {
+    const uint32_t column = lane + part * kWarpSize;
+    __nv_bfloat16 first_output = __float2bfloat16_rn(CUDART_NAN_F);
+    __nv_bfloat16 second_output = __float2bfloat16_rn(CUDART_NAN_F);
+    if (position < table_position_count) {
+      const float first_value = normalized[warp][column];
+      const float second_value = normalized[warp][column + half];
+      const uint64_t table_index = position * half + column;
+      const float cosine = round_to_storage<__nv_bfloat16>(cos[table_index]);
+      const float sine = round_to_storage<__nv_bfloat16>(sin[table_index]);
+      const float first_cosine =
+          multiply_in_storage<__nv_bfloat16>(first_value, cosine);
+      const float second_sine =
+          multiply_in_storage<__nv_bfloat16>(second_value, sine);
+      const float second_cosine =
+          multiply_in_storage<__nv_bfloat16>(second_value, cosine);
+      const float first_sine =
+          multiply_in_storage<__nv_bfloat16>(first_value, sine);
+      first_output = __float2bfloat16_rn(first_cosine - second_sine);
+      second_output = __float2bfloat16_rn(second_cosine + first_sine);
+    }
+    output[output_base + column] = first_output;
+    output[output_base + column + half] = second_output;
+    if (cached) {
+      key_pool[cache_base + column] = first_output;
+      key_pool[cache_base + column + half] = second_output;
+    }
+  }
+}
+
+uint32_t head_norm_warp_blocks(uint64_t row_count, uint64_t slots) {
+  return static_cast<uint32_t>(
+      (row_count * slots + kHeadNormWarpSlots - 1) / kHeadNormWarpSlots);
+}
+
 __device__ __forceinline__ float warp_sum(float value) {
 #pragma unroll
   for (uint32_t offset = kWarpSize / 2; offset != 0; offset /= 2) {
@@ -2901,9 +3041,9 @@ riley_cuda_ragged_paged_kv_cache_write_execute(
                   split.table_position_count, split.rotated_row_count,
                   split.norm_epsilon, dynamic.counts);
           }else{
-          qkv_split_head_norm_rope_kv_write_kernel<false>
-              <<<static_cast<uint32_t>(split.row_count * slots),
-                 kHeadNormSplitHeadSize, 0, stream->stream>>>(
+          qkv_split_head_norm_rope_kv_write_warp_kernel
+              <<<head_norm_warp_blocks(split.row_count, slots),
+                 kHeadNormWarpSlots * kWarpSize, 0, stream->stream>>>(
                   static_cast<const __nv_bfloat16*>(split.merged),
                   static_cast<const __nv_bfloat16*>(split.query_bias),
                   static_cast<const __nv_bfloat16*>(split.key_bias),
@@ -2920,7 +3060,7 @@ riley_cuda_ragged_paged_kv_cache_write_execute(
                                         kHeadNormSplitHeadSize),
                   static_cast<uint32_t>(params->key_value_head_count),
                   split.table_position_count, split.rotated_row_count,
-                  split.norm_epsilon, dynamic.counts);
+                  split.norm_epsilon, dynamic.counts, split.row_count);
           }
         } else if (split.head_size % 4 == 0 && work_items / 2 < (1ULL << 31) &&
                    ((reinterpret_cast<uintptr_t>(split.merged) |
@@ -6054,6 +6194,26 @@ extern "C" void riley_cuda_set_native_d128_attention_flashinfer(
   native_d128_flashinfer_setting().store(mode, std::memory_order_relaxed);
 }
 
+// Bytes of partial-state workspace a fixed-tile (FlashInfer) step of
+// `output_rows` rows needs: only its planner's workspace. UINT64_MAX when the
+// FlashInfer mode is off, an opt-in mode that keeps its own partial states is
+// on, or the head grouping is unsupported; the caller then sizes the whole
+// two-stage layout.
+extern "C" uint64_t riley_cuda_native_flashinfer_partial_state_bytes(
+    uint64_t output_rows, uint64_t page_capacity, uint32_t query_heads,
+    uint32_t key_value_heads, uint32_t head_size) noexcept {
+  if (native_d128_flashinfer_setting().load(std::memory_order_relaxed) != 1 ||
+      native_d128_decode_segment_mode_setting().load(std::memory_order_relaxed) != 0 ||
+      native_d128_prompt_direct_setting().load(std::memory_order_relaxed) != 0 ||
+      key_value_heads == 0 ||
+      query_heads / key_value_heads > kNativeBf16RaggedD128MaximumGroupHeads) {
+    return UINT64_MAX;
+  }
+  const uint64_t bytes = riley_fi::workspace_bytes(output_rows, page_capacity, query_heads,
+                                                   key_value_heads, head_size);
+  return bytes == UINT64_MAX ? bytes : (bytes + 3) / 4 * 4;
+}
+
 // Overrides RILEY_NATIVE_D128_DECODE_SEGMENT_MODE for later launches.
 extern "C" void riley_cuda_set_native_d128_decode_segment_mode(
     uint64_t mode) noexcept {
@@ -6171,6 +6331,27 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
       *params, &bytes, error, kOperation);
   if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
+  }
+  const uint64_t flashinfer_group =
+      params->query_head_count / params->key_value_head_count;
+  const bool flashinfer_requested =
+      native_d128_flashinfer_setting().load(std::memory_order_relaxed) == 1 &&
+      params->reserved[0] == 2 && params->reserved[1] == 1 &&
+      flashinfer_group <= kNativeBf16RaggedD128MaximumGroupHeads;
+  // The FlashInfer mode uses the partial-state workspace only for its
+  // planner, so it needs no more of it than that (unless the opt-in segment
+  // or direct-prompt modes, which keep their own partial states, are on).
+  if (flashinfer_requested &&
+      native_d128_decode_segment_mode_setting().load(std::memory_order_relaxed) == 0 &&
+      native_d128_prompt_direct_setting().load(std::memory_order_relaxed) == 0) {
+    const uint64_t planner_bytes = riley_fi::workspace_bytes(
+        params->output_row_count, params->partial_state_capacity,
+        static_cast<uint32_t>(params->query_head_count),
+        static_cast<uint32_t>(params->key_value_head_count),
+        static_cast<uint32_t>(params->head_size));
+    if (planner_bytes < bytes.partial_state_bytes) {
+      bytes.partial_state_bytes = (planner_bytes + 3) / 4 * 4;
+    }
   }
   ResolvedSpan query{};
   ResolvedSpan key_pool{};
@@ -6347,19 +6528,22 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
   // The FlashInfer mode replaces every attention launch below (producers,
   // prompt producer and merge) for head size 64 or 128 when its planner
   // workspace fits the partial-state workspace, which it reuses.
-  const uint64_t flashinfer_group =
-      params->query_head_count / params->key_value_head_count;
   const bool flashinfer_attention =
-      native_d128_flashinfer_setting().load(std::memory_order_relaxed) == 1 &&
-      params->reserved[0] == 2 && params->reserved[1] == 1 &&
-      flashinfer_group <= kNativeBf16RaggedD128MaximumGroupHeads &&
-      params->output_row_count <= 1024 &&
+      flashinfer_requested && params->output_row_count <= 1024 &&
       riley_fi::workspace_bytes(params->output_row_count,
                                 params->partial_state_capacity,
                                 static_cast<uint32_t>(params->query_head_count),
                                 static_cast<uint32_t>(params->key_value_head_count),
                                 static_cast<uint32_t>(params->head_size)) <=
           partial_states.used_bytes;
+  // The fixed-tile mode fixes the numerics: a step it cannot plan must fail
+  // rather than run the other kernels, whose bytes differ.
+  if (flashinfer_requested && !flashinfer_attention) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "fixed-tile attention cannot plan this step: more than 1,024 rows or a planner workspace larger than the partial-state workspace");
+  }
   const bool segment_decode =
       native_d128_decode_segment_mode_setting().load(
           std::memory_order_relaxed) == 1 &&
@@ -6423,7 +6607,8 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
           device.valid_tokens,           device.row_sequence_slots,
           device.row_positions,          device.sequence_count,
           device.block_count,            device.active_row_count,
-          device.physical_block_count,   device.dynamic_counts};
+          device.physical_block_count,   device.dynamic_counts,
+          row_kinds};
       // Every layer of one iteration attends over the same rows: the plan
       // is made by the first call of a command batch and reused after it
       // (outside a command batch every call plans).
@@ -7167,9 +7352,9 @@ static RileyCudaStatus execute_qkv_split_bias_profile(
             head_norm_epsilon,
             riley_cuda_internal::thread_step_capture_dynamic().counts);
     } else {
-    qkv_split_head_norm_rope_kv_write_kernel<false>
-        <<<static_cast<uint32_t>(params->row_count * slots),
-           kHeadNormSplitHeadSize, 0, stream->stream>>>(
+    qkv_split_head_norm_rope_kv_write_warp_kernel
+        <<<head_norm_warp_blocks(params->row_count, slots),
+           kHeadNormWarpSlots * kWarpSize, 0, stream->stream>>>(
             reinterpret_cast<const __nv_bfloat16*>(merged.data),
             reinterpret_cast<const __nv_bfloat16*>(query_bias.data),
             reinterpret_cast<const __nv_bfloat16*>(key_bias.data),
@@ -7186,7 +7371,8 @@ static RileyCudaStatus execute_qkv_split_bias_profile(
                                   kHeadNormSplitHeadSize),
             params->rope_table_position_count, params->reserved[1],
             head_norm_epsilon,
-            riley_cuda_internal::thread_step_capture_dynamic().counts);
+            riley_cuda_internal::thread_step_capture_dynamic().counts,
+            params->row_count);
     }
     status = launch_status(error, kOperation);
   } else if (status == RILEY_CUDA_STATUS_SUCCESS && merged_elements != 0 &&
@@ -7391,6 +7577,188 @@ extern "C" RileyCudaStatus riley_cuda_bf16_argmax_fp32_ties_execute(
   bf16_argmax_kernel<true><<<blocks,kArgmaxThreads,0,stream->stream>>>(
    reinterpret_cast<const __nv_bfloat16*>(spans[0].data),reinterpret_cast<RileyCudaBf16ArgmaxResult*>(spans[1].data),
    row_count,vocabulary_size,candidate_count!=0?candidate_count:vocabulary_size,dynamic.counts,refine);
+  status=launch_status(error,op);
+ }
+ return complete_execution(&uses,&scope,stream,status,launched,error,op);
+}
+
+// Log-probability summary of each greedy output row, so a request asking for
+// logprobs downloads a few words instead of its whole logits row. The CPU
+// finishes the log-softmax from it (sampling.rs `logprobs_from_summary`) and
+// gets the bytes `raw_logprobs_bf16_native` computes from the full row:
+// the maximum is exact in any order, each of the 16 lane sums adds
+// approximate_exp terms of the columns in its residue class in ascending
+// order with the CPU's operations and constants (no contraction), and the
+// top tokens are exact (value descending, lower token id on ties).
+constexpr uint32_t kLogprobThreads = 512;
+constexpr uint32_t kLogprobLanes = 16;
+constexpr uint32_t kLogprobTile = 4096;
+constexpr uint32_t kLogprobSummaryWords = 64;
+constexpr uint32_t kLogprobMaxTop = 20;
+static_assert(kLogprobTile % kLogprobLanes == 0, "tiles must keep lane residues");
+static_assert(3 + kLogprobLanes + 2 * kLogprobMaxTop <= kLogprobSummaryWords, "summary record overflow");
+
+__device__ __forceinline__ float logprob_approximate_exp(float x) {
+  const float scaled = __fmul_rn(fmaxf(x, -87.0f), 1.44269504088896340736f);
+  const float whole = floorf(scaled);
+  const float part = __fsub_rn(scaled, whole);
+  float mantissa = __fadd_rn(0.00961813f, __fmul_rn(part, 0.00133355f));
+  mantissa = __fadd_rn(0.05550411f, __fmul_rn(part, mantissa));
+  mantissa = __fadd_rn(0.2402265f, __fmul_rn(part, mantissa));
+  mantissa = __fadd_rn(0.6931472f, __fmul_rn(part, mantissa));
+  mantissa = __fadd_rn(1.0f, __fmul_rn(part, mantissa));
+  const int exponent = static_cast<int>(whole) + 127;
+  return __fmul_rn(mantissa, __int_as_float(exponent << 23));
+}
+
+// Whether (value, token) ranks before (best_value, best_token).
+__device__ __forceinline__ bool logprob_ranks_before(float value, uint32_t token,
+                                                     float best_value, uint32_t best_token) {
+  return value > best_value || (value == best_value && token < best_token);
+}
+
+__global__ __launch_bounds__(kLogprobThreads) void bf16_logprob_summary_kernel(
+    const __nv_bfloat16* logits, const uint32_t* greedy, uint32_t* summaries,
+    uint64_t row_count, uint64_t vocabulary_size, uint64_t addressable, uint32_t top_count) {
+  constexpr uint32_t kWarps = kLogprobThreads / kWarpSize;
+  __shared__ float tile[kLogprobTile];
+  __shared__ float warp_values[kWarps];
+  __shared__ uint32_t warp_tokens[kWarps];
+  __shared__ float shared_value;
+  __shared__ uint32_t shared_token;
+  const uint32_t lane = threadIdx.x % kWarpSize;
+  const uint32_t warp = threadIdx.x / kWarpSize;
+  for (uint64_t row = blockIdx.x; row < row_count; row += gridDim.x) {
+    const __nv_bfloat16* row_logits = logits + row * vocabulary_size;
+    uint32_t* record = summaries + row * kLogprobSummaryWords;
+    float maximum = -CUDART_INF_F;
+    for (uint64_t column = threadIdx.x; column < addressable; column += blockDim.x) {
+      maximum = fmaxf(maximum, __bfloat162float(row_logits[column]));
+    }
+    for (uint32_t offset = kWarpSize / 2; offset != 0; offset /= 2) {
+      maximum = fmaxf(maximum, __shfl_xor_sync(0xffffffffu, maximum, offset));
+    }
+    if (lane == 0) warp_values[warp] = maximum;
+    __syncthreads();
+    if (threadIdx.x == 0) {
+      float block_maximum = warp_values[0];
+      for (uint32_t index = 1; index < kWarps; ++index) block_maximum = fmaxf(block_maximum, warp_values[index]);
+      shared_value = block_maximum;
+    }
+    __syncthreads();
+    maximum = shared_value;
+
+    float lane_sum = 0.0f;
+    for (uint64_t base = 0; base < addressable; base += kLogprobTile) {
+      const uint32_t count = static_cast<uint32_t>(
+          addressable - base < kLogprobTile ? addressable - base : kLogprobTile);
+      for (uint32_t index = threadIdx.x; index < count; index += blockDim.x) {
+        tile[index] = logprob_approximate_exp(
+            __fsub_rn(__bfloat162float(row_logits[base + index]), maximum));
+      }
+      __syncthreads();
+      if (threadIdx.x < kLogprobLanes) {
+        for (uint32_t index = threadIdx.x; index < count; index += kLogprobLanes) {
+          lane_sum = __fadd_rn(lane_sum, tile[index]);
+        }
+      }
+      __syncthreads();
+    }
+    if (threadIdx.x < kLogprobLanes) record[2 + threadIdx.x] = __float_as_uint(lane_sum);
+
+    // Top tokens one at a time: each round picks the best entry ranked after
+    // the previous round's pick.
+    float previous_value = CUDART_INF_F;
+    uint32_t previous_token = 0;
+    for (uint32_t rank = 0; rank < top_count; ++rank) {
+      float best_value = -CUDART_INF_F;
+      uint32_t best_token = UINT32_MAX;
+      for (uint64_t column = threadIdx.x; column < addressable; column += blockDim.x) {
+        const float value = __bfloat162float(row_logits[column]);
+        const uint32_t token = static_cast<uint32_t>(column);
+        const bool after = rank == 0 || value < previous_value ||
+                           (value == previous_value && token > previous_token);
+        if (after && logprob_ranks_before(value, token, best_value, best_token)) {
+          best_value = value;
+          best_token = token;
+        }
+      }
+      for (uint32_t offset = kWarpSize / 2; offset != 0; offset /= 2) {
+        const float other_value = __shfl_xor_sync(0xffffffffu, best_value, offset);
+        const uint32_t other_token = __shfl_xor_sync(0xffffffffu, best_token, offset);
+        if (logprob_ranks_before(other_value, other_token, best_value, best_token)) {
+          best_value = other_value;
+          best_token = other_token;
+        }
+      }
+      if (lane == 0) {
+        warp_values[warp] = best_value;
+        warp_tokens[warp] = best_token;
+      }
+      __syncthreads();
+      if (threadIdx.x == 0) {
+        for (uint32_t index = 1; index < kWarps; ++index) {
+          if (logprob_ranks_before(warp_values[index], warp_tokens[index], warp_values[0], warp_tokens[0])) {
+            warp_values[0] = warp_values[index];
+            warp_tokens[0] = warp_tokens[index];
+          }
+        }
+        shared_value = warp_values[0];
+        shared_token = warp_tokens[0];
+        record[3 + kLogprobLanes + 2 * rank] = warp_tokens[0];
+        record[4 + kLogprobLanes + 2 * rank] = __float_as_uint(warp_values[0]);
+      }
+      __syncthreads();
+      previous_value = shared_value;
+      previous_token = shared_token;
+    }
+    if (threadIdx.x == 0) {
+      const uint32_t selected = greedy[2 * row];
+      const bool in_range = selected < addressable;
+      record[0] = in_range ? 1u : 0u;
+      record[1] = __float_as_uint(maximum);
+      record[2 + kLogprobLanes] =
+          in_range ? __float_as_uint(__bfloat162float(row_logits[selected])) : 0u;
+    }
+    __syncthreads();
+  }
+}
+
+// logits is BF16 [row_count, vocabulary_size] and greedy the U32 [row_count, 2]
+// argmax records whose token is each row's selected token; summaries is U32
+// [row_count, 64]: in-range flag, maximum, 16 lane sums, selected logit, then
+// top_count (token, logit) pairs. Only the first `addressable` columns count.
+extern "C" RileyCudaStatus riley_cuda_bf16_logprob_summary_execute(
+ RileyCudaBufferSpan logits_span,RileyCudaBufferSpan greedy_span,RileyCudaBufferSpan summaries_span,
+ uint64_t row_count,uint64_t vocabulary_size,uint64_t addressable,uint32_t top_count,
+ RileyCudaStream* stream,RileyCudaErrorInfo* error) noexcept {
+ constexpr const char* op="execute BF16 log-probability summary";clear_error(error);
+ if(vocabulary_size==0||vocabulary_size>UINT32_MAX||addressable==0||addressable>vocabulary_size||top_count>kLogprobMaxTop)
+   return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"invalid log-probability summary shape");
+ if(logits_span.dtype!=RILEY_CUDA_DTYPE_BF16||greedy_span.dtype!=RILEY_CUDA_DTYPE_U32||summaries_span.dtype!=RILEY_CUDA_DTYPE_U32)
+   return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"requires BF16 logits and U32 greedy records and summaries");
+ uint64_t logit_elements=0;
+ if(!checked_multiply(row_count,vocabulary_size,&logit_elements)||logit_elements>UINT64_MAX/2||row_count>UINT64_MAX/(4*kLogprobSummaryWords))
+   return validation_error(error,RILEY_CUDA_STATUS_OUT_OF_RANGE,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"log-probability summary shape overflows uint64_t");
+ ResolvedSpan spans[3]{};
+ RileyCudaStatus status=resolve_span(logits_span,RILEY_CUDA_DTYPE_BF16,logit_elements*2,&spans[0],error,op);
+ if(status==RILEY_CUDA_STATUS_SUCCESS)status=resolve_span(greedy_span,RILEY_CUDA_DTYPE_U32,row_count*8,&spans[1],error,op);
+ if(status==RILEY_CUDA_STATUS_SUCCESS)status=resolve_span(summaries_span,RILEY_CUDA_DTYPE_U32,row_count*4*kLogprobSummaryWords,&spans[2],error,op);
+ for(int i=0;i<2&&status==RILEY_CUDA_STATUS_SUCCESS;i++)status=reject_overlap(spans[2],spans[i],false,error,op);
+ if(status==RILEY_CUDA_STATUS_SUCCESS)status=validate_contexts(stream,spans,3,error,op);
+ if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+ if(riley_cuda_internal::thread_has_active_step_capture())return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"log-probability summaries are not recorded in step captures");
+ ExclusiveUses uses(stream);for(auto& span:spans)if(!uses.add(span.buffer))return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"buffer set overflow");
+ status=uses.acquire(error,op);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+ if(row_count==0)return uses.release_completed()?RILEY_CUDA_STATUS_SUCCESS:internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"exclusive-use accounting was corrupted");
+ CurrentContext scope(stream->owner);bool launched=false;status=scope.enter(error,RILEY_CUDA_ERROR_STAGE_LAUNCH,op);
+ if(status==RILEY_CUDA_STATUS_SUCCESS)status=prior_launch_status(error,op);
+ if(status==RILEY_CUDA_STATUS_SUCCESS){
+  launched=true;
+  const uint32_t blocks=static_cast<uint32_t>(row_count<kMaximumBlocks?row_count:kMaximumBlocks);
+  bf16_logprob_summary_kernel<<<blocks,kLogprobThreads,0,stream->stream>>>(
+   reinterpret_cast<const __nv_bfloat16*>(spans[0].data),reinterpret_cast<const uint32_t*>(spans[1].data),
+   reinterpret_cast<uint32_t*>(spans[2].data),row_count,vocabulary_size,addressable,top_count);
   status=launch_status(error,op);
  }
  return complete_execution(&uses,&scope,stream,status,launched,error,op);

@@ -550,8 +550,21 @@ impl PreparedLlamaBatchOwner {
             let hf_only = materialized.as_ref().is_some_and(|w| w.hf.is_some());
             #[cfg(not(feature="cuda-cublas-gemm-probe"))]
             let hf_only = false;
+            // Fixed-tile (FlashInfer) attention uses the partial states only
+            // as its planner workspace: [M, pages, heads, D+2] F32 would be
+            // 10.9 GB for a 40-head model at 1,024 rows and 8,192 tokens.
+            let partial_state_bytes = riley_cuda::native_flashinfer_partial_state_bytes(
+                usize_u64(bounds.max_input_tokens(), LlamaBatchExecutorResource::NativeD128PartialStates)?,
+                partial_state_capacity,
+                usize_u64(dimensions.query_heads(), LlamaBatchExecutorResource::NativeD128PartialStates)?,
+                usize_u64(dimensions.key_value_heads(), LlamaBatchExecutorResource::NativeD128PartialStates)?,
+                usize_u64(dimensions.head_dimension(), LlamaBatchExecutorResource::NativeD128PartialStates)?,
+            )
+            .map_or(workspace_layout.partial_state_bytes(), |bytes| {
+                bytes.min(workspace_layout.partial_state_bytes())
+            });
             let legacy_lengths = if hf_only { [0; 3] } else {
-                [workspace_layout.partial_state_bytes(), workspace_layout.reduction_step_bytes(),
+                [partial_state_bytes, workspace_layout.reduction_step_bytes(),
                  workspace_layout.reduction_normalizer_bytes()]
             };
             Some(NativeD128TwoStageWorkspace {

@@ -48,13 +48,24 @@ the requests already decoding. For Qwen2.5-3B, 256 was the best trade-off.
 `--prefill-burst-steady-budget N` keeps steps at N rows while more than
 `--prefill-burst-max-decode-rows` rows are decoding and opens the whole budget
 otherwise. With `--prefill-burst-min-prompt-tokens M` the budget also opens only
-while a ready prompt has at least M tokens left, so short prompts that arrive
-together keep the steady size. For Qwen2.5-7B on an A100, a budget of 512 with
+while a ready prompt has at least M tokens left, or a prompt of at least M
+tokens has started (its last chunk keeps the wide step), so short prompts that
+arrive together keep the steady size. For Qwen2.5-7B on an A100, a budget of 512 with
 `--prefill-burst-steady-budget 256 --prefill-burst-max-decode-rows 0
 --prefill-burst-min-prompt-tokens 512` cut a lone 3,500-token prompt's TTFT by
 about 4 % and cost short prompts about 0.6 ms
 ([serving validation](serving-validation.md#prompt-speed)). Outputs do not
 change.
+
+For a long-context server (`--max-sequence-tokens` above 1,024) that receives
+RAG-sized prompts, a burst to 1,024 rows works better: `--batch-token-budget
+1024 --prefill-chunk-tokens 1024`, buckets ending in `...,256,512,1024`,
+`--prefill-burst-steady-budget 256 --prefill-burst-max-decode-rows 32
+--prefill-burst-min-prompt-tokens 512`. For Qwen2.5-7B this cut TTFT by 11–26 %
+on 2,000–7,000-token prompts. Requests decoding next to such a prompt pay for
+it: TPOT at 8 clients rose from 16.6 to 19.6 ms
+([serving validation](serving-validation.md#prompt-steps-of-1024-rows)).
+`fixed-tile-unsplit-v1` accepts budgets up to 1,024.
 
 `--prefill-plateau-rows` exists because step cost is not smooth in the row
 count: with Qwen2.5-3B on an RTX 4090 a step costs about 1 ms more from row 129
@@ -105,8 +116,11 @@ a step budget up to 512 and 32 active sequences. For long prompts, pass
 long-prompt TTFT a little and lengthens short-prompt TTFT
 ([measurements](serving-validation.md#prompt-speed)).
 
-`--attention-kv-chunk-tokens N`, a multiple of 16 with default 1,024, sets where
-this attention cuts a row's context. Rows that fit in one part keep the same
+`--attention-kv-chunk-tokens N`, a multiple of 16 with default 512 (1,024 before
+2026-11-05), sets where this attention cuts a row's context. Without it,
+models with two KV heads or fewer cut generated tokens' context at 256 and
+prompt tokens' at 512; an explicit `N` applies to both. Smaller parts give
+a decoding row at long context more parallel work. Rows that fit in one part keep the same
 bytes, and a server whose context is no longer than `N` skips the split
 ([measurements](serving-validation.md#long-context)).
 

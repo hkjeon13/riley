@@ -3953,7 +3953,8 @@ impl PreparedLlamaForward {
         context: &CudaContext,
         required_bytes: u64,
     ) -> LlamaForwardResult<()> {
-        if required_bytes > self.gemm_workspace_cap_bytes {
+        let rows = u64::try_from(self.plan.sequence_length()).unwrap_or(u64::MAX);
+        if required_bytes > shape_gemm_workspace_cap(self.gemm_workspace_cap_bytes, rows) {
             return Err(LlamaForwardError::InvalidConfiguration {
                 field: "gemm_workspace_bytes",
                 reason: "a prepared batch shape exceeded the configured GEMM workspace cap",
@@ -6153,6 +6154,18 @@ fn build_allocation_report(
     })
 }
 
+/// Workspace cap of a GEMM plan with `rows` rows. Plans above 256 rows bind
+/// to an anchor selected at 128 rows under `cap`; a split-K anchor's partials
+/// grow with the rows, so wide shapes may use a proportionally larger
+/// workspace. Shapes up to 256 rows, and every algorithm choice, keep `cap`.
+pub(super) fn shape_gemm_workspace_cap(cap: u64, rows: u64) -> u64 {
+    if rows > 256 {
+        cap.saturating_mul(rows.div_ceil(256))
+    } else {
+        cap
+    }
+}
+
 pub(super) fn prepare_gemms(
     context: &CudaContext,
     weights: &CudaUploadedWeights,
@@ -6190,14 +6203,14 @@ pub(super) fn prepare_gemms(
     // In the fixed profile these five plans validate both reduction widths
     // used by the graph: `hidden` (also the RMSNorm axis) and `intermediate`.
     // Unsupported fixed37 shapes therefore fail here during cold preparation.
-    let prepare = |m,
+    let prepare = |m: u64,
                    n,
                    k,
                    policy,
                    site,
                    anchor: Option<&PreparedLlamaGemm>|
      -> LlamaForwardResult<PreparedLlamaGemm> {
-        let config = CudaGemmConfig::new(m, n, k, workspace_cap)
+        let config = CudaGemmConfig::new(m, n, k, shape_gemm_workspace_cap(workspace_cap, m))
             .map_err(|source| LlamaForwardError::cuda(site, source))?;
         #[cfg(feature = "cuda-cublas-gemm-probe")]
         if owned_hf_eager_bf16 {

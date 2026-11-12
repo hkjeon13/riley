@@ -42,7 +42,25 @@ const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE: usize = 16;
 #[cfg(any(feature = "cuda", test))]
 const FIXED37_MAX_SEQUENCE_TOKENS: usize = 8_192;
 /// Rows up to this length keep the bytes of the unsplit attention.
-const DEFAULT_ATTENTION_KV_CHUNK_TOKENS: u64 = 1_024;
+const DEFAULT_ATTENTION_KV_CHUNK_TOKENS: u64 = 512;
+/// Models with this many KV heads or fewer give a decoding row too little
+/// parallel work at 512, so their generated rows split at half that; prompt
+/// rows have work enough in their own query rows and keep 512.
+const FEW_KV_HEADS: usize = 2;
+const FEW_KV_HEADS_GENERATED_KV_CHUNK_TOKENS: u64 = 256;
+
+/// The KV chunks of prompt rows and of generated rows (`None`: the prompt
+/// chunk): an explicit chunk applies to both.
+fn attention_kv_chunks(explicit: Option<u64>, key_value_heads: usize) -> (u64, Option<u64>) {
+    match explicit {
+        Some(tokens) => (tokens, None),
+        None if key_value_heads <= FEW_KV_HEADS => (
+            DEFAULT_ATTENTION_KV_CHUNK_TOKENS,
+            Some(FEW_KV_HEADS_GENERATED_KV_CHUNK_TOKENS),
+        ),
+        None => (DEFAULT_ATTENTION_KV_CHUNK_TOKENS, None),
+    }
+}
 #[cfg(feature = "cuda")]
 const _: () =
     assert!(FIXED37_MAX_SEQUENCE_TOKENS == riley_runtime::llama::LLAMA_FIXED37_MAX_SEQUENCE_TOKENS);
@@ -58,7 +76,7 @@ serve options:
   --inference-profile MODE       native-bf16-v1 | native-bf16-varlen-v1: opt-in BF16 defaults;
                                  explicit options override
   --native-attention-mode MODE   page-v1 | fixed-tile-unsplit-v1 (D64/D128 tensor-core native route)
-  --attention-kv-chunk-tokens N  fixed-tile context split, multiple of 16 (default: 1024)
+  --attention-kv-chunk-tokens N  fixed-tile context split, multiple of 16 (default: 512)
   --model-id ID                  public model ID (default: checkpoint source model)
   --bind ADDRESS                 listener address (default: 127.0.0.1:8080)
   --device ORDINAL               CUDA device ordinal (default: 0)
@@ -1551,10 +1569,10 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         }
     }
     if native_attention_mode == Some(NativeAttentionMode::FixedTileUnsplit)
-        && (batch_token_budget > 512 || max_sequence_tokens.is_none_or(|n| n > 8192)
+        && (batch_token_budget > 1024 || max_sequence_tokens.is_none_or(|n| n > 8192)
             || max_active_sequences > 32)
     {
-        return Err("fixed-tile-unsplit-v1 requires an explicit context bound <=8192, batch budget <=512 and at most 32 active sequences".into());
+        return Err("fixed-tile-unsplit-v1 requires an explicit context bound <=8192, batch budget <=1024 and at most 32 active sequences".into());
     }
     if d128_global_merge {
         if decode_attention_backend
@@ -2651,10 +2669,15 @@ fn run_serve(
     if let Some(mode) = options.native_attention_mode {
         riley_runtime::set_native_d128_attention_flashinfer(mode.setting());
         if mode == NativeAttentionMode::FixedTileUnsplit {
-            riley_runtime::set_native_flashinfer_kv_chunk(
-                options
-                    .attention_kv_chunk_tokens
-                    .unwrap_or(DEFAULT_ATTENTION_KV_CHUNK_TOKENS),
+            let (prompt, generated) =
+                attention_kv_chunks(options.attention_kv_chunk_tokens, attention_heads.1);
+            riley_runtime::set_native_flashinfer_kv_chunk(prompt);
+            if !riley_runtime::set_native_flashinfer_generated_kv_chunk(generated) {
+                return Err(format!("invalid generated-row KV chunk {generated:?}"));
+            }
+            eprintln!(
+                "RILEY_ATTENTION_KV_CHUNK prompt={prompt} generated={}",
+                generated.unwrap_or(prompt)
             );
         }
         eprintln!("RILEY_NATIVE_ATTENTION mode={}", mode.cli_id());
@@ -2933,9 +2956,12 @@ fn warm_up_step_shapes(
     let decoders = max_active.saturating_sub(1);
     // Prompt lengths that take the iteration to each 16-row shape boundary
     // above the decoders, up to the token budget.
+    // Steps above 256 rows are never recorded, so the recordable shapes end
+    // there; one longer prompt below loads the wider steps' kernels.
+    let recorded_budget = token_budget.min(256);
     let mut prompt_lengths = Vec::new();
     let mut total = (decoders / 16 + 1) * 16;
-    while total <= token_budget {
+    while total <= recorded_budget {
         let length = total - decoders;
         if length + 1 < max_sequence_tokens {
             prompt_lengths.push(length);
@@ -2956,6 +2982,12 @@ fn warm_up_step_shapes(
     }
     for handle in &handles {
         finish(handle);
+    }
+    if token_budget > recorded_budget && token_budget + 1 < max_sequence_tokens {
+        if let Ok(handle) = engine.submit(request(token_budget, 1)) {
+            submitted += 1;
+            finish(&handle);
+        }
     }
     // Alone: prefill-only and single-row decode shapes.
     if let Ok(handle) = engine.submit(request(1, 4)) {
@@ -7376,6 +7408,14 @@ mod native_profile_cli_tests {
         assert!(parse(&["--numerics-profile", "owned-hf-eager-bf16-v1"]).is_err());
     }
     #[test]
+    fn models_with_two_kv_heads_split_generated_rows_at_half_length() {
+        assert_eq!(attention_kv_chunks(None, 1), (512, Some(256)));
+        assert_eq!(attention_kv_chunks(None, 2), (512, Some(256)));
+        assert_eq!(attention_kv_chunks(None, 4), (512, None));
+        assert_eq!(attention_kv_chunks(None, 8), (512, None));
+        assert_eq!(attention_kv_chunks(Some(1024), 2), (1024, None));
+    }
+    #[test]
     fn varlen_profile_selects_explicit_attention_and_bounds_qualification_scope() {
         let profile = |extra: &[&str]| {
             let mut argv = vec![
@@ -7400,9 +7440,9 @@ mod native_profile_cli_tests {
             &["--max-active-sequences", "33"],
             &[
                 "--batch-token-budget",
-                "1024",
+                "2048",
                 "--batch-shape-buckets",
-                "1,2,4,8,16,32,64,128,256,512,1024",
+                "1,2,4,8,16,32,64,128,256,512,1024,2048",
             ],
         ] {
             assert!(

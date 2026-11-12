@@ -1,0 +1,15 @@
+Warning: Directory "/mnt/efs/nlp/psyche/riley-gap-20261102/tmp-prof6" used to store temporary files appears to be on a remote filesystem ("127.0.0.1:/").
+This may cause errors or significantly degrade profiling performance.
+Please set the NSYS_TMPDIR environment variable to a local directory.
+RILEY_NATIVE_ATTENTION mode=fixed-tile-unsplit-v1
+RILEY_GRAPH prepared=false policy=Disabled fallback=true gpu_iteration_timing=true numerics=existing
+riley startup warm-up: 48 internal requests in 0.47 s
+RILEY_DECODE_ATTENTION requested_backend=native-bf16-paged-split-gqa-d128-two-stage resolved_ragged_backend=riley.cuda.ragged-paged-attention.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16.transition-v2 fallback_reason=none query_heads=12 key_value_heads=2 head_size=128 page_size=16 graph=false
+RILEY_PROJECTION_BIAS requested_backend=merged-qkv-strict-staged-v1 resolved_backend=merged-qkv-strict-staged-v1 fallback_reason=none
+riley listening on http://127.0.0.1:18396 (graceful_signals=SIGINT,SIGTERM graceful_stdin_shutdown=false)
+riley graceful shutdown requested by SIGINT
+Collecting data...
+Generating '/mnt/efs/nlp/psyche/riley-gap-20261102/tmp-prof6/nsys-nlp/nsys-report-2c0f.qdstrm'
+[1/1] [0%                          ] riley.nsys-rep[1/1] [0%                          ] riley.nsys-rep[1/1] [1%                          ] riley.nsys-rep[1/1] [2%                          ] riley.nsys-rep[1/1] [5%                          ] riley.nsys-rep[1/1] [6%                          ] riley.nsys-rep[1/1] [7%                          ] riley.nsys-rep[1/1] [9%                          ] riley.nsys-rep[1/1] [10%                         ] riley.nsys-rep[1/1] [13%                         ] riley.nsys-rep[1/1] [=16%                        ] riley.nsys-rep[1/1] [==19%                       ] riley.nsys-rep[1/1] [==20%                       ] riley.nsys-rep[1/1] [==================76%       ] riley.nsys-rep[1/1] [==================77%       ] riley.nsys-rep[1/1] [=======================96%  ] riley.nsys-rep[1/1] [========================98% ] riley.nsys-rep[1/1] [========================100%] riley.nsys-rep[1/1] [========================100%] riley.nsys-rep
+Generated:
+	/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/prof12/Qwen2.5-1.5B-Instruct/riley.nsys-rep

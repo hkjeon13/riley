@@ -1,0 +1,9 @@
+RILEY_NATIVE_ATTENTION mode=fixed-tile-unsplit-v1
+RILEY_GRAPH prepared=false policy=Disabled fallback=true gpu_iteration_timing=true numerics=existing
+riley startup warm-up: 47 internal requests in 1.23 s
+RILEY_DECODE_ATTENTION requested_backend=native-bf16-paged-split-gqa-d128-two-stage resolved_ragged_backend=riley.cuda.ragged-paged-attention.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16.transition-v2 fallback_reason=none query_heads=28 key_value_heads=4 head_size=128 page_size=16 graph=false
+RILEY_PROJECTION_BIAS requested_backend=merged-qkv-strict-staged-v1 resolved_backend=merged-qkv-strict-staged-v1 fallback_reason=none
+riley listening on http://127.0.0.1:18336 (graceful_signals=SIGINT,SIGTERM graceful_stdin_shutdown=false)
+HOSTSTEP us/step over 128 steps: cancel+commands=3962.8 plan=18.2 prepare=1.0 pack=9.9 upload=1.4 submit=725.7 wait=12208.5 download=24.3 sample=10.4 commit=5.1 events=2.4 publish=4.4 | captured=20 eager=0
+HOSTSTEP us/step over 128 steps: cancel+commands=9.1 plan=49.4 prepare=1.7 pack=25.3 upload=1.7 submit=255.4 wait=13474.4 download=23.9 sample=20.4 commit=11.2 events=4.3 publish=6.7 | captured=5 eager=0
+riley graceful shutdown requested by SIGTERM

@@ -26,7 +26,7 @@ pub struct PrefillBurstPolicy {
     /// Fewest prompt tokens one ready request must have left for the whole
     /// budget to open; 0 opens it for any prompt. Short prompts that arrive
     /// together then keep the steady size, and only a long prompt runs in
-    /// larger steps.
+    /// larger steps, including its last chunk once fewer tokens are left.
     pub min_prompt_tokens: usize,
 }
 

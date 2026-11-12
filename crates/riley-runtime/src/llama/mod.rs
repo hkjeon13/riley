@@ -937,9 +937,10 @@ mod source_contract_tests {
     #[test]
     fn executor_usize_u64_conversions_share_one_typed_error_facade() {
         for (boundary, source, expected_calls) in [
-            // Two existing cold-layout conversions plus the native D128
-            // workspace row/page conversions must all use the shared facade.
-            ("batch owner", include_str!("executor/owner.rs"), 5),
+            // Two existing cold-layout conversions, the native D128 workspace
+            // row/page conversions and the fixed-tile partial-state sizing
+            // must all use the shared facade.
+            ("batch owner", include_str!("executor/owner.rs"), 9),
             (
                 "execution dispatch",
                 include_str!("executor/dispatch.rs"),

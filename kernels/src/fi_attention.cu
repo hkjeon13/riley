@@ -85,6 +85,9 @@ struct PagedParams {
   bool partition_kv;
   // Riley's: the planned work item count, read by strided_paged_kernel.
   const uint32_t* work_count;
+  // Riley's: its presence makes the paged kernel read kv_chunk_size_ptr per
+  // request (the value is unused).
+  bool riley_kv_chunk_per_request;
 
   __host__ __device__ __forceinline__ uint32_t get_qo_len(uint32_t batch_idx) const {
     return q_indptr[batch_idx + 1] - q_indptr[batch_idx];
@@ -142,13 +145,44 @@ std::atomic<uint32_t>& full_grid_setting() {
   return value;
 }
 
+// KV chunk of the rows that are not prompt rows of the prompt-row producer
+// (generated rows, and prompt rows below its first position), or
+// kFollowPromptChunk for the prompt chunk. A prompt row below that position
+// (256) lies within one chunk of at least 256 tokens either way, so a request
+// that spans that position takes the same bytes whichever chunk it gets;
+// riley_cuda_set_native_flashinfer_generated_kv_chunk refuses smaller chunks.
+constexpr uint64_t kFollowPromptChunk = UINT64_MAX;
+constexpr uint64_t kMinimumGeneratedChunk = 256;
+std::atomic<uint64_t>& generated_kv_chunk_setting() {
+  static std::atomic<uint64_t> value{kFollowPromptChunk};
+  return value;
+}
+
 // A chunk that holds `page_capacity` pages cannot split any row, and a row in
 // one chunk has the same bytes without the partial states and the merge.
-uint32_t kv_chunk_tokens(uint64_t page_capacity) {
-  const uint64_t chunk = kv_chunk_setting().load(std::memory_order_relaxed);
+uint32_t chunk_tokens(uint64_t chunk, uint64_t page_capacity) {
   return chunk % kPage == 0 && chunk <= (1ULL << 20) && chunk < page_capacity * kPage
              ? static_cast<uint32_t>(chunk)
              : 0U;
+}
+
+uint32_t kv_chunk_tokens(uint64_t page_capacity) {
+  return chunk_tokens(kv_chunk_setting().load(std::memory_order_relaxed), page_capacity);
+}
+
+uint32_t generated_kv_chunk_tokens(uint64_t page_capacity) {
+  const uint64_t chunk = generated_kv_chunk_setting().load(std::memory_order_relaxed);
+  return chunk == kFollowPromptChunk ? kv_chunk_tokens(page_capacity)
+                                     : chunk_tokens(chunk, page_capacity);
+}
+
+// The chunk that bounds the work items and partial rows of a launch: the
+// smaller of the two that split, or 0 when neither does.
+uint32_t sizing_chunk(uint32_t prompt, uint32_t generated) {
+  if (prompt == 0) {
+    return generated;
+  }
+  return generated == 0 || prompt < generated ? prompt : generated;
 }
 
 // Chunks of the longest context `page_capacity` pages can hold.
@@ -194,7 +228,7 @@ Layout layout_for(uint64_t rows, uint64_t page_capacity, uint32_t query_heads,
   layout.request_indices = take(4 * work);
   layout.qo_tile_indices = take(4 * work);
   layout.kv_tile_indices = take(4 * work);
-  layout.kv_chunk_size = take(4);
+  layout.kv_chunk_size = take(4 * (rows + 1));
   layout.total_rows = take(4);
   layout.work_count = take(4);
   layout.block_valid = take(work);
@@ -258,7 +292,7 @@ __device__ uint32_t block_exclusive_sum(uint32_t value, uint32_t* scratch,
 __global__ __launch_bounds__(kPlannerThreads) void plan_kernel(
     RowBatch batch, uint64_t output_rows, uint64_t page_capacity,
     uint32_t group_heads, uint32_t row_width, uint32_t work_capacity,
-    uint32_t chunk, IdType* q_indptr, IdType* kv_indptr, IdType* last_page_len,
+    uint32_t prompt_chunk, uint32_t generated_chunk, IdType* q_indptr, IdType* kv_indptr, IdType* last_page_len,
     IdType* o_indptr, IdType* kv_indices, IdType* request_indices,
     IdType* qo_tile_indices, IdType* kv_tile_indices, IdType* kv_chunk_size,
     uint32_t* total_rows, uint32_t* work_count, bool* block_valid, IdType* merge_indptr,
@@ -295,9 +329,13 @@ __global__ __launch_bounds__(kPlannerThreads) void plan_kernel(
 
   // Thread r < requests owns request r.
   const bool owner = thread < requests;
+  // Partial states and the merge whenever either chunk splits; a request in
+  // one chunk then writes one partial row, which the merge copies.
+  const bool split = prompt_chunk != 0 || generated_chunk != 0;
   uint32_t pages = 0;
   uint32_t tiles = 0;
   uint32_t chunks = 1;
+  uint32_t chunk = 0;
   uint32_t kv_length = 0;
   uint32_t first_row = 0;
   uint32_t end_row = 0;
@@ -307,6 +345,9 @@ __global__ __launch_bounds__(kPlannerThreads) void plan_kernel(
     first_row = static_cast<uint32_t>(q_indptr[thread]);
     end_row = static_cast<uint32_t>(q_indptr[thread + 1]);
     kv_length = batch.row_positions[end_row - 1] + 1;
+    chunk = batch.row_kinds != nullptr && batch.row_kinds[end_row - 1] == 1U
+                ? prompt_chunk
+                : generated_chunk;
     pages = (kv_length + kPage - 1) / kPage;
     tiles = ((end_row - first_row) * group_heads + kCtaTileQ - 1) / kCtaTileQ;
     const uint64_t sequence = batch.row_sequence_slots[first_row];
@@ -343,12 +384,13 @@ __global__ __launch_bounds__(kPlannerThreads) void plan_kernel(
   // Partial rows: one per row and chunk (one per row of an invalid request).
   uint32_t total_partial = 0;
   const uint32_t partial_before = block_exclusive_sum(
-      owner && chunk != 0 ? (end_row - first_row) * chunks : 0U, scratch,
+      owner && split ? (end_row - first_row) * chunks : 0U, scratch,
       &total_partial);
   if (owner) {
     kv_indptr[thread] = static_cast<IdType>(page_before);
-    o_indptr[thread] = chunk != 0 ? static_cast<IdType>(partial_before) : q_indptr[thread];
-    if (chunk != 0) {
+    o_indptr[thread] = split ? static_cast<IdType>(partial_before) : q_indptr[thread];
+    kv_chunk_size[thread] = chunk != 0 ? static_cast<IdType>(chunk) : 1 << 30;
+    if (split) {
       for (uint32_t row = first_row; row < end_row; ++row) {
         merge_indptr[row] =
             static_cast<IdType>(partial_before + (row - first_row) * chunks);
@@ -380,18 +422,17 @@ __global__ __launch_bounds__(kPlannerThreads) void plan_kernel(
     q_indptr[entry] = static_cast<IdType>(active);
     kv_indptr[entry] = static_cast<IdType>(total_pages);
     o_indptr[entry] =
-        static_cast<IdType>(chunk != 0 ? total_partial : static_cast<uint32_t>(active));
+        static_cast<IdType>(split ? total_partial : static_cast<uint32_t>(active));
     if (entry < output_rows) {
       last_page_len[entry] = 0;
     }
   }
-  if (chunk != 0) {
+  if (split) {
     for (uint64_t entry = active + thread; entry <= output_rows; entry += blockDim.x) {
       merge_indptr[entry] = static_cast<IdType>(total_partial);
     }
   }
   if (thread == 0) {
-    kv_chunk_size[0] = chunk != 0 ? static_cast<IdType>(chunk) : 1 << 30;
     total_rows[0] = static_cast<uint32_t>(active);
     work_count[0] = total_tiles;
   }
@@ -614,7 +655,8 @@ uint64_t workspace_bytes(uint64_t output_rows, uint64_t page_capacity,
   }
   return layout_for(output_rows, page_capacity, query_heads,
                     query_heads / key_value_heads, head_size,
-                    kv_chunk_tokens(page_capacity))
+                    sizing_chunk(kv_chunk_tokens(page_capacity),
+                                 generated_kv_chunk_tokens(page_capacity)))
       .bytes;
 }
 
@@ -633,7 +675,9 @@ cudaError_t run_paged_attention(const __nv_bfloat16* query,
     return cudaErrorInvalidValue;
   }
   const uint32_t group_heads = query_heads / key_value_heads;
-  const uint32_t chunk = kv_chunk_tokens(page_capacity);
+  const uint32_t prompt_chunk = kv_chunk_tokens(page_capacity);
+  const uint32_t generated_chunk = generated_kv_chunk_tokens(page_capacity);
+  const uint32_t chunk = sizing_chunk(prompt_chunk, generated_chunk);
   const Layout layout =
       layout_for(output_rows, page_capacity, query_heads, group_heads, kHead, chunk);
   if (workspace == nullptr || workspace_size < layout.bytes) {
@@ -646,7 +690,8 @@ cudaError_t run_paged_attention(const __nv_bfloat16* query,
   const uint32_t row_width = query_heads * kHead;
   if (plan) {
   plan_kernel<<<1, kPlannerThreads, 0, stream>>>(
-      batch, output_rows, page_capacity, group_heads, row_width, work, chunk,
+      batch, output_rows, page_capacity, group_heads, row_width, work, prompt_chunk,
+      generated_chunk,
       ids(layout.q_indptr), ids(layout.kv_indptr), ids(layout.last_page_len),
       ids(layout.o_indptr), ids(layout.kv_indices), ids(layout.request_indices),
       ids(layout.qo_tile_indices), ids(layout.kv_tile_indices),
@@ -739,6 +784,19 @@ cudaError_t paged_attention(const __nv_bfloat16* query,
 // multiple of 16; 0 for no KV split).
 extern "C" void riley_cuda_set_native_flashinfer_kv_chunk(uint64_t tokens) noexcept {
   riley_fi::kv_chunk_setting().store(tokens, std::memory_order_relaxed);
+}
+
+// Sets the KV chunk of rows that are not prompt rows at or past position 256
+// (a multiple of 16 of at least 256, or 0 for no KV split); UINT64_MAX (the
+// default) follows the prompt chunk. Returns false and keeps the setting for
+// a chunk below 256 or not a multiple of 16.
+extern "C" bool riley_cuda_set_native_flashinfer_generated_kv_chunk(uint64_t tokens) noexcept {
+  if (tokens != riley_fi::kFollowPromptChunk && tokens != 0 &&
+      (tokens % riley_fi::kPage != 0 || tokens < riley_fi::kMinimumGeneratedChunk)) {
+    return false;
+  }
+  riley_fi::generated_kv_chunk_setting().store(tokens, std::memory_order_relaxed);
+  return true;
 }
 
 // 1 runs later launches with one CTA per possible work item, as FlashInfer's

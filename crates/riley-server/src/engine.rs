@@ -2883,6 +2883,36 @@ mod cuda_backend {
         native_fallback_request_local: bool,
     }
 
+    /// The response record of one token's log probabilities.
+    fn describe_logprobs(
+        model: &LoadedModel,
+        display_len: usize,
+        chosen: (u32, f64),
+        top: &[(u32, f64)],
+    ) -> Box<TokenLogprob> {
+        let mut display = vec![0_u8; display_len];
+        let mut describe = |token_id: u32, logprob: f64| {
+            let count = model
+                .tokenizer()
+                .decode_token_bytes_into(
+                    token_id,
+                    DecodeOptions {
+                        skip_special_tokens: false,
+                    },
+                    &mut display,
+                )
+                .unwrap_or(0);
+            TokenProbability {
+                bytes: display[..count].to_vec(),
+                #[allow(clippy::cast_possible_truncation)]
+                logprob: logprob as f32,
+            }
+        };
+        let chosen = describe(chosen.0, chosen.1);
+        let top = top.iter().map(|&(token_id, value)| describe(token_id, value)).collect();
+        Box::new(TokenLogprob { chosen, top })
+    }
+
     struct StructuredRequest {
         automaton: Arc<Mutex<GrammarAutomaton>>,
         cursor: GrammarCursor,
@@ -2904,6 +2934,8 @@ mod cuda_backend {
         automata: HashMap<Arc<Grammar>, Arc<Mutex<GrammarAutomaton>>>,
         top_logprobs: Vec<(u32, f64)>,
         row_logits: Vec<u8>,
+        logprob_summaries: Vec<u8>,
+        logprob_summary_device: Option<riley_runtime::CudaDeviceBuffer>,
         gpu_greedy: bool,
         generation_audit: Option<Arc<dyn C02GenerationAuditSink>>,
         greedy_token_workspace: Vec<u32>,
@@ -2971,6 +3003,23 @@ mod cuda_backend {
             pending_tokens
                 .try_reserve_exact(output_capacity)
                 .map_err(|_| internal("token publication staging allocation failed"))?;
+            // GPU-greedy requests with `logprobs` read a summary per output
+            // row; its buffers are reserved here, not on first use.
+            let summary_bytes = output_capacity * riley_runtime::BF16_LOGPROB_SUMMARY_WORDS * 4;
+            let mut logprob_summaries = Vec::new();
+            let logprob_summary_device = if resources.gpu_greedy && summary_bytes != 0 {
+                logprob_summaries
+                    .try_reserve_exact(summary_bytes)
+                    .map_err(|_| internal("logprob summary staging allocation failed"))?;
+                Some(
+                    resources
+                        .context
+                        .allocate_device_buffer(summary_bytes as u64)
+                        .map_err(|source| internal(format!("logprob summary allocation failed: {source}")))?,
+                )
+            } else {
+                None
+            };
             let request_capacity = resources
                 .scheduler
                 .config()
@@ -3045,6 +3094,8 @@ mod cuda_backend {
                 automata: HashMap::new(),
                 top_logprobs: Vec::new(),
                 row_logits: Vec::new(),
+                logprob_summaries,
+                logprob_summary_device,
                 gpu_greedy: resources.gpu_greedy,
                 generation_audit: resources.generation_audit,
                 greedy_token_workspace,
@@ -3211,6 +3262,45 @@ mod cuda_backend {
             // inference behavior or the general audit schema.
             let native_fallback_request_local =
                 c02_native_fallback_request_is_local(plan.output_slots().len());
+            // Log probabilities of the device's own choice come from a
+            // few-word device summary of the row instead of the row itself.
+            let mut summary_top = None;
+            if gpu_greedy {
+                for item in plan.prefill_items().iter().chain(plan.decode_items()) {
+                    if item.output_slot().is_none() {
+                        continue;
+                    }
+                    if let Some(index) = self.request_index_by_scheduler(item.request_id()) {
+                        let request = &self.requests[index];
+                        if request.structured.is_none() {
+                            summary_top = summary_top.max(request.logprobs_top);
+                        }
+                    }
+                }
+            }
+            const SUMMARY_BYTES: usize = riley_runtime::BF16_LOGPROB_SUMMARY_WORDS * 4;
+            if let Some(top) = summary_top {
+                let bytes = plan.output_slots().len() * SUMMARY_BYTES;
+                self.logprob_summaries.resize(bytes, 0);
+                let (executor, stream) = self
+                    .executor
+                    .as_mut()
+                    .zip(self.stream.as_mut())
+                    .ok_or_else(|| internal("batch executor is already closed"))?;
+                let device = self
+                    .logprob_summary_device
+                    .as_mut()
+                    .ok_or_else(|| internal("logprob summary buffer is missing"))?;
+                executor
+                    .download_logprob_summaries(
+                        self.addressable_tokens,
+                        u32::from(top),
+                        device,
+                        &mut self.logprob_summaries,
+                        stream,
+                    )
+                    .map_err(|source| internal(format!("logprob summary failed: {source}")))?;
+            }
             for &slot in plan.output_slots() {
                 let item = plan
                     .prefill_items()
@@ -3256,9 +3346,49 @@ mod cuda_backend {
                 } else {
                     None
                 };
+                let summarized = request
+                    .logprobs_top
+                    .filter(|_| summary_top.is_some() && request.structured.is_none());
                 let (token_id, token_logprob) = if let (Some(token_id), None) =
                     (device_token, request.logprobs_top)
                 {
+                    (token_id, Some(0.0))
+                } else if let (Some(token_id), Some(top)) = (device_token, summarized) {
+                    let index = usize::try_from(slot.get())
+                        .map_err(|_| internal("output slot overflowed"))?;
+                    let record = self
+                        .logprob_summaries
+                        .get(index * SUMMARY_BYTES..(index + 1) * SUMMARY_BYTES)
+                        .ok_or_else(|| internal("output slot has no logprob summary"))?;
+                    let word = |at: usize| {
+                        u32::from_ne_bytes([record[4 * at], record[4 * at + 1], record[4 * at + 2], record[4 * at + 3]])
+                    };
+                    let lanes: [f32; riley_runtime::sampling::LOGPROB_LANES] =
+                        std::array::from_fn(|lane| f32::from_bits(word(2 + lane)));
+                    let selected = (word(0) != 0).then(|| f32::from_bits(word(18)));
+                    let mut top_logits = [(0_u32, 0.0_f32); 20];
+                    let mut count = 0;
+                    for rank in 0..usize::from(top) {
+                        let token = word(19 + 2 * rank);
+                        if token == u32::MAX {
+                            break;
+                        }
+                        top_logits[count] = (token, f32::from_bits(word(20 + 2 * rank)));
+                        count += 1;
+                    }
+                    let chosen = SamplingWorkspace::logprobs_from_summary(
+                        f32::from_bits(word(1)),
+                        &lanes,
+                        selected,
+                        &top_logits[..count],
+                        &mut self.top_logprobs,
+                    );
+                    logprob = Some(describe_logprobs(
+                        &self.model,
+                        request.decoded_token_bytes.len(),
+                        (token_id, chosen),
+                        &self.top_logprobs,
+                    ));
                     (token_id, Some(0.0))
                 } else {
                     let logits = if gpu_greedy {
@@ -3359,32 +3489,12 @@ mod cuda_backend {
                             usize::from(top),
                             &mut self.top_logprobs,
                         );
-                        let mut display = vec![0_u8; request.decoded_token_bytes.len()];
-                        let mut describe = |token_id: u32, logprob: f64| {
-                            let count = self
-                                .model
-                                .tokenizer()
-                                .decode_token_bytes_into(
-                                    token_id,
-                                    DecodeOptions {
-                                        skip_special_tokens: false,
-                                    },
-                                    &mut display,
-                                )
-                                .unwrap_or(0);
-                            TokenProbability {
-                                bytes: display[..count].to_vec(),
-                                #[allow(clippy::cast_possible_truncation)]
-                                logprob: logprob as f32,
-                            }
-                        };
-                        let chosen = describe(sampled_id, selected);
-                        let top = self
-                            .top_logprobs
-                            .iter()
-                            .map(|&(token_id, value)| describe(token_id, value))
-                            .collect();
-                        logprob = Some(Box::new(TokenLogprob { chosen, top }));
+                        logprob = Some(describe_logprobs(
+                            &self.model,
+                            request.decoded_token_bytes.len(),
+                            (sampled_id, selected),
+                            &self.top_logprobs,
+                        ));
                     }
                     (sampled_id, sampled_logprob)
                 };
@@ -3721,6 +3831,11 @@ mod cuda_backend {
             if let Some(executor) = self.executor.take() {
                 if let Err(source) = executor.close() {
                     first_error.get_or_insert_with(|| format!("executor close failed: {source}"));
+                }
+            }
+            if let Some(buffer) = self.logprob_summary_device.take() {
+                if let Err(source) = buffer.close() {
+                    first_error.get_or_insert_with(|| format!("logprob summary close failed: {source}"));
                 }
             }
             if let Some(timer) = self.timer.take() {

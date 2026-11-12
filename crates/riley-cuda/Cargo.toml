@@ -81,6 +81,11 @@ path = "tests/bf16_argmax_gpu.rs"
 required-features = ["cuda"]
 
 [[test]]
+name = "bf16_logprob_summary_gpu"
+path = "tests/bf16_logprob_summary_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
 name = "batch_gpu"
 path = "tests/batch_gpu.rs"
 required-features = ["cuda"]

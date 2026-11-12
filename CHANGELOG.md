@@ -2,9 +2,14 @@
 
 All notable changes to Riley are documented in this file.
 
-## Unreleased
+## 0.1.0 — 2026-11-12
 
-Serving work since `0.1.0-rc2`, measured in [docs/performance.md](docs/performance.md):
+The first release. It covers the serving work since `0.1.0-rc2`, measured in
+[docs/performance.md](docs/performance.md) and
+[docs/serving-validation.md](docs/serving-validation.md). The release owner
+closed the remaining long-prompt gaps (first-token time on six 4–14B models,
+tail first-token time under long-prompt load) as limits of the current
+structure; see [docs/goal.md](docs/goal.md).
 
 - Qwen2.5-3B-Instruct support through a paged, two-stage attention backend,
   with tensor-core arithmetic for attention pages.
@@ -23,6 +28,38 @@ Serving work since `0.1.0-rc2`, measured in [docs/performance.md](docs/performan
   requests with the same leading tokens share read-only prompt KV blocks, and
   `usage.prompt_tokens_details.cached_tokens` reports the reuse. Outputs are
   unchanged.
+- `logprobs` summarized on the GPU: one kernel per step reduces each output
+  row to its maximum, normalizer partial sums and top tokens, and the CPU
+  finishes the same bytes from them. Qwen2.5-7B with `top_logprobs: 5` went
+  from 358 to 626 tok/s at 8 clients and 588 to 2,186 at 32.
+- Prompt steps of up to 1,024 rows: wide GEMM shapes keep the anchor's bytes
+  (new A100 equivalence-table rows, workspace cap scaled above 256 rows), and
+  `fixed-tile-unsplit-v1` accepts a budget of 1,024. With the burst options a
+  long-context server reaches the first token of a long prompt 11–26 % sooner.
+  Steps above 256 rows are not recorded as graphs.
+- The Qwen3 head norm with RoPE and the KV write runs one warp per head with
+  the same bytes, 2–3 % off a long prompt's first token on Qwen3 models.
+- `fixed-tile-unsplit-v1` sizes the attention workspace to its planner instead
+  of the two-stage layout (7 GB less on Qwen2.5-7B with 1,024-row steps), and a
+  step it cannot plan fails instead of falling back to kernels with other
+  bytes. Log-probability buffers are reserved at start-up.
+- `--attention-kv-chunk-tokens` defaults to 512 (was 1,024): decoding rows at
+  long context get more parallel work. This changes outputs for rows longer
+  than 512 tokens; batch invariance is unchanged. On models with two KV heads
+  or fewer (Qwen2.5 0.5B–3B, Qwen2.5-Coder 1.5B and 3B,
+  DeepSeek-R1-Distill-Qwen-1.5B) generated tokens split at 256 while prompt
+  tokens keep 512: the planner takes each request's split from the row kinds
+  the prompt-row producer already receives. This changes those models' outputs
+  for generated tokens past position 256.
+- Prompt tokenization merges BPE pairs by token ID through a hashed pair
+  table instead of string keys in ordered maps, with the same merge order and
+  the same IDs. Qwen prompts tokenize about 8× faster: on Qwen3-0.6B a
+  2,600-token prompt's first token arrives in 33.3 ms instead of 43.5 ms.
+- With `--prefill-burst-min-prompt-tokens`, a long prompt that has started
+  keeps the whole budget for its last chunk instead of finishing in steady
+  steps (about 1 % off a long prompt's first token).
+- Benchmarks: `gsm8k.py`, `logprob_parity.py`, shared-prefix and closed c1/c16
+  cells and `--tp` in `compare.py`, the `wide` mode of `gemm_anchor_search`.
 - Documentation rewritten for users; development records were removed from the
   tree and summarised in [docs/HISTORY.md](docs/HISTORY.md).
 

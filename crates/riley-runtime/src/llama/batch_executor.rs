@@ -853,6 +853,93 @@ impl PreparedLlamaBatchExecutor {
         }
     }
 
+    /// Computes into `device` and downloads into `destination` the
+    /// log-probability summary ([`riley_cuda::bf16_logprob_summary`]) of
+    /// every output row of the completed greedy iteration, with each row's
+    /// greedy token as the selected token: `output_count` records of
+    /// [`riley_cuda::BF16_LOGPROB_SUMMARY_WORDS`] native-endian U32 words.
+    /// Costs a few words per row instead of a vocabulary-sized row.
+    ///
+    /// # Errors
+    ///
+    /// Returns when execution did not produce greedy records, the
+    /// destination or device buffer has the wrong size, or CUDA fails.
+    pub fn download_logprob_summaries(
+        &mut self,
+        addressable: usize,
+        top_count: u32,
+        device: &mut CudaDeviceBuffer,
+        destination: &mut [u8],
+        stream: &mut CudaStream,
+    ) -> LlamaBatchExecutorResult<()> {
+        if self.is_poisoned() {
+            return Err(LlamaBatchExecutorError::Poisoned);
+        }
+        if !self.output_ready {
+            return Err(LlamaBatchExecutorError::OutputNotReady);
+        }
+        if self.output_mode != BatchOutputMode::GreedyTokens {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "output_mode",
+                reason: "the completed iteration produced logits, not greedy tokens",
+            });
+        }
+        let record_bytes = self
+            .output_count
+            .saturating_mul(riley_cuda::BF16_LOGPROB_SUMMARY_WORDS * U32_BYTES);
+        if destination.len() != record_bytes {
+            return Err(LlamaBatchExecutorError::InvalidDownloadLength {
+                expected_bytes: record_bytes,
+                actual_bytes: destination.len(),
+            });
+        }
+        if record_bytes == 0 {
+            return Ok(());
+        }
+        let site = ExecutionSite::global(LlamaOp::OutputGather);
+        let invalid = |reason| LlamaBatchExecutorError::InvalidConfiguration {
+            field: "logprob_summaries",
+            reason,
+        };
+        let logits_bytes = self.output_count.saturating_mul(self.vocabulary_size()).saturating_mul(2);
+        let greedy_bytes = self.greedy_result_byte_len_for(self.output_count)?;
+        let result = {
+            let logits = self
+                .owner
+                .gathered_logits
+                .as_ref()
+                .ok_or(invalid("non-empty output has no cold-prepared device buffer"))?;
+            let greedy = self
+                .owner
+                .greedy_results
+                .as_ref()
+                .ok_or(invalid("non-empty output has no cold-prepared greedy result buffer"))?;
+            let as_u64 = |value: usize| u64::try_from(value).map_err(|_| invalid("size overflowed"));
+            let logits = riley_cuda::CudaBufferSpan::new(logits, riley_cuda::CudaDType::BF16, 0, as_u64(logits_bytes)?)
+                .map_err(|source| batch_cuda(site, source))?;
+            let greedy = riley_cuda::CudaBufferSpan::new(greedy, riley_cuda::CudaDType::U32, 0, as_u64(greedy_bytes)?)
+                .map_err(|source| batch_cuda(site, source))?;
+            let mut summaries =
+                riley_cuda::CudaBufferSpanMut::new(device, riley_cuda::CudaDType::U32, 0, as_u64(record_bytes)?)
+                    .map_err(|source| batch_cuda(site, source))?;
+            riley_cuda::bf16_logprob_summary(
+                &logits,
+                &greedy,
+                &mut summaries,
+                as_u64(self.output_count)?,
+                as_u64(self.vocabulary_size())?,
+                as_u64(addressable)?,
+                top_count,
+                stream,
+            )
+        }
+        .and_then(|()| device.download_to_slice(0, destination, &mut self.owner.forward.io_staging, stream));
+        result.map_err(|source| {
+            poison_for_cuda_error(&mut self.owner.poisoned, &source);
+            batch_cuda(site, source)
+        })
+    }
+
     /// Downloads and validates one exact greedy token ID per output slot.
     ///
     /// Device traffic is eight bytes per row: a token ID and a status word.

@@ -520,15 +520,12 @@ impl SamplingWorkspace {
             *value = decode_finite_bf16(bytes);
         }
         let maximum = values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-        const LANES: usize = 16;
-        let mut lanes = [0.0_f32; LANES];
-        for chunk in values.chunks(LANES) {
+        let mut lanes = [0.0_f32; LOGPROB_LANES];
+        for chunk in values.chunks(LOGPROB_LANES) {
             for (lane, value) in lanes.iter_mut().zip(chunk) {
                 *lane += approximate_exp(*value - maximum);
             }
         }
-        let sum: f64 = lanes.iter().copied().map(f64::from).sum();
-        let normalizer = f64::from(maximum) + sum.ln();
         if top_count != 0 {
             for (token_id, &value) in values.iter().enumerate() {
                 let logit = f64::from(value);
@@ -539,12 +536,25 @@ impl SamplingWorkspace {
                 }
             }
         }
-        for entry in top.iter_mut() {
-            entry.1 -= normalizer;
-        }
-        values.get(selected as usize).map_or(f64::NEG_INFINITY, |value| {
-            f64::from(*value) - normalizer
-        })
+        finish_logprobs(maximum, &lanes, values.get(selected as usize).copied(), top)
+    }
+
+    /// [`Self::raw_logprobs_bf16_native`] from a device summary of the row
+    /// (`riley_cuda::bf16_logprob_summary`): its maximum, its
+    /// [`LOGPROB_LANES`] lane sums, the selected token's logit (`None` when
+    /// it is not addressable) and the top tokens' logits, highest first. The
+    /// summary reproduces the host's intermediate values exactly, so the
+    /// result is the one the full row gives.
+    pub fn logprobs_from_summary(
+        maximum: f32,
+        lanes: &[f32; LOGPROB_LANES],
+        selected: Option<f32>,
+        top_logits: &[(u32, f32)],
+        top: &mut Vec<(u32, f64)>,
+    ) -> f64 {
+        top.clear();
+        top.extend(top_logits.iter().map(|&(token_id, logit)| (token_id, f64::from(logit))));
+        finish_logprobs(maximum, lanes, selected, top)
     }
 
     /// Greedy selection in one pass over the row, for requests whose
@@ -917,6 +927,23 @@ fn allocate_filled<T: Clone>(
 /// `e^x` for `x <= 0`, branch-free so that a loop over it vectorizes, with a
 /// relative error below 1e-4, which moves a log probability by the same
 /// amount and is well under the resolution of BF16 logits.
+/// Lane count of the log-softmax normalizer's partial sums.
+pub const LOGPROB_LANES: usize = 16;
+
+fn finish_logprobs(
+    maximum: f32,
+    lanes: &[f32; LOGPROB_LANES],
+    selected: Option<f32>,
+    top: &mut [(u32, f64)],
+) -> f64 {
+    let sum: f64 = lanes.iter().copied().map(f64::from).sum();
+    let normalizer = f64::from(maximum) + sum.ln();
+    for entry in top.iter_mut() {
+        entry.1 -= normalizer;
+    }
+    selected.map_or(f64::NEG_INFINITY, |value| f64::from(value) - normalizer)
+}
+
 #[inline]
 fn approximate_exp(x: f32) -> f32 {
     let scaled = x.max(-87.0) * std::f32::consts::LOG2_E;
@@ -1034,6 +1061,43 @@ mod tests {
         let outside = workspace.raw_logprobs_bf16_native(&row, 3, 3, 0, &mut top);
         assert_eq!(outside, f64::NEG_INFINITY);
         assert!(top.is_empty());
+    }
+
+    #[test]
+    fn logprobs_from_a_summary_match_the_full_row() {
+        // A summary built the way the device builds it: exact maximum, lane
+        // sums over residues modulo 16 in ascending order, exact top tokens.
+        let values: Vec<f32> = (0..1003_u32)
+            .map(|index| f32::from_bits((((index * 7919) % 613) as f32 * 0.03 - 9.0).to_bits() & 0xffff_0000))
+            .collect();
+        let row: Vec<u8> = values.iter().flat_map(|value| ((value.to_bits() >> 16) as u16).to_ne_bytes()).collect();
+        let mut workspace = SamplingWorkspace::new(values.len()).unwrap();
+        for (addressable, selected, top_count) in [(1003, 17_u32, 5), (1000, 1001, 20), (16, 3, 0)] {
+            let mut expected_top = Vec::new();
+            let expected = workspace.raw_logprobs_bf16_native(&row, addressable, selected, top_count, &mut expected_top);
+            let used = &values[..addressable];
+            let maximum = used.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            let mut lanes = [0.0_f32; super::LOGPROB_LANES];
+            for (index, value) in used.iter().enumerate() {
+                lanes[index % super::LOGPROB_LANES] += super::approximate_exp(*value - maximum);
+            }
+            let mut order: Vec<u32> = (0..addressable as u32).collect();
+            order.sort_by(|&a, &b| used[b as usize].total_cmp(&used[a as usize]).then(a.cmp(&b)));
+            let top_logits: Vec<(u32, f32)> = order[..top_count].iter().map(|&id| (id, used[id as usize])).collect();
+            let mut top = Vec::new();
+            let value = SamplingWorkspace::logprobs_from_summary(
+                maximum,
+                &lanes,
+                used.get(selected as usize).copied(),
+                &top_logits,
+                &mut top,
+            );
+            assert_eq!(value.to_bits(), expected.to_bits());
+            assert_eq!(top.len(), expected_top.len());
+            for (left, right) in top.iter().zip(&expected_top) {
+                assert_eq!((left.0, left.1.to_bits()), (right.0, right.1.to_bits()));
+            }
+        }
     }
 
     #[test]

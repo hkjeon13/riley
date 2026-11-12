@@ -2322,6 +2322,84 @@ pub fn deterministic_bf16_argmax_fp32_ties<S: CudaExecutionStream + ?Sized>(
     }
 }
 
+/// U32 words per row written by [`bf16_logprob_summary`].
+pub const BF16_LOGPROB_SUMMARY_WORDS: usize = 64;
+/// Largest `top_count` accepted by [`bf16_logprob_summary`].
+pub const BF16_LOGPROB_SUMMARY_MAX_TOP: u32 = 20;
+
+/// Summarizes each greedy output row for log probabilities, so the host can
+/// finish a log-softmax without the row: per row, U32 words
+/// `[in_range, maximum, 16 lane sums, selected logit, (token, logit) x top_count]`
+/// (floats as bits). Only the first `addressable` columns count. The lane
+/// sums add `approximate_exp(logit - maximum)` of the columns congruent to the
+/// lane modulo 16 in ascending order, with the host's operations; the top
+/// tokens are ordered by logit descending, lower token id on ties. The
+/// selected token is the token of each row's greedy record; `in_range` is
+/// zero when it is not addressable. Not recordable in a step capture.
+///
+/// # Errors
+///
+/// Returns a dtype, shape, capacity, context, busy-state, launch, or completion
+/// error.
+#[allow(clippy::too_many_arguments)]
+pub fn bf16_logprob_summary<S: CudaExecutionStream + ?Sized>(
+    logits: &CudaBufferSpan<'_>,
+    greedy: &CudaBufferSpan<'_>,
+    summaries: &mut CudaBufferSpanMut<'_>,
+    row_count: u64,
+    vocabulary_size: u64,
+    addressable: u64,
+    top_count: u32,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "bf16_logprob_summary";
+    if vocabulary_size == 0
+        || vocabulary_size > u64::from(u32::MAX)
+        || addressable == 0
+        || addressable > vocabulary_size
+        || top_count > BF16_LOGPROB_SUMMARY_MAX_TOP
+    {
+        return Err(CudaError::invalid_argument(OPERATION, "invalid log-probability summary shape"));
+    }
+    let logit_bytes = row_count
+        .checked_mul(vocabulary_size)
+        .and_then(|v| v.checked_mul(2))
+        .ok_or_else(|| CudaError::invalid_argument(OPERATION, "logits shape overflows"))?;
+    let summary_bytes = row_count
+        .checked_mul(4 * BF16_LOGPROB_SUMMARY_WORDS as u64)
+        .ok_or_else(|| CudaError::invalid_argument(OPERATION, "summary shape overflows"))?;
+    for (name, dtype, want, bytes, need) in [
+        ("logits", logits.dtype, CudaDType::BF16, logits.byte_len, logit_bytes),
+        ("greedy", greedy.dtype, CudaDType::U32, greedy.byte_len, row_count * 8),
+        ("summaries", summaries.dtype, CudaDType::U32, summaries.byte_len, summary_bytes),
+    ] {
+        if dtype != want {
+            return Err(CudaError::invalid_argument(OPERATION, "log-probability summary dtype mismatch"));
+        }
+        require_capacity(OPERATION, name, bytes, need)?;
+    }
+    let stream = execution_stream_mut(stream);
+    validate_resources(OPERATION, stream, &[logits.buffer, greedy.buffer, summaries.buffer])?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::bf16_logprob_summary_execute(
+            logits.raw(),
+            greedy.raw(),
+            summaries.raw(),
+            row_count,
+            vocabulary_size,
+            addressable,
+            top_count,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = (logits, greedy, summaries, row_count, top_count);
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
 fn bf16_argmax<S: CudaExecutionStream + ?Sized>(
     params: &mut Bf16ArgmaxParams<'_>,
     candidate_count: u64,

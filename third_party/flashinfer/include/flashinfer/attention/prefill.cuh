@@ -49,6 +49,9 @@ DEFINE_HAS_MEMBER(maybe_token_pos_in_items_ptr)
 DEFINE_HAS_MEMBER(token_pos_in_items_len)
 DEFINE_HAS_MEMBER(maybe_max_item_len_ptr)
 DEFINE_HAS_MEMBER(maybe_k_cache_sf)
+// Riley: Params with this member give each request its own KV chunk size,
+// kv_chunk_size_ptr[request_idx], in the paged kernel.
+DEFINE_HAS_MEMBER(riley_kv_chunk_per_request)
 DEFINE_HAS_MEMBER(maybe_v_cache_sf)
 
 // Type trait to detect packed NVFP4 KV cache types (__nv_fp4x2_e2m1 stores 2 FP4 per byte).
@@ -3531,7 +3534,7 @@ __device__ __forceinline__ void BatchPrefillWithPagedKVCacheDevice(
 
     static_assert(sizeof(DTypeQ) == 2);
     auto block = cg::this_thread_block();
-    const uint32_t kv_chunk_size = *(params.kv_chunk_size_ptr);
+    uint32_t kv_chunk_size = *(params.kv_chunk_size_ptr);
 
     const uint32_t lane_idx = tid.x, warp_idx = get_warp_idx<KTraits>(tid.y, tid.z);
     if (block_valid_mask && !block_valid_mask[bx]) {
@@ -3541,6 +3544,9 @@ __device__ __forceinline__ void BatchPrefillWithPagedKVCacheDevice(
 
     const uint32_t request_idx = request_indices[bx], qo_tile_idx = qo_tile_indices[bx],
                    kv_tile_idx = kv_tile_indices[bx];
+    if constexpr (has_riley_kv_chunk_per_request_v<Params>) {
+      kv_chunk_size = params.kv_chunk_size_ptr[request_idx];
+    }
     auto smem = reinterpret_cast<uint8_t*>(&smem_storage);
     AttentionVariant variant(params, /*batch_idx=*/request_idx, smem);
     const uint32_t qo_len = variant.qo_len, kv_len = variant.kv_len,

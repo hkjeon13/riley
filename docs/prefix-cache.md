@@ -117,7 +117,39 @@ Evidence is under `evidence/pfx-*` on the host.
 | 8 | **615** / 609 | **39.4** / 41.9 | 57.8 / **49.7** | **12.06** / 12.16 |
 | 32 | **2156** / 2026 | **41.7** / 59.5 | 115 / **102** | **13.53** / 13.87 |
 
-Riley is ahead except on TTFT p95 at 8 and 32 clients. vLLM 0.27.1 changes some
+Riley is ahead except on TTFT p95 at 8 and 32 clients.
+
+Remeasured on 2026-11-04 with `benchmarks/live/compare.py` (`shared-c8`,
+`shared-c32`: a 330-word system document shared by every request, 20-word
+user prompts, 32 output tokens; `--prefix-cache 4096` turns on both caches; vLLM
+at `--gpu-memory-utilization 0.8`). Qwen2.5-7B, two runs each on GPU 7:
+
+| Cell | tok/s Riley / vLLM | TTFT p50 ms | TTFT p95 ms | TPOT p50 ms |
+|---|---:|---:|---:|---:|
+| shared-c8 | **630** / 596 | **30.1** / 46.3 | **30.8** / 47.2 | **12.0** / 12.2 |
+| shared-c32 | 2096 / **2127** | 94.3 / **62.0** | 105.4 / **67.9** | **12.8** / 13.4 |
+
+At 32 clients the harness runs after `shared-c8`, so every request hits the
+cache from the start. All 32 then finish their fixed 32 tokens in the same step
+and send their next prompts together: about 1,120 uncached tokens at once. The
+first token waits for that whole wave. Riley needs about 90 ms for it (steps of
+256, 512 or 1,024 rows all give 95–99 ms), vLLM 62 ms in one step of up to
+2,048 tokens. With a cold cache the first misses break the lockstep, and the
+same server gave 37.3 / 55.0 ms. Without the cache Riley's shared-c32 TTFT p50
+is 378 ms.
+
+Most of that wave was tokenization, not the prompt steps. An engine with no
+active request tokenizes a submitted prompt itself, so the 32 prompts of the
+wave (about 460 tokens each) were tokenized one after another at about 4.5 µs
+a token, some 65 ms. With tokens merged by ID (2026-11-05, build `lp13`, same
+token IDs) the same cells on GPU 6 (`shared13/`):
+
+| Cell | tok/s Riley / vLLM | TTFT p50 ms | TTFT p95 ms | TPOT p50 ms |
+|---|---:|---:|---:|---:|
+| shared-c8 | **627** / 596 | **30.5** / 45.7 | **31.0** / 47.0 | **12.1** / 12.2 |
+| shared-c32 | **2377** / 2119 | **26.2** / 57.2 | **33.2** / 72.8 | **12.9** / 13.5 |
+
+vLLM 0.27.1 changes some
 of its own outputs when its cache is on: 170, 158 and 161 of 192 matched its
 cache-off run for 1, 8 and 32 clients. Why was not investigated.
 

@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """Correctness of long prompts: concurrency invariance and agreement with HF.
 
-usage: long_check.py ADDRESS MODEL_ID MODEL_DIR OUT
+usage: long_check.py ADDRESS MODEL_ID MODEL_DIR OUT [SERVER_PID]
 Greedy continuations of documents of about 800 to 7000 tokens are requested
 alone, then at 8 and 32 concurrent clients, and compared with each other and
-with Hugging Face BF16 sdpa.
+with Hugging Face BF16 sdpa. With SERVER_PID the server is stopped before the
+HF model loads, so both fit one GPU in turn. OUT keeps Riley's tokens for
+comparison across builds.
 """
 import concurrent.futures as futures
 import json
+import os
 import random
+import signal
 import sys
+import time
 import urllib.request
 
 import torch
@@ -41,6 +46,17 @@ for clients in (8, 32):
     result[f"invariant_c{clients}"] = sum(again[i][0] == alone[i % len(prompts)][0] for i in range(len(again)))
     result[f"of_c{clients}"] = len(again)
 
+result["riley_tokens"] = [item[0] for item in alone]
+if len(sys.argv) > 5:
+    server = int(sys.argv[5])
+    os.kill(server, signal.SIGTERM)
+    for _ in range(120):
+        try:
+            os.kill(server, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(1)
+    time.sleep(5)
 tokenizer = AutoTokenizer.from_pretrained(model_dir)
 model = AutoModelForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, attn_implementation="sdpa").cuda().eval()
 same, firsts, depth = 0, 0, []
@@ -57,5 +73,5 @@ for generated, prompt_ids in alone:
     firsts += bool(reference and candidate and reference[0] == candidate[0])
     depth.append(next((i for i, (a, b) in enumerate(zip(reference, candidate)) if a != b), len(candidate)))
 result.update(hf_identical=same, hf_first_token=firsts, hf_common_prefix=depth)
-print(json.dumps({k: v for k, v in result.items() if k != "prompt_tokens"}))
+print(json.dumps({k: v for k, v in result.items() if k not in ("prompt_tokens", "riley_tokens")}))
 json.dump(result, open(out, "w"), indent=1)

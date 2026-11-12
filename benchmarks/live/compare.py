@@ -16,6 +16,8 @@ import urllib.request
 SHORT, LONG = "short", "long"
 # name: (server config, load.py arguments)
 SCENARIOS = {
+    "closed-c1": (SHORT, "--prompt-words 30 --max-tokens 64 --concurrency 1 --requests 64 --warmup 8"),
+    "closed-c16": (SHORT, "--prompt-words 30 --max-tokens 64 --concurrency 16 --requests 192"),
     "closed-c8": (SHORT, "--prompt-words 30 --max-tokens 64 --concurrency 8 --requests 192"),
     "closed-c32": (SHORT, "--prompt-words 30 --max-tokens 64 --concurrency 32 --requests 192"),
     "open-r6": (SHORT, "--prompt-words 30 --max-tokens 64 --rate 6 --requests 192"),
@@ -35,6 +37,12 @@ SCENARIOS = {
     "rag6k-c1": (LONG, "--prompt-words 3000,5000 --max-tokens 128 --concurrency 1 --requests 16 --warmup 4"),
     "reason-c8": (LONG, "--prompt-words 30 --max-tokens 1024 --concurrency 8 --requests 32 --warmup 8"),
     "reason-c32": (LONG, "--prompt-words 30 --max-tokens 1024 --concurrency 32 --requests 64 --warmup 32"),
+    "shared-c8": (SHORT, "--shared-prefix-words 330 --prompt-words 20 --max-tokens 32 --concurrency 8 --requests 192"),
+    "shared-c32": (SHORT, "--shared-prefix-words 330 --prompt-words 20 --max-tokens 32 --concurrency 32 --requests 192"),
+    "logprobs-c8": (SHORT, '--prompt-words 30 --max-tokens 64 --concurrency 8 --requests 192 '
+                           '--extra {"logprobs":true,"top_logprobs":5}'),
+    "logprobs-c32": (SHORT, '--prompt-words 30 --max-tokens 64 --concurrency 32 --requests 192 '
+                            '--extra {"logprobs":true,"top_logprobs":5}'),
 }
 parser = argparse.ArgumentParser()
 parser.add_argument("root")
@@ -47,6 +55,10 @@ parser.add_argument("--scenarios", default=",".join(SCENARIOS))
 parser.add_argument("--riley-short", default="")
 parser.add_argument("--riley-long", default="")
 parser.add_argument("--port", type=int, default=18300)
+parser.add_argument("--vllm-memory", default="0.8")
+parser.add_argument("--tp", type=int, default=1, help="tensor parallel size over the GPUs given (e.g. 6,7)")
+parser.add_argument("--prefix-cache", type=int, default=0,
+                    help="Riley --prefix-cache-blocks N and vLLM prefix caching on (0: both off)")
 args = parser.parse_args()
 PORT = args.port
 OUT = f"{args.root}/evidence/{args.label}"
@@ -59,6 +71,10 @@ ENV = {**os.environ, "PATH": f"{args.root}/tools/vllm-venv/bin:" + os.environ["P
 def riley_command(config):
     common = (f"{args.root}/bin/riley-{args.riley_bin} serve --model {MODEL} --model-id m "
               f"--bind 127.0.0.1:{PORT} --max-active-sequences 32 --max-weight-bytes 68719476736 ")
+    if args.prefix_cache:
+        common += f"--prefix-cache-blocks {args.prefix_cache} "
+    if args.tp > 1:
+        common += "--tensor-parallel-devices " + ",".join(str(i) for i in range(args.tp)) + " "
     if config == SHORT:
         return common + "--inference-profile native-bf16-varlen-v1 --max-output-tokens 128 " + args.riley_short
     return common + ("--inference-profile native-bf16-varlen-v1 --max-sequence-tokens 8192 "
@@ -68,8 +84,9 @@ def riley_command(config):
 def vllm_command(config):
     length = 1024 if config == SHORT else 8192
     return (f"{args.root}/tools/vllm-venv/bin/vllm serve {MODEL} --served-model-name m --port {PORT} "
-            f"--host 127.0.0.1 --max-model-len {length} --gpu-memory-utilization 0.8 "
-            f"--generation-config vllm --no-enable-prefix-caching --max-num-seqs 32 --disable-log-stats")
+            f"--host 127.0.0.1 --max-model-len {length} --gpu-memory-utilization {args.vllm_memory} "
+            f"--generation-config vllm --max-num-seqs 32 --disable-log-stats --tensor-parallel-size {args.tp} "
+            + ("--enable-prefix-caching" if args.prefix_cache else "--no-enable-prefix-caching"))
 
 
 def start(engine, config, log):

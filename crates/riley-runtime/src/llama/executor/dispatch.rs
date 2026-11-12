@@ -64,6 +64,8 @@ use crate::cuda_weights::CudaUploadedWeights;
 use crate::paged_kv::KvLayout;
 
 const BF16_BYTES: u64 = 2;
+/// Largest dense step shape that is recorded as a step graph.
+pub(crate) const MAX_RECORDED_STEP_ROWS: usize = 256;
 
 /// Tracks whether a command submission could have mutated iteration state.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -511,10 +513,14 @@ pub(in crate::llama) fn execute_packed(
     // recorded kernels read the active and output row counts from the device,
     // so one graph per (dense shape, output LM-head shape) serves decode-only
     // and prefill-mixed steps alike.
+    // Steps above 256 rows are not recorded: their kernels outlast the
+    // launches a graph saves, and recording them would spend the bounded
+    // graph budget that small decode shapes need.
     let step_capture_eligible = config.decode_step_capture()
         && produce_greedy_tokens
         && active != 0
-        && active <= dense_rows;
+        && active <= dense_rows
+        && dense_rows <= MAX_RECORDED_STEP_ROWS;
     let staged_attention_metadata=if let Some(prepared)=native_d128_two_stage_workspace.as_deref_mut().and_then(|w|w.materialized.as_mut()) {
         if config.staged_step_uploads() {
             Some(riley_cuda::stage_materialized_ragged_attention_metadata(host_batch,&prepared.reference,

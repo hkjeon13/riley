@@ -29,9 +29,11 @@ pub use kernel::{
 
 #[cfg(feature = "cuda")]
 pub use riley_cuda::{
-    AttentionBackend, AttentionPreference, AttentionSelectionTrace, CudaContext, CudaError,
-    CudaEvent, CudaPeerAllReduceGroup, CudaRuntime, CudaStream,
+    AttentionBackend, AttentionPreference, AttentionSelectionTrace, BF16_LOGPROB_SUMMARY_WORDS,
+    CudaContext, CudaDeviceBuffer, CudaError, CudaEvent, CudaPeerAllReduceGroup, CudaRuntime,
+    CudaStream,
     set_native_d128_attention_flashinfer,
+    set_native_flashinfer_generated_kv_chunk,
     set_native_flashinfer_kv_chunk,
 };
 

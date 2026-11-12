@@ -206,8 +206,121 @@ their numerics were measured and dropped:
   256 lowered agreement with HF (11/18, first token 17/18; `kc/`).
 
 Larger prompt steps remain the lever for the GEMM part: 512 rows recover about
-4 % for a lone long prompt (below), and a step of 1,024 rows fails on the GEMM
-equivalence table (`NotSupported`), so it needs new verified GEMM shapes first.
+4 % for a lone long prompt (below). A step of 1,024 rows used to fail with
+`NotSupported`; that is fixed now (next section).
+
+#### Prompt steps of 1,024 rows
+
+Two things stopped steps above 512 rows:
+
+- **Workspace.** Qwen2.5-7B's down projection anchors on a split-K algorithm
+  whose partial sums grow with the rows: 22 MB at 1,024 rows, over the 16 MiB
+  workspace cap. Plans above 256 rows now get a cap scaled by
+  ⌈rows / 256⌉. The anchor is still selected at 128 rows under 16 MiB, so no
+  algorithm choice changes.
+- **Attention.** `fixed-tile-unsplit-v1` refused budgets above 512. Its planner
+  is one block of 1,024 threads, one per row, so the limit is now 1,024.
+
+`gemm_anchor_search K N wide` (`benchmarks/profiling/`) finds the
+configurations whose 512-, 1,024- and 2,048-row products reproduce the anchor's
+256-row bytes on every row. The input repeats its first 256 rows, so a match
+also shows that a row's bytes do not depend on its position. For Qwen2.5-7B,
+102 configurations match per projection, and the fastest run at about 250
+TFLOP/s at 2,048 rows, against 150–170 at 256 rows. The same search ran over
+the 51 other projection shapes of the qualified models (`search/wide/`). The
+fastest member per row range went into the A100 equivalence table. As before,
+each entry is probed against the anchor's bytes when the plan is prepared.
+
+Steps above 256 rows are no longer recorded as step graphs. At 1,024 rows the
+kernels take about 70 ms, so a graph saves nothing. Recording them used up the
+32-graph budget during start-up warm-up, and small decode shapes then ran
+eagerly: rag-c1 TPOT rose from 12.24 to 12.63 ms until this was changed.
+
+A budget of 1,024 on every step costs short prompts, as 512 did. The burst
+options give long prompts the wide steps only:
+
+```bash
+--batch-token-budget 1024 --prefill-chunk-tokens 1024 \
+--batch-shape-buckets 1,2,4,8,16,24,32,48,64,80,96,112,128,144,160,176,192,208,224,240,256,512,1024 \
+--prefill-burst-steady-budget 256 --prefill-burst-max-decode-rows 32 \
+--prefill-burst-min-prompt-tokens 512
+```
+
+Qwen2.5-7B on a server with `--max-sequence-tokens 8192`, two runs each on
+GPU 7 (Riley; `burst5/`). vLLM is the same day's baseline on GPU 6:
+
+| Cell | Steps of 256 | Burst to 1,024 | vLLM |
+|---|---:|---:|---:|
+| rag-c1 TTFT p50 ms | 286.0 | **254.8** | 235.5 |
+| rag6k-c1 TTFT p50 ms | 491.1 | **445.2** | 395.5 |
+| rag-c8 TTFT p95 ms | 1,110 | **876** | 640 |
+| rag-r3 TTFT p95 ms | 709 | **522** | 457 |
+| rag-c1 TPOT p50 ms | 12.24 | 12.24 | 12.3 |
+| rag-c8 TPOT p50 ms | **16.6** | 19.6 | 20.0 |
+| rag-c8 tok/s | **358** | 345 | 347 |
+| reason-c8 tok/s | 572 | 572 | – |
+| reason-c32 tok/s | 2,110 | 2,110 | – |
+
+Long prompts reach their first token 11–26 % sooner. Under load, prompt chunks
+of up to 1,024 rows share steps with the requests already decoding, so their
+TPOT rises: rag-c8 goes from 16.6 to 19.6 ms (vLLM 20.0) and its throughput
+drops 3.7 %, a tie with vLLM. The default therefore stays at 256. On a server
+with `--max-sequence-tokens 1024` the same options cost short prompts
+(mid-r16 TTFT p50 59.7 to 62.4 ms, closed-c32 37.3 to 38.3 ms), so use them on
+long-context servers only.
+
+Smaller shapes are anchored on the widest plan's algorithm. With a widest plan
+of 1,024 rows that is a configuration chosen for 1,024 rows, and a decode
+shape without its own table entry fell back to it. The smallest models lost
+0.2 ms per token this way (Qwen2.5-0.5B rag-c1 TPOT 2.33 to 2.53 ms). A plan
+above 256 rows now passes on the algorithm it was itself anchored to, and the
+loss is gone (2.33 ms). Shapes of a widest plan up to 256 rows keep the
+previous rule.
+
+Six models on GPU 7, two runs each, Riley with steps of 256 and with the
+burst; vLLM from the baseline on GPU 6. Ratios are Riley / vLLM for TTFT and
+TPOT, vLLM / Riley for throughput (`models6/`, `models7/`):
+
+| Model | rag-c1 TTFT | rag6k-c1 TTFT | rag-c8 TTFT p95 | rag-r3 TTFT p95 | rag-c8 tok/s |
+|---|---:|---:|---:|---:|---:|
+| Qwen2.5-0.5B | 1.65 → 1.32 | 1.76 → 1.39 | 2.18 → 1.39 | 1.63 → 1.27 | 1.11 → 1.06 |
+| Qwen3-0.6B | 1.72 → 1.37 | 1.75 → 1.38 | 1.99 → 1.26 | 2.07 → 1.39 | 1.08 → 1.03 |
+| Llama-3.2-3B | 1.26 → 1.04 | 1.29 → 1.09 | 1.83 → 1.03 | 1.82 → 1.25 | 1.02 → 1.02 |
+| Qwen3-4B | 1.35 → 1.22 | 1.38 → 1.29 | 1.59 → 1.26 | 1.79 → 1.34 | 1.01 → 1.06 |
+| Qwen2.5-7B | 1.21 → 1.08 | 1.24 → 1.13 | 1.73 → 1.37 | 1.55 → 1.14 | 0.97 → 1.01 |
+| Llama-3.1-8B | 1.22 → 1.08 | 1.22 → 1.11 | 1.94 → 1.36 | 1.83 → 1.25 | 1.00 → 1.04 |
+
+Every model and setting returned the same text and log probabilities on 80 of
+80 mixed requests. Models of 3B and more come within 1.04–1.29× at one client.
+The smallest models stay furthest behind. For Qwen3-0.6B a 2,608-token request
+spends 32.4 ms on the GPU: GEMM 16.1 ms, attention 8.8 ms (about 90 TFLOP/s,
+half of what FlashAttention-2 reaches on an A100), and 4.0 ms in the Qwen3
+head norm with RoPE and the KV write.
+
+That head-norm kernel used one block of 128 threads and seven barriers per row
+and head. It now uses one warp per head with four columns per lane. The lane
+adds its columns in the block's tree order (offsets 64 and 32), and shuffles
+finish from 16 down, so the bytes are the same; the GPU test against the
+separate slice, norm, RoPE and cache-write launches passes. Qwen3-0.6B rag-c1
+TTFT went from 64.6 to 62.5 ms and rag6k-c1 from 114.5 to 110.6 ms, and
+outputs matched the previous build on 80 of 80 requests (`hn/`).
+
+The attention partial-state workspace was sized for Riley's two-stage
+attention, [rows, pages, heads, 130] FP32: 10.9 GB for a 40-head model at
+1,024 rows and 8,192 tokens. `fixed-tile-unsplit-v1` uses it only for the
+FlashInfer planner, so in that mode it is now sized to the planner (the opt-in
+segment-decode and direct-prompt modes keep the full size). A fixed-tile step
+that cannot plan now fails instead of running the other attention kernels,
+whose bytes differ. With the burst options, GPU memory at start went from 37.5
+to 30.3 GB for Qwen2.5-7B, 39.9 to 31.7 GB for Qwen3-4B and 8.7 to 5.1 GB for
+Qwen2.5-0.5B, with 80 of 80 requests unchanged. All four 14B models now start
+with the burst and the KV share vLLM gets at 0.9 utilization; before, they ran
+out of memory even with a smaller cache (`lp10/`).
+
+Outputs do not change with the step size: 32 of 32 structured requests and 80
+of 80 logprob requests matched the steps-of-256 build. The long check gave
+54/54 invariant at 8 and 32 clients and 12/18 equal to HF for both settings,
+and the two settings agreed on 18 of 18 (`long2/`).
 
 A step of 512 needs `--batch-token-budget 512 --prefill-chunk-tokens 512` and
 matching `--batch-shape-buckets`, and it raises short-prompt TTFT (closed-c32
@@ -323,9 +436,28 @@ others almost nothing (TPOT 13.58 against 13.54 ms).
 The check changes speed, not output: 32 schema requests at 8 clients, half with
 `logprobs`, returned identical text with and without it.
 
-`logprobs` remain 1.7× slower than vLLM at 8 clients: the row download and
-CPU work add about 1.2 ms per row per step. Use them for evaluation rather than
-for production traffic.
+`logprobs` used to be 1.7× slower than vLLM at 8 clients: each requesting row
+was downloaded whole (about 300 KB) and passed over on the CPU, about 1.2 ms
+per row per step. A GPU kernel now summarizes every output row in one launch
+after the step: the row maximum, the 16 partial sums of the normalizer, the
+selected token's logit and the top tokens. The CPU finishes the log-softmax from
+these few words. The kernel replays the CPU's arithmetic (the same exponential
+approximation, operations and order per partial sum, no contracted multiply-add),
+so the values are byte-identical. A GPU test compares every summary word with
+the CPU over four shapes, including the 151,936-column row, and two servers
+returned the same text and log probabilities on 80 of 80 mixed requests
+(completions and chat, `top_logprobs` 0, 1, 5 and 20, with requests without
+`logprobs` in the same batches; `lp/`). Requests with a grammar keep the
+full-row path.
+
+Qwen2.5-7B, 64 output tokens, two runs each on GPU 7, vLLM from the same day's
+baseline on GPU 6 (tok/s, TPOT p50 ms):
+
+| Cell | Riley before | Riley | vLLM |
+|---|---:|---:|---:|
+| plain, 8 clients | 659 (11.83) | 659 (11.82) | – |
+| logprobs, 8 clients | 358 (21.9) | **626** (12.45) | 605 (12.47) |
+| logprobs, 32 clients | 588 (53.3) | **2186** (13.98) | 2029 (13.73) |
 
 Accuracy of `logprobs` against Hugging Face:
 
@@ -333,6 +465,267 @@ Accuracy of `logprobs` against Hugging Face:
 |---|---:|---:|---:|
 | Qwen2.5-0.5B | 0.0041 | 0.119 | 98 % |
 | Qwen3-4B | 0.0004 | 0.157 | 99 % |
+
+## All 24 models
+
+Each model on GPU 6, 2026-11-04/05: vLLM 0.27.1 and Riley `h6e7a` alternated
+twice (`base0/`), then Riley with the GPU log-probability summaries, wider
+prompt steps and the burst options twice more (`stage1/`; 14B models on the
+build with the smaller attention workspace). The table in
+`benchmarks/evidence/20261104-goal/stage1-table.md` has every model. Ranges,
+Riley / vLLM (throughput vLLM / Riley), before → after:
+
+| Cell | Before | After |
+|---|---:|---:|
+| rag-c1 TTFT p50 | 1.14–1.73 | 0.93–1.32 |
+| rag6k-c1 TTFT p50 | 1.17–1.76 | 0.97–1.39 |
+| rag-c8 TTFT p95 | 1.28–2.25 | 0.66–1.43 |
+| rag-r3 TTFT p95 | 1.03–2.15 | 0.91–1.39 |
+| rag-c8 TPOT p50 | 0.83–1.01 | 0.93–1.10 |
+| rag-c8 tok/s | 0.97–1.12 | 0.88–1.06 |
+| logprobs, 8 clients, tok/s | 1.37–3.68 | 0.62–1.00 |
+| logprobs, 32 clients, tok/s | 2.24–8.64 | 0.45–0.98 |
+
+Qwen2.5-14B rag-c8 TTFT p95 stays at about 1.4× (1,751 ms, vLLM 1,240). Letting
+two prompts share a 1,024-row step (`--prefill-chunk-tokens 512`) left it at
+1,746 ms and cost 7 % throughput (`p95/`), so with the burst itself this is two
+levers under 2 % and the cell stays at the current structure's limit; the
+remaining gap is the prompt cost per token. At 3 requests/s both engines are
+overloaded with 14B (TTFT p95 above 13 s), so rag-r3 says little there.
+
+Llama models and the 7B–14B Qwen models reach the first token within
+1.09–1.12× of vLLM at one client; the small Qwen models (0.5B–3B) remain at
+1.19–1.32×. Under load (rag-c8) the burst trades TPOT for TTFT: TPOT rises to
+1.04–1.10× of vLLM's on the small models.
+
+#### Tokenization
+
+A Qwen3-0.6B profile of a 2,608-token prompt showed 31.6 ms of GPU work in a
+request the client timed at 44.2 ms; Qwen2.5-1.5B showed 54.0 against 67.8.
+The 13 ms outside the GPU was the tokenizer: a prompt over the context limit,
+rejected right after tokenization, took 41 ms for 9,000 words and 92 ms for
+20,000, about 4.5 µs a token. Riley's byte-level BPE merged strings looked up
+in nested ordered maps and allocated a string per symbol. It now merges token
+IDs through one hashed table of merge pairs, with the same order (lowest rank,
+then leftmost pair), so the IDs are the same: identical on code, prose, Korean,
+mixed bytes and a 3,000-letter run for the Qwen2.5, Qwen3, Llama 3 and SmolLM2
+tokenizers, and a unit test compares it with the string engine on every
+string of up to ten letters over a tie-heavy merge table. The same request
+over the limit now takes 6.3 ms, the 2,600-token request 33.3 ms instead of
+43.5, and served text is byte-identical (build `lp13`, `lp13/`).
+
+Llama 3 tokenizers were already fast on words, since `ignore_merges` finds a
+whole word in the vocabulary, which is why the Llama models led on long prompts
+while the Qwen models of the same size did not. All 24 models again with the
+burst options, Riley `lp13` against the vLLM runs of `base0/` (`stage1t/`;
+every model in `benchmarks/evidence/20261104-goal/stage1t-table.md`):
+
+| Cell | Burst before | With the tokenizer |
+|---|---:|---:|
+| rag-c1 TTFT p50 | 0.93–1.32 | 0.56–1.11 |
+| rag6k-c1 TTFT p50 | 0.97–1.39 | 0.65–1.20 |
+| rag-c8 TTFT p95 | 0.66–1.43 | 0.47–1.42 |
+| rag-r3 TTFT p95 | 0.91–1.39 | 0.56–1.26 |
+| rag-c8 TPOT p50 | 0.93–1.10 | 0.93–1.15 |
+| rag-c8 tok/s | 0.88–1.06 | 0.83–1.05 |
+
+The small Qwen models moved most: rag-c1 from 1.19–1.32 to 0.89–1.06. The
+slowest first tokens are now Qwen3-4B (1.11), Qwen3-8B (1.10), Qwen3-14B and
+DeepSeek-R1-Distill-Llama-8B (1.08). With requests admitted sooner, the small
+models' rag-c8 TPOT rose by up to 0.09 (Qwen2.5-0.5B 1.15) as prompt steps
+arrive closer together; their throughput is within 3 % of vLLM's.
+
+What remains on the larger models is GPU work. A 2,608-token prompt keeps the
+GPU busy for 221 ms on Qwen3-8B and 191 ms on Qwen2.5-7B, idle under 3 ms
+(`prof12/`). Qwen3-8B's projections run at about 233 TFLOP/s against 248 for
+Qwen2.5-7B: their anchors are split-K algorithms, and the 1,024-row
+configurations that keep the anchors' bytes are split-K too, with a reduction
+of about 100 µs per layer and step. Prompt attention takes 27 ms per request
+(178 µs a layer at 1,024 rows, about 146 TFLOP/s). Neither changes without
+changing outputs.
+
+Under load the median first token leads and the tail does not: Qwen2.5-7B
+rag-c8 TTFT p50 351 ms against vLLM's 407, p95 804 against 640. With 128
+output tokens the 8 clients fall into step: a profile shows runs of 12–19
+prompt steps, each about 67 ms (63 ms alone, so the decode rows they carry cost
+little), then 105–127 decode steps (`profc8/`, `tail/`). The tail is the last
+prompt of a wave, which waits for every prompt before it, so it follows the
+prompt cost per token above. Two step-shape changes that keep outputs were
+measured on Qwen2.5-7B and Qwen3-8B, Riley only, two runs each:
+
+- Finer buckets above 256 rows (384, 640, 768 and 896 added; every model
+  prepares them): a last chunk of 700 rows runs in 52 instead of 62 ms, but
+  the cells moved by −0.4 to +0.3 % on rag-c1 and −3.0 / −4.6 % on rag6k-c1;
+  rag-c8 p95 did not improve (`fineb13/`).
+- Keeping the burst open for the last chunk of a long prompt that has started
+  (it used to close once fewer than `--prefill-burst-min-prompt-tokens` were
+  left, so the chunk ran in steps of 256), on Qwen2.5-7B, Qwen3-4B, Qwen3-8B
+  and Llama-3.1-8B: rag-c1 −0.4 to −1.2 %, the other cells within ±1 % except
+  Qwen3-8B rag-r3 p95 −2.0 %; output bytes the same (`ab14/`, build `lp14`).
+
+Both stay under 2 % on the cells they target.
+
+Short prompts, closed loop with 1, 8, 16 and 32 clients, 30-word prompts and 64
+output tokens, Riley and vLLM alternated twice per model on GPU 7 (`short/`):
+TPOT p50 is at most 1.00× of vLLM's at one client on every model, at most
+1.03× at 8–32 clients on all cells but one (Qwen2.5-Coder-14B at 32 clients,
+1.04×), and throughput at 32 clients is 1.04–1.72× vLLM's. For Qwen2.5-Coder-14B at 32
+clients smaller steps trade throughput for TPOT: 26.49 / 26.14 ms with steps of
+256 / 128 (vLLM 25.46), at 1,153 / 1,118 tok/s (vLLM 1,073) and TTFT p50 76 /
+83 ms (vLLM 289); 192 was slower on every cell (`budget14/`). Neither lever
+moved the cell by 2 %, so it stays as the current structure's limit.
+
+### Decode at long context and the KV chunk
+
+`fixed-tile-unsplit-v1` splits each row's context at fixed 1,024-token
+positions. A decoding row is then planned as one or a few work items per KV
+head, too few to fill the GPU, and decode at long context runs slower than
+vLLM's: Qwen2.5-7B reason-c8 reached 571 tok/s against vLLM's 593. The
+existing `--attention-kv-chunk-tokens` changes the split. Same GPU, Riley with
+1,024 / 512 / 256 against vLLM (`chunk/`):
+
+| Cell | 1,024 | 512 | 256 | vLLM |
+|---|---:|---:|---:|---:|
+| Qwen2.5-7B reason-c8 tok/s | 571 | 594 | **604** | 593 |
+| Qwen2.5-7B reason-c32 tok/s | 2,112 | 2,137 | **2,163** | 2,104 |
+| Qwen2.5-7B rag-c1 TPOT ms | 12.23 | **11.94** | 11.99 | 12.33 |
+| Qwen2.5-0.5B rag-c1 TPOT ms | 2.33 | 2.12 | **2.05** | 2.08 |
+| Qwen2.5-0.5B reason-c8 tok/s | 3,319 | 3,388 | **3,526** | 2,855 |
+
+Three more models with 1,024 / 512 against vLLM:
+
+| Cell | 1,024 | 512 | vLLM |
+|---|---:|---:|---:|
+| Qwen3-4B reason-c8 tok/s | 901 | **918** | 916 |
+| Qwen3-4B reason-c32 tok/s | 2,853 | 2,902 | **2,971** |
+| Llama-3.1-8B reason-c8 tok/s | 528 | 544 | **560** |
+| Llama-3.1-8B reason-c32 tok/s | 1,860 | **1,878** | 1,794 |
+| Qwen2.5-1.5B reason-c8 tok/s | 1,659 | 1,675 | **1,698** |
+| Qwen2.5-1.5B rag-c1 TPOT ms | 4.41 | **4.05** | 4.53 |
+
+A different split changes the attention arithmetic, so outputs change. The
+long check stays invariant (54/54 at 8 and 32 clients) with 512 on all four
+models tried. HF agreement moves by at most one continuation either way:
+identical 12 → 13 (Qwen2.5-7B), 6 → 6 (Qwen2.5-0.5B), 12 → 11 (Qwen3-4B),
+14 → 13 (Llama-3.1-8B) of 18 (`long512/`). A split of 256 adds little over 512 on Llama-3.1-8B
+(reason-c8 543 tok/s, vLLM 560) and Qwen3-4B (reason-c32 2,922, vLLM 2,971),
+costs 1–3 % TTFT at one client, and agrees with HF on 11 of 18 for both, so of
+the two, 512 is the candidate. The rest of those two cells' gap is not in the
+attention split. The default became 512 on
+2026-11-05, with the user's approval; the re-validation of every model is below.
+
+Re-validation with the 512 default (build `lp12`), every model on GPU 6, the
+long check (`val512/`): all 24 models are invariant on 54 of 54 at 8 and at 32
+clients. The first token matches HF on 17 or 18 of 18 prompts for every model,
+and whole 32-token continuations on 6–15 of 18, depending on the model.
+
+Speed with the 512 default, reason-c8 and reason-c32 against vLLM, alternated
+twice on GPU 6 (`val512/speed/`, every model in
+`benchmarks/evidence/20261104-goal/val512-speed-table.md`). Throughput
+Riley / vLLM is 0.94–1.18 at 8 clients and 0.97–1.10 at 32 (14B models
+with the KV share below); TPOT p50 is
+0.94–1.04× of vLLM's at 8 clients and 0.91–1.06× at 32. Two cells stay more
+than 3 % behind: Qwen2.5-Coder-3B (0.940) and Qwen2.5-3B (0.965) at 8 clients.
+Both have two KV heads, so a decoding row has even fewer work items; a split
+of 256 takes them to 1.041 and 1.022 (32 clients 1.070 and 1.048; `c256/`).
+
+Since 2026-11-07, with the user's approval, models with two KV heads or fewer
+split at 256: Qwen2.5-0.5B, -1.5B and -3B, Qwen2.5-Coder-1.5B and -3B, and
+DeepSeek-R1-Distill-Qwen-1.5B. Splitting every row at 256 (build `lp15`,
+`val256/`) also cost the prompt side: on the same build, alternating the two
+chunks (`ab256/`), rag-c1 TTFT rose 3.9–4.1 %, rag6k-c1 5.5–6.4 % and rag-c8
+TTFT p95 3.8–4.5 % on Qwen2.5-3B and Qwen2.5-Coder-1.5B. A prompt row has its
+step's other query rows for parallel work, so more parts only add merge work.
+Only generated rows now split at 256 and prompt rows keep 512 (build `lp16`):
+the planner takes each request's chunk from the row kinds that the
+prompt-row producer already receives, where a prompt row at position 256 or
+later is marked whatever step it arrives in. A prompt row before position 256
+lies within one part of either chunk, so a request that spans that position
+has the same bytes whichever chunk it takes. The GPU test runs every
+invariance case of `flashinfer_attention_gpu` with prompt rows at 512 and the
+other rows at 256, and checks that each row has the bytes of its own chunk
+alone.
+
+Re-validation of `lp16` (`val16/`; GPU 7 was shared with another tenant's
+training during the long check and GSM8K, which changes no bytes): all six are
+invariant on 54 of 54 at 8 and at 32 clients, the first token matches HF on 17
+or 18 of 18 prompts, and whole continuations:
+
+| Model | HF identical, 512 | 256 everywhere (`lp15`) | 256 for generated rows (`lp16`) |
+|---|---:|---:|---:|
+| Qwen2.5-3B | 8 | 7 | 8 |
+| Qwen2.5-Coder-3B | 9 | 10 | 11 |
+| Qwen2.5-1.5B | 15 | 11 | 13 |
+| Qwen2.5-Coder-1.5B | 8 | 6 | 9 |
+| DeepSeek-R1-Distill-Qwen-1.5B | 14 | 13 | 13 |
+| Qwen2.5-0.5B | 6 | 8 | 5 |
+
+Throughput on `lp16` (`val16/speed`, order rvvr,
+`benchmarks/evidence/20261104-goal/val16-speed-table.md`; 512 in brackets):
+
+| Model | reason-c8 | reason-c32 | c8 TPOT | c32 TPOT |
+|---|---:|---:|---:|---:|
+| Qwen2.5-3B | 1.026 [0.965] | 1.042 [1.020] | 0.979 | 0.975 |
+| Qwen2.5-Coder-3B | 1.039 [0.940] | 1.047 [1.067] | 0.986 | 0.970 |
+| Qwen2.5-1.5B | 0.972 [0.997] | 1.055 [1.026] | 0.977 | 0.948 |
+| Qwen2.5-Coder-1.5B | 1.087 [0.989] | 1.084 [1.036] | 0.986 | 0.968 |
+| DeepSeek-R1-Distill-Qwen-1.5B | 1.029 [0.995] | 1.008 [0.998] | 0.982 | 1.002 |
+| Qwen2.5-0.5B | 1.214 [1.180] | 1.171 [1.085] | 0.906 | 0.888 |
+
+Qwen2.5-1.5B at 8 clients is within the run-to-run spread: Riley's two runs
+(1,644 and 1,641 tok/s) equal vLLM's second (1,645), its first was higher, and
+Riley's TPOT is lower; the two engines also stop at different lengths.
+
+The long-prompt cells with the burst options are at or below the `lp13`
+values (`stage1t16/`, `benchmarks/evidence/20261104-goal/stage1t16-table.md`):
+rag-c1 0.87–1.04, rag6k-c1 0.96–1.08, rag-c8 TPOT 1.06–1.15 as before.
+
+The three 14B models with 48 layers first measured 0.80–0.87 at 32 clients
+with a lower TPOT than vLLM's (0.95–0.96) and TTFT p95 of 13–27 s: requests
+waited for KV space. The benchmark helper had given Riley 1,859 blocks (29,744
+tokens), keeping 2.5 GiB free, where vLLM at 0.9 of the GPU holds 41,040
+tokens; 32 requests of 30 + 1,024 tokens need 2,144 blocks. With 2,576 blocks,
+about vLLM's tokens, Riley peaks at 36.9 GB against vLLM's 37.1 GB and
+reason-c32 is 1.013 (Qwen2.5-14B), 1.031 (DeepSeek-R1-Distill-Qwen-14B) and
+1.037 (Qwen2.5-Coder-14B; `kv2600/`). Qwen3-14B has 40 layers, fits the same requests in its blocks, and
+was already 1.048. A server sized with `--kv-blocks` serves no more requests at
+once than the blocks hold; Riley does not size the pool from free memory.
+
+## Task accuracy
+
+GSM8K on the current build (`benchmarks/live/gsm8k.py`: the 1,319 test
+questions, the first four train examples as a 4-shot prompt, greedy, at most 256
+tokens, stop at `Question:`, 32 requests at a time), Riley and vLLM 0.27.1 on
+the same GPU, `--max-sequence-tokens 4096` (`gsm8k/`):
+
+| Model | Riley | vLLM | Riley − vLLM |
+|---|---:|---:|---:|
+| Qwen2.5-7B | 84.46 % | 84.69 % | −0.23 |
+| Llama-3.2-3B | 65.96 % | 65.43 % | +0.53 |
+| Qwen3-4B | 85.44 % | 84.91 % | +0.53 |
+
+With the KV chunk of 512 (the default since 2026-11-05): Qwen2.5-7B 84.99 %,
+Llama-3.2-3B 65.66 %, Qwen3-4B 85.90 %, each at or above vLLM's (`gsm8k512/`).
+
+On the models with two KV heads, generated rows split at 256 (`lp16`,
+`val16/`; 256 everywhere, `lp15`, in brackets, `val256/`):
+
+| Model | Riley | vLLM | Riley − vLLM |
+|---|---:|---:|---:|
+| Qwen2.5-3B | 69.83 % [70.05] | 70.58 % | −0.75 |
+| Qwen2.5-Coder-3B | 67.32 % [67.25] | 67.70 % | −0.38 |
+| Qwen2.5-1.5B | 59.67 % [60.96] | 60.80 % | −1.13 |
+| Qwen2.5-Coder-1.5B | 47.92 % [48.22] | 47.76 % | +0.16 |
+| DeepSeek-R1-Distill-Qwen-1.5B | 62.85 % [62.02] | 62.40 % | +0.45 |
+| Qwen2.5-0.5B | 33.59 % [32.68] | 33.21 % | +0.38 |
+
+DeepSeek-R1-Distill-Qwen-1.5B first measured against vLLM's 67.70 %. Riley
+puts the begin-of-sentence token first, as `LlamaTokenizerFast` does for the
+checkpoint's `add_bos_token: true`; the Transformers release in the vLLM
+environment loads this tokenizer as `TokenizersBackend` and adds none (619
+prompt tokens against Riley's 620 on all of 20 prompts). With the token written
+at the front of each prompt, vLLM scores 62.40 %, the row above; Riley with
+512 everywhere scores 62.55 %.
 
 ## API checks
 
@@ -374,6 +767,12 @@ long-prompt and long-output kinds, plus 758 clients that disconnected mid-stream
 A further 10 minutes on the build with the KV split (4,806 requests, 250
 disconnects) gave the same result.
 
+The same 30 minutes on the build with GPU log-probability summaries, wider
+prompt steps and the 1,024-row burst options (14,378 requests, 758
+disconnects, 1,120 with `logprobs`) also had no problem: resident memory grew
+0.7 MiB over the second half, and no request or KV block was left at the end
+(`stage3/`). The API checks passed 40/40 with and without the burst options.
+
 ## Two GPUs
 
 Qwen2.5-32B-Instruct, `--tensor-parallel-devices 0,1`, 72-token prompts, 64
@@ -386,6 +785,19 @@ output tokens, 96 requests, two runs each. Riley / vLLM:
 | 32 | **914.3** / 873.3 | **98.6** / 318.7 | **99.6** / 421.0 | 33.0 / **31.7** |
 
 Throughput and TTFT lead at every concurrency; TPOT trails at 8 and 32 clients.
+
+Again on 2026-11-05 with the current build (`compare.py --tp 2`, 30-word
+prompts, 64 output tokens, 192 requests, Riley and vLLM alternated twice;
+`tp32/`):
+
+| Clients | Throughput tok/s | TTFT p50 ms | TPOT p50 ms | TPOT Riley / vLLM |
+|---|---:|---:|---:|---:|
+| 1 | **35.9** / 35.4 | **36.4** / 41.4 | **27.35** / 27.98 | 0.978 |
+| 8 | **274.1** / 266.0 | **80.1** / 140.9 | 28.33 / **28.27** | 1.002 |
+| 16 | **523.4** / 491.1 | **82.3** / 239.0 | 29.53 / **29.28** | 1.009 |
+| 32 | **945.7** / 877.5 | **93.8** / 283.6 | **32.31** / 32.37 | 0.998 |
+
+TPOT is within 1 % at every concurrency and ahead at 1 and 32 clients.
 
 ## What is not covered
 

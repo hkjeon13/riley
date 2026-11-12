@@ -1,0 +1,18 @@
+[256, 256, 256, 256, 256, 256, 256, 256]
+EXPORT 0
+steps 256 span ms 7307 per step ms 28.544
+  21.048 ms/step  163.8 us/call  128.5 calls/step  ampere_bf16_s16816gemm_bf16_64x64_ldg8_f2f_stages_64x5_tn
+   2.081 ms/step   32.6 us/call   63.8 calls/step  ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn
+   1.552 ms/step   24.3 us/call   63.8 calls/step  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_64x6_t
+   0.765 ms/step   12.0 us/call   64.0 calls/step  void riley_fi::<unnamed>::strided_paged_kernel<flashinfer::KernelTraits<
+   0.720 ms/step    5.6 us/call  129.0 calls/step  void <unnamed>::vector_bf16_rms_norm_kernel<
+   0.660 ms/step    5.2 us/call  128.0 calls/step  <unnamed>::peer_all_reduce_bf16_low_latency_kernel
+   0.383 ms/step    6.0 us/call   64.0 calls/step  <unnamed>::silu_gated_multiply_merged_rows_bf16x8_kernel
+   0.239 ms/step    3.7 us/call   64.0 calls/step  <unnamed>::qkv_split_bias_rope_kv_write_x2_kernel
+   0.178 ms/step    2.8 us/call   64.0 calls/step  void cublasLt::splitKreduce_kernel<
+   0.069 ms/step  138.4 us/call    0.5 calls/step  ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn
+   0.034 ms/step   33.5 us/call    1.0 calls/step  void <unnamed>::bf16_argmax_kernel<
+   0.032 ms/step  127.3 us/call    0.2 calls/step  void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x5
+   0.010 ms/step   10.0 us/call    1.0 calls/step  void <unnamed>::row_gather_kernel<__nv_bfloat16>
+   0.009 ms/step   36.8 us/call    0.2 calls/step  ampere_bf16_s16816gemm_bf16_128x128_ldg8_f2f_stages_64x3_tn
+PROFTP_DONE

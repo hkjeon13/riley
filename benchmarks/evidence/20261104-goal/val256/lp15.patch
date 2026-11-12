@@ -1,0 +1,2154 @@
+diff --git a/crates/riley-cuda/Cargo.toml b/crates/riley-cuda/Cargo.toml
+index 0f9120e52..03e0e948a 100644
+--- a/crates/riley-cuda/Cargo.toml
++++ b/crates/riley-cuda/Cargo.toml
+@@ -80,6 +80,11 @@ name = "bf16_argmax_gpu"
+ path = "tests/bf16_argmax_gpu.rs"
+ required-features = ["cuda"]
+ 
++[[test]]
++name = "bf16_logprob_summary_gpu"
++path = "tests/bf16_logprob_summary_gpu.rs"
++required-features = ["cuda"]
++
+ [[test]]
+ name = "batch_gpu"
+ path = "tests/batch_gpu.rs"
+diff --git a/crates/riley-cuda/src/batch.rs b/crates/riley-cuda/src/batch.rs
+index 3bf82cbfb..88f245540 100644
+--- a/crates/riley-cuda/src/batch.rs
++++ b/crates/riley-cuda/src/batch.rs
+@@ -997,6 +997,37 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge<
+     )
+ }
+ 
++/// Partial-state bytes a fixed-tile (FlashInfer) step of `output_rows` rows
++/// needs, which is only its planner workspace; `None` when the two-stage
++/// layout applies (the mode is off, an opt-in mode that keeps its own partial
++/// states is on, or the head grouping is unsupported).
++#[must_use]
++pub fn native_flashinfer_partial_state_bytes(
++    output_rows: u64,
++    page_capacity: u64,
++    query_heads: u64,
++    key_value_heads: u64,
++    head_size: u64,
++) -> Option<u64> {
++    #[cfg(feature = "cuda")]
++    {
++        let narrow = |value: u64| u32::try_from(value).ok();
++        let bytes = ffi::native_flashinfer_partial_state_bytes(
++            output_rows,
++            page_capacity,
++            narrow(query_heads)?,
++            narrow(key_value_heads)?,
++            narrow(head_size)?,
++        );
++        (bytes != u64::MAX).then_some(bytes)
++    }
++    #[cfg(not(feature = "cuda"))]
++    {
++        let _ = (output_rows, page_capacity, query_heads, key_value_heads, head_size);
++        None
++    }
++}
++
+ /// Selects the D128 attention of the tensor-core producer with the global-max
+ /// merge: `1` runs every row through one pinned FlashInfer paged-prefill
+ /// launch with a fixed 64-row query tile, planned on the GPU from the packed
+@@ -1534,7 +1565,14 @@ fn validate_native_bf16_ragged_paged_split_gqa_d128_two_stage(
+         (
+             "partial_states",
+             params.partial_states.byte_len(),
+-            layout.partial_state_bytes(),
++            native_flashinfer_partial_state_bytes(
++                params.output_row_count,
++                params.partial_state_capacity,
++                params.query_head_count,
++                params.key_value_head_count,
++                params.head_size,
++            )
++            .map_or(layout.partial_state_bytes(), |bytes| bytes.min(layout.partial_state_bytes())),
+         ),
+         (
+             "reduction_steps",
+diff --git a/crates/riley-cuda/src/ffi.rs b/crates/riley-cuda/src/ffi.rs
+index c9a2e8343..559daf6d9 100644
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -2379,6 +2379,7 @@ unsafe extern "C" {
+         error: *mut ErrorInfo,
+     ) -> i32;
+     fn riley_cuda_bf16_argmax_fp32_ties_execute(logits:RawBufferSpan,results:RawBufferSpan,hidden:RawBufferSpan,weight:RawBufferSpan,row_indices:RawBufferSpan,row_count:u64,vocabulary_size:u64,candidate_count:u64,hidden_size:u64,hidden_rows:u64,rows_gathered:u32,window_ulps:u32,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
++    fn riley_cuda_bf16_logprob_summary_execute(logits:RawBufferSpan,greedy:RawBufferSpan,summaries:RawBufferSpan,row_count:u64,vocabulary_size:u64,addressable:u64,top_count:u32,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+     fn riley_cuda_hf_pack_qkv_execute(q:RawBufferSpan,k:RawBufferSpan,v:RawBufferSpan,out:RawBufferSpan,rows:u64,qw:u64,kw:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+     fn riley_cuda_row_gather_execute(
+         params: *const RawRowGatherParams,
+@@ -2547,6 +2548,7 @@ unsafe extern "C" {
+     fn riley_cuda_set_native_d128_decode_segment_mode(mode: u64);
+     fn riley_cuda_set_native_d128_prompt_direct(mode: u64);
+     fn riley_cuda_set_native_d128_attention_flashinfer(mode: u64);
++    fn riley_cuda_native_flashinfer_partial_state_bytes(output_rows: u64, page_capacity: u64, query_heads: u32, key_value_heads: u32, head_size: u32) -> u64;
+     fn riley_cuda_set_native_flashinfer_kv_chunk(tokens: u64);
+     fn riley_cuda_set_native_flashinfer_full_grid(mode: u32);
+     fn riley_cuda_set_native_d128_prompt_direct_max_pages(pages: u64);
+@@ -9128,6 +9130,11 @@ pub(super) fn set_native_d128_prompt_direct_max_pages(pages: u64) {
+     unsafe { riley_cuda_set_native_d128_prompt_direct_max_pages(pages) }
+ }
+ 
++pub(super) fn native_flashinfer_partial_state_bytes(output_rows: u64, page_capacity: u64, query_heads: u32, key_value_heads: u32, head_size: u32) -> u64 {
++    // SAFETY: the native function reads atomics and computes a size.
++    unsafe { riley_cuda_native_flashinfer_partial_state_bytes(output_rows, page_capacity, query_heads, key_value_heads, head_size) }
++}
++
+ pub(super) fn set_native_d128_attention_flashinfer(mode: u64) {
+     // SAFETY: the native setter stores one atomic integer.
+     unsafe { riley_cuda_set_native_d128_attention_flashinfer(mode) }
+@@ -12849,6 +12856,12 @@ pub(super) fn bf16_argmax_fp32_ties_execute(logits:RawBufferSpan,results:RawBuff
+   // SAFETY: every borrowed opaque resource remains live for the synchronously completing native operation.
+   unsafe{riley_cuda_bf16_argmax_fp32_ties_execute(logits,results,hidden,weight,row_indices,row_count,vocabulary_size,candidate_count,hidden_size,hidden_rows,u32::from(rows_gathered),window_ulps,stream,error)})
+ }
++#[allow(clippy::too_many_arguments)]
++pub(super) fn bf16_logprob_summary_execute(logits:RawBufferSpan,greedy:RawBufferSpan,summaries:RawBufferSpan,row_count:u64,vocabulary_size:u64,addressable:u64,top_count:u32,stream:&mut StreamHandle)->CudaResult<()>{
++ primitive_status("execute BF16 log-probability summary",stream,|stream,error|
++  // SAFETY: every borrowed opaque resource remains live for the synchronously completing native operation.
++  unsafe{riley_cuda_bf16_logprob_summary_execute(logits,greedy,summaries,row_count,vocabulary_size,addressable,top_count,stream,error)})
++}
+ pub(super) fn hf_pack_qkv_execute(q:RawBufferSpan,k:RawBufferSpan,v:RawBufferSpan,out:RawBufferSpan,rows:u64,qw:u64,kw:u64,stream:&mut StreamHandle)->CudaResult<()>{
+  primitive_status("HF pack separate QKV",stream,|stream,error|unsafe{riley_cuda_hf_pack_qkv_execute(q,k,v,out,rows,qw,kw,stream,error)})
+ }
+diff --git a/crates/riley-cuda/src/lib.rs b/crates/riley-cuda/src/lib.rs
+index f564cfc03..05aa0996b 100644
+--- a/crates/riley-cuda/src/lib.rs
++++ b/crates/riley-cuda/src/lib.rs
+@@ -53,7 +53,8 @@ pub use batch::{
+     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge,
+     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge_prompt_mma,
+     set_native_d128_decode_segment_mode, set_native_d128_fused_decode_min_rows,
+-    set_native_d128_attention_flashinfer, set_native_d128_prompt_direct,
++    native_flashinfer_partial_state_bytes, set_native_d128_attention_flashinfer,
++    set_native_d128_prompt_direct,
+     set_native_flashinfer_full_grid, set_native_flashinfer_kv_chunk,
+     set_native_d128_prompt_direct_max_pages,
+     native_bf16_ragged_paged_split_gqa_d128_two_stage,
+@@ -169,7 +170,8 @@ pub use primitives::{
+     MergedGatedMultiplyParams, QkvRopeParams, QkvSplitBiasParams, ResidualAddParams,
+     ResidualRmsNormParams, RmsNormParams, RopeParams, RopeTableParams, RowBiasAddInPlaceParams,
+     SiluParams, cast, deterministic_bf16_argmax, deterministic_bf16_argmax_bounded,
+-    deterministic_bf16_argmax_fp32_ties, Bf16ArgmaxTieSource, embedding,
++    deterministic_bf16_argmax_fp32_ties, Bf16ArgmaxTieSource, bf16_logprob_summary,
++    BF16_LOGPROB_SUMMARY_MAX_TOP, BF16_LOGPROB_SUMMARY_WORDS, embedding,
+     embedding_deferred_report, fixed37_log_softmax, fixed37_residual_rms_norm, fixed37_rms_norm,
+     gated_multiply, hugging_face_qwen_p2051_rms_norm, hugging_face_smollm2_residual_rms_norm,
+     hugging_face_smollm2_rms_norm, qkv_split_bias, qkv_split_bias_rope, residual_add,
+diff --git a/crates/riley-cuda/src/primitives.rs b/crates/riley-cuda/src/primitives.rs
+index bd2ff3f01..87c0c5baa 100644
+--- a/crates/riley-cuda/src/primitives.rs
++++ b/crates/riley-cuda/src/primitives.rs
+@@ -2322,6 +2322,84 @@ pub fn deterministic_bf16_argmax_fp32_ties<S: CudaExecutionStream + ?Sized>(
+     }
+ }
+ 
++/// U32 words per row written by [`bf16_logprob_summary`].
++pub const BF16_LOGPROB_SUMMARY_WORDS: usize = 64;
++/// Largest `top_count` accepted by [`bf16_logprob_summary`].
++pub const BF16_LOGPROB_SUMMARY_MAX_TOP: u32 = 20;
++
++/// Summarizes each greedy output row for log probabilities, so the host can
++/// finish a log-softmax without the row: per row, U32 words
++/// `[in_range, maximum, 16 lane sums, selected logit, (token, logit) x top_count]`
++/// (floats as bits). Only the first `addressable` columns count. The lane
++/// sums add `approximate_exp(logit - maximum)` of the columns congruent to the
++/// lane modulo 16 in ascending order, with the host's operations; the top
++/// tokens are ordered by logit descending, lower token id on ties. The
++/// selected token is the token of each row's greedy record; `in_range` is
++/// zero when it is not addressable. Not recordable in a step capture.
++///
++/// # Errors
++///
++/// Returns a dtype, shape, capacity, context, busy-state, launch, or completion
++/// error.
++#[allow(clippy::too_many_arguments)]
++pub fn bf16_logprob_summary<S: CudaExecutionStream + ?Sized>(
++    logits: &CudaBufferSpan<'_>,
++    greedy: &CudaBufferSpan<'_>,
++    summaries: &mut CudaBufferSpanMut<'_>,
++    row_count: u64,
++    vocabulary_size: u64,
++    addressable: u64,
++    top_count: u32,
++    stream: &mut S,
++) -> CudaResult<()> {
++    const OPERATION: &str = "bf16_logprob_summary";
++    if vocabulary_size == 0
++        || vocabulary_size > u64::from(u32::MAX)
++        || addressable == 0
++        || addressable > vocabulary_size
++        || top_count > BF16_LOGPROB_SUMMARY_MAX_TOP
++    {
++        return Err(CudaError::invalid_argument(OPERATION, "invalid log-probability summary shape"));
++    }
++    let logit_bytes = row_count
++        .checked_mul(vocabulary_size)
++        .and_then(|v| v.checked_mul(2))
++        .ok_or_else(|| CudaError::invalid_argument(OPERATION, "logits shape overflows"))?;
++    let summary_bytes = row_count
++        .checked_mul(4 * BF16_LOGPROB_SUMMARY_WORDS as u64)
++        .ok_or_else(|| CudaError::invalid_argument(OPERATION, "summary shape overflows"))?;
++    for (name, dtype, want, bytes, need) in [
++        ("logits", logits.dtype, CudaDType::BF16, logits.byte_len, logit_bytes),
++        ("greedy", greedy.dtype, CudaDType::U32, greedy.byte_len, row_count * 8),
++        ("summaries", summaries.dtype, CudaDType::U32, summaries.byte_len, summary_bytes),
++    ] {
++        if dtype != want {
++            return Err(CudaError::invalid_argument(OPERATION, "log-probability summary dtype mismatch"));
++        }
++        require_capacity(OPERATION, name, bytes, need)?;
++    }
++    let stream = execution_stream_mut(stream);
++    validate_resources(OPERATION, stream, &[logits.buffer, greedy.buffer, summaries.buffer])?;
++    #[cfg(feature = "cuda")]
++    {
++        ffi::bf16_logprob_summary_execute(
++            logits.raw(),
++            greedy.raw(),
++            summaries.raw(),
++            row_count,
++            vocabulary_size,
++            addressable,
++            top_count,
++            &mut stream.native,
++        )
++    }
++    #[cfg(not(feature = "cuda"))]
++    {
++        let _ = (logits, greedy, summaries, row_count, top_count);
++        Err(CudaError::unavailable(OPERATION))
++    }
++}
++
+ fn bf16_argmax<S: CudaExecutionStream + ?Sized>(
+     params: &mut Bf16ArgmaxParams<'_>,
+     candidate_count: u64,
+diff --git a/crates/riley-cuda/tests/bf16_logprob_summary_gpu.rs b/crates/riley-cuda/tests/bf16_logprob_summary_gpu.rs
+new file mode 100644
+index 000000000..1063d150d
+--- /dev/null
++++ b/crates/riley-cuda/tests/bf16_logprob_summary_gpu.rs
+@@ -0,0 +1,132 @@
++use std::error::Error;
++
++use riley_cuda::{
++    BF16_LOGPROB_SUMMARY_WORDS, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType,
++    CudaDeviceBuffer, CudaPinnedHostBuffer, CudaRuntime, CudaStream, bf16_logprob_summary,
++};
++
++type TestResult<T = ()> = Result<T, Box<dyn Error>>;
++
++fn upload(
++    context: &CudaContext,
++    stream: &mut CudaStream,
++    staging: &mut CudaPinnedHostBuffer,
++    bytes: &[u8],
++) -> TestResult<CudaDeviceBuffer> {
++    let mut buffer = context.allocate_device_buffer(u64::try_from(bytes.len())?)?;
++    buffer.upload_from_slice(0, bytes, staging, stream)?;
++    Ok(buffer)
++}
++
++/// The host's `approximate_exp` (riley-runtime sampling.rs), operation for operation.
++fn approximate_exp(x: f32) -> f32 {
++    let scaled = x.max(-87.0) * std::f32::consts::LOG2_E;
++    let whole = scaled.floor();
++    let part = scaled - whole;
++    let mantissa = 1.0
++        + part
++            * (0.693_147_2
++                + part * (0.240_226_5 + part * (0.055_504_11 + part * (0.009_618_13 + part * 0.001_333_55))));
++    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
++    let power = f32::from_bits((((whole as i32) + 127) as u32) << 23);
++    mantissa * power
++}
++
++fn expected_record(row: &[u16], addressable: usize, selected: u32, top_count: usize) -> Vec<u32> {
++    let values: Vec<f32> = row[..addressable].iter().map(|&bits| f32::from_bits(u32::from(bits) << 16)).collect();
++    let maximum = values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
++    let mut lanes = [0.0_f32; 16];
++    for chunk in values.chunks(16) {
++        for (lane, value) in lanes.iter_mut().zip(chunk) {
++            *lane += approximate_exp(*value - maximum);
++        }
++    }
++    let mut order: Vec<u32> = (0..u32::try_from(addressable).unwrap()).collect();
++    order.sort_by(|&a, &b| {
++        values[b as usize].partial_cmp(&values[a as usize]).unwrap().then(a.cmp(&b))
++    });
++    let in_range = (selected as usize) < addressable;
++    let mut words = vec![u32::from(in_range), maximum.to_bits()];
++    words.extend(lanes.iter().map(|lane| lane.to_bits()));
++    words.push(if in_range { values[selected as usize].to_bits() } else { 0 });
++    for &token in &order[..top_count] {
++        words.extend([token, values[token as usize].to_bits()]);
++    }
++    words
++}
++
++#[test]
++#[ignore = "remote GPU"]
++fn logprob_summaries_reproduce_the_host_lane_sums_and_top_tokens() -> TestResult {
++    let runtime = CudaRuntime::initialize()?;
++    let device = runtime.device(0)?;
++    let context = device.create_context()?;
++    let mut stream = context.create_stream()?;
++    for (rows, vocabulary, addressable, top_count) in
++        [(5_usize, 151_936_usize, 151_665_usize, 5_usize), (3, 4099, 4099, 20), (2, 257, 250, 0), (33, 49_152, 49_152, 1)]
++    {
++        // Coarse values give many exact ties, including ±0.
++        let mut state = 0x9e37_79b9_u32 ^ u32::try_from(vocabulary)?;
++        let mut logits = Vec::with_capacity(rows * vocabulary);
++        for _ in 0..rows * vocabulary {
++            state ^= state << 13;
++            state ^= state >> 17;
++            state ^= state << 5;
++            let value = (f64::from(state % 2001) - 1000.0) * 0.02;
++            logits.push(((value as f32).to_bits() >> 16) as u16);
++        }
++        logits[3] = 0x8000;
++        logits[4] = 0x0000;
++        let selected: Vec<u32> = (0..rows).map(|row| u32::try_from((row * 7919 + 11) % vocabulary).unwrap()).collect();
++        let greedy: Vec<u32> = selected.iter().flat_map(|&token| [token, 0]).collect();
++        let logit_bytes: Vec<u8> = logits.iter().flat_map(|bits| bits.to_ne_bytes()).collect();
++        let greedy_bytes: Vec<u8> = greedy.iter().flat_map(|word| word.to_ne_bytes()).collect();
++        let record_bytes = BF16_LOGPROB_SUMMARY_WORDS * 4;
++        let mut staging = context.allocate_pinned_host_buffer(u64::try_from(logit_bytes.len())?)?;
++        let logits_device = upload(&context, &mut stream, &mut staging, &logit_bytes)?;
++        let greedy_device = upload(&context, &mut stream, &mut staging, &greedy_bytes)?;
++        // One spare record checks that nothing is written past row_count.
++        let mut summaries = upload(&context, &mut stream, &mut staging, &vec![0xa5; (rows + 1) * record_bytes])?;
++        {
++            let logits_span = CudaBufferSpan::new(&logits_device, CudaDType::BF16, 0, logits_device.byte_len())?;
++            let greedy_span = CudaBufferSpan::new(&greedy_device, CudaDType::U32, 0, greedy_device.byte_len())?;
++            let mut summary_span =
++                CudaBufferSpanMut::new(&mut summaries, CudaDType::U32, 0, u64::try_from(rows * record_bytes)?)?;
++            bf16_logprob_summary(
++                &logits_span,
++                &greedy_span,
++                &mut summary_span,
++                u64::try_from(rows)?,
++                u64::try_from(vocabulary)?,
++                u64::try_from(addressable)?,
++                u32::try_from(top_count)?,
++                &mut stream,
++            )?;
++        }
++        let mut output = vec![0_u8; (rows + 1) * record_bytes];
++        summaries.download_to_slice(0, &mut output, &mut staging, &mut stream)?;
++        for row in 0..rows {
++            let expected = expected_record(
++                &logits[row * vocabulary..(row + 1) * vocabulary],
++                addressable,
++                selected[row],
++                top_count,
++            );
++            let actual: Vec<u32> = output[row * record_bytes..row * record_bytes + expected.len() * 4]
++                .chunks_exact(4)
++                .map(|bytes| u32::from_ne_bytes(bytes.try_into().unwrap()))
++                .collect();
++            assert_eq!(actual, expected, "rows {rows} vocabulary {vocabulary} row {row}");
++        }
++        assert!(output[rows * record_bytes..].iter().all(|&byte| byte == 0xa5));
++        staging.close()?;
++        logits_device.close()?;
++        greedy_device.close()?;
++        summaries.close()?;
++    }
++    stream.close()?;
++    context.synchronize()?;
++    assert!(context.allocation_stats()?.is_zero());
++    context.close()?;
++    Ok(())
++}
+diff --git a/crates/riley-model/src/tokenizer.rs b/crates/riley-model/src/tokenizer.rs
+index 973e86be7..50fb7d851 100644
+--- a/crates/riley-model/src/tokenizer.rs
++++ b/crates/riley-model/src/tokenizer.rs
+@@ -1,5 +1,6 @@
+ use std::cmp::Reverse;
+-use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
++use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap};
++use std::hash::{BuildHasherDefault, Hasher};
+ 
+ use serde::Deserialize;
+ use unicode_normalization::UnicodeNormalization;
+@@ -186,7 +187,10 @@ pub trait Tokenizer: Send + Sync {
+ pub struct SmolLm2Tokenizer {
+     vocab: BTreeMap<String, u32>,
+     vocab_by_id: Box<[String]>,
+-    merge_ranks: BTreeMap<String, BTreeMap<String, usize>>,
++    /// The merge table keyed by token IDs: `(left, right)` to `(rank, merged)`.
++    pair_merges: PairMerges,
++    /// The token of each byte's `ByteLevel` character, or `NO_TOKEN`.
++    byte_ids: [u32; 256],
+     special_ids: BTreeSet<u32>,
+     added_ids: BTreeSet<u32>,
+     added_trie: AddedTrie,
+@@ -324,6 +328,9 @@ impl SmolLm2Tokenizer {
+         let added_trie = validated_added.trie;
+         validate_byte_alphabet(&vocab, &special_ids, &byte_decoder)?;
+         let merge_ranks = validate_merges(raw.model.merges, &vocab)?;
++        let pair_merges = pair_merges(&merge_ranks, &vocab)?;
++        drop(merge_ranks);
++        let byte_ids = byte_ids(&byte_encoder, &vocab);
+         let maximum_decoded_token_bytes = vocab_by_id
+             .iter()
+             .enumerate()
+@@ -361,7 +368,8 @@ impl SmolLm2Tokenizer {
+         Ok(Self {
+             vocab,
+             vocab_by_id: vocab_by_id.into_boxed_slice(),
+-            merge_ranks,
++            pair_merges,
++            byte_ids,
+             special_ids,
+             added_ids,
+             added_trie,
+@@ -423,51 +431,110 @@ impl SmolLm2Tokenizer {
+             TokenizerProfile::Qwen2 => qwen2_pieces(input),
+             TokenizerProfile::Llama3 => llama3_pieces(input),
+         };
++        let mut work = BpeWork::default();
++        let mut mapped = String::new();
+         for piece in pieces {
+-            let mapped = piece
+-                .as_bytes()
+-                .iter()
+-                .map(|byte| self.byte_encoder[usize::from(*byte)])
+-                .collect::<String>();
+             // `ignore_merges`: a piece that is itself a vocabulary entry is
+             // that token, whatever the merge table would build from it.
+             if self.profile == TokenizerProfile::Llama3 {
++                mapped.clear();
++                mapped.extend(
++                    piece
++                        .as_bytes()
++                        .iter()
++                        .map(|byte| self.byte_encoder[usize::from(*byte)]),
++                );
+                 if let Some(&id) = self.vocab.get(&mapped) {
+                     output.push(id);
+                     continue;
+                 }
+             }
+-            output.extend(self.bpe(&mapped)?);
++            self.bpe(piece.as_bytes(), &mut work, output)?;
+         }
+         Ok(())
+     }
+ 
+-    fn bpe(&self, mapped: &str) -> ModelResult<Vec<u32>> {
+-        let mut nodes = mapped
+-            .chars()
+-            .map(|character| BpeNode::new(character.to_string()))
+-            .collect::<Vec<_>>();
+-        if nodes.is_empty() {
+-            return Ok(Vec::new());
+-        }
+-        merge_bpe_nodes(&mut nodes, &self.merge_ranks);
+-
+-        let mut ids = Vec::new();
+-        let mut current = Some(0_usize);
+-        while let Some(index) = current {
+-            let node = &nodes[index];
+-            if node.alive {
+-                let id = self.vocab.get(&node.text).copied().ok_or_else(|| {
+-                    invalid(format!(
+-                        "BPE produced token absent from vocabulary: {:?}",
+-                        node.text
+-                    ))
+-                })?;
+-                ids.push(id);
++    /// Merges one piece's byte tokens by rank, lowest rank first and the
++    /// leftmost pair among equal ranks, as the string merge engine does. Every
++    /// merge's result is a vocabulary entry (checked at load), so the tokens
++    /// are the same IDs that engine looks up from the merged strings.
++    fn bpe(&self, piece: &[u8], work: &mut BpeWork, output: &mut Vec<u32>) -> ModelResult<()> {
++        // A byte without a token can take part in no merge (every merge side is
++        // a vocabulary entry), so it would stay an unknown token.
++        if let Some(byte) = piece
++            .iter()
++            .find(|byte| self.byte_ids[usize::from(**byte)] == NO_TOKEN)
++        {
++            return Err(invalid(format!(
++                "BPE produced token absent from vocabulary: {:?}",
++                self.byte_encoder[usize::from(*byte)].to_string()
++            )));
++        }
++        match piece {
++            [] => return Ok(()),
++            [byte] => {
++                output.push(self.byte_ids[usize::from(*byte)]);
++                return Ok(());
++            }
++            _ => {}
++        }
++        let BpeWork { nodes, heap } = work;
++        nodes.clear();
++        heap.clear();
++        let last = u32::try_from(piece.len() - 1)
++            .ok()
++            .filter(|last| *last < NO_NODE)
++            .ok_or_else(|| invalid("BPE piece exceeds the node index range"))?;
++        nodes.extend((0..=last).zip(piece).map(|(index, byte)| IdNode {
++            id: self.byte_ids[usize::from(*byte)],
++            previous: if index == 0 { NO_NODE } else { index - 1 },
++            next: if index == last { NO_NODE } else { index + 1 },
++            alive: true,
++        }));
++        for left in 0..last {
++            self.push_pair(nodes, heap, left, left + 1);
++        }
++        while let Some(Reverse((rank, left, right))) = heap.pop() {
++            let (l, r) = (left as usize, right as usize);
++            if !(nodes[l].alive && nodes[l].next == right && nodes[r].alive) {
++                continue;
++            }
++            let Some(&(current, merged)) = self.pair_merges.get(&pair_key(nodes[l].id, nodes[r].id))
++            else {
++                continue;
++            };
++            if current != rank {
++                continue;
++            }
++            let next = nodes[r].next;
++            nodes[r].alive = false;
++            nodes[l].id = merged;
++            nodes[l].next = next;
++            if next != NO_NODE {
++                nodes[next as usize].previous = left;
++            }
++            let previous = nodes[l].previous;
++            if previous != NO_NODE {
++                self.push_pair(nodes, heap, previous, left);
++            }
++            if next != NO_NODE {
++                self.push_pair(nodes, heap, left, next);
+             }
++        }
++        let mut current = 0_u32;
++        while current != NO_NODE {
++            let node = &nodes[current as usize];
++            output.push(node.id);
+             current = node.next;
+         }
+-        Ok(ids)
++        Ok(())
++    }
++
++    fn push_pair(&self, nodes: &[IdNode], heap: &mut IdHeap, left: u32, right: u32) {
++        let key = pair_key(nodes[left as usize].id, nodes[right as usize].id);
++        if let Some(&(rank, _)) = self.pair_merges.get(&key) {
++            heap.push(Reverse((rank, left, right)));
++        }
+     }
+ 
+     fn decoded_token(
+@@ -1301,6 +1368,94 @@ impl AddedTrie {
+     }
+ }
+ 
++const NO_NODE: u32 = u32::MAX;
++const NO_TOKEN: u32 = u32::MAX;
++
++/// One symbol of a piece being merged by token ID.
++#[derive(Clone, Copy)]
++struct IdNode {
++    id: u32,
++    previous: u32,
++    next: u32,
++    alive: bool,
++}
++
++type IdHeap = BinaryHeap<Reverse<(u32, u32, u32)>>;
++
++/// Buffers reused across the pieces of one input.
++#[derive(Default)]
++struct BpeWork {
++    nodes: Vec<IdNode>,
++    heap: IdHeap,
++}
++
++type PairMerges = HashMap<u64, (u32, u32), BuildHasherDefault<PairHasher>>;
++
++const fn pair_key(left: u32, right: u32) -> u64 {
++    ((left as u64) << 32) | right as u64
++}
++
++/// A multiplicative hash for the 64-bit pair keys; the table holds only the
++/// tokenizer's own merges, so it needs no protection against chosen keys.
++#[derive(Default)]
++struct PairHasher(u64);
++
++impl Hasher for PairHasher {
++    fn finish(&self) -> u64 {
++        self.0
++    }
++
++    fn write(&mut self, bytes: &[u8]) {
++        for byte in bytes {
++            self.write_u64(u64::from(*byte));
++        }
++    }
++
++    fn write_u64(&mut self, value: u64) {
++        self.0 = (self.0.rotate_left(5) ^ value).wrapping_mul(0x9e37_79b9_7f4a_7c15);
++        self.0 ^= self.0 >> 29;
++    }
++}
++
++fn pair_merges(
++    ranks: &BTreeMap<String, BTreeMap<String, usize>>,
++    vocab: &BTreeMap<String, u32>,
++) -> ModelResult<PairMerges> {
++    let id = |token: &str| {
++        vocab
++            .get(token)
++            .copied()
++            .ok_or_else(|| invalid(format!("merge token absent from vocabulary: {token:?}")))
++    };
++    let mut merges = PairMerges::default();
++    merges.reserve(ranks.values().map(BTreeMap::len).sum());
++    let mut combined = String::new();
++    for (left, rights) in ranks {
++        let left_id = id(left)?;
++        for (right, &rank) in rights {
++            combined.clear();
++            combined.push_str(left);
++            combined.push_str(right);
++            let rank = u32::try_from(rank).map_err(|_| invalid("merge rank exceeds u32"))?;
++            merges.insert(pair_key(left_id, id(right)?), (rank, id(&combined)?));
++        }
++    }
++    Ok(merges)
++}
++
++fn byte_ids(byte_encoder: &[char; 256], vocab: &BTreeMap<String, u32>) -> [u32; 256] {
++    let mut ids = [NO_TOKEN; 256];
++    let mut text = String::new();
++    for (byte, character) in byte_encoder.iter().enumerate() {
++        text.clear();
++        text.push(*character);
++        if let Some(&id) = vocab.get(&text) {
++            ids[byte] = id;
++        }
++    }
++    ids
++}
++
+ struct BpeNode {
+     text: String,
+     previous: Option<usize>,
+@@ -2418,6 +2573,75 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn id_merges_match_the_string_merge_engine_on_ties_and_overlaps() {
++        // Overlapping pairs ("a a" in "aaa"), equal ranks at several
++        // positions, and merges whose result enables a lower-ranked merge.
++        let tokens = [
++            "a", "b", "aa", "ab", "ba", "bb", "aaa", "aab", "aba", "abab", "baa", "aaaa", "bab",
++        ];
++        let merges = [
++            "a b", "a a", "b a", "aa a", "ab ab", "b b", "a ab", "ba a", "aa aa", "ab a", "b ab",
++        ];
++        let vocab = tokens
++            .iter()
++            .enumerate()
++            .map(|(id, token)| format!("\"{token}\":{id}"))
++            .collect::<Vec<_>>()
++            .join(",");
++        let merge_list = merges
++            .iter()
++            .map(|merge| format!("\"{merge}\""))
++            .collect::<Vec<_>>()
++            .join(",");
++        let json = FIXTURE
++            .replace(r#""added_tokens":[{"id":0,"content":"<|end|>","single_word":false,"lstrip":false,"rstrip":false,"normalized":false,"special":true}]"#, r#""added_tokens":[]"#)
++            .replace(
++                FIXTURE
++                    .split(r#""vocab":"#)
++                    .nth(1)
++                    .and_then(|rest| rest.split("]}").next())
++                    .unwrap(),
++                &format!("{{{vocab}}},\n        \"merges\":[{merge_list}"),
++            );
++        let tokenizer = SmolLm2Tokenizer::from_json_slice(json.as_bytes()).expect("tie tokenizer");
++        let vocab_map = tokens
++            .iter()
++            .enumerate()
++            .map(|(id, token)| ((*token).to_owned(), u32::try_from(id).unwrap()))
++            .collect::<BTreeMap<_, _>>();
++        let ranks = validate_merges(
++            merges
++                .iter()
++                .map(|merge| RawMerge::Text((*merge).to_owned()))
++                .collect(),
++            &vocab_map,
++        )
++        .unwrap();
++        for length in 1..=10_u32 {
++            for bits in 0..(1_u32 << length) {
++                let input = (0..length)
++                    .map(|index| if bits >> index & 1 == 0 { 'a' } else { 'b' })
++                    .collect::<String>();
++                let mut nodes = input
++                    .chars()
++                    .map(|character| BpeNode::new(character.to_string()))
++                    .collect::<Vec<_>>();
++                merge_bpe_nodes(&mut nodes, &ranks);
++                let expected = nodes
++                    .iter()
++                    .filter(|node| node.alive)
++                    .map(|node| vocab_map[&node.text])
++                    .collect::<Vec<_>>();
++                assert_eq!(
++                    tokenizer.encode(&input, EncodeOptions::default()).unwrap(),
++                    expected,
++                    "{input}"
++                );
++            }
++        }
++    }
++
+     #[test]
+     fn invalid_ids_and_unrepresentable_input_fail() {
+         let tokenizer = tokenizer();
+diff --git a/crates/riley-runtime/src/lib.rs b/crates/riley-runtime/src/lib.rs
+index 992d4ce9b..70b395c8d 100644
+--- a/crates/riley-runtime/src/lib.rs
++++ b/crates/riley-runtime/src/lib.rs
+@@ -29,8 +29,9 @@ pub use kernel::{
+ 
+ #[cfg(feature = "cuda")]
+ pub use riley_cuda::{
+-    AttentionBackend, AttentionPreference, AttentionSelectionTrace, CudaContext, CudaError,
+-    CudaEvent, CudaPeerAllReduceGroup, CudaRuntime, CudaStream,
++    AttentionBackend, AttentionPreference, AttentionSelectionTrace, BF16_LOGPROB_SUMMARY_WORDS,
++    CudaContext, CudaDeviceBuffer, CudaError, CudaEvent, CudaPeerAllReduceGroup, CudaRuntime,
++    CudaStream,
+     set_native_d128_attention_flashinfer,
+     set_native_flashinfer_kv_chunk,
+ };
+diff --git a/crates/riley-runtime/src/llama/batch_executor.rs b/crates/riley-runtime/src/llama/batch_executor.rs
+index 1cb73406a..43bcf8669 100644
+--- a/crates/riley-runtime/src/llama/batch_executor.rs
++++ b/crates/riley-runtime/src/llama/batch_executor.rs
+@@ -853,6 +853,93 @@ impl PreparedLlamaBatchExecutor {
+         }
+     }
+ 
++    /// Computes into `device` and downloads into `destination` the
++    /// log-probability summary ([`riley_cuda::bf16_logprob_summary`]) of
++    /// every output row of the completed greedy iteration, with each row's
++    /// greedy token as the selected token: `output_count` records of
++    /// [`riley_cuda::BF16_LOGPROB_SUMMARY_WORDS`] native-endian U32 words.
++    /// Costs a few words per row instead of a vocabulary-sized row.
++    ///
++    /// # Errors
++    ///
++    /// Returns when execution did not produce greedy records, the
++    /// destination or device buffer has the wrong size, or CUDA fails.
++    pub fn download_logprob_summaries(
++        &mut self,
++        addressable: usize,
++        top_count: u32,
++        device: &mut CudaDeviceBuffer,
++        destination: &mut [u8],
++        stream: &mut CudaStream,
++    ) -> LlamaBatchExecutorResult<()> {
++        if self.is_poisoned() {
++            return Err(LlamaBatchExecutorError::Poisoned);
++        }
++        if !self.output_ready {
++            return Err(LlamaBatchExecutorError::OutputNotReady);
++        }
++        if self.output_mode != BatchOutputMode::GreedyTokens {
++            return Err(LlamaBatchExecutorError::InvalidConfiguration {
++                field: "output_mode",
++                reason: "the completed iteration produced logits, not greedy tokens",
++            });
++        }
++        let record_bytes = self
++            .output_count
++            .saturating_mul(riley_cuda::BF16_LOGPROB_SUMMARY_WORDS * U32_BYTES);
++        if destination.len() != record_bytes {
++            return Err(LlamaBatchExecutorError::InvalidDownloadLength {
++                expected_bytes: record_bytes,
++                actual_bytes: destination.len(),
++            });
++        }
++        if record_bytes == 0 {
++            return Ok(());
++        }
++        let site = ExecutionSite::global(LlamaOp::OutputGather);
++        let invalid = |reason| LlamaBatchExecutorError::InvalidConfiguration {
++            field: "logprob_summaries",
++            reason,
++        };
++        let logits_bytes = self.output_count.saturating_mul(self.vocabulary_size()).saturating_mul(2);
++        let greedy_bytes = self.greedy_result_byte_len_for(self.output_count)?;
++        let result = {
++            let logits = self
++                .owner
++                .gathered_logits
++                .as_ref()
++                .ok_or(invalid("non-empty output has no cold-prepared device buffer"))?;
++            let greedy = self
++                .owner
++                .greedy_results
++                .as_ref()
++                .ok_or(invalid("non-empty output has no cold-prepared greedy result buffer"))?;
++            let as_u64 = |value: usize| u64::try_from(value).map_err(|_| invalid("size overflowed"));
++            let logits = riley_cuda::CudaBufferSpan::new(logits, riley_cuda::CudaDType::BF16, 0, as_u64(logits_bytes)?)
++                .map_err(|source| batch_cuda(site, source))?;
++            let greedy = riley_cuda::CudaBufferSpan::new(greedy, riley_cuda::CudaDType::U32, 0, as_u64(greedy_bytes)?)
++                .map_err(|source| batch_cuda(site, source))?;
++            let mut summaries =
++                riley_cuda::CudaBufferSpanMut::new(device, riley_cuda::CudaDType::U32, 0, as_u64(record_bytes)?)
++                    .map_err(|source| batch_cuda(site, source))?;
++            riley_cuda::bf16_logprob_summary(
++                &logits,
++                &greedy,
++                &mut summaries,
++                as_u64(self.output_count)?,
++                as_u64(self.vocabulary_size())?,
++                as_u64(addressable)?,
++                top_count,
++                stream,
++            )
++        }
++        .and_then(|()| device.download_to_slice(0, destination, &mut self.owner.forward.io_staging, stream));
++        result.map_err(|source| {
++            poison_for_cuda_error(&mut self.owner.poisoned, &source);
++            batch_cuda(site, source)
++        })
++    }
++
+     /// Downloads and validates one exact greedy token ID per output slot.
+     ///
+     /// Device traffic is eight bytes per row: a token ID and a status word.
+diff --git a/crates/riley-runtime/src/llama/executor/dispatch.rs b/crates/riley-runtime/src/llama/executor/dispatch.rs
+index 9f73d02cc..8922cc870 100644
+--- a/crates/riley-runtime/src/llama/executor/dispatch.rs
++++ b/crates/riley-runtime/src/llama/executor/dispatch.rs
+@@ -64,6 +64,8 @@ use crate::cuda_weights::CudaUploadedWeights;
+ use crate::paged_kv::KvLayout;
+ 
+ const BF16_BYTES: u64 = 2;
++/// Largest dense step shape that is recorded as a step graph.
++pub(crate) const MAX_RECORDED_STEP_ROWS: usize = 256;
+ 
+ /// Tracks whether a command submission could have mutated iteration state.
+ #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+@@ -511,10 +513,14 @@ pub(in crate::llama) fn execute_packed(
+     // recorded kernels read the active and output row counts from the device,
+     // so one graph per (dense shape, output LM-head shape) serves decode-only
+     // and prefill-mixed steps alike.
++    // Steps above 256 rows are not recorded: their kernels outlast the
++    // launches a graph saves, and recording them would spend the bounded
++    // graph budget that small decode shapes need.
+     let step_capture_eligible = config.decode_step_capture()
+         && produce_greedy_tokens
+         && active != 0
+-        && active <= dense_rows;
++        && active <= dense_rows
++        && dense_rows <= MAX_RECORDED_STEP_ROWS;
+     let staged_attention_metadata=if let Some(prepared)=native_d128_two_stage_workspace.as_deref_mut().and_then(|w|w.materialized.as_mut()) {
+         if config.staged_step_uploads() {
+             Some(riley_cuda::stage_materialized_ragged_attention_metadata(host_batch,&prepared.reference,
+diff --git a/crates/riley-runtime/src/llama/executor/owner.rs b/crates/riley-runtime/src/llama/executor/owner.rs
+index 113cfbb06..8ab7cb5fe 100644
+--- a/crates/riley-runtime/src/llama/executor/owner.rs
++++ b/crates/riley-runtime/src/llama/executor/owner.rs
+@@ -550,8 +550,21 @@ impl PreparedLlamaBatchOwner {
+             let hf_only = materialized.as_ref().is_some_and(|w| w.hf.is_some());
+             #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+             let hf_only = false;
++            // Fixed-tile (FlashInfer) attention uses the partial states only
++            // as its planner workspace: [M, pages, heads, D+2] F32 would be
++            // 10.9 GB for a 40-head model at 1,024 rows and 8,192 tokens.
++            let partial_state_bytes = riley_cuda::native_flashinfer_partial_state_bytes(
++                usize_u64(bounds.max_input_tokens(), LlamaBatchExecutorResource::NativeD128PartialStates)?,
++                partial_state_capacity,
++                usize_u64(dimensions.query_heads(), LlamaBatchExecutorResource::NativeD128PartialStates)?,
++                usize_u64(dimensions.key_value_heads(), LlamaBatchExecutorResource::NativeD128PartialStates)?,
++                usize_u64(dimensions.head_dimension(), LlamaBatchExecutorResource::NativeD128PartialStates)?,
++            )
++            .map_or(workspace_layout.partial_state_bytes(), |bytes| {
++                bytes.min(workspace_layout.partial_state_bytes())
++            });
+             let legacy_lengths = if hf_only { [0; 3] } else {
+-                [workspace_layout.partial_state_bytes(), workspace_layout.reduction_step_bytes(),
++                [partial_state_bytes, workspace_layout.reduction_step_bytes(),
+                  workspace_layout.reduction_normalizer_bytes()]
+             };
+             Some(NativeD128TwoStageWorkspace {
+diff --git a/crates/riley-runtime/src/llama/forward.rs b/crates/riley-runtime/src/llama/forward.rs
+index 9a3bb0764..f22e547f3 100644
+--- a/crates/riley-runtime/src/llama/forward.rs
++++ b/crates/riley-runtime/src/llama/forward.rs
+@@ -3953,7 +3953,8 @@ impl PreparedLlamaForward {
+         context: &CudaContext,
+         required_bytes: u64,
+     ) -> LlamaForwardResult<()> {
+-        if required_bytes > self.gemm_workspace_cap_bytes {
++        let rows = u64::try_from(self.plan.sequence_length()).unwrap_or(u64::MAX);
++        if required_bytes > shape_gemm_workspace_cap(self.gemm_workspace_cap_bytes, rows) {
+             return Err(LlamaForwardError::InvalidConfiguration {
+                 field: "gemm_workspace_bytes",
+                 reason: "a prepared batch shape exceeded the configured GEMM workspace cap",
+@@ -6153,6 +6154,18 @@ fn build_allocation_report(
+     })
+ }
+ 
++/// Workspace cap of a GEMM plan with `rows` rows. Plans above 256 rows bind
++/// to an anchor selected at 128 rows under `cap`; a split-K anchor's partials
++/// grow with the rows, so wide shapes may use a proportionally larger
++/// workspace. Shapes up to 256 rows, and every algorithm choice, keep `cap`.
++pub(super) fn shape_gemm_workspace_cap(cap: u64, rows: u64) -> u64 {
++    if rows > 256 {
++        cap.saturating_mul(rows.div_ceil(256))
++    } else {
++        cap
++    }
++}
++
+ pub(super) fn prepare_gemms(
+     context: &CudaContext,
+     weights: &CudaUploadedWeights,
+@@ -6190,14 +6203,14 @@ pub(super) fn prepare_gemms(
+     // In the fixed profile these five plans validate both reduction widths
+     // used by the graph: `hidden` (also the RMSNorm axis) and `intermediate`.
+     // Unsupported fixed37 shapes therefore fail here during cold preparation.
+-    let prepare = |m,
++    let prepare = |m: u64,
+                    n,
+                    k,
+                    policy,
+                    site,
+                    anchor: Option<&PreparedLlamaGemm>|
+      -> LlamaForwardResult<PreparedLlamaGemm> {
+-        let config = CudaGemmConfig::new(m, n, k, workspace_cap)
++        let config = CudaGemmConfig::new(m, n, k, shape_gemm_workspace_cap(workspace_cap, m))
+             .map_err(|source| LlamaForwardError::cuda(site, source))?;
+         #[cfg(feature = "cuda-cublas-gemm-probe")]
+         if owned_hf_eager_bf16 {
+diff --git a/crates/riley-runtime/src/llama/mod.rs b/crates/riley-runtime/src/llama/mod.rs
+index 0890d2ef5..304b761b0 100644
+--- a/crates/riley-runtime/src/llama/mod.rs
++++ b/crates/riley-runtime/src/llama/mod.rs
+@@ -937,9 +937,10 @@ mod source_contract_tests {
+     #[test]
+     fn executor_usize_u64_conversions_share_one_typed_error_facade() {
+         for (boundary, source, expected_calls) in [
+-            // Two existing cold-layout conversions plus the native D128
+-            // workspace row/page conversions must all use the shared facade.
+-            ("batch owner", include_str!("executor/owner.rs"), 5),
++            // Two existing cold-layout conversions, the native D128 workspace
++            // row/page conversions and the fixed-tile partial-state sizing
++            // must all use the shared facade.
++            ("batch owner", include_str!("executor/owner.rs"), 9),
+             (
+                 "execution dispatch",
+                 include_str!("executor/dispatch.rs"),
+diff --git a/crates/riley-runtime/src/sampling.rs b/crates/riley-runtime/src/sampling.rs
+index 6b3766e77..40671f3df 100644
+--- a/crates/riley-runtime/src/sampling.rs
++++ b/crates/riley-runtime/src/sampling.rs
+@@ -520,15 +520,12 @@ impl SamplingWorkspace {
+             *value = decode_finite_bf16(bytes);
+         }
+         let maximum = values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+-        const LANES: usize = 16;
+-        let mut lanes = [0.0_f32; LANES];
+-        for chunk in values.chunks(LANES) {
++        let mut lanes = [0.0_f32; LOGPROB_LANES];
++        for chunk in values.chunks(LOGPROB_LANES) {
+             for (lane, value) in lanes.iter_mut().zip(chunk) {
+                 *lane += approximate_exp(*value - maximum);
+             }
+         }
+-        let sum: f64 = lanes.iter().copied().map(f64::from).sum();
+-        let normalizer = f64::from(maximum) + sum.ln();
+         if top_count != 0 {
+             for (token_id, &value) in values.iter().enumerate() {
+                 let logit = f64::from(value);
+@@ -539,12 +536,25 @@ impl SamplingWorkspace {
+                 }
+             }
+         }
+-        for entry in top.iter_mut() {
+-            entry.1 -= normalizer;
+-        }
+-        values.get(selected as usize).map_or(f64::NEG_INFINITY, |value| {
+-            f64::from(*value) - normalizer
+-        })
++        finish_logprobs(maximum, &lanes, values.get(selected as usize).copied(), top)
++    }
++
++    /// [`Self::raw_logprobs_bf16_native`] from a device summary of the row
++    /// (`riley_cuda::bf16_logprob_summary`): its maximum, its
++    /// [`LOGPROB_LANES`] lane sums, the selected token's logit (`None` when
++    /// it is not addressable) and the top tokens' logits, highest first. The
++    /// summary reproduces the host's intermediate values exactly, so the
++    /// result is the one the full row gives.
++    pub fn logprobs_from_summary(
++        maximum: f32,
++        lanes: &[f32; LOGPROB_LANES],
++        selected: Option<f32>,
++        top_logits: &[(u32, f32)],
++        top: &mut Vec<(u32, f64)>,
++    ) -> f64 {
++        top.clear();
++        top.extend(top_logits.iter().map(|&(token_id, logit)| (token_id, f64::from(logit))));
++        finish_logprobs(maximum, lanes, selected, top)
+     }
+ 
+     /// Greedy selection in one pass over the row, for requests whose
+@@ -917,6 +927,23 @@ fn allocate_filled<T: Clone>(
+ /// `e^x` for `x <= 0`, branch-free so that a loop over it vectorizes, with a
+ /// relative error below 1e-4, which moves a log probability by the same
+ /// amount and is well under the resolution of BF16 logits.
++/// Lane count of the log-softmax normalizer's partial sums.
++pub const LOGPROB_LANES: usize = 16;
++
++fn finish_logprobs(
++    maximum: f32,
++    lanes: &[f32; LOGPROB_LANES],
++    selected: Option<f32>,
++    top: &mut [(u32, f64)],
++) -> f64 {
++    let sum: f64 = lanes.iter().copied().map(f64::from).sum();
++    let normalizer = f64::from(maximum) + sum.ln();
++    for entry in top.iter_mut() {
++        entry.1 -= normalizer;
++    }
++    selected.map_or(f64::NEG_INFINITY, |value| f64::from(value) - normalizer)
++}
++
+ #[inline]
+ fn approximate_exp(x: f32) -> f32 {
+     let scaled = x.max(-87.0) * std::f32::consts::LOG2_E;
+@@ -1036,6 +1063,43 @@ mod tests {
+         assert!(top.is_empty());
+     }
+ 
++    #[test]
++    fn logprobs_from_a_summary_match_the_full_row() {
++        // A summary built the way the device builds it: exact maximum, lane
++        // sums over residues modulo 16 in ascending order, exact top tokens.
++        let values: Vec<f32> = (0..1003_u32)
++            .map(|index| f32::from_bits((((index * 7919) % 613) as f32 * 0.03 - 9.0).to_bits() & 0xffff_0000))
++            .collect();
++        let row: Vec<u8> = values.iter().flat_map(|value| ((value.to_bits() >> 16) as u16).to_ne_bytes()).collect();
++        let mut workspace = SamplingWorkspace::new(values.len()).unwrap();
++        for (addressable, selected, top_count) in [(1003, 17_u32, 5), (1000, 1001, 20), (16, 3, 0)] {
++            let mut expected_top = Vec::new();
++            let expected = workspace.raw_logprobs_bf16_native(&row, addressable, selected, top_count, &mut expected_top);
++            let used = &values[..addressable];
++            let maximum = used.iter().copied().fold(f32::NEG_INFINITY, f32::max);
++            let mut lanes = [0.0_f32; super::LOGPROB_LANES];
++            for (index, value) in used.iter().enumerate() {
++                lanes[index % super::LOGPROB_LANES] += super::approximate_exp(*value - maximum);
++            }
++            let mut order: Vec<u32> = (0..addressable as u32).collect();
++            order.sort_by(|&a, &b| used[b as usize].total_cmp(&used[a as usize]).then(a.cmp(&b)));
++            let top_logits: Vec<(u32, f32)> = order[..top_count].iter().map(|&id| (id, used[id as usize])).collect();
++            let mut top = Vec::new();
++            let value = SamplingWorkspace::logprobs_from_summary(
++                maximum,
++                &lanes,
++                used.get(selected as usize).copied(),
++                &top_logits,
++                &mut top,
++            );
++            assert_eq!(value.to_bits(), expected.to_bits());
++            assert_eq!(top.len(), expected_top.len());
++            for (left, right) in top.iter().zip(&expected_top) {
++                assert_eq!((left.0, left.1.to_bits()), (right.0, right.1.to_bits()));
++            }
++        }
++    }
++
+     #[test]
+     fn approximate_exp_tracks_exp_over_its_range() {
+         let mut x = -80.0_f32;
+diff --git a/crates/riley-scheduler/src/config.rs b/crates/riley-scheduler/src/config.rs
+index c24df7ade..858fea701 100644
+--- a/crates/riley-scheduler/src/config.rs
++++ b/crates/riley-scheduler/src/config.rs
+@@ -26,7 +26,7 @@ pub struct PrefillBurstPolicy {
+     /// Fewest prompt tokens one ready request must have left for the whole
+     /// budget to open; 0 opens it for any prompt. Short prompts that arrive
+     /// together then keep the steady size, and only a long prompt runs in
+-    /// larger steps.
++    /// larger steps, including its last chunk once fewer tokens are left.
+     pub min_prompt_tokens: usize,
+ }
+ 
+diff --git a/crates/riley-scheduler/src/scheduler.rs b/crates/riley-scheduler/src/scheduler.rs
+index aea66bacb..4b876fdc1 100644
+--- a/crates/riley-scheduler/src/scheduler.rs
++++ b/crates/riley-scheduler/src/scheduler.rs
+@@ -1748,6 +1748,7 @@ impl Scheduler {
+                             request_id: record.request_id,
+                             ready_since_ns: record.ready_since_ns,
+                             remaining_tokens: remaining,
++                            prompt_tokens: record.descriptor.prompt_token_ids.len(),
+                             plateau_deferred: record.plateau_deferred,
+                             started: record.state == RequestState::Prefilling,
+                         });
+@@ -1757,6 +1758,7 @@ impl Scheduler {
+                     request_id: record.request_id,
+                     ready_since_ns: record.ready_since_ns,
+                     remaining_tokens: 1,
++                    prompt_tokens: 0,
+                     plateau_deferred: false,
+                     started: true,
+                 }),
+@@ -1775,9 +1777,10 @@ impl Scheduler {
+             Some(policy)
+                 if decode.len() > policy.max_decode_rows
+                     || (policy.min_prompt_tokens > 0
+-                        && !prefill
+-                            .iter()
+-                            .any(|item| item.remaining_tokens >= policy.min_prompt_tokens)) =>
++                        && !prefill.iter().any(|item| {
++                            item.remaining_tokens >= policy.min_prompt_tokens
++                                || (item.started && item.prompt_tokens >= policy.min_prompt_tokens)
++                        })) =>
+             {
+                 policy.steady_budget
+             }
+@@ -2901,6 +2904,8 @@ struct ReadyRequest {
+     request_id: RequestId,
+     ready_since_ns: u64,
+     remaining_tokens: usize,
++    /// The whole prompt's length, for the burst's long-prompt test.
++    prompt_tokens: usize,
+     plateau_deferred: bool,
+     /// A prompt some of whose tokens have already run.
+     started: bool,
+diff --git a/crates/riley-scheduler/tests/prefill_burst.rs b/crates/riley-scheduler/tests/prefill_burst.rs
+index 56790307f..731ca0a37 100644
+--- a/crates/riley-scheduler/tests/prefill_burst.rs
++++ b/crates/riley-scheduler/tests/prefill_burst.rs
+@@ -104,6 +104,30 @@ fn a_long_prompt_opens_the_whole_budget_when_a_prompt_length_is_required() {
+     assert_eq!(second.total_tokens(), 16);
+ }
+ 
++#[test]
++fn a_started_long_prompt_keeps_the_whole_budget_for_its_last_chunk() {
++    let mut scheduler = scheduler(Some(PrefillBurstPolicy {
++        min_prompt_tokens: 12,
++        ..burst(8, 4)
++    }));
++    submit(&mut scheduler, 20, 1);
++    submit(&mut scheduler, 8, 1);
++    submit(&mut scheduler, 8, 1);
++    // 8 + 8, then 1 decode row + 8 + 7: the long prompt has 5 tokens left.
++    for now in [2, 4] {
++        let step = plan(&mut scheduler, now);
++        assert_eq!(step.total_tokens(), 16);
++        settle(&mut scheduler, &step, now + 1);
++    }
++    submit(&mut scheduler, 8, 5);
++    // Neither prompt has 12 tokens left, but the long one has started: the
++    // budget stays open for 2 decode rows, its last 5 and the new prompt's 8
++    // (the steady budget would stop at 8 tokens).
++    let last = plan(&mut scheduler, 6);
++    assert_eq!(last.decode_items().len(), 2);
++    assert_eq!(last.total_tokens(), 15);
++}
++
+ #[test]
+ fn a_burst_with_few_decode_rows_uses_the_whole_budget() {
+     let mut scheduler = scheduler(Some(burst(8, 2)));
+diff --git a/crates/riley-server/src/engine.rs b/crates/riley-server/src/engine.rs
+index b31c14908..6e30d39d1 100644
+--- a/crates/riley-server/src/engine.rs
++++ b/crates/riley-server/src/engine.rs
+@@ -2883,6 +2883,36 @@ mod cuda_backend {
+         native_fallback_request_local: bool,
+     }
+ 
++    /// The response record of one token's log probabilities.
++    fn describe_logprobs(
++        model: &LoadedModel,
++        display_len: usize,
++        chosen: (u32, f64),
++        top: &[(u32, f64)],
++    ) -> Box<TokenLogprob> {
++        let mut display = vec![0_u8; display_len];
++        let mut describe = |token_id: u32, logprob: f64| {
++            let count = model
++                .tokenizer()
++                .decode_token_bytes_into(
++                    token_id,
++                    DecodeOptions {
++                        skip_special_tokens: false,
++                    },
++                    &mut display,
++                )
++                .unwrap_or(0);
++            TokenProbability {
++                bytes: display[..count].to_vec(),
++                #[allow(clippy::cast_possible_truncation)]
++                logprob: logprob as f32,
++            }
++        };
++        let chosen = describe(chosen.0, chosen.1);
++        let top = top.iter().map(|&(token_id, value)| describe(token_id, value)).collect();
++        Box::new(TokenLogprob { chosen, top })
++    }
++
+     struct StructuredRequest {
+         automaton: Arc<Mutex<GrammarAutomaton>>,
+         cursor: GrammarCursor,
+@@ -2904,6 +2934,8 @@ mod cuda_backend {
+         automata: HashMap<Arc<Grammar>, Arc<Mutex<GrammarAutomaton>>>,
+         top_logprobs: Vec<(u32, f64)>,
+         row_logits: Vec<u8>,
++        logprob_summaries: Vec<u8>,
++        logprob_summary_device: Option<riley_runtime::CudaDeviceBuffer>,
+         gpu_greedy: bool,
+         generation_audit: Option<Arc<dyn C02GenerationAuditSink>>,
+         greedy_token_workspace: Vec<u32>,
+@@ -2971,6 +3003,23 @@ mod cuda_backend {
+             pending_tokens
+                 .try_reserve_exact(output_capacity)
+                 .map_err(|_| internal("token publication staging allocation failed"))?;
++            // GPU-greedy requests with `logprobs` read a summary per output
++            // row; its buffers are reserved here, not on first use.
++            let summary_bytes = output_capacity * riley_runtime::BF16_LOGPROB_SUMMARY_WORDS * 4;
++            let mut logprob_summaries = Vec::new();
++            let logprob_summary_device = if resources.gpu_greedy && summary_bytes != 0 {
++                logprob_summaries
++                    .try_reserve_exact(summary_bytes)
++                    .map_err(|_| internal("logprob summary staging allocation failed"))?;
++                Some(
++                    resources
++                        .context
++                        .allocate_device_buffer(summary_bytes as u64)
++                        .map_err(|source| internal(format!("logprob summary allocation failed: {source}")))?,
++                )
++            } else {
++                None
++            };
+             let request_capacity = resources
+                 .scheduler
+                 .config()
+@@ -3045,6 +3094,8 @@ mod cuda_backend {
+                 automata: HashMap::new(),
+                 top_logprobs: Vec::new(),
+                 row_logits: Vec::new(),
++                logprob_summaries,
++                logprob_summary_device,
+                 gpu_greedy: resources.gpu_greedy,
+                 generation_audit: resources.generation_audit,
+                 greedy_token_workspace,
+@@ -3211,6 +3262,45 @@ mod cuda_backend {
+             // inference behavior or the general audit schema.
+             let native_fallback_request_local =
+                 c02_native_fallback_request_is_local(plan.output_slots().len());
++            // Log probabilities of the device's own choice come from a
++            // few-word device summary of the row instead of the row itself.
++            let mut summary_top = None;
++            if gpu_greedy {
++                for item in plan.prefill_items().iter().chain(plan.decode_items()) {
++                    if item.output_slot().is_none() {
++                        continue;
++                    }
++                    if let Some(index) = self.request_index_by_scheduler(item.request_id()) {
++                        let request = &self.requests[index];
++                        if request.structured.is_none() {
++                            summary_top = summary_top.max(request.logprobs_top);
++                        }
++                    }
++                }
++            }
++            const SUMMARY_BYTES: usize = riley_runtime::BF16_LOGPROB_SUMMARY_WORDS * 4;
++            if let Some(top) = summary_top {
++                let bytes = plan.output_slots().len() * SUMMARY_BYTES;
++                self.logprob_summaries.resize(bytes, 0);
++                let (executor, stream) = self
++                    .executor
++                    .as_mut()
++                    .zip(self.stream.as_mut())
++                    .ok_or_else(|| internal("batch executor is already closed"))?;
++                let device = self
++                    .logprob_summary_device
++                    .as_mut()
++                    .ok_or_else(|| internal("logprob summary buffer is missing"))?;
++                executor
++                    .download_logprob_summaries(
++                        self.addressable_tokens,
++                        u32::from(top),
++                        device,
++                        &mut self.logprob_summaries,
++                        stream,
++                    )
++                    .map_err(|source| internal(format!("logprob summary failed: {source}")))?;
++            }
+             for &slot in plan.output_slots() {
+                 let item = plan
+                     .prefill_items()
+@@ -3256,10 +3346,50 @@ mod cuda_backend {
+                 } else {
+                     None
+                 };
++                let summarized = request
++                    .logprobs_top
++                    .filter(|_| summary_top.is_some() && request.structured.is_none());
+                 let (token_id, token_logprob) = if let (Some(token_id), None) =
+                     (device_token, request.logprobs_top)
+                 {
+                     (token_id, Some(0.0))
++                } else if let (Some(token_id), Some(top)) = (device_token, summarized) {
++                    let index = usize::try_from(slot.get())
++                        .map_err(|_| internal("output slot overflowed"))?;
++                    let record = self
++                        .logprob_summaries
++                        .get(index * SUMMARY_BYTES..(index + 1) * SUMMARY_BYTES)
++                        .ok_or_else(|| internal("output slot has no logprob summary"))?;
++                    let word = |at: usize| {
++                        u32::from_ne_bytes([record[4 * at], record[4 * at + 1], record[4 * at + 2], record[4 * at + 3]])
++                    };
++                    let lanes: [f32; riley_runtime::sampling::LOGPROB_LANES] =
++                        std::array::from_fn(|lane| f32::from_bits(word(2 + lane)));
++                    let selected = (word(0) != 0).then(|| f32::from_bits(word(18)));
++                    let mut top_logits = [(0_u32, 0.0_f32); 20];
++                    let mut count = 0;
++                    for rank in 0..usize::from(top) {
++                        let token = word(19 + 2 * rank);
++                        if token == u32::MAX {
++                            break;
++                        }
++                        top_logits[count] = (token, f32::from_bits(word(20 + 2 * rank)));
++                        count += 1;
++                    }
++                    let chosen = SamplingWorkspace::logprobs_from_summary(
++                        f32::from_bits(word(1)),
++                        &lanes,
++                        selected,
++                        &top_logits[..count],
++                        &mut self.top_logprobs,
++                    );
++                    logprob = Some(describe_logprobs(
++                        &self.model,
++                        request.decoded_token_bytes.len(),
++                        (token_id, chosen),
++                        &self.top_logprobs,
++                    ));
++                    (token_id, Some(0.0))
+                 } else {
+                     let logits = if gpu_greedy {
+                         let (executor, stream) = self
+@@ -3359,32 +3489,12 @@ mod cuda_backend {
+                             usize::from(top),
+                             &mut self.top_logprobs,
+                         );
+-                        let mut display = vec![0_u8; request.decoded_token_bytes.len()];
+-                        let mut describe = |token_id: u32, logprob: f64| {
+-                            let count = self
+-                                .model
+-                                .tokenizer()
+-                                .decode_token_bytes_into(
+-                                    token_id,
+-                                    DecodeOptions {
+-                                        skip_special_tokens: false,
+-                                    },
+-                                    &mut display,
+-                                )
+-                                .unwrap_or(0);
+-                            TokenProbability {
+-                                bytes: display[..count].to_vec(),
+-                                #[allow(clippy::cast_possible_truncation)]
+-                                logprob: logprob as f32,
+-                            }
+-                        };
+-                        let chosen = describe(sampled_id, selected);
+-                        let top = self
+-                            .top_logprobs
+-                            .iter()
+-                            .map(|&(token_id, value)| describe(token_id, value))
+-                            .collect();
+-                        logprob = Some(Box::new(TokenLogprob { chosen, top }));
++                        logprob = Some(describe_logprobs(
++                            &self.model,
++                            request.decoded_token_bytes.len(),
++                            (sampled_id, selected),
++                            &self.top_logprobs,
++                        ));
+                     }
+                     (sampled_id, sampled_logprob)
+                 };
+@@ -3723,6 +3833,11 @@ mod cuda_backend {
+                     first_error.get_or_insert_with(|| format!("executor close failed: {source}"));
+                 }
+             }
++            if let Some(buffer) = self.logprob_summary_device.take() {
++                if let Err(source) = buffer.close() {
++                    first_error.get_or_insert_with(|| format!("logprob summary close failed: {source}"));
++                }
++            }
+             if let Some(timer) = self.timer.take() {
+                 if let Err(source) = timer.close() {
+                     first_error.get_or_insert_with(|| format!("CUDA timer close failed: {source}"));
+diff --git a/crates/riley-server/src/main.rs b/crates/riley-server/src/main.rs
+index 4ffac710a..3e263f990 100644
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -42,7 +42,19 @@ const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE: usize = 16;
+ #[cfg(any(feature = "cuda", test))]
+ const FIXED37_MAX_SEQUENCE_TOKENS: usize = 8_192;
+ /// Rows up to this length keep the bytes of the unsplit attention.
+-const DEFAULT_ATTENTION_KV_CHUNK_TOKENS: u64 = 1_024;
++const DEFAULT_ATTENTION_KV_CHUNK_TOKENS: u64 = 512;
++/// Models with this many KV heads or fewer give a decoding row too little
++/// parallel work at 512, so their default part is half as long.
++const FEW_KV_HEADS: usize = 2;
++const FEW_KV_HEADS_ATTENTION_KV_CHUNK_TOKENS: u64 = 256;
++
++fn default_attention_kv_chunk_tokens(key_value_heads: usize) -> u64 {
++    if key_value_heads <= FEW_KV_HEADS {
++        FEW_KV_HEADS_ATTENTION_KV_CHUNK_TOKENS
++    } else {
++        DEFAULT_ATTENTION_KV_CHUNK_TOKENS
++    }
++}
+ #[cfg(feature = "cuda")]
+ const _: () =
+     assert!(FIXED37_MAX_SEQUENCE_TOKENS == riley_runtime::llama::LLAMA_FIXED37_MAX_SEQUENCE_TOKENS);
+@@ -58,7 +70,7 @@ serve options:
+   --inference-profile MODE       native-bf16-v1 | native-bf16-varlen-v1: opt-in BF16 defaults;
+                                  explicit options override
+   --native-attention-mode MODE   page-v1 | fixed-tile-unsplit-v1 (D64/D128 tensor-core native route)
+-  --attention-kv-chunk-tokens N  fixed-tile context split, multiple of 16 (default: 1024)
++  --attention-kv-chunk-tokens N  fixed-tile context split, multiple of 16 (default: 512)
+   --model-id ID                  public model ID (default: checkpoint source model)
+   --bind ADDRESS                 listener address (default: 127.0.0.1:8080)
+   --device ORDINAL               CUDA device ordinal (default: 0)
+@@ -1551,10 +1563,10 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+         }
+     }
+     if native_attention_mode == Some(NativeAttentionMode::FixedTileUnsplit)
+-        && (batch_token_budget > 512 || max_sequence_tokens.is_none_or(|n| n > 8192)
++        && (batch_token_budget > 1024 || max_sequence_tokens.is_none_or(|n| n > 8192)
+             || max_active_sequences > 32)
+     {
+-        return Err("fixed-tile-unsplit-v1 requires an explicit context bound <=8192, batch budget <=512 and at most 32 active sequences".into());
++        return Err("fixed-tile-unsplit-v1 requires an explicit context bound <=8192, batch budget <=1024 and at most 32 active sequences".into());
+     }
+     if d128_global_merge {
+         if decode_attention_backend
+@@ -2654,7 +2666,7 @@ fn run_serve(
+             riley_runtime::set_native_flashinfer_kv_chunk(
+                 options
+                     .attention_kv_chunk_tokens
+-                    .unwrap_or(DEFAULT_ATTENTION_KV_CHUNK_TOKENS),
++                    .unwrap_or_else(|| default_attention_kv_chunk_tokens(attention_heads.1)),
+             );
+         }
+         eprintln!("RILEY_NATIVE_ATTENTION mode={}", mode.cli_id());
+@@ -2933,9 +2945,12 @@ fn warm_up_step_shapes(
+     let decoders = max_active.saturating_sub(1);
+     // Prompt lengths that take the iteration to each 16-row shape boundary
+     // above the decoders, up to the token budget.
++    // Steps above 256 rows are never recorded, so the recordable shapes end
++    // there; one longer prompt below loads the wider steps' kernels.
++    let recorded_budget = token_budget.min(256);
+     let mut prompt_lengths = Vec::new();
+     let mut total = (decoders / 16 + 1) * 16;
+-    while total <= token_budget {
++    while total <= recorded_budget {
+         let length = total - decoders;
+         if length + 1 < max_sequence_tokens {
+             prompt_lengths.push(length);
+@@ -2957,6 +2972,12 @@ fn warm_up_step_shapes(
+     for handle in &handles {
+         finish(handle);
+     }
++    if token_budget > recorded_budget && token_budget + 1 < max_sequence_tokens {
++        if let Ok(handle) = engine.submit(request(token_budget, 1)) {
++            submitted += 1;
++            finish(&handle);
++        }
++    }
+     // Alone: prefill-only and single-row decode shapes.
+     if let Ok(handle) = engine.submit(request(1, 4)) {
+         submitted += 1;
+@@ -7376,6 +7397,13 @@ mod native_profile_cli_tests {
+         assert!(parse(&["--numerics-profile", "owned-hf-eager-bf16-v1"]).is_err());
+     }
+     #[test]
++    fn models_with_two_kv_heads_default_to_half_length_kv_parts() {
++        assert_eq!(default_attention_kv_chunk_tokens(1), 256);
++        assert_eq!(default_attention_kv_chunk_tokens(2), 256);
++        assert_eq!(default_attention_kv_chunk_tokens(4), 512);
++        assert_eq!(default_attention_kv_chunk_tokens(8), 512);
++    }
++    #[test]
+     fn varlen_profile_selects_explicit_attention_and_bounds_qualification_scope() {
+         let profile = |extra: &[&str]| {
+             let mut argv = vec![
+@@ -7400,9 +7428,9 @@ mod native_profile_cli_tests {
+             &["--max-active-sequences", "33"],
+             &[
+                 "--batch-token-budget",
+-                "1024",
++                "2048",
+                 "--batch-shape-buckets",
+-                "1,2,4,8,16,32,64,128,256,512,1024",
++                "1,2,4,8,16,32,64,128,256,512,1024,2048",
+             ],
+         ] {
+             assert!(
+diff --git a/kernels/src/batch_primitives.cu b/kernels/src/batch_primitives.cu
+index 8fd59bd8b..461d6ff7b 100644
+--- a/kernels/src/batch_primitives.cu
++++ b/kernels/src/batch_primitives.cu
+@@ -1642,6 +1642,146 @@ void qkv_split_head_norm_rope_kv_write_kernel(
+   }
+ }
+ 
++// qkv_split_head_norm_rope_kv_write_kernel<false> with one warp per (row,
++// head slot) and four columns per lane, four slots per block: the block form
++// spends 128 threads and seven barriers on 128 columns. Every stored byte is
++// the same. Lane l holds columns l, l+32, l+64 and l+96, so the block's tree
++// from offset 64 is replayed as (sq[l] + sq[l+64]) + (sq[l+32] + sq[l+96])
++// in the lane and then the shuffles 16..1; the normalization and the rotation
++// are the block form's expressions per column (products rounded on their
++// own, so nothing is contracted).
++constexpr uint32_t kHeadNormWarpSlots = 4;
++
++__global__ __launch_bounds__(kHeadNormWarpSlots * kWarpSize)
++void qkv_split_head_norm_rope_kv_write_warp_kernel(
++    const __nv_bfloat16* merged, const __nv_bfloat16* query_scale,
++    const __nv_bfloat16* key_scale, const float* cos, const float* sin,
++    const uint32_t* positions, __nv_bfloat16* query, __nv_bfloat16* key,
++    __nv_bfloat16* value, __nv_bfloat16* key_pool, __nv_bfloat16* value_pool,
++    DeviceBatch batch, uint32_t query_head_count,
++    uint32_t key_value_head_count, uint64_t table_position_count,
++    uint64_t rotated_row_count, float epsilon,
++    const uint32_t* dynamic_counts, uint64_t row_count) {
++  __shared__ float normalized[kHeadNormWarpSlots][kHeadNormSplitHeadSize];
++  if (dynamic_counts != nullptr) {
++    rotated_row_count = dynamic_counts[0];
++  }
++  const uint32_t head_size = kHeadNormSplitHeadSize;
++  const uint32_t half = head_size / 2;
++  const uint32_t lane = threadIdx.x % kWarpSize;
++  const uint32_t warp = threadIdx.x / kWarpSize;
++  const uint32_t slots = query_head_count + 2 * key_value_head_count;
++  const uint64_t item =
++      static_cast<uint64_t>(blockIdx.x) * kHeadNormWarpSlots + warp;
++  if (item >= row_count * slots) {
++    return;
++  }
++  const uint64_t row = item / slots;
++  const uint32_t slot = static_cast<uint32_t>(item % slots);
++  const uint64_t query_width =
++      static_cast<uint64_t>(query_head_count) * head_size;
++  const uint64_t key_value_width =
++      static_cast<uint64_t>(key_value_head_count) * head_size;
++  const uint64_t merged_row = row * (query_width + 2 * key_value_width);
++  if (slot >= query_head_count + key_value_head_count) {
++    const uint32_t head = slot - query_head_count - key_value_head_count;
++    uint64_t cache_base = 0;
++    const bool cached =
++        value_pool != nullptr &&
++        resolve_row_cache_base(batch, row, batch.row_positions[row], head,
++                               key_value_head_count, head_size, &cache_base);
++#pragma unroll
++    for (uint32_t part = 0; part < 4; ++part) {
++      const uint32_t column = lane + part * kWarpSize;
++      const uint64_t local = static_cast<uint64_t>(head) * head_size + column;
++      const __nv_bfloat16 stored =
++          merged[merged_row + query_width + key_value_width + local];
++      value[row * key_value_width + local] = stored;
++      if (cached) {
++        value_pool[cache_base + column] = stored;
++      }
++    }
++    return;
++  }
++  if (row >= rotated_row_count) {
++    return;
++  }
++  const bool is_query = slot < query_head_count;
++  const uint32_t head = is_query ? slot : slot - query_head_count;
++  const uint64_t section = is_query ? 0 : query_width;
++  const __nv_bfloat16* scale = is_query ? query_scale : key_scale;
++  const uint64_t head_base = static_cast<uint64_t>(head) * head_size;
++  float projected[4];
++#pragma unroll
++  for (uint32_t part = 0; part < 4; ++part) {
++    projected[part] = __bfloat162float(
++        merged[merged_row + section + head_base + lane + part * kWarpSize]);
++  }
++  const float low = __fadd_rn(__fmul_rn(projected[0], projected[0]),
++                              __fmul_rn(projected[2], projected[2]));
++  const float high = __fadd_rn(__fmul_rn(projected[1], projected[1]),
++                               __fmul_rn(projected[3], projected[3]));
++  float sum = __fadd_rn(low, high);
++  for (uint32_t offset = kWarpSize / 2; offset != 0; offset /= 2) {
++    sum = __fadd_rn(sum, __shfl_down_sync(0xffffffffU, sum, offset));
++  }
++  sum = __shfl_sync(0xffffffffU, sum, 0);
++  const float inverse_rms =
++      rsqrtf(sum / static_cast<float>(head_size) + epsilon);
++#pragma unroll
++  for (uint32_t part = 0; part < 4; ++part) {
++    const uint32_t column = lane + part * kWarpSize;
++    const float normalized_for_weight =
++        round_to_storage<__nv_bfloat16>(projected[part] * inverse_rms);
++    normalized[warp][column] = round_to_storage<__nv_bfloat16>(
++        normalized_for_weight * __bfloat162float(scale[column]));
++  }
++  __syncwarp();
++  __nv_bfloat16* output = is_query ? query : key;
++  const uint64_t output_base =
++      row * (is_query ? query_width : key_value_width) + head_base;
++  const uint64_t position = positions[row];
++  uint64_t cache_base = 0;
++  const bool cached =
++      !is_query && key_pool != nullptr &&
++      resolve_row_cache_base(batch, row, batch.row_positions[row], head,
++                             key_value_head_count, head_size, &cache_base);
++#pragma unroll
++  for (uint32_t part = 0; part < 2; ++part) {
++    const uint32_t column = lane + part * kWarpSize;
++    __nv_bfloat16 first_output = __float2bfloat16_rn(CUDART_NAN_F);
++    __nv_bfloat16 second_output = __float2bfloat16_rn(CUDART_NAN_F);
++    if (position < table_position_count) {
++      const float first_value = normalized[warp][column];
++      const float second_value = normalized[warp][column + half];
++      const uint64_t table_index = position * half + column;
++      const float cosine = round_to_storage<__nv_bfloat16>(cos[table_index]);
++      const float sine = round_to_storage<__nv_bfloat16>(sin[table_index]);
++      const float first_cosine =
++          multiply_in_storage<__nv_bfloat16>(first_value, cosine);
++      const float second_sine =
++          multiply_in_storage<__nv_bfloat16>(second_value, sine);
++      const float second_cosine =
++          multiply_in_storage<__nv_bfloat16>(second_value, cosine);
++      const float first_sine =
++          multiply_in_storage<__nv_bfloat16>(first_value, sine);
++      first_output = __float2bfloat16_rn(first_cosine - second_sine);
++      second_output = __float2bfloat16_rn(second_cosine + first_sine);
++    }
++    output[output_base + column] = first_output;
++    output[output_base + column + half] = second_output;
++    if (cached) {
++      key_pool[cache_base + column] = first_output;
++      key_pool[cache_base + column + half] = second_output;
++    }
++  }
++}
++
++uint32_t head_norm_warp_blocks(uint64_t row_count, uint64_t slots) {
++  return static_cast<uint32_t>(
++      (row_count * slots + kHeadNormWarpSlots - 1) / kHeadNormWarpSlots);
++}
++
+ __device__ __forceinline__ float warp_sum(float value) {
+ #pragma unroll
+   for (uint32_t offset = kWarpSize / 2; offset != 0; offset /= 2) {
+@@ -2901,9 +3041,9 @@ riley_cuda_ragged_paged_kv_cache_write_execute(
+                   split.table_position_count, split.rotated_row_count,
+                   split.norm_epsilon, dynamic.counts);
+           }else{
+-          qkv_split_head_norm_rope_kv_write_kernel<false>
+-              <<<static_cast<uint32_t>(split.row_count * slots),
+-                 kHeadNormSplitHeadSize, 0, stream->stream>>>(
++          qkv_split_head_norm_rope_kv_write_warp_kernel
++              <<<head_norm_warp_blocks(split.row_count, slots),
++                 kHeadNormWarpSlots * kWarpSize, 0, stream->stream>>>(
+                   static_cast<const __nv_bfloat16*>(split.merged),
+                   static_cast<const __nv_bfloat16*>(split.query_bias),
+                   static_cast<const __nv_bfloat16*>(split.key_bias),
+@@ -2920,7 +3060,7 @@ riley_cuda_ragged_paged_kv_cache_write_execute(
+                                         kHeadNormSplitHeadSize),
+                   static_cast<uint32_t>(params->key_value_head_count),
+                   split.table_position_count, split.rotated_row_count,
+-                  split.norm_epsilon, dynamic.counts);
++                  split.norm_epsilon, dynamic.counts, split.row_count);
+           }
+         } else if (split.head_size % 4 == 0 && work_items / 2 < (1ULL << 31) &&
+                    ((reinterpret_cast<uintptr_t>(split.merged) |
+@@ -6054,6 +6194,26 @@ extern "C" void riley_cuda_set_native_d128_attention_flashinfer(
+   native_d128_flashinfer_setting().store(mode, std::memory_order_relaxed);
+ }
+ 
++// Bytes of partial-state workspace a fixed-tile (FlashInfer) step of
++// `output_rows` rows needs: only its planner's workspace. UINT64_MAX when the
++// FlashInfer mode is off, an opt-in mode that keeps its own partial states is
++// on, or the head grouping is unsupported; the caller then sizes the whole
++// two-stage layout.
++extern "C" uint64_t riley_cuda_native_flashinfer_partial_state_bytes(
++    uint64_t output_rows, uint64_t page_capacity, uint32_t query_heads,
++    uint32_t key_value_heads, uint32_t head_size) noexcept {
++  if (native_d128_flashinfer_setting().load(std::memory_order_relaxed) != 1 ||
++      native_d128_decode_segment_mode_setting().load(std::memory_order_relaxed) != 0 ||
++      native_d128_prompt_direct_setting().load(std::memory_order_relaxed) != 0 ||
++      key_value_heads == 0 ||
++      query_heads / key_value_heads > kNativeBf16RaggedD128MaximumGroupHeads) {
++    return UINT64_MAX;
++  }
++  const uint64_t bytes = riley_fi::workspace_bytes(output_rows, page_capacity, query_heads,
++                                                   key_value_heads, head_size);
++  return bytes == UINT64_MAX ? bytes : (bytes + 3) / 4 * 4;
++}
++
+ // Overrides RILEY_NATIVE_D128_DECODE_SEGMENT_MODE for later launches.
+ extern "C" void riley_cuda_set_native_d128_decode_segment_mode(
+     uint64_t mode) noexcept {
+@@ -6172,6 +6332,27 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+   if (status != RILEY_CUDA_STATUS_SUCCESS) {
+     return status;
+   }
++  const uint64_t flashinfer_group =
++      params->query_head_count / params->key_value_head_count;
++  const bool flashinfer_requested =
++      native_d128_flashinfer_setting().load(std::memory_order_relaxed) == 1 &&
++      params->reserved[0] == 2 && params->reserved[1] == 1 &&
++      flashinfer_group <= kNativeBf16RaggedD128MaximumGroupHeads;
++  // The FlashInfer mode uses the partial-state workspace only for its
++  // planner, so it needs no more of it than that (unless the opt-in segment
++  // or direct-prompt modes, which keep their own partial states, are on).
++  if (flashinfer_requested &&
++      native_d128_decode_segment_mode_setting().load(std::memory_order_relaxed) == 0 &&
++      native_d128_prompt_direct_setting().load(std::memory_order_relaxed) == 0) {
++    const uint64_t planner_bytes = riley_fi::workspace_bytes(
++        params->output_row_count, params->partial_state_capacity,
++        static_cast<uint32_t>(params->query_head_count),
++        static_cast<uint32_t>(params->key_value_head_count),
++        static_cast<uint32_t>(params->head_size));
++    if (planner_bytes < bytes.partial_state_bytes) {
++      bytes.partial_state_bytes = (planner_bytes + 3) / 4 * 4;
++    }
++  }
+   ResolvedSpan query{};
+   ResolvedSpan key_pool{};
+   ResolvedSpan value_pool{};
+@@ -6347,19 +6528,22 @@ riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+   // The FlashInfer mode replaces every attention launch below (producers,
+   // prompt producer and merge) for head size 64 or 128 when its planner
+   // workspace fits the partial-state workspace, which it reuses.
+-  const uint64_t flashinfer_group =
+-      params->query_head_count / params->key_value_head_count;
+   const bool flashinfer_attention =
+-      native_d128_flashinfer_setting().load(std::memory_order_relaxed) == 1 &&
+-      params->reserved[0] == 2 && params->reserved[1] == 1 &&
+-      flashinfer_group <= kNativeBf16RaggedD128MaximumGroupHeads &&
+-      params->output_row_count <= 1024 &&
++      flashinfer_requested && params->output_row_count <= 1024 &&
+       riley_fi::workspace_bytes(params->output_row_count,
+                                 params->partial_state_capacity,
+                                 static_cast<uint32_t>(params->query_head_count),
+                                 static_cast<uint32_t>(params->key_value_head_count),
+                                 static_cast<uint32_t>(params->head_size)) <=
+           partial_states.used_bytes;
++  // The fixed-tile mode fixes the numerics: a step it cannot plan must fail
++  // rather than run the other kernels, whose bytes differ.
++  if (flashinfer_requested && !flashinfer_attention) {
++    return validation_error(
++        error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
++        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
++        "fixed-tile attention cannot plan this step: more than 1,024 rows or a planner workspace larger than the partial-state workspace");
++  }
+   const bool segment_decode =
+       native_d128_decode_segment_mode_setting().load(
+           std::memory_order_relaxed) == 1 &&
+@@ -7167,9 +7351,9 @@ static RileyCudaStatus execute_qkv_split_bias_profile(
+             head_norm_epsilon,
+             riley_cuda_internal::thread_step_capture_dynamic().counts);
+     } else {
+-    qkv_split_head_norm_rope_kv_write_kernel<false>
+-        <<<static_cast<uint32_t>(params->row_count * slots),
+-           kHeadNormSplitHeadSize, 0, stream->stream>>>(
++    qkv_split_head_norm_rope_kv_write_warp_kernel
++        <<<head_norm_warp_blocks(params->row_count, slots),
++           kHeadNormWarpSlots * kWarpSize, 0, stream->stream>>>(
+             reinterpret_cast<const __nv_bfloat16*>(merged.data),
+             reinterpret_cast<const __nv_bfloat16*>(query_bias.data),
+             reinterpret_cast<const __nv_bfloat16*>(key_bias.data),
+@@ -7186,7 +7370,8 @@ static RileyCudaStatus execute_qkv_split_bias_profile(
+                                   kHeadNormSplitHeadSize),
+             params->rope_table_position_count, params->reserved[1],
+             head_norm_epsilon,
+-            riley_cuda_internal::thread_step_capture_dynamic().counts);
++            riley_cuda_internal::thread_step_capture_dynamic().counts,
++            params->row_count);
+     }
+     status = launch_status(error, kOperation);
+   } else if (status == RILEY_CUDA_STATUS_SUCCESS && merged_elements != 0 &&
+@@ -7396,6 +7581,188 @@ extern "C" RileyCudaStatus riley_cuda_bf16_argmax_fp32_ties_execute(
+  return complete_execution(&uses,&scope,stream,status,launched,error,op);
+ }
+ 
++// Log-probability summary of each greedy output row, so a request asking for
++// logprobs downloads a few words instead of its whole logits row. The CPU
++// finishes the log-softmax from it (sampling.rs `logprobs_from_summary`) and
++// gets the bytes `raw_logprobs_bf16_native` computes from the full row:
++// the maximum is exact in any order, each of the 16 lane sums adds
++// approximate_exp terms of the columns in its residue class in ascending
++// order with the CPU's operations and constants (no contraction), and the
++// top tokens are exact (value descending, lower token id on ties).
++constexpr uint32_t kLogprobThreads = 512;
++constexpr uint32_t kLogprobLanes = 16;
++constexpr uint32_t kLogprobTile = 4096;
++constexpr uint32_t kLogprobSummaryWords = 64;
++constexpr uint32_t kLogprobMaxTop = 20;
++static_assert(kLogprobTile % kLogprobLanes == 0, "tiles must keep lane residues");
++static_assert(3 + kLogprobLanes + 2 * kLogprobMaxTop <= kLogprobSummaryWords, "summary record overflow");
++
++__device__ __forceinline__ float logprob_approximate_exp(float x) {
++  const float scaled = __fmul_rn(fmaxf(x, -87.0f), 1.44269504088896340736f);
++  const float whole = floorf(scaled);
++  const float part = __fsub_rn(scaled, whole);
++  float mantissa = __fadd_rn(0.00961813f, __fmul_rn(part, 0.00133355f));
++  mantissa = __fadd_rn(0.05550411f, __fmul_rn(part, mantissa));
++  mantissa = __fadd_rn(0.2402265f, __fmul_rn(part, mantissa));
++  mantissa = __fadd_rn(0.6931472f, __fmul_rn(part, mantissa));
++  mantissa = __fadd_rn(1.0f, __fmul_rn(part, mantissa));
++  const int exponent = static_cast<int>(whole) + 127;
++  return __fmul_rn(mantissa, __int_as_float(exponent << 23));
++}
++
++// Whether (value, token) ranks before (best_value, best_token).
++__device__ __forceinline__ bool logprob_ranks_before(float value, uint32_t token,
++                                                     float best_value, uint32_t best_token) {
++  return value > best_value || (value == best_value && token < best_token);
++}
++
++__global__ __launch_bounds__(kLogprobThreads) void bf16_logprob_summary_kernel(
++    const __nv_bfloat16* logits, const uint32_t* greedy, uint32_t* summaries,
++    uint64_t row_count, uint64_t vocabulary_size, uint64_t addressable, uint32_t top_count) {
++  constexpr uint32_t kWarps = kLogprobThreads / kWarpSize;
++  __shared__ float tile[kLogprobTile];
++  __shared__ float warp_values[kWarps];
++  __shared__ uint32_t warp_tokens[kWarps];
++  __shared__ float shared_value;
++  __shared__ uint32_t shared_token;
++  const uint32_t lane = threadIdx.x % kWarpSize;
++  const uint32_t warp = threadIdx.x / kWarpSize;
++  for (uint64_t row = blockIdx.x; row < row_count; row += gridDim.x) {
++    const __nv_bfloat16* row_logits = logits + row * vocabulary_size;
++    uint32_t* record = summaries + row * kLogprobSummaryWords;
++    float maximum = -CUDART_INF_F;
++    for (uint64_t column = threadIdx.x; column < addressable; column += blockDim.x) {
++      maximum = fmaxf(maximum, __bfloat162float(row_logits[column]));
++    }
++    for (uint32_t offset = kWarpSize / 2; offset != 0; offset /= 2) {
++      maximum = fmaxf(maximum, __shfl_xor_sync(0xffffffffu, maximum, offset));
++    }
++    if (lane == 0) warp_values[warp] = maximum;
++    __syncthreads();
++    if (threadIdx.x == 0) {
++      float block_maximum = warp_values[0];
++      for (uint32_t index = 1; index < kWarps; ++index) block_maximum = fmaxf(block_maximum, warp_values[index]);
++      shared_value = block_maximum;
++    }
++    __syncthreads();
++    maximum = shared_value;
++
++    float lane_sum = 0.0f;
++    for (uint64_t base = 0; base < addressable; base += kLogprobTile) {
++      const uint32_t count = static_cast<uint32_t>(
++          addressable - base < kLogprobTile ? addressable - base : kLogprobTile);
++      for (uint32_t index = threadIdx.x; index < count; index += blockDim.x) {
++        tile[index] = logprob_approximate_exp(
++            __fsub_rn(__bfloat162float(row_logits[base + index]), maximum));
++      }
++      __syncthreads();
++      if (threadIdx.x < kLogprobLanes) {
++        for (uint32_t index = threadIdx.x; index < count; index += kLogprobLanes) {
++          lane_sum = __fadd_rn(lane_sum, tile[index]);
++        }
++      }
++      __syncthreads();
++    }
++    if (threadIdx.x < kLogprobLanes) record[2 + threadIdx.x] = __float_as_uint(lane_sum);
++
++    // Top tokens one at a time: each round picks the best entry ranked after
++    // the previous round's pick.
++    float previous_value = CUDART_INF_F;
++    uint32_t previous_token = 0;
++    for (uint32_t rank = 0; rank < top_count; ++rank) {
++      float best_value = -CUDART_INF_F;
++      uint32_t best_token = UINT32_MAX;
++      for (uint64_t column = threadIdx.x; column < addressable; column += blockDim.x) {
++        const float value = __bfloat162float(row_logits[column]);
++        const uint32_t token = static_cast<uint32_t>(column);
++        const bool after = rank == 0 || value < previous_value ||
++                           (value == previous_value && token > previous_token);
++        if (after && logprob_ranks_before(value, token, best_value, best_token)) {
++          best_value = value;
++          best_token = token;
++        }
++      }
++      for (uint32_t offset = kWarpSize / 2; offset != 0; offset /= 2) {
++        const float other_value = __shfl_xor_sync(0xffffffffu, best_value, offset);
++        const uint32_t other_token = __shfl_xor_sync(0xffffffffu, best_token, offset);
++        if (logprob_ranks_before(other_value, other_token, best_value, best_token)) {
++          best_value = other_value;
++          best_token = other_token;
++        }
++      }
++      if (lane == 0) {
++        warp_values[warp] = best_value;
++        warp_tokens[warp] = best_token;
++      }
++      __syncthreads();
++      if (threadIdx.x == 0) {
++        for (uint32_t index = 1; index < kWarps; ++index) {
++          if (logprob_ranks_before(warp_values[index], warp_tokens[index], warp_values[0], warp_tokens[0])) {
++            warp_values[0] = warp_values[index];
++            warp_tokens[0] = warp_tokens[index];
++          }
++        }
++        shared_value = warp_values[0];
++        shared_token = warp_tokens[0];
++        record[3 + kLogprobLanes + 2 * rank] = warp_tokens[0];
++        record[4 + kLogprobLanes + 2 * rank] = __float_as_uint(warp_values[0]);
++      }
++      __syncthreads();
++      previous_value = shared_value;
++      previous_token = shared_token;
++    }
++    if (threadIdx.x == 0) {
++      const uint32_t selected = greedy[2 * row];
++      const bool in_range = selected < addressable;
++      record[0] = in_range ? 1u : 0u;
++      record[1] = __float_as_uint(maximum);
++      record[2 + kLogprobLanes] =
++          in_range ? __float_as_uint(__bfloat162float(row_logits[selected])) : 0u;
++    }
++    __syncthreads();
++  }
++}
++
++// logits is BF16 [row_count, vocabulary_size] and greedy the U32 [row_count, 2]
++// argmax records whose token is each row's selected token; summaries is U32
++// [row_count, 64]: in-range flag, maximum, 16 lane sums, selected logit, then
++// top_count (token, logit) pairs. Only the first `addressable` columns count.
++extern "C" RileyCudaStatus riley_cuda_bf16_logprob_summary_execute(
++ RileyCudaBufferSpan logits_span,RileyCudaBufferSpan greedy_span,RileyCudaBufferSpan summaries_span,
++ uint64_t row_count,uint64_t vocabulary_size,uint64_t addressable,uint32_t top_count,
++ RileyCudaStream* stream,RileyCudaErrorInfo* error) noexcept {
++ constexpr const char* op="execute BF16 log-probability summary";clear_error(error);
++ if(vocabulary_size==0||vocabulary_size>UINT32_MAX||addressable==0||addressable>vocabulary_size||top_count>kLogprobMaxTop)
++   return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"invalid log-probability summary shape");
++ if(logits_span.dtype!=RILEY_CUDA_DTYPE_BF16||greedy_span.dtype!=RILEY_CUDA_DTYPE_U32||summaries_span.dtype!=RILEY_CUDA_DTYPE_U32)
++   return validation_error(error,RILEY_CUDA_STATUS_INVALID_ARGUMENT,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"requires BF16 logits and U32 greedy records and summaries");
++ uint64_t logit_elements=0;
++ if(!checked_multiply(row_count,vocabulary_size,&logit_elements)||logit_elements>UINT64_MAX/2||row_count>UINT64_MAX/(4*kLogprobSummaryWords))
++   return validation_error(error,RILEY_CUDA_STATUS_OUT_OF_RANGE,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"log-probability summary shape overflows uint64_t");
++ ResolvedSpan spans[3]{};
++ RileyCudaStatus status=resolve_span(logits_span,RILEY_CUDA_DTYPE_BF16,logit_elements*2,&spans[0],error,op);
++ if(status==RILEY_CUDA_STATUS_SUCCESS)status=resolve_span(greedy_span,RILEY_CUDA_DTYPE_U32,row_count*8,&spans[1],error,op);
++ if(status==RILEY_CUDA_STATUS_SUCCESS)status=resolve_span(summaries_span,RILEY_CUDA_DTYPE_U32,row_count*4*kLogprobSummaryWords,&spans[2],error,op);
++ for(int i=0;i<2&&status==RILEY_CUDA_STATUS_SUCCESS;i++)status=reject_overlap(spans[2],spans[i],false,error,op);
++ if(status==RILEY_CUDA_STATUS_SUCCESS)status=validate_contexts(stream,spans,3,error,op);
++ if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
++ if(riley_cuda_internal::thread_has_active_step_capture())return validation_error(error,RILEY_CUDA_STATUS_NOT_SUPPORTED,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"log-probability summaries are not recorded in step captures");
++ ExclusiveUses uses(stream);for(auto& span:spans)if(!uses.add(span.buffer))return internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"buffer set overflow");
++ status=uses.acquire(error,op);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
++ if(row_count==0)return uses.release_completed()?RILEY_CUDA_STATUS_SUCCESS:internal_error(error,RILEY_CUDA_ERROR_STAGE_VALIDATION,op,"exclusive-use accounting was corrupted");
++ CurrentContext scope(stream->owner);bool launched=false;status=scope.enter(error,RILEY_CUDA_ERROR_STAGE_LAUNCH,op);
++ if(status==RILEY_CUDA_STATUS_SUCCESS)status=prior_launch_status(error,op);
++ if(status==RILEY_CUDA_STATUS_SUCCESS){
++  launched=true;
++  const uint32_t blocks=static_cast<uint32_t>(row_count<kMaximumBlocks?row_count:kMaximumBlocks);
++  bf16_logprob_summary_kernel<<<blocks,kLogprobThreads,0,stream->stream>>>(
++   reinterpret_cast<const __nv_bfloat16*>(spans[0].data),reinterpret_cast<const uint32_t*>(spans[1].data),
++   reinterpret_cast<uint32_t*>(spans[2].data),row_count,vocabulary_size,addressable,top_count);
++  status=launch_status(error,op);
++ }
++ return complete_execution(&uses,&scope,stream,status,launched,error,op);
++}
++
+ extern "C" RileyCudaStatus riley_cuda_hf_pack_qkv_execute(
+  RileyCudaBufferSpan q,RileyCudaBufferSpan k,RileyCudaBufferSpan v,RileyCudaBufferSpan out,
+  uint64_t rows,uint64_t qw,uint64_t kw,RileyCudaStream* stream,RileyCudaErrorInfo* error) noexcept {
+diff --git a/kernels/src/gemm.cu b/kernels/src/gemm.cu
+index a9a230987..1ed12038d 100644
+--- a/kernels/src/gemm.cu
++++ b/kernels/src/gemm.cu
+@@ -77,6 +77,11 @@ struct RileyCudaGemmPlan {
+   cublasLtMatrixLayout_t output_layout;
+   cublasLtMatmulPreference_t preference;
+   cublasLtMatmulAlgo_t algorithm;
++  // For an anchored plan, the algorithm it was anchored to (before any
++  // bit-equivalent replacement), so plans anchored on it in turn can fall
++  // back to that algorithm rather than one chosen for this plan's rows.
++  cublasLtMatmulAlgo_t anchor_algorithm{};
++  bool has_anchor_algorithm = false;
+   uint64_t input_bytes;
+   uint64_t weight_bytes;
+   uint64_t output_bytes;
+@@ -801,6 +806,111 @@ constexpr EquivalentCandidate kEquivalentCandidates[] = {
+     {80, 18944, 3584, 129, 256, 21, 23, 15, 3, 4},
+     // LM head 3584 -> 152064 (rows searched up to 16)
+     {80, 3584, 152064, 1, 32, 6, 15, 17, 1, 0},
++    // A100, Qwen2.5-7B prompt steps of 257..2048 rows
++    // (benchmarks/profiling/gemm_anchor_search.cu `wide`: same bytes as the
++    // anchor's 256 rows on every row of 512-, 1024- and 2048-row products).
++    {80, 3584, 4608, 257, 2048, 21, 20, 11, 1, 0},
++    {80, 3584, 3584, 257, 512, 6, 18, 12, 1, 0},
++    {80, 3584, 3584, 513, 2048, 21, 20, 11, 1, 0},
++    {80, 3584, 37888, 257, 512, 21, 20, 11, 1, 0},
++    {80, 3584, 37888, 513, 1024, 21, 23, 9, 1, 0},
++    {80, 3584, 37888, 1025, 2048, 21, 23, 15, 1, 0},
++    {80, 18944, 3584, 257, 2048, 21, 20, 11, 3, 4},
++    // A100, every other qualified model's projections at 257..1024 rows (same
++    // search; the fastest anchor-equivalent configuration at 512 and 1,024
++    // rows). Shapes whose anchor is fastest there are absent.
++    {80, 1024, 4096, 257, 512, 6, 18, 12, 1, 0},
++    {80, 1024, 4096, 513, 1024, 6, 20, 11, 1, 0},
++    {80, 1024, 6144, 257, 512, 6, 24, 9, 1, 0},
++    {80, 1024, 6144, 513, 1024, 6, 20, 11, 1, 0},
++    {80, 11008, 2048, 257, 512, 6, 23, 15, 6, 4},
++    {80, 11008, 2048, 513, 1024, 6, 20, 11, 6, 4},
++    {80, 12288, 4096, 257, 512, 21, 23, 12, 3, 4},
++    {80, 12288, 4096, 513, 1024, 21, 23, 9, 3, 4},
++    {80, 13824, 5120, 257, 512, 21, 20, 11, 2, 1},
++    {80, 13824, 5120, 513, 1024, 21, 23, 9, 2, 1},
++    {80, 14336, 4096, 257, 512, 21, 24, 12, 3, 4},
++    {80, 14336, 4096, 513, 1024, 21, 23, 9, 3, 4},
++    {80, 1536, 1536, 257, 512, 31, 18, 18, 1, 0},
++    {80, 1536, 1536, 513, 1024, 31, 18, 15, 1, 0},
++    {80, 1536, 17920, 257, 512, 21, 20, 11, 1, 0},
++    {80, 1536, 17920, 513, 1024, 21, 20, 11, 1, 0},
++    {80, 1536, 2048, 257, 512, 31, 18, 15, 1, 0},
++    {80, 1536, 2048, 513, 1024, 31, 18, 15, 1, 0},
++    {80, 1536, 576, 513, 1024, 31, 17, 15, 1, 0},
++    {80, 17408, 5120, 257, 512, 21, 23, 9, 4, 1},
++    {80, 17408, 5120, 513, 1024, 21, 20, 11, 4, 1},
++    {80, 2048, 1024, 257, 512, 31, 17, 15, 1, 0},
++    {80, 2048, 1024, 513, 1024, 31, 18, 15, 1, 0},
++    {80, 2048, 12288, 257, 512, 21, 20, 11, 1, 0},
++    {80, 2048, 12288, 513, 1024, 21, 20, 11, 1, 0},
++    {80, 2048, 16384, 257, 512, 21, 20, 11, 1, 0},
++    {80, 2048, 16384, 513, 1024, 21, 20, 11, 1, 0},
++    {80, 2048, 2048, 257, 512, 31, 18, 15, 1, 0},
++    {80, 2048, 2048, 513, 1024, 31, 18, 15, 1, 0},
++    {80, 2048, 22016, 257, 512, 21, 20, 11, 1, 0},
++    {80, 2048, 22016, 513, 1024, 21, 20, 11, 1, 0},
++    {80, 2048, 2560, 257, 512, 31, 18, 15, 1, 0},
++    {80, 2048, 2560, 513, 1024, 31, 18, 18, 1, 0},
++    {80, 2048, 3072, 257, 512, 31, 18, 15, 1, 0},
++    {80, 2048, 3072, 513, 1024, 31, 18, 15, 1, 0},
++    {80, 2048, 4096, 257, 512, 6, 18, 12, 1, 0},
++    {80, 2048, 4096, 513, 1024, 21, 20, 11, 1, 0},
++    {80, 2048, 6144, 257, 512, 6, 24, 15, 1, 0},
++    {80, 2048, 6144, 513, 1024, 21, 20, 11, 1, 0},
++    {80, 2560, 19456, 257, 512, 21, 23, 12, 1, 0},
++    {80, 2560, 19456, 513, 1024, 21, 20, 11, 1, 0},
++    {80, 2560, 6144, 257, 512, 6, 24, 15, 1, 0},
++    {80, 2560, 6144, 513, 1024, 21, 23, 9, 1, 0},
++    {80, 2560, 960, 257, 512, 6, 18, 12, 4, 4},
++    {80, 2560, 960, 513, 1024, 6, 20, 11, 4, 4},
++    {80, 3072, 1024, 257, 512, 6, 18, 12, 4, 4},
++    {80, 3072, 1024, 513, 1024, 6, 20, 11, 4, 4},
++    {80, 3072, 16384, 257, 512, 21, 20, 11, 1, 0},
++    {80, 3072, 16384, 513, 1024, 21, 20, 11, 1, 0},
++    {80, 3072, 3072, 257, 512, 6, 23, 15, 4, 4},
++    {80, 3072, 3072, 513, 1024, 6, 20, 11, 4, 4},
++    {80, 3072, 5120, 257, 512, 6, 24, 15, 1, 0},
++    {80, 3072, 5120, 513, 1024, 21, 20, 11, 1, 0},
++    {80, 4096, 24576, 257, 512, 21, 20, 11, 1, 0},
++    {80, 4096, 24576, 513, 1024, 21, 20, 11, 1, 0},
++    {80, 4096, 28672, 257, 512, 21, 20, 11, 1, 0},
++    {80, 4096, 28672, 513, 1024, 21, 20, 11, 1, 0},
++    {80, 4096, 4096, 257, 512, 21, 20, 11, 3, 4},
++    {80, 4096, 4096, 513, 1024, 6, 20, 11, 3, 4},
++    {80, 4096, 6144, 257, 512, 21, 20, 11, 2, 1},
++    {80, 4096, 6144, 513, 1024, 21, 20, 11, 2, 1},
++    {80, 4864, 896, 257, 512, 6, 18, 12, 4, 4},
++    {80, 4864, 896, 513, 1024, 6, 20, 11, 4, 4},
++    {80, 5120, 27648, 257, 512, 21, 23, 12, 1, 0},
++    {80, 5120, 27648, 513, 1024, 21, 23, 9, 1, 0},
++    {80, 5120, 34816, 257, 512, 21, 20, 11, 1, 0},
++    {80, 5120, 34816, 513, 1024, 21, 20, 11, 1, 0},
++    {80, 5120, 5120, 257, 512, 21, 20, 11, 2, 1},
++    {80, 5120, 5120, 513, 1024, 21, 20, 11, 2, 1},
++    {80, 5120, 7168, 257, 512, 21, 20, 11, 3, 1},
++    {80, 5120, 7168, 513, 1024, 21, 20, 11, 3, 1},
++    {80, 576, 3072, 257, 512, 6, 20, 11, 1, 0},
++    {80, 576, 3072, 513, 1024, 6, 24, 9, 1, 0},
++    {80, 576, 576, 513, 1024, 31, 17, 15, 1, 0},
++    {80, 576, 960, 257, 512, 31, 18, 15, 1, 0},
++    {80, 576, 960, 513, 1024, 31, 18, 15, 1, 0},
++    {80, 8192, 3072, 257, 512, 6, 23, 15, 4, 4},
++    {80, 8192, 3072, 513, 1024, 21, 20, 11, 4, 4},
++    {80, 896, 1152, 257, 512, 31, 18, 15, 1, 0},
++    {80, 896, 1152, 513, 1024, 31, 18, 15, 1, 0},
++    {80, 896, 896, 257, 512, 31, 18, 15, 1, 0},
++    {80, 896, 896, 513, 1024, 31, 18, 15, 1, 0},
++    {80, 896, 9728, 257, 512, 21, 20, 11, 1, 0},
++    {80, 896, 9728, 513, 1024, 21, 20, 11, 1, 0},
++    {80, 8960, 1536, 257, 512, 6, 23, 15, 8, 4},
++    {80, 8960, 1536, 513, 1024, 6, 20, 11, 8, 4},
++    {80, 960, 1600, 257, 512, 31, 18, 15, 1, 0},
++    {80, 960, 1600, 513, 1024, 31, 18, 15, 1, 0},
++    {80, 960, 5120, 257, 512, 6, 24, 9, 1, 0},
++    {80, 960, 5120, 513, 1024, 6, 20, 11, 1, 0},
++    {80, 960, 960, 257, 512, 31, 17, 15, 1, 0},
++    {80, 960, 960, 513, 1024, 31, 18, 15, 1, 0},
+     // A100 (compute capability 8.0), second search (gemm-equiv-a100-attempt02):
+     // Qwen3 0.6B/1.7B/4B/8B, Llama 3.2 1B/3B and 3.1 8B, Qwen2.5 0.5B/14B and
+     // SmolLM2 135M/360M/1.7B projection shapes (merged Q|K|V, output
+@@ -1384,16 +1494,25 @@ RileyCudaStatus select_anchored_deterministic_algorithm(
+                             "anchor GEMM plan is null or has no prepared algorithm");
+   }
+ 
++  // An anchor wider than 256 rows (a wide prompt step) may itself run a
++  // configuration chosen for its rows; plans anchored on it bind to the
++  // algorithm that anchor was anchored to. Both have the same bytes.
++  const cublasLtMatmulAlgo_t anchor_algorithm =
++      anchor->config.m > 256 && anchor->has_anchor_algorithm
++          ? anchor->anchor_algorithm
++          : anchor->algorithm;
++  plan->anchor_algorithm = anchor_algorithm;
++  plan->has_anchor_algorithm = true;
+   {
+     cublasLtMatmulAlgo_t equivalent{};
+     size_t equivalent_workspace = 0;
+-    if (select_equivalent_candidate(plan, anchor->algorithm, &equivalent,
++    if (select_equivalent_candidate(plan, anchor_algorithm, &equivalent,
+                                     &equivalent_workspace)) {
+       return RILEY_CUDA_STATUS_SUCCESS;
+     }
+   }
+ 
+-  const cublasLtMatmulAlgo_t algorithm = anchor->algorithm;
++  const cublasLtMatmulAlgo_t algorithm = anchor_algorithm;
+   cublasLtMatmulHeuristicResult_t checked{};
+   const cublasStatus_t check_status = cublasLtMatmulAlgoCheck(
+       plan->handle, plan->operation, plan->weight_layout, plan->input_layout,
+diff --git a/kernels/src/primitives.cu b/kernels/src/primitives.cu
+index 49dd50a32..ffe166cfc 100644
+--- a/kernels/src/primitives.cu
++++ b/kernels/src/primitives.cu
+@@ -1258,7 +1258,7 @@ bool use_vector_rms_norm(uint64_t row_count, uint64_t hidden_size,
+          hidden_size > kWideRmsNormLanes &&
+          hidden_size <= kWideRmsNormLanes * kWideGeneralMaxColumnsPerLane &&
+          hidden_size % kVectorRmsNormGroupWidth == 0 && row_count != 0 &&
+-         row_count <= 256 && aligned_16(left) && aligned_16(right) &&
++         row_count <= kMaximumBlocks && aligned_16(left) && aligned_16(right) &&
+          aligned_16(weight) && aligned_16(residual_output) &&
+          aligned_16(normalized_output);
+ }

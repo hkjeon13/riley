@@ -1,0 +1,16 @@
+RILEY_NATIVE_ATTENTION mode=fixed-tile-unsplit-v1
+RILEY_GRAPH prepared=false policy=Disabled fallback=true gpu_iteration_timing=true numerics=existing
+riley startup warm-up: 47 internal requests in 1.23 s
+RILEY_DECODE_ATTENTION requested_backend=native-bf16-paged-split-gqa-d128-two-stage resolved_ragged_backend=riley.cuda.ragged-paged-attention.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16.transition-v2 fallback_reason=none query_heads=28 key_value_heads=4 head_size=128 page_size=16 graph=false
+RILEY_PROJECTION_BIAS requested_backend=merged-qkv-strict-staged-v1 resolved_backend=merged-qkv-strict-staged-v1 fallback_reason=none
+riley listening on http://127.0.0.1:18336 (graceful_signals=SIGINT,SIGTERM graceful_stdin_shutdown=false)
+HOSTSTEP us/step over 128 steps: cancel+commands=4560.1 plan=9.9 prepare=0.7 pack=5.8 upload=1.1 submit=766.5 wait=11921.0 download=24.6 sample=7.1 commit=3.4 events=1.8 publish=3.1 | captured=21 eager=0
+HOSTSTEP us/step over 128 steps: cancel+commands=2.9 plan=13.1 prepare=0.6 pack=8.4 upload=0.9 submit=72.6 wait=12109.7 download=23.6 sample=5.5 commit=2.4 events=1.7 publish=2.0 | captured=1 eager=0
+HOSTSTEP us/step over 128 steps: cancel+commands=2.4 plan=12.9 prepare=0.6 pack=8.0 upload=0.9 submit=33.1 wait=12108.9 download=23.3 sample=5.6 commit=2.4 events=1.6 publish=1.8 | captured=0 eager=0
+HOSTSTEP us/step over 128 steps: cancel+commands=2.3 plan=12.8 prepare=0.6 pack=8.0 upload=0.8 submit=32.0 wait=12109.7 download=23.2 sample=5.2 commit=2.2 events=1.5 publish=1.7 | captured=0 eager=0
+HOSTSTEP us/step over 128 steps: cancel+commands=2.3 plan=12.7 prepare=0.6 pack=8.0 upload=0.8 submit=32.5 wait=12109.0 download=23.4 sample=5.2 commit=2.2 events=1.5 publish=1.7 | captured=0 eager=0
+HOSTSTEP us/step over 128 steps: cancel+commands=2.3 plan=12.8 prepare=0.6 pack=8.1 upload=0.9 submit=32.3 wait=12113.5 download=23.4 sample=5.1 commit=2.1 events=1.5 publish=1.7 | captured=0 eager=0
+HOSTSTEP us/step over 128 steps: cancel+commands=2.2 plan=12.8 prepare=0.6 pack=8.1 upload=0.8 submit=32.7 wait=12108.8 download=23.8 sample=5.4 commit=2.1 events=1.5 publish=1.6 | captured=0 eager=0
+HOSTSTEP us/step over 128 steps: cancel+commands=1.8 plan=12.4 prepare=0.6 pack=8.2 upload=0.8 submit=33.9 wait=12040.7 download=23.4 sample=8.1 commit=2.1 events=1.6 publish=1.6 | captured=0 eager=0
+HOSTSTEP us/step over 128 steps: cancel+commands=3397.3 plan=51.6 prepare=1.5 pack=24.8 upload=1.5 submit=202.5 wait=12627.1 download=24.1 sample=20.7 commit=9.5 events=4.8 publish=8.6 | captured=4 eager=0
+riley graceful shutdown requested by SIGTERM

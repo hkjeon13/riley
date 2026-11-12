@@ -1,5 +1,6 @@
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap};
+use std::hash::{BuildHasherDefault, Hasher};
 
 use serde::Deserialize;
 use unicode_normalization::UnicodeNormalization;
@@ -186,7 +187,10 @@ pub trait Tokenizer: Send + Sync {
 pub struct SmolLm2Tokenizer {
     vocab: BTreeMap<String, u32>,
     vocab_by_id: Box<[String]>,
-    merge_ranks: BTreeMap<String, BTreeMap<String, usize>>,
+    /// The merge table keyed by token IDs: `(left, right)` to `(rank, merged)`.
+    pair_merges: PairMerges,
+    /// The token of each byte's `ByteLevel` character, or `NO_TOKEN`.
+    byte_ids: [u32; 256],
     special_ids: BTreeSet<u32>,
     added_ids: BTreeSet<u32>,
     added_trie: AddedTrie,
@@ -324,6 +328,9 @@ impl SmolLm2Tokenizer {
         let added_trie = validated_added.trie;
         validate_byte_alphabet(&vocab, &special_ids, &byte_decoder)?;
         let merge_ranks = validate_merges(raw.model.merges, &vocab)?;
+        let pair_merges = pair_merges(&merge_ranks, &vocab)?;
+        drop(merge_ranks);
+        let byte_ids = byte_ids(&byte_encoder, &vocab);
         let maximum_decoded_token_bytes = vocab_by_id
             .iter()
             .enumerate()
@@ -361,7 +368,8 @@ impl SmolLm2Tokenizer {
         Ok(Self {
             vocab,
             vocab_by_id: vocab_by_id.into_boxed_slice(),
-            merge_ranks,
+            pair_merges,
+            byte_ids,
             special_ids,
             added_ids,
             added_trie,
@@ -423,51 +431,110 @@ impl SmolLm2Tokenizer {
             TokenizerProfile::Qwen2 => qwen2_pieces(input),
             TokenizerProfile::Llama3 => llama3_pieces(input),
         };
+        let mut work = BpeWork::default();
+        let mut mapped = String::new();
         for piece in pieces {
-            let mapped = piece
-                .as_bytes()
-                .iter()
-                .map(|byte| self.byte_encoder[usize::from(*byte)])
-                .collect::<String>();
             // `ignore_merges`: a piece that is itself a vocabulary entry is
             // that token, whatever the merge table would build from it.
             if self.profile == TokenizerProfile::Llama3 {
+                mapped.clear();
+                mapped.extend(
+                    piece
+                        .as_bytes()
+                        .iter()
+                        .map(|byte| self.byte_encoder[usize::from(*byte)]),
+                );
                 if let Some(&id) = self.vocab.get(&mapped) {
                     output.push(id);
                     continue;
                 }
             }
-            output.extend(self.bpe(&mapped)?);
+            self.bpe(piece.as_bytes(), &mut work, output)?;
         }
         Ok(())
     }
 
-    fn bpe(&self, mapped: &str) -> ModelResult<Vec<u32>> {
-        let mut nodes = mapped
-            .chars()
-            .map(|character| BpeNode::new(character.to_string()))
-            .collect::<Vec<_>>();
-        if nodes.is_empty() {
-            return Ok(Vec::new());
+    /// Merges one piece's byte tokens by rank, lowest rank first and the
+    /// leftmost pair among equal ranks, as the string merge engine does. Every
+    /// merge's result is a vocabulary entry (checked at load), so the tokens
+    /// are the same IDs that engine looks up from the merged strings.
+    fn bpe(&self, piece: &[u8], work: &mut BpeWork, output: &mut Vec<u32>) -> ModelResult<()> {
+        // A byte without a token can take part in no merge (every merge side is
+        // a vocabulary entry), so it would stay an unknown token.
+        if let Some(byte) = piece
+            .iter()
+            .find(|byte| self.byte_ids[usize::from(**byte)] == NO_TOKEN)
+        {
+            return Err(invalid(format!(
+                "BPE produced token absent from vocabulary: {:?}",
+                self.byte_encoder[usize::from(*byte)].to_string()
+            )));
         }
-        merge_bpe_nodes(&mut nodes, &self.merge_ranks);
-
-        let mut ids = Vec::new();
-        let mut current = Some(0_usize);
-        while let Some(index) = current {
-            let node = &nodes[index];
-            if node.alive {
-                let id = self.vocab.get(&node.text).copied().ok_or_else(|| {
-                    invalid(format!(
-                        "BPE produced token absent from vocabulary: {:?}",
-                        node.text
-                    ))
-                })?;
-                ids.push(id);
+        match piece {
+            [] => return Ok(()),
+            [byte] => {
+                output.push(self.byte_ids[usize::from(*byte)]);
+                return Ok(());
             }
+            _ => {}
+        }
+        let BpeWork { nodes, heap } = work;
+        nodes.clear();
+        heap.clear();
+        let last = u32::try_from(piece.len() - 1)
+            .ok()
+            .filter(|last| *last < NO_NODE)
+            .ok_or_else(|| invalid("BPE piece exceeds the node index range"))?;
+        nodes.extend((0..=last).zip(piece).map(|(index, byte)| IdNode {
+            id: self.byte_ids[usize::from(*byte)],
+            previous: if index == 0 { NO_NODE } else { index - 1 },
+            next: if index == last { NO_NODE } else { index + 1 },
+            alive: true,
+        }));
+        for left in 0..last {
+            self.push_pair(nodes, heap, left, left + 1);
+        }
+        while let Some(Reverse((rank, left, right))) = heap.pop() {
+            let (l, r) = (left as usize, right as usize);
+            if !(nodes[l].alive && nodes[l].next == right && nodes[r].alive) {
+                continue;
+            }
+            let Some(&(current, merged)) = self.pair_merges.get(&pair_key(nodes[l].id, nodes[r].id))
+            else {
+                continue;
+            };
+            if current != rank {
+                continue;
+            }
+            let next = nodes[r].next;
+            nodes[r].alive = false;
+            nodes[l].id = merged;
+            nodes[l].next = next;
+            if next != NO_NODE {
+                nodes[next as usize].previous = left;
+            }
+            let previous = nodes[l].previous;
+            if previous != NO_NODE {
+                self.push_pair(nodes, heap, previous, left);
+            }
+            if next != NO_NODE {
+                self.push_pair(nodes, heap, left, next);
+            }
+        }
+        let mut current = 0_u32;
+        while current != NO_NODE {
+            let node = &nodes[current as usize];
+            output.push(node.id);
             current = node.next;
         }
-        Ok(ids)
+        Ok(())
+    }
+
+    fn push_pair(&self, nodes: &[IdNode], heap: &mut IdHeap, left: u32, right: u32) {
+        let key = pair_key(nodes[left as usize].id, nodes[right as usize].id);
+        if let Some(&(rank, _)) = self.pair_merges.get(&key) {
+            heap.push(Reverse((rank, left, right)));
+        }
     }
 
     fn decoded_token(
@@ -1299,6 +1366,94 @@ impl AddedTrie {
         }
         best
     }
+}
+
+const NO_NODE: u32 = u32::MAX;
+const NO_TOKEN: u32 = u32::MAX;
+
+/// One symbol of a piece being merged by token ID.
+#[derive(Clone, Copy)]
+struct IdNode {
+    id: u32,
+    previous: u32,
+    next: u32,
+    alive: bool,
+}
+
+type IdHeap = BinaryHeap<Reverse<(u32, u32, u32)>>;
+
+/// Buffers reused across the pieces of one input.
+#[derive(Default)]
+struct BpeWork {
+    nodes: Vec<IdNode>,
+    heap: IdHeap,
+}
+
+type PairMerges = HashMap<u64, (u32, u32), BuildHasherDefault<PairHasher>>;
+
+const fn pair_key(left: u32, right: u32) -> u64 {
+    ((left as u64) << 32) | right as u64
+}
+
+/// A multiplicative hash for the 64-bit pair keys; the table holds only the
+/// tokenizer's own merges, so it needs no protection against chosen keys.
+#[derive(Default)]
+struct PairHasher(u64);
+
+impl Hasher for PairHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.write_u64(u64::from(*byte));
+        }
+    }
+
+    fn write_u64(&mut self, value: u64) {
+        self.0 = (self.0.rotate_left(5) ^ value).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        self.0 ^= self.0 >> 29;
+    }
+}
+
+fn pair_merges(
+    ranks: &BTreeMap<String, BTreeMap<String, usize>>,
+    vocab: &BTreeMap<String, u32>,
+) -> ModelResult<PairMerges> {
+    let id = |token: &str| {
+        vocab
+            .get(token)
+            .copied()
+            .ok_or_else(|| invalid(format!("merge token absent from vocabulary: {token:?}")))
+    };
+    let mut merges = PairMerges::default();
+    merges.reserve(ranks.values().map(BTreeMap::len).sum());
+    let mut combined = String::new();
+    for (left, rights) in ranks {
+        let left_id = id(left)?;
+        for (right, &rank) in rights {
+            combined.clear();
+            combined.push_str(left);
+            combined.push_str(right);
+            let rank = u32::try_from(rank).map_err(|_| invalid("merge rank exceeds u32"))?;
+            merges.insert(pair_key(left_id, id(right)?), (rank, id(&combined)?));
+        }
+    }
+    Ok(merges)
+}
+
+fn byte_ids(byte_encoder: &[char; 256], vocab: &BTreeMap<String, u32>) -> [u32; 256] {
+    let mut ids = [NO_TOKEN; 256];
+    let mut text = String::new();
+    for (byte, character) in byte_encoder.iter().enumerate() {
+        text.clear();
+        text.push(*character);
+        if let Some(&id) = vocab.get(&text) {
+            ids[byte] = id;
+        }
+    }
+    ids
 }
 
 struct BpeNode {
@@ -2416,6 +2571,75 @@ mod tests {
             tokenizer.encode("hello", EncodeOptions::default()).unwrap(),
             [18]
         );
+    }
+
+    #[test]
+    fn id_merges_match_the_string_merge_engine_on_ties_and_overlaps() {
+        // Overlapping pairs ("a a" in "aaa"), equal ranks at several
+        // positions, and merges whose result enables a lower-ranked merge.
+        let tokens = [
+            "a", "b", "aa", "ab", "ba", "bb", "aaa", "aab", "aba", "abab", "baa", "aaaa", "bab",
+        ];
+        let merges = [
+            "a b", "a a", "b a", "aa a", "ab ab", "b b", "a ab", "ba a", "aa aa", "ab a", "b ab",
+        ];
+        let vocab = tokens
+            .iter()
+            .enumerate()
+            .map(|(id, token)| format!("\"{token}\":{id}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let merge_list = merges
+            .iter()
+            .map(|merge| format!("\"{merge}\""))
+            .collect::<Vec<_>>()
+            .join(",");
+        let json = FIXTURE
+            .replace(r#""added_tokens":[{"id":0,"content":"<|end|>","single_word":false,"lstrip":false,"rstrip":false,"normalized":false,"special":true}]"#, r#""added_tokens":[]"#)
+            .replace(
+                FIXTURE
+                    .split(r#""vocab":"#)
+                    .nth(1)
+                    .and_then(|rest| rest.split("]}").next())
+                    .unwrap(),
+                &format!("{{{vocab}}},\n        \"merges\":[{merge_list}"),
+            );
+        let tokenizer = SmolLm2Tokenizer::from_json_slice(json.as_bytes()).expect("tie tokenizer");
+        let vocab_map = tokens
+            .iter()
+            .enumerate()
+            .map(|(id, token)| ((*token).to_owned(), u32::try_from(id).unwrap()))
+            .collect::<BTreeMap<_, _>>();
+        let ranks = validate_merges(
+            merges
+                .iter()
+                .map(|merge| RawMerge::Text((*merge).to_owned()))
+                .collect(),
+            &vocab_map,
+        )
+        .unwrap();
+        for length in 1..=10_u32 {
+            for bits in 0..(1_u32 << length) {
+                let input = (0..length)
+                    .map(|index| if bits >> index & 1 == 0 { 'a' } else { 'b' })
+                    .collect::<String>();
+                let mut nodes = input
+                    .chars()
+                    .map(|character| BpeNode::new(character.to_string()))
+                    .collect::<Vec<_>>();
+                merge_bpe_nodes(&mut nodes, &ranks);
+                let expected = nodes
+                    .iter()
+                    .filter(|node| node.alive)
+                    .map(|node| vocab_map[&node.text])
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    tokenizer.encode(&input, EncodeOptions::default()).unwrap(),
+                    expected,
+                    "{input}"
+                );
+            }
+        }
     }
 
     #[test]

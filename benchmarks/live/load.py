@@ -4,6 +4,7 @@
 usage: load.py HOST:PORT MODEL --prompt-words N[,N...] --max-tokens N
                (--concurrency C | --rate R [--burst ON_S,OFF_S])
                --requests N [--warmup N] [--seed S] [--out FILE] [--extra JSON]
+               [--shared-prefix-words N] [--records FILE]
 
 Closed loop keeps C requests in flight. Open loop sends Poisson arrivals at R
 requests per second whatever the server is doing, so queueing shows up in
@@ -84,7 +85,7 @@ async def one(host, port, body, started_at, record):
         return
     completion = usage["completion_tokens"]
     record.update(
-        status=200, error=False, finish=finish,
+        status=200, error=False, finish=finish, start=started_at,
         prompt_tokens=usage["prompt_tokens"], completion_tokens=completion,
         ttft=times[0] - started_at, e2e=times[-1] - started_at,
         tpot=(times[-1] - times[0]) / max(completion - 1, 1),
@@ -135,15 +136,21 @@ async def main():
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--out")
     parser.add_argument("--extra", default="{}")
+    parser.add_argument("--records", help="also write each measured request's start, TTFT, E2E and prompt tokens")
+    parser.add_argument("--shared-prefix-words", type=int, default=0,
+                        help="start every request with the same system document of N words")
     args = parser.parse_args()
     host, port = args.address.split(":")
     rng = random.Random(args.seed)
     lengths = [int(value) for value in args.prompt_words.split(",")]
     total = args.warmup + args.requests
+    shared = []
+    if args.shared_prefix_words:
+        shared = [{"role": "system", "content": "Reference:\n\n" + document(random.Random(0), args.shared_prefix_words)}]
     bodies = [{
         "model": args.model, "temperature": 0, "max_tokens": args.max_tokens, "stream": True,
         "stream_options": {"include_usage": True},
-        "messages": [{"role": "user", "content": prompt(rng, rng.choice(lengths))}],
+        "messages": shared + [{"role": "user", "content": prompt(rng, rng.choice(lengths))}],
         **json.loads(args.extra),
     } for _ in range(total)]
     records = [{} for _ in range(total)]
@@ -184,6 +191,11 @@ async def main():
     if args.out:
         with open(args.out, "w") as output:
             json.dump(summary, output, indent=1)
+    if args.records:
+        with open(args.records, "w") as output:
+            json.dump([{"start": row["start"] - start, "ttft": row["ttft"], "e2e": row["e2e"],
+                        "prompt_tokens": row["prompt_tokens"]} for row in measured if not row.get("error")],
+                      output)
 
 
 asyncio.run(main())
