@@ -1,0 +1,80 @@
+steps 323
+    25.2 ms x74
+    25.3 ms x131
+    25.4 ms x7
+    25.5 ms x25
+    25.6 ms x14
+    25.7 ms x8
+    25.8 ms x6
+    34.9 ms x4
+    38.3 ms x3
+    38.5 ms x8
+    38.6 ms x7
+    38.7 ms x6
+    38.8 ms x5
+cluster kernels=489 ~25ms: 227 steps span 25.27 busy 24.34
+     17.853 ms  ampere_bf16_s16816gemm_bf16_64_1... grid=(2376, 1, 1)
+      4.187 ms  Kernel2 grid=(8, 7, 1)
+      1.119 ms  strided_paged_kernel grid=(36, 1, 8)
+      0.563 ms  vector_bf16_rms_norm_kernel grid=(8, 1, 1)
+      0.219 ms  qkv_split_bias_rope_kv_write_x2_kernel grid=(64, 1, 1)
+      0.194 ms  silu_gated_multiply_merged_rows_bf16x8_kernel grid=(108, 1, 1)
+      0.127 ms  merge_parts_kernel grid=(40, 1, 1)
+      0.031 ms  bf16_argmax_kernel grid=(16, 1, 1)
+      0.031 ms  row_gather_kernel grid=(9504, 1, 1)
+      0.007 ms  plan_kernel grid=(1, 1, 1)
+cluster kernels=489 ~26ms: 45 steps span 25.63 busy 24.67
+     17.850 ms  ampere_bf16_s16816gemm_bf16_64_1... grid=(80, 1, 2)
+      4.203 ms  Kernel2 grid=(8, 7, 1)
+      1.436 ms  strided_paged_kernel grid=(70, 1, 8)
+      0.563 ms  vector_bf16_rms_norm_kernel grid=(24, 1, 1)
+      0.220 ms  qkv_split_bias_rope_kv_write_x2_kernel grid=(192, 1, 1)
+      0.194 ms  silu_gated_multiply_merged_rows_bf16x8_kernel grid=(216, 1, 1)
+      0.127 ms  merge_parts_kernel grid=(80, 1, 1)
+      0.031 ms  bf16_argmax_kernel grid=(32, 1, 1)
+      0.031 ms  row_gather_kernel grid=(19008, 1, 1)
+      0.007 ms  plan_kernel grid=(1, 1, 1)
+cluster kernels=489 ~39ms: 23 steps span 38.68 busy 37.61
+     20.514 ms  Kernel2 grid=(32, 7, 1)
+     13.314 ms  ampere_bf16_s16816gemm_bf16_25_4... grid=(108, 2, 1)
+      1.646 ms  strided_paged_kernel grid=(216, 1, 8)
+      0.745 ms  vector_bf16_rms_norm_kernel grid=(256, 1, 1)
+      0.591 ms  silu_gated_multiply_merged_rows_bf16x8_kernel grid=(1728, 1, 1)
+      0.517 ms  qkv_split_bias_rope_kv_write_x2_kernel grid=(2048, 1, 1)
+      0.213 ms  merge_parts_kernel grid=(640, 1, 1)
+      0.037 ms  bf16_argmax_kernel grid=(32, 1, 1)
+      0.013 ms  plan_kernel grid=(1, 1, 1)
+      0.010 ms  embedding_kernel grid=(5120, 1, 1)
+cluster kernels=489 ~38ms: 16 steps span 38.26 busy 37.20
+     20.314 ms  Kernel2 grid=(8, 149, 1)
+     13.229 ms  ampere_bf16_s16816gemm_bf16_25_4... grid=(108, 2, 1)
+      1.530 ms  strided_paged_kernel grid=(216, 1, 8)
+      0.737 ms  vector_bf16_rms_norm_kernel grid=(176, 1, 1)
+      0.580 ms  silu_gated_multiply_merged_rows_bf16x8_kernel grid=(1728, 1, 1)
+      0.513 ms  qkv_split_bias_rope_kv_write_x2_kernel grid=(1408, 1, 1)
+      0.211 ms  merge_parts_kernel grid=(640, 1, 1)
+      0.037 ms  bf16_argmax_kernel grid=(32, 1, 1)
+      0.020 ms  ampere_bf16_s16816gemm_bf16_25_5... grid=(28, 3, 1)
+      0.012 ms  plan_kernel grid=(1, 1, 1)
+cluster kernels=489 ~27ms: 4 steps span 27.05 busy 24.37
+     17.868 ms  ampere_bf16_s16816gemm_bf16_64_1... grid=(80, 1, 2)
+      4.202 ms  Kernel2 grid=(8, 7, 1)
+      1.106 ms  strided_paged_kernel grid=(70, 1, 8)
+      0.567 ms  vector_bf16_rms_norm_kernel grid=(32, 1, 1)
+      0.220 ms  qkv_split_bias_rope_kv_write_x2_kernel grid=(256, 1, 1)
+      0.196 ms  silu_gated_multiply_merged_rows_bf16x8_kernel grid=(216, 1, 1)
+      0.129 ms  merge_parts_kernel grid=(80, 1, 1)
+      0.031 ms  bf16_argmax_kernel grid=(32, 1, 1)
+      0.031 ms  row_gather_kernel grid=(19008, 1, 1)
+      0.007 ms  plan_kernel grid=(1, 1, 1)
+cluster kernels=489 ~35ms: 4 steps span 34.92 busy 33.89
+     13.132 ms  ampere_bf16_s16816gemm_bf16_25_4... grid=(108, 2, 1)
+     10.083 ms  Kernel2 grid=(8, 7, 1)
+      3.865 ms  ampere_bf16_s16816gemm_bf16_25_5... grid=(28, 3, 1)
+      3.783 ms  ampere_bf16_s16816gemm_bf16_12_6... grid=(40, 3, 2)
+      1.276 ms  strided_paged_kernel grid=(216, 1, 8)
+      0.671 ms  vector_bf16_rms_norm_kernel grid=(32, 1, 1)
+      0.443 ms  silu_gated_multiply_merged_rows_bf16x8_kernel grid=(1188, 1, 1)
+      0.408 ms  qkv_split_bias_rope_kv_write_x2_kernel grid=(256, 1, 1)
+      0.174 ms  merge_parts_kernel grid=(440, 1, 1)
+      0.037 ms  bf16_argmax_kernel grid=(32, 1, 1)
