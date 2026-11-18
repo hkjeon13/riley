@@ -103,9 +103,23 @@ Instruct와 비슷하게 단일 요청의 Riley TTFT p95는 vLLM 대비 +2.7%였
 
 재시도는 실행 중 확인한 서버의 PID·시작 시각을 기록하고, 같은 서버가 종료된 상태에서만 남은 NVML 표본을 받아들인다. Nsight의 임시 경로도 자식 프로세스가 종료된 뒤 정리하도록 순서를 바꿨다. Linux에서 실제 자식 프로세스를 사용해 실행·좀비·회수 상태, 시작 시각 불일치, 외부 PID를 검증했다. GPU 계측 재실행은 기존 대기열 뒤에 등록했다. [재시도 패치](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-retry/runner.patch.gz) · [재시도 순서](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-retry/campaign.sh)
 
+이전에 계측 없이 잰 Qwen3-4B 길이 곡선의 실행 파일은 `riley-lp16`이었다. Nsight의 관측 비용을 비교할 때는 재시도와 같은 `f7c956d3c` 바이너리·입력·KV·설정을 사용한다. 이 대조를 GPU 7에 등록했으며 GPU 6의 W4 추적까지 끝난 뒤 실행한다. [이전 실행 파일 기록](../../benchmarks/evidence/20261119-w3-qwen3-lengths/lengths/receipt.json) · [같은 빌드 대조 실행](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-retry/baseline-campaign.sh)
+
 ### 엔진별 배치 토큰 예산 대조
 
-Riley 실행은 스텝당 1,024토큰을 명시했다. 서버에 설치된 vLLM 0.27.1의 소스는 이 A100과 OpenAI 서버 조건에서 chunked prefill 기본 배치 한도를 2,048토큰으로 선택한다. 기존 실행의 실제 스케줄러 한도는 설치 소스에서 추론한 값으로 기록한다. Qwen2.5-14B-Instruct에서 vLLM의 한도를 각각 1,024·2,048로 명시하고 같은 KV·요청에 적용하는 대조를 등록했다. 현재 대기열 뒤에 실행하며 토큰 한도 변화의 효과를 확인한다. [기본값과 소스 해시](../../benchmarks/evidence/20261119-w3-budget-control/batch-budget-observation.json) · [대조 실행 순서](../../benchmarks/evidence/20261119-w3-budget-control/campaign.sh) · [결과 검증 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/compare_vllm_budgets.py)
+Riley 실행은 스텝당 1,024행을 명시했다. 설치된 vLLM 0.27.1 소스에서 이 A100의 OpenAI 서버용 기본 배치 한도는 2,048토큰으로 추론했다. 후속 실험에서 Qwen2.5-14B-Instruct의 vLLM 한도를 1,024와 2,048로 명시했다. 양쪽 API 시작 로그에서 각각의 값을 확인했고 1,024 조건은 스케줄러 로그에도 값이 있었다. 두 조건의 KV 41,216토큰과 FlashAttention 2 경로가 같았다. [기본값과 소스 해시](../../benchmarks/evidence/20261119-w3-budget-control/batch-budget-observation.json) · [실행 원본과 체크섬](../../benchmarks/evidence/20261119-w3-budget-control/result-SHA256SUMS)
+
+두 조건은 GPU 7에서 1,024 → 2,048 순서로 각각 224건을 측정했고, 워밍업 36건을 포함해 오류·429가 없었다. 요청 본문과 실제 입력 토큰 수, 생성 토큰 수는 두 조건에서 모두 일치했다. 출력 텍스트와 종료 사유가 일치한 요청은 66/224였다. [결과 집계](../../benchmarks/evidence/20261119-w3-budget-control/result/comparison.json) · [검증 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/compare_vllm_budgets.py)
+
+| 부하 | 1,024 TTFT p95 (ms) | 2,048 TTFT p95 (ms) | 1,024의 변화율 |
+|---|---:|---:|---:|
+| `rag-c1` | 480 | 451 | +6.4% |
+| `rag-c8` seed 1 | 1,097 | 1,244 | −11.9% |
+| `rag-c8` seed 2 | 1,078 | 1,090 | −1.1% |
+| 8개 동시 전송 | 3,260 | 2,980 | +9.4% |
+| 8개 50ms 간격 전송 | 2,902 | 2,662 | +9.0% |
+
+두 한도의 차이는 부하에 따라 방향이 달랐다. 이전 Riley 1,024행 실행과 같은 요청 본문·입력 길이·KV로 교차 검산하면 Riley의 `rag-c8` TTFT p95는 vLLM 1,024토큰보다 두 seed에서 60.2%와 38.0% 길었다. 두 엔진의 수치 한도를 명시해도 이 측정의 지연 격차가 남았다. vLLM 한도당 한 번, Riley는 앞선 세션의 결과이므로 반복 정밀도와 엔진별 스케줄러의 차이는 추가 검토 범위다. [Riley 교차 비교](../../benchmarks/evidence/20261119-w3-budget-control/result/riley-cross-session-comparison.json)
 
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 

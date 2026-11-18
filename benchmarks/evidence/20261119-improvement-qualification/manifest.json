@@ -1,5 +1,5 @@
 {
-  "audited_main": "8c7357b4d636506abe305c6dfa06b9d43a1fb422",
+  "audited_main": "962912be7a8f395c5b5e0b749687723966abc2a3",
   "release_status": "hold",
   "shared_program_git_objects": {
     "Cargo.toml": "e75f6ce3a2ad13911f1a91fc2b982a410f9d32f2",
@@ -276,6 +276,20 @@
           "sha256": "e859e9fb365b8d043c6d896c942c7b9b5e81b7fe6d11abf71501a195fce24fae"
         }
       ]
-    }
+    },
+    "qwen14_vllm_batch_budget_control": [
+      {
+        "path": "benchmarks/evidence/20261119-w3-budget-control/result/comparison.json",
+        "sha256": "71c5bd37b2acfa709c13e92ffc319e08cfc841426a5f23533b391986862a478a"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-budget-control/result/riley-cross-session-comparison.json",
+        "sha256": "d47ecacc965bc653d9a6dfa93ac849670f4ba0f02eef8ebfa596aa525bc751b3"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-budget-control/result-SHA256SUMS",
+        "sha256": "ef96a4b38a9deb701d5362489ec4eee7c6252a12cd58cc37ac581e450963b57e"
+      }
+    ]
   }
 }

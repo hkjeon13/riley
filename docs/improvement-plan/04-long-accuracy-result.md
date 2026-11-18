@@ -85,7 +85,9 @@ Hugging Face SDPA에는 같은 입력 ID를 공급하고 원래 첫 출력 ID를
 
 GPU 6의 HF SDPA에서 첫 레이어 Q만, 첫 레이어 QKV, 전체 레이어 QKV의 bias를 각각 BF16 투영 후 더했다. 두 사례에서 세 조건의 전체 logits 해시는 모두 기준값과 달랐다. 첫 토큰은 각 조건에서 기준과 같았고, 사례 3에서는 ID 264와 5257의 점수도 18.25와 18.375로 유지됐다. 로짓 전체가 같은 기준 반복 결과도 확인했다. 이 HF 실행에서는 bias 적용 순서만으로 Riley의 사례 3 첫 토큰이 재현되지 않았다. [bias 대조 원본](../../benchmarks/evidence/20261119-w4-layer-trace/bias-order-control/result.json) · [도구와 실행 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/bias-order-SHA256SUMS)
 
-같은 HF 모델에서 캐시를 유지한 채 prefill을 나눴다. 사례 3은 `3072+229`와 `1024+1024+1024+229`, 사례 9는 `3328+2`와 `1024+1024+1024+256+2`로 실행했다. 각 구간 뒤 캐시 길이는 소비한 입력 길이와 일치했다. 사례 3의 `3072+229` 조건에서는 ID 5257의 logit이 18.375에서 18.5로 올랐고 두 사례의 첫 토큰은 모든 분할에서 HF 기준과 같았다. Riley의 attention과 paged KV를 각각 교체하는 대조는 남아 있다. [prefill 분할 원본](../../benchmarks/evidence/20261119-w4-layer-trace/prefill-partition-control/result.json) · [도구와 실행 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/prefill-partition-SHA256SUMS)
+같은 HF 모델에서 캐시를 유지한 채 prefill을 나눴다. 사례 3은 `3072+229`와 `1024+1024+1024+229`, 사례 9는 `3328+2`와 `1024+1024+1024+256+2`로 실행했다. 각 구간 뒤 캐시 길이는 소비한 입력 길이와 일치했다. 사례 3의 `3072+229` 조건에서는 ID 5257의 logit이 18.375에서 18.5로 올랐고 두 사례의 첫 토큰은 모든 분할에서 HF 기준과 같았다. [prefill 분할 원본](../../benchmarks/evidence/20261119-w4-layer-trace/prefill-partition-control/result.json) · [도구와 실행 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/prefill-partition-SHA256SUMS)
+
+Riley 네이티브 빌드 `f7c956d3c`에서 기준을 `dense-v1`과 `fused-split-v1`로 명시했다. 각 대조 실행에서 prompt attention을 `shared-kv-v1`로 바꾸거나 KV 쓰기를 `separate-v1`로 바꾼다. 동일 토큰 ID를 사용하고 각 설정에서 일반 요청, logprobs 요청, 일반 반복 요청의 생성 ID·텍스트·종료 사유를 대조한다. 사례 3과 9를 대상으로 W3 계측 뒤에 A100 GPU 6에서 실행하도록 등록했다. 이 대조는 KV 주소와 causal mask의 내부 상태를 직접 기록하는 단계와 별개다. [실행 순서](../../benchmarks/evidence/20261119-w4-layer-trace/attention-controls/campaign.sh) · [요청 캡처 도구](../../benchmarks/evidence/20261119-w4-layer-trace/tools/riley_attention_controls.py)
 
 ## GSM8K 전수 품질 대조
 
