@@ -102,6 +102,19 @@ Riley 네이티브 빌드 `f7c956d3c`에서 기준을 `dense-v1`과 `fused-split
 
 사례 3에서 Riley의 FP64 점수 차이는 BF16 반올림 뒤 동점이 된다. HF의 마지막 norm 행으로 계산한 차이는 반올림 뒤에도 남는다. 동일한 출력 가중치로 두 엔진의 관측값을 재현했으므로 이 두 토큰의 차이는 출력 투영에 들어온 마지막 norm 행에서 이미 설명된다. 앞단의 어느 연산 조합이 그 norm 차이를 만들었는지는 추가 확인 범위다.
 
+#### Residual 경로와 최종 RMSNorm 재계산
+
+두 사례의 마지막 입력 행에서 28개 레이어의 attention·MLP residual 덧셈을 각각 재계산했다. 사례·엔진당 BF16 원소 200,704개의 결과가 모두 캡처와 일치했다. 최종 RMSNorm에서 정규화 직후 BF16으로 반올림하고 가중치를 곱한 뒤 다시 반올림하는 순서를 적용하자 두 사례·두 엔진의 3,584개 원소를 각각 전부 재현했다. 마지막에 한 번만 반올림하는 대조는 각 행에서 2,587–2,691개가 일치했다. [잔차·정규화 재계산 원본](../../benchmarks/evidence/20261119-w4-layer-trace/residual-margin-control/result.json) · [계산 도구](../../benchmarks/evidence/20261119-w4-layer-trace/tools/replay_residual_margin.py)
+
+토큰 `5257 − 264`의 점수 차이가 Riley에서 HF로 바뀐 양을 같은 출력 가중치로 재계산했다. 누적 residual을 토큰 점수 방향으로 투영한 값과 RMS 배율 변화, 최종 norm의 두 BF16 반올림 영향을 합하면 관측한 점수 차이 변화와 일치한다.
+
+| 사례 | 관측 점수 차이 변화 | 누적 residual | RMS 배율 | 최종 norm 반올림 |
+|---:|---:|---:|---:|---:|
+| 3 | +0.065256 | +0.036596 | +0.000078 | +0.028581 |
+| 9 | +0.070010 | +0.052576 | −0.000073 | +0.017506 |
+
+사례 3에서는 21·22번 레이어가 같은 방향으로 기여했고 27번 레이어는 반대 방향으로 기여했다. 이 값은 기존 활성값에서 관측한 차이로, 특정 레이어를 바꿨을 때의 결과를 예측하지 않는다. 다음 원인 대조에서는 같은 입력을 각 엔진의 attention·MLP에 공급해 그 연산에서 추가되는 차이를 측정한다.
+
 ### Native KV와 causal mask 재계산
 
 GPU 6에서 두 사례의 첫 레이어가 사용한 물리 KV 페이지 207개와 209개를 읽었다. 마지막 prefill 묶음의 첫 행과 끝 행에서 KV head 0을 공유하는 query head 7개씩 비교했다. Native Q/K/V와 논리 위치의 causal 범위를 사용한 독립 FP64 재계산의 RMS 차이는 네 행에서 0.000133–0.000197이었다. 마지막 visible 토큰을 제외하면 RMS 차이는 0.0875–0.1171이었고, 첫 행에 미래 토큰을 포함하면 0.00175–0.02668이었다. [사례 3](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/result/case3-replay.json) · [사례 9](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/result/case9-replay.json)

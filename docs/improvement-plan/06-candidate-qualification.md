@@ -20,7 +20,7 @@
 |---|---|---|
 | W1 Linux·과거 계약 | hosted Linux CPU·CUDA 검사와 고정 Python의 RC3 격리 테스트 34건 통과 | 실제 배포 이미지의 NVIDIA 드라이버 주입과 추론 |
 | W2·W3 성능 | 이벤트 발행·스케줄 네 조합, 두 14B 모델의 동일 KV·커널 계측, Qwen2.5-14B 요청별 prefill 대기와 vLLM 한도 대조, Qwen3-4B 길이별 대조. 진행 중인 prefill 우선 후보는 decode TPOT 회귀로 미채택. 완료 가능한 prefill 우선 후보는 두 번째 RAG seed의 TTFT와 두 동시 유입 조건의 decode 지연 증가로 미채택 | 채택할 후보의 재현성과 영향을 받는 모델의 출력·회귀 판정. 동시 유입 조건의 decode 지연 포함 |
-| W4 장문·정확성 | 고정 입력 18개와 holdout 11개의 엔진 비교, 두 사례 첫 BF16 차이와 마지막 norm의 토큰 순위 재계산, native layer 0의 KV·causal 재계산, 네 모델의 동일 입력 GSM8K에서 품질 기준 통과 | Riley/HF의 내부 Q/K/V 차이 원인과 최종 배포 후보 재확인 |
+| W4 장문·정확성 | 고정 입력 18개와 holdout 11개의 엔진 비교, 두 사례의 첫 BF16 차이 및 28개 레이어 residual·최종 norm 재계산, native layer 0의 KV·causal 재계산, 네 모델의 동일 입력 GSM8K에서 품질 기준 통과 | Riley/HF의 내부 Q/K/V 차이 원인과 최종 배포 후보 재확인 |
 | W4 스키마 | 문서화한 부분집합에서 GPU 일반 API 40건과 schema 계약 11건 통과 | 배포 이미지의 대표 모델 API 재확인 |
 | W5 운영 | 캐시 off·on 30분 부하·종료 회수, 느린 SSE와 취소, GPU 메모리 오류 주입 네 사례 | 재현된 익명 RSS 증가의 할당 원인과 증가 0 조건, 실제 운영 분포, 최종 배포 이미지의 동일 바이너리 검증 |
 
