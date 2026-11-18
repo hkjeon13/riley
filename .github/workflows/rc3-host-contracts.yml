@@ -20,13 +20,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Build an isolated Jammy runtime from the signed Ubuntu snapshot
+      - name: Build an isolated Jammy runtime with the pinned Ubuntu packages
         shell: bash
         run: |
           set -euo pipefail
           context="$RUNNER_TEMP/riley-rc3-context"
           mkdir "$context"
-          cp /etc/ssl/certs/ca-certificates.crt "$context/"
+          cp ci/release/LegacyHostContracts.sha256 "$context/packages.sha256"
+          archive=https://snapshot.ubuntu.com/ubuntu/20260826T090000Z/pool/main/p/python3.10
+          while read -r _digest package; do
+            curl --fail --silent --show-error --location --retry 4 --retry-max-time 60 \
+              --connect-timeout 10 --max-time 45 --output "$context/$package" "$archive/$package"
+          done <"$context/packages.sha256"
+          (cd "$context" && sha256sum --check packages.sha256)
           docker buildx build --load --platform linux/amd64 --progress plain \
             --file ci/release/LegacyHostContracts.Dockerfile \
             --tag "riley-rc3-fixtures:$GITHUB_RUN_ID" "$context"

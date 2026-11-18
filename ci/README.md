@@ -115,9 +115,9 @@ Some historical RC3 integration tests execute the exact root-owned
 `7d51cd6b48b521277f5caa4610a82126e315fa2be4df069823a8b1eeb5bd4a86`.
 Production CPU reports named skips when the interpreter is absent. The
 [Historical RC3 Linux fixtures](../.github/workflows/rc3-host-contracts.yml)
-workflow builds an isolated Jammy image with the exact Python package
-`3.10.12-1~22.04.16` from a signed [Ubuntu snapshot](https://snapshot.ubuntu.com/).
-It verifies the interpreter hash and runs the fixtures with a read-only
+workflow builds an isolated Jammy image with Python `3.10.12-1~22.04.16`
+from an [Ubuntu snapshot](https://snapshot.ubuntu.com/). It verifies the
+historical packages and the interpreter by SHA-256. The fixtures use a read-only
 checkout and network disabled.
 
 Production CPU's manual `run_legacy_host_tests` input remains available on the
