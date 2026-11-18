@@ -63,6 +63,8 @@ GPU 7의 30분 재실행에서 정상 완료 13,749건과 의도적 연결 종�
 
 같은 서버 PID의 900초와 drain 시점에서 `/proc/PID/status` RSS는 15,161.46MiB로 같았다. `smaps_rollup` RSS는 15,544,012KiB에서 15,544,712KiB로 증가했고 익명 페이지도 700KiB 증가했다. 이 실행에서 RSS 증가 0 조건을 충족하지 못했다. 정밀 표본의 읽기 시간은 180ms와 252ms였으며, 기존 비계측 반복 대비 후반 TTFT p95와 전체 완료 p95는 각각 0.17%, 0.28% 낮았다. 이 대조는 증가한 페이지가 익명이라는 점까지 확인하며, 할당 지점은 아직 확인하지 못했다. [원본 대조와 판정](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/result/comparison.json)
 
+익명 RSS가 증가한 범위를 좁히기 위해 GPU 7에서 같은 바이너리와 30분 부하로 재실행을 시작했다. 이번 실행에는 `237f12546`의 정밀 RSS 실패 판정을 적용한다. 후반 첫 표본과 drain에서 `smaps` 매핑 종류별 RSS와 익명 페이지 차이를 수집한다. A100의 별도 CPU 프로세스로 매핑 파싱을 확인했다. [재실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/anon-mappings/campaign.sh) · [A100 파싱 사전검사](../../benchmarks/evidence/20261119-w5-mixed-soak/anon-mappings/smaps-cpu-check.json) · [대조 검사기](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/compare_anon_mappings.py)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)

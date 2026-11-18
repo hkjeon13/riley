@@ -1,0 +1,11 @@
+--- a/tools/run_soak.py
++++ b/tools/run_soak.py
+@@ -129,6 +129,8 @@
+     ]
+     if mode == "smoke":
+         client.append("--smoke")
++    else:
++        client.append("--require-zero-rss-growth")
+     receipt["client_argv"] = client
+     job = spawn(client, "client.log")
+     deadline = time.monotonic() + seconds + 150
