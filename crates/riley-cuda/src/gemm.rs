@@ -1104,7 +1104,7 @@ impl CudaPreparedGemm {
     }
 
     /// Enters native C05-22 capture after the graph layer proves that the
-    /// fixed canonical RMSNorm output is the exact GEMM input allocation.
+    /// fixed canonical `RMSNorm` output is the exact GEMM input allocation.
     /// The native boundary repeats every immutable allocation, shape, and
     /// strict-plan check because raw callers can bypass the Rust owner.
     #[cfg(feature = "cuda")]

@@ -6526,7 +6526,7 @@ impl GraphExecHandle {
         let status = unsafe {
             riley_cuda_graph_exec_read_bf16_embedding_status_d2h_report(
                 pointer.as_ptr(),
-                (&mut report as *mut RawEmbeddingErrorReport).cast::<u8>(),
+                (&raw mut report).cast::<u8>(),
                 u64::from(EMBEDDING_ERROR_REPORT_SIZE),
                 &mut graph_error,
                 &mut error,

@@ -13,6 +13,8 @@
 
 감사 이후 `main`의 `a21829d0e`에서 CUDA 헤더의 두 진단 선언에 기능 조건을 적용했다. Production CPU와 C ABI 네 조합이 통과했다. 헤더 수정이 포함된 `120e984c9`의 이미지 빌드와 CPU 검증을 마쳤다. 새 이미지의 런타임 파일 해시는 위 표의 이미지와 모두 일치했다. A100 오류 주입 재시험과 배포 이미지의 실제 GPU 실행은 남아 있다. [후속 빌드와 CI 기록](01-validation-result.md#현행-배포-이미지) · [새 이미지 검증 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/header-fix/receipt.json)
 
+Rust 바인딩을 보완한 `9ea8012c1` 배포 이미지도 CPU 검증을 통과했다. 이 이미지에서 Riley 실행 파일의 해시가 바뀌었다. 별도 hosted 네이티브 CI는 일반 CUDA 서버와 오류 주입 바이너리를 링크한 뒤 CUDA Clippy 단계에서 실패했다. [새 이미지와 바이너리](../../benchmarks/evidence/20261119-cu124-distribution-image/ffi-fix/receipt.json) · [네이티브 CI 단계별 근거](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/hosted-native-ci.json)
+
 ## 현재 판정
 
 | 조건 | 확인된 근거 | 남은 확인 |

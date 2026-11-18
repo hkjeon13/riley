@@ -372,6 +372,10 @@
         "path": "benchmarks/evidence/20261119-w5-mixed-soak/rss-accounting/probe.json",
         "sha256": "8d7e46a88fd3ecd1cbd78cb8e004277a33c2799da58b7c391666b7d4084b0a8e"
       }
+    },
+    "ffi_fix_hosted_native_ci": {
+      "path": "benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/hosted-native-ci.json",
+      "sha256": "55e5d90c66cb661d9b236e13285457c55f833a9473866e3888f2e90d1f96ac69"
     }
   },
   "follow_up_distribution_image": {
@@ -383,6 +387,17 @@
     "cpu_image_verification": {
       "path": "benchmarks/evidence/20261119-cu124-distribution-image/header-fix/receipt.json",
       "sha256": "69d01d5af52986748e87d924e18f595c5199e780d494c5fcb58ccd5990ba6514"
+    },
+    "gpu_inference": "pending"
+  },
+  "cuda_ffi_fix_distribution_image": {
+    "source_revision": "9ea8012c111a5cbfc5d1494e4242855501e0762e",
+    "source_archive_sha256": "cf0968a63a6cfff18fc5df9728dfc8362fbcb5adf3798191e3c27bab35836c8a",
+    "image_id": "sha256:440a9ff2e15d6b985604c8762500f5d6d5f12150beadd2ed4472b1c6cebbb372",
+    "binary_sha256": "aadba57a2656ad4cf5c0839304b6c8f60fa1b4e621ed64b008c12af408e7f28b",
+    "cpu_image_verification": {
+      "path": "benchmarks/evidence/20261119-cu124-distribution-image/ffi-fix/receipt.json",
+      "sha256": "faae843905903f555319332d088360d94e9753a550e5f9539b89a959802d182e"
     },
     "gpu_inference": "pending"
   }

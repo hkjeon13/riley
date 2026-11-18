@@ -1,0 +1,105 @@
+[
+    {
+        "Id": "sha256:440a9ff2e15d6b985604c8762500f5d6d5f12150beadd2ed4472b1c6cebbb372",
+        "RepoTags": [
+            "riley:cu124-ci-44403168877"
+        ],
+        "RepoDigests": [],
+        "Parent": "",
+        "Comment": "buildkit.dockerfile.v0",
+        "Created": "2026-11-18T21:40:29.764358181Z",
+        "DockerVersion": "",
+        "Author": "",
+        "Config": {
+            "Hostname": "",
+            "Domainname": "",
+            "User": "65532:65532",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "ExposedPorts": {
+                "8080/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/opt/riley/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "NVARCH=x86_64",
+                "NVIDIA_REQUIRE_CUDA=cuda>=12.4 brand=tesla,driver>=470,driver<471 brand=unknown,driver>=470,driver<471 brand=nvidia,driver>=470,driver<471 brand=nvidiartx,driver>=470,driver<471 brand=geforce,driver>=470,driver<471 brand=geforcertx,driver>=470,driver<471 brand=quadro,driver>=470,driver<471 brand=quadrortx,driver>=470,driver<471 brand=titan,driver>=470,driver<471 brand=titanrtx,driver>=470,driver<471 brand=tesla,driver>=525,driver<526 brand=unknown,driver>=525,driver<526 brand=nvidia,driver>=525,driver<526 brand=nvidiartx,driver>=525,driver<526 brand=geforce,driver>=525,driver<526 brand=geforcertx,driver>=525,driver<526 brand=quadro,driver>=525,driver<526 brand=quadrortx,driver>=525,driver<526 brand=titan,driver>=525,driver<526 brand=titanrtx,driver>=525,driver<526 brand=tesla,driver>=535,driver<536 brand=unknown,driver>=535,driver<536 brand=nvidia,driver>=535,driver<536 brand=nvidiartx,driver>=535,driver<536 brand=geforce,driver>=535,driver<536 brand=geforcertx,driver>=535,driver<536 brand=quadro,driver>=535,driver<536 brand=quadrortx,driver>=535,driver<536 brand=titan,driver>=535,driver<536 brand=titanrtx,driver>=535,driver<536",
+                "NV_CUDA_CUDART_VERSION=12.4.127-1",
+                "NV_CUDA_COMPAT_PACKAGE=cuda-compat-12-4",
+                "CUDA_VERSION=12.4.1",
+                "LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64",
+                "NVIDIA_VISIBLE_DEVICES=all",
+                "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
+                "NV_CUDA_LIB_VERSION=12.4.1-1",
+                "NV_NVTX_VERSION=12.4.127-1",
+                "NV_LIBNPP_VERSION=12.2.5.30-1",
+                "NV_LIBNPP_PACKAGE=libnpp-12-4=12.2.5.30-1",
+                "NV_LIBCUSPARSE_VERSION=12.3.1.170-1",
+                "NV_LIBCUBLAS_PACKAGE_NAME=libcublas-12-4",
+                "NV_LIBCUBLAS_VERSION=12.4.5.8-1",
+                "NV_LIBCUBLAS_PACKAGE=libcublas-12-4=12.4.5.8-1",
+                "NV_LIBNCCL_PACKAGE_NAME=libnccl2",
+                "NV_LIBNCCL_PACKAGE_VERSION=2.21.5-1",
+                "NCCL_VERSION=2.21.5-1",
+                "NV_LIBNCCL_PACKAGE=libnccl2=2.21.5-1+cuda12.4",
+                "NVIDIA_PRODUCT_NAME=CUDA",
+                "RILEY_MODEL_DIR=/models",
+                "RILEY_BIND=0.0.0.0:8080"
+            ],
+            "Cmd": [
+                "help"
+            ],
+            "ArgsEscaped": true,
+            "Image": "",
+            "Volumes": {
+                "/models": {}
+            },
+            "WorkingDir": "",
+            "Entrypoint": [
+                "/opt/riley/bin/riley-docker"
+            ],
+            "OnBuild": null,
+            "Labels": {
+                "io.riley.source-archive-sha256": "cf0968a63a6cfff18fc5df9728dfc8362fbcb5adf3798191e3c27bab35836c8a",
+                "maintainer": "NVIDIA CORPORATION <cudatools@nvidia.com>",
+                "org.opencontainers.image.ref.name": "ubuntu",
+                "org.opencontainers.image.revision": "9ea8012c111a5cbfc5d1494e4242855501e0762e",
+                "org.opencontainers.image.version": "22.04"
+            }
+        },
+        "Architecture": "amd64",
+        "Os": "linux",
+        "Size": 2346357846,
+        "GraphDriver": {
+            "Data": {
+                "LowerDir": "/var/lib/docker/overlay2/57on7ki6rn57orjj3hs0c85e8/diff:/var/lib/docker/overlay2/51624fd53f3fd750eea7f7db6a7c9f77f48ca346b3c7d548d8a2eb733b49dea8/diff:/var/lib/docker/overlay2/f73c2f9ff5d15f36fada645cfefd8cfdbd25de5084748846f84d4b3d7e15a5a3/diff:/var/lib/docker/overlay2/2d106e155fe08fdae5db2a9798d9941f9baa46800d5ec1ba03ff6a5014310e5c/diff:/var/lib/docker/overlay2/c479be1c7274fa0dad7e02feb7cb46772a3c9f9a0159945bcada524ba1fe7e7d/diff:/var/lib/docker/overlay2/0e87a602d6efbc5edfbd4c207697acb0ae315c87c8ad89b357f09ff5dd21ab5d/diff:/var/lib/docker/overlay2/4aaee43659889e35739297898b343db138df60c6fb5f7d1b269ddad0baa8111b/diff:/var/lib/docker/overlay2/e2a6d35f3c9ebfbfc176b825283fc1cac275ce4c4773c9e8f55e8cff33a04a89/diff:/var/lib/docker/overlay2/ae27d3540cecf05b75f8a68f960605c635721b84e68885392493ac641b0962a0/diff:/var/lib/docker/overlay2/bf28e98733ff94cd3858f5803406941fbb38d00b2da397f00f20844b8c4879c8/diff",
+                "MergedDir": "/var/lib/docker/overlay2/65oerau7girsayos1ejedl669/merged",
+                "UpperDir": "/var/lib/docker/overlay2/65oerau7girsayos1ejedl669/diff",
+                "WorkDir": "/var/lib/docker/overlay2/65oerau7girsayos1ejedl669/work"
+            },
+            "Name": "overlay2"
+        },
+        "RootFS": {
+            "Type": "layers",
+            "Layers": [
+                "sha256:e0a9f5911802534ba097660206feabeb0247a81e409029167b30e2e1f2803b57",
+                "sha256:47654eeadbc543f1dd44ebb41c6ca0954b9f1813efabdcd46b0e7f17ac4e9fd1",
+                "sha256:efe2b79b53de08e199a2ce107d83adc0cbdff94f605e03f5ef51f3df3ae31cfd",
+                "sha256:46d54736d31f4bfeb749544e22e8611dba11128bdb2cebb820a3b452b50e7d52",
+                "sha256:809d3bb9c80fb3d31d4c061ba0b38ba4e83b6329e33c2cb2bbf27251a8e527c6",
+                "sha256:1ffbbe19418f9726ebb365371ef96637c68f9d25af3f76a4f01f760e87fb31be",
+                "sha256:1b30dd39de2709bc00beebf392ea1f931d5f037d08e0f675a50855385cddad93",
+                "sha256:89fd878224a017aead1d4c83d5c62749307aa6f1a9e22087144ef339c3df8c1e",
+                "sha256:2b4acda8678c6f7ae0075eabb2c0c21078b80671800996ad2cf730f15fa0ef26",
+                "sha256:21ae58eb59c84530769d1a66f212be4949813db4248cb9239895648fa4fe6078",
+                "sha256:45fb4b4ab4e068752fe2d7b8c90ca65995d8ffe453a75b620401eaabc3c2124b"
+            ]
+        },
+        "Metadata": {
+            "LastTagTime": "2026-11-18T21:40:29.850395806Z"
+        }
+    }
+]

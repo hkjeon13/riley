@@ -1,0 +1,35 @@
+{
+  "workflow_run_id": 44403169100,
+  "job_id": 135151304074,
+  "source_revision": "9ea8012c111a5cbfc5d1494e4242855501e0762e",
+  "compile_toolkit": "12.8.1",
+  "cuda_aot_architectures": [
+    89
+  ],
+  "workflow_conclusion": "failure",
+  "failure_phase": "cargo clippy --package riley-cuda --all-targets --no-default-features --features cuda -- -D warnings",
+  "observed_completed_before_failure": [
+    "locked and offline Release server,cuda builds",
+    "riley-profile and riley-native compile and link",
+    "abi_link: 2 passed",
+    "host_runtime_gpu, memory_gpu, graph_gpu and memory_fault_injection_gpu compiled",
+    "riley-tensor cuda test targets compiled"
+  ],
+  "evidence_lines": [
+    "2026-11-18T21:38:58.8879325Z #16 59.03     Finished `release` profile [optimized + debuginfo] target(s) in 58.84s",
+    "2026-11-18T21:38:58.9844555Z #16 59.09     Finished `release` profile [optimized + debuginfo] target(s) in 0.02s",
+    "2026-11-18T21:39:08.8109659Z #16 68.98     Finished `release` profile [optimized + debuginfo] target(s) in 9.85s",
+    "2026-11-18T21:40:19.5542265Z #16 139.7     Finished `release` profile [optimized + debuginfo] target(s) in 42.20s",
+    "2026-11-18T21:40:40.9291981Z #16 161.0      Running tests/abi_link.rs (target/debug/deps/abi_link-2a256efa24e4c39c)",
+    "2026-11-18T21:40:40.9296219Z #16 161.0 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "2026-11-18T21:40:41.5442256Z #16 161.5   Executable tests/host_runtime_gpu.rs (target/debug/deps/host_runtime_gpu-ffe28f764b30134a)",
+    "2026-11-18T21:40:42.0151090Z #16 162.0   Executable tests/memory_gpu.rs (target/debug/deps/memory_gpu-b12caa8d97175c90)",
+    "2026-11-18T21:40:43.1838489Z #16 163.2   Executable tests/graph_gpu.rs (target/debug/deps/graph_gpu-6f6e04564e1411e9)",
+    "2026-11-18T21:41:04.4972822Z #16 184.5   Executable tests/memory_fault_injection_gpu.rs (target/debug/deps/memory_fault_injection_gpu-bbe23ddac29c9582)",
+    "2026-11-18T21:41:26.9598607Z #16 207.0 error: could not compile `riley-cuda` (lib) due to 69 previous errors",
+    "2026-11-18T21:41:27.2279051Z #16 207.4 error: could not compile `riley-cuda` (lib test) due to 83 previous errors",
+    "2026-11-18T21:41:27.3232786Z 207.4 error: could not compile `riley-cuda` (lib test) due to 83 previous errors"
+  ],
+  "workflow_log_url": "https://github.com/hkjeon13/riley/actions/runs/44403169100/job/135151304074",
+  "runtime_gpu_smoke": "not_run"
+}

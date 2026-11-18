@@ -1813,15 +1813,14 @@ impl OwnedGraphExec {
                     "the owned graph exec lost its fixed device buffer",
                 ));
             }
-            let native = match self.stream.as_mut() {
-                Some(stream) => self.native.launch(&mut stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        "OwnedGraphExec::launch",
-                        "the owned graph exec lost its capture stream",
-                    ));
-                }
+            let native = if let Some(stream) = self.stream.as_mut() {
+                self.native.launch(&mut stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    "OwnedGraphExec::launch",
+                    "the owned graph exec lost its capture stream",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphLaunch {
@@ -2382,17 +2381,11 @@ impl OwnedGraphH2DExec {
                 "an earlier graph H2D transition left native state uncertain",
             ));
         }
-        let expected_byte_len = self
-            .source
-            .as_ref()
-            .ok_or_else(|| {
-                self.terminal = true;
-                CudaError::invalid_state(
-                    OPERATION,
-                    "the owned graph exec lost its pinned H2D source",
-                )
-            })?
-            .byte_len();
+        let source = self.source.as_ref().ok_or_else(|| {
+            self.terminal = true;
+            CudaError::invalid_state(OPERATION, "the owned graph exec lost its pinned H2D source")
+        })?;
+        let expected_byte_len = source.byte_len();
         let actual_byte_len = u64::try_from(bytes.len())
             .map_err(|_| CudaError::out_of_range(OPERATION, "payload length does not fit u64"))?;
         if actual_byte_len != expected_byte_len {
@@ -2412,7 +2405,6 @@ impl OwnedGraphH2DExec {
                     "the owned graph exec lost its fixed device destination",
                 ));
             }
-            let source = self.source.as_ref().expect("source checked above");
             if let Err(error) = self.native.stage_h2d_source(source.native_handle(), bytes) {
                 // Native staging is the only path that marks input fresh. Do
                 // not permit any later launch to observe a previous payload
@@ -2420,15 +2412,14 @@ impl OwnedGraphH2DExec {
                 self.terminal = true;
                 return Err(error);
             }
-            let native = match self.stream.as_mut() {
-                Some(stream) => self.native.launch(&mut stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned graph exec lost its capture stream",
-                    ));
-                }
+            let native = if let Some(stream) = self.stream.as_mut() {
+                self.native.launch(&mut stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph exec lost its capture stream",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphH2DLaunch {
@@ -2996,15 +2987,14 @@ impl OwnedGraphSiluBf16Exec {
         }
         #[cfg(feature = "cuda")]
         {
-            let native = match self.resources.as_mut() {
-                Some(resources) => self.native.launch(&mut resources.stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned graph BF16 SiLU exec lost its captured resources",
-                    ));
-                }
+            let native = if let Some(resources) = self.resources.as_mut() {
+                self.native.launch(&mut resources.stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph BF16 SiLU exec lost its captured resources",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphSiluBf16Launch {
@@ -3542,15 +3532,14 @@ impl OwnedGraphGatedMultiplyBf16Exec {
         }
         #[cfg(feature = "cuda")]
         {
-            let native = match self.resources.as_mut() {
-                Some(resources) => self.native.launch(&mut resources.stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned graph BF16 gated-multiply exec lost its captured resources",
-                    ));
-                }
+            let native = if let Some(resources) = self.resources.as_mut() {
+                self.native.launch(&mut resources.stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph BF16 gated-multiply exec lost its captured resources",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphGatedMultiplyBf16Launch {
@@ -4080,15 +4069,14 @@ impl OwnedGraphResidualAddBf16Exec {
         }
         #[cfg(feature = "cuda")]
         {
-            let native = match self.resources.as_mut() {
-                Some(resources) => self.native.launch(&mut resources.stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned graph BF16 residual-add exec lost its captured resources",
-                    ));
-                }
+            let native = if let Some(resources) = self.resources.as_mut() {
+                self.native.launch(&mut resources.stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph BF16 residual-add exec lost its captured resources",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphResidualAddBf16Launch {
@@ -4622,15 +4610,14 @@ impl OwnedGraphCanonicalRmsNormBf16Exec {
         }
         #[cfg(feature = "cuda")]
         {
-            let native = match self.resources.as_mut() {
-                Some(resources) => self.native.launch(&mut resources.stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned graph canonical BF16 RMSNorm exec lost its captured resources",
-                    ));
-                }
+            let native = if let Some(resources) = self.resources.as_mut() {
+                self.native.launch(&mut resources.stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph canonical BF16 RMSNorm exec lost its captured resources",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphCanonicalRmsNormBf16Launch {
@@ -5165,15 +5152,14 @@ impl OwnedGraphBf16ArgmaxExec {
         }
         #[cfg(feature = "cuda")]
         {
-            let native = match self.resources.as_mut() {
-                Some(resources) => self.native.launch(&mut resources.stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned graph deterministic BF16 argmax exec lost its captured resources",
-                    ));
-                }
+            let native = if let Some(resources) = self.resources.as_mut() {
+                self.native.launch(&mut resources.stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph deterministic BF16 argmax exec lost its captured resources",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphBf16ArgmaxLaunch {
@@ -5730,15 +5716,14 @@ impl OwnedGraphBf16RowGatherExec {
         }
         #[cfg(feature = "cuda")]
         {
-            let native = match self.resources.as_mut() {
-                Some(resources) => self.native.launch(&mut resources.stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned graph BF16 row-gather exec lost its captured resources",
-                    ));
-                }
+            let native = if let Some(resources) = self.resources.as_mut() {
+                self.native.launch(&mut resources.stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph BF16 row-gather exec lost its captured resources",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphBf16RowGatherLaunch {
@@ -6351,15 +6336,14 @@ impl OwnedGraphBf16RowGatherArgmaxExec {
         }
         #[cfg(feature = "cuda")]
         {
-            let native = match self.resources.as_mut() {
-                Some(resources) => self.native.launch(&mut resources.stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned graph BF16 row-gather -> argmax exec lost its captured resources",
-                    ));
-                }
+            let native = if let Some(resources) = self.resources.as_mut() {
+                self.native.launch(&mut resources.stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph BF16 row-gather -> argmax exec lost its captured resources",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphBf16RowGatherArgmaxLaunch {
@@ -7005,15 +6989,14 @@ impl OwnedGraphBf16RowGatherArgmaxD2HExec {
         }
         #[cfg(feature = "cuda")]
         {
-            let native = match self.resources.as_mut() {
-                Some(resources) => self.native.launch(&mut resources.stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned graph BF16 row-gather -> argmax -> D2H exec lost its captured resources",
-                    ));
-                }
+            let native = if let Some(resources) = self.resources.as_mut() {
+                self.native.launch(&mut resources.stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph BF16 row-gather -> argmax -> D2H exec lost its captured resources",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphBf16RowGatherArgmaxD2HLaunch {
@@ -7757,15 +7740,14 @@ impl OwnedGraphIndexedRopeBf16Exec {
         }
         #[cfg(feature = "cuda")]
         {
-            let native = match self.resources.as_mut() {
-                Some(resources) => self.native.launch(&mut resources.stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned graph BF16 indexed-RoPE exec lost its captured resources",
-                    ));
-                }
+            let native = if let Some(resources) = self.resources.as_mut() {
+                self.native.launch(&mut resources.stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph BF16 indexed-RoPE exec lost its captured resources",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphIndexedRopeBf16Launch {
@@ -8469,15 +8451,14 @@ impl OwnedGraphRaggedPagedKvCacheWriteBf16Exec {
         }
         #[cfg(feature = "cuda")]
         {
-            let native = match self.resources.as_mut() {
-                Some(resources) => self.native.launch(&mut resources.stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned graph BF16 ragged paged-K/V cache-write exec lost its captured resources",
-                    ));
-                }
+            let native = if let Some(resources) = self.resources.as_mut() {
+                self.native.launch(&mut resources.stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph BF16 ragged paged-K/V cache-write exec lost its captured resources",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphRaggedPagedKvCacheWriteBf16Launch {
@@ -9203,15 +9184,14 @@ impl OwnedGraphGroupedRaggedPagedAttentionBf16Exec {
         }
         #[cfg(feature = "cuda")]
         {
-            let native = match self.resources.as_mut() {
-                Some(resources) => self.native.launch(&mut resources.stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned graph BF16 grouped ragged paged-attention exec lost its captured resources",
-                    ));
-                }
+            let native = if let Some(resources) = self.resources.as_mut() {
+                self.native.launch(&mut resources.stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph BF16 grouped ragged paged-attention exec lost its captured resources",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphGroupedRaggedPagedAttentionBf16Launch {
@@ -9950,15 +9930,14 @@ impl OwnedGraphBf16EmbeddingStatusD2HExec {
         }
         #[cfg(feature = "cuda")]
         {
-            let native = match self.resources.as_mut() {
-                Some(resources) => self.native.launch(&mut resources.stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned graph BF16 embedding status-D2H exec lost its captured resources",
-                    ));
-                }
+            let native = if let Some(resources) = self.resources.as_mut() {
+                self.native.launch(&mut resources.stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph BF16 embedding status-D2H exec lost its captured resources",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphBf16EmbeddingStatusD2HLaunch {
@@ -10585,15 +10564,14 @@ impl OwnedGraphCanonicalGemmBf16Exec {
         }
         #[cfg(feature = "cuda")]
         {
-            let native = match self.resources.as_mut() {
-                Some(resources) => self.native.launch(&mut resources.stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned canonical GEMM graph exec lost its captured resources",
-                    ));
-                }
+            let native = if let Some(resources) = self.resources.as_mut() {
+                self.native.launch(&mut resources.stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned canonical GEMM graph exec lost its captured resources",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphCanonicalGemmBf16Launch {
@@ -11180,15 +11158,14 @@ impl OwnedGraphCanonicalRmsNormGemmBf16Exec {
         }
         #[cfg(feature = "cuda")]
         {
-            let native = match self.resources.as_mut() {
-                Some(resources) => self.native.launch(&mut resources.stream.native),
-                None => {
-                    self.terminal = true;
-                    return Err(CudaError::invalid_state(
-                        OPERATION,
-                        "the owned canonical RMSNorm -> GEMM graph exec lost its captured resources",
-                    ));
-                }
+            let native = if let Some(resources) = self.resources.as_mut() {
+                self.native.launch(&mut resources.stream.native)
+            } else {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned canonical RMSNorm -> GEMM graph exec lost its captured resources",
+                ));
             };
             match native {
                 Ok(native) => Ok(OwnedGraphCanonicalRmsNormGemmBf16Launch {

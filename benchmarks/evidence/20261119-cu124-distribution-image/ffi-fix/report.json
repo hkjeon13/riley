@@ -1,0 +1,23 @@
+{
+  "schema_version": "riley.distribution-image-check.v1",
+  "status": "passed",
+  "distribution": "docker-cu124-sm80-sm86-sm89",
+  "source_revision": "9ea8012c111a5cbfc5d1494e4242855501e0762e",
+  "source_archive_sha256": "cf0968a63a6cfff18fc5df9728dfc8362fbcb5adf3798191e3c27bab35836c8a",
+  "image_id": "sha256:440a9ff2e15d6b985604c8762500f5d6d5f12150beadd2ed4472b1c6cebbb372",
+  "version": "riley 0.1.0 (server=true, cuda=true, cuda_abi=1)",
+  "binaries": {
+    "/opt/riley/bin/riley": "aadba57a2656ad4cf5c0839304b6c8f60fa1b4e621ed64b008c12af408e7f28b",
+    "/opt/riley/bin/riley-checkpoint": "42b0c53f557d1fcc0ee23fae5527534eacecbee18c9177a6ab8e606ff3074b73"
+  },
+  "cpu_cli_driver_stub_sha256": "326a1201a5439b167087048fd07d31bc6cfc704bb032b8f218a2a458385f4af1",
+  "driver_dependency": "libcuda.so.1 injected by NVIDIA at GPU runtime",
+  "preset_count": 16,
+  "checks": [
+    "linux-amd64-configuration",
+    "non-root-uid-gid",
+    "offline-cli",
+    "runtime-tree",
+    "native-linkage"
+  ]
+}

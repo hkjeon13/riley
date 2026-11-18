@@ -123,4 +123,10 @@ GPU 없는 runner에서 Riley 바이너리는 NVIDIA가 주입하는 `libcuda.so
 
 헤더를 수정한 A100 빌드는 C ABI를 지나 Rust 바인딩에서 멈췄다. cuBLAS 전용 외부 선언 다섯 개의 조건을 해당 타입과 맞췄고, 일반 CUDA가 호출하는 BF16 argmax 래퍼는 `cuda` 빌드에 포함했다. 격리한 macOS 환경의 Rust 타입 검사에서 일반 CUDA 서버, HF probe 서버, CUDA probe 크레이트, 오류 주입 크레이트의 네 조합이 통과했다. CUDA 소스가 바뀌면 `main`에서 기존 hosted 네이티브 빌드를 실행하도록 설정했다. 실제 A100 CUDA 링크와 오류 주입 재시험은 별도로 등록했다. [실패 원본과 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/rust-build/SHA256SUMS) · [네이티브 CI](../../.github/workflows/native-cuda.yml) · [A100 재시험 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/campaign.sh)
 
+`9ea8012c1`의 hosted CUDA 12.8 빌드에서 일반 CUDA 서버와 진단 도구의 컴파일·링크, C ABI 테스트 2건, CUDA 메모리 오류 주입 테스트 실행 파일 생성을 확인했다. 같은 CI는 이후 CUDA 전용 Clippy를 `-D warnings`로 실행하는 단계에서 실패했다. 이어지는 GPU smoke는 수동 실행 조건에 해당한다. [네이티브 CI 로그](https://github.com/hkjeon13/riley/actions/runs/44403169100) · [단계별 결과](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/hosted-native-ci.json)
+
+첫 수정에서는 그래프 실행의 기존 오류 상태 전이를 유지하면서 자원 확인을 정리했고, H2D 실행은 이미 확인한 소스 참조를 재사용한다. FFI의 포인터 표현, 문서 표기와 `Debug` 표시도 정리했다. macOS 격리 복사본에서 Rust만 검사한 CUDA Clippy 라이브러리 진단이 69건에서 49건으로 줄었다. 같은 소스의 CUDA를 끈 CPU 테스트 225건이 통과했다. 남은 CUDA 린트는 기존 `-D warnings`로 다시 판정한다.
+
+같은 커밋의 CUDA 12.4 배포 이미지 빌드와 CPU 검증은 통과했다. 소스 아카이브 해시를 로컬에서 재계산했고, 이전 이미지와 런타임 파일 목록이 같으며 Riley 실행 파일의 해시만 달라진 것을 확인했다. 이미지 ID와 새 실행 파일의 해시를 보존했다. [배포 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/44403168877) · [바인딩 수정 이미지 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/ffi-fix/receipt.json)
+
 W2·W3는 이 runner의 새 label·실패 판정·실행 argv/해시를 사용한다. W4는 정확성 판정 결과를 같은 후보에 결속한다. W5는 현행 이미지와 네이티브 GPU 실행 근거를 릴리스 문서에 연결한다. M5 판정에는 동일 후보의 패키징·GPU 실행·품질 근거가 필요하다.

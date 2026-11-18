@@ -122,6 +122,6 @@ impl fmt::Debug for CudaPeerAllReduceGroup {
                     .collect::<Vec<_>>(),
             )
             .field("max_elements", &self.max_elements)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
