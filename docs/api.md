@@ -230,6 +230,11 @@ A JSON object, free of prompt text:
   Unused entries are zeroed.
 - `counters`: `cancellations`, `disconnects`, `overloads`, `dropped_observations`
 
+`dropped_observations` counts terminal request records evicted from the
+bounded observation buffer. The default buffer retains the latest 1,024
+records. Request outcomes are tracked through the response and the
+cancellation, disconnect, and overload counters.
+
 ## `GET /healthz`, `GET /readyz`
 
 ```json

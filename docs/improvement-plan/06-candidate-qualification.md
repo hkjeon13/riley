@@ -22,10 +22,10 @@
 | W2·W3 성능 | 이벤트 발행·스케줄 네 조합, 두 14B 모델의 동일 KV·커널 계측, Qwen2.5-14B 요청별 prefill 대기와 vLLM 한도 대조, Qwen3-4B 길이별 대조. 진행 중인 prefill 우선 후보는 decode TPOT 회귀로 미채택 | 채택할 후보의 재현성과 영향을 받는 모델의 출력·회귀 판정 |
 | W4 장문·정확성 | 고정 입력 18개와 holdout 11개의 엔진 비교, 두 사례 첫 BF16 차이와 마지막 norm의 토큰 순위 재계산, native layer 0의 KV·causal 재계산, 네 모델의 동일 입력 GSM8K에서 품질 기준 통과 | Riley/HF의 내부 Q/K/V 차이 원인과 최종 배포 후보 재확인 |
 | W4 스키마 | 문서화한 부분집합에서 GPU 일반 API 40건과 schema 계약 11건 통과 | 배포 이미지의 대표 모델 API 재확인 |
-| W5 운영 | 캐시 off·on 30분 부하·종료 회수, 느린 SSE와 취소, GPU 메모리 오류 주입 네 사례 | 700KiB 익명 RSS 증가 원인과 증가 0 조건, 실제 운영 분포, 최종 배포 이미지의 동일 바이너리 검증 |
+| W5 운영 | 캐시 off·on 30분 부하·종료 회수, 느린 SSE와 취소, GPU 메모리 오류 주입 네 사례 | 재현된 익명 RSS 증가의 할당 원인과 증가 0 조건, 실제 운영 분포, 최종 배포 이미지의 동일 바이너리 검증 |
 
 기존 이벤트 발행 정책과 서빙 설정을 기준선으로 삼았다. 이전 빌드에서 관찰된 성능 실험은 입력·장비·바이너리에 연결하며, 새로운 수치 기준이나 기본값을 채택할 때는 종합 계획의 출력 불변성과 회귀 기준을 적용한다. [W2 결과](02-async-step-result.md) · [W3 결과](03-long-context-result.md) · [W4 정확성](04-long-accuracy-result.md) · [W5 운영 결과](05-mixed-soak-result.md)
 
-W5의 30분 실행에서 종료 뒤 GPU·pinned 메모리와 활성 KV는 0이었다. Cache-off 정밀 실행에서 일반 RSS의 변화는 0이었고 `smaps_rollup`은 익명 RSS +700KiB를 기록했다. 따라서 RSS 증가 0 조건은 미충족이다. 검사기는 정밀 지표로 판정하며 다음 실행은 매핑별 증가를 확인한다. GPU 메모리 오류 주입은 A100 6번의 CUDA 12.4 SM80 테스트 바이너리에서 네 독립 사례가 통과했다. [운영 품질 기준](../goal.md#33-운영-품질) · [정밀 RSS 결과](05-mixed-soak-result.md#정밀-rss-재실행-결과) · [오류 주입 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/result/verification.json)
+W5의 30분 실행에서 종료 뒤 GPU·pinned 메모리와 활성 KV는 0이었다. Cache-off 정밀 실행에서 일반 RSS의 변화는 0이었고 `smaps_rollup`은 익명 RSS +700KiB를 기록했다. 따라서 RSS 증가 0 조건은 미충족이다. 정밀 판정기를 적용한 다음 실행에서 +812KiB를 확인했고 매핑별 합계에서 전부 익명 private에 속했다. 요청·지연·종료 회수 검사는 통과했고 RSS 검사만 실패했다. GPU 메모리 오류 주입은 A100 6번의 CUDA 12.4 SM80 테스트 바이너리에서 네 독립 사례가 통과했다. [운영 품질 기준](../goal.md#33-운영-품질) · [정밀 RSS 결과](05-mixed-soak-result.md#정밀-rss-재실행-결과) · [오류 주입 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/result/verification.json)
 
 배포 이미지 재빌드를 위한 소스 아카이브 전송은 자동 승인 검토에서 거절됐다. 승인된 검증 경로에서 이미지 ID와 실행 파일 해시를 고정한 뒤 대표 모델의 API·정확성·운영 근거를 연결해야 릴리스 판정을 갱신할 수 있다. [이미지 검증 범위](01-validation-result.md#현행-배포-이미지) · [종합 완료 조건](README.md#8-종합-완료-체크리스트)

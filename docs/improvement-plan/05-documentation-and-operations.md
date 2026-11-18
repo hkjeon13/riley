@@ -97,7 +97,7 @@ runner 동시성은 GPU별로 제한하고 각 실행에 별도 포트·디렉�
 
 필드 추가는 기존 JSON consumer와 호환되게 설계하고 histogram bucket·단위·카운터 수명을 명시한다. raw prompt·tool argument·키를 메트릭 label에 넣지 않는다. 요청 ID·임의 모델 revision 같은 고카디널리티 값은 bounded 진단 근거로 분리한다.
 
-관측 on/off의 CPU·RSS·GPU·지연 비용을 비교한다. dropped observation이 생기면 결과에 표시하고 누락을 0ms나 0건으로 해석하지 않는다. Prometheus exporter가 필요하다면 별도 adapter 여부를 검토하며 현재 JSON endpoint를 임의 변경하지 않는다.
+관측 on/off의 CPU·RSS·GPU·지연 비용을 비교한다. `dropped_observations`는 기본 1,024건의 종료 관측 버퍼에서 밀려난 레코드 수다. 전체 요청 수와 지연은 클라이언트 원본으로 확인하고, 서버 취소·연결 종료·과부하 카운터를 함께 대조한다. [메트릭 계약](../api.md#get-metrics) · [30분 부하 원본 대조](05-mixed-soak-result.md#종료-관측-버퍼)
 
 ## 5. 실제 트래픽 재현과 장기 안정성
 

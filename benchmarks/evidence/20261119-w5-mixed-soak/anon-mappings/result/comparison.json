@@ -1,0 +1,97 @@
+{
+  "strict_soak_status": "failed",
+  "rollup_rss_delta_kib": 812,
+  "rollup_anonymous_delta_kib": 812,
+  "mapping_rss_delta_kib": 812,
+  "mapping_anonymous_delta_kib": 812,
+  "delta_by_class_kib": {
+    "anonymous-private": {
+      "Rss": 812,
+      "Anonymous": 812,
+      "Private_Dirty": 812,
+      "AnonHugePages": 0
+    },
+    "file-or-device": {
+      "Rss": 0,
+      "Anonymous": 0,
+      "Private_Dirty": 24,
+      "AnonHugePages": 0
+    },
+    "heap": {
+      "Rss": 0,
+      "Anonymous": 0,
+      "Private_Dirty": 0,
+      "AnonHugePages": 0
+    },
+    "labeled-stack": {
+      "Rss": 0,
+      "Anonymous": 0,
+      "Private_Dirty": 0,
+      "AnonHugePages": 0
+    },
+    "other-kernel": {
+      "Rss": 0,
+      "Anonymous": 0,
+      "Private_Dirty": 0,
+      "AnonHugePages": 0
+    }
+  },
+  "largest_retained_anonymous_changes": [
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 304
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 52
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 32
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 28
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 24
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 24
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 24
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 24
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 24
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 20
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 20
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 20
+    }
+  ],
+  "mapping_read_ms": [
+    180.14716356992722,
+    182.19871819019318
+  ],
+  "late_p95_change_percent_from_reference": {
+    "ttft_ms_p95": -0.5181934579204239,
+    "e2e_ms_p95": 0.20097767651030551
+  }
+}

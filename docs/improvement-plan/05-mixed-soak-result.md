@@ -41,6 +41,10 @@
 
 90초 사전 검증과 30분 시험의 도구는 native 할당과 RSS를 각각 기록한다. Cache off의 후반 RSS 표본은 900초부터 15,161.14MiB였고 1,560초 표본부터 15,161.89MiB였다. Cache on은 900초부터 종료 직전까지 15,163.53MiB였다. Cache off의 0.75MiB 변화는 [운영 품질 기준](../goal.md#33-운영-품질)의 RSS 증가 0 조건에 남겨 둔다.
 
+### 종료 관측 버퍼
+
+기본 cache off/on, cache-off 반복, allocator 계측, 정밀 RSS 실행의 30분 결과 다섯 건에서 정상 완료 13,749건과 의도적 연결 종료 700건을 각각 확인했다. `dropped_observations`는 모든 실행에서 0에서 13,425로 증가했다. 종료 레코드 14,449건에서 기본 보존 한도 1,024건을 빼면 기록된 증가량과 같다. 이 값은 최근 종료 관측 레코드의 퇴거 수로 기록했고 요청 종료와 지연은 클라이언트 원본으로 대조했다. [관측 버퍼와 API](../api.md#get-metrics) · [정밀 실행 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/result/cache-off/soak.json.gz)
+
 ### Cache off RSS 재현
 
 동일 GPU 7, 바이너리, 모델, 실행 옵션과 부하 도구로 30분 cache-off를 반복했다. 정상 완료 13,749건, 의도적 연결 종료 700건, HTTP·SSE 오류와 overload 0건을 기록했다. 후반 TTFT p95는 1.24% 증가했고 완료 지연 p95는 13.33% 감소했다. Ready와 drain 시 native 할당이 같았고 종료 후 GPU·pinned 할당과 활성 KV는 0이었다. GPU 7은 동일 홀더의 20GiB 예약으로 복귀했다. [재현 명령](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off-repeat/campaign.sh) · [원본 및 입력 대조](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off-repeat/result/comparison.json) · [종료 후 예약](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off-repeat/result/idle-after.json)
@@ -63,7 +67,9 @@ GPU 7의 30분 재실행에서 정상 완료 13,749건과 의도적 연결 종�
 
 같은 서버 PID의 900초와 drain 시점에서 `/proc/PID/status` RSS는 15,161.46MiB로 같았다. `smaps_rollup` RSS는 15,544,012KiB에서 15,544,712KiB로 증가했고 익명 페이지도 700KiB 증가했다. 이 실행에서 RSS 증가 0 조건을 충족하지 못했다. 정밀 표본의 읽기 시간은 180ms와 252ms였으며, 기존 비계측 반복 대비 후반 TTFT p95와 전체 완료 p95는 각각 0.17%, 0.28% 낮았다. 이 대조는 증가한 페이지가 익명이라는 점까지 확인하며, 할당 지점은 아직 확인하지 못했다. [원본 대조와 판정](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/result/comparison.json)
 
-익명 RSS가 증가한 범위를 좁히기 위해 GPU 7에서 같은 바이너리와 30분 부하로 재실행을 시작했다. 이번 실행에는 `237f12546`의 정밀 RSS 실패 판정을 적용한다. 후반 첫 표본과 drain에서 `smaps` 매핑 종류별 RSS와 익명 페이지 차이를 수집한다. A100의 별도 CPU 프로세스로 매핑 파싱을 확인했다. [재실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/anon-mappings/campaign.sh) · [A100 파싱 사전검사](../../benchmarks/evidence/20261119-w5-mixed-soak/anon-mappings/smaps-cpu-check.json) · [대조 검사기](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/compare_anon_mappings.py)
+GPU 7에서 같은 바이너리·모델·부하로 30분을 다시 실행했다. 후반 첫 표본과 drain에서 `smaps_rollup` RSS와 익명 RSS가 각각 **812KiB 증가**했다. `smaps`의 매핑별 합계도 같았으며, 812KiB 전체가 익명 private 매핑의 `Rss`·`Anonymous`·`Private_Dirty`에 반영됐다. 가장 큰 개별 매핑의 익명 페이지는 304KiB 증가했다. `[heap]`과 이름이 표시된 스택의 RSS는 유지됐다. 두 원본의 결과는 증가한 매핑 종류를 확정하며, 할당 호출 위치는 추가 확인 범위다. [재실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/anon-mappings/campaign.sh) · [A100 파싱 사전검사](../../benchmarks/evidence/20261119-w5-mixed-soak/anon-mappings/smaps-cpu-check.json) · [대조 검사기](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/compare_anon_mappings.py)
+
+이번 실행은 `237f12546`의 정밀 판정을 적용했다. 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했고, HTTP·SSE 오류와 429 및 종료 후 native 할당 잔류는 0이었다. RSS 증가 0 항목이 실패해 검사 프로세스는 코드 1을 반환했다. 서버는 코드 0으로 종료했고 GPU 7은 동일 홀더의 20GiB 예약으로 돌아갔다. [원본과 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/anon-mappings/result/SHA256SUMS) · [원본 대조](../../benchmarks/evidence/20261119-w5-mixed-soak/anon-mappings/result/comparison.json)
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 

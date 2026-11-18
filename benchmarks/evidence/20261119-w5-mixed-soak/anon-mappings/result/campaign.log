@@ -1,0 +1,17 @@
+campaign.sh: OK
+attribute_anon_rss.py: OK
+strict-rss-runner.patch: OK
+upstream-soak.sha256: OK
+upstream-soak.py.gz: OK
+holder.py: OK
+tools/compare_runner.py: OK
+tools/load.py: OK
+tools/run_soak.py: OK
+tools/soak.py: OK
+tools/upstream_soak.py: OK
+START cache-off anonymous attribution 2026-11-18T22:31:36Z
+Traceback (most recent call last):
+  File "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-anon-mappings-20261119.sZulouQC/tools/run_soak.py", line 178, in <module>
+    raise RuntimeError("soak workload checks failed")
+RuntimeError: soak workload checks failed
+END cache-off anonymous attribution 2026-11-18T23:03:56Z exit=1
