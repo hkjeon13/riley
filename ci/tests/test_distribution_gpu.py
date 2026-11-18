@@ -1,0 +1,150 @@
+"""Exercise the GPU image check's evidence bindings and cleanup without CUDA."""
+
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "ci"))
+import check_distribution_gpu as checker
+sys.path.pop(0)
+
+
+class DistributionGpuTest(unittest.TestCase):
+    gpu = "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7"
+    container = "c" * 64
+    pid = 2345
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.cpu_report = self.root / "cpu-report.json"
+        inputs = {"schema_version": "riley.distribution-image-check.v1", "status": "passed",
+                  "image_id": "sha256:" + "a" * 64, "source_revision": "b" * 40,
+                  "source_archive_sha256": "d" * 64, "binaries": {checker.RILEY: "e" * 64}}
+        self.cpu_report.write_text(json.dumps(inputs))
+        self.image = inputs["image_id"]
+        self.binary = inputs["binaries"][checker.RILEY]
+        self.image_inspect = {
+            "Id": self.image, "Os": "linux", "Architecture": "amd64",
+            "Config": {
+                "User": "65532:65532", "Entrypoint": ["/opt/riley/bin/riley-docker"], "Cmd": ["help"],
+                "Volumes": {"/models": {}}, "ExposedPorts": {"8080/tcp": {}},
+                "Env": ["RILEY_MODEL_DIR=/models", "RILEY_BIND=0.0.0.0:8080"],
+                "Labels": {"org.opencontainers.image.revision": inputs["source_revision"],
+                           "io.riley.source-archive-sha256": inputs["source_archive_sha256"]},
+            },
+        }
+        model = self.root / checker.CHECKPOINT
+        model.write_text(json.dumps({"source_model": "test-model", "source_revision": "a" * 40}))
+        self.model_hash = checker.digest(model)
+        self.exit_code = 0
+        self.device_pids = set()
+        self.api_pass = True
+        self.create_interrupted = False
+        self.name = None
+        self.calls = []
+        self.out = self.root / "evidence"
+
+    def docker(self, *args):
+        self.calls.append(args)
+        match args:
+            case ("image", "inspect", self.image):
+                return json.dumps([self.image_inspect])
+            case ("create", *rest):
+                self.assertIn("--pull=never", rest)
+                self.assertIn(f"device={self.gpu}", rest)
+                self.assertIn("127.0.0.1::8080", rest)
+                self.assertIn(self.image, rest)
+                self.name = rest[rest.index("--name") + 1]
+                if self.create_interrupted:
+                    raise subprocess.TimeoutExpired(args, 30)
+                return self.container
+            case ("start", self.container):
+                self.device_pids = {self.pid}
+            case ("container", "inspect", self.container):
+                return json.dumps([{
+                    "Id": self.container, "Image": self.image,
+                    "State": {"Running": bool(self.device_pids), "Pid": self.pid, "ExitCode": self.exit_code},
+                    "NetworkSettings": {"Ports": {"8080/tcp": [{"HostIp": "127.0.0.1", "HostPort": "44321"}]}},
+                }])
+            case ("container", "inspect", self.name):
+                return json.dumps([{"Id": self.container, "Name": "/" + self.name,
+                                    "Config": {"Labels": {"io.riley.gpu-check": self.name}}}])
+            case ("exec", self.container, "nvidia-smi", *_):
+                return f"{self.gpu}, A100, 550\n"
+            case ("exec", self.container, "/bin/sh", *_):
+                return f"{self.binary}  /proc/1/exe\n"
+            case ("stop", "--time", "20", self.container):
+                self.device_pids = set()
+            case ("rm", "--force", "--volumes", self.container):
+                self.device_pids = set()
+            case _:
+                self.fail(f"unexpected Docker command {args!r}")
+
+    def check(self, model_hash=None):
+        def log_command(out, file, argv, _seconds, **_kwargs):
+            (out / file).write_text("fixture log\n")
+            if file == "api.log":
+                self.assertIn("127.0.0.1:44321", argv)
+                (out / "api.json").write_text(json.dumps({"results": [{"passed": self.api_pass}]}))
+
+        def copy_shutdown(argv, **_kwargs):
+            self.assertEqual(argv[:3], ["docker", "cp", f"{self.container}:{checker.SHUTDOWN}"])
+            Path(argv[3]).write_text(json.dumps({"active_requests": 0, "waiting_requests": 0,
+                                                "kv_allocated_blocks": 0, "allocation": {"live_bytes": 0}}))
+
+        with (patch.object(checker, "docker", self.docker), patch.object(checker, "holder_pids", return_value=set()),
+              patch.object(checker, "gpu_pids", side_effect=lambda _: self.device_pids),
+              patch.object(checker, "wait_ready", return_value={"ready": True, "accepting": True}),
+              patch.object(checker, "log_command", log_command),
+              patch.object(checker.subprocess, "run", copy_shutdown)):
+            checker.check_gpu(self.cpu_report, self.gpu, self.root, model_hash or self.model_hash, self.out, False)
+
+    def test_report_binds_the_image_process_and_api(self):
+        self.check()
+        report = json.loads((self.out / "report.json").read_bytes())
+        self.assertEqual(report["image_id"], self.image)
+        self.assertEqual(report["riley_binary_sha256"], self.binary)
+        self.assertEqual(report["gpu_uuid"], self.gpu)
+        self.assertEqual(report["artifacts_sha256"]["api.json"], checker.digest(self.out / "api.json"))
+        self.assertEqual(self.calls[-1], ("rm", "--force", "--volumes", self.container))
+
+    def test_checkpoint_drift_prevents_container_creation(self):
+        with self.assertRaisesRegex(ValueError, "checkpoint manifest differs"):
+            self.check("0" * 64)
+        self.assertEqual(self.calls, [("image", "inspect", self.image)])
+        self.assertFalse(self.out.exists())
+
+    def test_binary_drift_and_api_failure_remove_the_container(self):
+        digest = self.binary
+        for changed_binary in (True, False):
+            with self.subTest(changed_binary=changed_binary):
+                self.binary = "0" * 64 if changed_binary else digest
+                self.api_pass = False
+                self.out = self.root / f"failure-{changed_binary}"
+                regex = "running Riley differs" if changed_binary else "API suite failed"
+                with self.assertRaisesRegex(ValueError, regex):
+                    self.check()
+                self.assertEqual(self.calls[-1], ("rm", "--force", "--volumes", self.container))
+                self.assertFalse((self.out / "report.json").exists())
+
+    def test_forced_shutdown_is_a_failure(self):
+        self.exit_code = 137
+        with self.assertRaisesRegex(ValueError, "stop gracefully"):
+            self.check()
+        self.assertEqual(self.calls[-1], ("rm", "--force", "--volumes", self.container))
+        self.assertFalse((self.out / "report.json").exists())
+
+    def test_docker_create_timeout_removes_the_identified_container(self):
+        self.create_interrupted = True
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.check()
+        self.assertEqual(self.calls[-2], ("container", "inspect", self.name))
+        self.assertEqual(self.calls[-1], ("rm", "--force", "--volumes", self.container))
+        self.assertFalse((self.out / "report.json").exists())

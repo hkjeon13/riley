@@ -135,4 +135,18 @@ GPU 없는 runner에서 Riley 바이너리는 NVIDIA가 주입하는 `libcuda.so
 
 `d3d8fe6e5` 배포 이미지의 CPU 검증과 원본 체크섬을 확인했다. 로컬에서 계산한 커밋의 소스 아카이브 해시가 이미지 label과 CI 보고서에 기록된 값과 같았다. 직전 검증 이미지와 런타임 파일 목록이 같았고 새 Riley 실행 파일의 해시를 보존했다. `27e36810b`의 배포 입력 Git 객체가 같은 것을 확인했다. [배포 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/44410078125) · [이미지·바이너리 영수증](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/receipt.json)
 
+### 배포 이미지 GPU 검사
+
+GPU 검사기는 Linux 호스트에 이미 준비된 CPU 검증 보고서의 이미지 ID로 컨테이너를 시작한다. 체크포인트를 읽기 전용으로 마운트하고, 지정된 GPU UUID와 컨테이너의 실제 CUDA 프로세스, 실행 중인 Riley의 SHA-256, 체크포인트 파일 무결성을 확인한다. Loopback에서 기존 API 검사를 실행하며 정상 종료 코드와 요청·KV·native 할당 회수를 확인한다. 한 모델의 API와 종료를 검증하는 실행이므로 릴리스용 장문·부하 검증은 같은 바이너리에 연결해 추가한다. [GPU 검사기](../../ci/check_distribution_gpu.py) · [CPU 이미지 보고서](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/report.json) · [Docker GPU UUID 지정 방식](https://docs.docker.com/engine/containers/gpu/)
+
+GPU 6·7의 기존 예약 도구 안에서 아래처럼 실행한다. `CPU_IMAGE_REPORT`는 검증하려는 이미지의 `report.json`이고 `MODEL_MANIFEST_SHA256`은 고정 체크포인트의 `riley-checkpoint.json` 해시다. `GPU_EVIDENCE_DIR`에는 새 경로를 지정한다. Tool API를 지원하는 모델에 `--tools`를 추가한다.
+
+```bash
+python3 "$HOLDER_CONTROL" --lease-dir "$GPU_LEASE_DIR" --index "$PHYSICAL_GPU" run -- \
+  python3.12 ci/check_distribution_gpu.py "$CPU_IMAGE_REPORT" "$GPU_UUID" \
+    "$MODEL_DIR" "$MODEL_MANIFEST_SHA256" "$GPU_EVIDENCE_DIR"
+```
+
+CPU에서는 이미지·실행 파일 식별, 체크포인트 해시 오류, API 실패 및 비정상 종료 시 판정과 컨테이너 정리 경로를 모의 테스트했다. A100 호스트의 Docker에는 검증 대상 `d3d8fe6e5` 이미지 ID가 없어 실제 추론 실행은 아직 남아 있다. [검사기 테스트](../../ci/tests/test_distribution_gpu.py)
+
 W2·W3는 이 runner의 새 label·실패 판정·실행 argv/해시를 사용한다. W4는 정확성 판정 결과를 같은 후보에 결속한다. W5는 현행 이미지와 네이티브 GPU 실행 근거를 릴리스 문서에 연결한다. M5 판정에는 동일 후보의 패키징·GPU 실행·품질 근거가 필요하다.
