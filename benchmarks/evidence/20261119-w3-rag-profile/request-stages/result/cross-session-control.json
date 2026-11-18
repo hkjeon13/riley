@@ -1,0 +1,38 @@
+{
+  "original_receipt_path": "benchmarks/evidence/20261119-w3-rag-profile/qwen14-riley/receipt.json",
+  "original_receipt_sha256": "72c113d7125ccc01d3d3e2b03e3d8135c9542b82d1b3acf0abc6ae0821a0d2ad",
+  "control_receipt_sha256": "d24e74f57d1582460ccbda788fc865de76abe807a7b2ccaba18fa31d554d6933",
+  "scope": "Cross-session reference with a different binary, tracing disabled in both",
+  "cells": {
+    "rag-c1": {
+      "matching_measured_requests": 16,
+      "original_ttft_p95_ms": 467.7653759717941,
+      "stage_control_ttft_p95_ms": 477.0495519042015,
+      "observed_change_percent": 1.984793319325795
+    },
+    "rag-c8-s1": {
+      "matching_measured_requests": 64,
+      "original_ttft_p95_ms": 1756.3615292310715,
+      "stage_control_ttft_p95_ms": 1776.3695940375328,
+      "observed_change_percent": 1.1391768991444895
+    },
+    "rag-c8-s2": {
+      "matching_measured_requests": 64,
+      "original_ttft_p95_ms": 1487.7377599477768,
+      "stage_control_ttft_p95_ms": 1767.7923515439034,
+      "observed_change_percent": 18.824190602378543
+    },
+    "wave-sync": {
+      "matching_measured_requests": 40,
+      "original_ttft_p95_ms": 3220.887079834938,
+      "stage_control_ttft_p95_ms": 3234.412170946598,
+      "observed_change_percent": 0.41991820192446294
+    },
+    "wave-50ms": {
+      "matching_measured_requests": 40,
+      "original_ttft_p95_ms": 2999.580793082714,
+      "stage_control_ttft_p95_ms": 3017.535910010338,
+      "observed_change_percent": 0.5985875416001374
+    }
+  }
+}

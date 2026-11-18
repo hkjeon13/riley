@@ -2,6 +2,7 @@
 
 from argparse import ArgumentParser
 from collections import defaultdict
+import gzip
 import json
 from pathlib import Path
 from statistics import median
@@ -12,7 +13,8 @@ from summarize_profile_arm import stable_server
 
 def read_phases(path):
     events = defaultdict(lambda: defaultdict(list))
-    with path.open() as handle:
+    stream = path.open() if path.exists() else gzip.open(path.with_suffix(".log.gz"), "rt")
+    with stream as handle:
         for line in handle:
             if line.startswith("W3-PHASE "):
                 _, request, stage, stamp, *fields = line.split()
@@ -20,7 +22,27 @@ def read_phases(path):
     return events
 
 
-def request_phases(phases, prompt_tokens):
+def prefill_union(grouped):
+    spans = []
+    for phases in grouped.values():
+        for (start, _), (end, _) in zip(phases["prefill_start"], phases["prefill_return"], strict=True):
+            require(start <= end, "recorded prefill span ends before it starts")
+            spans.append((start, end))
+    merged = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            left, right = merged[-1]
+            merged[-1] = (left, max(right, end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def overlap(begin, end, spans):
+    return sum(min(end, right) - max(begin, left) for left, right in spans if left < end and begin < right)
+
+
+def request_phases(phases, prompt_tokens, observed_prefill=()):
     def stamp(name):
         (value, fields), = phases[name]
         require(not fields, f"unexpected payload in {name}")
@@ -40,6 +62,7 @@ def request_phases(phases, prompt_tokens):
     starts, returns = phases["prefill_start"], phases["prefill_return"]
     require(starts and len(starts) == len(returns), "prefill chunks are incomplete")
     last_timestamp, logical, wall, gpu = admitted, 0, 0, 0
+    observed_between_steps = 0
     steps = []
     for (start, fields), (finish, output) in zip(starts, returns, strict=True):
         first, stop, final, batch_rows, decode_rows = fields
@@ -50,6 +73,8 @@ def request_phases(phases, prompt_tokens):
                 and 0 <= gpu_ns <= finish - start, "prefill range, shape or timing is incoherent")
         steps.append({"begin": first, "end": stop, "batch_rows": batch_rows,
                       "decode_rows": decode_rows, "gpu_ms": gpu_ns / 1e6})
+        if logical > 0:
+            observed_between_steps += overlap(last_timestamp, start, observed_prefill)
         wall += finish - start
         gpu += gpu_ns
         last_timestamp, logical = finish, stop
@@ -71,12 +96,22 @@ def request_phases(phases, prompt_tokens):
             "request stages do not partition the server interval")
     return {"tokenizer_thread": tokenizer, "server_ms": (delta - front) / 1e6,
             "shared_prefill_gpu_ms": gpu / 1e6, "prefill_steps": steps,
+            "other_prefill_during_wait_ms": {
+                "command_queue": overlap(sent, worker, observed_prefill) / 1e6,
+                "before_first_step": overlap(admitted, begin_prefill, observed_prefill) / 1e6,
+                "between_steps": observed_between_steps / 1e6,
+            },
             "stages_ms": {k: v / 1e6 for k, v in timing_ns.items()}}
 
 
 def stage_medians(requests):
     return {name: median(row["stages_ms"][name] for row in requests)
             for name in requests[0]["stages_ms"]}
+
+
+def other_prefill_medians(requests):
+    return {name: median(row["other_prefill_during_wait_ms"][name] for row in requests)
+            for name in requests[0]["other_prefill_during_wait_ms"]}
 
 
 def ttft_tail(requests, p95_ms):
@@ -87,6 +122,7 @@ def ttft_tail(requests, p95_ms):
     tail = [row for row in ranked if row["client_ttft_ms"] >= p95_ms]
     return {"requests": len(tail), "request_indices": [row["request_index"] for row in tail],
             "server_ms_p50": median(row["server_ms"] for row in tail),
+            "other_prefill_during_wait_ms_p50": other_prefill_medians(tail),
             "stages_ms_p50": stage_medians(tail)}
 
 
@@ -95,6 +131,7 @@ def summarize(root):
     base, base_plan, base_cells = arm(root, "qwen14", "riley")
     focus, plan, cells = arm(root, "qwen14", "stage-trace")
     grouped = read_phases(root / "qwen14-stage-trace/server.log")
+    observed_prefill = prefill_union(grouped)
     require(not read_phases(root / "qwen14-riley/server.log"), "control arm contains request tracing")
     immutable = ("model", "gpu", "common_kv_blocks", "kv_cache_bytes")
     source_hashes = [{Path(name).name: value for name, value in receipt["sha256"].items()
@@ -118,7 +155,7 @@ def summarize(root):
             identifiers.add(identifier)
             requests.append({"request_index": row["request_index"], "request_id": identifier,
                              "client_ttft_ms": row["ttft"] * 1000,
-                             **request_phases(grouped[identifier], row["prompt_tokens"])})
+                             **request_phases(grouped[identifier], row["prompt_tokens"], observed_prefill)})
         result[name] = {"requests": len(requests), "matching_outputs": len(requests),
                         "ttft_p95_instrumented_ms": stats["ttft_p95_ms"],
                         "ttft_p95_control_ms": control["ttft_p95_ms"],
@@ -126,6 +163,7 @@ def summarize(root):
                         "server_ms_p50": median(row["server_ms"] for row in requests),
                         "shared_prefill_gpu_ms_p50": median(row["shared_prefill_gpu_ms"] for row in requests),
                         "stages_ms_p50": stage_medians(requests),
+                        "other_prefill_during_wait_ms_p50": other_prefill_medians(requests),
                         "at_or_above_client_ttft_p95": ttft_tail(requests, stats["ttft_p95_ms"]),
                         "rows": requests}
     return {"model": focus["model"], "physical_gpu": 7, "build_sha256": source_hashes[0]["riley"],

@@ -1,0 +1,101 @@
+{
+  "server": [
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-request-stages-20261119.DWykKwJR/target/release/riley",
+    "serve",
+    "--model",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-14B-Instruct",
+    "--model-id",
+    "m",
+    "--bind",
+    "127.0.0.1:40153",
+    "--max-active-sequences",
+    "32",
+    "--max-weight-bytes",
+    "68719476736",
+    "--inference-profile",
+    "native-bf16-varlen-v1",
+    "--max-sequence-tokens",
+    "8192",
+    "--max-output-tokens",
+    "256",
+    "--kv-blocks",
+    "2576",
+    "--batch-token-budget",
+    "1024",
+    "--prefill-chunk-tokens",
+    "1024",
+    "--batch-shape-buckets",
+    "1,2,4,8,16,24,32,48,64,80,96,112,128,144,160,176,192,208,224,240,256,512,1024",
+    "--prefill-burst-steady-budget",
+    "256",
+    "--prefill-burst-max-decode-rows",
+    "32",
+    "--prefill-burst-min-prompt-tokens",
+    "512"
+  ],
+  "address": "127.0.0.1:40153",
+  "ready": "http://127.0.0.1:40153/readyz",
+  "env": {
+    "RILEY_W3_REQUEST_TRACE": "1"
+  },
+  "profile": false,
+  "cells": {
+    "rag-c1": {
+      "prompt_words": [
+        1500,
+        3000
+      ],
+      "max_tokens": 128,
+      "concurrency": 1,
+      "requests": 16,
+      "warmup": 4,
+      "seed": 1
+    },
+    "rag-c8-s1": {
+      "prompt_words": [
+        1500,
+        3000
+      ],
+      "max_tokens": 128,
+      "concurrency": 8,
+      "requests": 64,
+      "warmup": 8,
+      "seed": 1
+    },
+    "rag-c8-s2": {
+      "prompt_words": [
+        1500,
+        3000
+      ],
+      "max_tokens": 128,
+      "concurrency": 8,
+      "requests": 64,
+      "warmup": 8,
+      "seed": 2
+    },
+    "wave-sync": {
+      "prompt_words": [
+        1500,
+        3000
+      ],
+      "max_tokens": 128,
+      "concurrency": 8,
+      "requests": 40,
+      "warmup": 8,
+      "seed": 1,
+      "stagger_ms": 0
+    },
+    "wave-50ms": {
+      "prompt_words": [
+        1500,
+        3000
+      ],
+      "max_tokens": 128,
+      "concurrency": 8,
+      "requests": 40,
+      "warmup": 8,
+      "seed": 1,
+      "stagger_ms": 50
+    }
+  }
+}

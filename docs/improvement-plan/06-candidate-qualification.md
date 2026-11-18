@@ -11,12 +11,14 @@
 
 두 소스와 감사 시점 `main`에서 Rust 소스, CUDA 커널, vendored 코드, Cargo 입력, Rust toolchain, 체크포인트 도구의 Git 객체가 같다. 배포 이미지의 entrypoint에는 `serve --help` 보완이 포함됐다. 두 바이너리는 같은 Cargo 기능으로 빌드됐고 CUDA 아키텍처 목록과 바이너리 해시가 각각 다르다. 각 결과의 적용 범위는 해당 바이너리다. [네이티브 빌드 기록](04-structured-output-result.md) · [이미지 빌드 기록](01-validation-result.md#현행-배포-이미지)
 
+감사 이후 `main`의 `a21829d0e`에서 CUDA 헤더의 두 진단 선언에 기능 조건을 적용했다. Production CPU와 C ABI 네 조합이 통과했다. 헤더 수정이 포함된 `120e984c9`의 이미지 빌드와 CPU 검증을 마쳤다. 새 이미지의 런타임 파일 해시는 위 표의 이미지와 모두 일치했다. A100 오류 주입 재시험과 배포 이미지의 실제 GPU 실행은 남아 있다. [후속 빌드와 CI 기록](01-validation-result.md#현행-배포-이미지) · [새 이미지 검증 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/header-fix/receipt.json)
+
 ## 현재 판정
 
 | 조건 | 확인된 근거 | 남은 확인 |
 |---|---|---|
 | W1 Linux·과거 계약 | hosted Linux 검사와 정확한 Python을 쓴 RC3 격리 테스트 34건 통과 | 실제 배포 이미지의 NVIDIA 드라이버 주입과 추론 |
-| W2·W3 성능 | 이벤트 발행·스케줄 네 조합, 두 14B 모델의 동일 KV·커널 계측, vLLM 한도 대조, Qwen3-4B 길이별 계측·비계측 대조 | 요청별 대기 단계와, 변경을 채택할 때 영향을 받는 모델의 출력·회귀 판정 |
+| W2·W3 성능 | 이벤트 발행·스케줄 네 조합, 두 14B 모델의 동일 KV·커널 계측, Qwen2.5-14B 요청별 prefill 대기와 vLLM 한도 대조, Qwen3-4B 길이별 대조 | prefill 선택 순서의 효과와 공정성, 변경을 채택할 때 영향을 받는 모델의 출력·회귀 판정 |
 | W4 장문·정확성 | 고정 입력 18개와 holdout 11개의 엔진 비교, 두 사례 첫 BF16 차이 추적과 native layer 0의 KV·causal 재계산, 네 모델의 동일 입력 GSM8K에서 품질 기준 통과 | Riley/HF의 내부 Q/K/V 차이 원인과 최종 배포 후보 재확인 |
 | W4 스키마 | 문서화한 부분집합에서 GPU 일반 API 40건과 schema 계약 11건 통과 | 배포 이미지의 대표 모델 API 재확인 |
 | W5 운영 | 캐시 off·on 30분 시험, 캐시 재사용·퇴거, 포화 후 회복, 느린 SSE 소비자·취소·종료 회수 검증 | 실제 운영 분포와 장치 장애, 최종 배포 후보의 동일 바이너리 근거 |

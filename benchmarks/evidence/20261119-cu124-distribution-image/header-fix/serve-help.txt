@@ -1,0 +1,139 @@
+usage:
+  riley --version
+  riley serve --model PATH [options]
+
+serve options:
+  --inference-profile MODE       native-bf16-v1 | native-bf16-varlen-v1: opt-in BF16 defaults;
+                                 explicit options override
+  --native-attention-mode MODE   page-v1 | fixed-tile-unsplit-v1 (D64/D128 tensor-core native route)
+  --attention-kv-chunk-tokens N  fixed-tile context split, multiple of 16 (default: 512)
+  --model-id ID                  public model ID (default: checkpoint source model)
+  --bind ADDRESS                 listener address (default: 127.0.0.1:8080)
+  --device ORDINAL               CUDA device ordinal (default: 0)
+  --tensor-parallel-devices LIST tensor parallelism over 2..8 NVLink peer GPUs, CUDA ordinals in
+                                 rank order (e.g. 4,5); excludes --device
+  --max-active-sequences N       active scheduler capacity (default: 8)
+  --max-waiting-requests N       waiting scheduler capacity (default: 64)
+  --admission-timeout-ms MS      bounded queue/command wait, 1..3600000 (default: 30000)
+  --max-sequence-tokens N        context bound (default: checkpoint maximum)
+  --max-output-tokens N          API output bound (default: min(1024, context-1))
+  --batch-token-budget N         tokens per CUDA iteration (default: 512)
+  --prefill-chunk-tokens N       prompt tokens per request/iteration (default: 512)
+  --prefill-plateau-rows LIST    ascending iteration sizes after which one more row costs a
+                                 step-up (for example 128,192): an iteration that would end at
+                                 most --prefill-plateau-defer-tokens past one runs the overflowing
+                                 prompt tokens in the next iteration instead; a request waits at
+                                 most once and its output does not change (default: off)
+  --prefill-coalescing-tokens N  hold newly admitted prompts back until N prompt tokens are ready
+                                 or the oldest has waited --prefill-coalescing-wait-us, so that
+                                 several prompts start in one iteration; applies from
+                                 --prefill-coalescing-min-decode-rows decode rows; a prompt's
+                                 output does not change (default: off)
+  --prefill-coalescing-wait-us N longest a ready prompt is held back (default: 10000)
+  --prefill-coalescing-min-decode-rows N
+                                 fewest decode rows for coalescing to apply (default: 4)
+  --prefill-burst-steady-budget N
+                                 iteration budget while more than --prefill-burst-max-decode-rows
+                                 rows are decoding; with fewer, the whole --batch-token-budget is
+                                 open to prompts, so a burst starts in fewer, larger steps; a
+                                 prompt's output does not change (default: off)
+  --prefill-burst-max-decode-rows N
+                                 most decode rows at which the whole budget stays open (default: 8)
+  --prefill-burst-max-decode-percent P
+                                 the same bound as P percent of --max-active-sequences, rounded up
+                                 (exclusive with --prefill-burst-max-decode-rows)
+  --prefill-burst-min-prompt-tokens N
+                                 open the whole budget only while a ready prompt has at least N
+                                 tokens left, so short prompts arriving together keep the steady
+                                 budget (default: 0, any prompt)
+  --prefill-plateau-defer-tokens N
+                                 largest overflow put off by --prefill-plateau-rows (default: 32)
+  --prefill-plateau-min-decode-rows N
+                                 fewest decode rows for --prefill-plateau-rows to apply
+                                 (default: 12)
+  --kv-blocks N                  physical 16-token KV blocks (default: full active promise)
+  --prefix-cache-blocks N        keep up to N prompt KV blocks for requests that start with the
+                                 same tokens, on top of the default --kv-blocks; needs
+                                 --decode-attention-producer tensor-core-v1 (default: no cache)
+  --api-key-env NAME             require this environment variable's value as a bearer token on
+                                 every /v1 endpoint (default: no authentication)
+  --residual-rmsnorm MODE        fused E0 candidate or separate path (default: separate)
+  --execution-completion MODE    per-operation or iteration-batch (default: iteration-batch)
+  --batch-shape-policy MODE      fixed-max or power-of-two (default: fixed-max)
+  --batch-shape-buckets LIST     custom power-of-two-policy shapes, ending at token budget
+  --metadata-transport MODE      synchronous or packed-async (default: synchronous)
+  --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
+  --graph-numerics existing|vllm-smol-p128-v1  explicit bounded arithmetic (default: existing)
+  --projection-bias-backend MODE strict-staged-v1, cublaslt-bias-epilogue-experimental-v1, or
+                                 merged-qkv-strict-staged-v1 (default: strict-staged-v1)
+  --decode-attention-backend MODE existing, native-bf16-paged-split-gqa-d128-two-stage, materialized-bf16-reference-d128, or materialized-bf16-reference-d64 (default: existing)
+  --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
+  --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
+  --gemm-reduction-policy ID     canonical or first-heuristic-split-k-v1 (default: canonical)
+  --gemm-algorithm-selection ID  anchor-v1 or bit-equivalent-table-v1: per-row-count algorithms
+                                 verified bit-identical to the anchor; needs the first-heuristic
+                                 policy (default: anchor-v1)
+  --decode-attention-merge ID    ordered-v1 or global-max-v1 page merge for the native D128
+                                 backend (default: ordered-v1)
+  --mlp-activation ID            separate-v1 or fused-silu-multiply-v1: one kernel for SiLU and
+                                 the gate multiply, bit-identical (default: separate-v1)
+  --step-uploads ID              per-buffer-v1 or staged-batch-v1: copy an iteration's tokens and
+                                 metadata to the device inside its command batch from one pinned
+                                 buffer instead of one synchronized upload per buffer; needs
+                                 synchronous metadata transport and iteration-batch completion
+                                 (default: per-buffer-v1)
+  --startup-warmup ID            disabled or step-shapes-v1: before serving, run internal requests
+                                 that step through the decode and prefill-mixed row shapes, so
+                                 --decode-step-graph capture-v1 records them at start-up rather
+                                 than under traffic (default: disabled)
+  --event-publication ID         immediate-v1 or after-submit-v1: publish an iteration's events
+                                 after the next iteration is submitted to the GPU, same events
+                                 and order (default: immediate-v1)
+  --mlp-projection ID            separate-v1 or merged-gate-up-v1: one GEMM over the concatenated
+                                 gate|up weights (a second device copy of both); needs
+                                 --mlp-activation fused-silu-multiply-v1 (default: separate-v1)
+  --query-key-rope ID            separate-v1 or fused-split-v1: apply RoPE inside the merged QKV
+                                 split kernel, bit-identical (default: separate-v1)
+  --kv-cache-write ID            separate-v1 or fused-split-v1: write the KV cache inside the merged
+                                 QKV split kernel, same stored bytes; needs --query-key-rope
+                                 fused-split-v1 (default: separate-v1)
+  --decode-attention-producer ID shared-kv-v1 or tensor-core-v1: produce the native D128 page
+                                 states of every row with tensor-core arithmetic (different
+                                 rounding, identical in every batch and chunk); needs
+                                 --decode-attention-merge global-max-v1 and excludes
+                                 --prompt-attention tensor-core-v1 (default: shared-kv-v1)
+  --prompt-attention ID          shared-kv-v1, tensor-core-v1 or dense-v1: produce the attention of
+                                 prompt tokens with the tensor-core prefill kernel (different
+                                 rounding for prompt tokens, identical in every batch and chunk);
+                                 needs --decode-attention-merge global-max-v1. dense-v1 is that
+                                 kernel for every prompt token and any head geometry, next to
+                                 --decode-attention-producer tensor-core-v1 (default: shared-kv-v1)
+  --mlp-residual-norm ID         separate-v1 or fused-next-norm-v1: fuse the MLP residual add with
+                                 the following norm; needs --residual-rmsnorm fused
+                                 (default: separate-v1)
+  --lm-head-rows ID              dense-v1 or output-rows-v1: in steps that mix prefill and decode,
+                                 run the LM head on output rows only, bit-identical
+                                 (default: dense-v1)
+  --greedy-tie-break ID          lowest-token-v1, fp32-rescore-v1, fp32-window1-v1 or fp32-window2-v1:
+                                 tokens sharing a row's largest BF16 logit (window N: within N BF16
+                                 steps of it) are rescored in FP32 from the hidden state and LM head;
+                                 other rows are unchanged; needs --sampling-backend gpu-greedy
+                                 (default: lowest-token-v1)
+  --owned-decode-batch MODE      disabled, grouped-v1, lt-mlp-v2, bounded-gateup-sm80-v1 or bounded-projections-sm80-v2 / native-kv-sm80-v3 / native-attention-sm80-v4 / native-prefill-sm80-v5: explicit owned decode batching
+  --owned-decode-graph MODE      disabled or segments-v1: reuse exact owned decode segments
+  --decode-step-graph MODE       disabled or capture-v1: record pure-decode steps of the native
+                                 D128 route as CUDA graphs and replay them (default: disabled)
+  --owned-mlp-graph ID           off | pure-decode-v1; requires owned HF, iteration-batch, fused SiLU
+  --numerics-profile ID          existing | owned-hf-eager-bf16-v1 | hf-eager-qwen-p2048-o128-probe-v1;
+                                owned profile requires the owned-hf-eager feature, eager-only;
+                                prompt tokens must fit both batch and prefill token budgets;
+                                 the HF-exact profile needs an hf-exact-probe build and
+                                 --max-active-sequences 1, and serves only P2048/O<=128 greedy
+  --logit-observation-dir DIR    with the HF-exact profile, write each published logit row to DIR
+  --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648; native D128: 8589934592)
+  --c02-candidate-id ID          release candidate identity for C02 evidence mode
+  --c02-configuration-profile ID stable-default or max-performance-exact
+  --c02-startup-artifact PATH    absolute create-only C02 startup artifact path
+  --c02-audit-dir PATH           absolute C02 generation-audit output directory
+  --c02-shutdown-artifact PATH   direct-child C02 shutdown-v2 JSON artifact in audit dir
+  --shutdown-on-stdin            gracefully stop after one input line or EOF

@@ -119,4 +119,6 @@ GPU 없는 runner에서 Riley 바이너리는 NVIDIA가 주입하는 `libcuda.so
 
 후속 CUDA 메모리 오류 빌드에서 cuBLAS 진단 기능을 끄면 C ABI 헤더가 그 기능의 내부 타입을 참조하는 오류를 확인했다. 관련 함수 두 개의 선언을 정의와 같은 기능 조건에 넣었다. GPU 없이 C ABI 테스트를 네 가지 기능 조합으로 컴파일하는 단계를 Production CPU에 추가했고, 로컬에서 첫 오류를 재현한 뒤 네 조합의 통과를 확인했다. A100의 CUDA 재빌드와 오류 주입 실행은 등록 상태다. [실패 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/initial-build/build.log) · [CI 검사](../../.github/workflows/production-cpu.yml)
 
+`a21829d0e`의 C ABI 검사와 Production CPU가 Linux에서 통과했다. 이 커밋에서 이미지 CI는 실행되지 않아 `kernels/**`와 `rust-toolchain.toml`을 이미지 검증의 `main` 변경 감지에 추가했다. `120e984c9`의 Production CPU와 CUDA 12.4 이미지 빌드·CPU CLI·런타임 무결성 검사가 모두 통과했다. 새 이미지 ID와 소스 아카이브는 이전 이미지와 달랐고, 설치된 런타임 파일 해시 전체와 Riley 바이너리 해시는 일치했다. GitHub의 증거 ZIP 해시와 로컬에서 다시 계산한 소스 아카이브 해시를 대조했다. [Production CPU](https://github.com/hkjeon13/riley/actions/runs/44395442651) · [이미지 빌드와 검사](https://github.com/hkjeon13/riley/actions/runs/44395442715) · [새 이미지 검증 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/header-fix/receipt.json)
+
 W2·W3는 이 runner의 새 label·실패 판정·실행 argv/해시를 사용한다. W4는 정확성 판정 결과를 같은 후보에 결속한다. W5는 현행 이미지와 네이티브 GPU 실행 근거를 릴리스 문서에 연결한다. M5 판정에는 동일 후보의 패키징·GPU 실행·품질 근거가 필요하다.

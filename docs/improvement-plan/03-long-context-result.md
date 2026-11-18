@@ -135,9 +135,26 @@ Riley 실행은 스텝당 1,024행을 명시했다. 설치된 vLLM 0.27.1 소스
 
 ### Riley 14B의 요청별 대기와 prefill 계측
 
-동일한 Qwen2.5-14B-Instruct와 KV 41,216토큰을 사용해, 같은 진단 바이너리에서 계측을 끄고 켠 조건을 GPU 7에 등록했다. `rag-c1`, 두 seed의 `rag-c8`, 8개 동시 전송과 50ms 간격 전송을 다시 사용한다. 각 조건에서 요청 본문과 도착 일정, 응답 텍스트, 종료 사유, 토큰 수가 일치하는지 확인하고 계측에 따른 TTFT 변화도 기록한다. [실행 순서 및 입력 해시](../../benchmarks/evidence/20261119-w3-rag-profile/request-stages/campaign.sh)
+같은 Qwen2.5-14B-Instruct, KV 41,216토큰, 스텝당 1,024행과 진단 바이너리로 A100 GPU 7에서 계측 off·on을 순서대로 실행했다. 다섯 부하에서 조건별 측정 224건과 워밍업 36건을 오류·429 없이 마쳤다. 모든 측정 요청의 본문 지문, 입력·생성 토큰 수, 응답 텍스트 지문과 종료 사유가 일치했다. 두 실행 모두 코드 0으로 종료했고 같은 홀더의 20GiB 예약으로 복귀했다. [실행 순서 및 입력 해시](../../benchmarks/evidence/20261119-w3-rag-profile/request-stages/campaign.sh) · [원본 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/request-stages/result/SHA256SUMS)
 
-SSE 요청 ID로 서버의 엔진 제출, 토큰화, 스케줄러 진입, prefill chunk의 선택·반환, 첫 응답 조각 생성 시각을 연결한다. 스텝 반환까지의 경과에는 호스트와 GPU 작업이 함께 들어가며, CUDA 이벤트 시간은 같은 스텝의 요청이 공유하는 값으로 기록한다. Nsight의 커널 분류와 이 계측을 함께 보면 `rag-c8` 첫 토큰 꼬리에서 어느 대기 구간이 길어졌는지 확인할 수 있다. [원본 검증과 집계 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/summarize_request_stages.py)
+| 부하 | 비계측 TTFT p95 (ms) | 계측 TTFT p95 (ms) | 계측 조건 변화율 |
+|---|---:|---:|---:|
+| `rag-c1` | 477 | 473 | −0.84% |
+| `rag-c8` seed 1 | 1,776 | 1,773 | −0.20% |
+| `rag-c8` seed 2 | 1,768 | 1,592 | −9.93% |
+| 8개 동시 전송 | 3,234 | 3,240 | +0.19% |
+| 8개 50ms 간격 전송 | 3,018 | 3,011 | −0.22% |
+
+`rag-c8` seed 2는 이전 비계측 세션과 이번 비계측 조건 사이에도 +18.82% 차이가 있었다. 두 세션은 입력·응답이 같았고 바이너리와 측정 시점이 달랐다. 위 표의 계측 off·on은 각각 한 번씩 실행했으며 계측 비용을 추정하려면 반복이 필요하다. [이전 세션과 입력·출력 대조](../../benchmarks/evidence/20261119-w3-rag-profile/request-stages/result/cross-session-control.json)
+
+SSE 요청 ID로 엔진 제출부터 첫 응답 조각 생성까지를 연결했다. 스텝의 시작에서 반환까지에는 호스트와 GPU 작업이 포함된다. 같은 스텝의 CUDA 이벤트 시간은 해당 요청들이 공유한다. 아래 값은 각 seed에서 클라이언트 TTFT p95 이상인 네 요청의 중앙값이다. [요청별 시각과 집계](../../benchmarks/evidence/20261119-w3-rag-profile/request-stages/result/summary.json) · [검증 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/summarize_request_stages.py)
+
+| `rag-c8` | 엔진 명령 대기 | 첫 prefill 선택 대기 | 선택된 prefill 실행 | prefill 사이 대기 | prefill 사이 다른 요청의 prefill과 겹친 시간 |
+|---|---:|---:|---:|---:|---:|
+| seed 1 | 127ms | 336ms | 545ms | 1,008ms | 1,006ms |
+| seed 2 | 124ms | 195ms | 620ms | 657ms | 655ms |
+
+두 seed에서 prefill 사이 대기 대부분은 다른 요청의 prefill 구간과 겹쳤다. 이 구간은 토큰화나 스텝 자체의 실행 시간과 별도로 확인됐다. 같은 행 예산으로 조각 선택 순서를 비교할 때는 첫 토큰 꼬리와 다른 요청의 대기·decode TPOT를 함께 측정해야 한다.
 
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
