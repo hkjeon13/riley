@@ -1,0 +1,47 @@
+{
+  "model": "Qwen2.5-14B-Instruct",
+  "mode": "profile",
+  "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+  "holder_pid": 2431237,
+  "holder_start_ticks": "6339570875",
+  "common_kv_blocks": 2576,
+  "kv_block_bytes": 3145728,
+  "kv_cache_bytes": 8103395328,
+  "sha256": {
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-schema-build-20261119.QWnmhslP/target/release/riley": "3e070d05c93b6784e24eefd423a77ed260162c7ddd9fcde67bec135c3dc53e70",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-14B-Instruct/riley-checkpoint.json": "8210d56941a9c3a257f8f20ab65b40a19479f292036b2add12e66484b42e9e4d",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-14B-Instruct/config.json": "0f2085dbbe2ee251bd6a6a0797d84a6ce34436044d629aa3cba793b43d311a9e",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-14B-Instruct/tokenizer.json": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/qwen14-profile/plan.json": "a332081a9a2b58e202fdc1733630ec02d6389ab7ea5d2e6e770428a8cd1fcc2c",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/run_profile.py": "f8cc5a624063bc693e7176cd7be04f49779bf672a6e23e47fead9441533cc3d8",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/profile_workload.py": "781f4654d3c0f6ad205da57950b582ba49886ddd445a8380cb7f5e08655a6b08",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/load.py": "fb3a3de6fcd8904d6379433ad8fcff284530e46e388aa40c2b7b75cfd0d0c8b0",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/profile_summary.py": "edf89f5ccc1caae92b358f855eb5cfa606dea7b1fcb1e1c1ad51e3262dda5207",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/nsys-2026/opt/nvidia/nsight-systems-cli/2026.5.1/target-linux-x64/nsys": "ccc5904771ce1cdbcd96a9ce29f75a0d6cbaa4e08d47a3439232afe387f5a6fd"
+  },
+  "status": "passed",
+  "command": [
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/nsys-2026/opt/nvidia/nsight-systems-cli/2026.5.1/target-linux-x64/nsys",
+    "profile",
+    "--trace=cuda,nvtx",
+    "--cuda-graph-trace=node",
+    "--sample=none",
+    "--cpuctxsw=none",
+    "-o",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/qwen14-profile/trace",
+    "/usr/bin/python3",
+    "-B",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/profile_workload.py",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/qwen14-profile/plan.json"
+  ],
+  "results": {
+    "rag-c1": "b3195a503e43fbebe284702f0915d7aee4e3d61d1ec810b8727536e669883e85",
+    "rag-c8-s1": "607c010a5159f8458802e2fe99b9e4deeb63345e8744e731a99dff42ca40be4d",
+    "wave-sync": "541d426600a376073a20bed91113cfdf54cb2485cbf9d53af74928a3522ec508",
+    "wave-50ms": "d203bf070d82b38742a4064a9baea74a42ab2866372f67b0aefb34591b73af84"
+  },
+  "raw_report_sha256": "8aebfc981e70238337737aef5dc90f75a46a043f7c15eb69e45a6b3dbf3b7eae",
+  "sqlite_sha256": "ce481cdd8a47cd2aa55c1fa96ba9d6090a4b5103607aa347eb6db703d8ab357f",
+  "nvml_samples": 482,
+  "max_process_memory_mib": 38068.0
+}

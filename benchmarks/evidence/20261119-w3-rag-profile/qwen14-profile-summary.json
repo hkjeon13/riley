@@ -1,0 +1,67 @@
+{
+  "model": "Qwen2.5-14B-Instruct",
+  "physical_gpu": 7,
+  "scope": "Request windows share kernel time for concurrent clients",
+  "trace_files": {
+    "trace.nsys-rep": {
+      "path": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/qwen14-profile/trace.nsys-rep",
+      "bytes": 113506464,
+      "sha256": "8aebfc981e70238337737aef5dc90f75a46a043f7c15eb69e45a6b3dbf3b7eae"
+    },
+    "trace.sqlite": {
+      "path": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/qwen14-profile/trace.sqlite",
+      "bytes": 348258304,
+      "sha256": "ce481cdd8a47cd2aa55c1fa96ba9d6090a4b5103607aa347eb6db703d8ab357f"
+    }
+  },
+  "cells": {
+    "rag-c1": {
+      "requests": 16,
+      "sent_to_first_ms_p50": 358.96798,
+      "gpu_kernel_union_ms_p50": 351.65207250000003,
+      "outside_kernels_ms_p50": 8.180133999999999,
+      "gpu_busy_share_p50": 0.9806574406515469,
+      "ttft_p95_with_profile_ms": 469.5628881454468,
+      "ttft_p95_without_profile_ms": 467.7653759717941,
+      "profile_ttft_p95_relative_percent": 0.38427644840499653,
+      "clock_offset_change_ns": 2473,
+      "matching_output_text_and_finish": 16
+    },
+    "rag-c8-s1": {
+      "requests": 64,
+      "sent_to_first_ms_p50": 817.6953599999999,
+      "gpu_kernel_union_ms_p50": 806.6869879999999,
+      "outside_kernels_ms_p50": 11.5387625,
+      "gpu_busy_share_p50": 0.9871070037838162,
+      "ttft_p95_with_profile_ms": 1767.0436725020409,
+      "ttft_p95_without_profile_ms": 1756.3615292310715,
+      "profile_ttft_p95_relative_percent": 0.6081972927092005,
+      "clock_offset_change_ns": 4668,
+      "matching_output_text_and_finish": 64
+    },
+    "wave-sync": {
+      "requests": 40,
+      "sent_to_first_ms_p50": 2516.601924,
+      "gpu_kernel_union_ms_p50": 2469.300628,
+      "outside_kernels_ms_p50": 47.339949000000004,
+      "gpu_busy_share_p50": 0.9807635371837928,
+      "ttft_p95_with_profile_ms": 3266.909211874008,
+      "ttft_p95_without_profile_ms": 3220.887079834938,
+      "profile_ttft_p95_relative_percent": 1.4288651200224267,
+      "clock_offset_change_ns": 493,
+      "matching_output_text_and_finish": 40
+    },
+    "wave-50ms": {
+      "requests": 40,
+      "sent_to_first_ms_p50": 2230.306016,
+      "gpu_kernel_union_ms_p50": 2196.8889790000003,
+      "outside_kernels_ms_p50": 33.3788845,
+      "gpu_busy_share_p50": 0.9863179636411781,
+      "ttft_p95_with_profile_ms": 3029.5392349362373,
+      "ttft_p95_without_profile_ms": 2999.580793082714,
+      "profile_ttft_p95_relative_percent": 0.9987542900197877,
+      "clock_offset_change_ns": 5870,
+      "matching_output_text_and_finish": 40
+    }
+  }
+}
