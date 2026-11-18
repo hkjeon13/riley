@@ -71,12 +71,14 @@ jobs:
           mkdir "$empty"
           docker buildx build --platform linux/amd64 --progress plain --file - \
             --build-arg "CUDA_DEVEL_IMAGE=$cuda_builder" \
-            --output "type=local,dest=$driver" "$empty" <<'DOCKERFILE'
+            --output "type=local,dest=$empty/export" "$empty" <<'DOCKERFILE'
           ARG CUDA_DEVEL_IMAGE
           FROM ${CUDA_DEVEL_IMAGE} AS sdk
           FROM scratch
           COPY --from=sdk /usr/local/cuda/targets/x86_64-linux/lib/stubs/libcuda.so /libcuda.so.1
           DOCKERFILE
+          mkdir "$driver"
+          install -m 0644 "$empty/export/libcuda.so.1" "$driver/libcuda.so.1"
           printf '%s\n' "$cuda_builder" > "$output/cpu-cli-driver-stub-source.txt"
           python3 "$source/ci/check_distribution_image.py" "$(cat "$output/image.id")" "$GITHUB_SHA" \
             "$source" "$RUNNER_TEMP/riley-distribution-source.tar" "$driver/libcuda.so.1" "$output"

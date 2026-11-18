@@ -81,16 +81,19 @@ def check_image(image, revision, source_root, source_archive, stub, out):
             "the CPU host should lack only the runtime-injected CUDA driver")
     require(stub.is_file() and not stub.is_symlink() and stub.name == "libcuda.so.1",
             "expected the CUDA SDK driver stub exported as libcuda.so.1")
-    stub_location = "/run/riley-ci-driver"
+    stub_directory = "/run/riley-ci-driver"
+    stub_location = f"{stub_directory}/{stub.name}"
     stub_flags = [
-        "--mount", f"type=bind,src={stub.resolve().parent},dst={stub_location},readonly",
-        "--env", f"LD_LIBRARY_PATH={stub_location}",
+        "--mount", f"type=bind,src={stub.resolve()},dst={stub_location},readonly",
+        "--env", f"LD_LIBRARY_PATH={stub_directory}",
     ]
     cli = [*base, *stub_flags, image]
     cli_shell = [*base, *stub_flags, "--entrypoint", "/bin/sh", image, "-ec"]
-    stub_dependencies = capture(out, "cpu-cli-dependencies.txt", [*cli_shell, ldd_command])
+    stub_dependencies = capture(out, "cpu-cli-dependencies.txt", [
+        *cli_shell, f'stat -c "%a %u:%g %n" "{stub_location}"; test -r "{stub_location}"; {ldd_command}',
+    ])
     require(not missing_libraries(stub_dependencies)
-            and f"libcuda.so.1 => {stub_location}/libcuda.so.1" in stub_dependencies,
+            and f"libcuda.so.1 => {stub_location}" in stub_dependencies,
             "CPU CLI check did not resolve the exported SDK driver stub")
     version = capture(out, "version.txt", [*cli, "--version"]).strip()
     require(re.fullmatch(r"riley \S+ \(server=true, cuda=true, cuda_abi=\d+\)", version) is not None,
