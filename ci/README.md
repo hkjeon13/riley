@@ -194,11 +194,13 @@ run from Actions on demand. The job uses the Dockerfile's default `80;86;89`
 architecture list and records the source archive hash and immutable Docker
 image ID.
 
-The [image checker](check_distribution_image.py) runs the entrypoint without
-network or GPU access. It verifies the non-root user, `serve --help`, the
-checkpoint CLI, all preset file hashes and CUDA library resolution. The
-workflow retains the build log and checks as evidence. GPU inference and
-registry publication have their own release steps.
+The [image checker](check_distribution_image.py) verifies the non-root user,
+`serve --help`, the checkpoint CLI, all preset file hashes and CUDA library
+resolution without network or GPU access. The unmodified image on the CPU
+runner must report only the missing `libcuda.so.1` driver dependency. Separate
+CLI-only probes mount the matching CUDA 12.4 SDK stub read-only. The build log,
+image ID, runtime bytes and stub hash are retained as evidence. GPU inference
+uses the host driver supplied by the NVIDIA Container Runtime.
 
 ### CUDA development image
 

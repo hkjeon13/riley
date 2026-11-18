@@ -41,6 +41,8 @@ Rust 포맷을 맞추고 Clippy 경고를 수정했다. 문서의 오류 조건�
 
 2026-11-19에 배포 Dockerfile 전용 ignore 파일을 계약에 추가했다. 배포 entrypoint의 `serve --help`와 `serve -h`는 모델 경로 없이 CLI에 전달하도록 수정했다. Linux Actions가 현행 Dockerfile의 빌드와 패키지 검사도 실행한다. [배포 이미지 CI](../../.github/workflows/distribution-image.yml) · [이미지 검사기](../../ci/check_distribution_image.py)
 
+첫 Actions 실행에서 CUDA 12.4 배포 이미지는 빌드됐다. CPU 러너의 CLI 실행은 GPU 런타임이 공급하는 `libcuda.so.1`이 없어서 종료 코드 127로 실패했다. CPU의 기본 이미지에서 이 라이브러리만 미해결인지 확인하고, 도움말·버전 검사 컨테이너에만 같은 CUDA SDK의 스텁을 읽기 전용으로 연결하도록 수정했다. [첫 이미지 빌드와 실행 기록](https://github.com/hkjeon13/riley/actions/runs/44358229097)
+
 성능 파생 검사의 native checker 변경을 검토해 소스·정책 pin을 함께 맞췄다. 진단용 checker의 선택적 image digest가 정식 릴리스로 전파되지 않도록 full/compact 릴리스 경로 모두 image digest를 필수로 검사한다. 기존 성능 임계값을 낮추지 않았다.
 
 ### 의존성·확장 경계

@@ -60,7 +60,11 @@ def read_hashes(source):
     return result
 
 
-def check_image(image, revision, source_root, source_archive, out):
+def missing_libraries(dependencies):
+    return re.findall(r"^\s*(\S+) => not found\s*$", dependencies, flags=re.MULTILINE)
+
+
+def check_image(image, revision, source_root, source_archive, stub, out):
     require(IMAGE_ID.fullmatch(image) is not None, "pass an immutable Docker image ID")
     require(re.fullmatch("[0-9a-f]{40}", revision) is not None, "pass a full source revision")
     sources = validate_sources(source_root)
@@ -69,10 +73,29 @@ def check_image(image, revision, source_root, source_archive, out):
     check_config(inspect, image, revision, archive_sha)
     base = ["docker", "run", "--rm", "--network", "none", "--env", "NVIDIA_VISIBLE_DEVICES=void"]
     command = [*base, image]
-    version = capture(out, "version.txt", [*command, "--version"]).strip()
+    shell = [*base, "--entrypoint", "/bin/sh", image, "-ec"]
+    ldd_command = "ldd /opt/riley/bin/riley; ldd /opt/riley/bin/riley-checkpoint"
+    dependencies = capture(out, "runtime-dependencies.txt", [*shell, ldd_command])
+    require(missing_libraries(dependencies) == ["libcuda.so.1"]
+            and "libcublas" in dependencies and "libcudart" in dependencies,
+            "the CPU host should lack only the runtime-injected CUDA driver")
+    require(stub.is_file() and not stub.is_symlink() and stub.name == "libcuda.so.1",
+            "expected the CUDA SDK driver stub exported as libcuda.so.1")
+    stub_location = "/run/riley-ci-driver"
+    stub_flags = [
+        "--mount", f"type=bind,src={stub.resolve().parent},dst={stub_location},readonly",
+        "--env", f"LD_LIBRARY_PATH={stub_location}",
+    ]
+    cli = [*base, *stub_flags, image]
+    cli_shell = [*base, *stub_flags, "--entrypoint", "/bin/sh", image, "-ec"]
+    stub_dependencies = capture(out, "cpu-cli-dependencies.txt", [*cli_shell, ldd_command])
+    require(not missing_libraries(stub_dependencies)
+            and f"libcuda.so.1 => {stub_location}/libcuda.so.1" in stub_dependencies,
+            "CPU CLI check did not resolve the exported SDK driver stub")
+    version = capture(out, "version.txt", [*cli, "--version"]).strip()
     require(re.fullmatch(r"riley \S+ \(server=true, cuda=true, cuda_abi=\d+\)", version) is not None,
             "expected a CUDA-enabled Riley server version")
-    help_text = capture(out, "serve-help.txt", [*command, "serve", "--help"])
+    help_text = capture(out, "serve-help.txt", [*cli, "serve", "--help"])
     require("riley serve --model PATH" in help_text and "--inference-profile" in help_text,
             "serve help is unavailable through the image entrypoint")
     checkpoint_help = capture(out, "checkpoint-help.txt", [*command, "riley-checkpoint", "--help"])
@@ -83,7 +106,6 @@ def check_image(image, revision, source_root, source_archive, out):
     require(sorted(line.split()[0] for line in preset_list.splitlines()) == [file.stem for file in presets],
             "bundled preset list differs from the source archive")
 
-    shell = [*base, "--entrypoint", "/bin/sh", image, "-ec"]
     files = read_hashes(capture(out, "runtime.sha256", [
         *shell,
         'test "$(id -u):$(id -g)" = 65532:65532; '
@@ -99,16 +121,12 @@ def check_image(image, revision, source_root, source_archive, out):
     binaries = {"/opt/riley/bin/riley", "/opt/riley/bin/riley-checkpoint"}
     require(set(files) == set(expected) | binaries, "unexpected files in the Riley runtime tree")
     require(all(files[name] == expected[name] for name in expected), "runtime script, preset or license bytes differ")
-    dependencies = capture(out, "runtime-dependencies.txt", [
-        *shell, "ldd /opt/riley/bin/riley; ldd /opt/riley/bin/riley-checkpoint",
-    ])
-    require("not found" not in dependencies and "libcublas" in dependencies and "libcudart" in dependencies,
-            "missing expected CUDA runtime dependencies")
-
     report = {"schema_version": "riley.distribution-image-check.v1", "status": "passed",
               "distribution": sources["distribution"], "source_revision": revision,
               "source_archive_sha256": archive_sha, "image_id": image, "version": version,
               "binaries": {name: files[name] for name in sorted(binaries)},
+              "cpu_cli_driver_stub_sha256": digest(stub),
+              "driver_dependency": "libcuda.so.1 injected by NVIDIA at GPU runtime",
               "preset_count": len(presets),
               "checks": ["linux-amd64-configuration", "non-root-uid-gid", "offline-cli",
                          "runtime-tree", "native-linkage"]}
@@ -123,9 +141,10 @@ def main():
     parser.add_argument("revision")
     parser.add_argument("source_root", type=Path)
     parser.add_argument("source_archive", type=Path)
+    parser.add_argument("stub", type=Path)
     parser.add_argument("out", type=Path)
     args = parser.parse_args()
-    check_image(args.image, args.revision, args.source_root, args.source_archive, args.out)
+    check_image(args.image, args.revision, args.source_root, args.source_archive, args.stub, args.out)
 
 
 if __name__ == "__main__":
