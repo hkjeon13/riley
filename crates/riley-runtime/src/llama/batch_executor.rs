@@ -20,7 +20,9 @@ use riley_model::LoadedModel;
 use super::batch::{LlamaBatchRow, LlamaPackedBatchMetadata};
 pub use super::executor::allocation::PreparedLlamaBatchAllocationReport;
 use super::executor::allocation::build_batch_allocation_report;
-use super::executor::buffers::{BatchDeviceInput, BatchHostInput, U16_BYTES, U32_BYTES};
+#[cfg(test)]
+use super::executor::buffers::U16_BYTES;
+use super::executor::buffers::{BatchDeviceInput, BatchHostInput, U32_BYTES};
 pub use super::executor::config::{
     BatchMetadataTransport, ExecutionCompletionImplementation, PreparedLlamaBatchExecutorConfig,
     RaggedAttentionImplementation, ResidualNormImplementation,
@@ -38,9 +40,9 @@ pub use super::executor::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
 };
 use super::executor::gemm_plan::PreparedLlamaBatchShape;
-use super::executor::metadata::{
-    PackedIterationLayout, pack_iteration_input, validate_for_execution,
-};
+use super::executor::metadata::validate_for_execution;
+#[cfg(test)]
+use super::executor::metadata::{PackedIterationLayout, pack_iteration_input};
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
 use super::executor::output::{decode_greedy_tokens, greedy_result_bytes};
 use super::executor::owner::{

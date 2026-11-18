@@ -443,6 +443,8 @@ impl PreparedLlamaBatchOwner {
             }
         };
         #[cfg(feature = "cuda-cublas-gemm-probe")]
+        let mut shape_variants = shape_variants;
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
         if matches!(config.owned_decode_batch(), 7 | 8 | 9 | 10) {
             let d = forward.plan.dimensions();
             if (
