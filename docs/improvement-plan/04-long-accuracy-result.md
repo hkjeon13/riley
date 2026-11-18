@@ -89,6 +89,8 @@ GPU 6의 HF SDPA에서 첫 레이어 Q만, 첫 레이어 QKV, 전체 레이어 Q
 
 Riley 네이티브 빌드 `f7c956d3c`에서 기준을 `dense-v1`과 `fused-split-v1`로 명시했다. A100 GPU 6에서 prompt attention을 `shared-kv-v1`로 바꾸는 실행과 KV 쓰기를 `separate-v1`로 바꾸는 실행을 각각 완료했다. 사례 3과 9에 같은 토큰 ID를 공급했고 세 조건 모두 일반·logprobs·일반 반복 요청의 생성 ID·텍스트·종료 사유가 원래 Riley와 같았다. 첫 토큰의 상위 logprobs도 세 조건에서 일치했다. 사례 3의 Riley 첫 토큰은 세 조건 모두 264였고 HF SDPA는 5257이었다. 각 서버는 코드 0, 활성·대기 요청과 KV·native 할당 0으로 종료했고 GPU 6은 동일 홀더의 20GiB 예약으로 복귀했다. KV 주소와 causal mask의 내부 상태는 별도 검증 범위다. [세 조건 비교](../../benchmarks/evidence/20261119-w4-layer-trace/attention-controls/result/comparison.json) · [실행 원본과 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/attention-controls/result-SHA256SUMS)
 
+후속 진단은 첫 레이어에서 실제 KV 캐시의 물리 페이지와 KV head 0을 읽는다. 마지막 prefill 묶음의 첫 행과 끝 행에서 그 head를 공유하는 query head 7개의 native attention 출력을 보존한다. CPU 재계산은 같은 native Q/K/V에 논리 위치의 causal 범위를 적용한다. 첫 페이지를 빼거나 첫 행의 미래 토큰을 포함하는 대조도 계산한다. 격리 환경에서 Rust 타입 검사와 합성 입력의 독립 softmax 비교를 통과했다. 실제 CUDA 빌드와 두 프롬프트 측정은 진행 중인 RSS 시험 이후 GPU 6에서 시작하도록 등록했다. [실행 순서](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/campaign.sh) · [진단 패치](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/kv-trace.patch.gz) · [CPU 재계산기](../../benchmarks/evidence/20261119-w4-layer-trace/tools/replay_attention_mask.py)
+
 ## GSM8K 전수 품질 대조
 
 네 모델에서 Riley와 vLLM이 각각 1,319문제를 오류 없이 완료했다. 같은 train·test 데이터 해시, 4-shot 입력, 온도 0, 출력 상한 256토큰, 동시 요청 32개, 마지막 숫자 채점 방식을 사용했다. 같은 모델의 두 엔진에서 모든 문제의 요청과 입력 토큰 ID 해시가 일치했다. 점수 차이는 원본 정답 수에서 계산했다. [데이터셋 매니페스트](../../benchmarks/evidence/20261119-w4-gsm8k/dataset.json) · [전체 실행 기록](../../benchmarks/evidence/20261119-w4-gsm8k/campaign-result.log)

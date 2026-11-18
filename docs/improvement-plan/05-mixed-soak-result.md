@@ -41,6 +41,8 @@
 
 90초 사전 검증과 30분 시험의 도구는 native 할당과 RSS를 각각 기록한다. Cache off의 후반 RSS 표본은 900초부터 15,161.14MiB였고 1,560초 표본부터 15,161.89MiB였다. Cache on은 900초부터 종료 직전까지 15,163.53MiB였다. Cache off의 0.75MiB 변화는 [운영 품질 기준](../goal.md#33-운영-품질)의 RSS 증가 0 조건에 남겨 둔다.
 
+동일 GPU 7, 바이너리, 부하 도구와 30분 cache-off 조건의 재현 시험을 시작했다. 전용 서버 프로세스의 `/proc` 상태에서 `VmRSS`와 익명·파일·공유 페이지를 15초 간격으로 읽는 관측기를 시험 도중 시작했다. 기존 부하 도구의 RSS 가드레일 계산은 그대로 사용한다. [재현 명령과 입력 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off-repeat/campaign.sh) · [RSS 표본 채취 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/sample_resident_pages.py)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)
@@ -64,3 +66,5 @@ A100 GPU 6에서 같은 Qwen2.5-7B-Instruct CUDA 바이너리로 Linux loopback 
 두 번째 연결의 송신 큐가 차고 활성 요청이 하나인 상태에서 연결을 닫았다. `disconnects`와 `cancellations`는 각각 1 증가했다. 활성·대기 요청과 요청 KV는 0으로 돌아갔고, 서버 실행 중 native 할당은 시작 전 값으로 회복됐다. 종료 코드는 0이었고 종료 시 device·pinned 할당은 0이었다. GPU 6은 동일 홀더의 20GiB 예약으로 복귀했다. [실행 기록](../../benchmarks/evidence/20261119-w5-slow-stream/result/receipt.json) · [종료 메트릭](../../benchmarks/evidence/20261119-w5-slow-stream/result/shutdown-metrics.json) · [예약 복귀](../../benchmarks/evidence/20261119-w5-slow-stream/result/idle-after.json)
 
 장치 메모리 갱신 실패를 가정한 CPU 단위 테스트는 tentative KV 블록 회수와 sidecar 무효화를 확인했다. 실제 운영 트래픽 분포, GPU 장치 장애, 배포 이미지 추론은 추가 검증 항목이다. [장치 실패 시 KV 회수 테스트](../../crates/riley-runtime/src/paged_kv.rs#L2186)
+
+같은 서버 소스에 대해 GPU 메모리 오류 네 조건을 테스트 컨텍스트에서 재현하는 기존 테스트를 예약했다. 할당 생성·해제의 결과가 불명확한 경우와 복사 제출·완료 오류를 각각 독립 자식 프로세스로 검사한다. 장문 진단 이후 GPU 6에서 실행한다. [실패 주입 테스트](../../crates/riley-cuda/tests/memory_fault_injection_gpu.rs) · [GPU 실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/campaign.sh)
