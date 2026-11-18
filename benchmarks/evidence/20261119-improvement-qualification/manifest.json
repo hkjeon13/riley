@@ -1,0 +1,147 @@
+{
+  "audited_main": "4afb02d95440a03f43a9a4e1f711cc16b72b4805",
+  "release_status": "hold",
+  "shared_program_git_objects": {
+    "Cargo.toml": "e75f6ce3a2ad13911f1a91fc2b982a410f9d32f2",
+    "Cargo.lock": "afa446f5b2f1ad1ba2070de2d16343cf7a7a0a70",
+    "rust-toolchain.toml": "67c827cf973f78b64274b37b54c5a99cff5ca055",
+    "crates": "0d501dc3445a01ce351efd40fef0acd248d9b2d4",
+    "kernels": "7af4635f2fc204e1a61d4f313e706e85057029ba",
+    "third_party": "fcda977aec23d650259a7d1104d339f815d30e07",
+    "tools/riley-checkpoint": "375dc077ae7d32ba759b339d28f1ef8c370642b5"
+  },
+  "distribution_inputs_match_audited_main": [
+    ".dockerignore",
+    ".github/workflows/distribution-image.yml",
+    "deploy/docker",
+    "ci/check_distribution_image.py",
+    "ci/check_serving_source_contract.py",
+    "ci/serving-source-contract.json"
+  ],
+  "native_cuda_binary": {
+    "source_revision": "f7c956d3cc7e6e59c98698cce891df42bc84ef03",
+    "base_archive_revision": "187854f5845a553321eb3a6c11241488c90c07a7",
+    "base_archive_sha256": "c58e94f9f743631f96facfc5576f1ae3e06211325d750d122c998009e6860d50",
+    "source_update_sha256": "178f65b80f70044853d4ffbea5189ccff0d54b3daf13094c0c9a37a6c18b48d2",
+    "binary_sha256": "3e070d05c93b6784e24eefd423a77ed260162c7ddd9fcde67bec135c3dc53e70",
+    "cargo_features": [
+      "server",
+      "hf-exact-probe"
+    ],
+    "cuda_aot_architectures": [
+      80
+    ],
+    "evidence": {
+      "api": [
+        {
+          "path": "benchmarks/evidence/20261119-w4-schema/live-schema-result.json",
+          "sha256": "a44c116d947858f6173371c6d3255c11f63e8ccd63ad16d3022caca89646e614"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-schema/general-api-result.json",
+          "sha256": "d17845dba39c64539bf1fa1a099db56362847c713a02e6dc255e8977423e2882"
+        }
+      ],
+      "long_accuracy": [
+        {
+          "path": "benchmarks/evidence/20261119-w4-long/riley/receipt.json",
+          "sha256": "78b6b293c1442cb7fa974e158b03cd5562b2bb4821e93bc5aeb70bbd64e65f60"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-long/summary.json",
+          "sha256": "efbbb565838d23ff59be35621909708a56135f81ee7a32f273e955c1f48d3cdc"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-holdout/riley/receipt.json",
+          "sha256": "7ea66a4713fe9d0671ca0928eac8d55476032bb06d8dd433108240038e4466a9"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-holdout/summary.json",
+          "sha256": "6a1407342df9a6e3c241a9bc757a559141c9a55c53497f99b7b7954c6ae01b2e"
+        }
+      ],
+      "rag_performance": [
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/qwen14-riley/receipt.json",
+          "sha256": "72c113d7125ccc01d3d3e2b03e3d8135c9542b82d1b3acf0abc6ae0821a0d2ad"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/qwen14-vllm/receipt.json",
+          "sha256": "99830969b46f45e0e6880cf8a850eb57801bf05e80b21514525c59cc2893a597"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/qwen14-comparison.json",
+          "sha256": "e73ea6990761c8174745fa7c059e189d5f17b065ff3bd2fffab7a31f493b0158"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/qwen14-profile/receipt.json",
+          "sha256": "b4bd670be2483297cffe10735f1ec9b1e217e6e4a8509f45feef0fa9aac6b5c1"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/qwen14-profile-summary.json",
+          "sha256": "65a2d0db7dde30672b79623200f0d28e9939f6f987bb709c7748cbf1f1d909d6"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/qwen14-full-symbols.json",
+          "sha256": "354de2cce0aee38c2abec665aecc1903bea69e7bc53ebd54978eb261b993f834"
+        }
+      ],
+      "operations": [
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/cache-off/receipt.json",
+          "sha256": "a603dfc539cacdb3be5fc2d4d4985d503f3f6aceb8f96b251f7e360f38ccda1e"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/cache-off/summary.json",
+          "sha256": "e0982dabbb1e9608d45959896132d27fe03187d1b38c3897a59711fe1399ba5c"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/cache-on/receipt.json",
+          "sha256": "bb4501f6841ee0ad1d7b28b6e2dfe6cede0e9ca3865eec88337a9ce86a1f028d"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/cache-on/summary.json",
+          "sha256": "1ab660ccfdfad9992bbb04d49911cdb0c2a1adfcd7f90fed0aa3cafcafb8399d"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-operational/rerun/receipt.json",
+          "sha256": "7bbb81211c6b3572902c93e1e5562b1e2c3b49e46efea81969109dd6f3d63f6d"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-operational/rerun/operational.json",
+          "sha256": "eae154c9480a41711caea3c20256d872e03d29e9977ac96de609883399c53194"
+        }
+      ]
+    }
+  },
+  "distribution_image": {
+    "source_revision": "96c04dbe45b28f3ceb1ca6c578a36eb43d92f9ee",
+    "source_archive_sha256": "e7d279f8b8328f7565dc9b858ab0a29b0e22de129702b53624894ff931be1cfa",
+    "image_id": "sha256:6745d6db9e7ec8c2009e4e52038208a899d6da331c5c6941339583aacf463cb3",
+    "binary_sha256": "9f7e9f9b8eabe11d036a99e7be52bf94b72db43696d8f1c21f3550aef2216226",
+    "cargo_features": [
+      "server",
+      "hf-exact-probe"
+    ],
+    "cuda_aot_architectures": [
+      80,
+      86,
+      89
+    ],
+    "cpu_image_verification": {
+      "path": "benchmarks/evidence/20261119-cu124-distribution-image/report.json",
+      "sha256": "bed111db813353aa19cba6194f0a6f5002ed2e50805ac537e5c84339552cdc5c"
+    },
+    "gpu_inference": "pending"
+  },
+  "other_evidence": {
+    "historical_rc3_linux_fixture_suite": {
+      "path": "benchmarks/evidence/20261119-rc3-host-contracts/receipt.json",
+      "sha256": "70c9512d68829bf1410cab82d79b285a8ea016c82e651b90e35b72695a45c93a"
+    },
+    "smol_lm2_event_publication_on_prior_build": {
+      "path": "benchmarks/evidence/20261119-w2-explicit-events/summary.json",
+      "sha256": "42f59183b210e32039dad3b160a4a58d8d588dcee1c17d0c167eaacea5862cec"
+    }
+  }
+}

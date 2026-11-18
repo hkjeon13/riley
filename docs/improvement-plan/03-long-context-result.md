@@ -68,8 +68,10 @@ GPU 7에서 `f7c956d3c`의 Riley CUDA 바이너리와 vLLM을 순차 실행했�
 
 짧은 커널 이름 `Kernel2`가 CUTLASS GEMM을 숨겼고, FlashInfer prefill 커널은 이름이 `strided_paged_kernel`과 `merge_parts_kernel`이었다. 동일 SQLite의 전체 심볼을 사용해 다시 분류했으며 160개 요청의 GPU 커널 구간 합집합이 첫 집계와 일치했다. 첫 토큰까지 GPU가 대부분의 시간을 사용했고 GEMM 구간이 가장 길었다. 동시 요청은 GPU 구간을 공유하며, 이 표의 판정 범위는 첫 토큰까지의 공유 GPU 구간과 커널 종류다. [전체 심볼 검산](../../benchmarks/evidence/20261119-w3-rag-profile/qwen14-full-symbols.json) · [재분류 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/classify_full_symbols.py)
 
+같은 실행의 host trace는 128스텝 평균을 44개 기록했다. 이 평균값들의 중앙값은 제출 1.57ms, 완료 대기 32.90ms였다. 명령 처리·제출·완료 대기를 제외한 나머지 호스트 단계 합은 구간당 스텝 평균의 중앙값이 0.179ms였고, 이 중 plan 55.7µs, pack 31.5µs, download 36.8µs를 기록했다. 이 표본은 여러 부하와 워밍업을 포함한다. 요청별 큐 대기와 GPU 계산 중 실제로 겹친 CPU 시간은 추가 계측 항목이다. [host trace 원본](../../benchmarks/evidence/20261119-w3-rag-profile/qwen14-profile/server.log.gz)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
 
-A100 GPU 6에서 실행하도록 등록했다. 성능 측정 중 다른 CUDA 작업의 간섭을 줄이기 위해 진행 중인 14B 측정·레이어 추적·GSM8K 비교가 종료된 뒤 시작한다. [실행 순서](../../benchmarks/evidence/20261119-w23-matrix/campaign.sh) · [측정 도구](../../benchmarks/evidence/20261119-w23-matrix/tools/measure_matrix.py)
+A100 GPU 6에서 실행하도록 등록했다. 성능 측정 중 다른 CUDA 작업의 간섭을 줄이기 위해 진행 중인 14B 측정·레이어 추적·GSM8K 비교가 종료된 뒤 시작한다. 집계기는 현재 wide 기준 `after-submit-v1`/32행 대비 각 조건의 지표와, 두 이벤트 발행 모드에서 2행 정책 효과가 달라지는 비율을 seed별로 기록한다. 완료 처리, 같은 요청, 응답 일치, 종료 자원을 검증하고 원본이 바뀌면 해시 검사에서 실패한다. [실행 순서](../../benchmarks/evidence/20261119-w23-matrix/campaign.sh) · [측정 도구](../../benchmarks/evidence/20261119-w23-matrix/tools/measure_matrix.py) · [결과 집계기](../../benchmarks/evidence/20261119-w23-matrix/tools/summarize_matrix.py)

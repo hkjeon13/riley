@@ -140,7 +140,7 @@ python3 benchmarks/live/soak.py "$TEST_ADDRESS" "$MODEL_ID" \
 ## 6. 완료 조건과 최종 산출물
 
 - [ ] W5-A: 사용자 문서의 버전·기본값·성능 주장이 소스·동일 설정 근거와 연결되고 과거 측정은 시점이 표시된다.
-- [ ] W5-B: 모델 추론 GPU lane을 실제 실행한 성공·실패·미실행 근거가 있다.
+- [x] W5-B: A100에서 네이티브 모델 추론을 실제로 실행했고, 통과·초기 실패·미검증 범위를 기록했다. [운영 결과](05-mixed-soak-result.md)
 - [ ] 후보별 correctness·API·performance·soak·패키징 결과가 같은 manifest로 연결된다.
 - [ ] prefix cache·취소·shutdown·관측 비용을 검증하고 미검증 범위를 명시한다.
 - [ ] 운영 재현 분포·SLO·실패 분류·회수 절차가 기록된다.
@@ -148,3 +148,5 @@ python3 benchmarks/live/soak.py "$TEST_ADDRESS" "$MODEL_ID" \
 최종 산출물은 문서 주장 목록, GPU 검증 matrix, 운영 workload 정의, 관측 사양, soak 결과, known limitation과 릴리스 판정서다. 대형 nsys 원본은 관리 가능한 저장소에 두고 해시·위치·보존 정책을 기록한다. 임시 로그나 접근 불가능한 경로만 남기지 않는다.
 
 W1이 근거의 무결성을, W4가 출력·API 의미를, W2·W3가 실행 성능을 검증한다. 이 문서는 그 결과를 사용자에게 보이는 지원 범위와 실제 운영 판단으로 연결한다.
+
+[후보 검증 근거와 릴리스 판정](06-candidate-qualification.md)에 A100 바이너리와 배포 이미지의 소스·실행 파일·검증 범위를 각각 연결했다.
