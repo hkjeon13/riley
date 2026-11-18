@@ -69,3 +69,11 @@ class MixedSoakTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(windows["late"]["ttft_ms_count"], 0)
         self.assertIsNone(drift["ttft_ms"])
         self.assertAlmostEqual(drift["e2e_ms"], 40)
+
+    def test_rss_growth_uses_first_second_half_sample_and_drain(self):
+        samples = [{"at_seconds": 899.9, "rss_mib": 10},
+                   {"at_seconds": 900, "rss_mib": 14},
+                   {"at_seconds": 1200, "rss_mib": 14.5}]
+        self.assertEqual(soak.rss_growth_second_half(samples, {"rss_mib": 14.75}, 1800), 0.75)
+        self.assertEqual(soak.rss_growth_second_half(samples, {"rss_mib": 14}, 1800), 0)
+        self.assertIsNone(soak.rss_growth_second_half(samples[:1], {"rss_mib": 14}, 1800))

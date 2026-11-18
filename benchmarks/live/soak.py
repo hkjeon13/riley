@@ -193,6 +193,11 @@ def latency_windows(rows, start, duration):
     return windows, changes
 
 
+def rss_growth_second_half(samples, final, duration):
+    baseline = next((sample["rss_mib"] for sample in samples if sample["at_seconds"] >= duration / 2), None)
+    return final["rss_mib"] - baseline if baseline is not None else None
+
+
 async def soak(args):
     host, port = args.address.split(":")
     rng = random.Random(11)
@@ -262,14 +267,16 @@ async def soak(args):
     }
     if not args.smoke:
         checks["p95_drift_at_most_5_percent"] = all(value is not None and value <= 5 for value in drift.values())
-    late_rss = [sample["rss_mib"] for sample in samples if sample["at_seconds"] >= args.seconds / 2]
+    rss_growth = rss_growth_second_half(samples, final, args.seconds)
+    if args.require_zero_rss_growth:
+        checks["rss_growth_second_half_at_most_zero"] = rss_growth is not None and rss_growth <= 0
     result = {"status": "passed" if all(checks.values()) else "failed",
               "mode": "smoke" if args.smoke else "mixed_soak", "seconds": args.seconds, "rate": args.rate,
               "shared_prefixes": len(shared_prefixes), "checks": checks, "counts": counts,
               "problem_count": len(problems), "problems": problems[:20],
               "latency_windows": windows, "p95_change_percent": drift,
               "client_dispatch_p95_ms": percentile([row["dispatch_ms"] for row in rows], .95),
-              "rss_growth_second_half_mib": final["rss_mib"] - late_rss[0] if late_rss else None,
+              "rss_growth_second_half_mib": rss_growth,
               "rss_samples": samples, "initial": initial, "final": final, "counter_changes": counter_changes}
     return result
 
@@ -284,6 +291,8 @@ def main():
     parser.add_argument("--out")
     parser.add_argument("--shared-prefix", action="store_true", help="reuse eight fixed prefixes in the long-prompt traffic")
     parser.add_argument("--smoke", action="store_true", help="short runtime check without a latency-drift verdict")
+    parser.add_argument("--require-zero-rss-growth", action="store_true",
+                        help="fail if drain RSS exceeds the first second-half sample or that sample is missing")
     args = parser.parse_args()
     if not math.isfinite(args.seconds) or args.seconds <= 0 or not math.isfinite(args.rate) or args.rate <= 0:
         parser.error("seconds and rate must be finite and positive")

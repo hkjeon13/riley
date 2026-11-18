@@ -120,12 +120,14 @@ python3 benchmarks/live/api_check.py "$TEST_ADDRESS" "$MODEL_ID" \
   --tools --out "$API_RESULT_PATH"
 python3 benchmarks/live/soak.py "$TEST_ADDRESS" "$MODEL_ID" \
   --seconds 1800 --rate 8 --pid "$TEST_SERVER_PID" --shared-prefix \
-  --out "$SOAK_RESULT_PATH"
+  --require-zero-rss-growth --out "$SOAK_RESULT_PATH"
 ```
 
 전용 서버에서 일반·스키마·logprobs·도구·장문·긴 출력·연결 종료 요청을 합성한다. 일반 완료에는 finish, 토큰 usage, `[DONE]`이 모두 필요하다. 클라이언트가 콘텐츠 네 조각을 읽은 뒤 연결을 끊는 요청은 중간 EOF와 구분해 집계하고 서버의 disconnect·cancel 카운터를 대조한다. 429, 비정상 HTTP·SSE, drain 이후 요청·활성 KV 잔류 또는 native 할당 변화는 실패다. RSS는 경과 구간별로 기록한다.
 
 30분 비교는 cache off/on 양쪽에 같은 합성 workload와 seed를 사용한다. `--shared-prefix`를 켜면 장문 요청이 여덟 개의 고정 프롬프트 앞부분을 재사용한다. 실행 시간의 20–50% 구간과 70–100% 구간을 예약된 도착 시각으로 묶어 TTFT·전체 완료 지연 p95를 비교하며, 후반 증가가 5%를 넘거나 관측치가 비면 실패다. TTFT 표본 수는 첫 콘텐츠 또는 도구 조각이 관측된 요청 수다. 짧은 `--smoke`는 지연 판정을 빼고 종료·계약·정리 경계를 확인한다.
+
+최종 후보의 [메모리 증가 0 조건](../goal.md#33-운영-품질)은 `--require-zero-rss-growth`로 적용한다. 후반 첫 표본을 기준으로 drain RSS가 증가하거나 기준 표본이 없으면 결과에 실패 항목을 남기고 종료 코드 1을 반환한다. 진단 실행의 `rss_growth_second_half_mib`도 같은 표본 선택 규칙으로 계산한다. [혼합 부하 검사기](../../benchmarks/live/soak.py)
 
 캐시를 켠 전용 서버에서 [운영 검사기](../../benchmarks/live/operational_check.py)로 요청의 재사용 토큰, 공통 prefix 보존, 용량 압력 뒤 A 전용 블록 퇴거, 포화의 HTTP 429와 추론 회복을 확인했다. 검사는 활성 2개·대기 1개·캐시 128블록으로 구성하고 loopback에서 수행했다. [A100 운영 결과](05-mixed-soak-result.md#캐시-재사용퇴거와-큐-포화-후-회복)
 

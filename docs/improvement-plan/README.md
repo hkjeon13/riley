@@ -1,10 +1,16 @@
 # Riley 개선 종합 계획
 
-작성일: 2026-11-13 (Asia/Seoul)\
-기준: 로컬 `main` `37ede4445`, 원격 `origin/main` `9f039de78`\
-W1은 Linux CPU CI와 CUDA 12.4 배포 이미지 빌드·CPU CLI 검사를 통과했다. W2는 A100 기준선을 재현하고 이벤트 발행 모드를 명시해 다시 비교했다. W3는 작은 모델의 두 스케줄링 정책을 비교하고 Qwen3-4B 길이 곡선을 얻었다. W4-A는 기존 장문 18개와 독립 프롬프트 11개에서 동일 입력 ID로 세 엔진을 비교했고, W4-B 스키마 변경은 실제 GPU API에서 확인했다. W5-A는 사용자 문서의 성능·CLI·API 주장에 해당 근거를 연결했다. [W1 결과](01-validation-result.md) · [W2 결과](02-async-step-result.md) · [W3 실측 결과](03-long-context-result.md) · [W4-A 결과](04-long-accuracy-result.md) · [W4-B 결과](04-structured-output-result.md) · [W5 문서 계획](05-documentation-and-operations.md)
+작성일 2026-11-13 KST. 초기 기준은 로컬 `main` `37ede4445`와 원격 `origin/main` `9f039de78`이다.
 
-W5-B는 W4 CUDA 빌드의 90초 혼합 부하 검증에 이어 30분 cache off·on 두 조건을 통과했다. 각 조건에서 정상 완료 13,749건·의도적 연결 종료 700건·HTTP 및 SSE 오류 0건을 기록했고, 종료 뒤 활성 요청·요청 KV·native 할당이 모두 0이었다. 캐시 재사용·퇴거와 큐 포화의 HTTP 429 및 추론 회복도 확인했다. [W5-B A100 결과](05-mixed-soak-result.md)
+2026-11-19 KST 기준으로 CUDA 빌드·검증을 복구하고 A100에서 성능·정확성·운영 실험을 진행했다. 최종 배포 이미지에서의 GPU 실행과 운영 품질 판정이 남아 있어 릴리스는 보류 상태다. [후보별 검증 근거와 릴리스 판정](06-candidate-qualification.md)
+
+| 작업 | 현재 근거와 다음 검증 |
+|---|---|
+| W1 검증·릴리스 | Linux Production CPU, 고정 RC3 테스트 34건, CUDA 12.4 이미지 빌드와 CPU 검증을 통과했다. 수정한 헤더가 포함된 이미지의 런타임 해시도 대조했다. [W1 결과](01-validation-result.md) |
+| W2 실행 중첩 | A100에서 이벤트 발행 두 모드를 명시해 비교했다. W3의 prefill 제한과 교차한 시험에서 즉시 발행의 짧은 요청 TPOT 회귀를 확인해 기존 `after-submit-v1`을 유지한다. [W2 결과](02-async-step-result.md) |
+| W3 장문·스케줄 | 14B `rag-c8`의 p95 이상 요청은 여러 prefill 스텝 사이에서 다른 요청의 prefill과 겹치는 대기를 기록했다. 같은 행 예산에서 선택 순서만 바꾸는 후보는 CUDA 오류 재시험 이후 비교한다. [W3 결과](03-long-context-result.md) |
+| W4 정확성·스키마 | 고정 장문과 holdout에서 엔진별 첫 분기 지점을 좁혔고 네 모델의 GSM8K를 같은 입력으로 비교했다. 구조화 출력의 지원 범위는 GPU API에서 검증했다. [장문·품질 결과](04-long-accuracy-result.md) · [스키마 결과](04-structured-output-result.md) |
+| W5 문서·운영 | 두 cache 조건에서 각각 정상 완료 13,749건과 의도적 연결 종료 700건을 처리하고 종료 자원 회수를 확인했다. Cache off에서 후반 RSS +0.75MiB가 재현되어 증가 0 조건은 미충족이다. [문서 근거](05-documentation-and-operations.md) · [A100 운영 결과](05-mixed-soak-result.md) |
 
 ## 1. 목표와 현재 위치
 
@@ -46,7 +52,7 @@ flowchart TD
 
 병렬 조사는 가능하지만 W2와 W3를 동시에 기본값에 반영하지 않는다. 각 후보의 인과관계를 먼저 확인한 뒤 조합한다.
 
-## 3. 확인된 사실과 미확인 항목
+## 3. 초기 기준 조사에서 확인한 항목
 
 | 구분 | 근거와 해석 |
 |---|---|
