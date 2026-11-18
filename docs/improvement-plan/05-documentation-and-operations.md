@@ -4,6 +4,8 @@
 종합 계획: [진행 단계와 릴리스 조건](README.md)\
 구성: W5-A는 즉시 가능한 문서 정리, W5-B는 GPU 회귀·운영 검증이다.
 
+Qwen2.5-7B CUDA 서버에서 90초 합성 혼합 부하로 종료·취소·할당 회수를 확인했다. [W5-B 실행 결과](05-mixed-soak-result.md)
+
 ## 1. 현재 문제와 위험 범위
 
 | 항목 | 확인 내용 | 개선 이유 |
@@ -113,10 +115,15 @@ trace가 없으면 "production 검증" 대신 "관측 분포를 가정한 합성
 python3 benchmarks/live/api_check.py "$TEST_ADDRESS" "$MODEL_ID" \
   --tools --out "$API_RESULT_PATH"
 python3 benchmarks/live/soak.py "$TEST_ADDRESS" "$MODEL_ID" \
-  --seconds 1800 --rate 8 --pid "$TEST_SERVER_PID" --out "$SOAK_RESULT_PATH"
+  --seconds 1800 --rate 8 --pid "$TEST_SERVER_PID" --shared-prefix \
+  --out "$SOAK_RESULT_PATH"
 ```
 
-현재 도구의 인증·동시 서버·endpoint 가정은 실행 전 확인한다. `benchmarks/live/soak.py`의 출력은 혼합 부하 탐색용이다. 현재 구현은 중간 EOF에서 `[DONE]`을 강제하지 않고, 관찰 구간별 지연과 실패 시 종료 코드도 제공하지 않는다. 최신 후보의 혼합 soak 판정에는 이 경계를 보완한다. 별도의 [릴리스 soak 드라이버와 검사기](../../benchmarks/soak/README.md)는 고정 SmolLM2 workload·정식 golden·이미지 계보를 요구한다. 해당 계약을 실행할 수 있는 경우 패키징 판정에 사용한다.
+전용 서버에서 일반·스키마·logprobs·도구·장문·긴 출력·연결 종료 요청을 합성한다. 일반 완료에는 finish, 토큰 usage, `[DONE]`이 모두 필요하다. 클라이언트가 콘텐츠 네 조각을 읽은 뒤 연결을 끊는 요청은 중간 EOF와 구분해 집계하고 서버의 disconnect·cancel 카운터를 대조한다. 429, 비정상 HTTP·SSE, drain 이후 요청·활성 KV 잔류 또는 native 할당 변화는 실패다. RSS는 경과 구간별로 기록한다.
+
+30분 비교는 cache off/on 양쪽에 같은 합성 workload와 seed를 사용한다. `--shared-prefix`를 켜면 장문 요청이 여덟 개의 고정 프롬프트 앞부분을 재사용한다. 실행 시간의 20–50% 구간과 70–100% 구간을 예약된 도착 시각으로 묶어 TTFT·전체 완료 지연 p95를 비교하며, 후반 증가가 5%를 넘거나 관측치가 비면 실패다. TTFT 표본 수는 첫 콘텐츠 또는 도구 조각이 관측된 요청 수다. 짧은 `--smoke`는 지연 판정을 빼고 종료·계약·정리 경계를 확인한다.
+
+현재 공개 `/metrics`의 KV 사용량은 요청이 쓰는 블록을 보여 준다. 캐시 블록 점유량과 hit·eviction은 추가 계측이 필요하다. 별도의 [릴리스 soak 드라이버와 검사기](../../benchmarks/soak/README.md)는 고정 SmolLM2 workload·정식 golden·이미지 계보를 요구한다.
 
 ### W5-B5. 실패 분류와 회수
 

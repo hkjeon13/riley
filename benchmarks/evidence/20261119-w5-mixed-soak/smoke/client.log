@@ -1,0 +1,3 @@
+0s completed_records=0 outstanding=1
+60s completed_records=486 outstanding=7
+{"status": "passed", "checks": {"no_unexpected_http_or_stream_error": true, "completed_schema_and_tool_covered": true, "disconnects_observed": true, "idle_after_drain": true, "native_allocation_plateau": true, "workload_coverage": true}, "counts": {"plain": {"completed": 423}, "schema": {"completed": 90, "stop": 90}, "logprobs": {"completed": 47}, "tools": {"completed": 40, "tool_calls": 40}, "long": {"completed": 53}, "reason": {"completed": 38}, "cancel": {"disconnected": 39}}, "p95_change_percent": {"ttft_ms": -0.5367169156267337, "e2e_ms": 21.19298681533084}}

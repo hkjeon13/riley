@@ -1,156 +1,300 @@
 #!/usr/bin/env python3
-"""Mixed open-loop soak: plain, schema, logprobs, tools, long prompts, cancels.
-
-usage: soak.py HOST:PORT MODEL --seconds S --rate R --pid SERVER_PID --out FILE
-Every finished schema or tool reply is validated. Afterwards the server must be
-idle with its KV blocks returned, and its RSS must not have kept growing.
-"""
+"""Validate a synthetic, mixed, open-loop workload against a Riley server."""
 import argparse
 import asyncio
 import json
+import math
 import random
 import time
 import urllib.request
 
-parser = argparse.ArgumentParser()
-parser.add_argument("address")
-parser.add_argument("model")
-parser.add_argument("--seconds", type=float, default=1800)
-parser.add_argument("--rate", type=float, default=8)
-parser.add_argument("--pid", type=int, required=True)
-parser.add_argument("--out")
-args = parser.parse_args()
-HOST, PORT = args.address.split(":")
-WORDS = "the river market station garden winter engine letter mountain copper signal harbor forest".split()
+from load import document, percentile
+
 SCHEMA = {"type": "object", "properties": {"title": {"type": "string", "maxLength": 40},
                                            "year": {"type": "integer", "minimum": 1000, "maximum": 2100},
                                            "tags": {"type": "array", "items": {"enum": ["a", "b", "c"]}, "maxItems": 3}},
           "required": ["title", "year"], "additionalProperties": False}
 TOOLS = [{"type": "function", "function": {"name": "get_weather", "parameters": {
     "type": "object", "properties": {"city": {"type": "string", "maxLength": 30}}, "required": ["city"]}}}]
-rng = random.Random(11)
-counts = {}
-problems = []
+KINDS = ("plain", "schema", "logprobs", "tools", "long", "reason", "cancel")
+WEIGHTS = (55, 12, 8, 5, 10, 5, 5)
+IDLE_GAUGES = ("active_requests", "waiting_requests", "kv_allocated_blocks")
+WORDS = "the river market station garden winter engine letter mountain copper signal harbor forest".split()
 
 
-def text(words):
+def text(rng, words):
     return " ".join(rng.choice(WORDS) for _ in range(words))
 
 
-def request():
-    kind = rng.choices(["plain", "schema", "logprobs", "tools", "long", "reason", "cancel"],
-                       [55, 12, 8, 5, 10, 5, 5])[0]
-    body = {"model": args.model, "temperature": 0, "max_tokens": 64, "stream": True,
-            "messages": [{"role": "user", "content": f"Write about {text(rng.randint(3, 40))}."}]}
+def request(model, rng, shared_prefixes):
+    kind = rng.choices(KINDS, WEIGHTS)[0]
+    body = {"model": model, "temperature": 0, "max_tokens": 64, "stream": True,
+            "stream_options": {"include_usage": True},
+            "messages": [{"role": "user", "content": f"Write about {text(rng, rng.randint(3, 40))}."}]}
     if kind == "schema":
         body.update(max_tokens=96, response_format={"type": "json_schema", "json_schema": {"name": "s", "schema": SCHEMA}})
     elif kind == "logprobs":
         body.update(logprobs=True, top_logprobs=3)
     elif kind == "tools":
-        body.update(tools=TOOLS, tool_choice="required", max_tokens=64)
+        body.update(tools=TOOLS, tool_choice="required", max_tokens=96)
     elif kind == "long":
-        body["messages"][0]["content"] = f"{text(rng.choice([800, 1500, 3000]))}\nSummarize the text above."
+        paragraph = text(rng, rng.choice([800, 1500, 3000]))
+        if shared_prefixes:
+            prefix = shared_prefixes[rng.randrange(len(shared_prefixes))]
+            paragraph = f"{prefix}\n\n{paragraph}"
+        body["messages"][0]["content"] = f"{paragraph}\nSummarize the text above."
         body["max_tokens"] = 96
     elif kind == "reason":
         body["max_tokens"] = 512
     return kind, body
 
 
-async def one(kind, body):
-    payload = json.dumps(body).encode()
-    head = (f"POST /v1/chat/completions HTTP/1.1\r\nHost: {HOST}\r\nContent-Type: application/json\r\n"
-            f"Content-Length: {len(payload)}\r\nConnection: close\r\n\r\n").encode()
-    counts[kind] = counts.get(kind, 0) + 1
+def validate_completion(kind, finish, content, calls, logprobs, usage, limit):
+    if finish not in ("stop", "length", "tool_calls"):
+        raise ValueError("missing or invalid SSE finish")
+    if (any(type(usage.get(k)) is not int or usage[k] < 0
+            for k in ("prompt_tokens", "completion_tokens", "total_tokens"))
+            or not 0 < usage["completion_tokens"] <= limit
+            or usage["total_tokens"] != usage["prompt_tokens"] + usage["completion_tokens"]
+            or (finish == "length" and usage["completion_tokens"] != limit)):
+        raise ValueError("invalid SSE usage")
+    if kind == "schema" and finish == "stop":
+        value = json.loads(content)
+        if (not isinstance(value, dict) or not {"title", "year"} <= set(value) <= {"title", "year", "tags"}
+                or not isinstance(value["title"], str) or len(value["title"]) > 40
+                or type(value["year"]) is not int or not 1000 <= value["year"] <= 2100
+                or ("tags" in value and (not isinstance(value["tags"], list)
+                    or len(value["tags"]) > 3 or any(tag not in ("a", "b", "c") for tag in value["tags"])))):
+            raise ValueError("invalid completed schema")
+    if kind == "tools":
+        if finish == "stop":
+            raise ValueError("required tool call is missing")
+        if finish == "tool_calls":
+            if set(calls) != {0} or calls[0]["name"] != "get_weather":
+                raise ValueError("unexpected required tool call")
+            args = json.loads(calls[0]["arguments"])
+            if (not isinstance(args, dict) or not isinstance(args.get("city"), str) or len(args["city"]) > 30):
+                raise ValueError("invalid required tool arguments")
+    elif finish == "tool_calls":
+        raise ValueError("unexpected tool terminal")
+    if kind == "logprobs" and not logprobs:
+        raise ValueError("missing streamed logprobs")
+
+
+async def read_completion(reader, kind, limit, started):
+    status = int((await reader.readline()).split()[1])
+    while (await reader.readline()) != b"\r\n":
+        if reader.at_eof():
+            raise ValueError("incomplete HTTP headers")
+    if status != 200:
+        return {"outcome": "rejected" if status == 429 else "error", "http_status": status}
+
+    content, calls, usage = [], {}, {}
+    first_visible = finish = None
+    visible_chunks = logprobs = 0
+    while True:
+        line = await reader.readline()
+        if not line:
+            raise ValueError("SSE closed without [DONE]")
+        if not line.startswith(b"data: "):
+            continue
+        payload = line[6:].strip()
+        if payload == b"[DONE]":
+            break
+        event = json.loads(payload)
+        if "error" in event:
+            raise ValueError("server sent an SSE error")
+        if event.get("usage") is not None:
+            if usage:
+                raise ValueError("duplicate SSE usage")
+            usage = event["usage"]
+        for choice in event.get("choices", []):
+            delta = choice["delta"]
+            fragment = delta.get("content") or ""
+            pieces = delta.get("tool_calls") or []
+            if fragment or pieces:
+                if finish is not None:
+                    raise ValueError("content after SSE finish")
+                if first_visible is None:
+                    first_visible = time.perf_counter()
+                visible_chunks += 1
+            content.append(fragment)
+            for part in pieces:
+                fields = calls.setdefault(part["index"], {"name": "", "arguments": ""})
+                for key in fields:
+                    fields[key] += part["function"].get(key) or ""
+            for row in (choice.get("logprobs") or {}).get("content") or []:
+                if not math.isfinite(row["logprob"]):
+                    raise ValueError("non-finite streamed logprob")
+                logprobs += 1
+            terminal = choice.get("finish_reason")
+            if terminal is not None:
+                if finish is not None:
+                    raise ValueError("duplicate SSE finish")
+                finish = terminal
+        if kind == "cancel" and visible_chunks >= 4 and finish is None:
+            return {"outcome": "disconnected"}
+
+    finished = time.perf_counter()
+    validate_completion(kind, finish, "".join(content), calls, logprobs, usage, limit)
+    return {"outcome": "completed", "finish": finish,
+            "ttft_ms": None if first_visible is None else (first_visible - started) * 1000,
+            "e2e_ms": (finished - started) * 1000}
+
+
+async def exchange(host, port, kind, body, started):
+    reader, writer = await asyncio.open_connection(host, port, limit=1 << 22)
     try:
-        reader, writer = await asyncio.open_connection(HOST, int(PORT), limit=1 << 22)
+        payload = json.dumps(body).encode()
+        head = (f"POST /v1/chat/completions HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\n"
+                f"Content-Length: {len(payload)}\r\nConnection: close\r\n\r\n").encode()
         writer.write(head + payload)
         await writer.drain()
-        status = int((await reader.readline()).split()[1])
-        while (await reader.readline()) not in (b"\r\n", b""):
-            pass
-        if status != 200:
-            counts[f"http{status}"] = counts.get(f"http{status}", 0) + 1
-            if status != 429:
-                problems.append((kind, status))
-            writer.close()
-            return
-        content, calls, finish, chunks = "", [], None, 0
-        while True:
-            line = await reader.readline()
-            if not line:
-                break
-            if not line.startswith(b"data: "):
-                continue
-            data = line[6:].strip()
-            if data == b"[DONE]":
-                break
-            chunk = json.loads(data)
-            if "error" in chunk:
-                problems.append((kind, chunk["error"]))
-            for choice in chunk.get("choices") or []:
-                content += choice.get("delta", {}).get("content") or ""
-                calls += choice.get("delta", {}).get("tool_calls") or []
-                finish = choice.get("finish_reason") or finish
-            chunks += 1
-            if kind == "cancel" and chunks == 5:
-                writer.close()
-                return
+        return await read_completion(reader, kind, body["max_tokens"], started)
+    finally:
         writer.close()
-        if kind == "schema" and finish == "stop":
-            value = json.loads(content)
-            if not (set(value) <= {"title", "year", "tags"} and 1000 <= value["year"] <= 2100):
-                problems.append((kind, content))
-        if kind == "tools" and finish == "tool_calls":
-            json.loads(calls[0]["function"]["arguments"])
-        elif kind == "tools" and finish == "stop":
-            problems.append((kind, "forced tool call finished without a call", content[:80]))
-    except (OSError, ValueError, KeyError, IndexError) as error:
-        problems.append((kind, repr(error)[:160]))
 
 
-def rss_mb():
-    with open(f"/proc/{args.pid}/status") as status:
-        for line in status:
-            if line.startswith("VmRSS"):
-                return int(line.split()[1]) / 1024
-    return 0.0
+async def run_request(host, port, kind, body, scheduled):
+    started = time.perf_counter()
+    try:
+        result = await asyncio.wait_for(exchange(host, port, kind, body, started), timeout=120)
+    except (asyncio.TimeoutError, OSError, ValueError, KeyError, TypeError, IndexError) as error:
+        result = {"outcome": "error", "detail": str(error)[:100] or type(error).__name__}
+    return {"kind": kind, "scheduled": scheduled, "dispatch_ms": (started - scheduled) * 1000, **result}
 
 
-def health():
-    return json.load(urllib.request.urlopen(f"http://{args.address}/readyz", timeout=10))
+def snapshot(pid, address, start):
+    with open(f"/proc/{pid}/status") as info:
+        rss = next(int(line.split()[1]) / 1024 for line in info if line.startswith("VmRSS"))
+    with urllib.request.urlopen(f"http://{address}/metrics", timeout=5) as response:
+        metrics = json.load(response)
+    return {"at_seconds": time.perf_counter() - start, "rss_mib": rss, "metrics": metrics}
 
 
-def metrics():
-    return json.load(urllib.request.urlopen(f"http://{args.address}/metrics", timeout=10))
+def idle(metrics):
+    return all(type(metrics.get(key)) is int and metrics[key] == 0 for key in IDLE_GAUGES)
 
 
-async def main():
+def latency_windows(rows, start, duration):
+    windows = {}
+    for label, minimum, maximum in (("early", .20, .50), ("late", .70, 1.0)):
+        eligible = [row for row in rows if row["outcome"] == "completed"
+                    and minimum * duration <= row["scheduled"] - start < maximum * duration]
+        windows[label] = {"completed": len(eligible)}
+        for metric in ("ttft_ms", "e2e_ms"):
+            values = [row[metric] for row in eligible if row[metric] is not None]
+            windows[label][metric + "_count"] = len(values)
+            windows[label][metric + "_p95"] = percentile(values, .95)
+    changes = {}
+    for metric in ("ttft_ms", "e2e_ms"):
+        early, late = (windows[label][metric + "_p95"] for label in ("early", "late"))
+        changes[metric] = (late / early - 1) * 100 if early and late else None
+    return windows, changes
+
+
+async def soak(args):
+    host, port = args.address.split(":")
+    rng = random.Random(11)
+    prefix_rng = random.Random(12)
+    shared_prefixes = [document(prefix_rng, 512) for _ in range(8)] if args.shared_prefix else []
     start = time.perf_counter()
-    tasks, samples, next_sample = [], [], 0.0
-    clock = 0.0
-    while clock < args.seconds:
-        clock += rng.expovariate(args.rate)
-        delay = start + clock - time.perf_counter()
-        if delay > 0:
-            await asyncio.sleep(delay)
-        kind, body = request()
-        tasks.append(asyncio.create_task(one(kind, body)))
-        if clock >= next_sample:
-            samples.append((round(clock), round(rss_mb(), 1)))
-            print(samples[-1], len(tasks), len(problems), flush=True)
+    initial = await asyncio.to_thread(snapshot, args.pid, args.address, start)
+    if not idle(initial["metrics"]):
+        raise ValueError("soak requires a dedicated idle server")
+    start = time.perf_counter()
+    scheduled = rng.expovariate(args.rate)
+    samples = []
+    rows, tasks, next_sample = [], [], 0.0
+    poll = None
+    while scheduled < args.seconds:
+        await asyncio.sleep(max(0, start + scheduled - time.perf_counter()))
+        kind, body = request(args.model, rng, shared_prefixes)
+        tasks.append(asyncio.create_task(run_request(host, int(port), kind, body, start + scheduled)))
+        if scheduled >= next_sample:
+            if poll is not None:
+                samples.append(await poll)
+            poll = asyncio.create_task(asyncio.to_thread(snapshot, args.pid, args.address, start))
+            running = []
+            for task in tasks:
+                if task.done():
+                    rows.append(task.result())
+                else:
+                    running.append(task)
+            tasks = running
+            print(f"{scheduled:.0f}s completed_records={len(rows)} outstanding={len(tasks)}", flush=True)
             next_sample += 60
-            tasks = [task for task in tasks if not task.done()]
-    await asyncio.gather(*tasks)
-    await asyncio.sleep(5)
-    final = metrics()
-    tail = [value for _, value in samples[len(samples) // 2:]]
-    result = {"seconds": args.seconds, "rate": args.rate, "counts": counts, "problems": problems[:20],
-              "problem_count": len(problems), "rss_samples": samples, "rss_growth_second_half_mb": tail[-1] - tail[0],
-              "final_health": health(), "kv_allocated_blocks": final.get("kv_allocated_blocks"),
-              "counters": final.get("counters")}
-    print(json.dumps({key: value for key, value in result.items() if key != "rss_samples"})[:1500])
+        scheduled += rng.expovariate(args.rate)
+    await asyncio.sleep(max(0, start + args.seconds - time.perf_counter()))
+    rows.extend(await asyncio.gather(*tasks))
+    if poll is not None:
+        samples.append(await poll)
+    deadline = time.monotonic() + 10
+    while True:
+        final = await asyncio.to_thread(snapshot, args.pid, args.address, start)
+        if idle(final["metrics"]) or time.monotonic() >= deadline:
+            break
+        await asyncio.sleep(.5)
+
+    counts = {kind: {} for kind in KINDS}
+    problems = []
+    for row in rows:
+        outcomes = counts[row["kind"]]
+        outcome = row["outcome"]
+        outcomes[outcome] = outcomes.get(outcome, 0) + 1
+        if outcome in ("error", "rejected"):
+            problems.append({"kind": row["kind"], "http_status": row.get("http_status"), "detail": row.get("detail")})
+        elif outcome == "completed" and row["kind"] in ("schema", "tools"):
+            terminal = row["finish"]
+            outcomes[terminal] = outcomes.get(terminal, 0) + 1
+
+    before, after = (item["metrics"]["counters"] for item in (initial, final))
+    counter_changes = {key: after[key] - before[key] for key in before}
+    windows, drift = latency_windows(rows, start, args.seconds)
+    checks = {
+        "no_unexpected_http_or_stream_error": not problems and counter_changes["overloads"] == 0,
+        "completed_schema_and_tool_covered": counts["schema"].get("stop", 0) > 0 and counts["tools"].get("tool_calls", 0) > 0,
+        "disconnects_observed": counts["cancel"].get("disconnected", 0) > 0
+        and counter_changes["disconnects"] > 0 and counter_changes["cancellations"] > 0,
+        "idle_after_drain": idle(final["metrics"]),
+        "native_allocation_plateau": initial["metrics"]["allocation"] == final["metrics"]["allocation"],
+        "workload_coverage": all(counts[kind].get("completed", 0) > 0 for kind in KINDS if kind != "cancel"),
+    }
+    if not args.smoke:
+        checks["p95_drift_at_most_5_percent"] = all(value is not None and value <= 5 for value in drift.values())
+    late_rss = [sample["rss_mib"] for sample in samples if sample["at_seconds"] >= args.seconds / 2]
+    result = {"status": "passed" if all(checks.values()) else "failed",
+              "mode": "smoke" if args.smoke else "mixed_soak", "seconds": args.seconds, "rate": args.rate,
+              "shared_prefixes": len(shared_prefixes), "checks": checks, "counts": counts,
+              "problem_count": len(problems), "problems": problems[:20],
+              "latency_windows": windows, "p95_change_percent": drift,
+              "client_dispatch_p95_ms": percentile([row["dispatch_ms"] for row in rows], .95),
+              "rss_growth_second_half_mib": final["rss_mib"] - late_rss[0] if late_rss else None,
+              "rss_samples": samples, "initial": initial, "final": final, "counter_changes": counter_changes}
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("address")
+    parser.add_argument("model")
+    parser.add_argument("--seconds", type=float, default=1800)
+    parser.add_argument("--rate", type=float, default=8)
+    parser.add_argument("--pid", type=int, required=True)
+    parser.add_argument("--out")
+    parser.add_argument("--shared-prefix", action="store_true", help="reuse eight fixed prefixes in the long-prompt traffic")
+    parser.add_argument("--smoke", action="store_true", help="short runtime check without a latency-drift verdict")
+    args = parser.parse_args()
+    if not math.isfinite(args.seconds) or args.seconds <= 0 or not math.isfinite(args.rate) or args.rate <= 0:
+        parser.error("seconds and rate must be finite and positive")
+    result = asyncio.run(soak(args))
+    print(json.dumps({key: result[key] for key in ("status", "checks", "counts", "p95_change_percent")}), flush=True)
     if args.out:
-        json.dump(result, open(args.out, "w"), indent=1)
+        with open(args.out, "x", encoding="utf-8") as output:
+            json.dump(result, output, indent=2, allow_nan=False)
+            output.write("\n")
+    return int(result["status"] != "passed")
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    raise SystemExit(main())
