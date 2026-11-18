@@ -89,7 +89,11 @@ GPU 6의 HF SDPA에서 첫 레이어 Q만, 첫 레이어 QKV, 전체 레이어 Q
 
 Riley 네이티브 빌드 `f7c956d3c`에서 기준을 `dense-v1`과 `fused-split-v1`로 명시했다. A100 GPU 6에서 prompt attention을 `shared-kv-v1`로 바꾸는 실행과 KV 쓰기를 `separate-v1`로 바꾸는 실행을 각각 완료했다. 사례 3과 9에 같은 토큰 ID를 공급했고 세 조건 모두 일반·logprobs·일반 반복 요청의 생성 ID·텍스트·종료 사유가 원래 Riley와 같았다. 첫 토큰의 상위 logprobs도 세 조건에서 일치했다. 사례 3의 Riley 첫 토큰은 세 조건 모두 264였고 HF SDPA는 5257이었다. 각 서버는 코드 0, 활성·대기 요청과 KV·native 할당 0으로 종료했고 GPU 6은 동일 홀더의 20GiB 예약으로 복귀했다. KV 주소와 causal mask의 내부 상태는 별도 검증 범위다. [세 조건 비교](../../benchmarks/evidence/20261119-w4-layer-trace/attention-controls/result/comparison.json) · [실행 원본과 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/attention-controls/result-SHA256SUMS)
 
-후속 진단은 첫 레이어에서 실제 KV 캐시의 물리 페이지와 KV head 0을 읽는다. 마지막 prefill 묶음의 첫 행과 끝 행에서 그 head를 공유하는 query head 7개의 native attention 출력을 보존한다. CPU 재계산은 같은 native Q/K/V에 논리 위치의 causal 범위를 적용한다. 첫 페이지를 빼거나 첫 행의 미래 토큰을 포함하는 대조도 계산한다. 격리 환경에서 Rust 타입 검사와 합성 입력의 독립 softmax 비교를 통과했다. 실제 CUDA 빌드와 두 프롬프트 측정은 진행 중인 RSS 시험 이후 GPU 6에서 시작하도록 등록했다. [실행 순서](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/campaign.sh) · [진단 패치](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/kv-trace.patch.gz) · [CPU 재계산기](../../benchmarks/evidence/20261119-w4-layer-trace/tools/replay_attention_mask.py)
+### Native KV와 causal mask 재계산
+
+GPU 6에서 두 사례의 첫 레이어가 사용한 물리 KV 페이지 207개와 209개를 읽었다. 마지막 prefill 묶음의 첫 행과 끝 행에서 KV head 0을 공유하는 query head 7개씩 비교했다. Native Q/K/V와 논리 위치의 causal 범위를 사용한 독립 FP64 재계산의 RMS 차이는 네 행에서 0.000133–0.000197이었다. 마지막 visible 토큰을 제외하면 RMS 차이는 0.0875–0.1171이었고, 첫 행에 미래 토큰을 포함하면 0.00175–0.02668이었다. [사례 3](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/result/case3-replay.json) · [사례 9](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/result/case9-replay.json)
+
+두 사례의 관측 행에서는 causal 범위가 마지막 visible 토큰과 미래 토큰 대조보다 GPU 출력에 가까웠다. 첫 페이지를 뺐을 때 네 행의 RMS가 0.000136–0.000197로 비슷해 해당 페이지의 포함 여부를 이 대조로 판별하기 어렵다. 두 사례의 생성 ID·텍스트·종료 사유는 기존 Riley와 모두 같았고 GPU 6은 같은 홀더의 20GiB 예약으로 복귀했다. 원본 덤프에서 두 사례의 CPU 재계산을 다시 실행했다. 나머지 레이어·KV head와 Riley/HF 간 Q/K/V 차이의 원인은 여전히 확인 범위에 남는다. [실행 순서](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/campaign.sh) · [진단 패치](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/kv-trace.patch.gz) · [CPU 재계산기](../../benchmarks/evidence/20261119-w4-layer-trace/tools/replay_attention_mask.py) · [원본 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/result/SHA256SUMS)
 
 ## GSM8K 전수 품질 대조
 

@@ -1,6 +1,7 @@
 """Replay layer-0 attention from a logged Qwen KV page table and GPU snapshots."""
 
 from argparse import ArgumentParser
+import gzip
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -14,7 +15,8 @@ def bf16(payload):
 
 
 def capture(directory, expected_last):
-    data = (directory / "rows.bf16").read_bytes()
+    raw = directory / "rows.bf16"
+    data = raw.read_bytes() if raw.exists() else gzip.decompress(raw.with_suffix(".bf16.gz").read_bytes())
     head, *index = (directory / "index.tsv").read_text().splitlines()
     marker, position, _, row, active, dense = head.split()
     if marker != "#" or int(position) != expected_last or not 0 < int(row) == int(active) - 1 < int(dense):
@@ -52,7 +54,7 @@ def capture(directory, expected_last):
             vectors.append(bf16(payload).reshape(-1, 128))
     if len(set(physical)) != len(physical):
         raise ValueError("physical pages alias within the single request")
-    return rows, first, last, physical, np.concatenate(keys), np.concatenate(values)
+    return rows, first, last, physical, np.concatenate(keys), np.concatenate(values), sha256(data).hexdigest()
 
 
 def attention(query, key, value):
@@ -70,12 +72,15 @@ def compare(actual, expected):
 
 
 def replay(directory, fixture, case):
-    original = json.loads(fixture.read_bytes())["baseline"][case]
+    fixture_bytes = fixture.read_bytes()
+    if fixture.suffix == ".gz":
+        fixture_bytes = gzip.decompress(fixture_bytes)
+    original = json.loads(fixture_bytes)["baseline"][case]
     saved = json.loads((directory / "response.json").read_bytes())
     if (not saved["all_original_ids_text_and_finish"]
             or saved["response"]["prompt_tokens"] != original["prompt_tokens"]):
         raise ValueError("instrumented output differs from the pinned source")
-    rows, first, last, pages, keys, values = capture(directory, len(original["prompt_tokens"]) - 1)
+    rows, first, last, pages, keys, values, capture_sha256 = capture(directory, len(original["prompt_tokens"]) - 1)
     probes = {}
     for position, suffix in ((first, "_first"), (last, "")):
         query = bf16(rows[(f"query_rope{suffix}", "0")]).reshape(28, 128)[:7]
@@ -90,7 +95,7 @@ def replay(directory, fixture, case):
     return {"case": case, "layer": 0, "kv_head": 0, "query_heads": 7,
             "first_position": first, "final_position": last, "physical_pages": pages,
             "prompt_sha256": original["prompt_sha256"],
-            "page_data_sha256": sha256((directory / "rows.bf16").read_bytes()).hexdigest(),
+            "page_data_sha256": capture_sha256,
             "reference": "Float64 softmax over native BF16 Q/K/V using logical token visibility",
             "probes": probes}
 

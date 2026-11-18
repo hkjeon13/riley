@@ -1,0 +1,100 @@
+   Compiling typenum v1.20.1
+   Compiling serde_core v1.0.228
+   Compiling riley-cuda v0.1.0 (/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda)
+   Compiling serde_json v1.0.145
+   Compiling itoa v1.0.18
+   Compiling cfg-if v1.0.4
+   Compiling hybrid-array v0.4.14
+   Compiling memchr v2.8.3
+   Compiling crypto-common v0.2.2
+   Compiling block-buffer v0.12.1
+   Compiling ryu v1.0.23
+   Compiling digest v0.11.3
+   Compiling riley-core v0.1.0 (/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-core)
+   Compiling cpufeatures v0.3.0
+   Compiling sha2 v0.11.0
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/usr/local/cuda-12.4 nvcc=/usr/local/cuda-12.4/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=80 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/usr/local/cuda-12.4/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/usr/local/cuda-12.4/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/usr/local/cuda-12.4/targets/x86_64-linux/lib/stubs/libcuda.so
+error: failed to run custom build command for `riley-cuda v0.1.0 (/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda)`
+
+Caused by:
+  process didn't exit successfully: `/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/target/release/build/riley-cuda-11870f73dbbd5050/build-script-build` (exit status: 1)
+  --- stdout
+  cargo:rerun-if-env-changed=RILEY_CUDA_ARCHITECTURES
+  cargo:rustc-env=RILEY_CUDA_COMPILED_ARCHITECTURES=80
+  cargo:rerun-if-env-changed=CUDAToolkit_ROOT
+  cargo:rerun-if-env-changed=CUDA_HOME
+  cargo:rerun-if-env-changed=CUDA_PATH
+  cargo:rerun-if-env-changed=NVCC
+  cargo:rerun-if-env-changed=CUDACXX
+  cargo:rerun-if-env-changed=CMAKE
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/CMakeLists.txt
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/include/riley_cuda.h
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/ffi_internal.hpp
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/attention_online.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/attention_online.hpp
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/attention_cublaslt.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/attention_reference.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/batch_primitives.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/cublas_gemm_probe.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/decode_attention.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/fixed37_gemm.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/fixed37_attention.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/fixed37_primitives.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/fixed37_reduction.cuh
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/fi_attention.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/fi_attention.hpp
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/../third_party/flashinfer/MANIFEST.sha256
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/gemm.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/graph.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/graph_resources.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/host_runtime.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/memory.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/primitives.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/smoke_fill.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/src/version.cu
+  cargo:rerun-if-changed=/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/crates/riley-cuda/../../kernels/tests/abi_layout.c
+  cargo:warning=riley-cuda: CUDA toolkit=/usr/local/cuda-12.4 nvcc=/usr/local/cuda-12.4/bin/nvcc
+  cargo:warning=riley-cuda: CUDA AOT architectures=80 (compile targets only; no runtime device detection)
+  -- The C compiler identification is GNU 11.4.0
+  -- The CUDA compiler identification is NVIDIA 12.4.131
+  -- Detecting C compiler ABI info
+  -- Detecting C compiler ABI info - done
+  -- Check for working C compiler: /usr/bin/cc - skipped
+  -- Detecting C compile features
+  -- Detecting C compile features - done
+  -- Detecting CUDA compiler ABI info
+  -- Detecting CUDA compiler ABI info - done
+  -- Check for working CUDA compiler: /usr/local/cuda-12.4/bin/nvcc - skipped
+  -- Detecting CUDA compile features
+  -- Detecting CUDA compile features - done
+  -- Found CUDAToolkit: /usr/local/cuda-12.4/targets/x86_64-linux/include (found version "12.4.131")
+  -- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+  -- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+  -- Found Threads: TRUE
+  -- riley CUDA AOT architectures: 80 (compile targets only)
+  -- Configuring done (6.7s)
+  -- Generating done (0.7s)
+  -- Build files have been written to: /mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/target/release/build/riley-cuda-4b0d28c0abf8c2be/out/cuda-native-build
+  cargo:warning=riley-cuda: cuBLASLt strategy=shared linker=/usr/local/cuda-12.4/lib64/libcublasLt.so
+  cargo:warning=riley-cuda: CUDA Runtime strategy=shared linker=/usr/local/cuda-12.4/lib64/libcudart.so
+  cargo:warning=riley-cuda: CUDA Driver linker=/usr/local/cuda-12.4/targets/x86_64-linux/lib/stubs/libcuda.so
+  [  4%] Building C object CMakeFiles/riley_cuda_abi_checks.dir/tests/abi_layout.c.o
+
+  --- stderr
+  In file included from /mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/kernels/tests/abi_layout.c:1:
+  /mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/kernels/include/riley_cuda.h:3253:53: error: unknown type name ‘RileyCudaCublasGemmProbePlan’
+   3253 | int riley_cuda_cublas_hf_smol_exact_supported(const RileyCudaCublasGemmProbePlan*,uint64_t) RILEY_CUDA_NOEXCEPT;
+        |                                                     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  /mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/src/kernels/include/riley_cuda.h:3254:57: error: unknown type name ‘RileyCudaCublasGemmProbePlan’; did you mean ‘RileyCudaBiasGemmPlan’?
+   3254 | RileyCudaStatus riley_cuda_cublas_hf_smol_exact_execute(RileyCudaCublasGemmProbePlan*,const RileyCudaBufferSpan*,uint64_t,const uint32_t*,const uint64_t*,uint64_t,uint64_t,uint64_t,uint64_t,uint64_t,RileyCudaStream*,RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+        |                                                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        |                                                         RileyCudaBiasGemmPlan
+  gmake[3]: *** [CMakeFiles/riley_cuda_abi_checks.dir/build.make:76: CMakeFiles/riley_cuda_abi_checks.dir/tests/abi_layout.c.o] Error 1
+  gmake[2]: *** [CMakeFiles/Makefile2:111: CMakeFiles/riley_cuda_abi_checks.dir/all] Error 2
+  gmake[1]: *** [CMakeFiles/Makefile2:92: CMakeFiles/riley_cuda_native.dir/rule] Error 2
+  gmake: *** [Makefile:169: riley_cuda_native] Error 2
+  error: riley-cuda native build failed: could not compile the native CUDA library: "/usr/local/bin/cmake" "--build" "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-gpu-memory-faults-20261119.u0cxUF9V/target/release/build/riley-cuda-4b0d28c0abf8c2be/out/cuda-native-build" "--config" "Release" "--target" "riley_cuda_native" "--parallel" exited with exit status: 2

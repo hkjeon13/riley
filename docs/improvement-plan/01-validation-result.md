@@ -117,4 +117,6 @@ GPU 없는 runner에서 Riley 바이너리는 NVIDIA가 주입하는 `libcuda.so
 
 배포 이미지 재빌드에 쓰려던 소스 아카이브의 A100 전송은 자동 승인 검토에서 전송 자료의 범위와 목적지를 이유로 거절됐다. 배포 이미지의 GPU 검증은 승인된 경로에서 동일 이미지와 바이너리의 해시를 확인한 뒤 수행해야 한다.
 
+후속 CUDA 메모리 오류 빌드에서 cuBLAS 진단 기능을 끄면 C ABI 헤더가 그 기능의 내부 타입을 참조하는 오류를 확인했다. 관련 함수 두 개의 선언을 정의와 같은 기능 조건에 넣었다. GPU 없이 C ABI 테스트를 네 가지 기능 조합으로 컴파일하는 단계를 Production CPU에 추가했고, 로컬에서 첫 오류를 재현한 뒤 네 조합의 통과를 확인했다. A100의 CUDA 재빌드와 오류 주입 실행은 등록 상태다. [실패 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/initial-build/build.log) · [CI 검사](../../.github/workflows/production-cpu.yml)
+
 W2·W3는 이 runner의 새 label·실패 판정·실행 argv/해시를 사용한다. W4는 정확성 판정 결과를 같은 후보에 결속한다. W5는 현행 이미지와 네이티브 GPU 실행 근거를 릴리스 문서에 연결한다. M5 판정에는 동일 후보의 패키징·GPU 실행·품질 근거가 필요하다.

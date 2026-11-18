@@ -47,6 +47,8 @@
 
 후반 RSS는 900초의 15,162.35MiB에서 15,163.10MiB로 0.75MiB 증가했다. 1,080초부터 drain까지 같은 값을 유지했다. 서버 `/proc`의 15초 간격 표본 95개에서 두 RSS 수준의 차이는 `RssAnon` 768KiB였고 파일·공유 페이지와 RSS 최고치는 일정했다. 관측기는 실행 도중 시작했다. 두 cache-off 시험에서 후반 증가가 재현되어 RSS 증가 0 항목은 미충족 상태다. 익명 페이지의 증가 원인을 확인하려면 allocator에 남은 공간과 사용 중인 호스트 할당을 추가로 측정해야 한다. [RSS 표본](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off-repeat/result/rss-observer/samples.jsonl) · [대조 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/compare_cache_off_repeat.py) · [원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off-repeat/result/SHA256SUMS)
 
+GPU 7의 30분 진단을 예약했다. 동일 Riley 바이너리의 서버 프로세스에만 관측기를 적용해 15초마다 `/proc` RSS와 glibc `mallinfo2`의 arena 사용·여유 공간, `malloc`의 mmap 바이트를 함께 기록한다. A100 호스트 glibc 2.35에서 관측기 빌드와 CPU 사전 검사를 통과했다. 관측기의 계측 비용과 glibc 통계로 보이지 않는 할당 경로는 해석에 포함한다. [진단 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/campaign.sh) · [CPU 사전 검증](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/cpu-smoke.jsonl) · [관측기](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/sample_allocator.c) · [glibc 2.35 통계 정의](https://www.sourceware.org/glibc/manual/2.35/html_node/Statistics-of-Malloc.html)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)
@@ -71,4 +73,4 @@ A100 GPU 6에서 같은 Qwen2.5-7B-Instruct CUDA 바이너리로 Linux loopback 
 
 장치 메모리 갱신 실패를 가정한 CPU 단위 테스트는 tentative KV 블록 회수와 sidecar 무효화를 확인했다. 실제 운영 트래픽 분포, GPU 장치 장애, 배포 이미지 추론은 추가 검증 항목이다. [장치 실패 시 KV 회수 테스트](../../crates/riley-runtime/src/paged_kv.rs#L2186)
 
-같은 서버 소스에 대해 GPU 메모리 오류 네 조건을 테스트 컨텍스트에서 재현하는 기존 테스트를 예약했다. 할당 생성·해제의 결과가 불명확한 경우와 복사 제출·완료 오류를 각각 독립 자식 프로세스로 검사한다. 장문 진단 이후 GPU 6에서 실행한다. [실패 주입 테스트](../../crates/riley-cuda/tests/memory_fault_injection_gpu.rs) · [GPU 실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/campaign.sh)
+기존 테스트는 할당 생성·해제의 결과가 불명확한 경우와 복사 제출·완료 오류를 각각 독립 자식 프로세스로 검사한다. 첫 시도는 CUDA 빌드 중 cuBLAS probe 전용 타입의 C ABI 가드가 빠져 종료 코드 101로 끝났다. 두 선언을 대응하는 기능 조건 안으로 옮겼고 CPU CI에 C ABI 조합 검사를 추가했다. 수정한 헤더만 적용하는 재시험을 GPU 6에 등록했으며, 30분 RSS 계측 종료 뒤 실행한다. [실패 주입 테스트](../../crates/riley-cuda/tests/memory_fault_injection_gpu.rs) · [첫 빌드 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/initial-build/SHA256SUMS) · [재시험 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/retry/campaign.sh)
