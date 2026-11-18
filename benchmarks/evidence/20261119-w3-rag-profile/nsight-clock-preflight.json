@@ -1,0 +1,30 @@
+{
+  "nsight_version": "2026.5.1.161",
+  "scope": "CPU-only NVTX marks and historical W2 CUDA PID encoding",
+  "cpu_only": {
+    "remote": "/var/tmp/riley-w3-markers.grlbTJQf",
+    "sqlite_sha256": "ba6b6f7360947640e6d2cb16b14fc7f6885d587f6250f3765cf8aa945ea3b3fe",
+    "markers": [
+      {
+        "name": "RILEY_W3_CLOCK_probe_begin",
+        "monotonic_before_ns": 63451223189402622,
+        "monotonic_after_ns": 63451223189466829,
+        "nsight_start_ns": 131502821,
+        "offset_ns": -63451223057931904
+      },
+      {
+        "name": "RILEY_W3_CLOCK_probe_end",
+        "monotonic_before_ns": 63451223239584193,
+        "monotonic_after_ns": 63451223239607421,
+        "nsight_start_ns": 181634493,
+        "offset_ns": -63451223057961314
+      }
+    ],
+    "offset_change_ns": 29410
+  },
+  "historical_cuda": {
+    "remote": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w2-sm17-20261118.6UMfeHh2/nsys2",
+    "pid": 2465367,
+    "globalPid": 322836971388928
+  }
+}
