@@ -1,0 +1,146 @@
+{
+  "original": {
+    "normal_completions": 13749,
+    "intentional_disconnects": 700,
+    "counter_changes": {
+      "cancellations": 700,
+      "disconnects": 700,
+      "overloads": 0,
+      "dropped_observations": 13425
+    },
+    "p95_change_percent": {
+      "ttft_ms": 1.1148865002156727,
+      "e2e_ms": -13.278959397797808
+    },
+    "rss_first_late": {
+      "at_seconds": 900.0502094179392,
+      "rss_mib": 15161.13671875
+    },
+    "rss_at_drain": {
+      "at_seconds": 1803.8927067145705,
+      "rss_mib": 15161.88671875
+    },
+    "rss_growth_second_half_mib": 0.75,
+    "rss_zero_growth": false,
+    "native_allocation_at_ready_and_drain": {
+      "device_live_count": 291,
+      "device_live_bytes": 30495658464,
+      "pinned_live_count": 2,
+      "pinned_live_bytes": 4297400
+    },
+    "native_allocation_after_shutdown": {
+      "device_live_count": 0,
+      "device_live_bytes": 0,
+      "pinned_live_count": 0,
+      "pinned_live_bytes": 0
+    },
+    "soak_sha256": "8512dcbad83c90af29078e7c84c570ae0711e56a92272ac825d2127133fb167e",
+    "shutdown_metrics_sha256": "2563d68349f8c447807e856c098fb05d30361103cb75e6bc0def08980d8f1698"
+  },
+  "repeat": {
+    "normal_completions": 13749,
+    "intentional_disconnects": 700,
+    "counter_changes": {
+      "cancellations": 700,
+      "disconnects": 700,
+      "overloads": 0,
+      "dropped_observations": 13425
+    },
+    "p95_change_percent": {
+      "ttft_ms": 1.2363940953635133,
+      "e2e_ms": -13.331819479017849
+    },
+    "rss_first_late": {
+      "at_seconds": 900.053253762424,
+      "rss_mib": 15162.3515625
+    },
+    "rss_at_drain": {
+      "at_seconds": 1803.8942712545395,
+      "rss_mib": 15163.1015625
+    },
+    "rss_growth_second_half_mib": 0.75,
+    "rss_zero_growth": false,
+    "native_allocation_at_ready_and_drain": {
+      "device_live_count": 291,
+      "device_live_bytes": 30495658464,
+      "pinned_live_count": 2,
+      "pinned_live_bytes": 4297400
+    },
+    "native_allocation_after_shutdown": {
+      "device_live_count": 0,
+      "device_live_bytes": 0,
+      "pinned_live_count": 0,
+      "pinned_live_bytes": 0
+    },
+    "soak_sha256": "716d268046f1c4142d3c2b390486d0b16c403f0199eda386d2e4fe77ac0e400e",
+    "shutdown_metrics_sha256": "c3b56657ea2d477146c98d3bdc13b5615a71e6c4ce0510c99dcd7322e63a819b"
+  },
+  "observer": {
+    "samples": 95,
+    "first": {
+      "unix_seconds": 1795032428.6387343,
+      "pid": 3644857,
+      "start_ticks": 6346119522,
+      "kib": {
+        "VmHWM": 16452472,
+        "VmRSS": 15523176,
+        "RssAnon": 15339880,
+        "RssFile": 169728,
+        "RssShmem": 13568
+      }
+    },
+    "last": {
+      "unix_seconds": 1795033839.7879426,
+      "pid": 3644857,
+      "start_ticks": 6346119522,
+      "kib": {
+        "VmHWM": 16452472,
+        "VmRSS": 15527016,
+        "RssAnon": 15343720,
+        "RssFile": 169728,
+        "RssShmem": 13568
+      }
+    },
+    "delta_kib": {
+      "VmHWM": 0,
+      "VmRSS": 3840,
+      "RssAnon": 3840,
+      "RssFile": 0,
+      "RssShmem": 0
+    },
+    "distinct_kib_values": {
+      "VmHWM": [
+        16452472
+      ],
+      "VmRSS": [
+        15523176,
+        15524712,
+        15525480,
+        15526248,
+        15527016
+      ],
+      "RssAnon": [
+        15339880,
+        15341416,
+        15342184,
+        15342952,
+        15343720
+      ],
+      "RssFile": [
+        169728
+      ],
+      "RssShmem": [
+        13568
+      ]
+    },
+    "samples_sha256": "7272bb8725c247ad6e672b3e58da03d70f63d13f1248aaa17b2df98f65e476bf"
+  },
+  "matched_input_sha256": {
+    "riley": "3e070d05c93b6784e24eefd423a77ed260162c7ddd9fcde67bec135c3dc53e70",
+    "riley-checkpoint.json": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+    "tokenizer.json": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+    "run_soak.py": "f52722de9e20a86a8157396d5001ef0c69aea5a05281d5100c49e7bf726888cd",
+    "soak.py": "06caa23c0e8c60cd777a7d82b229e4c1285cb05e072d74cef0f2d44d9bd6876b",
+    "load.py": "fb3a3de6fcd8904d6379433ad8fcff284530e46e388aa40c2b7b75cfd0d0c8b0"
+  }
+}

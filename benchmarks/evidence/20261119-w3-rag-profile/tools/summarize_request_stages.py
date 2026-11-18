@@ -74,6 +74,22 @@ def request_phases(phases, prompt_tokens):
             "stages_ms": {k: v / 1e6 for k, v in timing_ns.items()}}
 
 
+def stage_medians(requests):
+    return {name: median(row["stages_ms"][name] for row in requests)
+            for name in requests[0]["stages_ms"]}
+
+
+def ttft_tail(requests, p95_ms):
+    ranked = sorted(requests, key=lambda row: row["client_ttft_ms"])
+    # Use the same observed order statistic as the load generator, including ties.
+    first = min(int(.95 * len(ranked)), len(ranked) - 1)
+    require(ranked[first]["client_ttft_ms"] == p95_ms, "TTFT p95 differs from the recorded requests")
+    tail = [row for row in ranked if row["client_ttft_ms"] >= p95_ms]
+    return {"requests": len(tail), "request_indices": [row["request_index"] for row in tail],
+            "server_ms_p50": median(row["server_ms"] for row in tail),
+            "stages_ms_p50": stage_medians(tail)}
+
+
 def summarize(root):
     require((root / "campaign.exit").read_text().strip() == "0", "stage campaign did not complete")
     base, base_plan, base_cells = arm(root, "qwen14", "riley")
@@ -101,6 +117,7 @@ def summarize(root):
             require(identifier not in identifiers and identifier in grouped, f"{name}: invalid trace identity")
             identifiers.add(identifier)
             requests.append({"request_index": row["request_index"], "request_id": identifier,
+                             "client_ttft_ms": row["ttft"] * 1000,
                              **request_phases(grouped[identifier], row["prompt_tokens"])})
         result[name] = {"requests": len(requests), "matching_outputs": len(requests),
                         "ttft_p95_instrumented_ms": stats["ttft_p95_ms"],
@@ -108,8 +125,8 @@ def summarize(root):
                         "ttft_p95_change_percent": ratio_percent(stats["ttft_p95_ms"], control["ttft_p95_ms"]),
                         "server_ms_p50": median(row["server_ms"] for row in requests),
                         "shared_prefill_gpu_ms_p50": median(row["shared_prefill_gpu_ms"] for row in requests),
-                        "stages_ms_p50": {key: median(row["stages_ms"][key] for row in requests)
-                                          for key in requests[0]["stages_ms"]},
+                        "stages_ms_p50": stage_medians(requests),
+                        "at_or_above_client_ttft_p95": ttft_tail(requests, stats["ttft_p95_ms"]),
                         "rows": requests}
     return {"model": focus["model"], "physical_gpu": 7, "build_sha256": source_hashes[0]["riley"],
             "scope": "Server phases from engine submission to first visible delta; GPU step durations are shared",

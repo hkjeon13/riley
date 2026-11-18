@@ -41,7 +41,11 @@
 
 90초 사전 검증과 30분 시험의 도구는 native 할당과 RSS를 각각 기록한다. Cache off의 후반 RSS 표본은 900초부터 15,161.14MiB였고 1,560초 표본부터 15,161.89MiB였다. Cache on은 900초부터 종료 직전까지 15,163.53MiB였다. Cache off의 0.75MiB 변화는 [운영 품질 기준](../goal.md#33-운영-품질)의 RSS 증가 0 조건에 남겨 둔다.
 
-동일 GPU 7, 바이너리, 부하 도구와 30분 cache-off 조건의 재현 시험을 시작했다. 전용 서버 프로세스의 `/proc` 상태에서 `VmRSS`와 익명·파일·공유 페이지를 15초 간격으로 읽는 관측기를 시험 도중 시작했다. 기존 부하 도구의 RSS 가드레일 계산은 그대로 사용한다. [재현 명령과 입력 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off-repeat/campaign.sh) · [RSS 표본 채취 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/sample_resident_pages.py)
+### Cache off RSS 재현
+
+동일 GPU 7, 바이너리, 모델, 실행 옵션과 부하 도구로 30분 cache-off를 반복했다. 정상 완료 13,749건, 의도적 연결 종료 700건, HTTP·SSE 오류와 overload 0건을 기록했다. 후반 TTFT p95는 1.24% 증가했고 완료 지연 p95는 13.33% 감소했다. Ready와 drain 시 native 할당이 같았고 종료 후 GPU·pinned 할당과 활성 KV는 0이었다. GPU 7은 동일 홀더의 20GiB 예약으로 복귀했다. [재현 명령](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off-repeat/campaign.sh) · [원본 및 입력 대조](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off-repeat/result/comparison.json) · [종료 후 예약](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off-repeat/result/idle-after.json)
+
+후반 RSS는 900초의 15,162.35MiB에서 15,163.10MiB로 0.75MiB 증가했다. 1,080초부터 drain까지 같은 값을 유지했다. 서버 `/proc`의 15초 간격 표본 95개에서 두 RSS 수준의 차이는 `RssAnon` 768KiB였고 파일·공유 페이지와 RSS 최고치는 일정했다. 관측기는 실행 도중 시작했다. 두 cache-off 시험에서 후반 증가가 재현되어 RSS 증가 0 항목은 미충족 상태다. 익명 페이지의 증가 원인을 확인하려면 allocator에 남은 공간과 사용 중인 호스트 할당을 추가로 측정해야 한다. [RSS 표본](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off-repeat/result/rss-observer/samples.jsonl) · [대조 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/compare_cache_off_repeat.py) · [원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off-repeat/result/SHA256SUMS)
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
