@@ -1,0 +1,54 @@
+[
+  {
+    "response_status": 415,
+    "tests": {
+      "total": 2,
+      "passed": 0,
+      "failed": 2,
+      "results": [
+        {
+          "name": "Unsupported oneOf returns HTTP 400",
+          "passed": false,
+          "consoleLogs": [],
+          "error": {
+            "message": "expected response to have status code 400 but got 415",
+            "name": "AssertionError"
+          }
+        },
+        {
+          "name": "Public error names the schema field and constraint",
+          "passed": false,
+          "consoleLogs": [],
+          "error": {
+            "message": "expected 'unsupported_media_type' to deeply equal 'invalid_schema'",
+            "name": "AssertionError"
+          }
+        }
+      ]
+    },
+    "cli_exit_code": 2,
+    "response_body": "{\"error\":{\"message\":\"Content-Type must be application/json\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"unsupported_media_type\"}}"
+  },
+  {
+    "response_status": 400,
+    "tests": {
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "results": [
+        {
+          "name": "Unsupported oneOf returns HTTP 400",
+          "passed": true,
+          "consoleLogs": []
+        },
+        {
+          "name": "Public error names the schema field and constraint",
+          "passed": true,
+          "consoleLogs": []
+        }
+      ]
+    },
+    "cli_exit_code": 1,
+    "response_body": "{\"error\":{\"message\":\"unsupported JSON Schema: oneOf requires exactly one matching branch\",\"type\":\"invalid_request_error\",\"param\":\"response_format\",\"code\":\"invalid_schema\"}}"
+  }
+]

@@ -1,0 +1,419 @@
+[
+  {
+    "name": "typed enum stream=False",
+    "request": {
+      "model": "m",
+      "temperature": 0,
+      "max_tokens": 80,
+      "messages": [
+        {
+          "role": "user",
+          "content": "Return a status record with mode ready."
+        }
+      ],
+      "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "status",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  1
+                ]
+              }
+            },
+            "required": [
+              "mode"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "stream": false,
+      "logprobs": true,
+      "top_logprobs": 2
+    },
+    "status": 200,
+    "body": "{\"id\":\"cmpl-0000000000000019\",\"object\":\"chat.completion\",\"created\":1795017779,\"model\":\"m\",\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"logprobs\":{\"content\":[{\"token\":\"{\",\"logprob\":-10.810661315917969,\"bytes\":[123],\"top_logprobs\":[{\"token\":\"Certainly\",\"logprob\":-0.5606614351272583,\"bytes\":[67,101,114,116,97,105,110,108,121]},{\"token\":\"Sure\",\"logprob\":-1.4356614351272583,\"bytes\":[83,117,114,101]}]},{\"token\":\"\\\"\",\"logprob\":-21.56566047668457,\"bytes\":[34],\"top_logprobs\":[{\"token\":\" \\\"\",\"logprob\":-0.0031605351250618696,\"bytes\":[32,34]},{\"token\":\" \\n\",\"logprob\":-6.37816047668457,\"bytes\":[32,10]}]},{\"token\":\"mode\",\"logprob\":-5.397936820983887,\"bytes\":[109,111,100,101],\"top_logprobs\":[{\"token\":\"status\",\"logprob\":-0.02293672040104866,\"bytes\":[115,116,97,116,117,115]},{\"token\":\"Status\",\"logprob\":-4.022936820983887,\"bytes\":[83,116,97,116,117,115]}]},{\"token\":\"\\\":\",\"logprob\":-0.023286020383238792,\"bytes\":[34,58],\"top_logprobs\":[{\"token\":\"\\\":\",\"logprob\":-0.023286020383238792,\"bytes\":[34,58]},{\"token\":\"\\\":\\\"\",\"logprob\":-3.7732861042022705,\"bytes\":[34,58,34]}]},{\"token\":\" \\\"\",\"logprob\":-5.091036996418552e-7,\"bytes\":[32,34],\"top_logprobs\":[{\"token\":\" \\\"\",\"logprob\":-5.091036996418552e-7,\"bytes\":[32,34]},{\"token\":\" {\\\"\",\"logprob\":-14.750000953674316,\"bytes\":[32,123,34]}]},{\"token\":\"ready\",\"logprob\":-0.00013134762411937118,\"bytes\":[114,101,97,100,121],\"top_logprobs\":[{\"token\":\"ready\",\"logprob\":-0.00013134762411937118,\"bytes\":[114,101,97,100,121]},{\"token\":\"Ready\",\"logprob\":-9.375131607055664,\"bytes\":[82,101,97,100,121]}]},{\"token\":\"\\\"}\",\"logprob\":-0.006740496959537268,\"bytes\":[34,125],\"top_logprobs\":[{\"token\":\"\\\"}\",\"logprob\":-0.006740496959537268,\"bytes\":[34,125]},{\"token\":\"\\\",\",\"logprob\":-5.006740570068359,\"bytes\":[34,44]}]},{\"token\":\"<|im_end|>\",\"logprob\":-0.0015813454519957304,\"bytes\":[60,124,105,109,95,101,110,100,124,62],\"top_logprobs\":[{\"token\":\"<|im_end|>\",\"logprob\":-0.0015813454519957304,\"bytes\":[60,124,105,109,95,101,110,100,124,62]},{\"token\":\" \\n\\n\",\"logprob\":-6.626581192016602,\"bytes\":[32,10,10]}]}]},\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"mode\\\": \\\"ready\\\"}\"}}],\"usage\":{\"prompt_tokens\":37,\"completion_tokens\":8,\"total_tokens\":45}}"
+  },
+  {
+    "name": "oneOf stream=False",
+    "request": {
+      "model": "m",
+      "temperature": 0,
+      "max_tokens": 80,
+      "messages": [
+        {
+          "role": "user",
+          "content": "Return a status record with mode ready."
+        }
+      ],
+      "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "status",
+          "schema": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ]
+          }
+        }
+      },
+      "stream": false
+    },
+    "status": 400,
+    "body": "{\"error\":{\"message\":\"unsupported JSON Schema: oneOf requires exactly one matching branch\",\"type\":\"invalid_request_error\",\"param\":\"response_format\",\"code\":\"invalid_schema\"}}"
+  },
+  {
+    "name": "typed enum stream=True",
+    "request": {
+      "model": "m",
+      "temperature": 0,
+      "max_tokens": 80,
+      "messages": [
+        {
+          "role": "user",
+          "content": "Return a status record with mode ready."
+        }
+      ],
+      "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "status",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  1
+                ]
+              }
+            },
+            "required": [
+              "mode"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "stream": true,
+      "logprobs": true,
+      "top_logprobs": 2
+    },
+    "status": 200,
+    "body": "data: {\"id\":\"cmpl-000000000000001a\",\"object\":\"chat.completion.chunk\",\"created\":1795017780,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":{\"content\":[{\"token\":\"{\",\"logprob\":-10.810661315917969,\"bytes\":[123],\"top_logprobs\":[{\"token\":\"Certainly\",\"logprob\":-0.5606614351272583,\"bytes\":[67,101,114,116,97,105,110,108,121]},{\"token\":\"Sure\",\"logprob\":-1.4356614351272583,\"bytes\":[83,117,114,101]}]}]},\"delta\":{\"role\":\"assistant\",\"content\":\"{\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001a\",\"object\":\"chat.completion.chunk\",\"created\":1795017780,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":{\"content\":[{\"token\":\"\\\"\",\"logprob\":-21.56566047668457,\"bytes\":[34],\"top_logprobs\":[{\"token\":\" \\\"\",\"logprob\":-0.0031605351250618696,\"bytes\":[32,34]},{\"token\":\" \\n\",\"logprob\":-6.37816047668457,\"bytes\":[32,10]}]}]},\"delta\":{\"content\":\"\\\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001a\",\"object\":\"chat.completion.chunk\",\"created\":1795017780,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":{\"content\":[{\"token\":\"mode\",\"logprob\":-5.397936820983887,\"bytes\":[109,111,100,101],\"top_logprobs\":[{\"token\":\"status\",\"logprob\":-0.02293672040104866,\"bytes\":[115,116,97,116,117,115]},{\"token\":\"Status\",\"logprob\":-4.022936820983887,\"bytes\":[83,116,97,116,117,115]}]}]},\"delta\":{\"content\":\"mode\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001a\",\"object\":\"chat.completion.chunk\",\"created\":1795017780,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":{\"content\":[{\"token\":\"\\\":\",\"logprob\":-0.023286020383238792,\"bytes\":[34,58],\"top_logprobs\":[{\"token\":\"\\\":\",\"logprob\":-0.023286020383238792,\"bytes\":[34,58]},{\"token\":\"\\\":\\\"\",\"logprob\":-3.7732861042022705,\"bytes\":[34,58,34]}]}]},\"delta\":{\"content\":\"\\\":\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001a\",\"object\":\"chat.completion.chunk\",\"created\":1795017780,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":{\"content\":[{\"token\":\" \\\"\",\"logprob\":-5.091036996418552e-7,\"bytes\":[32,34],\"top_logprobs\":[{\"token\":\" \\\"\",\"logprob\":-5.091036996418552e-7,\"bytes\":[32,34]},{\"token\":\" {\\\"\",\"logprob\":-14.750000953674316,\"bytes\":[32,123,34]}]}]},\"delta\":{\"content\":\" \\\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001a\",\"object\":\"chat.completion.chunk\",\"created\":1795017780,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":{\"content\":[{\"token\":\"ready\",\"logprob\":-0.00013134762411937118,\"bytes\":[114,101,97,100,121],\"top_logprobs\":[{\"token\":\"ready\",\"logprob\":-0.00013134762411937118,\"bytes\":[114,101,97,100,121]},{\"token\":\"Ready\",\"logprob\":-9.375131607055664,\"bytes\":[82,101,97,100,121]}]}]},\"delta\":{\"content\":\"ready\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001a\",\"object\":\"chat.completion.chunk\",\"created\":1795017780,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":{\"content\":[{\"token\":\"\\\"}\",\"logprob\":-0.006740496959537268,\"bytes\":[34,125],\"top_logprobs\":[{\"token\":\"\\\"}\",\"logprob\":-0.006740496959537268,\"bytes\":[34,125]},{\"token\":\"\\\",\",\"logprob\":-5.006740570068359,\"bytes\":[34,44]}]}]},\"delta\":{\"content\":\"\\\"}\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001a\",\"object\":\"chat.completion.chunk\",\"created\":1795017780,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":{\"content\":[{\"token\":\"<|im_end|>\",\"logprob\":-0.0015813454519957304,\"bytes\":[60,124,105,109,95,101,110,100,124,62],\"top_logprobs\":[{\"token\":\"<|im_end|>\",\"logprob\":-0.0015813454519957304,\"bytes\":[60,124,105,109,95,101,110,100,124,62]},{\"token\":\" \\n\\n\",\"logprob\":-6.626581192016602,\"bytes\":[32,10,10]}]}]},\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001a\",\"object\":\"chat.completion.chunk\",\"created\":1795017780,\"model\":\"m\",\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"logprobs\":null,\"delta\":{}}]}\n\ndata: [DONE]\n\n"
+  },
+  {
+    "name": "oneOf stream=True",
+    "request": {
+      "model": "m",
+      "temperature": 0,
+      "max_tokens": 80,
+      "messages": [
+        {
+          "role": "user",
+          "content": "Return a status record with mode ready."
+        }
+      ],
+      "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "status",
+          "schema": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ]
+          }
+        }
+      },
+      "stream": true
+    },
+    "status": 400,
+    "body": "{\"error\":{\"message\":\"unsupported JSON Schema: oneOf requires exactly one matching branch\",\"type\":\"invalid_request_error\",\"param\":\"response_format\",\"code\":\"invalid_schema\"}}"
+  },
+  {
+    "name": "sibling minimum",
+    "request": {
+      "model": "m",
+      "temperature": 0,
+      "max_tokens": 80,
+      "messages": [
+        {
+          "role": "user",
+          "content": "Return a status record with mode ready."
+        }
+      ],
+      "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "status",
+          "schema": {
+            "const": 1,
+            "minimum": 2
+          }
+        }
+      }
+    },
+    "status": 400,
+    "body": "{\"error\":{\"message\":\"unsupported JSON Schema: minimum beside const\",\"type\":\"invalid_request_error\",\"param\":\"response_format\",\"code\":\"invalid_schema\"}}"
+  },
+  {
+    "name": "sibling type",
+    "request": {
+      "model": "m",
+      "temperature": 0,
+      "max_tokens": 80,
+      "messages": [
+        {
+          "role": "user",
+          "content": "Return a status record with mode ready."
+        }
+      ],
+      "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "status",
+          "schema": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "status": 400,
+    "body": "{\"error\":{\"message\":\"unsupported JSON Schema: type beside anyOf\",\"type\":\"invalid_request_error\",\"param\":\"response_format\",\"code\":\"invalid_schema\"}}"
+  },
+  {
+    "name": "grammar with explicit stop",
+    "request": {
+      "model": "m",
+      "temperature": 0,
+      "max_tokens": 80,
+      "messages": [
+        {
+          "role": "user",
+          "content": "Return a status record with mode ready."
+        }
+      ],
+      "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "status",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  1
+                ]
+              }
+            },
+            "required": [
+              "mode"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "stop": "}"
+    },
+    "status": 400,
+    "body": "{\"error\":{\"message\":\"stop strings cannot truncate structured output\",\"type\":\"invalid_request_error\",\"param\":\"stop\",\"code\":\"unsupported_parameter\"}}"
+  },
+  {
+    "name": "grammar reaches token limit",
+    "request": {
+      "model": "m",
+      "temperature": 0,
+      "max_tokens": 1,
+      "messages": [
+        {
+          "role": "user",
+          "content": "Return a status record with mode ready."
+        }
+      ],
+      "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "status",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  1
+                ]
+              }
+            },
+            "required": [
+              "mode"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "stream": true
+    },
+    "status": 200,
+    "body": "data: {\"id\":\"cmpl-000000000000001b\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"{\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001b\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":\"length\",\"index\":0,\"logprobs\":null,\"delta\":{}}]}\n\ndata: [DONE]\n\n"
+  },
+  {
+    "name": "constrained tool stream=True",
+    "request": {
+      "model": "m",
+      "temperature": 0,
+      "max_tokens": 80,
+      "messages": [
+        {
+          "role": "user",
+          "content": "Return a status record with mode ready."
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "set_status",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "ready",
+                    1
+                  ]
+                }
+              },
+              "required": [
+                "mode"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "required",
+      "stream": true
+    },
+    "status": 200,
+    "body": "data: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":null,\"index\":0,\"logprobs\":null,\"delta\":{\"content\":\"\"}}]}\n\ndata: {\"id\":\"cmpl-000000000000001c\",\"object\":\"chat.completion.chunk\",\"created\":1795017782,\"model\":\"m\",\"choices\":[{\"finish_reason\":\"tool_calls\",\"index\":0,\"logprobs\":null,\"delta\":{\"tool_calls\":[{\"id\":\"call_cmpl-000000000000001c_0\",\"type\":\"function\",\"function\":{\"name\":\"set_status\",\"arguments\":\"{\\\"mode\\\":\\\"ready\\\"}\"},\"index\":0}]}}]}\n\ndata: [DONE]\n\n"
+  },
+  {
+    "name": "constrained tool stream=False",
+    "request": {
+      "model": "m",
+      "temperature": 0,
+      "max_tokens": 80,
+      "messages": [
+        {
+          "role": "user",
+          "content": "Return a status record with mode ready."
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "set_status",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "ready",
+                    1
+                  ]
+                }
+              },
+              "required": [
+                "mode"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "set_status"
+        }
+      },
+      "stream": false
+    },
+    "status": 200,
+    "body": "{\"id\":\"cmpl-000000000000001d\",\"object\":\"chat.completion\",\"created\":1795017783,\"model\":\"m\",\"choices\":[{\"finish_reason\":\"tool_calls\",\"index\":0,\"logprobs\":null,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_cmpl-000000000000001d_0\",\"type\":\"function\",\"function\":{\"name\":\"set_status\",\"arguments\":\"{\\\"mode\\\":\\\"ready\\\"}\"}}]}}],\"usage\":{\"prompt_tokens\":174,\"completion_tokens\":20,\"total_tokens\":194}}"
+  },
+  {
+    "name": "forced tool rejects oneOf",
+    "request": {
+      "model": "m",
+      "temperature": 0,
+      "max_tokens": 80,
+      "messages": [
+        {
+          "role": "user",
+          "content": "Return a status record with mode ready."
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "set_status",
+            "parameters": {
+              "oneOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "set_status"
+        }
+      }
+    },
+    "status": 400,
+    "body": "{\"error\":{\"message\":\"unsupported JSON Schema: oneOf requires exactly one matching branch\",\"type\":\"invalid_request_error\",\"param\":\"tools\",\"code\":\"invalid_schema\"}}"
+  }
+]

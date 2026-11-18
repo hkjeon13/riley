@@ -4,7 +4,7 @@
 종합 계획: [의존관계·가드레일](README.md)\
 구성: W4-A는 장문 수치 정확성, W4-B는 스키마 계약이다. 조사·수정·완료 여부를 각각 기록한다.
 
-2026-11-19에 `oneOf`와 강제할 수 없는 형제 제약을 거부하고, `type`과 `enum`·`const`의 교집합을 강제했다. Draft 2020-12 독립 검증기 `jsonschema 4.23.0`과 공유 fixture 13개·인스턴스 28개를 대조했다. 실제 CUDA API 실행 검증과 W4-A 장문 추적은 별도로 진행한다. [검증기 실행 파일](../../benchmarks/scripts/check_structured_schema_oracle.py) · [현행 API 계약](../api.md)
+2026-11-19에 `oneOf`와 강제할 수 없는 형제 제약을 거부하고, `type`과 `enum`·`const`의 교집합을 강제했다. Draft 2020-12 독립 검증기와 공유 fixture 13개·인스턴스 28개를 대조했다. W4-B 범위의 CUDA API 실행을 검증했고 W4-A 장문 추적이 남아 있다. [W4-B 검증 결과](04-structured-output-result.md) · [현행 API 계약](../api.md)
 
 ## 1. 현재 근거와 해석
 
@@ -12,8 +12,8 @@
 |---|---|---|
 | 장문 배치 불변성 | Qwen2.5-7B C8/C32 각각 54/54 | 18개 prompt를 세 번 반복한 비교다. 54개 독립 prompt의 품질 평가가 아니다. |
 | 장문 HF 일치 | 같은 표본에서 Riley 텍스트 12/18, vLLM 16/18 | 배치 불변성과 HF 수치·출력 일치는 별도 기준이다. 원인이 열려 있다. |
-| `oneOf` | compiler가 `anyOf`와 같은 분기 합집합으로 처리 | 정확히 하나만 만족한다는 의미를 보장하지 않는다. 현재 API 문서에도 제한이 적혀 있다. |
-| 스키마 조기 반환 | `$ref`, `const`, `enum`, 조합 키워드 처리 뒤 반환 | 형제 제약·미지원 키워드가 누락되는 추가 경계가 있는지 재현 검사가 필요하다. |
+| `oneOf` | 초기 컴파일러가 `anyOf`처럼 처리 | 수정 후 400을 반환한다. 이중 일치 반례를 독립 검증기에 확인했다. |
+| 스키마 조기 반환 | 초기 구현이 `const`·`enum`·조합 키워드 처리 뒤 일부 형제 제약을 무시 | 지원하는 `type` 교집합을 강제하고 나머지 형제 제약은 명시적으로 거부한다. |
 | HF 기준 경로 | `long_check.py`는 HF BF16 `sdpa` 사용 | owned HF-eager 프로파일 기록과 섞어 같은 기준이라고 주장하면 안 된다. |
 
 근거: [장문 정확성 기록](../serving-validation.md), [스키마 구현](../../crates/riley-server/src/structured.rs), [API 제한](../api.md), [long_check](../../benchmarks/live/long_check.py), [owned 프로파일 조건](../model-support.md).

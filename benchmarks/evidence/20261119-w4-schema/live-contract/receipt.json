@@ -1,0 +1,38 @@
+{
+  "gpu_uuid": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+  "holder_pid": 2431237,
+  "holder_start_ticks": "6339570875",
+  "server_argv": [
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-schema-build-20261119.QWnmhslP/target/release/riley",
+    "serve",
+    "--model",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-3B-Instruct",
+    "--model-id",
+    "m",
+    "--bind",
+    "127.0.0.1:18571",
+    "--max-active-sequences",
+    "8",
+    "--max-weight-bytes",
+    "68719476736",
+    "--inference-profile",
+    "native-bf16-varlen-v1",
+    "--max-sequence-tokens",
+    "2048",
+    "--max-output-tokens",
+    "256",
+    "--kv-blocks",
+    "2048"
+  ],
+  "source_revision": "f7c956d3cc7e6e59c98698cce891df42bc84ef03",
+  "sha256": {
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-schema-build-20261119.QWnmhslP/target/release/riley": "3e070d05c93b6784e24eefd423a77ed260162c7ddd9fcde67bec135c3dc53e70",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-3B-Instruct/riley-checkpoint.json": "97102e92530d42bf421c26e64d4907043d167d989832887a06eeaf3a19841f11",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-schema-build-20261119.QWnmhslP/tools/serve_contract.py": "a7a9cc868bb74ebc3c4354e35ceedd441cbac90ab78c9c2074849a56f902ae01"
+  },
+  "status": "passed",
+  "server_exit": 0,
+  "nvml_samples": 227,
+  "max_process_memory_mib": 8250.0,
+  "observed_active": true
+}

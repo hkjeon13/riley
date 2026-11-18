@@ -1,0 +1,131 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling serde_core v1.0.228
+   Compiling typenum v1.20.1
+   Compiling serde v1.0.228
+   Compiling hybrid-array v0.4.14
+   Compiling syn v2.0.119
+   Compiling hashbrown v0.17.1
+   Compiling equivalent v1.0.3
+   Compiling riley-cuda v0.1.0 (/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-schema-build-20261119.QWnmhslP/src/crates/riley-cuda)
+   Compiling indexmap v2.14.2
+   Compiling crypto-common v0.2.2
+   Compiling block-buffer v0.12.1
+   Compiling tinyvec_macros v0.1.1
+   Compiling riley-core v0.1.0 (/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-schema-build-20261119.QWnmhslP/src/crates/riley-core)
+   Compiling serde_json v1.0.145
+   Compiling tinyvec v1.12.0
+   Compiling serde_derive v1.0.228
+   Compiling digest v0.11.3
+   Compiling itoa v1.0.18
+   Compiling ryu v1.0.23
+   Compiling memchr v2.8.3
+   Compiling cfg-if v1.0.4
+   Compiling cpufeatures v0.3.0
+   Compiling sha2 v0.11.0
+   Compiling unicode-normalization v0.1.25
+   Compiling libc v0.2.189
+   Compiling minijinja v3.0.4
+   Compiling minijinja-contrib v3.0.4
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/usr/local/cuda-12.4 nvcc=/usr/local/cuda-12.4/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=80 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/usr/local/cuda-12.4/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: cuBLAS strategy=shared linker=/usr/local/cuda-12.4/lib64/libcublas.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/usr/local/cuda-12.4/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/usr/local/cuda-12.4/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: unused variable: `total`
+    --> crates/riley-cuda/src/gemm.rs:3165:22
+     |
+3165 |         let (tokens, total) = exact_wide_decode_chunk_tokens(
+     |                      ^^^^^ help: if this is intentional, prefix it with an underscore: `_total`
+     |
+     = note: `#[warn(unused_variables)]` on by default
+
+warning: constant `NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V2_SIZE` is never used
+  --> crates/riley-cuda/src/ffi.rs:99:7
+   |
+99 | const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V2_SIZE: u32 = 744;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: struct `RawNativeBf16RaggedPagedSplitGqaParamsV2` is never constructed
+    --> crates/riley-cuda/src/ffi.rs:1193:8
+     |
+1193 | struct RawNativeBf16RaggedPagedSplitGqaParamsV2 {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+     --> crates/riley-cuda/src/ffi.rs:12251:19
+      |
+12250 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+12251 |     pub(super) fn record_mlp(
+      |                   ^^^^^^^^^^
+...
+12261 |     pub(super) fn record_mlp_with_norm(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:12555:19
+      |
+12554 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+12555 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+12566 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+12578 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1827:8
+     |
+1827 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+   Compiling riley-tensor v0.1.0 (/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-schema-build-20261119.QWnmhslP/src/crates/riley-tensor)
+   Compiling riley-model v0.1.0 (/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-schema-build-20261119.QWnmhslP/src/crates/riley-model)
+   Compiling riley-runtime v0.1.0 (/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-schema-build-20261119.QWnmhslP/src/crates/riley-runtime)
+warning: unused import: `U16_BYTES`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:23:66
+   |
+23 | use super::executor::buffers::{BatchDeviceInput, BatchHostInput, U16_BYTES, U32_BYTES};
+   |                                                                  ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `PackedIterationLayout` and `pack_iteration_input`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:42:5
+   |
+42 |     PackedIterationLayout, pack_iteration_input, validate_for_execution,
+   |     ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 6 warnings
+error[E0596]: cannot borrow `*shape_variants` as mutable, as `shape_variants` is not declared as mutable
+   --> crates/riley-runtime/src/llama/executor/owner.rs:432:13
+    |
+432 |         let shape_variants = match prepare_shape_variants(
+    |             ^^^^^^^^^^^^^^ not mutable
+...
+462 |             for shape in shape_variants.iter_mut() {
+    |                          -------------- cannot borrow as mutable
+...
+469 |             for shape in shape_variants.iter_mut() {
+    |                          -------------- cannot borrow as mutable
+...
+491 |             for shape in shape_variants.iter_mut() {
+    |                          -------------- cannot borrow as mutable
+    |
+help: consider changing this to be mutable
+    |
+432 |         let mut shape_variants = match prepare_shape_variants(
+    |             +++
+
+For more information about this error, try `rustc --explain E0596`.
+warning: `riley-runtime` (lib) generated 2 warnings
+error: could not compile `riley-runtime` (lib) due to 1 previous error; 2 warnings emitted
+warning: build failed, waiting for other jobs to finish...

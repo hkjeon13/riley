@@ -2,7 +2,7 @@
 
 작성일: 2026-11-13 (Asia/Seoul)\
 기준: 로컬 `main` `37ede4445`, 원격 `origin/main` `9f039de78`\
-W1 구현과 Linux CPU CI를 확인했다. W2는 A100에서 기존 이벤트 발행 옵션을 평가해 기본 정책을 유지했다. W3는 작은 모델의 두 스케줄링 정책을 비교했고, W4는 스키마 수정과 장문 정확성 추적을 진행 중이다. [W1 결과](01-validation-result.md) · [W2 결과](02-async-step-result.md) · [W3 실측 결과](03-long-context-result.md)
+W1 구현과 Linux CPU CI를 확인했다. W2는 A100에서 기존 이벤트 발행 옵션을 평가해 기본 정책을 유지했다. W3는 작은 모델의 두 스케줄링 정책을 비교하고 Qwen3-4B 길이 곡선을 얻었다. W4-B 스키마 변경은 실제 GPU API에서 확인했다. W4-A 장문 정확성 추적은 진행 범위에 남아 있다. [W1 결과](01-validation-result.md) · [W2 결과](02-async-step-result.md) · [W3 실측 결과](03-long-context-result.md) · [W4-B 결과](04-structured-output-result.md)
 
 ## 1. 목표와 현재 위치
 
