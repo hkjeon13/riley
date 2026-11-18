@@ -156,6 +156,8 @@ SSE 요청 ID로 엔진 제출부터 첫 응답 조각 생성까지를 연결했
 
 두 seed에서 prefill 사이 대기 대부분은 다른 요청의 prefill 구간과 겹쳤다. 이 구간은 토큰화나 스텝 자체의 실행 시간과 별도로 확인됐다. 같은 행 예산으로 조각 선택 순서를 비교할 때는 첫 토큰 꼬리와 다른 요청의 대기·decode TPOT를 함께 측정해야 한다.
 
+후속 대조는 실행 중인 prefill을 기다린 지 100ms 미만인 새 prompt보다 먼저 고려한다. 100ms를 지난 요청은 기존 순서로 경쟁하며 decode 선택과 기존 aging override를 적용한다. 격리 패치의 스케줄러 CPU 테스트 146건과 CUDA 기능을 켠 Rust 타입 검사를 통과했다. A100에서는 같은 진단 바이너리로 옵션만 바꿔 위 다섯 부하와 32개 동시 짧은 요청을 실행한다. 별도 C1·C8 대조에서 장문 8개의 입력·생성 토큰 ID, 응답 텍스트와 종료 사유도 비교한다. GPU 7의 실측은 RSS와 CUDA 오류 시험 뒤에 등록했다. [실행 순서](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/campaign.sh) · [CPU 검사 원본](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/scheduler-tests.log.gz) · [채택 기준 대조 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/compare_prefill_continuation.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

@@ -25,14 +25,14 @@ def require(condition, reason):
         raise ValueError(reason)
 
 
-def arm(root, label, engine):
+def arm(root, label, engine, *, expected_cells=CELLS):
     directory = root / f"{label}-{engine}"
     plan_file = directory / "plan.json"
     plan = read(plan_file)
     receipt = read(directory / "receipt.json")
     reservation = read(directory / "idle-after.json")
     require(receipt["mode"] == engine and receipt["status"] == "passed", f"{engine}: incomplete arm")
-    require(not plan["profile"] and tuple(plan["cells"]) == CELLS, f"{engine}: unexpected timing cells")
+    require(not plan["profile"] and tuple(plan["cells"]) == expected_cells, f"{engine}: unexpected timing cells")
     hashes = {Path(path).name: checksum for path, checksum in receipt["sha256"].items()}
     require(hashes["plan.json"] == digest(plan_file), f"{engine}: plan digest mismatch")
     require(reservation["phase"] == "idle" and reservation["physical_index"] == 7
