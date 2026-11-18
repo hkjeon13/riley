@@ -5,10 +5,16 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/native-cuda.yml'
-      - 'crates/riley-cuda/**'
+      - '.dockerignore'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'crates/**'
       - 'kernels/**'
       - 'ci/cuda/**'
       - 'ci/verify_python_free_cuda.sh'
+      - 'benchmarks/release/candidates/**'
+      - 'benchmarks/evidence/20261022-phase0/native-extra.json'
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
