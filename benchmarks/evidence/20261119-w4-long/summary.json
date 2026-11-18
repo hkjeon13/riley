@@ -1,0 +1,357 @@
+{
+  "model": "Qwen2.5-7B-Instruct",
+  "riley_source": "f7c956d3cc7e6e59c98698cce891df42bc84ef03",
+  "physical_gpu": 7,
+  "vllm_startup_retry": "Use the existing venv ninja on PATH with isolated compilation caches.",
+  "vllm_runtime": "vLLM 0.27.1, FlashAttention 2, normal compiled CUDA Graph path",
+  "raw_riley_capture_sha256": "699f1efd9cb26ccc5b848e641c5c9dc1ebc294904d005837ec3584ecf40e1de9",
+  "matching_prompt_ids": 18,
+  "cases": 18,
+  "riley_matches_c1_of_54": {
+    "8": 54,
+    "32": 54
+  },
+  "matches_of_18": {
+    "riley_hf": {
+      "exact_ids": 13,
+      "first_id": 17,
+      "text": 13
+    },
+    "vllm_hf": {
+      "exact_ids": 16,
+      "first_id": 17,
+      "text": 16
+    },
+    "riley_vllm": {
+      "exact_ids": 13,
+      "first_id": 16,
+      "text": 13
+    }
+  },
+  "request_comparisons": [
+    {
+      "case": 0,
+      "riley_hf": {
+        "exact_ids": false,
+        "first_id": true,
+        "text": false
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": false,
+        "first_id": true,
+        "text": false
+      }
+    },
+    {
+      "case": 1,
+      "riley_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      }
+    },
+    {
+      "case": 2,
+      "riley_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "vllm_hf": {
+        "exact_ids": false,
+        "first_id": false,
+        "text": false
+      },
+      "riley_vllm": {
+        "exact_ids": false,
+        "first_id": false,
+        "text": false
+      }
+    },
+    {
+      "case": 3,
+      "riley_hf": {
+        "exact_ids": false,
+        "first_id": false,
+        "text": false
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": false,
+        "first_id": false,
+        "text": false
+      }
+    },
+    {
+      "case": 4,
+      "riley_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      }
+    },
+    {
+      "case": 5,
+      "riley_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      }
+    },
+    {
+      "case": 6,
+      "riley_hf": {
+        "exact_ids": false,
+        "first_id": true,
+        "text": false
+      },
+      "vllm_hf": {
+        "exact_ids": false,
+        "first_id": true,
+        "text": false
+      },
+      "riley_vllm": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      }
+    },
+    {
+      "case": 7,
+      "riley_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      }
+    },
+    {
+      "case": 8,
+      "riley_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      }
+    },
+    {
+      "case": 9,
+      "riley_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      }
+    },
+    {
+      "case": 10,
+      "riley_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      }
+    },
+    {
+      "case": 11,
+      "riley_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      }
+    },
+    {
+      "case": 12,
+      "riley_hf": {
+        "exact_ids": false,
+        "first_id": true,
+        "text": false
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": false,
+        "first_id": true,
+        "text": false
+      }
+    },
+    {
+      "case": 13,
+      "riley_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      }
+    },
+    {
+      "case": 14,
+      "riley_hf": {
+        "exact_ids": false,
+        "first_id": true,
+        "text": false
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": false,
+        "first_id": true,
+        "text": false
+      }
+    },
+    {
+      "case": 15,
+      "riley_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      }
+    },
+    {
+      "case": 16,
+      "riley_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      }
+    },
+    {
+      "case": 17,
+      "riley_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "vllm_hf": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      },
+      "riley_vllm": {
+        "exact_ids": true,
+        "first_id": true,
+        "text": true
+      }
+    }
+  ]
+}

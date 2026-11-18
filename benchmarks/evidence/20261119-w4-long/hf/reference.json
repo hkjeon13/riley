@@ -1,0 +1,1287 @@
+{
+  "scope": "Qwen legacy prompts, same Riley prompt token IDs, SDPA generation and SDPA/eager shared-prefix replay",
+  "runtime": {
+    "torch": "2.13.0+cu129",
+    "transformers": "5.22.1",
+    "safetensors": "0.8.0",
+    "cuda": "12.9",
+    "device": "NVIDIA A100-SXM4-40GB",
+    "dtype": "torch.bfloat16"
+  },
+  "eos_token_ids": [
+    151645,
+    151643
+  ],
+  "cases": [
+    {
+      "case": 0,
+      "prompt_tokens": 681,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        264,
+        12406,
+        56589,
+        2168,
+        476,
+        6109,
+        429,
+        5646,
+        5257,
+        5424,
+        1741,
+        438,
+        264,
+        14126,
+        11,
+        56411,
+        11,
+        13638,
+        11,
+        16301,
+        11,
+        14164,
+        11,
+        73165,
+        11,
+        323,
+        4712,
+        13,
+        576,
+        1467,
+        1083,
+        33845
+      ],
+      "hf_finish": "length",
+      "hf_text": " a winter-themed image or scene that includes various elements such as a village, harbor, forest, mountain, bridge, lantern, and engine. The text also mentions",
+      "exact_token_match": false,
+      "common_prefix": 2,
+      "source_finish": "length",
+      "first_divergence": {
+        "offset": 2,
+        "riley_id": 6109,
+        "hf_id": 56589,
+        "riley_reported_top_logprob_gap": 0.0,
+        "hf_generation_scores": {
+          "top": [
+            {
+              "id": 56589,
+              "logit": 19.875
+            },
+            {
+              "id": 6109,
+              "logit": 19.75
+            },
+            {
+              "id": 18414,
+              "logit": 19.0
+            },
+            {
+              "id": 14126,
+              "logit": 18.75
+            },
+            {
+              "id": 48544,
+              "logit": 17.375
+            }
+          ],
+          "margin": 0.125,
+          "selected_scores": {
+            "6109": 19.75,
+            "56589": 19.875
+          }
+        },
+        "hf_sdpa_replay": {
+          "top": [
+            {
+              "id": 56589,
+              "logit": 19.875
+            },
+            {
+              "id": 6109,
+              "logit": 19.75
+            },
+            {
+              "id": 18414,
+              "logit": 19.0
+            },
+            {
+              "id": 14126,
+              "logit": 18.75
+            },
+            {
+              "id": 48544,
+              "logit": 17.375
+            }
+          ],
+          "margin": 0.125,
+          "selected_scores": {
+            "6109": 19.75,
+            "56589": 19.875
+          }
+        },
+        "hf_eager_replay": {
+          "top": [
+            {
+              "id": 6109,
+              "logit": 19.75
+            },
+            {
+              "id": 56589,
+              "logit": 19.75
+            },
+            {
+              "id": 18414,
+              "logit": 19.25
+            },
+            {
+              "id": 14126,
+              "logit": 18.75
+            },
+            {
+              "id": 48544,
+              "logit": 18.0
+            }
+          ],
+          "margin": 0.0,
+          "selected_scores": {
+            "6109": 19.75,
+            "56589": 19.75
+          }
+        }
+      }
+    },
+    {
+      "case": 1,
+      "prompt_tokens": 1301,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        264,
+        6351,
+        3922,
+        315,
+        82316,
+        5424,
+        11,
+        2670,
+        5257,
+        52901,
+        4419,
+        11,
+        6171,
+        11,
+        323,
+        18940,
+        13,
+        1084,
+        4977,
+        311,
+        7512,
+        264,
+        18414,
+        448,
+        5424,
+        1075,
+        23501,
+        11,
+        35558,
+        11,
+        35517,
+        11
+      ],
+      "hf_finish": "length",
+      "hf_text": " a complex network of interconnected elements, including various geographical features, objects, and concepts. It seems to describe a landscape with elements like mountains, forests, rivers,",
+      "exact_token_match": true,
+      "common_prefix": 32,
+      "source_finish": "length",
+      "first_divergence": null
+    },
+    {
+      "case": 2,
+      "prompt_tokens": 2199,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        5257,
+        5424,
+        315,
+        264,
+        18414,
+        11,
+        2670,
+        38973,
+        11,
+        73165,
+        82,
+        11,
+        23501,
+        11,
+        35517,
+        11,
+        323,
+        53180,
+        13,
+        1084,
+        1083,
+        33845,
+        2155,
+        3039,
+        315,
+        279,
+        1899,
+        323,
+        15584,
+        11,
+        1741,
+        438
+      ],
+      "hf_finish": "length",
+      "hf_text": " various elements of a landscape, including bridges, lanterns, mountains, rivers, and oceans. It also mentions different times of the day and seasons, such as",
+      "exact_token_match": true,
+      "common_prefix": 32,
+      "source_finish": "length",
+      "first_divergence": null
+    },
+    {
+      "case": 3,
+      "prompt_tokens": 3301,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        5257,
+        12624,
+        323,
+        5424,
+        5435,
+        311,
+        264,
+        12406,
+        6109,
+        11,
+        2670,
+        73165,
+        82,
+        11,
+        35517,
+        11,
+        23501,
+        11,
+        323,
+        32789,
+        13,
+        1084,
+        1083,
+        33845,
+        2155,
+        15584,
+        323,
+        5424,
+        1075,
+        7324,
+        11,
+        13638
+      ],
+      "hf_finish": "length",
+      "hf_text": " various patterns and elements related to a winter scene, including lanterns, rivers, mountains, and villages. It also mentions different seasons and elements like summer, forest",
+      "exact_token_match": false,
+      "common_prefix": 0,
+      "source_finish": "length",
+      "first_divergence": {
+        "offset": 0,
+        "riley_id": 264,
+        "hf_id": 5257,
+        "riley_reported_top_logprob_gap": 0.0,
+        "hf_generation_scores": {
+          "top": [
+            {
+              "id": 5257,
+              "logit": 18.375
+            },
+            {
+              "id": 264,
+              "logit": 18.25
+            },
+            {
+              "id": 73165,
+              "logit": 17.375
+            },
+            {
+              "id": 2155,
+              "logit": 17.375
+            },
+            {
+              "id": 279,
+              "logit": 17.125
+            }
+          ],
+          "margin": 0.125,
+          "selected_scores": {
+            "264": 18.25,
+            "5257": 18.375
+          }
+        },
+        "hf_sdpa_replay": {
+          "top": [
+            {
+              "id": 5257,
+              "logit": 18.375
+            },
+            {
+              "id": 264,
+              "logit": 18.25
+            },
+            {
+              "id": 73165,
+              "logit": 17.375
+            },
+            {
+              "id": 2155,
+              "logit": 17.375
+            },
+            {
+              "id": 279,
+              "logit": 17.125
+            }
+          ],
+          "margin": 0.125,
+          "selected_scores": {
+            "264": 18.25,
+            "5257": 18.375
+          }
+        },
+        "hf_eager_replay": {
+          "top": [
+            {
+              "id": 5257,
+              "logit": 17.625
+            },
+            {
+              "id": 264,
+              "logit": 17.5
+            },
+            {
+              "id": 73165,
+              "logit": 17.25
+            },
+            {
+              "id": 12624,
+              "logit": 16.625
+            },
+            {
+              "id": 279,
+              "logit": 16.625
+            }
+          ],
+          "margin": 0.125,
+          "selected_scores": {
+            "264": 17.5,
+            "5257": 17.625
+          }
+        }
+      }
+    },
+    {
+      "case": 4,
+      "prompt_tokens": 4426,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        5257,
+        12624,
+        11,
+        5424,
+        11,
+        323,
+        14431,
+        5435,
+        311,
+        264,
+        34235,
+        14126,
+        323,
+        1181,
+        39090,
+        13,
+        1084,
+        33845,
+        2155,
+        5424,
+        1075,
+        38973,
+        11,
+        21106,
+        11,
+        73165,
+        82,
+        11,
+        11030,
+        11,
+        323,
+        5257
+      ],
+      "hf_finish": "length",
+      "hf_text": " various patterns, elements, and designs related to a coastal village and its surroundings. It mentions different elements like bridges, engines, lanterns, windows, and various",
+      "exact_token_match": true,
+      "common_prefix": 32,
+      "source_finish": "length",
+      "first_divergence": null
+    },
+    {
+      "case": 5,
+      "prompt_tokens": 6042,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        5257,
+        5424,
+        323,
+        6171,
+        5435,
+        311,
+        264,
+        34235,
+        476,
+        15662,
+        6243,
+        11,
+        1741,
+        438,
+        11030,
+        11,
+        73165,
+        82,
+        11,
+        38973,
+        11,
+        17337,
+        11,
+        323,
+        5257,
+        5810,
+        5424,
+        1075,
+        35517,
+        11,
+        35558,
+        11
+      ],
+      "hf_finish": "length",
+      "hf_text": " various elements and objects related to a coastal or urban setting, such as windows, lanterns, bridges, stations, and various natural elements like rivers, forests,",
+      "exact_token_match": true,
+      "common_prefix": 32,
+      "source_finish": "length",
+      "first_divergence": null
+    },
+    {
+      "case": 6,
+      "prompt_tokens": 667,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        264,
+        4426,
+        315,
+        4244,
+        323,
+        31747,
+        5435,
+        311,
+        5257,
+        5424,
+        315,
+        264,
+        14126,
+        11,
+        2670,
+        1181,
+        5810,
+        4419,
+        320,
+        20805,
+        438,
+        35558,
+        11,
+        23501,
+        11,
+        323,
+        35517,
+        701,
+        883,
+        26877,
+        14389,
+        320
+      ],
+      "hf_finish": "length",
+      "hf_text": " a collection of words and phrases related to various elements of a village, including its natural features (such as forests, mountains, and rivers), man-made structures (",
+      "exact_token_match": false,
+      "common_prefix": 14,
+      "source_finish": "length",
+      "first_divergence": {
+        "offset": 14,
+        "riley_id": 1741,
+        "hf_id": 2670,
+        "riley_reported_top_logprob_gap": 0.0,
+        "hf_generation_scores": {
+          "top": [
+            {
+              "id": 2670,
+              "logit": 21.25
+            },
+            {
+              "id": 1741,
+              "logit": 21.125
+            },
+            {
+              "id": 264,
+              "logit": 20.375
+            },
+            {
+              "id": 6993,
+              "logit": 20.125
+            },
+            {
+              "id": 1181,
+              "logit": 20.0
+            }
+          ],
+          "margin": 0.125,
+          "selected_scores": {
+            "1741": 21.125,
+            "2670": 21.25
+          }
+        },
+        "hf_sdpa_replay": {
+          "top": [
+            {
+              "id": 2670,
+              "logit": 21.25
+            },
+            {
+              "id": 1741,
+              "logit": 21.125
+            },
+            {
+              "id": 264,
+              "logit": 20.375
+            },
+            {
+              "id": 6993,
+              "logit": 20.125
+            },
+            {
+              "id": 1181,
+              "logit": 20.0
+            }
+          ],
+          "margin": 0.125,
+          "selected_scores": {
+            "1741": 21.125,
+            "2670": 21.25
+          }
+        },
+        "hf_eager_replay": {
+          "top": [
+            {
+              "id": 2670,
+              "logit": 19.375
+            },
+            {
+              "id": 1741,
+              "logit": 19.0
+            },
+            {
+              "id": 1181,
+              "logit": 18.0
+            },
+            {
+              "id": 264,
+              "logit": 17.875
+            },
+            {
+              "id": 6993,
+              "logit": 17.75
+            }
+          ],
+          "margin": 0.375,
+          "selected_scores": {
+            "1741": 19.0,
+            "2670": 19.375
+          }
+        }
+      }
+    },
+    {
+      "case": 7,
+      "prompt_tokens": 1331,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        264,
+        6351,
+        3922,
+        315,
+        82316,
+        5424,
+        11,
+        2670,
+        5257,
+        52901,
+        4419,
+        320,
+        5469,
+        11,
+        17951,
+        11,
+        13638,
+        11,
+        16301,
+        11,
+        8056,
+        11,
+        14126,
+        11,
+        14164,
+        11,
+        4992,
+        24389,
+        5424,
+        315,
+        13737,
+        320
+      ],
+      "hf_finish": "length",
+      "hf_text": " a complex network of interconnected elements, including various geographical features (river, ocean, forest, mountain, station, village, bridge, etc.), elements of infrastructure (",
+      "exact_token_match": true,
+      "common_prefix": 32,
+      "source_finish": "length",
+      "first_divergence": null
+    },
+    {
+      "case": 8,
+      "prompt_tokens": 2203,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        264,
+        11682,
+        4008,
+        315,
+        264,
+        13551,
+        11,
+        2670,
+        1181,
+        5257,
+        5424,
+        1741,
+        438,
+        38973,
+        11,
+        73165,
+        82,
+        11,
+        11030,
+        11,
+        323,
+        2155,
+        15584,
+        13,
+        1084,
+        1083,
+        33845,
+        2155,
+        12624,
+        11,
+        17337,
+        11
+      ],
+      "hf_finish": "length",
+      "hf_text": " a detailed description of a garden, including its various elements such as bridges, lanterns, windows, and different seasons. It also mentions different patterns, stations,",
+      "exact_token_match": true,
+      "common_prefix": 32,
+      "source_finish": "length",
+      "first_divergence": null
+    },
+    {
+      "case": 9,
+      "prompt_tokens": 3330,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        264,
+        8045,
+        315,
+        12406,
+        323,
+        7324,
+        16065,
+        11,
+        2670,
+        73165,
+        82,
+        11,
+        11725,
+        11,
+        23501,
+        11,
+        323,
+        32789,
+        13,
+        1084,
+        1083,
+        33845,
+        2155,
+        5424,
+        1741,
+        438,
+        11931,
+        11,
+        14564,
+        11,
+        323,
+        24970
+      ],
+      "hf_finish": "length",
+      "hf_text": " a variety of winter and summer scenes, including lanterns, markets, mountains, and villages. It also mentions different elements such as letters, threads, and theories",
+      "exact_token_match": true,
+      "common_prefix": 32,
+      "source_finish": "length",
+      "first_divergence": null
+    },
+    {
+      "case": 10,
+      "prompt_tokens": 4420,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        264,
+        4013,
+        315,
+        82316,
+        10468,
+        323,
+        5424,
+        304,
+        264,
+        43582,
+        6243,
+        11,
+        10767,
+        264,
+        18378,
+        1879,
+        476,
+        264,
+        11682,
+        2415,
+        13,
+        576,
+        1467,
+        16555,
+        5257,
+        7482,
+        11,
+        6171,
+        11,
+        323,
+        43147,
+        11
+      ],
+      "hf_finish": "length",
+      "hf_text": " a series of interconnected locations and elements in a fictional setting, possibly a fantasy world or a detailed map. The text describes various places, objects, and phenomena,",
+      "exact_token_match": true,
+      "common_prefix": 32,
+      "source_finish": "length",
+      "first_divergence": null
+    },
+    {
+      "case": 11,
+      "prompt_tokens": 6082,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        264,
+        6351,
+        3922,
+        315,
+        82316,
+        5424,
+        11,
+        10767,
+        14064,
+        264,
+        1614,
+        315,
+        264,
+        5810,
+        476,
+        20443,
+        1849,
+        13,
+        576,
+        5424,
+        2924,
+        5257,
+        5810,
+        4419,
+        320,
+        4803,
+        23501,
+        11,
+        35517,
+        11,
+        35558,
+        11
+      ],
+      "hf_finish": "length",
+      "hf_text": " a complex network of interconnected elements, possibly representing a model of a natural or artificial system. The elements include various natural features (like mountains, rivers, forests,",
+      "exact_token_match": true,
+      "common_prefix": 32,
+      "source_finish": "length",
+      "first_divergence": null
+    },
+    {
+      "case": 12,
+      "prompt_tokens": 669,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        264,
+        8045,
+        315,
+        5424,
+        323,
+        16065,
+        5435,
+        311,
+        264,
+        13638,
+        11,
+        13551,
+        11,
+        323,
+        14126,
+        6243,
+        13,
+        1084,
+        33845,
+        5257,
+        6171,
+        323,
+        14389,
+        1741,
+        438,
+        21106,
+        11,
+        73165,
+        82,
+        11,
+        38973,
+        11
+      ],
+      "hf_finish": "length",
+      "hf_text": " a variety of elements and scenes related to a forest, garden, and village setting. It mentions various objects and structures such as engines, lanterns, bridges,",
+      "exact_token_match": false,
+      "common_prefix": 9,
+      "source_finish": "length",
+      "first_divergence": {
+        "offset": 9,
+        "riley_id": 34235,
+        "hf_id": 13638,
+        "riley_reported_top_logprob_gap": 0.125,
+        "hf_generation_scores": {
+          "top": [
+            {
+              "id": 13638,
+              "logit": 18.875
+            },
+            {
+              "id": 34235,
+              "logit": 18.875
+            },
+            {
+              "id": 19082,
+              "logit": 17.0
+            },
+            {
+              "id": 13551,
+              "logit": 17.0
+            },
+            {
+              "id": 14126,
+              "logit": 16.875
+            }
+          ],
+          "margin": 0.0,
+          "selected_scores": {
+            "13638": 18.875,
+            "34235": 18.875
+          }
+        },
+        "hf_sdpa_replay": {
+          "top": [
+            {
+              "id": 13638,
+              "logit": 18.875
+            },
+            {
+              "id": 34235,
+              "logit": 18.875
+            },
+            {
+              "id": 19082,
+              "logit": 17.0
+            },
+            {
+              "id": 13551,
+              "logit": 17.0
+            },
+            {
+              "id": 14126,
+              "logit": 16.875
+            }
+          ],
+          "margin": 0.0,
+          "selected_scores": {
+            "13638": 18.875,
+            "34235": 18.875
+          }
+        },
+        "hf_eager_replay": {
+          "top": [
+            {
+              "id": 13638,
+              "logit": 19.0
+            },
+            {
+              "id": 34235,
+              "logit": 18.5
+            },
+            {
+              "id": 19082,
+              "logit": 17.125
+            },
+            {
+              "id": 14126,
+              "logit": 17.125
+            },
+            {
+              "id": 13551,
+              "logit": 16.625
+            }
+          ],
+          "margin": 0.5,
+          "selected_scores": {
+            "13638": 19.0,
+            "34235": 18.5
+          }
+        }
+      }
+    },
+    {
+      "case": 13,
+      "prompt_tokens": 1330,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        264,
+        11682,
+        4008,
+        315,
+        264,
+        8056,
+        11,
+        56411,
+        11,
+        323,
+        5257,
+        5424,
+        2163,
+        432,
+        11,
+        1741,
+        438,
+        264,
+        14796,
+        11,
+        264,
+        16301,
+        11,
+        323,
+        264,
+        13551,
+        13,
+        1084,
+        1083,
+        33845,
+        2155,
+        15584
+      ],
+      "hf_finish": "length",
+      "hf_text": " a detailed description of a station, harbor, and various elements around it, such as a river, a mountain, and a garden. It also mentions different seasons",
+      "exact_token_match": true,
+      "common_prefix": 32,
+      "source_finish": "length",
+      "first_divergence": null
+    },
+    {
+      "case": 14,
+      "prompt_tokens": 2196,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        264,
+        8045,
+        315,
+        5424,
+        323,
+        14389,
+        11,
+        1741,
+        438,
+        38973,
+        11,
+        23501,
+        11,
+        35558,
+        11,
+        53180,
+        11,
+        323,
+        32789,
+        11,
+        678,
+        82316,
+        304,
+        264,
+        6351,
+        3922,
+        13,
+        576,
+        1467,
+        1083,
+        33845,
+        2155
+      ],
+      "hf_finish": "length",
+      "hf_text": " a variety of elements and structures, such as bridges, mountains, forests, oceans, and villages, all interconnected in a complex network. The text also mentions different",
+      "exact_token_match": false,
+      "common_prefix": 9,
+      "source_finish": "length",
+      "first_divergence": {
+        "offset": 9,
+        "riley_id": 11931,
+        "hf_id": 38973,
+        "riley_reported_top_logprob_gap": 0.0,
+        "hf_generation_scores": {
+          "top": [
+            {
+              "id": 38973,
+              "logit": 19.875
+            },
+            {
+              "id": 11931,
+              "logit": 19.75
+            },
+            {
+              "id": 6524,
+              "logit": 18.125
+            },
+            {
+              "id": 264,
+              "logit": 17.0
+            },
+            {
+              "id": 1447,
+              "logit": 16.75
+            }
+          ],
+          "margin": 0.125,
+          "selected_scores": {
+            "11931": 19.75,
+            "38973": 19.875
+          }
+        },
+        "hf_sdpa_replay": {
+          "top": [
+            {
+              "id": 38973,
+              "logit": 19.875
+            },
+            {
+              "id": 11931,
+              "logit": 19.75
+            },
+            {
+              "id": 6524,
+              "logit": 18.125
+            },
+            {
+              "id": 264,
+              "logit": 17.0
+            },
+            {
+              "id": 1447,
+              "logit": 16.75
+            }
+          ],
+          "margin": 0.125,
+          "selected_scores": {
+            "11931": 19.75,
+            "38973": 19.875
+          }
+        },
+        "hf_eager_replay": {
+          "top": [
+            {
+              "id": 38973,
+              "logit": 19.25
+            },
+            {
+              "id": 11931,
+              "logit": 18.25
+            },
+            {
+              "id": 6524,
+              "logit": 17.625
+            },
+            {
+              "id": 264,
+              "logit": 16.125
+            },
+            {
+              "id": 73165,
+              "logit": 15.625
+            }
+          ],
+          "margin": 1.0,
+          "selected_scores": {
+            "11931": 18.25,
+            "38973": 19.25
+          }
+        }
+      }
+    },
+    {
+      "case": 15,
+      "prompt_tokens": 3292,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        264,
+        6351,
+        3922,
+        315,
+        82316,
+        5424,
+        11,
+        10767,
+        14064,
+        264,
+        2415,
+        476,
+        264,
+        13549,
+        13,
+        576,
+        5424,
+        2924,
+        5257,
+        10468,
+        320,
+        10715,
+        4160,
+        11,
+        13638,
+        11,
+        14126,
+        11,
+        8056,
+        11,
+        17951,
+        11
+      ],
+      "hf_finish": "length",
+      "hf_text": " a complex network of interconnected elements, possibly representing a map or a diagram. The elements include various locations (lantern, forest, village, station, ocean,",
+      "exact_token_match": true,
+      "common_prefix": 32,
+      "source_finish": "length",
+      "first_divergence": null
+    },
+    {
+      "case": 16,
+      "prompt_tokens": 4397,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        264,
+        11682,
+        4008,
+        315,
+        264,
+        14126,
+        323,
+        1181,
+        39090,
+        11,
+        2670,
+        5257,
+        5424,
+        1741,
+        438,
+        264,
+        11580,
+        11,
+        264,
+        16301,
+        11,
+        264,
+        13638,
+        11,
+        264,
+        14796,
+        11,
+        264,
+        13551,
+        11,
+        264,
+        8056
+      ],
+      "hf_finish": "length",
+      "hf_text": " a detailed description of a village and its surroundings, including various elements such as a planet, a mountain, a forest, a river, a garden, a station",
+      "exact_token_match": true,
+      "common_prefix": 32,
+      "source_finish": "length",
+      "first_divergence": null
+    },
+    {
+      "case": 17,
+      "prompt_tokens": 6030,
+      "hf_tokenizer_ids_match": true,
+      "hf_tokens": [
+        264,
+        6351,
+        5383,
+        315,
+        5257,
+        5424,
+        11,
+        2670,
+        3081,
+        11,
+        13551,
+        11,
+        7324,
+        11,
+        8286,
+        11,
+        12455,
+        11,
+        73165,
+        11,
+        323,
+        5257,
+        1008,
+        5810,
+        323,
+        883,
+        26877,
+        6171,
+        1075,
+        38973,
+        11,
+        23501
+      ],
+      "hf_finish": "length",
+      "hf_text": " a complex pattern of various elements, including market, garden, summer, signal, shadow, lantern, and various other natural and man-made objects like bridges, mountains",
+      "exact_token_match": true,
+      "common_prefix": 32,
+      "source_finish": "length",
+      "first_divergence": null
+    }
+  ]
+}

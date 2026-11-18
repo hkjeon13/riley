@@ -4,14 +4,14 @@
 종합 계획: [의존관계·가드레일](README.md)\
 구성: W4-A는 장문 수치 정확성, W4-B는 스키마 계약이다. 조사·수정·완료 여부를 각각 기록한다.
 
-2026-11-19에 `oneOf`와 강제할 수 없는 형제 제약을 거부하고, `type`과 `enum`·`const`의 교집합을 강제했다. Draft 2020-12 독립 검증기와 공유 fixture 13개·인스턴스 28개를 대조했다. W4-B 범위의 CUDA API 실행을 검증했고 W4-A 장문 추적이 남아 있다. [W4-B 검증 결과](04-structured-output-result.md) · [현행 API 계약](../api.md)
+2026-11-19에 `oneOf`와 강제할 수 없는 형제 제약을 거부하고, `type`과 `enum`·`const`의 교집합을 강제했다. Draft 2020-12 독립 검증기와 공유 fixture 13개·인스턴스 28개를 대조하고 W4-B CUDA API 실행을 검증했다. W4-A는 Riley와 Hugging Face에 같은 입력 ID를 공급해 다섯 사례의 첫 분기를 재현했다. [W4-A 장문 결과](04-long-accuracy-result.md) · [W4-B 검증 결과](04-structured-output-result.md) · [현행 API 계약](../api.md)
 
 ## 1. 현재 근거와 해석
 
 | 항목 | 확인 내용 | 해석 |
 |---|---|---|
 | 장문 배치 불변성 | Qwen2.5-7B C8/C32 각각 54/54 | 18개 prompt를 세 번 반복한 비교다. 54개 독립 prompt의 품질 평가가 아니다. |
-| 장문 HF 일치 | 같은 표본에서 Riley 텍스트 12/18, vLLM 16/18 | 배치 불변성과 HF 수치·출력 일치는 별도 기준이다. 원인이 열려 있다. |
+| 장문 HF 일치 | 원래 비교에서 Riley 텍스트 12/18, vLLM 16/18. 후속 동일 입력 ID를 사용한 HF SDPA 비교에서 전체 생성 ID와 텍스트 각각 Riley 13/18, vLLM 16/18 | 첫 분기 다섯 곳의 점수 간격을 확인했고 최초로 달라지는 내부 연산을 추적 중이다. |
 | `oneOf` | 초기 컴파일러가 `anyOf`처럼 처리 | 수정 후 400을 반환한다. 이중 일치 반례를 독립 검증기에 확인했다. |
 | 스키마 조기 반환 | 초기 구현이 `const`·`enum`·조합 키워드 처리 뒤 일부 형제 제약을 무시 | 지원하는 `type` 교집합을 강제하고 나머지 형제 제약은 명시적으로 거부한다. |
 | HF 기준 경로 | `long_check.py`는 HF BF16 `sdpa` 사용 | owned HF-eager 프로파일 기록과 섞어 같은 기준이라고 주장하면 안 된다. |
@@ -26,7 +26,7 @@
 
 CUDA·cuBLAS·PyTorch·Transformers와 attention backend를 기록한다. GPU 라이브러리 정렬은 원인 분리 실험이며 프로덕션 요구사항으로 자동 승격하지 않는다. HF exact를 주장할 때는 어떤 backend·버전·모델·문맥·출력 길이에 대한 주장인지 명시한다.
 
-최초 재현은 기존 18개 prompt·32 output token을 보존한다. `long_check.py`가 저장하는 raw token과 EOS 제거·길이 비교를 점검한다. EOS를 중간에서도 일괄 제거하거나 길이가 다른 출력을 공통 prefix만으로 같다고 판정하지 않게 한다.
+최초 재현은 기존 18개 prompt·32 output token을 보존했다. [`long_accuracy.py`](../../benchmarks/live/long_accuracy.py)는 raw ID를 기록하고 stop으로 종료된 마지막 EOS만 정규화한다. 길이가 다른 출력은 공통 prefix 길이가 같아도 별도로 판정한다.
 
 ### W4-A2. 최초 분기 token에서 teacher forcing으로 좁힌다
 

@@ -2,7 +2,7 @@
 
 작성일: 2026-11-13 (Asia/Seoul)\
 기준: 로컬 `main` `37ede4445`, 원격 `origin/main` `9f039de78`\
-W1 구현과 Linux CPU CI를 확인했다. W2는 A100에서 기존 이벤트 발행 옵션을 평가해 기본 정책을 유지했다. W3는 작은 모델의 두 스케줄링 정책을 비교하고 Qwen3-4B 길이 곡선을 얻었다. W4-B 스키마 변경은 실제 GPU API에서 확인했다. W4-A 장문 정확성 추적은 진행 범위에 남아 있다. [W1 결과](01-validation-result.md) · [W2 결과](02-async-step-result.md) · [W3 실측 결과](03-long-context-result.md) · [W4-B 결과](04-structured-output-result.md)
+W1 구현과 Linux CPU CI를 확인했다. W2는 A100 기준선을 재현하고 이벤트 발행 모드를 명시해 다시 비교했다. W3는 작은 모델의 두 스케줄링 정책을 비교하고 Qwen3-4B 길이 곡선을 얻었다. W4-A는 동일 입력 ID로 장문 출력이 처음 갈라지는 위치를 확인했고, W4-B 스키마 변경은 실제 GPU API에서 확인했다. W5-A는 사용자 문서의 성능·CLI·API 주장에 해당 근거를 연결했다. [W1 결과](01-validation-result.md) · [W2 결과](02-async-step-result.md) · [W3 실측 결과](03-long-context-result.md) · [W4-A 결과](04-long-accuracy-result.md) · [W4-B 결과](04-structured-output-result.md) · [W5 문서 계획](05-documentation-and-operations.md)
 
 ## 1. 목표와 현재 위치
 
