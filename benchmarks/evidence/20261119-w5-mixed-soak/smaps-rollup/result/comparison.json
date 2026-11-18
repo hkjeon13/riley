@@ -1,0 +1,106 @@
+{
+  "repeat": {
+    "normal_completions": 13749,
+    "intentional_disconnects": 700,
+    "counter_changes": {
+      "cancellations": 700,
+      "disconnects": 700,
+      "overloads": 0,
+      "dropped_observations": 13425
+    },
+    "p95_change_percent": {
+      "ttft_ms": 1.2363940953635133,
+      "e2e_ms": -13.331819479017849
+    },
+    "rss_first_late": {
+      "at_seconds": 900.053253762424,
+      "rss_mib": 15162.3515625
+    },
+    "rss_at_drain": {
+      "at_seconds": 1803.8942712545395,
+      "rss_mib": 15163.1015625
+    },
+    "rss_growth_second_half_mib": 0.75,
+    "rss_zero_growth": false,
+    "native_allocation_at_ready_and_drain": {
+      "device_live_count": 291,
+      "device_live_bytes": 30495658464,
+      "pinned_live_count": 2,
+      "pinned_live_bytes": 4297400
+    },
+    "native_allocation_after_shutdown": {
+      "device_live_count": 0,
+      "device_live_bytes": 0,
+      "pinned_live_count": 0,
+      "pinned_live_bytes": 0
+    },
+    "soak_sha256": "716d268046f1c4142d3c2b390486d0b16c403f0199eda386d2e4fe77ac0e400e",
+    "shutdown_metrics_sha256": "c3b56657ea2d477146c98d3bdc13b5615a71e6c4ce0510c99dcd7322e63a819b"
+  },
+  "instrumented": {
+    "normal_completions": 13749,
+    "intentional_disconnects": 700,
+    "counter_changes": {
+      "cancellations": 700,
+      "disconnects": 700,
+      "overloads": 0,
+      "dropped_observations": 13425
+    },
+    "p95_change_percent": {
+      "ttft_ms": 1.4174230896292217,
+      "e2e_ms": -13.71976110673917
+    },
+    "rss_first_late": {
+      "at_seconds": 900.0485197752714,
+      "rss_mib": 15161.46484375
+    },
+    "rss_at_drain": {
+      "at_seconds": 1803.899452202022,
+      "rss_mib": 15161.46484375
+    },
+    "rss_growth_second_half_mib": 0.0,
+    "rss_zero_growth": true,
+    "native_allocation_at_ready_and_drain": {
+      "device_live_count": 291,
+      "device_live_bytes": 30495658464,
+      "pinned_live_count": 2,
+      "pinned_live_bytes": 4297400
+    },
+    "native_allocation_after_shutdown": {
+      "device_live_count": 0,
+      "device_live_bytes": 0,
+      "pinned_live_count": 0,
+      "pinned_live_bytes": 0
+    },
+    "soak_sha256": "3563901faae792f587b1a8760d5d3ec1c097bf4b69014cc2d794314af0d1d674",
+    "shutdown_metrics_sha256": "cf921bdcaaebcfe0683afc73e5d8a846da40f94fa0f47aca331969794905ca1c"
+  },
+  "smaps_rollup_second_half": {
+    "baseline": {
+      "rss_kib": 15544012,
+      "anonymous_kib": 15358440,
+      "read_ms": 180.26810884475708
+    },
+    "drain": {
+      "rss_kib": 15544712,
+      "anonymous_kib": 15359140,
+      "read_ms": 251.76794081926346
+    },
+    "rss_growth_kib": 700,
+    "anonymous_growth_kib": 700
+  },
+  "smaps_rss_zero_growth": false,
+  "status_and_rollup_verdicts_agree": false,
+  "late_p95_ms": {
+    "ttft_ms_p95": {
+      "repeat": 333.21698009967804,
+      "instrumented": 332.6592519879341,
+      "change_percent": -0.1673768580391921
+    },
+    "e2e_ms_p95": {
+      "repeat": 4159.163199365139,
+      "instrumented": 4147.505685687065,
+      "change_percent": -0.28028507464802344
+    }
+  }
+}

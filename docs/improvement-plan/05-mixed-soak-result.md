@@ -55,7 +55,14 @@
 
 같은 호스트의 Linux `6.8.0-1017-aws`에서 별도 CPU 프로세스가 익명 페이지 2MiB를 64KiB씩 사용했다. `/proc/self/status`의 `RssAnon`은 32개 구간 중 29개에서 값이 유지됐고 세 구간에서 768KiB씩 증가했다. 같은 시점의 `smaps_rollup`은 구간별로 64–68KiB씩 증가했다. Linux는 `status` RSS를 비동기로 집계하며, `smaps_rollup`은 페이지 테이블을 읽은 결과를 합산한다. 두 cache-off 시험의 0.75MiB는 이 호스트에서 확인한 768KiB 계측 단위와 같다. Riley의 실제 상주 페이지 증가량을 확인하려면 같은 부하에서 후반 기준점과 drain의 `smaps_rollup`을 대조해야 한다. [호스트 CPU 실험](../../benchmarks/evidence/20261119-w5-mixed-soak/rss-accounting/probe.json) · [실험 소스](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/probe_linux_rss_accounting.py) · [Linux `/proc` 문서](https://docs.kernel.org/filesystems/proc.html)
 
-같은 바이너리와 30분 cache-off 부하를 사용하고 후반 첫 표본과 drain에서 `status`와 `smaps_rollup`을 함께 읽는 시험을 등록했다. A100 호스트의 별도 CPU 프로세스에서 `smaps_rollup` 파싱을 확인했다. 집계기는 기존 반복과 바이너리·부하·GPU 예약을 대조하고, 같은 두 시점의 원본에서 RSS 지표별 증가량과 판정을 다시 계산한다. GPU 실행은 14B prefill 후보 시험 뒤에 시작한다. [정밀 계측 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/campaign.sh) · [CPU 파싱 사전검사](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/smaps-cpu-check.json) · [두 RSS 지표 대조 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/compare_smaps_rollup.py)
+같은 바이너리와 30분 cache-off 부하를 사용하고 후반 첫 표본과 drain에서 `status`와 `smaps_rollup`을 함께 읽는 시험을 등록했다. A100 호스트의 별도 CPU 프로세스에서 `smaps_rollup` 파싱을 확인했다. 집계기는 기존 반복과 바이너리·부하·GPU 예약을 대조하고, 같은 두 시점의 원본에서 RSS 지표별 증가량과 판정을 다시 계산한다. GPU 실행은 14B prefill 후보 시험 종료 뒤 시작했다. [정밀 계측 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/campaign.sh) · [CPU 파싱 사전검사](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/smaps-cpu-check.json) · [두 RSS 지표 대조 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/compare_smaps_rollup.py)
+
+
+### 정밀 RSS 재실행 결과
+
+GPU 7의 30분 재실행에서 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했다. HTTP·SSE 오류와 overload는 0건이었다. Drain 뒤 활성 요청·대기 요청·요청 KV는 0이었고, 서버 종료 후 device·pinned 할당도 각각 0이었다. GPU 7은 같은 홀더 PID와 시작 시각을 유지해 20GiB 예약으로 돌아갔다. [실행 원본과 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/result/SHA256SUMS)
+
+같은 서버 PID의 900초와 drain 시점에서 `/proc/PID/status` RSS는 15,161.46MiB로 같았다. `smaps_rollup` RSS는 15,544,012KiB에서 15,544,712KiB로 증가했고 익명 페이지도 700KiB 증가했다. 이 실행에서 RSS 증가 0 조건을 충족하지 못했다. 정밀 표본의 읽기 시간은 180ms와 252ms였으며, 기존 비계측 반복 대비 후반 TTFT p95와 전체 완료 p95는 각각 0.17%, 0.28% 낮았다. 이 대조는 증가한 페이지가 익명이라는 점까지 확인하며, 할당 지점은 아직 확인하지 못했다. [원본 대조와 판정](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/result/comparison.json)
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
