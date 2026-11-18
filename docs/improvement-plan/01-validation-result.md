@@ -94,7 +94,7 @@ Linux 디스크립터 의미론이 필요한 fixture는 macOS에서 명시적으
 
 푸시 후 별도 `Rust checkpoint preparation` workflow에서 LoRA 도구의 포맷 실패를 발견했다. 포맷과 Clippy 경고 두 건을 고치고, 기존 소문자 SHA-256 변환 함수를 재사용했다. 로컬에서 기본 구성 16건과 `hub` 구성 21건이 통과했다. 빈 PATH에서 테스트 바이너리와 도움말 실행, 기본 구성의 Hub 의존성 부재도 확인했다.
 
-실제 Linux Production CPU workflow 실행은 남아 있다. PR/remote 실행 시 Linux 전용 테스트가 skip 없이 통과하는지 확인하고, 필요하면 과거 전용 호스트 lane을 실행한다. 이번에 실제 GitHub Actions 결과를 확인한 것은 아니다.
+2026-11-19에 `9ca18cb0f`의 GitHub Actions Linux Production CPU가 통과했음을 확인했다. 과거 RC3 고정 호스트 lane은 수동 실행 항목으로 남아 있다. [Production CPU 실행](https://github.com/hkjeon13/riley/actions/runs/44221081481) · [체크포인트 도구 CI](https://github.com/hkjeon13/riley/actions/runs/44221081323)
 
 CUDA 관련 Rust 포맷·문서·host cast 변경도 있으므로 릴리스 전 CUDA compile/link lane과 영향받는 GPU 검증을 실행해야 한다. 기존 커널·임계값·측정 근거가 유지되었다는 사실만으로 GPU 실행 동등성을 확정하지 않는다.
 

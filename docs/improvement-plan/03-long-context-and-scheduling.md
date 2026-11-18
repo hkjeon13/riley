@@ -4,6 +4,8 @@
 선행 조건: [W1 측정·판정 복구](01-validation-and-release.md), [W4 장문 정확성](04-correctness-and-schema.md)\
 연계: [W2 비동기 스텝](02-async-step.md), [종합 계획](README.md)
 
+Qwen2.5-0.5B의 burst 제한과 prompt 묶기 실측을 진행했다. 두 정책의 비용과 채택 판단은 결과 문서에 있다. [W3 실측 결과](03-long-context-result.md)
+
 ## 1. 남아 있는 문제
 
 [0.1.0 RAG 재측정](../../benchmarks/evidence/20261104-goal/stage1t16-table.md)의 비율은 Riley/vLLM이며 지연은 낮을수록 좋다.

@@ -13,6 +13,7 @@ only during ON seconds of each ON+OFF cycle.
 """
 import argparse
 import asyncio
+import hashlib
 import json
 import random
 import time
@@ -40,8 +41,11 @@ def prompt(rng, words):
             f"Using only the document above as inspiration, write a detailed story about {topic}.")
 
 
-async def one(host, port, body, started_at, record):
+async def one(host, port, body, started_at, record, *, capture_hashes=False):
     request = json.dumps(body).encode()
+    output_hash = hashlib.sha256() if capture_hashes else None
+    if capture_hashes:
+        record["input_sha256"] = hashlib.sha256(request).hexdigest()
     head = (f"POST /v1/chat/completions HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\n"
             f"Content-Length: {len(request)}\r\nConnection: close\r\n\r\n").encode()
     times = []
@@ -52,6 +56,8 @@ async def one(host, port, body, started_at, record):
     try:
         reader, writer = await asyncio.open_connection(host, port, limit=1 << 22)
         writer.write(head + request)
+        if capture_hashes:
+            record["sent_at"] = time.perf_counter()
         await writer.drain()
         status_line = await reader.readline()
         status = int(status_line.split()[1])
@@ -76,8 +82,11 @@ async def one(host, port, body, started_at, record):
             if chunk.get("usage"):
                 usage = chunk["usage"]
             for choice in chunk.get("choices") or []:
-                if choice.get("delta", {}).get("content"):
+                content = choice.get("delta", {}).get("content")
+                if content:
                     times.append(time.perf_counter())
+                    if output_hash is not None:
+                        output_hash.update(content.encode("utf-8"))
                 finish = choice.get("finish_reason") or finish
         writer.close()
     except (OSError, ValueError, IndexError) as error:
@@ -106,6 +115,8 @@ async def one(host, port, body, started_at, record):
         tpot=(times[-1] - times[0]) / max(completion - 1, 1),
         gaps=[b - a for a, b in zip(times, times[1:])],
     )
+    if output_hash is not None:
+        record["output_sha256"] = output_hash.hexdigest()
 
 
 def percentile(values, q):
@@ -151,7 +162,7 @@ async def main():
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--out")
     parser.add_argument("--extra", default="{}")
-    parser.add_argument("--records", help="also write each measured request's start, TTFT, E2E and prompt tokens")
+    parser.add_argument("--records", help="write per-request timings, usage and text digests for measured requests")
     parser.add_argument("--shared-prefix-words", type=int, default=0,
                         help="start every request with the same system document of N words")
     args = parser.parse_args()
@@ -188,14 +199,18 @@ async def main():
             if delay > 0:
                 await asyncio.sleep(delay)
             at = time.perf_counter()
-            tasks.append(asyncio.create_task(one(host, int(port), bodies[index], at, records[index])))
+            if args.records:
+                records[index]["scheduled_start"] = arrival
+            tasks.append(asyncio.create_task(one(host, int(port), bodies[index], at, records[index],
+                                                 capture_hashes=bool(args.records))))
         await asyncio.gather(*tasks)
     else:
         queue = iter(range(total))
 
         async def worker():
             for index in queue:
-                await one(host, int(port), bodies[index], time.perf_counter(), records[index])
+                await one(host, int(port), bodies[index], time.perf_counter(), records[index],
+                          capture_hashes=bool(args.records))
 
         await asyncio.gather(*(worker() for _ in range(args.concurrency)))
     wall = time.perf_counter() - start
@@ -212,9 +227,15 @@ async def main():
             json.dump(summary, output, indent=1)
     if args.records:
         with open(args.records, "w") as output:
-            json.dump([{"start": row["start"] - start, "ttft": row["ttft"], "e2e": row["e2e"],
-                        "prompt_tokens": row["prompt_tokens"]} for row in measured if not row.get("error")],
-                      output)
+            json.dump([
+                {"request_index": index, "start": row["start"] - start, "sent_at": row["sent_at"] - start,
+                 "ttft": row["ttft"],
+                 "e2e": row["e2e"], "tpot": row["tpot"], "prompt_tokens": row["prompt_tokens"],
+                 "completion_tokens": row["completion_tokens"], "finish": row["finish"],
+                 "scheduled_start": row.get("scheduled_start"), "input_sha256": row["input_sha256"],
+                 "output_sha256": row["output_sha256"]}
+                for index, row in enumerate(measured, start=args.warmup) if row.get("error") is False
+            ], output)
 
 
 if __name__ == "__main__":
