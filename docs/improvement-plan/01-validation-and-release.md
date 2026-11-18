@@ -101,7 +101,7 @@ ci/check_workspace_without_research_tools.sh
 
 - [x] W1-1: 지원 Python·Rust 버전과 재현 환경이 명시되어 있다.
 - [x] W1-2 로컬: 포맷·기본/서버 Clippy·CPU 테스트·문서·경계·격리 빌드가 통과한다.
-- [ ] W1-2 CI: 실제 Linux hosted workflow를 실행하고 Linux 전용 항목의 통과를 확인한다.
+- [x] W1-2 CI: Linux hosted workflow에서 Linux 전용 계약을 통과했다. [Linux CI 실행](https://github.com/hkjeon13/riley/actions/runs/44221081481)
 - [x] W1-3 로컬: 계약 정상 경로와 drift 거부 경로가 모두 통과한다. 과거 릴리스 근거의 검증 가능 범위가 보존된다.
 - [x] W1-4: 부하 실행 실패·누락 JSON·무효 셀이 전체 성공으로 승격되지 않는다.
 - [x] [결과·결정 기록](01-validation-result.md)에 변경 전 실패, 수정 근거, 실행한 검사, 미실행 검사를 명시했다.

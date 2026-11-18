@@ -113,12 +113,18 @@ integrity tests still run locally.
 Some historical RC3 integration tests execute the exact root-owned
 `/usr/bin/python3.10` with SHA-256
 `7d51cd6b48b521277f5caa4610a82126e315fa2be4df069823a8b1eeb5bd4a86`.
-An ordinary hosted runner cannot substitute its ambient Python for that
-contract. These tests report named skips when the reviewed host is absent.
-Use Production CPU's manual `run_legacy_host_tests` input on the
+Production CPU reports named skips when the interpreter is absent. The
+[Historical RC3 Linux fixtures](../.github/workflows/rc3-host-contracts.yml)
+workflow builds an isolated Jammy image with the exact Python package
+`3.10.12-1~22.04.16` from a signed [Ubuntu snapshot](https://snapshot.ubuntu.com/).
+It verifies the interpreter hash and runs the fixtures with a read-only
+checkout and network disabled.
+
+Production CPU's manual `run_legacy_host_tests` input remains available on the
 `riley-legacy-rc3` self-hosted Linux label to run them. That lane sets
 `RILEY_REQUIRE_LEGACY_HOST_TESTS=1`; a missing or different interpreter fails.
-It uses no GPU and does not qualify the current serving release.
+Both fixture lanes use the same checker and test targets. Full historical
+deployment qualification and GPU qualification have their own gates.
 
 ## Serving comparison validity
 

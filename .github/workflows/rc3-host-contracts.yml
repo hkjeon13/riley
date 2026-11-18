@@ -1,0 +1,50 @@
+name: Historical RC3 Linux fixtures
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/rc3-host-contracts.yml'
+      - 'ci/release/**'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-python:
+    name: Run historical fixtures with the verified Python 3.10 binary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build an isolated Jammy runtime from the signed Ubuntu snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          context="$RUNNER_TEMP/riley-rc3-context"
+          mkdir "$context"
+          cp /etc/ssl/certs/ca-certificates.crt "$context/"
+          docker buildx build --load --platform linux/amd64 --progress plain \
+            --file ci/release/LegacyHostContracts.Dockerfile \
+            --tag "riley-rc3-fixtures:$GITHUB_RUN_ID" "$context"
+      - name: Check interpreter identity and run the historical Linux fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          image=$(docker image inspect --format '{{.Id}}' "riley-rc3-fixtures:$GITHUB_RUN_ID")
+          printf 'runtime image %s\n' "$image"
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+            --tmpfs /tmp:rw,mode=1777,size=268435456 \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/workspace,readonly" \
+            --workdir /workspace "$image" /bin/bash -euc '
+              uname -srm
+              sha256sum /usr/bin/python3.10
+              stat -c "%u %a %n" /usr/bin/python3.10
+              /usr/bin/python3.10 --version
+              dpkg-query -W python3.10 python3.10-minimal libpython3.10-minimal libpython3.10-stdlib
+              bash ci/release/run_legacy_host_tests.sh
+            '
