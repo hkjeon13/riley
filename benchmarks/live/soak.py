@@ -164,12 +164,44 @@ async def run_request(host, port, kind, body, scheduled):
     return {"kind": kind, "scheduled": scheduled, "dispatch_ms": (started - scheduled) * 1000, **result}
 
 
-def snapshot(pid, address, start):
+def read_smaps_rollup(pid):
+    fields = {"Rss": "rss_kib", "Anonymous": "anonymous_kib"}
+    values = {}
+    started = time.perf_counter()
+    with open(f"/proc/{pid}/smaps_rollup", encoding="ascii") as info:
+        for line in info:
+            key, _, body = line.partition(":")
+            field = fields.get(key)
+            if field is None:
+                continue
+            count, unit = body.split()
+            if unit != "kB" or field in values:
+                raise ValueError(f"invalid smaps_rollup field {key}")
+            values[field] = int(count)
+    rss_kib = values.get("rss_kib", 0)
+    if rss_kib <= 0 or not 0 <= values.get("anonymous_kib", -1) <= rss_kib:
+        raise ValueError("missing or inconsistent smaps_rollup RSS")
+    values["read_ms"] = (time.perf_counter() - started) * 1000
+    return values
+
+
+def record_smaps_rollup(sample, pid):
+    try:
+        sample["smaps_rollup"] = read_smaps_rollup(pid)
+    except (OSError, ValueError) as error:
+        sample["smaps_rollup"] = None
+        sample["smaps_rollup_error"] = str(error)
+
+
+def snapshot(pid, address, start, smaps_after_seconds=None):
     with open(f"/proc/{pid}/status") as info:
         rss = next(int(line.split()[1]) / 1024 for line in info if line.startswith("VmRSS"))
     with urllib.request.urlopen(f"http://{address}/metrics", timeout=5) as response:
         metrics = json.load(response)
-    return {"at_seconds": time.perf_counter() - start, "rss_mib": rss, "metrics": metrics}
+    sample = {"at_seconds": time.perf_counter() - start, "rss_mib": rss, "metrics": metrics}
+    if smaps_after_seconds is not None and sample["at_seconds"] >= smaps_after_seconds:
+        record_smaps_rollup(sample, pid)
+    return sample
 
 
 def idle(metrics):
@@ -193,9 +225,23 @@ def latency_windows(rows, start, duration):
     return windows, changes
 
 
+def first_second_half_sample(samples, duration):
+    return next((sample for sample in samples if sample["at_seconds"] >= duration / 2), {})
+
+
 def rss_growth_second_half(samples, final, duration):
-    baseline = next((sample["rss_mib"] for sample in samples if sample["at_seconds"] >= duration / 2), None)
+    baseline = first_second_half_sample(samples, duration).get("rss_mib")
     return final["rss_mib"] - baseline if baseline is not None else None
+
+
+def smaps_growth_second_half(samples, final, duration):
+    baseline = first_second_half_sample(samples, duration)
+    start, end = baseline.get("smaps_rollup"), final.get("smaps_rollup")
+    comparison = {"baseline": start, "drain": end, "rss_growth_kib": None, "anonymous_growth_kib": None}
+    if start is not None and end is not None:
+        comparison["rss_growth_kib"] = end["rss_kib"] - start["rss_kib"]
+        comparison["anonymous_growth_kib"] = end["anonymous_kib"] - start["anonymous_kib"]
+    return comparison
 
 
 async def soak(args):
@@ -212,14 +258,20 @@ async def soak(args):
     samples = []
     rows, tasks, next_sample = [], [], 0.0
     poll = None
+    smaps_after_seconds = args.seconds / 2 if args.require_zero_rss_growth else None
     while scheduled < args.seconds:
         await asyncio.sleep(max(0, start + scheduled - time.perf_counter()))
         kind, body = request(args.model, rng, shared_prefixes)
         tasks.append(asyncio.create_task(run_request(host, int(port), kind, body, start + scheduled)))
         if scheduled >= next_sample:
             if poll is not None:
-                samples.append(await poll)
-            poll = asyncio.create_task(asyncio.to_thread(snapshot, args.pid, args.address, start))
+                sample = await poll
+                samples.append(sample)
+                if "smaps_rollup" in sample:
+                    smaps_after_seconds = None
+            poll = asyncio.create_task(asyncio.to_thread(
+                snapshot, args.pid, args.address, start, smaps_after_seconds=smaps_after_seconds,
+            ))
             running = []
             for task in tasks:
                 if task.done():
@@ -240,6 +292,11 @@ async def soak(args):
         if idle(final["metrics"]) or time.monotonic() >= deadline:
             break
         await asyncio.sleep(.5)
+
+    smaps_comparison = None
+    if args.require_zero_rss_growth:
+        record_smaps_rollup(final, args.pid)
+        smaps_comparison = smaps_growth_second_half(samples, final, args.seconds)
 
     counts = {kind: {} for kind in KINDS}
     problems = []
@@ -268,8 +325,9 @@ async def soak(args):
     if not args.smoke:
         checks["p95_drift_at_most_5_percent"] = all(value is not None and value <= 5 for value in drift.values())
     rss_growth = rss_growth_second_half(samples, final, args.seconds)
-    if args.require_zero_rss_growth:
-        checks["rss_growth_second_half_at_most_zero"] = rss_growth is not None and rss_growth <= 0
+    if smaps_comparison is not None:
+        precise_growth = smaps_comparison["rss_growth_kib"]
+        checks["rss_growth_second_half_at_most_zero"] = precise_growth is not None and precise_growth <= 0
     result = {"status": "passed" if all(checks.values()) else "failed",
               "mode": "smoke" if args.smoke else "mixed_soak", "seconds": args.seconds, "rate": args.rate,
               "shared_prefixes": len(shared_prefixes), "checks": checks, "counts": counts,
@@ -278,6 +336,8 @@ async def soak(args):
               "client_dispatch_p95_ms": percentile([row["dispatch_ms"] for row in rows], .95),
               "rss_growth_second_half_mib": rss_growth,
               "rss_samples": samples, "initial": initial, "final": final, "counter_changes": counter_changes}
+    if smaps_comparison is not None:
+        result["smaps_rollup_second_half"] = smaps_comparison
     return result
 
 
@@ -292,7 +352,7 @@ def main():
     parser.add_argument("--shared-prefix", action="store_true", help="reuse eight fixed prefixes in the long-prompt traffic")
     parser.add_argument("--smoke", action="store_true", help="short runtime check without a latency-drift verdict")
     parser.add_argument("--require-zero-rss-growth", action="store_true",
-                        help="fail if drain RSS exceeds the first second-half sample or that sample is missing")
+                        help="fail if Linux smaps_rollup RSS grows from the first second-half sample to drain, or either reading is missing")
     args = parser.parse_args()
     if not math.isfinite(args.seconds) or args.seconds <= 0 or not math.isfinite(args.rate) or args.rate <= 0:
         parser.error("seconds and rate must be finite and positive")

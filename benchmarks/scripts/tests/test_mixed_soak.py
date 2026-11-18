@@ -4,8 +4,9 @@ import json
 from pathlib import Path
 import sys
 import time
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, mock_open, patch
 
 with patch.object(sys, "path", [str(Path(__file__).resolve().parents[2] / "live"), *sys.path]):
     import soak
@@ -77,3 +78,67 @@ class MixedSoakTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(soak.rss_growth_second_half(samples, {"rss_mib": 14.75}, 1800), 0.75)
         self.assertEqual(soak.rss_growth_second_half(samples, {"rss_mib": 14}, 1800), 0)
         self.assertIsNone(soak.rss_growth_second_half(samples[:1], {"rss_mib": 14}, 1800))
+
+    def test_smaps_growth_is_visible_with_an_unchanged_status_counter(self):
+        start = {"rss_kib": 15_544_012, "anonymous_kib": 15_358_440}
+        end = {"rss_kib": 15_544_712, "anonymous_kib": 15_359_140}
+        samples = [{"at_seconds": 899, "rss_mib": 15_161.46},
+                   {"at_seconds": 900, "rss_mib": 15_161.46, "smaps_rollup": start}]
+        final = {"rss_mib": 15_161.46, "smaps_rollup": end}
+        self.assertEqual(soak.rss_growth_second_half(samples, final, 1800), 0)
+        precise = soak.smaps_growth_second_half(samples, final, 1800)
+        self.assertEqual(precise["rss_growth_kib"], 700)
+        self.assertEqual(precise["anonymous_growth_kib"], 700)
+        self.assertIsNone(soak.smaps_growth_second_half(samples[:1], final, 1800)["rss_growth_kib"])
+        self.assertIsNone(soak.smaps_growth_second_half(samples, {}, 1800)["rss_growth_kib"])
+
+    def test_smaps_reader_handles_unavailable_or_malformed_measurements(self):
+        with patch("builtins.open", mock_open(read_data="Rss: 1024 kB\nAnonymous: 1000 kB\n")):
+            sample = soak.read_smaps_rollup(42)
+        self.assertEqual((sample["rss_kib"], sample["anonymous_kib"]), (1024, 1000))
+        for contents in ("Anonymous: 3 kB\n", "Rss: 5 kB\nAnonymous: 6 kB\n", "Rss: 5 MB\n"):
+            with self.subTest(contents=contents), patch("builtins.open", mock_open(read_data=contents)):
+                sample = {}
+                soak.record_smaps_rollup(sample, 42)
+                self.assertIsNone(sample["smaps_rollup"])
+                self.assertIn("smaps_rollup_error", sample)
+        with patch("builtins.open", side_effect=PermissionError("smaps not readable")):
+            sample = {}
+            soak.record_smaps_rollup(sample, 42)
+            self.assertIsNone(sample["smaps_rollup"])
+            self.assertEqual(sample["smaps_rollup_error"], "smaps not readable")
+
+    async def test_precise_growth_fails_the_soak_despite_flat_status_rss(self):
+        args = SimpleNamespace(address="localhost:1", model="test", pid=42, seconds=120, rate=1,
+                               shared_prefix=False, smoke=True, require_zero_rss_growth=True)
+        metrics = dict.fromkeys(soak.IDLE_GAUGES, 0)
+        metrics["allocation"] = {}
+        metrics["counters"] = {"overloads": 0, "disconnects": 0, "cancellations": 0}
+        final_metrics = dict(metrics, counters={"overloads": 0, "disconnects": 1, "cancellations": 1})
+        baseline = {"rss_kib": 15_544_012, "anonymous_kib": 15_358_440}
+        final = {"rss_kib": 15_544_712, "anonymous_kib": 15_359_140}
+        snapshots = [
+            {"at_seconds": 0, "rss_mib": 15_161.46, "metrics": metrics},
+            {"at_seconds": 10, "rss_mib": 15_161.46, "metrics": metrics},
+            {"at_seconds": 60, "rss_mib": 15_161.46, "metrics": metrics, "smaps_rollup": baseline},
+            {"at_seconds": 120, "rss_mib": 15_161.46, "metrics": final_metrics},
+        ]
+
+        async def response(_host, _port, kind, _body, scheduled):
+            return {"kind": kind, "scheduled": scheduled, "dispatch_ms": 0, "ttft_ms": 1, "e2e_ms": 1,
+                    "outcome": "disconnected" if kind == "cancel" else "completed",
+                    "finish": "tool_calls" if kind == "tools" else "stop"}
+
+        requests = [(kind, {}) for kind in (*soak.KINDS, *soak.KINDS[:4])]
+        with (patch.object(soak.asyncio, "sleep", new_callable=AsyncMock),
+              patch.object(soak.random.Random, "expovariate", return_value=10),
+              patch.object(soak, "request", side_effect=requests),
+              patch.object(soak, "run_request", side_effect=response),
+              patch.object(soak, "snapshot", side_effect=snapshots),
+              patch.object(soak, "read_smaps_rollup", return_value=final)):
+            result = await soak.soak(args)
+        self.assertEqual(result["rss_growth_second_half_mib"], 0)
+        self.assertEqual(result["smaps_rollup_second_half"]["rss_growth_kib"], 700)
+        self.assertEqual([name for name, passed in result["checks"].items() if not passed],
+                         ["rss_growth_second_half_at_most_zero"])
+        self.assertEqual(result["status"], "failed")
