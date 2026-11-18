@@ -402,6 +402,16 @@
     },
     "qwen14_prefill_finish": {
       "decision": "not_adopted_rag_tail_and_wave_decode_regressions",
+      "request_latency_details": [
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/result/request-latency.json",
+          "sha256": "722f756341dee652b59473952b206dc5cafc4c2770dbea0c785a178495e029d6"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/tools/analyze_prefill_latency.py",
+          "sha256": "62d173f7f3b98cadd23a6e3575b90ec940a6d0efec66ef73be58ed11b464e917"
+        }
+      ],
       "comparison": {
         "path": "benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/result/summary.json",
         "sha256": "42a8c9043f3899002b94c180db149e30a0dc8dd63d58a23da738e80d2fe41782"

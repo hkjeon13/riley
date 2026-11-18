@@ -65,6 +65,8 @@ kernel probe의 빠른 알고리즘은 실제 모델 activation과 서버 프로
 
 같은 입력·도착 순서를 기준/후보에 재생한다. closed-loop는 느려질수록 새 요청도 늦어지므로 open-loop와 구분한다. 예정 도착 시각과 실제 전송 지연을 기록해 부하 생성기 병목도 확인한다.
 
+14B 후속 후보의 1% decode TPOT 회귀 판정에는 8개 동시 전송과 50ms 간격 전송을 모두 포함한다. 두 RAG seed의 TTFT 꼬리를 실행 순서를 뒤집어 반복하고, 가능한 진단 실행에서는 토큰 간격을 요청 ID와 스텝에 연결해 어느 구간에서 ITL 꼬리가 늘었는지 찾는다. [완료 가능한 prefill 후보의 요청별 결과](03-long-context-result.md#완료-가능한-prefill-우선-후보)
+
 ## 5. 개선 후보와 채택 순서
 
 ### W3-4. 바이트를 보존하는 스케줄 후보
@@ -107,6 +109,7 @@ python3 benchmarks/live/compare.py \
 - [ ] 병목을 queue·host·GEMM·attention·KV별 trace로 설명한다.
 - [x] Qwen2.5-14B의 요청별 prefill 대기와 다른 요청의 prefill 구간이 겹치는 시간을 실측했다. [요청별 계측](03-long-context-result.md#riley-14b의-요청별-대기와-prefill-계측)
 - [x] 14B에서 진행 중인 prefill을 우선한 후보의 배치 불변성과 회귀를 확인했다. Decode TPOT 기준을 넘긴 설정은 미채택으로 판정했다. [후보 결과](03-long-context-result.md#riley-14b의-요청별-대기와-prefill-계측)
+- [x] 14B에서 완료 가능한 prefill을 우선한 후보를 비교했다. 두 번째 RAG seed의 TTFT 꼬리와 두 동시 유입 조건의 decode 지연이 늘어 미채택했다. [후보 결과](03-long-context-result.md#완료-가능한-prefill-우선-후보)
 - [x] 시험한 burst 후보의 득실과 decode·짧은 요청 비용을 함께 기록했다. [W3 결과](03-long-context-result.md)
 - [ ] W4 장문·chunk 경계·배치 불변성 검사를 통과한다.
 - [x] 같은 CUDA 후보와 Qwen2.5-0.5B에서 네 조합을 두 seed로 교차 측정했다. [조합 결과](03-long-context-result.md#w2-이벤트-발행과-묶음-정책의-상호작용)

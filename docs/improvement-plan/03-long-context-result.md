@@ -184,6 +184,8 @@ CUDA 12.4 SM80 진단 바이너리로 A100 6번에서 같은 부하 여섯 개�
 
 이 후보는 채택하지 않았다. 기존 자동 판정은 짧은 `C32`의 TTFT·처리량과 `C32`·두 `rag-c8`의 TPOT를 통과시켰다. 실제 긴 요청의 TTFT p95는 seed마다 방향이 달랐고, 두 동시 유입 조건에서 decode TPOT와 ITL 꼬리가 모두 늘었다. 단일 실행 쌍에서 관측한 변화이므로 후속 후보 검증은 실행 순서를 뒤집어 반복하고 두 동시 유입 조건의 decode 지연도 판정에 포함한다.
 
+요청별 전송·첫 조각·마지막 조각 시각을 같은 요청끼리 비교했다. `wave-sync` 40개 중 24개, `wave-50ms` 40개 중 27개에서 TPOT가 늘었다. 묶음별 TPOT 변화 중앙값은 각각 5개 중 3개와 5개 전체에서 양수였다. 두 조건의 실행 간 실제 전송 간격 범위는 각각 0.171–0.231ms와 348.15–351.15ms였다. `rag-c8` seed 2에서 후보의 p95 이상 네 요청은 모두 같은 기준 요청보다 TTFT가 늘었고, 증가량 중앙값은 507.9ms였다. 요청별 원본에 토큰 간 개별 간격이 보존되지 않아 ITL p99 상승을 특정 스텝에 연결하려면 추가 계측이 필요하다. [요청 비교 집계](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/result/request-latency.json) · [재계산 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/analyze_prefill_latency.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
