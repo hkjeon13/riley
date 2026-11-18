@@ -15,15 +15,11 @@ use riley_model::PROVENANCE_FILENAME;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::{Plan, Result, invalid, regular_file};
+use crate::{Plan, Result, hex_digest, invalid, regular_file};
 
 const ADAPTER_CONFIG: &str = "adapter_config.json";
 const ADAPTER_WEIGHTS: &str = "adapter_model.safetensors";
 const SAFETENSORS_HEADER_PREFIX: usize = 8;
-
-fn lower_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-}
 
 /// One tensor's location in a safetensors file.
 struct TensorEntry {
@@ -68,7 +64,15 @@ fn tensor_entries(file: &[u8]) -> Result<(usize, BTreeMap<String, TensorEntry>)>
                 .ok_or_else(|| invalid("safetensors tensor offset is invalid"))
         };
         let (start, end) = (offset(0)?, offset(1)?);
-        entries.insert(name, TensorEntry { dtype, shape, start, end });
+        entries.insert(
+            name,
+            TensorEntry {
+                dtype,
+                shape,
+                start,
+                end,
+            },
+        );
     }
     Ok((data_start, entries))
 }
@@ -148,23 +152,26 @@ fn scaling_factor(config: &Value, scale: f32) -> Result<(f32, usize)> {
     let alpha = config["lora_alpha"]
         .as_f64()
         .ok_or_else(|| invalid("adapter lora_alpha is missing"))?;
-    for (key, what) in [
-        ("fan_in_fan_out", "fan_in_fan_out"),
-        ("use_dora", "DoRA"),
-    ] {
+    for (key, what) in [("fan_in_fan_out", "fan_in_fan_out"), ("use_dora", "DoRA")] {
         if config[key].as_bool() == Some(true) {
-            return Err(invalid(&format!("{what} adapters are not supported")));
+            return Err(invalid(format!("{what} adapters are not supported")));
         }
     }
     if config["bias"].as_str().is_some_and(|bias| bias != "none") {
         return Err(invalid("adapters with trained biases are not supported"));
     }
     for key in ["rank_pattern", "alpha_pattern"] {
-        if config[key].as_object().is_some_and(|pattern| !pattern.is_empty()) {
+        if config[key]
+            .as_object()
+            .is_some_and(|pattern| !pattern.is_empty())
+        {
             return Err(invalid("per-module rank or alpha is not supported"));
         }
     }
-    if config["modules_to_save"].as_array().is_some_and(|saved| !saved.is_empty()) {
+    if config["modules_to_save"]
+        .as_array()
+        .is_some_and(|saved| !saved.is_empty())
+    {
         return Err(invalid("modules_to_save is not supported"));
     }
     #[allow(clippy::cast_precision_loss)]
@@ -187,7 +194,9 @@ fn adapter_target(key: &str) -> Result<(String, bool)> {
             return Ok((format!("{target}.weight"), is_a));
         }
     }
-    Err(invalid("adapter holds a tensor other than lora_A and lora_B weights"))
+    Err(invalid(
+        "adapter holds a tensor other than lora_A and lora_B weights",
+    ))
 }
 
 /// Writes `destination`: `base` with `adapter` merged at `scale`.
@@ -221,7 +230,10 @@ pub fn merge_lora(base: &Path, adapter: &Path, destination: &Path, scale: f32) -
         let source = base.join(path);
         regular_file(&source)?;
         let target = destination.join(path);
-        if path.extension().is_none_or(|extension| extension != "safetensors") {
+        if path
+            .extension()
+            .is_none_or(|extension| extension != "safetensors")
+        {
             fs::copy(&source, &target)?;
             continue;
         }
@@ -229,7 +241,9 @@ pub fn merge_lora(base: &Path, adapter: &Path, destination: &Path, scale: f32) -
         let (_, entries) = tensor_entries(&file)?;
         let mut changed = false;
         for (name, weight) in &entries {
-            let Some(pair) = pairs.get(name) else { continue };
+            let Some(pair) = pairs.get(name) else {
+                continue;
+            };
             let [Some(a), Some(b)] = *pair else {
                 return Err(invalid("an adapter target lacks lora_A or lora_B"));
             };
@@ -260,7 +274,7 @@ pub fn merge_lora(base: &Path, adapter: &Path, destination: &Path, scale: f32) -
         if changed {
             merged_files.insert(
                 path.to_string_lossy().into_owned(),
-                lower_hex(&Sha256::digest(&file)),
+                hex_digest(&Sha256::digest(&file)),
             );
         }
     }
@@ -271,14 +285,17 @@ pub fn merge_lora(base: &Path, adapter: &Path, destination: &Path, scale: f32) -
     binding.update(&config_bytes);
     binding.update(&adapter_file);
     binding.update(scale.to_le_bytes());
-    let binding = lower_hex(&binding.finalize());
+    let binding = hex_digest(&binding.finalize());
     manifest["converter_revision"] = Value::from(&binding[..40]);
     manifest["source_model"] = Value::from(format!(
         "{}-lora",
         manifest["source_model"].as_str().unwrap_or_default()
     ));
     for file in manifest["files"].as_array_mut().into_iter().flatten() {
-        if let Some(sha256) = file["path"].as_str().and_then(|path| merged_files.get(path)) {
+        if let Some(sha256) = file["path"]
+            .as_str()
+            .and_then(|path| merged_files.get(path))
+        {
             file["sha256"] = Value::from(sha256.clone());
         }
     }
@@ -319,7 +336,8 @@ mod tests {
         let config = serde_json::json!({"peft_type": "LORA", "r": 4, "lora_alpha": 8});
         assert_eq!(scaling_factor(&config, 1.0).unwrap(), (2.0, 4));
         assert_eq!(scaling_factor(&config, 0.5).unwrap(), (1.0, 4));
-        let rs = serde_json::json!({"peft_type": "LORA", "r": 4, "lora_alpha": 8, "use_rslora": true});
+        let rs =
+            serde_json::json!({"peft_type": "LORA", "r": 4, "lora_alpha": 8, "use_rslora": true});
         assert_eq!(scaling_factor(&rs, 1.0).unwrap().0, 4.0);
         for extra in [
             serde_json::json!({"use_dora": true}),
@@ -329,17 +347,18 @@ mod tests {
             serde_json::json!({"rank_pattern": {"x": 2}}),
         ] {
             let mut bad = config.clone();
-            bad.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            bad.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
             assert!(scaling_factor(&bad, 1.0).is_err(), "{bad}");
         }
     }
 
     #[test]
     fn adapter_keys_map_to_base_weights() {
-        let (target, is_a) = adapter_target(
-            "base_model.model.model.layers.3.self_attn.q_proj.lora_A.weight",
-        )
-        .unwrap();
+        let (target, is_a) =
+            adapter_target("base_model.model.model.layers.3.self_attn.q_proj.lora_A.weight")
+                .unwrap();
         assert_eq!(target, "model.layers.3.self_attn.q_proj.weight");
         assert!(is_a);
         assert!(adapter_target("base_model.model.x.lora_B.bias").is_err());
