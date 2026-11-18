@@ -1,0 +1,209 @@
+{
+  "scope": "Kernel union by reviewed full symbol within each request window",
+  "sqlite_sha256": "06ca5001af594fd840f8047d401db1da7f9dfbd93b1f7af8f5cd29b3e8464cb3",
+  "server_pid": 3568830,
+  "cells": {
+    "words-30": {
+      "requests": 12,
+      "kernel_category_ms_p50": {
+        "attention": 0.6226370000000001,
+        "attention_metadata": 0.016352,
+        "gemm": 7.237098,
+        "other": 0.691017,
+        "qkv_bias_rope_kv_write": 0.20747100000000002
+      }
+    },
+    "words-1700": {
+      "requests": 12,
+      "kernel_category_ms_p50": {
+        "attention": 13.7497995,
+        "attention_metadata": 0.131264,
+        "gemm": 66.443512,
+        "other": 8.016341,
+        "qkv_bias_rope_kv_write": 2.3967445
+      }
+    },
+    "words-3500": {
+      "requests": 12,
+      "kernel_category_ms_p50": {
+        "attention": 47.8045705,
+        "attention_metadata": 0.292064,
+        "gemm": 133.2853285,
+        "other": 16.025486,
+        "qkv_bias_rope_kv_write": 4.897834
+      }
+    },
+    "words-5250": {
+      "requests": 12,
+      "kernel_category_ms_p50": {
+        "attention": 100.752556,
+        "attention_metadata": 0.5119039999999999,
+        "gemm": 200.042756,
+        "other": 24.024372999999997,
+        "qkv_bias_rope_kv_write": 7.3500285
+      }
+    },
+    "words-6800": {
+      "requests": 12,
+      "kernel_category_ms_p50": {
+        "attention": 164.677549,
+        "attention_metadata": 0.81904,
+        "gemm": 266.52115449999997,
+        "other": 32.012428,
+        "qkv_bias_rope_kv_write": 9.632295
+      }
+    }
+  },
+  "symbols": [
+    {
+      "name": "<unnamed>::reset_embedding_error(RileyCudaEmbeddingErrorReport *)",
+      "category": "other",
+      "launches": 2533
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_64x64_ldg8_f2f_stages_64x5_tn",
+      "category": "gemm",
+      "launches": 81756
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn",
+      "category": "gemm",
+      "launches": 80960
+    },
+    {
+      "name": "<unnamed>::validate_embedding_tokens(const unsigned int *, unsigned long, unsigned long, RileyCudaEmbeddingErrorReport *)",
+      "category": "other",
+      "launches": 2533
+    },
+    {
+      "name": "void <unnamed>::embedding_kernel<__nv_bfloat16>(const T1 *, const unsigned int *, T1 *, const RileyCudaEmbeddingErrorReport *, unsigned long, unsigned long)",
+      "category": "other",
+      "launches": 2533
+    },
+    {
+      "name": "<unnamed>::finalize_embedding_error(const unsigned int *, unsigned long, RileyCudaEmbeddingErrorReport *)",
+      "category": "other",
+      "launches": 2533
+    },
+    {
+      "name": "void <unnamed>::vector_bf16_rms_norm_kernel<(bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, unsigned long, unsigned int, float)",
+      "category": "other",
+      "launches": 2533
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_64x6_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 160829
+    },
+    {
+      "name": "<unnamed>::qkv_split_head_norm_rope_kv_write_warp_kernel(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, const float *, const unsigned int *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, <unnamed>::DeviceBatch, unsigned int, unsigned int, unsigned long, unsigned long, float, const unsigned int *, unsigned long)",
+      "category": "qkv_bias_rope_kv_write",
+      "launches": 91188
+    },
+    {
+      "name": "riley_fi::<unnamed>::plan_kernel(riley_fi::RowBatch, unsigned long, unsigned long, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, int *, int *, int *, int *, int *, int *, int *, int *, int *, unsigned int *, unsigned int *, bool *, int *, __nv_bfloat16 *, __nv_bfloat16 *)",
+      "category": "attention_metadata",
+      "launches": 2533
+    },
+    {
+      "name": "void riley_fi::<unnamed>::strided_paged_kernel<flashinfer::KernelTraits<(flashinfer::MaskMode)1, (unsigned int)64, (unsigned int)1, (unsigned int)8, (unsigned int)8, (unsigned int)8, (unsigned int)4, (unsigned int)1, (flashinfer::PosEncodingMode)0, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, int, riley_fi::<unnamed>::Variant>>(riley_fi::<unnamed>::PagedParams)",
+      "category": "attention",
+      "launches": 91188
+    },
+    {
+      "name": "void riley_fi::<unnamed>::merge_parts_kernel<(unsigned int)128>(const __nv_bfloat16 *, const float *, const int *, __nv_bfloat16 *, const unsigned int *, unsigned int)",
+      "category": "attention",
+      "launches": 91188
+    },
+    {
+      "name": "void <unnamed>::vector_bf16_rms_norm_kernel<(bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, unsigned long, unsigned int, float)",
+      "category": "other",
+      "launches": 182376
+    },
+    {
+      "name": "<unnamed>::silu_gated_multiply_merged_rows_bf16x8_kernel(const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, unsigned int)",
+      "category": "other",
+      "launches": 91188
+    },
+    {
+      "name": "void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, (bool)1, (bool)0, (bool)0>(cublasLt::cublasSplitKParams<T6>, const T4 *, const T5 *, T5 *, const T6 *, const T6 *, const T7 *, const T4 *, T7 *, void *, long, T6 *, int *)",
+      "category": "other",
+      "launches": 91224
+    },
+    {
+      "name": "void <unnamed>::row_gather_kernel<__nv_bfloat16>(const T1 *, const unsigned int *, T1 *, unsigned long, unsigned long, unsigned long, const unsigned int *)",
+      "category": "other",
+      "launches": 2309
+    },
+    {
+      "name": "void <unnamed>::bf16_argmax_kernel<(bool)0>(const __nv_bfloat16 *, RileyCudaBf16ArgmaxResult *, unsigned long, unsigned long, unsigned long, const unsigned int *, <unnamed>::ArgmaxTieRefine)",
+      "category": "other",
+      "launches": 2309
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "launches": 12
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_64x64_ldg8_f2f_stages_64x6_tn",
+      "category": "gemm",
+      "launches": 11929
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x64_64x3_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 153
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "launches": 282
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_128x128_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "launches": 10350
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_128x256_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "launches": 187
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_64x128_ldg8_f2f_stages_32x6_tn",
+      "category": "gemm",
+      "launches": 38
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x5_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 188
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x64_64x6_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 110
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x5_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 10304
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_32x3_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 10117
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_256x64_ldg8_f2f_tn",
+      "category": "gemm",
+      "launches": 1
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_32x6_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 1
+    }
+  ]
+}

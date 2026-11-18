@@ -103,6 +103,18 @@ Instruct와 비슷하게 단일 요청의 Riley TTFT p95는 vLLM 대비 +2.7%였
 
 재시도는 실행 중 확인한 서버의 PID·시작 시각을 기록하고, 같은 서버가 종료된 상태에서만 남은 NVML 표본을 받아들인다. Nsight의 임시 경로도 자식 프로세스가 종료된 뒤 정리하도록 순서를 바꿨다. Linux에서 실제 자식 프로세스를 사용해 실행·좀비·회수 상태, 시작 시각 불일치, 외부 PID를 검증했다. GPU 계측 재실행은 기존 대기열 뒤에 등록했다. [재시도 패치](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-retry/runner.patch.gz) · [재시도 순서](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-retry/campaign.sh)
 
+재실행에서 60건과 워밍업 10건을 오류 없이 마쳤다. 앞선 시도와 60건의 요청, 입력·생성 토큰 수, 출력 텍스트, 종료 사유가 모두 같았다. 서버는 코드 0으로 종료했고 GPU 7은 동일 홀더의 20GiB 예약으로 돌아갔다. Nsight의 원본과 SQLite 해시를 검증했고 요청별 GPU 커널 합집합을 전체 커널 심볼로 검산했다. [재실행 결과](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-summary.json) · [두 계측 실행의 출력 비교](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-retry-parity.json) · [Nsight 원본 위치와 해시](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile/trace-files.json)
+
+| 평균 입력 토큰 | 전송→첫 토큰 p50 (ms) | GPU 커널 비중 p50 | GEMM p50 (ms) | Attention p50 (ms) | 커널 밖 p50 (ms) |
+|---:|---:|---:|---:|---:|---:|
+| 50 | 10.20 | 85.74% | 7.24 | 0.62 | 1.45 |
+| 1,984 | 94.65 | 95.90% | 66.44 | 13.75 | 3.87 |
+| 4,056 | 209.21 | 96.74% | 133.29 | 47.80 | 6.83 |
+| 6,064 | 342.18 | 97.22% | 200.04 | 100.75 | 9.50 |
+| 7,847 | 486.03 | 97.48% | 266.52 | 164.68 | 12.24 |
+
+7,847토큰에서 attention은 164.68ms로 전송부터 첫 토큰까지 시간의 약 34%였다. 약 6K에서 7.8K로 늘렸을 때 GEMM은 66.5ms, attention은 63.9ms 증가했다. 위 값은 Nsight를 켠 동시성 1의 중앙값이며 호스트·스케줄러 개별 원인이나 실제 꼬리 지연을 직접 판정하려면 추가 대조가 필요하다. [커널 심볼별 분류](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-full-symbols.json) · [계측 원본 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-result-SHA256SUMS)
+
 이전에 계측 없이 잰 Qwen3-4B 길이 곡선의 실행 파일은 `riley-lp16`이었다. Nsight의 관측 비용을 비교할 때는 재시도와 같은 `f7c956d3c` 바이너리·입력·KV·설정을 사용한다. 이 대조를 GPU 7에 등록했으며 GPU 6의 W4 추적까지 끝난 뒤 실행한다. [이전 실행 파일 기록](../../benchmarks/evidence/20261119-w3-qwen3-lengths/lengths/receipt.json) · [같은 빌드 대조 실행](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-retry/baseline-campaign.sh)
 
 ### 엔진별 배치 토큰 예산 대조
