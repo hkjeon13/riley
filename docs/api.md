@@ -225,7 +225,9 @@ A JSON object, free of prompt text:
 
 - `active_requests`, `waiting_requests`, `kv_allocated_blocks`
 - `allocation`: live native allocations (device and pinned host memory)
-- `batch_shapes`: how many steps ran at each batch shape, with GPU time
+- `batch_shapes`: committed steps and GPU time by batch shape. `bucket_count`
+  gives the number of configured entries in the 24-slot `buckets` array.
+  Unused entries are zeroed.
 - `counters`: `cancellations`, `disconnects`, `overloads`, `dropped_observations`
 
 ## `GET /healthz`, `GET /readyz`

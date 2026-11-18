@@ -90,9 +90,10 @@ reads zero. Cached blocks have their own gauge, `prefix_cache_blocks`.
   prefill. Later requests hit.
 - **Only the prompt is cached.** A chat turn does not reuse the previous turn's
   generated tokens, because those blocks were written by decode.
-- **Tested for correctness, not endurance.** The cache has not been through the
-  30-minute soak, and device failure is covered by the scheduler simulation
-  rather than on real hardware.
+- **Endurance coverage.** Qwen2.5-7B passed a 30-minute synthetic mixed load on
+  A100 with 128 prefix blocks. The [soak results](improvement-plan/05-mixed-soak-result.md)
+  include request, cancellation and shutdown metrics. Device failure coverage
+  comes from the scheduler simulation.
 
 ## Measurements
 

@@ -4,7 +4,7 @@
 종합 계획: [진행 단계와 릴리스 조건](README.md)\
 구성: W5-A는 즉시 가능한 문서 정리, W5-B는 GPU 회귀·운영 검증이다.
 
-Qwen2.5-7B CUDA 서버에서 90초 합성 혼합 부하로 종료·취소·할당 회수를 확인했다. [W5-B 실행 결과](05-mixed-soak-result.md)
+Qwen2.5-7B CUDA 서버에서 90초 사전 검증과 cache off·on 각 30분의 합성 혼합 부하로 응답·취소·할당 회수를 확인했다. [W5-B 실행 결과](05-mixed-soak-result.md)
 
 ## 1. 현재 문제와 위험 범위
 
@@ -16,7 +16,7 @@ Qwen2.5-7B CUDA 서버에서 90초 합성 혼합 부하로 종료·취소·할�
 | 모델 지원 의미 혼합 | model-support는 owned HF 프로파일·특정 pinned 모델 검증, README는 일반 native qualification | 모델 지원·HF exact·속도 qualification을 분리해야 함 |
 | GPU CI 범위 | native-cuda workflow는 nightly compile, GPU runtime/memory smoke는 수동 opt-in | 모델 추론·routing·성능 회귀가 PR마다 자동 검증되지 않음 |
 | 운영 근거 | 합성 트래픽 30분 soak 기록. 실제 production trace 미검증 | 실제 길이·도착·취소·기능 혼합의 차이를 모름 |
-| prefix cache | 문서상 캐시 30분 soak와 실제 device failure 검증이 미완료 | 일반 soak 성공을 cache-on 수명 보장으로 확대할 수 없음 |
+| prefix cache | 캐시 활성 30분 합성 부하를 통과했다. 실제 device failure 검증은 미실행 | 장치 장애 뒤 prefix 폐기와 다양한 캐시 압력 조건은 별도 확인 필요 |
 
 근거: [README](../../README.md), [configuration](../configuration.md), [API](../api.md), [serving-validation](../serving-validation.md), [model-support](../model-support.md), [prefix-cache](../prefix-cache.md), [GPU CI](../../.github/workflows/native-cuda.yml).
 
@@ -39,7 +39,8 @@ Qwen2.5-7B CUDA 서버에서 90초 합성 혼합 부하로 종료·취소·할�
 | [CLI 실행 옵션](../configuration.md#execution-options) | [프로파일 resolver](../../crates/riley-server/src/inference_profile.rs), [서버 옵션](../../crates/riley-server/src/main.rs), [실행 구현](../../crates/riley-server/src/engine.rs) | 프로파일 공급값, 일반 CLI 기본값, 실험값을 각각 표기 |
 | [logprobs](../api.md#log-probabilities) | [`sample_iteration` 구현](../../crates/riley-server/src/engine.rs) | GPU 요약 사용 여부는 해당 배치 조건에 의존. 공개 분포와 응답 형태는 같은 계약을 따름 |
 | [모델별 지원과 독립 참조](../model-support.md) | [네이티브 A100 성능표](../model-coverage-a100-perf-table.md), [모델별 독립 참조](../model-support.md) | 각 기록의 체크포인트·길이·기능 조건에서 whole-model 일치와 성능 자격을 각각 판정 |
-| [릴리스 soak 메트릭](../../benchmarks/soak/README.md#target-contract) | [서버 응답 구조](../../crates/riley-server/src/service.rs), [릴리스 검사기](../../benchmarks/scripts/check_reliability_soak.py) | 최상위 `batch_shapes`와 고정 10개 bucket 계약 포함 |
+| [현행 운영 메트릭](../api.md#get-metrics) | [서버 응답 구조](../../crates/riley-server/src/service.rs), [엔진 bucket 정의](../../crates/riley-server/src/engine.rs), [A100 응답 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/smoke/soak.json) | `batch_shapes.buckets` 배열은 24개 슬롯이며 측정한 프로파일은 그중 21개를 구성했다. |
+| [고정 RC 릴리스 soak 메트릭](../../benchmarks/soak/README.md#target-contract) | [릴리스 검사기](../../benchmarks/scripts/check_reliability_soak.py) | 과거 SmolLM2 경로에 고정 10개 슬롯을 적용한다. |
 
 ### W5-A2. 사용자 문서와 연구 기록의 역할 정리
 
@@ -123,7 +124,9 @@ python3 benchmarks/live/soak.py "$TEST_ADDRESS" "$MODEL_ID" \
 
 30분 비교는 cache off/on 양쪽에 같은 합성 workload와 seed를 사용한다. `--shared-prefix`를 켜면 장문 요청이 여덟 개의 고정 프롬프트 앞부분을 재사용한다. 실행 시간의 20–50% 구간과 70–100% 구간을 예약된 도착 시각으로 묶어 TTFT·전체 완료 지연 p95를 비교하며, 후반 증가가 5%를 넘거나 관측치가 비면 실패다. TTFT 표본 수는 첫 콘텐츠 또는 도구 조각이 관측된 요청 수다. 짧은 `--smoke`는 지연 판정을 빼고 종료·계약·정리 경계를 확인한다.
 
-현재 공개 `/metrics`의 KV 사용량은 요청이 쓰는 블록을 보여 준다. 캐시 블록 점유량과 hit·eviction은 추가 계측이 필요하다. 별도의 [릴리스 soak 드라이버와 검사기](../../benchmarks/soak/README.md)는 고정 SmolLM2 workload·정식 golden·이미지 계보를 요구한다.
+현재 공개 `/metrics`의 KV 사용량은 요청이 쓰는 블록을 보여 준다. 스케줄러 내부에는 prefix hit 토큰과 eviction 블록 카운터가 있다. 이를 운영 응답에서 조회하려면 별도 계측 계약이 필요하다. [스케줄러 메트릭](../../crates/riley-scheduler/src/metrics.rs)
+
+[고정 RC 릴리스 soak 드라이버와 검사기](../../benchmarks/soak/README.md)는 SmolLM2 workload·정식 golden·이미지 계보와 10개 bucket 슬롯을 요구한다. 현행 서버 응답의 24개 슬롯을 검사하려면 현행 바이너리로 별도 계약을 검증해야 한다.
 
 ### W5-B5. 실패 분류와 회수
 

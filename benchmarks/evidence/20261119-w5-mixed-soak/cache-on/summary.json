@@ -1,0 +1,39 @@
+{
+  "model": "Qwen2.5-7B-Instruct",
+  "physical_gpu": 7,
+  "seconds": 1800.0,
+  "rate": 8.0,
+  "status": "passed",
+  "prefix_cache_blocks": 128,
+  "normally_completed": 13749,
+  "intentional_client_disconnects": 700,
+  "counter_changes": {
+    "cancellations": 700,
+    "disconnects": 700,
+    "overloads": 0,
+    "dropped_observations": 13425
+  },
+  "errors": 0,
+  "p95_change_percent": {
+    "ttft_ms": 0.8723296387803448,
+    "e2e_ms": -13.456997742436272
+  },
+  "latency_windows": {
+    "early": {
+      "completed": 4109,
+      "ttft_ms_count": 4109,
+      "ttft_ms_p95": 320.5656483769417,
+      "e2e_ms_count": 4109,
+      "e2e_ms_p95": 4770.778194069862
+    },
+    "late": {
+      "completed": 4163,
+      "ttft_ms_count": 4163,
+      "ttft_ms_p95": 323.3620375394821,
+      "e2e_ms_count": 4163,
+      "e2e_ms_p95": 4128.774680197239
+    }
+  },
+  "rss_growth_second_half_mib": 0.0,
+  "raw_soak_json_sha256": "083e77555ee522a57568e01e8f33cfb6ac1e77ae1a469afa5f212ad7f3f1b899"
+}

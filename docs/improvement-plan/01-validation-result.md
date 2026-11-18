@@ -3,7 +3,7 @@
 작성일: 2026-11-13 (Asia/Seoul)\
 작업 기준: `main` `37ede444562b1d6c3718fae0a8db314f81fbba92`\
 작업 브랜치: `codex/restore-validation-release-contracts`\
-판정: 구현과 로컬 CPU 검증 완료. 실제 Linux CI·과거 고정 호스트 실행·CUDA 검증은 미실행.
+최신 판정: 로컬 및 Linux CI 검증, CUDA 12.4 배포 이미지 빌드·CPU 검사 완료. 과거 고정 호스트 lane과 배포 이미지의 GPU 추론 검증은 미완료.
 
 [W1 계획](01-validation-and-release.md) · [종합 계획](README.md) · [검사 사용법](../../ci/README.md)
 
@@ -102,4 +102,10 @@ Linux 디스크립터 의미론이 필요한 fixture는 macOS에서 명시적으
 
 CUDA 관련 Rust 포맷·문서·host cast 변경도 있으므로 릴리스 전 CUDA compile/link lane과 영향받는 GPU 검증을 실행해야 한다. 기존 커널·임계값·측정 근거가 유지되었다는 사실만으로 GPU 실행 동등성을 확정하지 않는다.
 
-W2·W3는 이 runner의 새 label·실패 판정·실행 argv/해시를 사용한다. W4는 정확성 판정 결과를 같은 후보에 결속한다. W5는 현행/과거 패키징 경계와 Linux·GPU 실행 근거를 릴리스 문서에 연결한다. 이 문서의 로컬 CPU 완료 판정을 M5 릴리스 승인으로 확장하지 않는다.
+### 현행 배포 이미지
+
+`96c04dbe4`의 소스 아카이브로 CUDA 12.4 Linux AMD64 이미지를 빌드했다. 비루트 UID/GID, entrypoint, Riley의 버전·서버 도움말, 체크포인트 도구, 16개 프리셋, 이진 파일 해시와 런타임 파일을 검증했다. [성공한 Actions 실행](https://github.com/hkjeon13/riley/actions/runs/44361292764) · [해시가 포함된 검증 보고서](../../benchmarks/evidence/20261119-cu124-distribution-image/report.json)
+
+GPU 없는 runner에서 Riley 바이너리는 NVIDIA가 주입하는 `libcuda.so.1`을 요구했다. CPU CLI 검사는 CUDA 12.4 SDK에서 가져온 스텁 파일을 읽기 전용으로 마운트해 수행했다. 완성 이미지의 드라이버 주입과 모델 추론은 GPU 호스트에서 추가 검증이 필요하다. W4·W5의 네이티브 GPU 실행은 자체 바이너리로 검증했다. [기본 링커 기록](../../benchmarks/evidence/20261119-cu124-distribution-image/runtime-dependencies.txt) · [CPU 검사 링커 기록](../../benchmarks/evidence/20261119-cu124-distribution-image/cpu-cli-dependencies.txt) · [A100 혼합 부하](05-mixed-soak-result.md)
+
+W2·W3는 이 runner의 새 label·실패 판정·실행 argv/해시를 사용한다. W4는 정확성 판정 결과를 같은 후보에 결속한다. W5는 현행 이미지와 네이티브 GPU 실행 근거를 릴리스 문서에 연결한다. M5 판정에는 동일 후보의 패키징·GPU 실행·품질 근거가 필요하다.
