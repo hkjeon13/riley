@@ -21,6 +21,7 @@ SOURCE_PATHS = {
     "crates/riley-server/src/main.rs",
     "crates/riley-server/src/inference_profile.rs",
     "deploy/docker/Dockerfile",
+    "deploy/docker/Dockerfile.dockerignore",
     "deploy/docker/entrypoint.sh",
 }
 MAX_SOURCE_BYTES = 4 * 1024 * 1024

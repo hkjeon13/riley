@@ -1,0 +1,77 @@
+name: CUDA distribution image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/distribution-image.yml'
+      - '.dockerignore'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'crates/**'
+      - 'third_party/**'
+      - 'tools/riley-checkpoint/**'
+      - 'deploy/docker/**'
+      - 'LICENSE'
+      - 'ci/check_distribution_image.py'
+      - 'ci/check_serving_source_contract.py'
+      - 'ci/serving-source-contract.json'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Build and verify CUDA 12.4 distribution image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build from the committed source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/riley-distribution-evidence"
+          source="$RUNNER_TEMP/riley-distribution-source"
+          archive="$RUNNER_TEMP/riley-distribution-source.tar"
+          mkdir "$output" "$source"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git archive --format=tar --output="$archive" "$GITHUB_SHA"
+          tar -xf "$archive" -C "$source"
+          source_sha="$(sha256sum "$archive" | cut -d ' ' -f 1)"
+          printf '%s\n' "$source_sha" > "$output/source-archive.sha256"
+          python3 "$source/ci/check_serving_source_contract.py"
+          docker buildx build --load --platform linux/amd64 --progress plain \
+            --file "$source/deploy/docker/Dockerfile" \
+            --build-arg CARGO_BUILD_JOBS=2 \
+            --build-arg CMAKE_BUILD_PARALLEL_LEVEL=2 \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "io.riley.source-archive-sha256=$source_sha" \
+            --iidfile "$output/image.id" \
+            --tag "riley:cu124-ci-$GITHUB_RUN_ID" \
+            "$source" 2>&1 | tee "$output/build.log"
+
+      - name: Check image config, CLI and native dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/riley-distribution-evidence"
+          source="$RUNNER_TEMP/riley-distribution-source"
+          python3 "$source/ci/check_distribution_image.py" "$(cat "$output/image.id")" "$GITHUB_SHA" \
+            "$source" "$RUNNER_TEMP/riley-distribution-source.tar" "$output"
+
+      - name: Upload image verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuda-distribution-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/riley-distribution-evidence
+          if-no-files-found: warn
+          retention-days: 14

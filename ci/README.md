@@ -185,6 +185,23 @@ and performs no CUDA or GPU operation.
 
 ## Python-free CUDA compile and link
 
+### CUDA 12.4 distribution image
+
+The [distribution image workflow](../.github/workflows/distribution-image.yml)
+builds `deploy/docker/Dockerfile` from an archive of the triggering commit on
+Linux AMD64. Relevant changes on `main` trigger the workflow, and it can also
+run from Actions on demand. The job uses the Dockerfile's default `80;86;89`
+architecture list and records the source archive hash and immutable Docker
+image ID.
+
+The [image checker](check_distribution_image.py) runs the entrypoint without
+network or GPU access. It verifies the non-root user, `serve --help`, the
+checkpoint CLI, all preset file hashes and CUDA library resolution. The
+workflow retains the build log and checks as evidence. GPU inference and
+registry publication have their own release steps.
+
+### CUDA development image
+
 The reproducible container lane is Linux/amd64 and pins both input images by
 immutable manifest digest:
 

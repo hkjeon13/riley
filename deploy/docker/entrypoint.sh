@@ -143,6 +143,12 @@ has_flag() {
 }
 
 serve() {
+    if [ "$#" -eq 1 ]; then
+        case $1 in
+            --help | -h) exec riley serve "$1" ;;
+        esac
+    fi
+
     model=
     expect_model=
     for argument; do

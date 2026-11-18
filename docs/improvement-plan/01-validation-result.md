@@ -39,6 +39,8 @@ Rust 포맷을 맞추고 Clippy 경고를 수정했다. 문서의 오류 조건�
 
 현행 배포는 CUDA 12.4/sm_80·86·89 경로다. [별도 source 계약](../../ci/serving-source-contract.json)이 CLI·inference profile·배포 Dockerfile·entrypoint 네 파일을 결속하고, [검사기](../../ci/check_serving_source_contract.py)가 byte drift·누락·링크·inventory 변경을 거부한다. 이는 검토한 소스를 식별하는 장치이며 CUDA 바이너리·실제 배포 qualification을 대신하지 않는다.
 
+2026-11-19에 배포 Dockerfile 전용 ignore 파일을 계약에 추가했다. 배포 entrypoint의 `serve --help`와 `serve -h`는 모델 경로 없이 CLI에 전달하도록 수정했다. Linux Actions가 현행 Dockerfile의 빌드와 패키지 검사도 실행한다. [배포 이미지 CI](../../.github/workflows/distribution-image.yml) · [이미지 검사기](../../ci/check_distribution_image.py)
+
 성능 파생 검사의 native checker 변경을 검토해 소스·정책 pin을 함께 맞췄다. 진단용 checker의 선택적 image digest가 정식 릴리스로 전파되지 않도록 full/compact 릴리스 경로 모두 image digest를 필수로 검사한다. 기존 성능 임계값을 낮추지 않았다.
 
 ### 의존성·확장 경계
