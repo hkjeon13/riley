@@ -1,0 +1,94 @@
+{
+  "server": [
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-schema-build-20261119.QWnmhslP/target/release/riley",
+    "serve",
+    "--model",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen3-4B",
+    "--model-id",
+    "m",
+    "--bind",
+    "127.0.0.1:43655",
+    "--max-active-sequences",
+    "32",
+    "--max-weight-bytes",
+    "68719476736",
+    "--inference-profile",
+    "native-bf16-varlen-v1",
+    "--max-sequence-tokens",
+    "8192",
+    "--max-output-tokens",
+    "256",
+    "--kv-blocks",
+    "10050",
+    "--batch-token-budget",
+    "1024",
+    "--prefill-chunk-tokens",
+    "1024",
+    "--batch-shape-buckets",
+    "1,2,4,8,16,24,32,48,64,80,96,112,128,144,160,176,192,208,224,240,256,512,1024",
+    "--prefill-burst-steady-budget",
+    "256",
+    "--prefill-burst-max-decode-rows",
+    "32",
+    "--prefill-burst-min-prompt-tokens",
+    "512"
+  ],
+  "address": "127.0.0.1:43655",
+  "ready": "http://127.0.0.1:43655/readyz",
+  "env": {
+    "RILEY_HOST_STEP_TRACE": "1"
+  },
+  "profile": true,
+  "cells": {
+    "words-30": {
+      "prompt_words": [
+        30
+      ],
+      "max_tokens": 32,
+      "concurrency": 1,
+      "requests": 12,
+      "warmup": 2,
+      "seed": 1
+    },
+    "words-1700": {
+      "prompt_words": [
+        1700
+      ],
+      "max_tokens": 32,
+      "concurrency": 1,
+      "requests": 12,
+      "warmup": 2,
+      "seed": 1
+    },
+    "words-3500": {
+      "prompt_words": [
+        3500
+      ],
+      "max_tokens": 32,
+      "concurrency": 1,
+      "requests": 12,
+      "warmup": 2,
+      "seed": 1
+    },
+    "words-5250": {
+      "prompt_words": [
+        5250
+      ],
+      "max_tokens": 32,
+      "concurrency": 1,
+      "requests": 12,
+      "warmup": 2,
+      "seed": 1
+    },
+    "words-6800": {
+      "prompt_words": [
+        6800
+      ],
+      "max_tokens": 32,
+      "concurrency": 1,
+      "requests": 12,
+      "warmup": 2,
+      "seed": 1
+    }
+  }
+}

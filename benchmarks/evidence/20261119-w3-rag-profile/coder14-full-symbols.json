@@ -1,0 +1,199 @@
+{
+  "scope": "Kernel union by reviewed full symbol within each request window",
+  "sqlite_sha256": "bf1869c1e9cd809657369736f0bb1d93bec8173e53484780e7d4321a23afe81a",
+  "server_pid": 3217625,
+  "cells": {
+    "rag-c1": {
+      "requests": 16,
+      "kernel_category_ms_p50": {
+        "attention": 40.997044,
+        "attention_metadata": 0.2475515,
+        "gemm": 291.791779,
+        "other": 14.739379,
+        "qkv_bias_rope_kv_write": 4.475796
+      }
+    },
+    "rag-c8-s1": {
+      "requests": 64,
+      "kernel_category_ms_p50": {
+        "attention": 109.5324425,
+        "attention_metadata": 0.6293280000000001,
+        "gemm": 667.1291725,
+        "other": 33.3727585,
+        "qkv_bias_rope_kv_write": 10.4648495
+      }
+    },
+    "wave-sync": {
+      "requests": 40,
+      "kernel_category_ms_p50": {
+        "attention": 296.247937,
+        "attention_metadata": 1.220481,
+        "gemm": 2045.8524499999999,
+        "other": 102.65672,
+        "qkv_bias_rope_kv_write": 32.492815
+      }
+    },
+    "wave-50ms": {
+      "requests": 40,
+      "kernel_category_ms_p50": {
+        "attention": 262.76235399999996,
+        "attention_metadata": 1.177314,
+        "gemm": 1818.599469,
+        "other": 91.16753800000001,
+        "qkv_bias_rope_kv_write": 28.909366499999997
+      }
+    }
+  },
+  "symbols": [
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_64x64_ldg8_f2f_stages_64x5_tn",
+      "category": "gemm",
+      "launches": 749264
+    },
+    {
+      "name": "<unnamed>::reset_embedding_error(RileyCudaEmbeddingErrorReport *)",
+      "category": "other",
+      "launches": 5694
+    },
+    {
+      "name": "<unnamed>::validate_embedding_tokens(const unsigned int *, unsigned long, unsigned long, RileyCudaEmbeddingErrorReport *)",
+      "category": "other",
+      "launches": 5694
+    },
+    {
+      "name": "void <unnamed>::embedding_kernel<__nv_bfloat16>(const T1 *, const unsigned int *, T1 *, const RileyCudaEmbeddingErrorReport *, unsigned long, unsigned long)",
+      "category": "other",
+      "launches": 5694
+    },
+    {
+      "name": "<unnamed>::finalize_embedding_error(const unsigned int *, unsigned long, RileyCudaEmbeddingErrorReport *)",
+      "category": "other",
+      "launches": 5694
+    },
+    {
+      "name": "void <unnamed>::vector_bf16_rms_norm_kernel<(bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, unsigned long, unsigned int, float)",
+      "category": "other",
+      "launches": 5694
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x64_64x6_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 273219
+    },
+    {
+      "name": "<unnamed>::qkv_split_bias_rope_kv_write_x2_kernel(const __nv_bfloat162 *, const __nv_bfloat162 *, const __nv_bfloat162 *, const __nv_bfloat162 *, const float *, const float *, const unsigned int *, __nv_bfloat162 *, __nv_bfloat162 *, __nv_bfloat162 *, __nv_bfloat162 *, __nv_bfloat162 *, <unnamed>::DeviceBatch, unsigned int, unsigned int, unsigned int, unsigned int, unsigned long, unsigned int, unsigned int, const unsigned int *)",
+      "category": "qkv_bias_rope_kv_write",
+      "launches": 273312
+    },
+    {
+      "name": "riley_fi::<unnamed>::plan_kernel(riley_fi::RowBatch, unsigned long, unsigned long, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, int *, int *, int *, int *, int *, int *, int *, int *, int *, unsigned int *, unsigned int *, bool *, int *, __nv_bfloat16 *, __nv_bfloat16 *)",
+      "category": "attention_metadata",
+      "launches": 5694
+    },
+    {
+      "name": "void riley_fi::<unnamed>::strided_paged_kernel<flashinfer::KernelTraits<(flashinfer::MaskMode)1, (unsigned int)64, (unsigned int)1, (unsigned int)8, (unsigned int)8, (unsigned int)8, (unsigned int)4, (unsigned int)1, (flashinfer::PosEncodingMode)0, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, int, riley_fi::<unnamed>::Variant>>(riley_fi::<unnamed>::PagedParams)",
+      "category": "attention",
+      "launches": 273312
+    },
+    {
+      "name": "void riley_fi::<unnamed>::merge_parts_kernel<(unsigned int)128>(const __nv_bfloat16 *, const float *, const int *, __nv_bfloat16 *, const unsigned int *, unsigned int)",
+      "category": "attention",
+      "launches": 273312
+    },
+    {
+      "name": "void <unnamed>::vector_bf16_rms_norm_kernel<(bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, unsigned long, unsigned int, float)",
+      "category": "other",
+      "launches": 546624
+    },
+    {
+      "name": "<unnamed>::silu_gated_multiply_merged_rows_bf16x8_kernel(const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, unsigned int)",
+      "category": "other",
+      "launches": 273312
+    },
+    {
+      "name": "void <unnamed>::row_gather_kernel<__nv_bfloat16>(const T1 *, const unsigned int *, T1 *, unsigned long, unsigned long, unsigned long, const unsigned int *)",
+      "category": "other",
+      "launches": 5562
+    },
+    {
+      "name": "void <unnamed>::bf16_argmax_kernel<(bool)0>(const __nv_bfloat16 *, RileyCudaBf16ArgmaxResult *, unsigned long, unsigned long, unsigned long, const unsigned int *, <unnamed>::ArgmaxTieRefine)",
+      "category": "other",
+      "launches": 5562
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn",
+      "category": "gemm",
+      "launches": 389
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_64x128_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "launches": 98
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "launches": 694
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_256x64_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "launches": 148
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "launches": 148
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x5_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 776
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x64_64x3_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 290
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_32x6_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 1206
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_32x3_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 47331
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x5_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 25349
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_128x128_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "launches": 46
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x128_64x3_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 1
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_64x3_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 1
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_64x3_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 1
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x6_tn_align8>(T1::Params)",
+      "category": "gemm",
+      "launches": 1
+    }
+  ]
+}

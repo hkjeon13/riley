@@ -1,0 +1,16 @@
+{
+  "vllm_version": "0.27.1",
+  "usage_context": "OPENAI_API_SERVER",
+  "source": "vllm/engine/arg_utils.py",
+  "source_sha256": "165f9ec6e3b067bb7e6c72d68adedde7fa4d5ed7932fa7568064b9d9086e6830",
+  "device": "NVIDIA A100-SXM4-40GB",
+  "device_memory_mib": 40960,
+  "observed_chunked_prefill": true,
+  "vllm_batch_limit_inferred_from_source": 2048,
+  "riley_explicit_batch_token_budget": 1024,
+  "control_explicitly_pins_vllm_limits": [
+    1024,
+    2048
+  ],
+  "scope": "Comparison of the vLLM token ceiling. Scheduler semantics and kernels remain engine-specific."
+}

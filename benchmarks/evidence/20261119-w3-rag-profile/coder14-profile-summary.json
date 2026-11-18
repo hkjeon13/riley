@@ -1,0 +1,119 @@
+{
+  "model": "Qwen2.5-Coder-14B-Instruct",
+  "physical_gpu": 7,
+  "binary_sha256": "3e070d05c93b6784e24eefd423a77ed260162c7ddd9fcde67bec135c3dc53e70",
+  "scope": "Request windows share kernel time for concurrent clients",
+  "trace_files": {
+    "trace.nsys-rep": {
+      "path": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/coder14-profile/trace.nsys-rep",
+      "bytes": 113675955,
+      "sha256": "5bf97446661172156bf7c25a285471856f053590d11fbc341e19deae739ce10f"
+    },
+    "trace.sqlite": {
+      "path": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/coder14-profile/trace.sqlite",
+      "bytes": 348205056,
+      "sha256": "bf1869c1e9cd809657369736f0bb1d93bec8173e53484780e7d4321a23afe81a"
+    }
+  },
+  "cells": {
+    "rag-c1": {
+      "requests": 16,
+      "prompt_tokens_mean": 2637.375,
+      "ttft_p95_with_profile_ms": 474.6243804693222,
+      "sent_to_first_ms_p50": 360.093136,
+      "gpu_kernel_union_ms_p50": 352.247054,
+      "outside_kernels_ms_p50": 8.7514295,
+      "gpu_busy_share_p50": 0.9803324635580102,
+      "clock_offset_change_ns": 721,
+      "kernel_category_ms_p50": {
+        "attention": 40.997044,
+        "attention_metadata": 0.2475515,
+        "gemm": 291.791779,
+        "other": 14.739379,
+        "qkv_bias_rope_kv_write": 4.475796
+      },
+      "ttft_p95_without_profile_ms": 465.202271938324,
+      "profile_ttft_p95_relative_percent": 2.0253788726653843,
+      "matching_output_text_and_finish": 16
+    },
+    "rag-c8-s1": {
+      "requests": 64,
+      "prompt_tokens_mean": 2721.0,
+      "ttft_p95_with_profile_ms": 1774.0261182188988,
+      "sent_to_first_ms_p50": 821.639064,
+      "gpu_kernel_union_ms_p50": 809.3724199999999,
+      "outside_kernels_ms_p50": 12.708708,
+      "gpu_busy_share_p50": 0.9856134663865079,
+      "clock_offset_change_ns": 4375,
+      "kernel_category_ms_p50": {
+        "attention": 109.5324425,
+        "attention_metadata": 0.6293280000000001,
+        "gemm": 667.1291725,
+        "other": 33.3727585,
+        "qkv_bias_rope_kv_write": 10.4648495
+      },
+      "ttft_p95_without_profile_ms": 1760.0585296750069,
+      "profile_ttft_p95_relative_percent": 0.7935865943316633,
+      "matching_output_text_and_finish": 64
+    },
+    "wave-sync": {
+      "requests": 40,
+      "prompt_tokens_mean": 2768.075,
+      "ttft_p95_with_profile_ms": 3245.327979326248,
+      "sent_to_first_ms_p50": 2526.6445519999997,
+      "gpu_kernel_union_ms_p50": 2478.511782,
+      "outside_kernels_ms_p50": 47.975168999999994,
+      "gpu_busy_share_p50": 0.9796819171233779,
+      "clock_offset_change_ns": 1782,
+      "kernel_category_ms_p50": {
+        "attention": 296.247937,
+        "attention_metadata": 1.220481,
+        "gemm": 2045.8524499999999,
+        "other": 102.65672,
+        "qkv_bias_rope_kv_write": 32.492815
+      },
+      "ttft_p95_without_profile_ms": 3246.2559193372726,
+      "profile_ttft_p95_relative_percent": -0.028584930889052895,
+      "matching_output_text_and_finish": 40
+    },
+    "wave-50ms": {
+      "requests": 40,
+      "prompt_tokens_mean": 2768.075,
+      "ttft_p95_with_profile_ms": 3025.762803852558,
+      "sent_to_first_ms_p50": 2247.947532,
+      "gpu_kernel_union_ms_p50": 2199.695407,
+      "outside_kernels_ms_p50": 32.713791,
+      "gpu_busy_share_p50": 0.9860320085654668,
+      "clock_offset_change_ns": 2707,
+      "kernel_category_ms_p50": {
+        "attention": 262.76235399999996,
+        "attention_metadata": 1.177314,
+        "gemm": 1818.599469,
+        "other": 91.16753800000001,
+        "qkv_bias_rope_kv_write": 28.909366499999997
+      },
+      "ttft_p95_without_profile_ms": 3001.4117062091827,
+      "profile_ttft_p95_relative_percent": 0.8113214722591744,
+      "matching_output_text_and_finish": 40
+    }
+  },
+  "host_step_windows": {
+    "block_steps": 128,
+    "blocks": 44,
+    "median_us_per_step": {
+      "cancel+commands": 29.15,
+      "plan": 56.3,
+      "prepare": 1.8,
+      "pack": 35.3,
+      "upload": 4.4,
+      "submit": 1575.05,
+      "wait": 32957.5,
+      "download": 39.3,
+      "sample": 14.6,
+      "commit": 7.75,
+      "events": 2.25,
+      "publish": 12.55
+    },
+    "other_host_phases_median_us_per_step": 187.15
+  }
+}

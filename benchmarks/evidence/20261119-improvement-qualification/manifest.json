@@ -1,5 +1,5 @@
 {
-  "audited_main": "ff27256cd730f5630565edb72d5c06afadc72564",
+  "audited_main": "6e637c08f55b3b1df2409e06cf2d70fd82eef8d1",
   "release_status": "hold",
   "shared_program_git_objects": {
     "Cargo.toml": "e75f6ce3a2ad13911f1a91fc2b982a410f9d32f2",
@@ -96,6 +96,18 @@
         {
           "path": "benchmarks/evidence/20261119-w3-rag-profile/coder14-comparison.json",
           "sha256": "e002b524ecb23049eeb7eb999518c5e7714e7e5a136403109e9bcc4264cb58c7"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/coder14-profile/receipt.json",
+          "sha256": "46f1e89e1cec7045c8e3d16193689ff7de57d62f462b6ce48ad146ddb9b5072e"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/coder14-profile-summary.json",
+          "sha256": "6a354cb29a49fde5ca5a02ee23881f18f4e2fd57dae35b8dcfbd982863910b84"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/coder14-full-symbols.json",
+          "sha256": "b5904bc2549a19626143c056d34b3116dcb25f60f6d91899216275bd34af2577"
         }
       ],
       "operations": [
@@ -154,6 +166,10 @@
     "smol_lm2_event_publication_on_prior_build": {
       "path": "benchmarks/evidence/20261119-w2-explicit-events/summary.json",
       "sha256": "42f59183b210e32039dad3b160a4a58d8d588dcee1c17d0c167eaacea5862cec"
+    },
+    "qwen3_4b_initial_nsight_attempt": {
+      "path": "benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-initial/receipt.json",
+      "sha256": "6474f5c6c614063f8078e9214b8b35a37b2d6af2690968cd17368689709add6a"
     }
   }
 }

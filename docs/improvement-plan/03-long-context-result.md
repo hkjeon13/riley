@@ -84,6 +84,29 @@ GPU 7에서 실행 순서를 vLLM → Riley로 바꿨다. KV 용량 41,216토큰
 
 Instruct와 비슷하게 단일 요청의 Riley TTFT p95는 vLLM 대비 +2.7%였고 동시성 8에서는 +43.8%, +40.6%였다. 동시 전송을 50ms 간격으로 바꾸면 Riley의 TTFT p95는 7.54% 감소하고 TPOT p50은 3.20% 증가했다. vLLM은 각각 10.38%, 3.34% 감소했다. 실험은 입출력 길이와 KV 용량을 통제했고, 각 엔진의 기존 스케줄러 설정을 사용했다. 두 실행이 끝난 뒤 GPU 7의 20GiB 예약 복귀를 확인했다. [원본 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/coder14-SHA256SUMS)
 
+### Qwen2.5-Coder-14B-Instruct 커널 계측
+
+같은 실행 파일과 요청으로 160건을 계측했다. 모든 출력 텍스트와 종료 사유가 비계측 실행과 일치했다. 계측 실행의 TTFT p95 변화는 셀별 −0.03%에서 +2.03%였고, 시계 오프셋 변화는 0.72–4.38µs였다. 두 14B 모델 모두 첫 토큰까지 GPU가 오래 실행됐고, 전체 심볼로 식별한 GEMM의 시간이 가장 길었다. [계측 결과와 원본 해시](../../benchmarks/evidence/20261119-w3-rag-profile/coder14-profile-summary.json) · [전체 심볼 검산](../../benchmarks/evidence/20261119-w3-rag-profile/coder14-full-symbols.json)
+
+| 부하 | 전송 → 첫 토큰 p50 (ms) | GPU 커널 비중 p50 | 커널 밖 시간 p50 (ms) | GEMM p50 (ms) | Attention p50 (ms) |
+|---|---:|---:|---:|---:|---:|
+| `rag-c1` | 360 | 98.03% | 8.75 | 292 | 41 |
+| `rag-c8` seed 1 | 822 | 98.56% | 12.71 | 667 | 110 |
+| 8개 동시 전송 | 2,527 | 97.97% | 47.98 | 2,046 | 296 |
+| 8개 50ms 간격 전송 | 2,248 | 98.60% | 32.71 | 1,819 | 263 |
+
+128스텝 평균을 44개 수집했다. 평균값들의 중앙값은 제출 1.58ms, 완료 대기 32.96ms, 그 둘과 명령 처리를 제외한 나머지 호스트 단계 합 0.187ms였다. 이 집계는 워밍업과 여러 부하를 포함한다. 동시성 구간에서 여러 요청은 동일한 GPU 커널 실행을 공유한다. [계측 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/coder14-profile-SHA256SUMS) · [검증·집계 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/summarize_profile_arm.py)
+
+### Qwen3-4B 계측의 종료 오류와 재시도
+
+다섯 길이에서 10건의 워밍업과 60건의 스트리밍 요청이 완료됐다. 시도의 입력 토큰 평균은 약 50·1,984·4,056·6,064·7,847개였다. 서버 종료 중 GPU 감시기가 기존 Riley PID를 외부 프로세스로 판정해 시도가 실패했다. 이 PID는 실패 기록과 서버 시작 파일에서 같았다. GPU 7의 홀더는 종료 후 20GiB 예약으로 돌아왔다. 응답 측정 원본은 보존했으며 해당 시도의 커널 데이터는 미수집 상태다. [실패 기록](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-initial/receipt.json) · [초기 요청과 원본 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-initial-and-retry-SHA256SUMS)
+
+재시도는 실행 중 확인한 서버의 PID·시작 시각을 기록하고, 같은 서버가 종료된 상태에서만 남은 NVML 표본을 받아들인다. Nsight의 임시 경로도 자식 프로세스가 종료된 뒤 정리하도록 순서를 바꿨다. Linux에서 실제 자식 프로세스를 사용해 실행·좀비·회수 상태, 시작 시각 불일치, 외부 PID를 검증했다. GPU 계측 재실행은 기존 대기열 뒤에 등록했다. [재시도 패치](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-retry/runner.patch.gz) · [재시도 순서](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-retry/campaign.sh)
+
+### 엔진별 배치 토큰 예산 대조
+
+Riley 실행은 스텝당 1,024토큰을 명시했다. 서버에 설치된 vLLM 0.27.1의 소스는 이 A100과 OpenAI 서버 조건에서 chunked prefill 기본 배치 한도를 2,048토큰으로 선택한다. 기존 실행의 실제 스케줄러 한도는 설치 소스에서 추론한 값으로 기록한다. Qwen2.5-14B-Instruct에서 vLLM의 한도를 각각 1,024·2,048로 명시하고 같은 KV·요청에 적용하는 대조를 등록했다. 현재 대기열 뒤에 실행하며 토큰 한도 변화의 효과를 확인한다. [기본값과 소스 해시](../../benchmarks/evidence/20261119-w3-budget-control/batch-budget-observation.json) · [대조 실행 순서](../../benchmarks/evidence/20261119-w3-budget-control/campaign.sh) · [결과 검증 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/compare_vllm_budgets.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
