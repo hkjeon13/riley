@@ -21,6 +21,20 @@
 
 ## 30분 본 실행
 
-같은 바이너리·모델·입력 생성기에서 cache off 다음 cache on 순서로 각 30분을 실행한다. 2026-11-19 01:39 KST에 첫 조건을 시작했다. 판정에는 초기·후반 TTFT와 전체 완료 지연 p95, RSS, 완료·취소·오류 수, drain 뒤 native 할당과 종료 메트릭을 사용한다. [GPU 실행 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/run_soak.py) · [순차 실행 명령](../../benchmarks/evidence/20261119-w5-mixed-soak/campaign.sh)
+같은 바이너리·모델·입력 생성기에서 cache off 다음 cache on 순서로 각 30분을 실행한다. 2026-11-19 01:39 KST에 첫 조건을 시작했다. [GPU 실행 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/run_soak.py) · [순차 실행 명령](../../benchmarks/evidence/20261119-w5-mixed-soak/campaign.sh)
+
+| 측정 | cache off |
+|---|---:|
+| 정상 완료 / 클라이언트 연결 종료 | 13,749 / 700 |
+| 스키마 유효 완료 / 필수 도구 완료 | 1,739 / 708 |
+| HTTP·SSE 오류와 429 | 0 |
+| 서버 disconnect / cancel 증가 | 700 / 700 |
+| TTFT p95 초기 → 후반 | 327.14 → 330.79ms (+1.11%) |
+| 전체 완료 지연 p95 초기 → 후반 | 4,784.31 → 4,149.00ms (−13.28%) |
+| RSS 후반 변화 | +0.75MiB |
+| drain 뒤 활성·대기·요청 KV 블록 | 각각 0 |
+| 종료 뒤 device·pinned 할당과 바이트 | 각각 0 |
+
+cache off 조건은 모든 판정을 통과했다. 부하 직전과 drain 뒤 native 할당값이 같았고 서버·클라이언트 모두 종료 코드 0을 남겼다. GPU 7은 해당 조건 종료 뒤 동일 홀더의 20GiB 대기로 복귀했다. cache on 결과는 진행 중이다. [집계](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off/summary.json) · [원본 메트릭과 결과 (gzip)](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off/soak.json.gz) · [서버 종료 메트릭](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off/shutdown-metrics.json) · [예약 복귀](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off/idle-after.json)
 
 범위는 합성 부하를 사용한 한 체크포인트의 서빙이다. 실제 운영 분포, cache hit·eviction 관측, 장애 주입, 이미지 패키징은 추가 검증 항목이다.
