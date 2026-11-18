@@ -34,7 +34,7 @@ Riley는 logprobs 요청에서도 18건 모두 일반 요청과 같은 ID를 생
 
 사례 0의 동일 prefix에서 HF attention을 eager로 바꾸면 SDPA에서 0.125 차이였던 두 ID의 점수가 19.75로 같아졌다. Riley와 HF SDPA가 갈라진 다섯 위치 모두 각 경로의 상위 두 점수가 0.125 이내였다. Riley 쪽 수치는 공개 API가 보고한 logprob 간격이고 전체 vocabulary의 raw logit은 수집하지 않았다. 다섯 사례의 최초 분기 위치와 attention backend에 따른 점수 변화를 확인했다. 최초로 달라지는 Riley 내부 층·연산과 KV 위치·mask의 영향은 추가 비교가 필요하다.
 
-다국어·코드·수치·경계 길이 holdout과 GSM8K 전수 검증은 이번 표에 포함되지 않았다. 이 결과로 참조 exact 범위를 확대하거나 수치 동작을 변경하지 않는다.
+다국어·코드·수치·경계 길이 holdout은 아래에 별도로 기록했다. GSM8K 전수 검증은 후속 단계다.
 
 vLLM의 최초 참조 시도는 시작 중 컴파일러가 실행 환경에서 `ninja`를 찾지 못해 종료됐다. 기존 vLLM 가상환경의 `ninja`를 이번 실행의 PATH에 추가하고 별도 컴파일 캐시를 사용해 18건을 완료했다. 참조 비교는 vLLM의 강제 prefix 점수나 동시성별 불변성까지 검증하지 않았다. 각 단계 종료 후 GPU 7은 동일 홀더의 20GiB 대기 상태로 돌아갔다. [최초 실패 receipt](../../benchmarks/evidence/20261119-w4-long/vllm-initial/receipt.json) · [최종 예약 상태](../../benchmarks/evidence/20261119-w4-long/vllm/idle-after.json)
 
@@ -43,10 +43,29 @@ vLLM의 최초 참조 시도는 시작 중 컴파일러가 실행 환경에서 `
 - [동일 입력 ID를 확인한 vLLM 원본 응답 (gzip)](../../benchmarks/evidence/20261119-w4-long/vllm/results.json.gz)
 - [캡처 및 참조 도구](../../benchmarks/live/long_accuracy.py) · [GPU 예약 래퍼](../../benchmarks/evidence/20261119-w4-long/tools/run_accuracy.py)
 
+## 독립 프롬프트 11개 교차 비교
+
+같은 모델과 Riley GPU 빌드에서 한국어·일본어·코드·수치·반복 입력을 검증했다. 입력 ID는 255–7,917개, 생성 상한은 64·128·256토큰이었다. Riley와 vLLM에 사용된 입력 ID를 각 고정 fixture와 대조했고 HF tokenizer도 11개 모두 같은 ID를 반환했다. HF는 같은 ID에서 BF16 SDPA를, vLLM 0.27.1은 BF16 FlashAttention 2를 사용했다. [입력 fixture](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [케이스별 집계](../../benchmarks/evidence/20261119-w4-holdout/summary.json)
+
+| 비교 | 첫 출력 ID | 전체 출력 ID | 출력 텍스트 | 종료 사유 |
+|---|---:|---:|---:|---:|
+| Riley / HF SDPA | 11/11 | 9/11 | 9/11 | 11/11 |
+| vLLM / HF SDPA | 11/11 | 7/11 | 7/11 | 11/11 |
+| Riley / vLLM | 11/11 | 8/11 | 8/11 | 11/11 |
+
+Riley의 C8·C32 반복에서는 각각 33/33의 생성 ID·텍스트·종료 사유가 C1과 같았다. 세 엔진 각각 6건은 `stop`, 5건은 `length`로 종료했다. 토큰 비교에서 `stop`으로 끝난 응답에 포함된 마지막 EOS ID를 제거했다.
+
+| Riley와 HF가 갈라진 사례 | 생성 위치 (0부터) | Riley / HF ID | Riley 상위 logprob 차이 | HF SDPA / eager 결과 |
+|---|---:|---|---:|---|
+| 수치 1,023토큰 | 67 | 510 / 311 | 0.25 | 두 경로 모두 두 ID가 동점 |
+| 한국어 1,024토큰 | 77 | 12802 / 42039 | 0 | SDPA는 42039가 0.125, eager는 12802가 0.50 높음 |
+
+7,836토큰 코드 입력에서는 세 엔진의 출력이 일치했다. 7,917토큰 한국어 입력에서 Riley와 HF는 일치했고 vLLM은 생성 위치 7에서 갈라졌다. 길이 경계에 따라 일관되게 분기하는 패턴은 이 표에서 확인되지 않았다. vLLM 종료 로그에는 semaphore 정리 경고 한 건이 남았으며, 각 단계 종료 뒤 GPU 7은 동일 홀더의 20GiB 예약으로 복귀했다. [Riley 캡처](../../benchmarks/evidence/20261119-w4-holdout/riley/capture.json.gz) · [HF 참조](../../benchmarks/evidence/20261119-w4-holdout/hf/reference.json) · [vLLM 원본](../../benchmarks/evidence/20261119-w4-holdout/vllm/results.json.gz) · [vLLM 로그](../../benchmarks/evidence/20261119-w4-holdout/vllm/server.log.gz) · [GPU 7 예약](../../benchmarks/evidence/20261119-w4-holdout/vllm/idle-after.json)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.
 
 Hugging Face SDPA에는 같은 입력 ID를 공급하고 원래 첫 출력 ID를 재확인한다. QKV bias 이전 행과 RoPE 이후 query는 참조의 입력·가중치로 별도 재계산한다. 다른 지점은 실제 순전파에서 수집한다. 첫 BF16 불일치 지점은 추적 결과이며, KV 저장·mask 또는 특정 커널이 출력 차이의 원인이라는 판정에는 추가 대조가 필요하다.
 
-격리 소스에서 Rust 타입 검사와 합성 BF16 비교기 검산을 통과했다. Linux CUDA 빌드 및 실제 두 사례 수집은 혼합 부하와 holdout 실행이 끝난 뒤 진행된다. [진단 패치 (gzip)](../../benchmarks/evidence/20261119-w4-layer-trace/final-prefill.patch.gz) · [실행 순서](../../benchmarks/evidence/20261119-w4-layer-trace/campaign.sh) · [입력 해시](../../benchmarks/evidence/20261119-w4-layer-trace/staged-inputs.sha256)
+격리 소스에서 Rust 타입 검사와 합성 BF16 비교기 검산을 통과했다. 첫 Linux CUDA 빌드는 소스 묶음에서 `kernels/CMakeLists.txt`가 빠져 코드 101로 종료됐다. 서버에 이미 있던 W4 빌드의 커널 파일을 기준 커밋의 34개 파일 해시와 대조했다. 같은 소스 묶음과 진단 패치에 검증한 커널 파일을 보완하며, GPU 7의 W3 성능 측정이 끝나면 GPU 6에서 진단을 수행하도록 등록했다. [진단 패치 (gzip)](../../benchmarks/evidence/20261119-w4-layer-trace/final-prefill.patch.gz) · [첫 빌드 로그](../../benchmarks/evidence/20261119-w4-layer-trace/initial-build.log.gz) · [커널 검증 로그](../../benchmarks/evidence/20261119-w4-layer-trace/retry-admission-kernels.log) · [재실행 명령](../../benchmarks/evidence/20261119-w4-layer-trace/retry-campaign.sh)

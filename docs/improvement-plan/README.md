@@ -2,9 +2,9 @@
 
 작성일: 2026-11-13 (Asia/Seoul)\
 기준: 로컬 `main` `37ede4445`, 원격 `origin/main` `9f039de78`\
-W1 구현과 Linux CPU CI를 확인했다. W2는 A100 기준선을 재현하고 이벤트 발행 모드를 명시해 다시 비교했다. W3는 작은 모델의 두 스케줄링 정책을 비교하고 Qwen3-4B 길이 곡선을 얻었다. W4-A는 동일 입력 ID로 장문 출력이 처음 갈라지는 위치를 확인했고, W4-B 스키마 변경은 실제 GPU API에서 확인했다. W5-A는 사용자 문서의 성능·CLI·API 주장에 해당 근거를 연결했다. [W1 결과](01-validation-result.md) · [W2 결과](02-async-step-result.md) · [W3 실측 결과](03-long-context-result.md) · [W4-A 결과](04-long-accuracy-result.md) · [W4-B 결과](04-structured-output-result.md) · [W5 문서 계획](05-documentation-and-operations.md)
+W1은 Linux CPU CI와 CUDA 12.4 배포 이미지 빌드·CPU CLI 검사를 통과했다. W2는 A100 기준선을 재현하고 이벤트 발행 모드를 명시해 다시 비교했다. W3는 작은 모델의 두 스케줄링 정책을 비교하고 Qwen3-4B 길이 곡선을 얻었다. W4-A는 기존 장문 18개와 독립 프롬프트 11개에서 동일 입력 ID로 세 엔진을 비교했고, W4-B 스키마 변경은 실제 GPU API에서 확인했다. W5-A는 사용자 문서의 성능·CLI·API 주장에 해당 근거를 연결했다. [W1 결과](01-validation-result.md) · [W2 결과](02-async-step-result.md) · [W3 실측 결과](03-long-context-result.md) · [W4-A 결과](04-long-accuracy-result.md) · [W4-B 결과](04-structured-output-result.md) · [W5 문서 계획](05-documentation-and-operations.md)
 
-W5-B는 W4 CUDA 빌드의 90초 혼합 부하 검증에 이어 30분 cache off·on 두 조건을 통과했다. 각 조건에서 정상 완료 13,749건·의도적 연결 종료 700건·HTTP 및 SSE 오류 0건을 기록했고, 종료 뒤 활성 요청·요청 KV·native 할당이 모두 0이었다. [W5-B A100 결과](05-mixed-soak-result.md)
+W5-B는 W4 CUDA 빌드의 90초 혼합 부하 검증에 이어 30분 cache off·on 두 조건을 통과했다. 각 조건에서 정상 완료 13,749건·의도적 연결 종료 700건·HTTP 및 SSE 오류 0건을 기록했고, 종료 뒤 활성 요청·요청 KV·native 할당이 모두 0이었다. 캐시 재사용·퇴거와 큐 포화의 HTTP 429 및 추론 회복도 확인했다. [W5-B A100 결과](05-mixed-soak-result.md)
 
 ## 1. 목표와 현재 위치
 
