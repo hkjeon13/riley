@@ -47,7 +47,9 @@
 
 후반 RSS는 900초의 15,162.35MiB에서 15,163.10MiB로 0.75MiB 증가했다. 1,080초부터 drain까지 같은 값을 유지했다. 서버 `/proc`의 15초 간격 표본 95개에서 두 RSS 수준의 차이는 `RssAnon` 768KiB였고 파일·공유 페이지와 RSS 최고치는 일정했다. 관측기는 실행 도중 시작했다. 두 cache-off 시험에서 후반 증가가 재현되어 RSS 증가 0 항목은 미충족 상태다. 익명 페이지의 증가 원인을 확인하려면 allocator에 남은 공간과 사용 중인 호스트 할당을 추가로 측정해야 한다. [RSS 표본](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off-repeat/result/rss-observer/samples.jsonl) · [대조 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/compare_cache_off_repeat.py) · [원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off-repeat/result/SHA256SUMS)
 
-GPU 7의 30분 진단을 예약했다. 동일 Riley 바이너리의 서버 프로세스에만 관측기를 적용해 15초마다 `/proc` RSS와 glibc `mallinfo2`의 arena 사용·여유 공간, `malloc`의 mmap 바이트를 함께 기록한다. A100 호스트 glibc 2.35에서 관측기 빌드와 CPU 사전 검사를 통과했다. 관측기의 계측 비용과 glibc 통계로 보이지 않는 할당 경로는 해석에 포함한다. [진단 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/campaign.sh) · [CPU 사전 검증](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/cpu-smoke.jsonl) · [관측기](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/sample_allocator.c) · [glibc 2.35 통계 정의](https://www.sourceware.org/glibc/manual/2.35/html_node/Statistics-of-Malloc.html)
+GPU 7의 30분 진단을 예약했다. 동일 Riley 바이너리의 서버 프로세스에만 관측기를 적용해 15초마다 `/proc` RSS와 glibc `mallinfo2`의 arena 사용·여유 공간, `malloc`의 mmap 바이트를 함께 기록한다. A100 호스트 glibc 2.35에서 관측기 빌드와 CPU 사전 검사를 통과했다. [진단 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/campaign.sh) · [CPU 사전 검증](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/cpu-smoke.jsonl) · [관측기](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/sample_allocator.c) · [glibc 2.35 통계 정의](https://www.sourceware.org/glibc/manual/2.35/html_node/Statistics-of-Malloc.html)
+
+집계기는 두 실행의 바이너리·GPU·부하·예약 복귀를 대조하고 allocator 표본과 서버 PID의 일치를 확인한다. `soak.json`의 원격 파일 수정 시각과 마지막 drain 표본의 경과 시간으로 중간·후반 관측 구간을 추정한다. 구간별 RSS 구성과 allocator 사용·여유 바이트, 계측 전후 지연 p95를 함께 확인한다. glibc 밖의 할당 경로는 추가 검증 범위다. [계측 결과 대조 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/compare_allocator_trace.py)
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
