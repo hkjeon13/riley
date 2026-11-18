@@ -25,7 +25,7 @@ def require(condition, reason):
         raise ValueError(reason)
 
 
-def arm(root, label, engine, *, expected_cells=CELLS):
+def arm(root, label, engine, *, expected_cells=CELLS, physical_gpu=7):
     directory = root / f"{label}-{engine}"
     plan_file = directory / "plan.json"
     plan = read(plan_file)
@@ -35,7 +35,7 @@ def arm(root, label, engine, *, expected_cells=CELLS):
     require(not plan["profile"] and tuple(plan["cells"]) == expected_cells, f"{engine}: unexpected timing cells")
     hashes = {Path(path).name: checksum for path, checksum in receipt["sha256"].items()}
     require(hashes["plan.json"] == digest(plan_file), f"{engine}: plan digest mismatch")
-    require(reservation["phase"] == "idle" and reservation["physical_index"] == 7
+    require(reservation["phase"] == "idle" and reservation["physical_index"] == physical_gpu
             and reservation["allocation_bytes"] == reservation["torch_reserved_bytes"] == HOLDER_BYTES
             and not reservation["other_processes"]
             and reservation["gpu"] == receipt["gpu"]

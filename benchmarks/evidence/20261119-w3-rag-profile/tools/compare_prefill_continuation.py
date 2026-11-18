@@ -10,12 +10,12 @@ from compare_profile_arms import CELLS, METRICS, arm, ratio_percent, read, requi
 from summarize_profile_arm import stable_server
 
 
-def compare(root):
-    require((root / "campaign.exit").read_text().strip() == "0", "continuation campaign did not finish")
+def compare(root, *, candidate_mode="continuation", env_name="RILEY_W3_PREFILL_CONTINUE", physical_gpu=7):
+    require((root / "campaign.exit").read_text().strip() == "0", "prefill comparison campaign did not finish")
     expected = (*CELLS, "short-c32")
-    modes = ("riley", "continuation")
+    modes = ("riley", candidate_mode)
     (base, base_plan, control), (candidate, candidate_plan, measured) = (
-        arm(root, "qwen14", mode, expected_cells=expected) for mode in modes
+        arm(root, "qwen14", mode, expected_cells=expected, physical_gpu=physical_gpu) for mode in modes
     )
     immutable = ("model", "gpu", "common_kv_blocks", "kv_cache_bytes", "holder_pid", "holder_start_ticks")
     hashes = [{Path(k).name: v for k, v in record["sha256"].items() if Path(k).name != "plan.json"}
@@ -23,7 +23,7 @@ def compare(root):
     require(all(base[name] == candidate[name] for name in immutable) and hashes[0] == hashes[1],
             "experiment changed serving inputs")
     require(base_plan["cells"] == candidate_plan["cells"] and base_plan["env"] == {}
-            and candidate_plan["env"] == {"RILEY_W3_PREFILL_CONTINUE": "1"}
+            and candidate_plan["env"] == {env_name: "1"}
             and stable_server(base_plan["server"]) == stable_server(candidate_plan["server"]),
             "experiment changed workload or server flags")
 
@@ -52,7 +52,7 @@ def compare(root):
         cells[name] = {"requests": len(rows), "exact_outputs": sum(
                            all(old[field] == new[field] for field in output_fields) for old, new in rows),
                        "control": {key: before[key] for key in METRICS},
-                       "continuation": {key: after[key] for key in METRICS},
+                       candidate_mode: {key: after[key] for key in METRICS},
                        "change_percent": {key: ratio_percent(after[key], before[key]) for key in METRICS}}
     short = cells["short-c32"]["change_percent"]
     guards = {"exact_stream_results": all(cell["exact_outputs"] == cell["requests"] for cell in cells.values()),
@@ -61,7 +61,7 @@ def compare(root):
               "short_throughput_regression_below_2_percent": short["output_tok_s"] > -2,
               "decode_tpot_regression_below_1_percent": all(cells[name]["change_percent"]["tpot_p50_ms"] < 1
                                                             for name in ("short-c32", "rag-c8-s1", "rag-c8-s2"))}
-    return {"model": base["model"], "physical_gpu": 7, "binary_sha256": hashes[0]["riley"],
+    return {"model": base["model"], "physical_gpu": physical_gpu, "binary_sha256": hashes[0]["riley"],
             "guardrails": guards, "cells": cells}
 
 

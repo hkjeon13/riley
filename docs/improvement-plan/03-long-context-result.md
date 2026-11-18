@@ -166,6 +166,12 @@ SSE 요청 ID로 엔진 제출부터 첫 응답 조각 생성까지를 연결했
 
 이 설정은 채택하지 않았다. `rag-c8` seed 2의 TTFT 중앙값은 25.41% 줄었으나 p95는 2.17% 늘었고, decode TPOT가 1% 회귀 기준을 넘었다. 두 seed의 결과는 각 조건을 한 번씩 실행한 근거다. [정확성·성능 대조](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/result/summary.json) · [집계 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/compare_prefill_continuation.py)
 
+### 완료 가능한 prefill 우선 후보
+
+요청별 `prefill_start`와 `prefill_return`을 다시 읽어 각 요청의 남은 토큰을 대조했다. 두 `rag-c8` seed에서 선두 요청은 이번 스텝에서 끝낼 수 없지만 다른 요청은 끝낼 수 있는 경우가 각각 180스텝 중 41개와 168스텝 중 37개 있었다. 모두 decode가 진행 중이었다. 계측 시각으로 readiness를 근사한 후보 선별 집계이며 실제 우선순위 변경 횟수는 별도 실행에서 확인한다. [추적 집계](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/finishing-opportunities.json) · [집계 도구](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/scan_finishing_opportunities.py)
+
+새 후보는 기존 aging override 직후의 decode 우선 스텝에서만 동작한다. 기존 decode 행을 먼저 배정하고, 남은 예산에 들어오는 완료 가능한 요청 한 개를 앞당긴다. 다음 aging override는 기존 순서를 사용한다. 격리한 스케줄러 CPU 테스트 146건과 진단 표지를 포함한 최종 단위 테스트 37건을 통과했다. CUDA 기능 구성은 로컬 Rust 타입 검사까지 확인했다. 워크스페이스 기본값은 유지하고, 실제 두 설정 비교는 A100 7번 RSS 시험 종료 뒤 GPU 6번에서 시작한다. [진단 패치·실행 순서](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/campaign.sh) · [로컬 검사 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/local-checks.sha256) · [검증기](../../benchmarks/evidence/20261119-w3-rag-profile/tools/compare_prefill_finish.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

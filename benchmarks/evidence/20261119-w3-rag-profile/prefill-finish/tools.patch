@@ -1,0 +1,39 @@
+--- a/tools/run_profile_retry.py
++++ b/tools/run_profile_retry.py
+@@ -24,7 +24,7 @@
+     "coder14": ("Qwen2.5-Coder-14B-Instruct", 2576),
+     "qwen4": ("Qwen3-4B", 10050),
+ }
+-MODES = ("riley", "continuation")
++MODES = ("riley", "finishing")
+ RUN = Path(__file__).resolve().parents[1]
+ ROOT = RUN.parent.parent
+ NATIVE = RUN / "target/release/riley"
+@@ -93,6 +93,7 @@
+     env.pop("RILEY_TIMING", None)
+     env.pop("RILEY_W3_REQUEST_TRACE", None)
+     env.pop("RILEY_W3_PREFILL_CONTINUE", None)
++    env.pop("RILEY_W3_PREFILL_FINISH", None)
+     overrides = {}
+     if mode == "vllm":
+         server = [
+@@ -119,8 +120,8 @@
+         ready = "/readyz"
+         if mode == "profile":
+             overrides["RILEY_HOST_STEP_TRACE"] = "1"
+-        if mode == "continuation":
+-            overrides["RILEY_W3_PREFILL_CONTINUE"] = "1"
++        if mode == "finishing":
++            overrides["RILEY_W3_PREFILL_FINISH"] = "1"
+     plan = {"server": server, "address": endpoint, "ready": f"http://{endpoint}{ready}", "env": overrides,
+             "profile": False, "check_token_ids": True, "cells": cells(model_key, mode)}
+     plan_path = out / "plan.json"
+@@ -130,7 +131,7 @@
+     gpu = os.environ["CUDA_VISIBLE_DEVICES"]
+     holder_pid = int(env["RILEY_GPU_HOLDER_PID"])
+     holder_ticks = env["RILEY_GPU_HOLDER_START_TICKS"]
+-    lease = Path(env["RILEY_GPU_HOLDER_LEASE_DIR"]) / "gpu7.status.json"
++    lease = Path(env["RILEY_GPU_HOLDER_LEASE_DIR"]) / "gpu6.status.json"
+     start_ticks = int(identity(os.getpid()))
+     server_pid_file = out / "server.pid"
+     receipt = {"model": model_name, "mode": mode, "gpu": gpu, "holder_pid": holder_pid,

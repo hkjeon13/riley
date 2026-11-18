@@ -1,0 +1,58 @@
+{
+  "interpretation": "Recorded admit and return times approximate scheduler readiness; this is eligibility screening",
+  "budget": 1024,
+  "chunk_limit": 1024,
+  "aging_threshold_ns": 100000000,
+  "cells": {
+    "rag-c1": {
+      "batches": 48,
+      "prefill_only_batches": 48,
+      "prefill_batches_with_other_ready": 0,
+      "trace_front_or_tie_differs": 0,
+      "finishing_alternative": 0,
+      "finishing_alternative_no_decode": 0,
+      "finishing_alternative_within_aging": 0,
+      "finishing_alternative_no_decode_within_aging": 0
+    },
+    "rag-c8-s1": {
+      "batches": 180,
+      "prefill_only_batches": 0,
+      "prefill_batches_with_other_ready": 119,
+      "trace_front_or_tie_differs": 0,
+      "finishing_alternative": 41,
+      "finishing_alternative_no_decode": 0,
+      "finishing_alternative_within_aging": 0,
+      "finishing_alternative_no_decode_within_aging": 0
+    },
+    "rag-c8-s2": {
+      "batches": 168,
+      "prefill_only_batches": 0,
+      "prefill_batches_with_other_ready": 114,
+      "trace_front_or_tie_differs": 0,
+      "finishing_alternative": 37,
+      "finishing_alternative_no_decode": 0,
+      "finishing_alternative_within_aging": 0,
+      "finishing_alternative_no_decode_within_aging": 0
+    },
+    "wave-sync": {
+      "batches": 111,
+      "prefill_only_batches": 51,
+      "prefill_batches_with_other_ready": 108,
+      "trace_front_or_tie_differs": 0,
+      "finishing_alternative": 66,
+      "finishing_alternative_no_decode": 35,
+      "finishing_alternative_within_aging": 0,
+      "finishing_alternative_no_decode_within_aging": 0
+    },
+    "wave-50ms": {
+      "batches": 111,
+      "prefill_only_batches": 42,
+      "prefill_batches_with_other_ready": 103,
+      "trace_front_or_tie_differs": 0,
+      "finishing_alternative": 59,
+      "finishing_alternative_no_decode": 21,
+      "finishing_alternative_within_aging": 0,
+      "finishing_alternative_no_decode_within_aging": 0
+    }
+  }
+}
