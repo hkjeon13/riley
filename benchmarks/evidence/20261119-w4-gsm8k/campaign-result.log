@@ -1,0 +1,28 @@
+WAITING FOR /mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-mixed-soak-20261119.YJg0Xzhk/campaign.exit 2026-11-18T17:33:19Z
+WAITING FOR /mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-holdout-20261119.cgmtjz4x/campaign.exit 2026-11-18T17:44:23Z
+WAITING FOR /mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-layer-trace-20261119.1gr9Rppl/campaign.exit 2026-11-18T17:52:40Z
+WAITING FOR /mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/campaign.exit 2026-11-18T17:53:11Z
+START qwen7-riley 2026-11-18T18:47:44Z
+END qwen7-riley 2026-11-18T18:51:56Z exit=0
+START qwen7-vllm 2026-11-18T18:51:56Z
+END qwen7-vllm 2026-11-18T18:57:25Z exit=0
+START llama3-vllm 2026-11-18T18:57:25Z
+END llama3-vllm 2026-11-18T19:01:05Z exit=0
+START llama3-riley 2026-11-18T19:01:06Z
+END llama3-riley 2026-11-18T19:03:04Z exit=0
+START qwen4-riley 2026-11-18T19:03:04Z
+END qwen4-riley 2026-11-18T19:05:40Z exit=0
+START qwen4-vllm 2026-11-18T19:05:40Z
+END qwen4-vllm 2026-11-18T19:10:42Z exit=0
+START qwen3-vllm 2026-11-18T19:10:42Z
+END qwen3-vllm 2026-11-18T19:14:54Z exit=0
+START qwen3-riley 2026-11-18T19:14:54Z
+END qwen3-riley 2026-11-18T19:17:14Z exit=0
+COMPARE qwen7
+passed 0.530705079605762
+COMPARE llama3
+passed -0.530705079605762
+COMPARE qwen4
+passed 1.1372251705837755
+COMPARE qwen3
+passed -0.9855951478392722

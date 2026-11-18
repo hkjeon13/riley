@@ -1,0 +1,24 @@
+{
+  "status": "passed",
+  "questions": 1319,
+  "riley_correct": 921,
+  "vllm_correct": 934,
+  "riley_only_correct": 42,
+  "vllm_only_correct": 55,
+  "matching_text": 565,
+  "matching_output_ids": 565,
+  "unmatched_prompt_ids": [],
+  "gap_percentage_points": -0.9855951478392722,
+  "riley_sha256": "946fba021d8eef25b05692348800f4136abb221d7e335d0640272d37c0bd8d16",
+  "vllm_sha256": "d4d60e8aa4d5098a0ae4734e9be4f2eccaaf8f65d92bd5df93f5379f827d088f",
+  "dataset": {
+    "train": {
+      "sha256": "17f347dc51477c50d4efb83959dbb7c56297aba886e5544ee2aaed3024813465",
+      "rows": 7473
+    },
+    "test": {
+      "sha256": "3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14",
+      "rows": 1319
+    }
+  }
+}

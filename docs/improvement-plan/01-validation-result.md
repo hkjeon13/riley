@@ -98,7 +98,7 @@ Linux 디스크립터 의미론이 필요한 fixture는 macOS에서 명시적으
 
 푸시 후 별도 `Rust checkpoint preparation` workflow에서 LoRA 도구의 포맷 실패를 발견했다. 포맷과 Clippy 경고 두 건을 고치고, 기존 소문자 SHA-256 변환 함수를 재사용했다. 로컬에서 기본 구성 16건과 `hub` 구성 21건이 통과했다. 빈 PATH에서 테스트 바이너리와 도움말 실행, 기본 구성의 Hub 의존성 부재도 확인했다.
 
-GitHub Actions Linux Production CPU가 `9ca18cb0f`에서 통과했다. 로그에서 `RILEY_REQUIRE_LINUX_CONTRACT_TESTS=1`과 릴리스 테스트 1,314건 중 1,284건 통과·30건 skip을 확인했다. 별도 과거 RC3 고정 호스트 lane은 skip 상태이며 수동 실행 항목으로 남아 있다. [Production CPU 실행](https://github.com/hkjeon13/riley/actions/runs/44221081481) · [체크포인트 도구 CI](https://github.com/hkjeon13/riley/actions/runs/44221081323)
+GitHub Actions Linux Production CPU가 `9ca18cb0f`에서 통과했다. 당시 로그에서 `RILEY_REQUIRE_LINUX_CONTRACT_TESTS=1`과 릴리스 테스트 1,314건 중 1,284건 통과·30건 skip을 확인했다. 후속 `main`의 `f33e949fc`도 Production CPU를 통과했다. 과거 RC3 고정 호스트 lane의 별도 실행 결과는 아래에 기록했다. [최초 Production CPU 실행](https://github.com/hkjeon13/riley/actions/runs/44221081481) · [후속 main 실행](https://github.com/hkjeon13/riley/actions/runs/44375679799) · [체크포인트 도구 CI](https://github.com/hkjeon13/riley/actions/runs/44221081323)
 
 CUDA 관련 Rust 포맷·문서·host cast 변경도 있으므로 릴리스 전 CUDA compile/link lane과 영향받는 GPU 검증을 실행해야 한다. 기존 커널·임계값·측정 근거가 유지되었다는 사실만으로 GPU 실행 동등성을 확정하지 않는다.
 

@@ -11,7 +11,7 @@
 | 항목 | 확인 내용 | 해석 |
 |---|---|---|
 | 장문 배치 불변성 | Qwen2.5-7B C8/C32 각각 54/54 | 18개 prompt를 세 번 반복한 비교다. 54개 독립 prompt의 품질 평가가 아니다. |
-| 장문 HF 일치 | 원래 비교에서 Riley 텍스트 12/18, vLLM 16/18. 후속 동일 입력 ID를 사용한 HF SDPA 비교에서 전체 생성 ID와 텍스트 각각 Riley 13/18, vLLM 16/18 | 첫 분기 다섯 곳의 점수 간격을 확인했고 최초로 달라지는 내부 연산을 추적 중이다. |
+| 장문 HF 일치 | 원래 비교에서 Riley 텍스트 12/18, vLLM 16/18. 후속 동일 입력 ID를 사용한 HF SDPA 비교에서 전체 생성 ID와 텍스트 각각 Riley 13/18, vLLM 16/18 | 다섯 첫 분기의 점수 간격과 두 prefill 사례의 첫 BF16 차이를 확인했다. HF의 bias 순서와 prefill 분할 대조에서 두 사례의 첫 토큰은 유지됐다. |
 | `oneOf` | 초기 컴파일러가 `anyOf`처럼 처리 | 수정 후 400을 반환한다. 이중 일치 반례를 독립 검증기에 확인했다. |
 | 스키마 조기 반환 | 초기 구현이 `const`·`enum`·조합 키워드 처리 뒤 일부 형제 제약을 무시 | 지원하는 `type` 교집합을 강제하고 나머지 형제 제약은 명시적으로 거부한다. |
 | HF 기준 경로 | `long_check.py`는 HF BF16 `sdpa` 사용 | owned HF-eager 프로파일 기록과 섞어 같은 기준이라고 주장하면 안 된다. |
@@ -66,7 +66,7 @@ Qwen2.5-7B의 검증된 tokenizer로 별도 greedy holdout 11개를 고정했다
 
 GSM8K는 기존 train 7,473행과 test 1,319행의 파일 해시를 고정했다. 기존 세 모델인 Qwen2.5-7B, Llama-3.2-3B, Qwen3-4B와 두 KV-head 모델 Qwen2.5-3B를 Riley·vLLM에서 전수 비교한다. 두 엔진에서 4-shot, greedy, 최대 256토큰, `Question:` 종료 문자열, 문맥 4,096과 클라이언트 동시성 32를 사용한다. 요청 본문과 서버가 받은 토큰 ID를 모두 대조하고, 응답 오류가 하나라도 있으면 점수 비교는 무효다. [고정 데이터](../../benchmarks/evidence/20261119-w4-gsm8k/dataset.json) · [비교 검사기](../../benchmarks/evidence/20261119-w4-gsm8k/tools/compare_gsm8k.py)
 
-CPU에서 과거 세 Riley 결과의 1,319문항별 정오를 각각 재계산해 원래 결과와 일치함을 확인했다. 이는 채점 호환성 근거다. 현재 GPU 빌드의 전수 평가는 앞선 소크·정확성·성능 검증 뒤 실행한다. [과거 결과 재채점](../../benchmarks/evidence/20261119-w4-gsm8k/preflight.json) · [GPU 실행 순서](../../benchmarks/evidence/20261119-w4-gsm8k/campaign.sh)
+CPU에서 과거 세 Riley 결과의 1,319문항별 정오를 각각 재계산해 원래 결과와 일치함을 확인했다. 현재 네이티브 GPU 후보는 네 모델 모두에서 vLLM과 1,319개 동일 입력으로 검증해 −1.2%p 품질 기준을 통과했다. [과거 결과 재채점](../../benchmarks/evidence/20261119-w4-gsm8k/preflight.json) · [GPU 실행 순서](../../benchmarks/evidence/20261119-w4-gsm8k/campaign.sh) · [전수 비교 결과](04-long-accuracy-result.md#gsm8k-전수-품질-대조)
 
 ## 3. W4-B: 스키마 의미를 일치시키는 절차
 
@@ -128,7 +128,7 @@ CPU에서 과거 세 Riley 결과의 1,319문항별 정오를 각각 재계산�
 
 ## 6. 완료 조건과 다른 작업의 사용법
 
-- [ ] W4-A: 장문 차이가 동일 입력에서 재현되고 최초 분기 위치·연산·원인 또는 남은 불확실성이 기록돼 있다.
+- [x] W4-A: 같은 입력에서 최초 분기 토큰과 첫 BF16 차이를 재현했고 남은 불확실성을 기록했다. [장문 정확성 결과](04-long-accuracy-result.md#첫-prefill-분기-추적)
 - [ ] W4-A: 결함 수정 또는 수치 기준 변경의 영향 모델·품질 결과가 명확하다. 모든 HF 문자열을 무조건 같게 만들었다고 과장하지 않는다.
 - [x] W4-B: 지원 제약의 독립 판정, 미지원 응답, `oneOf`·형제 제약 반례를 검증했다. [구조화 출력 계약 결과](04-structured-output-result.md)
 - [ ] 공통: 배치 불변성·기존 품질 범위·W2/W3 성능 회귀 제한을 함께 만족한다.

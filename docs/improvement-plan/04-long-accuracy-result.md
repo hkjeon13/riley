@@ -89,13 +89,19 @@ GPU 6의 HF SDPA에서 첫 레이어 Q만, 첫 레이어 QKV, 전체 레이어 Q
 
 ## GSM8K 전수 품질 대조
 
-Qwen2.5-7B-Instruct의 Riley와 vLLM이 각각 1,319문제를 오류 없이 완료했다. 동일한 train·test 데이터 해시, 4-shot 입력, 온도 0, 출력 상한 256토큰, 동시 요청 32개, 마지막 숫자 채점 방식을 사용했다. 1,319개 모두에서 요청과 입력 토큰 ID 해시를 대조했다. [데이터셋 매니페스트](../../benchmarks/evidence/20261119-w4-gsm8k/dataset.json) · [검증 집계](../../benchmarks/evidence/20261119-w4-gsm8k/qwen7-comparison.json)
+네 모델에서 Riley와 vLLM이 각각 1,319문제를 오류 없이 완료했다. 같은 train·test 데이터 해시, 4-shot 입력, 온도 0, 출력 상한 256토큰, 동시 요청 32개, 마지막 숫자 채점 방식을 사용했다. 같은 모델의 두 엔진에서 모든 문제의 요청과 입력 토큰 ID 해시가 일치했다. 점수 차이는 원본 정답 수에서 계산했다. [데이터셋 매니페스트](../../benchmarks/evidence/20261119-w4-gsm8k/dataset.json) · [전체 실행 기록](../../benchmarks/evidence/20261119-w4-gsm8k/campaign-result.log)
 
 | 모델 | Riley 정답 | vLLM 정답 | Riley − vLLM | 판정 |
 |---|---:|---:|---:|---|
 | Qwen2.5-7B-Instruct | 1,121/1,319 (84.99%) | 1,114/1,319 (84.46%) | +0.53%p | −1.2%p 품질 기준 통과 |
 | Llama-3.2-3B-Instruct | 866/1,319 (65.66%) | 873/1,319 (66.19%) | −0.53%p | −1.2%p 품질 기준 통과 |
+| Qwen3-4B | 1,133/1,319 (85.90%) | 1,118/1,319 (84.76%) | +1.14%p | −1.2%p 품질 기준 통과 |
+| Qwen2.5-3B-Instruct | 921/1,319 (69.83%) | 934/1,319 (70.81%) | −0.99%p | −1.2%p 품질 기준 통과 |
 
 Qwen2.5-7B에서 Riley만 맞힌 문제는 35개, vLLM만 맞힌 문제는 28개였다. 출력 ID와 텍스트는 각각 578개에서 같았다. [Qwen2.5-7B 양쪽 실행 체크섬](../../benchmarks/evidence/20261119-w4-gsm8k/qwen7-SHA256SUMS)
 
-Llama-3.2-3B에서도 두 엔진의 1,319개 요청 설정과 입력 ID 해시가 일치했고 오류는 0건이었다. Riley만 맞힌 문제는 19개, vLLM만 맞힌 문제는 26개, 출력 ID와 텍스트가 같은 문제는 각각 899개였다. 두 모델 모두 각 엔진 종료 뒤 GPU 7의 20GiB 예약 복귀를 확인했다. Qwen3-4B와 Qwen2.5-3B-Instruct 비교를 진행 중이다. [Llama 결과](../../benchmarks/evidence/20261119-w4-gsm8k/llama3-comparison.json) · [Llama 양쪽 실행 체크섬](../../benchmarks/evidence/20261119-w4-gsm8k/llama3-SHA256SUMS)
+Llama-3.2-3B에서도 두 엔진의 1,319개 요청 설정과 입력 ID 해시가 일치했고 오류는 0건이었다. Riley만 맞힌 문제는 19개, vLLM만 맞힌 문제는 26개, 출력 ID와 텍스트가 같은 문제는 각각 899개였다. [Llama 결과](../../benchmarks/evidence/20261119-w4-gsm8k/llama3-comparison.json) · [Llama 양쪽 실행 체크섬](../../benchmarks/evidence/20261119-w4-gsm8k/llama3-SHA256SUMS)
+
+Qwen3-4B에서 Riley만 맞힌 문제는 32개, vLLM만 맞힌 문제는 17개였다. [Qwen3-4B 결과](../../benchmarks/evidence/20261119-w4-gsm8k/qwen4-comparison.json) · [Qwen3-4B 양쪽 실행 체크섬](../../benchmarks/evidence/20261119-w4-gsm8k/qwen4-SHA256SUMS)
+
+KV head 2개인 Qwen2.5-3B-Instruct에서 Riley만 맞힌 문제는 42개, vLLM만 맞힌 문제는 55개였다. 네 모델 모두 두 엔진의 실행이 끝날 때마다 GPU 7의 동일 홀더가 20GiB 예약으로 복귀했다. [Qwen2.5-3B 결과](../../benchmarks/evidence/20261119-w4-gsm8k/qwen3-comparison.json) · [Qwen2.5-3B 양쪽 실행 체크섬](../../benchmarks/evidence/20261119-w4-gsm8k/qwen3-SHA256SUMS)
