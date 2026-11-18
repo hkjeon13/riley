@@ -5,12 +5,16 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
+
+from release_test_environment import requires_legacy_host
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 ISOLATED_PYTHON = ("/usr/bin/python3.10", "-I", "-S", "-E", "-B")
@@ -122,6 +126,8 @@ class ExecutionAnchorTests(unittest.TestCase):
                 root = Path(directory)
                 anchor_root, lock_directory = self._make_anchor(root)
                 mutation(anchor_root, lock_directory)
+                if name == "setuid-bootstrap" and not (anchor_root / anchor.BOOTSTRAP_NAME).stat().st_mode & stat.S_ISUID:
+                    self.skipTest("filesystem does not preserve setuid script bits; pure mode guard is tested separately")
                 with self.assertRaises(anchor.ExecutionAnchorError):
                     anchor._verify_anchor(
                         anchor_root,
@@ -129,6 +135,13 @@ class ExecutionAnchorTests(unittest.TestCase):
                         owner_uid=os.geteuid(),
                         trusted_prefix=root,
                     )
+
+    def test_special_mode_bits_are_rejected_independently_of_filesystem_support(self) -> None:
+        for bit in (stat.S_ISUID, stat.S_ISGID, stat.S_ISVTX):
+            metadata = SimpleNamespace(st_mode=stat.S_IFREG | 0o555 | bit,
+                                       st_nlink=1, st_uid=os.geteuid(), st_size=1)
+            with self.subTest(bit=bit), self.assertRaises(anchor.ExecutionAnchorError):
+                anchor._require_regular(metadata, "fixture", owner_uid=os.geteuid(), executable=True, max_bytes=10)
 
     def test_noncanonical_or_widened_manifest_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -166,6 +179,7 @@ class ExecutionAnchorTests(unittest.TestCase):
                     trusted_prefix=root,
                 )
 
+    @requires_legacy_host
     def test_public_cli_has_no_path_override_or_execution_path(self) -> None:
         runner = REPOSITORY_ROOT / "ci" / "release" / "verify_rc3_gate_e_execution_anchor_v1.py"
         help_result = subprocess.run(

@@ -47,7 +47,7 @@ pub const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_TRANSITION_WIDTH: u64 = 2;
 /// immutable for as long as the descriptor can be submitted.
 #[derive(Clone, Copy, Debug)]
 pub struct PackedBatchHostV1<'a> {
-    request_groups:Option<ValidatedRequestRowGroups<'a>>,
+    request_groups: Option<ValidatedRequestRowGroups<'a>>,
     sequence_block_offsets: &'a [u32],
     block_ids: &'a [u32],
     valid_tokens: &'a [u16],
@@ -60,15 +60,41 @@ pub struct PackedBatchHostV1<'a> {
 }
 
 /// Safe borrowed proof of canonical contiguous request extents.
-#[derive(Clone,Copy,Debug)]
-pub struct ValidatedRequestRowGroups<'a>{offsets:&'a [u32],slots:&'a [u32]}
-impl<'a> ValidatedRequestRowGroups<'a>{
+#[derive(Clone, Copy, Debug)]
+pub struct ValidatedRequestRowGroups<'a> {
+    offsets: &'a [u32],
+    slots: &'a [u32],
+}
+impl<'a> ValidatedRequestRowGroups<'a> {
     #[must_use]
-    pub const fn row_sequence_slots(self)->&'a [u32]{self.slots}
-    pub fn group_end(self,begin:usize)->CudaResult<usize>{
-        let slot=self.slots.get(begin).copied().ok_or_else(||CudaError::invalid_argument("request group","start outside active rows"))? as usize;
-        if self.offsets.get(slot).copied()!=Some(begin as u32){return Err(CudaError::invalid_argument("request group","start is not a request boundary"));}
-        self.offsets.get(slot+1).copied().map(|v|v as usize).ok_or_else(||CudaError::invalid_argument("request group","missing end boundary"))
+    pub const fn row_sequence_slots(self) -> &'a [u32] {
+        self.slots
+    }
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    pub fn group_end(self, begin: usize) -> CudaResult<usize> {
+        let slot = self.slots.get(begin).copied().ok_or_else(|| {
+            CudaError::invalid_argument("request group", "start outside active rows")
+        })? as usize;
+        if self
+            .offsets
+            .get(slot)
+            .copied()
+            .and_then(|value| usize::try_from(value).ok())
+            != Some(begin)
+        {
+            return Err(CudaError::invalid_argument(
+                "request group",
+                "start is not a request boundary",
+            ));
+        }
+        self.offsets
+            .get(slot + 1)
+            .copied()
+            .map(|v| v as usize)
+            .ok_or_else(|| CudaError::invalid_argument("request group", "missing end boundary"))
     }
 }
 
@@ -101,7 +127,7 @@ impl<'a> PackedBatchHostV1<'a> {
             physical_block_count,
         )?;
         Ok(Self {
-            request_groups:None,
+            request_groups: None,
             sequence_block_offsets,
             block_ids,
             valid_tokens,
@@ -116,24 +142,49 @@ impl<'a> PackedBatchHostV1<'a> {
 
     /// Validates the existing input CSR once; device metadata and page ownership
     /// still pass the canonical constructor above. No rows are reordered.
-    pub fn with_request_row_groups(mut self,offsets:&'a [u32])->CudaResult<Self>{
-        const OP:&str="PackedBatchHostV1::with_request_row_groups";
-        if offsets.len()!=self.sequence_count as usize+1 || offsets.first()!=Some(&0)
-            || offsets.last().copied().map(u64::from)!=Some(self.active_row_count) {
-            return Err(CudaError::invalid_argument(OP,"request CSR bounds differ from packed rows"));
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    pub fn with_request_row_groups(mut self, offsets: &'a [u32]) -> CudaResult<Self> {
+        const OP: &str = "PackedBatchHostV1::with_request_row_groups";
+        if usize_to_u64(OP, "request CSR offsets", offsets.len())? != self.sequence_count + 1
+            || offsets.first() != Some(&0)
+            || offsets.last().copied().map(u64::from) != Some(self.active_row_count)
+        {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "request CSR bounds differ from packed rows",
+            ));
         }
-        for (slot,pair) in offsets.windows(2).enumerate(){
-            let begin=pair[0] as usize;let end=pair[1] as usize;
-            if begin>=end||end>self.row_sequence_slots.len()
-                ||self.row_sequence_slots[begin..end].iter().any(|&s|s as usize!=slot)
-                ||self.row_positions[begin..end].windows(2).any(|p|p[0].checked_add(1)!=Some(p[1])) {
-                return Err(CudaError::invalid_argument(OP,"request rows are not contiguous canonical CSR groups"));
+        for (slot, pair) in offsets.windows(2).enumerate() {
+            let begin = pair[0] as usize;
+            let end = pair[1] as usize;
+            if begin >= end
+                || end > self.row_sequence_slots.len()
+                || self.row_sequence_slots[begin..end]
+                    .iter()
+                    .any(|&s| s as usize != slot)
+                || self.row_positions[begin..end]
+                    .windows(2)
+                    .any(|p| p[0].checked_add(1) != Some(p[1]))
+            {
+                return Err(CudaError::invalid_argument(
+                    OP,
+                    "request rows are not contiguous canonical CSR groups",
+                ));
             }
         }
-        self.request_groups=Some(ValidatedRequestRowGroups{offsets,slots:self.row_sequence_slots});Ok(self)
+        self.request_groups = Some(ValidatedRequestRowGroups {
+            offsets,
+            slots: self.row_sequence_slots,
+        });
+        Ok(self)
     }
     #[must_use]
-    pub const fn request_row_groups(self)->Option<ValidatedRequestRowGroups<'a>>{self.request_groups}
+    pub const fn request_row_groups(self) -> Option<ValidatedRequestRowGroups<'a>> {
+        self.request_groups
+    }
 
     #[must_use]
     pub const fn format_version(self) -> u32 {
@@ -997,7 +1048,7 @@ pub fn native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge<
     )
 }
 
-/// Partial-state bytes a fixed-tile (FlashInfer) step of `output_rows` rows
+/// Partial-state bytes a fixed-tile (`FlashInfer`) step of `output_rows` rows
 /// needs, which is only its planner workspace; `None` when the two-stage
 /// layout applies (the mode is off, an opt-in mode that keeps its own partial
 /// states is on, or the head grouping is unsupported).
@@ -1023,13 +1074,19 @@ pub fn native_flashinfer_partial_state_bytes(
     }
     #[cfg(not(feature = "cuda"))]
     {
-        let _ = (output_rows, page_capacity, query_heads, key_value_heads, head_size);
+        let _ = (
+            output_rows,
+            page_capacity,
+            query_heads,
+            key_value_heads,
+            head_size,
+        );
         None
     }
 }
 
 /// Selects the D128 attention of the tensor-core producer with the global-max
-/// merge: `1` runs every row through one pinned FlashInfer paged-prefill
+/// merge: `1` runs every row through one pinned `FlashInfer` paged-prefill
 /// launch with a fixed 64-row query tile, planned on the GPU from the packed
 /// batch (a separately selected numerical mode), `0` keeps Riley's producers
 /// and merge. See [`set_native_flashinfer_kv_chunk`] for the KV split. Overrides
@@ -1041,7 +1098,7 @@ pub fn set_native_d128_attention_flashinfer(mode: u64) {
     let _ = mode;
 }
 
-/// Splits each row's context in the FlashInfer mode into fixed chunks of
+/// Splits each row's context in the `FlashInfer` mode into fixed chunks of
 /// `tokens` tokens (a multiple of 16) starting at position 0, whose BF16
 /// partial outputs are merged in order; `0` folds the whole context in one
 /// pass. A row within one chunk has the same bytes either way. Overrides `RILEY_NATIVE_FLASHINFER_KV_CHUNK`.
@@ -1060,6 +1117,7 @@ pub fn set_native_flashinfer_kv_chunk(tokens: u64) {
 /// row below position 256 lies within one part of either chunk, so its bytes
 /// do not depend on which chunk its request takes. Returns `false` and keeps
 /// the setting for any other value.
+#[must_use]
 pub fn set_native_flashinfer_generated_kv_chunk(tokens: Option<u64>) -> bool {
     let tokens = tokens.unwrap_or(u64::MAX);
     #[cfg(feature = "cuda")]
@@ -1072,8 +1130,8 @@ pub fn set_native_flashinfer_generated_kv_chunk(tokens: Option<u64>) -> bool {
     }
 }
 
-/// For tests: `true` launches the FlashInfer mode with one CTA per possible
-/// work item, as FlashInfer's own launcher does, instead of a resident-sized
+/// For tests: `true` launches the `FlashInfer` mode with one CTA per possible
+/// work item, as `FlashInfer`'s own launcher does, instead of a resident-sized
 /// grid striding over the planned items. Both write the same bytes.
 pub fn set_native_flashinfer_full_grid(full: bool) {
     #[cfg(feature = "cuda")]
@@ -1592,7 +1650,9 @@ fn validate_native_bf16_ragged_paged_split_gqa_d128_two_stage(
                 params.key_value_head_count,
                 params.head_size,
             )
-            .map_or(layout.partial_state_bytes(), |bytes| bytes.min(layout.partial_state_bytes())),
+            .map_or(layout.partial_state_bytes(), |bytes| {
+                bytes.min(layout.partial_state_bytes())
+            }),
         ),
         (
             "reduction_steps",
@@ -1810,10 +1870,10 @@ fn validate_packed_host(
     // lists a block twice.
     if !sorted_unique(block_ids.iter().copied()) {
         for pair in sequence_block_offsets.windows(2) {
-            let start = usize::try_from(pair[0])
-                .expect("U32 CSR offsets fit every supported host usize");
-            let end = usize::try_from(pair[1])
-                .expect("U32 CSR offsets fit every supported host usize");
+            let start =
+                usize::try_from(pair[0]).expect("U32 CSR offsets fit every supported host usize");
+            let end =
+                usize::try_from(pair[1]).expect("U32 CSR offsets fit every supported host usize");
             let sequence_blocks = &block_ids[start..end];
             let sequence_unique = sorted_unique(sequence_blocks.iter().copied());
             for (logical_index, physical_id) in sequence_blocks.iter().enumerate() {
@@ -1925,12 +1985,12 @@ fn sequence_logical_length(
 }
 
 /// Validates the host mirror required by eager and fixed-address graph indexed
-/// RoPE before either path enters native CUDA.
+/// `RoPE` before either path enters native CUDA.
 /// Host-side input checks for a step replayed from a recorded graph.
 ///
 /// A replay launches no per-operation wrapper, so the checks those wrappers
 /// run on every eager step are repeated here: every row position must be
-/// inside the RoPE table, every output index must name a distinct dense row,
+/// inside the `RoPE` table, every output index must name a distinct dense row,
 /// and, when the native D128 attention is used, every row's page prefix must
 /// fit both its sequence's block range and the per-row workspace capacity.
 ///
@@ -2126,6 +2186,11 @@ fn slice_len_u64(
     usize_to_u64(operation, name, slice.len())
 }
 
+fn u64_to_usize(operation: &'static str, value: u64) -> CudaResult<usize> {
+    usize::try_from(value)
+        .map_err(|_| CudaError::invalid_argument(operation, "host index exceeds usize"))
+}
+
 fn usize_to_u64(operation: &'static str, name: &'static str, value: usize) -> CudaResult<u64> {
     u64::try_from(value)
         .map_err(|_| CudaError::out_of_range(operation, format!("{name} does not fit u64")))
@@ -2220,8 +2285,9 @@ mod tests {
 
         let mut duplicate_block = blocks.clone();
         duplicate_block[90] = duplicate_block[3];
-        let error = PackedBatchHostV1::new(&offsets, &duplicate_block, &valid, &slots, &positions, 101)
-            .expect_err("duplicate physical block must fail");
+        let error =
+            PackedBatchHostV1::new(&offsets, &duplicate_block, &valid, &slots, &positions, 101)
+                .expect_err("duplicate physical block must fail");
         assert_eq!(error.kind(), CudaErrorKind::InvalidArgument);
         assert!(error.to_string().contains(&format!(
             "physical block id {} appears more than once",
@@ -2248,7 +2314,11 @@ mod tests {
         let error = PackedBatchHostV1::new(&offsets, &blocks, &valid, &slots, &duplicate_row, 101)
             .expect_err("duplicate row address must fail");
         assert_eq!(error.kind(), CudaErrorKind::InvalidArgument);
-        assert!(error.to_string().contains(&format!("duplicate row address (0,{})", positions[7])));
+        assert!(
+            error
+                .to_string()
+                .contains(&format!("duplicate row address (0,{})", positions[7]))
+        );
     }
 
     #[test]
@@ -2443,114 +2513,291 @@ mod tests {
 }
 
 /// Eager materialized BF16 reference. Uses caller-owned prepared resources; graph capture remains rejected.
+///
+/// # Errors
+/// Returns an error for invalid resource geometry, context or lifecycle,
+/// an unavailable CUDA build, or a failed native operation.
+// Keep the audited CUDA preflight and lease/submission sequence together.
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 pub fn prepared_materialized_ragged_attention<S: CudaExecutionStream + ?Sized>(
-    query: CudaBufferSpan<'_>, key_pool: CudaBufferSpan<'_>, value_pool: CudaBufferSpan<'_>,
-    output: &mut CudaDeviceBuffer, batch: PackedBatchV1<'_>,
-    reference: &crate::decode::PreparedPagedDecodeAttention, workspace: &mut CudaDeviceBuffer,
+    query: CudaBufferSpan<'_>,
+    key_pool: CudaBufferSpan<'_>,
+    value_pool: CudaBufferSpan<'_>,
+    output: &mut CudaDeviceBuffer,
+    batch: PackedBatchV1<'_>,
+    reference: &crate::decode::PreparedPagedDecodeAttention,
+    workspace: &mut CudaDeviceBuffer,
     valid_device: &CudaDeviceBuffer,
-    valid_host: &mut [u16], duplicate_scratch: &mut [u8],
+    valid_host: &mut [u16],
+    duplicate_scratch: &mut [u8],
     stream: &mut S,
 ) -> CudaResult<()> {
-    use crate::decode::{PagedDecodeAttentionParams,PagedKvBlockTableHostV1,PagedKvBlockTableV1};
-    let stream=execution_stream_mut(stream);
-    let host=batch.host();
-    if reference.backend()!=crate::decode::DecodeAttentionBackend::MaterializedReference {
-        return Err(CudaError::invalid_argument("prepared_materialized_ragged_attention","an explicitly prepared materialized reference is required"));
+    use crate::decode::{PagedDecodeAttentionParams, PagedKvBlockTableHostV1, PagedKvBlockTableV1};
+    let stream = execution_stream_mut(stream);
+    let host = batch.host();
+    if reference.backend() != crate::decode::DecodeAttentionBackend::MaterializedReference {
+        return Err(CudaError::invalid_argument(
+            "prepared_materialized_ragged_attention",
+            "an explicitly prepared materialized reference is required",
+        ));
     }
-    let request=reference.request();
-    let row_bytes=request.query_head_count()*request.head_size()*2;
-    if query.dtype()!=CudaDType::BF16 || key_pool.dtype()!=CudaDType::BF16 || value_pool.dtype()!=CudaDType::BF16 || host.physical_block_count()!=request.physical_block_count() {
-        return Err(CudaError::invalid_argument("prepared_materialized_ragged_attention","BF16 spans and the prepared physical pool are required"));
+    let request = reference.request();
+    let row_bytes = request.query_head_count() * request.head_size() * 2;
+    if query.dtype() != CudaDType::BF16
+        || key_pool.dtype() != CudaDType::BF16
+        || value_pool.dtype() != CudaDType::BF16
+        || host.physical_block_count() != request.physical_block_count()
+    {
+        return Err(CudaError::invalid_argument(
+            "prepared_materialized_ragged_attention",
+            "BF16 spans and the prepared physical pool are required",
+        ));
     }
-    if host.row_positions().iter().any(|p|u64::from(*p)+1>request.maximum_sequence_length()) {
-        return Err(CudaError::invalid_argument("prepared_materialized_ragged_attention","row exceeds the prepared sequence bound"));
+    if host
+        .row_positions()
+        .iter()
+        .any(|p| u64::from(*p) + 1 > request.maximum_sequence_length())
+    {
+        return Err(CudaError::invalid_argument(
+            "prepared_materialized_ragged_attention",
+            "row exceeds the prepared sequence bound",
+        ));
     }
-    let active_bytes=host.active_row_count().checked_mul(row_bytes).ok_or_else(||CudaError::invalid_argument("prepared_materialized_ragged_attention","active output byte count overflows"))?;
-    if active_bytes>query.byte_len() || active_bytes>output.byte_len() || output.byte_len()%row_bytes!=0 {
-        return Err(CudaError::invalid_argument("prepared_materialized_ragged_attention","prepared output or zero scratch is too small"));
+    let active_bytes = host
+        .active_row_count()
+        .checked_mul(row_bytes)
+        .ok_or_else(|| {
+            CudaError::invalid_argument(
+                "prepared_materialized_ragged_attention",
+                "active output byte count overflows",
+            )
+        })?;
+    if active_bytes > query.byte_len()
+        || active_bytes > output.byte_len()
+        || output.byte_len() % row_bytes != 0
+    {
+        return Err(CudaError::invalid_argument(
+            "prepared_materialized_ragged_attention",
+            "prepared output or zero scratch is too small",
+        ));
     }
-    let workspace_len=workspace.byte_len();
-    let valid_stride=valid_host.len();
-    for row in 0..host.active_row_count() as usize {
-        let tokens=u64::from(host.row_positions()[row])+1;
-        let slot=host.row_sequence_slots()[row] as usize;
-        let begin=host.sequence_block_offsets()[slot] as usize;
-        let end=begin+tokens.div_ceil(16) as usize;
-        let count=end-begin;
-        if count==0 || count>valid_host.len() {
-            return Err(CudaError::invalid_argument("prepared_materialized_ragged_attention","prepared host scratch cannot hold the logical prefix"));
+    let workspace_len = workspace.byte_len();
+    let valid_stride = valid_host.len();
+    for row in 0..u64_to_usize(
+        "prepared_materialized_ragged_attention",
+        host.active_row_count(),
+    )? {
+        let tokens = u64::from(host.row_positions()[row]) + 1;
+        let slot = host.row_sequence_slots()[row] as usize;
+        let begin = host.sequence_block_offsets()[slot] as usize;
+        let end = begin + u64_to_usize("materialized attention block count", tokens.div_ceil(16))?;
+        let count = end - begin;
+        if count == 0 || count > valid_host.len() {
+            return Err(CudaError::invalid_argument(
+                "prepared_materialized_ragged_attention",
+                "prepared host scratch cannot hold the logical prefix",
+            ));
         }
-        let valid=&mut valid_host[..count];valid.fill(16);
-        valid[count-1]=((tokens-1)%16+1) as u16;
-        let table=PagedKvBlockTableHostV1::new_with_duplicate_scratch(&host.block_ids()[begin..end],valid,tokens,host.physical_block_count(),duplicate_scratch)?;
-        let ids=batch.device_block_ids();
-        reference.execute(&mut PagedDecodeAttentionParams{
-            query:CudaBufferSpan::new(query.buffer(),CudaDType::BF16,query.byte_offset()+row as u64*row_bytes,row_bytes)?,
-            key_pool,value_pool,
-            workspace:CudaBufferSpanMut::new(workspace,reference.workspace_dtype(),0,workspace_len)?,
-            output:CudaBufferSpanMut::new(output,CudaDType::BF16,row as u64*row_bytes,row_bytes)?,
-            block_table:PagedKvBlockTableV1::new(table,CudaBufferSpan::new(ids.buffer(),CudaDType::U32,ids.byte_offset()+begin as u64*4,(end-begin) as u64*4)?,CudaBufferSpan::new(valid_device,CudaDType::U16,row as u64*valid_stride as u64*2,count as u64*2)?)?,
-        },stream)?;
+        let valid = &mut valid_host[..count];
+        valid.fill(16);
+        valid[count - 1] = u16::try_from((tokens - 1) % 16 + 1).map_err(|_| {
+            CudaError::invalid_argument("materialized attention", "valid-token count exceeds U16")
+        })?;
+        let table = PagedKvBlockTableHostV1::new_with_duplicate_scratch(
+            &host.block_ids()[begin..end],
+            valid,
+            tokens,
+            host.physical_block_count(),
+            duplicate_scratch,
+        )?;
+        let ids = batch.device_block_ids();
+        reference.execute(
+            &mut PagedDecodeAttentionParams {
+                query: CudaBufferSpan::new(
+                    query.buffer(),
+                    CudaDType::BF16,
+                    query.byte_offset() + row as u64 * row_bytes,
+                    row_bytes,
+                )?,
+                key_pool,
+                value_pool,
+                workspace: CudaBufferSpanMut::new(
+                    workspace,
+                    reference.workspace_dtype(),
+                    0,
+                    workspace_len,
+                )?,
+                output: CudaBufferSpanMut::new(
+                    output,
+                    CudaDType::BF16,
+                    row as u64 * row_bytes,
+                    row_bytes,
+                )?,
+                block_table: PagedKvBlockTableV1::new(
+                    table,
+                    CudaBufferSpan::new(
+                        ids.buffer(),
+                        CudaDType::U32,
+                        ids.byte_offset() + begin as u64 * 4,
+                        (end - begin) as u64 * 4,
+                    )?,
+                    CudaBufferSpan::new(
+                        valid_device,
+                        CudaDType::U16,
+                        row as u64 * valid_stride as u64 * 2,
+                        count as u64 * 2,
+                    )?,
+                )?,
+            },
+            stream,
+        )?;
     }
     // Direct reference calls complete eagerly; a command batch owns its one fence.
     Ok(())
 }
 
 fn encode_materialized_ragged_attention_metadata(
-    host: PackedBatchHostV1<'_>, reference: &crate::decode::PreparedPagedDecodeAttention,
-    output: &CudaDeviceBuffer, valid_device: &CudaDeviceBuffer,
-    valid_host: &mut [u16], encoded_valid: &mut [u8], zero_host: &[u8],
-) -> CudaResult<(usize,u64)> {
-    let op="prepare_materialized_ragged_attention_metadata";
-    let row_bytes=reference.request().query_head_count()*reference.request().head_size()*2;
-    let active_bytes=host.active_row_count().checked_mul(row_bytes).ok_or_else(||CudaError::invalid_argument(op,"row bytes overflow"))?;
-    let stride=valid_host.len();
-    let copy_bytes=(host.active_row_count() as usize).checked_mul(stride).and_then(|n|n.checked_mul(2)).ok_or_else(||CudaError::invalid_argument(op,"metadata bytes overflow"))?;
-    if stride==0 || copy_bytes>encoded_valid.len() || copy_bytes as u64>valid_device.byte_len() || active_bytes>output.byte_len() || output.byte_len()-active_bytes>zero_host.len() as u64 {
-        return Err(CudaError::invalid_argument(op,"prepared scratch cannot hold the iteration"));
+    host: PackedBatchHostV1<'_>,
+    reference: &crate::decode::PreparedPagedDecodeAttention,
+    output: &CudaDeviceBuffer,
+    valid_device: &CudaDeviceBuffer,
+    valid_host: &mut [u16],
+    encoded_valid: &mut [u8],
+    zero_host: &[u8],
+) -> CudaResult<(usize, u64)> {
+    let op = "prepare_materialized_ragged_attention_metadata";
+    let row_bytes = reference.request().query_head_count() * reference.request().head_size() * 2;
+    let active_bytes = host
+        .active_row_count()
+        .checked_mul(row_bytes)
+        .ok_or_else(|| CudaError::invalid_argument(op, "row bytes overflow"))?;
+    let stride = valid_host.len();
+    let copy_bytes = u64_to_usize(op, host.active_row_count())?
+        .checked_mul(stride)
+        .and_then(|n| n.checked_mul(2))
+        .ok_or_else(|| CudaError::invalid_argument(op, "metadata bytes overflow"))?;
+    if stride == 0
+        || copy_bytes > encoded_valid.len()
+        || copy_bytes as u64 > valid_device.byte_len()
+        || active_bytes > output.byte_len()
+        || output.byte_len() - active_bytes > zero_host.len() as u64
+    {
+        return Err(CudaError::invalid_argument(
+            op,
+            "prepared scratch cannot hold the iteration",
+        ));
     }
-    for (row,raw) in encoded_valid[..copy_bytes].chunks_exact_mut(stride*2).enumerate() {
-        let tokens=u64::from(host.row_positions()[row])+1;
-        let count=tokens.div_ceil(16) as usize;
-        if tokens>reference.request().maximum_sequence_length() || count>stride {return Err(CudaError::invalid_argument(op,"prefix exceeds prepared capacity"));}
-        raw.fill(0);valid_host[..count].fill(16);valid_host[count-1]=((tokens-1)%16+1) as u16;
-        for (bytes,value) in raw[..count*2].chunks_exact_mut(2).zip(valid_host[..count].iter()) {bytes.copy_from_slice(&value.to_le_bytes());}
+    for (row, raw) in encoded_valid[..copy_bytes]
+        .chunks_exact_mut(stride * 2)
+        .enumerate()
+    {
+        let tokens = u64::from(host.row_positions()[row]) + 1;
+        let count = u64_to_usize("materialized attention block count", tokens.div_ceil(16))?;
+        if tokens > reference.request().maximum_sequence_length() || count > stride {
+            return Err(CudaError::invalid_argument(
+                op,
+                "prefix exceeds prepared capacity",
+            ));
+        }
+        raw.fill(0);
+        valid_host[..count].fill(16);
+        valid_host[count - 1] = u16::try_from((tokens - 1) % 16 + 1).map_err(|_| {
+            CudaError::invalid_argument("materialized attention", "valid-token count exceeds U16")
+        })?;
+        for (bytes, value) in raw[..count * 2]
+            .chunks_exact_mut(2)
+            .zip(valid_host[..count].iter())
+        {
+            bytes.copy_from_slice(&value.to_le_bytes());
+        }
     }
-    Ok((copy_bytes,active_bytes))
+    Ok((copy_bytes, active_bytes))
 }
 
 /// Writes non-overlapping valid-prefix and zero-tail payloads into existing
 /// pinned storage before the command batch; no device copy or allocation occurs.
+///
+/// # Errors
+/// Returns an error for invalid resource geometry, context or lifecycle,
+/// an unavailable CUDA build, or a failed native operation.
+// Keep the audited CUDA preflight and lease/submission sequence together.
+#[allow(clippy::too_many_arguments)]
 pub fn stage_materialized_ragged_attention_metadata(
-    host: PackedBatchHostV1<'_>, reference: &crate::decode::PreparedPagedDecodeAttention,
-    output: &CudaDeviceBuffer, valid_device: &CudaDeviceBuffer,
-    staging: &mut crate::memory::CudaPinnedHostBuffer, valid_host: &mut [u16],
-    encoded_valid: &mut [u8], zero_host: &[u8],
-) -> CudaResult<(u64,u64)> {
-    let (copy_bytes,active_bytes)=encode_materialized_ragged_attention_metadata(
-        host,reference,output,valid_device,valid_host,encoded_valid,zero_host)?;
-    let inactive=output.byte_len()-active_bytes;
-    let end=(copy_bytes as u64).checked_add(inactive).ok_or_else(||
-        CudaError::invalid_argument("stage materialized metadata","staging extent overflow"))?;
-    if end>staging.byte_len(){return Err(CudaError::invalid_argument("stage materialized metadata","prepared staging cannot hold both payloads"));}
-    staging.write(0,&encoded_valid[..copy_bytes])?;
-    if inactive>0 {staging.write(copy_bytes as u64,&zero_host[..inactive as usize])?;}
-    Ok((copy_bytes as u64,active_bytes))
+    host: PackedBatchHostV1<'_>,
+    reference: &crate::decode::PreparedPagedDecodeAttention,
+    output: &CudaDeviceBuffer,
+    valid_device: &CudaDeviceBuffer,
+    staging: &mut crate::memory::CudaPinnedHostBuffer,
+    valid_host: &mut [u16],
+    encoded_valid: &mut [u8],
+    zero_host: &[u8],
+) -> CudaResult<(u64, u64)> {
+    let (copy_bytes, active_bytes) = encode_materialized_ragged_attention_metadata(
+        host,
+        reference,
+        output,
+        valid_device,
+        valid_host,
+        encoded_valid,
+        zero_host,
+    )?;
+    let inactive = output.byte_len() - active_bytes;
+    let end = (copy_bytes as u64).checked_add(inactive).ok_or_else(|| {
+        CudaError::invalid_argument("stage materialized metadata", "staging extent overflow")
+    })?;
+    if end > staging.byte_len() {
+        return Err(CudaError::invalid_argument(
+            "stage materialized metadata",
+            "prepared staging cannot hold both payloads",
+        ));
+    }
+    staging.write(0, &encoded_valid[..copy_bytes])?;
+    if inactive > 0 {
+        staging.write(
+            copy_bytes as u64,
+            &zero_host[..u64_to_usize("stage materialized metadata", inactive)?],
+        )?;
+    }
+    Ok((copy_bytes as u64, active_bytes))
 }
 
 /// Prepares immutable row-prefix metadata before starting an iteration command batch.
 /// All storage is caller-owned; no allocation occurs here or in the layer dispatch.
+///
+/// # Errors
+/// Returns an error for invalid resource geometry, context or lifecycle,
+/// an unavailable CUDA build, or a failed native operation.
+// Keep the audited CUDA preflight and lease/submission sequence together.
+#[allow(clippy::too_many_arguments)]
 pub fn prepare_materialized_ragged_attention_metadata(
-    host: PackedBatchHostV1<'_>, reference: &crate::decode::PreparedPagedDecodeAttention,
-    output: &mut CudaDeviceBuffer, valid_device: &mut CudaDeviceBuffer,
-    staging: &mut crate::memory::CudaPinnedHostBuffer, valid_host: &mut [u16],
-    encoded_valid: &mut [u8], zero_host: &[u8], stream: &mut CudaStream,
+    host: PackedBatchHostV1<'_>,
+    reference: &crate::decode::PreparedPagedDecodeAttention,
+    output: &mut CudaDeviceBuffer,
+    valid_device: &mut CudaDeviceBuffer,
+    staging: &mut crate::memory::CudaPinnedHostBuffer,
+    valid_host: &mut [u16],
+    encoded_valid: &mut [u8],
+    zero_host: &[u8],
+    stream: &mut CudaStream,
 ) -> CudaResult<()> {
-    let (copy_bytes,active_bytes)=encode_materialized_ragged_attention_metadata(
-        host,reference,output,valid_device,valid_host,encoded_valid,zero_host)?;
-    valid_device.upload_from_slice(0,&encoded_valid[..copy_bytes],staging,stream)?;
-    let inactive=(output.byte_len()-active_bytes) as usize;
-    if inactive>0 {output.upload_from_slice(active_bytes,&zero_host[..inactive],staging,stream)?;}
+    let (copy_bytes, active_bytes) = encode_materialized_ragged_attention_metadata(
+        host,
+        reference,
+        output,
+        valid_device,
+        valid_host,
+        encoded_valid,
+        zero_host,
+    )?;
+    valid_device.upload_from_slice(0, &encoded_valid[..copy_bytes], staging, stream)?;
+    let inactive = u64_to_usize(
+        "prepare materialized metadata",
+        output.byte_len() - active_bytes,
+    )?;
+    if inactive > 0 {
+        output.upload_from_slice(active_bytes, &zero_host[..inactive], staging, stream)?;
+    }
     Ok(())
 }
 
@@ -2558,12 +2805,29 @@ pub fn prepare_materialized_ragged_attention_metadata(
 mod request_row_group_cache_tests {
     use super::*;
     #[test]
-    fn request_cache_requires_canonical_boundaries_and_positions(){
-        let offsets=[0,1,2];let blocks=[0,1];let valid=[2,1];let slots=[0,0,1];let positions=[0,1,0];
-        let host=PackedBatchHostV1::new(&offsets,&blocks,&valid,&slots,&positions,2).unwrap();
-        let rows=[0,2,3];let groups=host.with_request_row_groups(&rows).unwrap().request_row_groups().unwrap();
-        assert_eq!(groups.group_end(0).unwrap(),2);assert_eq!(groups.group_end(2).unwrap(),3);assert!(groups.group_end(1).is_err());assert!(groups.group_end(3).is_err());
-        assert!(host.with_request_row_groups(&[0,1,3]).is_err());assert!(host.with_request_row_groups(&[0,2,2]).is_err());
-        let positions=[1,0,0];let host=PackedBatchHostV1::new(&offsets,&blocks,&valid,&slots,&positions,2).unwrap();assert!(host.with_request_row_groups(&rows).is_err());
+    fn request_cache_requires_canonical_boundaries_and_positions() {
+        let offsets = [0, 1, 2];
+        let blocks = [0, 1];
+        let valid = [2, 1];
+        let slots = [0, 0, 1];
+        let positions = [0, 1, 0];
+        let host =
+            PackedBatchHostV1::new(&offsets, &blocks, &valid, &slots, &positions, 2).unwrap();
+        let rows = [0, 2, 3];
+        let groups = host
+            .with_request_row_groups(&rows)
+            .unwrap()
+            .request_row_groups()
+            .unwrap();
+        assert_eq!(groups.group_end(0).unwrap(), 2);
+        assert_eq!(groups.group_end(2).unwrap(), 3);
+        assert!(groups.group_end(1).is_err());
+        assert!(groups.group_end(3).is_err());
+        assert!(host.with_request_row_groups(&[0, 1, 3]).is_err());
+        assert!(host.with_request_row_groups(&[0, 2, 2]).is_err());
+        let positions = [1, 0, 0];
+        let host =
+            PackedBatchHostV1::new(&offsets, &blocks, &valid, &slots, &positions, 2).unwrap();
+        assert!(host.with_request_row_groups(&rows).is_err());
     }
 }

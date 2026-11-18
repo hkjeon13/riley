@@ -37,7 +37,10 @@ fn owned_classic_gemm_step_graph_preserves_frozen_hf_output()
             manifest["files"][name]["bytes"].as_u64()
         );
         assert_eq!(
-            Sha256::digest(&bytes).iter().map(|v|format!("{v:02x}")).collect::<String>(),
+            Sha256::digest(&bytes)
+                .iter()
+                .map(|v| format!("{v:02x}"))
+                .collect::<String>(),
             manifest["files"][name]["sha256"].as_str().ok_or("hash")?
         );
         Ok(bytes)

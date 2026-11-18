@@ -625,16 +625,22 @@ impl ModelSpec {
             });
         }
         let mut spec = self.clone();
-        for block in spec.blocks.iter_mut() {
+        for block in &mut spec.blocks {
             let attention = &mut block.attention;
             if attention.query_heads % size != 0 {
                 return Err(unsupported("num_attention_heads", attention.query_heads));
             }
             if attention.key_value_heads % size != 0 {
-                return Err(unsupported("num_key_value_heads", attention.key_value_heads));
+                return Err(unsupported(
+                    "num_key_value_heads",
+                    attention.key_value_heads,
+                ));
             }
             if block.mlp.intermediate_size % size != 0 {
-                return Err(unsupported("intermediate_size", block.mlp.intermediate_size));
+                return Err(unsupported(
+                    "intermediate_size",
+                    block.mlp.intermediate_size,
+                ));
             }
             attention.query_heads /= size;
             attention.key_value_heads /= size;

@@ -1,3 +1,10 @@
+// GPU fixture sizes, explicit lifetime signatures and linear ownership oracles are intentional.
+#![allow(
+    clippy::items_after_statements,
+    clippy::needless_lifetimes,
+    clippy::result_large_err,
+    clippy::too_many_lines
+)]
 #![cfg(not(feature = "cuda"))]
 
 use riley_cuda::{
@@ -1872,7 +1879,7 @@ fn owned_canonical_bf16_rms_norm_graph_uses_fixed_three_buffer_lifecycle_without
         "generic eager",
         "SmolLM2",
         "Fixed37",
-        "fused RMSNorm",
+        "fused `RMSNorm`",
         "C07 executor integration",
     ] {
         assert!(

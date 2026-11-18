@@ -378,7 +378,8 @@ mod tests {
         };
         let canonical = LlamaRmsNormProfile::Canonical;
         let valid = make(canonical, 1, 64, 1e-5, weight).unwrap();
-        for profile in [LlamaRmsNormProfile::FixedContiguous37Balanced] {
+        {
+            let profile = LlamaRmsNormProfile::FixedContiguous37Balanced;
             assert_eq!(
                 make(profile, 1, 64, 1e-5, weight),
                 Err(FinalNormBindingMismatch::Profile)

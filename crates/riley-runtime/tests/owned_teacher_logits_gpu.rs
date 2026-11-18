@@ -112,11 +112,16 @@ fn owned_batch_teacher_forced_logits_are_finite_and_reported() -> Result {
     assert!(root.is_absolute() && output.is_absolute());
     let fixture_bytes = fs::read(root.join("fixture.json"))?;
     let fixture: Value = serde_json::from_slice(&fixture_bytes)?;
-    let completion = std::env::var("RILEY_DIVERGENCE_COMPLETION")
-        .unwrap_or_else(|_| "per-operation".to_owned());
-    assert!(matches!(completion.as_str(), "per-operation" | "iteration-batch"));
-    let copies:usize=std::env::var("RILEY_TEACHER_COPIES").unwrap_or_else(|_|"1".into()).parse()?;
-    assert!(matches!(copies,1|7|8));
+    let completion =
+        std::env::var("RILEY_DIVERGENCE_COMPLETION").unwrap_or_else(|_| "per-operation".to_owned());
+    assert!(matches!(
+        completion.as_str(),
+        "per-operation" | "iteration-batch"
+    ));
+    let copies: usize = std::env::var("RILEY_TEACHER_COPIES")
+        .unwrap_or_else(|_| "1".into())
+        .parse()?;
+    assert!(matches!(copies, 1 | 7 | 8));
     let rt = CudaRuntime::initialize()?;
     assert_eq!(rt.device_count(), 1);
     let c = rt.device(0)?.create_context()?;
@@ -135,7 +140,7 @@ fn owned_batch_teacher_forced_logits_are_finite_and_reported() -> Result {
             LoadLimits::default().with_weight_byte_limits(32 << 30, 32 << 30)?,
         )?;
         let config = PreparedLlamaBatchExecutorConfig::new(
-            LlamaBatchMetadataConfig::new(copies, 512*copies, 64*copies, copies, 64*copies)?,
+            LlamaBatchMetadataConfig::new(copies, 512 * copies, 64 * copies, copies, 64 * copies)?,
             PreparedLlamaForwardConfig::default(),
         )
         .with_active_row_buckets()
@@ -148,7 +153,9 @@ fn owned_batch_teacher_forced_logits_are_finite_and_reported() -> Result {
         };
         let config = if std::env::var("RILEY_OWNED_GRAPH").as_deref() == Ok("segments-v1") {
             config.with_owned_decode_graph()
-        } else { config };
+        } else {
+            config
+        };
         let config = match std::env::var("RILEY_OWNED_BATCH").as_deref() {
             Ok("grouped-v1") => config.with_owned_decode_batch(),
             Ok("lt-mlp-v2") => config.with_owned_mlp_decode_batch(),
@@ -157,7 +164,7 @@ fn owned_batch_teacher_forced_logits_are_finite_and_reported() -> Result {
         let mut owner = PreparedLlamaBatchExecutor::prepare(&model, &c, &mut stream, config)?;
         let stable = c.allocation_stats()?;
         let row_bytes = model.spec().embedding().vocabulary_size() * 2;
-        let mut bytes = vec![0; row_bytes*copies];
+        let mut bytes = vec![0; row_bytes * copies];
         let mut cases = Vec::new();
         let operation = (|| -> Result {
             for (i, case) in model_case["cases"]
@@ -185,22 +192,49 @@ fn owned_batch_teacher_forced_logits_are_finite_and_reported() -> Result {
                     };
                     let length = prompt.len() + step;
                     let (blocks, valid) = table(length)?;
-                    let block_tables=(0..copies).map(|copy| blocks.iter().map(|b| *b+copy as u32*64).collect::<Vec<_>>()).collect::<Vec<_>>();
-                    let batch_rows=(0..copies).map(|copy| LlamaBatchRow::new(
-                        (i*copies+copy+1) as u64,
-                        if step==0 { LlamaBatchRowKind::Prefill } else { LlamaBatchRowKind::Decode },
-                        tokens,u32::try_from(length).expect("bounded sequence"),
-                        LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION,&block_tables[copy],&valid,u32::try_from(length).expect("bounded sequence")),
-                        Some(copy as u32),
-                    )).collect::<Vec<_>>();
+                    let block_tables = (0..copies)
+                        .map(|copy| {
+                            blocks
+                                .iter()
+                                .map(|b| *b + copy as u32 * 64)
+                                .collect::<Vec<_>>()
+                        })
+                        .collect::<Vec<_>>();
+                    let batch_rows = (0..copies)
+                        .map(|copy| {
+                            LlamaBatchRow::new(
+                                (i * copies + copy + 1) as u64,
+                                if step == 0 {
+                                    LlamaBatchRowKind::Prefill
+                                } else {
+                                    LlamaBatchRowKind::Decode
+                                },
+                                tokens,
+                                u32::try_from(length).expect("bounded sequence"),
+                                LlamaBatchBlockTable::new(
+                                    BLOCK_TABLE_V1_VERSION,
+                                    &block_tables[copy],
+                                    &valid,
+                                    u32::try_from(length).expect("bounded sequence"),
+                                ),
+                                Some(copy as u32),
+                            )
+                        })
+                        .collect::<Vec<_>>();
                     owner.execute(&batch_rows, &mut stream)?;
                     if let Some(expected) = steps
                         .iter()
                         .find(|v| v["step"].as_u64() == Some(step as u64))
                     {
                         owner.download_logits(&mut bytes, &mut stream)?;
-                        for row in bytes.chunks_exact(row_bytes) { assert_eq!(row,&bytes[..row_bytes],"replicated request logits differ"); }
-                        let bytes=&bytes[..row_bytes];
+                        for row in bytes.chunks_exact(row_bytes) {
+                            assert_eq!(
+                                row,
+                                &bytes[..row_bytes],
+                                "replicated request logits differ"
+                            );
+                        }
+                        let bytes = &bytes[..row_bytes];
 
                         let filename = leaf(expected["file"].as_str().ok_or("HF file missing")?)?;
                         let hf = fs::read(root.join(filename))?;

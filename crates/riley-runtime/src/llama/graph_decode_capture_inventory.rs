@@ -46,7 +46,7 @@ pub(crate) enum PureDecodeGraphV1CaptureOperation {
     KvWrite,
     /// Decode attention computation.
     Attention,
-    /// C07 V1's out-of-place BF16 SiLU from gate projection to activated gate.
+    /// C07 V1's out-of-place BF16 `SiLU` from gate projection to activated gate.
     MlpSiluBf16,
     /// C07 V1's fixed-address, out-of-place BF16 product of the activated
     /// gate and up-projection outputs.

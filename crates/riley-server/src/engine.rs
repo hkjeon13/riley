@@ -25,6 +25,7 @@ use crate::domain::{
 };
 
 // Complete prompt prefill preserves this profile's request GEMM geometry.
+#[cfg(any(feature = "cuda", test))]
 fn owned_prefill_shape_valid(owned: bool, prompt: usize, batch: usize, chunk: usize) -> bool {
     !owned || (prompt <= batch && prompt <= chunk)
 }
@@ -390,6 +391,8 @@ impl Drop for RequestControl {
     }
 }
 
+// Keep independent protocol flags and bounded owned messages explicit.
+#[allow(clippy::large_enum_variant)]
 enum Command {
     Submit {
         request_id: EngineRequestId,
@@ -702,6 +705,9 @@ pub struct C02GenerationAuditRecord {
 #[cfg(any(feature = "cuda", feature = "server", test))]
 pub trait C02GenerationAuditSink: Send + Sync {
     /// Creates the terminal record without replacing an existing one.
+    ///
+    /// # Errors
+    /// Returns an error if validation or durable record/grammar creation fails.
     fn write_record(&self, record: C02GenerationAuditRecord) -> Result<(), String>;
 }
 
@@ -719,7 +725,7 @@ fn gpu_greedy_ineligibility(
         Some(C02GpuGreedyIneligibility::AddressableVocabularyMismatch)
     } else if temperature != 0.0 {
         Some(C02GpuGreedyIneligibility::NonZeroTemperature)
-    } else if repetition_penalty != 1.0 {
+    } else if repetition_penalty.to_bits() != 1.0_f32.to_bits() {
         Some(C02GpuGreedyIneligibility::RepetitionPenalty)
     } else if has_finish_token_mask {
         Some(C02GpuGreedyIneligibility::FinishTokenMask)
@@ -1751,6 +1757,8 @@ fn flush_staged_events<B: EngineBackend>(
     }
 }
 
+// Keep independent protocol flags and bounded owned messages explicit.
+#[allow(clippy::too_many_lines)]
 fn worker_main<B: EngineBackend>(
     mut backend: B,
     config: EngineConfig,
@@ -2182,10 +2190,10 @@ mod cuda_backend {
         FinishReason as RuntimeFinishReason, GenerationRequest as RuntimeGenerationRequest,
         GenerationState,
     };
+    use riley_runtime::grammar::{Grammar, GrammarAutomaton, GrammarCursor, TokenIndex};
     use riley_runtime::llama::{
         MAX_LLAMA_BATCH_SHAPE_BUCKETS, PreparedLlamaBatchExecutor, PreparedLlamaBatchExecutorConfig,
     };
-    use riley_runtime::grammar::{Grammar, GrammarAutomaton, GrammarCursor, TokenIndex};
     use riley_runtime::sampling::{SamplingParams, SamplingWorkspace, TokenConstraints};
     use riley_runtime::{CudaContext, CudaRuntime, CudaStream};
     use riley_scheduler::{
@@ -2231,7 +2239,11 @@ mod cuda_backend {
             let follower = runtime
                 .device(ordinal)
                 .and_then(|device| device.create_context())
-                .map_err(|source| internal(format!("CUDA context for device {ordinal} failed: {source}")))?;
+                .map_err(|source| {
+                    internal(format!(
+                        "CUDA context for device {ordinal} failed: {source}"
+                    ))
+                })?;
             contexts.push(follower);
         }
         let shard = |rank| {
@@ -2249,9 +2261,10 @@ mod cuda_backend {
                 .zip(follower_configs)
                 .map(|(follower_context, follower_config)| {
                     scope.spawn(move || {
-                        let mut follower_stream = follower_context.create_stream().map_err(|source| {
-                            internal(format!("CUDA stream creation failed: {source}"))
-                        })?;
+                        let mut follower_stream =
+                            follower_context.create_stream().map_err(|source| {
+                                internal(format!("CUDA stream creation failed: {source}"))
+                            })?;
                         let executor = PreparedLlamaBatchExecutor::prepare(
                             model,
                             follower_context,
@@ -2270,9 +2283,9 @@ mod cuda_backend {
             let followers = handles
                 .into_iter()
                 .map(|handle| {
-                    handle
-                        .join()
-                        .map_err(|_| internal("tensor-parallel preparation thread panicked".to_owned()))?
+                    handle.join().map_err(|_| {
+                        internal("tensor-parallel preparation thread panicked".to_owned())
+                    })?
                 })
                 .collect::<Result<Vec<_>, _>>();
             (leader, followers)
@@ -2289,8 +2302,9 @@ mod cuda_backend {
         let mut group_contexts = vec![context];
         group_contexts.extend(contexts.iter());
         let group = std::sync::Arc::new(
-            riley_runtime::CudaPeerAllReduceGroup::new(&group_contexts, max_elements)
-                .map_err(|source| internal(format!("tensor-parallel peer group failed: {source}")))?,
+            riley_runtime::CudaPeerAllReduceGroup::new(&group_contexts, max_elements).map_err(
+                |source| internal(format!("tensor-parallel peer group failed: {source}")),
+            )?,
         );
         for (rank, (executor, _)) in followers.iter_mut().enumerate() {
             executor
@@ -2301,7 +2315,9 @@ mod cuda_backend {
             .attach_tensor_parallel(
                 group,
                 devices[0],
-                Some(riley_runtime::llama::TensorParallelFollowers::spawn(followers)),
+                Some(riley_runtime::llama::TensorParallelFollowers::spawn(
+                    followers,
+                )),
             )
             .map_err(|source| internal(format!("tensor-parallel attach failed: {source}")))?;
         eprintln!("RILEY_TENSOR_PARALLEL size={size} devices={devices:?}");
@@ -2598,14 +2614,28 @@ mod cuda_backend {
                     })?
             };
             // Complete qualified decode graph capture before accepting requests.
-            if let Err(source)=executor.warm_owned_qwen_decode_graphs(config.gpu_greedy,&mut stream){
-                let _=executor.close();return Err(internal(format!("decode graph warmup failed: {source}")));
+            if let Err(source) =
+                executor.warm_owned_qwen_decode_graphs(config.gpu_greedy, &mut stream)
+            {
+                let _ = executor.close();
+                return Err(internal(format!("decode graph warmup failed: {source}")));
             }
             if executor.config().owned_hf_eager_bf16() {
-                eprintln!("RILEY_NUMERICS profile={} prefill={} decode={} qkv={} output={} mlp={} lm_head={} rms_norm={} graph=false fallback=forbidden max_prompt_tokens={}",
-                    executor.numerics_profile_id(),executor.prefill_attention_implementation_id(),executor.decode_attention_implementation_id(),
-                    executor.projection_bias_backend_id(),executor.output_projection_backend_id(),executor.mlp_projection_backend_id(),
-                    executor.lm_head_backend_id(),executor.rms_norm_backend_id(),config.scheduler.iteration_token_budget.min(config.scheduler.max_prefill_chunk_tokens));
+                eprintln!(
+                    "RILEY_NUMERICS profile={} prefill={} decode={} qkv={} output={} mlp={} lm_head={} rms_norm={} graph=false fallback=forbidden max_prompt_tokens={}",
+                    executor.numerics_profile_id(),
+                    executor.prefill_attention_implementation_id(),
+                    executor.decode_attention_implementation_id(),
+                    executor.projection_bias_backend_id(),
+                    executor.output_projection_backend_id(),
+                    executor.mlp_projection_backend_id(),
+                    executor.lm_head_backend_id(),
+                    executor.rms_norm_backend_id(),
+                    config
+                        .scheduler
+                        .iteration_token_budget
+                        .min(config.scheduler.max_prefill_chunk_tokens)
+                );
             }
             let batch_token_budget = executor.batch_token_budget();
             if config.scheduler.iteration_token_budget != batch_token_budget {
@@ -2618,7 +2648,9 @@ mod cuda_backend {
             let mut scheduler = Scheduler::new(config.scheduler, executor.kv_layout())
                 .map_err(|source| internal(format!("scheduler preparation failed: {source}")))?;
             if config.executor.owned_hf_eager_bf16() {
-                scheduler.set_atomic_prefill_chunks(true).map_err(|e|internal(format!("atomic prefill preparation: {e}")))?;
+                scheduler
+                    .set_atomic_prefill_chunks(true)
+                    .map_err(|e| internal(format!("atomic prefill preparation: {e}")))?;
             }
             let timer = LlamaIterationCudaTimer::prepare(&context)
                 .map_err(|source| internal(format!("CUDA timing preparation failed: {source}")))?;
@@ -2909,7 +2941,10 @@ mod cuda_backend {
             }
         };
         let chosen = describe(chosen.0, chosen.1);
-        let top = top.iter().map(|&(token_id, value)| describe(token_id, value)).collect();
+        let top = top
+            .iter()
+            .map(|&(token_id, value)| describe(token_id, value))
+            .collect();
         Box::new(TokenLogprob { chosen, top })
     }
 
@@ -2952,7 +2987,10 @@ mod cuda_backend {
     /// Distinct grammars kept between requests.
     const MAX_CACHED_AUTOMATA: usize = 64;
 
-    fn token_index(model: &LoadedModel, vocabulary_size: usize) -> Result<TokenIndex, BackendError> {
+    fn token_index(
+        model: &LoadedModel,
+        vocabulary_size: usize,
+    ) -> Result<TokenIndex, BackendError> {
         let tokenizer = model.tokenizer();
         let mut buffer = vec![0_u8; tokenizer.maximum_decoded_token_bytes()];
         let mut tokens = Vec::with_capacity(vocabulary_size);
@@ -3015,7 +3053,9 @@ mod cuda_backend {
                     resources
                         .context
                         .allocate_device_buffer(summary_bytes as u64)
-                        .map_err(|source| internal(format!("logprob summary allocation failed: {source}")))?,
+                        .map_err(|source| {
+                            internal(format!("logprob summary allocation failed: {source}"))
+                        })?,
                 )
             } else {
                 None
@@ -3067,7 +3107,9 @@ mod cuda_backend {
             } else {
                 (Some(resources.executor), None)
             };
-            let eager_numerics = executor.as_ref().map_or("existing", |e| e.numerics_profile_id());
+            let eager_numerics = executor
+                .as_ref()
+                .map_or("existing", |e| e.numerics_profile_id());
             eprintln!(
                 "RILEY_GRAPH prepared={} policy={:?} fallback={} gpu_iteration_timing={} numerics={}",
                 use_graph,
@@ -3329,12 +3371,7 @@ mod cuda_backend {
                                 .lock()
                                 .map_err(|_| internal("grammar automaton lock poisoned"))?;
                             request.state.masked_finish_token_ids().is_empty()
-                                && !self
-                                    .model
-                                    .spec()
-                                    .special_tokens()
-                                    .eos()
-                                    .contains(&token_id)
+                                && !self.model.spec().special_tokens().eos().contains(&token_id)
                                 && automaton.allows(
                                     &mut structured.cursor,
                                     &self.token_index,
@@ -3361,7 +3398,12 @@ mod cuda_backend {
                         .get(index * SUMMARY_BYTES..(index + 1) * SUMMARY_BYTES)
                         .ok_or_else(|| internal("output slot has no logprob summary"))?;
                     let word = |at: usize| {
-                        u32::from_ne_bytes([record[4 * at], record[4 * at + 1], record[4 * at + 2], record[4 * at + 3]])
+                        u32::from_ne_bytes([
+                            record[4 * at],
+                            record[4 * at + 1],
+                            record[4 * at + 2],
+                            record[4 * at + 3],
+                        ])
                     };
                     let lanes: [f32; riley_runtime::sampling::LOGPROB_LANES] =
                         std::array::from_fn(|lane| f32::from_bits(word(2 + lane)));
@@ -3392,17 +3434,20 @@ mod cuda_backend {
                     (token_id, Some(0.0))
                 } else {
                     let logits = if gpu_greedy {
-                        let (executor, stream) = self
-                            .executor
-                            .as_mut()
-                            .zip(self.stream.as_mut())
-                            .ok_or_else(|| internal("batch executor is already closed"))?;
+                        let (executor, stream) =
+                            self.executor
+                                .as_mut()
+                                .zip(self.stream.as_mut())
+                                .ok_or_else(|| internal("batch executor is already closed"))?;
                         let index = usize::try_from(slot.get())
                             .map_err(|_| internal("output slot overflowed"))?;
-                        self.row_logits.resize(self.sampling.vocabulary_size() * 2, 0);
+                        self.row_logits
+                            .resize(self.sampling.vocabulary_size() * 2, 0);
                         executor
                             .download_greedy_row_logits(index, &mut self.row_logits, stream)
-                            .map_err(|source| internal(format!("logit row download failed: {source}")))?;
+                            .map_err(|source| {
+                                internal(format!("logit row download failed: {source}"))
+                            })?;
                         self.row_logits.as_slice()
                     } else {
                         downloaded
@@ -3458,10 +3503,9 @@ mod cuda_backend {
                             )
                             .map_err(|source| internal(format!("sampling failed: {source}")))?;
                         let sample = if let Some(sample) = greedy {
-                            request
-                                .state
-                                .pre_step()
-                                .map_err(|source| internal(format!("sampling RNG failed: {source}")))?;
+                            request.state.pre_step().map_err(|source| {
+                                internal(format!("sampling RNG failed: {source}"))
+                            })?;
                             sample
                         } else {
                             let distribution = self
@@ -3477,7 +3521,9 @@ mod cuda_backend {
                                 .sample(request.state.sampling_rng().map_err(|source| {
                                     internal(format!("sampling RNG failed: {source}"))
                                 })?)
-                                .map_err(|source| internal(format!("sampling RNG failed: {source}")))?
+                                .map_err(|source| {
+                                    internal(format!("sampling RNG failed: {source}"))
+                                })?
                         };
                         (sample.token_id(), sample.token_logprob())
                     };
@@ -3835,7 +3881,8 @@ mod cuda_backend {
             }
             if let Some(buffer) = self.logprob_summary_device.take() {
                 if let Err(source) = buffer.close() {
-                    first_error.get_or_insert_with(|| format!("logprob summary close failed: {source}"));
+                    first_error
+                        .get_or_insert_with(|| format!("logprob summary close failed: {source}"));
                 }
             }
             if let Some(timer) = self.timer.take() {
@@ -3960,11 +4007,25 @@ mod cuda_backend {
                     "requested output token count is outside server bounds",
                 ));
             }
-            let owned = self.executor.as_ref().is_some_and(|e| e.config().owned_hf_eager_bf16());
+            let owned = self
+                .executor
+                .as_ref()
+                .is_some_and(|e| e.config().owned_hf_eager_bf16());
             if owned {
-                let c=self.scheduler.as_ref().ok_or_else(||internal("scheduler unavailable"))?.config();
-                if !super::owned_prefill_shape_valid(true,prompt_token_ids.len(),c.iteration_token_budget,c.max_prefill_chunk_tokens) {
-                    return Err(private_request_error("prompt exceeds the owned profile full-prefill token budget"));
+                let c = self
+                    .scheduler
+                    .as_ref()
+                    .ok_or_else(|| internal("scheduler unavailable"))?
+                    .config();
+                if !super::owned_prefill_shape_valid(
+                    true,
+                    prompt_token_ids.len(),
+                    c.iteration_token_budget,
+                    c.max_prefill_chunk_tokens,
+                ) {
+                    return Err(private_request_error(
+                        "prompt exceeds the owned profile full-prefill token budget",
+                    ));
                 }
             }
             if let Some(graph) = &self.decode_graph {
@@ -4045,13 +4106,10 @@ mod cuda_backend {
                         self.automata
                             .retain(|_, automaton| Arc::strong_count(automaton) > 1);
                     }
-                    let automaton = Arc::clone(
-                        self.automata
-                            .entry(Arc::clone(grammar))
-                            .or_insert_with(|| {
-                                Arc::new(Mutex::new(GrammarAutomaton::new(Arc::clone(grammar))))
-                            }),
-                    );
+                    let automaton =
+                        Arc::clone(self.automata.entry(Arc::clone(grammar)).or_insert_with(|| {
+                            Arc::new(Mutex::new(GrammarAutomaton::new(Arc::clone(grammar))))
+                        }));
                     let cursor = automaton
                         .lock()
                         .map_err(|_| internal("grammar automaton lock poisoned"))?
@@ -5288,9 +5346,9 @@ mod tests {
 #[cfg(test)]
 #[test]
 fn owned_prefill_admission_does_not_trim_or_change_the_default_contract() {
-    assert!(owned_prefill_shape_valid(true,8192,8192,8192));
-    assert!(!owned_prefill_shape_valid(true,8193,8192,8192));
-    assert!(!owned_prefill_shape_valid(true,129,512,128));
-    assert!(owned_prefill_shape_valid(true,128,512,128));
-    assert!(owned_prefill_shape_valid(false,8193,512,128));
+    assert!(owned_prefill_shape_valid(true, 8192, 8192, 8192));
+    assert!(!owned_prefill_shape_valid(true, 8193, 8192, 8192));
+    assert!(!owned_prefill_shape_valid(true, 129, 512, 128));
+    assert!(owned_prefill_shape_valid(true, 128, 512, 128));
+    assert!(owned_prefill_shape_valid(false, 8193, 512, 128));
 }

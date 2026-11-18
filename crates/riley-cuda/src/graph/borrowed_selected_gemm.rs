@@ -44,6 +44,8 @@ impl<'a> BorrowedSelectedGemmGraph<'a> {
     /// Captures the selected selected no-split plan without replacement resources.
     /// # Errors
     /// Rejects unsupported policy, size, context, alias, lease or CUDA failures.
+    // CUDA builds consume this ownership descriptor; keep one API in CPU builds.
+    #[cfg_attr(not(feature = "cuda"), allow(clippy::needless_pass_by_value))]
     pub fn prepare(resources: BorrowedSelectedGemmResources<'a>) -> CudaResult<Self> {
         #[cfg(feature = "cuda")]
         {

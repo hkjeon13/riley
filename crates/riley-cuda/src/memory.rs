@@ -339,6 +339,8 @@ impl BufferUseState {
 /// }
 /// ```
 pub struct CudaDeviceBuffer {
+    // Identity is read by the explicit owned-HF CUDA probe only.
+    #[cfg_attr(not(feature = "cuda-cublas-gemm-probe"), allow(dead_code))]
     pub(crate) identity: crate::runtime::CudaResourceIdentity,
     #[cfg(feature = "cuda")]
     native: ffi::DeviceBufferHandle,

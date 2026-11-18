@@ -6,21 +6,22 @@
 //! resource lifetime, output publication, failure-state policy, allocation,
 //! and explicit close ordering.
 
-#[cfg(feature="cuda-cublas-gemm-probe")]
-use riley_cuda::{hugging_face_qwen_head128_rms_norm,qkv_split_bias_rope_hf_head128};
-#[cfg(feature="cuda-cublas-gemm-probe")]
+#[cfg(feature = "cuda-cublas-gemm-probe")]
 use riley_cuda::hf_pack_separate_qkv;
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+use riley_cuda::{hugging_face_qwen_head128_rms_norm, qkv_split_bias_rope_hf_head128};
 use std::mem;
 
 use riley_cuda::{
-    AttentionReductionProfile, Bf16ArgmaxParams, Bf16ArgmaxTieSource, CudaBufferSpan, CudaBufferSpanMut,
-    CudaCommandStream, CudaDType, CudaDeviceBuffer, CudaExecutionStream, CudaStepGraph, CudaStream,
-    DecodePartialReductionOrder, EmbeddingParams, GatedMultiplyParams, IndexedRopeParams,
-    MergedGatedMultiplyParams, NativeBf16RaggedPagedSplitGqaD128TwoStageParams, PackedBatchHostV1,
-    PackedBatchV1, QkvRopeParams, QkvSplitBiasParams, RaggedPagedAttentionParams,
-    RaggedPagedKvCacheWriteParams, ResidualAddParams, ResidualRmsNormParams, RmsNormParams,
-    RowGatherParams, SiluParams, abort_step_capture, begin_step_capture, deterministic_bf16_argmax,
-    deterministic_bf16_argmax_bounded, deterministic_bf16_argmax_fp32_ties, embedding, embedding_deferred_report, end_step_capture,
+    AttentionReductionProfile, Bf16ArgmaxParams, Bf16ArgmaxTieSource, CudaBufferSpan,
+    CudaBufferSpanMut, CudaCommandStream, CudaDType, CudaDeviceBuffer, CudaExecutionStream,
+    CudaStepGraph, CudaStream, DecodePartialReductionOrder, EmbeddingParams, GatedMultiplyParams,
+    IndexedRopeParams, MergedGatedMultiplyParams, NativeBf16RaggedPagedSplitGqaD128TwoStageParams,
+    PackedBatchHostV1, PackedBatchV1, QkvRopeParams, QkvSplitBiasParams,
+    RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
+    ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams, abort_step_capture,
+    begin_step_capture, deterministic_bf16_argmax, deterministic_bf16_argmax_bounded,
+    deterministic_bf16_argmax_fp32_ties, embedding, embedding_deferred_report, end_step_capture,
     fixed37_ragged_paged_attention, gated_multiply, grouped_ragged_paged_attention, indexed_rope,
     launch_step_graph, native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma,
     native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge,
@@ -34,10 +35,11 @@ use riley_cuda::{
 
 use super::super::batch::{LlamaBatchRowKind, LlamaPackedBatchMetadata};
 use super::super::forward::{
-    ForwardBuffers, GemmPlans, OwnedDecodeSegment, LlamaForwardError, LlamaRmsNormProfile, PreparedLlamaForward,
-    PreparedLlamaGemm, owned_decode_segment_offset, execute_gemm_with_row_groups, execute_gemm_with_row_groups_from, execute_profile_residual_rms_norm, execute_profile_rms_norm, execute_profile_rms_norm_grouped,
-    execute_projection_bias, execute_projection_with_row_groups, poison_for_cuda_error,
-    span, span_mut, weight_span,
+    ForwardBuffers, GemmPlans, LlamaForwardError, LlamaRmsNormProfile, OwnedDecodeSegment,
+    PreparedLlamaForward, PreparedLlamaGemm, execute_gemm_with_row_groups,
+    execute_gemm_with_row_groups_from, execute_profile_residual_rms_norm, execute_profile_rms_norm,
+    execute_profile_rms_norm_grouped, execute_projection_bias, execute_projection_with_row_groups,
+    owned_decode_segment_offset, poison_for_cuda_error, span, span_mut, weight_span,
 };
 use super::super::{ExecutionSite, LlamaExecutionPlan, LlamaOp};
 use super::buffers::{
@@ -285,8 +287,9 @@ pub(in crate::llama) fn execute_packed(
     gathered_logits: &mut Option<CudaDeviceBuffer>,
     greedy_results: &mut Option<CudaDeviceBuffer>,
     mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
-    #[cfg(feature="cuda-cublas-gemm-probe")]
-    mut owned_mlp_graphs: Option<&mut riley_cuda::CudaOwnedHfMlpGraph>,
+    #[cfg(feature = "cuda-cublas-gemm-probe")] mut owned_mlp_graphs: Option<
+        &mut riley_cuda::CudaOwnedHfMlpGraph,
+    >,
     host_input: &mut BatchHostInput,
     produce_greedy_tokens: bool,
     dispatch_disposition: &mut BatchDispatchDisposition,
@@ -318,7 +321,13 @@ pub(in crate::llama) fn execute_packed(
         )?,
     )
     .map_err(|source| batch_cuda(metadata_site, source))?;
-    let host_batch=if matches!(config.owned_decode_batch(),3|4|5|6|7|8|9|10){host_batch.with_request_row_groups(packed.input_row_offsets()).map_err(|e|batch_cuda(metadata_site,e))?}else{host_batch};
+    let host_batch = if matches!(config.owned_decode_batch(), 3..=10) {
+        host_batch
+            .with_request_row_groups(packed.input_row_offsets())
+            .map_err(|e| batch_cuda(metadata_site, e))?
+    } else {
+        host_batch
+    };
     crate::host_trace::lap_here(crate::host_trace::PACK);
     let packed_layout = match (&mut *host_input, &mut *device, config.metadata_transport()) {
         (
@@ -521,28 +530,66 @@ pub(in crate::llama) fn execute_packed(
         && active != 0
         && active <= dense_rows
         && dense_rows <= MAX_RECORDED_STEP_ROWS;
-    let staged_attention_metadata=if let Some(prepared)=native_d128_two_stage_workspace.as_deref_mut().and_then(|w|w.materialized.as_mut()) {
+    let staged_attention_metadata = if let Some(prepared) = native_d128_two_stage_workspace
+        .as_deref_mut()
+        .and_then(|w| w.materialized.as_mut())
+    {
         if config.staged_step_uploads() {
-            Some(riley_cuda::stage_materialized_ragged_attention_metadata(host_batch,&prepared.reference,
-                &forward.buffers.hidden_context,&prepared.valid,&mut prepared.staging,
-                &mut prepared.valid_host,&mut prepared.encoded_valid,&prepared.zero_host)
-                .map_err(|e|batch_cuda(metadata_site,e))?)
+            Some(
+                riley_cuda::stage_materialized_ragged_attention_metadata(
+                    host_batch,
+                    &prepared.reference,
+                    &forward.buffers.hidden_context,
+                    &prepared.valid,
+                    &mut prepared.staging,
+                    &mut prepared.valid_host,
+                    &mut prepared.encoded_valid,
+                    &prepared.zero_host,
+                )
+                .map_err(|e| batch_cuda(metadata_site, e))?,
+            )
         } else {
-            riley_cuda::prepare_materialized_ragged_attention_metadata(host_batch,&prepared.reference,
-                &mut forward.buffers.hidden_context,&mut prepared.valid,&mut prepared.staging,
-                &mut prepared.valid_host,&mut prepared.encoded_valid,&prepared.zero_host,stream)
-                .map_err(|e|batch_cuda(metadata_site,e))?;
+            riley_cuda::prepare_materialized_ragged_attention_metadata(
+                host_batch,
+                &prepared.reference,
+                &mut forward.buffers.hidden_context,
+                &mut prepared.valid,
+                &mut prepared.staging,
+                &mut prepared.valid_host,
+                &mut prepared.encoded_valid,
+                &prepared.zero_host,
+                stream,
+            )
+            .map_err(|e| batch_cuda(metadata_site, e))?;
             None
         }
-    }else{None};
-    #[cfg(feature="cuda-cublas-gemm-probe")]
-    let owned_mlp_eligible=if config.owned_decode_batch()==10 && config.owned_decode_graph() {
-        let decode=packed.row_kind_codes().iter().take_while(|v|**v==LlamaBatchRowKind::Decode.code()).count();
-        decode>0 && decode<=32 && (config.owned_mlp_graphs() || packed.prefill_token_count()>0 || decode==1)
-    }else{active>0 && active<=32
-        && packed.row_kind_codes().iter().all(|v|*v==LlamaBatchRowKind::Decode.code())
-        && packed.row_sequence_slots().iter().enumerate().all(|(i,v)|!packed.row_sequence_slots()[..i].contains(v))};
-    #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+    } else {
+        None
+    };
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    let owned_mlp_eligible = if config.owned_decode_batch() == 10 && config.owned_decode_graph() {
+        let decode = packed
+            .row_kind_codes()
+            .iter()
+            .take_while(|v| **v == LlamaBatchRowKind::Decode.code())
+            .count();
+        decode > 0
+            && decode <= 32
+            && (config.owned_mlp_graphs() || packed.prefill_token_count() > 0 || decode == 1)
+    } else {
+        active > 0
+            && active <= 32
+            && packed
+                .row_kind_codes()
+                .iter()
+                .all(|v| *v == LlamaBatchRowKind::Decode.code())
+            && packed
+                .row_sequence_slots()
+                .iter()
+                .enumerate()
+                .all(|(i, v)| !packed.row_sequence_slots()[..i].contains(v))
+    };
+    #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
     let owned_mlp_eligible = false;
     let mut execute_iteration_body = |batch: PackedBatchV1<'_>,
                                       token_ids: Option<CudaBufferSpan<'_>>,
@@ -551,14 +598,32 @@ pub(in crate::llama) fn execute_packed(
                                       step_counts: Option<CudaBufferSpan<'_>>,
                                       stream: &mut dyn CudaExecutionStream|
      -> LlamaBatchExecutorResult<()> {
-        if let Some((bytes,active_bytes))=staged_attention_metadata {
-            let prepared=native_d128_two_stage_workspace.as_deref_mut().and_then(|w|w.materialized.as_mut())
-                .ok_or(LlamaBatchExecutorError::InvalidConfiguration{field:"staged attention metadata",reason:"prepared owner missing"})?;
-            prepared.valid.copy_from_pinned_in_active_command_batch(0,&prepared.staging,0,bytes,stream)
-                .map_err(|e|batch_cuda(metadata_site,e))?;
-            let inactive=forward.buffers.hidden_context.byte_len()-active_bytes;
-            if inactive>0 {forward.buffers.hidden_context.copy_from_pinned_in_active_command_batch(
-                active_bytes,&prepared.staging,bytes,inactive,stream).map_err(|e|batch_cuda(metadata_site,e))?;}
+        if let Some((bytes, active_bytes)) = staged_attention_metadata {
+            let prepared = native_d128_two_stage_workspace
+                .as_deref_mut()
+                .and_then(|w| w.materialized.as_mut())
+                .ok_or(LlamaBatchExecutorError::InvalidConfiguration {
+                    field: "staged attention metadata",
+                    reason: "prepared owner missing",
+                })?;
+            prepared
+                .valid
+                .copy_from_pinned_in_active_command_batch(0, &prepared.staging, 0, bytes, stream)
+                .map_err(|e| batch_cuda(metadata_site, e))?;
+            let inactive = forward.buffers.hidden_context.byte_len() - active_bytes;
+            if inactive > 0 {
+                forward
+                    .buffers
+                    .hidden_context
+                    .copy_from_pinned_in_active_command_batch(
+                        active_bytes,
+                        &prepared.staging,
+                        bytes,
+                        inactive,
+                        stream,
+                    )
+                    .map_err(|e| batch_cuda(metadata_site, e))?;
+            }
         }
         let rms_norm_profile = forward.rms_norm_profile();
         let PreparedLlamaForward {
@@ -576,7 +641,8 @@ pub(in crate::llama) fn execute_packed(
         // head can run on the smallest prepared bucket that holds them (and
         // fits the gathered-logits buffer) instead of on every dense row.
         let mut output_rows_bucket = 0_usize;
-        let output_rows_index = if batch_output_lm_head.is_none() && config.output_row_lm_head()
+        let output_rows_index = if batch_output_lm_head.is_none()
+            && config.output_row_lm_head()
             && packed.output_count() != 0
             && packed.output_count() < dense_rows
         {
@@ -609,10 +675,8 @@ pub(in crate::llama) fn execute_packed(
         };
         let (plan, gemms, mut captured_steps, output_lm_head, owned_segments) =
             if dense_rows == maximum_plan.sequence_length() {
-                let output_lm_head = match output_rows_index {
-                    Some(index) => Some(&mut shape_variants[index].gemms.lm_head),
-                    None => None,
-                };
+                let output_lm_head =
+                    output_rows_index.map(|index| &mut shape_variants[index].gemms.lm_head);
                 (
                     &*maximum_plan,
                     maximum_gemms,
@@ -649,7 +713,9 @@ pub(in crate::llama) fn execute_packed(
             };
         let output_lm_head = if packed.output_count() != 0 {
             batch_output_lm_head.as_mut().or(output_lm_head)
-        } else { output_lm_head };
+        } else {
+            output_lm_head
+        };
         let logits_already_gathered = output_lm_head.is_some();
         let output_rows_extent = output_rows_index.and_then(|index| {
             if logits_already_gathered {
@@ -708,10 +774,14 @@ pub(in crate::llama) fn execute_packed(
         // qualified staged lane, enqueue the device's redundant report check at
         // command completion instead of stopping the GPU between embedding and
         // layer0. A malformed device report still fails before publication.
-        let defer_validated_embedding_report=in_command_batch && config.owned_decode_batch()==10
+        let defer_validated_embedding_report = in_command_batch
+            && config.owned_decode_batch() == 10
             && config.staged_step_uploads()
             && matches!(&*host_input,BatchHostInput::PerOperation(h) if h.staging.is_some())
-            && packed.input_token_ids().iter().all(|&t|(t as usize)<plan.dimensions().vocabulary_size());
+            && packed
+                .input_token_ids()
+                .iter()
+                .all(|&t| (t as usize) < plan.dimensions().vocabulary_size());
         let step_capture = match (recorded, step_counts) {
             (Some(graph), _) => StepCaptureMode::Replay(graph, packed.output_token_indices()),
             (None, Some(counts)) if capturing => StepCaptureMode::Capture {
@@ -723,55 +793,128 @@ pub(in crate::llama) fn execute_packed(
         // Dynamic full-body Graphs only for the separately qualified Smol path.
         // Each actual count has a private key within its unchanged dense owner.
         let actual_rows = packed.row_sequence_slots().len();
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        let smol_actual_row_graph = actual_rows>=2 && config.owned_decode_batch()>=2 && dense_rows<=32
-            && plan.dimensions().hidden_size()==576 && plan.dimensions().query_heads()==9
-            && plan.dimensions().key_value_heads()==3 && plan.dimensions().head_dimension()==64
-            && native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref())
-                .and_then(|m|m.hf.as_ref()).is_some_and(|hf| hf.decode_chunk.is_some()
-                    && packed.position_ids().iter().all(|&pos|u64::from(pos)<hf.plan.config().n() && hf.plan.supports_exact_smol_attention(u64::from(pos)+1)));
-        #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        let smol_actual_row_graph = actual_rows >= 2
+            && config.owned_decode_batch() >= 2
+            && dense_rows <= 32
+            && plan.dimensions().hidden_size() == 576
+            && plan.dimensions().query_heads() == 9
+            && plan.dimensions().key_value_heads() == 3
+            && plan.dimensions().head_dimension() == 64
+            && native_d128_two_stage_workspace
+                .as_ref()
+                .and_then(|w| w.materialized.as_ref())
+                .and_then(|m| m.hf.as_ref())
+                .is_some_and(|hf| {
+                    hf.decode_chunk.is_some()
+                        && packed.position_ids().iter().all(|&pos| {
+                            u64::from(pos) < hf.plan.config().n()
+                                && hf.plan.supports_exact_smol_attention(u64::from(pos) + 1)
+                        })
+                });
+        #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
         let smol_actual_row_graph = false;
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        let wide_actual_row_graph=actual_rows>=2 && config.owned_decode_batch()==5 && dense_rows<=32
-            && matches!(plan.dimensions().hidden_size(),2560|4096)
-            && plan.dimensions().query_heads()==32 && plan.dimensions().key_value_heads()==8 && plan.dimensions().head_dimension()==128
-            && native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).and_then(|m|m.hf.as_ref())
-                .is_some_and(|hf|hf.decode_chunk.is_some()&&hf.plan.supports_exact_decode_chunk());
-        #[cfg(not(feature="cuda-cublas-gemm-probe"))]
-        let wide_actual_row_graph=false;
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        let sm80_actual_row_graph=actual_rows>=2 && matches!(config.owned_decode_batch(),6|7|8|9|10) && dense_rows<=32
-            && matches!((plan.dimensions().hidden_size(),plan.dimensions().query_heads(),plan.dimensions().key_value_heads(),plan.dimensions().head_dimension(),plan.dimensions().intermediate_size()),(2560,32,8,128,9728)|(4096,32,8,128,14336))
-            && native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).and_then(|m|m.hf.as_ref()).is_some_and(|hf|hf.plan.supports_bounded_sm80_gateup_rows());
-        #[cfg(not(feature="cuda-cublas-gemm-probe"))]
-        let sm80_actual_row_graph=false;
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        let wide_actual_row_graph = actual_rows >= 2
+            && config.owned_decode_batch() == 5
+            && dense_rows <= 32
+            && matches!(plan.dimensions().hidden_size(), 2560 | 4096)
+            && plan.dimensions().query_heads() == 32
+            && plan.dimensions().key_value_heads() == 8
+            && plan.dimensions().head_dimension() == 128
+            && native_d128_two_stage_workspace
+                .as_ref()
+                .and_then(|w| w.materialized.as_ref())
+                .and_then(|m| m.hf.as_ref())
+                .is_some_and(|hf| {
+                    hf.decode_chunk.is_some() && hf.plan.supports_exact_decode_chunk()
+                });
+        #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+        let wide_actual_row_graph = false;
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        let sm80_actual_row_graph = actual_rows >= 2
+            && matches!(config.owned_decode_batch(), 6 | 7 | 8 | 9 | 10)
+            && dense_rows <= 32
+            && matches!(
+                (
+                    plan.dimensions().hidden_size(),
+                    plan.dimensions().query_heads(),
+                    plan.dimensions().key_value_heads(),
+                    plan.dimensions().head_dimension(),
+                    plan.dimensions().intermediate_size()
+                ),
+                (2560, 32, 8, 128, 9728) | (4096, 32, 8, 128, 14336)
+            )
+            && native_d128_two_stage_workspace
+                .as_ref()
+                .and_then(|w| w.materialized.as_ref())
+                .and_then(|m| m.hf.as_ref())
+                .is_some_and(|hf| hf.plan.supports_bounded_sm80_gateup_rows());
+        #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+        let sm80_actual_row_graph = false;
         // Qwen mode10 uses qualified whole-body graphs only. Keep R1 and
         // unsupported contexts eager instead of creating 72 layer captures.
-        let qwen_body_only=config.owned_decode_batch()==10 && plan.dimensions().hidden_size()==2560
-            && plan.dimensions().query_heads()==32 && plan.dimensions().key_value_heads()==8 && plan.dimensions().head_dimension()==128;
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        let qwen_body_eligible=actual_rows>=2 && actual_rows<=32 && native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).and_then(|m|m.hf.as_ref())
-            .is_some_and(|hf|hf.plan.uses_sm80_paged_attention() && packed.position_ids().iter().all(|&p|hf.plan.supports_sm80_paged_attention(u64::from(p)+1)));
-        #[cfg(not(feature="cuda-cublas-gemm-probe"))]
-        let qwen_body_eligible=false;
-        let actual_row_graph=smol_actual_row_graph||wide_actual_row_graph||sm80_actual_row_graph;
+        let qwen_body_only = config.owned_decode_batch() == 10
+            && plan.dimensions().hidden_size() == 2560
+            && plan.dimensions().query_heads() == 32
+            && plan.dimensions().key_value_heads() == 8
+            && plan.dimensions().head_dimension() == 128;
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        let qwen_body_eligible = actual_rows >= 2
+            && actual_rows <= 32
+            && native_d128_two_stage_workspace
+                .as_ref()
+                .and_then(|w| w.materialized.as_ref())
+                .and_then(|m| m.hf.as_ref())
+                .is_some_and(|hf| {
+                    hf.plan.uses_sm80_paged_attention()
+                        && packed
+                            .position_ids()
+                            .iter()
+                            .all(|&p| hf.plan.supports_sm80_paged_attention(u64::from(p) + 1))
+                });
+        #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+        let qwen_body_eligible = false;
+        let actual_row_graph =
+            smol_actual_row_graph || wide_actual_row_graph || sm80_actual_row_graph;
         // The bounded MLP graph owns its capture. Keep layer segments outside it
         // to avoid nesting captures; other modes retain their original policy.
-        let owned_segments = if config.owned_decode_graph() && in_command_batch
+        let owned_segments = if config.owned_decode_graph()
+            && in_command_batch
             && (!qwen_body_only || qwen_body_eligible)
-            && !(matches!(config.owned_decode_batch(),9|10) && config.owned_mlp_graphs())
-            && actual_rows!=0 && actual_rows<=dense_rows
-            && (actual_rows==dense_rows || actual_row_graph)
-            && packed.row_sequence_slots().iter().enumerate().all(|(i,&slot)|slot as usize==i)
-            && packed.output_count()==actual_rows && packed.prefill_token_count()==0
-            && plan.layers().len()%2==0 {
-            let legacy_count=plan.layers().len()*2;
+            && !(matches!(config.owned_decode_batch(), 9 | 10) && config.owned_mlp_graphs())
+            && actual_rows != 0
+            && actual_rows <= dense_rows
+            && (actual_rows == dense_rows || actual_row_graph)
+            && packed
+                .row_sequence_slots()
+                .iter()
+                .enumerate()
+                .all(|(i, &slot)| slot as usize == i)
+            && packed.output_count() == actual_rows
+            && packed.prefill_token_count() == 0
+            && plan.layers().len() % 2 == 0
+        {
+            let legacy_count = plan.layers().len() * 2;
             if actual_row_graph {
-                let stride=legacy_count+1;let start=owned_decode_segment_offset(legacy_count,dense_rows as usize,actual_rows,produce_greedy_tokens).ok_or(LlamaBatchExecutorError::InvalidConfiguration{field:"owned graph key",reason:"actual rows/output mode exceed prepared cache"})?;
-                Some(&mut owned_segments[start..start+stride])
-            } else { Some(&mut owned_segments[..legacy_count]) }
-        } else { None };
+                let stride = legacy_count + 1;
+                let start = owned_decode_segment_offset(
+                    legacy_count,
+                    dense_rows,
+                    actual_rows,
+                    produce_greedy_tokens,
+                )
+                .ok_or(LlamaBatchExecutorError::InvalidConfiguration {
+                    field: "owned graph key",
+                    reason: "actual rows/output mode exceed prepared cache",
+                })?;
+                Some(&mut owned_segments[start..start + stride])
+            } else {
+                Some(&mut owned_segments[..legacy_count])
+            }
+        } else {
+            None
+        };
         let fixed = execute_fixed_graph(
             plan,
             weights,
@@ -779,7 +922,11 @@ pub(in crate::llama) fn execute_packed(
             buffers,
             config.residual_norm_implementation(),
             rms_norm_profile,
-            if config.owned_decode_batch()>=2 || packed.prefill_token_count()==0 { config.owned_decode_batch() } else { 0 },
+            if config.owned_decode_batch() >= 2 || packed.prefill_token_count() == 0 {
+                config.owned_decode_batch()
+            } else {
+                0
+            },
             owned_mlp_eligible && in_command_batch,
             owned_segments,
             config.ragged_attention_reduction_profile(),
@@ -804,9 +951,21 @@ pub(in crate::llama) fn execute_packed(
             embedding_in_step,
             defer_validated_embedding_report,
             native_d128_two_stage_workspace.as_deref_mut(),
-            #[cfg(feature="cuda-cublas-gemm-probe")]
-            if owned_mlp_eligible && in_command_batch {owned_mlp_graphs.as_deref_mut()}else{None},
-            if owned_mlp_eligible && config.owned_decode_batch()==10 {packed.row_kind_codes().iter().take_while(|v|**v==LlamaBatchRowKind::Decode.code()).count()}else{0},
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            if owned_mlp_eligible && in_command_batch {
+                owned_mlp_graphs.as_deref_mut()
+            } else {
+                None
+            },
+            if owned_mlp_eligible && config.owned_decode_batch() == 10 {
+                packed
+                    .row_kind_codes()
+                    .iter()
+                    .take_while(|v| **v == LlamaBatchRowKind::Decode.code())
+                    .count()
+            } else {
+                0
+            },
             layout,
             key_cache,
             value_cache,
@@ -818,7 +977,9 @@ pub(in crate::llama) fn execute_packed(
             step_capture,
             output_row_lm_head,
             packed.output_count() != 0,
-            tensor_parallel_group.as_ref().map(|(group, rank)| (&**group, *rank)),
+            tensor_parallel_group
+                .as_ref()
+                .map(|(group, rank)| (&**group, *rank)),
             stream,
         );
         // Staged step uploads: the batch also copies this iteration's results
@@ -895,7 +1056,7 @@ pub(in crate::llama) fn execute_packed(
                     output_count: packed.output_count(),
                     gathered_logits,
                     greedy_results,
-                    produce_greedy_tokens: produce_greedy_tokens,
+                    produce_greedy_tokens,
                     greedy_candidate_count: config.greedy_candidate_count(),
                     logits_already_gathered,
                     tie_source: if config.greedy_fp32_ties() && produce_greedy_tokens {
@@ -1044,9 +1205,7 @@ pub(in crate::llama) fn execute_packed(
                         ),
                         None => Ok(()),
                     };
-                    if let Err(error) = copied {
-                        return Err(error);
-                    }
+                    copied?;
                 }
                 execute_iteration_body(
                     views.batch,
@@ -1214,33 +1373,62 @@ enum StepCaptureMode<'a> {
     Replay(&'a CudaStepGraph, &'a [u32]),
 }
 
-fn mlp_span<'a>(buffer:&'a CudaDeviceBuffer,dtype:CudaDType,bytes:u64,site:ExecutionSite,skip:usize)->Result<CudaBufferSpan<'a>,LlamaForwardError>{
-    let offset=skip as u64*9728*2;CudaBufferSpan::new(buffer,dtype,offset,bytes-offset).map_err(|e|LlamaForwardError::cuda(site,e))
+fn mlp_span(
+    buffer: &CudaDeviceBuffer,
+    dtype: CudaDType,
+    bytes: u64,
+    site: ExecutionSite,
+    skip: usize,
+) -> Result<CudaBufferSpan<'_>, LlamaForwardError> {
+    let offset = skip as u64 * 9728 * 2;
+    CudaBufferSpan::new(buffer, dtype, offset, bytes - offset)
+        .map_err(|e| LlamaForwardError::cuda(site, e))
 }
-fn mlp_span_mut<'a>(buffer:&'a mut CudaDeviceBuffer,dtype:CudaDType,bytes:u64,site:ExecutionSite,skip:usize)->Result<CudaBufferSpanMut<'a>,LlamaForwardError>{
-    let offset=skip as u64*9728*2;CudaBufferSpanMut::new(buffer,dtype,offset,bytes-offset).map_err(|e|LlamaForwardError::cuda(site,e))
+fn mlp_span_mut(
+    buffer: &mut CudaDeviceBuffer,
+    dtype: CudaDType,
+    bytes: u64,
+    site: ExecutionSite,
+    skip: usize,
+) -> Result<CudaBufferSpanMut<'_>, LlamaForwardError> {
+    let offset = skip as u64 * 9728 * 2;
+    CudaBufferSpanMut::new(buffer, dtype, offset, bytes - offset)
+        .map_err(|e| LlamaForwardError::cuda(site, e))
 }
 
 /// Warm library state once, then capture the same operations. Attention stays
 /// eager because its cuBLAS geometry depends on each request's current length.
 fn execute_owned_decode_segment<S: CudaExecutionStream + ?Sized>(
-    segment: Option<&mut OwnedDecodeSegment>, stream: &mut S,
+    segment: Option<&mut OwnedDecodeSegment>,
+    stream: &mut S,
     body: impl FnOnce(&mut S) -> LlamaBatchExecutorResult<()>,
 ) -> LlamaBatchExecutorResult<()> {
-    let Some(segment) = segment else { return body(stream); };
+    let Some(segment) = segment else {
+        return body(stream);
+    };
     let site = ExecutionSite::global(LlamaOp::IterationCompletion);
     if let Some(graph) = &segment.graph {
-        launch_step_graph(stream, graph).map_err(|e| batch_cuda(site,e))?;
-        if !segment.replayed { eprintln!("RILEY_OWNED_SEGMENT replay=true"); segment.replayed=true; }
+        launch_step_graph(stream, graph).map_err(|e| batch_cuda(site, e))?;
+        if !segment.replayed {
+            eprintln!("RILEY_OWNED_SEGMENT replay=true");
+            segment.replayed = true;
+        }
         return Ok(());
     }
-    if !segment.warmed { body(stream)?; segment.warmed=true; return Ok(()); }
-    begin_step_capture(stream).map_err(|e|batch_cuda(site,e))?;
-    if let Err(error) = body(stream) { let _=abort_step_capture(stream); return Err(error); }
-    let graph = end_step_capture(stream).map_err(|e|batch_cuda(site,e))?;
+    if !segment.warmed {
+        body(stream)?;
+        segment.warmed = true;
+        return Ok(());
+    }
+    begin_step_capture(stream).map_err(|e| batch_cuda(site, e))?;
+    if let Err(error) = body(stream) {
+        let _ = abort_step_capture(stream);
+        return Err(error);
+    }
+    let graph = end_step_capture(stream).map_err(|e| batch_cuda(site, e))?;
     // Capture records work without executing it; execute this iteration once.
-    launch_step_graph(stream,&graph).map_err(|e|batch_cuda(site,e))?;
-    segment.graph=Some(graph);
+    launch_step_graph(stream, &graph).map_err(|e| batch_cuda(site, e))?;
+    segment.graph = Some(graph);
     eprintln!("RILEY_OWNED_SEGMENT capture=true");
     Ok(())
 }
@@ -1264,6 +1452,20 @@ fn tensor_parallel_all_reduce<S: CudaExecutionStream + ?Sized>(
         .map_err(|source| batch_cuda(site, source))
 }
 
+// Tensor gate/gated and projection site names describe distinct operations.
+#[allow(clippy::similar_names)]
+// Explicit tensor/lease operands are validated before native dispatch.
+#[allow(clippy::too_many_arguments)]
+// Keep cold validation and the audited execution/cleanup sequence together.
+#[allow(clippy::too_many_lines)]
+// Copy configuration and borrowed descriptors keep the established execution/lease API.
+#[allow(clippy::large_types_passed_by_value)]
+// Independent cold-validated execution switches are not one state enum.
+#[allow(clippy::fn_params_excessive_bools)]
+// FP32 scaling and bounded fixture values preserve the approved numerical contract.
+#[allow(clippy::cast_precision_loss)]
+// Native rows and fixed geometry are bounded during cold preparation; preserve their bytes.
+#[allow(clippy::cast_possible_truncation)]
 fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     plan: &LlamaExecutionPlan,
     weights: &CudaUploadedWeights,
@@ -1286,9 +1488,10 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     embedding_in_recorded_step: bool,
     defer_validated_embedding_report: bool,
     mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
-    #[cfg(feature="cuda-cublas-gemm-probe")]
-    mut owned_mlp_graphs: Option<&mut riley_cuda::CudaOwnedHfMlpGraph>,
-    piecewise_active_rows:usize,
+    #[cfg(feature = "cuda-cublas-gemm-probe")] mut owned_mlp_graphs: Option<
+        &mut riley_cuda::CudaOwnedHfMlpGraph,
+    >,
+    piecewise_active_rows: usize,
     layout: KvLayout,
     key_cache: &mut CudaDeviceBuffer,
     value_cache: &mut CudaDeviceBuffer,
@@ -1305,6 +1508,8 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     tensor_parallel: Option<(&riley_cuda::CudaPeerAllReduceGroup, u32)>,
     stream: &mut S,
 ) -> LlamaBatchExecutorResult<()> {
+    #[cfg(not(feature = "cuda"))]
+    let _ = (smol_qkv_fusion_eligible, piecewise_active_rows);
     let dense_rows = usize_u64(
         plan.sequence_length(),
         LlamaBatchExecutorResource::HostWorkspace,
@@ -1397,7 +1602,11 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         })
     };
     if !embedding_in_recorded_step {
-        run_embedding(defer_validated_embedding_report, &mut *buffers, &mut *stream)?;
+        run_embedding(
+            defer_validated_embedding_report,
+            &mut *buffers,
+            &mut *stream,
+        )?;
     }
 
     // The embedding was submitted above unless it belongs to the recorded
@@ -1445,728 +1654,1235 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     // Cache a whole decode body separately from the original layer segments.
     // Embedding stays outside this body graph. Its report, dynamic metadata
     // uploads, result download and sampling use the iteration completion path.
-    #[cfg(feature="cuda-cublas-gemm-probe")]
-    let owned_full_body = owned_segments.is_some() && owned_decode_batch >= 2
-        && batch.host().row_positions().len() >= 2 && dense_rows <= 32
-        && owned_segments.as_ref().is_some_and(|s|s.len()==plan.layers().len()*2+1)
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    let owned_full_body = owned_segments.is_some()
+        && owned_decode_batch >= 2
+        && batch.host().row_positions().len() >= 2
+        && dense_rows <= 32
+        && owned_segments
+            .as_ref()
+            .is_some_and(|s| s.len() == plan.layers().len() * 2 + 1)
         && batch.host().row_positions().len() as u64 <= dense_rows
-        && batch.host().row_sequence_slots().iter().enumerate().all(|(i,&slot)| slot as usize == i)
-        && output_row_lm_head.as_ref().is_none_or(|o|o.output_indices_host.iter().enumerate().all(|(i,&r)|r as usize == i))
-        && native_d128_two_stage_workspace.as_ref()
-            .and_then(|w|w.materialized.as_ref()).and_then(|m|m.hf.as_ref())
-            .is_some_and(|hf|hf.decode_chunk.is_some() && (
-                (query_heads==9 && key_value_heads==3 && head_size==64 && batch.host().row_positions().iter()
-                    .all(|&pos|u64::from(pos)<hf.plan.config().n() && hf.plan.supports_exact_smol_attention(u64::from(pos)+1)))
-                || (owned_decode_batch==10 && hidden==2560 && query_heads==32 && key_value_heads==8 && head_size==128
-                    && hf.plan.uses_sm80_paged_attention() && batch.host().row_positions().iter()
-                    .all(|&pos|hf.plan.supports_sm80_paged_attention(u64::from(pos)+1)))
-            ));
-    #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+        && batch
+            .host()
+            .row_sequence_slots()
+            .iter()
+            .enumerate()
+            .all(|(i, &slot)| slot as usize == i)
+        && output_row_lm_head.as_ref().is_none_or(|o| {
+            o.output_indices_host
+                .iter()
+                .enumerate()
+                .all(|(i, &r)| r as usize == i)
+        })
+        && native_d128_two_stage_workspace
+            .as_ref()
+            .and_then(|w| w.materialized.as_ref())
+            .and_then(|m| m.hf.as_ref())
+            .is_some_and(|hf| {
+                hf.decode_chunk.is_some()
+                    && ((query_heads == 9
+                        && key_value_heads == 3
+                        && head_size == 64
+                        && batch.host().row_positions().iter().all(|&pos| {
+                            u64::from(pos) < hf.plan.config().n()
+                                && hf.plan.supports_exact_smol_attention(u64::from(pos) + 1)
+                        }))
+                        || (owned_decode_batch == 10
+                            && hidden == 2560
+                            && query_heads == 32
+                            && key_value_heads == 8
+                            && head_size == 128
+                            && hf.plan.uses_sm80_paged_attention()
+                            && batch.host().row_positions().iter().all(|&pos| {
+                                hf.plan.supports_sm80_paged_attention(u64::from(pos) + 1)
+                            })))
+            });
+    #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
     let owned_full_body = false;
     let (whole_body_segment, mut owned_segments) = match owned_segments.take() {
         Some(segments) => {
-            let (prepost,whole)=segments.split_at_mut(plan.layers().len()*2);
+            let (prepost, whole) = segments.split_at_mut(plan.layers().len() * 2);
             if owned_full_body {
-                if !whole[0].warmed { eprintln!("RILEY_OWNED_BODY_KEY active_rows={} dense_rows={}",batch.host().row_positions().len(),dense_rows); }
-                (Some(&mut whole[0]),None)
-            }else{(None,Some(prepost))}
-        },
-        None => (None,None),
-    };
-    execute_owned_decode_segment(whole_body_segment,stream,|stream| {
-    #[cfg(feature="cuda-cublas-gemm-probe")]
-    let hf_wide_norm=matches!(hidden,576|2048|2560|4096)&&native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).is_some_and(|m|m.hf.is_some());
-    #[cfg(not(feature="cuda-cublas-gemm-probe"))]let hf_wide_norm=false;
-    if hf_wide_norm && residual_norm_implementation!=ResidualNormImplementation::Separate {
-      return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"hf_wide_norm",reason:"private request RMSNorm requires separate residual/norm"});
-    }
-    let norm_after_mlp = fused_mlp_residual_norm
-        && residual_norm_implementation == ResidualNormImplementation::Fused
-        && !plan.layers().is_empty();
-    for (ordinal, layer) in plan.layers().iter().enumerate() {
-        let (hidden_current, hidden_projection) = layer_hidden_roles(
-            ordinal,
-            &mut buffers.hidden_current,
-            &mut buffers.hidden_projection,
-        );
-        let layer_index = layer.index();
-        let layer_offset = layout.layer_byte_offset(layer_index).ok_or(
-            LlamaBatchExecutorError::InvalidConfiguration {
-                field: "KV layer offset",
-                reason: "decoder layer lies outside the prepared KV layout",
-            },
-        )?;
-        let pre_segment = owned_segments.as_deref_mut().map(|segments| &mut segments[ordinal*2]);
-        execute_owned_decode_segment(pre_segment, stream, |stream| {
-        let input_norm_site = ExecutionSite::layer(layer_index, LlamaOp::InputNorm);
-        let input_norm_weight = weight_span(weights, layer.input_norm_weight(), input_norm_site)?;
-        // With the fused MLP residual norm the previous layer already wrote
-        // this layer's normalized input.
-        if !(norm_after_mlp && ordinal > 0) {
-            let mut params = RmsNormParams {
-                input: span(
-                    hidden_current,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    input_norm_site,
-                )?,
-                weight: input_norm_weight,
-                output: span_mut(
-                    &mut buffers.hidden_norm,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    input_norm_site,
-                )?,
-                row_count: dense_rows,
-                hidden_size: hidden,
-                epsilon: layer.input_norm_epsilon(),
-            };
-            execute_profile_rms_norm_grouped(rms_norm_profile,&mut params,stream,batch.host(),hf_wide_norm)
-                .map_err(|source| batch_cuda(input_norm_site, source))?;
-        }
-
-        let rope_in_split = fused_qkv_rope && gemms.merged_qkv_plan().is_some();
-        if gemms.merged_qkv_plan().is_some() {
-            // One GEMM over the concatenated Q|K|V weights. `gate_raw` is idle
-            // until the MLP and is wide enough to hold the merged rows.
-            let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
-            let merged_width = query_width + 2 * key_value_width;
-            let merged_bytes = dense_rows * merged_width * 2;
-            let missing_bias = LlamaForwardError::InvalidConfiguration {
-                field: "projection_bias_mode",
-                reason: "merged QKV projection requires Q/K/V biases, or no bias with a per-head query/key norm and the fused RoPE split",
-            };
-            // With biases: split + bias. Without them, with a per-head norm
-            // (Qwen3): the split kernel normalizes every query and key head
-            // instead and the bias spans carry the two norm scales. Without
-            // either (Llama 3): the bias is a vector of negative zeros.
-            let (query_bias, key_bias, value_bias, head_norm_epsilon) = match (
-                layer.query_bias(),
-                layer.key_bias(),
-                layer.value_bias(),
-                layer.query_key_norm(),
-            ) {
-                (Some(query_bias), Some(key_bias), Some(value_bias), None) => (
-                    weight_span(weights, query_bias, query_site)?,
-                    weight_span(weights, key_bias, query_site)?,
-                    weight_span(weights, value_bias, query_site)?,
-                    None,
-                ),
-                (None, None, None, Some((query_scale, key_scale, epsilon)))
-                    if rope_in_split && head_size == 128 =>
-                {
-                    (
-                        weight_span(weights, query_scale, query_site)?,
-                        weight_span(weights, key_scale, query_site)?,
-                        weight_span(weights, key_scale, query_site)?,
-                        Some(epsilon),
-                    )
+                if !whole[0].warmed {
+                    eprintln!(
+                        "RILEY_OWNED_BODY_KEY active_rows={} dense_rows={}",
+                        batch.host().row_positions().len(),
+                        dense_rows
+                    );
                 }
-                (None, None, None, None) => {
-                    let zeros = weights.negative_zero_bias().ok_or(missing_bias)?;
-                    let zeros_span = |elements: u64| {
-                        CudaBufferSpan::new(zeros, CudaDType::BF16, 0, elements * 2)
-                            .map_err(|source| batch_cuda(query_site, source))
-                    };
-                    (
-                        zeros_span(query_width)?,
-                        zeros_span(key_value_width)?,
-                        zeros_span(key_value_width)?,
-                        None,
-                    )
-                }
-                _ => return Err(missing_bias.into()),
-            };
-            #[cfg(feature="cuda-cublas-gemm-probe")]
-            let separate=if let Some((query,key_value))=gemms.hf_separate_projection_plans(){
-              execute_gemm_with_row_groups(query,&buffers.hidden_norm,weight_span(weights,layer.query_weight(),query_site)?,&mut buffers.hidden_context,&mut buffers.gemm_workspace,stream,query_site,batch.host(),None,owned_decode_batch)?;
-              execute_gemm_with_row_groups(key_value,&buffers.hidden_norm,weight_span(weights,layer.key_weight(),query_site)?,&mut buffers.key_raw,&mut buffers.gemm_workspace,stream,query_site,batch.host(),None,owned_decode_batch)?;
-              execute_gemm_with_row_groups(key_value,&buffers.hidden_norm,weight_span(weights,layer.value_weight(),query_site)?,&mut buffers.value_raw,&mut buffers.gemm_workspace,stream,query_site,batch.host(),None,owned_decode_batch)?;
-              hf_pack_separate_qkv(span(&buffers.hidden_context,CudaDType::BF16,dense_rows*query_width*2,query_site)?,span(&buffers.key_raw,CudaDType::BF16,dense_rows*key_value_width*2,query_site)?,span(&buffers.value_raw,CudaDType::BF16,dense_rows*key_value_width*2,query_site)?,span_mut(&mut buffers.gate_raw,CudaDType::BF16,merged_bytes,query_site)?,dense_rows,query_width,key_value_width,stream).map_err(|e|batch_cuda(query_site,e))?;
-              true
-            }else{false};
-            #[cfg(not(feature="cuda-cublas-gemm-probe"))]let separate=false;
-            if !separate {
-            let merged_weight =
-                weights
-                    .merged_qkv(layer_index)
-                    .ok_or(LlamaForwardError::InvalidConfiguration {
-                        field: "projection_bias_mode",
-                        reason: "merged QKV weights were not uploaded for this layer",
-                    })?;
-            let merged_weight =
-                CudaBufferSpan::new(merged_weight, CudaDType::BF16, 0, merged_weight.byte_len())
-                    .map_err(|source| batch_cuda(query_site, source))?;
-            if let Some(plan) = gemms.merged_qkv_plan() {
-                execute_gemm_with_row_groups(
-                    plan,
-                    &buffers.hidden_norm,
-                    merged_weight,
-                    &mut buffers.gate_raw,
-                    &mut buffers.gemm_workspace,
-                    stream,
-                    query_site,
-                batch.host(),None,owned_decode_batch,
-)?;
-            }
-            }
-            let mut params = QkvSplitBiasParams {
-                merged: span(&buffers.gate_raw, CudaDType::BF16, merged_bytes, query_site)?,
-                query_bias,
-                key_bias,
-                value_bias,
-                query: span_mut(
-                    if fused_qkv_rope {
-                        &mut buffers.hidden_rotary
-                    } else {
-                        &mut *hidden_projection
-                    },
-                    CudaDType::BF16,
-                    dense_rows * query_width * 2,
-                    query_site,
-                )?,
-                key: span_mut(
-                    if fused_qkv_rope {
-                        &mut buffers.key_rotary
-                    } else {
-                        &mut buffers.key_raw
-                    },
-                    CudaDType::BF16,
-                    dense_rows * key_value_width * 2,
-                    query_site,
-                )?,
-                value: span_mut(
-                    &mut buffers.value_raw,
-                    CudaDType::BF16,
-                    dense_rows * key_value_width * 2,
-                    query_site,
-                )?,
-                row_count: dense_rows,
-                query_width,
-                key_value_width,
-            };
-            if fused_qkv_rope {
-                let rope = QkvRopeParams {
-                    cos: CudaBufferSpan::new(rope_cos, CudaDType::F32, 0, rope_cos.byte_len())
-                        .map_err(|source| batch_cuda(query_site, source))?,
-                    sin: CudaBufferSpan::new(rope_sin, CudaDType::F32, 0, rope_sin.byte_len())
-                        .map_err(|source| batch_cuda(query_site, source))?,
-                    positions: batch.device_row_positions(),
-                    positions_host,
-                    head_size,
-                    table_position_count: max_positions,
-                    // The KV cache write below consumes the deferred split.
-                    defer_for_kv_write: fused_kv_write || (matches!(owned_decode_batch,3|4|5) && hf_wide_norm && head_norm_epsilon.is_some()),
-                    head_norm_epsilon,
-                };
-                #[cfg(feature="cuda-cublas-gemm-probe")]
-                let split_result=if hf_wide_norm && head_norm_epsilon.is_some(){if matches!(owned_decode_batch,3|4|5) {riley_cuda::qkv_split_bias_rope_hf_head128_deferred(&mut params,&rope,stream)}else{qkv_split_bias_rope_hf_head128(&mut params,&rope,stream)}}else{qkv_split_bias_rope(&mut params,&rope,stream)};
-                #[cfg(not(feature="cuda-cublas-gemm-probe"))]
-                let split_result=qkv_split_bias_rope(&mut params,&rope,stream);
-                split_result.map_err(|source|batch_cuda(query_site,source))?;
+                (Some(&mut whole[0]), None)
             } else {
-                qkv_split_bias(&mut params, stream)
-                    .map_err(|source| batch_cuda(query_site, source))?;
-            }
-        } else {
-            let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
-            if query_width != hidden {
-                return Err(LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "projection_bias_mode",
-                    reason: "a query projection wider than the hidden size requires the merged Q|K|V projection with the fused RoPE split",
-                });
-            }
-            #[cfg(feature="cuda-cublas-gemm-probe")]
-            let fused_smol_qkv = if smol_qkv_fusion_eligible && owned_decode_batch>=2
-                && hidden==576 && query_width==576 && key_value_width==192 && head_size==64
-                && layer.query_bias().is_none() && layer.key_bias().is_none() && layer.value_bias().is_none() && layer.query_key_norm().is_none() {
-                if let super::super::forward::PreparedLlamaGemm::ClassicRequestRows(native)=&mut gemms.hidden {
-                    let rows=batch.host().row_positions().len() as u64;
-                    native.try_execute_hf_smol_fused_qkv(
-                        weight_span(weights,layer.query_weight(),query_site)?,weight_span(weights,layer.key_weight(),query_site)?,weight_span(weights,layer.value_weight(),query_site)?,
-                        span(&buffers.hidden_norm,CudaDType::BF16,rows*576*2,query_site)?,
-                        span_mut(hidden_projection,CudaDType::BF16,rows*576*2,query_site)?,
-                        span_mut(&mut buffers.key_raw,CudaDType::BF16,rows*192*2,query_site)?,
-                        span_mut(&mut buffers.value_raw,CudaDType::BF16,rows*192*2,query_site)?,rows,stream)
-                        .map_err(|e|batch_cuda(query_site,e))?
-                } else {false}
-            } else {false};
-            #[cfg(not(feature="cuda-cublas-gemm-probe"))]
-            let fused_smol_qkv=false;
-            if !fused_smol_qkv {
-            let (strict, fused, requests, batches) = gemms.query_projection_plans_with_requests();
-            execute_projection_with_row_groups(
-                strict,
-                fused,
-                weights,
-                layer.query_bias(),
-                &buffers.hidden_norm,
-                weight_span(weights, layer.query_weight(), query_site)?,
-                hidden_projection,
-                &mut buffers.gemm_workspace,
-                dense_rows,
-                hidden,
-                stream,
-                query_site,
-            batch.host(),requests,if owned_decode_batch>=2 {batches}else{None},owned_decode_batch,
-)?;
-            let key_site = ExecutionSite::layer(layer_index, LlamaOp::KeyProjection);
-            let (strict, fused, requests, batches) = gemms.key_value_projection_plans_with_requests();
-            execute_projection_with_row_groups(
-                strict,
-                fused,
-                weights,
-                layer.key_bias(),
-                &buffers.hidden_norm,
-                weight_span(weights, layer.key_weight(), key_site)?,
-                &mut buffers.key_raw,
-                &mut buffers.gemm_workspace,
-                dense_rows,
-                key_value_width,
-                stream,
-                key_site,
-            batch.host(),requests,if owned_decode_batch>=2 {batches}else{None},owned_decode_batch,
-)?;
-            let value_site = ExecutionSite::layer(layer_index, LlamaOp::ValueProjection);
-            let (strict, fused, requests, batches) = gemms.key_value_projection_plans_with_requests();
-            execute_projection_with_row_groups(
-                strict,
-                fused,
-                weights,
-                layer.value_bias(),
-                &buffers.hidden_norm,
-                weight_span(weights, layer.value_weight(), value_site)?,
-                &mut buffers.value_raw,
-                &mut buffers.gemm_workspace,
-                dense_rows,
-                key_value_width,
-                stream,
-                value_site,
-            batch.host(),requests,if owned_decode_batch>=2 {batches}else{None},owned_decode_batch,
-)?;
+                (None, Some(prepost))
             }
         }
-
-        // Qwen3 RMS-normalizes every projected query head and key head before
-        // the rotary embedding. `hidden_norm` is idle from here to the
-        // post-attention norm and `gate_raw` until the MLP, so they hold the
-        // normalized query and key.
-        // The merged split with fused RoPE has already normalized both.
-        let query_key_normed = layer.query_key_norm().is_some() && !rope_in_split;
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        let hf_head_norm = head_size==128 && native_d128_two_stage_workspace.as_ref()
-            .and_then(|w|w.materialized.as_ref()).is_some_and(|m|m.hf.is_some());
-        if let (Some((query_scale, key_scale, epsilon)), false) =
-            (layer.query_key_norm(), rope_in_split)
-        {
-            if gemms.merged_qkv_plan().is_some() {
-                return Err(LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "projection_bias_mode",
-                    reason: "a per-head query/key norm on merged Q|K|V needs the fused RoPE split",
-                });
-            }
-            let query_norm_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
-            let mut params = RmsNormParams {
-                input: span(
-                    hidden_projection,
-                    CudaDType::BF16,
-                    dense_rows * query_heads * head_size * 2,
-                    query_norm_site,
-                )?,
-                weight: weight_span(weights, query_scale, query_norm_site)?,
-                output: span_mut(
-                    &mut buffers.hidden_norm,
-                    CudaDType::BF16,
-                    dense_rows * query_heads * head_size * 2,
-                    query_norm_site,
-                )?,
-                row_count: dense_rows * query_heads,
-                hidden_size: head_size,
-                epsilon,
-            };
-            #[cfg(feature="cuda-cublas-gemm-probe")]
-            let norm_result=if hf_head_norm { hugging_face_qwen_head128_rms_norm(&mut params,stream) } else { execute_profile_rms_norm(rms_norm_profile,&mut params,stream) };
-            #[cfg(not(feature="cuda-cublas-gemm-probe"))]
-            let norm_result=execute_profile_rms_norm(rms_norm_profile,&mut params,stream);
-            norm_result.map_err(|source|batch_cuda(query_norm_site,source))?;
-            let key_norm_site = ExecutionSite::layer(layer_index, LlamaOp::KeyProjection);
-            let mut params = RmsNormParams {
-                input: span(
-                    &buffers.key_raw,
-                    CudaDType::BF16,
-                    dense_rows * key_value_width * 2,
-                    key_norm_site,
-                )?,
-                weight: weight_span(weights, key_scale, key_norm_site)?,
-                output: span_mut(
-                    &mut buffers.gate_raw,
-                    CudaDType::BF16,
-                    dense_rows * key_value_width * 2,
-                    key_norm_site,
-                )?,
-                row_count: dense_rows * key_value_heads,
-                hidden_size: head_size,
-                epsilon,
-            };
-            #[cfg(feature="cuda-cublas-gemm-probe")]
-            let norm_result=if hf_head_norm { hugging_face_qwen_head128_rms_norm(&mut params,stream) } else { execute_profile_rms_norm(rms_norm_profile,&mut params,stream) };
-            #[cfg(not(feature="cuda-cublas-gemm-probe"))]
-            let norm_result=execute_profile_rms_norm(rms_norm_profile,&mut params,stream);
-            norm_result.map_err(|source|batch_cuda(key_norm_site,source))?;
+        None => (None, None),
+    };
+    execute_owned_decode_segment(whole_body_segment, stream, |stream| {
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        let hf_wide_norm = matches!(hidden, 576 | 2048 | 2560 | 4096)
+            && native_d128_two_stage_workspace
+                .as_ref()
+                .and_then(|w| w.materialized.as_ref())
+                .is_some_and(|m| m.hf.is_some());
+        #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+        let hf_wide_norm = false;
+        if hf_wide_norm && residual_norm_implementation != ResidualNormImplementation::Separate {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "hf_wide_norm",
+                reason: "private request RMSNorm requires separate residual/norm",
+            });
         }
-
-        let query_rope_site = ExecutionSite::layer(layer_index, LlamaOp::QueryRope);
-        if !rope_in_split {
-            let mut params = IndexedRopeParams {
-                input: span(
-                    if query_key_normed {
-                        &buffers.hidden_norm
-                    } else {
-                        &*hidden_projection
-                    },
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    query_rope_site,
-                )?,
-                cos: CudaBufferSpan::new(rope_cos, CudaDType::F32, 0, rope_cos.byte_len())
-                    .map_err(|source| batch_cuda(query_rope_site, source))?,
-                sin: CudaBufferSpan::new(rope_sin, CudaDType::F32, 0, rope_sin.byte_len())
-                    .map_err(|source| batch_cuda(query_rope_site, source))?,
-                positions: batch.device_row_positions(),
-                positions_host,
-                output: span_mut(
-                    &mut buffers.hidden_rotary,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    query_rope_site,
-                )?,
-                head_count: query_heads,
-                head_size,
-                rotary_dimension: head_size,
-                table_position_count: max_positions,
-            };
-            indexed_rope(&mut params, stream)
-                .map_err(|source| batch_cuda(query_rope_site, source))?;
-        }
-        let key_rope_site = ExecutionSite::layer(layer_index, LlamaOp::KeyRope);
-        if !rope_in_split {
-            let mut params = IndexedRopeParams {
-                input: span(
-                    if query_key_normed {
-                        &buffers.gate_raw
-                    } else {
-                        &buffers.key_raw
-                    },
-                    CudaDType::BF16,
-                    plan.workspace_spec().key_value_buffer_bytes(),
-                    key_rope_site,
-                )?,
-                cos: CudaBufferSpan::new(rope_cos, CudaDType::F32, 0, rope_cos.byte_len())
-                    .map_err(|source| batch_cuda(key_rope_site, source))?,
-                sin: CudaBufferSpan::new(rope_sin, CudaDType::F32, 0, rope_sin.byte_len())
-                    .map_err(|source| batch_cuda(key_rope_site, source))?,
-                positions: batch.device_row_positions(),
-                positions_host,
-                output: span_mut(
-                    &mut buffers.key_rotary,
-                    CudaDType::BF16,
-                    plan.workspace_spec().key_value_buffer_bytes(),
-                    key_rope_site,
-                )?,
-                head_count: key_value_heads,
-                head_size,
-                rotary_dimension: head_size,
-                table_position_count: max_positions,
-            };
-            indexed_rope(&mut params, stream)
-                .map_err(|source| batch_cuda(key_rope_site, source))?;
-        }
-
-        let cache_site = ExecutionSite::layer(layer_index, LlamaOp::KvCacheWrite);
-        {
-            let mut params = RaggedPagedKvCacheWriteParams {
-                key_source: span(
-                    &buffers.key_rotary,
-                    CudaDType::BF16,
-                    plan.workspace_spec().key_value_buffer_bytes(),
-                    cache_site,
-                )?,
-                value_source: span(
-                    &buffers.value_raw,
-                    CudaDType::BF16,
-                    plan.workspace_spec().key_value_buffer_bytes(),
-                    cache_site,
-                )?,
-                key_pool: CudaBufferSpanMut::new(
-                    key_cache,
-                    CudaDType::BF16,
-                    layer_offset,
-                    layout.layer_stride_bytes(),
-                )
-                .map_err(|source| batch_cuda(cache_site, source))?,
-                value_pool: CudaBufferSpanMut::new(
-                    value_cache,
-                    CudaDType::BF16,
-                    layer_offset,
-                    layout.layer_stride_bytes(),
-                )
-                .map_err(|source| batch_cuda(cache_site, source))?,
-                batch,
-                key_value_head_count: key_value_heads,
-                head_size,
-            };
-            ragged_paged_kv_cache_write(&mut params, stream)
-                .map_err(|source| batch_cuda(cache_site, source))?;
-        }
-
-        Ok(())
-        })?;
-        let attention_site = ExecutionSite::layer(layer_index, LlamaOp::RaggedPagedAttention);
-        let materialized_reference = native_d128_two_stage_workspace.as_ref().is_some_and(|w|w.materialized.is_some());
-        if materialized_reference {
-            if !matches!(step_capture, StepCaptureMode::Disabled) {
-                return Err(LlamaBatchExecutorError::InvalidConfiguration { field: "materialized reference attention", reason: "temporary reference resources cannot be graph captured" });
-            }
-            let prepared = native_d128_two_stage_workspace.as_deref_mut().and_then(|w|w.materialized.as_mut()).expect("cold prepared reference workspace");
-            #[cfg(feature="cuda-cublas-gemm-probe")]
-            let mut hf_executed=false;
-            #[cfg(feature="cuda-cublas-gemm-probe")]
-            if let Some(hf)=prepared.hf.as_mut() {
-                let host=batch.host();let positions=host.row_positions();let slots=host.row_sequence_slots();let mut begin=0;
-                let mut selected=[0u32;32];let mut selected_count=0usize;
-                if dimensions.query_heads()==9 && dimensions.key_value_heads()==3 && head_size==64 && hf.decode_chunk.is_some() {
-                    for r in 0..positions.len() {if selected_count==32{break;}if (r==0||slots[r-1]!=slots[r]) && (r+1==slots.len()||slots[r+1]!=slots[r]) && hf.plan.supports_exact_smol_attention(u64::from(positions[r])+1){selected[selected_count]=r as u32;selected_count+=1;}}
-                    if selected_count==1 {selected_count=0;}
-                    if selected_count>=2 {let bytes=positions.len() as u64*query_width*2;
-                        hf.plan.execute_hf_attention_smol_exact(
-                            CudaBufferSpan::new(&buffers.hidden_rotary,CudaDType::BF16,0,bytes).map_err(|e|batch_cuda(attention_site,e))?,
-                            CudaBufferSpan::new(key_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
-                            CudaBufferSpan::new(value_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
-                            CudaBufferSpanMut::new(&mut buffers.hidden_context,CudaDType::BF16,0,bytes).map_err(|e|batch_cuda(attention_site,e))?,
-                            hf.decode_chunk.as_mut().expect("cold qualified scratch"),batch,&selected[..selected_count],stream,
-                        ).map_err(|e|batch_cuda(attention_site,e))?;
-                    }
-                }
-                let mut selected_cursor=0usize;
-                while begin<positions.len() {
-                    if selected_cursor<selected_count && selected[selected_cursor] as usize==begin {selected_cursor+=1;begin+=1;continue;}
-                    // Chunk independent decode requests even when context lengths
-                    // differ. Original per-request QK/PV arithmetic is unchanged.
-                    if let Some(chunk)=hf.decode_chunk.as_mut().filter(|_|head_size==128){
-                        let mut end=begin;
-                        let maximum=if dimensions.query_heads()==32{32}else{8};
-                        while end<positions.len() && end-begin<maximum && positions[end]<512 && (!hf.plan.uses_sm80_paged_attention() || hf.plan.supports_sm80_paged_attention(u64::from(positions[end])+1)) && !slots[begin..end].contains(&slots[end]) && (end==0||slots[end-1]!=slots[end]) && (end+1==slots.len()||slots[end+1]!=slots[end]){end+=1;}
-                        if end-begin>=2{let count=(end-begin) as u64;let row_bytes=query_width*2;let rb=begin as u64*row_bytes;
-                            if dimensions.query_heads()==32 {
-                            if owned_decode_batch==10 && hidden==2560 && hf.plan.uses_sm80_paged_attention() {
-                            hf.plan.execute_hf_attention_chunk_wide_dynamic(
-                                CudaBufferSpan::new(&buffers.hidden_rotary,CudaDType::BF16,rb,count*row_bytes).map_err(|e|batch_cuda(attention_site,e))?,
-                                CudaBufferSpan::new(key_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
-                                CudaBufferSpan::new(value_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
-                                CudaBufferSpanMut::new(&mut buffers.hidden_context,CudaDType::BF16,rb,count*row_bytes).map_err(|e|batch_cuda(attention_site,e))?,
-                                chunk,&mut hf.scratch[7],batch,begin,end-begin,stream,
-                            ).map_err(|e|batch_cuda(attention_site,e))?;
-                            } else {
-                            hf.plan.execute_hf_attention_chunk_wide(
-                                CudaBufferSpan::new(&buffers.hidden_rotary,CudaDType::BF16,rb,count*row_bytes).map_err(|e|batch_cuda(attention_site,e))?,
-                                CudaBufferSpan::new(key_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
-                                CudaBufferSpan::new(value_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
-                                CudaBufferSpanMut::new(&mut buffers.hidden_context,CudaDType::BF16,rb,count*row_bytes).map_err(|e|batch_cuda(attention_site,e))?,
-                                chunk,&mut hf.scratch[7],None,batch,begin,end-begin,stream,
-                            ).map_err(|e|batch_cuda(attention_site,e))?;
-                            }
-                            } else {
-                            hf.plan.execute_hf_attention_chunk(
-                                CudaBufferSpan::new(&buffers.hidden_rotary,CudaDType::BF16,rb,count*row_bytes).map_err(|e|batch_cuda(attention_site,e))?,
-                                CudaBufferSpan::new(key_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
-                                CudaBufferSpan::new(value_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
-                                CudaBufferSpanMut::new(&mut buffers.hidden_context,CudaDType::BF16,rb,count*row_bytes).map_err(|e|batch_cuda(attention_site,e))?,
-                                chunk,&mut hf.scratch[7],None,batch,begin,end-begin,stream,
-                            ).map_err(|e|batch_cuda(attention_site,e))?;
-                            }begin=end;continue;
-                        }
-                    }
-                    let slot=slots[begin] as usize;
-                    let end=if let Some(groups)=host.request_row_groups(){groups.group_end(begin).map_err(|e|batch_cuda(attention_site,e))?}else{
-                        let mut end=begin+1;while end<positions.len()&&slots[end] as usize==slot{end+=1;}
-                        if positions[begin..end].windows(2).any(|p|p[0].checked_add(1)!=Some(p[1])){return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"hf_attention_rows",reason:"query rows must be contiguous within a sequence"});}end
-                    };
-                    let m=(end-begin) as u64;let t=u64::from(positions[end-1])+1;let table_begin=host.sequence_block_offsets()[slot] as u64;let table_len=t.div_ceil(16);
-                    if table_begin+table_len>host.block_ids().len() as u64 {return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"hf_attention_table",reason:"logical prefix exceeds packed block table"});}
-                    let ids=batch.device_block_ids();let row_bytes=query_width*2;let rb=(begin as u64)*row_bytes;
-                    hf.plan.execute_hf_attention(
-                        CudaBufferSpan::new(&buffers.hidden_rotary,CudaDType::BF16,rb,m*row_bytes).map_err(|e|batch_cuda(attention_site,e))?,
-                        CudaBufferSpan::new(key_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
-                        CudaBufferSpan::new(value_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
-                        ids.subspan(table_begin*4,table_len*4).map_err(|e|batch_cuda(attention_site,e))?,
-                        CudaBufferSpanMut::new(&mut buffers.hidden_context,CudaDType::BF16,rb,m*row_bytes).map_err(|e|batch_cuda(attention_site,e))?,
-                        &mut hf.scratch,m,t,layout.physical_block_count() as u64,dimensions.query_heads() as u64,dimensions.key_value_heads() as u64,dimensions.head_dimension() as u64,stream,
-                    ).map_err(|e|batch_cuda(attention_site,e))?;
-                    begin=end;
-                }
-                hf_executed=true;
-            }
-            #[cfg(not(feature="cuda-cublas-gemm-probe"))]
-            let hf_executed=false;
-            if !hf_executed && attention_implementation == RaggedAttentionImplementation::OwnedHfEagerBf16V1 {
-                return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"owned-hf-eager-bf16-v1",reason:"owned attention workspace missing; fallback is forbidden"});
-            }
-            if !hf_executed {
-            riley_cuda::prepared_materialized_ragged_attention(
-                span(&buffers.hidden_rotary,CudaDType::BF16,query_buffer_bytes,attention_site)?,
-                CudaBufferSpan::new(key_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
-                CudaBufferSpan::new(value_cache,CudaDType::BF16,layer_offset,layout.layer_stride_bytes()).map_err(|e|batch_cuda(attention_site,e))?,
-                &mut buffers.hidden_context,batch,
-                &prepared.reference,&mut prepared.scores,&prepared.valid,
-                &mut prepared.valid_host,&mut prepared.duplicate_scratch,stream,
-            ).map_err(|e|batch_cuda(attention_site,e))?;
-            }
-        }
-        if materialized_reference {
-            // Output active rows already produced by the prepared reference.
-        } else if attention_implementation
-            == RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage
-        {
-            if attention_reduction_profile != AttentionReductionProfile::CanonicalV1 {
-                return Err(LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "ragged_attention_implementation",
-                    reason: "native D128 two-stage attention requires canonical-v1 reductions",
-                });
-            }
-            let workspace = native_d128_two_stage_workspace.as_deref_mut().ok_or(
+        let norm_after_mlp = fused_mlp_residual_norm
+            && residual_norm_implementation == ResidualNormImplementation::Fused
+            && !plan.layers().is_empty();
+        for (ordinal, layer) in plan.layers().iter().enumerate() {
+            let (hidden_current, hidden_projection) = layer_hidden_roles(
+                ordinal,
+                &mut buffers.hidden_current,
+                &mut buffers.hidden_projection,
+            );
+            let layer_index = layer.index();
+            let layer_offset = layout.layer_byte_offset(layer_index).ok_or(
                 LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "native_d128_two_stage_workspace",
-                    reason: "native D128 two-stage selection has no prepared workspace",
+                    field: "KV layer offset",
+                    reason: "decoder layer lies outside the prepared KV layout",
                 },
             )?;
-            let partial_state_bytes = workspace.partial_states.byte_len();
-            let reduction_step_bytes = workspace.reduction_steps.byte_len();
-            let reduction_normalizer_bytes = workspace.reduction_normalizers.byte_len();
-            let mut params = NativeBf16RaggedPagedSplitGqaD128TwoStageParams {
-                query: span(
-                    &buffers.hidden_rotary,
-                    CudaDType::BF16,
-                    query_buffer_bytes,
-                    attention_site,
-                )?,
-                key_pool: CudaBufferSpan::new(
-                    key_cache,
-                    CudaDType::BF16,
-                    layer_offset,
-                    layout.layer_stride_bytes(),
-                )
-                .map_err(|source| batch_cuda(attention_site, source))?,
-                value_pool: CudaBufferSpan::new(
-                    value_cache,
-                    CudaDType::BF16,
-                    layer_offset,
-                    layout.layer_stride_bytes(),
-                )
-                .map_err(|source| batch_cuda(attention_site, source))?,
-                partial_states: CudaBufferSpanMut::new(
-                    &mut workspace.partial_states,
-                    CudaDType::F32,
-                    0,
-                    partial_state_bytes,
-                )
-                .map_err(|source| batch_cuda(attention_site, source))?,
-                reduction_steps: CudaBufferSpanMut::new(
-                    &mut workspace.reduction_steps,
-                    CudaDType::F32,
-                    0,
-                    reduction_step_bytes,
-                )
-                .map_err(|source| batch_cuda(attention_site, source))?,
-                reduction_normalizers: CudaBufferSpanMut::new(
-                    &mut workspace.reduction_normalizers,
-                    CudaDType::F32,
-                    0,
-                    reduction_normalizer_bytes,
-                )
-                .map_err(|source| batch_cuda(attention_site, source))?,
-                output: span_mut(
-                    &mut buffers.hidden_context,
-                    CudaDType::BF16,
-                    query_buffer_bytes,
-                    attention_site,
-                )?,
-                batch,
-                query_head_count: query_heads,
-                key_value_head_count: key_value_heads,
-                head_size,
-                output_row_count: dense_rows,
-                partial_state_capacity: workspace.partial_state_capacity,
-                scale: 1.0 / (head_size as f32).sqrt(),
-                reduction_order: DecodePartialReductionOrder::LogicalAscending,
-            };
-            // Shared-KV producer geometry: bit-identical states, one K/V read
-            // per KV head instead of one per query head.
-            if let (true, true, Some((first_word, generated_rows))) = (
-                d128_global_merge,
-                d128_tensor_core_producer,
-                prompt_row_kinds_first_word,
-            ) {
-                native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge_prompt_mma(
-                    &mut params,
-                    first_word,
-                    generated_rows,
-                    stream,
-                )
-            } else if d128_global_merge && d128_tensor_core_producer {
-                native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge(
-                    &mut params,
-                    stream,
-                )
-            } else if let (true, Some((first_word, _))) =
-                (d128_global_merge, prompt_row_kinds_first_word)
-            {
-                native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma(
-                    &mut params,
-                    first_word,
-                    stream,
-                )
-            } else if d128_global_merge {
-                native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge(&mut params, stream)
-            } else {
-                native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv(&mut params, stream)
+            let pre_segment = owned_segments
+                .as_deref_mut()
+                .map(|segments| &mut segments[ordinal * 2]);
+            execute_owned_decode_segment(pre_segment, stream, |stream| {
+                let input_norm_site = ExecutionSite::layer(layer_index, LlamaOp::InputNorm);
+                let input_norm_weight =
+                    weight_span(weights, layer.input_norm_weight(), input_norm_site)?;
+                // With the fused MLP residual norm the previous layer already wrote
+                // this layer's normalized input.
+                if !(norm_after_mlp && ordinal > 0) {
+                    let mut params = RmsNormParams {
+                        input: span(
+                            hidden_current,
+                            CudaDType::BF16,
+                            plan.workspace_spec().hidden_buffer_bytes(),
+                            input_norm_site,
+                        )?,
+                        weight: input_norm_weight,
+                        output: span_mut(
+                            &mut buffers.hidden_norm,
+                            CudaDType::BF16,
+                            plan.workspace_spec().hidden_buffer_bytes(),
+                            input_norm_site,
+                        )?,
+                        row_count: dense_rows,
+                        hidden_size: hidden,
+                        epsilon: layer.input_norm_epsilon(),
+                    };
+                    execute_profile_rms_norm_grouped(
+                        rms_norm_profile,
+                        &mut params,
+                        stream,
+                        batch.host(),
+                        hf_wide_norm,
+                    )
+                    .map_err(|source| batch_cuda(input_norm_site, source))?;
+                }
+
+                let rope_in_split = fused_qkv_rope && gemms.merged_qkv_plan().is_some();
+                if gemms.merged_qkv_plan().is_some() {
+                    // One GEMM over the concatenated Q|K|V weights. `gate_raw` is idle
+                    // until the MLP and is wide enough to hold the merged rows.
+                    let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
+                    let merged_width = query_width + 2 * key_value_width;
+                    let merged_bytes = dense_rows * merged_width * 2;
+                    let missing_bias = LlamaForwardError::InvalidConfiguration {
+                        field: "projection_bias_mode",
+                        reason: "merged QKV projection requires Q/K/V biases, or no bias with a per-head query/key norm and the fused RoPE split",
+                    };
+                    // With biases: split + bias. Without them, with a per-head norm
+                    // (Qwen3): the split kernel normalizes every query and key head
+                    // instead and the bias spans carry the two norm scales. Without
+                    // either (Llama 3): the bias is a vector of negative zeros.
+                    let (query_bias, key_bias, value_bias, head_norm_epsilon) = match (
+                        layer.query_bias(),
+                        layer.key_bias(),
+                        layer.value_bias(),
+                        layer.query_key_norm(),
+                    ) {
+                        (Some(query_bias), Some(key_bias), Some(value_bias), None) => (
+                            weight_span(weights, query_bias, query_site)?,
+                            weight_span(weights, key_bias, query_site)?,
+                            weight_span(weights, value_bias, query_site)?,
+                            None,
+                        ),
+                        (None, None, None, Some((query_scale, key_scale, epsilon)))
+                            if rope_in_split && head_size == 128 =>
+                        {
+                            (
+                                weight_span(weights, query_scale, query_site)?,
+                                weight_span(weights, key_scale, query_site)?,
+                                weight_span(weights, key_scale, query_site)?,
+                                Some(epsilon),
+                            )
+                        }
+                        (None, None, None, None) => {
+                            let zeros = weights.negative_zero_bias().ok_or(missing_bias)?;
+                            let zeros_span = |elements: u64| {
+                                CudaBufferSpan::new(zeros, CudaDType::BF16, 0, elements * 2)
+                                    .map_err(|source| batch_cuda(query_site, source))
+                            };
+                            (
+                                zeros_span(query_width)?,
+                                zeros_span(key_value_width)?,
+                                zeros_span(key_value_width)?,
+                                None,
+                            )
+                        }
+                        _ => return Err(missing_bias.into()),
+                    };
+                    #[cfg(feature = "cuda-cublas-gemm-probe")]
+                    let separate =
+                        if let Some((query, key_value)) = gemms.hf_separate_projection_plans() {
+                            execute_gemm_with_row_groups(
+                                query,
+                                &buffers.hidden_norm,
+                                weight_span(weights, layer.query_weight(), query_site)?,
+                                &mut buffers.hidden_context,
+                                &mut buffers.gemm_workspace,
+                                stream,
+                                query_site,
+                                batch.host(),
+                                None,
+                                owned_decode_batch,
+                            )?;
+                            execute_gemm_with_row_groups(
+                                key_value,
+                                &buffers.hidden_norm,
+                                weight_span(weights, layer.key_weight(), query_site)?,
+                                &mut buffers.key_raw,
+                                &mut buffers.gemm_workspace,
+                                stream,
+                                query_site,
+                                batch.host(),
+                                None,
+                                owned_decode_batch,
+                            )?;
+                            execute_gemm_with_row_groups(
+                                key_value,
+                                &buffers.hidden_norm,
+                                weight_span(weights, layer.value_weight(), query_site)?,
+                                &mut buffers.value_raw,
+                                &mut buffers.gemm_workspace,
+                                stream,
+                                query_site,
+                                batch.host(),
+                                None,
+                                owned_decode_batch,
+                            )?;
+                            hf_pack_separate_qkv(
+                                span(
+                                    &buffers.hidden_context,
+                                    CudaDType::BF16,
+                                    dense_rows * query_width * 2,
+                                    query_site,
+                                )?,
+                                span(
+                                    &buffers.key_raw,
+                                    CudaDType::BF16,
+                                    dense_rows * key_value_width * 2,
+                                    query_site,
+                                )?,
+                                span(
+                                    &buffers.value_raw,
+                                    CudaDType::BF16,
+                                    dense_rows * key_value_width * 2,
+                                    query_site,
+                                )?,
+                                span_mut(
+                                    &mut buffers.gate_raw,
+                                    CudaDType::BF16,
+                                    merged_bytes,
+                                    query_site,
+                                )?,
+                                dense_rows,
+                                query_width,
+                                key_value_width,
+                                stream,
+                            )
+                            .map_err(|e| batch_cuda(query_site, e))?;
+                            true
+                        } else {
+                            false
+                        };
+                    #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                    let separate = false;
+                    if !separate {
+                        let merged_weight = weights.merged_qkv(layer_index).ok_or(
+                            LlamaForwardError::InvalidConfiguration {
+                                field: "projection_bias_mode",
+                                reason: "merged QKV weights were not uploaded for this layer",
+                            },
+                        )?;
+                        let merged_weight = CudaBufferSpan::new(
+                            merged_weight,
+                            CudaDType::BF16,
+                            0,
+                            merged_weight.byte_len(),
+                        )
+                        .map_err(|source| batch_cuda(query_site, source))?;
+                        if let Some(plan) = gemms.merged_qkv_plan() {
+                            execute_gemm_with_row_groups(
+                                plan,
+                                &buffers.hidden_norm,
+                                merged_weight,
+                                &mut buffers.gate_raw,
+                                &mut buffers.gemm_workspace,
+                                stream,
+                                query_site,
+                                batch.host(),
+                                None,
+                                owned_decode_batch,
+                            )?;
+                        }
+                    }
+                    let mut params = QkvSplitBiasParams {
+                        merged: span(&buffers.gate_raw, CudaDType::BF16, merged_bytes, query_site)?,
+                        query_bias,
+                        key_bias,
+                        value_bias,
+                        query: span_mut(
+                            if fused_qkv_rope {
+                                &mut buffers.hidden_rotary
+                            } else {
+                                &mut *hidden_projection
+                            },
+                            CudaDType::BF16,
+                            dense_rows * query_width * 2,
+                            query_site,
+                        )?,
+                        key: span_mut(
+                            if fused_qkv_rope {
+                                &mut buffers.key_rotary
+                            } else {
+                                &mut buffers.key_raw
+                            },
+                            CudaDType::BF16,
+                            dense_rows * key_value_width * 2,
+                            query_site,
+                        )?,
+                        value: span_mut(
+                            &mut buffers.value_raw,
+                            CudaDType::BF16,
+                            dense_rows * key_value_width * 2,
+                            query_site,
+                        )?,
+                        row_count: dense_rows,
+                        query_width,
+                        key_value_width,
+                    };
+                    if fused_qkv_rope {
+                        let rope = QkvRopeParams {
+                            cos: CudaBufferSpan::new(
+                                rope_cos,
+                                CudaDType::F32,
+                                0,
+                                rope_cos.byte_len(),
+                            )
+                            .map_err(|source| batch_cuda(query_site, source))?,
+                            sin: CudaBufferSpan::new(
+                                rope_sin,
+                                CudaDType::F32,
+                                0,
+                                rope_sin.byte_len(),
+                            )
+                            .map_err(|source| batch_cuda(query_site, source))?,
+                            positions: batch.device_row_positions(),
+                            positions_host,
+                            head_size,
+                            table_position_count: max_positions,
+                            // The KV cache write below consumes the deferred split.
+                            defer_for_kv_write: fused_kv_write
+                                || (matches!(owned_decode_batch, 3..=5)
+                                    && hf_wide_norm
+                                    && head_norm_epsilon.is_some()),
+                            head_norm_epsilon,
+                        };
+                        #[cfg(feature = "cuda-cublas-gemm-probe")]
+                        let split_result = if hf_wide_norm && head_norm_epsilon.is_some() {
+                            if matches!(owned_decode_batch, 3 | 4 | 5) {
+                                riley_cuda::qkv_split_bias_rope_hf_head128_deferred(
+                                    &mut params,
+                                    &rope,
+                                    stream,
+                                )
+                            } else {
+                                qkv_split_bias_rope_hf_head128(&mut params, &rope, stream)
+                            }
+                        } else {
+                            qkv_split_bias_rope(&mut params, &rope, stream)
+                        };
+                        #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                        let split_result = qkv_split_bias_rope(&mut params, &rope, stream);
+                        split_result.map_err(|source| batch_cuda(query_site, source))?;
+                    } else {
+                        qkv_split_bias(&mut params, stream)
+                            .map_err(|source| batch_cuda(query_site, source))?;
+                    }
+                } else {
+                    let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
+                    if query_width != hidden {
+                        return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                            field: "projection_bias_mode",
+                            reason: "a query projection wider than the hidden size requires the merged Q|K|V projection with the fused RoPE split",
+                        });
+                    }
+                    #[cfg(feature = "cuda-cublas-gemm-probe")]
+                    let fused_smol_qkv = if smol_qkv_fusion_eligible
+                        && owned_decode_batch >= 2
+                        && hidden == 576
+                        && query_width == 576
+                        && key_value_width == 192
+                        && head_size == 64
+                        && layer.query_bias().is_none()
+                        && layer.key_bias().is_none()
+                        && layer.value_bias().is_none()
+                        && layer.query_key_norm().is_none()
+                    {
+                        if let super::super::forward::PreparedLlamaGemm::ClassicRequestRows(
+                            native,
+                        ) = &mut gemms.hidden
+                        {
+                            let rows = batch.host().row_positions().len() as u64;
+                            native
+                                .try_execute_hf_smol_fused_qkv(
+                                    weight_span(weights, layer.query_weight(), query_site)?,
+                                    weight_span(weights, layer.key_weight(), query_site)?,
+                                    weight_span(weights, layer.value_weight(), query_site)?,
+                                    span(
+                                        &buffers.hidden_norm,
+                                        CudaDType::BF16,
+                                        rows * 576 * 2,
+                                        query_site,
+                                    )?,
+                                    span_mut(
+                                        hidden_projection,
+                                        CudaDType::BF16,
+                                        rows * 576 * 2,
+                                        query_site,
+                                    )?,
+                                    span_mut(
+                                        &mut buffers.key_raw,
+                                        CudaDType::BF16,
+                                        rows * 192 * 2,
+                                        query_site,
+                                    )?,
+                                    span_mut(
+                                        &mut buffers.value_raw,
+                                        CudaDType::BF16,
+                                        rows * 192 * 2,
+                                        query_site,
+                                    )?,
+                                    rows,
+                                    stream,
+                                )
+                                .map_err(|e| batch_cuda(query_site, e))?
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+                    #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                    let fused_smol_qkv = false;
+                    if !fused_smol_qkv {
+                        let (strict, fused, requests, batches) =
+                            gemms.query_projection_plans_with_requests();
+                        execute_projection_with_row_groups(
+                            strict,
+                            fused,
+                            weights,
+                            layer.query_bias(),
+                            &buffers.hidden_norm,
+                            weight_span(weights, layer.query_weight(), query_site)?,
+                            hidden_projection,
+                            &mut buffers.gemm_workspace,
+                            dense_rows,
+                            hidden,
+                            stream,
+                            query_site,
+                            batch.host(),
+                            requests,
+                            if owned_decode_batch >= 2 {
+                                batches
+                            } else {
+                                None
+                            },
+                            owned_decode_batch,
+                        )?;
+                        let key_site = ExecutionSite::layer(layer_index, LlamaOp::KeyProjection);
+                        let (strict, fused, requests, batches) =
+                            gemms.key_value_projection_plans_with_requests();
+                        execute_projection_with_row_groups(
+                            strict,
+                            fused,
+                            weights,
+                            layer.key_bias(),
+                            &buffers.hidden_norm,
+                            weight_span(weights, layer.key_weight(), key_site)?,
+                            &mut buffers.key_raw,
+                            &mut buffers.gemm_workspace,
+                            dense_rows,
+                            key_value_width,
+                            stream,
+                            key_site,
+                            batch.host(),
+                            requests,
+                            if owned_decode_batch >= 2 {
+                                batches
+                            } else {
+                                None
+                            },
+                            owned_decode_batch,
+                        )?;
+                        let value_site =
+                            ExecutionSite::layer(layer_index, LlamaOp::ValueProjection);
+                        let (strict, fused, requests, batches) =
+                            gemms.key_value_projection_plans_with_requests();
+                        execute_projection_with_row_groups(
+                            strict,
+                            fused,
+                            weights,
+                            layer.value_bias(),
+                            &buffers.hidden_norm,
+                            weight_span(weights, layer.value_weight(), value_site)?,
+                            &mut buffers.value_raw,
+                            &mut buffers.gemm_workspace,
+                            dense_rows,
+                            key_value_width,
+                            stream,
+                            value_site,
+                            batch.host(),
+                            requests,
+                            if owned_decode_batch >= 2 {
+                                batches
+                            } else {
+                                None
+                            },
+                            owned_decode_batch,
+                        )?;
+                    }
+                }
+
+                // Qwen3 RMS-normalizes every projected query head and key head before
+                // the rotary embedding. `hidden_norm` is idle from here to the
+                // post-attention norm and `gate_raw` until the MLP, so they hold the
+                // normalized query and key.
+                // The merged split with fused RoPE has already normalized both.
+                let query_key_normed = layer.query_key_norm().is_some() && !rope_in_split;
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                let hf_head_norm = head_size == 128
+                    && native_d128_two_stage_workspace
+                        .as_ref()
+                        .and_then(|w| w.materialized.as_ref())
+                        .is_some_and(|m| m.hf.is_some());
+                if let (Some((query_scale, key_scale, epsilon)), false) =
+                    (layer.query_key_norm(), rope_in_split)
+                {
+                    if gemms.merged_qkv_plan().is_some() {
+                        return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                            field: "projection_bias_mode",
+                            reason: "a per-head query/key norm on merged Q|K|V needs the fused RoPE split",
+                        });
+                    }
+                    let query_norm_site =
+                        ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
+                    let mut params = RmsNormParams {
+                        input: span(
+                            hidden_projection,
+                            CudaDType::BF16,
+                            dense_rows * query_heads * head_size * 2,
+                            query_norm_site,
+                        )?,
+                        weight: weight_span(weights, query_scale, query_norm_site)?,
+                        output: span_mut(
+                            &mut buffers.hidden_norm,
+                            CudaDType::BF16,
+                            dense_rows * query_heads * head_size * 2,
+                            query_norm_site,
+                        )?,
+                        row_count: dense_rows * query_heads,
+                        hidden_size: head_size,
+                        epsilon,
+                    };
+                    #[cfg(feature = "cuda-cublas-gemm-probe")]
+                    let norm_result = if hf_head_norm {
+                        hugging_face_qwen_head128_rms_norm(&mut params, stream)
+                    } else {
+                        execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
+                    };
+                    #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                    let norm_result =
+                        execute_profile_rms_norm(rms_norm_profile, &mut params, stream);
+                    norm_result.map_err(|source| batch_cuda(query_norm_site, source))?;
+                    let key_norm_site = ExecutionSite::layer(layer_index, LlamaOp::KeyProjection);
+                    let mut params = RmsNormParams {
+                        input: span(
+                            &buffers.key_raw,
+                            CudaDType::BF16,
+                            dense_rows * key_value_width * 2,
+                            key_norm_site,
+                        )?,
+                        weight: weight_span(weights, key_scale, key_norm_site)?,
+                        output: span_mut(
+                            &mut buffers.gate_raw,
+                            CudaDType::BF16,
+                            dense_rows * key_value_width * 2,
+                            key_norm_site,
+                        )?,
+                        row_count: dense_rows * key_value_heads,
+                        hidden_size: head_size,
+                        epsilon,
+                    };
+                    #[cfg(feature = "cuda-cublas-gemm-probe")]
+                    let norm_result = if hf_head_norm {
+                        hugging_face_qwen_head128_rms_norm(&mut params, stream)
+                    } else {
+                        execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
+                    };
+                    #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                    let norm_result =
+                        execute_profile_rms_norm(rms_norm_profile, &mut params, stream);
+                    norm_result.map_err(|source| batch_cuda(key_norm_site, source))?;
+                }
+
+                let query_rope_site = ExecutionSite::layer(layer_index, LlamaOp::QueryRope);
+                if !rope_in_split {
+                    let mut params = IndexedRopeParams {
+                        input: span(
+                            if query_key_normed {
+                                &buffers.hidden_norm
+                            } else {
+                                &*hidden_projection
+                            },
+                            CudaDType::BF16,
+                            plan.workspace_spec().hidden_buffer_bytes(),
+                            query_rope_site,
+                        )?,
+                        cos: CudaBufferSpan::new(rope_cos, CudaDType::F32, 0, rope_cos.byte_len())
+                            .map_err(|source| batch_cuda(query_rope_site, source))?,
+                        sin: CudaBufferSpan::new(rope_sin, CudaDType::F32, 0, rope_sin.byte_len())
+                            .map_err(|source| batch_cuda(query_rope_site, source))?,
+                        positions: batch.device_row_positions(),
+                        positions_host,
+                        output: span_mut(
+                            &mut buffers.hidden_rotary,
+                            CudaDType::BF16,
+                            plan.workspace_spec().hidden_buffer_bytes(),
+                            query_rope_site,
+                        )?,
+                        head_count: query_heads,
+                        head_size,
+                        rotary_dimension: head_size,
+                        table_position_count: max_positions,
+                    };
+                    indexed_rope(&mut params, stream)
+                        .map_err(|source| batch_cuda(query_rope_site, source))?;
+                }
+                let key_rope_site = ExecutionSite::layer(layer_index, LlamaOp::KeyRope);
+                if !rope_in_split {
+                    let mut params = IndexedRopeParams {
+                        input: span(
+                            if query_key_normed {
+                                &buffers.gate_raw
+                            } else {
+                                &buffers.key_raw
+                            },
+                            CudaDType::BF16,
+                            plan.workspace_spec().key_value_buffer_bytes(),
+                            key_rope_site,
+                        )?,
+                        cos: CudaBufferSpan::new(rope_cos, CudaDType::F32, 0, rope_cos.byte_len())
+                            .map_err(|source| batch_cuda(key_rope_site, source))?,
+                        sin: CudaBufferSpan::new(rope_sin, CudaDType::F32, 0, rope_sin.byte_len())
+                            .map_err(|source| batch_cuda(key_rope_site, source))?,
+                        positions: batch.device_row_positions(),
+                        positions_host,
+                        output: span_mut(
+                            &mut buffers.key_rotary,
+                            CudaDType::BF16,
+                            plan.workspace_spec().key_value_buffer_bytes(),
+                            key_rope_site,
+                        )?,
+                        head_count: key_value_heads,
+                        head_size,
+                        rotary_dimension: head_size,
+                        table_position_count: max_positions,
+                    };
+                    indexed_rope(&mut params, stream)
+                        .map_err(|source| batch_cuda(key_rope_site, source))?;
+                }
+
+                let cache_site = ExecutionSite::layer(layer_index, LlamaOp::KvCacheWrite);
+                {
+                    let mut params = RaggedPagedKvCacheWriteParams {
+                        key_source: span(
+                            &buffers.key_rotary,
+                            CudaDType::BF16,
+                            plan.workspace_spec().key_value_buffer_bytes(),
+                            cache_site,
+                        )?,
+                        value_source: span(
+                            &buffers.value_raw,
+                            CudaDType::BF16,
+                            plan.workspace_spec().key_value_buffer_bytes(),
+                            cache_site,
+                        )?,
+                        key_pool: CudaBufferSpanMut::new(
+                            key_cache,
+                            CudaDType::BF16,
+                            layer_offset,
+                            layout.layer_stride_bytes(),
+                        )
+                        .map_err(|source| batch_cuda(cache_site, source))?,
+                        value_pool: CudaBufferSpanMut::new(
+                            value_cache,
+                            CudaDType::BF16,
+                            layer_offset,
+                            layout.layer_stride_bytes(),
+                        )
+                        .map_err(|source| batch_cuda(cache_site, source))?,
+                        batch,
+                        key_value_head_count: key_value_heads,
+                        head_size,
+                    };
+                    ragged_paged_kv_cache_write(&mut params, stream)
+                        .map_err(|source| batch_cuda(cache_site, source))?;
+                }
+
+                Ok(())
+            })?;
+            let attention_site = ExecutionSite::layer(layer_index, LlamaOp::RaggedPagedAttention);
+            let materialized_reference = native_d128_two_stage_workspace
+                .as_ref()
+                .is_some_and(|w| w.materialized.is_some());
+            if materialized_reference {
+                if !matches!(step_capture, StepCaptureMode::Disabled) {
+                    return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                        field: "materialized reference attention",
+                        reason: "temporary reference resources cannot be graph captured",
+                    });
+                }
+                let prepared = native_d128_two_stage_workspace
+                    .as_deref_mut()
+                    .and_then(|w| w.materialized.as_mut())
+                    .expect("cold prepared reference workspace");
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                let mut hf_executed = false;
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                if let Some(hf) = prepared.hf.as_mut() {
+                    let host = batch.host();
+                    let positions = host.row_positions();
+                    let slots = host.row_sequence_slots();
+                    let mut begin = 0;
+                    let mut selected = [0u32; 32];
+                    let mut selected_count = 0usize;
+                    if dimensions.query_heads() == 9
+                        && dimensions.key_value_heads() == 3
+                        && head_size == 64
+                        && hf.decode_chunk.is_some()
+                    {
+                        for r in 0..positions.len() {
+                            if selected_count == 32 {
+                                break;
+                            }
+                            if (r == 0 || slots[r - 1] != slots[r])
+                                && (r + 1 == slots.len() || slots[r + 1] != slots[r])
+                                && hf
+                                    .plan
+                                    .supports_exact_smol_attention(u64::from(positions[r]) + 1)
+                            {
+                                selected[selected_count] = r as u32;
+                                selected_count += 1;
+                            }
+                        }
+                        if selected_count == 1 {
+                            selected_count = 0;
+                        }
+                        if selected_count >= 2 {
+                            let bytes = positions.len() as u64 * query_width * 2;
+                            hf.plan
+                                .execute_hf_attention_smol_exact(
+                                    CudaBufferSpan::new(
+                                        &buffers.hidden_rotary,
+                                        CudaDType::BF16,
+                                        0,
+                                        bytes,
+                                    )
+                                    .map_err(|e| batch_cuda(attention_site, e))?,
+                                    CudaBufferSpan::new(
+                                        key_cache,
+                                        CudaDType::BF16,
+                                        layer_offset,
+                                        layout.layer_stride_bytes(),
+                                    )
+                                    .map_err(|e| batch_cuda(attention_site, e))?,
+                                    CudaBufferSpan::new(
+                                        value_cache,
+                                        CudaDType::BF16,
+                                        layer_offset,
+                                        layout.layer_stride_bytes(),
+                                    )
+                                    .map_err(|e| batch_cuda(attention_site, e))?,
+                                    CudaBufferSpanMut::new(
+                                        &mut buffers.hidden_context,
+                                        CudaDType::BF16,
+                                        0,
+                                        bytes,
+                                    )
+                                    .map_err(|e| batch_cuda(attention_site, e))?,
+                                    hf.decode_chunk.as_mut().expect("cold qualified scratch"),
+                                    batch,
+                                    &selected[..selected_count],
+                                    stream,
+                                )
+                                .map_err(|e| batch_cuda(attention_site, e))?;
+                        }
+                    }
+                    let mut selected_cursor = 0usize;
+                    while begin < positions.len() {
+                        if selected_cursor < selected_count
+                            && selected[selected_cursor] as usize == begin
+                        {
+                            selected_cursor += 1;
+                            begin += 1;
+                            continue;
+                        }
+                        // Chunk independent decode requests even when context lengths
+                        // differ. Original per-request QK/PV arithmetic is unchanged.
+                        if let Some(chunk) = hf.decode_chunk.as_mut().filter(|_| head_size == 128) {
+                            let mut end = begin;
+                            let maximum = if dimensions.query_heads() == 32 {
+                                32
+                            } else {
+                                8
+                            };
+                            while end < positions.len()
+                                && end - begin < maximum
+                                && positions[end] < 512
+                                && (!hf.plan.uses_sm80_paged_attention()
+                                    || hf.plan.supports_sm80_paged_attention(
+                                        u64::from(positions[end]) + 1,
+                                    ))
+                                && !slots[begin..end].contains(&slots[end])
+                                && (end == 0 || slots[end - 1] != slots[end])
+                                && (end + 1 == slots.len() || slots[end + 1] != slots[end])
+                            {
+                                end += 1;
+                            }
+                            if end - begin >= 2 {
+                                let count = (end - begin) as u64;
+                                let row_bytes = query_width * 2;
+                                let rb = begin as u64 * row_bytes;
+                                if dimensions.query_heads() == 32 {
+                                    if owned_decode_batch == 10
+                                        && hidden == 2560
+                                        && hf.plan.uses_sm80_paged_attention()
+                                    {
+                                        hf.plan
+                                            .execute_hf_attention_chunk_wide_dynamic(
+                                                CudaBufferSpan::new(
+                                                    &buffers.hidden_rotary,
+                                                    CudaDType::BF16,
+                                                    rb,
+                                                    count * row_bytes,
+                                                )
+                                                .map_err(|e| batch_cuda(attention_site, e))?,
+                                                CudaBufferSpan::new(
+                                                    key_cache,
+                                                    CudaDType::BF16,
+                                                    layer_offset,
+                                                    layout.layer_stride_bytes(),
+                                                )
+                                                .map_err(|e| batch_cuda(attention_site, e))?,
+                                                CudaBufferSpan::new(
+                                                    value_cache,
+                                                    CudaDType::BF16,
+                                                    layer_offset,
+                                                    layout.layer_stride_bytes(),
+                                                )
+                                                .map_err(|e| batch_cuda(attention_site, e))?,
+                                                CudaBufferSpanMut::new(
+                                                    &mut buffers.hidden_context,
+                                                    CudaDType::BF16,
+                                                    rb,
+                                                    count * row_bytes,
+                                                )
+                                                .map_err(|e| batch_cuda(attention_site, e))?,
+                                                chunk,
+                                                &mut hf.scratch[7],
+                                                batch,
+                                                begin,
+                                                end - begin,
+                                                stream,
+                                            )
+                                            .map_err(|e| batch_cuda(attention_site, e))?;
+                                    } else {
+                                        hf.plan
+                                            .execute_hf_attention_chunk_wide(
+                                                CudaBufferSpan::new(
+                                                    &buffers.hidden_rotary,
+                                                    CudaDType::BF16,
+                                                    rb,
+                                                    count * row_bytes,
+                                                )
+                                                .map_err(|e| batch_cuda(attention_site, e))?,
+                                                CudaBufferSpan::new(
+                                                    key_cache,
+                                                    CudaDType::BF16,
+                                                    layer_offset,
+                                                    layout.layer_stride_bytes(),
+                                                )
+                                                .map_err(|e| batch_cuda(attention_site, e))?,
+                                                CudaBufferSpan::new(
+                                                    value_cache,
+                                                    CudaDType::BF16,
+                                                    layer_offset,
+                                                    layout.layer_stride_bytes(),
+                                                )
+                                                .map_err(|e| batch_cuda(attention_site, e))?,
+                                                CudaBufferSpanMut::new(
+                                                    &mut buffers.hidden_context,
+                                                    CudaDType::BF16,
+                                                    rb,
+                                                    count * row_bytes,
+                                                )
+                                                .map_err(|e| batch_cuda(attention_site, e))?,
+                                                chunk,
+                                                &mut hf.scratch[7],
+                                                None,
+                                                batch,
+                                                begin,
+                                                end - begin,
+                                                stream,
+                                            )
+                                            .map_err(|e| batch_cuda(attention_site, e))?;
+                                    }
+                                } else {
+                                    hf.plan
+                                        .execute_hf_attention_chunk(
+                                            CudaBufferSpan::new(
+                                                &buffers.hidden_rotary,
+                                                CudaDType::BF16,
+                                                rb,
+                                                count * row_bytes,
+                                            )
+                                            .map_err(|e| batch_cuda(attention_site, e))?,
+                                            CudaBufferSpan::new(
+                                                key_cache,
+                                                CudaDType::BF16,
+                                                layer_offset,
+                                                layout.layer_stride_bytes(),
+                                            )
+                                            .map_err(|e| batch_cuda(attention_site, e))?,
+                                            CudaBufferSpan::new(
+                                                value_cache,
+                                                CudaDType::BF16,
+                                                layer_offset,
+                                                layout.layer_stride_bytes(),
+                                            )
+                                            .map_err(|e| batch_cuda(attention_site, e))?,
+                                            CudaBufferSpanMut::new(
+                                                &mut buffers.hidden_context,
+                                                CudaDType::BF16,
+                                                rb,
+                                                count * row_bytes,
+                                            )
+                                            .map_err(|e| batch_cuda(attention_site, e))?,
+                                            chunk,
+                                            &mut hf.scratch[7],
+                                            None,
+                                            batch,
+                                            begin,
+                                            end - begin,
+                                            stream,
+                                        )
+                                        .map_err(|e| batch_cuda(attention_site, e))?;
+                                }
+                                begin = end;
+                                continue;
+                            }
+                        }
+                        let slot = slots[begin] as usize;
+                        let end = if let Some(groups) = host.request_row_groups() {
+                            groups
+                                .group_end(begin)
+                                .map_err(|e| batch_cuda(attention_site, e))?
+                        } else {
+                            let mut end = begin + 1;
+                            while end < positions.len() && slots[end] as usize == slot {
+                                end += 1;
+                            }
+                            if positions[begin..end]
+                                .windows(2)
+                                .any(|p| p[0].checked_add(1) != Some(p[1]))
+                            {
+                                return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                                    field: "hf_attention_rows",
+                                    reason: "query rows must be contiguous within a sequence",
+                                });
+                            }
+                            end
+                        };
+                        let m = (end - begin) as u64;
+                        let t = u64::from(positions[end - 1]) + 1;
+                        let table_begin = host.sequence_block_offsets()[slot] as u64;
+                        let table_len = t.div_ceil(16);
+                        if table_begin + table_len > host.block_ids().len() as u64 {
+                            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                                field: "hf_attention_table",
+                                reason: "logical prefix exceeds packed block table",
+                            });
+                        }
+                        let ids = batch.device_block_ids();
+                        let row_bytes = query_width * 2;
+                        let rb = (begin as u64) * row_bytes;
+                        hf.plan
+                            .execute_hf_attention(
+                                CudaBufferSpan::new(
+                                    &buffers.hidden_rotary,
+                                    CudaDType::BF16,
+                                    rb,
+                                    m * row_bytes,
+                                )
+                                .map_err(|e| batch_cuda(attention_site, e))?,
+                                CudaBufferSpan::new(
+                                    key_cache,
+                                    CudaDType::BF16,
+                                    layer_offset,
+                                    layout.layer_stride_bytes(),
+                                )
+                                .map_err(|e| batch_cuda(attention_site, e))?,
+                                CudaBufferSpan::new(
+                                    value_cache,
+                                    CudaDType::BF16,
+                                    layer_offset,
+                                    layout.layer_stride_bytes(),
+                                )
+                                .map_err(|e| batch_cuda(attention_site, e))?,
+                                ids.subspan(table_begin * 4, table_len * 4)
+                                    .map_err(|e| batch_cuda(attention_site, e))?,
+                                CudaBufferSpanMut::new(
+                                    &mut buffers.hidden_context,
+                                    CudaDType::BF16,
+                                    rb,
+                                    m * row_bytes,
+                                )
+                                .map_err(|e| batch_cuda(attention_site, e))?,
+                                &mut hf.scratch,
+                                m,
+                                t,
+                                layout.physical_block_count() as u64,
+                                dimensions.query_heads() as u64,
+                                dimensions.key_value_heads() as u64,
+                                dimensions.head_dimension() as u64,
+                                stream,
+                            )
+                            .map_err(|e| batch_cuda(attention_site, e))?;
+                        begin = end;
+                    }
+                    hf_executed = true;
+                }
+                #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                let hf_executed = false;
+                if !hf_executed
+                    && attention_implementation == RaggedAttentionImplementation::OwnedHfEagerBf16V1
+                {
+                    return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                        field: "owned-hf-eager-bf16-v1",
+                        reason: "owned attention workspace missing; fallback is forbidden",
+                    });
+                }
+                if !hf_executed {
+                    riley_cuda::prepared_materialized_ragged_attention(
+                        span(
+                            &buffers.hidden_rotary,
+                            CudaDType::BF16,
+                            query_buffer_bytes,
+                            attention_site,
+                        )?,
+                        CudaBufferSpan::new(
+                            key_cache,
+                            CudaDType::BF16,
+                            layer_offset,
+                            layout.layer_stride_bytes(),
+                        )
+                        .map_err(|e| batch_cuda(attention_site, e))?,
+                        CudaBufferSpan::new(
+                            value_cache,
+                            CudaDType::BF16,
+                            layer_offset,
+                            layout.layer_stride_bytes(),
+                        )
+                        .map_err(|e| batch_cuda(attention_site, e))?,
+                        &mut buffers.hidden_context,
+                        batch,
+                        &prepared.reference,
+                        &mut prepared.scores,
+                        &prepared.valid,
+                        &mut prepared.valid_host,
+                        &mut prepared.duplicate_scratch,
+                        stream,
+                    )
+                    .map_err(|e| batch_cuda(attention_site, e))?;
+                }
             }
-            .map_err(|source| batch_cuda(attention_site, source))?;
-        } else {
-            let mut params = RaggedPagedAttentionParams {
-                query: span(
-                    &buffers.hidden_rotary,
-                    CudaDType::BF16,
-                    query_buffer_bytes,
-                    attention_site,
-                )?,
-                key_pool: CudaBufferSpan::new(
-                    key_cache,
-                    CudaDType::BF16,
-                    layer_offset,
-                    layout.layer_stride_bytes(),
-                )
-                .map_err(|source| batch_cuda(attention_site, source))?,
-                value_pool: CudaBufferSpan::new(
-                    value_cache,
-                    CudaDType::BF16,
-                    layer_offset,
-                    layout.layer_stride_bytes(),
-                )
-                .map_err(|source| batch_cuda(attention_site, source))?,
-                output: span_mut(
-                    &mut buffers.hidden_context,
-                    CudaDType::BF16,
-                    query_buffer_bytes,
-                    attention_site,
-                )?,
-                batch,
-                query_head_count: query_heads,
-                key_value_head_count: key_value_heads,
-                head_size,
-                output_row_count: dense_rows,
-                scale: 1.0 / (head_size as f32).sqrt(),
-            };
-            match attention_reduction_profile {
+            if materialized_reference {
+                // Output active rows already produced by the prepared reference.
+            } else if attention_implementation
+                == RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage
+            {
+                if attention_reduction_profile != AttentionReductionProfile::CanonicalV1 {
+                    return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                        field: "ragged_attention_implementation",
+                        reason: "native D128 two-stage attention requires canonical-v1 reductions",
+                    });
+                }
+                let workspace = native_d128_two_stage_workspace.as_deref_mut().ok_or(
+                    LlamaBatchExecutorError::InvalidConfiguration {
+                        field: "native_d128_two_stage_workspace",
+                        reason: "native D128 two-stage selection has no prepared workspace",
+                    },
+                )?;
+                let partial_state_bytes = workspace.partial_states.byte_len();
+                let reduction_step_bytes = workspace.reduction_steps.byte_len();
+                let reduction_normalizer_bytes = workspace.reduction_normalizers.byte_len();
+                let mut params = NativeBf16RaggedPagedSplitGqaD128TwoStageParams {
+                    query: span(
+                        &buffers.hidden_rotary,
+                        CudaDType::BF16,
+                        query_buffer_bytes,
+                        attention_site,
+                    )?,
+                    key_pool: CudaBufferSpan::new(
+                        key_cache,
+                        CudaDType::BF16,
+                        layer_offset,
+                        layout.layer_stride_bytes(),
+                    )
+                    .map_err(|source| batch_cuda(attention_site, source))?,
+                    value_pool: CudaBufferSpan::new(
+                        value_cache,
+                        CudaDType::BF16,
+                        layer_offset,
+                        layout.layer_stride_bytes(),
+                    )
+                    .map_err(|source| batch_cuda(attention_site, source))?,
+                    partial_states: CudaBufferSpanMut::new(
+                        &mut workspace.partial_states,
+                        CudaDType::F32,
+                        0,
+                        partial_state_bytes,
+                    )
+                    .map_err(|source| batch_cuda(attention_site, source))?,
+                    reduction_steps: CudaBufferSpanMut::new(
+                        &mut workspace.reduction_steps,
+                        CudaDType::F32,
+                        0,
+                        reduction_step_bytes,
+                    )
+                    .map_err(|source| batch_cuda(attention_site, source))?,
+                    reduction_normalizers: CudaBufferSpanMut::new(
+                        &mut workspace.reduction_normalizers,
+                        CudaDType::F32,
+                        0,
+                        reduction_normalizer_bytes,
+                    )
+                    .map_err(|source| batch_cuda(attention_site, source))?,
+                    output: span_mut(
+                        &mut buffers.hidden_context,
+                        CudaDType::BF16,
+                        query_buffer_bytes,
+                        attention_site,
+                    )?,
+                    batch,
+                    query_head_count: query_heads,
+                    key_value_head_count: key_value_heads,
+                    head_size,
+                    output_row_count: dense_rows,
+                    partial_state_capacity: workspace.partial_state_capacity,
+                    scale: 1.0 / (head_size as f32).sqrt(),
+                    reduction_order: DecodePartialReductionOrder::LogicalAscending,
+                };
+                // Shared-KV producer geometry: bit-identical states, one K/V read
+                // per KV head instead of one per query head.
+                if let (true, true, Some((first_word, generated_rows))) = (
+                    d128_global_merge,
+                    d128_tensor_core_producer,
+                    prompt_row_kinds_first_word,
+                ) {
+                    native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge_prompt_mma(
+                        &mut params,
+                        first_word,
+                        generated_rows,
+                        stream,
+                    )
+                } else if d128_global_merge && d128_tensor_core_producer {
+                    native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge(
+                        &mut params,
+                        stream,
+                    )
+                } else if let (true, Some((first_word, _))) =
+                    (d128_global_merge, prompt_row_kinds_first_word)
+                {
+                    native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma(
+                        &mut params,
+                        first_word,
+                        stream,
+                    )
+                } else if d128_global_merge {
+                    native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge(
+                        &mut params,
+                        stream,
+                    )
+                } else {
+                    native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv(&mut params, stream)
+                }
+                .map_err(|source| batch_cuda(attention_site, source))?;
+            } else {
+                let mut params = RaggedPagedAttentionParams {
+                    query: span(
+                        &buffers.hidden_rotary,
+                        CudaDType::BF16,
+                        query_buffer_bytes,
+                        attention_site,
+                    )?,
+                    key_pool: CudaBufferSpan::new(
+                        key_cache,
+                        CudaDType::BF16,
+                        layer_offset,
+                        layout.layer_stride_bytes(),
+                    )
+                    .map_err(|source| batch_cuda(attention_site, source))?,
+                    value_pool: CudaBufferSpan::new(
+                        value_cache,
+                        CudaDType::BF16,
+                        layer_offset,
+                        layout.layer_stride_bytes(),
+                    )
+                    .map_err(|source| batch_cuda(attention_site, source))?,
+                    output: span_mut(
+                        &mut buffers.hidden_context,
+                        CudaDType::BF16,
+                        query_buffer_bytes,
+                        attention_site,
+                    )?,
+                    batch,
+                    query_head_count: query_heads,
+                    key_value_head_count: key_value_heads,
+                    head_size,
+                    output_row_count: dense_rows,
+                    scale: 1.0 / (head_size as f32).sqrt(),
+                };
+                match attention_reduction_profile {
                 AttentionReductionProfile::CanonicalV1 => match attention_implementation {
                     RaggedAttentionImplementation::Legacy => {
                         ragged_paged_attention(&mut params, stream)
@@ -2186,509 +2902,694 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 }
             }
             .map_err(|source| batch_cuda(attention_site, source))?;
-        }
+            }
 
-        let post_segment = owned_segments.as_deref_mut().map(|segments| &mut segments[ordinal*2+1]);
-        execute_owned_decode_segment(post_segment, stream, |stream| {
-        let output_site = ExecutionSite::layer(layer_index, LlamaOp::OutputProjection);
-        execute_gemm_with_row_groups(
-            gemms.output_projection_plan(),
-            &buffers.hidden_context,
-            weight_span(weights, layer.output_weight(), output_site)?,
-            hidden_projection,
-            &mut buffers.gemm_workspace,
-            stream,
-            output_site,
-        batch.host(),None,owned_decode_batch,
-)?;
-        // Tensor parallelism: each rank holds partial sums of its heads.
-        tensor_parallel_all_reduce(tensor_parallel, hidden_projection, dense_rows * hidden, stream, output_site)?;
-        execute_projection_bias(
-            weights,
-            layer.output_bias(),
-            hidden_projection,
-            dense_rows,
-            hidden,
-            stream,
-            output_site,
-        )?;
-        let attention_residual_site = ExecutionSite::layer(layer_index, LlamaOp::AttentionResidual);
-        let post_norm_site = ExecutionSite::layer(layer_index, LlamaOp::PostAttentionNorm);
-        match residual_norm_implementation {
-            ResidualNormImplementation::Separate => {
-                let mut residual = ResidualAddParams {
-                    left: span(
-                        hidden_current,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        attention_residual_site,
-                    )?,
-                    right: span(
-                        hidden_projection,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        attention_residual_site,
-                    )?,
-                    output: span_mut(
-                        &mut buffers.hidden_rotary,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        attention_residual_site,
-                    )?,
-                    element_count: hidden_elements,
+            let post_segment = owned_segments
+                .as_deref_mut()
+                .map(|segments| &mut segments[ordinal * 2 + 1]);
+            execute_owned_decode_segment(post_segment, stream, |stream| {
+                let output_site = ExecutionSite::layer(layer_index, LlamaOp::OutputProjection);
+                execute_gemm_with_row_groups(
+                    gemms.output_projection_plan(),
+                    &buffers.hidden_context,
+                    weight_span(weights, layer.output_weight(), output_site)?,
+                    hidden_projection,
+                    &mut buffers.gemm_workspace,
+                    stream,
+                    output_site,
+                    batch.host(),
+                    None,
+                    owned_decode_batch,
+                )?;
+                // Tensor parallelism: each rank holds partial sums of its heads.
+                tensor_parallel_all_reduce(
+                    tensor_parallel,
+                    hidden_projection,
+                    dense_rows * hidden,
+                    stream,
+                    output_site,
+                )?;
+                execute_projection_bias(
+                    weights,
+                    layer.output_bias(),
+                    hidden_projection,
+                    dense_rows,
+                    hidden,
+                    stream,
+                    output_site,
+                )?;
+                let attention_residual_site =
+                    ExecutionSite::layer(layer_index, LlamaOp::AttentionResidual);
+                let post_norm_site = ExecutionSite::layer(layer_index, LlamaOp::PostAttentionNorm);
+                match residual_norm_implementation {
+                    ResidualNormImplementation::Separate => {
+                        let mut residual = ResidualAddParams {
+                            left: span(
+                                hidden_current,
+                                CudaDType::BF16,
+                                plan.workspace_spec().hidden_buffer_bytes(),
+                                attention_residual_site,
+                            )?,
+                            right: span(
+                                hidden_projection,
+                                CudaDType::BF16,
+                                plan.workspace_spec().hidden_buffer_bytes(),
+                                attention_residual_site,
+                            )?,
+                            output: span_mut(
+                                &mut buffers.hidden_rotary,
+                                CudaDType::BF16,
+                                plan.workspace_spec().hidden_buffer_bytes(),
+                                attention_residual_site,
+                            )?,
+                            element_count: hidden_elements,
+                        };
+                        residual_add(&mut residual, stream)
+                            .map_err(|source| batch_cuda(attention_residual_site, source))?;
+                        let mut norm = RmsNormParams {
+                            input: span(
+                                &buffers.hidden_rotary,
+                                CudaDType::BF16,
+                                plan.workspace_spec().hidden_buffer_bytes(),
+                                post_norm_site,
+                            )?,
+                            weight: weight_span(
+                                weights,
+                                layer.post_attention_norm_weight(),
+                                post_norm_site,
+                            )?,
+                            output: span_mut(
+                                &mut buffers.hidden_norm,
+                                CudaDType::BF16,
+                                plan.workspace_spec().hidden_buffer_bytes(),
+                                post_norm_site,
+                            )?,
+                            row_count: dense_rows,
+                            hidden_size: hidden,
+                            epsilon: layer.post_attention_norm_epsilon(),
+                        };
+                        execute_profile_rms_norm_grouped(
+                            rms_norm_profile,
+                            &mut norm,
+                            stream,
+                            batch.host(),
+                            hf_wide_norm,
+                        )
+                        .map_err(|source| batch_cuda(post_norm_site, source))?;
+                    }
+                    ResidualNormImplementation::Fused => {
+                        let mut fused = ResidualRmsNormParams {
+                            left: span(
+                                hidden_current,
+                                CudaDType::BF16,
+                                plan.workspace_spec().hidden_buffer_bytes(),
+                                post_norm_site,
+                            )?,
+                            right: span(
+                                hidden_projection,
+                                CudaDType::BF16,
+                                plan.workspace_spec().hidden_buffer_bytes(),
+                                post_norm_site,
+                            )?,
+                            weight: weight_span(
+                                weights,
+                                layer.post_attention_norm_weight(),
+                                post_norm_site,
+                            )?,
+                            residual_output: span_mut(
+                                &mut buffers.hidden_rotary,
+                                CudaDType::BF16,
+                                plan.workspace_spec().hidden_buffer_bytes(),
+                                post_norm_site,
+                            )?,
+                            normalized_output: span_mut(
+                                &mut buffers.hidden_norm,
+                                CudaDType::BF16,
+                                plan.workspace_spec().hidden_buffer_bytes(),
+                                post_norm_site,
+                            )?,
+                            row_count: dense_rows,
+                            hidden_size: hidden,
+                            epsilon: layer.post_attention_norm_epsilon(),
+                        };
+                        execute_profile_residual_rms_norm(rms_norm_profile, &mut fused, stream)
+                            .map_err(|source| batch_cuda(post_norm_site, source))?;
+                    }
+                }
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                let piecewise_rows = if owned_decode_batch == 10 && owned_mlp_graphs.is_some() {
+                    piecewise_active_rows
+                } else {
+                    0
                 };
-                residual_add(&mut residual, stream)
-                    .map_err(|source| batch_cuda(attention_residual_site, source))?;
-                let mut norm = RmsNormParams {
-                    input: span(
-                        &buffers.hidden_rotary,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        post_norm_site,
-                    )?,
-                    weight: weight_span(
-                        weights,
-                        layer.post_attention_norm_weight(),
-                        post_norm_site,
-                    )?,
-                    output: span_mut(
-                        &mut buffers.hidden_norm,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        post_norm_site,
-                    )?,
-                    row_count: dense_rows,
-                    hidden_size: hidden,
-                    epsilon: layer.post_attention_norm_epsilon(),
+                #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                let piecewise_rows = 0;
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                let mlp_done = if let Some(graphs) = owned_mlp_graphs.as_deref_mut() {
+                    let site = ExecutionSite::layer(layer_index, LlamaOp::GateProjection);
+                    let mut mlp_params = riley_cuda::CudaOwnedHfMlpParams {
+                        input: span(
+                            &buffers.hidden_norm,
+                            CudaDType::BF16,
+                            buffers.hidden_norm.byte_len(),
+                            site,
+                        )?,
+                        gate_weight: weight_span(weights, layer.gate_weight(), site)?,
+                        up_weight: weight_span(weights, layer.up_weight(), site)?,
+                        down_weight: weight_span(weights, layer.down_weight(), site)?,
+                        gate: &mut buffers.gate_raw,
+                        up: &mut buffers.up_raw,
+                        product: &mut buffers.gated_product,
+                        output: hidden_current,
+                        active_rows: if piecewise_rows > 0 {
+                            piecewise_rows as u32
+                        } else {
+                            batch.host().row_sequence_slots().len() as u32
+                        },
+                    };
+                    if let Some(w) = weights.merged_gate_up(layer_index) {
+                        graphs.execute_with_merged(
+                            &mut mlp_params,
+                            CudaBufferSpan::new(w, CudaDType::BF16, 0, w.byte_len())
+                                .map_err(|e| batch_cuda(site, e))?,
+                            stream,
+                        )
+                    } else {
+                        graphs.execute(&mut mlp_params, stream)
+                    }
+                    .map_err(|e| batch_cuda(site, e))?;
+                    piecewise_rows == 0 || piecewise_rows == batch.host().row_sequence_slots().len()
+                } else {
+                    false
                 };
-                execute_profile_rms_norm_grouped(rms_norm_profile,&mut norm,stream,batch.host(),hf_wide_norm)
-                    .map_err(|source| batch_cuda(post_norm_site, source))?;
-            }
-            ResidualNormImplementation::Fused => {
-                let mut fused = ResidualRmsNormParams {
-                    left: span(
-                        hidden_current,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        post_norm_site,
-                    )?,
-                    right: span(
-                        hidden_projection,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        post_norm_site,
-                    )?,
-                    weight: weight_span(
-                        weights,
-                        layer.post_attention_norm_weight(),
-                        post_norm_site,
-                    )?,
-                    residual_output: span_mut(
-                        &mut buffers.hidden_rotary,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        post_norm_site,
-                    )?,
-                    normalized_output: span_mut(
-                        &mut buffers.hidden_norm,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        post_norm_site,
-                    )?,
-                    row_count: dense_rows,
-                    hidden_size: hidden,
-                    epsilon: layer.post_attention_norm_epsilon(),
-                };
-                execute_profile_residual_rms_norm(rms_norm_profile, &mut fused, stream)
-                    .map_err(|source| batch_cuda(post_norm_site, source))?;
-            }
-        }
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        let piecewise_rows=if owned_decode_batch==10 && owned_mlp_graphs.is_some(){piecewise_active_rows}else{0};
-        #[cfg(not(feature="cuda-cublas-gemm-probe"))]
-        let piecewise_rows=0;
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        let mlp_done=if let Some(graphs)=owned_mlp_graphs.as_deref_mut(){
-            let site=ExecutionSite::layer(layer_index,LlamaOp::GateProjection);
-            let mut mlp_params=riley_cuda::CudaOwnedHfMlpParams {
-                input:span(&buffers.hidden_norm,CudaDType::BF16,buffers.hidden_norm.byte_len(),site)?,
-                gate_weight:weight_span(weights,layer.gate_weight(),site)?,
-                up_weight:weight_span(weights,layer.up_weight(),site)?,
-                down_weight:weight_span(weights,layer.down_weight(),site)?,
-                gate:&mut buffers.gate_raw,up:&mut buffers.up_raw,product:&mut buffers.gated_product,
-                output:hidden_current,active_rows:if piecewise_rows>0 {piecewise_rows as u32}else{batch.host().row_sequence_slots().len() as u32},
-            };
-            if let Some(w)=weights.merged_gate_up(layer_index) {
-                graphs.execute_with_merged(&mut mlp_params,CudaBufferSpan::new(w,CudaDType::BF16,0,w.byte_len()).map_err(|e|batch_cuda(site,e))?,stream)
-            }else{graphs.execute(&mut mlp_params,stream)}.map_err(|e|batch_cuda(site,e))?;
-            piecewise_rows==0 || piecewise_rows==batch.host().row_sequence_slots().len()
-        }else{false};
-        #[cfg(not(feature="cuda-cublas-gemm-probe"))]
-        let mlp_done=false;
-        if !mlp_done {
-        let gate_site = ExecutionSite::layer(layer_index, LlamaOp::GateProjection);
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        let native_merged=owned_decode_batch==10 && piecewise_rows==0 && batch.host().request_row_groups().is_some()
-            && batch.host().row_sequence_slots().windows(2).all(|v|v[0]!=v[1])
-            && matches!(batch.host().row_sequence_slots().len(),1|17..=32) && weights.merged_gate_up(layer_index).is_some();
-        #[cfg(not(feature="cuda-cublas-gemm-probe"))]
-        let native_merged=false;
-        if native_merged {
-            #[cfg(feature="cuda-cublas-gemm-probe")]
-            if let Some(PreparedLlamaGemm::ClassicRequestRows(native))=gemms.merged_gate_up_plan() {
-                let rows=batch.host().row_sequence_slots().len() as u64;
-                let w=weights.merged_gate_up(layer_index).expect("checked merged weights");
-                native.execute_sm80_merged_gate_up(
-                    span(&buffers.hidden_norm,CudaDType::BF16,rows*hidden*2,gate_site)?,
-                    CudaBufferSpan::new(w,CudaDType::BF16,0,w.byte_len()).map_err(|e|batch_cuda(gate_site,e))?,
-                    span_mut(&mut buffers.gate_raw,CudaDType::BF16,rows*19456*2,gate_site)?,rows,stream)
-                    .map_err(|e|batch_cuda(gate_site,e))?;
-                silu_gated_multiply_merged_rows(&mut MergedGatedMultiplyParams {
-                    merged:span(&buffers.gate_raw,CudaDType::BF16,rows*19456*2,gate_site)?,
-                    output:span_mut(&mut buffers.gated_product,CudaDType::BF16,rows*9728*2,gate_site)?,
-                    element_count:rows*9728,row_width:9728,
-                },stream).map_err(|e|batch_cuda(gate_site,e))?;
-            }else{return Err(LlamaForwardError::InvalidConfiguration{field:"native_merged_gate_up",reason:"cold native plan missing"}.into());}
-        }else if owned_decode_batch!=10 && gemms.merged_gate_up_plan().is_some() {
-            // One GEMM over the concatenated gate|up weights; each output row
-            // holds the raw gate followed by the up projection.
-            if !fused_silu_multiply {
-                return Err(LlamaForwardError::InvalidConfiguration {
+                #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                let mlp_done = false;
+                if !mlp_done {
+                    let gate_site = ExecutionSite::layer(layer_index, LlamaOp::GateProjection);
+                    #[cfg(feature = "cuda-cublas-gemm-probe")]
+                    let native_merged = owned_decode_batch == 10
+                        && piecewise_rows == 0
+                        && batch.host().request_row_groups().is_some()
+                        && batch
+                            .host()
+                            .row_sequence_slots()
+                            .windows(2)
+                            .all(|v| v[0] != v[1])
+                        && matches!(batch.host().row_sequence_slots().len(), 1 | 17..=32)
+                        && weights.merged_gate_up(layer_index).is_some();
+                    #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                    let native_merged = false;
+                    if native_merged {
+                        #[cfg(feature = "cuda-cublas-gemm-probe")]
+                        if let Some(PreparedLlamaGemm::ClassicRequestRows(native)) =
+                            gemms.merged_gate_up_plan()
+                        {
+                            let rows = batch.host().row_sequence_slots().len() as u64;
+                            let w = weights
+                                .merged_gate_up(layer_index)
+                                .expect("checked merged weights");
+                            native
+                                .execute_sm80_merged_gate_up(
+                                    span(
+                                        &buffers.hidden_norm,
+                                        CudaDType::BF16,
+                                        rows * hidden * 2,
+                                        gate_site,
+                                    )?,
+                                    CudaBufferSpan::new(w, CudaDType::BF16, 0, w.byte_len())
+                                        .map_err(|e| batch_cuda(gate_site, e))?,
+                                    span_mut(
+                                        &mut buffers.gate_raw,
+                                        CudaDType::BF16,
+                                        rows * 19456 * 2,
+                                        gate_site,
+                                    )?,
+                                    rows,
+                                    stream,
+                                )
+                                .map_err(|e| batch_cuda(gate_site, e))?;
+                            silu_gated_multiply_merged_rows(
+                                &mut MergedGatedMultiplyParams {
+                                    merged: span(
+                                        &buffers.gate_raw,
+                                        CudaDType::BF16,
+                                        rows * 19456 * 2,
+                                        gate_site,
+                                    )?,
+                                    output: span_mut(
+                                        &mut buffers.gated_product,
+                                        CudaDType::BF16,
+                                        rows * 9728 * 2,
+                                        gate_site,
+                                    )?,
+                                    element_count: rows * 9728,
+                                    row_width: 9728,
+                                },
+                                stream,
+                            )
+                            .map_err(|e| batch_cuda(gate_site, e))?;
+                        } else {
+                            return Err(LlamaForwardError::InvalidConfiguration {
+                                field: "native_merged_gate_up",
+                                reason: "cold native plan missing",
+                            }
+                            .into());
+                        }
+                    } else if owned_decode_batch != 10 && gemms.merged_gate_up_plan().is_some() {
+                        // One GEMM over the concatenated gate|up weights; each output row
+                        // holds the raw gate followed by the up projection.
+                        if !fused_silu_multiply {
+                            return Err(LlamaForwardError::InvalidConfiguration {
                     field: "merged_gate_up",
                     reason: "merged gate|up projection requires the fused SiLU multiply",
                 }
                 .into());
-            }
-            let merged_weight = weights.merged_gate_up(layer_index).ok_or(
-                LlamaForwardError::InvalidConfiguration {
-                    field: "merged_gate_up",
-                    reason: "merged gate|up weights were not uploaded for this layer",
-                },
-            )?;
-            let merged_weight =
-                CudaBufferSpan::new(merged_weight, CudaDType::BF16, 0, merged_weight.byte_len())
-                    .map_err(|source| batch_cuda(gate_site, source))?;
-            if let Some(merged_plan) = gemms.merged_gate_up_plan() {
-                execute_gemm_with_row_groups_from(
-                    merged_plan,
-                    &buffers.hidden_norm,
-                    merged_weight,
-                    &mut buffers.gate_raw,
-                    &mut buffers.gemm_workspace,
-                    stream,
-                    gate_site,
-                batch.host(),None,owned_decode_batch,piecewise_rows,
-)?;
-            }
-            let gated_site = ExecutionSite::layer(layer_index, LlamaOp::GatedMultiply);
-            let mut params = MergedGatedMultiplyParams {
-                merged: span(
-                    &buffers.gate_raw,
-                    CudaDType::BF16,
-                    plan.workspace_spec().intermediate_buffer_bytes() * 2,
-                    gated_site,
-                )?,
-                output: span_mut(
-                    &mut buffers.gated_product,
-                    CudaDType::BF16,
-                    plan.workspace_spec().intermediate_buffer_bytes(),
-                    gated_site,
-                )?,
-                element_count: intermediate_elements,
-                row_width: plan.dimensions().intermediate_size() as u64,
-            };
-            silu_gated_multiply_merged_rows(&mut params, stream)
-                .map_err(|source| batch_cuda(gated_site, source))?;
-        } else {
-            #[cfg(feature="cuda-cublas-gemm-probe")]
-            let fused_smol_gate_up=if smol_qkv_fusion_eligible && owned_decode_batch>=2 && hidden==576 && plan.dimensions().intermediate_size()==1536 {
-                if let super::super::forward::PreparedLlamaGemm::ClassicRequestRows(native)=&mut gemms.intermediate {
-                    let rows=batch.host().row_positions().len() as u64;
-                    native.try_execute_hf_smol_fused_gate_up(
-                        weight_span(weights,layer.gate_weight(),gate_site)?,weight_span(weights,layer.up_weight(),gate_site)?,
-                        span(&buffers.hidden_norm,CudaDType::BF16,rows*576*2,gate_site)?,
-                        span_mut(&mut buffers.gated_product,CudaDType::BF16,rows*1536*2,gate_site)?,rows,stream)
-                        .map_err(|e|batch_cuda(gate_site,e))?
-                }else{false}
-            }else if owned_decode_batch==10 && hidden==2560 && plan.dimensions().intermediate_size()==9728 && fused_silu_multiply {
-                if let (PreparedLlamaGemm::ClassicRequestRows(native),Some(groups))=(&mut gemms.intermediate,batch.host().request_row_groups()) {
-                    let bytes=native.config().input_bytes();
-                    native.try_execute_hf_sm80_fused_gate_up_groups_from(
-                        weight_span(weights,layer.gate_weight(),gate_site)?,weight_span(weights,layer.up_weight(),gate_site)?,
-                        span(&buffers.hidden_norm,CudaDType::BF16,bytes,gate_site)?,
-                        &mut buffers.gate_raw,&mut buffers.up_raw,&mut buffers.gated_product,groups,piecewise_rows,stream)
-                        .map_err(|e|batch_cuda(gate_site,e))?
-                }else{false}
-            }else{false};
-            #[cfg(not(feature="cuda-cublas-gemm-probe"))]
-            let fused_smol_gate_up=false;
-            if !fused_smol_gate_up {
-            execute_gemm_with_row_groups_from(
-                &mut gemms.intermediate,
-                &buffers.hidden_norm,
-                weight_span(weights, layer.gate_weight(), gate_site)?,
-                &mut buffers.gate_raw,
-                &mut buffers.gemm_workspace,
-                stream,
-                gate_site,
-            batch.host(),None,owned_decode_batch,piecewise_rows,
-)?;
-            let up_site = ExecutionSite::layer(layer_index, LlamaOp::UpProjection);
-            execute_gemm_with_row_groups_from(
-                &mut gemms.intermediate,
-                &buffers.hidden_norm,
-                weight_span(weights, layer.up_weight(), up_site)?,
-                &mut buffers.up_raw,
-                &mut buffers.gemm_workspace,
-                stream,
-                up_site,
-            batch.host(),None,owned_decode_batch,piecewise_rows,
-)?;
-            let silu_site = ExecutionSite::layer(layer_index, LlamaOp::Silu);
-            if !fused_silu_multiply {
-                let mut params = SiluParams {
-                    input: mlp_span(
-                        &buffers.gate_raw,
-                        CudaDType::BF16,
-                        plan.workspace_spec().intermediate_buffer_bytes(),
-                        silu_site,piecewise_rows,
-                    )?,
-                    output: mlp_span_mut(
-                        &mut buffers.gate_activated,
-                        CudaDType::BF16,
-                        plan.workspace_spec().intermediate_buffer_bytes(),
-                        silu_site,piecewise_rows,
-                    )?,
-                    element_count: if piecewise_rows>0 {(batch.host().row_sequence_slots().len()-piecewise_rows)as u64*9728}else{intermediate_elements},
-                };
-                silu(&mut params, stream).map_err(|source| batch_cuda(silu_site, source))?;
-            }
-            let gated_site = ExecutionSite::layer(layer_index, LlamaOp::GatedMultiply);
-            {
-                let mut params = GatedMultiplyParams {
-                    activated_gate: mlp_span(
-                        if fused_silu_multiply {
-                            &buffers.gate_raw
+                        }
+                        let merged_weight = weights.merged_gate_up(layer_index).ok_or(
+                            LlamaForwardError::InvalidConfiguration {
+                                field: "merged_gate_up",
+                                reason: "merged gate|up weights were not uploaded for this layer",
+                            },
+                        )?;
+                        let merged_weight = CudaBufferSpan::new(
+                            merged_weight,
+                            CudaDType::BF16,
+                            0,
+                            merged_weight.byte_len(),
+                        )
+                        .map_err(|source| batch_cuda(gate_site, source))?;
+                        if let Some(merged_plan) = gemms.merged_gate_up_plan() {
+                            execute_gemm_with_row_groups_from(
+                                merged_plan,
+                                &buffers.hidden_norm,
+                                merged_weight,
+                                &mut buffers.gate_raw,
+                                &mut buffers.gemm_workspace,
+                                stream,
+                                gate_site,
+                                batch.host(),
+                                None,
+                                owned_decode_batch,
+                                piecewise_rows,
+                            )?;
+                        }
+                        let gated_site = ExecutionSite::layer(layer_index, LlamaOp::GatedMultiply);
+                        let mut params = MergedGatedMultiplyParams {
+                            merged: span(
+                                &buffers.gate_raw,
+                                CudaDType::BF16,
+                                plan.workspace_spec().intermediate_buffer_bytes() * 2,
+                                gated_site,
+                            )?,
+                            output: span_mut(
+                                &mut buffers.gated_product,
+                                CudaDType::BF16,
+                                plan.workspace_spec().intermediate_buffer_bytes(),
+                                gated_site,
+                            )?,
+                            element_count: intermediate_elements,
+                            row_width: plan.dimensions().intermediate_size() as u64,
+                        };
+                        silu_gated_multiply_merged_rows(&mut params, stream)
+                            .map_err(|source| batch_cuda(gated_site, source))?;
+                    } else {
+                        #[cfg(feature = "cuda-cublas-gemm-probe")]
+                        let fused_smol_gate_up = if smol_qkv_fusion_eligible
+                            && owned_decode_batch >= 2
+                            && hidden == 576
+                            && plan.dimensions().intermediate_size() == 1536
+                        {
+                            if let super::super::forward::PreparedLlamaGemm::ClassicRequestRows(
+                                native,
+                            ) = &mut gemms.intermediate
+                            {
+                                let rows = batch.host().row_positions().len() as u64;
+                                native
+                                    .try_execute_hf_smol_fused_gate_up(
+                                        weight_span(weights, layer.gate_weight(), gate_site)?,
+                                        weight_span(weights, layer.up_weight(), gate_site)?,
+                                        span(
+                                            &buffers.hidden_norm,
+                                            CudaDType::BF16,
+                                            rows * 576 * 2,
+                                            gate_site,
+                                        )?,
+                                        span_mut(
+                                            &mut buffers.gated_product,
+                                            CudaDType::BF16,
+                                            rows * 1536 * 2,
+                                            gate_site,
+                                        )?,
+                                        rows,
+                                        stream,
+                                    )
+                                    .map_err(|e| batch_cuda(gate_site, e))?
+                            } else {
+                                false
+                            }
+                        } else if owned_decode_batch == 10
+                            && hidden == 2560
+                            && plan.dimensions().intermediate_size() == 9728
+                            && fused_silu_multiply
+                        {
+                            if let (PreparedLlamaGemm::ClassicRequestRows(native), Some(groups)) =
+                                (&mut gemms.intermediate, batch.host().request_row_groups())
+                            {
+                                let bytes = native.config().input_bytes();
+                                native
+                                    .try_execute_hf_sm80_fused_gate_up_groups_from(
+                                        weight_span(weights, layer.gate_weight(), gate_site)?,
+                                        weight_span(weights, layer.up_weight(), gate_site)?,
+                                        span(
+                                            &buffers.hidden_norm,
+                                            CudaDType::BF16,
+                                            bytes,
+                                            gate_site,
+                                        )?,
+                                        &mut buffers.gate_raw,
+                                        &mut buffers.up_raw,
+                                        &mut buffers.gated_product,
+                                        groups,
+                                        piecewise_rows,
+                                        stream,
+                                    )
+                                    .map_err(|e| batch_cuda(gate_site, e))?
+                            } else {
+                                false
+                            }
                         } else {
-                            &buffers.gate_activated
-                        },
-                        CudaDType::BF16,
-                        plan.workspace_spec().intermediate_buffer_bytes(),
-                        gated_site,piecewise_rows,
-                    )?,
-                    up: mlp_span(
-                        &buffers.up_raw,
-                        CudaDType::BF16,
-                        plan.workspace_spec().intermediate_buffer_bytes(),
-                        gated_site,piecewise_rows,
-                    )?,
-                    output: mlp_span_mut(
-                        &mut buffers.gated_product,
-                        CudaDType::BF16,
-                        plan.workspace_spec().intermediate_buffer_bytes(),
-                        gated_site,piecewise_rows,
-                    )?,
-                    element_count: if piecewise_rows>0 {(batch.host().row_sequence_slots().len()-piecewise_rows)as u64*9728}else{intermediate_elements},
-                };
-                if fused_silu_multiply {
-                    silu_gated_multiply(&mut params, stream)
-                        .map_err(|source| batch_cuda(gated_site, source))?;
-                } else {
-                    gated_multiply(&mut params, stream)
-                        .map_err(|source| batch_cuda(gated_site, source))?;
+                            false
+                        };
+                        #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                        let fused_smol_gate_up = false;
+                        if !fused_smol_gate_up {
+                            execute_gemm_with_row_groups_from(
+                                &mut gemms.intermediate,
+                                &buffers.hidden_norm,
+                                weight_span(weights, layer.gate_weight(), gate_site)?,
+                                &mut buffers.gate_raw,
+                                &mut buffers.gemm_workspace,
+                                stream,
+                                gate_site,
+                                batch.host(),
+                                None,
+                                owned_decode_batch,
+                                piecewise_rows,
+                            )?;
+                            let up_site = ExecutionSite::layer(layer_index, LlamaOp::UpProjection);
+                            execute_gemm_with_row_groups_from(
+                                &mut gemms.intermediate,
+                                &buffers.hidden_norm,
+                                weight_span(weights, layer.up_weight(), up_site)?,
+                                &mut buffers.up_raw,
+                                &mut buffers.gemm_workspace,
+                                stream,
+                                up_site,
+                                batch.host(),
+                                None,
+                                owned_decode_batch,
+                                piecewise_rows,
+                            )?;
+                            let silu_site = ExecutionSite::layer(layer_index, LlamaOp::Silu);
+                            if !fused_silu_multiply {
+                                let mut params = SiluParams {
+                                    input: mlp_span(
+                                        &buffers.gate_raw,
+                                        CudaDType::BF16,
+                                        plan.workspace_spec().intermediate_buffer_bytes(),
+                                        silu_site,
+                                        piecewise_rows,
+                                    )?,
+                                    output: mlp_span_mut(
+                                        &mut buffers.gate_activated,
+                                        CudaDType::BF16,
+                                        plan.workspace_spec().intermediate_buffer_bytes(),
+                                        silu_site,
+                                        piecewise_rows,
+                                    )?,
+                                    element_count: if piecewise_rows > 0 {
+                                        (batch.host().row_sequence_slots().len() - piecewise_rows)
+                                            as u64
+                                            * 9728
+                                    } else {
+                                        intermediate_elements
+                                    },
+                                };
+                                silu(&mut params, stream)
+                                    .map_err(|source| batch_cuda(silu_site, source))?;
+                            }
+                            let gated_site =
+                                ExecutionSite::layer(layer_index, LlamaOp::GatedMultiply);
+                            {
+                                let mut params = GatedMultiplyParams {
+                                    activated_gate: mlp_span(
+                                        if fused_silu_multiply {
+                                            &buffers.gate_raw
+                                        } else {
+                                            &buffers.gate_activated
+                                        },
+                                        CudaDType::BF16,
+                                        plan.workspace_spec().intermediate_buffer_bytes(),
+                                        gated_site,
+                                        piecewise_rows,
+                                    )?,
+                                    up: mlp_span(
+                                        &buffers.up_raw,
+                                        CudaDType::BF16,
+                                        plan.workspace_spec().intermediate_buffer_bytes(),
+                                        gated_site,
+                                        piecewise_rows,
+                                    )?,
+                                    output: mlp_span_mut(
+                                        &mut buffers.gated_product,
+                                        CudaDType::BF16,
+                                        plan.workspace_spec().intermediate_buffer_bytes(),
+                                        gated_site,
+                                        piecewise_rows,
+                                    )?,
+                                    element_count: if piecewise_rows > 0 {
+                                        (batch.host().row_sequence_slots().len() - piecewise_rows)
+                                            as u64
+                                            * 9728
+                                    } else {
+                                        intermediate_elements
+                                    },
+                                };
+                                if fused_silu_multiply {
+                                    silu_gated_multiply(&mut params, stream)
+                                        .map_err(|source| batch_cuda(gated_site, source))?;
+                                } else {
+                                    gated_multiply(&mut params, stream)
+                                        .map_err(|source| batch_cuda(gated_site, source))?;
+                                }
+                            }
+                        }
+                    }
+                    let down_site = ExecutionSite::layer(layer_index, LlamaOp::DownProjection);
+                    execute_gemm_with_row_groups_from(
+                        &mut gemms.down,
+                        &buffers.gated_product,
+                        weight_span(weights, layer.down_weight(), down_site)?,
+                        hidden_current,
+                        &mut buffers.gemm_workspace,
+                        stream,
+                        down_site,
+                        batch.host(),
+                        None,
+                        owned_decode_batch,
+                        piecewise_rows,
+                    )?;
                 }
-            }
-            }
-        }
-        let down_site = ExecutionSite::layer(layer_index, LlamaOp::DownProjection);
-        execute_gemm_with_row_groups_from(
-            &mut gemms.down,
-            &buffers.gated_product,
-            weight_span(weights, layer.down_weight(), down_site)?,
-            hidden_current,
-            &mut buffers.gemm_workspace,
-            stream,
-            down_site,
-        batch.host(),None,owned_decode_batch,piecewise_rows,
-)?;
-        }
-        tensor_parallel_all_reduce(
-            tensor_parallel,
-            hidden_current,
-            dense_rows * hidden,
-            stream,
-            ExecutionSite::layer(layer_index, LlamaOp::DownProjection),
-        )?;
-        let mlp_residual_site = ExecutionSite::layer(layer_index, LlamaOp::MlpResidual);
-        if norm_after_mlp {
-            // The norm that follows this residual: the next layer's input norm,
-            // or the final norm after the last layer.
-            let (next_weight, next_epsilon, next_site) = match plan.layers().get(ordinal + 1) {
-                Some(next) => (
-                    next.input_norm_weight(),
-                    next.input_norm_epsilon(),
-                    ExecutionSite::layer(next.index(), LlamaOp::InputNorm),
-                ),
-                None => (
-                    plan.final_norm_weight(),
-                    plan.final_norm_epsilon(),
-                    ExecutionSite::global(LlamaOp::FinalNorm),
-                ),
-            };
-            let mut fused = ResidualRmsNormParams {
-                left: span(
-                    &buffers.hidden_rotary,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    mlp_residual_site,
-                )?,
-                right: span(
+                tensor_parallel_all_reduce(
+                    tensor_parallel,
                     hidden_current,
+                    dense_rows * hidden,
+                    stream,
+                    ExecutionSite::layer(layer_index, LlamaOp::DownProjection),
+                )?;
+                let mlp_residual_site = ExecutionSite::layer(layer_index, LlamaOp::MlpResidual);
+                if norm_after_mlp {
+                    // The norm that follows this residual: the next layer's input norm,
+                    // or the final norm after the last layer.
+                    let (next_weight, next_epsilon, next_site) =
+                        match plan.layers().get(ordinal + 1) {
+                            Some(next) => (
+                                next.input_norm_weight(),
+                                next.input_norm_epsilon(),
+                                ExecutionSite::layer(next.index(), LlamaOp::InputNorm),
+                            ),
+                            None => (
+                                plan.final_norm_weight(),
+                                plan.final_norm_epsilon(),
+                                ExecutionSite::global(LlamaOp::FinalNorm),
+                            ),
+                        };
+                    let mut fused = ResidualRmsNormParams {
+                        left: span(
+                            &buffers.hidden_rotary,
+                            CudaDType::BF16,
+                            plan.workspace_spec().hidden_buffer_bytes(),
+                            mlp_residual_site,
+                        )?,
+                        right: span(
+                            hidden_current,
+                            CudaDType::BF16,
+                            plan.workspace_spec().hidden_buffer_bytes(),
+                            mlp_residual_site,
+                        )?,
+                        weight: weight_span(weights, next_weight, next_site)?,
+                        residual_output: span_mut(
+                            hidden_projection,
+                            CudaDType::BF16,
+                            plan.workspace_spec().hidden_buffer_bytes(),
+                            mlp_residual_site,
+                        )?,
+                        normalized_output: span_mut(
+                            &mut buffers.hidden_norm,
+                            CudaDType::BF16,
+                            plan.workspace_spec().hidden_buffer_bytes(),
+                            next_site,
+                        )?,
+                        row_count: dense_rows,
+                        hidden_size: hidden,
+                        epsilon: next_epsilon,
+                    };
+                    execute_profile_residual_rms_norm(rms_norm_profile, &mut fused, stream)
+                        .map_err(|source| batch_cuda(next_site, source))?;
+                } else {
+                    let mut params = ResidualAddParams {
+                        left: span(
+                            &buffers.hidden_rotary,
+                            CudaDType::BF16,
+                            plan.workspace_spec().hidden_buffer_bytes(),
+                            mlp_residual_site,
+                        )?,
+                        right: span(
+                            hidden_current,
+                            CudaDType::BF16,
+                            plan.workspace_spec().hidden_buffer_bytes(),
+                            mlp_residual_site,
+                        )?,
+                        output: span_mut(
+                            hidden_projection,
+                            CudaDType::BF16,
+                            plan.workspace_spec().hidden_buffer_bytes(),
+                            mlp_residual_site,
+                        )?,
+                        element_count: hidden_elements,
+                    };
+                    residual_add(&mut params, stream)
+                        .map_err(|source| batch_cuda(mlp_residual_site, source))?;
+                }
+                Ok(())
+            })?;
+        }
+
+        // Preserve the public owner roles after an odd number of layers. Within
+        // the chain, physical owners never move; a future native recorder can use
+        // the same parity mapping without retaining conflicting per-op borrows.
+        if plan.layers().len() % 2 != 0 {
+            mem::swap(&mut buffers.hidden_current, &mut buffers.hidden_projection);
+        }
+
+        let final_norm_site = ExecutionSite::global(LlamaOp::FinalNorm);
+        if !norm_after_mlp {
+            let mut params = RmsNormParams {
+                input: span(
+                    &buffers.hidden_current,
                     CudaDType::BF16,
                     plan.workspace_spec().hidden_buffer_bytes(),
-                    mlp_residual_site,
+                    final_norm_site,
                 )?,
-                weight: weight_span(weights, next_weight, next_site)?,
-                residual_output: span_mut(
-                    hidden_projection,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    mlp_residual_site,
-                )?,
-                normalized_output: span_mut(
+                weight: weight_span(weights, plan.final_norm_weight(), final_norm_site)?,
+                output: span_mut(
                     &mut buffers.hidden_norm,
                     CudaDType::BF16,
                     plan.workspace_spec().hidden_buffer_bytes(),
-                    next_site,
+                    final_norm_site,
                 )?,
                 row_count: dense_rows,
                 hidden_size: hidden,
-                epsilon: next_epsilon,
+                epsilon: plan.final_norm_epsilon(),
             };
-            execute_profile_residual_rms_norm(rms_norm_profile, &mut fused, stream)
-                .map_err(|source| batch_cuda(next_site, source))?;
-        } else {
-            let mut params = ResidualAddParams {
-                left: span(
-                    &buffers.hidden_rotary,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    mlp_residual_site,
-                )?,
-                right: span(
-                    hidden_current,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    mlp_residual_site,
-                )?,
-                output: span_mut(
-                    hidden_projection,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    mlp_residual_site,
-                )?,
-                element_count: hidden_elements,
-            };
-            residual_add(&mut params, stream)
-                .map_err(|source| batch_cuda(mlp_residual_site, source))?;
-        }
-        Ok(())
-        })?;
-    }
-
-    // Preserve the public owner roles after an odd number of layers. Within
-    // the chain, physical owners never move; a future native recorder can use
-    // the same parity mapping without retaining conflicting per-op borrows.
-    if plan.layers().len() % 2 != 0 {
-        mem::swap(&mut buffers.hidden_current, &mut buffers.hidden_projection);
-    }
-
-    let final_norm_site = ExecutionSite::global(LlamaOp::FinalNorm);
-    if !norm_after_mlp {
-        let mut params = RmsNormParams {
-            input: span(
-                &buffers.hidden_current,
-                CudaDType::BF16,
-                plan.workspace_spec().hidden_buffer_bytes(),
-                final_norm_site,
-            )?,
-            weight: weight_span(weights, plan.final_norm_weight(), final_norm_site)?,
-            output: span_mut(
-                &mut buffers.hidden_norm,
-                CudaDType::BF16,
-                plan.workspace_spec().hidden_buffer_bytes(),
-                final_norm_site,
-            )?,
-            row_count: dense_rows,
-            hidden_size: hidden,
-            epsilon: plan.final_norm_epsilon(),
-        };
-        execute_profile_rms_norm_grouped(rms_norm_profile,&mut params,stream,batch.host(),hf_wide_norm)
+            execute_profile_rms_norm_grouped(
+                rms_norm_profile,
+                &mut params,
+                stream,
+                batch.host(),
+                hf_wide_norm,
+            )
             .map_err(|source| batch_cuda(final_norm_site, source))?;
-    }
-    let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
-    // No token is requested from this partial prefill: the next iteration
-    // consumes only KV. Batch-only storage deliberately has no dense logits,
-    // and a step without output rows skips the LM head (about 1 ms over 256
-    // rows of a 152K vocabulary).
-    if (buffers.logits.byte_len() == 0 || !logits_read) && output_row_lm_head.is_none() {
-        return Ok(());
-    }
-    if let Some(output_rows) = output_row_lm_head {
-        // `hidden_rotary` is idle after the last layer: it receives the output
-        // rows' normalized hidden states in output order. Rows past the output
-        // count keep earlier contents; their logits are never read.
-        let gather_site = ExecutionSite::global(LlamaOp::OutputGather);
-        let gathered_rows = u64::try_from(output_rows.output_indices_host.len()).map_err(|_| {
-            LlamaBatchExecutorError::InvalidConfiguration {
-                field: "output_token_indices",
-                reason: "output row count does not fit u64",
+        }
+        let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
+        // No token is requested from this partial prefill: the next iteration
+        // consumes only KV. Batch-only storage deliberately has no dense logits,
+        // and a step without output rows skips the LM head (about 1 ms over 256
+        // rows of a 152K vocabulary).
+        if (buffers.logits.byte_len() == 0 || !logits_read) && output_row_lm_head.is_none() {
+            return Ok(());
+        }
+        if let Some(output_rows) = output_row_lm_head {
+            // `hidden_rotary` is idle after the last layer: it receives the output
+            // rows' normalized hidden states in output order. Rows past the output
+            // count keep earlier contents; their logits are never read.
+            let gather_site = ExecutionSite::global(LlamaOp::OutputGather);
+            let gathered_rows =
+                u64::try_from(output_rows.output_indices_host.len()).map_err(|_| {
+                    LlamaBatchExecutorError::InvalidConfiguration {
+                        field: "output_token_indices",
+                        reason: "output row count does not fit u64",
+                    }
+                })?;
+            {
+                let mut params = RowGatherParams {
+                    input: span(
+                        &buffers.hidden_norm,
+                        CudaDType::BF16,
+                        plan.workspace_spec().hidden_buffer_bytes(),
+                        gather_site,
+                    )?,
+                    row_indices: output_rows.output_indices,
+                    row_indices_host: output_rows.output_indices_host,
+                    output: span_mut(
+                        &mut buffers.hidden_rotary,
+                        CudaDType::BF16,
+                        gathered_rows * hidden * 2,
+                        gather_site,
+                    )?,
+                    input_row_count: dense_rows,
+                    column_count: hidden,
+                };
+                row_gather(&mut params, stream)
+                    .map_err(|source| batch_cuda(gather_site, source))?;
             }
-        })?;
-        {
-            let mut params = RowGatherParams {
-                input: span(
-                    &buffers.hidden_norm,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    gather_site,
-                )?,
-                row_indices: output_rows.output_indices,
-                row_indices_host: output_rows.output_indices_host,
-                output: span_mut(
-                    &mut buffers.hidden_rotary,
-                    CudaDType::BF16,
-                    gathered_rows * hidden * 2,
-                    gather_site,
-                )?,
-                input_row_count: dense_rows,
-                column_count: hidden,
-            };
-            row_gather(&mut params, stream).map_err(|source| batch_cuda(gather_site, source))?;
+            execute_gemm_with_row_groups(
+                output_rows.gemm,
+                &buffers.hidden_rotary,
+                weight_span(weights, plan.lm_head_weight(), lm_head_site)?,
+                output_rows.gathered_logits,
+                &mut buffers.gemm_workspace,
+                stream,
+                lm_head_site,
+                batch.host(),
+                Some(gathered_rows as usize),
+                owned_decode_batch,
+            )?;
+            return Ok(());
         }
         execute_gemm_with_row_groups(
-            output_rows.gemm,
-            &buffers.hidden_rotary,
+            &mut gemms.lm_head,
+            &buffers.hidden_norm,
             weight_span(weights, plan.lm_head_weight(), lm_head_site)?,
-            output_rows.gathered_logits,
+            &mut buffers.logits,
             &mut buffers.gemm_workspace,
             stream,
             lm_head_site,
-        batch.host(),Some(gathered_rows as usize),owned_decode_batch,
-)?;
-        return Ok(());
-    }
-    execute_gemm_with_row_groups(
-        &mut gemms.lm_head,
-        &buffers.hidden_norm,
-        weight_span(weights, plan.lm_head_weight(), lm_head_site)?,
-        &mut buffers.logits,
-        &mut buffers.gemm_workspace,
-        stream,
-        lm_head_site,
-    batch.host(),Some(batch.host().active_row_count() as usize),owned_decode_batch,
-)?;
-    Ok(())
+            batch.host(),
+            Some(batch.host().active_row_count() as usize),
+            owned_decode_batch,
+        )?;
+        Ok(())
     })
 }
 
@@ -2701,6 +3602,8 @@ const TENSOR_CORE_PROMPT_MIN_POSITION: u32 = 256;
 
 /// The first prompt position that takes the prompt-row producer: every prompt
 /// row with the dense prompt attention, else the bound above.
+// Copy configuration and borrowed descriptors keep the established execution/lease API.
+#[allow(clippy::large_types_passed_by_value)]
 const fn prompt_row_min_position(config: PreparedLlamaBatchExecutorConfig) -> u32 {
     if config.dense_prompt_attention() {
         0
@@ -2727,6 +3630,10 @@ fn is_tensor_core_prompt_row(
 /// word `max_input_tokens`, and returns how many bytes of `row_kinds` the
 /// step copies to the device: the kinds alone, or the kinds region and the
 /// list. `row_kinds` already holds this step's kinds.
+// Copy configuration and borrowed descriptors keep the established execution/lease API.
+#[allow(clippy::large_types_passed_by_value)]
+// Native rows and fixed geometry are bounded during cold preparation; preserve their bytes.
+#[allow(clippy::cast_possible_truncation)]
 fn fill_generated_row_list(
     config: PreparedLlamaBatchExecutorConfig,
     bounds: crate::llama::LlamaBatchMetadataConfig,
@@ -2856,6 +3763,10 @@ fn stage_bytes(
 /// The staged form of the synchronous token and metadata uploads: the same
 /// bytes for the same device buffers, written to pinned memory now and copied
 /// by [`copy_staged_step_uploads`] inside the iteration's command batch.
+// Keep cold validation and the audited execution/cleanup sequence together.
+#[allow(clippy::too_many_lines)]
+// Copy configuration and borrowed descriptors keep the established execution/lease API.
+#[allow(clippy::large_types_passed_by_value)]
 fn stage_step_uploads(
     host: &mut PerOperationHostWorkspace,
     forward: &mut PreparedLlamaForward,

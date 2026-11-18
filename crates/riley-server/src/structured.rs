@@ -6,7 +6,7 @@
 //! object properties in schema order, which keeps a model from filling its
 //! token budget with whitespace.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use riley_runtime::grammar::{ByteClass, Grammar, GrammarBuilder, GrammarElement};
@@ -85,7 +85,6 @@ pub struct SchemaCompiler {
     common: Common,
     root: Value,
     references: BTreeMap<String, u32>,
-    active_inline: HashSet<String>,
 }
 
 impl SchemaCompiler {
@@ -152,7 +151,8 @@ impl SchemaCompiler {
         let plain = ByteClass::range(0x20, 0x21)
             .union(ByteClass::range(0x23, 0x5b))
             .union(ByteClass::range(0x5d, 0x7f));
-        self.builder.alternative(id, vec![GrammarElement::Bytes(plain)]);
+        self.builder
+            .alternative(id, vec![GrammarElement::Bytes(plain)]);
         let simple_escape = GrammarElement::Bytes(
             ByteClass::byte(b'"')
                 .union(ByteClass::byte(b'\\'))
@@ -197,7 +197,12 @@ impl SchemaCompiler {
             .alternative(id, vec![class(0xee, 0xef), continuation, continuation]);
         self.builder.alternative(
             id,
-            vec![class(0xf0, 0xf0), class(0x90, 0xbf), continuation, continuation],
+            vec![
+                class(0xf0, 0xf0),
+                class(0x90, 0xbf),
+                continuation,
+                continuation,
+            ],
         );
         self.builder.alternative(
             id,
@@ -205,7 +210,12 @@ impl SchemaCompiler {
         );
         self.builder.alternative(
             id,
-            vec![class(0xf4, 0xf4), class(0x80, 0x8f), continuation, continuation],
+            vec![
+                class(0xf4, 0xf4),
+                class(0x80, 0x8f),
+                continuation,
+                continuation,
+            ],
         );
         self.common.multibyte_char = Some(id);
         id
@@ -368,7 +378,8 @@ impl SchemaCompiler {
         };
         // Without this the two recursions below double with every digit.
         if low.iter().all(|&digit| digit == b'0') && high.iter().all(|&digit| digit == b'9') {
-            self.builder.alternative(id, vec![class(b'0', b'9'); low.len()]);
+            self.builder
+                .alternative(id, vec![class(b'0', b'9'); low.len()]);
             return;
         }
         if low_first == high_first {
@@ -420,7 +431,11 @@ impl SchemaCompiler {
         }
     }
 
-    fn integer_range(&mut self, minimum: Option<i64>, maximum: Option<i64>) -> Result<u32, SchemaError> {
+    fn integer_range(
+        &mut self,
+        minimum: Option<i64>,
+        maximum: Option<i64>,
+    ) -> Result<u32, SchemaError> {
         match (minimum, maximum) {
             (None, None) => Ok(self.integer()),
             (Some(0), None) => Ok(self.natural()),
@@ -474,8 +489,10 @@ impl SchemaCompiler {
         let members = self
             .repetition(member, Some(&lead), 0, None)
             .unwrap_or(member);
-        self.builder
-            .alternative(id, concat(vec![bytes("{"), vec![rule(members)], bytes("}")]));
+        self.builder.alternative(
+            id,
+            concat(vec![bytes("{"), vec![rule(members)], bytes("}")]),
+        );
         let items = self.repetition(id, Some(&lead), 0, None).unwrap_or(id);
         self.builder
             .alternative(id, concat(vec![bytes("["), vec![rule(items)], bytes("]")]));
@@ -483,6 +500,9 @@ impl SchemaCompiler {
     }
 
     /// The grammar of `{...}` with any members, for `json_object` mode.
+    ///
+    /// # Errors
+    /// Returns an error if validation or durable record/grammar creation fails.
     pub fn any_object(&mut self) -> Result<u32, SchemaError> {
         let value = self.value();
         self.object_map(value, 0, None)
@@ -508,8 +528,10 @@ impl SchemaCompiler {
         );
         let members = self.repetition(member, Some(&lead), minimum, maximum)?;
         let id = self.builder.rule();
-        self.builder
-            .alternative(id, concat(vec![bytes("{"), vec![rule(members)], bytes("}")]));
+        self.builder.alternative(
+            id,
+            concat(vec![bytes("{"), vec![rule(members)], bytes("}")]),
+        );
         Ok(id)
     }
 
@@ -631,12 +653,21 @@ impl SchemaCompiler {
             ("null", &[]),
             ("boolean", &[]),
             ("string", &["minLength", "maxLength", "format", "pattern"]),
-            ("integer", &["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"]),
+            (
+                "integer",
+                &["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"],
+            ),
             ("number", &["minimum"]),
             ("array", &["items", "minItems", "maxItems"]),
             (
                 "object",
-                &["properties", "required", "additionalProperties", "minProperties", "maxProperties"],
+                &[
+                    "properties",
+                    "required",
+                    "additionalProperties",
+                    "minProperties",
+                    "maxProperties",
+                ],
             ),
         ];
         let allowed = TYPE_KEYWORDS
@@ -652,8 +683,7 @@ impl SchemaCompiler {
                 .any(|(_, keywords)| keywords.contains(&key.as_str()));
             if key != "type"
                 && !ANNOTATIONS.contains(&key.as_str())
-                && !allowed.contains(&key.as_str())
-                && !(multiple && known_elsewhere)
+                && !(allowed.contains(&key.as_str()) || multiple && known_elsewhere)
             {
                 return Err(unsupported(format!("{key} on type {name}")));
             }
@@ -673,18 +703,20 @@ impl SchemaCompiler {
             "integer" => {
                 let bound = |key: &str| -> Result<Option<i64>, SchemaError> {
                     object.get(key).map_or(Ok(None), |value| {
-                        value.as_i64().map(Some).ok_or_else(|| {
-                            unsupported(format!("non-integer {key} on an integer"))
-                        })
+                        value
+                            .as_i64()
+                            .map(Some)
+                            .ok_or_else(|| unsupported(format!("non-integer {key} on an integer")))
                     })
                 };
                 let above = |key: &str, step: i64| -> Result<Option<i64>, SchemaError> {
                     Ok(bound(key)?.map(|value| value.saturating_add(step)))
                 };
-                let tightest = |a: Option<i64>, b: Option<i64>, pick: fn(i64, i64) -> i64| match (a, b) {
-                    (Some(a), Some(b)) => Some(pick(a, b)),
-                    (a, b) => a.or(b),
-                };
+                let tightest =
+                    |a: Option<i64>, b: Option<i64>, pick: fn(i64, i64) -> i64| match (a, b) {
+                        (Some(a), Some(b)) => Some(pick(a, b)),
+                        (a, b) => a.or(b),
+                    };
                 self.integer_range(
                     tightest(bound("minimum")?, above("exclusiveMinimum", 1)?, i64::max),
                     tightest(bound("maximum")?, above("exclusiveMaximum", -1)?, i64::min),
@@ -734,7 +766,9 @@ impl SchemaCompiler {
         let mut position = 0;
         let matched = self.pattern_alternation(&characters, &mut position)?;
         if position != characters.len() {
-            return Err(unsupported(format!("pattern {pattern:?}: unbalanced group")));
+            return Err(unsupported(format!(
+                "pattern {pattern:?}: unbalanced group"
+            )));
         }
         let free = self.string_char();
         let any = self.repetition(free, None, 0, None)?;
@@ -779,12 +813,9 @@ impl SchemaCompiler {
                 break;
             }
             let atom = self.pattern_atom(characters, position)?;
-            let (minimum, maximum) = match pattern_quantifier(characters, position)? {
-                Some(bounds) => bounds,
-                None => {
-                    sequence.extend(atom);
-                    continue;
-                }
+            let Some((minimum, maximum)) = pattern_quantifier(characters, position)? else {
+                sequence.extend(atom);
+                continue;
             };
             let item = self.builder.rule();
             self.builder.alternative(item, atom);
@@ -828,9 +859,9 @@ impl SchemaCompiler {
                     None => Err(unsupported(format!("pattern escape \\{escape}"))),
                 }
             }
-            '*' | '+' | '?' | '{' | '^' | '$' => {
-                Err(unsupported(format!("pattern operator {next} in this position")))
-            }
+            '*' | '+' | '?' | '{' | '^' | '$' => Err(unsupported(format!(
+                "pattern operator {next} in this position"
+            ))),
             literal => pattern_literal(literal),
         }
     }
@@ -891,7 +922,8 @@ impl SchemaCompiler {
         }
         let id = self.builder.rule();
         let multibyte = self.multibyte_char();
-        self.builder.alternative(id, vec![GrammarElement::Bytes(complement)]);
+        self.builder
+            .alternative(id, vec![GrammarElement::Bytes(complement)]);
         self.builder.alternative(id, vec![rule(multibyte)]);
         Ok(vec![rule(id)])
     }
@@ -899,14 +931,26 @@ impl SchemaCompiler {
     fn string_format(&mut self, format: &str) -> Result<u32, SchemaError> {
         let digit = || class(b'0', b'9');
         let date = vec![
-            digit(), digit(), digit(), digit(),
-            class(b'-', b'-'), class(b'0', b'1'), digit(),
-            class(b'-', b'-'), class(b'0', b'3'), digit(),
+            digit(),
+            digit(),
+            digit(),
+            digit(),
+            class(b'-', b'-'),
+            class(b'0', b'1'),
+            digit(),
+            class(b'-', b'-'),
+            class(b'0', b'3'),
+            digit(),
         ];
         let time = vec![
-            class(b'0', b'2'), digit(), class(b':', b':'),
-            class(b'0', b'5'), digit(), class(b':', b':'),
-            class(b'0', b'5'), digit(),
+            class(b'0', b'2'),
+            digit(),
+            class(b':', b':'),
+            class(b'0', b'5'),
+            digit(),
+            class(b':', b':'),
+            class(b'0', b'5'),
+            digit(),
         ];
         let id = self.builder.rule();
         let body = match format {
@@ -919,8 +963,15 @@ impl SchemaCompiler {
                 );
                 let dash = class(b'-', b'-');
                 concat(vec![
-                    vec![hex; 8], vec![dash], vec![hex; 4], vec![dash], vec![hex; 4],
-                    vec![dash], vec![hex; 4], vec![dash], vec![hex; 12],
+                    vec![hex; 8],
+                    vec![dash],
+                    vec![hex; 4],
+                    vec![dash],
+                    vec![hex; 4],
+                    vec![dash],
+                    vec![hex; 4],
+                    vec![dash],
+                    vec![hex; 12],
                 ])
             }
             other => return Err(unsupported(format!("string format {other}"))),
@@ -965,7 +1016,11 @@ impl SchemaCompiler {
                 }
                 _ => self.value(),
             };
-            return self.object_map(value, bound("minProperties").unwrap_or(0), bound("maxProperties"));
+            return self.object_map(
+                value,
+                bound("minProperties").unwrap_or(0),
+                bound("maxProperties"),
+            );
         };
         if object.contains_key("minProperties") || object.contains_key("maxProperties") {
             return Err(unsupported("minProperties with properties"));
@@ -980,7 +1035,10 @@ impl SchemaCompiler {
                 .map(|names| names.iter().filter_map(Value::as_str).collect())
                 .ok_or_else(|| SchemaError("required must be an array".to_owned()))?,
         };
-        if let Some(name) = required.iter().find(|name| !properties.contains_key(**name)) {
+        if let Some(name) = required
+            .iter()
+            .find(|name| !properties.contains_key(**name))
+        {
             return Err(unsupported(format!("required {name} without a property")));
         }
         let separator = self.separator();
@@ -991,7 +1049,8 @@ impl SchemaCompiler {
         self.builder.alternative(rest[0], Vec::new());
         self.builder.alternative(rest[1], Vec::new());
         for (name, schema) in properties.iter().rev() {
-            let key = serde_json::to_string(name).map_err(|error| SchemaError(error.to_string()))?;
+            let key =
+                serde_json::to_string(name).map_err(|error| SchemaError(error.to_string()))?;
             let value = self.schema(schema)?;
             let member = concat(vec![
                 bytes(&key),
@@ -1014,8 +1073,10 @@ impl SchemaCompiler {
             rest = [without, with];
         }
         let id = self.builder.rule();
-        self.builder
-            .alternative(id, concat(vec![bytes("{"), vec![rule(rest[0])], bytes("}")]));
+        self.builder.alternative(
+            id,
+            concat(vec![bytes("{"), vec![rule(rest[0])], bytes("}")]),
+        );
         Ok(id)
     }
 }
@@ -1066,7 +1127,9 @@ fn pattern_quantifier(
                 .iter()
                 .position(|character| *character == '}')
                 .ok_or_else(|| unsupported("pattern with an unclosed {"))?;
-            let body: String = characters[*position + 1..*position + close].iter().collect();
+            let body: String = characters[*position + 1..*position + close]
+                .iter()
+                .collect();
             *position += close;
             let number = |text: &str| {
                 text.parse::<u64>()
@@ -1124,6 +1187,7 @@ mod tests {
         automaton.advance(&mut cursor, text.as_bytes()) && automaton.is_accepting(&mut cursor)
     }
 
+    #[allow(clippy::needless_pass_by_value)] // Test cases pass owned JSON literals.
     fn rejected(schema: Value) -> String {
         compile_schema(&schema).unwrap_err().0
     }
@@ -1192,8 +1256,14 @@ mod tests {
         assert!(accepts(&bounded, "\"ab\""));
         assert!(accepts(&bounded, "\"한글자\""));
         assert!(!accepts(&bounded, "\"abcd\""));
-        assert!(accepts(&json!({"type": "string", "format": "date"}), "\"2026-11-02\""));
-        assert!(!accepts(&json!({"type": "string", "format": "date"}), "\"2026-1-2\""));
+        assert!(accepts(
+            &json!({"type": "string", "format": "date"}),
+            "\"2026-11-02\""
+        ));
+        assert!(!accepts(
+            &json!({"type": "string", "format": "date"}),
+            "\"2026-1-2\""
+        ));
         assert!(accepts(
             &json!({"type": "string", "format": "uuid"}),
             "\"123e4567-e89b-42d3-a456-426614174000\""
@@ -1215,7 +1285,10 @@ mod tests {
         });
         assert!(accepts(&schema, r#"{"b":"x"}"#));
         assert!(accepts(&schema, r#"{"a":1,"b":"x"}"#));
-        assert!(accepts(&schema, r#"{"a": 1, "b": "x", "c": [true, false]}"#));
+        assert!(accepts(
+            &schema,
+            r#"{"a": 1, "b": "x", "c": [true, false]}"#
+        ));
         assert!(accepts(&schema, r#"{"b":"x","c":[true]}"#));
         assert!(!accepts(&schema, r#"{"a":1}"#));
         assert!(!accepts(&schema, r#"{"b":"x","c":[]}"#));
@@ -1227,7 +1300,12 @@ mod tests {
     #[test]
     fn all_optional_properties_never_leave_a_stray_comma() {
         let schema = json!({"properties": {"a": {"type": "null"}, "b": {"type": "null"}}});
-        for text in ["{}", r#"{"a":null}"#, r#"{"b":null}"#, r#"{"a":null,"b":null}"#] {
+        for text in [
+            "{}",
+            r#"{"a":null}"#,
+            r#"{"b":null}"#,
+            r#"{"a":null,"b":null}"#,
+        ] {
             assert!(accepts(&schema, text), "{text}");
         }
         assert!(!accepts(&schema, r#"{,"b":null}"#));
@@ -1269,7 +1347,12 @@ mod tests {
         assert!(!accepts(&phone, "\"555-123\""));
         assert!(!accepts(&phone, "\"x555-1234\""));
         let word = anchored(r"^(cat|dog)s?$");
-        for (text, expected) in [("cat", true), ("dogs", true), ("cow", false), ("catss", false)] {
+        for (text, expected) in [
+            ("cat", true),
+            ("dogs", true),
+            ("cow", false),
+            ("catss", false),
+        ] {
             assert_eq!(accepts(&word, &format!("\"{text}\"")), expected, "{text}");
         }
         let class = anchored(r"^[a-c_]+[^a-c]$");
@@ -1285,7 +1368,8 @@ mod tests {
 
     #[test]
     fn exclusive_integer_bounds() {
-        let schema = json!({"type": "integer", "exclusiveMinimum": 2, "exclusiveMaximum": 5, "minimum": 1});
+        let schema =
+            json!({"type": "integer", "exclusiveMinimum": 2, "exclusiveMaximum": 5, "minimum": 1});
         for (value, expected) in [(2, false), (3, true), (4, true), (5, false)] {
             assert_eq!(accepts(&schema, &value.to_string()), expected, "{value}");
         }
@@ -1296,7 +1380,9 @@ mod tests {
         assert!(rejected(json!({"type": "string", "pattern": "(?=a)b"})).contains("lookaround"));
         assert!(rejected(json!({"type": "string", "pattern": "a+?"})).contains("lazy"));
         assert!(rejected(json!({"type": "string", "pattern": "\\bword"})).contains("escape"));
-        assert!(rejected(json!({"type": "string", "pattern": "a", "maxLength": 3})).contains("pattern"));
+        assert!(
+            rejected(json!({"type": "string", "pattern": "a", "maxLength": 3})).contains("pattern")
+        );
         assert!(rejected(json!({"type": "array", "uniqueItems": true})).contains("uniqueItems"));
         assert!(rejected(json!({"type": "number", "maximum": 3})).contains("maximum"));
         assert!(rejected(json!({"type": "number", "minimum": 2})).contains("minimum"));

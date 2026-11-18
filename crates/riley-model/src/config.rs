@@ -1550,7 +1550,7 @@ mod tests {
             config
                 .warnings()
                 .iter()
-                .map(|warning| warning.field())
+                .map(super::ConfigWarning::field)
                 .collect::<Vec<_>>(),
             [
                 "attention_dropout",
@@ -1618,10 +1618,19 @@ mod tests {
             .to_model_spec();
         let rank = spec.tensor_parallel_rank_spec(3).unwrap();
         for (whole, part) in spec.blocks().iter().zip(rank.blocks()) {
-            assert_eq!(part.attention().query_heads(), whole.attention().query_heads() / 3);
+            assert_eq!(
+                part.attention().query_heads(),
+                whole.attention().query_heads() / 3
+            );
             assert_eq!(part.attention().key_value_heads(), 1);
-            assert_eq!(part.attention().head_dimension(), whole.attention().head_dimension());
-            assert_eq!(part.attention().hidden_size(), whole.attention().hidden_size());
+            assert_eq!(
+                part.attention().head_dimension(),
+                whole.attention().head_dimension()
+            );
+            assert_eq!(
+                part.attention().hidden_size(),
+                whole.attention().hidden_size()
+            );
             assert_eq!(part.mlp().intermediate_size(), 512);
         }
         assert_eq!(spec.tensor_parallel_rank_spec(1).unwrap(), spec);

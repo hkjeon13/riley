@@ -14,6 +14,8 @@ from pathlib import Path
 from unittest import mock
 
 
+from release_test_environment import requires_legacy_host
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 RELEASE_DIRECTORY = Path(__file__).resolve().parent
 ISOLATED_PYTHON = ("/usr/bin/python3.10", "-I", "-S", "-E", "-B")
@@ -363,6 +365,8 @@ class ReconstructedRuntimePythonPrerequisiteTests(unittest.TestCase):
 
         deep_json = b"[" * 8000 + b"]" * 8000
         self.assert_reason("probe-json-nesting-too-deep", lambda: checker._parse_probe(deep_json))
+        quoted_brackets = b'{"text":' + checker.canonical_json_bytes('[' * 1000 + '\\"') + b'}'
+        self.assert_reason("invalid-probe-schema", lambda: checker._parse_probe(quoted_brackets))
 
     def test_main_writes_canonical_stdout_without_a_trailing_newline(self) -> None:
         expected = {"checked": True}
@@ -373,6 +377,7 @@ class ReconstructedRuntimePythonPrerequisiteTests(unittest.TestCase):
             self.assertEqual(checker.main(["--python", "/external/python3.13"]), 0)
         self.assertEqual(output.getvalue(), checker.canonical_json_bytes(expected).decode("utf-8"))
 
+    @requires_legacy_host
     def test_public_cli_is_isolated_and_never_executes_ambient_python(self) -> None:
         runner = REPOSITORY_ROOT / "ci" / "release" / "check_reconstructed_runtime_python_prerequisite_v1.py"
         help_result = subprocess.run(

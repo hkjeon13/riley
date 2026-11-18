@@ -29,8 +29,12 @@ def _sha256(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+from release_test_environment import require_linux_proc
+
+
 class PrefreezeFixture:
     def __init__(self, base: Path) -> None:
+        require_linux_proc()
         self.root = base / "checkout"
         self.root.mkdir(parents=True)
         self.defaults = b"fixture reviewed Rust serve defaults\n"
@@ -378,9 +382,9 @@ class Rc3PrefreezeTests(unittest.TestCase):
             second.run(defaults_sha256="f" * 64)
         self.assert_reason(raised, "server-defaults-source-mismatch")
 
-    def test_checked_in_reviewed_server_defaults_pin_matches_source(self) -> None:
+    def test_legacy_reviewed_server_defaults_pin_matches_fixture(self) -> None:
         repository_root = Path(__file__).resolve().parents[2]
-        source = repository_root / checker.SERVER_DEFAULTS_SOURCE_PATH
+        source = repository_root / "ci/release/fixtures/legacy-server-defaults-21f445f.rs.txt"
         self.assertEqual(
             _sha256(source.read_bytes()),
             checker.SERVER_DEFAULTS_SOURCE_SHA256,

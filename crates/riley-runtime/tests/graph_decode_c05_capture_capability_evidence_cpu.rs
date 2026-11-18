@@ -114,6 +114,8 @@ fn query_body() -> &'static str {
 }
 
 #[test]
+// Keep the complete source-ownership oracle together.
+#[allow(clippy::too_many_lines)]
 fn c05_capture_capability_evidence_stays_exact_private_and_cold() {
     let source = production_source();
     for token in REQUIRED_PRODUCTION_TOKENS {

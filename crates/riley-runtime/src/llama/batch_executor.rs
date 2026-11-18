@@ -68,6 +68,8 @@ pub(super) enum BatchOutputMode {
     GreedyTokens,
 }
 
+// Copy configuration and borrowed descriptors keep the established execution/lease API.
+#[allow(clippy::large_types_passed_by_value)]
 fn shape_history_for_config(
     config: PreparedLlamaBatchExecutorConfig,
 ) -> LlamaBatchExecutorResult<LlamaBatchShapeHistory> {
@@ -132,6 +134,8 @@ impl PreparedLlamaBatchExecutor {
     /// upload, or checked KV-layout error. No partially prepared owner is
     /// returned.
     #[allow(clippy::too_many_lines)]
+    // Copy configuration and borrowed descriptors keep the established execution/lease API.
+    #[allow(clippy::large_types_passed_by_value)]
     pub fn prepare(
         model: &LoadedModel,
         context: &CudaContext,
@@ -220,17 +224,29 @@ impl PreparedLlamaBatchExecutor {
     /// Arithmetic profile resolved by this successfully prepared owner.
     #[must_use]
     pub const fn numerics_profile_id(&self) -> &'static str {
-        if self.owner.forward.owned_hf_eager_bf16 { "owned-hf-eager-bf16-v1" } else { "existing" }
+        if self.owner.forward.owned_hf_eager_bf16 {
+            "owned-hf-eager-bf16-v1"
+        } else {
+            "existing"
+        }
     }
 
     #[must_use]
-    pub const fn output_projection_backend_id(&self) -> &'static str { self.owner.forward.output_projection_backend_id() }
+    pub const fn output_projection_backend_id(&self) -> &'static str {
+        self.owner.forward.output_projection_backend_id()
+    }
     #[must_use]
-    pub const fn mlp_projection_backend_id(&self) -> &'static str { self.owner.forward.mlp_projection_backend_id() }
+    pub const fn mlp_projection_backend_id(&self) -> &'static str {
+        self.owner.forward.mlp_projection_backend_id()
+    }
     #[must_use]
-    pub const fn lm_head_backend_id(&self) -> &'static str { self.owner.forward.lm_head_backend_id() }
+    pub const fn lm_head_backend_id(&self) -> &'static str {
+        self.owner.forward.lm_head_backend_id()
+    }
     #[must_use]
-    pub const fn rms_norm_backend_id(&self) -> &'static str { self.owner.forward.rms_norm_backend_id() }
+    pub const fn rms_norm_backend_id(&self) -> &'static str {
+        self.owner.forward.rms_norm_backend_id()
+    }
 
     /// Stable C02 identifier for the completion boundary frozen during cold
     /// preparation. This reads the normalized prepared configuration, not a
@@ -268,8 +284,11 @@ impl PreparedLlamaBatchExecutor {
     /// preference requested by the caller.
     #[must_use]
     pub fn prefill_attention_implementation_id(&self) -> &'static str {
-        if self.owner.forward.owned_hf_eager_bf16 { "riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1" }
-        else { self.owner.forward.attention_selection().implementation_id() }
+        if self.owner.forward.owned_hf_eager_bf16 {
+            "riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1"
+        } else {
+            self.owner.forward.attention_selection().implementation_id()
+        }
     }
 
     /// Stable ID of the ragged paged-attention implementation bound to this
@@ -292,8 +311,11 @@ impl PreparedLlamaBatchExecutor {
     /// exposed here.
     #[must_use]
     pub const fn gemm_reduction_policy_aggregate_id(&self) -> &'static str {
-        if self.owner.forward.owned_hf_eager_bf16 { "owned-hf-eager-bf16-v1" }
-        else { self.owner.forward.reduction_profile().id() }
+        if self.owner.forward.owned_hf_eager_bf16 {
+            "owned-hf-eager-bf16-v1"
+        } else {
+            self.owner.forward.reduction_profile().id()
+        }
     }
 
     /// Stable ID of the Q/K/V bias implementation selected during cold
@@ -316,8 +338,11 @@ impl PreparedLlamaBatchExecutor {
     /// Runtime selection contract bound to the prepared reduction profile.
     #[must_use]
     pub const fn runtime_selection_policy_id(&self) -> &'static str {
-        if self.owner.forward.owned_hf_eager_bf16 { "fail-closed" }
-        else { runtime_selection_policy_id(self.owner.forward.reduction_profile()) }
+        if self.owner.forward.owned_hf_eager_bf16 {
+            "fail-closed"
+        } else {
+            runtime_selection_policy_id(self.owner.forward.reduction_profile())
+        }
     }
 
     /// Number of exact dense-row plans owned by this executor, including the
@@ -423,7 +448,12 @@ impl PreparedLlamaBatchExecutor {
     pub fn is_poisoned(&self) -> bool {
         self.owner.poisoned
             || self.owner.forward.poisoned
-            || self.owner.forward.batch_output_lm_head.as_ref().is_some_and(|p|p.is_poisoned())
+            || self
+                .owner
+                .forward
+                .batch_output_lm_head
+                .as_ref()
+                .is_some_and(super::forward::PreparedLlamaGemm::is_poisoned)
             || self
                 .owner
                 .shape_variants
@@ -438,55 +468,165 @@ impl PreparedLlamaBatchExecutor {
     /// are created. Future requests overwrite their logical prefixes normally.
     /// The caller must choose the same output mode as serving. Logit and greedy
     /// graphs have separate keys, so switching mode cannot reuse stale outputs.
-    pub fn warm_owned_qwen_decode_graphs(&mut self,greedy:bool,stream:&mut CudaStream)->LlamaBatchExecutorResult<bool>{
-        let d=self.owner.forward.plan.dimensions();let bounds=self.config.metadata();
-        let count=bounds.max_rows().min(bounds.max_output_slots());
-        if !self.config.owned_decode_graph() || self.config.owned_decode_batch()!=10 || self.config.owned_mlp_graphs()
-            || (d.hidden_size(),d.query_heads(),d.key_value_heads(),d.head_dimension(),d.intermediate_size())!=(2560,32,8,128,9728)
-            || !(2..=32).contains(&count) || bounds.max_input_tokens()<128 || bounds.physical_block_count()<count*16
-            || bounds.max_block_entries()<count*9 || self.config.serving_sequence_token_bound().unwrap_or(self.owner.forward.plan.sequence_length())<131 {
+    // Keep cold validation and the audited execution/cleanup sequence together.
+    #[allow(clippy::too_many_lines)]
+    // Local types/imports document the adjacent prepared-workspace path.
+    #[allow(clippy::items_after_statements)]
+    // Native rows and fixed geometry are bounded during cold preparation; preserve their bytes.
+    #[allow(clippy::cast_possible_truncation)]
+    // Warm-up lengths are bounded positive fixture dimensions.
+    #[allow(clippy::cast_sign_loss)]
+    pub fn warm_owned_qwen_decode_graphs(
+        &mut self,
+        greedy: bool,
+        stream: &mut CudaStream,
+    ) -> LlamaBatchExecutorResult<bool> {
+        let d = self.owner.forward.plan.dimensions();
+        let bounds = self.config.metadata();
+        let count = bounds.max_rows().min(bounds.max_output_slots());
+        if !self.config.owned_decode_graph()
+            || self.config.owned_decode_batch() != 10
+            || self.config.owned_mlp_graphs()
+            || (
+                d.hidden_size(),
+                d.query_heads(),
+                d.key_value_heads(),
+                d.head_dimension(),
+                d.intermediate_size(),
+            ) != (2560, 32, 8, 128, 9728)
+            || !(2..=32).contains(&count)
+            || bounds.max_input_tokens() < 128
+            || bounds.physical_block_count() < count * 16
+            || bounds.max_block_entries() < count * 9
+            || self
+                .config
+                .serving_sequence_token_bound()
+                .unwrap_or(self.owner.forward.plan.sequence_length())
+                < 131
+        {
             return Ok(false);
         }
         if self.shape_history.last_success().is_some() || self.owner.poisoned {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"owned graph warmup",reason:"warmup is only valid before the first external iteration"});
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "owned graph warmup",
+                reason: "warmup is only valid before the first external iteration",
+            });
         }
-        use super::batch::{LlamaBatchBlockTable,LlamaBatchRowKind};
+        use super::batch::{LlamaBatchBlockTable, LlamaBatchRowKind};
         use crate::paged_kv::BLOCK_TABLE_V1_VERSION;
-        let history=self.shape_history;let prompt=vec![0u32;128];let token=[0u32];
-        let tables=(0..count).map(|r|(0..9).map(|p|(r*16+p)as u32).collect::<Vec<_>>()).collect::<Vec<_>>();
-        let valid_prefill=vec![16u16;8];let chunk=(bounds.max_input_tokens()/128).min(count);
-        for first in (0..count).step_by(chunk){let end=(first+chunk).min(count);
-            let rows=(first..end).enumerate().map(|(slot,r)|LlamaBatchRow::new(u64::MAX-r as u64,LlamaBatchRowKind::Prefill,&prompt,128,LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION,&tables[r][..8],&valid_prefill,128),Some(slot as u32))).collect::<Vec<_>>();
-            if greedy{self.execute_greedy(&rows,stream)?;}else{self.execute(&rows,stream)?;}
+        let history = self.shape_history;
+        let prompt = vec![0u32; 128];
+        let token = [0u32];
+        let tables = (0..count)
+            .map(|r| (0..9).map(|p| (r * 16 + p) as u32).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let valid_prefill = vec![16u16; 8];
+        let chunk = (bounds.max_input_tokens() / 128).min(count);
+        for first in (0..count).step_by(chunk) {
+            let end = (first + chunk).min(count);
+            let rows = (first..end)
+                .enumerate()
+                .map(|(slot, r)| {
+                    LlamaBatchRow::new(
+                        u64::MAX - r as u64,
+                        LlamaBatchRowKind::Prefill,
+                        &prompt,
+                        128,
+                        LlamaBatchBlockTable::new(
+                            BLOCK_TABLE_V1_VERSION,
+                            &tables[r][..8],
+                            &valid_prefill,
+                            128,
+                        ),
+                        Some(slot as u32),
+                    )
+                })
+                .collect::<Vec<_>>();
+            if greedy {
+                self.execute_greedy(&rows, stream)?;
+            } else {
+                self.execute(&rows, stream)?;
+            }
         }
         // Prewarm every layer/count piece using the same stable parent buffers.
         // Temporarily select the MLP-only route so captures never nest in body
         // graphs. Restore policy even when a startup execution fails.
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        if let Some(g)=self.owner.owned_mlp_graphs.as_mut(){g.set_capture_allowed(true);}
-        let original_config=self.config;
-        self.config=self.config.with_owned_mlp_graphs();
-        let piecewise_warm=(||->LlamaBatchExecutorResult<()>{
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if let Some(g) = self.owner.owned_mlp_graphs.as_mut() {
+            g.set_capture_allowed(true);
+        }
+        let original_config = self.config;
+        self.config = self.config.with_owned_mlp_graphs();
+        let piecewise_warm = (|| -> LlamaBatchExecutorResult<()> {
             for active in 1..=count {
-                let mut valid=vec![16u16;9];valid[8]=1;
-                let rows=(0..active).map(|r|LlamaBatchRow::new(u64::MAX-r as u64,LlamaBatchRowKind::Decode,&token,129,LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION,&tables[r],&valid,129),Some(r as u32))).collect::<Vec<_>>();
-                if greedy{self.execute_greedy(&rows,stream)?;}else{self.execute(&rows,stream)?;}
+                let mut valid = vec![16u16; 9];
+                valid[8] = 1;
+                let rows = (0..active)
+                    .map(|r| {
+                        LlamaBatchRow::new(
+                            u64::MAX - r as u64,
+                            LlamaBatchRowKind::Decode,
+                            &token,
+                            129,
+                            LlamaBatchBlockTable::new(
+                                BLOCK_TABLE_V1_VERSION,
+                                &tables[r],
+                                &valid,
+                                129,
+                            ),
+                            Some(r as u32),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                if greedy {
+                    self.execute_greedy(&rows, stream)?;
+                } else {
+                    self.execute(&rows, stream)?;
+                }
             }
             Ok(())
         })();
-        self.config=original_config;
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        if let Some(g)=self.owner.owned_mlp_graphs.as_mut(){g.set_capture_allowed(false);}
+        self.config = original_config;
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if let Some(g) = self.owner.owned_mlp_graphs.as_mut() {
+            g.set_capture_allowed(false);
+        }
         piecewise_warm?;
         eprintln!("RILEY_PIECEWISE_WARMUP rows=1..{count} complete=true capture_sealed=true");
-        for active in 1..=count{for length in 129..=131{
-            let mut valid=vec![16u16;9];valid[8]=(length-128)as u16;
-            let rows=(0..active).map(|r|LlamaBatchRow::new(u64::MAX-r as u64,LlamaBatchRowKind::Decode,&token,length as u32,LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION,&tables[r],&valid,length as u32),Some(r as u32))).collect::<Vec<_>>();
-            if greedy{self.execute_greedy(&rows,stream)?;}else{self.execute(&rows,stream)?;}
-        }}
+        for active in 1..=count {
+            for length in 129..=131 {
+                let mut valid = vec![16u16; 9];
+                valid[8] = (length - 128) as u16;
+                let rows = (0..active)
+                    .map(|r| {
+                        LlamaBatchRow::new(
+                            u64::MAX - r as u64,
+                            LlamaBatchRowKind::Decode,
+                            &token,
+                            length as u32,
+                            LlamaBatchBlockTable::new(
+                                BLOCK_TABLE_V1_VERSION,
+                                &tables[r],
+                                &valid,
+                                length as u32,
+                            ),
+                            Some(r as u32),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                if greedy {
+                    self.execute_greedy(&rows, stream)?;
+                } else {
+                    self.execute(&rows, stream)?;
+                }
+            }
+        }
         // Startup iterations never appear as externally consumed output/history.
-        self.shape_history=history;self.output_count=0;self.output_ready=false;
-        self.output_mode=BatchOutputMode::Logits;self.owner.forward.output_ready=false;
+        self.shape_history = history;
+        self.output_count = 0;
+        self.output_ready = false;
+        self.output_mode = BatchOutputMode::Logits;
+        self.owner.forward.output_ready = false;
         eprintln!("RILEY_OWNED_BODY_WARMUP rows=1..{count} greedy={greedy} complete=true");
         Ok(true)
     }
@@ -536,6 +676,8 @@ impl PreparedLlamaBatchExecutor {
         self.execute_output(rows, BatchOutputMode::GreedyTokens, stream)
     }
 
+    // Keep cold validation and the audited execution/cleanup sequence together.
+    #[allow(clippy::too_many_lines)]
     pub(super) fn execute_output(
         &mut self,
         rows: &[LlamaBatchRow<'_>],
@@ -568,7 +710,7 @@ impl PreparedLlamaBatchExecutor {
             followers,
         } = self;
         let PreparedLlamaBatchOwner {
-            #[cfg(feature="cuda-cublas-gemm-probe")]
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
             owned_mlp_graphs,
             metadata,
             forward,
@@ -585,7 +727,11 @@ impl PreparedLlamaBatchExecutor {
             host,
             poisoned,
         } = owner;
-        let packed = if config.owned_decode_graph() && config.owned_decode_batch()==10 {metadata.pack_decode_first(rows)?}else{metadata.pack(rows)?};
+        let packed = if config.owned_decode_graph() && config.owned_decode_batch() == 10 {
+            metadata.pack_decode_first(rows)?
+        } else {
+            metadata.pack(rows)?
+        };
         let active_rows = packed.total_input_tokens();
         config.select_dense_rows(active_rows)?;
         let selected_dense_rows = select_prepared_dense_rows(
@@ -632,14 +778,19 @@ impl PreparedLlamaBatchExecutor {
             gathered_logits,
             greedy_results,
             native_d128_two_stage_workspace.as_mut(),
-            #[cfg(feature="cuda-cublas-gemm-probe")]
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
             owned_mlp_graphs.as_mut(),
             host,
             output_mode_requested,
             &mut dispatch_disposition,
             stream,
         );
-        let result = match (result, followers.as_mut().map(|followers| followers.wait())) {
+        let result = match (
+            result,
+            followers
+                .as_mut()
+                .map(super::tensor_parallel::TensorParallelFollowers::wait),
+        ) {
             (Ok(()), Some(Err(error))) => {
                 // A rank that did not run this iteration leaves the group
                 // unusable: its KV state and barrier epochs differ.
@@ -674,7 +825,11 @@ impl PreparedLlamaBatchExecutor {
                 }
                 let forward_gemms = &forward.gemms;
                 poison_for_batch_error(poisoned, &mut forward.poisoned, &error, || {
-                    forward_gemms.any_poisoned() || forward.batch_output_lm_head.as_ref().is_some_and(|p|p.is_poisoned())
+                    forward_gemms.any_poisoned()
+                        || forward
+                            .batch_output_lm_head
+                            .as_ref()
+                            .is_some_and(super::forward::PreparedLlamaGemm::is_poisoned)
                 });
                 *poisoned |= shape_variants
                     .iter()
@@ -840,8 +995,12 @@ impl PreparedLlamaBatchExecutor {
                 reason: "row offset overflowed",
             }
         })?;
-        match gathered.download_to_slice(offset, destination, &mut self.owner.forward.io_staging, stream)
-        {
+        match gathered.download_to_slice(
+            offset,
+            destination,
+            &mut self.owner.forward.io_staging,
+            stream,
+        ) {
             Ok(()) => Ok(()),
             Err(source) => {
                 poison_for_cuda_error(&mut self.owner.poisoned, &source);
@@ -901,27 +1060,41 @@ impl PreparedLlamaBatchExecutor {
             field: "logprob_summaries",
             reason,
         };
-        let logits_bytes = self.output_count.saturating_mul(self.vocabulary_size()).saturating_mul(2);
+        let logits_bytes = self
+            .output_count
+            .saturating_mul(self.vocabulary_size())
+            .saturating_mul(2);
         let greedy_bytes = self.greedy_result_byte_len_for(self.output_count)?;
         let result = {
-            let logits = self
-                .owner
-                .gathered_logits
-                .as_ref()
-                .ok_or(invalid("non-empty output has no cold-prepared device buffer"))?;
-            let greedy = self
-                .owner
-                .greedy_results
-                .as_ref()
-                .ok_or(invalid("non-empty output has no cold-prepared greedy result buffer"))?;
-            let as_u64 = |value: usize| u64::try_from(value).map_err(|_| invalid("size overflowed"));
-            let logits = riley_cuda::CudaBufferSpan::new(logits, riley_cuda::CudaDType::BF16, 0, as_u64(logits_bytes)?)
-                .map_err(|source| batch_cuda(site, source))?;
-            let greedy = riley_cuda::CudaBufferSpan::new(greedy, riley_cuda::CudaDType::U32, 0, as_u64(greedy_bytes)?)
-                .map_err(|source| batch_cuda(site, source))?;
-            let mut summaries =
-                riley_cuda::CudaBufferSpanMut::new(device, riley_cuda::CudaDType::U32, 0, as_u64(record_bytes)?)
-                    .map_err(|source| batch_cuda(site, source))?;
+            let logits = self.owner.gathered_logits.as_ref().ok_or(invalid(
+                "non-empty output has no cold-prepared device buffer",
+            ))?;
+            let greedy = self.owner.greedy_results.as_ref().ok_or(invalid(
+                "non-empty output has no cold-prepared greedy result buffer",
+            ))?;
+            let as_u64 =
+                |value: usize| u64::try_from(value).map_err(|_| invalid("size overflowed"));
+            let logits = riley_cuda::CudaBufferSpan::new(
+                logits,
+                riley_cuda::CudaDType::BF16,
+                0,
+                as_u64(logits_bytes)?,
+            )
+            .map_err(|source| batch_cuda(site, source))?;
+            let greedy = riley_cuda::CudaBufferSpan::new(
+                greedy,
+                riley_cuda::CudaDType::U32,
+                0,
+                as_u64(greedy_bytes)?,
+            )
+            .map_err(|source| batch_cuda(site, source))?;
+            let mut summaries = riley_cuda::CudaBufferSpanMut::new(
+                device,
+                riley_cuda::CudaDType::U32,
+                0,
+                as_u64(record_bytes)?,
+            )
+            .map_err(|source| batch_cuda(site, source))?;
             riley_cuda::bf16_logprob_summary(
                 &logits,
                 &greedy,
@@ -933,7 +1106,9 @@ impl PreparedLlamaBatchExecutor {
                 stream,
             )
         }
-        .and_then(|()| device.download_to_slice(0, destination, &mut self.owner.forward.io_staging, stream));
+        .and_then(|()| {
+            device.download_to_slice(0, destination, &mut self.owner.forward.io_staging, stream)
+        });
         result.map_err(|source| {
             poison_for_cuda_error(&mut self.owner.poisoned, &source);
             batch_cuda(site, source)
@@ -1027,9 +1202,12 @@ impl PreparedLlamaBatchExecutor {
     }
 
     /// Counters for the optional owned MLP graph cache.
-    #[cfg(feature="cuda-cublas-gemm-probe")]
-    pub fn owned_mlp_graph_stats(&self)->Option<riley_cuda::CudaOwnedHfMlpGraphStats>{
-        self.owner.owned_mlp_graphs.as_ref().map(riley_cuda::CudaOwnedHfMlpGraph::stats)
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    pub fn owned_mlp_graph_stats(&self) -> Option<riley_cuda::CudaOwnedHfMlpGraphStats> {
+        self.owner
+            .owned_mlp_graphs
+            .as_ref()
+            .map(riley_cuda::CudaOwnedHfMlpGraph::stats)
     }
 
     /// Explicitly closes all extra batch allocations, then the reused forward.
@@ -1040,7 +1218,10 @@ impl PreparedLlamaBatchExecutor {
     /// Returns the first CUDA cleanup failure after attempting every owned
     /// device resource and the underlying prepared forward.
     pub fn close(self) -> LlamaBatchExecutorResult<()> {
-        let followers = self.followers.map_or(Ok(()), |followers| followers.close());
+        let followers = self.followers.map_or(
+            Ok(()),
+            super::tensor_parallel::TensorParallelFollowers::close,
+        );
         let owner = self.owner.close();
         owner.and(followers)
     }
@@ -1048,6 +1229,8 @@ impl PreparedLlamaBatchExecutor {
 
 // HOT_BATCH_EXECUTE_BEGIN
 #[allow(clippy::too_many_arguments)]
+// Copy configuration and borrowed descriptors keep the established execution/lease API.
+#[allow(clippy::large_types_passed_by_value)]
 fn execute_packed(
     packed: LlamaPackedBatchMetadata<'_>,
     config: PreparedLlamaBatchExecutorConfig,
@@ -1063,8 +1246,9 @@ fn execute_packed(
     gathered_logits: &mut Option<CudaDeviceBuffer>,
     greedy_results: &mut Option<CudaDeviceBuffer>,
     native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
-    #[cfg(feature="cuda-cublas-gemm-probe")]
-    owned_mlp_graphs: Option<&mut riley_cuda::CudaOwnedHfMlpGraph>,
+    #[cfg(feature = "cuda-cublas-gemm-probe")] owned_mlp_graphs: Option<
+        &mut riley_cuda::CudaOwnedHfMlpGraph,
+    >,
     host: &mut BatchHostWorkspace,
     output_mode: BatchOutputMode,
     dispatch_disposition: &mut BatchDispatchDisposition,
@@ -1085,7 +1269,7 @@ fn execute_packed(
         gathered_logits,
         greedy_results,
         native_d128_two_stage_workspace,
-        #[cfg(feature="cuda-cublas-gemm-probe")]
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
         owned_mlp_graphs,
         &mut host.input,
         output_mode == BatchOutputMode::GreedyTokens,
@@ -1601,6 +1785,8 @@ mod tests {
         }
     }
 
+    // Copy configuration and borrowed descriptors keep the established execution/lease API.
+    #[allow(clippy::large_types_passed_by_value)]
     fn record_shape_success(
         history: &mut LlamaBatchShapeHistory,
         config: PreparedLlamaBatchExecutorConfig,

@@ -1320,6 +1320,28 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
             self.assertEqual(derived["metrics"], fixture.candidate["metrics"])
             self.assertEqual(derived["raw_runs"], fixture.candidate["raw_runs"])
 
+    def test_release_derivation_still_requires_a_container_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ReleaseFixture(Path(directory))
+            payloads = []
+            for path in fixture.raw_paths:
+                run = json.loads(path.read_bytes())
+                run["environment"]["software"]["container_image_sha256"] = None
+                payloads.append((str(path), json.dumps(run).encode()))
+            with self.assertRaisesRegex(checker.InputError, "container_image_sha256"):
+                checker.derive_raw_run_payloads(payloads)
+
+    def test_native_contract_and_policy_pins_match_and_native_drift_is_rejected(self) -> None:
+        self.assertEqual(checker.bound_semantic_policy_sha256(), checker.BOUND_SEMANTIC_POLICY_SHA256)
+        self.assertEqual(hashlib.sha256(checker._NATIVE_CHECKER_PATH.read_bytes()).hexdigest(), checker.NATIVE_PROFILE_CONTRACT_SHA256)
+        read = checker._read_bounded_regular
+        def drift(path, label, maximum):
+            raw = read(path, label, maximum)
+            return raw + b"\n" if path == checker._NATIVE_CHECKER_PATH else raw
+        with mock.patch.object(checker, "_read_bounded_regular", side_effect=drift):
+            with self.assertRaisesRegex(checker.InputError, "derivation contract changed"):
+                checker._require_bound_semantic_policy()
+
     def test_raw_archive_is_deterministic_canonical_ustar_and_replays(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

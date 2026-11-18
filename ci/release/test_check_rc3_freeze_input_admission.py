@@ -37,8 +37,12 @@ class _CapturedStdout:
         self.buffer = io.BytesIO()
 
 
+from release_test_environment import require_linux_proc
+
+
 class AdmissionFixture:
     def __init__(self, base: Path) -> None:
+        require_linux_proc()
         base.mkdir(parents=True, exist_ok=True)
         base.chmod(0o700)
         self.root = base / "checkout"

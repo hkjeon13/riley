@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import copy
 import sys
+import json
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -22,6 +24,7 @@ from check_workspace_boundaries import (  # noqa: E402
     validate_package_manifests,
     validate_root_manifest,
     validate_runtime_source_text,
+    cargo_metadata,
 )
 
 
@@ -58,6 +61,33 @@ def _reviewed_packages() -> dict[str, dict[str, object]]:
 
 
 class WorkspaceRoleContractTests(unittest.TestCase):
+    def test_resolved_metadata_includes_optional_serving_and_probe_dependencies(self) -> None:
+        process = mock.Mock(returncode=0, stdout=json.dumps({"packages": []}))
+        with mock.patch("check_workspace_boundaries.subprocess.run", return_value=process) as run:
+            cargo_metadata(ROOT, True, no_deps=False)
+        self.assertIn("--all-features", run.call_args.args[0])
+        self.assertIn("--locked", run.call_args.args[0])
+
+    def test_probe_features_cannot_become_defaults_or_acquire_unknown_edges(self) -> None:
+        for name in ("riley-cuda", "riley-runtime", "riley-server"):
+            packages = _reviewed_packages()
+            packages[name]["features"]["default"] = ["cuda"]
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(BoundaryError, "feature propagation drifted"):
+                    validate_features(packages)
+        packages = _reviewed_packages()
+        packages["riley-server"]["features"]["unknown-probe"] = ["cuda"]
+        with self.assertRaisesRegex(BoundaryError, "feature propagation drifted"):
+            validate_features(packages)
+
+    def test_gpu_target_cannot_silently_enter_cpu_validation(self) -> None:
+        packages = _reviewed_packages()
+        target = {"name": "new_attention_gpu", "kind": ["test"]}
+        packages["riley-cuda"]["targets"].append(target)
+        with self.assertRaisesRegex(BoundaryError, "explicit CUDA feature"):
+            validate_features(packages)
+        target["required-features"] = ["cuda"]
+        validate_features(packages)
     def test_checked_in_workspace_and_license_pass(self) -> None:
         validate_root_manifest(ROOT)
         validate_package_manifests(ROOT)

@@ -156,16 +156,16 @@ pub enum CudaGraphCaptureOperation {
     FillF32 = 1,
     /// One whole-slab H2D memcpy between retained pinned/device allocations.
     H2D = 2,
-    /// One fixed-address, out-of-place BF16 SiLU kernel.
+    /// One fixed-address, out-of-place BF16 `SiLU` kernel.
     SiluBf16 = 3,
     /// One fixed-address, out-of-place BF16 activated-gate × up kernel.
     GatedMultiplyBf16 = 4,
     /// One fixed-address, out-of-place BF16 residual-add kernel.
     ResidualAddBf16 = 5,
-    /// One fixed-address, out-of-place generic eager BF16 RMSNorm kernel.
+    /// One fixed-address, out-of-place generic eager BF16 `RMSNorm` kernel.
     ///
-    /// This is deliberately distinct from SmolLM2 and Fixed37 variants, fused
-    /// RMSNorm, and C07 executor integration.
+    /// This is deliberately distinct from `SmolLM2` and Fixed37 variants, fused
+    /// `RMSNorm`, and C07 executor integration.
     CanonicalRmsNormBf16 = 6,
     /// One fixed-address deterministic BF16 greedy-argmax kernel.
     ///
@@ -195,7 +195,7 @@ pub enum CudaGraphCaptureOperation {
     /// It does not validate token/status records, commit scheduler state, or
     /// establish a C07 completion boundary.
     Bf16RowGatherArgmaxD2H = 10,
-    /// One fixed-address, out-of-place BF16 indexed RoPE kernel.
+    /// One fixed-address, out-of-place BF16 indexed `RoPE` kernel.
     ///
     /// This retains only the fixed input, cosine/sine tables, device
     /// positions, and output allocations. It does not include H2D/D2H,
@@ -230,9 +230,9 @@ pub enum CudaGraphCaptureOperation {
     /// spans, offsets, alternate reduction/epilogue, executor wiring, or C07
     /// projection/LM-head capability evidence.
     CanonicalGemmBf16 = 15,
-    /// One fixed-address canonical BF16 RMSNorm -> cuBLASLt GEMM graph.
+    /// One fixed-address canonical BF16 `RMSNorm` -> cuBLASLt GEMM graph.
     ///
-    /// The RMSNorm output is the one intentional fixed-allocation dependency
+    /// The `RMSNorm` output is the one intentional fixed-allocation dependency
     /// consumed as GEMM input. It retains a cold strict-no-split BF16/F32
     /// plan and every other whole allocation by value; it does not imply a
     /// general graph composer, spans, offsets, node updates, C07 executor
@@ -1795,6 +1795,8 @@ impl OwnedGraphExec {
     /// Any launch error makes this by-value owner terminal. C05-6 deliberately
     /// prefers retaining native leases over returning resources from a
     /// malformed or deferred launch outcome.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphLaunch<'exec>> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -1999,6 +2001,10 @@ impl OwnedGraphH2DResources {
     ///
     /// The device destination closes before the retained pinned source and
     /// stream, mirroring the ordinary caller-owned copy cleanup order.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (stream, source, destination) = self.into_parts();
         destination.close()?;
@@ -2110,6 +2116,10 @@ impl OwnedGraphH2DCapture {
     /// There are no user-supplied pointers, offsets, ranges, or payload bytes:
     /// begin fixed the whole source/destination slabs, and replay staging is a
     /// later graph-exec operation.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_h2d(&mut self) -> CudaResult<()> {
         const OPERATION: &str = "OwnedGraphH2DCapture::enqueue_h2d";
         if !self.active {
@@ -2148,6 +2158,10 @@ impl OwnedGraphH2DCapture {
 
     /// Ends capture and transfers all three moved resources into an owned
     /// captured graph.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedH2DGraph> {
         const OPERATION: &str = "OwnedGraphH2DCapture::end";
         if !self.active {
@@ -2201,6 +2215,10 @@ impl OwnedGraphH2DCapture {
 
     /// Aborts capture and returns the moved resources only after known native
     /// recovery releases every graph lease.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphH2DResources> {
         self.abort_once()?;
         take_owned_graph_h2d_resources(
@@ -2261,6 +2279,10 @@ pub struct OwnedCapturedH2DGraph {
 impl OwnedCapturedH2DGraph {
     /// Instantiates this graph while retaining its exact source, destination,
     /// and stream by value.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphH2DExec> {
         #[cfg(feature = "cuda")]
         {
@@ -2290,6 +2312,10 @@ impl OwnedCapturedH2DGraph {
 
     /// Destroys the graph and returns the three resources only after known
     /// native release evidence.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphH2DResources> {
         #[cfg(feature = "cuda")]
         {
@@ -2341,6 +2367,10 @@ impl OwnedGraphH2DExec {
     /// The returned completion owner retains an exclusive mutable borrow of
     /// this exec, so no second stage, relaunch, or close can occur until the
     /// one CUDA replay reaches its completion boundary.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn launch_with_source<'exec>(
         &'exec mut self,
         bytes: &[u8],
@@ -2433,6 +2463,10 @@ impl OwnedGraphH2DExec {
     ///     drop(launch);
     /// }
     /// ```
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphH2DResources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -2479,6 +2513,10 @@ pub struct OwnedGraphH2DLaunch<'exec> {
 
 impl OwnedGraphH2DLaunch<'_> {
     /// Waits for H2D graph replay completion exactly once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<()> {
         self.complete_once()
     }
@@ -2621,6 +2659,10 @@ impl OwnedGraphSiluBf16Resources {
     }
 
     /// Explicitly destroys both recovered device buffers before their stream.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (stream, input, output) = self.into_parts();
         output.close()?;
@@ -2696,7 +2738,7 @@ impl std::error::Error for OwnedGraphSiluBf16CaptureBeginError {
     }
 }
 
-/// By-value owner of one active fixed-address, out-of-place BF16 SiLU CUDA
+/// By-value owner of one active fixed-address, out-of-place BF16 `SiLU` CUDA
 /// Graph capture.
 ///
 /// ```compile_fail
@@ -2721,7 +2763,11 @@ pub struct OwnedGraphSiluBf16Capture {
 }
 
 impl OwnedGraphSiluBf16Capture {
-    /// Captures the one immutable BF16 SiLU node.
+    /// Captures the one immutable BF16 `SiLU` node.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_silu_bf16(&mut self) -> CudaResult<()> {
         const OPERATION: &str = "OwnedGraphSiluBf16Capture::enqueue_silu_bf16";
         if !self.active {
@@ -2760,6 +2806,10 @@ impl OwnedGraphSiluBf16Capture {
 
     /// Ends capture and transfers the fixed stream/input/output triple into a
     /// by-value captured graph.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedSiluBf16Graph> {
         const OPERATION: &str = "OwnedGraphSiluBf16Capture::end";
         if !self.active {
@@ -2804,6 +2854,10 @@ impl OwnedGraphSiluBf16Capture {
 
     /// Aborts capture and returns resources only after native recovery proves
     /// every permanent graph lease has been released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphSiluBf16Resources> {
         self.abort_once()?;
         take_owned_graph_silu_bf16_resources(
@@ -2839,7 +2893,7 @@ impl Drop for OwnedGraphSiluBf16Capture {
     }
 }
 
-/// By-value fixed-address BF16 SiLU CUDA Graph awaiting instantiate or close.
+/// By-value fixed-address BF16 `SiLU` CUDA Graph awaiting instantiate or close.
 pub struct OwnedCapturedSiluBf16Graph {
     #[cfg(feature = "cuda")]
     native: crate::ffi::GraphHandle,
@@ -2850,6 +2904,10 @@ pub struct OwnedCapturedSiluBf16Graph {
 impl OwnedCapturedSiluBf16Graph {
     /// Instantiates this graph while retaining its fixed stream/input/output
     /// triple by value.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphSiluBf16Exec> {
         #[cfg(feature = "cuda")]
         {
@@ -2876,6 +2934,10 @@ impl OwnedCapturedSiluBf16Graph {
 
     /// Destroys this graph and returns its resources only after known native
     /// graph-lease release evidence.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphSiluBf16Resources> {
         #[cfg(feature = "cuda")]
         {
@@ -2893,7 +2955,7 @@ impl OwnedCapturedSiluBf16Graph {
     }
 }
 
-/// By-value fixed-address BF16 SiLU CUDA Graph executable.
+/// By-value fixed-address BF16 `SiLU` CUDA Graph executable.
 ///
 /// It only replays the capture-time input allocation. Fresh input staging,
 /// mutable spans, node updates, and model/executor wiring remain outside this
@@ -2917,7 +2979,13 @@ pub struct OwnedGraphSiluBf16Exec {
 }
 
 impl OwnedGraphSiluBf16Exec {
-    /// Replays the fixed-address BF16 SiLU graph once.
+    /// Replays the fixed-address BF16 `SiLU` graph once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphSiluBf16Launch<'exec>> {
         const OPERATION: &str = "OwnedGraphSiluBf16Exec::launch";
         if self.terminal {
@@ -2971,6 +3039,10 @@ impl OwnedGraphSiluBf16Exec {
     ///     drop(launch);
     /// }
     /// ```
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphSiluBf16Resources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -3015,6 +3087,10 @@ pub struct OwnedGraphSiluBf16Launch<'exec> {
 
 impl OwnedGraphSiluBf16Launch<'_> {
     /// Waits for graph replay completion exactly once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<()> {
         self.complete_once()
     }
@@ -3141,6 +3217,10 @@ impl OwnedGraphGatedMultiplyBf16Resources {
     }
 
     /// Explicitly destroys recovered device buffers before their stream.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (stream, activated_gate, up, output) = self.into_parts();
         output.close()?;
@@ -3234,6 +3314,10 @@ pub struct OwnedGraphGatedMultiplyBf16Capture {
 
 impl OwnedGraphGatedMultiplyBf16Capture {
     /// Captures the one immutable BF16 gated-multiply node.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_gated_multiply_bf16(&mut self) -> CudaResult<()> {
         const OPERATION: &str = "OwnedGraphGatedMultiplyBf16Capture::enqueue_gated_multiply_bf16";
         if !self.active {
@@ -3272,6 +3356,10 @@ impl OwnedGraphGatedMultiplyBf16Capture {
 
     /// Ends capture and transfers the fixed stream/input/input/output quartet
     /// into a by-value captured graph.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedGatedMultiplyBf16Graph> {
         const OPERATION: &str = "OwnedGraphGatedMultiplyBf16Capture::end";
         if !self.active {
@@ -3317,6 +3405,10 @@ impl OwnedGraphGatedMultiplyBf16Capture {
 
     /// Aborts capture and returns resources only after native recovery proves
     /// every permanent graph lease has been released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Resources> {
         self.abort_once()?;
         take_owned_graph_gated_multiply_bf16_resources(
@@ -3366,6 +3458,10 @@ pub struct OwnedCapturedGatedMultiplyBf16Graph {
 impl OwnedCapturedGatedMultiplyBf16Graph {
     /// Instantiates this graph while retaining its fixed stream/input/input/
     /// output quartet by value.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Exec> {
         #[cfg(feature = "cuda")]
         {
@@ -3392,6 +3488,10 @@ impl OwnedCapturedGatedMultiplyBf16Graph {
 
     /// Destroys this graph and returns its resources only after known native
     /// graph-lease release evidence.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Resources> {
         #[cfg(feature = "cuda")]
         {
@@ -3414,7 +3514,7 @@ impl OwnedCapturedGatedMultiplyBf16Graph {
 /// By-value fixed-address BF16 gated-multiply CUDA Graph executable.
 ///
 /// It only replays the capture-time input allocations. Fresh input staging,
-/// mutable spans, node updates, SiLU fusion, and model/executor wiring remain
+/// mutable spans, node updates, `SiLU` fusion, and model/executor wiring remain
 /// outside this C05 ownership slice.
 pub struct OwnedGraphGatedMultiplyBf16Exec {
     #[cfg(feature = "cuda")]
@@ -3426,6 +3526,12 @@ pub struct OwnedGraphGatedMultiplyBf16Exec {
 
 impl OwnedGraphGatedMultiplyBf16Exec {
     /// Replays the fixed-address BF16 gated-multiply graph once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Launch<'exec>> {
         const OPERATION: &str = "OwnedGraphGatedMultiplyBf16Exec::launch";
         if self.terminal {
@@ -3469,6 +3575,10 @@ impl OwnedGraphGatedMultiplyBf16Exec {
 
     /// Destroys this executable and returns the fixed resource quartet only
     /// after native close proves every graph lease was released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Resources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -3505,6 +3615,10 @@ pub struct OwnedGraphGatedMultiplyBf16Launch<'exec> {
 
 impl OwnedGraphGatedMultiplyBf16Launch<'_> {
     /// Waits for graph replay completion exactly once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<()> {
         self.complete_once()
     }
@@ -3641,6 +3755,10 @@ impl OwnedGraphResidualAddBf16Resources {
     }
 
     /// Explicitly destroys recovered device buffers before their stream.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (stream, left, right, output) = self.into_parts();
         output.close()?;
@@ -3734,6 +3852,10 @@ pub struct OwnedGraphResidualAddBf16Capture {
 
 impl OwnedGraphResidualAddBf16Capture {
     /// Captures the one immutable BF16 residual-add node.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_residual_add_bf16(&mut self) -> CudaResult<()> {
         const OPERATION: &str = "OwnedGraphResidualAddBf16Capture::enqueue_residual_add_bf16";
         if !self.active {
@@ -3772,6 +3894,10 @@ impl OwnedGraphResidualAddBf16Capture {
 
     /// Ends capture and transfers the fixed stream/input/input/output quartet
     /// into a by-value captured graph.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedResidualAddBf16Graph> {
         const OPERATION: &str = "OwnedGraphResidualAddBf16Capture::end";
         if !self.active {
@@ -3817,6 +3943,10 @@ impl OwnedGraphResidualAddBf16Capture {
 
     /// Aborts capture and returns resources only after native recovery proves
     /// every permanent graph lease has been released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphResidualAddBf16Resources> {
         self.abort_once()?;
         take_owned_graph_residual_add_bf16_resources(
@@ -3866,6 +3996,10 @@ pub struct OwnedCapturedResidualAddBf16Graph {
 impl OwnedCapturedResidualAddBf16Graph {
     /// Instantiates this graph while retaining its fixed stream/input/input/
     /// output quartet by value.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphResidualAddBf16Exec> {
         #[cfg(feature = "cuda")]
         {
@@ -3892,6 +4026,10 @@ impl OwnedCapturedResidualAddBf16Graph {
 
     /// Destroys this graph and returns resources only after known native
     /// graph-lease release evidence.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphResidualAddBf16Resources> {
         #[cfg(feature = "cuda")]
         {
@@ -3914,7 +4052,7 @@ impl OwnedCapturedResidualAddBf16Graph {
 /// By-value fixed-address BF16 residual-add CUDA Graph executable.
 ///
 /// It replays only the capture-time input allocations. Fresh input staging,
-/// mutable spans, node updates, fused RMSNorm, and model/executor wiring stay
+/// mutable spans, node updates, fused `RMSNorm`, and model/executor wiring stay
 /// outside this narrow C05 ownership slice.
 pub struct OwnedGraphResidualAddBf16Exec {
     #[cfg(feature = "cuda")]
@@ -3926,6 +4064,12 @@ pub struct OwnedGraphResidualAddBf16Exec {
 
 impl OwnedGraphResidualAddBf16Exec {
     /// Replays the fixed-address BF16 residual-add graph once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphResidualAddBf16Launch<'exec>> {
         const OPERATION: &str = "OwnedGraphResidualAddBf16Exec::launch";
         if self.terminal {
@@ -3969,6 +4113,10 @@ impl OwnedGraphResidualAddBf16Exec {
 
     /// Destroys this executable and returns its resource quartet only after
     /// native close proves every graph lease was released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphResidualAddBf16Resources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -4005,6 +4153,10 @@ pub struct OwnedGraphResidualAddBf16Launch<'exec> {
 
 impl OwnedGraphResidualAddBf16Launch<'_> {
     /// Waits for graph replay completion exactly once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<()> {
         self.complete_once()
     }
@@ -4093,7 +4245,7 @@ fn validate_graph_residual_add_bf16_capture_preflight(
 }
 
 /// A by-value stream and three fixed device buffers recovered from one known
-/// canonical BF16 RMSNorm graph lifecycle transition.
+/// canonical BF16 `RMSNorm` graph lifecycle transition.
 ///
 /// This recovery bundle exposes no graph-visible pointer, mutable span, or
 /// fresh replay input. The input, learned weight, and output remain distinct
@@ -4141,6 +4293,10 @@ impl OwnedGraphCanonicalRmsNormBf16Resources {
     }
 
     /// Explicitly destroys recovered device buffers before their stream.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (stream, input, weight, output) = self.into_parts();
         output.close()?;
@@ -4150,7 +4306,7 @@ impl OwnedGraphCanonicalRmsNormBf16Resources {
     }
 }
 
-/// Error from beginning an owned fixed-address canonical BF16 RMSNorm graph
+/// Error from beginning an owned fixed-address canonical BF16 `RMSNorm` graph
 /// capture.
 ///
 /// Only Rust-side preflight errors recover the untouched resource quartet.
@@ -4219,7 +4375,7 @@ impl std::error::Error for OwnedGraphCanonicalRmsNormBf16CaptureBeginError {
 }
 
 /// By-value owner of one active fixed-address, out-of-place canonical BF16
-/// RMSNorm CUDA Graph capture.
+/// `RMSNorm` CUDA Graph capture.
 pub struct OwnedGraphCanonicalRmsNormBf16Capture {
     // Native drops before child resource wrappers. A capture ambiguity owns
     // their raw addresses and must remain fail-closed before Rust drops them.
@@ -4233,7 +4389,11 @@ pub struct OwnedGraphCanonicalRmsNormBf16Capture {
 }
 
 impl OwnedGraphCanonicalRmsNormBf16Capture {
-    /// Captures the one immutable canonical BF16 RMSNorm node.
+    /// Captures the one immutable canonical BF16 `RMSNorm` node.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_canonical_rms_norm_bf16(&mut self) -> CudaResult<()> {
         const OPERATION: &str =
             "OwnedGraphCanonicalRmsNormBf16Capture::enqueue_canonical_rms_norm_bf16";
@@ -4273,6 +4433,10 @@ impl OwnedGraphCanonicalRmsNormBf16Capture {
 
     /// Ends capture and transfers the fixed stream/input/weight/output quartet
     /// into a by-value captured graph.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedCanonicalRmsNormBf16Graph> {
         const OPERATION: &str = "OwnedGraphCanonicalRmsNormBf16Capture::end";
         if !self.active {
@@ -4318,6 +4482,10 @@ impl OwnedGraphCanonicalRmsNormBf16Capture {
 
     /// Aborts capture and returns resources only after native recovery proves
     /// every permanent graph lease has been released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Resources> {
         self.abort_once()?;
         take_owned_graph_canonical_rms_norm_bf16_resources(
@@ -4355,7 +4523,7 @@ impl Drop for OwnedGraphCanonicalRmsNormBf16Capture {
     }
 }
 
-/// By-value fixed-address canonical BF16 RMSNorm CUDA Graph awaiting
+/// By-value fixed-address canonical BF16 `RMSNorm` CUDA Graph awaiting
 /// instantiate or close.
 pub struct OwnedCapturedCanonicalRmsNormBf16Graph {
     #[cfg(feature = "cuda")]
@@ -4367,6 +4535,10 @@ pub struct OwnedCapturedCanonicalRmsNormBf16Graph {
 impl OwnedCapturedCanonicalRmsNormBf16Graph {
     /// Instantiates this graph while retaining its fixed stream/input/weight/
     /// output quartet by value.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Exec> {
         #[cfg(feature = "cuda")]
         {
@@ -4393,6 +4565,10 @@ impl OwnedCapturedCanonicalRmsNormBf16Graph {
 
     /// Destroys this graph and returns resources only after known native
     /// graph-lease release evidence.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Resources> {
         #[cfg(feature = "cuda")]
         {
@@ -4412,10 +4588,10 @@ impl OwnedCapturedCanonicalRmsNormBf16Graph {
     }
 }
 
-/// By-value fixed-address canonical BF16 RMSNorm CUDA Graph executable.
+/// By-value fixed-address canonical BF16 `RMSNorm` CUDA Graph executable.
 ///
-/// It replays only the capture-time generic eager RMSNorm input and weight
-/// allocations. SmolLM2 and Fixed37 profiles, fused RMSNorm, C07 executor
+/// It replays only the capture-time generic eager `RMSNorm` input and weight
+/// allocations. `SmolLM2` and Fixed37 profiles, fused `RMSNorm`, C07 executor
 /// integration, fresh input staging, mutable spans, node updates, and profile
 /// selection stay outside this narrow C05 ownership slice.
 pub struct OwnedGraphCanonicalRmsNormBf16Exec {
@@ -4427,7 +4603,13 @@ pub struct OwnedGraphCanonicalRmsNormBf16Exec {
 }
 
 impl OwnedGraphCanonicalRmsNormBf16Exec {
-    /// Replays the fixed-address canonical BF16 RMSNorm graph once.
+    /// Replays the fixed-address canonical BF16 `RMSNorm` graph once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(
         &'exec mut self,
     ) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Launch<'exec>> {
@@ -4473,6 +4655,10 @@ impl OwnedGraphCanonicalRmsNormBf16Exec {
 
     /// Destroys this executable and returns its resource quartet only after
     /// native close proves every graph lease was released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Resources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -4509,6 +4695,10 @@ pub struct OwnedGraphCanonicalRmsNormBf16Launch<'exec> {
 
 impl OwnedGraphCanonicalRmsNormBf16Launch<'_> {
     /// Waits for graph replay completion exactly once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<()> {
         self.complete_once()
     }
@@ -4653,6 +4843,10 @@ impl OwnedGraphBf16ArgmaxResources {
     }
 
     /// Explicitly destroys recovered device buffers before their stream.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (stream, logits, results) = self.into_parts();
         results.close()?;
@@ -4745,6 +4939,10 @@ pub struct OwnedGraphBf16ArgmaxCapture {
 
 impl OwnedGraphBf16ArgmaxCapture {
     /// Captures the one immutable deterministic BF16 argmax node.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_bf16_argmax(&mut self) -> CudaResult<()> {
         const OPERATION: &str = "OwnedGraphBf16ArgmaxCapture::enqueue_bf16_argmax";
         if !self.active {
@@ -4783,6 +4981,10 @@ impl OwnedGraphBf16ArgmaxCapture {
 
     /// Ends capture and transfers the fixed stream/logits/results trio into a
     /// by-value captured graph.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedBf16ArgmaxGraph> {
         const OPERATION: &str = "OwnedGraphBf16ArgmaxCapture::end";
         if !self.active {
@@ -4827,6 +5029,10 @@ impl OwnedGraphBf16ArgmaxCapture {
 
     /// Aborts capture and returns resources only after native recovery proves
     /// every permanent graph lease has been released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphBf16ArgmaxResources> {
         self.abort_once()?;
         take_owned_graph_bf16_argmax_resources(
@@ -4874,6 +5080,10 @@ pub struct OwnedCapturedBf16ArgmaxGraph {
 impl OwnedCapturedBf16ArgmaxGraph {
     /// Instantiates this graph while retaining its fixed stream/logits/results
     /// trio by value.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphBf16ArgmaxExec> {
         #[cfg(feature = "cuda")]
         {
@@ -4900,6 +5110,10 @@ impl OwnedCapturedBf16ArgmaxGraph {
 
     /// Destroys this graph and returns resources only after known native
     /// graph-lease release evidence.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphBf16ArgmaxResources> {
         #[cfg(feature = "cuda")]
         {
@@ -4935,6 +5149,12 @@ pub struct OwnedGraphBf16ArgmaxExec {
 
 impl OwnedGraphBf16ArgmaxExec {
     /// Replays the fixed-address deterministic BF16 argmax graph once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphBf16ArgmaxLaunch<'exec>> {
         const OPERATION: &str = "OwnedGraphBf16ArgmaxExec::launch";
         if self.terminal {
@@ -4978,6 +5198,10 @@ impl OwnedGraphBf16ArgmaxExec {
 
     /// Destroys this executable and returns its resource trio only after native
     /// close proves every graph lease was released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphBf16ArgmaxResources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -5012,6 +5236,10 @@ pub struct OwnedGraphBf16ArgmaxLaunch<'exec> {
 
 impl OwnedGraphBf16ArgmaxLaunch<'_> {
     /// Waits for graph replay completion exactly once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<()> {
         self.complete_once()
     }
@@ -5177,6 +5405,10 @@ impl OwnedGraphBf16RowGatherResources {
     }
 
     /// Explicitly destroys recovered device buffers before their stream.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (stream, input, row_indices, output) = self.into_parts();
         output.close()?;
@@ -5269,6 +5501,10 @@ pub struct OwnedGraphBf16RowGatherCapture {
 
 impl OwnedGraphBf16RowGatherCapture {
     /// Captures the one immutable BF16 row-gather node.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_bf16_row_gather(&mut self) -> CudaResult<()> {
         const OPERATION: &str = "OwnedGraphBf16RowGatherCapture::enqueue_bf16_row_gather";
         if !self.active {
@@ -5307,6 +5543,10 @@ impl OwnedGraphBf16RowGatherCapture {
 
     /// Ends capture and transfers the fixed stream/input/row-indices/output
     /// quartet into a by-value captured graph.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedBf16RowGatherGraph> {
         const OPERATION: &str = "OwnedGraphBf16RowGatherCapture::end";
         if !self.active {
@@ -5352,6 +5592,10 @@ impl OwnedGraphBf16RowGatherCapture {
 
     /// Aborts capture and returns resources only after native recovery proves
     /// every permanent graph lease has been released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphBf16RowGatherResources> {
         self.abort_once()?;
         take_owned_graph_bf16_row_gather_resources(
@@ -5401,6 +5645,10 @@ pub struct OwnedCapturedBf16RowGatherGraph {
 impl OwnedCapturedBf16RowGatherGraph {
     /// Instantiates this graph while retaining its fixed stream/input/
     /// row-indices/output quartet by value.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphBf16RowGatherExec> {
         #[cfg(feature = "cuda")]
         {
@@ -5427,6 +5675,10 @@ impl OwnedCapturedBf16RowGatherGraph {
 
     /// Destroys this graph and returns resources only after known native
     /// graph-lease release evidence.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphBf16RowGatherResources> {
         #[cfg(feature = "cuda")]
         {
@@ -5462,6 +5714,12 @@ pub struct OwnedGraphBf16RowGatherExec {
 
 impl OwnedGraphBf16RowGatherExec {
     /// Replays the fixed-address BF16 row-gather graph once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphBf16RowGatherLaunch<'exec>> {
         const OPERATION: &str = "OwnedGraphBf16RowGatherExec::launch";
         if self.terminal {
@@ -5505,6 +5763,10 @@ impl OwnedGraphBf16RowGatherExec {
 
     /// Destroys this executable and returns its resource quartet only after
     /// native close proves every graph lease was released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphBf16RowGatherResources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -5539,6 +5801,10 @@ pub struct OwnedGraphBf16RowGatherLaunch<'exec> {
 
 impl OwnedGraphBf16RowGatherLaunch<'_> {
     /// Waits for graph replay completion exactly once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<()> {
         self.complete_once()
     }
@@ -5749,6 +6015,10 @@ impl OwnedGraphBf16RowGatherArgmaxResources {
     }
 
     /// Explicitly destroys recovered device buffers before their stream.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (stream, input, row_indices, gathered_logits, results) = self.into_parts();
         results.close()?;
@@ -5844,6 +6114,10 @@ pub struct OwnedGraphBf16RowGatherArgmaxCapture {
 impl OwnedGraphBf16RowGatherArgmaxCapture {
     /// Captures the one immutable BF16 row-gather then deterministic-argmax
     /// node chain.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_bf16_row_gather_argmax(&mut self) -> CudaResult<()> {
         const OPERATION: &str =
             "OwnedGraphBf16RowGatherArgmaxCapture::enqueue_bf16_row_gather_argmax";
@@ -5886,6 +6160,10 @@ impl OwnedGraphBf16RowGatherArgmaxCapture {
 
     /// Ends capture and transfers the fixed stream/input/row-indices/
     /// gathered-logits/results quintet into a by-value captured graph.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedBf16RowGatherArgmaxGraph> {
         const OPERATION: &str = "OwnedGraphBf16RowGatherArgmaxCapture::end";
         if !self.active {
@@ -5931,6 +6209,10 @@ impl OwnedGraphBf16RowGatherArgmaxCapture {
 
     /// Aborts capture and returns resources only after native recovery proves
     /// every permanent graph lease has been released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxResources> {
         self.abort_once()?;
         take_owned_graph_bf16_row_gather_argmax_resources(
@@ -5980,6 +6262,10 @@ pub struct OwnedCapturedBf16RowGatherArgmaxGraph {
 impl OwnedCapturedBf16RowGatherArgmaxGraph {
     /// Instantiates this graph while retaining its fixed stream/input/
     /// row-indices/gathered-logits/results quintet by value.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxExec> {
         #[cfg(feature = "cuda")]
         {
@@ -6006,6 +6292,10 @@ impl OwnedCapturedBf16RowGatherArgmaxGraph {
 
     /// Destroys this graph and returns resources only after known native
     /// graph-lease release evidence.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxResources> {
         #[cfg(feature = "cuda")]
         {
@@ -6043,6 +6333,12 @@ pub struct OwnedGraphBf16RowGatherArgmaxExec {
 impl OwnedGraphBf16RowGatherArgmaxExec {
     /// Replays the fixed-address BF16 row-gather then deterministic-argmax
     /// graph once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(
         &'exec mut self,
     ) -> CudaResult<OwnedGraphBf16RowGatherArgmaxLaunch<'exec>> {
@@ -6088,6 +6384,10 @@ impl OwnedGraphBf16RowGatherArgmaxExec {
 
     /// Destroys this executable and returns its resource quintet only after
     /// native close proves every graph lease was released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxResources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -6124,6 +6424,10 @@ pub struct OwnedGraphBf16RowGatherArgmaxLaunch<'exec> {
 
 impl OwnedGraphBf16RowGatherArgmaxLaunch<'_> {
     /// Waits for graph replay completion exactly once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<()> {
         self.complete_once()
     }
@@ -6374,6 +6678,10 @@ impl OwnedGraphBf16RowGatherArgmaxD2HResources {
     }
 
     /// Explicitly destroys recovered allocations before the capture stream.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (stream, input, row_indices, gathered_logits, results, pinned_results) =
             self.into_parts();
@@ -6467,6 +6775,10 @@ pub struct OwnedGraphBf16RowGatherArgmaxD2HCapture {
 
 impl OwnedGraphBf16RowGatherArgmaxD2HCapture {
     /// Records exactly gather -> argmax -> fixed result D2H once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_bf16_row_gather_argmax_d2h(&mut self) -> CudaResult<()> {
         const OPERATION: &str =
             "OwnedGraphBf16RowGatherArgmaxD2HCapture::enqueue_bf16_row_gather_argmax_d2h";
@@ -6507,6 +6819,10 @@ impl OwnedGraphBf16RowGatherArgmaxD2HCapture {
     }
 
     /// Ends capture and transfers the resource sextet into a captured graph.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedBf16RowGatherArgmaxD2HGraph> {
         const OPERATION: &str = "OwnedGraphBf16RowGatherArgmaxD2HCapture::end";
         if !self.active {
@@ -6553,6 +6869,10 @@ impl OwnedGraphBf16RowGatherArgmaxD2HCapture {
     }
 
     /// Aborts capture and returns resources only after known release evidence.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxD2HResources> {
         self.abort_once()?;
         take_owned_graph_bf16_row_gather_argmax_d2h_resources(
@@ -6600,6 +6920,10 @@ pub struct OwnedCapturedBf16RowGatherArgmaxD2HGraph {
 
 impl OwnedCapturedBf16RowGatherArgmaxD2HGraph {
     /// Instantiates while retaining the exact stream/allocation sextet.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxD2HExec> {
         #[cfg(feature = "cuda")]
         {
@@ -6625,6 +6949,10 @@ impl OwnedCapturedBf16RowGatherArgmaxD2HGraph {
     }
 
     /// Closes the captured graph and returns resources after known lease release.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxD2HResources> {
         #[cfg(feature = "cuda")]
         {
@@ -6659,6 +6987,12 @@ pub struct OwnedGraphBf16RowGatherArgmaxD2HExec {
 
 impl OwnedGraphBf16RowGatherArgmaxD2HExec {
     /// Launches the fixed three-node graph once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(
         &'exec mut self,
     ) -> CudaResult<OwnedGraphBf16RowGatherArgmaxD2HLaunch<'exec>> {
@@ -6703,6 +7037,10 @@ impl OwnedGraphBf16RowGatherArgmaxD2HExec {
     }
 
     /// Destroys this executable and returns resources after known graph release.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxD2HResources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -6742,6 +7080,10 @@ impl<'exec> OwnedGraphBf16RowGatherArgmaxD2HLaunch<'exec> {
     ///
     /// The receipt keeps the executable exclusively borrowed, so a new replay
     /// or close cannot race the fixed pinned-host result view.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxD2HCompletion<'exec>> {
         self.complete_once()?;
         let exec = self.exec.take().ok_or_else(|| {
@@ -6808,6 +7150,10 @@ impl OwnedGraphBf16RowGatherArgmaxD2HCompletion<'_> {
     /// The destination must have exactly the capture-time result byte length.
     /// This is a byte transport only; callers must not treat its success as
     /// token validation, scheduler commit, or a C07 completion boundary.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn read_result_bytes(&mut self, destination: &mut [u8]) -> CudaResult<()> {
         const OPERATION: &str = "OwnedGraphBf16RowGatherArgmaxD2HCompletion::read_result_bytes";
         if self.exec.terminal {
@@ -6816,15 +7162,14 @@ impl OwnedGraphBf16RowGatherArgmaxD2HCompletion<'_> {
                 "the graph executable is terminal after an uncertain transition",
             ));
         }
-        let expected_len = match self.exec.resources.as_ref() {
-            Some(resources) => resources.pinned_results.byte_len(),
-            None => {
-                self.exec.terminal = true;
-                return Err(CudaError::invalid_state(
-                    OPERATION,
-                    "the graph executable lost its retained pinned result allocation",
-                ));
-            }
+        let expected_len = if let Some(resources) = self.exec.resources.as_ref() {
+            resources.pinned_results.byte_len()
+        } else {
+            self.exec.terminal = true;
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the graph executable lost its retained pinned result allocation",
+            ));
         };
         let actual_len = u64::try_from(destination.len()).map_err(|_| {
             CudaError::out_of_range(OPERATION, "result destination length does not fit u64")
@@ -7084,6 +7429,10 @@ impl OwnedGraphIndexedRopeBf16Resources {
     }
 
     /// Explicitly destroys recovered device buffers before their stream.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (stream, input, cos, sin, positions, output) = self.into_parts();
         output.close()?;
@@ -7179,6 +7528,10 @@ pub struct OwnedGraphIndexedRopeBf16Capture {
 
 impl OwnedGraphIndexedRopeBf16Capture {
     /// Captures the one immutable BF16 indexed-RoPE node.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_indexed_rope_bf16(&mut self) -> CudaResult<()> {
         const OPERATION: &str = "OwnedGraphIndexedRopeBf16Capture::enqueue_indexed_rope_bf16";
         if !self.active {
@@ -7217,6 +7570,10 @@ impl OwnedGraphIndexedRopeBf16Capture {
 
     /// Ends capture and transfers the fixed resource sextet into a by-value
     /// captured graph.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedIndexedRopeBf16Graph> {
         const OPERATION: &str = "OwnedGraphIndexedRopeBf16Capture::end";
         if !self.active {
@@ -7262,6 +7619,10 @@ impl OwnedGraphIndexedRopeBf16Capture {
 
     /// Aborts capture and returns resources only after native recovery proves
     /// every permanent graph lease has been released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Resources> {
         self.abort_once()?;
         take_owned_graph_indexed_rope_bf16_resources(
@@ -7311,6 +7672,10 @@ pub struct OwnedCapturedIndexedRopeBf16Graph {
 impl OwnedCapturedIndexedRopeBf16Graph {
     /// Instantiates the graph while retaining its fixed resource sextet by
     /// value.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Exec> {
         #[cfg(feature = "cuda")]
         {
@@ -7337,6 +7702,10 @@ impl OwnedCapturedIndexedRopeBf16Graph {
 
     /// Destroys this graph and returns resources only after known native
     /// graph-lease release evidence.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Resources> {
         #[cfg(feature = "cuda")]
         {
@@ -7372,6 +7741,12 @@ pub struct OwnedGraphIndexedRopeBf16Exec {
 
 impl OwnedGraphIndexedRopeBf16Exec {
     /// Replays the fixed-address BF16 indexed-RoPE graph once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Launch<'exec>> {
         const OPERATION: &str = "OwnedGraphIndexedRopeBf16Exec::launch";
         if self.terminal {
@@ -7415,6 +7790,10 @@ impl OwnedGraphIndexedRopeBf16Exec {
 
     /// Destroys this executable and returns its resource sextet only after
     /// native close proves every graph lease was released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Resources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -7451,6 +7830,10 @@ pub struct OwnedGraphIndexedRopeBf16Launch<'exec> {
 
 impl OwnedGraphIndexedRopeBf16Launch<'_> {
     /// Waits for graph replay completion exactly once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<()> {
         self.complete_once()
     }
@@ -7735,6 +8118,10 @@ impl OwnedGraphRaggedPagedKvCacheWriteBf16Resources {
     }
 
     /// Explicitly destroys recovered device buffers before their stream.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (
             stream,
@@ -7848,6 +8235,10 @@ pub struct OwnedGraphRaggedPagedKvCacheWriteBf16Capture {
 
 impl OwnedGraphRaggedPagedKvCacheWriteBf16Capture {
     /// Captures the one immutable BF16 ragged paged-K/V cache-write node.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_ragged_paged_kv_cache_write_bf16(&mut self) -> CudaResult<()> {
         const OPERATION: &str = "OwnedGraphRaggedPagedKvCacheWriteBf16Capture::enqueue_ragged_paged_kv_cache_write_bf16";
         if !self.active {
@@ -7886,6 +8277,10 @@ impl OwnedGraphRaggedPagedKvCacheWriteBf16Capture {
 
     /// Ends capture and transfers the fixed resource bundle into a by-value
     /// captured graph.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedRaggedPagedKvCacheWriteBf16Graph> {
         const OPERATION: &str = "OwnedGraphRaggedPagedKvCacheWriteBf16Capture::end";
         if !self.active {
@@ -7933,6 +8328,10 @@ impl OwnedGraphRaggedPagedKvCacheWriteBf16Capture {
 
     /// Aborts capture and returns resources only after native recovery proves
     /// every permanent graph lease has been released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Resources> {
         self.abort_once()?;
         take_owned_graph_ragged_paged_kv_cache_write_bf16_resources(
@@ -7982,6 +8381,10 @@ pub struct OwnedCapturedRaggedPagedKvCacheWriteBf16Graph {
 impl OwnedCapturedRaggedPagedKvCacheWriteBf16Graph {
     /// Instantiates the graph while retaining its fixed resource bundle by
     /// value.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Exec> {
         #[cfg(feature = "cuda")]
         {
@@ -8008,6 +8411,10 @@ impl OwnedCapturedRaggedPagedKvCacheWriteBf16Graph {
 
     /// Destroys this graph and returns resources only after known native
     /// graph-lease release evidence.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Resources> {
         #[cfg(feature = "cuda")]
         {
@@ -8044,6 +8451,12 @@ pub struct OwnedGraphRaggedPagedKvCacheWriteBf16Exec {
 
 impl OwnedGraphRaggedPagedKvCacheWriteBf16Exec {
     /// Replays the fixed-address BF16 ragged paged-K/V cache-write graph once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(
         &'exec mut self,
     ) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Launch<'exec>> {
@@ -8089,6 +8502,10 @@ impl OwnedGraphRaggedPagedKvCacheWriteBf16Exec {
 
     /// Destroys this executable and returns its resource bundle only after
     /// native close proves every graph lease was released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Resources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -8126,6 +8543,10 @@ pub struct OwnedGraphRaggedPagedKvCacheWriteBf16Launch<'exec> {
 
 impl OwnedGraphRaggedPagedKvCacheWriteBf16Launch<'_> {
     /// Waits for graph replay completion exactly once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<()> {
         self.complete_once()
     }
@@ -8430,6 +8851,10 @@ impl OwnedGraphGroupedRaggedPagedAttentionBf16Resources {
     }
 
     /// Explicitly destroys recovered device buffers before their stream.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (
             stream,
@@ -8543,6 +8968,10 @@ pub struct OwnedGraphGroupedRaggedPagedAttentionBf16Capture {
 
 impl OwnedGraphGroupedRaggedPagedAttentionBf16Capture {
     /// Captures the one immutable BF16 grouped ragged paged-attention node.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_grouped_ragged_paged_attention_bf16(&mut self) -> CudaResult<()> {
         const OPERATION: &str = "OwnedGraphGroupedRaggedPagedAttentionBf16Capture::enqueue_grouped_ragged_paged_attention_bf16";
         if !self.active {
@@ -8581,6 +9010,10 @@ impl OwnedGraphGroupedRaggedPagedAttentionBf16Capture {
 
     /// Ends capture and transfers the fixed resource bundle into a by-value
     /// captured graph.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedGroupedRaggedPagedAttentionBf16Graph> {
         const OPERATION: &str = "OwnedGraphGroupedRaggedPagedAttentionBf16Capture::end";
         if !self.active {
@@ -8628,6 +9061,10 @@ impl OwnedGraphGroupedRaggedPagedAttentionBf16Capture {
 
     /// Aborts capture and returns resources only after native recovery proves
     /// every permanent graph lease has been released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphGroupedRaggedPagedAttentionBf16Resources> {
         self.abort_once()?;
         take_owned_graph_grouped_ragged_paged_attention_bf16_resources(
@@ -8677,6 +9114,10 @@ pub struct OwnedCapturedGroupedRaggedPagedAttentionBf16Graph {
 impl OwnedCapturedGroupedRaggedPagedAttentionBf16Graph {
     /// Instantiates the graph while retaining its fixed resource bundle by
     /// value.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphGroupedRaggedPagedAttentionBf16Exec> {
         #[cfg(feature = "cuda")]
         {
@@ -8703,6 +9144,10 @@ impl OwnedCapturedGroupedRaggedPagedAttentionBf16Graph {
 
     /// Destroys this graph and returns resources only after known native
     /// graph-lease release evidence.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphGroupedRaggedPagedAttentionBf16Resources> {
         #[cfg(feature = "cuda")]
         {
@@ -8740,6 +9185,12 @@ pub struct OwnedGraphGroupedRaggedPagedAttentionBf16Exec {
 impl OwnedGraphGroupedRaggedPagedAttentionBf16Exec {
     /// Replays the fixed-address BF16 grouped ragged paged-attention graph
     /// once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(
         &'exec mut self,
     ) -> CudaResult<OwnedGraphGroupedRaggedPagedAttentionBf16Launch<'exec>> {
@@ -8785,6 +9236,10 @@ impl OwnedGraphGroupedRaggedPagedAttentionBf16Exec {
 
     /// Destroys this executable and returns its resource bundle only after
     /// native close proves every graph lease was released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphGroupedRaggedPagedAttentionBf16Resources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -8822,6 +9277,10 @@ pub struct OwnedGraphGroupedRaggedPagedAttentionBf16Launch<'exec> {
 
 impl OwnedGraphGroupedRaggedPagedAttentionBf16Launch<'_> {
     /// Waits for graph replay completion exactly once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<()> {
         self.complete_once()
     }
@@ -9162,6 +9621,10 @@ impl OwnedGraphBf16EmbeddingStatusD2HResources {
     }
 
     /// Explicitly destroys recovered allocations before the capture stream.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (stream, table, token_ids, output, device_error_scratch, pinned_report) =
             self.into_parts();
@@ -9257,6 +9720,10 @@ pub struct OwnedGraphBf16EmbeddingStatusD2HCapture {
 impl OwnedGraphBf16EmbeddingStatusD2HCapture {
     /// Records exactly reset -> validate -> gather -> finalize -> pinned D2H
     /// once. It admits no host callback, fresh token staging, or node update.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_bf16_embedding_status_d2h(&mut self) -> CudaResult<()> {
         const OPERATION: &str =
             "OwnedGraphBf16EmbeddingStatusD2HCapture::enqueue_bf16_embedding_status_d2h";
@@ -9297,6 +9764,10 @@ impl OwnedGraphBf16EmbeddingStatusD2HCapture {
     }
 
     /// Ends capture and transfers the resource sextet into a captured graph.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedBf16EmbeddingStatusD2HGraph> {
         const OPERATION: &str = "OwnedGraphBf16EmbeddingStatusD2HCapture::end";
         if !self.active {
@@ -9343,6 +9814,10 @@ impl OwnedGraphBf16EmbeddingStatusD2HCapture {
     }
 
     /// Aborts capture and returns resources only after known native release.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HResources> {
         self.abort_once()?;
         take_owned_graph_bf16_embedding_status_d2h_resources(
@@ -9390,6 +9865,10 @@ pub struct OwnedCapturedBf16EmbeddingStatusD2HGraph {
 
 impl OwnedCapturedBf16EmbeddingStatusD2HGraph {
     /// Instantiates while retaining the exact stream/allocation sextet.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HExec> {
         #[cfg(feature = "cuda")]
         {
@@ -9415,6 +9894,10 @@ impl OwnedCapturedBf16EmbeddingStatusD2HGraph {
     }
 
     /// Closes the captured graph and returns resources after known release.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HResources> {
         #[cfg(feature = "cuda")]
         {
@@ -9449,6 +9932,12 @@ pub struct OwnedGraphBf16EmbeddingStatusD2HExec {
 
 impl OwnedGraphBf16EmbeddingStatusD2HExec {
     /// Launches the fixed five-node graph once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(
         &'exec mut self,
     ) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HLaunch<'exec>> {
@@ -9493,6 +9982,10 @@ impl OwnedGraphBf16EmbeddingStatusD2HExec {
     }
 
     /// Destroys this executable and returns resources after known release.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HResources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -9532,6 +10025,10 @@ impl<'exec> OwnedGraphBf16EmbeddingStatusD2HLaunch<'exec> {
     ///
     /// The receipt keeps the executable exclusively borrowed, so a new replay
     /// or close cannot race the fixed pinned-host report view.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HCompletion<'exec>> {
         self.complete_once()?;
         let exec = self.exec.take().ok_or_else(|| {
@@ -9600,6 +10097,10 @@ impl OwnedGraphBf16EmbeddingStatusD2HCompletion<'_> {
     /// intentional eager-equivalent no-output-write result, not an error that
     /// poisons the graph. A native observation, metadata, or report-contract
     /// failure instead retains all resources fail-closed.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn read_status(&mut self) -> CudaResult<Bf16EmbeddingStatusD2HStatus> {
         const OPERATION: &str = "OwnedGraphBf16EmbeddingStatusD2HCompletion::read_status";
         if self.exec.terminal {
@@ -9737,6 +10238,10 @@ impl OwnedGraphCanonicalGemmBf16Resources {
     }
 
     /// Explicitly closes recovered resources in the reverse ownership order.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (stream, plan, input, weight, output, workspace) = self.into_parts();
         plan.close()?;
@@ -9841,6 +10346,10 @@ impl OwnedGraphCanonicalGemmBf16Capture {
     /// Records exactly one capture-only `cublasLtMatmul` for the cold plan.
     /// It admits no dynamic spans, node updates, command batch, or eager
     /// synchronization.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_canonical_gemm_bf16(&mut self) -> CudaResult<()> {
         const OPERATION: &str = "OwnedGraphCanonicalGemmBf16Capture::enqueue_canonical_gemm_bf16";
         if !self.active {
@@ -9878,6 +10387,10 @@ impl OwnedGraphCanonicalGemmBf16Capture {
     }
 
     /// Ends capture and transfers the plan/allocation bundle into a graph.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedCanonicalGemmBf16Graph> {
         const OPERATION: &str = "OwnedGraphCanonicalGemmBf16Capture::end";
         if !self.active {
@@ -9922,6 +10435,10 @@ impl OwnedGraphCanonicalGemmBf16Capture {
     }
 
     /// Aborts capture and returns resources only after known native release.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Resources> {
         self.abort_once()?;
         take_owned_graph_canonical_gemm_bf16_resources(
@@ -9979,6 +10496,10 @@ pub struct OwnedCapturedCanonicalGemmBf16Graph {
 
 impl OwnedCapturedCanonicalGemmBf16Graph {
     /// Instantiates while retaining the exact plan, stream, and allocations.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Exec> {
         #[cfg(feature = "cuda")]
         {
@@ -10004,6 +10525,10 @@ impl OwnedCapturedCanonicalGemmBf16Graph {
     }
 
     /// Closes the captured graph and returns resources after known release.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Resources> {
         #[cfg(feature = "cuda")]
         {
@@ -10044,6 +10569,12 @@ pub struct OwnedGraphCanonicalGemmBf16Exec {
 
 impl OwnedGraphCanonicalGemmBf16Exec {
     /// Launches the fixed one-node graph once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Launch<'exec>> {
         const OPERATION: &str = "OwnedGraphCanonicalGemmBf16Exec::launch";
         if self.terminal {
@@ -10086,6 +10617,10 @@ impl OwnedGraphCanonicalGemmBf16Exec {
     }
 
     /// Destroys this executable and returns resources after known release.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Resources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -10133,6 +10668,10 @@ pub struct OwnedGraphCanonicalGemmBf16Launch<'exec> {
 impl OwnedGraphCanonicalGemmBf16Launch<'_> {
     /// Waits for known graph completion. The output allocation remains owned
     /// by the executable until its later explicit close.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<()> {
         self.complete_once()
     }
@@ -10188,7 +10727,7 @@ fn take_owned_graph_canonical_gemm_bf16_resources(
     })
 }
 
-/// By-value resource bundle for one C05-22 canonical RMSNorm -> GEMM graph.
+/// By-value resource bundle for one C05-22 canonical `RMSNorm` -> GEMM graph.
 ///
 /// `rms_norm_output` is the one deliberate fixed-address dependency: native
 /// records it as the canonical GEMM input without a second Rust wrapper or
@@ -10270,6 +10809,10 @@ impl OwnedGraphCanonicalRmsNormGemmBf16Resources {
 
     /// Explicitly closes the recovered plan and buffers in reverse graph-use
     /// order, then releases the retained stream.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         let (
             stream,
@@ -10292,7 +10835,7 @@ impl OwnedGraphCanonicalRmsNormGemmBf16Resources {
     }
 }
 
-/// Error from beginning one by-value C05-22 canonical RMSNorm -> GEMM graph
+/// Error from beginning one by-value C05-22 canonical `RMSNorm` -> GEMM graph
 /// capture.
 ///
 /// Rust-only preflight errors recover the untouched bundle. Once native begin
@@ -10386,9 +10929,13 @@ pub struct OwnedGraphCanonicalRmsNormGemmBf16Capture {
 }
 
 impl OwnedGraphCanonicalRmsNormGemmBf16Capture {
-    /// Records exactly canonical BF16 RMSNorm followed by the dependent,
+    /// Records exactly canonical BF16 `RMSNorm` followed by the dependent,
     /// capture-only strict-plan cuBLASLt matmul. Dynamic spans, node updates,
     /// fresh inputs, batches, and eager synchronization are not admitted.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn enqueue_canonical_rms_norm_gemm_bf16(&mut self) -> CudaResult<()> {
         const OPERATION: &str =
             "OwnedGraphCanonicalRmsNormGemmBf16Capture::enqueue_canonical_rms_norm_gemm_bf16";
@@ -10430,6 +10977,10 @@ impl OwnedGraphCanonicalRmsNormGemmBf16Capture {
 
     /// Ends the exact two-node capture and transfers its full bundle into a
     /// by-value graph owner.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn end(mut self) -> CudaResult<OwnedCapturedCanonicalRmsNormGemmBf16Graph> {
         const OPERATION: &str = "OwnedGraphCanonicalRmsNormGemmBf16Capture::end";
         if !self.active {
@@ -10477,6 +11028,10 @@ impl OwnedGraphCanonicalRmsNormGemmBf16Capture {
 
     /// Aborts the capture and returns resources only after native recovery
     /// proves that all permanent graph leases were released.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn abort(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Resources> {
         self.abort_once()?;
         take_owned_graph_canonical_rms_norm_gemm_bf16_resources(
@@ -10534,6 +11089,10 @@ pub struct OwnedCapturedCanonicalRmsNormGemmBf16Graph {
 
 impl OwnedCapturedCanonicalRmsNormGemmBf16Graph {
     /// Instantiates while retaining the one cold plan and exact allocations.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn instantiate(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Exec> {
         #[cfg(feature = "cuda")]
         {
@@ -10559,6 +11118,10 @@ impl OwnedCapturedCanonicalRmsNormGemmBf16Graph {
     }
 
     /// Closes the captured graph and returns resources after known release.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Resources> {
         #[cfg(feature = "cuda")]
         {
@@ -10578,7 +11141,7 @@ impl OwnedCapturedCanonicalRmsNormGemmBf16Graph {
     }
 }
 
-/// By-value executable for one fixed canonical RMSNorm -> GEMM graph.
+/// By-value executable for one fixed canonical `RMSNorm` -> GEMM graph.
 ///
 /// ```compile_fail
 /// fn assert_send<T: Send>() {}
@@ -10599,6 +11162,12 @@ pub struct OwnedGraphCanonicalRmsNormGemmBf16Exec {
 
 impl OwnedGraphCanonicalRmsNormGemmBf16Exec {
     /// Launches the fixed two-node graph once on its retained stream.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
+    // Public named lifetime documents the retained execution lease.
+    #[allow(clippy::needless_lifetimes)]
     pub fn launch<'exec>(
         &'exec mut self,
     ) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Launch<'exec>> {
@@ -10644,6 +11213,10 @@ impl OwnedGraphCanonicalRmsNormGemmBf16Exec {
 
     /// Destroys this executable and returns its bundle after known native
     /// release of every plan/allocation graph lease.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Resources> {
         if self.terminal {
             return Err(CudaError::invalid_state(
@@ -10690,6 +11263,10 @@ pub struct OwnedGraphCanonicalRmsNormGemmBf16Launch<'exec> {
 
 impl OwnedGraphCanonicalRmsNormGemmBf16Launch<'_> {
     /// Waits for known completion exactly once.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn finish(mut self) -> CudaResult<()> {
         self.complete_once()
     }
@@ -11130,7 +11707,7 @@ impl CudaStream {
     }
 
     /// Begins a by-value C05-8 capture containing exactly one fixed-address,
-    /// out-of-place BF16 SiLU node.
+    /// out-of-place BF16 `SiLU` node.
     ///
     /// The moved input and output remain inaccessible until graph close. This
     /// slice deliberately replays capture-time input bytes only: it does not
@@ -11143,6 +11720,8 @@ impl CudaStream {
     /// [`OwnedGraphSiluBf16CaptureBeginError::into_resources`]. After native
     /// entry, no resources are returned because CUDA may retain their raw
     /// addresses while resolving a deferred capture failure.
+    // The error returns owned GPU resources without allocating or losing leases.
+    #[allow(clippy::result_large_err)]
     pub fn begin_owned_graph_silu_bf16_capture(
         self,
         input: CudaDeviceBuffer,
@@ -11205,7 +11784,7 @@ impl CudaStream {
     /// The moved activated-gate input, up input, and output remain inaccessible
     /// until graph close. This slice deliberately replays capture-time input
     /// bytes only: it does not expose spans, offsets, in-place aliasing, dtype
-    /// selection, fresh input staging, node updates, SiLU fusion, executor
+    /// selection, fresh input staging, node updates, `SiLU` fusion, executor
     /// wiring, or eager fallback.
     ///
     /// # Errors
@@ -11214,6 +11793,8 @@ impl CudaStream {
     /// [`OwnedGraphGatedMultiplyBf16CaptureBeginError::into_resources`]. After
     /// native entry, no resources are returned because CUDA may retain their
     /// raw addresses while resolving a deferred capture failure.
+    // The error returns owned GPU resources without allocating or losing leases.
+    #[allow(clippy::result_large_err)]
     pub fn begin_owned_graph_gated_multiply_bf16_capture(
         self,
         activated_gate: CudaDeviceBuffer,
@@ -11294,6 +11875,8 @@ impl CudaStream {
     /// [`OwnedGraphResidualAddBf16CaptureBeginError::into_resources`]. After
     /// native entry, no resource is returned because CUDA may retain the raw
     /// addresses while resolving an ambiguous capture failure.
+    // The error returns owned GPU resources without allocating or losing leases.
+    #[allow(clippy::result_large_err)]
     pub fn begin_owned_graph_residual_add_bf16_capture(
         self,
         left: CudaDeviceBuffer,
@@ -11357,13 +11940,13 @@ impl CudaStream {
     }
 
     /// Begins a by-value C05-12 capture containing exactly one fixed-address,
-    /// out-of-place canonical BF16 RMSNorm node.
+    /// out-of-place canonical BF16 `RMSNorm` node.
     ///
     /// The moved input, learned weight, and output remain inaccessible until
     /// graph close. This slice follows only the generic eager
     /// [`crate::rms_norm`] BF16 reduction and normalized-storage-rounding
     /// contract; it excludes
-    /// profile-specific SmolLM2 and Fixed37 RMSNorm, fused RMSNorm, C07
+    /// profile-specific `SmolLM2` and Fixed37 `RMSNorm`, fused `RMSNorm`, C07
     /// executor integration, in-place aliases, spans, offsets, fresh inputs,
     /// node updates, and eager fallback.
     ///
@@ -11373,6 +11956,10 @@ impl CudaStream {
     /// [`OwnedGraphCanonicalRmsNormBf16CaptureBeginError::into_resources`].
     /// After native entry, no resource is returned because CUDA may retain the
     /// raw addresses while resolving an ambiguous capture failure.
+    // The error returns owned GPU resources without allocating or losing leases.
+    #[allow(clippy::result_large_err)]
+    // Keep the audited CUDA preflight and lease/submission sequence together.
+    #[allow(clippy::too_many_arguments)]
     pub fn begin_owned_graph_canonical_rms_norm_bf16_capture(
         self,
         input: CudaDeviceBuffer,
@@ -11468,6 +12055,8 @@ impl CudaStream {
     /// [`OwnedGraphBf16ArgmaxCaptureBeginError::into_resources`]. After native
     /// entry, no resource is returned because CUDA may retain the raw addresses
     /// while resolving an ambiguous capture failure.
+    // The error returns owned GPU resources without allocating or losing leases.
+    #[allow(clippy::result_large_err)]
     pub fn begin_owned_graph_bf16_argmax_capture(
         self,
         logits: CudaDeviceBuffer,
@@ -11544,6 +12133,10 @@ impl CudaStream {
     /// [`OwnedGraphBf16RowGatherCaptureBeginError::into_resources`]. After
     /// native entry, no resource is returned because CUDA may retain the raw
     /// addresses while resolving an ambiguous capture failure.
+    // The error returns owned GPU resources without allocating or losing leases.
+    #[allow(clippy::result_large_err)]
+    // Keep the audited CUDA preflight and lease/submission sequence together.
+    #[allow(clippy::too_many_arguments)]
     pub fn begin_owned_graph_bf16_row_gather_capture(
         self,
         input: CudaDeviceBuffer,
@@ -11626,7 +12219,7 @@ impl CudaStream {
     /// device-only BF16 row-gather then deterministic-argmax node chain.
     ///
     /// The moved BF16 input, U32 row-index allocation, BF16 gathered-logits
-    /// allocation, and U32 [`Bf16ArgmaxResult`] allocation remain inaccessible
+    /// allocation, and U32 [`crate::Bf16ArgmaxResult`] allocation remain inaccessible
     /// until graph close. `row_indices_host` is only a temporary safe-
     /// validation mirror: it must be unique and in range like eager
     /// [`crate::row_gather`], is never retained by this owner, and does not
@@ -11643,6 +12236,10 @@ impl CudaStream {
     /// [`OwnedGraphBf16RowGatherArgmaxCaptureBeginError::into_resources`].
     /// After native entry, no resource is returned because CUDA may retain the
     /// raw addresses while resolving an ambiguous capture failure.
+    // The error returns owned GPU resources without allocating or losing leases.
+    #[allow(clippy::result_large_err)]
+    // Keep the audited CUDA preflight and lease/submission sequence together.
+    #[allow(clippy::too_many_arguments)]
     pub fn begin_owned_graph_bf16_row_gather_argmax_capture(
         self,
         input: CudaDeviceBuffer,
@@ -11757,6 +12354,10 @@ impl CudaStream {
     ///
     /// Rust-side preflight failures return the untouched resource sextet.
     /// Native-entry errors retain all raw addresses fail-closed.
+    // The error returns owned GPU resources without allocating or losing leases.
+    #[allow(clippy::result_large_err)]
+    // Keep the audited CUDA preflight and lease/submission sequence together.
+    #[allow(clippy::too_many_arguments)]
     pub fn begin_owned_graph_bf16_row_gather_argmax_d2h_capture(
         self,
         input: CudaDeviceBuffer,
@@ -11885,6 +12486,10 @@ impl CudaStream {
     ///
     /// Rust-side preflight failures return the untouched resource sextet.
     /// Native-entry errors retain every raw address fail-closed.
+    // The error returns owned GPU resources without allocating or losing leases.
+    #[allow(clippy::result_large_err)]
+    // Keep the audited CUDA preflight and lease/submission sequence together.
+    #[allow(clippy::too_many_arguments)]
     pub fn begin_owned_graph_indexed_rope_bf16_capture(
         self,
         input: CudaDeviceBuffer,
@@ -12005,6 +12610,10 @@ impl CudaStream {
     /// allocation resource bundle. Native-entry errors retain every raw
     /// address fail-closed.
     #[allow(clippy::too_many_arguments)]
+    // The error returns owned GPU resources without allocating or losing leases.
+    #[allow(clippy::result_large_err)]
+    // Keep the audited CUDA preflight and lease/submission sequence together.
+    #[allow(clippy::too_many_lines)]
     pub fn begin_owned_graph_ragged_paged_kv_cache_write_bf16_capture(
         self,
         key_source: CudaDeviceBuffer,
@@ -12145,6 +12754,10 @@ impl CudaStream {
     /// allocation resource bundle. Native-entry errors retain every raw
     /// address fail-closed.
     #[allow(clippy::too_many_arguments)]
+    // The error returns owned GPU resources without allocating or losing leases.
+    #[allow(clippy::result_large_err)]
+    // Keep the audited CUDA preflight and lease/submission sequence together.
+    #[allow(clippy::too_many_lines)]
     pub fn begin_owned_graph_grouped_ragged_paged_attention_bf16_capture(
         self,
         query: CudaDeviceBuffer,
@@ -12298,6 +12911,8 @@ impl CudaStream {
     /// device allocations and pinned report. Native-entry errors retain every
     /// raw address fail-closed.
     #[allow(clippy::too_many_arguments)]
+    // The error returns owned GPU resources without allocating or losing leases.
+    #[allow(clippy::result_large_err)]
     pub fn begin_owned_graph_bf16_embedding_status_d2h_capture(
         self,
         table: CudaDeviceBuffer,
@@ -12412,6 +13027,8 @@ impl CudaStream {
     /// bundle. An error after native entry leaves no reusable bundle because
     /// capture recovery may retain every raw address fail-closed.
     #[allow(clippy::too_many_arguments)]
+    // The error returns owned GPU resources without allocating or losing leases.
+    #[allow(clippy::result_large_err)]
     pub fn begin_owned_graph_canonical_gemm_bf16_capture(
         self,
         plan: CudaPreparedGemm,
@@ -12478,13 +13095,13 @@ impl CudaStream {
         }
     }
 
-    /// Begins one C05-22 fixed-address canonical BF16 RMSNorm -> cuBLASLt
+    /// Begins one C05-22 fixed-address canonical BF16 `RMSNorm` -> cuBLASLt
     /// GEMM graph capture.
     ///
     /// The caller moves one cold-prepared strict-no-split BF16/F32 GEMM plan,
-    /// canonical RMSNorm input/weight, the one intermediate allocation, GEMM
+    /// canonical `RMSNorm` input/weight, the one intermediate allocation, GEMM
     /// weight/final output/workspace, and this stream into the owner. The
-    /// intermediate is supplied exactly once: it is the RMSNorm output and
+    /// intermediate is supplied exactly once: it is the `RMSNorm` output and
     /// the captured GEMM input. No fresh replay input, spans, offsets, node
     /// updates, command batch, C07 executor wiring, or eager fallback is
     /// exposed by this narrow two-node slice.
@@ -12497,6 +13114,8 @@ impl CudaStream {
     /// untouched bundle. A native-entry error fails closed because CUDA may
     /// retain all raw addresses during recovery.
     #[allow(clippy::too_many_arguments)]
+    // The error returns owned GPU resources without allocating or losing leases.
+    #[allow(clippy::result_large_err)]
     pub fn begin_owned_graph_canonical_rms_norm_gemm_bf16_capture(
         self,
         plan: CudaPreparedGemm,

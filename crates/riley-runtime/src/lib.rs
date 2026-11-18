@@ -31,9 +31,7 @@ pub use kernel::{
 pub use riley_cuda::{
     AttentionBackend, AttentionPreference, AttentionSelectionTrace, BF16_LOGPROB_SUMMARY_WORDS,
     CudaContext, CudaDeviceBuffer, CudaError, CudaEvent, CudaPeerAllReduceGroup, CudaRuntime,
-    CudaStream,
-    set_native_d128_attention_flashinfer,
-    set_native_flashinfer_generated_kv_chunk,
+    CudaStream, set_native_d128_attention_flashinfer, set_native_flashinfer_generated_kv_chunk,
     set_native_flashinfer_kv_chunk,
 };
 

@@ -49,12 +49,10 @@ pub(crate) struct PrefixCache {
 }
 
 fn key(parent: EntryId, tokens: &[u32]) -> SchedulerResult<Key> {
-    let tokens = tokens
-        .try_into()
-        .map_err(|_| SchedulerError::InvalidPlan {
-            field: "prefix cache key",
-            reason: "a key covers exactly one full KV block",
-        })?;
+    let tokens = tokens.try_into().map_err(|_| SchedulerError::InvalidPlan {
+        field: "prefix cache key",
+        reason: "a key covers exactly one full KV block",
+    })?;
     Ok(Key { parent, tokens })
 }
 
@@ -64,10 +62,11 @@ impl PrefixCache {
             resource,
             requested_elements: capacity,
         };
-        let top = EntryId::try_from(capacity).map_err(|_| SchedulerError::InvalidConfiguration {
-            field: "prefix_cache.capacity",
-            reason: "must fit the U32 entry index",
-        })?;
+        let top =
+            EntryId::try_from(capacity).map_err(|_| SchedulerError::InvalidConfiguration {
+                field: "prefix_cache.capacity",
+                reason: "must fit the U32 entry index",
+            })?;
         let mut entries = Vec::new();
         entries
             .try_reserve_exact(capacity)
@@ -103,9 +102,7 @@ impl PrefixCache {
         tokens: &[u32],
     ) -> SchedulerResult<Option<(EntryId, BlockId)>> {
         let found = self.index.get(&key(parent, tokens)?).copied();
-        found
-            .map(|id| Ok((id, self.entry(id)?.block)))
-            .transpose()
+        found.map(|id| Ok((id, self.entry(id)?.block))).transpose()
     }
 
     /// Lists a block under `parent`. The caller hands over one shared hold,
@@ -176,7 +173,13 @@ impl PrefixCache {
         for index in 0..self.entries.len() {
             if let Some(entry) = self.entries[index].take() {
                 pool.release_shared_block(entry.block)?;
-                self.free_entries.push(index as EntryId);
+                self.free_entries
+                    .push(
+                        EntryId::try_from(index).map_err(|_| SchedulerError::InvalidPlan {
+                            field: "prefix cache index",
+                            reason: "entry exceeds U32",
+                        })?,
+                    );
             }
         }
         self.index.clear();
@@ -328,7 +331,7 @@ mod tests {
         assert!(cache.evict_one(&mut pool).expect("evict"));
         assert!(cache.evict_one(&mut pool).expect("evict"));
         assert!(!cache.evict_one(&mut pool).expect("evict"), "other holds d");
-        assert_eq!(cache.find(ROOT, &tokens(4)).unwrap().is_some(), true);
+        assert!(cache.find(ROOT, &tokens(4)).unwrap().is_some());
     }
 
     #[test]

@@ -59,12 +59,17 @@ impl CudaPeerAllReduceGroup {
         }
         #[cfg(feature = "cuda")]
         {
-            let handles: Vec<&ffi::ContextHandle> =
-                contexts.iter().map(|context| &context.inner.native).collect();
+            let handles: Vec<&ffi::ContextHandle> = contexts
+                .iter()
+                .map(|context| &context.inner.native)
+                .collect();
             let native = ffi::PeerAllReduceGroupHandle::create(&handles, max_elements)?;
             Ok(Self {
                 native,
-                contexts: contexts.iter().map(|context| Arc::clone(&context.inner)).collect(),
+                contexts: contexts
+                    .iter()
+                    .map(|context| Arc::clone(&context.inner))
+                    .collect(),
                 max_elements,
             })
         }
@@ -110,7 +115,11 @@ impl fmt::Debug for CudaPeerAllReduceGroup {
             .debug_struct("CudaPeerAllReduceGroup")
             .field(
                 "devices",
-                &self.contexts.iter().map(|context| context.ordinal).collect::<Vec<_>>(),
+                &self
+                    .contexts
+                    .iter()
+                    .map(|context| context.ordinal)
+                    .collect::<Vec<_>>(),
             )
             .field("max_elements", &self.max_elements)
             .finish()

@@ -926,16 +926,33 @@ impl EngineBackend for HfExactBackend {
 
 #[cfg(test)]
 mod admission_timeout_tests {
-    use super::{admission_timeout_ns, DEFAULT_ADMISSION_TIMEOUT};
+    use super::{DEFAULT_ADMISSION_TIMEOUT, admission_timeout_ns};
     use std::time::Duration;
 
     #[test]
     fn hf_exact_admission_timeout_preserves_default_and_checked_units() {
-        assert_eq!(admission_timeout_ns(DEFAULT_ADMISSION_TIMEOUT).unwrap(), 30_000_000_000);
-        assert_eq!(admission_timeout_ns(Duration::from_millis(600_000)).unwrap(), 600_000_000_000);
-        assert_eq!(admission_timeout_ns(Duration::from_millis(1)).unwrap(), 1_000_000);
-        assert_eq!(admission_timeout_ns(Duration::from_secs(3600)).unwrap(), 3_600_000_000_000);
-        for invalid in [Duration::ZERO, Duration::from_nanos(999_999), Duration::from_secs(3600) + Duration::from_nanos(1), Duration::MAX] {
+        assert_eq!(
+            admission_timeout_ns(DEFAULT_ADMISSION_TIMEOUT).unwrap(),
+            30_000_000_000
+        );
+        assert_eq!(
+            admission_timeout_ns(Duration::from_millis(600_000)).unwrap(),
+            600_000_000_000
+        );
+        assert_eq!(
+            admission_timeout_ns(Duration::from_millis(1)).unwrap(),
+            1_000_000
+        );
+        assert_eq!(
+            admission_timeout_ns(Duration::from_secs(3600)).unwrap(),
+            3_600_000_000_000
+        );
+        for invalid in [
+            Duration::ZERO,
+            Duration::from_nanos(999_999),
+            Duration::from_secs(3600) + Duration::from_nanos(1),
+            Duration::MAX,
+        ] {
             assert!(admission_timeout_ns(invalid).is_err());
         }
     }

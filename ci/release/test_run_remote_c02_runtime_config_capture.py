@@ -11,6 +11,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from release_test_environment import require_linux_proc
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 RUNNER = REPOSITORY_ROOT / "ci/release/run_remote_c02_runtime_config_capture.sh"
@@ -26,6 +28,7 @@ class RemoteC02RuntimeConfigCaptureTests(unittest.TestCase):
         return source[heredoc_start:heredoc_end]
 
     def _run_embedded_python(self, function_name: str, *arguments: str) -> subprocess.CompletedProcess[str]:
+        require_linux_proc()
         return subprocess.run(
             [sys.executable, "-B", "-I", "-S", "-", *arguments],
             input=self._embedded_python(function_name),

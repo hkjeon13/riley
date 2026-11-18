@@ -48,8 +48,8 @@ const NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS: usize = 32_768;
 #[cfg(feature = "cuda-cublas-gemm-probe")]
 pub(in crate::llama) struct HfAttentionDiagnosticWorkspace {
     pub(in crate::llama) plan: riley_cuda::CudaPreparedCublasGemmProbe,
-    pub(in crate::llama) scratch: [CudaDeviceBuffer;8],
-    pub(in crate::llama) decode_chunk: Option<[CudaDeviceBuffer;3]>,
+    pub(in crate::llama) scratch: [CudaDeviceBuffer; 8],
+    pub(in crate::llama) decode_chunk: Option<[CudaDeviceBuffer; 3]>,
 }
 
 pub(in crate::llama) struct MaterializedBf16ReferenceWorkspace {
@@ -66,15 +66,26 @@ pub(in crate::llama) struct MaterializedBf16ReferenceWorkspace {
 }
 
 impl MaterializedBf16ReferenceWorkspace {
-    fn diagnostic_bytes(&self)->u64 {
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        { self.hf.as_ref().map_or(0,|h|h.scratch.iter().chain(h.decode_chunk.iter().flat_map(|b|b.iter())).map(CudaDeviceBuffer::byte_len).sum()) }
-        #[cfg(not(feature="cuda-cublas-gemm-probe"))] {0}
+    #[cfg_attr(not(feature = "cuda-cublas-gemm-probe"), allow(clippy::unused_self))]
+    fn diagnostic_bytes(&self) -> u64 {
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        {
+            self.hf.as_ref().map_or(0, |h| {
+                h.scratch
+                    .iter()
+                    .chain(h.decode_chunk.iter().flat_map(|b| b.iter()))
+                    .map(CudaDeviceBuffer::byte_len)
+                    .sum()
+            })
+        }
+        #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+        {
+            0
+        }
     }
 }
 
 pub(in crate::llama) struct NativeD128TwoStageWorkspace {
-
     pub(in crate::llama) materialized: Option<MaterializedBf16ReferenceWorkspace>,
 
     pub(in crate::llama) partial_states: CudaDeviceBuffer,
@@ -105,7 +116,7 @@ pub(in crate::llama) struct BatchHostWorkspace {
 /// owner's uploaded weights, paged KV arena, `RoPE`, metadata, and output
 /// workspaces rather than allocating duplicates.
 pub(in crate::llama) struct PreparedLlamaBatchOwner {
-    #[cfg(feature="cuda-cublas-gemm-probe")]
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     pub(in crate::llama) owned_mlp_graphs: Option<riley_cuda::CudaOwnedHfMlpGraph>,
     pub(in crate::llama) metadata: PreparedLlamaBatchMetadata,
     pub(in crate::llama) forward: PreparedLlamaForward,
@@ -298,6 +309,12 @@ impl PreparedLlamaBatchOwner {
     /// order: forward first, then optional shape plans, KV/`RoPE`, metadata,
     /// outputs, and host workspace.
     #[allow(clippy::too_many_lines)]
+    // Copy configuration and borrowed descriptors keep the established execution/lease API.
+    #[allow(clippy::large_types_passed_by_value)]
+    // FP32 scaling and bounded fixture values preserve the approved numerical contract.
+    #[allow(clippy::cast_precision_loss)]
+    // Native rows and fixed geometry are bounded during cold preparation; preserve their bytes.
+    #[allow(clippy::cast_possible_truncation)]
     pub(in crate::llama) fn prepare(
         model: &LoadedModel,
         context: &CudaContext,
@@ -330,14 +347,29 @@ impl PreparedLlamaBatchOwner {
             })?
             .attention();
         let bounds = config.metadata();
-        if matches!(config.owned_decode_batch(),6|7|8|9|10) && (bounds.max_rows()>32 || bounds.max_output_slots()>32) {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"bounded_sm80_gateup",reason:"requires at most32 simultaneous sequences"});
+        if matches!(config.owned_decode_batch(), 6..=10)
+            && (bounds.max_rows() > 32 || bounds.max_output_slots() > 32)
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "bounded_sm80_gateup",
+                reason: "requires at most32 simultaneous sequences",
+            });
         }
-        if config.owned_decode_batch()==5 && (bounds.max_rows()>32 || bounds.max_output_slots()>32) {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"exact_smallrows_decode",reason:"mode5 requires at most32 simultaneous sequences"});
+        if config.owned_decode_batch() == 5
+            && (bounds.max_rows() > 32 || bounds.max_output_slots() > 32)
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "exact_smallrows_decode",
+                reason: "mode5 requires at most32 simultaneous sequences",
+            });
         }
-        if config.owned_decode_batch()==4 && (bounds.max_rows()>2 || bounds.max_output_slots()>2) {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"exact_r2_global_decode",reason:"mode4 is performance-qualified only for at most2 simultaneous sequences; use the existing mode3 for larger batches"});
+        if config.owned_decode_batch() == 4
+            && (bounds.max_rows() > 2 || bounds.max_output_slots() > 2)
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "exact_r2_global_decode",
+                reason: "mode4 is performance-qualified only for at most2 simultaneous sequences; use the existing mode3 for larger batches",
+            });
         }
 
         validate_batch_attention_geometry(
@@ -381,17 +413,23 @@ impl PreparedLlamaBatchOwner {
         } else {
             config.forward()
         };
-        #[cfg(feature="cuda-cublas-gemm-probe")]
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
         let hf_batch_only = config.owned_hf_eager_bf16();
-        #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+        #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
         let hf_batch_only = false;
         let mut forward = if hf_batch_only {
-            PreparedLlamaForward::prepare_paged_batch(model, context, stream, forward_rows,
-                forward_config, bounds.max_output_slots())?
+            PreparedLlamaForward::prepare_paged_batch(
+                model,
+                context,
+                stream,
+                forward_rows,
+                forward_config,
+                bounds.max_output_slots(),
+            )?
         } else {
             PreparedLlamaForward::prepare(model, context, stream, forward_rows, forward_config)?
         };
-        let mut shape_variants = match prepare_shape_variants(
+        let shape_variants = match prepare_shape_variants(
             model,
             context,
             &forward,
@@ -404,27 +442,55 @@ impl PreparedLlamaBatchOwner {
                 return Err(error);
             }
         };
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        if matches!(config.owned_decode_batch(),7|8|9|10) {
-            let d=forward.plan.dimensions();
-            if (d.hidden_size(),d.query_heads(),d.key_value_heads(),d.head_dimension(),d.intermediate_size())!=(2560,32,8,128,9728) {
-                return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"bounded_sm80_projections",reason:"requires qualified Qwen3-4B geometry"});
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if matches!(config.owned_decode_batch(), 7 | 8 | 9 | 10) {
+            let d = forward.plan.dimensions();
+            if (
+                d.hidden_size(),
+                d.query_heads(),
+                d.key_value_heads(),
+                d.head_dimension(),
+                d.intermediate_size(),
+            ) != (2560, 32, 8, 128, 9728)
+            {
+                return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                    field: "bounded_sm80_projections",
+                    reason: "requires qualified Qwen3-4B geometry",
+                });
             }
             forward.gemms.prepare_bounded_sm80_projections()?;
-            for shape in shape_variants.iter_mut(){shape.gemms.prepare_bounded_sm80_projections()?;}
+            for shape in shape_variants.iter_mut() {
+                shape.gemms.prepare_bounded_sm80_projections()?;
+            }
         }
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        if config.owned_decode_batch()==10 {
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if config.owned_decode_batch() == 10 {
             forward.gemms.prepare_sm80_prefill()?;
-            for shape in shape_variants.iter_mut(){shape.gemms.prepare_sm80_prefill()?;}
+            for shape in shape_variants.iter_mut() {
+                shape.gemms.prepare_sm80_prefill()?;
+            }
         }
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        if config.owned_decode_batch()==10 && config.owned_decode_graph() && bounds.max_rows()>=2 && bounds.max_input_tokens()>=128 {
-            forward.weights.upload_merged_gate_up(model.weights(),forward.plan.layers().len(),context,stream,
-                config.forward().upload_staging_bytes(),false)
-                .map_err(|source|crate::llama::LlamaForwardError::Weight{site:None,source})?;
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if config.owned_decode_batch() == 10
+            && config.owned_decode_graph()
+            && bounds.max_rows() >= 2
+            && bounds.max_input_tokens() >= 128
+        {
+            forward
+                .weights
+                .upload_merged_gate_up(
+                    model.weights(),
+                    forward.plan.layers().len(),
+                    context,
+                    stream,
+                    config.forward().upload_staging_bytes(),
+                    false,
+                )
+                .map_err(|source| crate::llama::LlamaForwardError::Weight { site: None, source })?;
             forward.gemms.prepare_sm80_merged_decode(context)?;
-            for shape in shape_variants.iter_mut(){shape.gemms.prepare_sm80_merged_decode(context)?;}
+            for shape in shape_variants.iter_mut() {
+                shape.gemms.prepare_sm80_merged_decode(context)?;
+            }
         }
         let required_gemm_workspace_bytes = shape_variants.iter().fold(
             forward.gemms.maximum_workspace_bytes(),
@@ -465,8 +531,7 @@ impl PreparedLlamaBatchOwner {
             layout.bytes_per_kind(),
             ExecutionSite::layer(0, LlamaOp::KvCacheWrite),
         )?;
-        let native_d128_two_stage_workspace = if config.uses_paged_attention_workspace()
-        {
+        let native_d128_two_stage_workspace = if config.uses_paged_attention_workspace() {
             // A row never has more pages than the longest sequence the
             // scheduler admits; without a declared bound, fall back to the
             // checkpoint context.
@@ -497,95 +562,199 @@ impl PreparedLlamaBatchOwner {
                 })?;
             let attention_site = ExecutionSite::layer(0, LlamaOp::RaggedPagedAttention);
 
-            let materialized = if config.materialized_bf16_reference_d128() || config.materialized_bf16_reference_d64() || config.owned_hf_eager_bf16() {
-                let reference = riley_cuda::PreparedPagedDecodeAttention::select(context,
-                    riley_cuda::PagedDecodeAttentionRequest::new(workspace_sequence_tokens as u64,
-                        layout.physical_block_count() as u64, dimensions.query_heads() as u64,
-                        dimensions.key_value_heads() as u64, dimensions.head_dimension() as u64,
-                        1.0/(dimensions.head_dimension() as f32).sqrt()),
+            let materialized = if config.materialized_bf16_reference_d128()
+                || config.materialized_bf16_reference_d64()
+                || config.owned_hf_eager_bf16()
+            {
+                let reference = riley_cuda::PreparedPagedDecodeAttention::select(
+                    context,
+                    riley_cuda::PagedDecodeAttentionRequest::new(
+                        workspace_sequence_tokens as u64,
+                        layout.physical_block_count() as u64,
+                        dimensions.query_heads() as u64,
+                        dimensions.key_value_heads() as u64,
+                        dimensions.head_dimension() as u64,
+                        1.0 / (dimensions.head_dimension() as f32).sqrt(),
+                    ),
                     riley_cuda::DecodeAttentionPreference::Reference,
-                    riley_cuda::DecodeAttentionBackendAvailability::linked())
-                    .map_err(|e| owner_cuda(attention_site,e))?;
-                let scores=allocate_device(context,reference.workspace_bytes(),attention_site)?;
-                let valid_bytes=partial_state_capacity*2*bounds.max_input_tokens() as u64;
-                let valid=allocate_device(context,valid_bytes,attention_site)?;
-                let zero_bytes=bounds.max_input_tokens()*dimensions.query_width()*2;
-                let staging=context.allocate_pinned_host_buffer(valid_bytes.max(zero_bytes as u64))
-                    .map_err(|e| owner_cuda(attention_site,e))?;
-                #[cfg(feature="cuda-cublas-gemm-probe")]
-                let hf=if config.owned_hf_eager_bf16() {
-                    if dimensions.query_heads()==0 || dimensions.query_heads()>64 || dimensions.key_value_heads()==0 || dimensions.query_heads()%dimensions.key_value_heads()!=0 || dimensions.query_heads()/dimensions.key_value_heads()>8 || !matches!(dimensions.head_dimension(),64|128) || bounds.max_input_tokens()>8192 || workspace_sequence_tokens>9216 {
-                        return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"hf_attention_diagnostic",reason:"owned D64/D128 GQA<=8 M<=8192 T<=9216 geometry only"});
+                    riley_cuda::DecodeAttentionBackendAvailability::linked(),
+                )
+                .map_err(|e| owner_cuda(attention_site, e))?;
+                let scores = allocate_device(context, reference.workspace_bytes(), attention_site)?;
+                let valid_bytes = partial_state_capacity * 2 * bounds.max_input_tokens() as u64;
+                let valid = allocate_device(context, valid_bytes, attention_site)?;
+                let zero_bytes = bounds.max_input_tokens() * dimensions.query_width() * 2;
+                let staging = context
+                    .allocate_pinned_host_buffer(valid_bytes.max(zero_bytes as u64))
+                    .map_err(|e| owner_cuda(attention_site, e))?;
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                let hf = if config.owned_hf_eager_bf16() {
+                    if dimensions.query_heads() == 0
+                        || dimensions.query_heads() > 64
+                        || dimensions.key_value_heads() == 0
+                        || dimensions.query_heads() % dimensions.key_value_heads() != 0
+                        || dimensions.query_heads() / dimensions.key_value_heads() > 8
+                        || !matches!(dimensions.head_dimension(), 64 | 128)
+                        || bounds.max_input_tokens() > 8192
+                        || workspace_sequence_tokens > 9216
+                    {
+                        return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                            field: "hf_attention_diagnostic",
+                            reason: "owned D64/D128 GQA<=8 M<=8192 T<=9216 geometry only",
+                        });
                     }
-                    let m=bounds.max_input_tokens() as u64;let t=workspace_sequence_tokens as u64;let h=dimensions.query_heads() as u64;let d=dimensions.head_dimension() as u64;let q=m*h*d*2;let kv=t*h*d*2;let sc=h*m*t;let tiled=h*m.min(128)*t;
-                    let mut plan=context.prepare_owned_hf_gemm(riley_cuda::CudaGemmConfig::new(m,t,d,16777216).map_err(|e|owner_cuda(attention_site,e))?).map_err(|e|owner_cuda(attention_site,e))?;
-                    if matches!(config.owned_decode_batch(),9|10) {plan.prepare_sm80_attention().map_err(|e|owner_cuda(attention_site,e))?;}
-                    if config.owned_decode_batch()==10 {plan.prepare_sm80_paged_attention().map_err(|e|owner_cuda(attention_site,e))?;}
-                    let mut allocated=Vec::with_capacity(8);
-                    for len in [q,kv,kv,sc*2,tiled*4,tiled*4,q,16777216] {allocated.push(allocate_device(context,len,attention_site)?);}
-                    let scratch=match allocated.try_into() {Ok(a)=>a,Err(_)=>unreachable!("eight cold buffers")};
-                    eprintln!("owned-hf-eager-bf16-v1: owned scratch, completion={:?}, M={m}, T={t}",config.execution_completion_implementation());
-                    let decode_chunk=if config.owned_decode_batch()>=2 && bounds.max_rows()>=2 && matches!((dimensions.query_heads(),dimensions.key_value_heads()),(16,2)|(32,8)) && d==128 && plan.supports_exact_decode_chunk(){
-                        let maximum=if dimensions.query_heads()==32{32}else{8};let r=bounds.max_rows().min(maximum) as u64;let t=t.min(512);let p=r*h*t*2;let kv=if plan.uses_sm80_paged_attention(){p}else{r*h*t*128*2};
-                        Some([allocate_device(context,kv,attention_site)?,allocate_device(context,kv,attention_site)?,allocate_device(context,p,attention_site)?])
-                    }else if config.owned_decode_batch()>=2 && bounds.max_rows()>=2 && dimensions.query_heads()==9 && dimensions.key_value_heads()==3 && d==64 && plan.supports_exact_smol_attention(16) {
-                        let r=bounds.max_rows().min(32) as u64;let kv=r*3*1024*64*2;let p=r*9*1024*2;
-                        Some([allocate_device(context,kv,attention_site)?,allocate_device(context,kv,attention_site)?,allocate_device(context,p,attention_site)?])
-                    }else{None};
-                    Some(HfAttentionDiagnosticWorkspace {plan,scratch,decode_chunk})
-                } else {None};
+                    let m = bounds.max_input_tokens() as u64;
+                    let t = workspace_sequence_tokens as u64;
+                    let h = dimensions.query_heads() as u64;
+                    let d = dimensions.head_dimension() as u64;
+                    let q = m * h * d * 2;
+                    let kv = t * h * d * 2;
+                    let sc = h * m * t;
+                    let tiled = h * m.min(128) * t;
+                    let mut plan = context
+                        .prepare_owned_hf_gemm(
+                            riley_cuda::CudaGemmConfig::new(m, t, d, 16777216)
+                                .map_err(|e| owner_cuda(attention_site, e))?,
+                        )
+                        .map_err(|e| owner_cuda(attention_site, e))?;
+                    if matches!(config.owned_decode_batch(), 9 | 10) {
+                        plan.prepare_sm80_attention()
+                            .map_err(|e| owner_cuda(attention_site, e))?;
+                    }
+                    if config.owned_decode_batch() == 10 {
+                        plan.prepare_sm80_paged_attention()
+                            .map_err(|e| owner_cuda(attention_site, e))?;
+                    }
+                    let mut allocated = Vec::with_capacity(8);
+                    for len in [q, kv, kv, sc * 2, tiled * 4, tiled * 4, q, 16777216] {
+                        allocated.push(allocate_device(context, len, attention_site)?);
+                    }
+                    let scratch = match allocated.try_into() {
+                        Ok(a) => a,
+                        Err(_) => unreachable!("eight cold buffers"),
+                    };
+                    eprintln!(
+                        "owned-hf-eager-bf16-v1: owned scratch, completion={:?}, M={m}, T={t}",
+                        config.execution_completion_implementation()
+                    );
+                    let decode_chunk = if config.owned_decode_batch() >= 2
+                        && bounds.max_rows() >= 2
+                        && matches!(
+                            (dimensions.query_heads(), dimensions.key_value_heads()),
+                            (16, 2) | (32, 8)
+                        )
+                        && d == 128
+                        && plan.supports_exact_decode_chunk()
+                    {
+                        let maximum = if dimensions.query_heads() == 32 {
+                            32
+                        } else {
+                            8
+                        };
+                        let r = bounds.max_rows().min(maximum) as u64;
+                        let t = t.min(512);
+                        let p = r * h * t * 2;
+                        let kv = if plan.uses_sm80_paged_attention() {
+                            p
+                        } else {
+                            r * h * t * 128 * 2
+                        };
+                        Some([
+                            allocate_device(context, kv, attention_site)?,
+                            allocate_device(context, kv, attention_site)?,
+                            allocate_device(context, p, attention_site)?,
+                        ])
+                    } else if config.owned_decode_batch() >= 2
+                        && bounds.max_rows() >= 2
+                        && dimensions.query_heads() == 9
+                        && dimensions.key_value_heads() == 3
+                        && d == 64
+                        && plan.supports_exact_smol_attention(16)
+                    {
+                        let r = bounds.max_rows().min(32) as u64;
+                        let kv = r * 3 * 1024 * 64 * 2;
+                        let p = r * 9 * 1024 * 2;
+                        Some([
+                            allocate_device(context, kv, attention_site)?,
+                            allocate_device(context, kv, attention_site)?,
+                            allocate_device(context, p, attention_site)?,
+                        ])
+                    } else {
+                        None
+                    };
+                    Some(HfAttentionDiagnosticWorkspace {
+                        plan,
+                        scratch,
+                        decode_chunk,
+                    })
+                } else {
+                    None
+                };
                 Some(MaterializedBf16ReferenceWorkspace {
-                    #[cfg(feature="cuda-cublas-gemm-probe")] hf,
-                    reference,scores,valid,staging,
-                    valid_host:vec![0;partial_state_capacity as usize].into_boxed_slice(),
-                    encoded_valid:vec![0;valid_bytes as usize].into_boxed_slice(),
-                    duplicate_scratch:vec![0;layout.physical_block_count()].into_boxed_slice(),
-                    zero_host:vec![0;zero_bytes].into_boxed_slice()})
-            } else { None };
-            let materialized_extra_bytes = materialized.as_ref().map_or(0,|w|w.scores.byte_len()+w.valid.byte_len()+w.diagnostic_bytes());
+                    #[cfg(feature = "cuda-cublas-gemm-probe")]
+                    hf,
+                    reference,
+                    scores,
+                    valid,
+                    staging,
+                    valid_host: vec![0; partial_state_capacity as usize].into_boxed_slice(),
+                    encoded_valid: vec![0; valid_bytes as usize].into_boxed_slice(),
+                    duplicate_scratch: vec![0; layout.physical_block_count()].into_boxed_slice(),
+                    zero_host: vec![0; zero_bytes].into_boxed_slice(),
+                })
+            } else {
+                None
+            };
+            let materialized_extra_bytes = materialized.as_ref().map_or(0, |w| {
+                w.scores.byte_len() + w.valid.byte_len() + w.diagnostic_bytes()
+            });
             // The owned HF path returns directly from dispatch; it never uses
             // native split-page partials. Retain zero-capacity owned buffers
             // instead of a second, unused M*pages*heads*D allocation.
-            #[cfg(feature="cuda-cublas-gemm-probe")]
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
             let hf_only = materialized.as_ref().is_some_and(|w| w.hf.is_some());
-            #[cfg(not(feature="cuda-cublas-gemm-probe"))]
+            #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
             let hf_only = false;
             // Fixed-tile (FlashInfer) attention uses the partial states only
             // as its planner workspace: [M, pages, heads, D+2] F32 would be
             // 10.9 GB for a 40-head model at 1,024 rows and 8,192 tokens.
             let partial_state_bytes = riley_cuda::native_flashinfer_partial_state_bytes(
-                usize_u64(bounds.max_input_tokens(), LlamaBatchExecutorResource::NativeD128PartialStates)?,
+                usize_u64(
+                    bounds.max_input_tokens(),
+                    LlamaBatchExecutorResource::NativeD128PartialStates,
+                )?,
                 partial_state_capacity,
-                usize_u64(dimensions.query_heads(), LlamaBatchExecutorResource::NativeD128PartialStates)?,
-                usize_u64(dimensions.key_value_heads(), LlamaBatchExecutorResource::NativeD128PartialStates)?,
-                usize_u64(dimensions.head_dimension(), LlamaBatchExecutorResource::NativeD128PartialStates)?,
+                usize_u64(
+                    dimensions.query_heads(),
+                    LlamaBatchExecutorResource::NativeD128PartialStates,
+                )?,
+                usize_u64(
+                    dimensions.key_value_heads(),
+                    LlamaBatchExecutorResource::NativeD128PartialStates,
+                )?,
+                usize_u64(
+                    dimensions.head_dimension(),
+                    LlamaBatchExecutorResource::NativeD128PartialStates,
+                )?,
             )
             .map_or(workspace_layout.partial_state_bytes(), |bytes| {
                 bytes.min(workspace_layout.partial_state_bytes())
             });
-            let legacy_lengths = if hf_only { [0; 3] } else {
-                [partial_state_bytes, workspace_layout.reduction_step_bytes(),
-                 workspace_layout.reduction_normalizer_bytes()]
+            let legacy_lengths = if hf_only {
+                [0; 3]
+            } else {
+                [
+                    partial_state_bytes,
+                    workspace_layout.reduction_step_bytes(),
+                    workspace_layout.reduction_normalizer_bytes(),
+                ]
             };
             Some(NativeD128TwoStageWorkspace {
-
                 materialized,
 
-                partial_states: allocate_device(
-                    context,
-                    legacy_lengths[0],
-                    attention_site,
-                )?,
-                reduction_steps: allocate_device(
-                    context,
-                    legacy_lengths[1],
-                    attention_site,
-                )?,
-                reduction_normalizers: allocate_device(
-                    context,
-                    legacy_lengths[2],
-                    attention_site,
-                )?,
+                partial_states: allocate_device(context, legacy_lengths[0], attention_site)?,
+                reduction_steps: allocate_device(context, legacy_lengths[1], attention_site)?,
+                reduction_normalizers: allocate_device(context, legacy_lengths[2], attention_site)?,
                 partial_state_capacity,
                 byte_len: legacy_lengths.iter().sum::<u64>() + materialized_extra_bytes,
             })
@@ -691,38 +860,125 @@ impl PreparedLlamaBatchOwner {
             config.staged_step_uploads(),
         )?;
 
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        if matches!(config.owned_decode_batch(),3|4) && ((dimensions.hidden_size(),dimensions.query_heads(),dimensions.key_value_heads(),dimensions.head_dimension(),dimensions.intermediate_size())!=(2560,32,8,128,9728)
-            ||!native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).and_then(|w|w.hf.as_ref()).is_some_and(|w|w.plan.supports_exact_decode_chunk())
-            ||["CUBLAS_WORKSPACE_CONFIG","CUDA_MPS_ACTIVE_THREAD_PERCENTAGE"].iter().any(|k|std::env::var_os(k).is_some_and(|v|!v.is_empty()))) {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"exact_r2_decode",reason:"requires qualified Q4 SM89/CUDA12.8 geometry and unmodified cuBLAS workspace/SM configuration"});
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if matches!(config.owned_decode_batch(), 3 | 4)
+            && ((
+                dimensions.hidden_size(),
+                dimensions.query_heads(),
+                dimensions.key_value_heads(),
+                dimensions.head_dimension(),
+                dimensions.intermediate_size(),
+            ) != (2560, 32, 8, 128, 9728)
+                || !native_d128_two_stage_workspace
+                    .as_ref()
+                    .and_then(|w| w.materialized.as_ref())
+                    .and_then(|w| w.hf.as_ref())
+                    .is_some_and(|w| w.plan.supports_exact_decode_chunk())
+                || [
+                    "CUBLAS_WORKSPACE_CONFIG",
+                    "CUDA_MPS_ACTIVE_THREAD_PERCENTAGE",
+                ]
+                .iter()
+                .any(|k| std::env::var_os(k).is_some_and(|v| !v.is_empty())))
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "exact_r2_decode",
+                reason: "requires qualified Q4 SM89/CUDA12.8 geometry and unmodified cuBLAS workspace/SM configuration",
+            });
         }
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        if config.owned_decode_batch()==5 && (!matches!((dimensions.hidden_size(),dimensions.query_heads(),dimensions.key_value_heads(),dimensions.head_dimension(),dimensions.intermediate_size()),(2560,32,8,128,9728)|(4096,32,8,128,14336))
-            ||!native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).and_then(|w|w.hf.as_ref()).is_some_and(|w|w.plan.supports_exact_decode_chunk())
-            ||["CUBLAS_WORKSPACE_CONFIG","CUDA_MPS_ACTIVE_THREAD_PERCENTAGE"].iter().any(|k|std::env::var_os(k).is_some_and(|v|!v.is_empty()))) {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"exact_smallrows_decode",reason:"requires qualified Q4/Mistral SM89/CUDA12.8 geometry and unmodified cuBLAS workspace/SM configuration"});
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if config.owned_decode_batch() == 5
+            && (!matches!(
+                (
+                    dimensions.hidden_size(),
+                    dimensions.query_heads(),
+                    dimensions.key_value_heads(),
+                    dimensions.head_dimension(),
+                    dimensions.intermediate_size()
+                ),
+                (2560, 32, 8, 128, 9728) | (4096, 32, 8, 128, 14336)
+            ) || !native_d128_two_stage_workspace
+                .as_ref()
+                .and_then(|w| w.materialized.as_ref())
+                .and_then(|w| w.hf.as_ref())
+                .is_some_and(|w| w.plan.supports_exact_decode_chunk())
+                || [
+                    "CUBLAS_WORKSPACE_CONFIG",
+                    "CUDA_MPS_ACTIVE_THREAD_PERCENTAGE",
+                ]
+                .iter()
+                .any(|k| std::env::var_os(k).is_some_and(|v| !v.is_empty())))
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "exact_smallrows_decode",
+                reason: "requires qualified Q4/Mistral SM89/CUDA12.8 geometry and unmodified cuBLAS workspace/SM configuration",
+            });
         }
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        if matches!(config.owned_decode_batch(),6|7|8|9|10) && (!matches!((dimensions.hidden_size(),dimensions.query_heads(),dimensions.key_value_heads(),dimensions.head_dimension(),dimensions.intermediate_size()),(2560,32,8,128,9728)|(4096,32,8,128,14336))
-            ||!native_d128_two_stage_workspace.as_ref().and_then(|w|w.materialized.as_ref()).and_then(|w|w.hf.as_ref()).is_some_and(|w|w.plan.supports_bounded_sm80_gateup_rows())
-            ||["CUBLAS_WORKSPACE_CONFIG","CUDA_MPS_ACTIVE_THREAD_PERCENTAGE"].iter().any(|k|std::env::var_os(k).is_some_and(|v|!v.is_empty()))) {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"bounded_sm80_gateup",reason:"requires Q4/Mistral SM80/108SM/CUDA12.4 and unmodified cuBLAS workspace/SM configuration"});
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if matches!(config.owned_decode_batch(), 6 | 7 | 8 | 9 | 10)
+            && (!matches!(
+                (
+                    dimensions.hidden_size(),
+                    dimensions.query_heads(),
+                    dimensions.key_value_heads(),
+                    dimensions.head_dimension(),
+                    dimensions.intermediate_size()
+                ),
+                (2560, 32, 8, 128, 9728) | (4096, 32, 8, 128, 14336)
+            ) || !native_d128_two_stage_workspace
+                .as_ref()
+                .and_then(|w| w.materialized.as_ref())
+                .and_then(|w| w.hf.as_ref())
+                .is_some_and(|w| w.plan.supports_bounded_sm80_gateup_rows())
+                || [
+                    "CUBLAS_WORKSPACE_CONFIG",
+                    "CUDA_MPS_ACTIVE_THREAD_PERCENTAGE",
+                ]
+                .iter()
+                .any(|k| std::env::var_os(k).is_some_and(|v| !v.is_empty())))
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "bounded_sm80_gateup",
+                reason: "requires Q4/Mistral SM80/108SM/CUDA12.4 and unmodified cuBLAS workspace/SM configuration",
+            });
         }
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        let owned_mlp_graphs=if config.owned_mlp_graphs() || (config.owned_decode_graph() && config.owned_decode_batch()==10 && bounds.max_rows()>=2) {
-            if spec.blocks().iter().any(|b|b.mlp().has_bias()) {return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"owned_mlp_graphs",reason:"MLP biases are not supported by graph MLP"});}
-            let sm80=matches!(config.owned_decode_batch(),9|10);
-            let mut graphs=riley_cuda::CudaOwnedHfMlpGraph::prepare(context,bounds.max_input_tokens().min(32) as u32,
-                dimensions.hidden_size() as u64,dimensions.intermediate_size() as u64,if sm80 {2048}else{1024})
-                .map_err(|e|owner_cuda(ExecutionSite::layer(0,LlamaOp::GateProjection),e))?;
-            if config.owned_decode_graph() && config.owned_decode_batch()==10 {graphs.enable_piecewise_sm80(context).map_err(|e|owner_cuda(ExecutionSite::layer(0,LlamaOp::GateProjection),e))?;}
-            else if sm80 {graphs.enable_bounded_sm80_projections().map_err(|e|owner_cuda(ExecutionSite::layer(0,LlamaOp::GateProjection),e))?;}
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        let owned_mlp_graphs = if config.owned_mlp_graphs()
+            || (config.owned_decode_graph()
+                && config.owned_decode_batch() == 10
+                && bounds.max_rows() >= 2)
+        {
+            if spec.blocks().iter().any(|b| b.mlp().has_bias()) {
+                return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                    field: "owned_mlp_graphs",
+                    reason: "MLP biases are not supported by graph MLP",
+                });
+            }
+            let sm80 = matches!(config.owned_decode_batch(), 9 | 10);
+            let mut graphs = riley_cuda::CudaOwnedHfMlpGraph::prepare(
+                context,
+                bounds.max_input_tokens().min(32) as u32,
+                dimensions.hidden_size() as u64,
+                dimensions.intermediate_size() as u64,
+                if sm80 { 2048 } else { 1024 },
+            )
+            .map_err(|e| owner_cuda(ExecutionSite::layer(0, LlamaOp::GateProjection), e))?;
+            if config.owned_decode_graph() && config.owned_decode_batch() == 10 {
+                graphs
+                    .enable_piecewise_sm80(context)
+                    .map_err(|e| owner_cuda(ExecutionSite::layer(0, LlamaOp::GateProjection), e))?;
+            } else if sm80 {
+                graphs
+                    .enable_bounded_sm80_projections()
+                    .map_err(|e| owner_cuda(ExecutionSite::layer(0, LlamaOp::GateProjection), e))?;
+            }
             Some(graphs)
-        }else{None};
+        } else {
+            None
+        };
 
         Ok(Self {
-            #[cfg(feature="cuda-cublas-gemm-probe")]
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
             owned_mlp_graphs,
             metadata,
             forward,
@@ -749,7 +1005,7 @@ impl PreparedLlamaBatchOwner {
     #[allow(clippy::too_many_lines)]
     pub(in crate::llama) fn close(self) -> LlamaBatchExecutorResult<()> {
         let Self {
-            #[cfg(feature="cuda-cublas-gemm-probe")]
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
             owned_mlp_graphs,
             metadata: _,
             forward,
@@ -767,8 +1023,14 @@ impl PreparedLlamaBatchOwner {
             poisoned: _,
         } = self;
         let mut first = None;
-        #[cfg(feature="cuda-cublas-gemm-probe")]
-        if let Some(graphs)=owned_mlp_graphs {record_close(&mut first,LlamaBatchExecutorResource::HostWorkspace,graphs.close());}
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if let Some(graphs) = owned_mlp_graphs {
+            record_close(
+                &mut first,
+                LlamaBatchExecutorResource::HostWorkspace,
+                graphs.close(),
+            );
+        }
         record_close(
             &mut first,
             LlamaBatchExecutorResource::KeyCache,
@@ -780,16 +1042,45 @@ impl PreparedLlamaBatchOwner {
             value_cache.close(),
         );
         if let Some(workspace) = native_d128_two_stage_workspace {
-
             if let Some(materialized) = workspace.materialized {
-                record_close(&mut first,LlamaBatchExecutorResource::NativeD128PartialStates,materialized.scores.close());
-                record_close(&mut first,LlamaBatchExecutorResource::NativeD128ReductionSteps,materialized.valid.close());
-                record_close(&mut first,LlamaBatchExecutorResource::NativeD128ReductionNormalizers,materialized.staging.close());
-                #[cfg(feature="cuda-cublas-gemm-probe")]
-                if let Some(hf)=materialized.hf {
-                    record_close(&mut first,LlamaBatchExecutorResource::NativeD128PartialStates,hf.plan.close());
-                    for buffer in hf.scratch {record_close(&mut first,LlamaBatchExecutorResource::NativeD128PartialStates,buffer.close());}
-                    if let Some(chunk)=hf.decode_chunk {for buffer in chunk {record_close(&mut first,LlamaBatchExecutorResource::NativeD128PartialStates,buffer.close());}}
+                record_close(
+                    &mut first,
+                    LlamaBatchExecutorResource::NativeD128PartialStates,
+                    materialized.scores.close(),
+                );
+                record_close(
+                    &mut first,
+                    LlamaBatchExecutorResource::NativeD128ReductionSteps,
+                    materialized.valid.close(),
+                );
+                record_close(
+                    &mut first,
+                    LlamaBatchExecutorResource::NativeD128ReductionNormalizers,
+                    materialized.staging.close(),
+                );
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                if let Some(hf) = materialized.hf {
+                    record_close(
+                        &mut first,
+                        LlamaBatchExecutorResource::NativeD128PartialStates,
+                        hf.plan.close(),
+                    );
+                    for buffer in hf.scratch {
+                        record_close(
+                            &mut first,
+                            LlamaBatchExecutorResource::NativeD128PartialStates,
+                            buffer.close(),
+                        );
+                    }
+                    if let Some(chunk) = hf.decode_chunk {
+                        for buffer in chunk {
+                            record_close(
+                                &mut first,
+                                LlamaBatchExecutorResource::NativeD128PartialStates,
+                                buffer.close(),
+                            );
+                        }
+                    }
                 }
                 drop(materialized.reference);
             }
@@ -898,6 +1189,8 @@ fn allocate_device(
 
 /// The longest sequence the scheduler admits: the declared serving bound when
 /// one was given, else the checkpoint context.
+// Copy configuration and borrowed descriptors keep the established execution/lease API.
+#[allow(clippy::large_types_passed_by_value)]
 fn serving_sequence_tokens(
     config: PreparedLlamaBatchExecutorConfig,
     model_sequence_tokens: usize,
@@ -909,6 +1202,10 @@ fn serving_sequence_tokens(
         })
 }
 
+// Copy configuration and borrowed descriptors keep the established execution/lease API.
+#[allow(clippy::large_types_passed_by_value)]
+// Native rows and fixed geometry are bounded during cold preparation; preserve their bytes.
+#[allow(clippy::cast_possible_truncation)]
 fn validate_batch_attention_geometry(
     config: PreparedLlamaBatchExecutorConfig,
     query_heads: usize,
@@ -917,21 +1214,45 @@ fn validate_batch_attention_geometry(
     maximum_sequence_tokens: usize,
     bounds: LlamaBatchMetadataConfig,
 ) -> LlamaBatchExecutorResult<()> {
-    #[cfg(feature="cuda-cublas-gemm-probe")]
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     if config.owned_hf_eager_bf16() {
         if config.vllm_smol_p128_graph() {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"hf_attention_diagnostic",reason:"owned materialized reference attention does not support graphs"});
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "hf_attention_diagnostic",
+                reason: "owned materialized reference attention does not support graphs",
+            });
         }
-        if !matches!(head_dimension,64|128) || query_heads==0 || query_heads>64 || key_value_heads==0 || query_heads%key_value_heads!=0 || query_heads/key_value_heads>8 || bounds.max_input_tokens()>8192 || maximum_sequence_tokens>9216 {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"hf_attention_diagnostic_geometry",reason:"bounded D64/D128 GQA diagnostic only"});
+        if !matches!(head_dimension, 64 | 128)
+            || query_heads == 0
+            || query_heads > 64
+            || key_value_heads == 0
+            || query_heads % key_value_heads != 0
+            || query_heads / key_value_heads > 8
+            || bounds.max_input_tokens() > 8192
+            || maximum_sequence_tokens > 9216
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "hf_attention_diagnostic_geometry",
+                reason: "bounded D64/D128 GQA diagnostic only",
+            });
         }
         return Ok(());
     }
     if config.materialized_bf16_reference_d64() {
         // Private full-prefill diagnostic; reference executes one row at a time.
         let maximum_materialized_d64_rows = 512;
-        if head_dimension != 64 || query_heads == 0 || key_value_heads == 0 || query_heads % key_value_heads != 0 || query_heads / key_value_heads > 8 || bounds.max_input_tokens() > maximum_materialized_d64_rows || maximum_sequence_tokens > NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"materialized_d64_reference_geometry",reason:"requires D64 GQA ratio<=8, batch<=512, sequence<=32768"});
+        if head_dimension != 64
+            || query_heads == 0
+            || key_value_heads == 0
+            || query_heads % key_value_heads != 0
+            || query_heads / key_value_heads > 8
+            || bounds.max_input_tokens() > maximum_materialized_d64_rows
+            || maximum_sequence_tokens > NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "materialized_d64_reference_geometry",
+                reason: "requires D64 GQA ratio<=8, batch<=512, sequence<=32768",
+            });
         }
         return Ok(());
     }
@@ -1111,10 +1432,18 @@ mod tests {
 
     #[test]
     fn d64_reference_geometry_rejects_wrong_heads_and_bounds() {
-        let (base,bounds)=native_config(128);
-        let config=base.with_materialized_bf16_reference_d64();
-        assert!(validate_batch_attention_geometry(config,9,3,64,1024,bounds).is_ok());
-        for (qh,kh,d,seq) in [(9,3,128,1024),(9,0,64,1024),(10,3,64,1024),(27,3,64,1024),(9,3,64,32769)] {assert!(validate_batch_attention_geometry(config,qh,kh,d,seq,bounds).is_err());}
+        let (base, bounds) = native_config(128);
+        let config = base.with_materialized_bf16_reference_d64();
+        assert!(validate_batch_attention_geometry(config, 9, 3, 64, 1024, bounds).is_ok());
+        for (qh, kh, d, seq) in [
+            (9, 3, 128, 1024),
+            (9, 0, 64, 1024),
+            (10, 3, 64, 1024),
+            (27, 3, 64, 1024),
+            (9, 3, 64, 32769),
+        ] {
+            assert!(validate_batch_attention_geometry(config, qh, kh, d, seq, bounds).is_err());
+        }
     }
 
     #[cfg(feature = "cuda-cublas-gemm-probe")]
@@ -1123,11 +1452,26 @@ mod tests {
         let (base, bounds) = native_config(8192);
         let owned = base.with_owned_hf_eager_bf16();
         for config in [owned, owned.with_iteration_batch_completion()] {
-            assert!(validate_batch_attention_geometry(config,32,8,128,9216,bounds).is_ok());
-            for (qh,kvh,d,t) in [(32,0,128,9216),(32,8,256,9216),(32,8,128,9217),(32,2,128,9216)] {
-                assert!(validate_batch_attention_geometry(config,qh,kvh,d,t,bounds).is_err());
+            assert!(validate_batch_attention_geometry(config, 32, 8, 128, 9216, bounds).is_ok());
+            for (qh, kvh, d, t) in [
+                (32, 0, 128, 9216),
+                (32, 8, 256, 9216),
+                (32, 8, 128, 9217),
+                (32, 2, 128, 9216),
+            ] {
+                assert!(validate_batch_attention_geometry(config, qh, kvh, d, t, bounds).is_err());
             }
-            assert!(validate_batch_attention_geometry(config.with_vllm_smol_p128_graph(),32,8,128,9216,bounds).is_err());
+            assert!(
+                validate_batch_attention_geometry(
+                    config.with_vllm_smol_p128_graph(),
+                    32,
+                    8,
+                    128,
+                    9216,
+                    bounds
+                )
+                .is_err()
+            );
         }
     }
 

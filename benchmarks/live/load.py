@@ -47,6 +47,8 @@ async def one(host, port, body, started_at, record):
     times = []
     usage = {}
     finish = None
+    done = False
+    writer = None
     try:
         reader, writer = await asyncio.open_connection(host, port, limit=1 << 22)
         writer.write(head + request)
@@ -68,6 +70,7 @@ async def one(host, port, body, started_at, record):
                 continue
             payload = line[6:].strip()
             if payload == b"[DONE]":
+                done = True
                 break
             chunk = json.loads(payload)
             if chunk.get("usage"):
@@ -80,8 +83,20 @@ async def one(host, port, body, started_at, record):
     except (OSError, ValueError, IndexError) as error:
         record.update(status=0, error=True, detail=repr(error)[:120])
         return
-    if not times or not usage:
-        record.update(status=200, error=True, detail="no tokens")
+    finally:
+        if writer is not None:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except OSError:
+                pass
+    if not done or finish not in ("stop", "length", "tool_calls"):
+        record.update(status=200, error=True, detail="incomplete SSE finish/DONE")
+        return
+    if (not times or type(usage.get("completion_tokens")) is not int
+            or usage["completion_tokens"] <= 0 or type(usage.get("prompt_tokens")) is not int
+            or usage["prompt_tokens"] < 0):
+        record.update(status=200, error=True, detail="missing/invalid token usage")
         return
     completion = usage["completion_tokens"]
     record.update(
@@ -101,7 +116,7 @@ def percentile(values, q):
 
 
 def summarize(rows, wall, config):
-    good = [row for row in rows if not row.get("error")]
+    good = [row for row in rows if row.get("error") is False]
     gaps = [gap for row in good for gap in row["gaps"]]
     summary = {
         "config": config, "requests": len(rows), "ok": len(good),
@@ -186,6 +201,10 @@ async def main():
     wall = time.perf_counter() - start
     measured = records[args.warmup:]
     summary = summarize(measured, wall * len(measured) / total, vars(args))
+    warmup = records[:args.warmup]
+    warmup_ok = sum(row.get("error") is False for row in warmup)
+    summary.update(warmup_requests=len(warmup), warmup_ok=warmup_ok,
+                   warmup_errors=len(warmup) - warmup_ok)
     print(json.dumps({key: (round(value, 2) if isinstance(value, float) else value)
                       for key, value in summary.items() if key != "config"}))
     if args.out:
@@ -198,4 +217,5 @@ async def main():
                       output)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

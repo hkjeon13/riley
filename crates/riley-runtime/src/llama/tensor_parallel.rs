@@ -18,6 +18,8 @@ use super::batch_executor::{BatchOutputMode, PreparedLlamaBatchExecutor};
 use super::executor::error::{LlamaBatchExecutorError, LlamaBatchExecutorResult};
 
 /// Owned copy of one [`LlamaBatchRow`], sent to the follower threads.
+// Actual CUDA execution uses this; CPU policy tests retain the same types.
+#[cfg_attr(not(feature = "cuda"), allow(dead_code))]
 struct OwnedRow {
     sequence_tag: u64,
     kind: LlamaBatchRowKind,
@@ -46,6 +48,8 @@ impl OwnedRow {
         }
     }
 
+    // Actual CUDA execution uses this; CPU policy tests retain the same types.
+    #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
     fn row(&self) -> LlamaBatchRow<'_> {
         LlamaBatchRow::new(
             self.sequence_tag,
@@ -63,6 +67,8 @@ impl OwnedRow {
     }
 }
 
+// Actual CUDA execution uses this; CPU policy tests retain the same types.
+#[cfg_attr(not(feature = "cuda"), allow(dead_code))]
 enum Command {
     Execute(Arc<Vec<OwnedRow>>, BatchOutputMode),
 }
@@ -92,6 +98,8 @@ impl TensorParallelFollowers {
     /// Starts one host thread per follower rank, each owning its prepared
     /// executor (with the group attached) and stream until the leader closes.
     #[must_use]
+    // Actual CUDA execution uses this; CPU policy tests retain the same types.
+    #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
     pub fn spawn(ranks: Vec<(PreparedLlamaBatchExecutor, CudaStream)>) -> Self {
         let followers = ranks
             .into_iter()
@@ -137,10 +145,11 @@ impl TensorParallelFollowers {
     ) -> LlamaBatchExecutorResult<()> {
         let rows = Arc::new(rows.iter().copied().map(OwnedRow::new).collect::<Vec<_>>());
         for follower in &self.followers {
-            let sent = follower
-                .commands
-                .as_ref()
-                .is_some_and(|commands| commands.send(Command::Execute(Arc::clone(&rows), mode)).is_ok());
+            let sent = follower.commands.as_ref().is_some_and(|commands| {
+                commands
+                    .send(Command::Execute(Arc::clone(&rows), mode))
+                    .is_ok()
+            });
             if !sent {
                 return Err(follower_failed("a follower thread has stopped"));
             }

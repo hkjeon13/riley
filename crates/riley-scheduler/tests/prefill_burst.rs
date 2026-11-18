@@ -52,7 +52,7 @@ fn settle(scheduler: &mut Scheduler, plan: &IterationPlan, now_ns: u64) {
         .prefill_items()
         .iter()
         .chain(plan.decode_items())
-        .filter_map(|item| item.output_slot())
+        .filter_map(riley_scheduler::WorkItem::output_slot)
         .map(|slot| IterationOutput::new(slot, 7, false))
         .collect();
     let result = IterationResult::new(plan.iteration_id(), outputs, 1, 0).expect("fake result");

@@ -66,6 +66,8 @@ impl<'a> BorrowedPointwiseGraph<'a> {
     /// Captures the existing native primitive on the actual borrowed allocations.
     /// # Errors
     /// Rejects arity, geometry, aliases, context, leases and CUDA failures.
+    // CUDA builds consume this ownership descriptor; keep one API in CPU builds.
+    #[cfg_attr(not(feature = "cuda"), allow(clippy::needless_pass_by_value))]
     pub fn prepare(
         resources: BorrowedPointwiseResources<'a>,
         operation: PointwiseGraphOperation,

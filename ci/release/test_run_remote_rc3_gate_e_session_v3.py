@@ -17,6 +17,8 @@ import unittest
 from pathlib import Path
 
 
+from release_test_environment import requires_legacy_host
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 BOOTSTRAP = REPOSITORY_ROOT / "ci/release/run_remote_rc3_gate_e_session_v3.py"
 CORE = REPOSITORY_ROOT / "ci/release/rc3_gate_e_private_raw_core_v1.py"
@@ -184,6 +186,7 @@ run(sys.argv[3])
 class GateEV3BootstrapTests(unittest.TestCase):
     maxDiff = None
 
+    @requires_legacy_host
     def _isolated(self, mode: str) -> dict[str, object]:
         completed = subprocess.run(
             [
@@ -261,6 +264,7 @@ class GateEV3BootstrapTests(unittest.TestCase):
                 self.assertIsInstance(record["error"], str)
                 self.assertTrue(record["error"])
 
+    @requires_legacy_host
     def test_checkout_entrypoint_rejects_before_fixed_anchor_work(self) -> None:
         protected_paths = (
             Path("/opt/riley/rc3-gate-e-v1"),
@@ -286,6 +290,7 @@ class GateEV3BootstrapTests(unittest.TestCase):
         self.assertIn("fixed root-installed bootstrap path", completed.stderr)
         self.assertEqual(before, {path: path.exists() for path in protected_paths})
 
+    @requires_legacy_host
     def test_unrecognized_cli_override_is_rejected(self) -> None:
         completed = subprocess.run(
             [

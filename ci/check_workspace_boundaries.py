@@ -63,6 +63,7 @@ EXPECTED_FEATURES = {
     "riley-core": {"default": []},
     "riley-cuda": {
         "cuda": [],
+        "cuda-cublas-gemm-probe": ["cuda"],
         "cuda-test-fault-injection": ["cuda"],
         "default": [],
         "nvml": ["cuda"],
@@ -79,6 +80,7 @@ EXPECTED_FEATURES = {
             "riley-tensor/cuda",
         ],
         "default": [],
+        "cuda-cublas-gemm-probe": ["cuda", "riley-cuda/cuda-cublas-gemm-probe"],
     },
     "riley-scheduler": {
         "cuda": ["riley-runtime/cuda"],
@@ -89,7 +91,9 @@ EXPECTED_FEATURES = {
         "cuda": ["riley-runtime/cuda", "riley-scheduler/cuda"],
         "default": [],
         "experimental": [],
-        "server": ["dep:libc", "dep:serde", "dep:serde_json", "dep:sha2"],
+        "server": ["dep:libc", "dep:minijinja", "dep:minijinja-contrib", "dep:serde", "dep:serde_json", "dep:sha2"],
+        "hf-exact-probe": ["cuda", "riley-runtime/cuda-cublas-gemm-probe"],
+        "owned-hf-eager": ["cuda", "riley-runtime/cuda-cublas-gemm-probe"],
     },
     "riley-native": {
         "cuda": [
@@ -111,7 +115,7 @@ EXPECTED_OPTIONAL_DEPENDENCIES = {
     "riley-model": set(),
     "riley-runtime": {"riley-cuda"},
     "riley-scheduler": set(),
-    "riley-server": {"libc", "serde", "serde_json", "sha2"},
+    "riley-server": {"libc", "minijinja", "minijinja-contrib", "serde", "serde_json", "sha2"},
     "riley-native": {"riley-cuda", "riley-model", "riley-runtime"},
 }
 
@@ -169,16 +173,38 @@ EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES = {
     ("riley-server", "serde_json"): {
         "version": "1.0.145",
         "default_features": True,
-        "features": [],
+        "features": ["preserve_order"],
     },
     ("riley-server", "sha2"): {
         "version": "0.11.0",
         "default_features": False,
         "features": [],
     },
+    ("riley-server", "minijinja"): {
+        "version": "3.0.4",
+        "default_features": True,
+        "features": ["fuel", "json", "loop_controls", "preserve_order", "serde"],
+    },
+    ("riley-server", "minijinja-contrib"): {
+        "version": "3.0.4",
+        "default_features": True,
+        "features": ["pycompat"],
+    },
 }
 
 EXPECTED_DEV_DEPENDENCIES = {
+    ("riley-cuda", "serde_json"): {
+        "req": "=1.0.145", "default_features": True, "features": [], "path": None,
+    },
+    ("riley-cuda", "sha2"): {
+        "req": "=0.11.0", "default_features": False, "features": [], "path": None,
+    },
+    ("riley-runtime", "syn"): {
+        "req": "=2.0.119", "default_features": True, "features": ["full", "visit"], "path": None,
+    },
+    ("riley-server", "riley-tensor"): {
+        "req": "*", "default_features": True, "features": [], "path": "crates/riley-tensor",
+    },
     ("riley-scheduler", "riley-model"): {
         "req": "*",
         "default_features": True,
@@ -422,8 +448,7 @@ def load_dependency_policy(root: Path) -> dict[str, Any]:
     if direct_keys != set(EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES):
         raise BoundaryError(
             f"{policy_path}: direct external dependencies must be exactly "
-            "riley-model -> serde, serde_json, sha2, and unicode-normalization plus "
-            "riley-runtime -> sha2 plus riley-server -> serde, serde_json, and sha2"
+            "the owner/version/feature entries in EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES"
         )
     for dependency in direct_dependencies:
         expected = EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES[
@@ -526,6 +551,11 @@ def cargo_metadata(root: Path, locked: bool, *, no_deps: bool) -> dict[str, Any]
     command = ["cargo", "metadata", "--format-version", "1"]
     if no_deps:
         command.append("--no-deps")
+    else:
+        # Resolve optional serving/probe dependencies too. Metadata resolution
+        # neither builds CUDA nor initializes a device; an empty default graph
+        # must not hide packages present in the reviewed lockfile closure.
+        command.append("--all-features")
     if locked:
         command.append("--locked")
     process = subprocess.run(
@@ -928,6 +958,15 @@ def validate_features(packages: dict[str, dict[str, Any]]) -> None:
         default = features.get("default")
         if default != []:
             raise BoundaryError(f"{name}: default features must remain empty")
+        for target in package.get("targets", []):
+            if "test" not in target.get("kind", []) or not target.get("name", "").endswith("_gpu"):
+                continue
+            cuda_selectors = {
+                "cuda", "cuda-cublas-gemm-probe", "cuda-test-fault-injection",
+                "nvml", "hf-exact-probe", "owned-hf-eager",
+            }
+            if not cuda_selectors.intersection(target.get("required-features", [])):
+                raise BoundaryError(f"{name}: GPU test {target['name']} must require an explicit CUDA feature")
 
     server_targets = packages["riley-server"].get("targets", [])
     server_bins = {

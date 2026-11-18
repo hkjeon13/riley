@@ -66,7 +66,8 @@ mod prefix_cache;
 mod scheduler;
 
 pub use config::{
-    OverloadPolicy, PrefillBurstPolicy, PrefillCoalescingPolicy, PrefillPlateauPolicy, SchedulerConfig,
+    OverloadPolicy, PrefillBurstPolicy, PrefillCoalescingPolicy, PrefillPlateauPolicy,
+    SchedulerConfig,
 };
 pub use error::{SchedulerError, SchedulerResult};
 pub use execution::{

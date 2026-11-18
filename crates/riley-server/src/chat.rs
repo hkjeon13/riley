@@ -329,10 +329,7 @@ fn offered_tools(request: &ChatCompletionRequest) -> Option<&[Value]> {
     if request.tool_choice.as_ref().and_then(Value::as_str) == Some("none") {
         return None;
     }
-    request
-        .tools
-        .as_deref()
-        .filter(|tools| !tools.is_empty())
+    request.tools.as_deref().filter(|tools| !tools.is_empty())
 }
 
 fn schema_error(parameter: &'static str) -> impl Fn(SchemaError) -> ChatRequestError {
@@ -393,9 +390,7 @@ fn tool_function(tool: &Value) -> Result<(&str, Value), ChatRequestError> {
 
 fn literal(text: &str) -> Vec<GrammarElement> {
     text.bytes()
-        .map(|byte| {
-            GrammarElement::Bytes(riley_runtime::grammar::ByteClass::byte(byte))
-        })
+        .map(|byte| GrammarElement::Bytes(riley_runtime::grammar::ByteClass::byte(byte)))
         .collect()
 }
 
@@ -424,9 +419,7 @@ fn forced_tool_grammar(
             .schema(&parameters)
             .map_err(schema_error("tools"))?;
         let head = json!(name).to_string();
-        let mut elements = literal(&format!(
-            "{open}{{\"name\": {head}, \"{arguments_key}\": "
-        ));
+        let mut elements = literal(&format!("{open}{{\"name\": {head}, \"{arguments_key}\": "));
         elements.push(GrammarElement::Rule(arguments));
         elements.extend(literal(&format!("}}{close}")));
         compiler.alternative(call, elements);
@@ -440,7 +433,11 @@ fn forced_tool_grammar(
     let start = compiler.rule();
     compiler.alternative(start, vec![GrammarElement::Rule(call)]);
     if parallel {
-        let separator = if style == ToolStyle::Hermes { "\n" } else { "; " };
+        let separator = if style == ToolStyle::Hermes {
+            "\n"
+        } else {
+            "; "
+        };
         let mut elements = vec![GrammarElement::Rule(call)];
         elements.extend(literal(separator));
         elements.push(GrammarElement::Rule(start));
@@ -477,9 +474,7 @@ fn tool_grammar(
                 .get("function")
                 .and_then(|function| function.get("name"))
                 .and_then(Value::as_str)
-                .ok_or_else(|| {
-                    invalid_value("tool_choice", "tool_choice must name a function")
-                })?;
+                .ok_or_else(|| invalid_value("tool_choice", "tool_choice must name a function"))?;
             forced_tool_grammar(tools, Some(name), style, false).map(Some)
         }
     }
@@ -491,6 +486,8 @@ fn tool_grammar(
 ///
 /// Returns [`ChatRequestError`] for unsupported fields (tools, non-text
 /// content), a template error, or any completion validation failure.
+// Keep independent protocol flags and bounded owned messages explicit.
+#[allow(clippy::too_many_lines)]
 pub fn normalize_chat_request(
     request: ChatCompletionRequest,
     template: &ChatTemplate,
@@ -509,14 +506,20 @@ pub fn normalize_chat_request(
     {
         return Err(invalid("functions", "use tools instead of functions"));
     }
-    if request.top_logprobs.is_some_and(|top| top > MAX_TOP_LOGPROBS) {
+    if request
+        .top_logprobs
+        .is_some_and(|top| top > MAX_TOP_LOGPROBS)
+    {
         return Err(invalid_value(
             "top_logprobs",
             "top_logprobs must be from 0 to 20",
         ));
     }
     if request.top_logprobs.is_some() && !request.logprobs.unwrap_or(false) {
-        return Err(invalid_value("top_logprobs", "top_logprobs requires logprobs"));
+        return Err(invalid_value(
+            "top_logprobs",
+            "top_logprobs requires logprobs",
+        ));
     }
     let tools = offered_tools(&request).map(<[Value]>::to_vec);
     if tools.is_some() && template.tool_style.is_none() {
@@ -798,7 +801,8 @@ impl ToolStreamFilter {
                 let keep = (1..HERMES_OPEN.len())
                     .rev()
                     .find(|&length| {
-                        self.held.is_char_boundary(self.held.len().wrapping_sub(length))
+                        self.held
+                            .is_char_boundary(self.held.len().wrapping_sub(length))
                             && self.held.ends_with(&HERMES_OPEN[..length])
                     })
                     .unwrap_or(0);
@@ -905,10 +909,8 @@ impl ChatChunkShaper {
                                     "tool_calls".to_owned(),
                                     tool_call_values(&calls, &id_base, true),
                                 );
-                                choice.insert(
-                                    "finish_reason".to_owned(),
-                                    Value::from("tool_calls"),
-                                );
+                                choice
+                                    .insert("finish_reason".to_owned(), Value::from("tool_calls"));
                             }
                             Err(held) => text = Value::from(held),
                         }
@@ -1026,8 +1028,16 @@ mod tests {
             limits(),
         )
         .unwrap();
-        assert!(generation.prompt.contains("\"weather\""), "{}", generation.prompt);
-        assert!(generation.prompt.contains("assistant:Seoul"), "{}", generation.prompt);
+        assert!(
+            generation.prompt.contains("\"weather\""),
+            "{}",
+            generation.prompt
+        );
+        assert!(
+            generation.prompt.contains("assistant:Seoul"),
+            "{}",
+            generation.prompt
+        );
         assert!(generation.prompt.contains("tool:sunny"));
         assert!(generation.grammar.is_none());
     }
@@ -1084,16 +1094,23 @@ mod tests {
                 &template(CHATML),
                 limits()
             ),
-            Err(ChatRequestError::Schema { parameter: "response_format", .. })
+            Err(ChatRequestError::Schema {
+                parameter: "response_format",
+                ..
+            })
         ));
         assert!(matches!(
             normalize_chat_request(body(json!({"type": "xml"})), &template(CHATML), limits()),
             Err(ChatRequestError::Invalid(_))
         ));
-        let text = normalize_chat_request(body(json!({"type": "text"})), &template(CHATML), limits());
+        let text =
+            normalize_chat_request(body(json!({"type": "text"})), &template(CHATML), limits());
         assert!(text.unwrap().grammar.is_none());
-        let object =
-            normalize_chat_request(body(json!({"type": "json_object"})), &template(CHATML), limits());
+        let object = normalize_chat_request(
+            body(json!({"type": "json_object"})),
+            &template(CHATML),
+            limits(),
+        );
         assert!(object.unwrap().grammar.is_some());
     }
 
@@ -1101,7 +1118,9 @@ mod tests {
     fn logprobs_options_are_checked_and_ask_for_token_delivery() {
         let body = |extra: Value| {
             let mut body = json!({"model": "m", "messages": [{"role": "user", "content": "x"}]});
-            body.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            body.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
             request(body)
         };
         let generation = normalize_chat_request(
@@ -1112,7 +1131,10 @@ mod tests {
         .unwrap();
         assert_eq!(generation.logprobs_top, Some(3));
         assert!(generation.include_token_ids && !generation.expose_token_ids);
-        for extra in [json!({"top_logprobs": 3}), json!({"logprobs": true, "top_logprobs": 21})] {
+        for extra in [
+            json!({"top_logprobs": 3}),
+            json!({"logprobs": true, "top_logprobs": 21}),
+        ] {
             assert!(matches!(
                 normalize_chat_request(body(extra), &template(CHATML), limits()),
                 Err(ChatRequestError::Invalid(_))
@@ -1128,7 +1150,10 @@ mod tests {
         assert_eq!(calls[0], ("a".to_owned(), "{\"x\":1}".to_owned()));
         assert_eq!(calls[1].0, "b");
         let cut = format!("{text}\n<tool_call>\n{{\"name\": \"c");
-        assert_eq!(parse_tool_calls(ToolStyle::Hermes, &cut).unwrap().1.len(), 2);
+        assert_eq!(
+            parse_tool_calls(ToolStyle::Hermes, &cut).unwrap().1.len(),
+            2
+        );
         assert!(parse_tool_calls(ToolStyle::Hermes, "plain").is_none());
         assert!(parse_tool_calls(ToolStyle::Hermes, "<tool_call>{oops</tool_call>").is_none());
 
@@ -1161,9 +1186,18 @@ mod tests {
     fn streamed_tool_calls_are_held_and_delivered_at_the_finish() {
         let mut shaper = ChatChunkShaper::new(Some(ToolStyle::Hermes));
         let mut content = String::new();
-        for piece in ["ok ", "<tool", "_call>\n{\"name\": \"a\",", " \"arguments\": {}}\n</tool_call>"] {
+        for piece in [
+            "ok ",
+            "<tool",
+            "_call>\n{\"name\": \"a\",",
+            " \"arguments\": {}}\n</tool_call>",
+        ] {
             let chunk = &payloads(&shaper.shape(&frame(piece, None)))[0];
-            content.push_str(chunk["choices"][0]["delta"]["content"].as_str().unwrap_or_default());
+            content.push_str(
+                chunk["choices"][0]["delta"]["content"]
+                    .as_str()
+                    .unwrap_or_default(),
+            );
         }
         assert_eq!(content, "ok ");
         let last = &payloads(&shaper.shape(&frame("", Some("stop"))))[0];
@@ -1179,7 +1213,11 @@ mod tests {
         let mut content = String::new();
         for piece in ["a <tool", " b"] {
             let chunk = &payloads(&shaper.shape(&frame(piece, None)))[0];
-            content.push_str(chunk["choices"][0]["delta"]["content"].as_str().unwrap_or_default());
+            content.push_str(
+                chunk["choices"][0]["delta"]["content"]
+                    .as_str()
+                    .unwrap_or_default(),
+            );
         }
         assert_eq!(content, "a <tool b");
 
@@ -1193,10 +1231,15 @@ mod tests {
     #[test]
     fn a_usage_frame_joined_to_the_finish_frame_keeps_the_chat_shape() {
         let mut shaper = ChatChunkShaper::default();
-        let joined = frame("", Some("stop")) + "data: {\"object\":\"text_completion\",\"choices\":[],\"usage\":{}}\n\n";
-        let shaped = payloads(&shaper.shape(&joined));
-        assert_eq!(shaped.len(), 2);
-        assert!(shaped.iter().all(|chunk| chunk["object"] == CHAT_CHUNK_OBJECT));
+        let joined = frame("", Some("stop"))
+            + "data: {\"object\":\"text_completion\",\"choices\":[],\"usage\":{}}\n\n";
+        let chunks = payloads(&shaper.shape(&joined));
+        assert_eq!(chunks.len(), 2);
+        assert!(
+            chunks
+                .iter()
+                .all(|chunk| chunk["object"] == CHAT_CHUNK_OBJECT)
+        );
     }
 
     #[test]

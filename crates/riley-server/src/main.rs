@@ -42,15 +42,19 @@ const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE: usize = 16;
 #[cfg(any(feature = "cuda", test))]
 const FIXED37_MAX_SEQUENCE_TOKENS: usize = 8_192;
 /// Rows up to this length keep the bytes of the unsplit attention.
+#[cfg_attr(not(feature = "cuda"), allow(dead_code))]
 const DEFAULT_ATTENTION_KV_CHUNK_TOKENS: u64 = 512;
 /// Models with this many KV heads or fewer give a decoding row too little
 /// parallel work at 512, so their generated rows split at half that; prompt
 /// rows have work enough in their own query rows and keep 512.
+#[cfg_attr(not(feature = "cuda"), allow(dead_code))]
 const FEW_KV_HEADS: usize = 2;
+#[cfg_attr(not(feature = "cuda"), allow(dead_code))]
 const FEW_KV_HEADS_GENERATED_KV_CHUNK_TOKENS: u64 = 256;
 
 /// The KV chunks of prompt rows and of generated rows (`None`: the prompt
 /// chunk): an explicit chunk applies to both.
+#[cfg_attr(not(feature = "cuda"), allow(dead_code))]
 fn attention_kv_chunks(explicit: Option<u64>, key_value_heads: usize) -> (u64, Option<u64>) {
     match explicit {
         Some(tokens) => (tokens, None),
@@ -217,6 +221,8 @@ enum CliCommand {
 }
 
 #[derive(Debug, Eq, PartialEq)]
+// Keep the complete cold option-validation/receipt mapping visible.
+#[allow(clippy::struct_excessive_bools)]
 struct ServeOptions {
     model_path: PathBuf,
     model_id: Option<String>,
@@ -341,6 +347,7 @@ enum ProjectionBiasBackendMode {
 }
 
 impl ProjectionBiasBackendMode {
+    #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
     const fn cli_id(self) -> &'static str {
         match self {
             Self::StrictStagedV1 => "strict-staged-v1",
@@ -366,7 +373,9 @@ enum DecodeAttentionBackendMode {
 }
 
 impl DecodeAttentionBackendMode {
-    const fn uses_paged_geometry(self) -> bool { !matches!(self,Self::Existing) }
+    const fn uses_paged_geometry(self) -> bool {
+        !matches!(self, Self::Existing)
+    }
 
     #[cfg(any(feature = "cuda", test))]
     const fn cli_id(self) -> &'static str {
@@ -1224,13 +1233,20 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     }
 
     let residual_rmsnorm = residual_rmsnorm.unwrap_or(ResidualRmsNormMode::Separate);
-    let execution_completion =
-        execution_completion.unwrap_or(if numerics_profile == Some(NumericsProfileMode::OwnedHfEagerBf16V1) {
+    let execution_completion = execution_completion.unwrap_or(
+        if numerics_profile == Some(NumericsProfileMode::OwnedHfEagerBf16V1) {
             ExecutionCompletionMode::PerOperation
-        } else { ExecutionCompletionMode::IterationBatch });
-    let batch_shape_policy = batch_shape_policy.unwrap_or(if numerics_profile == Some(NumericsProfileMode::OwnedHfEagerBf16V1) {
-        BatchShapePolicyMode::PowerOfTwo
-    } else { BatchShapePolicyMode::FixedMaximum });
+        } else {
+            ExecutionCompletionMode::IterationBatch
+        },
+    );
+    let batch_shape_policy = batch_shape_policy.unwrap_or(
+        if numerics_profile == Some(NumericsProfileMode::OwnedHfEagerBf16V1) {
+            BatchShapePolicyMode::PowerOfTwo
+        } else {
+            BatchShapePolicyMode::FixedMaximum
+        },
+    );
     let batch_token_budget = batch_token_budget.unwrap_or(512);
     let metadata_transport = metadata_transport.unwrap_or(MetadataTransportMode::Synchronous);
     if metadata_transport == MetadataTransportMode::PackedAsync
@@ -1264,24 +1280,46 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         execution_graph_policy.unwrap_or(riley_runtime::llama::ExecutionGraphPolicy::Disabled);
     let projection_bias_backend = projection_bias_backend.unwrap_or_default();
     let requested_decode_attention_backend = decode_attention_backend.unwrap_or_default();
-    let decode_attention_backend = if numerics_profile == Some(NumericsProfileMode::OwnedHfEagerBf16V1) {
-        if !matches!(requested_decode_attention_backend, DecodeAttentionBackendMode::Existing | DecodeAttentionBackendMode::OwnedHfEagerBf16V1) {
+    let decode_attention_backend = if numerics_profile
+        == Some(NumericsProfileMode::OwnedHfEagerBf16V1)
+    {
+        if !matches!(
+            requested_decode_attention_backend,
+            DecodeAttentionBackendMode::Existing | DecodeAttentionBackendMode::OwnedHfEagerBf16V1
+        ) {
             return Err("owned-hf-eager-bf16-v1 selects its own attention; conflicting legacy backend override".to_owned());
         }
         DecodeAttentionBackendMode::OwnedHfEagerBf16V1
-    } else { requested_decode_attention_backend };
+    } else {
+        requested_decode_attention_backend
+    };
     let reduction_profile = reduction_profile.unwrap_or(ReductionProfileMode::CanonicalV1);
     let numerics_profile = numerics_profile.unwrap_or_default();
-    if ["RILEY_CLASSIC_GEMM_DIAGNOSTIC","RILEY_HF_ATTENTION_DIAGNOSTIC",
-        "RILEY_REQUEST_GEMM_DIAGNOSTIC","RILEY_ATOMIC_PREFILL_DIAGNOSTIC"].iter().any(|k|std::env::var_os(k).is_some()) {
+    if [
+        "RILEY_CLASSIC_GEMM_DIAGNOSTIC",
+        "RILEY_HF_ATTENTION_DIAGNOSTIC",
+        "RILEY_REQUEST_GEMM_DIAGNOSTIC",
+        "RILEY_ATOMIC_PREFILL_DIAGNOSTIC",
+    ]
+    .iter()
+    .any(|k| std::env::var_os(k).is_some())
+    {
         return Err("legacy numerical diagnostic environment is unsupported; use --numerics-profile owned-hf-eager-bf16-v1".to_owned());
     }
     if decode_attention_backend == DecodeAttentionBackendMode::OwnedHfEagerBf16V1
-        && numerics_profile != NumericsProfileMode::OwnedHfEagerBf16V1 {
-        return Err("owned attention requires --numerics-profile owned-hf-eager-bf16-v1".to_owned());
+        && numerics_profile != NumericsProfileMode::OwnedHfEagerBf16V1
+    {
+        return Err(
+            "owned attention requires --numerics-profile owned-hf-eager-bf16-v1".to_owned(),
+        );
     }
-    if numerics_profile == NumericsProfileMode::OwnedHfEagerBf16V1 && !cfg!(feature="owned-hf-eager") {
-        return Err("owned-hf-eager-bf16-v1 requires a build with --features server,owned-hf-eager".to_owned());
+    if numerics_profile == NumericsProfileMode::OwnedHfEagerBf16V1
+        && !cfg!(feature = "owned-hf-eager")
+    {
+        return Err(
+            "owned-hf-eager-bf16-v1 requires a build with --features server,owned-hf-eager"
+                .to_owned(),
+        );
     }
     if numerics_profile == NumericsProfileMode::HfEagerQwenP2048O128ProbeV1 {
         if !cfg!(feature = "hf-exact-probe") {
@@ -1361,7 +1399,8 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 .to_owned(),
         );
     }
-    if prefill_burst_max_decode_percent.is_some_and(|percent: usize| percent == 0 || percent > 100) {
+    if prefill_burst_max_decode_percent.is_some_and(|percent: usize| percent == 0 || percent > 100)
+    {
         return Err("--prefill-burst-max-decode-percent must be 1 to 100".to_owned());
     }
     let prefill_burst = prefill_burst_steady_budget
@@ -1550,15 +1589,19 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     }
     let d128_global_merge = decode_attention_merge.unwrap_or(false);
     if native_attention_mode.is_some()
-        && (decode_attention_backend != DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
-            || !d128_tensor_core_producer || !d128_global_merge)
+        && (decode_attention_backend
+            != DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+            || !d128_tensor_core_producer
+            || !d128_global_merge)
     {
         return Err("--native-attention-mode requires native D128 attention, tensor-core-v1 producer and global-max-v1 merge".into());
     }
     // Only this route has been shown to give a prompt's tokens the same keys
     // and values wherever the prompt is split.
     if prefix_cache_blocks.is_some() && !d128_tensor_core_producer {
-        return Err("--prefix-cache-blocks requires --decode-attention-producer tensor-core-v1".into());
+        return Err(
+            "--prefix-cache-blocks requires --decode-attention-producer tensor-core-v1".into(),
+        );
     }
     if let Some(tokens) = attention_kv_chunk_tokens {
         if native_attention_mode != Some(NativeAttentionMode::FixedTileUnsplit) {
@@ -1569,20 +1612,20 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         }
     }
     if native_attention_mode == Some(NativeAttentionMode::FixedTileUnsplit)
-        && (batch_token_budget > 1024 || max_sequence_tokens.is_none_or(|n| n > 8192)
+        && (batch_token_budget > 1024
+            || max_sequence_tokens.is_none_or(|n| n > 8192)
             || max_active_sequences > 32)
     {
         return Err("fixed-tile-unsplit-v1 requires an explicit context bound <=8192, batch budget <=1024 and at most 32 active sequences".into());
     }
-    if d128_global_merge {
-        if decode_attention_backend
+    if d128_global_merge
+        && decode_attention_backend
             != DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
-        {
-            return Err(
+    {
+        return Err(
                 "--decode-attention-merge global-max-v1 requires the native D128 decode attention backend"
                     .to_owned(),
             );
-        }
     }
     if decode_attention_backend.uses_paged_geometry()
         && execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Disabled
@@ -1602,38 +1645,65 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     }
     let owned_decode_graph = owned_decode_graph.unwrap_or(false);
     let owned_decode_batch = owned_decode_batch.unwrap_or(0);
-    if matches!(owned_decode_batch,6|7|8|9|10) && max_active_sequences>32 {
-        return Err("bounded SM80 decode batching requires --max-active-sequences at most 32".to_owned());
+    if matches!(owned_decode_batch, 6..=10) && max_active_sequences > 32 {
+        return Err(
+            "bounded SM80 decode batching requires --max-active-sequences at most 32".to_owned(),
+        );
     }
-    if owned_decode_batch==5 && max_active_sequences>32 {
-        return Err("--owned-decode-batch exact-smallrows-v5 requires --max-active-sequences at most 32".to_owned());
+    if owned_decode_batch == 5 && max_active_sequences > 32 {
+        return Err(
+            "--owned-decode-batch exact-smallrows-v5 requires --max-active-sequences at most 32"
+                .to_owned(),
+        );
     }
-    if owned_decode_batch==4 && max_active_sequences>2 {
+    if owned_decode_batch == 4 && max_active_sequences > 2 {
         return Err("--owned-decode-batch exact-r2-global-v4 requires --max-active-sequences at most 2; larger batches retain exact-r2-v3".to_owned());
     }
 
-    if (owned_decode_graph || owned_decode_batch != 0) && (numerics_profile != NumericsProfileMode::OwnedHfEagerBf16V1
-        || execution_completion != ExecutionCompletionMode::IterationBatch) {
-        return Err("--owned-decode-graph requires owned-hf-eager-bf16-v1 and iteration-batch completion".to_owned());
-        }
-    if owned_mlp_graph.unwrap_or(false) && (numerics_profile!=NumericsProfileMode::OwnedHfEagerBf16V1
-        || execution_completion!=ExecutionCompletionMode::IterationBatch || !mlp_activation.unwrap_or(false)){
+    if (owned_decode_graph || owned_decode_batch != 0)
+        && (numerics_profile != NumericsProfileMode::OwnedHfEagerBf16V1
+            || execution_completion != ExecutionCompletionMode::IterationBatch)
+    {
+        return Err(
+            "--owned-decode-graph requires owned-hf-eager-bf16-v1 and iteration-batch completion"
+                .to_owned(),
+        );
+    }
+    if owned_mlp_graph.unwrap_or(false)
+        && (numerics_profile != NumericsProfileMode::OwnedHfEagerBf16V1
+            || execution_completion != ExecutionCompletionMode::IterationBatch
+            || !mlp_activation.unwrap_or(false))
+    {
         return Err("--owned-mlp-graph pure-decode-v1 requires owned HF numerics, iteration-batch completion and fused SiLU".to_owned());
     }
     if numerics_profile == NumericsProfileMode::OwnedHfEagerBf16V1 {
-        if metadata_transport != MetadataTransportMode::Synchronous || (staged_step_uploads && owned_decode_batch != 10)
-            || residual_rmsnorm != ResidualRmsNormMode::Separate || decode_step_capture
-            || vllm_smol_p128_graph || fused_mlp_residual_norm || fused_kv_write
-            || prompt_attention_mma || dense_prompt_attention || d128_tensor_core_producer
-            || d128_global_merge || merged_gate_up
-            || gemm_reduction_policy.unwrap_or(false) || bit_equivalent_gemm_selection
-            || prefill_plateau.is_some() || prefill_coalescing.is_some() || prefill_burst.is_some()
-            || projection_bias_backend != ProjectionBiasBackendMode::StrictStagedV1 || fused_qkv_rope
-            || c02_runtime_config.is_some() {
+        if metadata_transport != MetadataTransportMode::Synchronous
+            || (staged_step_uploads && owned_decode_batch != 10)
+            || residual_rmsnorm != ResidualRmsNormMode::Separate
+            || decode_step_capture
+            || vllm_smol_p128_graph
+            || fused_mlp_residual_norm
+            || fused_kv_write
+            || prompt_attention_mma
+            || dense_prompt_attention
+            || d128_tensor_core_producer
+            || d128_global_merge
+            || merged_gate_up
+            || gemm_reduction_policy.unwrap_or(false)
+            || bit_equivalent_gemm_selection
+            || prefill_plateau.is_some()
+            || prefill_coalescing.is_some()
+            || prefill_burst.is_some()
+            || projection_bias_backend != ProjectionBiasBackendMode::StrictStagedV1
+            || fused_qkv_rope
+            || c02_runtime_config.is_some()
+        {
             return Err("owned-hf-eager-bf16-v1 requires synchronous metadata and separate norms without graph, C02, or component overrides".to_owned());
         }
-        if max_sequence_tokens.is_some_and(|n|n>9216) {
-            return Err("owned-hf-eager-bf16-v1 supports --max-sequence-tokens at most 9216".to_owned());
+        if max_sequence_tokens.is_some_and(|n| n > 9216) {
+            return Err(
+                "owned-hf-eager-bf16-v1 supports --max-sequence-tokens at most 9216".to_owned(),
+            );
         }
     }
     let maximum_paged_batch_tokens = match decode_attention_backend {
@@ -1648,17 +1718,13 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             "selected paged attention backend requires --batch-token-budget at most {maximum_paged_batch_tokens}"
         ));
     }
-    if decode_attention_backend.uses_paged_geometry()
-        && prefill_chunk_tokens > batch_token_budget
-    {
+    if decode_attention_backend.uses_paged_geometry() && prefill_chunk_tokens > batch_token_budget {
         return Err(
             "native-bf16-paged-split-gqa-d128-two-stage requires --prefill-chunk-tokens no greater than --batch-token-budget"
                 .to_owned(),
         );
     }
-    if decode_attention_backend.uses_paged_geometry()
-        && max_active_sequences > batch_token_budget
-    {
+    if decode_attention_backend.uses_paged_geometry() && max_active_sequences > batch_token_budget {
         return Err(
             "native-bf16-paged-split-gqa-d128-two-stage requires --max-active-sequences no greater than --batch-token-budget"
                 .to_owned(),
@@ -2121,14 +2187,27 @@ fn validate_native_bf16_paged_split_gqa_d128_two_stage_model(
     }
 
     let spec = model.spec();
-    if backend==DecodeAttentionBackendMode::OwnedHfEagerBf16V1 {
-        if spec.dtype().name()!="bf16" || max_sequence_tokens>9216 || spec.blocks().is_empty() {
-            return Err("owned-hf-eager-bf16-v1 requires BF16 blocks and sequence<=9216".to_owned());
+    if backend == DecodeAttentionBackendMode::OwnedHfEagerBf16V1 {
+        if spec.dtype().name() != "bf16" || max_sequence_tokens > 9216 || spec.blocks().is_empty() {
+            return Err(
+                "owned-hf-eager-bf16-v1 requires BF16 blocks and sequence<=9216".to_owned(),
+            );
         }
         return Ok(()); // Exact supported model geometry is checked by the runtime before weight upload.
     }
-    if backend==DecodeAttentionBackendMode::MaterializedBf16ReferenceD64 {
-        if spec.dtype().name()!="bf16" || max_sequence_tokens>32768 || spec.blocks().is_empty() || spec.blocks().iter().any(|b| {let a=b.attention();a.head_dimension()!=64 || a.query_heads()==0 || a.key_value_heads()==0 || a.query_heads()%a.key_value_heads()!=0 || a.query_heads()/a.key_value_heads()>8}) {
+    if backend == DecodeAttentionBackendMode::MaterializedBf16ReferenceD64 {
+        if spec.dtype().name() != "bf16"
+            || max_sequence_tokens > 32768
+            || spec.blocks().is_empty()
+            || spec.blocks().iter().any(|b| {
+                let a = b.attention();
+                a.head_dimension() != 64
+                    || a.query_heads() == 0
+                    || a.key_value_heads() == 0
+                    || a.query_heads() % a.key_value_heads() != 0
+                    || a.query_heads() / a.key_value_heads() > 8
+            })
+        {
             return Err("materialized-bf16-reference-d64 requires BF16 D64 GQA ratio<=8 and sequence<=32768".to_owned());
         }
         return Ok(());
@@ -2209,11 +2288,7 @@ fn native_bf16_paged_split_gqa_d128_two_stage_startup_receipt(
         ));
     }
     Ok(format!(
-        "RILEY_DECODE_ATTENTION requested_backend=native-bf16-paged-split-gqa-d128-two-stage resolved_ragged_backend={resolved_ragged_backend} fallback_reason=none query_heads={} key_value_heads={} head_size={} page_size={} graph=false",
-        query_heads,
-        key_value_heads,
-        head_size,
-        NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE,
+        "RILEY_DECODE_ATTENTION requested_backend=native-bf16-paged-split-gqa-d128-two-stage resolved_ragged_backend={resolved_ragged_backend} fallback_reason=none query_heads={query_heads} key_value_heads={key_value_heads} head_size={head_size} page_size={NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE} graph=false",
     ))
 }
 
@@ -2289,11 +2364,11 @@ fn run_serve(
     };
     use riley_runtime::paged_kv::KV_BLOCK_SIZE;
     use riley_scheduler::{OverloadPolicy, SchedulerConfig};
+    use riley_server::chat::ChatTemplate;
     use riley_server::domain::{ModelMetadata, RequestLimits};
     use riley_server::engine::{
         CudaBackendConfig, CudaEngineResources, EngineConfig, InferenceEngine,
     };
-    use riley_server::chat::ChatTemplate;
     use riley_server::service::{CompletionBackend, ServerConfig, start_server_with_chat};
 
     #[cfg(not(unix))]
@@ -2372,7 +2447,13 @@ fn run_serve(
         .first()
         .map_or(0, |block| block.attention().head_dimension());
     let model_context = model.spec().max_sequence_length();
-    let max_sequence_tokens = options.max_sequence_tokens.unwrap_or(if options.numerics_profile==NumericsProfileMode::OwnedHfEagerBf16V1 {model_context.min(9216)} else {model_context});
+    let max_sequence_tokens = options.max_sequence_tokens.unwrap_or(
+        if options.numerics_profile == NumericsProfileMode::OwnedHfEagerBf16V1 {
+            model_context.min(9216)
+        } else {
+            model_context
+        },
+    );
     if max_sequence_tokens < 2 || max_sequence_tokens > model_context {
         return Err(format!(
             "--max-sequence-tokens must be between 2 and the model bound {model_context}"
@@ -2390,7 +2471,9 @@ fn run_serve(
             .iter()
             .any(|block| !matches!(block.attention().head_dimension(), 64 | 128))
     {
-        return Err("fixed-tile-unsplit-v1 requires head dimension 64 or 128 in every layer".into());
+        return Err(
+            "fixed-tile-unsplit-v1 requires head dimension 64 or 128 in every layer".into(),
+        );
     }
     validate_reduction_profile_context(options.reduction_profile, max_sequence_tokens)?;
     let default_output_tokens = 1_024_usize.min(max_sequence_tokens - 1);
@@ -2459,8 +2542,15 @@ fn run_serve(
         }
     };
     let owned_wide_query = options.numerics_profile == NumericsProfileMode::OwnedHfEagerBf16V1
-        && model.spec().blocks().first().is_some_and(|b|b.attention().query_heads()*b.attention().head_dimension()>model.spec().embedding().hidden_size());
-    let forward = if owned_wide_query { forward.with_merged_qkv_projection() } else { forward };
+        && model.spec().blocks().first().is_some_and(|b| {
+            b.attention().query_heads() * b.attention().head_dimension()
+                > model.spec().embedding().hidden_size()
+        });
+    let forward = if owned_wide_query {
+        forward.with_merged_qkv_projection()
+    } else {
+        forward
+    };
     let forward = if options.merged_gate_up {
         forward.with_merged_gate_up_projection()
     } else {
@@ -2521,7 +2611,11 @@ fn run_serve(
     } else {
         executor
     };
-    let executor = if options.owned_mlp_graph {executor.with_owned_mlp_graphs()}else{executor};
+    let executor = if options.owned_mlp_graph {
+        executor.with_owned_mlp_graphs()
+    } else {
+        executor
+    };
     let executor = if options.fused_qkv_rope || owned_wide_query {
         executor.with_fused_qkv_rope()
     } else {
@@ -2566,26 +2660,82 @@ fn run_serve(
     // selection. Graph-capable existing modes keep the established
     // grouped-head selection; the default remains the legacy path.
     let executor = match options.owned_decode_batch {
-        1 => { eprintln!("RILEY_OWNED_BATCH mode=grouped-v1 rows_per_matrix=1"); executor.with_owned_decode_batch() },
-        2 => { eprintln!("RILEY_OWNED_BATCH mode=lt-mlp-v2 coalesced_n=11008 coalesced_k=2048"); executor.with_owned_mlp_decode_batch() },
-        3 => {eprintln!("RILEY_OWNED_BATCH mode=exact-r2-v3 q4_r2_gate=true cached_request_rows=true atomic_prefill=true");executor.with_exact_r2_decode_batch()},
-        4 => {eprintln!("RILEY_OWNED_BATCH mode=exact-r2-global-v4 q4_r2_gate=true q4_r2_down_output_global=true cached_request_rows=true atomic_prefill=true");executor.with_exact_r2_global_decode_batch()},
-        5 => {eprintln!("RILEY_OWNED_BATCH mode=exact-smallrows-v5 actual_row_graph_keys=true cached_request_rows=true atomic_prefill=true");executor.with_exact_smallrows_decode_batch()},
-        6 => {eprintln!("RILEY_OWNED_BATCH mode=bounded-gateup-sm80-v1 max_gemm_rows=16 actual_row_graph_keys=true");executor.with_bounded_sm80_gateup_batch()},
-        7 => {eprintln!("RILEY_OWNED_BATCH mode=bounded-projections-sm80-v2 q_rows=32 output_rows=8 down_rows=4");executor.with_bounded_sm80_projection_batch()},
-        8 => {eprintln!("RILEY_OWNED_BATCH mode=native-kv-sm80-v3 q_rows=32 output_rows=8 down_rows=4 kv_reuse=2,4,8 native_k_stride=32 kv_unroll=16");executor.with_bounded_sm80_projection_kv_batch()},
-        9 => {eprintln!("RILEY_OWNED_BATCH mode=native-attention-sm80-v4 kv_vector_bytes=16 gqa_reuse=4 fused_decode_scale=true");executor.with_bounded_sm80_attention_batch()},
-        10 => {eprintln!("RILEY_OWNED_BATCH mode=native-prefill-sm80-v5 prefill_gate_original=64..130 prefill_gate_merged=161..576 prefill_down_native_lt_v7=161..576 prefill_gate_lt_v7=257..512 decode_down_slice_v9=5..32 decode_gate_up_native_v8=17..32 paged_attention_chunk_v6=2..32 attention_t=24..216");executor.with_bounded_sm80_prefill_batch()},
+        1 => {
+            eprintln!("RILEY_OWNED_BATCH mode=grouped-v1 rows_per_matrix=1");
+            executor.with_owned_decode_batch()
+        }
+        2 => {
+            eprintln!("RILEY_OWNED_BATCH mode=lt-mlp-v2 coalesced_n=11008 coalesced_k=2048");
+            executor.with_owned_mlp_decode_batch()
+        }
+        3 => {
+            eprintln!(
+                "RILEY_OWNED_BATCH mode=exact-r2-v3 q4_r2_gate=true cached_request_rows=true atomic_prefill=true"
+            );
+            executor.with_exact_r2_decode_batch()
+        }
+        4 => {
+            eprintln!(
+                "RILEY_OWNED_BATCH mode=exact-r2-global-v4 q4_r2_gate=true q4_r2_down_output_global=true cached_request_rows=true atomic_prefill=true"
+            );
+            executor.with_exact_r2_global_decode_batch()
+        }
+        5 => {
+            eprintln!(
+                "RILEY_OWNED_BATCH mode=exact-smallrows-v5 actual_row_graph_keys=true cached_request_rows=true atomic_prefill=true"
+            );
+            executor.with_exact_smallrows_decode_batch()
+        }
+        6 => {
+            eprintln!(
+                "RILEY_OWNED_BATCH mode=bounded-gateup-sm80-v1 max_gemm_rows=16 actual_row_graph_keys=true"
+            );
+            executor.with_bounded_sm80_gateup_batch()
+        }
+        7 => {
+            eprintln!(
+                "RILEY_OWNED_BATCH mode=bounded-projections-sm80-v2 q_rows=32 output_rows=8 down_rows=4"
+            );
+            executor.with_bounded_sm80_projection_batch()
+        }
+        8 => {
+            eprintln!(
+                "RILEY_OWNED_BATCH mode=native-kv-sm80-v3 q_rows=32 output_rows=8 down_rows=4 kv_reuse=2,4,8 native_k_stride=32 kv_unroll=16"
+            );
+            executor.with_bounded_sm80_projection_kv_batch()
+        }
+        9 => {
+            eprintln!(
+                "RILEY_OWNED_BATCH mode=native-attention-sm80-v4 kv_vector_bytes=16 gqa_reuse=4 fused_decode_scale=true"
+            );
+            executor.with_bounded_sm80_attention_batch()
+        }
+        10 => {
+            eprintln!(
+                "RILEY_OWNED_BATCH mode=native-prefill-sm80-v5 prefill_gate_original=64..130 prefill_gate_merged=161..576 prefill_down_native_lt_v7=161..576 prefill_gate_lt_v7=257..512 decode_down_slice_v9=5..32 decode_gate_up_native_v8=17..32 paged_attention_chunk_v6=2..32 attention_t=24..216"
+            );
+            executor.with_bounded_sm80_prefill_batch()
+        }
         _ => executor,
     };
     let executor = if options.owned_decode_graph {
-        eprintln!("RILEY_OWNED_GRAPH mode=segments-v1 attention_capture=qualified exact_bucket=true");
+        eprintln!(
+            "RILEY_OWNED_GRAPH mode=segments-v1 attention_capture=qualified exact_bucket=true"
+        );
         executor.with_owned_decode_graph()
-    } else { executor };
+    } else {
+        executor
+    };
     let executor = match options.decode_attention_backend {
-        DecodeAttentionBackendMode::OwnedHfEagerBf16V1 => executor.with_owned_hf_eager_bf16().with_serving_sequence_token_bound(max_sequence_tokens),
-        DecodeAttentionBackendMode::MaterializedBf16ReferenceD128 => executor.with_materialized_bf16_reference_d128().with_serving_sequence_token_bound(max_sequence_tokens),
-        DecodeAttentionBackendMode::MaterializedBf16ReferenceD64 => executor.with_materialized_bf16_reference_d64().with_serving_sequence_token_bound(max_sequence_tokens),
+        DecodeAttentionBackendMode::OwnedHfEagerBf16V1 => executor
+            .with_owned_hf_eager_bf16()
+            .with_serving_sequence_token_bound(max_sequence_tokens),
+        DecodeAttentionBackendMode::MaterializedBf16ReferenceD128 => executor
+            .with_materialized_bf16_reference_d128()
+            .with_serving_sequence_token_bound(max_sequence_tokens),
+        DecodeAttentionBackendMode::MaterializedBf16ReferenceD64 => executor
+            .with_materialized_bf16_reference_d64()
+            .with_serving_sequence_token_bound(max_sequence_tokens),
         DecodeAttentionBackendMode::Existing => {
             if options.execution_graph_policy
                 != riley_runtime::llama::ExecutionGraphPolicy::Disabled
@@ -2699,7 +2849,9 @@ fn run_serve(
     .and_then(|engine| engine.with_prefill_coalescing_policy(options.prefill_coalescing))
     .and_then(|engine| engine.with_prefill_burst_policy(options.prefill_burst))
     .and_then(|engine| engine.with_prefix_cache(options.prefix_cache_blocks))
-    .map_err(|error| format!("invalid prefill plateau, coalescing or prefix cache policy: {error}"))?;
+    .map_err(|error| {
+        format!("invalid prefill plateau, coalescing or prefix cache policy: {error}")
+    })?;
     let native_d128_two_stage_startup_receipt = if options.decode_attention_backend
         == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
     {
@@ -2713,25 +2865,44 @@ fn run_serve(
     } else {
         None
     };
-    if matches!(options.decode_attention_backend, DecodeAttentionBackendMode::MaterializedBf16ReferenceD128 | DecodeAttentionBackendMode::MaterializedBf16ReferenceD64) {
-        let facts=resources.effective_runtime_facts();
-        let actual=facts.attention_decode();
-        let expected=if options.decode_attention_backend==DecodeAttentionBackendMode::MaterializedBf16ReferenceD64 {"riley.cuda.ragged-paged-attention.materialized-bf16-reference.d64.v1"} else {"riley.cuda.ragged-paged-attention.materialized-bf16-reference.d128.v1"};
-        if actual!=expected {
-            return Err(format!("materialized BF16 reference selection mismatch: {actual}"));
+    if matches!(
+        options.decode_attention_backend,
+        DecodeAttentionBackendMode::MaterializedBf16ReferenceD128
+            | DecodeAttentionBackendMode::MaterializedBf16ReferenceD64
+    ) {
+        let facts = resources.effective_runtime_facts();
+        let actual = facts.attention_decode();
+        let expected = if options.decode_attention_backend
+            == DecodeAttentionBackendMode::MaterializedBf16ReferenceD64
+        {
+            "riley.cuda.ragged-paged-attention.materialized-bf16-reference.d64.v1"
+        } else {
+            "riley.cuda.ragged-paged-attention.materialized-bf16-reference.d128.v1"
+        };
+        if actual != expected {
+            return Err(format!(
+                "materialized BF16 reference selection mismatch: {actual}"
+            ));
         }
     }
     let projection_bias_startup_receipt = {
         let facts = resources.effective_runtime_facts();
-        if options.numerics_profile==NumericsProfileMode::OwnedHfEagerBf16V1 {
-            if facts.attention_prefill()!="riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1"
-                || facts.attention_decode()!="riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1"
-                || facts.gemm_reduction_policy()!="owned-hf-eager-bf16-v1" {
+        if options.numerics_profile == NumericsProfileMode::OwnedHfEagerBf16V1 {
+            if facts.attention_prefill() != "riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1"
+                || facts.attention_decode() != "riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1"
+                || facts.gemm_reduction_policy() != "owned-hf-eager-bf16-v1"
+            {
                 return Err("owned numerical profile resolved an unexpected backend".to_owned());
             }
-            format!("RILEY_PROJECTION_BIAS requested_profile=owned-hf-eager-bf16-v1 resolved_backend={} fallback_reason=none",facts.projection_bias_backend())
+            format!(
+                "RILEY_PROJECTION_BIAS requested_profile=owned-hf-eager-bf16-v1 resolved_backend={} fallback_reason=none",
+                facts.projection_bias_backend()
+            )
         } else {
-            projection_bias_backend_startup_receipt(options.projection_bias_backend,facts.projection_bias_backend())?
+            projection_bias_backend_startup_receipt(
+                options.projection_bias_backend,
+                facts.projection_bias_backend(),
+            )?
         }
     };
     let (c02_receipt, c02_generation_audit) = match c02_runtime_config.as_ref() {
@@ -3529,6 +3700,9 @@ fn c02_native_fallback_projection(
 }
 
 #[cfg(any(feature = "cuda", test))]
+// Keep the complete cold option-validation/receipt mapping visible.
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 fn c02_native_fallback_event_bytes(
     candidate_id: &str,
     configuration_profile: C02ConfigurationProfile,
@@ -4022,6 +4196,8 @@ fn validate_c02_generation_audit_schema_bounds(
 
 #[cfg(all(any(feature = "cuda", test), unix))]
 impl riley_server::engine::C02GenerationAuditSink for C02GenerationAuditWriter {
+    // Keep the complete cold option-validation/receipt mapping visible.
+    #[allow(clippy::too_many_lines)]
     fn write_record(
         &self,
         record: riley_server::engine::C02GenerationAuditRecord,
@@ -4104,8 +4280,9 @@ impl riley_server::engine::C02GenerationAuditSink for C02GenerationAuditWriter {
                         "ineligibility_reason".to_owned(),
                         selection
                             .ineligibility_reason
-                            .map(|reason| serde_json::Value::String(reason.as_str().to_owned()))
-                            .unwrap_or(serde_json::Value::Null),
+                            .map_or(serde_json::Value::Null, |reason| {
+                                serde_json::Value::String(reason.as_str().to_owned())
+                            }),
                     ),
                     (
                         "committed".to_owned(),
@@ -4910,6 +5087,8 @@ mod tests {
     }
 
     #[test]
+    // Keep the complete cold option-validation/receipt mapping visible.
+    #[allow(clippy::too_many_lines)]
     fn c02_native_fallback_event_v1_is_a_closed_committed_sampling_projection() {
         use riley_server::engine::{
             C02CommittedSamplingSelection, C02GpuGreedyIneligibility, C02SamplingBackend,
@@ -5393,6 +5572,8 @@ mod tests {
 
     #[cfg(all(any(feature = "cuda", test), unix))]
     #[test]
+    // Keep the complete cold option-validation/receipt mapping visible.
+    #[allow(clippy::too_many_lines)]
     fn c02_generation_audit_writer_creates_a_bound_leaf_and_marker_once() {
         use riley_server::domain::{FinishReason, TokenUsage};
         use riley_server::engine::{
@@ -5747,13 +5928,29 @@ mod tests {
     #[test]
     fn admission_timeout_cli_accepts_explicit_budget_and_preserves_default() {
         let default = parse_arguments(args(&["serve", "--model", "/m"])).unwrap();
-        let CliCommand::Serve(default) = default else { panic!("serve expected") };
+        let CliCommand::Serve(default) = default else {
+            panic!("serve expected")
+        };
         assert_eq!(default.admission_timeout_ms, 30_000);
         for milliseconds in ["1", "600000", "3600000"] {
-            let parsed = parse_arguments(args(&["serve", "--model", "/m", "--admission-timeout-ms", milliseconds])).unwrap();
-            let CliCommand::Serve(options) = parsed else { panic!("serve expected") };
+            let parsed = parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/m",
+                "--admission-timeout-ms",
+                milliseconds,
+            ]))
+            .unwrap();
+            let CliCommand::Serve(options) = parsed else {
+                panic!("serve expected")
+            };
             assert_eq!(options.admission_timeout_ms.to_string(), milliseconds);
-            assert!(options.admission_timeout_ms.checked_mul(1_000_000).is_some());
+            assert!(
+                options
+                    .admission_timeout_ms
+                    .checked_mul(1_000_000)
+                    .is_some()
+            );
         }
         assert!(USAGE.contains("--admission-timeout-ms MS"));
     }
@@ -5761,16 +5958,43 @@ mod tests {
     #[test]
     fn admission_timeout_cli_rejects_unbounded_invalid_and_duplicate_budgets() {
         for value in ["0", "-1", "1.5", "3600001", "18446744073709551616", "none"] {
-            assert!(parse_arguments(args(&["serve", "--model", "/m", "--admission-timeout-ms", value])).is_err(), "{value}");
+            assert!(
+                parse_arguments(args(&[
+                    "serve",
+                    "--model",
+                    "/m",
+                    "--admission-timeout-ms",
+                    value
+                ]))
+                .is_err(),
+                "{value}"
+            );
         }
-        assert!(parse_arguments(args(&["serve", "--model", "/m", "--admission-timeout-ms"])).is_err());
-        assert!(parse_arguments(args(&["serve", "--model", "/m", "--admission-timeout-ms", "600000", "--admission-timeout-ms", "30000"])).is_err());
+        assert!(
+            parse_arguments(args(&["serve", "--model", "/m", "--admission-timeout-ms"])).is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/m",
+                "--admission-timeout-ms",
+                "600000",
+                "--admission-timeout-ms",
+                "30000"
+            ]))
+            .is_err()
+        );
     }
 
     #[test]
     fn tensor_parallel_devices_take_two_to_eight_distinct_ordinals_and_exclude_device() {
         let Ok(CliCommand::Serve(options)) = parse_arguments(args(&[
-            "serve", "--model", "/m", "--tensor-parallel-devices", "4,5",
+            "serve",
+            "--model",
+            "/m",
+            "--tensor-parallel-devices",
+            "4,5",
         ])) else {
             panic!("tensor-parallel serve must parse");
         };
@@ -5778,14 +6002,29 @@ mod tests {
         assert_eq!(options.device_ordinal, 4);
         for value in ["4", "4,4", "0,1,2,3,4,5,6,7,8", "4,x", ""] {
             assert!(
-                parse_arguments(args(&["serve", "--model", "/m", "--tensor-parallel-devices", value])).is_err(),
+                parse_arguments(args(&[
+                    "serve",
+                    "--model",
+                    "/m",
+                    "--tensor-parallel-devices",
+                    value
+                ]))
+                .is_err(),
                 "{value}"
             );
         }
-        assert!(parse_arguments(args(&[
-            "serve", "--model", "/m", "--device", "1", "--tensor-parallel-devices", "4,5",
-        ]))
-        .is_err());
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/m",
+                "--device",
+                "1",
+                "--tensor-parallel-devices",
+                "4,5",
+            ]))
+            .is_err()
+        );
     }
 
     #[test]
@@ -6479,6 +6718,8 @@ mod tests {
     }
 
     #[test]
+    // Keep the complete cold option-validation/receipt mapping visible.
+    #[allow(clippy::too_many_lines)]
     fn custom_batch_shape_buckets_require_active_policy_and_exact_budget_bound() {
         assert!(
             parse_arguments(args(&[
@@ -6733,24 +6974,53 @@ mod tests {
 
     #[test]
     fn owned_decode_graph_requires_exact_iteration_profile() {
-        let base=["serve","--model","/qwen25-3b","--owned-decode-graph","segments-v1"];
+        let base = [
+            "serve",
+            "--model",
+            "/qwen25-3b",
+            "--owned-decode-graph",
+            "segments-v1",
+        ];
         assert!(parse_arguments(args(&base)).is_err());
-        let mut exact=base.to_vec(); exact.extend(["--numerics-profile","owned-hf-eager-bf16-v1"]);
+        let mut exact = base.to_vec();
+        exact.extend(["--numerics-profile", "owned-hf-eager-bf16-v1"]);
         assert!(parse_arguments(args(&exact)).is_err());
-        exact.extend(["--execution-completion","iteration-batch"]);
+        exact.extend(["--execution-completion", "iteration-batch"]);
         // The numerical profile is available only in builds that include
         // its CUDA implementation; CPU-only parser tests must reject it.
-        assert_eq!(parse_arguments(args(&exact)).is_ok(), cfg!(feature = "owned-hf-eager"));
+        assert_eq!(
+            parse_arguments(args(&exact)).is_ok(),
+            cfg!(feature = "owned-hf-eager")
+        );
     }
 
     #[test]
     fn materialized_bf16_reference_cli_requires_eager_canonical_and_rejects_native_overrides() {
-        let base=["serve","--model","/qwen17","--decode-attention-backend","materialized-bf16-reference-d128","--batch-token-budget","32"];
-        let CliCommand::Serve(options)=parse_arguments(args(&base)).expect("explicit reference") else {panic!("serve")};
-        assert_eq!(options.decode_attention_backend,DecodeAttentionBackendMode::MaterializedBf16ReferenceD128);
-        assert_eq!(options.prefill_chunk_tokens,32);
-        for extra in [["--decode-step-graph","capture-v1"],["--decode-attention-merge","global-max-v1"]] {
-            let mut input=base.to_vec();input.extend(extra);assert!(parse_arguments(args(&input)).is_err());
+        let base = [
+            "serve",
+            "--model",
+            "/qwen17",
+            "--decode-attention-backend",
+            "materialized-bf16-reference-d128",
+            "--batch-token-budget",
+            "32",
+        ];
+        let CliCommand::Serve(options) = parse_arguments(args(&base)).expect("explicit reference")
+        else {
+            panic!("serve")
+        };
+        assert_eq!(
+            options.decode_attention_backend,
+            DecodeAttentionBackendMode::MaterializedBf16ReferenceD128
+        );
+        assert_eq!(options.prefill_chunk_tokens, 32);
+        for extra in [
+            ["--decode-step-graph", "capture-v1"],
+            ["--decode-attention-merge", "global-max-v1"],
+        ] {
+            let mut input = base.to_vec();
+            input.extend(extra);
+            assert!(parse_arguments(args(&input)).is_err());
         }
     }
 
@@ -6783,28 +7053,39 @@ mod tests {
         }
         assert!(burst("8", &["--prefill-burst-max-decode-percent", "0"]).is_err());
         assert!(burst("8", &["--prefill-burst-max-decode-percent", "101"]).is_err());
-        assert!(burst(
-            "8",
-            &["--prefill-burst-max-decode-percent", "31", "--prefill-burst-max-decode-rows", "3"]
-        )
-        .is_err());
+        assert!(
+            burst(
+                "8",
+                &[
+                    "--prefill-burst-max-decode-percent",
+                    "31",
+                    "--prefill-burst-max-decode-rows",
+                    "3"
+                ]
+            )
+            .is_err()
+        );
         let CliCommand::Serve(options) =
             burst("8", &["--prefill-burst-min-prompt-tokens", "512"]).unwrap()
         else {
             panic!("serve expected");
         };
         assert_eq!(options.prefill_burst.unwrap().min_prompt_tokens, 512);
-        assert!(parse_arguments(args(&[
-            "serve",
-            "--model",
-            "/m",
-            "--prefill-burst-min-prompt-tokens",
-            "512",
-        ]))
-        .is_err());
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/m",
+                "--prefill-burst-min-prompt-tokens",
+                "512",
+            ]))
+            .is_err()
+        );
     }
 
     #[test]
+    // Keep the complete cold option-validation/receipt mapping visible.
+    #[allow(clippy::too_many_lines)]
     fn native_d128_two_stage_cli_is_explicit_eager_and_fail_closed() {
         let CliCommand::Serve(options) = parse_arguments(args(&[
             "serve",
@@ -7274,67 +7555,206 @@ mod graph_numerics_cli_tests {
 #[cfg(test)]
 mod owned_hf_cli_tests {
     use super::*;
-    fn base(extra: &[&str]) -> Result<CliCommand,String> {
-        let mut a=vec!["serve","--model","/models/fixture","--numerics-profile","owned-hf-eager-bf16-v1"];
-        a.extend_from_slice(extra);parse_arguments(a.into_iter().map(OsString::from))
+    fn base(extra: &[&str]) -> Result<CliCommand, String> {
+        let mut a = vec![
+            "serve",
+            "--model",
+            "/models/fixture",
+            "--numerics-profile",
+            "owned-hf-eager-bf16-v1",
+        ];
+        a.extend_from_slice(extra);
+        parse_arguments(a.into_iter().map(OsString::from))
     }
     #[test]
-    #[cfg(feature="owned-hf-eager")]
-    fn native_kv_sm80_cli_is_explicit_and_bounded(){
-        assert!(base(&["--owned-decode-batch","native-kv-sm80-v3"]).is_err());
-        let CliCommand::Serve(o)=base(&["--owned-decode-batch","native-kv-sm80-v3","--execution-completion","iteration-batch","--max-active-sequences","32"]).unwrap()else{panic!("serve")};
-        assert_eq!(o.owned_decode_batch,8);
-        assert!(base(&["--owned-decode-batch","native-kv-sm80-v3","--execution-completion","iteration-batch","--max-active-sequences","33"]).is_err());
+    #[cfg(feature = "owned-hf-eager")]
+    fn native_kv_sm80_cli_is_explicit_and_bounded() {
+        assert!(base(&["--owned-decode-batch", "native-kv-sm80-v3"]).is_err());
+        let CliCommand::Serve(o) = base(&[
+            "--owned-decode-batch",
+            "native-kv-sm80-v3",
+            "--execution-completion",
+            "iteration-batch",
+            "--max-active-sequences",
+            "32",
+        ])
+        .unwrap() else {
+            panic!("serve")
+        };
+        assert_eq!(o.owned_decode_batch, 8);
+        assert!(
+            base(&[
+                "--owned-decode-batch",
+                "native-kv-sm80-v3",
+                "--execution-completion",
+                "iteration-batch",
+                "--max-active-sequences",
+                "33"
+            ])
+            .is_err()
+        );
     }
     #[test]
-    #[cfg(feature="owned-hf-eager")]
-    fn native_attention_sm80_cli_is_explicit_and_bounded(){
-        assert!(base(&["--owned-decode-batch","native-attention-sm80-v4"]).is_err());
-        let CliCommand::Serve(o)=base(&["--owned-decode-batch","native-attention-sm80-v4","--execution-completion","iteration-batch","--max-active-sequences","32"]).unwrap()else{panic!("serve")};
-        assert_eq!(o.owned_decode_batch,9);
-        assert!(base(&["--owned-decode-batch","native-attention-sm80-v4","--execution-completion","iteration-batch","--max-active-sequences","33"]).is_err());
+    #[cfg(feature = "owned-hf-eager")]
+    fn native_attention_sm80_cli_is_explicit_and_bounded() {
+        assert!(base(&["--owned-decode-batch", "native-attention-sm80-v4"]).is_err());
+        let CliCommand::Serve(o) = base(&[
+            "--owned-decode-batch",
+            "native-attention-sm80-v4",
+            "--execution-completion",
+            "iteration-batch",
+            "--max-active-sequences",
+            "32",
+        ])
+        .unwrap() else {
+            panic!("serve")
+        };
+        assert_eq!(o.owned_decode_batch, 9);
+        assert!(
+            base(&[
+                "--owned-decode-batch",
+                "native-attention-sm80-v4",
+                "--execution-completion",
+                "iteration-batch",
+                "--max-active-sequences",
+                "33"
+            ])
+            .is_err()
+        );
     }
     #[test]
-    #[cfg(feature="owned-hf-eager")]
-    fn native_prefill_sm80_cli_is_explicit_and_bounded(){
-        assert!(base(&["--owned-decode-batch","native-prefill-sm80-v5"]).is_err());
-        let CliCommand::Serve(o)=base(&["--owned-decode-batch","native-prefill-sm80-v5","--execution-completion","iteration-batch","--max-active-sequences","32"]).unwrap()else{panic!("serve")};
-        assert_eq!(o.owned_decode_batch,10);
-        assert!(base(&["--owned-decode-batch","native-prefill-sm80-v5","--execution-completion","iteration-batch","--max-active-sequences","33"]).is_err());
+    #[cfg(feature = "owned-hf-eager")]
+    fn native_prefill_sm80_cli_is_explicit_and_bounded() {
+        assert!(base(&["--owned-decode-batch", "native-prefill-sm80-v5"]).is_err());
+        let CliCommand::Serve(o) = base(&[
+            "--owned-decode-batch",
+            "native-prefill-sm80-v5",
+            "--execution-completion",
+            "iteration-batch",
+            "--max-active-sequences",
+            "32",
+        ])
+        .unwrap() else {
+            panic!("serve")
+        };
+        assert_eq!(o.owned_decode_batch, 10);
+        assert!(
+            base(&[
+                "--owned-decode-batch",
+                "native-prefill-sm80-v5",
+                "--execution-completion",
+                "iteration-batch",
+                "--max-active-sequences",
+                "33"
+            ])
+            .is_err()
+        );
     }
     #[test]
-    #[cfg(feature="owned-hf-eager")]
-    fn bounded_sm80_gateup_cli_is_explicit_and_bounded(){
-        assert!(base(&["--owned-decode-batch","bounded-gateup-sm80-v1"]).is_err());
-        let CliCommand::Serve(o)=base(&["--owned-decode-batch","bounded-gateup-sm80-v1","--execution-completion","iteration-batch","--max-active-sequences","32"]).unwrap()else{panic!("serve")};
-        assert_eq!(o.owned_decode_batch,6);
-        assert!(base(&["--owned-decode-batch","bounded-gateup-sm80-v1","--execution-completion","iteration-batch","--max-active-sequences","33"]).is_err());
+    #[cfg(feature = "owned-hf-eager")]
+    fn bounded_sm80_gateup_cli_is_explicit_and_bounded() {
+        assert!(base(&["--owned-decode-batch", "bounded-gateup-sm80-v1"]).is_err());
+        let CliCommand::Serve(o) = base(&[
+            "--owned-decode-batch",
+            "bounded-gateup-sm80-v1",
+            "--execution-completion",
+            "iteration-batch",
+            "--max-active-sequences",
+            "32",
+        ])
+        .unwrap() else {
+            panic!("serve")
+        };
+        assert_eq!(o.owned_decode_batch, 6);
+        assert!(
+            base(&[
+                "--owned-decode-batch",
+                "bounded-gateup-sm80-v1",
+                "--execution-completion",
+                "iteration-batch",
+                "--max-active-sequences",
+                "33"
+            ])
+            .is_err()
+        );
     }
     #[test]
-    #[cfg(feature="owned-hf-eager")]
-    fn owned_mlp_graph_cli_requires_reviewed_launch_configuration(){
-        assert!(base(&["--owned-mlp-graph","pure-decode-v1"]).is_err());
-        assert!(base(&["--owned-mlp-graph","pure-decode-v1","--execution-completion","iteration-batch"]).is_err());
-        let CliCommand::Serve(o)=base(&["--owned-mlp-graph","pure-decode-v1","--execution-completion","iteration-batch","--mlp-activation","fused-silu-multiply-v1"]).unwrap()else{panic!("serve")};
+    #[cfg(feature = "owned-hf-eager")]
+    fn owned_mlp_graph_cli_requires_reviewed_launch_configuration() {
+        assert!(base(&["--owned-mlp-graph", "pure-decode-v1"]).is_err());
+        assert!(
+            base(&[
+                "--owned-mlp-graph",
+                "pure-decode-v1",
+                "--execution-completion",
+                "iteration-batch"
+            ])
+            .is_err()
+        );
+        let CliCommand::Serve(o) = base(&[
+            "--owned-mlp-graph",
+            "pure-decode-v1",
+            "--execution-completion",
+            "iteration-batch",
+            "--mlp-activation",
+            "fused-silu-multiply-v1",
+        ])
+        .unwrap() else {
+            panic!("serve")
+        };
         assert!(o.owned_mlp_graph);
     }
     #[test]
     fn owned_hf_cli_has_explicit_completion_and_rejects_arithmetic_overrides() {
-        if cfg!(feature="owned-hf-eager") {
-            let CliCommand::Serve(o)=base(&["--batch-token-budget","8192","--max-sequence-tokens","8704"]).unwrap() else {panic!("serve")};
-            assert_eq!(o.numerics_profile,NumericsProfileMode::OwnedHfEagerBf16V1);
-            assert_eq!(o.decode_attention_backend,DecodeAttentionBackendMode::OwnedHfEagerBf16V1);
-            assert_eq!(o.execution_completion,ExecutionCompletionMode::PerOperation);
-            assert_eq!(o.batch_shape_policy,BatchShapePolicyMode::PowerOfTwo);
-            let CliCommand::Serve(batched)=base(&["--execution-completion","iteration-batch"]).unwrap() else {panic!("serve")};
-            assert_eq!(batched.execution_completion,ExecutionCompletionMode::IterationBatch);
-            let CliCommand::Serve(fused)=base(&["--mlp-activation","fused-silu-multiply-v1"]).unwrap() else {panic!("serve")};
+        if cfg!(feature = "owned-hf-eager") {
+            let CliCommand::Serve(o) = base(&[
+                "--batch-token-budget",
+                "8192",
+                "--max-sequence-tokens",
+                "8704",
+            ])
+            .unwrap() else {
+                panic!("serve")
+            };
+            assert_eq!(o.numerics_profile, NumericsProfileMode::OwnedHfEagerBf16V1);
+            assert_eq!(
+                o.decode_attention_backend,
+                DecodeAttentionBackendMode::OwnedHfEagerBf16V1
+            );
+            assert_eq!(
+                o.execution_completion,
+                ExecutionCompletionMode::PerOperation
+            );
+            assert_eq!(o.batch_shape_policy, BatchShapePolicyMode::PowerOfTwo);
+            let CliCommand::Serve(batched) =
+                base(&["--execution-completion", "iteration-batch"]).unwrap()
+            else {
+                panic!("serve")
+            };
+            assert_eq!(
+                batched.execution_completion,
+                ExecutionCompletionMode::IterationBatch
+            );
+            let CliCommand::Serve(fused) =
+                base(&["--mlp-activation", "fused-silu-multiply-v1"]).unwrap()
+            else {
+                panic!("serve")
+            };
             assert!(fused.fused_silu_multiply);
-        } else { assert!(base(&[]).unwrap_err().contains("owned-hf-eager")); }
-        for bad in [&["--batch-token-budget","8193"][..],&["--max-sequence-tokens","9217"],
-            &["--execution-graph-policy","require"],
-            &["--decode-attention-backend","materialized-bf16-reference-d128"],&["--residual-rmsnorm","fused"]] {
-            assert!(base(bad).is_err(),"accepted {:?}",bad);
+        } else {
+            assert!(base(&[]).unwrap_err().contains("owned-hf-eager"));
+        }
+        for bad in [
+            &["--batch-token-budget", "8193"][..],
+            &["--max-sequence-tokens", "9217"],
+            &["--execution-graph-policy", "require"],
+            &[
+                "--decode-attention-backend",
+                "materialized-bf16-reference-d128",
+            ],
+            &["--residual-rmsnorm", "fused"],
+        ] {
+            assert!(base(bad).is_err(), "accepted {bad:?}");
         }
     }
 }

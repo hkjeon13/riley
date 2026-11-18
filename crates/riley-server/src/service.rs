@@ -1425,7 +1425,9 @@ fn authorized(expected: Option<&str>, header: Option<&str>) -> bool {
         && expected
             .bytes()
             .zip(presented.bytes())
-            .fold(0_u8, |difference, (left, right)| difference | (left ^ right))
+            .fold(0_u8, |difference, (left, right)| {
+                difference | (left ^ right)
+            })
             == 0
 }
 
@@ -2080,6 +2082,8 @@ fn serve_generation(
 }
 
 #[derive(Clone, Copy)]
+// Keep independent protocol flags and bounded owned messages explicit.
+#[allow(clippy::struct_excessive_bools)]
 struct DeliveryOptions {
     include_token_ids: bool,
     expose_token_ids: bool,

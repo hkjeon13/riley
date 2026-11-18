@@ -60,6 +60,8 @@ pub struct SamplingParameters {
 
 /// A validated generation request independent of any HTTP compatibility DTO.
 #[derive(Clone, Debug, PartialEq)]
+// Keep independent protocol flags and bounded owned messages explicit.
+#[allow(clippy::struct_excessive_bools)]
 pub struct GenerationRequest {
     /// Model identifier selected by the client.
     pub model_id: String,

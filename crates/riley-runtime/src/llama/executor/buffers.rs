@@ -115,6 +115,8 @@ pub(crate) struct IterationBatchHostWorkspace {
     pub(crate) pinned: CudaPinnedHostBuffer,
 }
 
+// Keep bounded owned metadata inline instead of adding a hot-path allocation.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum BatchHostInput {
     PerOperation(PerOperationHostWorkspace),
     IterationBatch(IterationBatchHostWorkspace),

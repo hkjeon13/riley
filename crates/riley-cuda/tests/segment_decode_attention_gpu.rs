@@ -308,7 +308,10 @@ fn run(
     ] {
         buffer.close()?;
     }
-    Ok(bytes.chunks_exact(row_width * 2).map(<[u8]>::to_vec).collect())
+    Ok(bytes
+        .chunks_exact(row_width * 2)
+        .map(<[u8]>::to_vec)
+        .collect())
 }
 
 fn rows(sequence: u32, positions: impl IntoIterator<Item = u32>) -> Vec<Row> {
@@ -354,15 +357,33 @@ fn check_geometry(
         heads,
         pages_per_sequence,
         page_capacity,
-        key_pool: upload(&context, &mut stream, &mut staging, &pattern(pool_elements, 5, 3, 31, 10.0))?,
-        value_pool: upload(&context, &mut stream, &mut staging, &pattern(pool_elements, 13, 9, 37, 24.0))?,
-        offsets: upload(&context, &mut stream, &mut staging, &encode_u32(&sequence_block_offsets))?,
+        key_pool: upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pattern(pool_elements, 5, 3, 31, 10.0),
+        )?,
+        value_pool: upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pattern(pool_elements, 13, 9, 37, 24.0),
+        )?,
+        offsets: upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &encode_u32(&sequence_block_offsets),
+        )?,
         ids: upload(&context, &mut stream, &mut staging, &encode_u32(&block_ids))?,
         valid: upload(
             &context,
             &mut stream,
             &mut staging,
-            &valid_tokens.iter().flat_map(|value| value.to_ne_bytes()).collect::<Vec<u8>>(),
+            &valid_tokens
+                .iter()
+                .flat_map(|value| value.to_ne_bytes())
+                .collect::<Vec<u8>>(),
         )?,
         sequence_block_offsets,
         block_ids,
@@ -396,17 +417,33 @@ fn check_geometry(
     let page_mode = run(&context, &mut stream, &mut staging, &pools, &decode, None)?;
     set_native_d128_decode_segment_mode(1);
     let segment = run(&context, &mut stream, &mut staging, &pools, &decode, None)?;
-    let by_row: std::collections::HashMap<Row, Vec<u8>> =
-        decode.iter().copied().zip(segment.iter().cloned()).collect();
+    let by_row: std::collections::HashMap<Row, Vec<u8>> = decode
+        .iter()
+        .copied()
+        .zip(segment.iter().cloned())
+        .collect();
     assert!(
-        segment[decode.len()..].iter().flatten().all(|byte| *byte == 0),
+        segment[decode.len()..]
+            .iter()
+            .flatten()
+            .all(|byte| *byte == 0),
         "rows past the active count must be zeros"
     );
 
     let mut checked = 0_usize;
-    let reordered_output = run(&context, &mut stream, &mut staging, &pools, &reordered, None)?;
+    let reordered_output = run(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &reordered,
+        None,
+    )?;
     for (row, bytes) in reordered.iter().zip(&reordered_output) {
-        assert_eq!(bytes, &by_row[row], "{row:?}: output depends on the batch order");
+        assert_eq!(
+            bytes, &by_row[row],
+            "{row:?}: output depends on the batch order"
+        );
         checked += 1;
     }
     for chunk in [&decode[..1], &decode[1..9], &decode[9..20], &decode[20..]] {
@@ -427,7 +464,10 @@ fn check_geometry(
         )?;
         for ((row, kind), bytes) in mixed.iter().zip(&kinds).zip(&output) {
             if *kind == 0 {
-                assert_eq!(bytes, &by_row[row], "{row:?}: output depends on prompt neighbours");
+                assert_eq!(
+                    bytes, &by_row[row],
+                    "{row:?}: output depends on prompt neighbours"
+                );
                 checked += 1;
             }
         }
@@ -440,7 +480,10 @@ fn check_geometry(
         for (a, b) in left.chunks_exact(2).zip(right.chunks_exact(2)) {
             let x = bf16_value(u16::from_ne_bytes([a[0], a[1]]));
             let y = bf16_value(u16::from_ne_bytes([b[0], b[1]]));
-            assert!(x.is_finite() && y.is_finite(), "non-finite attention output");
+            assert!(
+                x.is_finite() && y.is_finite(),
+                "non-finite attention output"
+            );
             worst = worst.max((x - y).abs());
             elements += 1;
             identical += usize::from(a == b);

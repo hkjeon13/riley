@@ -1308,20 +1308,31 @@ impl SequenceState {
                 maximum_tokens: self.maximum_logical_length as usize,
             });
         }
+        let valid_tokens =
+            u16::try_from(KV_BLOCK_SIZE).map_err(|_| PagedKvError::ArithmeticOverflow {
+                field: "shared block valid tokens",
+            })?;
+        let logical_length = u32::try_from((index + 1).checked_mul(KV_BLOCK_SIZE).ok_or(
+            PagedKvError::ArithmeticOverflow {
+                field: "shared logical length",
+            },
+        )?)
+        .map_err(|_| PagedKvError::ArithmeticOverflow {
+            field: "shared logical length",
+        })?;
         let references = pool.shared_references(block)?;
-        let incremented =
-            references
-                .checked_add(1)
-                .ok_or(PagedKvError::ArithmeticOverflow {
-                    field: "shared block references",
-                })?;
+        let incremented = references
+            .checked_add(1)
+            .ok_or(PagedKvError::ArithmeticOverflow {
+                field: "shared block references",
+            })?;
         pool.slots[block.physical_index as usize].shared_references = incremented;
         self.block_ids[index] = Some(block);
         self.physical_block_ids[index] = block.physical_index();
-        self.valid_tokens[index] = KV_BLOCK_SIZE as u16;
+        self.valid_tokens[index] = valid_tokens;
         self.allocated_block_count = index + 1;
         self.shared_block_count = index + 1;
-        self.logical_length = ((index + 1) * KV_BLOCK_SIZE) as u32;
+        self.logical_length = logical_length;
         Ok(())
     }
 
@@ -2022,7 +2033,9 @@ mod tests {
             sequence.truncate_to(&mut pool, 15),
             Err(PagedKvError::InvalidTruncateLength { .. })
         ));
-        sequence.truncate_to(&mut pool, 16).expect("keep the shared block");
+        sequence
+            .truncate_to(&mut pool, 16)
+            .expect("keep the shared block");
         assert_eq!(sequence.allocated_block_count(), 1);
     }
 

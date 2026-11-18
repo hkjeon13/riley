@@ -13,10 +13,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
+
 
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "ci"))
+
+import check_extension_gates as checker  # noqa: E402
 
 from check_extension_gates import (  # noqa: E402
     APPROVAL_ANSWER_KEYS,
@@ -550,6 +554,7 @@ class ExtensionGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ExtensionGateError, "must be Git-tracked"):
             validate_repository(self.root)
 
+
         self._reset_fixture()
         entry, proposal, _ = self._add_extension()
         reference = self.root / str(proposal["reference_path"])
@@ -566,6 +571,24 @@ class ExtensionGateTests(unittest.TestCase):
         (self.root / str(workload["path"])).write_text("changed\n", encoding="utf-8")
         with self.assertRaisesRegex(ExtensionGateError, r"workloads\[0\]\.sha256"):
             validate_repository(self.root)
+
+    def test_historical_admission_does_not_allow_future_fallback_drift_or_implementation(self) -> None:
+        key = next(iter(checker.HISTORICAL_ADMISSION_FALLBACKS))
+        extension_id, relative, original = key
+        entry = {"extension_id": extension_id, "implementation_link_path": None}
+        current = checker.HISTORICAL_ADMISSION_FALLBACKS[key]["reviewed_current_sha256"]
+        checker._validate_historical_admission_fallback(ROOT, entry, relative, original, current, "fixture")
+        for changed in ({**entry, "implementation_link_path": "implementation.json"},
+                        {**entry, "extension_id": "unreviewed-extension"}):
+            with self.subTest(entry=changed), self.assertRaises(ExtensionGateError):
+                checker._validate_historical_admission_fallback(ROOT, changed, relative, original, current, "fixture")
+        with self.assertRaisesRegex(ExtensionGateError, "content mismatch"):
+            checker._validate_historical_admission_fallback(ROOT, entry, relative, original, "f" * 64, "fixture")
+        for blob in (None, b"forged admission"):
+            with mock.patch.object(checker, "_git_show_optional", return_value=blob):
+                with self.assertRaisesRegex(ExtensionGateError, "Git blob"):
+                    checker._validate_historical_admission_fallback(ROOT, entry, relative, original, current, "fixture")
+
 
     def test_reference_and_fallback_must_be_different(self) -> None:
         entry, proposal, _ = self._add_extension()

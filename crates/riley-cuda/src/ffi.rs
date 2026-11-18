@@ -2378,9 +2378,44 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
-    fn riley_cuda_bf16_argmax_fp32_ties_execute(logits:RawBufferSpan,results:RawBufferSpan,hidden:RawBufferSpan,weight:RawBufferSpan,row_indices:RawBufferSpan,row_count:u64,vocabulary_size:u64,candidate_count:u64,hidden_size:u64,hidden_rows:u64,rows_gathered:u32,window_ulps:u32,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
-    fn riley_cuda_bf16_logprob_summary_execute(logits:RawBufferSpan,greedy:RawBufferSpan,summaries:RawBufferSpan,row_count:u64,vocabulary_size:u64,addressable:u64,top_count:u32,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
-    fn riley_cuda_hf_pack_qkv_execute(q:RawBufferSpan,k:RawBufferSpan,v:RawBufferSpan,out:RawBufferSpan,rows:u64,qw:u64,kw:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    fn riley_cuda_bf16_argmax_fp32_ties_execute(
+        logits: RawBufferSpan,
+        results: RawBufferSpan,
+        hidden: RawBufferSpan,
+        weight: RawBufferSpan,
+        row_indices: RawBufferSpan,
+        row_count: u64,
+        vocabulary_size: u64,
+        candidate_count: u64,
+        hidden_size: u64,
+        hidden_rows: u64,
+        rows_gathered: u32,
+        window_ulps: u32,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_bf16_logprob_summary_execute(
+        logits: RawBufferSpan,
+        greedy: RawBufferSpan,
+        summaries: RawBufferSpan,
+        row_count: u64,
+        vocabulary_size: u64,
+        addressable: u64,
+        top_count: u32,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_hf_pack_qkv_execute(
+        q: RawBufferSpan,
+        k: RawBufferSpan,
+        v: RawBufferSpan,
+        out: RawBufferSpan,
+        rows: u64,
+        qw: u64,
+        kw: u64,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_row_gather_execute(
         params: *const RawRowGatherParams,
         stream: *mut RawStream,
@@ -2548,7 +2583,13 @@ unsafe extern "C" {
     fn riley_cuda_set_native_d128_decode_segment_mode(mode: u64);
     fn riley_cuda_set_native_d128_prompt_direct(mode: u64);
     fn riley_cuda_set_native_d128_attention_flashinfer(mode: u64);
-    fn riley_cuda_native_flashinfer_partial_state_bytes(output_rows: u64, page_capacity: u64, query_heads: u32, key_value_heads: u32, head_size: u32) -> u64;
+    fn riley_cuda_native_flashinfer_partial_state_bytes(
+        output_rows: u64,
+        page_capacity: u64,
+        query_heads: u32,
+        key_value_heads: u32,
+        head_size: u32,
+    ) -> u64;
     fn riley_cuda_set_native_flashinfer_kv_chunk(tokens: u64);
     fn riley_cuda_set_native_flashinfer_generated_kv_chunk(tokens: u64) -> bool;
     fn riley_cuda_set_native_flashinfer_full_grid(mode: u32);
@@ -2718,47 +2759,151 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_cublas_hf_attention_execute(plan: *mut RawCublasGemmProbePlan,
-        spans: *const RawBufferSpan, count: u64, rows: u64, tokens: u64,
-        physical: u64, qh:u64,kvh:u64,head_size:u64,stream: *mut RawStream, error: *mut ErrorInfo) -> i32;
+    fn riley_cuda_cublas_hf_attention_execute(
+        plan: *mut RawCublasGemmProbePlan,
+        spans: *const RawBufferSpan,
+        count: u64,
+        rows: u64,
+        tokens: u64,
+        physical: u64,
+        qh: u64,
+        kvh: u64,
+        head_size: u64,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_cublas_hf_smol_fused_gate_up_supported(plan:*const RawCublasGemmProbePlan,rows:u64)->i32;
+    fn riley_cuda_cublas_hf_smol_fused_gate_up_supported(
+        plan: *const RawCublasGemmProbePlan,
+        rows: u64,
+    ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_cublas_hf_smol_fused_gate_up_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,rows:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    fn riley_cuda_cublas_hf_smol_fused_gate_up_execute(
+        plan: *mut RawCublasGemmProbePlan,
+        spans: *const RawBufferSpan,
+        count: u64,
+        rows: u64,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_cublas_hf_sm80_fused_gate_up_supported(plan:*const RawCublasGemmProbePlan,rows:u64)->i32;
+    fn riley_cuda_cublas_hf_sm80_fused_gate_up_supported(
+        plan: *const RawCublasGemmProbePlan,
+        rows: u64,
+    ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_cublas_hf_sm80_fused_gate_up_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,rows:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    fn riley_cuda_cublas_hf_sm80_fused_gate_up_execute(
+        plan: *mut RawCublasGemmProbePlan,
+        spans: *const RawBufferSpan,
+        count: u64,
+        rows: u64,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_cublas_hf_smol_fused_qkv_supported(plan:*const RawCublasGemmProbePlan,rows:u64)->i32;
+    fn riley_cuda_cublas_hf_smol_fused_qkv_supported(
+        plan: *const RawCublasGemmProbePlan,
+        rows: u64,
+    ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_cublas_hf_smol_fused_qkv_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,rows:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    fn riley_cuda_cublas_hf_smol_fused_qkv_execute(
+        plan: *mut RawCublasGemmProbePlan,
+        spans: *const RawBufferSpan,
+        count: u64,
+        rows: u64,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_cublas_hf_smol_exact_supported(plan:*const RawCublasGemmProbePlan,tokens:u64)->i32;
-    fn riley_cuda_cublas_hf_smol_exact_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,rows:*const u32,tokens:*const u64,requests:u64,active:u64,physical:u64,sequences:u64,ids:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
-    fn riley_cuda_cublas_bounded_sm80_gateup_qualified(plan:*const RawCublasGemmProbePlan)->i32;
-    fn riley_cuda_cublas_hf_decode_chunk_qualified(plan:*const RawCublasGemmProbePlan)->i32;
+    fn riley_cuda_cublas_hf_smol_exact_supported(
+        plan: *const RawCublasGemmProbePlan,
+        tokens: u64,
+    ) -> i32;
+    fn riley_cuda_cublas_hf_smol_exact_execute(
+        plan: *mut RawCublasGemmProbePlan,
+        spans: *const RawBufferSpan,
+        count: u64,
+        rows: *const u32,
+        tokens: *const u64,
+        requests: u64,
+        active: u64,
+        physical: u64,
+        sequences: u64,
+        ids: u64,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_cublas_bounded_sm80_gateup_qualified(plan: *const RawCublasGemmProbePlan) -> i32;
+    fn riley_cuda_cublas_hf_decode_chunk_qualified(plan: *const RawCublasGemmProbePlan) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_cublas_hf_attention_chunk_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,tokens:*const u64,requests:u64,physical:u64,sequences:u64,ids:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    fn riley_cuda_cublas_hf_attention_chunk_execute(
+        plan: *mut RawCublasGemmProbePlan,
+        spans: *const RawBufferSpan,
+        count: u64,
+        tokens: *const u64,
+        requests: u64,
+        physical: u64,
+        sequences: u64,
+        ids: u64,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_cublas_hf_attention_chunk_wide_execute(plan:*mut RawCublasGemmProbePlan,spans:*const RawBufferSpan,count:u64,tokens:*const u64,requests:u64,physical:u64,sequences:u64,ids:u64,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    fn riley_cuda_cublas_hf_attention_chunk_wide_execute(
+        plan: *mut RawCublasGemmProbePlan,
+        spans: *const RawBufferSpan,
+        count: u64,
+        tokens: *const u64,
+        requests: u64,
+        physical: u64,
+        sequences: u64,
+        ids: u64,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_owned_hf_mlp_register_uses(gate:*mut RawCublasGemmProbePlan,
-        down:*mut RawCublasGemmProbePlan,buffers:*const RawBufferSpan,
-        stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    fn riley_cuda_owned_hf_mlp_register_uses(
+        gate: *mut RawCublasGemmProbePlan,
+        down: *mut RawCublasGemmProbePlan,
+        buffers: *const RawBufferSpan,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_projections(plan:*mut RawCublasGemmProbePlan,error:*mut ErrorInfo)->i32;
-    fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_attention(plan:*mut RawCublasGemmProbePlan,error:*mut ErrorInfo)->i32;
+    fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_projections(
+        plan: *mut RawCublasGemmProbePlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_attention(
+        plan: *mut RawCublasGemmProbePlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_prefill(plan:*mut RawCublasGemmProbePlan,error:*mut ErrorInfo)->i32;
-    fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_paged_attention(plan:*mut RawCublasGemmProbePlan,error:*mut ErrorInfo)->i32;
+    fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_prefill(
+        plan: *mut RawCublasGemmProbePlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_paged_attention(
+        plan: *mut RawCublasGemmProbePlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_cublas_hf_sm80_paged_qualified(plan:*const RawCublasGemmProbePlan,tokens:u64)->i32;
+    fn riley_cuda_cublas_hf_sm80_paged_qualified(
+        plan: *const RawCublasGemmProbePlan,
+        tokens: u64,
+    ) -> i32;
 
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_cublas_gemm_probe_plan_execute_rows(plan:*mut RawCublasGemmProbePlan,
-        input:*const RawBufferSpan,weight:*const RawBufferSpan,output:*const RawBufferSpan,
-        rows:u64,grouped_decode:u32,stream:*mut RawStream,error:*mut ErrorInfo)->i32;
+    fn riley_cuda_cublas_gemm_probe_plan_execute_rows(
+        plan: *mut RawCublasGemmProbePlan,
+        input: *const RawBufferSpan,
+        weight: *const RawBufferSpan,
+        output: *const RawBufferSpan,
+        rows: u64,
+        grouped_decode: u32,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_gemm_probe_plan_close(
         plan: *mut *mut RawCublasGemmProbePlan,
@@ -7266,7 +7411,9 @@ pub(super) fn hugging_face_smollm2_singleton_rms_norm_execute(
         |stream, error| {
             // SAFETY: the reviewed descriptor and every borrowed opaque
             // resource remain live through synchronous native completion.
-            unsafe { riley_cuda_hugging_face_smollm2_singleton_rms_norm_execute(&params, stream, error) }
+            unsafe {
+                riley_cuda_hugging_face_smollm2_singleton_rms_norm_execute(&params, stream, error)
+            }
         },
     )
 }
@@ -7392,7 +7539,9 @@ pub(super) fn hugging_face_qwen_singleton_rms_norm_execute(
         |stream, error| {
             // SAFETY: the source-bound descriptor and every borrowed opaque
             // resource remain live through synchronous native completion.
-            unsafe { riley_cuda_hugging_face_qwen_singleton_rms_norm_execute(&params, stream, error) }
+            unsafe {
+                riley_cuda_hugging_face_qwen_singleton_rms_norm_execute(&params, stream, error)
+            }
         },
     )
 }
@@ -7654,7 +7803,13 @@ pub(super) fn qkv_split_bias_execute(
         |stream, error| {
             // SAFETY: the descriptor and all borrowed opaque buffers remain
             // live for the synchronously completing native operation.
-            unsafe { if hf_head_norm {riley_cuda_qkv_split_bias_rope_hf_head128_execute(&params,stream,error)} else {riley_cuda_qkv_split_bias_execute(&params, stream, error)} }
+            unsafe {
+                if hf_head_norm {
+                    riley_cuda_qkv_split_bias_rope_hf_head128_execute(&params, stream, error)
+                } else {
+                    riley_cuda_qkv_split_bias_execute(&params, stream, error)
+                }
+            }
         },
     )
 }
@@ -9131,9 +9286,23 @@ pub(super) fn set_native_d128_prompt_direct_max_pages(pages: u64) {
     unsafe { riley_cuda_set_native_d128_prompt_direct_max_pages(pages) }
 }
 
-pub(super) fn native_flashinfer_partial_state_bytes(output_rows: u64, page_capacity: u64, query_heads: u32, key_value_heads: u32, head_size: u32) -> u64 {
+pub(super) fn native_flashinfer_partial_state_bytes(
+    output_rows: u64,
+    page_capacity: u64,
+    query_heads: u32,
+    key_value_heads: u32,
+    head_size: u32,
+) -> u64 {
     // SAFETY: the native function reads atomics and computes a size.
-    unsafe { riley_cuda_native_flashinfer_partial_state_bytes(output_rows, page_capacity, query_heads, key_value_heads, head_size) }
+    unsafe {
+        riley_cuda_native_flashinfer_partial_state_bytes(
+            output_rows,
+            page_capacity,
+            query_heads,
+            key_value_heads,
+            head_size,
+        )
+    }
 }
 
 pub(super) fn set_native_d128_attention_flashinfer(mode: u64) {
@@ -9961,9 +10130,21 @@ impl BiasGemmPlanHandle {
         // validates the BF16 [N] span and does not retain its allocation lease.
         let status = unsafe {
             if singleton_batch {
-                riley_cuda_bias_singleton_batch_plan_create(context.as_ptr(),&config,&preparation_bias,&mut pointer,&mut error)
+                riley_cuda_bias_singleton_batch_plan_create(
+                    context.as_ptr(),
+                    &config,
+                    &preparation_bias,
+                    &mut pointer,
+                    &mut error,
+                )
             } else {
-                riley_cuda_bias_gemm_plan_create(context.as_ptr(),&config,&preparation_bias,&mut pointer,&mut error)
+                riley_cuda_bias_gemm_plan_create(
+                    context.as_ptr(),
+                    &config,
+                    &preparation_bias,
+                    &mut pointer,
+                    &mut error,
+                )
             }
         };
         status_result(status, "prepare CUDA bias-epilogue GEMM plan", &error)?;
@@ -10229,11 +10410,17 @@ impl CublasGemmProbePlanHandle {
         let status = unsafe {
             if owned_command_batches {
                 riley_cuda_owned_hf_gemm_plan_create(
-                    context.as_ptr(), &config, &mut pointer, &mut error,
+                    context.as_ptr(),
+                    &config,
+                    &mut pointer,
+                    &mut error,
                 )
             } else {
                 riley_cuda_cublas_gemm_probe_plan_create(
-                    context.as_ptr(), &config, &mut pointer, &mut error,
+                    context.as_ptr(),
+                    &config,
+                    &mut pointer,
+                    &mut error,
                 )
             }
         };
@@ -10315,127 +10502,308 @@ impl CublasGemmProbePlanHandle {
         status_result(status, "execute direct cuBLAS GEMM probe", &error)
     }
 
-    pub(super) fn attention(&mut self, spans: &[RawBufferSpan;14], rows:u64,tokens:u64,physical:u64,qh:u64,kvh:u64,head_size:u64,stream:&mut StreamHandle)->CudaResult<()> {
-        let mut error=ErrorInfo::new();
+    pub(super) fn attention(
+        &mut self,
+        spans: &[RawBufferSpan; 14],
+        rows: u64,
+        tokens: u64,
+        physical: u64,
+        qh: u64,
+        kvh: u64,
+        head_size: u64,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
         // SAFETY: safe bridge retains exclusive plan/stream/output/scratch borrows;
         // native checks all span owners, overlap, geometry and use guards, then fences.
-        let status=unsafe {riley_cuda_cublas_hf_attention_execute(self.as_ptr(),spans.as_ptr(),14,rows,tokens,physical,qh,kvh,head_size,stream.as_ptr(),&mut error)};
-        status_result(status,"private prepared HF attention",&error)
+        let status = unsafe {
+            riley_cuda_cublas_hf_attention_execute(
+                self.as_ptr(),
+                spans.as_ptr(),
+                14,
+                rows,
+                tokens,
+                physical,
+                qh,
+                kvh,
+                head_size,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "private prepared HF attention", &error)
     }
 
-    pub(super) fn smol_fused_gate_up_supported(&self,rows:u64)->bool {
+    pub(super) fn smol_fused_gate_up_supported(&self, rows: u64) -> bool {
         // SAFETY: immutable qualified live-plan metadata, no GPU operation.
-        unsafe {riley_cuda_cublas_hf_smol_fused_gate_up_supported(self.as_ptr(),rows)!=0}
+        unsafe { riley_cuda_cublas_hf_smol_fused_gate_up_supported(self.as_ptr(), rows) != 0 }
     }
-    pub(super) fn smol_fused_gate_up(&mut self,spans:&[RawBufferSpan;4],rows:u64,stream:&mut StreamHandle)->CudaResult<()> {
-        let mut error=ErrorInfo::new();
+    pub(super) fn smol_fused_gate_up(
+        &mut self,
+        spans: &[RawBufferSpan; 4],
+        rows: u64,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
         // SAFETY: retained caller borrows; native validates ranges, contexts,
         // aliases and registers exclusive uses until capture/commands fence.
-        let status=unsafe {riley_cuda_cublas_hf_smol_fused_gate_up_execute(self.as_ptr(),spans.as_ptr(),4,rows,stream.as_ptr(),&mut error)};
-        status_result(status,"private exact Smol GateUp SiLU",&error)
+        let status = unsafe {
+            riley_cuda_cublas_hf_smol_fused_gate_up_execute(
+                self.as_ptr(),
+                spans.as_ptr(),
+                4,
+                rows,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "private exact Smol GateUp SiLU", &error)
     }
 
-    pub(super) fn sm80_fused_gate_up_supported(&self,rows:u64)->bool {
+    pub(super) fn sm80_fused_gate_up_supported(&self, rows: u64) -> bool {
         // SAFETY: immutable qualified live-plan metadata, no GPU operation.
-        unsafe {riley_cuda_cublas_hf_sm80_fused_gate_up_supported(self.as_ptr(),rows)!=0}
+        unsafe { riley_cuda_cublas_hf_sm80_fused_gate_up_supported(self.as_ptr(), rows) != 0 }
     }
-    pub(super) fn sm80_fused_gate_up(&mut self,spans:&[RawBufferSpan;4],rows:u64,stream:&mut StreamHandle)->CudaResult<()> {
-        let mut error=ErrorInfo::new();
+    pub(super) fn sm80_fused_gate_up(
+        &mut self,
+        spans: &[RawBufferSpan; 4],
+        rows: u64,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
         // SAFETY: retained caller borrows; native validates ranges, contexts,
         // aliases and registers exclusive uses until capture/commands fence.
-        let status=unsafe {riley_cuda_cublas_hf_sm80_fused_gate_up_execute(self.as_ptr(),spans.as_ptr(),4,rows,stream.as_ptr(),&mut error)};
-        status_result(status,"private exact SM80 GateUp SiLU",&error)
+        let status = unsafe {
+            riley_cuda_cublas_hf_sm80_fused_gate_up_execute(
+                self.as_ptr(),
+                spans.as_ptr(),
+                4,
+                rows,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "private exact SM80 GateUp SiLU", &error)
     }
 
-    pub(super) fn smol_fused_qkv_supported(&self,rows:u64)->bool {
+    pub(super) fn smol_fused_qkv_supported(&self, rows: u64) -> bool {
         // SAFETY: immutable qualified live-plan metadata; no CUDA operation.
-        unsafe {riley_cuda_cublas_hf_smol_fused_qkv_supported(self.as_ptr(),rows)!=0}
+        unsafe { riley_cuda_cublas_hf_smol_fused_qkv_supported(self.as_ptr(), rows) != 0 }
     }
-    pub(super) fn smol_fused_qkv(&mut self,spans:&[RawBufferSpan;7],rows:u64,stream:&mut StreamHandle)->CudaResult<()> {
-        let mut error=ErrorInfo::new();
+    pub(super) fn smol_fused_qkv(
+        &mut self,
+        spans: &[RawBufferSpan; 7],
+        rows: u64,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
         // SAFETY: caller retains all borrows. Native validates owners, spans,
         // aliases and bounds and registers exclusive uses until fenced.
-        let status=unsafe {riley_cuda_cublas_hf_smol_fused_qkv_execute(self.as_ptr(),spans.as_ptr(),7,rows,stream.as_ptr(),&mut error)};
-        status_result(status,"private exact Smol fused QKV",&error)
+        let status = unsafe {
+            riley_cuda_cublas_hf_smol_fused_qkv_execute(
+                self.as_ptr(),
+                spans.as_ptr(),
+                7,
+                rows,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "private exact Smol fused QKV", &error)
     }
 
-    pub(super) fn smol_exact_supported(&self,tokens:u64)->bool {
+    pub(super) fn smol_exact_supported(&self, tokens: u64) -> bool {
         // SAFETY: immutable cold plan flag and static recipe lookup, no CUDA call.
-        unsafe {riley_cuda_cublas_hf_smol_exact_supported(self.as_ptr(),tokens)!=0}
+        unsafe { riley_cuda_cublas_hf_smol_exact_supported(self.as_ptr(), tokens) != 0 }
     }
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn attention_smol_exact(&mut self,spans:&[RawBufferSpan;11],rows:&[u32;32],tokens:&[u64;32],requests:u64,active:u64,physical:u64,sequences:u64,ids:u64,stream:&mut StreamHandle)->CudaResult<()> {
-        let mut error=ErrorInfo::new();
+    pub(super) fn attention_smol_exact(
+        &mut self,
+        spans: &[RawBufferSpan; 11],
+        rows: &[u32; 32],
+        tokens: &[u64; 32],
+        requests: u64,
+        active: u64,
+        physical: u64,
+        sequences: u64,
+        ids: u64,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
         // SAFETY: owners retain spans/host metadata for synchronous submission;
         // native copies selected rows and retains exclusive GPU uses until fenced.
-        let status=unsafe {riley_cuda_cublas_hf_smol_exact_execute(self.as_ptr(),spans.as_ptr(),11,rows.as_ptr(),tokens.as_ptr(),requests,active,physical,sequences,ids,stream.as_ptr(),&mut error)};
-        status_result(status,"private exact Smol attention",&error)
+        let status = unsafe {
+            riley_cuda_cublas_hf_smol_exact_execute(
+                self.as_ptr(),
+                spans.as_ptr(),
+                11,
+                rows.as_ptr(),
+                tokens.as_ptr(),
+                requests,
+                active,
+                physical,
+                sequences,
+                ids,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "private exact Smol attention", &error)
     }
-    pub(super) fn bounded_sm80_gateup_qualified(&self)->bool {
+    pub(super) fn bounded_sm80_gateup_qualified(&self) -> bool {
         // SAFETY: immutable cold query of a live owned plan; no GPU operation.
-        unsafe {riley_cuda_cublas_bounded_sm80_gateup_qualified(self.as_ptr())!=0}
+        unsafe { riley_cuda_cublas_bounded_sm80_gateup_qualified(self.as_ptr()) != 0 }
     }
-    pub(super) fn decode_chunk_qualified(&self)->bool {
+    pub(super) fn decode_chunk_qualified(&self) -> bool {
         // SAFETY: immutable cold query of the live plan; no CUDA operation.
-        unsafe {riley_cuda_cublas_hf_decode_chunk_qualified(self.as_ptr())!=0}
+        unsafe { riley_cuda_cublas_hf_decode_chunk_qualified(self.as_ptr()) != 0 }
     }
-    pub(super) fn attention_chunk(&mut self,spans:&[RawBufferSpan;12],span_count:u64,tokens:&[u64;8],requests:u64,physical:u64,sequences:u64,ids:u64,stream:&mut StreamHandle)->CudaResult<()> {
-        let mut error=ErrorInfo::new();
+    pub(super) fn attention_chunk(
+        &mut self,
+        spans: &[RawBufferSpan; 12],
+        span_count: u64,
+        tokens: &[u64; 8],
+        requests: u64,
+        physical: u64,
+        sequences: u64,
+        ids: u64,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
         // SAFETY: the safe owner retains every span and host token array for
         // synchronous submission. Native copies token scalars into kernel args,
         // validates ownership/overlap and retains GPU resource leases until fenced.
-        let status=unsafe{riley_cuda_cublas_hf_attention_chunk_execute(self.as_ptr(),spans.as_ptr(),span_count,tokens.as_ptr(),requests,physical,sequences,ids,stream.as_ptr(),&mut error)};
-        status_result(status,"private exact heterogeneous decode chunk",&error)
+        let status = unsafe {
+            riley_cuda_cublas_hf_attention_chunk_execute(
+                self.as_ptr(),
+                spans.as_ptr(),
+                span_count,
+                tokens.as_ptr(),
+                requests,
+                physical,
+                sequences,
+                ids,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "private exact heterogeneous decode chunk", &error)
     }
-    pub(super) fn attention_chunk_wide(&mut self,spans:&[RawBufferSpan;12],span_count:u64,tokens:&[u64;32],requests:u64,physical:u64,sequences:u64,ids:u64,stream:&mut StreamHandle)->CudaResult<()> {
-        let mut error=ErrorInfo::new();
+    pub(super) fn attention_chunk_wide(
+        &mut self,
+        spans: &[RawBufferSpan; 12],
+        span_count: u64,
+        tokens: &[u64; 32],
+        requests: u64,
+        physical: u64,
+        sequences: u64,
+        ids: u64,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
         // SAFETY: the safe owner retains every span and host token array for
         // synchronous submission. Native copies token scalars into kernel args,
         // validates ownership/overlap and retains GPU resource leases until fenced.
-        let status=unsafe{riley_cuda_cublas_hf_attention_chunk_wide_execute(self.as_ptr(),spans.as_ptr(),span_count,tokens.as_ptr(),requests,physical,sequences,ids,stream.as_ptr(),&mut error)};
-        status_result(status,"private exact heterogeneous decode chunk",&error)
+        let status = unsafe {
+            riley_cuda_cublas_hf_attention_chunk_wide_execute(
+                self.as_ptr(),
+                spans.as_ptr(),
+                span_count,
+                tokens.as_ptr(),
+                requests,
+                physical,
+                sequences,
+                ids,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "private exact heterogeneous decode chunk", &error)
     }
-    pub(super) fn register_mlp_uses(&self,down:&Self,buffers:&[RawBufferSpan;8],stream:&mut StreamHandle)->CudaResult<()> {
-        let mut error=ErrorInfo::new();
+    pub(super) fn register_mlp_uses(
+        &self,
+        down: &Self,
+        buffers: &[RawBufferSpan; 8],
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
         // SAFETY: both plan owners and all eight validated spans remain live
         // for this synchronous registration; the native batch retains uses.
-        let status=unsafe{riley_cuda_owned_hf_mlp_register_uses(self.as_ptr(),down.as_ptr(),buffers.as_ptr(),stream.as_ptr(),&mut error)};
-        status_result(status,"register owned MLP graph resources",&error)
+        let status = unsafe {
+            riley_cuda_owned_hf_mlp_register_uses(
+                self.as_ptr(),
+                down.as_ptr(),
+                buffers.as_ptr(),
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "register owned MLP graph resources", &error)
     }
-    pub(super) fn prepare_sm80_attention(&mut self)->CudaResult<()> {
-        let mut error=ErrorInfo::new();
+    pub(super) fn prepare_sm80_attention(&mut self) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
         // SAFETY: unique cold owner; native preparation allocates no resources.
-        let status=unsafe{riley_cuda_cublas_gemm_probe_plan_prepare_sm80_attention(self.as_ptr(),&mut error)};
-        status_result(status,"prepare native SM80 attention",&error)
+        let status = unsafe {
+            riley_cuda_cublas_gemm_probe_plan_prepare_sm80_attention(self.as_ptr(), &mut error)
+        };
+        status_result(status, "prepare native SM80 attention", &error)
     }
-    pub(super) fn prepare_sm80_prefill(&mut self)->CudaResult<()> {
-        let mut error=ErrorInfo::new();
+    pub(super) fn prepare_sm80_prefill(&mut self) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
         // SAFETY: unique cold owner; native checks context, image and geometry.
-        let status=unsafe{riley_cuda_cublas_gemm_probe_plan_prepare_sm80_prefill(self.as_ptr(),&mut error)};
-        status_result(status,"prepare native SM80 prefill",&error)
+        let status = unsafe {
+            riley_cuda_cublas_gemm_probe_plan_prepare_sm80_prefill(self.as_ptr(), &mut error)
+        };
+        status_result(status, "prepare native SM80 prefill", &error)
     }
-    pub(super) fn prepare_sm80_paged_attention(&mut self)->CudaResult<()> {
-        let mut error=ErrorInfo::new();
+    pub(super) fn prepare_sm80_paged_attention(&mut self) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
         // SAFETY: unique cold owner; native checks context, image and geometry.
-        let status=unsafe{riley_cuda_cublas_gemm_probe_plan_prepare_sm80_paged_attention(self.as_ptr(),&mut error)};
-        status_result(status,"prepare native SM80 paged attention",&error)
+        let status = unsafe {
+            riley_cuda_cublas_gemm_probe_plan_prepare_sm80_paged_attention(
+                self.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "prepare native SM80 paged attention", &error)
     }
-    pub(super) fn supports_sm80_paged_attention(&self,tokens:u64)->bool {
+    pub(super) fn supports_sm80_paged_attention(&self, tokens: u64) -> bool {
         // SAFETY: read-only eligibility query on this live plan.
-        unsafe{riley_cuda_cublas_hf_sm80_paged_qualified(self.as_ptr(),tokens)!=0}
+        unsafe { riley_cuda_cublas_hf_sm80_paged_qualified(self.as_ptr(), tokens) != 0 }
     }
-    pub(super) fn prepare_bounded_sm80_projections(&mut self)->CudaResult<()> {
-        let mut error=ErrorInfo::new();
+    pub(super) fn prepare_bounded_sm80_projections(&mut self) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
         // SAFETY: cold unique plan owner, before any capture or command batch.
-        let status=unsafe{riley_cuda_cublas_gemm_probe_plan_prepare_sm80_projections(self.as_ptr(),&mut error)};
-        status_result(status,"prepare bounded SM80 projections",&error)
+        let status = unsafe {
+            riley_cuda_cublas_gemm_probe_plan_prepare_sm80_projections(self.as_ptr(), &mut error)
+        };
+        status_result(status, "prepare bounded SM80 projections", &error)
     }
-    pub(super) fn execute_rows(&mut self,input:RawBufferSpan,weight:RawBufferSpan,output:RawBufferSpan,rows:u64,grouped_decode:u8,stream:&mut StreamHandle)->CudaResult<()> {
-        let mut error=ErrorInfo::new();
+    pub(super) fn execute_rows(
+        &mut self,
+        input: RawBufferSpan,
+        weight: RawBufferSpan,
+        output: RawBufferSpan,
+        rows: u64,
+        grouped_decode: u8,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
         // SAFETY: safe group owner retains parent borrows, bounds each child range;
         // native validates all owners/leases and synchronizes before releasing them.
-        let status=unsafe {riley_cuda_cublas_gemm_probe_plan_execute_rows(self.as_ptr(),&input,&weight,&output,rows,u32::from(grouped_decode),stream.as_ptr(),&mut error)};
-        status_result(status,"private request-row cuBLAS GEMM",&error)
+        let status = unsafe {
+            riley_cuda_cublas_gemm_probe_plan_execute_rows(
+                self.as_ptr(),
+                &input,
+                &weight,
+                &output,
+                rows,
+                u32::from(grouped_decode),
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "private request-row cuBLAS GEMM", &error)
     }
 
     pub(super) fn close(&mut self) -> CudaResult<()> {
@@ -10471,7 +10839,8 @@ unsafe impl Sync for PeerAllReduceGroupHandle {}
 
 impl PeerAllReduceGroupHandle {
     pub(super) fn create(contexts: &[&ContextHandle], max_elements: u64) -> CudaResult<Self> {
-        let pointers: Vec<*mut RawContext> = contexts.iter().map(|context| context.as_ptr()).collect();
+        let pointers: Vec<*mut RawContext> =
+            contexts.iter().map(|context| context.as_ptr()).collect();
         let rank_count = u32::try_from(pointers.len()).map_err(|_| {
             CudaError::out_of_range("create CUDA peer all-reduce group", "too many contexts")
         })?;
@@ -10490,7 +10859,10 @@ impl PeerAllReduceGroupHandle {
         };
         status_result(status, "create CUDA peer all-reduce group", &error)?;
         let pointer = NonNull::new(pointer).ok_or_else(|| {
-            missing_output("create CUDA peer all-reduce group", "native group handle is null")
+            missing_output(
+                "create CUDA peer all-reduce group",
+                "native group handle is null",
+            )
         })?;
         Ok(Self {
             pointer: Some(pointer),
@@ -12776,98 +13148,64 @@ impl GraphResourcesHandle {
 }
 
 #[cfg(all(test, feature = "cuda-test-fault-injection"))]
-mod aggregate_replay_fault_tests {
-    use super::*;
-    unsafe extern "C" {
-        fn riley_cuda_graph_resources_test_replay_fault(
-            owner: *mut RawGraphResources,
-            fault: u32,
-            error: *mut ErrorInfo,
-        ) -> i32;
-    }
-    #[test]
-    #[ignore = "requires CUDA test-fault-injection; ambiguous completion is process-isolated"]
-    fn aggregate_replay_failure_retains_or_releases_by_completion() -> CudaResult<()> {
-        const CHILD: &str = "RILEY_AGGREGATE_REPLAY_FAULT_CHILD";
-        let Ok(value) = std::env::var(CHILD) else {
-            for fault in [1, 2] {
-                let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
-                    .args(["--exact", "ffi::aggregate_replay_fault_tests::aggregate_replay_failure_retains_or_releases_by_completion", "--ignored", "--nocapture", "--test-threads=1"])
-                    .env(CHILD, fault.to_string()).output().expect("isolated fault process");
-                assert!(
-                    output.status.success(),
-                    "{}{}",
-                    String::from_utf8_lossy(&output.stdout),
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                println!("G03_REPLAY_FAULT fault={fault} isolated=true passed=true");
-            }
-            return Ok(());
-        };
-        let fault = value.parse::<u32>().expect("test fault id");
-        let _runtime = crate::CudaRuntime::initialize()?;
-        let mut context = ContextHandle::create(0)?;
-        let mut stream = StreamHandle::create(&context)?;
-        let mut first = DeviceBufferHandle::create(&context, 32)?;
-        let mut second = DeviceBufferHandle::create(&context, 32)?;
-        let mut input = PinnedHostBufferHandle::create(&context, 32)?;
-        let mut output = PinnedHostBufferHandle::create(&context, 32)?;
-        let mut graph =
-            GraphResourcesHandle::reserve(&stream, &[&first, &second], &[&input, &output], &[])?;
-        graph.record_transfer(&input, &first, &second, &output)?;
-        graph.replay_transfer(&[3; 32])?;
-        let mut bytes = [0; 32];
-        graph.read_transfer(&mut bytes)?;
-        assert_eq!(bytes, [3; 32]);
-        let mut error = ErrorInfo::new();
-        // SAFETY: test-only hook receives this live, thread-confined retained owner.
-        let status = unsafe {
-            riley_cuda_graph_resources_test_replay_fault(
-                graph.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
-                fault,
-                &mut error,
-            )
-        };
-        status_result(status, "arm aggregate test replay fault", &error)?;
-        assert!(graph.replay_transfer(&[7; 32]).is_err());
-        assert!(graph.read_transfer(&mut bytes).is_err());
-        assert!(graph.replay_transfer(&[9; 32]).is_err());
-        if fault == 2 {
-            assert!(graph.close().is_err());
-            assert!(first.close().is_err());
-            assert!(second.close().is_err());
-            assert!(input.close().is_err());
-            assert!(output.close().is_err());
-            assert!(stream.close().is_err());
-            assert!(context.close().is_err());
-            // Intentionally retained native allocations live until this child exits.
-        } else {
-            graph.close()?;
-            graph.close()?;
-            first.close()?;
-            second.close()?;
-            input.close()?;
-            output.close()?;
-            stream.close()?;
-            context.close()?;
-        }
-        Ok(())
-    }
-}
+#[path = "../tests/support/aggregate_replay_fault_tests.rs"]
+mod aggregate_replay_fault_tests;
 
-#[cfg(feature="cuda-cublas-gemm-probe")]
+#[cfg(feature = "cuda-cublas-gemm-probe")]
 #[allow(clippy::too_many_arguments)]
-pub(super) fn bf16_argmax_fp32_ties_execute(logits:RawBufferSpan,results:RawBufferSpan,hidden:RawBufferSpan,weight:RawBufferSpan,row_indices:RawBufferSpan,row_count:u64,vocabulary_size:u64,candidate_count:u64,hidden_size:u64,hidden_rows:u64,rows_gathered:bool,window_ulps:u32,stream:&mut StreamHandle)->CudaResult<()>{
- primitive_status("execute deterministic CUDA BF16 argmax with FP32 ties",stream,|stream,error|
+pub(super) fn bf16_argmax_fp32_ties_execute(
+    logits: RawBufferSpan,
+    results: RawBufferSpan,
+    hidden: RawBufferSpan,
+    weight: RawBufferSpan,
+    row_indices: RawBufferSpan,
+    row_count: u64,
+    vocabulary_size: u64,
+    candidate_count: u64,
+    hidden_size: u64,
+    hidden_rows: u64,
+    rows_gathered: bool,
+    window_ulps: u32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    primitive_status(
+        "execute deterministic CUDA BF16 argmax with FP32 ties",
+        stream,
+        |stream,error|
   // SAFETY: every borrowed opaque resource remains live for the synchronously completing native operation.
-  unsafe{riley_cuda_bf16_argmax_fp32_ties_execute(logits,results,hidden,weight,row_indices,row_count,vocabulary_size,candidate_count,hidden_size,hidden_rows,u32::from(rows_gathered),window_ulps,stream,error)})
+  unsafe{riley_cuda_bf16_argmax_fp32_ties_execute(logits,results,hidden,weight,row_indices,row_count,vocabulary_size,candidate_count,hidden_size,hidden_rows,u32::from(rows_gathered),window_ulps,stream,error)},
+    )
 }
 #[allow(clippy::too_many_arguments)]
-pub(super) fn bf16_logprob_summary_execute(logits:RawBufferSpan,greedy:RawBufferSpan,summaries:RawBufferSpan,row_count:u64,vocabulary_size:u64,addressable:u64,top_count:u32,stream:&mut StreamHandle)->CudaResult<()>{
- primitive_status("execute BF16 log-probability summary",stream,|stream,error|
+pub(super) fn bf16_logprob_summary_execute(
+    logits: RawBufferSpan,
+    greedy: RawBufferSpan,
+    summaries: RawBufferSpan,
+    row_count: u64,
+    vocabulary_size: u64,
+    addressable: u64,
+    top_count: u32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    primitive_status(
+        "execute BF16 log-probability summary",
+        stream,
+        |stream,error|
   // SAFETY: every borrowed opaque resource remains live for the synchronously completing native operation.
-  unsafe{riley_cuda_bf16_logprob_summary_execute(logits,greedy,summaries,row_count,vocabulary_size,addressable,top_count,stream,error)})
+  unsafe{riley_cuda_bf16_logprob_summary_execute(logits,greedy,summaries,row_count,vocabulary_size,addressable,top_count,stream,error)},
+    )
 }
-pub(super) fn hf_pack_qkv_execute(q:RawBufferSpan,k:RawBufferSpan,v:RawBufferSpan,out:RawBufferSpan,rows:u64,qw:u64,kw:u64,stream:&mut StreamHandle)->CudaResult<()>{
- primitive_status("HF pack separate QKV",stream,|stream,error|unsafe{riley_cuda_hf_pack_qkv_execute(q,k,v,out,rows,qw,kw,stream,error)})
+pub(super) fn hf_pack_qkv_execute(
+    q: RawBufferSpan,
+    k: RawBufferSpan,
+    v: RawBufferSpan,
+    out: RawBufferSpan,
+    rows: u64,
+    qw: u64,
+    kw: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    primitive_status("HF pack separate QKV", stream, |stream, error| unsafe {
+        riley_cuda_hf_pack_qkv_execute(q, k, v, out, rows, qw, kw, stream, error)
+    })
 }

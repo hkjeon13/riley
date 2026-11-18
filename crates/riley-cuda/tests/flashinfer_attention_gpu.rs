@@ -410,14 +410,25 @@ fn flashinfer_rows_are_batch_invariant_and_close_to_the_page_path() -> TestResul
     for heads in GEOMETRIES {
         check_geometry(&runtime, heads, 20, 24, None, 0, None)?;
         check_geometry(&runtime, heads, 60, 64, None, 0, None)?;
-        check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15), 0, None)?;
+        check_geometry(
+            &runtime,
+            heads,
+            60,
+            64,
+            Some(0x9e37_79b9_7f4a_7c15),
+            0,
+            None,
+        )?;
     }
     check_high_amplitude_against_f64(&runtime, HIGH_AMPLITUDE, 12.0)?;
     check_high_amplitude_against_f64(&runtime, HIGH_AMPLITUDE_D64, 12.0)?;
     // Qwen2.5-7B's last layer reaches |QK| ~ 1e5, beyond FlashInfer's finite
     // -5e4 mask value in raw QK units.
     let largest = check_high_amplitude_against_f64(&runtime, QWEN25_7B, 192.0)?;
-    assert!(largest > 5.0e4, "fixture must exceed the mask range, got {largest}");
+    assert!(
+        largest > 5.0e4,
+        "fixture must exceed the mask range, got {largest}"
+    );
     // Fixed KV chunks: 256 tokens (the screened size) and 64 tokens (many
     // chunks per row at both context lengths).
     for chunk in [256, 64] {
@@ -428,7 +439,15 @@ fn flashinfer_rows_are_batch_invariant_and_close_to_the_page_path() -> TestResul
             .chain([GEOMETRIES[0]])
         {
             check_geometry(&runtime, heads, 20, 24, None, chunk, None)?;
-            check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15), chunk, None)?;
+            check_geometry(
+                &runtime,
+                heads,
+                60,
+                64,
+                Some(0x9e37_79b9_7f4a_7c15),
+                chunk,
+                None,
+            )?;
         }
         check_high_amplitude_against_f64(&runtime, HIGH_AMPLITUDE_D64, 12.0)?;
         println!("kv_chunk={chunk} done");
@@ -439,7 +458,15 @@ fn flashinfer_rows_are_batch_invariant_and_close_to_the_page_path() -> TestResul
     assert!(!set_native_flashinfer_generated_kv_chunk(Some(128)));
     assert!(set_native_flashinfer_generated_kv_chunk(Some(256)));
     for heads in GEOMETRIES {
-        check_geometry(&runtime, heads, 60, 64, Some(0x9e37_79b9_7f4a_7c15), 512, Some(256))?;
+        check_geometry(
+            &runtime,
+            heads,
+            60,
+            64,
+            Some(0x9e37_79b9_7f4a_7c15),
+            512,
+            Some(256),
+        )?;
     }
     assert!(set_native_flashinfer_generated_kv_chunk(None));
     println!("kv_chunk=512 generated=256 done");
@@ -606,21 +633,43 @@ fn check_geometry(
         true,
     )?;
     set_native_flashinfer_full_grid(false);
-    assert_eq!(full_grid, flashinfer, "the strided grid must match one CTA per item");
+    assert_eq!(
+        full_grid, flashinfer,
+        "the strided grid must match one CTA per item"
+    );
     if let Some(generated) = generated_chunk {
         // Prompt rows take the bytes of the prompt chunk alone and every other
         // row those of the generated-row chunk alone.
         set_native_flashinfer_generated_kv_chunk(None);
-        let (prompt_only, _) =
-            run_kinds(&context, &mut stream, &mut staging, &pools, &reference, true)?;
+        let (prompt_only, _) = run_kinds(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pools,
+            &reference,
+            true,
+        )?;
         set_native_flashinfer_kv_chunk(generated);
-        let (generated_only, _) =
-            run_kinds(&context, &mut stream, &mut staging, &pools, &reference, true)?;
+        let (generated_only, _) = run_kinds(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pools,
+            &reference,
+            true,
+        )?;
         set_native_flashinfer_kv_chunk(outer_chunk);
         set_native_flashinfer_generated_kv_chunk(Some(generated));
         for (row, kind) in &reference {
-            let expected = if *kind == 1 { &prompt_only } else { &generated_only };
-            assert_eq!(flashinfer[row], expected[row], "{row:?} kind {kind}: wrong KV chunk");
+            let expected = if *kind == 1 {
+                &prompt_only
+            } else {
+                &generated_only
+            };
+            assert_eq!(
+                flashinfer[row], expected[row],
+                "{row:?} kind {kind}: wrong KV chunk"
+            );
         }
     }
     if page_capacity > pages_per_sequence {

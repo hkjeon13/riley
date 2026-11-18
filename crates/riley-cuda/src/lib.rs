@@ -45,22 +45,21 @@ pub use batch::{
     NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_TRANSITION_WIDTH,
     NativeBf16RaggedPagedSplitGqaD128TwoStageParams,
     NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout, PACKED_BATCH_BLOCK_SIZE,
-    PACKED_BATCH_VERSION, ValidatedRequestRowGroups, PackedBatchHostV1, PackedBatchV1, RaggedPagedAttentionParams,
-    RaggedPagedKvCacheWriteParams, RowGatherParams, fixed37_ragged_paged_attention,
-    grouped_ragged_paged_attention, indexed_rope,
+    PACKED_BATCH_VERSION, PackedBatchHostV1, PackedBatchV1, RaggedPagedAttentionParams,
+    RaggedPagedKvCacheWriteParams, RowGatherParams, ValidatedRequestRowGroups,
+    fixed37_ragged_paged_attention, grouped_ragged_paged_attention, indexed_rope,
     native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma,
     native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge,
     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge_prompt_mma,
-    set_native_d128_decode_segment_mode, set_native_d128_fused_decode_min_rows,
-    native_flashinfer_partial_state_bytes, set_native_d128_attention_flashinfer,
-    set_native_d128_prompt_direct,
-    set_native_flashinfer_full_grid, set_native_flashinfer_generated_kv_chunk,
-    set_native_flashinfer_kv_chunk,
-    set_native_d128_prompt_direct_max_pages,
     native_bf16_ragged_paged_split_gqa_d128_two_stage,
-    native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv, ragged_paged_attention,
-    ragged_paged_kv_cache_write, row_gather, validate_replayed_decode_step,
+    native_bf16_ragged_paged_split_gqa_d128_two_stage_shared_kv,
+    native_flashinfer_partial_state_bytes, ragged_paged_attention, ragged_paged_kv_cache_write,
+    row_gather, set_native_d128_attention_flashinfer, set_native_d128_decode_segment_mode,
+    set_native_d128_fused_decode_min_rows, set_native_d128_prompt_direct,
+    set_native_d128_prompt_direct_max_pages, set_native_flashinfer_full_grid,
+    set_native_flashinfer_generated_kv_chunk, set_native_flashinfer_kv_chunk,
+    validate_replayed_decode_step,
 };
 pub use decode::{
     DECODE_PARTIAL_STATE_VERSION, DecodeAttentionBackend, DecodeAttentionBackendAvailability,
@@ -147,12 +146,12 @@ pub use graph::{
     PackedParentKvWriteGraph, PackedParentKvWriteResources, ParentAttentionGraph,
     ParentAttentionResources, PointwiseGraphOperation, RopeGraphGeometry,
 };
-pub use peer_all_reduce::CudaPeerAllReduceGroup;
 pub use memory::{
     CudaAllocationStats, CudaDeviceBuffer, CudaPendingD2H, CudaPendingH2D, CudaPinnedHostBuffer,
 };
 #[cfg(feature = "cuda-test-fault-injection")]
 pub use memory::{CudaMemoryFault, CudaMemoryFaultStats};
+pub use peer_all_reduce::CudaPeerAllReduceGroup;
 pub use prefill::{
     AttentionBackend, AttentionBackendAvailability, AttentionCapability, AttentionLayout,
     AttentionMask, AttentionMode, AttentionPreference, AttentionReductionProfile,
@@ -162,7 +161,8 @@ pub use prefill::{
 };
 pub use primitives::{
     BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_RESULT_U32_WORDS, BF16_ARGMAX_STATUS_NON_FINITE,
-    BF16_ARGMAX_STATUS_SUCCESS, Bf16ArgmaxParams, Bf16ArgmaxResult, CastParams, CudaBufferSpan,
+    BF16_ARGMAX_STATUS_SUCCESS, BF16_LOGPROB_SUMMARY_MAX_TOP, BF16_LOGPROB_SUMMARY_WORDS,
+    Bf16ArgmaxParams, Bf16ArgmaxResult, Bf16ArgmaxTieSource, CastParams, CudaBufferSpan,
     CudaBufferSpanMut, CudaDType, EmbeddingError, EmbeddingParams, Fixed37LogSoftmaxParams,
     GatedMultiplyParams, HUGGING_FACE_QWEN_P2048_CACHE_ON_RMS_NORM_ROW_COUNT,
     HUGGING_FACE_QWEN_P2051_RMS_NORM_EPSILON_BITS, HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE,
@@ -170,15 +170,13 @@ pub use primitives::{
     HUGGING_FACE_SMOLLM2_RMS_NORM_HIDDEN_SIZE, HUGGING_FACE_SMOLLM2_RMS_NORM_MAX_ROWS,
     MergedGatedMultiplyParams, QkvRopeParams, QkvSplitBiasParams, ResidualAddParams,
     ResidualRmsNormParams, RmsNormParams, RopeParams, RopeTableParams, RowBiasAddInPlaceParams,
-    SiluParams, cast, deterministic_bf16_argmax, deterministic_bf16_argmax_bounded,
-    deterministic_bf16_argmax_fp32_ties, Bf16ArgmaxTieSource, bf16_logprob_summary,
-    BF16_LOGPROB_SUMMARY_MAX_TOP, BF16_LOGPROB_SUMMARY_WORDS, embedding,
+    SiluParams, bf16_logprob_summary, cast, deterministic_bf16_argmax,
+    deterministic_bf16_argmax_bounded, deterministic_bf16_argmax_fp32_ties, embedding,
     embedding_deferred_report, fixed37_log_softmax, fixed37_residual_rms_norm, fixed37_rms_norm,
     gated_multiply, hugging_face_qwen_p2051_rms_norm, hugging_face_smollm2_residual_rms_norm,
-    hugging_face_smollm2_rms_norm, qkv_split_bias, qkv_split_bias_rope, residual_add,
-    peer_all_reduce_bf16_in_place, residual_rms_norm, rms_norm, rope, rope_table,
-    row_bias_add_in_place, silu,
-    silu_gated_multiply, silu_gated_multiply_merged_rows,
+    hugging_face_smollm2_rms_norm, peer_all_reduce_bf16_in_place, qkv_split_bias,
+    qkv_split_bias_rope, residual_add, residual_rms_norm, rms_norm, rope, rope_table,
+    row_bias_add_in_place, silu, silu_gated_multiply, silu_gated_multiply_merged_rows,
 };
 pub use runtime::{
     CudaCommandBatch, CudaCommandStream, CudaContext, CudaDevice, CudaEvent, CudaExecutionStream,
@@ -241,6 +239,35 @@ pub fn build_info() -> riley_core::Result<String> {
         .map_err(|error| riley_core::Error::native_contract("riley-cuda", error.to_string()))
 }
 
+pub use batch::prepared_materialized_ragged_attention;
+
+pub use batch::{
+    prepare_materialized_ragged_attention_metadata, stage_materialized_ragged_attention_metadata,
+};
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+pub use primitives::hugging_face_qwen_head128_rms_norm;
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+pub use primitives::hugging_face_qwen_wide_rms_norm;
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+pub use primitives::{
+    hugging_face_qwen_wide_rms_norm_row_groups, hugging_face_qwen_wide_rms_norm_row_groups_cached,
+    hugging_face_smollm2_rms_norm_row_groups,
+};
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+pub use primitives::{qkv_split_bias_rope_hf_head128, qkv_split_bias_rope_hf_head128_deferred};
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+pub use primitives::hf_pack_separate_qkv;
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+mod owned_mlp;
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+pub use owned_mlp::{CudaOwnedHfMlpGraph, CudaOwnedHfMlpGraphStats, CudaOwnedHfMlpParams};
+
 #[cfg(test)]
 mod tests {
     use super::{CUDA_ENABLED, EXPECTED_ABI_VERSION};
@@ -251,27 +278,3 @@ mod tests {
         assert_eq!(EXPECTED_ABI_VERSION, 1);
     }
 }
-
-pub use batch::prepared_materialized_ragged_attention;
-
-pub use batch::{prepare_materialized_ragged_attention_metadata, stage_materialized_ragged_attention_metadata};
-
-#[cfg(feature="cuda-cublas-gemm-probe")]
-pub use primitives::hugging_face_qwen_head128_rms_norm;
-
-#[cfg(feature="cuda-cublas-gemm-probe")]
-pub use primitives::hugging_face_qwen_wide_rms_norm;
-
-#[cfg(feature="cuda-cublas-gemm-probe")]
-pub use primitives::{hugging_face_qwen_wide_rms_norm_row_groups_cached, hugging_face_qwen_wide_rms_norm_row_groups, hugging_face_smollm2_rms_norm_row_groups};
-
-#[cfg(feature="cuda-cublas-gemm-probe")]
-pub use primitives::{qkv_split_bias_rope_hf_head128, qkv_split_bias_rope_hf_head128_deferred};
-
-#[cfg(feature="cuda-cublas-gemm-probe")]
-pub use primitives::hf_pack_separate_qkv;
-
-#[cfg(feature="cuda-cublas-gemm-probe")]
-mod owned_mlp;
-#[cfg(feature="cuda-cublas-gemm-probe")]
-pub use owned_mlp::{CudaOwnedHfMlpGraph,CudaOwnedHfMlpParams,CudaOwnedHfMlpGraphStats};

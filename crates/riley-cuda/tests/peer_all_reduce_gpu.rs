@@ -80,7 +80,8 @@ fn run_rank(
                 .collect();
             buffer.upload_from_slice(0, &host, &mut staging, &mut stream)?;
             {
-                let mut span = CudaBufferSpanMut::new(&mut buffer, CudaDType::BF16, 0, elements * 2)?;
+                let mut span =
+                    CudaBufferSpanMut::new(&mut buffer, CudaDType::BF16, 0, elements * 2)?;
                 peer_all_reduce_bf16_in_place(group, rank, &mut span, elements, &mut stream)?;
             }
             let mut result = vec![0_u8; usize::try_from(elements * 2)?];
@@ -128,7 +129,10 @@ fn check(columns: u64) -> TestResult {
     for (call, rank0) in results[0].iter().enumerate() {
         let rows = ROW_COUNTS[call % ROW_COUNTS.len()];
         for (rank, outputs) in results.iter().enumerate() {
-            assert_eq!(&outputs[call], rank0, "rank {rank} differs from rank 0 at call {call}");
+            assert_eq!(
+                &outputs[call], rank0,
+                "rank {rank} differs from rank 0 at call {call}"
+            );
         }
         for row in 0..rows {
             for column in 0..columns {
@@ -232,7 +236,13 @@ fn recorded_reduce_latency() -> TestResult {
                 .map(|(rank, context)| {
                     let (group, barrier) = (&group, &barrier);
                     scope.spawn(move || {
-                        time_rank(group, context, u32::try_from(rank).expect("rank"), rows, barrier)
+                        time_rank(
+                            group,
+                            context,
+                            u32::try_from(rank).expect("rank"),
+                            rows,
+                            barrier,
+                        )
                     })
                 })
                 .collect();

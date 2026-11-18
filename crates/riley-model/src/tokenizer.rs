@@ -499,7 +499,8 @@ impl SmolLm2Tokenizer {
             if !(nodes[l].alive && nodes[l].next == right && nodes[r].alive) {
                 continue;
             }
-            let Some(&(current, merged)) = self.pair_merges.get(&pair_key(nodes[l].id, nodes[r].id))
+            let Some(&(current, merged)) =
+                self.pair_merges.get(&pair_key(nodes[l].id, nodes[r].id))
             else {
                 continue;
             };
@@ -555,7 +556,7 @@ impl SmolLm2Tokenizer {
     }
 }
 
-/// Shared ranked BPE merge engine for ByteLevel and Unicode/byte-fallback inputs.
+/// Shared ranked BPE merge engine for `ByteLevel` and Unicode/byte-fallback inputs.
 fn merge_bpe_nodes(nodes: &mut [BpeNode], merge_ranks: &BTreeMap<String, BTreeMap<String, usize>>) {
     for index in 0..nodes.len() {
         nodes[index].previous = index.checked_sub(1);
@@ -564,10 +565,10 @@ fn merge_bpe_nodes(nodes: &mut [BpeNode], merge_ranks: &BTreeMap<String, BTreeMa
 
     let mut candidates = BinaryHeap::new();
     for left in 0..nodes.len().saturating_sub(1) {
-        push_candidate(&nodes, merge_ranks, left, left + 1, &mut candidates);
+        push_candidate(nodes, merge_ranks, left, left + 1, &mut candidates);
     }
     while let Some(Reverse((rank, position, left, right))) = candidates.pop() {
-        if !candidate_is_current(&nodes, merge_ranks, rank, left, right) {
+        if !candidate_is_current(nodes, merge_ranks, rank, left, right) {
             continue;
         }
         merge_nodes(nodes, merge_ranks, left, right, position, &mut candidates);
@@ -993,6 +994,10 @@ fn validate_pipeline(raw: &RawTokenizer, profile: TokenizerProfile) -> ModelResu
         }
     }
 
+    validate_decoder(raw, profile)
+}
+
+fn validate_decoder(raw: &RawTokenizer, profile: TokenizerProfile) -> ModelResult<()> {
     let decoder_matches = match profile {
         TokenizerProfile::SmolLm2 => {
             raw.decoder.kind == "ByteLevel"
@@ -2621,7 +2626,7 @@ mod tests {
         for length in 1..=10_u32 {
             for bits in 0..(1_u32 << length) {
                 let input = (0..length)
-                    .map(|index| if bits >> index & 1 == 0 { 'a' } else { 'b' })
+                    .map(|index| if (bits >> index) & 1 == 0 { 'a' } else { 'b' })
                     .collect::<String>();
                 let mut nodes = input
                     .chars()

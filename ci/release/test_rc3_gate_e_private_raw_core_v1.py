@@ -11,6 +11,8 @@ import unittest
 from pathlib import Path
 
 
+from release_test_environment import requires_legacy_host
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CORE = REPOSITORY_ROOT / "ci/release/rc3_gate_e_private_raw_core_v1.py"
 PYTHON = "/usr/bin/python3.10"
@@ -307,6 +309,7 @@ main()
 
 
 class Rc3GateEPrivateRawCoreV1Tests(unittest.TestCase):
+    @requires_legacy_host
     def _run_driver(self, mode: str) -> dict[str, object]:
         completed = subprocess.run(
             [PYTHON, "-I", "-S", "-E", "-B", "-c", ISOLATED_DRIVER, str(CORE), mode],
@@ -320,6 +323,7 @@ class Rc3GateEPrivateRawCoreV1Tests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         return json.loads(completed.stdout)
 
+    @requires_legacy_host
     def test_checkout_path_is_not_a_callable_core(self) -> None:
         completed = subprocess.run(
             [PYTHON, "-I", "-S", "-E", "-B", str(CORE), "--sealed-no-action-core"],

@@ -53,6 +53,7 @@ EXPECTED_MACHINE = "x86_64"
 EXPECTED_PYTHON_SHA256 = "ce20f82411f2b0ccdf3e2212ca62303519521d73d25178588f1a9c8d4935c866"
 MAX_PYTHON_EXECUTABLE_BYTES = 128 * 1024 * 1024
 MAX_PROBE_BYTES = 16 * 1024
+MAX_PROBE_JSON_DEPTH = 64
 MAX_PROBE_STDERR_BYTES = 4 * 1024
 PROBE_TIMEOUT_SECONDS = 10
 PROBE_CLEANUP_TIMEOUT_SECONDS = 1
@@ -319,6 +320,26 @@ def canonical_json_bytes(value: Any) -> bytes:
 def _parse_probe(raw: bytes) -> dict[str, Any]:
     if type(raw) is not bytes or not raw or len(raw) > MAX_PROBE_BYTES:
         _fail("invalid-probe-byte-length", "Python probe output has an invalid byte length")
+    # Do not rely on the interpreter/JSON accelerator's recursion threshold.
+    # This flat probe schema never needs deeply nested containers. Ignore
+    # brackets inside strings, including escaped quotes and backslashes.
+    depth, quoted, escaped = 0, False, False
+    for byte in raw:
+        if quoted:
+            if escaped:
+                escaped = False
+            elif byte == 92:
+                escaped = True
+            elif byte == 34:
+                quoted = False
+        elif byte == 34:
+            quoted = True
+        elif byte in (91, 123):
+            depth += 1
+            if depth > MAX_PROBE_JSON_DEPTH:
+                _fail("probe-json-nesting-too-deep", "Python probe JSON nesting exceeds the fixed bound")
+        elif byte in (93, 125):
+            depth -= 1
     try:
         document = json.loads(
             raw.decode("utf-8"),

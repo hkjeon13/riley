@@ -82,6 +82,8 @@ impl<'a> BorrowedEmbeddingGraph<'a> {
     /// Captures the existing validation/gather/status-D2H native primitive.
     /// # Errors
     /// Rejects geometry, resource identity, report size, leases or CUDA failures.
+    // CUDA builds consume this ownership descriptor; keep one API in CPU builds.
+    #[cfg_attr(not(feature = "cuda"), allow(clippy::needless_pass_by_value))]
     pub fn prepare(
         resources: BorrowedEmbeddingResources<'a>,
         geometry: EmbeddingGraphGeometry,

@@ -39,6 +39,19 @@ SCHEMA_SEMANTIC_SHA256 = {
     IMPLEMENTATION_SCHEMA: "11f77429ffa7eea134cd8fd2e0db2e1a8c99bb208061879d6e159f3ff2e8caff",
 }
 
+# Preserve the immutable C12 admission rather than silently rebasing its
+# promised fallback. This admission has no implementation link. Its historical
+# Git blob and the separately reviewed current source must BOTH match. A later
+# implementation needs a new admission with a current fallback; this bridge
+# confers no tenant-isolation, runtime, or performance qualification.
+HISTORICAL_ADMISSION_FALLBACKS = {
+    ("prefix-cache-v1", "crates/riley-runtime/src/paged_kv.rs",
+     "aaa9eacc472e5055bdbbea4919cef0d8bcacc3dd5916a5e9885ff007c9b4c838"): {
+        "admission_revision": "1f0c9d63acb78bb0b3f0ff6e1709fa7fdde6eb8e",
+        "reviewed_current_sha256": "46a6aa488ff1d0e5f1391903397bae8cea3365db81e962ac43e425019b74691c",
+    },
+}
+
 SEMANTIC_CLASSES = {"reference", "E0", "E1", "A1", "M1"}
 EXTENSION_TRACKS = {
     "quantization",
@@ -978,6 +991,19 @@ def _validate_approval_answers(
         )
 
 
+def _validate_historical_admission_fallback(
+    root: Path, entry: dict[str, Any], relative: str,
+    expected: str, actual: str, label: str,
+) -> None:
+    reviewed = HISTORICAL_ADMISSION_FALLBACKS.get((entry["extension_id"], relative, expected))
+    if (reviewed is None or entry["implementation_link_path"] is not None
+            or actual != reviewed["reviewed_current_sha256"]):
+        raise ExtensionGateError(f"{label}.fallback_sha256: file content mismatch")
+    original = _git_show_optional(root, reviewed["admission_revision"], relative)
+    if original is None or hashlib.sha256(original).hexdigest() != expected:
+        raise ExtensionGateError(f"{label}.fallback_sha256: immutable admission Git blob is missing or changed")
+
+
 def _validate_proposal(
     root: Path,
     path: Path,
@@ -1021,8 +1047,11 @@ def _validate_proposal(
     fallback_sha256 = _sha256(
         proposal["fallback_sha256"], f"{label}.fallback_sha256"
     )
-    if _file_sha256(fallback_file) != fallback_sha256:
-        raise ExtensionGateError(f"{label}.fallback_sha256: file content mismatch")
+    actual_fallback_sha256 = _file_sha256(fallback_file)
+    if actual_fallback_sha256 != fallback_sha256:
+        _validate_historical_admission_fallback(
+            root, entry, fallback_path, fallback_sha256, actual_fallback_sha256, label,
+        )
     if fallback_path == reference_path:
         raise ExtensionGateError(
             f"{label}: reference_path and fallback_path must be different files"

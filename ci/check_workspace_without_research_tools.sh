@@ -15,15 +15,17 @@ trap cleanup EXIT HUP INT TERM
 
 (
     cd "$repo_root"
+    # Copy the production build inputs, including its source-contract fixtures,
+    # rather than copying local checkpoints, benchmark dumps and tool targets.
+    # A new external include must be admitted here or the isolated build fails.
     tar \
-        --exclude='./.git' \
-        --exclude='./target' \
-        --exclude='./benchmarks/results' \
-        --exclude='./tools/python' \
-        --exclude='./tools/native' \
-        --exclude='./experiments/triton' \
-        -cf - .
-) | tar -xf - -C "$scratch"
+        -cf "$scratch/source.tar" \
+        Cargo.toml Cargo.lock rust-toolchain.toml rustfmt.toml LICENSE README.md \
+        crates kernels third_party ci/release/release_common.py \
+        benchmarks/release benchmarks/evidence/20261022-phase0/native-extra.json
+)
+tar -xf "$scratch/source.tar" -C "$scratch"
+rm "$scratch/source.tar"
 
 test ! -e "$scratch/tools/python"
 test ! -e "$scratch/tools/native"

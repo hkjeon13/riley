@@ -25,7 +25,7 @@ from typing import Any, BinaryIO, Mapping, Sequence
 
 _NATIVE_CHECKER_PATH = Path(__file__).with_name("check_native_profile_pair.py")
 NATIVE_PROFILE_CONTRACT_SHA256 = (
-    "064b549c5555c4333f8bd14b17fd56af8e8d880a88e58429fa91047ca8b6990a"
+    "3a2ee0cce17ece41e8dc06629378bed3089ac27424207e6f57b588a087ddcf1e"
 )
 _NATIVE_SPEC = importlib.util.spec_from_file_location(
     "riley_release_native_profile_contract", _NATIVE_CHECKER_PATH
@@ -956,7 +956,7 @@ def bound_semantic_policy_sha256() -> str:
 
 # Updated only alongside a deliberate reviewed change to the map above.
 BOUND_SEMANTIC_POLICY_SHA256 = (
-    "41181632225db3153b6bb5fa151626c8dac7e4c6a4237f9ba25bb40fb4afcd9a"
+    "0c21b99d52fcf8b4993609f41de089394c08e239820a615c851815f12189ac53"
 )
 
 
@@ -1693,6 +1693,9 @@ def derive_raw_run_payloads(
             if not isinstance(run, dict):
                 raise InputError(f"{label}: raw native profile root must be an object")
             native_profile._validate_run(run, label)
+            _sha256(run["environment"]["software"]["container_image_sha256"], f"{label}.container_image_sha256")
+
+
             if run["role"] != "candidate":
                 raise InputError(
                     f"{label}.role: expected 'candidate', got {run['role']!r}"
@@ -3506,6 +3509,8 @@ def _compact_bound_raw_candidate(
         raise InputError(f"{label}: native-profile root must be an object")
     try:
         native_profile._validate_run(run, label)
+        _sha256(run["environment"]["software"]["container_image_sha256"], f"{label}.container_image_sha256")
+
     except native_profile.InputError as error:
         raise InputError(str(error)) from error
     if run["role"] != "candidate":

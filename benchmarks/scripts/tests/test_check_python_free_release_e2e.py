@@ -725,7 +725,7 @@ class PythonFreeReleaseE2EV2Tests(unittest.TestCase):
             checker.release_common.STABLE_OPTIMIZATION_DEFAULTS,
         )
         defaults_source = (
-            REPOSITORY_ROOT / checker.release_common.SERVER_DEFAULTS_SOURCE_PATH
+            REPOSITORY_ROOT / "ci/release/fixtures/legacy-server-defaults-21f445f.rs.txt"
         ).read_bytes()
         self.assertEqual(
             hashlib.sha256(defaults_source).hexdigest(),

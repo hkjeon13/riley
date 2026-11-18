@@ -25,7 +25,10 @@ fn full_attention_mistral_lowers_to_shared_dense_execution() {
         assert!(!attention.has_bias());
         assert!(attention.query_key_norm().is_none());
         assert!(!block.mlp().has_bias());
-        assert_eq!(attention.rope().theta(), 1_000_000.0);
+        assert_eq!(
+            attention.rope().theta().to_bits(),
+            1_000_000.0_f64.to_bits()
+        );
         assert!(attention.rope().scaling().is_none());
     }
     // The dedicated Llama parser must retain its strict family boundary.

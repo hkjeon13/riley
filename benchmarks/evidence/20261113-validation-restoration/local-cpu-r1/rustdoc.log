@@ -1,0 +1,32 @@
+   Compiling riley-cuda v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-cuda)
+ Documenting riley-tensor v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-tensor)
+ Documenting riley-core v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-core)
+    Checking riley-model v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-model)
+ Documenting riley-native v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-native)
+ Documenting riley-model v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-model)
+    Checking riley-runtime v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-runtime)
+ Documenting riley-runtime v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-runtime)
+    Checking riley-scheduler v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-scheduler)
+ Documenting riley-scheduler v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-scheduler)
+ Documenting riley-cuda v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-cuda)
+ Documenting riley-server v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-server)
+error: unresolved link to `Bf16ArgmaxResult`
+     --> crates/riley-cuda/src/graph.rs:12222:31
+      |
+12222 |     /// allocation, and U32 [`Bf16ArgmaxResult`] allocation remain inaccessible
+      |                               ^^^^^^^^^^^^^^^^ no item named `Bf16ArgmaxResult` in scope
+      |
+      = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+      = note: `-D rustdoc::broken-intra-doc-links` implied by `-D warnings`
+      = help: to override `-D warnings` add `#[allow(rustdoc::broken_intra_doc_links)]`
+
+error: unresolved link to `0,live_blocks`
+   --> crates/riley-cuda/src/graph_resources.rs:729:67
+    |
+729 |     /// Replay uses an exact-sized payload: token/position u32, [`0,live_blocks`] u32,
+    |                                                                   ^^^^^^^^^^^^^ no item named `0,live_blocks` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+error: could not document `riley-cuda`
+warning: build failed, waiting for other jobs to finish...

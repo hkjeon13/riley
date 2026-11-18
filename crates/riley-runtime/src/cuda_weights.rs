@@ -138,7 +138,10 @@ impl TensorParallelShard {
         };
         let extent = *shape.get(axis).ok_or(indivisible)?;
         if extent % self.size != 0 {
-            return Err(CudaWeightUploadError::IndivisibleShard { slot, size: self.size });
+            return Err(CudaWeightUploadError::IndivisibleShard {
+                slot,
+                size: self.size,
+            });
         }
         let part = extent / self.size;
         let mut rank_shape = shape.to_vec();
@@ -478,7 +481,9 @@ impl CudaUploadedWeights {
                 let slot = WeightSlot::Decoder { layer, parameter };
                 let bound = weights.view(slot)?;
                 let view = bound.view();
-                let (bytes, _) = self.shard.slice(slot, view.storage(), view.shape().dimensions())?;
+                let (bytes, _) =
+                    self.shard
+                        .slice(slot, view.storage(), view.shape().dimensions())?;
                 total = u64::try_from(bytes.len())
                     .ok()
                     .and_then(|bytes| total.checked_add(bytes))
@@ -661,7 +666,9 @@ impl CudaUploadedWeights {
                 let slot = WeightSlot::Decoder { layer, parameter };
                 let bound = weights.view(slot)?;
                 let view = bound.view();
-                let (bytes, _) = self.shard.slice(slot, view.storage(), view.shape().dimensions())?;
+                let (bytes, _) =
+                    self.shard
+                        .slice(slot, view.storage(), view.shape().dimensions())?;
                 total = u64::try_from(bytes.len())
                     .ok()
                     .and_then(|bytes| total.checked_add(bytes))
@@ -865,7 +872,7 @@ impl fmt::Debug for CudaUploadedWeights {
             .field("physical", &self.physical)
             .field("slots", &self.slots)
             .field("total_physical_bytes", &self.total_physical_bytes)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -891,19 +898,26 @@ mod tensor_parallel_tests {
     use riley_model::{DecoderWeight, WeightSlot};
 
     fn slot(parameter: DecoderWeight) -> WeightSlot {
-        WeightSlot::Decoder { layer: 0, parameter }
+        WeightSlot::Decoder {
+            layer: 0,
+            parameter,
+        }
     }
 
     // A 4x6 matrix of 2-byte elements whose bytes encode (row, column).
     fn matrix() -> Vec<u8> {
-        (0..4_u8).flat_map(|row| (0..6_u8).flat_map(move |column| [row, column])).collect()
+        (0..4_u8)
+            .flat_map(|row| (0..6_u8).flat_map(move |column| [row, column]))
+            .collect()
     }
 
     #[test]
     fn rows_split_keeps_a_contiguous_block_of_output_features() {
         let shard = TensorParallelShard::new(1, 2).unwrap();
         let bytes = matrix();
-        let (slice, shape) = shard.slice(slot(DecoderWeight::QueryWeight), &bytes, &[4, 6]).unwrap();
+        let (slice, shape) = shard
+            .slice(slot(DecoderWeight::QueryWeight), &bytes, &[4, 6])
+            .unwrap();
         assert_eq!(shape, [2, 6]);
         assert_eq!(&slice[..], &bytes[24..48]);
     }
@@ -912,7 +926,9 @@ mod tensor_parallel_tests {
     fn columns_split_gathers_each_row_s_input_features() {
         let shard = TensorParallelShard::new(2, 3).unwrap();
         let bytes = matrix();
-        let (slice, shape) = shard.slice(slot(DecoderWeight::DownWeight), &bytes, &[4, 6]).unwrap();
+        let (slice, shape) = shard
+            .slice(slot(DecoderWeight::DownWeight), &bytes, &[4, 6])
+            .unwrap();
         assert_eq!(shape, [4, 2]);
         let expected: Vec<u8> = (0..4_u8).flat_map(|row| [row, 4, row, 5]).collect();
         assert_eq!(&slice[..], &expected[..]);
@@ -922,13 +938,21 @@ mod tensor_parallel_tests {
     fn biases_split_norms_and_whole_shards_stay_whole() {
         let bytes: Vec<u8> = (0..8).collect();
         let shard = TensorParallelShard::new(1, 2).unwrap();
-        let (bias, _) = shard.slice(slot(DecoderWeight::GateBias), &bytes, &[4]).unwrap();
+        let (bias, _) = shard
+            .slice(slot(DecoderWeight::GateBias), &bytes, &[4])
+            .unwrap();
         assert_eq!(&bias[..], &[4, 5, 6, 7]);
-        let (norm, shape) = shard.slice(slot(DecoderWeight::QueryNormScale), &bytes, &[4]).unwrap();
+        let (norm, shape) = shard
+            .slice(slot(DecoderWeight::QueryNormScale), &bytes, &[4])
+            .unwrap();
         assert_eq!((&norm[..], shape.as_slice()), (&bytes[..], &[4][..]));
-        let (output_bias, _) = shard.slice(slot(DecoderWeight::OutputBias), &bytes, &[4]).unwrap();
+        let (output_bias, _) = shard
+            .slice(slot(DecoderWeight::OutputBias), &bytes, &[4])
+            .unwrap();
         assert_eq!(&output_bias[..], &bytes[..]);
-        let (whole, _) = TensorParallelShard::WHOLE.slice(slot(DecoderWeight::DownWeight), &bytes, &[2, 2]).unwrap();
+        let (whole, _) = TensorParallelShard::WHOLE
+            .slice(slot(DecoderWeight::DownWeight), &bytes, &[2, 2])
+            .unwrap();
         assert_eq!(&whole[..], &bytes[..]);
     }
 

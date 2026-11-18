@@ -67,7 +67,8 @@ const fn is_deterministic_reduction_configuration(
             scheme == REDUCTION_SCHEME_INPLACE || scheme == REDUCTION_SCHEME_OUTPUT_TYPE
         }
         CudaGemmReductionPolicy::HfCompatibleBiasSplitKV1 => {
-            scheme == REDUCTION_SCHEME_INPLACE || scheme == REDUCTION_SCHEME_COMPUTE_TYPE
+            scheme == REDUCTION_SCHEME_INPLACE
+                || scheme == REDUCTION_SCHEME_COMPUTE_TYPE
                 || scheme == REDUCTION_SCHEME_OUTPUT_TYPE
         }
     }
@@ -707,9 +708,11 @@ impl CudaContext {
         preparation_bias: CudaBufferSpan<'_>,
     ) -> CudaResult<CudaPreparedBiasEpilogueGemm> {
         const OPERATION: &str = "CudaContext::prepare_hf_compatible_bias_epilogue_probe";
-        if !matches!(config.reduction_policy,
-            CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1 |
-            CudaGemmReductionPolicy::HfCompatibleBiasSplitKV1) {
+        if !matches!(
+            config.reduction_policy,
+            CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1
+                | CudaGemmReductionPolicy::HfCompatibleBiasSplitKV1
+        ) {
             return Err(CudaError::new(
                 CudaErrorKind::NotSupported,
                 CudaErrorDomain::Rust,
@@ -726,10 +729,16 @@ impl CudaContext {
     /// Returns NotSupported when the device or frozen algorithm is unqualified.
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     pub fn prepare_hf_bias_singleton_batch(
-        &self, config: CudaGemmConfig, preparation_bias: CudaBufferSpan<'_>,
+        &self,
+        config: CudaGemmConfig,
+        preparation_bias: CudaBufferSpan<'_>,
     ) -> CudaResult<CudaPreparedBiasEpilogueGemm> {
-        self.prepare_bias_epilogue_gemm_unchecked(config,preparation_bias,
-            "CudaContext::prepare_hf_bias_singleton_batch",true)
+        self.prepare_bias_epilogue_gemm_unchecked(
+            config,
+            preparation_bias,
+            "CudaContext::prepare_hf_bias_singleton_batch",
+            true,
+        )
     }
 
     fn prepare_bias_epilogue_gemm_unchecked(
@@ -739,6 +748,8 @@ impl CudaContext {
         operation: &'static str,
         singleton_batch: bool,
     ) -> CudaResult<CudaPreparedBiasEpilogueGemm> {
+        #[cfg(not(feature = "cuda"))]
+        let _ = singleton_batch;
         ensure_same_context(
             &self.inner,
             preparation_bias.buffer().context_owner(),
@@ -1388,6 +1399,10 @@ impl CudaPreparedBiasEpilogueGemm {
     /// A poisoned wrapper refuses to report a successful explicit close. The
     /// fused-bias plan is deliberately not graph-capture capable, so callers
     /// must close it outside an active graph capture.
+    ///
+    /// # Errors
+    /// Returns an error for invalid resource geometry, context or lifecycle,
+    /// an unavailable CUDA build, or a failed native operation.
     pub fn close(self) -> CudaResult<()> {
         #[cfg(feature = "cuda")]
         {
@@ -1979,405 +1994,1286 @@ impl CudaPreparedFixed37Gemm {
 
 #[cfg(feature = "cuda-cublas-gemm-probe")]
 impl CudaPreparedCublasGemmProbe {
-    pub(crate) fn register_mlp_uses(&self,down:&Self,buffers:[ffi::RawBufferSpan;8],stream:&mut CudaStream)->CudaResult<()> {
-        if self.poisoned || down.poisoned {return Err(CudaError::invalid_state("owned MLP graph","poisoned GEMM plan"));}
-        self.native.register_mlp_uses(&down.native,&buffers,&mut stream.native)
+    pub(crate) fn register_mlp_uses(
+        &self,
+        down: &Self,
+        buffers: [ffi::RawBufferSpan; 8],
+        stream: &mut CudaStream,
+    ) -> CudaResult<()> {
+        if self.poisoned || down.poisoned {
+            return Err(CudaError::invalid_state(
+                "owned MLP graph",
+                "poisoned GEMM plan",
+            ));
+        }
+        self.native
+            .register_mlp_uses(&down.native, &buffers, &mut stream.native)
     }
 
     /// Private request-row execution; no plan or buffer is allocated while dispatching.
-    pub fn execute_row_groups<S:CudaExecutionStream+?Sized>(&mut self,params:&mut CublasGemmProbeParams<'_>,slots:&[u32],output_rows:Option<usize>,grouped_decode:u8,stream:&mut S)->CudaResult<()> {
-        const OP:&str="CudaPreparedCublasGemmProbe::execute_row_groups";
-        if self.poisoned {return Err(CudaError::invalid_state(OP,"poisoned owner"));}
-        let stream=execution_stream_mut(stream);self.validate_execution(params,stream)?;
-        let total=output_rows.unwrap_or(slots.len());
-        if total as u64>self.config.m {return Err(CudaError::invalid_argument(OP,"active request rows exceed cold plan"));}
-        if grouped_decode>10 { return Err(CudaError::invalid_argument(OP,"unknown decode batch mode")); }
-        if grouped_decode==1 && total>1 {
-            if output_rows.is_none() && slots.windows(2).any(|w| w[0]==w[1]) {
-                return Err(CudaError::invalid_argument(OP,"grouped decode requires one row per request"));
-            }
-            let input=params.input.subspan(0,total as u64*self.config.k*2)?;
-            let output=params.output.buffer().native_handle().span(ffi::DTYPE_BF16,params.output.byte_offset(),total as u64*self.config.n*2);
-            let result=self.native.execute_rows(input.raw(),params.weight.raw(),output,total as u64,grouped_decode,&mut stream.native);
-            if result.is_err(){self.poisoned=true;} return result;
+    pub fn execute_row_groups<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        params: &mut CublasGemmProbeParams<'_>,
+        slots: &[u32],
+        output_rows: Option<usize>,
+        grouped_decode: u8,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        const OP: &str = "CudaPreparedCublasGemmProbe::execute_row_groups";
+        if self.poisoned {
+            return Err(CudaError::invalid_state(OP, "poisoned owner"));
         }
-        let mut begin=0;
-        while begin<total {
-            let mut end=begin+1;
-            if output_rows.is_none() {while end<total && slots[end]==slots[begin] {end+=1;}}
-            let original_end=end;
+        let stream = execution_stream_mut(stream);
+        self.validate_execution(params, stream)?;
+        let total = output_rows.unwrap_or(slots.len());
+        if total as u64 > self.config.m {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "active request rows exceed cold plan",
+            ));
+        }
+        if grouped_decode > 10 {
+            return Err(CudaError::invalid_argument(OP, "unknown decode batch mode"));
+        }
+        if grouped_decode == 1 && total > 1 {
+            if output_rows.is_none() && slots.windows(2).any(|w| w[0] == w[1]) {
+                return Err(CudaError::invalid_argument(
+                    OP,
+                    "grouped decode requires one row per request",
+                ));
+            }
+            let input = params.input.subspan(0, total as u64 * self.config.k * 2)?;
+            let output = params.output.buffer().native_handle().span(
+                ffi::DTYPE_BF16,
+                params.output.byte_offset(),
+                total as u64 * self.config.n * 2,
+            );
+            let result = self.native.execute_rows(
+                input.raw(),
+                params.weight.raw(),
+                output,
+                total as u64,
+                grouped_decode,
+                &mut stream.native,
+            );
+            if result.is_err() {
+                self.poisoned = true;
+            }
+            return result;
+        }
+        let mut begin = 0;
+        while begin < total {
+            let mut end = begin + 1;
+            if output_rows.is_none() {
+                while end < total && slots[end] == slots[begin] {
+                    end += 1;
+                }
+            }
+            let original_end = end;
             // Only mode10 merges adjacent prefill groups with an independently
             // qualified native arithmetic family. Other modes preserve extents.
-            let prefill_bounds=if grouped_decode==10 && output_rows.is_none(){
-                match (self.config.n,self.config.k) {
-                    (9728, 2560) | (2560, 9728) => Some((64_usize,130_usize,161_usize,576_usize)),
+            let prefill_bounds = if grouped_decode == 10 && output_rows.is_none() {
+                match (self.config.n, self.config.k) {
+                    (9728, 2560) | (2560, 9728) => {
+                        Some((64_usize, 130_usize, 161_usize, 576_usize))
+                    }
                     // Packed linear tokens: keep each original native-M128
                     // arithmetic family and its independently qualified bounds.
-                    (4096, 2560) => Some((65,130,257,576)),
-                    (1024, 2560) => Some((94,128,161,512)),
-                    (2560, 4096) => Some((65,128,161,576)),
+                    (4096, 2560) => Some((65, 130, 257, 576)),
+                    (1024, 2560) => Some((94, 128, 161, 512)),
+                    (2560, 4096) => Some((65, 128, 161, 576)),
                     _ => None,
                 }
-            }else{None};
-            if let Some((original_min,original_max,merged_min,merged_max))=prefill_bounds {
-                if (original_min..=original_max).contains(&(end-begin)) {
-                    let mut scan_end=end;
-                    while scan_end<total {
-                        let mut next_end=scan_end+1;while next_end<total && slots[next_end]==slots[scan_end]{next_end+=1;}
-                        if !(original_min..=original_max).contains(&(next_end-scan_end)) || next_end-begin>merged_max {break;}
-                        scan_end=next_end;
-                        if scan_end-begin>=merged_min {end=scan_end;}
+            } else {
+                None
+            };
+            if let Some((original_min, original_max, merged_min, merged_max)) = prefill_bounds {
+                if (original_min..=original_max).contains(&(end - begin)) {
+                    let mut scan_end = end;
+                    while scan_end < total {
+                        let mut next_end = scan_end + 1;
+                        while next_end < total && slots[next_end] == slots[scan_end] {
+                            next_end += 1;
+                        }
+                        if !(original_min..=original_max).contains(&(next_end - scan_end))
+                            || next_end - begin > merged_max
+                        {
+                            break;
+                        }
+                        scan_end = next_end;
+                        if scan_end - begin >= merged_min {
+                            end = scan_end;
+                        }
                     }
                 }
             }
             // Mode11 is a private native call selector, not a public decode mode.
             // Never replace a standalone large prefill with the M128 recipe.
-            let packed_projection=matches!((self.config.n,self.config.k),(4096,2560)|(1024,2560)|(2560,4096));
-            let fixed_prefill=end>original_end && (packed_projection || self.config.k==9728 || (257..=512).contains(&(end-begin)));
-            let mut mode=if fixed_prefill {11}else{0};
-            if grouped_decode>=2 && end==begin+1 {
-                mode=grouped_decode;
-                while end<total && end-begin<32 {
-                    if output_rows.is_none() && end+1<total && slots[end]==slots[end+1] {break;}
-                    end+=1;
+            let packed_projection = matches!(
+                (self.config.n, self.config.k),
+                (4096, 2560) | (1024, 2560) | (2560, 4096)
+            );
+            let fixed_prefill = end > original_end
+                && (packed_projection
+                    || self.config.k == 9728
+                    || (257..=512).contains(&(end - begin)));
+            let mut mode = if fixed_prefill { 11 } else { 0 };
+            if grouped_decode >= 2 && end == begin + 1 {
+                mode = grouped_decode;
+                while end < total && end - begin < 32 {
+                    if output_rows.is_none() && end + 1 < total && slots[end] == slots[end + 1] {
+                        break;
+                    }
+                    end += 1;
                 }
             }
-            let m=(end-begin) as u64;
-            let input=params.input.subspan(begin as u64*self.config.k*2,m*self.config.k*2)?;
-            let offset=params.output.byte_offset()+begin as u64*self.config.n*2;
-            let output=params.output.buffer().native_handle().span(ffi::DTYPE_BF16,offset,m*self.config.n*2);
-            let result=self.native.execute_rows(input.raw(),params.weight.raw(),output,m,mode,&mut stream.native);
-            if result.is_err(){self.poisoned=true;return result;}
-            begin=end;
+            let m = (end - begin) as u64;
+            let input = params
+                .input
+                .subspan(begin as u64 * self.config.k * 2, m * self.config.k * 2)?;
+            let offset = params.output.byte_offset() + begin as u64 * self.config.n * 2;
+            let output = params.output.buffer().native_handle().span(
+                ffi::DTYPE_BF16,
+                offset,
+                m * self.config.n * 2,
+            );
+            let result = self.native.execute_rows(
+                input.raw(),
+                params.weight.raw(),
+                output,
+                m,
+                mode,
+                &mut stream.native,
+            );
+            if result.is_err() {
+                self.poisoned = true;
+                return result;
+            }
+            begin = end;
         }
         Ok(())
     }
 
-    pub fn execute_row_groups_cached<S:CudaExecutionStream+?Sized>(&mut self,params:&mut CublasGemmProbeParams<'_>,groups:crate::batch::ValidatedRequestRowGroups<'_>,output_rows:Option<usize>,grouped_decode:u8,stream:&mut S)->CudaResult<()> {
-        self.execute_row_groups_cached_from(params,groups,output_rows,grouped_decode,0,stream)
+    pub fn execute_row_groups_cached<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        params: &mut CublasGemmProbeParams<'_>,
+        groups: crate::batch::ValidatedRequestRowGroups<'_>,
+        output_rows: Option<usize>,
+        grouped_decode: u8,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        self.execute_row_groups_cached_from(params, groups, output_rows, grouped_decode, 0, stream)
     }
 
     /// Runs a suffix starting at a proven request boundary. The full parent
     /// spans are validated before offsets are applied, as for the zero prefix.
-    pub fn execute_row_groups_cached_from<S:CudaExecutionStream+?Sized>(&mut self,params:&mut CublasGemmProbeParams<'_>,groups:crate::batch::ValidatedRequestRowGroups<'_>,output_rows:Option<usize>,grouped_decode:u8,first_row:usize,stream:&mut S)->CudaResult<()> {
-        const OP:&str="CudaPreparedCublasGemmProbe::execute_row_groups";
-        let slots=groups.row_sequence_slots();
-        if self.poisoned {return Err(CudaError::invalid_state(OP,"poisoned owner"));}
-        let stream=execution_stream_mut(stream);self.validate_execution(params,stream)?;
-        let total=output_rows.unwrap_or(slots.len());
-        if total as u64>self.config.m {return Err(CudaError::invalid_argument(OP,"active request rows exceed cold plan"));}
-        if grouped_decode>10 { return Err(CudaError::invalid_argument(OP,"unknown decode batch mode")); }
-        if grouped_decode==1 && total>1 && first_row==0 {
-            if output_rows.is_none() && slots.windows(2).any(|w| w[0]==w[1]) {
-                return Err(CudaError::invalid_argument(OP,"grouped decode requires one row per request"));
+    pub fn execute_row_groups_cached_from<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        params: &mut CublasGemmProbeParams<'_>,
+        groups: crate::batch::ValidatedRequestRowGroups<'_>,
+        output_rows: Option<usize>,
+        grouped_decode: u8,
+        first_row: usize,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        const OP: &str = "CudaPreparedCublasGemmProbe::execute_row_groups";
+        let slots = groups.row_sequence_slots();
+        if self.poisoned {
+            return Err(CudaError::invalid_state(OP, "poisoned owner"));
+        }
+        let stream = execution_stream_mut(stream);
+        self.validate_execution(params, stream)?;
+        let total = output_rows.unwrap_or(slots.len());
+        if total as u64 > self.config.m {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "active request rows exceed cold plan",
+            ));
+        }
+        if grouped_decode > 10 {
+            return Err(CudaError::invalid_argument(OP, "unknown decode batch mode"));
+        }
+        if grouped_decode == 1 && total > 1 && first_row == 0 {
+            if output_rows.is_none() && slots.windows(2).any(|w| w[0] == w[1]) {
+                return Err(CudaError::invalid_argument(
+                    OP,
+                    "grouped decode requires one row per request",
+                ));
             }
-            let input=params.input.subspan(0,total as u64*self.config.k*2)?;
-            let output=params.output.buffer().native_handle().span(ffi::DTYPE_BF16,params.output.byte_offset(),total as u64*self.config.n*2);
-            let result=self.native.execute_rows(input.raw(),params.weight.raw(),output,total as u64,grouped_decode,&mut stream.native);
-            if result.is_err(){self.poisoned=true;} return result;
+            let input = params.input.subspan(0, total as u64 * self.config.k * 2)?;
+            let output = params.output.buffer().native_handle().span(
+                ffi::DTYPE_BF16,
+                params.output.byte_offset(),
+                total as u64 * self.config.n * 2,
+            );
+            let result = self.native.execute_rows(
+                input.raw(),
+                params.weight.raw(),
+                output,
+                total as u64,
+                grouped_decode,
+                &mut stream.native,
+            );
+            if result.is_err() {
+                self.poisoned = true;
+            }
+            return result;
         }
-        if first_row>total || (first_row<total && first_row>0 && slots[first_row-1]==slots[first_row]) {
-            return Err(CudaError::invalid_argument(OP,"suffix must start on a request boundary"));
+        if first_row > total
+            || (first_row < total && first_row > 0 && slots[first_row - 1] == slots[first_row])
+        {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "suffix must start on a request boundary",
+            ));
         }
-        let mut begin=first_row;
-        while begin<total {
-            let mut end=begin+1;
-            if output_rows.is_none() {end=groups.group_end(begin)?;}
-            let original_end=end;
+        let mut begin = first_row;
+        while begin < total {
+            let mut end = begin + 1;
+            if output_rows.is_none() {
+                end = groups.group_end(begin)?;
+            }
+            let original_end = end;
             // Only mode10 merges adjacent prefill groups with an independently
             // qualified native arithmetic family. Other modes preserve extents.
-            let prefill_bounds=if grouped_decode==10 && output_rows.is_none(){
-                match (self.config.n,self.config.k) {
-                    (9728, 2560) | (2560, 9728) => Some((64_usize,130_usize,161_usize,576_usize)),
+            let prefill_bounds = if grouped_decode == 10 && output_rows.is_none() {
+                match (self.config.n, self.config.k) {
+                    (9728, 2560) | (2560, 9728) => {
+                        Some((64_usize, 130_usize, 161_usize, 576_usize))
+                    }
                     // Packed linear tokens: keep each original native-M128
                     // arithmetic family and its independently qualified bounds.
-                    (4096, 2560) => Some((65,130,257,576)),
-                    (1024, 2560) => Some((94,128,161,512)),
-                    (2560, 4096) => Some((65,128,161,576)),
+                    (4096, 2560) => Some((65, 130, 257, 576)),
+                    (1024, 2560) => Some((94, 128, 161, 512)),
+                    (2560, 4096) => Some((65, 128, 161, 576)),
                     _ => None,
                 }
-            }else{None};
-            if let Some((original_min,original_max,merged_min,merged_max))=prefill_bounds {
-                if (original_min..=original_max).contains(&(end-begin)) {
-                    let mut scan_end=end;
-                    while scan_end<total {
-                        let next_end=groups.group_end(scan_end)?;
-                        if !(original_min..=original_max).contains(&(next_end-scan_end)) || next_end-begin>merged_max {break;}
-                        scan_end=next_end;
-                        if scan_end-begin>=merged_min {end=scan_end;}
+            } else {
+                None
+            };
+            if let Some((original_min, original_max, merged_min, merged_max)) = prefill_bounds {
+                if (original_min..=original_max).contains(&(end - begin)) {
+                    let mut scan_end = end;
+                    while scan_end < total {
+                        let next_end = groups.group_end(scan_end)?;
+                        if !(original_min..=original_max).contains(&(next_end - scan_end))
+                            || next_end - begin > merged_max
+                        {
+                            break;
+                        }
+                        scan_end = next_end;
+                        if scan_end - begin >= merged_min {
+                            end = scan_end;
+                        }
                     }
                 }
             }
             // Mode11 is a private native call selector, not a public decode mode.
             // Never replace a standalone large prefill with the M128 recipe.
-            let packed_projection=matches!((self.config.n,self.config.k),(4096,2560)|(1024,2560)|(2560,4096));
-            let fixed_prefill=end>original_end && (packed_projection || self.config.k==9728 || (257..=512).contains(&(end-begin)));
-            let mut mode=if fixed_prefill {11}else{0};
-            if grouped_decode>=2 && end==begin+1 {
-                mode=grouped_decode;
-                while end<total && end-begin<32 {
-                    if output_rows.is_none() && end+1<total && slots[end]==slots[end+1] {break;}
-                    end+=1;
+            let packed_projection = matches!(
+                (self.config.n, self.config.k),
+                (4096, 2560) | (1024, 2560) | (2560, 4096)
+            );
+            let fixed_prefill = end > original_end
+                && (packed_projection
+                    || self.config.k == 9728
+                    || (257..=512).contains(&(end - begin)));
+            let mut mode = if fixed_prefill { 11 } else { 0 };
+            if grouped_decode >= 2 && end == begin + 1 {
+                mode = grouped_decode;
+                while end < total && end - begin < 32 {
+                    if output_rows.is_none() && end + 1 < total && slots[end] == slots[end + 1] {
+                        break;
+                    }
+                    end += 1;
                 }
             }
-            let m=(end-begin) as u64;
-            let input=params.input.subspan(begin as u64*self.config.k*2,m*self.config.k*2)?;
-            let offset=params.output.byte_offset()+begin as u64*self.config.n*2;
-            let output=params.output.buffer().native_handle().span(ffi::DTYPE_BF16,offset,m*self.config.n*2);
-            let result=self.native.execute_rows(input.raw(),params.weight.raw(),output,m,mode,&mut stream.native);
-            if result.is_err(){self.poisoned=true;return result;}
-            begin=end;
+            let m = (end - begin) as u64;
+            let input = params
+                .input
+                .subspan(begin as u64 * self.config.k * 2, m * self.config.k * 2)?;
+            let offset = params.output.byte_offset() + begin as u64 * self.config.n * 2;
+            let output = params.output.buffer().native_handle().span(
+                ffi::DTYPE_BF16,
+                offset,
+                m * self.config.n * 2,
+            );
+            let result = self.native.execute_rows(
+                input.raw(),
+                params.weight.raw(),
+                output,
+                m,
+                mode,
+                &mut stream.native,
+            );
+            if result.is_err() {
+                self.poisoned = true;
+                return result;
+            }
+            begin = end;
         }
         Ok(())
     }
 
     /// Private native-M1-equivalent merged Gate/Up. Only independently
     /// qualified R1 and R17..32 use the pinned SM80/cuBLASLt recipe.
-    pub fn execute_sm80_merged_gate_up<S:CudaExecutionStream+?Sized>(
-        &mut self,input:CudaBufferSpan<'_>,weight:CudaBufferSpan<'_>,
-        output:CudaBufferSpanMut<'_>,rows:u64,stream:&mut S,
-    )->CudaResult<()> {
-        const OP:&str="native exact SM80 merged Gate/Up";
-        if self.poisoned || self.config.n!=19456 || self.config.k!=2560 || rows>self.config.m
-            || !(rows==1 || (17..=32).contains(&rows)) {
-            return Err(CudaError::invalid_argument(OP,"qualified cold merged plan and R1/R17..32 required"));
+    pub fn execute_sm80_merged_gate_up<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        input: CudaBufferSpan<'_>,
+        weight: CudaBufferSpan<'_>,
+        output: CudaBufferSpanMut<'_>,
+        rows: u64,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        const OP: &str = "native exact SM80 merged Gate/Up";
+        if self.poisoned
+            || self.config.n != 19456
+            || self.config.k != 2560
+            || rows > self.config.m
+            || !(rows == 1 || (17..=32).contains(&rows))
+        {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "qualified cold merged plan and R1/R17..32 required",
+            ));
         }
-        let stream=execution_stream_mut(stream);
-        ensure_same_context(&self.context,&stream.context,OP)?;
-        for b in [input.buffer(),weight.buffer(),output.buffer()] {ensure_same_context(&self.context,b.context_owner(),OP)?;}
-        let result=self.native.execute_rows(input.raw(),weight.raw(),output.raw(),rows,12,&mut stream.native);
-        if result.is_err(){self.poisoned=true;}result
+        let stream = execution_stream_mut(stream);
+        ensure_same_context(&self.context, &stream.context, OP)?;
+        for b in [input.buffer(), weight.buffer(), output.buffer()] {
+            ensure_same_context(&self.context, b.context_owner(), OP)?;
+        }
+        let result = self.native.execute_rows(
+            input.raw(),
+            weight.raw(),
+            output.raw(),
+            rows,
+            12,
+            &mut stream.native,
+        );
+        if result.is_err() {
+            self.poisoned = true;
+        }
+        result
     }
 
     /// Bounded attention bridge with caller-owned cold scratch and plan-selected completion.
     #[allow(clippy::too_many_arguments)]
     pub fn execute_hf_attention<S: CudaExecutionStream + ?Sized>(
-        &mut self, query: CudaBufferSpan<'_>, key: CudaBufferSpan<'_>,
-        value: CudaBufferSpan<'_>, ids: CudaBufferSpan<'_>,
-        output: CudaBufferSpanMut<'_>, scratch: &mut [CudaDeviceBuffer; 8],
-        rows: u64, tokens: u64, physical: u64, qh:u64,kvh:u64,head_size:u64,stream: &mut S,
+        &mut self,
+        query: CudaBufferSpan<'_>,
+        key: CudaBufferSpan<'_>,
+        value: CudaBufferSpan<'_>,
+        ids: CudaBufferSpan<'_>,
+        output: CudaBufferSpanMut<'_>,
+        scratch: &mut [CudaDeviceBuffer; 8],
+        rows: u64,
+        tokens: u64,
+        physical: u64,
+        qh: u64,
+        kvh: u64,
+        head_size: u64,
+        stream: &mut S,
     ) -> CudaResult<()> {
         const OPERATION: &str = "CudaPreparedCublasGemmProbe::execute_hf_attention";
-        if self.poisoned || !hf_attention_geometry_valid(self.config,rows,tokens,physical,qh,kvh,head_size) {
-            return Err(CudaError::invalid_argument(OPERATION,"bounded cold D64/D128 attention geometry or poisoned owner"));
+        if self.poisoned
+            || !hf_attention_geometry_valid(self.config, rows, tokens, physical, qh, kvh, head_size)
+        {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "bounded cold D64/D128 attention geometry or poisoned owner",
+            ));
         }
         let stream = execution_stream_mut(stream);
         ensure_same_context(&self.context, &stream.context, OPERATION)?;
-        for b in [query.buffer(), key.buffer(), value.buffer(), ids.buffer(), output.buffer()] {
-            ensure_same_context(&self.context,b.context_owner(),OPERATION)?;
+        for b in [
+            query.buffer(),
+            key.buffer(),
+            value.buffer(),
+            ids.buffer(),
+            output.buffer(),
+        ] {
+            ensure_same_context(&self.context, b.context_owner(), OPERATION)?;
         }
-        let sizes = [rows*qh*head_size*2,physical*kvh*16*head_size*2,physical*kvh*16*head_size*2,tokens.div_ceil(16)*4,rows*qh*head_size*2];
-        for (span,(dtype,size)) in [query,key,value,ids].iter().zip([(CudaDType::BF16,sizes[0]),(CudaDType::BF16,sizes[1]),(CudaDType::BF16,sizes[2]),(CudaDType::U32,sizes[3])]) {
-            if span.dtype()!=dtype || span.byte_len()!=size {return Err(CudaError::invalid_argument(OPERATION,"input span geometry or dtype mismatch"));}
+        let sizes = [
+            rows * qh * head_size * 2,
+            physical * kvh * 16 * head_size * 2,
+            physical * kvh * 16 * head_size * 2,
+            tokens.div_ceil(16) * 4,
+            rows * qh * head_size * 2,
+        ];
+        for (span, (dtype, size)) in [query, key, value, ids].iter().zip([
+            (CudaDType::BF16, sizes[0]),
+            (CudaDType::BF16, sizes[1]),
+            (CudaDType::BF16, sizes[2]),
+            (CudaDType::U32, sizes[3]),
+        ]) {
+            if span.dtype() != dtype || span.byte_len() != size {
+                return Err(CudaError::invalid_argument(
+                    OPERATION,
+                    "input span geometry or dtype mismatch",
+                ));
+            }
         }
-        if output.dtype()!=CudaDType::BF16 || output.byte_len()!=sizes[4] {return Err(CudaError::invalid_argument(OPERATION,"output span geometry mismatch"));}
-        let q=rows*qh*head_size*2;let kv=tokens*qh*head_size*2;let s=qh*rows*tokens;let tiled=qh*rows.min(128)*tokens;
+        if output.dtype() != CudaDType::BF16 || output.byte_len() != sizes[4] {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "output span geometry mismatch",
+            ));
+        }
+        let q = rows * qh * head_size * 2;
+        let kv = tokens * qh * head_size * 2;
+        let s = qh * rows * tokens;
+        let tiled = qh * rows.min(128) * tokens;
         // Completed BF16 score rows become probabilities in-place; GEMM geometry is unchanged.
-        let lens=[q,kv,kv,s*2,tiled*4,tiled*4,q,16777216];
-        let roles=[5,6,7,8,9,10,12,13];
-        let mut spans=[query.raw();14];spans[1]=key.raw();spans[2]=value.raw();spans[3]=ids.raw();spans[4]=output.raw();
-        for (i,b) in scratch.iter_mut().enumerate() {
-            ensure_same_context(&self.context,b.context_owner(),OPERATION)?;
-            let dtype=if i==4||i==5 {CudaDType::F32} else if i==7 {CudaDType::U8} else {CudaDType::BF16};
-            spans[roles[i]]=CudaBufferSpan::new(b,dtype,0,lens[i])?.raw();
+        let lens = [q, kv, kv, s * 2, tiled * 4, tiled * 4, q, 16777216];
+        let roles = [5, 6, 7, 8, 9, 10, 12, 13];
+        let mut spans = [query.raw(); 14];
+        spans[1] = key.raw();
+        spans[2] = value.raw();
+        spans[3] = ids.raw();
+        spans[4] = output.raw();
+        for (i, b) in scratch.iter_mut().enumerate() {
+            ensure_same_context(&self.context, b.context_owner(), OPERATION)?;
+            let dtype = if i == 4 || i == 5 {
+                CudaDType::F32
+            } else if i == 7 {
+                CudaDType::U8
+            } else {
+                CudaDType::BF16
+            };
+            spans[roles[i]] = CudaBufferSpan::new(b, dtype, 0, lens[i])?.raw();
         }
-        spans[11]=spans[8]; // Exact internal alias, retained exclusively by this scratch owner.
-        let result=self.native.attention(&spans,rows,tokens,physical,qh,kvh,head_size,&mut stream.native);
-        if result.is_err(){self.poisoned=true;}
+        spans[11] = spans[8]; // Exact internal alias, retained exclusively by this scratch owner.
+        let result = self.native.attention(
+            &spans,
+            rows,
+            tokens,
+            physical,
+            qh,
+            kvh,
+            head_size,
+            &mut stream.native,
+        );
+        if result.is_err() {
+            self.poisoned = true;
+        }
         result
     }
 
     /// Exact Smol gate/up projection plus SiLU multiply, preserving BF16
     /// stores after both projections, after SiLU, and after multiplication.
-    pub fn try_execute_hf_smol_fused_gate_up<S:CudaExecutionStream+?Sized>(&mut self,gate:CudaBufferSpan<'_>,up:CudaBufferSpan<'_>,input:CudaBufferSpan<'_>,output:CudaBufferSpanMut<'_>,rows:u64,stream:&mut S)->CudaResult<bool> {
-        const OP:&str="CudaPreparedCublasGemmProbe::try_execute_hf_smol_fused_gate_up";
-        if self.poisoned{return Err(CudaError::invalid_argument(OP,"prepared plan is poisoned"));}
-        if !self.native.smol_fused_gate_up_supported(rows){return Ok(false);}
-        if [gate,up,input].iter().any(|v|v.byte_offset()%16!=0){return Ok(false);}
-        let stream=execution_stream_mut(stream);ensure_same_context(&self.context,&stream.context,OP)?;
-        let spans=[gate.raw(),up.raw(),input.raw(),output.raw()];
-        let result=self.native.smol_fused_gate_up(&spans,rows,&mut stream.native);
-        if result.is_err(){self.poisoned=true;}result.map(|_|true)
+    pub fn try_execute_hf_smol_fused_gate_up<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        gate: CudaBufferSpan<'_>,
+        up: CudaBufferSpan<'_>,
+        input: CudaBufferSpan<'_>,
+        output: CudaBufferSpanMut<'_>,
+        rows: u64,
+        stream: &mut S,
+    ) -> CudaResult<bool> {
+        const OP: &str = "CudaPreparedCublasGemmProbe::try_execute_hf_smol_fused_gate_up";
+        if self.poisoned {
+            return Err(CudaError::invalid_argument(OP, "prepared plan is poisoned"));
+        }
+        if !self.native.smol_fused_gate_up_supported(rows) {
+            return Ok(false);
+        }
+        if [gate, up, input].iter().any(|v| v.byte_offset() % 16 != 0) {
+            return Ok(false);
+        }
+        let stream = execution_stream_mut(stream);
+        ensure_same_context(&self.context, &stream.context, OP)?;
+        let spans = [gate.raw(), up.raw(), input.raw(), output.raw()];
+        let result = self
+            .native
+            .smol_fused_gate_up(&spans, rows, &mut stream.native);
+        if result.is_err() {
+            self.poisoned = true;
+        }
+        result.map(|_| true)
     }
 
     /// Native SM80 batched Gate/Up with shared input and BF16 SiLU boundaries.
-    pub fn try_execute_hf_sm80_fused_gate_up<S:CudaExecutionStream+?Sized>(&mut self,gate:CudaBufferSpan<'_>,up:CudaBufferSpan<'_>,input:CudaBufferSpan<'_>,output:CudaBufferSpanMut<'_>,rows:u64,stream:&mut S)->CudaResult<bool> {
-        const OP:&str="CudaPreparedCublasGemmProbe::try_execute_hf_sm80_fused_gate_up";
-        if self.poisoned{return Err(CudaError::invalid_argument(OP,"prepared plan is poisoned"));}
-        if !self.native.sm80_fused_gate_up_supported(rows){return Ok(false);}
-        if [gate,up,input].iter().any(|v|v.byte_offset()%32!=0){return Ok(false);}
-        let stream=execution_stream_mut(stream);ensure_same_context(&self.context,&stream.context,OP)?;
-        let spans=[gate.raw(),up.raw(),input.raw(),output.raw()];
-        let result=self.native.sm80_fused_gate_up(&spans,rows,&mut stream.native);
-        if result.is_err(){self.poisoned=true;}result.map(|_|true)
+    pub fn try_execute_hf_sm80_fused_gate_up<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        gate: CudaBufferSpan<'_>,
+        up: CudaBufferSpan<'_>,
+        input: CudaBufferSpan<'_>,
+        output: CudaBufferSpanMut<'_>,
+        rows: u64,
+        stream: &mut S,
+    ) -> CudaResult<bool> {
+        const OP: &str = "CudaPreparedCublasGemmProbe::try_execute_hf_sm80_fused_gate_up";
+        if self.poisoned {
+            return Err(CudaError::invalid_argument(OP, "prepared plan is poisoned"));
+        }
+        if !self.native.sm80_fused_gate_up_supported(rows) {
+            return Ok(false);
+        }
+        if [gate, up, input].iter().any(|v| v.byte_offset() % 32 != 0) {
+            return Ok(false);
+        }
+        let stream = execution_stream_mut(stream);
+        ensure_same_context(&self.context, &stream.context, OP)?;
+        let spans = [gate.raw(), up.raw(), input.raw(), output.raw()];
+        let result = self
+            .native
+            .sm80_fused_gate_up(&spans, rows, &mut stream.native);
+        if result.is_err() {
+            self.poisoned = true;
+        }
+        result.map(|_| true)
     }
 
     /// Fuses independent decode groups even when prefill shares this iteration.
     /// Non-singleton groups retain the existing mode10 prefill merge/recipe.
     #[allow(clippy::too_many_arguments)]
-    pub fn try_execute_hf_sm80_fused_gate_up_groups<S:CudaExecutionStream+?Sized>(
-        &mut self,gate:CudaBufferSpan<'_>,up:CudaBufferSpan<'_>,input:CudaBufferSpan<'_>,
-        gate_raw:&mut CudaDeviceBuffer,up_raw:&mut CudaDeviceBuffer,product:&mut CudaDeviceBuffer,
-        groups:crate::batch::ValidatedRequestRowGroups<'_>,stream:&mut S,
-    )->CudaResult<bool>{
-        self.try_execute_hf_sm80_fused_gate_up_groups_from(gate,up,input,gate_raw,up_raw,product,groups,0,stream)
+    pub fn try_execute_hf_sm80_fused_gate_up_groups<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        gate: CudaBufferSpan<'_>,
+        up: CudaBufferSpan<'_>,
+        input: CudaBufferSpan<'_>,
+        gate_raw: &mut CudaDeviceBuffer,
+        up_raw: &mut CudaDeviceBuffer,
+        product: &mut CudaDeviceBuffer,
+        groups: crate::batch::ValidatedRequestRowGroups<'_>,
+        stream: &mut S,
+    ) -> CudaResult<bool> {
+        self.try_execute_hf_sm80_fused_gate_up_groups_from(
+            gate, up, input, gate_raw, up_raw, product, groups, 0, stream,
+        )
     }
     #[allow(clippy::too_many_arguments)]
-    pub fn try_execute_hf_sm80_fused_gate_up_groups_from<S:CudaExecutionStream+?Sized>(
-        &mut self,gate:CudaBufferSpan<'_>,up:CudaBufferSpan<'_>,input:CudaBufferSpan<'_>,
-        gate_raw:&mut CudaDeviceBuffer,up_raw:&mut CudaDeviceBuffer,product:&mut CudaDeviceBuffer,
-        groups:crate::batch::ValidatedRequestRowGroups<'_>,first_row:usize,stream:&mut S,
-    )->CudaResult<bool>{
-        const OP:&str="CudaPreparedCublasGemmProbe::try_execute_hf_sm80_fused_gate_up_groups";
-        if self.poisoned{return Err(CudaError::invalid_state(OP,"poisoned owner"));}
-        if !self.native.sm80_fused_gate_up_supported(2){return Ok(false);}
-        if [gate,up,input].iter().any(|v|v.byte_offset()%32!=0){return Ok(false);}
-        let slots=groups.row_sequence_slots();let total=slots.len();
-        if total as u64>self.config.m{return Err(CudaError::invalid_argument(OP,"active rows exceed plan"));}
-        let range=|begin:usize|->CudaResult<(usize,u8,bool)>{
-            let mut end=groups.group_end(begin)?;let original_end=end;
-            if (64..=130).contains(&(end-begin)){
-                let mut scan=end;
-                while scan<total{let next=groups.group_end(scan)?;if !(64..=130).contains(&(next-scan))||next-begin>576{break;}scan=next;if scan-begin>=161{end=scan;}}
+    pub fn try_execute_hf_sm80_fused_gate_up_groups_from<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        gate: CudaBufferSpan<'_>,
+        up: CudaBufferSpan<'_>,
+        input: CudaBufferSpan<'_>,
+        gate_raw: &mut CudaDeviceBuffer,
+        up_raw: &mut CudaDeviceBuffer,
+        product: &mut CudaDeviceBuffer,
+        groups: crate::batch::ValidatedRequestRowGroups<'_>,
+        first_row: usize,
+        stream: &mut S,
+    ) -> CudaResult<bool> {
+        const OP: &str = "CudaPreparedCublasGemmProbe::try_execute_hf_sm80_fused_gate_up_groups";
+        if self.poisoned {
+            return Err(CudaError::invalid_state(OP, "poisoned owner"));
+        }
+        if !self.native.sm80_fused_gate_up_supported(2) {
+            return Ok(false);
+        }
+        if [gate, up, input].iter().any(|v| v.byte_offset() % 32 != 0) {
+            return Ok(false);
+        }
+        let slots = groups.row_sequence_slots();
+        let total = slots.len();
+        if total as u64 > self.config.m {
+            return Err(CudaError::invalid_argument(OP, "active rows exceed plan"));
+        }
+        let range = |begin: usize| -> CudaResult<(usize, u8, bool)> {
+            let mut end = groups.group_end(begin)?;
+            let original_end = end;
+            if (64..=130).contains(&(end - begin)) {
+                let mut scan = end;
+                while scan < total {
+                    let next = groups.group_end(scan)?;
+                    if !(64..=130).contains(&(next - scan)) || next - begin > 576 {
+                        break;
+                    }
+                    scan = next;
+                    if scan - begin >= 161 {
+                        end = scan;
+                    }
+                }
             }
-            let mut mode=if end>original_end&&(257..=512).contains(&(end-begin)){11}else{0};
-            if end==begin+1{mode=10;while end<total&&end-begin<32{if end+1<total&&slots[end]==slots[end+1]{break;}end+=1;}}
-            Ok((end,mode,mode==10&&end-begin>=2))
+            let mut mode = if end > original_end && (257..=512).contains(&(end - begin)) {
+                11
+            } else {
+                0
+            };
+            if end == begin + 1 {
+                mode = 10;
+                while end < total && end - begin < 32 {
+                    if end + 1 < total && slots[end] == slots[end + 1] {
+                        break;
+                    }
+                    end += 1;
+                }
+            }
+            Ok((end, mode, mode == 10 && end - begin >= 2))
         };
         // Unsupported/all-prefill batches submit nothing through this route.
-        if first_row>total || (first_row<total && first_row>0 && slots[first_row-1]==slots[first_row]) {return Err(CudaError::invalid_argument(OP,"fused suffix boundary"));}
-        let mut scan=first_row;let mut useful=false;while scan<total{let(end,_,fused)=range(scan)?;useful|=fused;scan=end;}
-        if !useful{return Ok(false);}
-        let stream=execution_stream_mut(stream);
-        {let p=CublasGemmProbeParams{input,weight:gate,output:CudaBufferSpanMut::new(gate_raw,CudaDType::BF16,0,self.config.output_bytes())?};self.validate_execution(&p,stream)?;}
-        {let p=CublasGemmProbeParams{input,weight:up,output:CudaBufferSpanMut::new(up_raw,CudaDType::BF16,0,self.config.output_bytes())?};self.validate_execution(&p,stream)?;}
-        ensure_same_context(&self.context,product.context_owner(),OP)?;
-        if product.byte_len()<self.config.output_bytes(){return Err(CudaError::invalid_argument(OP,"product capacity below plan"));}
-        let result=(||->CudaResult<()>{let mut begin=first_row;while begin<total{
-            let(end,mode,fused)=range(begin)?;let rows=(end-begin)as u64;let in_span=input.subspan(begin as u64*2560*2,rows*2560*2)?;let offset=begin as u64*9728*2;let bytes=rows*9728*2;
-            if fused{
-                let out=CudaBufferSpanMut::new(product,CudaDType::BF16,offset,bytes)?;
-                self.native.sm80_fused_gate_up(&[gate.raw(),up.raw(),in_span.raw(),out.raw()],rows,&mut stream.native)?;
-            }else{
-                for(weight,out)in[(gate,&mut *gate_raw),(up,&mut *up_raw)]{
-                    let out=CudaBufferSpanMut::new(out,CudaDType::BF16,offset,bytes)?;
-                    self.native.execute_rows(in_span.raw(),weight.raw(),out.raw(),rows,mode,&mut stream.native)?;
+        if first_row > total
+            || (first_row < total && first_row > 0 && slots[first_row - 1] == slots[first_row])
+        {
+            return Err(CudaError::invalid_argument(OP, "fused suffix boundary"));
+        }
+        let mut scan = first_row;
+        let mut useful = false;
+        while scan < total {
+            let (end, _, fused) = range(scan)?;
+            useful |= fused;
+            scan = end;
+        }
+        if !useful {
+            return Ok(false);
+        }
+        let stream = execution_stream_mut(stream);
+        {
+            let p = CublasGemmProbeParams {
+                input,
+                weight: gate,
+                output: CudaBufferSpanMut::new(
+                    gate_raw,
+                    CudaDType::BF16,
+                    0,
+                    self.config.output_bytes(),
+                )?,
+            };
+            self.validate_execution(&p, stream)?;
+        }
+        {
+            let p = CublasGemmProbeParams {
+                input,
+                weight: up,
+                output: CudaBufferSpanMut::new(
+                    up_raw,
+                    CudaDType::BF16,
+                    0,
+                    self.config.output_bytes(),
+                )?,
+            };
+            self.validate_execution(&p, stream)?;
+        }
+        ensure_same_context(&self.context, product.context_owner(), OP)?;
+        if product.byte_len() < self.config.output_bytes() {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "product capacity below plan",
+            ));
+        }
+        let result = (|| -> CudaResult<()> {
+            let mut begin = first_row;
+            while begin < total {
+                let (end, mode, fused) = range(begin)?;
+                let rows = (end - begin) as u64;
+                let in_span = input.subspan(begin as u64 * 2560 * 2, rows * 2560 * 2)?;
+                let offset = begin as u64 * 9728 * 2;
+                let bytes = rows * 9728 * 2;
+                if fused {
+                    let out = CudaBufferSpanMut::new(product, CudaDType::BF16, offset, bytes)?;
+                    self.native.sm80_fused_gate_up(
+                        &[gate.raw(), up.raw(), in_span.raw(), out.raw()],
+                        rows,
+                        &mut stream.native,
+                    )?;
+                } else {
+                    for (weight, out) in [(gate, &mut *gate_raw), (up, &mut *up_raw)] {
+                        let out = CudaBufferSpanMut::new(out, CudaDType::BF16, offset, bytes)?;
+                        self.native.execute_rows(
+                            in_span.raw(),
+                            weight.raw(),
+                            out.raw(),
+                            rows,
+                            mode,
+                            &mut stream.native,
+                        )?;
+                    }
+                    let mut p = crate::GatedMultiplyParams {
+                        activated_gate: CudaBufferSpan::new(
+                            gate_raw,
+                            CudaDType::BF16,
+                            offset,
+                            bytes,
+                        )?,
+                        up: CudaBufferSpan::new(up_raw, CudaDType::BF16, offset, bytes)?,
+                        output: CudaBufferSpanMut::new(product, CudaDType::BF16, offset, bytes)?,
+                        element_count: rows * 9728,
+                    };
+                    crate::silu_gated_multiply(&mut p, stream)?;
                 }
-                let mut p=crate::GatedMultiplyParams{activated_gate:CudaBufferSpan::new(gate_raw,CudaDType::BF16,offset,bytes)?,up:CudaBufferSpan::new(up_raw,CudaDType::BF16,offset,bytes)?,output:CudaBufferSpanMut::new(product,CudaDType::BF16,offset,bytes)?,element_count:rows*9728};
-                crate::silu_gated_multiply(&mut p,stream)?;
+                begin = end;
             }
-            begin=end;
-        }Ok(())})();
-        if result.is_err(){self.poisoned=true;}result.map(|_|true)
+            Ok(())
+        })();
+        if result.is_err() {
+            self.poisoned = true;
+        }
+        result.map(|_| true)
     }
 
     /// Executes three disjoint Smol projections with their original FP32 FMA
     /// chains. Unsupported environments/alignment submit nothing and return false.
     #[allow(clippy::too_many_arguments)]
-    pub fn try_execute_hf_smol_fused_qkv<S:CudaExecutionStream+?Sized>(&mut self,query_weight:CudaBufferSpan<'_>,key_weight:CudaBufferSpan<'_>,value_weight:CudaBufferSpan<'_>,input:CudaBufferSpan<'_>,query:CudaBufferSpanMut<'_>,key:CudaBufferSpanMut<'_>,value:CudaBufferSpanMut<'_>,rows:u64,stream:&mut S)->CudaResult<bool> {
-        const OP:&str="CudaPreparedCublasGemmProbe::try_execute_hf_smol_fused_qkv";
-        if self.poisoned {return Err(CudaError::invalid_argument(OP,"prepared plan is poisoned"));}
-        if !self.native.smol_fused_qkv_supported(rows){return Ok(false);}
-        if [query_weight,key_weight,value_weight,input].iter().any(|v|v.byte_offset()%16!=0){return Ok(false);}
-        let stream=execution_stream_mut(stream);ensure_same_context(&self.context,&stream.context,OP)?;
-        let spans=[query_weight.raw(),key_weight.raw(),value_weight.raw(),input.raw(),query.raw(),key.raw(),value.raw()];
-        let result=self.native.smol_fused_qkv(&spans,rows,&mut stream.native);
-        if result.is_err(){self.poisoned=true;}result.map(|_|true)
+    pub fn try_execute_hf_smol_fused_qkv<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        query_weight: CudaBufferSpan<'_>,
+        key_weight: CudaBufferSpan<'_>,
+        value_weight: CudaBufferSpan<'_>,
+        input: CudaBufferSpan<'_>,
+        query: CudaBufferSpanMut<'_>,
+        key: CudaBufferSpanMut<'_>,
+        value: CudaBufferSpanMut<'_>,
+        rows: u64,
+        stream: &mut S,
+    ) -> CudaResult<bool> {
+        const OP: &str = "CudaPreparedCublasGemmProbe::try_execute_hf_smol_fused_qkv";
+        if self.poisoned {
+            return Err(CudaError::invalid_argument(OP, "prepared plan is poisoned"));
+        }
+        if !self.native.smol_fused_qkv_supported(rows) {
+            return Ok(false);
+        }
+        if [query_weight, key_weight, value_weight, input]
+            .iter()
+            .any(|v| v.byte_offset() % 16 != 0)
+        {
+            return Ok(false);
+        }
+        let stream = execution_stream_mut(stream);
+        ensure_same_context(&self.context, &stream.context, OP)?;
+        let spans = [
+            query_weight.raw(),
+            key_weight.raw(),
+            value_weight.raw(),
+            input.raw(),
+            query.raw(),
+            key.raw(),
+            value.raw(),
+        ];
+        let result = self.native.smol_fused_qkv(&spans, rows, &mut stream.native);
+        if result.is_err() {
+            self.poisoned = true;
+        }
+        result.map(|_| true)
     }
 
     /// Cold qualification for exact decode chunks; unknown environments fall back.
     #[must_use]
-    pub fn supports_exact_smol_attention(&self,tokens:u64)->bool { !self.poisoned && self.native.smol_exact_supported(tokens) }
+    pub fn supports_exact_smol_attention(&self, tokens: u64) -> bool {
+        !self.poisoned && self.native.smol_exact_supported(tokens)
+    }
     /// Exact H9/KV3/D64 attention for selected independent singleton rows.
     #[allow(clippy::too_many_arguments)]
-    pub fn execute_hf_attention_smol_exact<S:CudaExecutionStream+?Sized>(&mut self,query:CudaBufferSpan<'_>,key:CudaBufferSpan<'_>,value:CudaBufferSpan<'_>,output:CudaBufferSpanMut<'_>,scratch:&mut[CudaDeviceBuffer;3],batch:crate::PackedBatchV1<'_>,selected:&[u32],stream:&mut S)->CudaResult<()> {
-        const OP:&str="CudaPreparedCublasGemmProbe::execute_hf_attention_smol_exact";
-        let host=batch.host();let positions=host.row_positions();let slots=host.row_sequence_slots();let active=positions.len() as u64;
-        if selected.is_empty()||selected.len()>32||active==0||active>self.config.m||self.config.k!=64||selected.windows(2).any(|x|x[0]>=x[1]) {return Err(CudaError::invalid_argument(OP,"sorted R1..32 rows within prepared H9KV3D64 bounds required"));}
-        let mut rows=[0u32;32];let mut tokens=[0u64;32];
-        for (i,&row) in selected.iter().enumerate(){let r=row as usize;if r>=positions.len() || (r>0&&slots[r-1]==slots[r]) || (r+1<slots.len()&&slots[r+1]==slots[r]) {return Err(CudaError::invalid_argument(OP,"selected rows must be independent singleton groups"));}let t=u64::from(positions[r])+1;if t>self.config.n||!self.supports_exact_smol_attention(t){return Err(CudaError::invalid_argument(OP,"unsupported exact attention recipe"));}rows[i]=row;tokens[i]=t;}
-        let physical=host.physical_block_count();let q=active*576*2;let pool=physical*3*16*64*2;let ids=batch.device_block_ids();let slots=batch.device_row_sequence_slots();let offsets=batch.device_sequence_block_offsets();let positions=batch.device_row_positions();
-        let stream=execution_stream_mut(stream);ensure_same_context(&self.context,&stream.context,OP)?;
-        for (span,dtype,n) in [(query,CudaDType::BF16,q),(key,CudaDType::BF16,pool),(value,CudaDType::BF16,pool),(ids,CudaDType::U32,host.block_ids().len() as u64*4),(slots,CudaDType::U32,active*4),(offsets,CudaDType::U32,(host.sequence_count()+1)*4),(positions,CudaDType::U32,active*4)] {ensure_same_context(&self.context,span.buffer().context_owner(),OP)?;if span.dtype()!=dtype||span.byte_len()!=n{return Err(CudaError::invalid_argument(OP,"exact attention input geometry"));}}
-        ensure_same_context(&self.context,output.buffer().context_owner(),OP)?;if output.dtype()!=CudaDType::BF16||output.byte_len()!=q{return Err(CudaError::invalid_argument(OP,"exact attention output geometry"));}
-        let mut spans=[query.raw();11];spans[1]=key.raw();spans[2]=value.raw();spans[3]=ids.raw();spans[4]=output.raw();spans[8]=slots.raw();spans[9]=offsets.raw();spans[10]=positions.raw();
-        for (i,b) in scratch.iter_mut().enumerate(){ensure_same_context(&self.context,b.context_owner(),OP)?;let n=selected.len() as u64*if i<2{3*1024*64*2}else{9*1024*2};spans[5+i]=CudaBufferSpan::new(b,CudaDType::BF16,0,n)?.raw();}
-        let result=self.native.attention_smol_exact(&spans,&rows,&tokens,selected.len() as u64,active,physical,host.sequence_count(),host.block_ids().len() as u64,&mut stream.native);if result.is_err(){self.poisoned=true;}result
+    pub fn execute_hf_attention_smol_exact<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        query: CudaBufferSpan<'_>,
+        key: CudaBufferSpan<'_>,
+        value: CudaBufferSpan<'_>,
+        output: CudaBufferSpanMut<'_>,
+        scratch: &mut [CudaDeviceBuffer; 3],
+        batch: crate::PackedBatchV1<'_>,
+        selected: &[u32],
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        const OP: &str = "CudaPreparedCublasGemmProbe::execute_hf_attention_smol_exact";
+        let host = batch.host();
+        let positions = host.row_positions();
+        let slots = host.row_sequence_slots();
+        let active = positions.len() as u64;
+        if selected.is_empty()
+            || selected.len() > 32
+            || active == 0
+            || active > self.config.m
+            || self.config.k != 64
+            || selected.windows(2).any(|x| x[0] >= x[1])
+        {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "sorted R1..32 rows within prepared H9KV3D64 bounds required",
+            ));
+        }
+        let mut rows = [0u32; 32];
+        let mut tokens = [0u64; 32];
+        for (i, &row) in selected.iter().enumerate() {
+            let r = row as usize;
+            if r >= positions.len()
+                || (r > 0 && slots[r - 1] == slots[r])
+                || (r + 1 < slots.len() && slots[r + 1] == slots[r])
+            {
+                return Err(CudaError::invalid_argument(
+                    OP,
+                    "selected rows must be independent singleton groups",
+                ));
+            }
+            let t = u64::from(positions[r]) + 1;
+            if t > self.config.n || !self.supports_exact_smol_attention(t) {
+                return Err(CudaError::invalid_argument(
+                    OP,
+                    "unsupported exact attention recipe",
+                ));
+            }
+            rows[i] = row;
+            tokens[i] = t;
+        }
+        let physical = host.physical_block_count();
+        let q = active * 576 * 2;
+        let pool = physical * 3 * 16 * 64 * 2;
+        let ids = batch.device_block_ids();
+        let slots = batch.device_row_sequence_slots();
+        let offsets = batch.device_sequence_block_offsets();
+        let positions = batch.device_row_positions();
+        let stream = execution_stream_mut(stream);
+        ensure_same_context(&self.context, &stream.context, OP)?;
+        for (span, dtype, n) in [
+            (query, CudaDType::BF16, q),
+            (key, CudaDType::BF16, pool),
+            (value, CudaDType::BF16, pool),
+            (ids, CudaDType::U32, host.block_ids().len() as u64 * 4),
+            (slots, CudaDType::U32, active * 4),
+            (offsets, CudaDType::U32, (host.sequence_count() + 1) * 4),
+            (positions, CudaDType::U32, active * 4),
+        ] {
+            ensure_same_context(&self.context, span.buffer().context_owner(), OP)?;
+            if span.dtype() != dtype || span.byte_len() != n {
+                return Err(CudaError::invalid_argument(
+                    OP,
+                    "exact attention input geometry",
+                ));
+            }
+        }
+        ensure_same_context(&self.context, output.buffer().context_owner(), OP)?;
+        if output.dtype() != CudaDType::BF16 || output.byte_len() != q {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "exact attention output geometry",
+            ));
+        }
+        let mut spans = [query.raw(); 11];
+        spans[1] = key.raw();
+        spans[2] = value.raw();
+        spans[3] = ids.raw();
+        spans[4] = output.raw();
+        spans[8] = slots.raw();
+        spans[9] = offsets.raw();
+        spans[10] = positions.raw();
+        for (i, b) in scratch.iter_mut().enumerate() {
+            ensure_same_context(&self.context, b.context_owner(), OP)?;
+            let n = selected.len() as u64
+                * if i < 2 {
+                    3 * 1024 * 64 * 2
+                } else {
+                    9 * 1024 * 2
+                };
+            spans[5 + i] = CudaBufferSpan::new(b, CudaDType::BF16, 0, n)?.raw();
+        }
+        let result = self.native.attention_smol_exact(
+            &spans,
+            &rows,
+            &tokens,
+            selected.len() as u64,
+            active,
+            physical,
+            host.sequence_count(),
+            host.block_ids().len() as u64,
+            &mut stream.native,
+        );
+        if result.is_err() {
+            self.poisoned = true;
+        }
+        result
     }
 
     /// Cold SM80/CUDA12.4/108SM environment qualification; shape checks stay native.
-    pub fn prepare_bounded_sm80_projections(&mut self)->CudaResult<()> {self.native.prepare_bounded_sm80_projections()}
+    pub fn prepare_bounded_sm80_projections(&mut self) -> CudaResult<()> {
+        self.native.prepare_bounded_sm80_projections()
+    }
     /// Cold opt-in attention staging; the native owner validates SM80 geometry.
-    pub fn prepare_sm80_attention(&mut self)->CudaResult<()> {self.native.prepare_sm80_attention()}
+    pub fn prepare_sm80_attention(&mut self) -> CudaResult<()> {
+        self.native.prepare_sm80_attention()
+    }
     /// Opt-in paged chunk preparation; native SIMT/WMMA families stay pinned.
-    pub fn prepare_sm80_prefill(&mut self)->CudaResult<()> {self.native.prepare_sm80_prefill()}
-    pub fn prepare_sm80_paged_attention(&mut self)->CudaResult<()> {self.native.prepare_sm80_paged_attention()}
-    pub fn uses_sm80_paged_attention(&self)->bool {self.native.supports_sm80_paged_attention(0)}
-    pub fn supports_sm80_paged_attention(&self,tokens:u64)->bool {tokens!=0&&self.native.supports_sm80_paged_attention(tokens)}
+    pub fn prepare_sm80_prefill(&mut self) -> CudaResult<()> {
+        self.native.prepare_sm80_prefill()
+    }
+    pub fn prepare_sm80_paged_attention(&mut self) -> CudaResult<()> {
+        self.native.prepare_sm80_paged_attention()
+    }
+    pub fn uses_sm80_paged_attention(&self) -> bool {
+        self.native.supports_sm80_paged_attention(0)
+    }
+    pub fn supports_sm80_paged_attention(&self, tokens: u64) -> bool {
+        tokens != 0 && self.native.supports_sm80_paged_attention(tokens)
+    }
 
-    pub fn supports_bounded_sm80_gateup_rows(&self)->bool {self.native.bounded_sm80_gateup_qualified()}
-    pub fn supports_exact_decode_chunk(&self)->bool {self.native.decode_chunk_qualified()}
+    pub fn supports_bounded_sm80_gateup_rows(&self) -> bool {
+        self.native.bounded_sm80_gateup_qualified()
+    }
+    pub fn supports_exact_decode_chunk(&self) -> bool {
+        self.native.decode_chunk_qualified()
+    }
 
     /// Heterogeneous Q16/KV2/D128 singleton requests, with unchanged QK/PV shapes.
     #[allow(clippy::too_many_arguments)]
-    pub fn execute_hf_attention_chunk<S:CudaExecutionStream+?Sized>(&mut self,query:CudaBufferSpan<'_>,key:CudaBufferSpan<'_>,value:CudaBufferSpan<'_>,output:CudaBufferSpanMut<'_>,scratch:&mut[CudaDeviceBuffer;3],workspace:&mut CudaDeviceBuffer,scaled_trace:Option<&mut CudaDeviceBuffer>,batch:crate::PackedBatchV1<'_>,begin:usize,requests:usize,stream:&mut S)->CudaResult<()> {
-        const OP:&str="CudaPreparedCublasGemmProbe::execute_hf_attention_chunk";
-        let host=batch.host();let (tokens,total)=exact_decode_chunk_tokens(host.row_positions(),host.row_sequence_slots(),begin,requests).ok_or_else(||CudaError::invalid_argument(OP,"distinct singleton slots, R2..8 and eachT1..512 required"))?;
-        if self.poisoned || self.config.m<1 || self.config.k!=128 || tokens[..requests].iter().any(|t|*t>self.config.n) || !self.supports_exact_decode_chunk(){return Err(CudaError::invalid_argument(OP,"unqualified owned decode chunk"));}
-        let physical=host.physical_block_count();let q=requests as u64*16*128*2;let pool=physical*2*16*128*2;
-        let ids=batch.device_block_ids();let slots=batch.device_row_sequence_slots().subspan(begin as u64*4,requests as u64*4)?;let offsets=batch.device_sequence_block_offsets();
-        let stream=execution_stream_mut(stream);ensure_same_context(&self.context,&stream.context,OP)?;
-        for (span,dtype,n) in [(query,CudaDType::BF16,q),(key,CudaDType::BF16,pool),(value,CudaDType::BF16,pool),(ids,CudaDType::U32,host.block_ids().len() as u64*4),(slots,CudaDType::U32,requests as u64*4),(offsets,CudaDType::U32,(host.sequence_count()+1)*4)]{ensure_same_context(&self.context,span.buffer().context_owner(),OP)?;if span.dtype()!=dtype||span.byte_len()!=n{return Err(CudaError::invalid_argument(OP,"decode chunk input geometry"));}}
-        ensure_same_context(&self.context,output.buffer().context_owner(),OP)?;if output.dtype()!=CudaDType::BF16||output.byte_len()!=q{return Err(CudaError::invalid_argument(OP,"decode chunk output geometry"));}
-        let mut spans=[query.raw();12];spans[1]=key.raw();spans[2]=value.raw();spans[3]=ids.raw();spans[4]=output.raw();spans[9]=slots.raw();spans[10]=offsets.raw();
-        for (i,b) in scratch.iter_mut().enumerate(){ensure_same_context(&self.context,b.context_owner(),OP)?;let n=if i<2{total*16*128*2}else{total*16*2};spans[5+i]=CudaBufferSpan::new(b,CudaDType::BF16,0,n)?.raw();}
-        ensure_same_context(&self.context,workspace.context_owner(),OP)?;spans[8]=CudaBufferSpan::new(workspace,CudaDType::U8,0,16777216)?.raw();
-        let span_count=if let Some(trace)=scaled_trace{ensure_same_context(&self.context,trace.context_owner(),OP)?;spans[11]=CudaBufferSpan::new(trace,CudaDType::F32,0,total*16*4)?.raw();12}else{11};
-        let result=self.native.attention_chunk(&spans,span_count,&tokens,requests as u64,physical,host.sequence_count(),host.block_ids().len() as u64,&mut stream.native);if result.is_err(){self.poisoned=true;}result
+    pub fn execute_hf_attention_chunk<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        query: CudaBufferSpan<'_>,
+        key: CudaBufferSpan<'_>,
+        value: CudaBufferSpan<'_>,
+        output: CudaBufferSpanMut<'_>,
+        scratch: &mut [CudaDeviceBuffer; 3],
+        workspace: &mut CudaDeviceBuffer,
+        scaled_trace: Option<&mut CudaDeviceBuffer>,
+        batch: crate::PackedBatchV1<'_>,
+        begin: usize,
+        requests: usize,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        const OP: &str = "CudaPreparedCublasGemmProbe::execute_hf_attention_chunk";
+        let host = batch.host();
+        let (tokens, total) = exact_decode_chunk_tokens(
+            host.row_positions(),
+            host.row_sequence_slots(),
+            begin,
+            requests,
+        )
+        .ok_or_else(|| {
+            CudaError::invalid_argument(
+                OP,
+                "distinct singleton slots, R2..8 and eachT1..512 required",
+            )
+        })?;
+        if self.poisoned
+            || self.config.m < 1
+            || self.config.k != 128
+            || tokens[..requests].iter().any(|t| *t > self.config.n)
+            || !self.supports_exact_decode_chunk()
+        {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "unqualified owned decode chunk",
+            ));
+        }
+        let physical = host.physical_block_count();
+        let q = requests as u64 * 16 * 128 * 2;
+        let pool = physical * 2 * 16 * 128 * 2;
+        let ids = batch.device_block_ids();
+        let slots = batch
+            .device_row_sequence_slots()
+            .subspan(begin as u64 * 4, requests as u64 * 4)?;
+        let offsets = batch.device_sequence_block_offsets();
+        let stream = execution_stream_mut(stream);
+        ensure_same_context(&self.context, &stream.context, OP)?;
+        for (span, dtype, n) in [
+            (query, CudaDType::BF16, q),
+            (key, CudaDType::BF16, pool),
+            (value, CudaDType::BF16, pool),
+            (ids, CudaDType::U32, host.block_ids().len() as u64 * 4),
+            (slots, CudaDType::U32, requests as u64 * 4),
+            (offsets, CudaDType::U32, (host.sequence_count() + 1) * 4),
+        ] {
+            ensure_same_context(&self.context, span.buffer().context_owner(), OP)?;
+            if span.dtype() != dtype || span.byte_len() != n {
+                return Err(CudaError::invalid_argument(
+                    OP,
+                    "decode chunk input geometry",
+                ));
+            }
+        }
+        ensure_same_context(&self.context, output.buffer().context_owner(), OP)?;
+        if output.dtype() != CudaDType::BF16 || output.byte_len() != q {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "decode chunk output geometry",
+            ));
+        }
+        let mut spans = [query.raw(); 12];
+        spans[1] = key.raw();
+        spans[2] = value.raw();
+        spans[3] = ids.raw();
+        spans[4] = output.raw();
+        spans[9] = slots.raw();
+        spans[10] = offsets.raw();
+        for (i, b) in scratch.iter_mut().enumerate() {
+            ensure_same_context(&self.context, b.context_owner(), OP)?;
+            let n = if i < 2 {
+                total * 16 * 128 * 2
+            } else {
+                total * 16 * 2
+            };
+            spans[5 + i] = CudaBufferSpan::new(b, CudaDType::BF16, 0, n)?.raw();
+        }
+        ensure_same_context(&self.context, workspace.context_owner(), OP)?;
+        spans[8] = CudaBufferSpan::new(workspace, CudaDType::U8, 0, 16777216)?.raw();
+        let span_count = if let Some(trace) = scaled_trace {
+            ensure_same_context(&self.context, trace.context_owner(), OP)?;
+            spans[11] = CudaBufferSpan::new(trace, CudaDType::F32, 0, total * 16 * 4)?.raw();
+            12
+        } else {
+            11
+        };
+        let result = self.native.attention_chunk(
+            &spans,
+            span_count,
+            &tokens,
+            requests as u64,
+            physical,
+            host.sequence_count(),
+            host.block_ids().len() as u64,
+            &mut stream.native,
+        );
+        if result.is_err() {
+            self.poisoned = true;
+        }
+        result
     }
 
     /// Heterogeneous Q32/KV8/D128 singleton requests, with unchanged QK/PV shapes.
     #[allow(clippy::too_many_arguments)]
-    pub fn execute_hf_attention_chunk_wide<S:CudaExecutionStream+?Sized>(&mut self,query:CudaBufferSpan<'_>,key:CudaBufferSpan<'_>,value:CudaBufferSpan<'_>,output:CudaBufferSpanMut<'_>,scratch:&mut[CudaDeviceBuffer;3],workspace:&mut CudaDeviceBuffer,scaled_trace:Option<&mut CudaDeviceBuffer>,batch:crate::PackedBatchV1<'_>,begin:usize,requests:usize,stream:&mut S)->CudaResult<()> {
-        const OP:&str="CudaPreparedCublasGemmProbe::execute_hf_attention_chunk_wide";
-        let host=batch.host();let (tokens,total)=exact_wide_decode_chunk_tokens(host.row_positions(),host.row_sequence_slots(),begin,requests).ok_or_else(||CudaError::invalid_argument(OP,"distinct singleton slots, R2..32 and eachT1..512 required"))?;
-        let sm80=self.uses_sm80_paged_attention();
-        if sm80 && tokens[..requests].iter().any(|t|!self.supports_sm80_paged_attention(*t)){return Err(CudaError::invalid_argument(OP,"unsupported SM80 native attention family"));}
-        if self.poisoned || self.config.m<1 || self.config.k!=128 || tokens[..requests].iter().any(|t|*t>self.config.n) || !self.supports_exact_decode_chunk(){return Err(CudaError::invalid_argument(OP,"unqualified owned decode chunk"));}
-        let physical=host.physical_block_count();let q=requests as u64*32*128*2;let pool=physical*8*16*128*2;
-        let ids=batch.device_block_ids();let slots=batch.device_row_sequence_slots().subspan(begin as u64*4,requests as u64*4)?;let offsets=batch.device_sequence_block_offsets();
-        let stream=execution_stream_mut(stream);ensure_same_context(&self.context,&stream.context,OP)?;
-        for (span,dtype,n) in [(query,CudaDType::BF16,q),(key,CudaDType::BF16,pool),(value,CudaDType::BF16,pool),(ids,CudaDType::U32,host.block_ids().len() as u64*4),(slots,CudaDType::U32,requests as u64*4),(offsets,CudaDType::U32,(host.sequence_count()+1)*4)]{ensure_same_context(&self.context,span.buffer().context_owner(),OP)?;if span.dtype()!=dtype||span.byte_len()!=n{return Err(CudaError::invalid_argument(OP,"decode chunk input geometry"));}}
-        ensure_same_context(&self.context,output.buffer().context_owner(),OP)?;if output.dtype()!=CudaDType::BF16||output.byte_len()!=q{return Err(CudaError::invalid_argument(OP,"decode chunk output geometry"));}
-        let mut spans=[query.raw();12];spans[1]=key.raw();spans[2]=value.raw();spans[3]=ids.raw();spans[4]=output.raw();spans[9]=slots.raw();spans[10]=offsets.raw();
-        for (i,b) in scratch.iter_mut().enumerate(){ensure_same_context(&self.context,b.context_owner(),OP)?;let n=if i<2 && !sm80{total*32*128*2}else{total*32*2};spans[5+i]=CudaBufferSpan::new(b,CudaDType::BF16,0,n)?.raw();}
-        ensure_same_context(&self.context,workspace.context_owner(),OP)?;spans[8]=CudaBufferSpan::new(workspace,CudaDType::U8,0,16777216)?.raw();
-        let span_count=if let Some(trace)=scaled_trace{ensure_same_context(&self.context,trace.context_owner(),OP)?;spans[11]=CudaBufferSpan::new(trace,CudaDType::F32,0,total*32*4)?.raw();12}else{11};
-        let result=self.native.attention_chunk_wide(&spans,span_count,&tokens,requests as u64,physical,host.sequence_count(),host.block_ids().len() as u64,&mut stream.native);if result.is_err(){self.poisoned=true;}result
+    pub fn execute_hf_attention_chunk_wide<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        query: CudaBufferSpan<'_>,
+        key: CudaBufferSpan<'_>,
+        value: CudaBufferSpan<'_>,
+        output: CudaBufferSpanMut<'_>,
+        scratch: &mut [CudaDeviceBuffer; 3],
+        workspace: &mut CudaDeviceBuffer,
+        scaled_trace: Option<&mut CudaDeviceBuffer>,
+        batch: crate::PackedBatchV1<'_>,
+        begin: usize,
+        requests: usize,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        const OP: &str = "CudaPreparedCublasGemmProbe::execute_hf_attention_chunk_wide";
+        let host = batch.host();
+        let (tokens, total) = exact_wide_decode_chunk_tokens(
+            host.row_positions(),
+            host.row_sequence_slots(),
+            begin,
+            requests,
+        )
+        .ok_or_else(|| {
+            CudaError::invalid_argument(
+                OP,
+                "distinct singleton slots, R2..32 and eachT1..512 required",
+            )
+        })?;
+        let sm80 = self.uses_sm80_paged_attention();
+        if sm80
+            && tokens[..requests]
+                .iter()
+                .any(|t| !self.supports_sm80_paged_attention(*t))
+        {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "unsupported SM80 native attention family",
+            ));
+        }
+        if self.poisoned
+            || self.config.m < 1
+            || self.config.k != 128
+            || tokens[..requests].iter().any(|t| *t > self.config.n)
+            || !self.supports_exact_decode_chunk()
+        {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "unqualified owned decode chunk",
+            ));
+        }
+        let physical = host.physical_block_count();
+        let q = requests as u64 * 32 * 128 * 2;
+        let pool = physical * 8 * 16 * 128 * 2;
+        let ids = batch.device_block_ids();
+        let slots = batch
+            .device_row_sequence_slots()
+            .subspan(begin as u64 * 4, requests as u64 * 4)?;
+        let offsets = batch.device_sequence_block_offsets();
+        let stream = execution_stream_mut(stream);
+        ensure_same_context(&self.context, &stream.context, OP)?;
+        for (span, dtype, n) in [
+            (query, CudaDType::BF16, q),
+            (key, CudaDType::BF16, pool),
+            (value, CudaDType::BF16, pool),
+            (ids, CudaDType::U32, host.block_ids().len() as u64 * 4),
+            (slots, CudaDType::U32, requests as u64 * 4),
+            (offsets, CudaDType::U32, (host.sequence_count() + 1) * 4),
+        ] {
+            ensure_same_context(&self.context, span.buffer().context_owner(), OP)?;
+            if span.dtype() != dtype || span.byte_len() != n {
+                return Err(CudaError::invalid_argument(
+                    OP,
+                    "decode chunk input geometry",
+                ));
+            }
+        }
+        ensure_same_context(&self.context, output.buffer().context_owner(), OP)?;
+        if output.dtype() != CudaDType::BF16 || output.byte_len() != q {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "decode chunk output geometry",
+            ));
+        }
+        let mut spans = [query.raw(); 12];
+        spans[1] = key.raw();
+        spans[2] = value.raw();
+        spans[3] = ids.raw();
+        spans[4] = output.raw();
+        spans[9] = slots.raw();
+        spans[10] = offsets.raw();
+        for (i, b) in scratch.iter_mut().enumerate() {
+            ensure_same_context(&self.context, b.context_owner(), OP)?;
+            let n = if i < 2 && !sm80 {
+                total * 32 * 128 * 2
+            } else {
+                total * 32 * 2
+            };
+            spans[5 + i] = CudaBufferSpan::new(b, CudaDType::BF16, 0, n)?.raw();
+        }
+        ensure_same_context(&self.context, workspace.context_owner(), OP)?;
+        spans[8] = CudaBufferSpan::new(workspace, CudaDType::U8, 0, 16777216)?.raw();
+        let span_count = if let Some(trace) = scaled_trace {
+            ensure_same_context(&self.context, trace.context_owner(), OP)?;
+            spans[11] = CudaBufferSpan::new(trace, CudaDType::F32, 0, total * 32 * 4)?.raw();
+            12
+        } else {
+            11
+        };
+        let result = self.native.attention_chunk_wide(
+            &spans,
+            span_count,
+            &tokens,
+            requests as u64,
+            physical,
+            host.sequence_count(),
+            host.block_ids().len() as u64,
+            &mut stream.native,
+        );
+        if result.is_err() {
+            self.poisoned = true;
+        }
+        result
     }
 
     /// Fixed-stride device-metadata attention for whole-body decode graphs.
     #[allow(clippy::too_many_arguments)]
-    pub fn execute_hf_attention_chunk_wide_dynamic<S:CudaExecutionStream+?Sized>(&mut self,query:CudaBufferSpan<'_>,key:CudaBufferSpan<'_>,value:CudaBufferSpan<'_>,output:CudaBufferSpanMut<'_>,scratch:&mut[CudaDeviceBuffer;3],workspace:&mut CudaDeviceBuffer,batch:crate::PackedBatchV1<'_>,begin:usize,requests:usize,stream:&mut S)->CudaResult<()> {
-        const OP:&str="CudaPreparedCublasGemmProbe::execute_hf_attention_chunk_wide_dynamic";
-        let host=batch.host();let (tokens,total)=exact_wide_decode_chunk_tokens(host.row_positions(),host.row_sequence_slots(),begin,requests).ok_or_else(||CudaError::invalid_argument(OP,"distinct singleton slots, R2..32 and eachT1..512 required"))?;
-        let sm80=self.uses_sm80_paged_attention();
-        if !sm80{return Err(CudaError::invalid_argument(OP,"dynamic route requires SM80 paged attention"));}
-        let total=requests as u64*512;
-        if sm80 && tokens[..requests].iter().any(|t|!self.supports_sm80_paged_attention(*t)){return Err(CudaError::invalid_argument(OP,"unsupported SM80 native attention family"));}
-        if self.poisoned || self.config.m<1 || self.config.k!=128 || tokens[..requests].iter().any(|t|*t>self.config.n) || !self.supports_exact_decode_chunk(){return Err(CudaError::invalid_argument(OP,"unqualified owned decode chunk"));}
-        let physical=host.physical_block_count();let q=requests as u64*32*128*2;let pool=physical*8*16*128*2;
-        let ids=batch.device_block_ids();let slots=batch.device_row_sequence_slots().subspan(begin as u64*4,requests as u64*4)?;let offsets=batch.device_sequence_block_offsets();
-        let stream=execution_stream_mut(stream);ensure_same_context(&self.context,&stream.context,OP)?;
-        for (span,dtype,n) in [(query,CudaDType::BF16,q),(key,CudaDType::BF16,pool),(value,CudaDType::BF16,pool),(ids,CudaDType::U32,host.block_ids().len() as u64*4),(slots,CudaDType::U32,requests as u64*4),(offsets,CudaDType::U32,(host.sequence_count()+1)*4)]{ensure_same_context(&self.context,span.buffer().context_owner(),OP)?;if span.dtype()!=dtype||span.byte_len()!=n{return Err(CudaError::invalid_argument(OP,"decode chunk input geometry"));}}
-        ensure_same_context(&self.context,output.buffer().context_owner(),OP)?;if output.dtype()!=CudaDType::BF16||output.byte_len()!=q{return Err(CudaError::invalid_argument(OP,"decode chunk output geometry"));}
-        let mut spans=[query.raw();12];spans[1]=key.raw();spans[2]=value.raw();spans[3]=ids.raw();spans[4]=output.raw();spans[9]=slots.raw();spans[10]=offsets.raw();
-        for (i,b) in scratch.iter_mut().enumerate(){ensure_same_context(&self.context,b.context_owner(),OP)?;let n=if i<2 && !sm80{total*32*128*2}else{total*32*2};spans[5+i]=CudaBufferSpan::new(b,CudaDType::BF16,0,n)?.raw();}
-        ensure_same_context(&self.context,workspace.context_owner(),OP)?;spans[8]=CudaBufferSpan::new(workspace,CudaDType::U8,0,16777216)?.raw();
-        let positions=batch.device_row_positions().subspan(begin as u64*4,requests as u64*4)?;
-        ensure_same_context(&self.context,positions.buffer().context_owner(),OP)?;
-        spans[11]=positions.raw();let span_count=12;
-        let result=self.native.attention_chunk_wide(&spans,span_count,&tokens,requests as u64,physical,host.sequence_count(),host.block_ids().len() as u64,&mut stream.native);if result.is_err(){self.poisoned=true;}result
+    pub fn execute_hf_attention_chunk_wide_dynamic<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        query: CudaBufferSpan<'_>,
+        key: CudaBufferSpan<'_>,
+        value: CudaBufferSpan<'_>,
+        output: CudaBufferSpanMut<'_>,
+        scratch: &mut [CudaDeviceBuffer; 3],
+        workspace: &mut CudaDeviceBuffer,
+        batch: crate::PackedBatchV1<'_>,
+        begin: usize,
+        requests: usize,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        const OP: &str = "CudaPreparedCublasGemmProbe::execute_hf_attention_chunk_wide_dynamic";
+        let host = batch.host();
+        let (tokens, total) = exact_wide_decode_chunk_tokens(
+            host.row_positions(),
+            host.row_sequence_slots(),
+            begin,
+            requests,
+        )
+        .ok_or_else(|| {
+            CudaError::invalid_argument(
+                OP,
+                "distinct singleton slots, R2..32 and eachT1..512 required",
+            )
+        })?;
+        let sm80 = self.uses_sm80_paged_attention();
+        if !sm80 {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "dynamic route requires SM80 paged attention",
+            ));
+        }
+        let total = requests as u64 * 512;
+        if sm80
+            && tokens[..requests]
+                .iter()
+                .any(|t| !self.supports_sm80_paged_attention(*t))
+        {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "unsupported SM80 native attention family",
+            ));
+        }
+        if self.poisoned
+            || self.config.m < 1
+            || self.config.k != 128
+            || tokens[..requests].iter().any(|t| *t > self.config.n)
+            || !self.supports_exact_decode_chunk()
+        {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "unqualified owned decode chunk",
+            ));
+        }
+        let physical = host.physical_block_count();
+        let q = requests as u64 * 32 * 128 * 2;
+        let pool = physical * 8 * 16 * 128 * 2;
+        let ids = batch.device_block_ids();
+        let slots = batch
+            .device_row_sequence_slots()
+            .subspan(begin as u64 * 4, requests as u64 * 4)?;
+        let offsets = batch.device_sequence_block_offsets();
+        let stream = execution_stream_mut(stream);
+        ensure_same_context(&self.context, &stream.context, OP)?;
+        for (span, dtype, n) in [
+            (query, CudaDType::BF16, q),
+            (key, CudaDType::BF16, pool),
+            (value, CudaDType::BF16, pool),
+            (ids, CudaDType::U32, host.block_ids().len() as u64 * 4),
+            (slots, CudaDType::U32, requests as u64 * 4),
+            (offsets, CudaDType::U32, (host.sequence_count() + 1) * 4),
+        ] {
+            ensure_same_context(&self.context, span.buffer().context_owner(), OP)?;
+            if span.dtype() != dtype || span.byte_len() != n {
+                return Err(CudaError::invalid_argument(
+                    OP,
+                    "decode chunk input geometry",
+                ));
+            }
+        }
+        ensure_same_context(&self.context, output.buffer().context_owner(), OP)?;
+        if output.dtype() != CudaDType::BF16 || output.byte_len() != q {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "decode chunk output geometry",
+            ));
+        }
+        let mut spans = [query.raw(); 12];
+        spans[1] = key.raw();
+        spans[2] = value.raw();
+        spans[3] = ids.raw();
+        spans[4] = output.raw();
+        spans[9] = slots.raw();
+        spans[10] = offsets.raw();
+        for (i, b) in scratch.iter_mut().enumerate() {
+            ensure_same_context(&self.context, b.context_owner(), OP)?;
+            let n = if i < 2 && !sm80 {
+                total * 32 * 128 * 2
+            } else {
+                total * 32 * 2
+            };
+            spans[5 + i] = CudaBufferSpan::new(b, CudaDType::BF16, 0, n)?.raw();
+        }
+        ensure_same_context(&self.context, workspace.context_owner(), OP)?;
+        spans[8] = CudaBufferSpan::new(workspace, CudaDType::U8, 0, 16777216)?.raw();
+        let positions = batch
+            .device_row_positions()
+            .subspan(begin as u64 * 4, requests as u64 * 4)?;
+        ensure_same_context(&self.context, positions.buffer().context_owner(), OP)?;
+        spans[11] = positions.raw();
+        let span_count = 12;
+        let result = self.native.attention_chunk_wide(
+            &spans,
+            span_count,
+            &tokens,
+            requests as u64,
+            physical,
+            host.sequence_count(),
+            host.block_ids().len() as u64,
+            &mut stream.native,
+        );
+        if result.is_err() {
+            self.poisoned = true;
+        }
+        result
     }
 
     /// Exact logical/storage contract fixed at cold prepare time.
@@ -2866,14 +3762,26 @@ mod tests {
     #[test]
     fn hf_bias_compute_type_reduction_is_explicit_and_does_not_relax_older_policies() {
         use CudaGemmReductionPolicy::*;
-        for split in [2,8,16] {
-            assert!(is_deterministic_reduction_configuration(HfCompatibleBiasSplitKV1,split,2));
-            for old in [StrictNoSplitV1,AllowOutputTypeSplitKV1,AllowInPlaceAndOutputTypeSplitKV1] {
-                assert!(!is_deterministic_reduction_configuration(old,split,2));
+        for split in [2, 8, 16] {
+            assert!(is_deterministic_reduction_configuration(
+                HfCompatibleBiasSplitKV1,
+                split,
+                2
+            ));
+            for old in [
+                StrictNoSplitV1,
+                AllowOutputTypeSplitKV1,
+                AllowInPlaceAndOutputTypeSplitKV1,
+            ] {
+                assert!(!is_deterministic_reduction_configuration(old, split, 2));
             }
         }
-        for (split,scheme) in [(1,2),(2,0),(8,3),(8,7)] {
-            assert!(!is_deterministic_reduction_configuration(HfCompatibleBiasSplitKV1,split,scheme));
+        for (split, scheme) in [(1, 2), (2, 0), (8, 3), (8, 7)] {
+            assert!(!is_deterministic_reduction_configuration(
+                HfCompatibleBiasSplitKV1,
+                split,
+                scheme
+            ));
         }
     }
 
@@ -2927,55 +3835,206 @@ mod tests {
     }
 }
 
-#[cfg(feature="cuda-cublas-gemm-probe")]
-fn hf_attention_geometry_valid(config:CudaGemmConfig,rows:u64,tokens:u64,physical:u64,qh:u64,kvh:u64,head_size:u64)->bool {
-    rows>0 && rows<=8192 && tokens>=rows && tokens<=9216 && physical>0 && physical<=u32::MAX as u64 && rows<=config.m && tokens<=config.n && matches!(head_size,64|128) && config.k==head_size && qh>0 && qh<=64 && kvh>0 && kvh<=qh && qh%kvh==0 && qh/kvh<=8
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+fn hf_attention_geometry_valid(
+    config: CudaGemmConfig,
+    rows: u64,
+    tokens: u64,
+    physical: u64,
+    qh: u64,
+    kvh: u64,
+    head_size: u64,
+) -> bool {
+    rows > 0
+        && rows <= 8192
+        && tokens >= rows
+        && tokens <= 9216
+        && physical > 0
+        && physical <= u32::MAX as u64
+        && rows <= config.m
+        && tokens <= config.n
+        && matches!(head_size, 64 | 128)
+        && config.k == head_size
+        && qh > 0
+        && qh <= 64
+        && kvh > 0
+        && kvh <= qh
+        && qh % kvh == 0
+        && qh / kvh <= 8
 }
-#[cfg(all(test,feature="cuda-cublas-gemm-probe"))]
+#[cfg(all(test, feature = "cuda-cublas-gemm-probe"))]
 mod hf_attention_contract_tests {
- use super::*;
- #[test]
- fn hf_attention_diagnostic_preflight_stops_at_cold_bounds() {
-  let c=CudaGemmConfig::new(512,528,64,16777216).unwrap();
-  for (m,t) in [(16,16),(128,128),(398,398),(1,149),(1,425),(512,528)] {assert!(hf_attention_geometry_valid(c,m,t,33,9,3,64));}
-  for (m,t,p) in [(0,1,33),(513,528,33),(512,511,33),(1,529,33),(1,1025,33),(1,1,0),(1,1,u32::MAX as u64+1)] {assert!(!hf_attention_geometry_valid(c,m,t,p,9,3,64));}
-  let c128=CudaGemmConfig::new(512,528,128,16777216).unwrap();
-  for (h,k) in [(16,2),(16,8),(32,8)] {assert!(hf_attention_geometry_valid(c128,397,525,33,h,k,128));}
-  for (h,k,d) in [(0,2,128),(65,8,128),(16,0,128),(17,2,128),(32,2,128),(16,8,96)] {assert!(!hf_attention_geometry_valid(c128,1,128,33,h,k,d));}
-  let long=CudaGemmConfig::new(8192,9216,128,16777216).unwrap();
-  for (m,t) in [(1,9216),(8192,8192),(8192,8704),(8192,9216)] {assert!(hf_attention_geometry_valid(long,m,t,576,32,8,128));}
-  for (m,t) in [(8193,9216),(8192,8191),(1,9217)] {assert!(!hf_attention_geometry_valid(long,m,t,576,32,8,128));}
-  let small=CudaGemmConfig::new(128,128,64,0).unwrap();assert!(!hf_attention_geometry_valid(small,129,129,33,9,3,64));assert!(!hf_attention_geometry_valid(small,1,129,33,9,3,64));
- }
+    use super::*;
+    #[test]
+    fn hf_attention_diagnostic_preflight_stops_at_cold_bounds() {
+        let c = CudaGemmConfig::new(512, 528, 64, 16777216).unwrap();
+        for (m, t) in [
+            (16, 16),
+            (128, 128),
+            (398, 398),
+            (1, 149),
+            (1, 425),
+            (512, 528),
+        ] {
+            assert!(hf_attention_geometry_valid(c, m, t, 33, 9, 3, 64));
+        }
+        for (m, t, p) in [
+            (0, 1, 33),
+            (513, 528, 33),
+            (512, 511, 33),
+            (1, 529, 33),
+            (1, 1025, 33),
+            (1, 1, 0),
+            (1, 1, u32::MAX as u64 + 1),
+        ] {
+            assert!(!hf_attention_geometry_valid(c, m, t, p, 9, 3, 64));
+        }
+        let c128 = CudaGemmConfig::new(512, 528, 128, 16777216).unwrap();
+        for (h, k) in [(16, 2), (16, 8), (32, 8)] {
+            assert!(hf_attention_geometry_valid(c128, 397, 525, 33, h, k, 128));
+        }
+        for (h, k, d) in [
+            (0, 2, 128),
+            (65, 8, 128),
+            (16, 0, 128),
+            (17, 2, 128),
+            (32, 2, 128),
+            (16, 8, 96),
+        ] {
+            assert!(!hf_attention_geometry_valid(c128, 1, 128, 33, h, k, d));
+        }
+        let long = CudaGemmConfig::new(8192, 9216, 128, 16777216).unwrap();
+        for (m, t) in [(1, 9216), (8192, 8192), (8192, 8704), (8192, 9216)] {
+            assert!(hf_attention_geometry_valid(long, m, t, 576, 32, 8, 128));
+        }
+        for (m, t) in [(8193, 9216), (8192, 8191), (1, 9217)] {
+            assert!(!hf_attention_geometry_valid(long, m, t, 576, 32, 8, 128));
+        }
+        let small = CudaGemmConfig::new(128, 128, 64, 0).unwrap();
+        assert!(!hf_attention_geometry_valid(small, 129, 129, 33, 9, 3, 64));
+        assert!(!hf_attention_geometry_valid(small, 1, 129, 33, 9, 3, 64));
+    }
 }
 
-fn exact_decode_chunk_tokens_bounded<const MAX:usize>(positions:&[u32],slots:&[u32],begin:usize,requests:usize)->Option<([u64;MAX],u64)>{
- if !(2..=MAX).contains(&requests)||positions.len()!=slots.len(){return None;}let end=begin.checked_add(requests)?;positions.get(begin..end)?;let mut tokens=[0;MAX];let mut total=0;
- for row in begin..end{let slot=slots[row];if (row>0&&slots[row-1]==slot)||(row+1<slots.len()&&slots[row+1]==slot)||slots[begin..row].contains(&slot){return None;}let t=u64::from(positions[row])+1;if t>512{return None;}tokens[row-begin]=t;total+=t;}
- Some((tokens,total))
+#[cfg(any(feature = "cuda", test))]
+fn exact_decode_chunk_tokens_bounded<const MAX: usize>(
+    positions: &[u32],
+    slots: &[u32],
+    begin: usize,
+    requests: usize,
+) -> Option<([u64; MAX], u64)> {
+    if !(2..=MAX).contains(&requests) || positions.len() != slots.len() {
+        return None;
+    }
+    let end = begin.checked_add(requests)?;
+    positions.get(begin..end)?;
+    let mut tokens = [0; MAX];
+    let mut total = 0;
+    for row in begin..end {
+        let slot = slots[row];
+        if (row > 0 && slots[row - 1] == slot)
+            || (row + 1 < slots.len() && slots[row + 1] == slot)
+            || slots[begin..row].contains(&slot)
+        {
+            return None;
+        }
+        let t = u64::from(positions[row]) + 1;
+        if t > 512 {
+            return None;
+        }
+        tokens[row - begin] = t;
+        total += t;
+    }
+    Some((tokens, total))
 }
-fn exact_decode_chunk_tokens(p:&[u32],s:&[u32],begin:usize,requests:usize)->Option<([u64;8],u64)>{exact_decode_chunk_tokens_bounded::<8>(p,s,begin,requests)}
-fn exact_wide_decode_chunk_tokens(p:&[u32],s:&[u32],begin:usize,requests:usize)->Option<([u64;32],u64)>{exact_decode_chunk_tokens_bounded::<32>(p,s,begin,requests)}
-#[cfg(test)]mod exact_decode_chunk_tests{
- use super::exact_decode_chunk_tokens as chunk;
- #[test]fn heterogeneous_singletons_and_prefill_boundaries(){
-  let slots=[0,1,2,3,4,5,6,7];let p=[0,1,14,31,127,256,510,511];let (ts,total)=chunk(&p,&slots,0,8).unwrap();assert_eq!(ts,[1,2,15,32,128,257,511,512]);assert_eq!(total,1458);assert!(chunk(&p,&slots,0,1).is_none());assert!(chunk(&p,&slots,0,9).is_none());assert!(chunk(&p,&slots,usize::MAX,2).is_none());assert!(chunk(&[512;8],&slots,0,2).is_none());assert!(chunk(&p,&slots[..7],0,2).is_none());
-  let repeated=[0,0,1,2,3,4,5,6];assert!(chunk(&p,&repeated,0,2).is_none());assert!(chunk(&p,&repeated,1,2).is_none());assert!(chunk(&p,&repeated,2,2).is_some());
- }
+#[cfg(any(feature = "cuda", test))]
+fn exact_decode_chunk_tokens(
+    p: &[u32],
+    s: &[u32],
+    begin: usize,
+    requests: usize,
+) -> Option<([u64; 8], u64)> {
+    exact_decode_chunk_tokens_bounded::<8>(p, s, begin, requests)
+}
+#[cfg(any(feature = "cuda", test))]
+fn exact_wide_decode_chunk_tokens(
+    p: &[u32],
+    s: &[u32],
+    begin: usize,
+    requests: usize,
+) -> Option<([u64; 32], u64)> {
+    exact_decode_chunk_tokens_bounded::<32>(p, s, begin, requests)
+}
+#[cfg(test)]
+mod exact_decode_chunk_tests {
+    use super::exact_decode_chunk_tokens as chunk;
+    #[test]
+    fn heterogeneous_singletons_and_prefill_boundaries() {
+        let slots = [0, 1, 2, 3, 4, 5, 6, 7];
+        let p = [0, 1, 14, 31, 127, 256, 510, 511];
+        let (ts, total) = chunk(&p, &slots, 0, 8).unwrap();
+        assert_eq!(ts, [1, 2, 15, 32, 128, 257, 511, 512]);
+        assert_eq!(total, 1458);
+        assert!(chunk(&p, &slots, 0, 1).is_none());
+        assert!(chunk(&p, &slots, 0, 9).is_none());
+        assert!(chunk(&p, &slots, usize::MAX, 2).is_none());
+        assert!(chunk(&[512; 8], &slots, 0, 2).is_none());
+        assert!(chunk(&p, &slots[..7], 0, 2).is_none());
+        let repeated = [0, 0, 1, 2, 3, 4, 5, 6];
+        assert!(chunk(&p, &repeated, 0, 2).is_none());
+        assert!(chunk(&p, &repeated, 1, 2).is_none());
+        assert!(chunk(&p, &repeated, 2, 2).is_some());
+    }
 }
 
-#[cfg(test)]mod exact_wide_decode_chunk_tests{
- use super::{exact_wide_decode_chunk_tokens as chunk,exact_decode_chunk_tokens as legacy};
- #[test]fn all_counts_and_nonzero_offsets_preserve_tails(){
-  let slots=(0u32..40).collect::<Vec<_>>();let p=(0u32..40).map(|i|i*13%512).collect::<Vec<_>>();
-  for count in 2..=32{for begin in 0..=40-count{let(ts,total)=chunk(&p,&slots,begin,count).unwrap();assert_eq!(&ts[..count],&p[begin..begin+count].iter().map(|x|u64::from(*x)+1).collect::<Vec<_>>());assert_eq!(total,ts[..count].iter().sum::<u64>());assert!(ts[count..].iter().all(|x|*x==0));}}
-  assert!(legacy(&p,&slots,0,9).is_none());
- }
- #[test]fn prefill_and_duplicate_slots_rejected_at_every_boundary(){
-  let p=vec![511;40];let mut slots=(0u32..40).collect::<Vec<_>>();slots[0]=slots[1];assert!(chunk(&p,&slots,1,32).is_none());slots[0]=0;slots[34]=slots[33];assert!(chunk(&p,&slots,2,32).is_none());slots[34]=34;slots[16]=slots[2];assert!(chunk(&p,&slots,2,32).is_none());
- }
- #[test]fn wide_limits_overflow_and_maximum_total_checked(){
-  let p=vec![511;32];let s=(0u32..32).collect::<Vec<_>>();let(ts,total)=chunk(&p,&s,0,32).unwrap();assert_eq!(ts,[512;32]);assert_eq!(total,16384);
-  for count in [0,1,33,usize::MAX]{assert!(chunk(&p,&s,0,count).is_none());}assert!(chunk(&p,&s,usize::MAX,2).is_none());assert!(chunk(&p,&s[..31],0,2).is_none());assert!(chunk(&[512;32],&s,0,2).is_none());
- }
+#[cfg(test)]
+mod exact_wide_decode_chunk_tests {
+    use super::{exact_decode_chunk_tokens as legacy, exact_wide_decode_chunk_tokens as chunk};
+    #[test]
+    fn all_counts_and_nonzero_offsets_preserve_tails() {
+        let slots = (0u32..40).collect::<Vec<_>>();
+        let p = (0u32..40).map(|i| i * 13 % 512).collect::<Vec<_>>();
+        for count in 2..=32 {
+            for begin in 0..=40 - count {
+                let (ts, total) = chunk(&p, &slots, begin, count).unwrap();
+                assert_eq!(
+                    &ts[..count],
+                    &p[begin..begin + count]
+                        .iter()
+                        .map(|x| u64::from(*x) + 1)
+                        .collect::<Vec<_>>()
+                );
+                assert_eq!(total, ts[..count].iter().sum::<u64>());
+                assert!(ts[count..].iter().all(|x| *x == 0));
+            }
+        }
+        assert!(legacy(&p, &slots, 0, 9).is_none());
+    }
+    #[test]
+    fn prefill_and_duplicate_slots_rejected_at_every_boundary() {
+        let p = vec![511; 40];
+        let mut slots = (0u32..40).collect::<Vec<_>>();
+        slots[0] = slots[1];
+        assert!(chunk(&p, &slots, 1, 32).is_none());
+        slots[0] = 0;
+        slots[34] = slots[33];
+        assert!(chunk(&p, &slots, 2, 32).is_none());
+        slots[34] = 34;
+        slots[16] = slots[2];
+        assert!(chunk(&p, &slots, 2, 32).is_none());
+    }
+    #[test]
+    fn wide_limits_overflow_and_maximum_total_checked() {
+        let p = vec![511; 32];
+        let s = (0u32..32).collect::<Vec<_>>();
+        let (ts, total) = chunk(&p, &s, 0, 32).unwrap();
+        assert_eq!(ts, [512; 32]);
+        assert_eq!(total, 16384);
+        for count in [0, 1, 33, usize::MAX] {
+            assert!(chunk(&p, &s, 0, count).is_none());
+        }
+        assert!(chunk(&p, &s, usize::MAX, 2).is_none());
+        assert!(chunk(&p, &s[..31], 0, 2).is_none());
+        assert!(chunk(&[512; 32], &s, 0, 2).is_none());
+    }
 }

@@ -303,7 +303,10 @@ fn run(
     ] {
         buffer.close()?;
     }
-    Ok(bytes.chunks_exact(row_width * 2).map(<[u8]>::to_vec).collect())
+    Ok(bytes
+        .chunks_exact(row_width * 2)
+        .map(<[u8]>::to_vec)
+        .collect())
 }
 
 fn rows(sequence: u32, positions: impl IntoIterator<Item = u32>) -> Vec<Row> {
@@ -420,9 +423,23 @@ fn check_geometry(
     let mut compared = 0_usize;
     for (name, rows, prompt_kinds) in cases {
         set_native_d128_fused_decode_min_rows(0);
-        let two_kernel = run(&context, &mut stream, &mut staging, &pools, rows, prompt_kinds)?;
+        let two_kernel = run(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pools,
+            rows,
+            prompt_kinds,
+        )?;
         set_native_d128_fused_decode_min_rows(1);
-        let fused = run(&context, &mut stream, &mut staging, &pools, rows, prompt_kinds)?;
+        let fused = run(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pools,
+            rows,
+            prompt_kinds,
+        )?;
         assert_eq!(two_kernel.len(), fused.len());
         for (index, (left, right)) in two_kernel.iter().zip(&fused).enumerate() {
             assert_eq!(

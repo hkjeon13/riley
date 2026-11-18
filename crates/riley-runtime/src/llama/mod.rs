@@ -18,8 +18,6 @@ mod executor;
 #[cfg(any(feature = "cuda", test))]
 mod forward;
 #[cfg(any(feature = "cuda", test))]
-mod tensor_parallel;
-#[cfg(any(feature = "cuda", test))]
 mod gemm_policy;
 #[cfg(feature = "cuda")]
 mod generation;
@@ -99,6 +97,8 @@ mod graph_registry_dispatch;
 mod plan;
 #[cfg(any(feature = "cuda", test))]
 mod reduction_profile;
+#[cfg(any(feature = "cuda", test))]
+mod tensor_parallel;
 
 pub use batch::{
     LLAMA_BATCH_METADATA_V1_VERSION, LLAMA_BATCH_NO_OUTPUT_SLOT, LlamaBatchBlockTable,

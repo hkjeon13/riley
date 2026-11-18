@@ -522,6 +522,8 @@ impl LlamaKvCachePolicy {
 
 /// Cold-path settings for one fixed-prompt decode owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+// Independent cold-validated execution switches are not one state enum.
+#[allow(clippy::struct_excessive_bools)]
 pub struct PreparedLlamaDecodeConfig {
     forward: PreparedLlamaForwardConfig,
     decode_attention_preference: DecodeAttentionPreference,
@@ -1743,7 +1745,7 @@ enum LatestOutput {
 ///
 /// The owner records exactly the same one-token boundaries as the offline HF
 /// artifact: the embedding, every boundary in one caller-selected decoder
-/// layer, every decoder residual output, final RMSNorm, and logits. Normal
+/// layer, every decoder residual output, final `RMSNorm`, and logits. Normal
 /// decode neither allocates it nor performs these synchronized D2H copies.
 pub struct PreparedLlamaDecodeM1Trace {
     embedding: Box<[u8]>,
@@ -1833,7 +1835,7 @@ impl PreparedLlamaDecodeM1Trace {
         self.layer_outputs.layer_residual_output(layer_index)
     }
 
-    /// Captured final RMSNorm M1 row.
+    /// Captured final `RMSNorm` M1 row.
     #[must_use]
     pub fn final_norm_output(&self) -> Option<&[u8]> {
         self.layer_outputs.final_norm_output()
@@ -2156,6 +2158,8 @@ fn capture_hf_eager_qwen_p2048_cache_on_m1_logits(
 }
 
 /// Owning fixed-prompt, fixed-capacity single-request decode executor.
+// Independent cold-validated execution switches are not one state enum.
+#[allow(clippy::struct_excessive_bools)]
 pub struct PreparedLlamaDecode {
     forward: PreparedLlamaForward,
     gemms: DecodeGemmPlans,
@@ -3102,6 +3106,8 @@ impl PreparedLlamaDecode {
         clippy::cast_precision_loss,
         clippy::similar_names
     )]
+    // Retain symmetric diagnostic branches and their existing trace scope.
+    #[allow(clippy::redundant_else)]
     fn execute_decode_inner<const M1_TRACE: bool>(
         &mut self,
         position: usize,
@@ -3113,6 +3119,8 @@ impl PreparedLlamaDecode {
             self.hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate;
         let hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate =
             self.hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate;
+        #[cfg(not(feature = "cuda"))]
+        let _ = &hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate;
         let forward = &mut self.forward;
         let rms_norm_profile = forward.rms_norm_profile();
         let plan = &forward.plan;

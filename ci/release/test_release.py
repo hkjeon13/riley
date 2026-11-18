@@ -54,7 +54,7 @@ assert set(DEPENDENCIES) <= ALLOWED_NATIVE_DEPENDENCIES
 
 def install_reviewed_server_defaults_source(repository_root: Path) -> Path:
     """Install the exact reviewed Rust defaults source in a fixture repository."""
-    source = REPOSITORY_ROOT / SERVER_DEFAULTS_SOURCE_PATH
+    source = REPOSITORY_ROOT / "ci/release/fixtures/legacy-server-defaults-21f445f.rs.txt"
     destination = repository_root / SERVER_DEFAULTS_SOURCE_PATH
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(source.read_bytes())
@@ -541,14 +541,18 @@ class ReleaseBundleTests(unittest.TestCase):
             manifest["rollback"]["previous_release_scope"],
         )
 
-    def test_checked_in_server_defaults_contract_pin_matches_source(self) -> None:
-        source = REPOSITORY_ROOT / SERVER_DEFAULTS_SOURCE_PATH
+    def test_legacy_defaults_contract_pin_matches_reviewed_fixture(self) -> None:
+        source = REPOSITORY_ROOT / "ci/release/fixtures/legacy-server-defaults-21f445f.rs.txt"
         self.assertEqual(
             hashlib.sha256(source.read_bytes()).hexdigest(),
             SERVER_DEFAULTS_SOURCE_SHA256,
             "changing reviewed server defaults requires an explicit "
             "release-contract pin update",
         )
+
+    def test_modern_cli_cannot_be_bundled_under_legacy_rc_metadata(self) -> None:
+        with self.assertRaisesRegex(ReleaseContractError, "defaults changed"):
+            release_common.validate_server_defaults_source(REPOSITORY_ROOT)
 
     def test_fixed37_cannot_be_promoted_by_manifest_tampering(self) -> None:
         source = self.build("fixed37-source.tar.gz")

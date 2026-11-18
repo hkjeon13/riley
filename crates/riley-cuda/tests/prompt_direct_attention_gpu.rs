@@ -308,7 +308,10 @@ fn run(
     ] {
         buffer.close()?;
     }
-    Ok(bytes.chunks_exact(row_width * 2).map(<[u8]>::to_vec).collect())
+    Ok(bytes
+        .chunks_exact(row_width * 2)
+        .map(<[u8]>::to_vec)
+        .collect())
 }
 
 fn rows(sequence: u32, positions: impl IntoIterator<Item = u32>) -> Vec<Row> {
@@ -342,8 +345,19 @@ fn run_kinds(
 ) -> TestResult<(std::collections::HashMap<Row, Vec<u8>>, Vec<Vec<u8>>)> {
     let addresses: Vec<Row> = rows.iter().map(|(row, _)| *row).collect();
     let kinds: Vec<u32> = rows.iter().map(|(_, kind)| *kind).collect();
-    let output = run(context, stream, staging, pools, &addresses, Some((&kinds, with_list)))?;
-    let by_row = addresses.iter().copied().zip(output.iter().cloned()).collect();
+    let output = run(
+        context,
+        stream,
+        staging,
+        pools,
+        &addresses,
+        Some((&kinds, with_list)),
+    )?;
+    let by_row = addresses
+        .iter()
+        .copied()
+        .zip(output.iter().cloned())
+        .collect();
     Ok((by_row, output[rows.len()..].to_vec()))
 }
 
@@ -371,15 +385,33 @@ fn check_geometry(
         heads,
         pages_per_sequence,
         page_capacity,
-        key_pool: upload(&context, &mut stream, &mut staging, &pattern(pool_elements, 5, 3, 31, 10.0))?,
-        value_pool: upload(&context, &mut stream, &mut staging, &pattern(pool_elements, 13, 9, 37, 24.0))?,
-        offsets: upload(&context, &mut stream, &mut staging, &encode_u32(&sequence_block_offsets))?,
+        key_pool: upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pattern(pool_elements, 5, 3, 31, 10.0),
+        )?,
+        value_pool: upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pattern(pool_elements, 13, 9, 37, 24.0),
+        )?,
+        offsets: upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &encode_u32(&sequence_block_offsets),
+        )?,
         ids: upload(&context, &mut stream, &mut staging, &encode_u32(&block_ids))?,
         valid: upload(
             &context,
             &mut stream,
             &mut staging,
-            &valid_tokens.iter().flat_map(|value| value.to_ne_bytes()).collect::<Vec<u8>>(),
+            &valid_tokens
+                .iter()
+                .flat_map(|value| value.to_ne_bytes())
+                .collect::<Vec<u8>>(),
         )?,
         sequence_block_offsets,
         block_ids,
@@ -388,10 +420,15 @@ fn check_geometry(
 
     let last = (pages_per_sequence * PAGE_SIZE - 1) as u32;
     let prompt = |sequence: u32, positions: std::ops::Range<u32>| -> Vec<(Row, u32)> {
-        positions.map(|position| (Row { sequence, position }, 1)).collect()
+        positions
+            .map(|position| (Row { sequence, position }, 1))
+            .collect()
     };
     let decode = |sequence: u32, positions: &[u32]| -> Vec<(Row, u32)> {
-        positions.iter().map(|&position| (Row { sequence, position }, 0)).collect()
+        positions
+            .iter()
+            .map(|&position| (Row { sequence, position }, 0))
+            .collect()
     };
     // Prompt runs: from position 0, crossing pages and tiles, a long late
     // run, and a short one; decode rows of other sequences in between.
@@ -399,17 +436,38 @@ fn check_geometry(
     let run_b = prompt(1, 60..101);
     let run_c = prompt(2, last - 40..last + 1);
     let run_d = prompt(3, 15..18);
-    let decodes = [decode(4, &[0, 15, 16, 255, last]), decode(5, &[64, 127, 300])].concat();
+    let decodes = [
+        decode(4, &[0, 15, 16, 255, last]),
+        decode(5, &[64, 127, 300]),
+    ]
+    .concat();
     let mut reference = Vec::new();
     for part in [&run_a, &decodes[..3], &run_b, &run_c, &decodes[3..], &run_d] {
         reference.extend_from_slice(part);
     }
 
     set_native_d128_prompt_direct(0);
-    let (segment_path, _) = run_kinds(&context, &mut stream, &mut staging, &pools, &reference, true)?;
+    let (segment_path, _) = run_kinds(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &reference,
+        true,
+    )?;
     set_native_d128_prompt_direct(1);
-    let (direct, padding) = run_kinds(&context, &mut stream, &mut staging, &pools, &reference, true)?;
-    assert!(padding.iter().flatten().all(|byte| *byte == 0), "padding rows must be zeros");
+    let (direct, padding) = run_kinds(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &reference,
+        true,
+    )?;
+    assert!(
+        padding.iter().flatten().all(|byte| *byte == 0),
+        "padding rows must be zeros"
+    );
 
     let mut checked = 0_usize;
     // Other orders, tile alignments (1..3 leading decode rows), with and
@@ -423,9 +481,19 @@ fn check_geometry(
     };
     for (lead, with_list) in [(1, false), (2, true), (3, false)] {
         let rows = shifted(lead);
-        let (output, _) = run_kinds(&context, &mut stream, &mut staging, &pools, &rows, with_list)?;
+        let (output, _) = run_kinds(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pools,
+            &rows,
+            with_list,
+        )?;
         for (row, _) in &rows {
-            assert_eq!(output[row], direct[row], "{row:?}: output depends on order or alignment");
+            assert_eq!(
+                output[row], direct[row],
+                "{row:?}: output depends on order or alignment"
+            );
             checked += 1;
         }
     }
@@ -434,14 +502,20 @@ fn check_geometry(
     for run_rows in [&run_a, &run_b, &run_c, &run_d] {
         let (output, _) = run_kinds(&context, &mut stream, &mut staging, &pools, run_rows, false)?;
         for (row, _) in run_rows.iter() {
-            assert_eq!(output[row], direct[row], "{row:?}: output depends on neighbours");
+            assert_eq!(
+                output[row], direct[row],
+                "{row:?}: output depends on neighbours"
+            );
             checked += 1;
         }
     }
     for chunk in [&run_a[..5], &run_a[5..21], &run_a[21..]] {
         let (output, _) = run_kinds(&context, &mut stream, &mut staging, &pools, chunk, false)?;
         for (row, _) in chunk {
-            assert_eq!(output[row], direct[row], "{row:?}: output depends on the chunk");
+            assert_eq!(
+                output[row], direct[row],
+                "{row:?}: output depends on the chunk"
+            );
             checked += 1;
         }
     }
@@ -451,27 +525,49 @@ fn check_geometry(
     let mut worst = 0.0_f32;
     for (row, kind) in &reference {
         if *kind == 0 {
-            assert_eq!(direct[row], segment_path[row], "{row:?}: decode row changed");
+            assert_eq!(
+                direct[row], segment_path[row],
+                "{row:?}: decode row changed"
+            );
             continue;
         }
-        for (a, b) in direct[row].chunks_exact(2).zip(segment_path[row].chunks_exact(2)) {
+        for (a, b) in direct[row]
+            .chunks_exact(2)
+            .zip(segment_path[row].chunks_exact(2))
+        {
             let x = bf16_value(u16::from_ne_bytes([a[0], a[1]]));
             let y = bf16_value(u16::from_ne_bytes([b[0], b[1]]));
-            assert!(x.is_finite() && y.is_finite(), "non-finite attention output");
+            assert!(
+                x.is_finite() && y.is_finite(),
+                "non-finite attention output"
+            );
             worst = worst.max((x - y).abs());
             elements += 1;
             identical += usize::from(a == b);
         }
     }
-    assert!(worst <= 0.03125, "the direct path differs from the segment path by {worst}");
+    assert!(
+        worst <= 0.03125,
+        "the direct path differs from the segment path by {worst}"
+    );
 
     // Hybrid: prompt rows within HYBRID_PAGES pages of their own context are
     // direct, longer ones keep the segment path, decided per row; the result
     // must not depend on the batch either.
     const HYBRID_PAGES: u32 = 4;
     set_native_d128_prompt_direct_max_pages(u64::from(HYBRID_PAGES));
-    let (hybrid, padding) = run_kinds(&context, &mut stream, &mut staging, &pools, &reference, true)?;
-    assert!(padding.iter().flatten().all(|byte| *byte == 0), "padding rows must be zeros");
+    let (hybrid, padding) = run_kinds(
+        &context,
+        &mut stream,
+        &mut staging,
+        &pools,
+        &reference,
+        true,
+    )?;
+    assert!(
+        padding.iter().flatten().all(|byte| *byte == 0),
+        "padding rows must be zeros"
+    );
     let (mut short_rows, mut long_rows) = (0_usize, 0_usize);
     for (row, kind) in &reference {
         let expected = if *kind == 0 {
@@ -483,21 +579,40 @@ fn check_geometry(
             long_rows += 1;
             &segment_path[row]
         };
-        assert_eq!(&hybrid[row], expected, "{row:?}: hybrid row took the wrong path");
+        assert_eq!(
+            &hybrid[row], expected,
+            "{row:?}: hybrid row took the wrong path"
+        );
     }
-    assert!(short_rows > 0 && long_rows > 0, "the hybrid check needs both row classes");
+    assert!(
+        short_rows > 0 && long_rows > 0,
+        "the hybrid check needs both row classes"
+    );
     for (lead, with_list) in [(1, true), (3, false)] {
         let rows = shifted(lead);
-        let (output, _) = run_kinds(&context, &mut stream, &mut staging, &pools, &rows, with_list)?;
+        let (output, _) = run_kinds(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pools,
+            &rows,
+            with_list,
+        )?;
         for (row, _) in &rows {
-            assert_eq!(output[row], hybrid[row], "{row:?}: hybrid output depends on order");
+            assert_eq!(
+                output[row], hybrid[row],
+                "{row:?}: hybrid output depends on order"
+            );
             checked += 1;
         }
     }
     for chunk in [&run_a[..5], &run_a[5..21], &run_a[21..]] {
         let (output, _) = run_kinds(&context, &mut stream, &mut staging, &pools, chunk, false)?;
         for (row, _) in chunk {
-            assert_eq!(output[row], hybrid[row], "{row:?}: hybrid output depends on the chunk");
+            assert_eq!(
+                output[row], hybrid[row],
+                "{row:?}: hybrid output depends on the chunk"
+            );
             checked += 1;
         }
     }

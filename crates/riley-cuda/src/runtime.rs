@@ -477,16 +477,22 @@ impl CudaContext {
 #[derive(Clone, Debug)]
 pub(crate) struct CudaResourceIdentity(Arc<()>);
 impl CudaResourceIdentity {
-    pub(crate) fn new() -> Self { Self(Arc::new(())) }
+    #[cfg(feature = "cuda")]
+    pub(crate) fn new() -> Self {
+        Self(Arc::new(()))
+    }
 }
 impl PartialEq for CudaResourceIdentity {
-    fn eq(&self, other:&Self)->bool { Arc::ptr_eq(&self.0,&other.0) }
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 impl Eq for CudaResourceIdentity {}
 impl std::hash::Hash for CudaResourceIdentity {
-    fn hash<H:std::hash::Hasher>(&self,state:&mut H){std::ptr::hash(Arc::as_ptr(&self.0),state);}
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::ptr::hash(Arc::as_ptr(&self.0), state);
+    }
 }
-
 
 /// Explicit non-default CUDA stream.
 ///
@@ -499,6 +505,8 @@ impl std::hash::Hash for CudaResourceIdentity {
 /// assert_sync::<riley_cuda::CudaStream>();
 /// ```
 pub struct CudaStream {
+    // Identity is read by the explicit owned-HF CUDA probe only.
+    #[cfg_attr(not(feature = "cuda-cublas-gemm-probe"), allow(dead_code))]
     pub(crate) identity: CudaResourceIdentity,
     #[cfg(feature = "cuda")]
     pub(crate) native: ffi::StreamHandle,

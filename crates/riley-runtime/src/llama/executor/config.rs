@@ -117,13 +117,22 @@ pub(in crate::llama) const fn ragged_attention_implementation_id(
     ) {
         return RAGGED_PAGED_ATTENTION_NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_V2;
     }
-    if matches!(implementation,RaggedAttentionImplementation::OwnedHfEagerBf16V1) {
+    if matches!(
+        implementation,
+        RaggedAttentionImplementation::OwnedHfEagerBf16V1
+    ) {
         return "riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1";
     }
-    if matches!(implementation,RaggedAttentionImplementation::MaterializedBf16ReferenceD128) {
+    if matches!(
+        implementation,
+        RaggedAttentionImplementation::MaterializedBf16ReferenceD128
+    ) {
         return "riley.cuda.ragged-paged-attention.materialized-bf16-reference.d128.v1";
     }
-    if matches!(implementation,RaggedAttentionImplementation::MaterializedBf16ReferenceD64) {
+    if matches!(
+        implementation,
+        RaggedAttentionImplementation::MaterializedBf16ReferenceD64
+    ) {
         return "riley.cuda.ragged-paged-attention.materialized-bf16-reference.d64.v1";
     }
     match (profile, implementation) {
@@ -137,9 +146,18 @@ pub(in crate::llama) const fn ragged_attention_implementation_id(
             AttentionReductionProfile::CanonicalV1,
             RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage,
         ) => RAGGED_PAGED_ATTENTION_NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_V2,
-        (AttentionReductionProfile::CanonicalV1,RaggedAttentionImplementation::MaterializedBf16ReferenceD128) => "riley.cuda.ragged-paged-attention.materialized-bf16-reference.d128.v1",
-        (AttentionReductionProfile::CanonicalV1,RaggedAttentionImplementation::MaterializedBf16ReferenceD64) => "riley.cuda.ragged-paged-attention.materialized-bf16-reference.d64.v1",
-        (AttentionReductionProfile::CanonicalV1,RaggedAttentionImplementation::OwnedHfEagerBf16V1) => "riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1",
+        (
+            AttentionReductionProfile::CanonicalV1,
+            RaggedAttentionImplementation::MaterializedBf16ReferenceD128,
+        ) => "riley.cuda.ragged-paged-attention.materialized-bf16-reference.d128.v1",
+        (
+            AttentionReductionProfile::CanonicalV1,
+            RaggedAttentionImplementation::MaterializedBf16ReferenceD64,
+        ) => "riley.cuda.ragged-paged-attention.materialized-bf16-reference.d64.v1",
+        (
+            AttentionReductionProfile::CanonicalV1,
+            RaggedAttentionImplementation::OwnedHfEagerBf16V1,
+        ) => "riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1",
         (AttentionReductionProfile::FixedContiguous37BalancedV1, _) => {
             RAGGED_PAGED_ATTENTION_FIXED37_TWO_PASS_D64_S8192_V1
         }
@@ -157,6 +175,8 @@ pub(in crate::llama) const fn runtime_selection_policy_id(
 
 /// Cold bounds and shape policy for one reusable continuous-batch owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+// Independent cold-validated execution switches are not one state enum.
+#[allow(clippy::struct_excessive_bools)]
 pub struct PreparedLlamaBatchExecutorConfig {
     metadata: LlamaBatchMetadataConfig,
     forward: PreparedLlamaForwardConfig,
@@ -228,9 +248,14 @@ impl PreparedLlamaBatchExecutorConfig {
 
     /// Enables bounded MLP-only graphs for independent M1 decode rows.
     #[must_use]
-    pub const fn with_owned_mlp_graphs(mut self)->Self { self.owned_mlp_graphs=true;self }
+    pub const fn with_owned_mlp_graphs(mut self) -> Self {
+        self.owned_mlp_graphs = true;
+        self
+    }
     #[must_use]
-    pub const fn owned_mlp_graphs(self)->bool { self.owned_mlp_graphs }
+    pub const fn owned_mlp_graphs(self) -> bool {
+        self.owned_mlp_graphs
+    }
 
     /// Records the first pure-decode step of each dense-row shape as a CUDA
     /// graph and replays it for later pure-decode steps that fill the same
@@ -252,7 +277,9 @@ impl PreparedLlamaBatchExecutorConfig {
     }
 
     #[must_use]
-    pub const fn owned_decode_graph(self) -> bool { self.owned_decode_graph }
+    pub const fn owned_decode_graph(self) -> bool {
+        self.owned_decode_graph
+    }
 
     /// Submits unchanged M=1 cuBLAS calls under one native validation/lease scope.
     #[must_use]
@@ -261,44 +288,69 @@ impl PreparedLlamaBatchExecutorConfig {
         self
     }
     #[must_use]
-    pub const fn owned_decode_batch(self) -> u8 { self.owned_decode_batch }
+    pub const fn owned_decode_batch(self) -> u8 {
+        self.owned_decode_batch
+    }
 
     /// Experimental bounded Qwen Gate/Up row coalescing; independent byte gates required.
     #[must_use]
     pub const fn with_owned_mlp_decode_batch(mut self) -> Self {
-        self.owned_decode_batch=2;
+        self.owned_decode_batch = 2;
         self
     }
 
     /// Q4 SM89 exact R2 Gate/Up plus once-validated request boundaries.
     #[must_use]
-    pub const fn with_exact_r2_decode_batch(mut self)->Self{self.owned_decode_batch=3;self}
+    pub const fn with_exact_r2_decode_batch(mut self) -> Self {
+        self.owned_decode_batch = 3;
+        self
+    }
 
     /// Opt-in SM89 Q4 R2 Down/attention-output global-load kernels for at most2
     /// simultaneous sequences. Preserves
     /// eager BF16 arithmetic; throughput and first-token latency are qualified
     /// separately. Existing mode3 and ordinary modes retain their algorithms.
     #[must_use]
-    pub const fn with_exact_r2_global_decode_batch(mut self)->Self{self.owned_decode_batch=4;self}
-
+    pub const fn with_exact_r2_global_decode_batch(mut self) -> Self {
+        self.owned_decode_batch = 4;
+        self
+    }
 
     /// Opt-in SM89 Qwen3-4B/Mistral small-row kernels and private per-actual-row
     /// layer Graph keys, bounded to 32 sequences. Keeps eager arithmetic; first
     /// token and streaming latency tradeoffs are measured separately.
     #[must_use]
-    pub const fn with_exact_smallrows_decode_batch(mut self)->Self{self.owned_decode_batch=5;self}
+    pub const fn with_exact_smallrows_decode_batch(mut self) -> Self {
+        self.owned_decode_batch = 5;
+        self
+    }
     /// Explicit SM80-only Gate/Up row batches, each native GEMM bounded to16 rows.
     /// Unknown environments and model geometries are rejected during preparation.
-    pub const fn with_bounded_sm80_gateup_batch(mut self)->Self{self.owned_decode_batch=6;self}
+    pub const fn with_bounded_sm80_gateup_batch(mut self) -> Self {
+        self.owned_decode_batch = 6;
+        self
+    }
     #[must_use]
-    pub const fn with_bounded_sm80_projection_batch(mut self)->Self{self.owned_decode_batch=7;self}
+    pub const fn with_bounded_sm80_projection_batch(mut self) -> Self {
+        self.owned_decode_batch = 7;
+        self
+    }
     /// Explicit SM80 Qwen projection batching plus native-order strided K/V reuse.
     #[must_use]
-    pub const fn with_bounded_sm80_projection_kv_batch(mut self)->Self{self.owned_decode_batch=8;self}
+    pub const fn with_bounded_sm80_projection_kv_batch(mut self) -> Self {
+        self.owned_decode_batch = 8;
+        self
+    }
     /// Explicit native-order projections with vector GQA staging and fused decode scaling.
-    pub const fn with_bounded_sm80_attention_batch(mut self)->Self{self.owned_decode_batch=9;self}
+    pub const fn with_bounded_sm80_attention_batch(mut self) -> Self {
+        self.owned_decode_batch = 9;
+        self
+    }
     /// Native-equivalent contiguous prefill row batches on qualified SM80 geometry.
-    pub const fn with_bounded_sm80_prefill_batch(mut self)->Self{self.owned_decode_batch=10;self}
+    pub const fn with_bounded_sm80_prefill_batch(mut self) -> Self {
+        self.owned_decode_batch = 10;
+        self
+    }
 
     /// Stages an iteration's token and metadata bytes in one pinned buffer
     /// and copies them to their device buffers inside the iteration's command
@@ -409,7 +461,7 @@ impl PreparedLlamaBatchExecutorConfig {
     }
 
     /// Runs the MLP activation and gate multiply as one BF16 kernel. The
-    /// result is bit-identical to the separate SiLU and multiply kernels.
+    /// result is bit-identical to the separate `SiLU` and multiply kernels.
     #[must_use]
     pub const fn with_fused_silu_multiply(mut self) -> Self {
         self.fused_silu_multiply = true;
@@ -507,7 +559,7 @@ impl PreparedLlamaBatchExecutorConfig {
         self.output_row_lm_head
     }
 
-    /// Whether SiLU and the gate multiply run as one kernel.
+    /// Whether `SiLU` and the gate multiply run as one kernel.
     #[must_use]
     pub const fn fused_silu_multiply(self) -> bool {
         self.fused_silu_multiply
@@ -527,7 +579,7 @@ impl PreparedLlamaBatchExecutorConfig {
         self.greedy_candidate_count
     }
 
-    /// Selects the explicit VllmSmolP128V1 owned graph. Eager fallback is forbidden.
+    /// Selects the explicit `VllmSmolP128V1` owned graph. Eager fallback is forbidden.
     #[must_use]
     pub const fn with_vllm_smol_p128_graph(mut self) -> Self {
         self.vllm_smol_p128_graph = true;
@@ -560,7 +612,10 @@ impl PreparedLlamaBatchExecutorConfig {
     /// attached after preparation with
     /// [`super::super::PreparedLlamaBatchExecutor::attach_tensor_parallel`].
     #[must_use]
-    pub const fn with_tensor_parallel(mut self, shard: crate::cuda_weights::TensorParallelShard) -> Self {
+    pub const fn with_tensor_parallel(
+        mut self,
+        shard: crate::cuda_weights::TensorParallelShard,
+    ) -> Self {
         self.forward = self.forward.with_tensor_parallel(shard);
         self
     }
@@ -673,34 +728,47 @@ impl PreparedLlamaBatchExecutorConfig {
 
     #[must_use]
     pub const fn owned_hf_eager_bf16(self) -> bool {
-        matches!(self.ragged_attention_implementation,RaggedAttentionImplementation::OwnedHfEagerBf16V1)
+        matches!(
+            self.ragged_attention_implementation,
+            RaggedAttentionImplementation::OwnedHfEagerBf16V1
+        )
     }
 
     /// Selects an eager D128 reference with explicit BF16 probability rounding.
     /// Canonical reductions and graph-disabled execution are required.
     #[must_use]
     pub const fn with_materialized_bf16_reference_d128(mut self) -> Self {
-        self.ragged_attention_implementation=RaggedAttentionImplementation::MaterializedBf16ReferenceD128;
+        self.ragged_attention_implementation =
+            RaggedAttentionImplementation::MaterializedBf16ReferenceD128;
         self
     }
 
     #[must_use]
     pub const fn materialized_bf16_reference_d128(self) -> bool {
-        matches!(self.ragged_attention_implementation,RaggedAttentionImplementation::MaterializedBf16ReferenceD128)
+        matches!(
+            self.ragged_attention_implementation,
+            RaggedAttentionImplementation::MaterializedBf16ReferenceD128
+        )
     }
 
     /// Selects the explicit eager D64 BF16 materialized reference.
     #[must_use]
     pub const fn with_materialized_bf16_reference_d64(mut self) -> Self {
-        self.ragged_attention_implementation=RaggedAttentionImplementation::MaterializedBf16ReferenceD64;
+        self.ragged_attention_implementation =
+            RaggedAttentionImplementation::MaterializedBf16ReferenceD64;
         self
     }
     #[must_use]
     pub const fn materialized_bf16_reference_d64(self) -> bool {
-        matches!(self.ragged_attention_implementation,RaggedAttentionImplementation::MaterializedBf16ReferenceD64)
+        matches!(
+            self.ragged_attention_implementation,
+            RaggedAttentionImplementation::MaterializedBf16ReferenceD64
+        )
     }
     pub(in crate::llama) const fn uses_paged_attention_workspace(self) -> bool {
-        self.uses_d128_paged_attention() || self.materialized_bf16_reference_d64() || self.owned_hf_eager_bf16()
+        self.uses_d128_paged_attention()
+            || self.materialized_bf16_reference_d64()
+            || self.owned_hf_eager_bf16()
     }
 
     /// Returns the canonical ragged attention launch implementation.
@@ -714,7 +782,10 @@ impl PreparedLlamaBatchExecutorConfig {
     /// allocate its dedicated eager workspace.
     #[must_use]
     pub const fn native_bf16_paged_split_gqa_d128_two_stage(self) -> bool {
-        matches!(self.ragged_attention_implementation,RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage)
+        matches!(
+            self.ragged_attention_implementation,
+            RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage
+        )
     }
 
     /// Common cold geometry/resource admission; it does not identify the arithmetic backend.
@@ -813,28 +884,59 @@ impl PreparedLlamaBatchExecutorConfig {
     pub(in crate::llama) fn validate_attention_implementation(
         self,
     ) -> LlamaBatchExecutorResult<()> {
-        if (self.owned_decode_graph || self.owned_decode_batch != 0) && (!self.owned_hf_eager_bf16()
-            || self.execution_completion != ExecutionCompletionImplementation::IterationBatch) {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"owned_decode_graph",reason:"requires owned profile and iteration-batch completion"});
+        if (self.owned_decode_graph || self.owned_decode_batch != 0)
+            && (!self.owned_hf_eager_bf16()
+                || self.execution_completion != ExecutionCompletionImplementation::IterationBatch)
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "owned_decode_graph",
+                reason: "requires owned profile and iteration-batch completion",
+            });
         }
-        if self.owned_mlp_graphs && (!self.owned_hf_eager_bf16()
-            || self.execution_completion!=ExecutionCompletionImplementation::IterationBatch
-            || !self.fused_silu_multiply || !cfg!(feature="cuda-cublas-gemm-probe")) {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration{field:"owned_mlp_graphs",reason:"owned HF iteration-batch completion and fused SiLU required"});
+        if self.owned_mlp_graphs
+            && (!self.owned_hf_eager_bf16()
+                || self.execution_completion != ExecutionCompletionImplementation::IterationBatch
+                || !self.fused_silu_multiply
+                || !cfg!(feature = "cuda-cublas-gemm-probe"))
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "owned_mlp_graphs",
+                reason: "owned HF iteration-batch completion and fused SiLU required",
+            });
         }
         if self.owned_hf_eager_bf16() != self.forward.owned_hf_eager_bf16() {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"owned-hf-eager-bf16-v1",reason:"attention and GEMM/norm profile must be selected together"});
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "owned-hf-eager-bf16-v1",
+                reason: "attention and GEMM/norm profile must be selected together",
+            });
         }
-        if self.owned_hf_eager_bf16() && (!cfg!(feature="cuda-cublas-gemm-probe")
-            || self.metadata_transport != BatchMetadataTransport::Synchronous
-            || self.residual_norm != ResidualNormImplementation::Separate
-            || (self.staged_step_uploads && self.owned_decode_batch != 10) || self.decode_step_capture || self.fused_mlp_residual_norm
-            || self.fused_kv_write) {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"owned-hf-eager-bf16-v1",reason:"requires linked owned CUDA path, synchronous metadata and separate norms without capture"});
+        if self.owned_hf_eager_bf16()
+            && (!cfg!(feature = "cuda-cublas-gemm-probe")
+                || self.metadata_transport != BatchMetadataTransport::Synchronous
+                || self.residual_norm != ResidualNormImplementation::Separate
+                || (self.staged_step_uploads && self.owned_decode_batch != 10)
+                || self.decode_step_capture
+                || self.fused_mlp_residual_norm
+                || self.fused_kv_write)
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "owned-hf-eager-bf16-v1",
+                reason: "requires linked owned CUDA path, synchronous metadata and separate norms without capture",
+            });
         }
-        if (self.materialized_bf16_reference_d128() || self.materialized_bf16_reference_d64() || self.owned_hf_eager_bf16())
-            && (self.decode_step_capture || self.vllm_smol_p128_graph || self.d128_global_merge || self.d128_tensor_core_producer || self.prompt_attention_mma) {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration {field:"materialized_bf16_reference_d128",reason:"reference attention requires eager execution without native producer/merge overrides"});
+        if (self.materialized_bf16_reference_d128()
+            || self.materialized_bf16_reference_d64()
+            || self.owned_hf_eager_bf16())
+            && (self.decode_step_capture
+                || self.vllm_smol_p128_graph
+                || self.d128_global_merge
+                || self.d128_tensor_core_producer
+                || self.prompt_attention_mma)
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "materialized_bf16_reference_d128",
+                reason: "reference attention requires eager execution without native producer/merge overrides",
+            });
         }
         if self.uses_paged_attention_workspace()
             && self.ragged_attention_reduction_profile != AttentionReductionProfile::CanonicalV1
@@ -933,6 +1035,8 @@ impl PreparedLlamaBatchExecutorConfig {
     }
 }
 
+// Copy configuration and borrowed descriptors keep the established execution/lease API.
+#[allow(clippy::large_types_passed_by_value)]
 pub(in crate::llama) const fn normalize_prepared_config(
     config: PreparedLlamaBatchExecutorConfig,
 ) -> PreparedLlamaBatchExecutorConfig {
@@ -973,23 +1077,44 @@ mod graph_numerical_profile_tests {
     use super::*;
     #[test]
     fn d64_reference_is_explicit_eager_and_does_not_admit_d128_native_modes() {
-        let base=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,128,16,1,16).unwrap(),PreparedLlamaForwardConfig::default());
+        let base = PreparedLlamaBatchExecutorConfig::new(
+            LlamaBatchMetadataConfig::new(1, 128, 16, 1, 16).unwrap(),
+            PreparedLlamaForwardConfig::default(),
+        );
         assert!(!base.uses_paged_attention_workspace());
-        let config=base.with_materialized_bf16_reference_d64();
+        let config = base.with_materialized_bf16_reference_d64();
         assert!(config.validate_attention_implementation().is_ok());
         assert!(!config.uses_d128_paged_attention());
         assert!(config.uses_paged_attention_workspace());
         assert!(!config.materialized_bf16_reference_d128());
-        for invalid in [config.with_decode_step_capture(),config.with_vllm_smol_p128_graph(),config.with_d128_global_merge(),config.with_d128_tensor_core_producer(),config.with_fixed37_reductions()] { assert!(invalid.validate_attention_implementation().is_err()); }
+        for invalid in [
+            config.with_decode_step_capture(),
+            config.with_vllm_smol_p128_graph(),
+            config.with_d128_global_merge(),
+            config.with_d128_tensor_core_producer(),
+            config.with_fixed37_reductions(),
+        ] {
+            assert!(invalid.validate_attention_implementation().is_err());
+        }
     }
 
     #[test]
     fn materialized_reference_rejects_incompatible_modes_before_cuda_preparation() {
-        let config=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,128,16,1,16).unwrap(),PreparedLlamaForwardConfig::default()).with_materialized_bf16_reference_d128();
+        let config = PreparedLlamaBatchExecutorConfig::new(
+            LlamaBatchMetadataConfig::new(1, 128, 16, 1, 16).unwrap(),
+            PreparedLlamaForwardConfig::default(),
+        )
+        .with_materialized_bf16_reference_d128();
         assert!(config.validate_attention_implementation().is_ok());
         assert!(!config.native_bf16_paged_split_gqa_d128_two_stage());
         assert!(config.uses_d128_paged_attention());
-        for invalid in [config.with_decode_step_capture(),config.with_vllm_smol_p128_graph(),config.with_d128_global_merge(),config.with_d128_tensor_core_producer(),config.with_fixed37_reductions()] {
+        for invalid in [
+            config.with_decode_step_capture(),
+            config.with_vllm_smol_p128_graph(),
+            config.with_d128_global_merge(),
+            config.with_d128_tensor_core_producer(),
+            config.with_fixed37_reductions(),
+        ] {
             assert!(invalid.validate_attention_implementation().is_err());
         }
     }
@@ -1098,38 +1223,132 @@ mod graph_numerical_profile_tests {
 mod owned_hf_profile_contract_tests {
     use super::*;
     #[test]
+    // Keep cold validation and the audited execution/cleanup sequence together.
+    #[allow(clippy::too_many_lines)]
     fn owned_hf_profile_rejects_partial_selection_and_execution_overrides() {
         let base = PreparedLlamaBatchExecutorConfig::new(
-            LlamaBatchMetadataConfig::new(1,8192,576,1,576).unwrap(), PreparedLlamaForwardConfig::default());
+            LlamaBatchMetadataConfig::new(1, 8192, 576, 1, 576).unwrap(),
+            PreparedLlamaForwardConfig::default(),
+        );
         let own = base.with_owned_hf_eager_bf16();
-        assert_eq!(own.validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
-        assert_eq!(ragged_attention_implementation_id(own.ragged_attention_reduction_profile(),own.ragged_attention_implementation()),"riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1");
+        assert_eq!(
+            own.validate_attention_implementation().is_ok(),
+            cfg!(feature = "cuda-cublas-gemm-probe")
+        );
+        assert_eq!(
+            ragged_attention_implementation_id(
+                own.ragged_attention_reduction_profile(),
+                own.ragged_attention_implementation()
+            ),
+            "riley.cuda.owned-hf-bf16-gqa-tiled-f32.v1"
+        );
         assert!(own.uses_paged_attention_workspace());
-        assert!(base.with_owned_decode_graph().validate_attention_implementation().is_err());
-        assert!(base.with_owned_decode_batch().validate_attention_implementation().is_err());
-        assert!(base.with_bounded_sm80_gateup_batch().validate_attention_implementation().is_err());
-        assert!(own.with_bounded_sm80_gateup_batch().validate_attention_implementation().is_err());
-        assert_eq!(own.with_iteration_batch_completion().with_bounded_sm80_gateup_batch().validate_attention_implementation().is_ok(),cfg!(feature="cuda-cublas-gemm-probe"));
-        assert!(own.with_owned_decode_batch().validate_attention_implementation().is_err());
-        assert_eq!(own.with_iteration_batch_completion().with_owned_decode_batch().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
+        assert!(
+            base.with_owned_decode_graph()
+                .validate_attention_implementation()
+                .is_err()
+        );
+        assert!(
+            base.with_owned_decode_batch()
+                .validate_attention_implementation()
+                .is_err()
+        );
+        assert!(
+            base.with_bounded_sm80_gateup_batch()
+                .validate_attention_implementation()
+                .is_err()
+        );
+        assert!(
+            own.with_bounded_sm80_gateup_batch()
+                .validate_attention_implementation()
+                .is_err()
+        );
+        assert_eq!(
+            own.with_iteration_batch_completion()
+                .with_bounded_sm80_gateup_batch()
+                .validate_attention_implementation()
+                .is_ok(),
+            cfg!(feature = "cuda-cublas-gemm-probe")
+        );
+        assert!(
+            own.with_owned_decode_batch()
+                .validate_attention_implementation()
+                .is_err()
+        );
+        assert_eq!(
+            own.with_iteration_batch_completion()
+                .with_owned_decode_batch()
+                .validate_attention_implementation()
+                .is_ok(),
+            cfg!(feature = "cuda-cublas-gemm-probe")
+        );
 
-        assert!(own.with_owned_decode_graph().validate_attention_implementation().is_err());
-        assert_eq!(own.with_iteration_batch_completion().with_owned_decode_graph().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
+        assert!(
+            own.with_owned_decode_graph()
+                .validate_attention_implementation()
+                .is_err()
+        );
+        assert_eq!(
+            own.with_iteration_batch_completion()
+                .with_owned_decode_graph()
+                .validate_attention_implementation()
+                .is_ok(),
+            cfg!(feature = "cuda-cublas-gemm-probe")
+        );
 
-        assert_eq!(own.with_iteration_batch_completion().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
-        assert_eq!(own.with_fused_silu_multiply().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
-        let staged = own.with_iteration_batch_completion().with_staged_step_uploads();
+        assert_eq!(
+            own.with_iteration_batch_completion()
+                .validate_attention_implementation()
+                .is_ok(),
+            cfg!(feature = "cuda-cublas-gemm-probe")
+        );
+        assert_eq!(
+            own.with_fused_silu_multiply()
+                .validate_attention_implementation()
+                .is_ok(),
+            cfg!(feature = "cuda-cublas-gemm-probe")
+        );
+        let staged = own
+            .with_iteration_batch_completion()
+            .with_staged_step_uploads();
         assert!(staged.validate_attention_implementation().is_err());
-        assert_eq!(staged.with_bounded_sm80_prefill_batch().validate_attention_implementation().is_ok(), cfg!(feature="cuda-cublas-gemm-probe"));
-        let graphed=own.with_fused_silu_multiply().with_iteration_batch_completion().with_owned_mlp_graphs();
-        assert_eq!(graphed.validate_attention_implementation().is_ok(),cfg!(feature="cuda-cublas-gemm-probe"));
+        assert_eq!(
+            staged
+                .with_bounded_sm80_prefill_batch()
+                .validate_attention_implementation()
+                .is_ok(),
+            cfg!(feature = "cuda-cublas-gemm-probe")
+        );
+        let graphed = own
+            .with_fused_silu_multiply()
+            .with_iteration_batch_completion()
+            .with_owned_mlp_graphs();
+        assert_eq!(
+            graphed.validate_attention_implementation().is_ok(),
+            cfg!(feature = "cuda-cublas-gemm-probe")
+        );
         assert!(super::normalize_prepared_config(graphed).owned_mlp_graphs());
-        assert!(own.with_owned_mlp_graphs().validate_attention_implementation().is_err());
-        assert!(own.with_fused_silu_multiply().with_owned_mlp_graphs().validate_attention_implementation().is_err());
-        for bad in [own.with_fused_residual_norm(),
-            own.with_decode_step_capture(),own.with_vllm_smol_p128_graph(),own.with_d128_global_merge(),
-            own.with_d128_tensor_core_producer(),own.with_fixed37_reductions(),own.with_legacy_ragged_attention_heads(),
-            own.with_materialized_bf16_reference_d64()] {
+        assert!(
+            own.with_owned_mlp_graphs()
+                .validate_attention_implementation()
+                .is_err()
+        );
+        assert!(
+            own.with_fused_silu_multiply()
+                .with_owned_mlp_graphs()
+                .validate_attention_implementation()
+                .is_err()
+        );
+        for bad in [
+            own.with_fused_residual_norm(),
+            own.with_decode_step_capture(),
+            own.with_vllm_smol_p128_graph(),
+            own.with_d128_global_merge(),
+            own.with_d128_tensor_core_producer(),
+            own.with_fixed37_reductions(),
+            own.with_legacy_ragged_attention_heads(),
+            own.with_materialized_bf16_reference_d64(),
+        ] {
             assert!(bad.validate_attention_implementation().is_err());
         }
     }

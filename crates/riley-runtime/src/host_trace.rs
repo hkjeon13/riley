@@ -87,6 +87,8 @@ pub fn lap_here(segment: usize) {
     }
 }
 
+// Diagnostic microsecond averages are approximate; inference arithmetic is untouched.
+#[allow(clippy::cast_precision_loss)]
 pub fn step_done() {
     if !enabled() {
         return;

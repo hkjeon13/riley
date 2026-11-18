@@ -348,7 +348,7 @@ class CheckRc3RollbackStructuralPrecheckTests(unittest.TestCase):
     def test_direct_cli_requires_bytecode_cache_suppression_before_evidence_access(self) -> None:
         completed = subprocess.run(
             [
-                "/usr/bin/python3",
+                sys.executable,
                 "-S",
                 str(Path(precheck.__file__).resolve()),
                 "--evidence-root",

@@ -1353,7 +1353,9 @@ fn settle_plan(
         .collect();
     let result = IterationResult::new(plan.iteration_id(), outputs, 1, 0).expect("result");
     *clock += 1;
-    let updates = scheduler.complete_iteration(&result, *clock).expect("commit");
+    let updates = scheduler
+        .complete_iteration(&result, *clock)
+        .expect("commit");
     *clock += 1;
     let (_, finished, failures) = updates.into_parts();
     assert!(failures.is_empty());
@@ -1363,10 +1365,7 @@ fn settle_plan(
 fn run_to_completion(scheduler: &mut Scheduler, clock: &mut u64) -> Vec<RequestCompletion> {
     let mut completions = Vec::new();
     loop {
-        let (plan, mut finished) = scheduler
-            .plan_iteration(*clock)
-            .expect("plan")
-            .into_parts();
+        let (plan, mut finished) = scheduler.plan_iteration(*clock).expect("plan").into_parts();
         completions.append(&mut finished);
         let Some(plan) = plan else {
             return completions;
@@ -1385,8 +1384,22 @@ fn a_repeated_prompt_reuses_full_blocks_and_always_runs_its_last_token() {
         .expect("first");
     let first = run_to_completion(&mut scheduler, &mut clock);
     assert_eq!(first[0].cached_prompt_tokens(), 0);
-    assert_eq!(scheduler.metrics_snapshot().unwrap().gauges.prefix_cache_blocks, 2);
-    assert_eq!(scheduler.metrics_snapshot().unwrap().gauges.allocated_kv_blocks, 0);
+    assert_eq!(
+        scheduler
+            .metrics_snapshot()
+            .unwrap()
+            .gauges
+            .prefix_cache_blocks,
+        2
+    );
+    assert_eq!(
+        scheduler
+            .metrics_snapshot()
+            .unwrap()
+            .gauges
+            .allocated_kv_blocks,
+        0
+    );
 
     // Same 40 tokens: two listed blocks, 8 tokens to run.
     scheduler
@@ -1457,8 +1470,19 @@ fn requests_running_together_share_blocks_and_finish_in_any_order() {
     settle_plan(&mut scheduler, &plan, &mut clock);
     let finished = run_to_completion(&mut scheduler, &mut clock);
     assert_eq!(finished.len(), 2);
-    assert!(finished.iter().all(|done| done.cached_prompt_tokens() == 32));
-    assert_eq!(scheduler.metrics_snapshot().unwrap().gauges.allocated_kv_blocks, 0);
+    assert!(
+        finished
+            .iter()
+            .all(|done| done.cached_prompt_tokens() == 32)
+    );
+    assert_eq!(
+        scheduler
+            .metrics_snapshot()
+            .unwrap()
+            .gauges
+            .allocated_kv_blocks,
+        0
+    );
 }
 
 #[test]
@@ -1481,7 +1505,10 @@ fn prompt_blocks_listed_by_one_chunk_serve_a_request_that_has_not_started() {
         .iter()
         .map(RequestCompletion::cached_prompt_tokens)
         .sum();
-    assert_eq!(reused, 16, "the second request starts after the first block");
+    assert_eq!(
+        reused, 16,
+        "the second request starts after the first block"
+    );
 }
 
 #[test]
@@ -1494,7 +1521,14 @@ fn listed_blocks_yield_to_admitted_requests() {
         .submit(RequestDescriptor::new(prompt(1, 49), 1), clock)
         .expect("seed");
     run_to_completion(&mut scheduler, &mut clock);
-    assert_eq!(scheduler.metrics_snapshot().unwrap().gauges.prefix_cache_blocks, 3);
+    assert_eq!(
+        scheduler
+            .metrics_snapshot()
+            .unwrap()
+            .gauges
+            .prefix_cache_blocks,
+        3
+    );
 
     scheduler
         .submit(RequestDescriptor::new(prompt(100, 63), 1), clock)
@@ -1582,9 +1616,20 @@ fn a_waiting_reader_never_continues_from_an_entry_of_the_emptied_cache() {
         .expect("refill");
     let finished = run_to_completion(&mut scheduler, &mut clock);
     assert_eq!(finished.len(), 2);
-    assert!(finished.iter().any(|done| done.cached_prompt_tokens() == 32));
+    assert!(
+        finished
+            .iter()
+            .any(|done| done.cached_prompt_tokens() == 32)
+    );
     assert!(finished.iter().any(|done| done.cached_prompt_tokens() == 0));
-    assert_eq!(scheduler.metrics_snapshot().unwrap().gauges.allocated_kv_blocks, 0);
+    assert_eq!(
+        scheduler
+            .metrics_snapshot()
+            .unwrap()
+            .gauges
+            .allocated_kv_blocks,
+        0
+    );
 }
 
 #[test]

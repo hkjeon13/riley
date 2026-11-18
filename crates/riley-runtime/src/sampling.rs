@@ -553,7 +553,11 @@ impl SamplingWorkspace {
         top: &mut Vec<(u32, f64)>,
     ) -> f64 {
         top.clear();
-        top.extend(top_logits.iter().map(|&(token_id, logit)| (token_id, f64::from(logit))));
+        top.extend(
+            top_logits
+                .iter()
+                .map(|&(token_id, logit)| (token_id, f64::from(logit))),
+        );
         finish_logprobs(maximum, lanes, selected, top)
     }
 
@@ -614,14 +618,6 @@ impl SamplingWorkspace {
         // in, so the scan runs on integer keys in branch-free passes: a
         // finiteness check, a maximum, then the first allowed index holding
         // it. Negative zero is keyed as positive zero, matching `==` on f32.
-        const fn order_key(bits: u16) -> u16 {
-            let bits = if bits == 0x8000 { 0 } else { bits };
-            if bits & 0x8000 == 0 {
-                bits | 0x8000
-            } else {
-                !bits
-            }
-        }
         let bits_at = |token_id: usize| {
             u16::from_ne_bytes([
                 logits_bf16_native[token_id * BF16_BYTES],
@@ -944,6 +940,15 @@ fn finish_logprobs(
     selected.map_or(f64::NEG_INFINITY, |value| f64::from(value) - normalizer)
 }
 
+const fn order_key(bits: u16) -> u16 {
+    let bits = if bits == 0x8000 { 0 } else { bits };
+    if bits & 0x8000 == 0 {
+        bits | 0x8000
+    } else {
+        !bits
+    }
+}
+
 #[inline]
 fn approximate_exp(x: f32) -> f32 {
     let scaled = x.max(-87.0) * std::f32::consts::LOG2_E;
@@ -952,12 +957,10 @@ fn approximate_exp(x: f32) -> f32 {
     // Taylor series of 2^part on [0, 1).
     let mantissa = 1.0
         + part
-            * (0.693_147_2
+            * (std::f32::consts::LN_2
                 + part
                     * (0.240_226_5
-                        + part
-                            * (0.055_504_11
-                                + part * (0.009_618_13 + part * 0.001_333_55))));
+                        + part * (0.055_504_11 + part * (0.009_618_13 + part * 0.001_333_55))));
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let power = f32::from_bits((((whole as i32) + 127) as u32) << 23);
     mantissa * power
@@ -1064,17 +1067,33 @@ mod tests {
     }
 
     #[test]
+    // FP32 scaling and bounded fixture values preserve the approved numerical contract.
+    #[allow(clippy::cast_precision_loss)]
+    // Native rows and fixed geometry are bounded during cold preparation; preserve their bytes.
+    #[allow(clippy::cast_possible_truncation)]
     fn logprobs_from_a_summary_match_the_full_row() {
         // A summary built the way the device builds it: exact maximum, lane
         // sums over residues modulo 16 in ascending order, exact top tokens.
         let values: Vec<f32> = (0..1003_u32)
-            .map(|index| f32::from_bits((((index * 7919) % 613) as f32 * 0.03 - 9.0).to_bits() & 0xffff_0000))
+            .map(|index| {
+                f32::from_bits((((index * 7919) % 613) as f32 * 0.03 - 9.0).to_bits() & 0xffff_0000)
+            })
             .collect();
-        let row: Vec<u8> = values.iter().flat_map(|value| ((value.to_bits() >> 16) as u16).to_ne_bytes()).collect();
+        let row: Vec<u8> = values
+            .iter()
+            .flat_map(|value| ((value.to_bits() >> 16) as u16).to_ne_bytes())
+            .collect();
         let mut workspace = SamplingWorkspace::new(values.len()).unwrap();
-        for (addressable, selected, top_count) in [(1003, 17_u32, 5), (1000, 1001, 20), (16, 3, 0)] {
+        for (addressable, selected, top_count) in [(1003, 17_u32, 5), (1000, 1001, 20), (16, 3, 0)]
+        {
             let mut expected_top = Vec::new();
-            let expected = workspace.raw_logprobs_bf16_native(&row, addressable, selected, top_count, &mut expected_top);
+            let expected = workspace.raw_logprobs_bf16_native(
+                &row,
+                addressable,
+                selected,
+                top_count,
+                &mut expected_top,
+            );
             let used = &values[..addressable];
             let maximum = used.iter().copied().fold(f32::NEG_INFINITY, f32::max);
             let mut lanes = [0.0_f32; super::LOGPROB_LANES];
@@ -1082,8 +1101,15 @@ mod tests {
                 lanes[index % super::LOGPROB_LANES] += super::approximate_exp(*value - maximum);
             }
             let mut order: Vec<u32> = (0..addressable as u32).collect();
-            order.sort_by(|&a, &b| used[b as usize].total_cmp(&used[a as usize]).then(a.cmp(&b)));
-            let top_logits: Vec<(u32, f32)> = order[..top_count].iter().map(|&id| (id, used[id as usize])).collect();
+            order.sort_by(|&a, &b| {
+                used[b as usize]
+                    .total_cmp(&used[a as usize])
+                    .then(a.cmp(&b))
+            });
+            let top_logits: Vec<(u32, f32)> = order[..top_count]
+                .iter()
+                .map(|&id| (id, used[id as usize]))
+                .collect();
             let mut top = Vec::new();
             let value = SamplingWorkspace::logprobs_from_summary(
                 maximum,
@@ -1109,7 +1135,7 @@ mod tests {
             assert!(error < 1e-4, "{x}: {error}");
             x += 0.037;
         }
-        assert_eq!(super::approximate_exp(-1000.0) > 0.0, true);
+        assert!(super::approximate_exp(-1000.0) > 0.0);
         assert!(super::approximate_exp(-1000.0) < 1e-37);
     }
 

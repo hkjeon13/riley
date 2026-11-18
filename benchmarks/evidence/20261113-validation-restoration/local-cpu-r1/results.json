@@ -1,0 +1,329 @@
+{
+  "base_revision": "37ede444562b1d6c3718fae0a8db314f81fbba92",
+  "branch": "codex/restore-validation-release-contracts",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "python": "3.12.7 | packaged by Anaconda, Inc. | (main, Oct  4 2024, 08:22:19) [Clang 14.0.6 ]",
+  "rust": "rustc 1.85.0 (4d91de4e4 2025-02-17)",
+  "gpu_checks": "not-run",
+  "linux_descriptor_checks": "not-run-on-macOS",
+  "legacy_pinned_host_probes": "not-run-unavailable-reviewed-host",
+  "checks": [
+    {
+      "name": "format",
+      "argv": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "started_at_utc": "2026-11-13T06:20:58.885204+00:00",
+      "log": "format.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 1.395,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "clippy-workspace",
+      "argv": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "--workspace",
+        "--all-targets",
+        "--no-default-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "started_at_utc": "2026-11-13T06:21:00.280697+00:00",
+      "log": "clippy-workspace.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 0.628,
+      "log_sha256": "ec3275bd7cdb61fe7edc4fadcb9a7a8d1c03aef38d75c8a6d05652c57a1d448e"
+    },
+    {
+      "name": "clippy-server",
+      "argv": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "-p",
+        "riley-server",
+        "--all-targets",
+        "--no-default-features",
+        "--features",
+        "server",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "started_at_utc": "2026-11-13T06:21:00.910980+00:00",
+      "log": "clippy-server.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 0.19,
+      "log_sha256": "a5f4c585ee974ca44916ac30a98bbc189e067a7e0a6bc6d2e8d6bc525be724af"
+    },
+    {
+      "name": "rust-workspace",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--workspace",
+        "--all-targets",
+        "--no-default-features"
+      ],
+      "started_at_utc": "2026-11-13T06:21:01.102043+00:00",
+      "log": "rust-workspace.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 90.651,
+      "log_sha256": "4db17f426a5bf38eb721924a287ac72c0e5f71e450605d466757e493bc81bd3a"
+    },
+    {
+      "name": "rust-server",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "riley-server",
+        "--lib",
+        "--no-default-features",
+        "--features",
+        "server"
+      ],
+      "started_at_utc": "2026-11-13T06:22:31.760620+00:00",
+      "log": "rust-server.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 5.803,
+      "log_sha256": "5bf0a9630eeb2c95cb0c20ce7e2b23c1d0abcf34a533862d915adcab27f90820"
+    },
+    {
+      "name": "workspace-boundaries",
+      "argv": [
+        "/opt/anaconda3/bin/python3.12",
+        "ci/check_workspace_boundaries.py",
+        "--locked"
+      ],
+      "started_at_utc": "2026-11-13T06:22:37.565448+00:00",
+      "log": "workspace-boundaries.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 0.568,
+      "log_sha256": "304e332b52c96f40e289f8116b3aac62948e1481def1a458e063c2cf968b1cda"
+    },
+    {
+      "name": "serving-source-contract",
+      "argv": [
+        "/opt/anaconda3/bin/python3.12",
+        "ci/check_serving_source_contract.py"
+      ],
+      "started_at_utc": "2026-11-13T06:22:38.135564+00:00",
+      "log": "serving-source-contract.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 0.04,
+      "log_sha256": "807b7357c78e085346090b02cc8ff506b6d659b326189278101011c097950e03"
+    },
+    {
+      "name": "extension-gates",
+      "argv": [
+        "/opt/anaconda3/bin/python3.12",
+        "ci/check_extension_gates.py",
+        "--base-revision",
+        "37ede444562b1d6c3718fae0a8db314f81fbba92"
+      ],
+      "started_at_utc": "2026-11-13T06:22:38.177237+00:00",
+      "log": "extension-gates.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 5.276,
+      "log_sha256": "3c1c009f9ad2bace5ddd96377ccea4a0ea557948979dc4fe76a1d7de5024be48"
+    },
+    {
+      "name": "python-ci",
+      "argv": [
+        "/opt/anaconda3/bin/python3.12",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "ci/tests",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "started_at_utc": "2026-11-13T06:22:43.455688+00:00",
+      "log": "python-ci.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 4.623,
+      "log_sha256": "2360f2635c5addca7d30eab55a491a3833182689c34d054039e77b57a5f82f92"
+    },
+    {
+      "name": "python-release",
+      "argv": [
+        "/opt/anaconda3/bin/python3.12",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "ci/release",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "started_at_utc": "2026-11-13T06:22:48.081403+00:00",
+      "log": "python-release.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 143.037,
+      "log_sha256": "4f7d96e45f567c2f4998a33483f229916308d8fbce3d9a789a4dc9784e893e34"
+    },
+    {
+      "name": "python-benchmarks",
+      "argv": [
+        "/opt/anaconda3/bin/python3.12",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "benchmarks/scripts/tests",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "started_at_utc": "2026-11-13T06:25:11.131364+00:00",
+      "log": "python-benchmarks.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 89.416,
+      "log_sha256": "2664cb5aa8366d3db9433abbedf7b256ab25799f062c04d900052dd730ba0c90"
+    },
+    {
+      "name": "runtime-docker-contract",
+      "argv": [
+        "/opt/anaconda3/bin/python3.12",
+        "ci/release/verify_runtime_dockerfile.py"
+      ],
+      "started_at_utc": "2026-11-13T06:26:40.551593+00:00",
+      "log": "runtime-docker-contract.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 0.129,
+      "log_sha256": "73997d92a7d4e76c78bb5d7cbffa919268e640d93addae2055318da6d8e79f41"
+    },
+    {
+      "name": "reconstructed-docker-contract",
+      "argv": [
+        "/opt/anaconda3/bin/python3.12",
+        "ci/release/verify_reconstructed_runtime_assembly_dockerfile.py"
+      ],
+      "started_at_utc": "2026-11-13T06:26:40.681703+00:00",
+      "log": "reconstructed-docker-contract.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 0.077,
+      "log_sha256": "e51c5d60b53839a0be7dd5434a167895481a2a153eeeea23b38c61ac918951db"
+    },
+    {
+      "name": "result-schema",
+      "argv": [
+        "/opt/anaconda3/bin/python3.12",
+        "benchmarks/scripts/validate_contract.py"
+      ],
+      "started_at_utc": "2026-11-13T06:26:40.760320+00:00",
+      "log": "result-schema.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 0.349,
+      "log_sha256": "c0759c8f17eab409bff6c94efad55e3f560d1d74f404752ff359385db704cd98"
+    },
+    {
+      "name": "soak-shell-syntax",
+      "argv": [
+        "bash",
+        "-n",
+        "ci/run_release_soak.sh"
+      ],
+      "started_at_utc": "2026-11-13T06:26:41.111002+00:00",
+      "log": "soak-shell-syntax.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 0.005,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "python-free-model",
+      "argv": [
+        "sh",
+        "ci/verify_python_free_model_loading.sh"
+      ],
+      "started_at_utc": "2026-11-13T06:26:41.116809+00:00",
+      "log": "python-free-model.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 13.568,
+      "log_sha256": "6f4cc77f9f6734d2cbc38b7ed0c7ec5e732a882a612f0f42e8d8fe47ed986558"
+    },
+    {
+      "name": "rustdoc",
+      "argv": [
+        "cargo",
+        "doc",
+        "--locked",
+        "--offline",
+        "--workspace",
+        "--no-deps",
+        "--no-default-features"
+      ],
+      "started_at_utc": "2026-11-13T06:26:54.687959+00:00",
+      "log": "rustdoc.log",
+      "exit_code": 101,
+      "status": "failed",
+      "seconds": 3.251,
+      "log_sha256": "38895b070569b2f6dc9dee1694ce6fea845d85a0511b570ec33979d1776393dd"
+    },
+    {
+      "name": "cpu-feature-matrix",
+      "argv": [
+        "sh",
+        "ci/check_feature_matrix.sh"
+      ],
+      "started_at_utc": "2026-11-13T06:26:57.940917+00:00",
+      "log": "cpu-feature-matrix.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 15.527,
+      "log_sha256": "67788091acf48a58551bf467f7cf45f01361bc44f363fe7ddae3e8af8673b220"
+    },
+    {
+      "name": "isolated-production-build",
+      "argv": [
+        "sh",
+        "ci/check_workspace_without_research_tools.sh"
+      ],
+      "started_at_utc": "2026-11-13T06:27:13.469982+00:00",
+      "log": "isolated-production-build.log",
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 15.369,
+      "log_sha256": "6d5277920083b6b4f9023e9798cb033eab182030991ef99a11e56cf862a9d5ff"
+    }
+  ],
+  "tracked_patch_sha256": "feec7c9f2916a23f3bb1b48e6bcc20bf0ce90a06836e5ff420b10fc3a70c10a4",
+  "status": "failed-local-cpu"
+}

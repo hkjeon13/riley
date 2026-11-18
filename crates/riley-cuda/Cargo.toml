@@ -199,3 +199,168 @@ required-features = ["cuda-cublas-gemm-probe"]
 name = "owned_hf_command_batch_gpu"
 path = "tests/owned_hf_command_batch_gpu.rs"
 required-features = ["cuda-cublas-gemm-probe"]
+
+[[test]]
+name = "attention_bench_gpu"
+path = "tests/attention_bench_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "canonical_narrow_norm_gpu"
+path = "tests/canonical_narrow_norm_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "decode_attention_gpu"
+path = "tests/decode_attention_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "flashinfer_attention_gpu"
+path = "tests/flashinfer_attention_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "fused_decode_attention_gpu"
+path = "tests/fused_decode_attention_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "gemm_bias_epilogue_ab_gpu"
+path = "tests/gemm_bias_epilogue_ab_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "gemm_bias_epilogue_gpu"
+path = "tests/gemm_bias_epilogue_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "graph_c05_18_gpu"
+path = "tests/graph_c05_18_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "graph_c05_19_gpu"
+path = "tests/graph_c05_19_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "graph_c05_20_gpu"
+path = "tests/graph_c05_20_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "graph_c05_21_gpu"
+path = "tests/graph_c05_21_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "graph_c05_22_gpu"
+path = "tests/graph_c05_22_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "graph_embedding_borrowed_gpu"
+path = "tests/graph_embedding_borrowed_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "graph_kv_parent_gpu"
+path = "tests/graph_kv_parent_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "graph_pointwise_gpu"
+path = "tests/graph_pointwise_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "graph_rope_span_gpu"
+path = "tests/graph_rope_span_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "hf_inplace_attention_gpu"
+path = "tests/hf_inplace_attention_gpu.rs"
+required-features = ["cuda-cublas-gemm-probe"]
+
+[[test]]
+name = "hf_real_component_oracle_gpu"
+path = "tests/hf_real_component_oracle_gpu.rs"
+required-features = ["cuda-cublas-gemm-probe"]
+
+[[test]]
+name = "owned_bias_completion_gpu"
+path = "tests/owned_bias_completion_gpu.rs"
+required-features = ["cuda-cublas-gemm-probe"]
+
+[[test]]
+name = "owned_decode_batch_gpu"
+path = "tests/owned_decode_batch_gpu.rs"
+required-features = ["cuda-cublas-gemm-probe"]
+
+[[test]]
+name = "owned_hf_graph_feasibility_gpu"
+path = "tests/owned_hf_graph_feasibility_gpu.rs"
+required-features = ["cuda-cublas-gemm-probe"]
+
+[[test]]
+name = "owned_hf_mlp_graph_gpu"
+path = "tests/owned_hf_mlp_graph_gpu.rs"
+required-features = ["cuda-cublas-gemm-probe"]
+
+[[test]]
+name = "owned_qkv_singleton_batch_gpu"
+path = "tests/owned_qkv_singleton_batch_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "paged_decode_attention_gpu"
+path = "tests/paged_decode_attention_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "prompt_direct_attention_gpu"
+path = "tests/prompt_direct_attention_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "prompt_mma_attention_gpu"
+path = "tests/prompt_mma_attention_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "qkv_split_head_norm_gpu"
+path = "tests/qkv_split_head_norm_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "qkv_split_kv_write_gpu"
+path = "tests/qkv_split_kv_write_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "segment_decode_attention_gpu"
+path = "tests/segment_decode_attention_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "serving_attention_replay_gpu"
+path = "tests/serving_attention_replay_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "sm80_prefill_alignment_gpu"
+path = "tests/sm80_prefill_alignment_gpu.rs"
+required-features = ["cuda-cublas-gemm-probe"]
+
+[[test]]
+name = "tensor_core_producer_gpu"
+path = "tests/tensor_core_producer_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "wide_general_rms_norm_gpu"
+path = "tests/wide_general_rms_norm_gpu.rs"
+required-features = ["cuda"]

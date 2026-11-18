@@ -108,30 +108,48 @@ impl CudaOwnedHfMlpGraph {
     /// Enables the separately qualified SM80 Gate/Up<=16 and Down<=4
     /// recipes before the first capture. Existing M1 graph callers stay mode0.
     pub fn enable_bounded_sm80_projections(&mut self) -> CudaResult<()> {
-        if self.hidden != 2560 || self.intermediate != 9728 || !self.entries.is_empty()
-            || self.row_batch_mode != 0 || !self.gate_plan.supports_bounded_sm80_gateup_rows() {
-            return Err(CudaError::invalid_argument(OP, "cold qualified Qwen3-4B SM80 MLP required"));
+        if self.hidden != 2560
+            || self.intermediate != 9728
+            || !self.entries.is_empty()
+            || self.row_batch_mode != 0
+            || !self.gate_plan.supports_bounded_sm80_gateup_rows()
+        {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "cold qualified Qwen3-4B SM80 MLP required",
+            ));
         }
         self.down_plan.prepare_bounded_sm80_projections()?;
         self.row_batch_mode = 9;
         Ok(())
     }
     /// Mode10 uses the native fused Gate/Up and private full-row Down recipe.
-    pub fn enable_piecewise_sm80(&mut self,c:&CudaContext)->CudaResult<()> {
+    pub fn enable_piecewise_sm80(&mut self, c: &CudaContext) -> CudaResult<()> {
         self.enable_bounded_sm80_projections()?;
         self.gate_plan.prepare_sm80_prefill()?;
         self.down_plan.prepare_sm80_prefill()?;
-        let mut merged=c.prepare_owned_hf_gemm(CudaGemmConfig::new(u64::from(self.max_rows),2*self.intermediate,self.hidden,0)?)?;
+        let mut merged = c.prepare_owned_hf_gemm(CudaGemmConfig::new(
+            u64::from(self.max_rows),
+            2 * self.intermediate,
+            self.hidden,
+            0,
+        )?)?;
         merged.prepare_sm80_prefill()?;
-        self.merged_plan=Some(merged);
-        self.row_batch_mode=10;
-        self.capture_allowed=false;
+        self.merged_plan = Some(merged);
+        self.row_batch_mode = 10;
+        self.capture_allowed = false;
         Ok(())
     }
     /// Only startup may create new pieces. Serving misses execute eagerly.
-    pub fn set_capture_allowed(&mut self,allowed:bool){
-        self.capture_allowed=allowed;
-        if self.row_batch_mode==10 && !allowed {eprintln!("RILEY_PIECEWISE_SEALED captures={} entries={}",self.stats.captures,self.entries.len());}
+    pub fn set_capture_allowed(&mut self, allowed: bool) {
+        self.capture_allowed = allowed;
+        if self.row_batch_mode == 10 && !allowed {
+            eprintln!(
+                "RILEY_PIECEWISE_SEALED captures={} entries={}",
+                self.stats.captures,
+                self.entries.len()
+            );
+        }
     }
     pub fn stats(&self) -> CudaOwnedHfMlpGraphStats {
         self.stats
@@ -143,17 +161,36 @@ impl CudaOwnedHfMlpGraph {
         p: &mut CudaOwnedHfMlpParams<'_>,
         stream: &mut S,
     ) -> CudaResult<()> {
-        self.execute_impl(p,None,stream)
+        self.execute_impl(p, None, stream)
     }
     /// Merged weights retain their own allocation identity in the replay key.
-    pub fn execute_with_merged<S:CudaExecutionStream+?Sized>(&mut self,p:&mut CudaOwnedHfMlpParams<'_>,merged:CudaBufferSpan<'_>,stream:&mut S)->CudaResult<()> {
-        self.execute_impl(p,Some(merged),stream)
+    pub fn execute_with_merged<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        p: &mut CudaOwnedHfMlpParams<'_>,
+        merged: CudaBufferSpan<'_>,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        self.execute_impl(p, Some(merged), stream)
     }
-    fn execute_impl<S:CudaExecutionStream+?Sized>(&mut self,p:&mut CudaOwnedHfMlpParams<'_>,merged:Option<CudaBufferSpan<'_>>,stream:&mut S)->CudaResult<()> {
-        let merged=merged.filter(|_|self.row_batch_mode==10 && (p.active_rows==1 || p.active_rows>=17));
-        let weight_half=self.hidden*self.intermediate*2;
-        let gate_weight=if let Some(w)=merged {w.subspan(0,weight_half)?}else{p.gate_weight};
-        let up_weight=if let Some(w)=merged {w.subspan(weight_half,weight_half)?}else{p.up_weight};
+    fn execute_impl<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        p: &mut CudaOwnedHfMlpParams<'_>,
+        merged: Option<CudaBufferSpan<'_>>,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        let merged = merged
+            .filter(|_| self.row_batch_mode == 10 && (p.active_rows == 1 || p.active_rows >= 17));
+        let weight_half = self.hidden * self.intermediate * 2;
+        let gate_weight = if let Some(w) = merged {
+            w.subspan(0, weight_half)?
+        } else {
+            p.gate_weight
+        };
+        let up_weight = if let Some(w) = merged {
+            w.subspan(weight_half, weight_half)?
+        } else {
+            p.up_weight
+        };
         if self.poisoned {
             return Err(CudaError::invalid_state(
                 OP,
@@ -198,19 +235,21 @@ impl CudaOwnedHfMlpGraph {
         };
         // Native validates all capacities, contexts, aliases, batch thread and leases
         // before either a cache hit or a cold capture can submit GPU work.
-        let lease_plan=if merged.is_some(){self.merged_plan.as_ref().ok_or(CudaError::invalid_state(OP,"merged plan not prepared"))?}else{&self.gate_plan};
+        let lease_plan = if merged.is_some() {
+            self.merged_plan
+                .as_ref()
+                .ok_or(CudaError::invalid_state(OP, "merged plan not prepared"))?
+        } else {
+            &self.gate_plan
+        };
         lease_plan.register_mlp_uses(
             &self.down_plan,
             [
                 p.input
                     .subspan(0, self.gate_plan.config().input_bytes())?
                     .raw(),
-                gate_weight
-                    .subspan(0, weight_half)?
-                    .raw(),
-                up_weight
-                    .subspan(0, weight_half)?
-                    .raw(),
+                gate_weight.subspan(0, weight_half)?.raw(),
+                up_weight.subspan(0, weight_half)?.raw(),
                 p.down_weight
                     .subspan(0, self.down_plan.config().weight_bytes())?
                     .raw(),
@@ -259,7 +298,12 @@ impl CudaOwnedHfMlpGraph {
             if result.is_err() {
                 self.poisoned = true;
             } else {
-                if self.row_batch_mode==10 && self.stats.hits==0 {eprintln!("RILEY_PIECEWISE_FIRST_REPLAY rows={} capture_allowed={}",p.active_rows,self.capture_allowed);}
+                if self.row_batch_mode == 10 && self.stats.hits == 0 {
+                    eprintln!(
+                        "RILEY_PIECEWISE_FIRST_REPLAY rows={} capture_allowed={}",
+                        p.active_rows, self.capture_allowed
+                    );
+                }
                 self.stats.hits = self.stats.hits.saturating_add(1);
             }
             return result;
@@ -314,56 +358,95 @@ impl CudaOwnedHfMlpGraph {
         }
         let slots = &slots[..p.active_rows as usize];
         let gate_bytes = self.gate_plan.config().output_bytes();
-        let rows=u64::from(p.active_rows);
-        let fused=if let Some(w)=merged {
-            self.merged_plan.as_mut().ok_or(CudaError::invalid_state(OP,"merged plan not prepared"))?.execute_sm80_merged_gate_up(
-                p.input.subspan(0,rows*self.hidden*2)?,w,
-                CudaBufferSpanMut::new(p.gate,CudaDType::BF16,0,rows*self.intermediate*4)?,rows,s)?;
-            crate::silu_gated_multiply_merged_rows(&mut crate::MergedGatedMultiplyParams {
-                merged:CudaBufferSpan::new(p.gate,CudaDType::BF16,0,rows*self.intermediate*4)?,
-                output:CudaBufferSpanMut::new(p.product,CudaDType::BF16,0,rows*self.intermediate*2)?,
-                element_count:rows*self.intermediate,row_width:self.intermediate,
-            },s)?;
+        let rows = u64::from(p.active_rows);
+        let fused = if let Some(w) = merged {
+            self.merged_plan
+                .as_mut()
+                .ok_or(CudaError::invalid_state(OP, "merged plan not prepared"))?
+                .execute_sm80_merged_gate_up(
+                    p.input.subspan(0, rows * self.hidden * 2)?,
+                    w,
+                    CudaBufferSpanMut::new(
+                        p.gate,
+                        CudaDType::BF16,
+                        0,
+                        rows * self.intermediate * 4,
+                    )?,
+                    rows,
+                    s,
+                )?;
+            crate::silu_gated_multiply_merged_rows(
+                &mut crate::MergedGatedMultiplyParams {
+                    merged: CudaBufferSpan::new(
+                        p.gate,
+                        CudaDType::BF16,
+                        0,
+                        rows * self.intermediate * 4,
+                    )?,
+                    output: CudaBufferSpanMut::new(
+                        p.product,
+                        CudaDType::BF16,
+                        0,
+                        rows * self.intermediate * 2,
+                    )?,
+                    element_count: rows * self.intermediate,
+                    row_width: self.intermediate,
+                },
+                s,
+            )?;
             true
-        }else{self.row_batch_mode==10 && self.gate_plan.try_execute_hf_sm80_fused_gate_up(
-            p.gate_weight,p.up_weight,p.input.subspan(0,rows*self.hidden*2)?,
-            CudaBufferSpanMut::new(p.product,CudaDType::BF16,0,rows*self.intermediate*2)?,rows,s)?};
+        } else {
+            self.row_batch_mode == 10
+                && self.gate_plan.try_execute_hf_sm80_fused_gate_up(
+                    p.gate_weight,
+                    p.up_weight,
+                    p.input.subspan(0, rows * self.hidden * 2)?,
+                    CudaBufferSpanMut::new(
+                        p.product,
+                        CudaDType::BF16,
+                        0,
+                        rows * self.intermediate * 2,
+                    )?,
+                    rows,
+                    s,
+                )?
+        };
         if !fused {
-        self.gate_plan.execute_row_groups(
-            &mut CublasGemmProbeParams {
-                input: p.input.subspan(0, self.gate_plan.config().input_bytes())?,
-                weight: p
-                    .gate_weight
-                    .subspan(0, self.gate_plan.config().weight_bytes())?,
-                output: CudaBufferSpanMut::new(p.gate, CudaDType::BF16, 0, gate_bytes)?,
-            },
-            slots,
-            None,
-            self.row_batch_mode,
-            s,
-        )?;
-        self.gate_plan.execute_row_groups(
-            &mut CublasGemmProbeParams {
-                input: p.input.subspan(0, self.gate_plan.config().input_bytes())?,
-                weight: p
-                    .up_weight
-                    .subspan(0, self.gate_plan.config().weight_bytes())?,
-                output: CudaBufferSpanMut::new(p.up, CudaDType::BF16, 0, gate_bytes)?,
-            },
-            slots,
-            None,
-            self.row_batch_mode,
-            s,
-        )?;
-        crate::silu_gated_multiply(
-            &mut GatedMultiplyParams {
-                activated_gate: CudaBufferSpan::new(p.gate, CudaDType::BF16, 0, gate_bytes)?,
-                up: CudaBufferSpan::new(p.up, CudaDType::BF16, 0, gate_bytes)?,
-                output: CudaBufferSpanMut::new(p.product, CudaDType::BF16, 0, gate_bytes)?,
-                element_count: u64::from(p.active_rows) * self.intermediate,
-            },
-            s,
-        )?;
+            self.gate_plan.execute_row_groups(
+                &mut CublasGemmProbeParams {
+                    input: p.input.subspan(0, self.gate_plan.config().input_bytes())?,
+                    weight: p
+                        .gate_weight
+                        .subspan(0, self.gate_plan.config().weight_bytes())?,
+                    output: CudaBufferSpanMut::new(p.gate, CudaDType::BF16, 0, gate_bytes)?,
+                },
+                slots,
+                None,
+                self.row_batch_mode,
+                s,
+            )?;
+            self.gate_plan.execute_row_groups(
+                &mut CublasGemmProbeParams {
+                    input: p.input.subspan(0, self.gate_plan.config().input_bytes())?,
+                    weight: p
+                        .up_weight
+                        .subspan(0, self.gate_plan.config().weight_bytes())?,
+                    output: CudaBufferSpanMut::new(p.up, CudaDType::BF16, 0, gate_bytes)?,
+                },
+                slots,
+                None,
+                self.row_batch_mode,
+                s,
+            )?;
+            crate::silu_gated_multiply(
+                &mut GatedMultiplyParams {
+                    activated_gate: CudaBufferSpan::new(p.gate, CudaDType::BF16, 0, gate_bytes)?,
+                    up: CudaBufferSpan::new(p.up, CudaDType::BF16, 0, gate_bytes)?,
+                    output: CudaBufferSpanMut::new(p.product, CudaDType::BF16, 0, gate_bytes)?,
+                    element_count: u64::from(p.active_rows) * self.intermediate,
+                },
+                s,
+            )?;
         }
         self.down_plan.execute_row_groups(
             &mut CublasGemmProbeParams {
@@ -385,14 +468,21 @@ impl CudaOwnedHfMlpGraph {
         )
     }
     pub fn close(mut self) -> CudaResult<()> {
-        if matches!(self.row_batch_mode,9|10) {
-            eprintln!("RILEY_OWNED_SM80_MLP captures={} hits={} eager_fallbacks={} stream_resets={}",
-                self.stats.captures,self.stats.hits,self.stats.eager_fallbacks,self.stats.stream_resets);
+        if matches!(self.row_batch_mode, 9 | 10) {
+            eprintln!(
+                "RILEY_OWNED_SM80_MLP captures={} hits={} eager_fallbacks={} stream_resets={}",
+                self.stats.captures,
+                self.stats.hits,
+                self.stats.eager_fallbacks,
+                self.stats.stream_resets
+            );
         }
         for (_, g) in self.entries.drain() {
             g.close()?;
         }
-        if let Some(merged)=self.merged_plan.take(){merged.close()?;}
+        if let Some(merged) = self.merged_plan.take() {
+            merged.close()?;
+        }
         self.gate_plan.close()?;
         self.down_plan.close()
     }

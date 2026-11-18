@@ -906,6 +906,8 @@ impl PreparedPrefillAttention {
         }
     }
 
+    // Keep the audited CUDA preflight and lease/submission sequence together.
+    #[allow(clippy::too_many_lines)]
     fn select_canonical(
         context: &CudaContext,
         compute_capability: (u32, u32),
@@ -1189,6 +1191,8 @@ impl PreparedPrefillAttention {
     /// context, or any native launch/completion failure. A native failure
     /// poisons the prepared probe just as [`Self::execute`] does.
     #[allow(clippy::too_many_lines)]
+    // CUDA builds consume this ownership descriptor; keep one API in CPU builds.
+    #[cfg_attr(not(feature = "cuda"), allow(clippy::needless_pass_by_value))]
     pub fn execute_hf_eager_qwen_p2051_last_row_traced(
         &self,
         params: &mut PrefillAttentionParams<'_>,
@@ -2564,6 +2568,8 @@ fn validate_execute_params(
     Ok(())
 }
 
+// Keep the audited CUDA preflight and lease/submission sequence together.
+#[allow(clippy::too_many_lines)]
 fn validate_hf_eager_qwen_p2051_last_row_trace(
     prepared: &PreparedPrefillAttention,
     params: &PrefillAttentionParams<'_>,

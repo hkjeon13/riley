@@ -80,3 +80,13 @@ required-features = ["server", "cuda"]
 name = "qwen3b_http_hf_exact_c1_gpu"
 path = "tests/qwen3b_http_hf_exact_c1_gpu.rs"
 required-features = ["server", "hf-exact-probe"]
+
+[[test]]
+name = "batch_model_exact_gpu"
+path = "tests/batch_model_exact_gpu.rs"
+required-features = ["server", "cuda"]
+
+[[test]]
+name = "batch_prepared_reference_gpu"
+path = "tests/batch_prepared_reference_gpu.rs"
+required-features = ["server", "cuda"]

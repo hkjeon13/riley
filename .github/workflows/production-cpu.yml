@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      run_legacy_host_tests:
+        description: Run historical RC3 integration on the exact reviewed Linux/Python host (no GPU)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -13,6 +18,8 @@ env:
   CARGO_INCREMENTAL: "0"
   CARGO_TERM_COLOR: always
   RUSTUP_TOOLCHAIN: 1.85.0
+  PYTHONDONTWRITEBYTECODE: "1"
+  RILEY_REQUIRE_LINUX_CONTRACT_TESTS: "1"
 
 jobs:
   quality:
@@ -30,12 +37,18 @@ jobs:
           rustc --version | grep -E '^rustc 1\.85\.0 '
           cargo --version | grep -E '^cargo 1\.85\.0 '
 
+      - name: Install validation Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Format
         run: cargo fmt --all -- --check
 
       - name: Dependency, license, feature, and workspace boundary policy
         run: |
           python3 ci/check_workspace_boundaries.py --locked
+          python3 ci/check_serving_source_contract.py
           python3 ci/check_extension_gates.py --base-revision "${{ github.event.pull_request.base.sha || github.event.before }}"
 
       - name: Release, performance, and reliability contract tests
@@ -49,7 +62,9 @@ jobs:
           python3 benchmarks/scripts/validate_contract.py
 
       - name: Clippy
-        run: cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
+        run: |
+          cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
+          cargo clippy --locked -p riley-server --all-targets --no-default-features --features server -- -D warnings
 
       - name: Prepare C03 routing-fuzz diagnostic directory
         env:
@@ -64,6 +79,7 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$RILEY_ROUTING_FUZZ_SOURCE_REVISION"
           cargo test --locked --workspace --all-targets --no-default-features
+          cargo test --locked -p riley-server --lib --no-default-features --features server
 
       - name: Validate C03 routing-fuzz diagnostics
         if: failure() && steps.unit_tests.outcome == 'failure'
@@ -101,3 +117,24 @@ jobs:
 
       - name: Build without excluded tool and research directories
         run: ci/check_workspace_without_research_tools.sh
+
+  legacy-host-contracts:
+    name: Historical RC3 host integration (not current GPU qualification)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_legacy_host_tests }}
+    runs-on: [self-hosted, linux, x64, riley-legacy-rc3]
+    timeout-minutes: 15
+    env:
+      RILEY_REQUIRE_LEGACY_HOST_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require the reviewed host and execute the historical probes
+        run: |
+          for target in \
+            test_rc3_gate_e_private_raw_core_v1.py \
+            test_run_remote_rc3_gate_e_session_v2.py \
+            test_run_remote_rc3_gate_e_session_v3.py \
+            test_verify_rc3_gate_e_execution_anchor_v1.py \
+            test_check_reconstructed_runtime_python_prerequisite_v1.py
+          do
+            /usr/bin/python3.10 -B -m unittest discover -s ci/release -p "$target" -v
+          done

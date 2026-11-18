@@ -5,8 +5,6 @@ pub mod benchmark;
 #[cfg(feature = "server")]
 pub mod chat;
 #[cfg(feature = "server")]
-pub mod structured;
-#[cfg(feature = "server")]
 pub mod domain;
 #[cfg(feature = "server")]
 pub mod engine;
@@ -16,6 +14,8 @@ pub mod http;
 pub mod openai;
 #[cfg(feature = "server")]
 pub mod service;
+#[cfg(feature = "server")]
+pub mod structured;
 
 /// Returns a stable, human-readable version line without starting a server.
 ///

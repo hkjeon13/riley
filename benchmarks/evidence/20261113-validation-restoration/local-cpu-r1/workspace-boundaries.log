@@ -1,0 +1,9 @@
+workspace boundary check passed
+  production crates: 7
+  development crates: 1 (riley-native, non-default, CUDA-gated binary)
+  excluded tool/research roots: tools/python, tools/native, experiments/triton
+  approved direct third-party Cargo dependencies: 14 (riley-model, riley-runtime, riley-server, and riley-native)
+  approved third-party Cargo package closure: 28
+  resolved source/checksum/license/MSRV/dependency edges: exact allowlist
+  production/native-development Python/Triton build invocations: 0
+  production/native-development runtime process-launch paths: 0

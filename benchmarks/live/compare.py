@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
-"""Run the serving scenarios on Riley and vLLM, alternating engines, on one GPU.
+"""Alternate Riley/vLLM on one GPU and require every declared cell to validate.
 
-usage: compare.py ROOT LABEL MODEL_DIR GPU RILEY_BIN [--order rvvr] [--scenarios a,b] [--riley-extra "..."]
-Writes ROOT/evidence/LABEL/<engine><rep>-<scenario>.json. Every scenario is
-declared here before the run; none is dropped afterwards.
+Legacy positional campaign layout is retained; --help lists explicit executable,
+model-directory and load-script overrides. Each label must be new. A failed
+cell exits nonzero, retains logs/run.json, and never prints COMPARE_DONE.
 """
-import argparse
-import json
-import os
-import shlex
-import subprocess
-import time
-import urllib.request
+from compare_runner import main
 
 SHORT, LONG = "short", "long"
 # name: (server config, load.py arguments)
@@ -44,97 +38,6 @@ SCENARIOS = {
     "logprobs-c32": (SHORT, '--prompt-words 30 --max-tokens 64 --concurrency 32 --requests 192 '
                             '--extra {"logprobs":true,"top_logprobs":5}'),
 }
-parser = argparse.ArgumentParser()
-parser.add_argument("root")
-parser.add_argument("label")
-parser.add_argument("model")
-parser.add_argument("gpu")
-parser.add_argument("riley_bin")
-parser.add_argument("--order", default="rvvr")
-parser.add_argument("--scenarios", default=",".join(SCENARIOS))
-parser.add_argument("--riley-short", default="")
-parser.add_argument("--riley-long", default="")
-parser.add_argument("--port", type=int, default=18300)
-parser.add_argument("--vllm-memory", default="0.8")
-parser.add_argument("--tp", type=int, default=1, help="tensor parallel size over the GPUs given (e.g. 6,7)")
-parser.add_argument("--prefix-cache", type=int, default=0,
-                    help="Riley --prefix-cache-blocks N and vLLM prefix caching on (0: both off)")
-args = parser.parse_args()
-PORT = args.port
-OUT = f"{args.root}/evidence/{args.label}"
-os.makedirs(OUT, exist_ok=True)
-MODEL = f"{args.root}/models/{args.model}"
-ENV = {**os.environ, "PATH": f"{args.root}/tools/vllm-venv/bin:" + os.environ["PATH"], "CUDA_DEVICE_ORDER": "PCI_BUS_ID", "CUDA_VISIBLE_DEVICES": args.gpu,
-       "LD_LIBRARY_PATH": "/usr/local/cuda-12.4/lib64:" + os.environ.get("LD_LIBRARY_PATH", "")}
 
-
-def riley_command(config):
-    common = (f"{args.root}/bin/riley-{args.riley_bin} serve --model {MODEL} --model-id m "
-              f"--bind 127.0.0.1:{PORT} --max-active-sequences 32 --max-weight-bytes 68719476736 ")
-    if args.prefix_cache:
-        common += f"--prefix-cache-blocks {args.prefix_cache} "
-    if args.tp > 1:
-        common += "--tensor-parallel-devices " + ",".join(str(i) for i in range(args.tp)) + " "
-    if config == SHORT:
-        return common + "--inference-profile native-bf16-varlen-v1 --max-output-tokens 128 " + args.riley_short
-    return common + ("--inference-profile native-bf16-varlen-v1 --max-sequence-tokens 8192 "
-                     "--max-output-tokens 2048 " + args.riley_long)
-
-
-def vllm_command(config):
-    length = 1024 if config == SHORT else 8192
-    return (f"{args.root}/tools/vllm-venv/bin/vllm serve {MODEL} --served-model-name m --port {PORT} "
-            f"--host 127.0.0.1 --max-model-len {length} --gpu-memory-utilization {args.vllm_memory} "
-            f"--generation-config vllm --max-num-seqs 32 --disable-log-stats --tensor-parallel-size {args.tp} "
-            + ("--enable-prefix-caching" if args.prefix_cache else "--no-enable-prefix-caching"))
-
-
-def start(engine, config, log):
-    command = riley_command(config) if engine == "r" else vllm_command(config)
-    handle = open(log, "w")
-    process = subprocess.Popen(shlex.split(command), env=ENV, stdout=handle, stderr=subprocess.STDOUT,
-                               stdin=subprocess.DEVNULL, start_new_session=True)
-    path = "/readyz" if engine == "r" else "/health"
-    for _ in range(600):
-        if process.poll() is not None:
-            raise SystemExit(f"{engine} died; see {log}")
-        try:
-            urllib.request.urlopen(f"http://127.0.0.1:{PORT}{path}", timeout=2)
-            return process
-        except OSError:
-            time.sleep(1)
-    process.kill()
-    raise SystemExit(f"{engine} never became ready")
-
-
-def stop(process):
-    process.terminate()
-    try:
-        process.wait(60)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
-    time.sleep(5)
-
-
-names = args.scenarios.split(",")
-seen = {}
-for engine in args.order:
-    seen[engine] = seen.get(engine, 0) + 1
-    tag = f"{engine}{seen[engine]}"
-    for config in (SHORT, LONG):
-        selected = [name for name in names if SCENARIOS[name][0] == config]
-        if not selected:
-            continue
-        process = start(engine, config, f"{OUT}/{tag}-{config}.server.log")
-        try:
-            for name in selected:
-                output = f"{OUT}/{tag}-{name}.json"
-                subprocess.run(
-                    ["python3", f"{args.root}/src/benchmarks/live/load.py", f"127.0.0.1:{PORT}", "m",
-                     *SCENARIOS[name][1].split(), "--out", output],
-                    check=False, timeout=1800, stdout=subprocess.DEVNULL)
-                print(tag, name, "done", flush=True)
-        finally:
-            stop(process)
-print("COMPARE_DONE", flush=True)
+if __name__ == "__main__":
+    raise SystemExit(main(SCENARIOS))

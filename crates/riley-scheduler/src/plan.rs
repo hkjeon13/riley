@@ -599,8 +599,15 @@ fn validate_physical_block_aliases(
         reason: "physical blocks written by a work item must not alias another table",
     };
     let first_written = |item: &WorkItem| {
-        (item.target_logical_length.saturating_sub(item.input_tokens.len()) / KV_BLOCK_SIZE)
-            .min(block_tables[item.block_table_index].physical_block_ids.len())
+        (item
+            .target_logical_length
+            .saturating_sub(item.input_tokens.len())
+            / KV_BLOCK_SIZE)
+            .min(
+                block_tables[item.block_table_index]
+                    .physical_block_ids
+                    .len(),
+            )
     };
     for item in items.into_iter().flatten() {
         let ids = &block_tables[item.block_table_index].physical_block_ids;
@@ -612,7 +619,10 @@ fn validate_physical_block_aliases(
     }
     for item in items.into_iter().flatten() {
         let ids = &block_tables[item.block_table_index].physical_block_ids;
-        if ids[..first_written(item)].iter().any(|id| written.contains(id)) {
+        if ids[..first_written(item)]
+            .iter()
+            .any(|id| written.contains(id))
+        {
             return Err(alias());
         }
     }

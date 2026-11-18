@@ -5133,6 +5133,8 @@ mod tests {
 
     #[test]
     #[cfg(not(feature = "cuda"))]
+    // Keep the audited CUDA preflight and lease/submission sequence together.
+    #[allow(clippy::too_many_lines)]
     fn native_bf16_paged_split_gqa_d128_is_explicit_eager_only_and_falls_back_cold() {
         let context = test_context();
         let qwen3b =

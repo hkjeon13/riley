@@ -1,6 +1,12 @@
 //! Native Metaspace + byte-fallback BPE for the Mistral v0.3 artifact profile.
-//! Uses the same ranked merge engine and bounded artifact validators as ByteLevel.
-use super::*;
+//! Uses the same ranked merge engine and bounded artifact validators as `ByteLevel`.
+use super::{
+    AddedTrie, ArtifactKind, BTreeMap, BTreeSet, BpeNode, DecodeOptions, Deserialize,
+    EncodeOptions, LoadLimits, ModelError, ModelResult, RawAddedToken, RawBpe, RawOptionalJson,
+    TOKENIZER_VERSION, Tokenizer, TokenizerProfile, enforce_count_limit, ensure_decode_destination,
+    invalid, merge_bpe_nodes, strict_json, usize_to_u64, validate_added_tokens, validate_merges,
+    validate_vocab,
+};
 use serde_json::{Value, json};
 
 /// First-party tokenizer for Mistral's full-attention v0.3 checkpoint profile.
@@ -47,52 +53,8 @@ impl MistralTokenizer {
     pub fn from_json_slice_with_limits(input: &[u8], limits: LoadLimits) -> ModelResult<Self> {
         enforce_count_limit("tokenizer JSON", limits.tokenizer_bytes(), input.len())?;
         let raw: RawMistralTokenizer = strict_json::from_slice(input, ArtifactKind::Tokenizer)?;
+        validate_metadata(&raw)?;
         let model = &raw.model;
-        if raw.version != TOKENIZER_VERSION
-            || !raw.truncation.is_null()
-            || !raw.padding.is_null()
-            || !raw.normalizer.is_null()
-            || model.kind != "BPE"
-            || !model.dropout.is_null()
-            || model.unk_token.as_str() != Some("<unk>")
-            || !model.continuing_subword_prefix.is_null()
-            || !model.end_of_word_suffix.is_null()
-            || !model.fuse_unk
-            || !model.byte_fallback
-            || !matches!(
-                model.ignore_merges,
-                RawOptionalJson::Missing | RawOptionalJson::Present(Value::Bool(false))
-            )
-        {
-            return Err(invalid("unsupported Mistral byte-fallback BPE metadata"));
-        }
-        if raw.pre_tokenizer
-            != json!({
-                "type":"Metaspace", "replacement":"▁", "prepend_scheme":"first", "split":false
-            })
-            || raw.decoder
-                != json!({
-                    "type":"Sequence", "decoders":[
-                        {"type":"Replace", "pattern":{"String":"▁"}, "content":" "},
-                        {"type":"ByteFallback"}, {"type":"Fuse"},
-                        {"type":"Strip", "content":" ", "start":1, "stop":0}
-                    ]
-                })
-        {
-            return Err(invalid("unsupported Mistral Metaspace/decoder pipeline"));
-        }
-        // A closed post-processor prevents additional or reordered special tokens.
-        if raw.post_processor
-            != json!({
-                "type":"TemplateProcessing",
-                "single":[{"SpecialToken":{"id":"<s>","type_id":0}},{"Sequence":{"id":"A","type_id":0}}],
-                "pair":[{"SpecialToken":{"id":"<s>","type_id":0}},{"Sequence":{"id":"A","type_id":0}},
-                    {"SpecialToken":{"id":"<s>","type_id":1}},{"Sequence":{"id":"B","type_id":1}}],
-                "special_tokens":{"<s>":{"id":"<s>","ids":[1],"tokens":["<s>"]}}
-            })
-        {
-            return Err(invalid("unsupported Mistral BOS template"));
-        }
         enforce_count_limit(
             "tokenizer vocabulary",
             usize_to_u64(limits.vocabulary_entries()),
@@ -137,8 +99,8 @@ impl MistralTokenizer {
         }
         let merge_ranks = validate_merges(raw.model.merges, &vocab)?;
         let mut fallback_bytes = vec![None; vocab_by_id.len()];
-        for (byte, &id) in fallback_ids.iter().enumerate() {
-            fallback_bytes[id as usize] = Some(u8::try_from(byte).expect("byte domain"));
+        for (byte, &id) in (0_u8..=255).zip(&fallback_ids) {
+            fallback_bytes[id as usize] = Some(byte);
         }
         let decoded: Vec<Box<[u8]>> = vocab_by_id
             .iter()
@@ -394,9 +356,60 @@ impl Tokenizer for MistralTokenizer {
     }
 }
 
+fn validate_metadata(raw: &RawMistralTokenizer) -> ModelResult<()> {
+    let model = &raw.model;
+    if raw.version != TOKENIZER_VERSION
+        || !raw.truncation.is_null()
+        || !raw.padding.is_null()
+        || !raw.normalizer.is_null()
+        || model.kind != "BPE"
+        || !model.dropout.is_null()
+        || model.unk_token.as_str() != Some("<unk>")
+        || !model.continuing_subword_prefix.is_null()
+        || !model.end_of_word_suffix.is_null()
+        || !model.fuse_unk
+        || !model.byte_fallback
+        || !matches!(
+            model.ignore_merges,
+            RawOptionalJson::Missing | RawOptionalJson::Present(Value::Bool(false))
+        )
+    {
+        return Err(invalid("unsupported Mistral byte-fallback BPE metadata"));
+    }
+    if raw.pre_tokenizer
+        != json!({
+            "type":"Metaspace", "replacement":"▁", "prepend_scheme":"first", "split":false
+        })
+        || raw.decoder
+            != json!({
+                "type":"Sequence", "decoders":[
+                    {"type":"Replace", "pattern":{"String":"▁"}, "content":" "},
+                    {"type":"ByteFallback"}, {"type":"Fuse"},
+                    {"type":"Strip", "content":" ", "start":1, "stop":0}
+                ]
+            })
+    {
+        return Err(invalid("unsupported Mistral Metaspace/decoder pipeline"));
+    }
+    // A closed post-processor prevents additional or reordered special tokens.
+    if raw.post_processor
+        != json!({
+            "type":"TemplateProcessing",
+            "single":[{"SpecialToken":{"id":"<s>","type_id":0}},{"Sequence":{"id":"A","type_id":0}}],
+            "pair":[{"SpecialToken":{"id":"<s>","type_id":0}},{"Sequence":{"id":"A","type_id":0}},
+                {"SpecialToken":{"id":"<s>","type_id":1}},{"Sequence":{"id":"B","type_id":1}}],
+            "special_tokens":{"<s>":{"id":"<s>","ids":[1],"tokens":["<s>"]}}
+        })
+    {
+        return Err(invalid("unsupported Mistral BOS template"));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::TokenDecodeState;
 
     fn artifact() -> Value {
         let mut vocab = BTreeMap::from([

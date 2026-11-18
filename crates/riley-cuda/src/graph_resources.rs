@@ -7,7 +7,7 @@ use crate::{CudaDeviceBuffer, CudaPinnedHostBuffer, CudaPreparedGemm, CudaResult
 pub enum DecodeNumericalProfile {
     /// Existing canonical graph arithmetic.
     Canonical = 0,
-    /// Existing HF-compatible SmolLM2 graph arithmetic.
+    /// Existing HF-compatible `SmolLM2` graph arithmetic.
     HuggingFaceSmolLm2 = 1,
     /// SM89/CUDA13 SmolLM2-135M, P128 and at most 32 generated tokens.
     /// Preserves vLLM 0.27.1 compiled/FlashAttention2 arithmetic for this bucket.
@@ -726,7 +726,7 @@ impl BorrowedGraphResourceReservation<'_> {
     /// Weights: embedding, final norm, head, then nine weights per layer:
     /// input norm, Q, K, V, O, post norm, gate, up, down. Geometry: layers,
     /// physical blocks, block capacity, vocabulary. Epsilons: final, then two per layer.
-    /// Replay uses an exact-sized payload: token/position u32, [0,live_blocks] u32,
+    /// Replay uses an exact-sized payload: token/position u32, `[0,live_blocks]` u32,
     /// capacity physical u32s, capacity valid u16s, aligned zero row-slot u32.
     /// The rest is padding. Size is max(metadata length, 40 + optional vocab*2).
     /// Output is optional BF16 logits, argmax token/status (8 bytes), embedding report (32 bytes).
@@ -842,6 +842,8 @@ impl BorrowedGraphResourceReservation<'_> {
     /// Rejects packed parents without packed plans, P128 prefill or the
     /// `VllmSmolP128V1` profile, out-of-range indices, or invalid native capture.
     #[allow(clippy::too_many_arguments)]
+    // Keep the audited CUDA preflight and lease/submission sequence together.
+    #[allow(clippy::too_many_lines)]
     pub fn record_decode_with_profile_prefill_and_packed(
         &mut self,
         devices: [usize; 21],

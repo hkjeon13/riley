@@ -1,6 +1,9 @@
-# PR 02–05 native CI contract
+# CPU validation and native CI contracts
 
-The mandatory lane is CPU-only. Native CUDA compilation is a separate
+The mandatory Production CPU lane uses Rust 1.85.0 and Python 3.12, with
+bytecode writes disabled. It checks both feature-off and `server` lint/tests,
+the exact workspace dependency closure, current serving source pins and the
+historical release-contract fixtures. Native CUDA compilation is a separate
 nightly/manual lane, the cumulative PR 03 host-runtime and PR 04 memory GPU
 tests are an explicit self-hosted/manual lane, and the Python reference suite
 is an optional offline fake-backend lane. No CI lane loads a model or runs
@@ -10,15 +13,25 @@ lifecycle checks.
 
 ## Production CPU gate
 
-Use the repository-pinned Rust 1.85.0 toolchain:
+Use the repository-pinned Rust 1.85.0 toolchain and Python 3.12. Set
+`REVIEW_BASE_SHA` to the full actual PR base or pre-change revision:
 
 ```sh
+export PYTHONDONTWRITEBYTECODE=1
 cargo fmt --all -- --check
 python3 ci/check_workspace_boundaries.py --locked
-python3 ci/check_extension_gates.py
+python3 ci/check_serving_source_contract.py
+python3 ci/check_extension_gates.py --base-revision "$REVIEW_BASE_SHA"
 python3 -m unittest discover -s ci/tests -p 'test_*.py' -v
+python3 -B -m unittest discover -s ci/release -p 'test_*.py' -v
+python3 -B -m unittest discover -s benchmarks/scripts/tests -p 'test_*.py' -v
 cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
+cargo clippy --locked -p riley-server --all-targets --no-default-features --features server -- -D warnings
 cargo test --locked --workspace --all-targets --no-default-features
+cargo test --locked -p riley-server --lib --no-default-features --features server
+python3 ci/release/verify_runtime_dockerfile.py
+python3 ci/release/verify_reconstructed_runtime_assembly_dockerfile.py
+python3 benchmarks/scripts/validate_contract.py
 ci/verify_python_free_model_loading.sh
 RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --no-deps --no-default-features
 ci/check_feature_matrix.sh
@@ -40,11 +53,11 @@ and it is not part of a production artifact. The checker fails closed unless:
 - every crate inherits `publish = false`;
 - every crate inherits the exact workspace `MIT` SPDX expression and the root
   `LICENSE` remains the reviewed MIT text for `Riley contributors`;
-- the only direct third-party Cargo dependencies are exact-version `serde`,
-  `serde_json`, and `sha2` requirements owned by `riley-model`; the same
-  reviewed `sha2` package used directly by `riley-runtime` and
-  `riley-server`; and optional `libc` owned by `riley-server` solely for
-  synchronous POSIX shutdown signal handling;
+- the 14 direct third-party dependency entries and 28 registry packages match
+  the reviewed policy, including native tokenizer Unicode normalization,
+  server-only MiniJinja chat templates and ordered schema JSON, SHA-256 and
+  POSIX signal handling. Optional dependencies are resolved with all features
+  for metadata inspection; this does not compile CUDA or initialize a GPU;
 - development-only dependency declarations match their own exact allowlist and
   do not count as production edges, while their resolved registry packages
   remain inside the exact lockfile closure below;
@@ -61,6 +74,71 @@ and it is not part of a production artifact. The checker fails closed unless:
 The approved dependency manifest is a reviewed allowlist, not a discovery
 output. Adding or upgrading a package requires updating its exact resolved
 closure and re-reviewing every changed checksum, license, and MSRV entry.
+
+Every `*_gpu` target explicitly requires its CUDA/probe feature, so CPU tests
+do not count unavailable GPU tests as executed. GPU fixture semantics and
+ignored-test controls remain in their native targets. The isolated production
+build copies only source inputs and embedded contract fixtures, avoiding local
+model downloads, evidence dumps and excluded tool build directories.
+
+## Current serving versus historical release contracts
+
+`ci/serving-source-contract.json` pins the reviewed current CLI, inference
+profile, distribution Dockerfile and entrypoint. A source change needs a
+behavior review and explicit literal pin update. The guard tests reject
+one-byte drift, missing files, links and an altered inventory. These pins do
+not establish performance, a reproducible CUDA binary or GPU correctness.
+
+`ci/release/release_common.py` retains the historical CUDA 12.8.1/sm_89
+RC-series artifact semantics. Its test fixture is the exact CLI blob from
+`21f445f4870a140346509144c36c7294f2f677f3`, preserved under
+`ci/release/fixtures/legacy-server-defaults-21f445f.rs.txt`. The modern CLI must
+still fail that historical bundle contract. The current CUDA 12.4
+sm_80/sm_86/sm_89 distribution uses `deploy/docker/Dockerfile`.
+
+The immutable C12 prefix-cache admission likewise retains its old fallback
+digest. The extension checker verifies its admission Git blob and a separate
+literal pin for the reviewed current KV source. This narrow admission-only
+bridge rejects missing history, subsequent source drift and an implementation
+link; it confers no tenant-isolation or runtime qualification. Full Git history
+is required, as supplied by the CPU workflow's `fetch-depth: 0`.
+
+## Host-specific historical execution tests
+
+Linux descriptor-bound fixtures explicitly skip on other kernels. Production
+CPU sets `RILEY_REQUIRE_LINUX_CONTRACT_TESTS=1`, so a wrong CI platform fails
+instead of skipping these tests. Portable parser, mode-policy and source
+integrity tests still run locally.
+
+Some historical RC3 integration tests execute the exact root-owned
+`/usr/bin/python3.10` with SHA-256
+`7d51cd6b48b521277f5caa4610a82126e315fa2be4df069823a8b1eeb5bd4a86`.
+An ordinary hosted runner cannot substitute its ambient Python for that
+contract. These tests report named skips when the reviewed host is absent.
+Use Production CPU's manual `run_legacy_host_tests` input on the
+`riley-legacy-rc3` self-hosted Linux label to run them. That lane sets
+`RILEY_REQUIRE_LEGACY_HOST_TESTS=1`; a missing or different interpreter fails.
+It uses no GPU and does not qualify the current serving release.
+
+## Serving comparison validity
+
+`benchmarks/live/compare.py` retains the positional campaign interface and
+supports explicit `--riley-executable`, `--vllm-executable`, `--models-dir` and
+`--load-script` paths. Paths are argv elements, including spaces and JSON.
+Each evidence label must be new. Use the updated runner and load script
+together: summaries now include warm-up counts and reject truncated SSE
+without a terminal finish and `[DONE]`.
+
+Every declared cell must exit successfully, contain the expected measured and
+warm-up counts/configuration, have no failed/429 requests, and contain finite
+nonnegative metrics. Qualification runs that intentionally test rejection
+need a separate declared expectation; this runner never silently tolerates
+429s. Failure retains logs and `run.json`, exits nonzero and omits
+`COMPARE_DONE`. Readiness and load timeouts reap the runner's own process
+sessions. The run records command argv and available script/binary/checkpoint
+manifest hashes. This orchestration validity is not a formal GPU release
+qualification. Historical measurements remain unchanged; rerun both engines
+with the same updated load generator before making a new speed claim.
 
 The PR 17 extension checker is a second closed allowlist. Registry v1 lands
 empty by default; the checked-in `deploy/extensions/registry.json` is

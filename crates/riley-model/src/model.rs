@@ -56,31 +56,7 @@ impl LoadedModel {
     pub fn load(root: &Path, limits: LoadLimits) -> ModelResult<Self> {
         let mut session = VerifiedArtifactSession::open(root, limits)?;
 
-        let config_artifact = session.read_once(
-            Path::new(CONFIG_FILENAME),
-            limits.config_bytes(),
-            "config.json",
-        )?;
-        let mut config = ModelConfig::from_json_slice_with_limits(config_artifact.bytes(), limits)?;
-        // A checkpoint whose manifest lists its generation configuration also
-        // stops on that file's end-of-sequence IDs, as Hugging Face generation
-        // does. A manifest without the file keeps the IDs of `config.json`.
-        let generation_config = Path::new(GENERATION_CONFIG_FILENAME);
-        if session.provenance().lists(generation_config) {
-            let artifact = session.read_once(
-                generation_config,
-                limits.config_bytes(),
-                "generation_config.json",
-            )?;
-            match &mut config {
-                ModelConfig::Llama(llama_config) | ModelConfig::Mistral(llama_config) => {
-                    llama_config.extend_eos_from_generation_config(artifact.bytes(), limits)?;
-                }
-                ModelConfig::Qwen2(qwen_config) => {
-                    qwen_config.extend_eos_from_generation_config(artifact.bytes(), limits)?;
-                }
-            }
-        }
+        let config = read_model_config(&mut session, limits)?;
         let spec = config.to_model_spec();
         validate_manifest_dtype(session.provenance(), &spec)?;
 
@@ -131,24 +107,7 @@ impl LoadedModel {
                     tokenizer_artifact.bytes(),
                     limits,
                 )?;
-                if tokenizer.addressable_token_count() != spec.embedding().vocabulary_size()
-                    || spec.special_tokens().bos() != Some(tokenizer.bos_token_id())
-                    || spec
-                        .special_tokens()
-                        .eos()
-                        .iter()
-                        .any(|id| !tokenizer.is_special_id(*id))
-                    || config
-                        .pad_token_id()
-                        .is_some_and(|id| !tokenizer.is_special_id(id))
-                {
-                    return Err(ModelError::InvalidArtifact {
-                        artifact: TOKENIZER_FILENAME.to_owned(),
-                        reason:
-                            "Mistral tokenizer vocabulary or special tokens disagree with config"
-                                .to_owned(),
-                    });
-                }
+                validate_mistral_tokenizer_coherence(&spec, &tokenizer, config.pad_token_id())?;
                 (Arc::new(tokenizer), None)
             }
             ModelConfig::Qwen2(_) => {
@@ -277,6 +236,61 @@ fn metadata_bos_token(input: &[u8]) -> Option<String> {
         serde_json::Value::Object(token) => token.get("content")?.as_str().map(str::to_owned),
         _ => None,
     }
+}
+
+fn validate_mistral_tokenizer_coherence(
+    spec: &ModelSpec,
+    tokenizer: &MistralTokenizer,
+    pad_token_id: Option<u32>,
+) -> ModelResult<()> {
+    if tokenizer.addressable_token_count() != spec.embedding().vocabulary_size()
+        || spec.special_tokens().bos() != Some(tokenizer.bos_token_id())
+        || spec
+            .special_tokens()
+            .eos()
+            .iter()
+            .any(|id| !tokenizer.is_special_id(*id))
+        || pad_token_id.is_some_and(|id| !tokenizer.is_special_id(id))
+    {
+        return Err(ModelError::InvalidArtifact {
+            artifact: TOKENIZER_FILENAME.to_owned(),
+            reason: "Mistral tokenizer vocabulary or special tokens disagree with config"
+                .to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn read_model_config(
+    session: &mut VerifiedArtifactSession,
+    limits: LoadLimits,
+) -> ModelResult<ModelConfig> {
+    let config_artifact = session.read_once(
+        Path::new(CONFIG_FILENAME),
+        limits.config_bytes(),
+        "config.json",
+    )?;
+    let mut config = ModelConfig::from_json_slice_with_limits(config_artifact.bytes(), limits)?;
+    // A checkpoint whose manifest lists its generation configuration also
+    // stops on that file's end-of-sequence IDs, as Hugging Face generation
+    // does. A manifest without the file keeps the IDs of `config.json`.
+    let generation_config = Path::new(GENERATION_CONFIG_FILENAME);
+    if session.provenance().lists(generation_config) {
+        let artifact = session.read_once(
+            generation_config,
+            limits.config_bytes(),
+            "generation_config.json",
+        )?;
+        match &mut config {
+            ModelConfig::Llama(llama_config) | ModelConfig::Mistral(llama_config) => {
+                llama_config.extend_eos_from_generation_config(artifact.bytes(), limits)?;
+            }
+            ModelConfig::Qwen2(qwen_config) => {
+                qwen_config.extend_eos_from_generation_config(artifact.bytes(), limits)?;
+            }
+        }
+    }
+    Ok(config)
 }
 
 fn read_chat_template(

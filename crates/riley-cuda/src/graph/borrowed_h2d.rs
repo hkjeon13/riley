@@ -38,6 +38,8 @@ impl<'a> BorrowedH2DGraph<'a> {
     /// Captures one whole-slab copy on actual source/destination allocations.
     /// # Errors
     /// Rejects unsupported policy, size, context, alias, lease or CUDA failures.
+    // CUDA builds consume this ownership descriptor; keep one API in CPU builds.
+    #[cfg_attr(not(feature = "cuda"), allow(clippy::needless_pass_by_value))]
     pub fn prepare(resources: BorrowedH2DResources<'a>) -> CudaResult<Self> {
         #[cfg(feature = "cuda")]
         {

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Shared, standard-library-only release bundle contract helpers."""
+"""Historical RC-series CUDA 12.8.1/sm_89 bundle contract helpers.
+
+These immutable artifact semantics are not the CUDA 12.4 distribution image.
+Current serving defaults are checked by ci/check_serving_source_contract.py;
+never repin this legacy contract to a modern CLI merely to pass its fixtures.
+"""
 
 from __future__ import annotations
 

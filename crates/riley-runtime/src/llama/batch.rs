@@ -530,16 +530,24 @@ impl PreparedLlamaBatchMetadata {
         &'batch mut self,
         rows: &[LlamaBatchRow<'_>],
     ) -> LlamaBatchResult<LlamaPackedBatchMetadata<'batch>> {
-        self.pack_ordered(rows,false)
+        self.pack_ordered(rows, false)
     }
 
     /// Decode-prefix packing for fixed-address mixed-batch linear Graphs.
     /// Explicit output slots retain the caller's routing order.
-    pub(crate) fn pack_decode_first<'batch>(&'batch mut self,rows:&[LlamaBatchRow<'_>])->LlamaBatchResult<LlamaPackedBatchMetadata<'batch>> {
-        self.pack_ordered(rows,true)
+    #[cfg(any(feature = "cuda", test))]
+    pub(crate) fn pack_decode_first<'batch>(
+        &'batch mut self,
+        rows: &[LlamaBatchRow<'_>],
+    ) -> LlamaBatchResult<LlamaPackedBatchMetadata<'batch>> {
+        self.pack_ordered(rows, true)
     }
 
-    fn pack_ordered<'batch>(&'batch mut self,rows:&[LlamaBatchRow<'_>],decode_first:bool)->LlamaBatchResult<LlamaPackedBatchMetadata<'batch>> {
+    fn pack_ordered<'batch>(
+        &'batch mut self,
+        rows: &[LlamaBatchRow<'_>],
+        decode_first: bool,
+    ) -> LlamaBatchResult<LlamaPackedBatchMetadata<'batch>> {
         // HOT_BATCH_PACK_BEGIN
         let validated = self.validate(rows)?;
         self.clear_packed();
@@ -552,8 +560,13 @@ impl PreparedLlamaBatchMetadata {
 
         let mut token_offset = 0_u32;
         let mut block_offset = 0_u32;
-        let ordered=rows.iter().filter(|r|!decode_first || r.kind==LlamaBatchRowKind::Decode)
-            .chain(rows.iter().filter(|r|decode_first && r.kind!=LlamaBatchRowKind::Decode));
+        let ordered = rows
+            .iter()
+            .filter(|r| !decode_first || r.kind == LlamaBatchRowKind::Decode)
+            .chain(
+                rows.iter()
+                    .filter(|r| decode_first && r.kind != LlamaBatchRowKind::Decode),
+            );
         for (row_index, row) in ordered.enumerate() {
             let row_index_u32 = checked_u32(row_index, "row index")?;
             let input_count = checked_u32(row.input_token_ids.len(), "row input token count")?;
@@ -836,7 +849,7 @@ impl PreparedLlamaBatchMetadata {
                     reason: "physical blocks written by a row must not alias another row",
                 });
             }
-            self.physical_block_marks[physical_index] = epoch << 1 | u64::from(write);
+            self.physical_block_marks[physical_index] = (epoch << 1) | u64::from(write);
 
             let expected_valid = if block_index + 1 == required_blocks {
                 let tail = target_length % KV_BLOCK_SIZE;
@@ -1346,19 +1359,19 @@ mod tests {
         let mut prepared = PreparedLlamaBatchMetadata::prepare(config()).expect("prepare");
         let packed = prepared.pack_decode_first(&rows).expect("pack");
 
-        assert_eq!(packed.sequence_tags(), &[42,41]);
-        assert_eq!(packed.input_token_ids(), &[20,10,11,12]);
-        assert_eq!(packed.position_ids(), &[16,0,1,2]);
-        assert_eq!(packed.block_row_offsets(), &[0,2,3]);
-        assert_eq!(packed.physical_block_ids(), &[4,5,2]);
-        assert_eq!(packed.valid_tokens(), &[FULL,1,3]);
-        assert_eq!(packed.output_slots_by_row(), &[0,1]);
-        assert_eq!(packed.output_row_indices(), &[0,1]);
-        assert_eq!(packed.output_token_indices(), &[0,3]);
+        assert_eq!(packed.sequence_tags(), &[42, 41]);
+        assert_eq!(packed.input_token_ids(), &[20, 10, 11, 12]);
+        assert_eq!(packed.position_ids(), &[16, 0, 1, 2]);
+        assert_eq!(packed.block_row_offsets(), &[0, 2, 3]);
+        assert_eq!(packed.physical_block_ids(), &[4, 5, 2]);
+        assert_eq!(packed.valid_tokens(), &[FULL, 1, 3]);
+        assert_eq!(packed.output_slots_by_row(), &[0, 1]);
+        assert_eq!(packed.output_row_indices(), &[0, 1]);
+        assert_eq!(packed.output_token_indices(), &[0, 3]);
         assert_eq!(packed.prefill_row_indices(), &[1]);
         assert_eq!(packed.decode_row_indices(), &[0]);
-        assert_eq!(packed.prefill_token_count(),3);
-        assert_eq!(packed.decode_token_count(),1);
+        assert_eq!(packed.prefill_token_count(), 3);
+        assert_eq!(packed.decode_token_count(), 1);
     }
 
     #[test]
@@ -1469,7 +1482,11 @@ mod tests {
             )
         };
         let mut prepared = PreparedLlamaBatchMetadata::prepare(config()).expect("prepare");
-        assert!(prepared.pack(&[row(1, &[0, 1], 0), row(2, &[0, 2], 1)]).is_ok());
+        assert!(
+            prepared
+                .pack(&[row(1, &[0, 1], 0), row(2, &[0, 2], 1)])
+                .is_ok()
+        );
         for rows in [
             [row(1, &[0, 1], 0), row(2, &[1, 2], 1)],
             [row(1, &[1, 0], 0), row(2, &[2, 0], 1)],

@@ -1,5 +1,5 @@
 //! CPU-only oracle checks against pinned HF artifacts and tokenizers 0.23.3.
-//! Run explicitly with RILEY_MISTRAL_ARTIFACT_DIR and --ignored; never silently skip.
+//! Run explicitly with `RILEY_MISTRAL_ARTIFACT_DIR` and --ignored; never silently skip.
 use riley_model::{
     DecodeOptions, EncodeOptions, LoadLimits, LoadedModel, MistralTokenizer, ModelFamily,
     TokenDecodeState, Tokenizer,

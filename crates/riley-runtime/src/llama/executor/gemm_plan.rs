@@ -10,7 +10,10 @@ use riley_cuda::{CudaContext, CudaErrorKind};
 use riley_model::LoadedModel;
 
 use super::super::LlamaExecutionPlan;
-use super::super::forward::{GemmPlans, LlamaForwardError, PreparedLlamaForward, OwnedDecodeSegment, owned_decode_segment_capacity};
+use super::super::forward::{
+    GemmPlans, LlamaForwardError, OwnedDecodeSegment, PreparedLlamaForward,
+    owned_decode_segment_capacity,
+};
 use super::error::{LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult};
 use super::shape::{LlamaBatchShapePolicy, validate_shape_buckets};
 
@@ -82,7 +85,9 @@ pub(in crate::llama) fn prepare_shape_variants(
         };
         variants.push(PreparedLlamaBatchShape {
             dense_rows,
-            owned_decode_segments: (0..owned_decode_segment_capacity(&plan,dense_rows)).map(|_| OwnedDecodeSegment::default()).collect(),
+            owned_decode_segments: (0..owned_decode_segment_capacity(&plan, dense_rows))
+                .map(|_| OwnedDecodeSegment::default())
+                .collect(),
             plan,
             gemms,
             captured_steps: Vec::new(),

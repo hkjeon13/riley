@@ -415,8 +415,10 @@ impl LlamaRopeFrequencies {
             - scaling.low_frequency_factor)
             / (scaling.high_frequency_factor - scaling.low_frequency_factor);
         let smoothed = (1.0 - smooth) * scaled / scaling.factor + smooth * scaled;
-        let medium =
-            !(wavelength < high_frequency_wavelength) && !(wavelength > low_frequency_wavelength);
+        let medium = wavelength.partial_cmp(&high_frequency_wavelength)
+            != Some(std::cmp::Ordering::Less)
+            && wavelength.partial_cmp(&low_frequency_wavelength)
+                != Some(std::cmp::Ordering::Greater);
         if medium { smoothed } else { scaled }
     }
 }
@@ -1549,6 +1551,8 @@ mod tests {
     }
 
     #[test]
+    // The tuple describes ownership transfer without boxing or allocating.
+    #[allow(clippy::type_complexity)]
     fn llama3_rope_frequencies_follow_the_transformers_formula() {
         // Reference: transformers' `_compute_llama3_parameters` evaluated in
         // float32 (numpy) for base 500000, low 1, high 4, original 8192.

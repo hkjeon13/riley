@@ -83,7 +83,6 @@ fn download(
     Ok(bytes)
 }
 
-
 /// Context length of sequence `s` in a natural-workload steady state: the
 /// 16-, 128- and 398-token prompts with part of their 32/64/128 outputs.
 fn natural_context(sequence: usize) -> u32 {
@@ -112,10 +111,28 @@ fn time_mode(
     context: &CudaContext,
     stream: &mut CudaStream,
     staging: &mut CudaPinnedHostBuffer,
-    pools: &(CudaDeviceBuffer, CudaDeviceBuffer, CudaDeviceBuffer, CudaDeviceBuffer, CudaDeviceBuffer, Vec<u32>, Vec<u32>, Vec<u16>),
+    pools: &(
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        Vec<u32>,
+        Vec<u32>,
+        Vec<u16>,
+    ),
     rows: &[(u32, u32, u32)],
 ) -> TestResult<f64> {
-    let (key_pool, value_pool, offsets, ids, valid, sequence_block_offsets, block_ids, valid_tokens) = pools;
+    let (
+        key_pool,
+        value_pool,
+        offsets,
+        ids,
+        valid,
+        sequence_block_offsets,
+        block_ids,
+        valid_tokens,
+    ) = pools;
     let row_count = rows.len();
     let slots: Vec<u32> = rows.iter().map(|row| row.0).collect();
     let positions: Vec<u32> = rows.iter().map(|row| row.1).collect();
@@ -130,7 +147,12 @@ fn time_mode(
         u64::try_from(SEQUENCES * PAGES_PER_SEQUENCE)?,
     )?;
     let row_width = QUERY_HEADS * HEAD_SIZE;
-    let query = upload(context, stream, staging, &pattern(row_count * row_width, 11, 7, 29, 9.0))?;
+    let query = upload(
+        context,
+        stream,
+        staging,
+        &pattern(row_count * row_width, 11, 7, 29, 9.0),
+    )?;
     let row_slots = upload(context, stream, staging, &encode_u32(&slots))?;
     let position_buffer = upload(context, stream, staging, &encode_u32(&words))?;
     let layout = NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::with_query_heads(
@@ -140,7 +162,8 @@ fn time_mode(
     )?;
     let mut partial_states = context.allocate_device_buffer(layout.partial_state_bytes())?;
     let mut reduction_steps = context.allocate_device_buffer(layout.reduction_step_bytes())?;
-    let mut reduction_normalizers = context.allocate_device_buffer(layout.reduction_normalizer_bytes())?;
+    let mut reduction_normalizers =
+        context.allocate_device_buffer(layout.reduction_normalizer_bytes())?;
     let mut output = context.allocate_device_buffer(u64::try_from(row_count * row_width * 2)?)?;
     let elapsed;
     {
@@ -154,8 +177,18 @@ fn time_mode(
             query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
             key_pool: CudaBufferSpan::new(key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
             value_pool: CudaBufferSpan::new(value_pool, CudaDType::BF16, 0, value_pool.byte_len())?,
-            partial_states: CudaBufferSpanMut::new(&mut partial_states, CudaDType::F32, 0, states_len)?,
-            reduction_steps: CudaBufferSpanMut::new(&mut reduction_steps, CudaDType::F32, 0, steps_len)?,
+            partial_states: CudaBufferSpanMut::new(
+                &mut partial_states,
+                CudaDType::F32,
+                0,
+                states_len,
+            )?,
+            reduction_steps: CudaBufferSpanMut::new(
+                &mut reduction_steps,
+                CudaDType::F32,
+                0,
+                steps_len,
+            )?,
             reduction_normalizers: CudaBufferSpanMut::new(
                 &mut reduction_normalizers,
                 CudaDType::F32,
@@ -169,7 +202,12 @@ fn time_mode(
                 CudaBufferSpan::new(ids, CudaDType::U32, 0, ids.byte_len())?,
                 CudaBufferSpan::new(valid, CudaDType::U16, 0, valid.byte_len())?,
                 CudaBufferSpan::new(&row_slots, CudaDType::U32, 0, row_slots.byte_len())?,
-                CudaBufferSpan::new(&position_buffer, CudaDType::U32, 0, position_buffer.byte_len())?,
+                CudaBufferSpan::new(
+                    &position_buffer,
+                    CudaDType::U32,
+                    0,
+                    position_buffer.byte_len(),
+                )?,
             )?,
             query_head_count: u64::try_from(QUERY_HEADS)?,
             key_value_head_count: u64::try_from(KEY_VALUE_HEADS)?,
@@ -182,20 +220,34 @@ fn time_mode(
         let first_word = u64::try_from(row_count)?;
         for _ in 0..WARMUP {
             native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge_prompt_mma(
-                &mut params, first_word, None, stream,
+                &mut params,
+                first_word,
+                None,
+                stream,
             )?;
         }
         stream.synchronize()?;
         let started = Instant::now();
         for _ in 0..ITERATIONS {
             native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge_prompt_mma(
-                &mut params, first_word, None, stream,
+                &mut params,
+                first_word,
+                None,
+                stream,
             )?;
         }
         stream.synchronize()?;
         elapsed = started.elapsed().as_secs_f64() * 1e6 / ITERATIONS as f64;
     }
-    for buffer in [query, row_slots, position_buffer, partial_states, reduction_steps, reduction_normalizers, output] {
+    for buffer in [
+        query,
+        row_slots,
+        position_buffer,
+        partial_states,
+        reduction_steps,
+        reduction_normalizers,
+        output,
+    ] {
         buffer.close()?;
     }
     Ok(elapsed)
@@ -218,15 +270,33 @@ fn attention_step_shapes_timing() -> TestResult {
         .collect();
     let valid_tokens = vec![PAGE_SIZE as u16; physical_blocks];
     let pools = (
-        upload(&context, &mut stream, &mut staging, &pattern(pool_elements, 5, 3, 31, 10.0))?,
-        upload(&context, &mut stream, &mut staging, &pattern(pool_elements, 13, 9, 37, 24.0))?,
-        upload(&context, &mut stream, &mut staging, &encode_u32(&sequence_block_offsets))?,
+        upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pattern(pool_elements, 5, 3, 31, 10.0),
+        )?,
+        upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &pattern(pool_elements, 13, 9, 37, 24.0),
+        )?,
+        upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &encode_u32(&sequence_block_offsets),
+        )?,
         upload(&context, &mut stream, &mut staging, &encode_u32(&block_ids))?,
         upload(
             &context,
             &mut stream,
             &mut staging,
-            &valid_tokens.iter().flat_map(|value| value.to_ne_bytes()).collect::<Vec<u8>>(),
+            &valid_tokens
+                .iter()
+                .flat_map(|value| value.to_ne_bytes())
+                .collect::<Vec<u8>>(),
         )?,
         sequence_block_offsets,
         block_ids,
@@ -243,7 +313,10 @@ fn attention_step_shapes_timing() -> TestResult {
         for (shape, mixed) in [("decode32", false), ("mixed31+224", true)] {
             let rows = step_rows(mixed);
             let microseconds = time_mode(&context, &mut stream, &mut staging, &pools, &rows)?;
-            println!("ATTN mode={mode} shape={shape} rows={} us_per_layer={microseconds:.1}", rows.len());
+            println!(
+                "ATTN mode={mode} shape={shape} rows={} us_per_layer={microseconds:.1}",
+                rows.len()
+            );
         }
     }
     set_native_d128_prompt_direct(0);

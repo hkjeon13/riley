@@ -169,9 +169,6 @@ fn nullable_rules(rules: &[Vec<Vec<GrammarElement>>]) -> Vec<bool> {
 }
 
 fn reject_left_recursion(rules: &[Vec<Vec<GrammarElement>>]) -> Result<(), GrammarError> {
-    let nullable = nullable_rules(rules);
-    // 0 unvisited, 1 on the current path, 2 finished.
-    let mut marks = vec![0_u8; rules.len()];
     fn visit(
         rule: usize,
         rules: &[Vec<Vec<GrammarElement>>],
@@ -199,6 +196,9 @@ fn reject_left_recursion(rules: &[Vec<Vec<GrammarElement>>]) -> Result<(), Gramm
         marks[rule] = 2;
         Ok(())
     }
+    let nullable = nullable_rules(rules);
+    // 0 unvisited, 1 on the current path, 2 finished.
+    let mut marks = vec![0_u8; rules.len()];
     for rule in 0..rules.len() {
         visit(rule, rules, &nullable, &mut marks)?;
     }
@@ -671,6 +671,8 @@ mod tests {
     }
 
     #[test]
+    // Native rows and fixed geometry are bounded during cold preparation; preserve their bytes.
+    #[allow(clippy::cast_possible_truncation)]
     fn mask_allows_tokens_whose_whole_bytes_fit() {
         let tokens: Vec<Vec<u8>> = [&b"a"[..], b"ab", b"abd", b"bd", b"x", b"", b"ax"]
             .iter()

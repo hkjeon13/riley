@@ -11,12 +11,15 @@ import unittest
 from pathlib import Path
 
 
+from release_test_environment import requires_legacy_host
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 RUNNER = REPOSITORY_ROOT / "ci/release/run_remote_rc3_gate_e_session_v2.py"
 PYTHON = "/usr/bin/python3.10"
 
 
 class RunRemoteRc3GateESessionV2Tests(unittest.TestCase):
+    @requires_legacy_host
     def _run(
         self,
         *arguments: str,
@@ -92,6 +95,7 @@ class RunRemoteRc3GateESessionV2Tests(unittest.TestCase):
         self.assertGreater(source["sealed_snapshot_dev"], 0)
         self.assertGreater(source["sealed_snapshot_ino"], 0)
 
+    @requires_legacy_host
     def test_relative_and_symlinked_launcher_paths_fail_before_source_probe(self) -> None:
         relative = subprocess.run(
             [
