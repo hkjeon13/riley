@@ -57,7 +57,6 @@
 
 같은 바이너리와 30분 cache-off 부하를 사용하고 후반 첫 표본과 drain에서 `status`와 `smaps_rollup`을 함께 읽는 시험을 등록했다. A100 호스트의 별도 CPU 프로세스에서 `smaps_rollup` 파싱을 확인했다. 집계기는 기존 반복과 바이너리·부하·GPU 예약을 대조하고, 같은 두 시점의 원본에서 RSS 지표별 증가량과 판정을 다시 계산한다. GPU 실행은 14B prefill 후보 시험 종료 뒤 시작했다. [정밀 계측 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/campaign.sh) · [CPU 파싱 사전검사](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/smaps-cpu-check.json) · [두 RSS 지표 대조 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/compare_smaps_rollup.py)
 
-
 ### 정밀 RSS 재실행 결과
 
 GPU 7의 30분 재실행에서 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했다. HTTP·SSE 오류와 overload는 0건이었다. Drain 뒤 활성 요청·대기 요청·요청 KV는 0이었고, 서버 종료 후 device·pinned 할당도 각각 0이었다. GPU 7은 같은 홀더 PID와 시작 시각을 유지해 20GiB 예약으로 돌아갔다. [실행 원본과 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/result/SHA256SUMS)
@@ -88,4 +87,6 @@ A100 GPU 6에서 같은 Qwen2.5-7B-Instruct CUDA 바이너리로 Linux loopback 
 
 장치 메모리 갱신 실패를 가정한 CPU 단위 테스트는 tentative KV 블록 회수와 sidecar 무효화를 확인했다. 실제 운영 트래픽 분포, GPU 장치 장애, 배포 이미지 추론은 추가 검증 항목이다. [장치 실패 시 KV 회수 테스트](../../crates/riley-runtime/src/paged_kv.rs#L2186)
 
-기존 테스트는 할당 생성·해제의 결과가 불명확한 경우와 복사 제출·완료 오류를 독립 자식 프로세스로 검사한다. 첫 시도는 C ABI 헤더에서 cuBLAS probe 전용 타입의 기능 조건이 누락돼 종료 코드 101을 기록했다. 헤더 수정 이후 실제 빌드는 Rust 바인딩의 기능 조건 여섯 곳에서 종료 코드 101을 기록했다. 두 수정 사항을 적용하는 새 시험을 GPU 6에 등록했다. GPU 실행은 정밀 RSS 대조 뒤에 시작한다. [실패 주입 테스트](../../crates/riley-cuda/tests/memory_fault_injection_gpu.rs) · [C ABI 실패 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/initial-build/SHA256SUMS) · [Rust 실패 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/rust-build/SHA256SUMS) · [새 재시험 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/campaign.sh)
+기존 테스트는 할당 생성·해제의 결과가 불명확한 경우와 복사 제출·완료 오류를 독립 자식 프로세스로 검사한다. 첫 시도는 C ABI 헤더에서 cuBLAS probe 전용 타입의 기능 조건이 누락돼 종료 코드 101을 기록했다. 헤더 수정 이후 실제 빌드는 Rust 바인딩의 기능 조건 여섯 곳에서 종료 코드 101을 기록했다. 두 수정 사항을 적용한 재시험은 정밀 RSS 대조가 끝난 뒤 GPU 6에서 실행했다. [실패 주입 테스트](../../crates/riley-cuda/tests/memory_fault_injection_gpu.rs) · [C ABI 실패 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/initial-build/SHA256SUMS) · [Rust 실패 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/rust-build/SHA256SUMS) · [재시험 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/campaign.sh)
+
+CUDA 12.4의 SM80 빌드에서 소스·패치 입력 체크섬 144개를 확인한 뒤 메모리 오류 주입 테스트를 실행했다. 생성 rollback, 명시적 해제, 지연 제출, 완료 복구의 네 사례가 서로 다른 자식 프로세스에서 종료 코드 0을 반환했다. 로그 검사기가 자식 네 건과 부모 한 건의 통과, 순차 격리, 총 16개 단계 표지를 검증했다. 물리 GPU 6은 같은 홀더의 20GiB 예약으로 돌아갔다. [실행과 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/result/SHA256SUMS) · [오류 주입 판정](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/result/verification.json)

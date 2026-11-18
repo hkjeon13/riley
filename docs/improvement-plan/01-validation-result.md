@@ -4,7 +4,7 @@
 작업 기준: `main` `37ede444562b1d6c3718fae0a8db314f81fbba92`\
 초기 복구 작업 브랜치: `codex/restore-validation-release-contracts`\
 반영 브랜치: `main`\
-최신 판정: 로컬·Linux CI, 격리 컨테이너의 과거 RC3 고정 테스트, CUDA 12.4 배포 이미지 빌드·CPU 검사 완료. 배포 이미지의 GPU 추론 검증은 미완료.
+최신 판정: 로컬·Linux CPU CI, CUDA 12.8 네이티브 빌드·Clippy, 격리 컨테이너의 과거 RC3 고정 테스트, CUDA 12.4 배포 이미지 빌드·CPU 검사 완료. 배포 이미지의 GPU 추론 검증은 미완료.
 
 [W1 계획](01-validation-and-release.md) · [종합 계획](README.md) · [검사 사용법](../../ci/README.md)
 
@@ -129,8 +129,8 @@ GPU 없는 runner에서 Riley 바이너리는 NVIDIA가 주입하는 `libcuda.so
 
 두 번째 수정에서는 CUDA 라이브러리의 probe 전용 함수와 테스트 전용 helper에 호출자와 같은 기능 조건을 적용했다. 그래프 preflight와 FFI의 반환 타입과 C ABI는 유지했고, GPU 테스트에서 사용하는 크기·인덱스 변환은 범위를 확인하도록 수정했다. CPU 구성에서 `riley-cuda` 테스트 225건을 통과했다. 격리한 macOS 환경에서 네이티브 빌드 스크립트를 임시 대체해 Rust 코드만 확인한 결과, `riley-cuda`와 `riley-tensor`의 CUDA 기능 전체 타깃 Clippy가 기존 `-D warnings`로 통과했다. 같은 빌드의 GitHub Actions에서 `riley-cuda`·`riley-tensor` Clippy를 통과했다. 이어서 `riley-server` Clippy에 포함되는 `riley-runtime` 진단 124건에서 멈췄다. [CUDA 12.8 실행](https://github.com/hkjeon13/riley/actions/runs/44408233868)
 
-서버와 런타임에서 probe 전용 코드의 기능 조건을 맞췄다. 그래프의 호스트 크기와 U32 변환에 검사를 추가하고, argmax 결과 버퍼가 짧을 때는 기존 `OutputNotReady` 오류로 처리한다. Linux 프로세스 통계 파서는 Linux CUDA와 단위 테스트에서만 빌드한다. 서버 진입점의 분기 동작을 대조한 뒤 현행 소스 계약의 해당 해시 한 건을 갱신했다. 로컬 Rust 전용 검사에서 `riley-server`·`riley-native`까지 기존 CUDA Clippy 명령 네 개가 모두 통과했다. 실제 CUDA 네이티브 CI에서 전체 명령을 다시 검증한다. [현행 소스 계약](../../ci/serving-source-contract.json)
+서버와 런타임에서 probe 전용 코드의 기능 조건을 맞췄다. 그래프의 호스트 크기와 U32 변환에 검사를 추가하고, argmax 결과 버퍼가 짧을 때는 기존 `OutputNotReady` 오류로 처리한다. Linux 프로세스 통계 파서는 Linux CUDA와 단위 테스트에서만 빌드한다. 서버 진입점의 분기 동작을 대조한 뒤 현행 소스 계약의 해당 해시 한 건을 갱신했다. 로컬 Rust 전용 검사에서 `riley-server`·`riley-native`까지 기존 CUDA Clippy 명령 네 개가 모두 통과했다. 현재 소스와 바이너리 입력을 변경하면 `main`에서 네이티브 CUDA 워크플로가 실행되도록 트리거를 넓혔다. CUDA 12.8.1과 Rust 1.85.0에서 `77c367003`의 실제 빌드·링크, C ABI 테스트 2건, 엄격한 Clippy 명령 4개, 실행 파일 버전·의존성 검사가 통과했다. [현행 소스 계약](../../ci/serving-source-contract.json) · [네이티브 CUDA 성공 실행](https://github.com/hkjeon13/riley/actions/runs/44410425140)
 
-같은 커밋의 CUDA 12.4 배포 이미지 빌드와 CPU 검증은 통과했다. 소스 아카이브 해시를 로컬에서 재계산했고, 이전 이미지와 런타임 파일 목록이 같으며 Riley 실행 파일의 해시만 달라진 것을 확인했다. 이미지 ID와 새 실행 파일의 해시를 보존했다. [배포 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/44403168877) · [바인딩 수정 이미지 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/ffi-fix/receipt.json)
+`9ea8012c1`의 CUDA 12.4 배포 이미지 빌드와 CPU 검증도 통과했다. 소스 아카이브 해시를 로컬에서 재계산했고, 이전 이미지와 런타임 파일 목록이 같으며 Riley 실행 파일의 해시만 달라진 것을 확인했다. 이미지 ID와 새 실행 파일의 해시를 보존했다. [배포 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/44403168877) · [바인딩 수정 이미지 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/ffi-fix/receipt.json)
 
 W2·W3는 이 runner의 새 label·실패 판정·실행 argv/해시를 사용한다. W4는 정확성 판정 결과를 같은 후보에 결속한다. W5는 현행 이미지와 네이티브 GPU 실행 근거를 릴리스 문서에 연결한다. M5 판정에는 동일 후보의 패키징·GPU 실행·품질 근거가 필요하다.

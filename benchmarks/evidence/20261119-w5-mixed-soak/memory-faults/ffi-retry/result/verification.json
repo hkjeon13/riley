@@ -1,0 +1,30 @@
+{
+  "status": "passed",
+  "scope": "CUDA 12.4 SM80 native fault-injection test executable on the reserved A100, GPU 6",
+  "source_inputs_verified": 144,
+  "binary_sha256": "d23939fa373ec99fe73777c391f8e5c6945e2d3c0ad9341c755a67a1ae8731bf",
+  "isolated_cases": [
+    {
+      "name": "create-rollback-ambiguous",
+      "child_pid": 162177,
+      "exit_code": 0
+    },
+    {
+      "name": "explicit-close-ambiguous",
+      "child_pid": 162242,
+      "exit_code": 0
+    },
+    {
+      "name": "deferred-submission-error",
+      "child_pid": 162261,
+      "exit_code": 0
+    },
+    {
+      "name": "completion-restore-ambiguous",
+      "child_pid": 162323,
+      "exit_code": 0
+    }
+  ],
+  "passing_test_summaries": 5,
+  "holder_restored": true
+}

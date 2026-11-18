@@ -1,0 +1,46 @@
+
+running 1 test
+riley-cuda-memory-fault-case case=create-rollback-ambiguous event=spawn parent_pid=162175 child_pid=162177
+
+running 1 test
+riley-cuda-memory-fault-case case=create-rollback-ambiguous event=start child_pid=162177
+riley-cuda-memory-fault-case case=create-rollback-ambiguous event=passed child_pid=162177
+test memory_fault_subprocess ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.62s
+
+riley-cuda-memory-fault-case case=create-rollback-ambiguous event=joined parent_pid=162175 child_pid=162177 exit_code=0
+riley-cuda-memory-fault-case case=explicit-close-ambiguous event=spawn parent_pid=162175 child_pid=162242
+
+running 1 test
+riley-cuda-memory-fault-case case=explicit-close-ambiguous event=start child_pid=162242
+riley-cuda-memory-fault-case case=explicit-close-ambiguous event=passed child_pid=162242
+test memory_fault_subprocess ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.42s
+
+riley-cuda-memory-fault-case case=explicit-close-ambiguous event=joined parent_pid=162175 child_pid=162242 exit_code=0
+riley-cuda-memory-fault-case case=deferred-submission-error event=spawn parent_pid=162175 child_pid=162261
+
+running 1 test
+riley-cuda-memory-fault-case case=deferred-submission-error event=start child_pid=162261
+riley-cuda-memory-fault-case case=deferred-submission-error event=passed child_pid=162261
+test memory_fault_subprocess ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.57s
+
+riley-cuda-memory-fault-case case=deferred-submission-error event=joined parent_pid=162175 child_pid=162261 exit_code=0
+riley-cuda-memory-fault-case case=completion-restore-ambiguous event=spawn parent_pid=162175 child_pid=162323
+
+running 1 test
+riley-cuda-memory-fault-case case=completion-restore-ambiguous event=start child_pid=162323
+riley-cuda-memory-fault-case case=completion-restore-ambiguous event=passed child_pid=162323
+test memory_fault_subprocess ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.44s
+
+riley-cuda-memory-fault-case case=completion-restore-ambiguous event=joined parent_pid=162175 child_pid=162323 exit_code=0
+test memory_fault_cases_are_subprocess_isolated ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 2.80s
+
