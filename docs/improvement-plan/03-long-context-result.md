@@ -133,6 +133,12 @@ Riley 실행은 스텝당 1,024행을 명시했다. 설치된 vLLM 0.27.1 소스
 
 두 한도의 차이는 부하에 따라 방향이 달랐다. 이전 Riley 1,024행 실행과 같은 요청 본문·입력 길이·KV로 교차 검산하면 Riley의 `rag-c8` TTFT p95는 vLLM 1,024토큰보다 두 seed에서 60.2%와 38.0% 길었다. 두 엔진의 수치 한도를 명시해도 이 측정의 지연 격차가 남았다. vLLM 한도당 한 번, Riley는 앞선 세션의 결과이므로 반복 정밀도와 엔진별 스케줄러의 차이는 추가 검토 범위다. [Riley 교차 비교](../../benchmarks/evidence/20261119-w3-budget-control/result/riley-cross-session-comparison.json)
 
+### Riley 14B의 요청별 대기와 prefill 계측
+
+동일한 Qwen2.5-14B-Instruct와 KV 41,216토큰을 사용해, 같은 진단 바이너리에서 계측을 끄고 켠 조건을 GPU 7에 등록했다. `rag-c1`, 두 seed의 `rag-c8`, 8개 동시 전송과 50ms 간격 전송을 다시 사용한다. 각 조건에서 요청 본문과 도착 일정, 응답 텍스트, 종료 사유, 토큰 수가 일치하는지 확인하고 계측에 따른 TTFT 변화도 기록한다. [실행 순서 및 입력 해시](../../benchmarks/evidence/20261119-w3-rag-profile/request-stages/campaign.sh)
+
+SSE 요청 ID로 서버의 엔진 제출, 토큰화, 스케줄러 진입, prefill chunk의 선택·반환, 첫 응답 조각 생성 시각을 연결한다. 스텝 반환까지의 경과에는 호스트와 GPU 작업이 함께 들어가며, CUDA 이벤트 시간은 같은 스텝의 요청이 공유하는 값으로 기록한다. Nsight의 커널 분류와 이 계측을 함께 보면 `rag-c8` 첫 토큰 꼬리에서 어느 대기 구간이 길어졌는지 확인할 수 있다. [원본 검증과 집계 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/summarize_request_stages.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
