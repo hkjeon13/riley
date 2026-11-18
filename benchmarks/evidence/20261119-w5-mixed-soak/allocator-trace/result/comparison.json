@@ -1,0 +1,203 @@
+{
+  "repeat": {
+    "normal_completions": 13749,
+    "intentional_disconnects": 700,
+    "counter_changes": {
+      "cancellations": 700,
+      "disconnects": 700,
+      "overloads": 0,
+      "dropped_observations": 13425
+    },
+    "p95_change_percent": {
+      "ttft_ms": 1.2363940953635133,
+      "e2e_ms": -13.331819479017849
+    },
+    "rss_first_late": {
+      "at_seconds": 900.053253762424,
+      "rss_mib": 15162.3515625
+    },
+    "rss_at_drain": {
+      "at_seconds": 1803.8942712545395,
+      "rss_mib": 15163.1015625
+    },
+    "rss_growth_second_half_mib": 0.75,
+    "rss_zero_growth": false,
+    "native_allocation_at_ready_and_drain": {
+      "device_live_count": 291,
+      "device_live_bytes": 30495658464,
+      "pinned_live_count": 2,
+      "pinned_live_bytes": 4297400
+    },
+    "native_allocation_after_shutdown": {
+      "device_live_count": 0,
+      "device_live_bytes": 0,
+      "pinned_live_count": 0,
+      "pinned_live_bytes": 0
+    },
+    "soak_sha256": "716d268046f1c4142d3c2b390486d0b16c403f0199eda386d2e4fe77ac0e400e",
+    "shutdown_metrics_sha256": "c3b56657ea2d477146c98d3bdc13b5615a71e6c4ce0510c99dcd7322e63a819b"
+  },
+  "instrumented": {
+    "normal_completions": 13749,
+    "intentional_disconnects": 700,
+    "counter_changes": {
+      "cancellations": 700,
+      "disconnects": 700,
+      "overloads": 0,
+      "dropped_observations": 13425
+    },
+    "p95_change_percent": {
+      "ttft_ms": 1.036571513008444,
+      "e2e_ms": -13.303942720099027
+    },
+    "rss_first_late": {
+      "at_seconds": 900.0536516308784,
+      "rss_mib": 15162.3125
+    },
+    "rss_at_drain": {
+      "at_seconds": 1803.890713185072,
+      "rss_mib": 15162.3125
+    },
+    "rss_growth_second_half_mib": 0.0,
+    "rss_zero_growth": true,
+    "native_allocation_at_ready_and_drain": {
+      "device_live_count": 291,
+      "device_live_bytes": 30495658464,
+      "pinned_live_count": 2,
+      "pinned_live_bytes": 4297400
+    },
+    "native_allocation_after_shutdown": {
+      "device_live_count": 0,
+      "device_live_bytes": 0,
+      "pinned_live_count": 0,
+      "pinned_live_bytes": 0
+    },
+    "soak_sha256": "993ae7d28d4fab05d62e575416cf9e43730f9bacd102775c70f74d7847d94943",
+    "shutdown_metrics_sha256": "ed93c2a41ef94bca228f93bfd78fc30b5ceaa4850e1bb567ba33959ac77f6712"
+  },
+  "late_p95_ms": {
+    "ttft_ms_p95": {
+      "repeat": 333.21698009967804,
+      "instrumented": 334.29817855358124,
+      "change_percent": 0.32447279654830297
+    },
+    "e2e_ms_p95": {
+      "repeat": 4159.163199365139,
+      "instrumented": 4159.447766840458,
+      "change_percent": 0.00684194059425991
+    }
+  },
+  "window_clock": "Estimated from soak output mtime and the final monotonic snapshot",
+  "allocator_jsonl_sha256": "a7d92f59ad53338768058f7d5cac1b8a934937e2414cf36e1faf70696f322e39",
+  "samples": 130,
+  "windows": {
+    "mid": {
+      "estimated_elapsed_seconds": [
+        930,
+        990
+      ],
+      "samples": 4,
+      "ranges": {
+        "rss_kib": {
+          "min": 15526208,
+          "median": 15526208.0,
+          "max": 15526208
+        },
+        "anonymous_kib": {
+          "min": 15342144,
+          "median": 15342144.0,
+          "max": 15342144
+        },
+        "file_kib": {
+          "min": 169728,
+          "median": 169728.0,
+          "max": 169728
+        },
+        "shared_kib": {
+          "min": 14336,
+          "median": 14336.0,
+          "max": 14336
+        },
+        "arena_bytes": {
+          "min": 485498880,
+          "median": 485502976.0,
+          "max": 485502976
+        },
+        "arena_in_use_bytes": {
+          "min": 399697824,
+          "median": 403347512.0,
+          "max": 412763280
+        },
+        "arena_free_bytes": {
+          "min": 72739696,
+          "median": 82153416.0,
+          "max": 85805152
+        },
+        "malloc_mmap_bytes": {
+          "min": 15231279104,
+          "median": 15231279104.0,
+          "max": 15231279104
+        }
+      }
+    },
+    "late": {
+      "estimated_elapsed_seconds": [
+        1710,
+        1770
+      ],
+      "samples": 4,
+      "ranges": {
+        "rss_kib": {
+          "min": 15526208,
+          "median": 15526208.0,
+          "max": 15526208
+        },
+        "anonymous_kib": {
+          "min": 15342144,
+          "median": 15342144.0,
+          "max": 15342144
+        },
+        "file_kib": {
+          "min": 169728,
+          "median": 169728.0,
+          "max": 169728
+        },
+        "shared_kib": {
+          "min": 14336,
+          "median": 14336.0,
+          "max": 14336
+        },
+        "arena_bytes": {
+          "min": 485879808,
+          "median": 485879808.0,
+          "max": 485883904
+        },
+        "arena_in_use_bytes": {
+          "min": 402758704,
+          "median": 404652960.0,
+          "max": 416359808
+        },
+        "arena_free_bytes": {
+          "min": 69520000,
+          "median": 81226848.0,
+          "max": 83125200
+        },
+        "malloc_mmap_bytes": {
+          "min": 15231279104,
+          "median": 15231279104.0,
+          "max": 15231279104
+        }
+      }
+    }
+  },
+  "late_minus_mid_medians": {
+    "rss_kib": 0.0,
+    "anonymous_kib": 0.0,
+    "file_kib": 0.0,
+    "shared_kib": 0.0,
+    "arena_bytes": 376832.0,
+    "arena_in_use_bytes": 1305448.0,
+    "arena_free_bytes": -926568.0,
+    "malloc_mmap_bytes": 0.0
+  }
+}

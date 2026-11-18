@@ -25,6 +25,6 @@
 
 기존 이벤트 발행 정책과 서빙 설정을 기준선으로 삼았다. 이전 빌드에서 관찰된 성능 실험은 입력·장비·바이너리에 연결하며, 새로운 수치 기준이나 기본값을 채택할 때는 종합 계획의 출력 불변성과 회귀 기준을 적용한다. [W2 결과](02-async-step-result.md) · [W3 결과](03-long-context-result.md) · [W4 정확성](04-long-accuracy-result.md) · [W5 운영 결과](05-mixed-soak-result.md)
 
-W5의 30분 실행에서 종료 뒤 GPU·pinned 메모리와 활성 KV는 0이었다. Cache on의 후반 RSS는 0.00MiB였고 같은 GPU·설정의 cache-off 두 실행에서 +0.75MiB가 재현됐다. 운영 검사기의 native 할당·오류·지연 판정은 통과했고 RSS 증가 0 항목은 미충족 상태다. [운영 품질 기준](../goal.md#33-운영-품질) · [RSS 재현과 관측 범위](05-mixed-soak-result.md#cache-off-rss-재현)
+W5의 30분 실행에서 종료 뒤 GPU·pinned 메모리와 활성 KV는 0이었다. Cache on과 allocator를 계측한 cache off의 후반 RSS는 0.00MiB였고 같은 GPU·설정의 비계측 cache-off 두 실행에서 +0.75MiB를 기록했다. 같은 호스트의 CPU 대조에서 `status` RSS가 768KiB 단위로 갱신되는 사례를 재현했다. 상주 페이지 증가 여부와 최종 후보의 메모리 조건은 동일 부하의 `smaps_rollup` 근거가 남아 있다. [운영 품질 기준](../goal.md#33-운영-품질) · [RSS 원본 대조](05-mixed-soak-result.md#cache-off-rss-재현)
 
 배포 이미지 재빌드를 위한 소스 아카이브 전송은 자동 승인 검토에서 거절됐다. 승인된 검증 경로에서 이미지 ID와 실행 파일 해시를 고정한 뒤 대표 모델의 API·정확성·운영 근거를 연결해야 릴리스 판정을 갱신할 수 있다. [이미지 검증 범위](01-validation-result.md#현행-배포-이미지) · [종합 완료 조건](README.md#8-종합-완료-체크리스트)

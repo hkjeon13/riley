@@ -362,6 +362,16 @@
     "qwen7_native_kv_and_causal_replay": {
       "path": "benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/result/SHA256SUMS",
       "sha256": "b5a64f878fa7d642faf420809b23dfa473f194ef9461d5b1846bf142ff31c98b"
+    },
+    "qwen7_allocator_and_host_rss_diagnostics": {
+      "allocator_rollup_comparison": {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/result/comparison.json",
+        "sha256": "e5bbe42217e42715c18eb6a04032640b5b84909ffdd7450813228d2a5a8262f5"
+      },
+      "linux_rss_accounting_probe": {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/rss-accounting/probe.json",
+        "sha256": "8d7e46a88fd3ecd1cbd78cb8e004277a33c2799da58b7c391666b7d4084b0a8e"
+      }
     }
   },
   "follow_up_distribution_image": {
