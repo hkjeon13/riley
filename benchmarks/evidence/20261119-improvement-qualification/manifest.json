@@ -1,5 +1,5 @@
 {
-  "audited_main": "567b17a56ec1e8499eb12c848322fe4ba393c622",
+  "audited_main": "f1078c6770581c77b61ae6595dbc7b68a2d3253e",
   "release_status": "hold",
   "shared_program_git_objects": {
     "Cargo.toml": "e75f6ce3a2ad13911f1a91fc2b982a410f9d32f2",
@@ -132,6 +132,18 @@
         {
           "path": "benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-result-SHA256SUMS",
           "sha256": "be697501fd22fada68085826957a4cd84cdd4b7e140e7935743f90b498b007ea"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/qwen4-riley-unprofiled/receipt.json",
+          "sha256": "a38b518a0ad18b212e45da7d401ca099955519bdd764dc412ae7c9a6e8450e0b"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-paired-summary.json",
+          "sha256": "5184bfc28eed5681433fa7dd2d1f23b9072c612b9db394f35f9abd3b38921d9e"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/qwen4-unprofiled-SHA256SUMS",
+          "sha256": "59db76c508e304a954ca1e3bab5e6f80a93c57efcbe6812653348a7b91779709"
         }
       ],
       "operations": [
@@ -234,6 +246,16 @@
         {
           "path": "benchmarks/evidence/20261119-w23-matrix/result-SHA256SUMS",
           "sha256": "622aca7bdc9c8267448e585dfa627dd6dcc7aa8374961000d1ddea313400d4be"
+        }
+      ],
+      "accuracy_attention_kv_controls": [
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/attention-controls/result/comparison.json",
+          "sha256": "d51e80cf034b9ce08221b5425f576a5c43dd0da869a9e591562dc69aa103c682"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/attention-controls/result-SHA256SUMS",
+          "sha256": "69898c440d7aaaba0e33798046e6aaeb4ace45a5b11bdffb41767a746efc065c"
         }
       ]
     }

@@ -1,0 +1,139 @@
+{
+  "model": "Qwen3-4B",
+  "physical_gpu": 7,
+  "binary_sha256": "3e070d05c93b6784e24eefd423a77ed260162c7ddd9fcde67bec135c3dc53e70",
+  "scope": "Request windows share kernel time for concurrent clients",
+  "trace_files": {
+    "trace.nsys-rep": {
+      "path": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-qwen4-profile-r2-20261119.Ydyk8B8n/qwen4-profile/trace.nsys-rep",
+      "bytes": 33330321,
+      "sha256": "461b07e74a622798b01afb2833687876c131789413933eb2d6fcc70f21662750"
+    },
+    "trace.sqlite": {
+      "path": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-qwen4-profile-r2-20261119.Ydyk8B8n/qwen4-profile/trace.sqlite",
+      "bytes": 118591488,
+      "sha256": "06ca5001af594fd840f8047d401db1da7f9dfbd93b1f7af8f5cd29b3e8464cb3"
+    }
+  },
+  "cells": {
+    "words-30": {
+      "requests": 12,
+      "prompt_tokens_mean": 50.25,
+      "ttft_p95_with_profile_ms": 10.870367288589478,
+      "sent_to_first_ms_p50": 10.198336,
+      "gpu_kernel_union_ms_p50": 8.751227,
+      "outside_kernels_ms_p50": 1.4541275,
+      "gpu_busy_share_p50": 0.8574095215724038,
+      "clock_offset_change_ns": 131,
+      "kernel_category_ms_p50": {
+        "attention": 0.6226370000000001,
+        "attention_metadata": 0.016352,
+        "gemm": 7.237098,
+        "other": 0.691017,
+        "qkv_bias_rope_kv_write": 0.20747100000000002
+      },
+      "ttft_p95_without_profile_ms": 9.599141776561737,
+      "profile_ttft_p95_relative_percent": 13.243116328708648,
+      "matching_output_text_and_finish": 12
+    },
+    "words-1700": {
+      "requests": 12,
+      "prompt_tokens_mean": 1983.5,
+      "ttft_p95_with_profile_ms": 96.42405807971954,
+      "sent_to_first_ms_p50": 94.653348,
+      "gpu_kernel_union_ms_p50": 90.701567,
+      "outside_kernels_ms_p50": 3.869498,
+      "gpu_busy_share_p50": 0.9590049211678298,
+      "clock_offset_change_ns": 13891,
+      "kernel_category_ms_p50": {
+        "attention": 13.7497995,
+        "attention_metadata": 0.131264,
+        "gemm": 66.443512,
+        "other": 8.016341,
+        "qkv_bias_rope_kv_write": 2.3967445
+      },
+      "ttft_p95_without_profile_ms": 94.27010267972946,
+      "profile_ttft_p95_relative_percent": 2.2848764759574536,
+      "matching_output_text_and_finish": 12
+    },
+    "words-3500": {
+      "requests": 12,
+      "prompt_tokens_mean": 4056.25,
+      "ttft_p95_with_profile_ms": 210.98052710294724,
+      "sent_to_first_ms_p50": 209.20735200000001,
+      "gpu_kernel_union_ms_p50": 202.2460565,
+      "outside_kernels_ms_p50": 6.8318515,
+      "gpu_busy_share_p50": 0.9673775012614352,
+      "clock_offset_change_ns": 2542,
+      "kernel_category_ms_p50": {
+        "attention": 47.8045705,
+        "attention_metadata": 0.292064,
+        "gemm": 133.2853285,
+        "other": 16.025486,
+        "qkv_bias_rope_kv_write": 4.897834
+      },
+      "ttft_p95_without_profile_ms": 209.8645120859146,
+      "profile_ttft_p95_relative_percent": 0.5317788157417347,
+      "matching_output_text_and_finish": 12
+    },
+    "words-5250": {
+      "requests": 12,
+      "prompt_tokens_mean": 6063.916666666667,
+      "ttft_p95_with_profile_ms": 343.78446638584137,
+      "sent_to_first_ms_p50": 342.178964,
+      "gpu_kernel_union_ms_p50": 332.6733765,
+      "outside_kernels_ms_p50": 9.499176,
+      "gpu_busy_share_p50": 0.9722389402426455,
+      "clock_offset_change_ns": 1375,
+      "kernel_category_ms_p50": {
+        "attention": 100.752556,
+        "attention_metadata": 0.5119039999999999,
+        "gemm": 200.042756,
+        "other": 24.024372999999997,
+        "qkv_bias_rope_kv_write": 7.3500285
+      },
+      "ttft_p95_without_profile_ms": 344.953216612339,
+      "profile_ttft_p95_relative_percent": -0.3388141261518096,
+      "matching_output_text_and_finish": 12
+    },
+    "words-6800": {
+      "requests": 12,
+      "prompt_tokens_mean": 7847.333333333333,
+      "ttft_p95_with_profile_ms": 491.77873879671097,
+      "sent_to_first_ms_p50": 486.0299,
+      "gpu_kernel_union_ms_p50": 473.713246,
+      "outside_kernels_ms_p50": 12.2412605,
+      "gpu_busy_share_p50": 0.974837347587034,
+      "clock_offset_change_ns": 2328,
+      "kernel_category_ms_p50": {
+        "attention": 164.677549,
+        "attention_metadata": 0.81904,
+        "gemm": 266.52115449999997,
+        "other": 32.012428,
+        "qkv_bias_rope_kv_write": 9.632295
+      },
+      "ttft_p95_without_profile_ms": 489.0447407960892,
+      "profile_ttft_p95_relative_percent": 0.559048645768323,
+      "matching_output_text_and_finish": 12
+    }
+  },
+  "host_step_windows": {
+    "block_steps": 128,
+    "blocks": 19,
+    "median_us_per_step": {
+      "cancel+commands": 158.1,
+      "plan": 21.6,
+      "prepare": 1.0,
+      "pack": 10.0,
+      "upload": 2.2,
+      "submit": 825.9,
+      "wait": 13565.1,
+      "download": 30.8,
+      "sample": 2.7,
+      "commit": 2.9,
+      "events": 0.6,
+      "publish": 1.2
+    },
+    "other_host_phases_median_us_per_step": 72.8
+  }
+}

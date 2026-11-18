@@ -25,7 +25,7 @@ burst를 일찍 제한하면 `rag-c8`의 토큰 간 지연 p99가 두 seed에서
 | 6,064 | 337.5 | 8.78 |
 | 7,847 | 481.1 | 9.01 |
 
-60건 모두 성공했다. 동시 요청이 없는 상태에서도 문맥이 길어질수록 첫 토큰 지연 증가 폭이 커졌다. 다음에는 이 입력을 그대로 프로파일링해 prefill GEMM, attention 및 호스트 비용을 구분한다.
+60건 모두 성공했다. 동시 요청이 없는 상태에서도 문맥이 길어질수록 첫 토큰 지연 증가 폭이 커졌다. 아래 Qwen3-4B 계측에서는 같은 길이·요청 조건의 GPU 커널 시간을 분해했다.
 
 - [Burst 제한 결과와 실행 근거](../../benchmarks/evidence/20261119-w3-small-rag/summary.json)
 - [Prompt 묶기 결과와 실행 근거](../../benchmarks/evidence/20261119-w3-coalescing/summary.json)
@@ -115,7 +115,7 @@ Instruct와 비슷하게 단일 요청의 Riley TTFT p95는 vLLM 대비 +2.7%였
 
 7,847토큰에서 attention은 164.68ms로 전송부터 첫 토큰까지 시간의 약 34%였다. 약 6K에서 7.8K로 늘렸을 때 GEMM은 66.5ms, attention은 63.9ms 증가했다. 위 값은 Nsight를 켠 동시성 1의 중앙값이며 호스트·스케줄러 개별 원인이나 실제 꼬리 지연을 직접 판정하려면 추가 대조가 필요하다. [커널 심볼별 분류](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-full-symbols.json) · [계측 원본 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-result-SHA256SUMS)
 
-이전에 계측 없이 잰 Qwen3-4B 길이 곡선의 실행 파일은 `riley-lp16`이었다. Nsight의 관측 비용을 비교할 때는 재시도와 같은 `f7c956d3c` 바이너리·입력·KV·설정을 사용한다. 이 대조를 GPU 7에 등록했으며 GPU 6의 W4 추적까지 끝난 뒤 실행한다. [이전 실행 파일 기록](../../benchmarks/evidence/20261119-w3-qwen3-lengths/lengths/receipt.json) · [같은 빌드 대조 실행](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-retry/baseline-campaign.sh)
+이전에 계측 없이 잰 길이 곡선은 `riley-lp16`으로 실행했다. 후속 대조는 Nsight 실행과 같은 `f7c956d3c` 바이너리·입력·KV·설정을 사용했고, 다섯 길이에서 60건을 오류 없이 완료했다. 모든 출력 텍스트와 종료 사유가 계측 실행과 일치했다. 계측 켠 조건의 TTFT p95는 계측 끈 조건 대비 약 50토큰에서 +13.24%, 이후 길이별로 +2.28%, +0.53%, −0.34%, +0.56%였다. 각 길이당 12건, 조건별 한 번의 실행에서 관측한 차이다. [동일 바이너리 대조](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-paired-summary.json) · [비계측 결과 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/qwen4-unprofiled-SHA256SUMS)
 
 ### 엔진별 배치 토큰 예산 대조
 
