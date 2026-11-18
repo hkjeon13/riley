@@ -24,6 +24,38 @@ def same_args(args, values_to_clear):
     return normalized
 
 
+def normalized_client(argv):
+    result = same_args(argv, ('--pid', '--out'))
+    result[2] = Path(result[2]).name
+    result[3] = 'loopback'
+    return result
+
+
+def require_matched_soaks(base, base_soak, current, current_soak, changed_tools=None):
+    for key in ('gpu_uuid', 'holder_pid', 'holder_start_ticks', 'riley_source'):
+        require(base[key] == current[key], f'changed {key}')
+    digests = [{Path(path).name: digest for path, digest in receipt['sha256'].items()}
+               for receipt in (base, current)]
+    require(all(len(values) == len(receipt['sha256']) == 6
+                for values, receipt in zip(digests, (base, current), strict=True)),
+            'unrecognized or duplicate soak inputs')
+    changes = changed_tools or {}
+    require(changes.keys() <= digests[0].keys() and (digests[0] | changes) == digests[1],
+            'unexpected serving or runner inputs')
+    require(same_args(base['server_argv'], ('--bind',)) == same_args(current['server_argv'], ('--bind',))
+            and normalized_client(base['client_argv']) == normalized_client(current['client_argv']),
+            'workload command or serving flags changed')
+    require(base_soak['counts'] == current_soak['counts'], 'changed workload outcome counts')
+    return digests[0]
+
+
+def require_restored_reservation(directory):
+    before, after = (json_file(directory, name) for name in ('idle-before.json', 'idle-after.json'))
+    lease_keys = ('pid', 'start_ticks', 'phase', 'physical_index', 'gpu', 'allocation_bytes',
+                  'torch_reserved_bytes', 'other_processes')
+    require(all(before[key] == after[key] for key in lease_keys), 'the GPU reservation changed')
+
+
 def run(directory, lease_directory):
     receipt = json_file(directory, 'receipt.json')
     require(receipt['mode'] == 'cache-off' and receipt['prefix_cache_blocks'] == 0,
@@ -79,25 +111,8 @@ def compare(original, repeated):
     require((repeated / 'campaign.exit').read_text().strip() == '0', 'repeat campaign did not finish')
     original_receipt, original_soak, original_summary = run(original, original)
     repeat_receipt, repeat_soak, repeat_summary = run(repeated / 'cache-off', repeated)
-    for key in ('gpu_uuid', 'holder_pid', 'holder_start_ticks', 'riley_source'):
-        require(original_receipt[key] == repeat_receipt[key], f'changed {key}')
-    digests = [{Path(path).name: digest for path, digest in rec['sha256'].items()}
-               for rec in (original_receipt, repeat_receipt)]
-    require(len(digests[0]) == len(digests[1]) == 6 and digests[0] == digests[1], 'changed inputs')
-    require(same_args(original_receipt['server_argv'], ('--bind',))
-            == same_args(repeat_receipt['server_argv'], ('--bind',)), 'changed server flags')
-    clients = []
-    for receipt in (original_receipt, repeat_receipt):
-        argv = same_args(receipt['client_argv'], ('--pid', '--out'))
-        argv[2] = Path(argv[2]).name
-        argv[3] = 'loopback'
-        clients.append(argv)
-    require(clients[0] == clients[1], 'changed client flags')
-    require(original_soak['counts'] == repeat_soak['counts'], 'changed workload outcome counts')
-    before, after = (json_file(repeated, name) for name in ('idle-before.json', 'idle-after.json'))
-    lease_keys = ('pid', 'start_ticks', 'phase', 'physical_index', 'gpu', 'allocation_bytes',
-                  'torch_reserved_bytes', 'other_processes')
-    require(all(before[key] == after[key] for key in lease_keys), 'the GPU reservation changed')
+    matched = require_matched_soaks(original_receipt, original_soak, repeat_receipt, repeat_soak)
+    require_restored_reservation(repeated)
     observer = (repeated / 'rss-observer' / 'samples.jsonl').read_bytes()
     samples = [json.loads(line) for line in observer.splitlines()]
     argv = repeat_receipt['client_argv']
@@ -119,7 +134,7 @@ def compare(original, repeated):
                                     for field in first['kib']},
             'samples_sha256': sha256(observer).hexdigest(),
         },
-        'matched_input_sha256': digests[0],
+        'matched_input_sha256': matched,
     }
 
 

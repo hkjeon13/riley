@@ -55,7 +55,7 @@
 
 같은 호스트의 Linux `6.8.0-1017-aws`에서 별도 CPU 프로세스가 익명 페이지 2MiB를 64KiB씩 사용했다. `/proc/self/status`의 `RssAnon`은 32개 구간 중 29개에서 값이 유지됐고 세 구간에서 768KiB씩 증가했다. 같은 시점의 `smaps_rollup`은 구간별로 64–68KiB씩 증가했다. Linux는 `status` RSS를 비동기로 집계하며, `smaps_rollup`은 페이지 테이블을 읽은 결과를 합산한다. 두 cache-off 시험의 0.75MiB는 이 호스트에서 확인한 768KiB 계측 단위와 같다. Riley의 실제 상주 페이지 증가량을 확인하려면 같은 부하에서 후반 기준점과 drain의 `smaps_rollup`을 대조해야 한다. [호스트 CPU 실험](../../benchmarks/evidence/20261119-w5-mixed-soak/rss-accounting/probe.json) · [실험 소스](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/probe_linux_rss_accounting.py) · [Linux `/proc` 문서](https://docs.kernel.org/filesystems/proc.html)
 
-같은 바이너리와 30분 cache-off 부하를 사용하고 후반 첫 표본과 drain에서 `status`와 `smaps_rollup`을 함께 읽는 시험을 등록했다. A100 호스트의 별도 CPU 프로세스에서 `smaps_rollup` 파싱을 확인했다. GPU 실행은 14B prefill 후보 시험 뒤에 시작한다. [정밀 계측 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/campaign.sh) · [CPU 파싱 사전검사](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/smaps-cpu-check.json)
+같은 바이너리와 30분 cache-off 부하를 사용하고 후반 첫 표본과 drain에서 `status`와 `smaps_rollup`을 함께 읽는 시험을 등록했다. A100 호스트의 별도 CPU 프로세스에서 `smaps_rollup` 파싱을 확인했다. 집계기는 기존 반복과 바이너리·부하·GPU 예약을 대조하고, 같은 두 시점의 원본에서 RSS 지표별 증가량과 판정을 다시 계산한다. GPU 실행은 14B prefill 후보 시험 뒤에 시작한다. [정밀 계측 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/campaign.sh) · [CPU 파싱 사전검사](../../benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/smaps-cpu-check.json) · [두 RSS 지표 대조 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/compare_smaps_rollup.py)
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 

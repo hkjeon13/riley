@@ -7,18 +7,11 @@ from math import isfinite
 from pathlib import Path
 from statistics import median
 
-from compare_cache_off_repeat import json_file, require, run, same_args
+from compare_cache_off_repeat import require, require_matched_soaks, require_restored_reservation, run
 
 
 RSS = ("rss_kib", "anonymous_kib", "file_kib", "shared_kib")
 ARENA = ("arena_bytes", "arena_in_use_bytes", "arena_free_bytes", "malloc_mmap_bytes")
-
-
-def normalized_client(argv):
-    result = same_args(argv, ("--pid", "--out"))
-    result[2] = Path(result[2]).name
-    result[3] = "loopback"
-    return result
 
 
 def summarize_samples(samples):
@@ -46,15 +39,8 @@ def compare(reference, traced, expected_runner_hash):
     base, base_soak, base_summary = run(reference / "cache-off", reference)
     current, current_soak, current_summary = run(traced / "cache-off", traced)
     require((traced / "campaign.exit").read_text().strip() == "0", "allocator campaign did not finish")
-    require(all(base[key] == current[key] for key in ("gpu_uuid", "holder_pid", "holder_start_ticks", "riley_source")),
-            "allocator trace changed device, holder, or source")
-    hashes = [{Path(path).name: digest for path, digest in receipt["sha256"].items()}
-              for receipt in (base, current)]
-    require(hashes[0] | {"run_soak.py": expected_runner_hash} == hashes[1], "unexpected serving or runner inputs")
-    require(same_args(base["server_argv"], ("--bind",)) == same_args(current["server_argv"], ("--bind",))
-            and normalized_client(base["client_argv"]) == normalized_client(current["client_argv"]),
-            "workload command or serving flags changed")
-    require(base_soak["counts"] == current_soak["counts"], "measured workload outcomes differ")
+    require_matched_soaks(base, base_soak, current, current_soak, {"run_soak.py": expected_runner_hash})
+    require_restored_reservation(traced)
     library_hash, filename = (traced / "library.sha256").read_text().split()
     require(filename == "sample_allocator.so" and library_hash == current["allocator_sampler_sha256"],
             "observed sampler differs from the checked library")
