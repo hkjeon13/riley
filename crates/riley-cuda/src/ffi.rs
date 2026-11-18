@@ -2819,6 +2819,7 @@ unsafe extern "C" {
         plan: *const RawCublasGemmProbePlan,
         tokens: u64,
     ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_hf_smol_exact_execute(
         plan: *mut RawCublasGemmProbePlan,
         spans: *const RawBufferSpan,
@@ -2833,7 +2834,9 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_bounded_sm80_gateup_qualified(plan: *const RawCublasGemmProbePlan) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_hf_decode_chunk_qualified(plan: *const RawCublasGemmProbePlan) -> i32;
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_hf_attention_chunk_execute(
@@ -2874,6 +2877,7 @@ unsafe extern "C" {
         plan: *mut RawCublasGemmProbePlan,
         error: *mut ErrorInfo,
     ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_attention(
         plan: *mut RawCublasGemmProbePlan,
         error: *mut ErrorInfo,
@@ -2883,6 +2887,7 @@ unsafe extern "C" {
         plan: *mut RawCublasGemmProbePlan,
         error: *mut ErrorInfo,
     ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_cublas_gemm_probe_plan_prepare_sm80_paged_attention(
         plan: *mut RawCublasGemmProbePlan,
         error: *mut ErrorInfo,
@@ -13151,7 +13156,6 @@ impl GraphResourcesHandle {
 #[path = "../tests/support/aggregate_replay_fault_tests.rs"]
 mod aggregate_replay_fault_tests;
 
-#[cfg(feature = "cuda-cublas-gemm-probe")]
 #[allow(clippy::too_many_arguments)]
 pub(super) fn bf16_argmax_fp32_ties_execute(
     logits: RawBufferSpan,

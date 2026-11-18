@@ -121,4 +121,6 @@ GPU 없는 runner에서 Riley 바이너리는 NVIDIA가 주입하는 `libcuda.so
 
 `a21829d0e`의 C ABI 검사와 Production CPU가 Linux에서 통과했다. 이 커밋에서 이미지 CI는 실행되지 않아 `kernels/**`와 `rust-toolchain.toml`을 이미지 검증의 `main` 변경 감지에 추가했다. `120e984c9`의 Production CPU와 CUDA 12.4 이미지 빌드·CPU CLI·런타임 무결성 검사가 모두 통과했다. 새 이미지 ID와 소스 아카이브는 이전 이미지와 달랐고, 설치된 런타임 파일 해시 전체와 Riley 바이너리 해시는 일치했다. GitHub의 증거 ZIP 해시와 로컬에서 다시 계산한 소스 아카이브 해시를 대조했다. [Production CPU](https://github.com/hkjeon13/riley/actions/runs/44395442651) · [이미지 빌드와 검사](https://github.com/hkjeon13/riley/actions/runs/44395442715) · [새 이미지 검증 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/header-fix/receipt.json)
 
+헤더를 수정한 A100 빌드는 C ABI를 지나 Rust 바인딩에서 멈췄다. cuBLAS 전용 외부 선언 다섯 개의 조건을 해당 타입과 맞췄고, 일반 CUDA가 호출하는 BF16 argmax 래퍼는 `cuda` 빌드에 포함했다. 격리한 macOS 환경의 Rust 타입 검사에서 일반 CUDA 서버, HF probe 서버, CUDA probe 크레이트, 오류 주입 크레이트의 네 조합이 통과했다. CUDA 소스가 바뀌면 `main`에서 기존 hosted 네이티브 빌드를 실행하도록 설정했다. 실제 A100 CUDA 링크와 오류 주입 재시험은 별도로 등록했다. [실패 원본과 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/rust-build/SHA256SUMS) · [네이티브 CI](../../.github/workflows/native-cuda.yml) · [A100 재시험 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/campaign.sh)
+
 W2·W3는 이 runner의 새 label·실패 판정·실행 argv/해시를 사용한다. W4는 정확성 판정 결과를 같은 후보에 결속한다. W5는 현행 이미지와 네이티브 GPU 실행 근거를 릴리스 문서에 연결한다. M5 판정에는 동일 후보의 패키징·GPU 실행·품질 근거가 필요하다.

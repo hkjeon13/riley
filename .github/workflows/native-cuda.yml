@@ -1,6 +1,14 @@
 name: Native CUDA host runtime and tensor memory
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/native-cuda.yml'
+      - 'crates/riley-cuda/**'
+      - 'kernels/**'
+      - 'ci/cuda/**'
+      - 'ci/verify_python_free_cuda.sh'
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
