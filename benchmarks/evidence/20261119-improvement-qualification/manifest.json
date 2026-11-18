@@ -389,6 +389,30 @@
           "sha256": "aa611eb03d26cf1a90dedd477b1eed28ff9b1199e1c5e40cefb8dc2a995ab4e0"
         }
       ]
+    },
+    "qwen7_exact_rss": {
+      "status_rss_growth_mib": 0.0,
+      "smaps_rss_growth_kib": 700,
+      "smaps_anonymous_growth_kib": 700,
+      "zero_growth": false,
+      "comparison": {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/result/comparison.json",
+        "sha256": "7fdf014d6ec1bef4a5325632bb17ab8b5c77f5942e40f9633de2e51f3b820d90"
+      },
+      "source_checksums": {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/smaps-rollup/result/SHA256SUMS",
+        "sha256": "6a1ae46309aef5a386794ae2cf740710382b320f4bd7d16d80f23436353c5d81"
+      }
+    },
+    "cuda_12_4_sm80_memory_faults": {
+      "run": {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/result/verification.json",
+        "sha256": "0ebc2965115e1dac3d8c779c7bc37d44114ed545546d7459f349a8d140a94adb"
+      },
+      "source_checksums": {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/result/SHA256SUMS",
+        "sha256": "2884da5f2312bfdb886e01518528770a23b75a4c4785b1cc1423f608b4f73c84"
+      }
     }
   },
   "follow_up_distribution_image": {
@@ -411,6 +435,40 @@
     "cpu_image_verification": {
       "path": "benchmarks/evidence/20261119-cu124-distribution-image/ffi-fix/receipt.json",
       "sha256": "faae843905903f555319332d088360d94e9753a550e5f9539b89a959802d182e"
+    },
+    "gpu_inference": "pending"
+  },
+  "current_distribution_candidate": {
+    "audited_main": "27e36810bae3e966f80196b85f2e0dd6e7763c4b",
+    "matching_distribution_input_git_objects": {
+      "Cargo.toml": "e75f6ce3a2ad13911f1a91fc2b982a410f9d32f2",
+      "Cargo.lock": "afa446f5b2f1ad1ba2070de2d16343cf7a7a0a70",
+      "rust-toolchain.toml": "67c827cf973f78b64274b37b54c5a99cff5ca055",
+      "crates": "b053e11bda5a29c3f9927d3d425bc5b2b7a71161",
+      "kernels": "7c3c0dfd2d7d04b694c8bd77c4e323081199f46f",
+      "third_party": "fcda977aec23d650259a7d1104d339f815d30e07",
+      "tools/riley-checkpoint": "375dc077ae7d32ba759b339d28f1ef8c370642b5",
+      ".dockerignore": "032839f0b4e1ab479f5a1069d69937ade5e44f7e",
+      ".github/workflows/distribution-image.yml": "8a4587aa0fccb0304fdc1c06333b4f138a503dab",
+      "deploy/docker": "4a585fa6e013d816c743760807ad422d270b404e",
+      "ci/check_distribution_image.py": "536a00bedb0675f19bf038395bf46e1996b82053",
+      "ci/check_serving_source_contract.py": "26abce96ca8eb573299613464e26bae94529a8ce",
+      "ci/serving-source-contract.json": "205b02603ad57d850071cb212c88fce965edd148",
+      "LICENSE": "1b4cfd2f88277e627300ec3a92f5c310807d125e"
+    },
+    "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+    "source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+    "image_id": "sha256:8cb92e573ef1cf7e3acda80c0f9cff46e7885bcdee01b5240d7d2c09f501dca7",
+    "binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+    "cpu_image_verification": {
+      "path": "benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/receipt.json",
+      "sha256": "1df284925452521fafd22f9eedbf34c6ce9397d1a5e67027874b1339921de976"
+    },
+    "native_cuda_12_8_ci": {
+      "workflow_run_id": 44410425140,
+      "source_revision": "77c36700339145b36dd0ac275866052a2ab1fb7d",
+      "status": "passed",
+      "same_program_inputs": true
     },
     "gpu_inference": "pending"
   }

@@ -133,4 +133,6 @@ GPU 없는 runner에서 Riley 바이너리는 NVIDIA가 주입하는 `libcuda.so
 
 `9ea8012c1`의 CUDA 12.4 배포 이미지 빌드와 CPU 검증도 통과했다. 소스 아카이브 해시를 로컬에서 재계산했고, 이전 이미지와 런타임 파일 목록이 같으며 Riley 실행 파일의 해시만 달라진 것을 확인했다. 이미지 ID와 새 실행 파일의 해시를 보존했다. [배포 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/44403168877) · [바인딩 수정 이미지 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/ffi-fix/receipt.json)
 
+`d3d8fe6e5` 배포 이미지의 CPU 검증과 원본 체크섬을 확인했다. 로컬에서 계산한 커밋의 소스 아카이브 해시가 이미지 label과 CI 보고서에 기록된 값과 같았다. 직전 검증 이미지와 런타임 파일 목록이 같았고 새 Riley 실행 파일의 해시를 보존했다. `27e36810b`의 배포 입력 Git 객체가 같은 것을 확인했다. [배포 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/44410078125) · [이미지·바이너리 영수증](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/receipt.json)
+
 W2·W3는 이 runner의 새 label·실패 판정·실행 argv/해시를 사용한다. W4는 정확성 판정 결과를 같은 후보에 결속한다. W5는 현행 이미지와 네이티브 GPU 실행 근거를 릴리스 문서에 연결한다. M5 판정에는 동일 후보의 패키징·GPU 실행·품질 근거가 필요하다.

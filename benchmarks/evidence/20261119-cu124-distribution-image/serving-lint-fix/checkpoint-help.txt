@@ -1,0 +1,10 @@
+riley-checkpoint (offline by default)
+prepare --manifest PLAN.json --source REGULAR_DIRECTORY --destination NEW_DIRECTORY
+verify --checkpoint DIRECTORY
+merge-lora --checkpoint DIRECTORY --adapter PEFT_DIRECTORY --destination NEW_DIRECTORY [--scale 1.0]
+download --manifest PLAN.json --destination NEW_DIRECTORY --allow-network [--token-env HF_TOKEN]
+plan --repository OWNER/MODEL [--revision main] --output NEW_PLAN.json --allow-network [--token-env HF_TOKEN]
+Download and plan require the separately compiled `hub` feature. Downloads accept only commits.
+The manifest is an explicit file/size/SHA-256 allowlist; `plan` derives it from the Hub's
+LFS SHA-256 and git blob ids at the commit the revision resolves to.
+Never serve or edit a checkpoint until this command succeeds; verify after an interruption.
