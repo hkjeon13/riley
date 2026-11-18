@@ -1,0 +1,115 @@
+{
+  "torch": "2.13.0+cu129",
+  "backend": "sdpa",
+  "cases": {
+    "3": {
+      "prompt_sha256": "343ba4711df279dc535694caef24763595679307f22dc3a8171adc15e1bc581d",
+      "riley_first_id": 264,
+      "runs": {
+        "baseline": {
+          "partition": [
+            3301
+          ],
+          "first_id": 5257,
+          "tracked_logits": {
+            "264": 18.25,
+            "5257": 18.375
+          },
+          "logits_sha256": "c82be997783c54586f737ac83d454bba61cdfb213e333e5ea567612ecdfc6378"
+        },
+        "native_final_tail": {
+          "partition": [
+            3072,
+            229
+          ],
+          "first_id": 5257,
+          "tracked_logits": {
+            "264": 18.25,
+            "5257": 18.5
+          },
+          "logits_sha256": "d24d229ceab0a6617ed27e70460dbc43bca9e709e591b5b8cbc6aa6b40f02ed6"
+        },
+        "budget_1024_with_native_final_tail": {
+          "partition": [
+            1024,
+            1024,
+            1024,
+            229
+          ],
+          "first_id": 5257,
+          "tracked_logits": {
+            "264": 18.25,
+            "5257": 18.375
+          },
+          "logits_sha256": "dce5a27e64ee369de11fd637f9780fd53c215f08db914bf7aca9808abbcaa915"
+        },
+        "baseline_repeat": {
+          "partition": [
+            3301
+          ],
+          "first_id": 5257,
+          "tracked_logits": {
+            "264": 18.25,
+            "5257": 18.375
+          },
+          "logits_sha256": "c82be997783c54586f737ac83d454bba61cdfb213e333e5ea567612ecdfc6378"
+        }
+      }
+    },
+    "9": {
+      "prompt_sha256": "7fb5c6c22ae8635b52037b34674cb8d8f3583933fe3f7a8fcf7dcb26c64d6a3a",
+      "riley_first_id": 264,
+      "runs": {
+        "baseline": {
+          "partition": [
+            3330
+          ],
+          "first_id": 264,
+          "tracked_logits": {
+            "264": 18.375,
+            "5257": 18.375
+          },
+          "logits_sha256": "55f7906950ed9969a492a907dc5e426fa2f82319692078815b649b4592e1c901"
+        },
+        "native_final_tail": {
+          "partition": [
+            3328,
+            2
+          ],
+          "first_id": 264,
+          "tracked_logits": {
+            "264": 18.375,
+            "5257": 18.375
+          },
+          "logits_sha256": "44e4828f68af424c38154cb09a5b801b319b0c12bb6c4c7cb3ea608249419d32"
+        },
+        "budget_1024_with_native_final_tail": {
+          "partition": [
+            1024,
+            1024,
+            1024,
+            256,
+            2
+          ],
+          "first_id": 264,
+          "tracked_logits": {
+            "264": 18.375,
+            "5257": 18.375
+          },
+          "logits_sha256": "48241dbb7f616c8538c71d5fbfa66a290ab98bd65ac6da985e92a65e6b47f42a"
+        },
+        "baseline_repeat": {
+          "partition": [
+            3330
+          ],
+          "first_id": 264,
+          "tracked_logits": {
+            "264": 18.375,
+            "5257": 18.375
+          },
+          "logits_sha256": "55f7906950ed9969a492a907dc5e426fa2f82319692078815b649b4592e1c901"
+        }
+      }
+    }
+  }
+}

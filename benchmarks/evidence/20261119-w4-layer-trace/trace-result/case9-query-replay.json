@@ -1,0 +1,34 @@
+{
+  "case": 9,
+  "position": 3329,
+  "head_width": 128,
+  "torch_cpu_version": "2.13.0+cu129",
+  "weight_sha256": "d2bbccdb5f2f2ff17e2e5d4798e20e549e7cc7f4035323e414069da50f850fa9",
+  "bias_sha256": "649100b462c49935eb75517ad90cc99bc748614c5a295202fd8569209e6275fc",
+  "cpu_accumulator_rounded_vs_trace_prebias": {
+    "different_bf16_elements": 6,
+    "max_abs": 0.00390625
+  },
+  "rotary_query_replay": {
+    "round_before_bias": {
+      "riley": {
+        "different_bf16_elements": 0,
+        "max_abs": 0.0
+      },
+      "hf": {
+        "different_bf16_elements": 950,
+        "max_abs": 0.25
+      }
+    },
+    "bias_before_round": {
+      "riley": {
+        "different_bf16_elements": 945,
+        "max_abs": 0.25
+      },
+      "hf": {
+        "different_bf16_elements": 7,
+        "max_abs": 0.0009765625
+      }
+    }
+  }
+}

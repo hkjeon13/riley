@@ -1,0 +1,2074 @@
+{
+  "case": 3,
+  "native_row": {
+    "position": 3300,
+    "last_token_id": 911,
+    "row": 228,
+    "active_rows": 229,
+    "dense_rows": 240
+  },
+  "stages": [
+    {
+      "stage": "embedding",
+      "layer": "-",
+      "width": 3584,
+      "different_bf16_elements": 0,
+      "max_abs": 0.0,
+      "mean_abs": 0.0
+    },
+    {
+      "stage": "input_norm",
+      "layer": "0",
+      "width": 3584,
+      "different_bf16_elements": 0,
+      "max_abs": 0.0,
+      "mean_abs": 0.0
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "0",
+      "width": 4608,
+      "different_bf16_elements": 0,
+      "max_abs": 0.0,
+      "mean_abs": 0.0
+    },
+    {
+      "stage": "query_rope",
+      "layer": "0",
+      "width": 3584,
+      "different_bf16_elements": 944,
+      "max_abs": 0.25,
+      "mean_abs": 0.0016657539776393346
+    },
+    {
+      "stage": "attention_context",
+      "layer": "0",
+      "width": 3584,
+      "different_bf16_elements": 2649,
+      "max_abs": 0.02175140380859375,
+      "mean_abs": 0.0005378286129728492
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "0",
+      "width": 3584,
+      "different_bf16_elements": 3186,
+      "max_abs": 0.015625,
+      "mean_abs": 0.0008654259145259857
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "0",
+      "width": 3584,
+      "different_bf16_elements": 3081,
+      "max_abs": 0.015625,
+      "mean_abs": 0.0008684503180640084
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "0",
+      "width": 3584,
+      "different_bf16_elements": 3101,
+      "max_abs": 0.015625,
+      "mean_abs": 0.0019820621902389185
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "0",
+      "width": 3584,
+      "different_bf16_elements": 3086,
+      "max_abs": 0.01171875,
+      "mean_abs": 0.0014529675245285034
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "0",
+      "width": 3584,
+      "different_bf16_elements": 3000,
+      "max_abs": 0.015625,
+      "mean_abs": 0.0016104174511773245
+    },
+    {
+      "stage": "input_norm",
+      "layer": "1",
+      "width": 3584,
+      "different_bf16_elements": 2966,
+      "max_abs": 0.03125,
+      "mean_abs": 0.0009130885472196886
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "1",
+      "width": 4608,
+      "different_bf16_elements": 3360,
+      "max_abs": 0.03125,
+      "mean_abs": 0.002251523546874523
+    },
+    {
+      "stage": "query_rope",
+      "layer": "1",
+      "width": 3584,
+      "different_bf16_elements": 2195,
+      "max_abs": 0.03125,
+      "mean_abs": 0.002526259848049709
+    },
+    {
+      "stage": "attention_context",
+      "layer": "1",
+      "width": 3584,
+      "different_bf16_elements": 2913,
+      "max_abs": 0.005859375,
+      "mean_abs": 0.0004602474075779485
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "1",
+      "width": 3584,
+      "different_bf16_elements": 2956,
+      "max_abs": 0.0078125,
+      "mean_abs": 0.0005218440066008563
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "1",
+      "width": 3584,
+      "different_bf16_elements": 3011,
+      "max_abs": 0.0234375,
+      "mean_abs": 0.0017414689064025879
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "1",
+      "width": 3584,
+      "different_bf16_elements": 2948,
+      "max_abs": 1.0,
+      "mean_abs": 0.0052840377071074075
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "1",
+      "width": 3584,
+      "different_bf16_elements": 3274,
+      "max_abs": 0.015625,
+      "mean_abs": 0.0010758655012718268
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "1",
+      "width": 3584,
+      "different_bf16_elements": 3015,
+      "max_abs": 0.015625,
+      "mean_abs": 0.002059078642300197
+    },
+    {
+      "stage": "input_norm",
+      "layer": "2",
+      "width": 3584,
+      "different_bf16_elements": 3034,
+      "max_abs": 0.0625,
+      "mean_abs": 0.002620690371518971
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "2",
+      "width": 4608,
+      "different_bf16_elements": 3750,
+      "max_abs": 0.0390625,
+      "mean_abs": 0.0047123222094443105
+    },
+    {
+      "stage": "query_rope",
+      "layer": "2",
+      "width": 3584,
+      "different_bf16_elements": 2691,
+      "max_abs": 0.0625,
+      "mean_abs": 0.005026491624968392
+    },
+    {
+      "stage": "attention_context",
+      "layer": "2",
+      "width": 3584,
+      "different_bf16_elements": 3042,
+      "max_abs": 0.01953125,
+      "mean_abs": 0.0007764987614271897
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "2",
+      "width": 3584,
+      "different_bf16_elements": 3120,
+      "max_abs": 0.00732421875,
+      "mean_abs": 0.0007536418104012098
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "2",
+      "width": 3584,
+      "different_bf16_elements": 3055,
+      "max_abs": 0.03125,
+      "mean_abs": 0.0022460807647023883
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "2",
+      "width": 3584,
+      "different_bf16_elements": 3012,
+      "max_abs": 0.25,
+      "mean_abs": 0.005525704207164901
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "2",
+      "width": 3584,
+      "different_bf16_elements": 2675,
+      "max_abs": 0.0078125,
+      "mean_abs": 0.0008760406968316861
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "2",
+      "width": 3584,
+      "different_bf16_elements": 2869,
+      "max_abs": 0.03125,
+      "mean_abs": 0.0023179948329925537
+    },
+    {
+      "stage": "input_norm",
+      "layer": "3",
+      "width": 3584,
+      "different_bf16_elements": 2803,
+      "max_abs": 0.046875,
+      "mean_abs": 0.002073522647931116
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "3",
+      "width": 4608,
+      "different_bf16_elements": 3340,
+      "max_abs": 0.03125,
+      "mean_abs": 0.003231884187294377
+    },
+    {
+      "stage": "query_rope",
+      "layer": "3",
+      "width": 3584,
+      "different_bf16_elements": 2389,
+      "max_abs": 0.03125,
+      "mean_abs": 0.0035433833088193622
+    },
+    {
+      "stage": "attention_context",
+      "layer": "3",
+      "width": 3584,
+      "different_bf16_elements": 3063,
+      "max_abs": 0.015625,
+      "mean_abs": 0.001249359521482672
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "3",
+      "width": 3584,
+      "different_bf16_elements": 2933,
+      "max_abs": 0.0078125,
+      "mean_abs": 0.0012723411699490888
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "3",
+      "width": 3584,
+      "different_bf16_elements": 2852,
+      "max_abs": 0.0625,
+      "mean_abs": 0.0026672865663255963
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "3",
+      "width": 3584,
+      "different_bf16_elements": 2767,
+      "max_abs": 0.125,
+      "mean_abs": 0.006361706980637142
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "3",
+      "width": 3584,
+      "different_bf16_elements": 3056,
+      "max_abs": 0.01171875,
+      "mean_abs": 0.00122381720159735
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "3",
+      "width": 3584,
+      "different_bf16_elements": 2887,
+      "max_abs": 0.0625,
+      "mean_abs": 0.0028327490602220807
+    },
+    {
+      "stage": "input_norm",
+      "layer": "4",
+      "width": 3584,
+      "different_bf16_elements": 2841,
+      "max_abs": 0.0625,
+      "mean_abs": 0.0025925112703199765
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "4",
+      "width": 4608,
+      "different_bf16_elements": 3400,
+      "max_abs": 0.033203125,
+      "mean_abs": 0.004056846929921044
+    },
+    {
+      "stage": "query_rope",
+      "layer": "4",
+      "width": 3584,
+      "different_bf16_elements": 2507,
+      "max_abs": 0.0625,
+      "mean_abs": 0.0044038934367043635
+    },
+    {
+      "stage": "attention_context",
+      "layer": "4",
+      "width": 3584,
+      "different_bf16_elements": 3394,
+      "max_abs": 0.03076171875,
+      "mean_abs": 0.0016020530352501997
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "4",
+      "width": 3584,
+      "different_bf16_elements": 3237,
+      "max_abs": 0.0234375,
+      "mean_abs": 0.0019783115879233393
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "4",
+      "width": 3584,
+      "different_bf16_elements": 2994,
+      "max_abs": 0.0625,
+      "mean_abs": 0.0035870245524815153
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "4",
+      "width": 3584,
+      "different_bf16_elements": 2947,
+      "max_abs": 0.1875,
+      "mean_abs": 0.007382852690560477
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "4",
+      "width": 3584,
+      "different_bf16_elements": 3023,
+      "max_abs": 0.013916015625,
+      "mean_abs": 0.002122263374206211
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "4",
+      "width": 3584,
+      "different_bf16_elements": 2931,
+      "max_abs": 0.09375,
+      "mean_abs": 0.003836753112929208
+    },
+    {
+      "stage": "input_norm",
+      "layer": "5",
+      "width": 3584,
+      "different_bf16_elements": 2813,
+      "max_abs": 0.0625,
+      "mean_abs": 0.0037325142017964807
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "5",
+      "width": 4608,
+      "different_bf16_elements": 3601,
+      "max_abs": 0.03125,
+      "mean_abs": 0.005314365650216739
+    },
+    {
+      "stage": "query_rope",
+      "layer": "5",
+      "width": 3584,
+      "different_bf16_elements": 2664,
+      "max_abs": 0.125,
+      "mean_abs": 0.00583309360912868
+    },
+    {
+      "stage": "attention_context",
+      "layer": "5",
+      "width": 3584,
+      "different_bf16_elements": 3256,
+      "max_abs": 0.01806640625,
+      "mean_abs": 0.0011478054470249585
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "5",
+      "width": 3584,
+      "different_bf16_elements": 3169,
+      "max_abs": 0.0107421875,
+      "mean_abs": 0.0011647085754832784
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "5",
+      "width": 3584,
+      "different_bf16_elements": 3025,
+      "max_abs": 0.09375,
+      "mean_abs": 0.00415589553969247
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "5",
+      "width": 3584,
+      "different_bf16_elements": 2918,
+      "max_abs": 0.25,
+      "mean_abs": 0.00880800879427365
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "5",
+      "width": 3584,
+      "different_bf16_elements": 3205,
+      "max_abs": 0.03125,
+      "mean_abs": 0.0026821110264531206
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "5",
+      "width": 3584,
+      "different_bf16_elements": 3039,
+      "max_abs": 0.0625,
+      "mean_abs": 0.0044165679386683875
+    },
+    {
+      "stage": "input_norm",
+      "layer": "6",
+      "width": 3584,
+      "different_bf16_elements": 2942,
+      "max_abs": 0.0625,
+      "mean_abs": 0.003610965147215341
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "6",
+      "width": 4608,
+      "different_bf16_elements": 3615,
+      "max_abs": 0.03125,
+      "mean_abs": 0.005454510657323731
+    },
+    {
+      "stage": "query_rope",
+      "layer": "6",
+      "width": 3584,
+      "different_bf16_elements": 2764,
+      "max_abs": 0.125,
+      "mean_abs": 0.006027125886508397
+    },
+    {
+      "stage": "attention_context",
+      "layer": "6",
+      "width": 3584,
+      "different_bf16_elements": 3310,
+      "max_abs": 0.03125,
+      "mean_abs": 0.0018253346040312732
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "6",
+      "width": 3584,
+      "different_bf16_elements": 3301,
+      "max_abs": 0.015625,
+      "mean_abs": 0.002125646029266396
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "6",
+      "width": 3584,
+      "different_bf16_elements": 3088,
+      "max_abs": 0.0625,
+      "mean_abs": 0.004925740616662162
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "6",
+      "width": 3584,
+      "different_bf16_elements": 3010,
+      "max_abs": 0.25,
+      "mean_abs": 0.005398392677307129
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "6",
+      "width": 3584,
+      "different_bf16_elements": 3258,
+      "max_abs": 0.046875,
+      "mean_abs": 0.004087736796853798
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "6",
+      "width": 3584,
+      "different_bf16_elements": 3017,
+      "max_abs": 0.125,
+      "mean_abs": 0.005408065659659249
+    },
+    {
+      "stage": "input_norm",
+      "layer": "7",
+      "width": 3584,
+      "different_bf16_elements": 3093,
+      "max_abs": 0.0625,
+      "mean_abs": 0.00462464482656547
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "7",
+      "width": 4608,
+      "different_bf16_elements": 3838,
+      "max_abs": 0.041015625,
+      "mean_abs": 0.0059071727510955595
+    },
+    {
+      "stage": "query_rope",
+      "layer": "7",
+      "width": 3584,
+      "different_bf16_elements": 2806,
+      "max_abs": 0.0625,
+      "mean_abs": 0.005992463656834194
+    },
+    {
+      "stage": "attention_context",
+      "layer": "7",
+      "width": 3584,
+      "different_bf16_elements": 3348,
+      "max_abs": 0.021484375,
+      "mean_abs": 0.0025110459786706735
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "7",
+      "width": 3584,
+      "different_bf16_elements": 3308,
+      "max_abs": 0.03515625,
+      "mean_abs": 0.0026860509866050313
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "7",
+      "width": 3584,
+      "different_bf16_elements": 3108,
+      "max_abs": 0.0625,
+      "mean_abs": 0.00594349844115121
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "7",
+      "width": 3584,
+      "different_bf16_elements": 3103,
+      "max_abs": 0.0625,
+      "mean_abs": 0.00538985404585089
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "7",
+      "width": 3584,
+      "different_bf16_elements": 3259,
+      "max_abs": 0.0234375,
+      "mean_abs": 0.004679304813700063
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "7",
+      "width": 3584,
+      "different_bf16_elements": 3070,
+      "max_abs": 0.03125,
+      "mean_abs": 0.0059975215366908485
+    },
+    {
+      "stage": "input_norm",
+      "layer": "8",
+      "width": 3584,
+      "different_bf16_elements": 3098,
+      "max_abs": 0.0625,
+      "mean_abs": 0.005244126809494836
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "8",
+      "width": 4608,
+      "different_bf16_elements": 3897,
+      "max_abs": 0.052734375,
+      "mean_abs": 0.0070196592973338235
+    },
+    {
+      "stage": "query_rope",
+      "layer": "8",
+      "width": 3584,
+      "different_bf16_elements": 2928,
+      "max_abs": 0.125,
+      "mean_abs": 0.007355298314775739
+    },
+    {
+      "stage": "attention_context",
+      "layer": "8",
+      "width": 3584,
+      "different_bf16_elements": 3286,
+      "max_abs": 0.0234375,
+      "mean_abs": 0.0020992274034402464
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "8",
+      "width": 3584,
+      "different_bf16_elements": 3285,
+      "max_abs": 0.017578125,
+      "mean_abs": 0.0022781136711793287
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "8",
+      "width": 3584,
+      "different_bf16_elements": 3098,
+      "max_abs": 0.0390625,
+      "mean_abs": 0.00639681305204119
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "8",
+      "width": 3584,
+      "different_bf16_elements": 3089,
+      "max_abs": 0.046875,
+      "mean_abs": 0.005645885531391416
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "8",
+      "width": 3584,
+      "different_bf16_elements": 3240,
+      "max_abs": 0.046875,
+      "mean_abs": 0.005286283258880887
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "8",
+      "width": 3584,
+      "different_bf16_elements": 3115,
+      "max_abs": 0.0625,
+      "mean_abs": 0.007164708205631801
+    },
+    {
+      "stage": "input_norm",
+      "layer": "9",
+      "width": 3584,
+      "different_bf16_elements": 3120,
+      "max_abs": 0.0703125,
+      "mean_abs": 0.0056515224277973175
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "9",
+      "width": 4608,
+      "different_bf16_elements": 3759,
+      "max_abs": 0.046875,
+      "mean_abs": 0.006477846298366785
+    },
+    {
+      "stage": "query_rope",
+      "layer": "9",
+      "width": 3584,
+      "different_bf16_elements": 2822,
+      "max_abs": 0.0625,
+      "mean_abs": 0.006489549364362445
+    },
+    {
+      "stage": "attention_context",
+      "layer": "9",
+      "width": 3584,
+      "different_bf16_elements": 3240,
+      "max_abs": 0.037109375,
+      "mean_abs": 0.002903589313583715
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "9",
+      "width": 3584,
+      "different_bf16_elements": 3278,
+      "max_abs": 0.03125,
+      "mean_abs": 0.0029497072765869753
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "9",
+      "width": 3584,
+      "different_bf16_elements": 3137,
+      "max_abs": 0.125,
+      "mean_abs": 0.007340737751552037
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "9",
+      "width": 3584,
+      "different_bf16_elements": 3104,
+      "max_abs": 0.0625,
+      "mean_abs": 0.008211733507258552
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "9",
+      "width": 3584,
+      "different_bf16_elements": 3236,
+      "max_abs": 0.1171875,
+      "mean_abs": 0.005199926240103585
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "9",
+      "width": 3584,
+      "different_bf16_elements": 3079,
+      "max_abs": 0.0625,
+      "mean_abs": 0.0064478474003928045
+    },
+    {
+      "stage": "input_norm",
+      "layer": "10",
+      "width": 3584,
+      "different_bf16_elements": 3057,
+      "max_abs": 0.0625,
+      "mean_abs": 0.0047598592936992645
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "10",
+      "width": 4608,
+      "different_bf16_elements": 3800,
+      "max_abs": 0.0625,
+      "mean_abs": 0.006307455400625865
+    },
+    {
+      "stage": "query_rope",
+      "layer": "10",
+      "width": 3584,
+      "different_bf16_elements": 2818,
+      "max_abs": 0.125,
+      "mean_abs": 0.006728181881564004
+    },
+    {
+      "stage": "attention_context",
+      "layer": "10",
+      "width": 3584,
+      "different_bf16_elements": 3313,
+      "max_abs": 0.046875,
+      "mean_abs": 0.0025630955185209003
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "10",
+      "width": 3584,
+      "different_bf16_elements": 3273,
+      "max_abs": 0.015625,
+      "mean_abs": 0.0026690436394086908
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "10",
+      "width": 3584,
+      "different_bf16_elements": 3132,
+      "max_abs": 0.125,
+      "mean_abs": 0.006760258759771075
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "10",
+      "width": 3584,
+      "different_bf16_elements": 3138,
+      "max_abs": 0.03125,
+      "mean_abs": 0.00560608080455235
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "10",
+      "width": 3584,
+      "different_bf16_elements": 3235,
+      "max_abs": 0.0234375,
+      "mean_abs": 0.004543519179735865
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "10",
+      "width": 3584,
+      "different_bf16_elements": 3085,
+      "max_abs": 0.125,
+      "mean_abs": 0.00626528263092041
+    },
+    {
+      "stage": "input_norm",
+      "layer": "11",
+      "width": 3584,
+      "different_bf16_elements": 3088,
+      "max_abs": 0.0625,
+      "mean_abs": 0.004874262426580701
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "11",
+      "width": 4608,
+      "different_bf16_elements": 3861,
+      "max_abs": 0.046875,
+      "mean_abs": 0.006440808168715901
+    },
+    {
+      "stage": "query_rope",
+      "layer": "11",
+      "width": 3584,
+      "different_bf16_elements": 2845,
+      "max_abs": 0.125,
+      "mean_abs": 0.006737014012677329
+    },
+    {
+      "stage": "attention_context",
+      "layer": "11",
+      "width": 3584,
+      "different_bf16_elements": 3272,
+      "max_abs": 0.09765625,
+      "mean_abs": 0.002520771322971476
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "11",
+      "width": 3584,
+      "different_bf16_elements": 3379,
+      "max_abs": 0.05078125,
+      "mean_abs": 0.002925733686424792
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "11",
+      "width": 3584,
+      "different_bf16_elements": 3186,
+      "max_abs": 0.125,
+      "mean_abs": 0.007126642124993461
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "11",
+      "width": 3584,
+      "different_bf16_elements": 3096,
+      "max_abs": 0.0322265625,
+      "mean_abs": 0.005806289347154754
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "11",
+      "width": 3584,
+      "different_bf16_elements": 3274,
+      "max_abs": 0.078125,
+      "mean_abs": 0.004881764229919229
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "11",
+      "width": 3584,
+      "different_bf16_elements": 3132,
+      "max_abs": 0.0625,
+      "mean_abs": 0.007159079824175153
+    },
+    {
+      "stage": "input_norm",
+      "layer": "12",
+      "width": 3584,
+      "different_bf16_elements": 3089,
+      "max_abs": 0.125,
+      "mean_abs": 0.005742236971855164
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "12",
+      "width": 4608,
+      "different_bf16_elements": 4040,
+      "max_abs": 0.0546875,
+      "mean_abs": 0.008087270893156528
+    },
+    {
+      "stage": "query_rope",
+      "layer": "12",
+      "width": 3584,
+      "different_bf16_elements": 3021,
+      "max_abs": 0.0625,
+      "mean_abs": 0.0082459883498294
+    },
+    {
+      "stage": "attention_context",
+      "layer": "12",
+      "width": 3584,
+      "different_bf16_elements": 3345,
+      "max_abs": 0.056396484375,
+      "mean_abs": 0.0034435628248112543
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "12",
+      "width": 3584,
+      "different_bf16_elements": 3383,
+      "max_abs": 0.07421875,
+      "mean_abs": 0.0031812593640227404
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "12",
+      "width": 3584,
+      "different_bf16_elements": 3200,
+      "max_abs": 0.125,
+      "mean_abs": 0.007963627576828003
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "12",
+      "width": 3584,
+      "different_bf16_elements": 3167,
+      "max_abs": 0.033203125,
+      "mean_abs": 0.006188564534698214
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "12",
+      "width": 3584,
+      "different_bf16_elements": 3323,
+      "max_abs": 0.228515625,
+      "mean_abs": 0.005563149228692055
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "12",
+      "width": 3584,
+      "different_bf16_elements": 3158,
+      "max_abs": 0.125,
+      "mean_abs": 0.0075488218239375526
+    },
+    {
+      "stage": "input_norm",
+      "layer": "13",
+      "width": 3584,
+      "different_bf16_elements": 3162,
+      "max_abs": 0.078125,
+      "mean_abs": 0.0063123491459659165
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "13",
+      "width": 4608,
+      "different_bf16_elements": 4073,
+      "max_abs": 0.0546875,
+      "mean_abs": 0.008381472874639763
+    },
+    {
+      "stage": "query_rope",
+      "layer": "13",
+      "width": 3584,
+      "different_bf16_elements": 3051,
+      "max_abs": 0.0625,
+      "mean_abs": 0.008431566613061088
+    },
+    {
+      "stage": "attention_context",
+      "layer": "13",
+      "width": 3584,
+      "different_bf16_elements": 3337,
+      "max_abs": 0.0390625,
+      "mean_abs": 0.003518163093498775
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "13",
+      "width": 3584,
+      "different_bf16_elements": 3341,
+      "max_abs": 0.109375,
+      "mean_abs": 0.0035997622347037706
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "13",
+      "width": 3584,
+      "different_bf16_elements": 3214,
+      "max_abs": 0.25,
+      "mean_abs": 0.008329604353223528
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "13",
+      "width": 3584,
+      "different_bf16_elements": 3190,
+      "max_abs": 0.0546875,
+      "mean_abs": 0.005963366744773728
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "13",
+      "width": 3584,
+      "different_bf16_elements": 3347,
+      "max_abs": 0.140625,
+      "mean_abs": 0.005252160531069551
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "13",
+      "width": 3584,
+      "different_bf16_elements": 3148,
+      "max_abs": 0.125,
+      "mean_abs": 0.007918017251150948
+    },
+    {
+      "stage": "input_norm",
+      "layer": "14",
+      "width": 3584,
+      "different_bf16_elements": 3168,
+      "max_abs": 0.125,
+      "mean_abs": 0.007082813219832522
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "14",
+      "width": 4608,
+      "different_bf16_elements": 4061,
+      "max_abs": 0.125,
+      "mean_abs": 0.008925787069731288
+    },
+    {
+      "stage": "query_rope",
+      "layer": "14",
+      "width": 3584,
+      "different_bf16_elements": 3053,
+      "max_abs": 0.125,
+      "mean_abs": 0.00909145815031869
+    },
+    {
+      "stage": "attention_context",
+      "layer": "14",
+      "width": 3584,
+      "different_bf16_elements": 3288,
+      "max_abs": 0.078125,
+      "mean_abs": 0.0028035496569438173
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "14",
+      "width": 3584,
+      "different_bf16_elements": 3286,
+      "max_abs": 0.078125,
+      "mean_abs": 0.0027406151306682397
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "14",
+      "width": 3584,
+      "different_bf16_elements": 3200,
+      "max_abs": 0.25,
+      "mean_abs": 0.008170447179249354
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "14",
+      "width": 3584,
+      "different_bf16_elements": 3158,
+      "max_abs": 0.046875,
+      "mean_abs": 0.00594818073191813
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "14",
+      "width": 3584,
+      "different_bf16_elements": 3332,
+      "max_abs": 0.125,
+      "mean_abs": 0.005171416593449456
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "14",
+      "width": 3584,
+      "different_bf16_elements": 3152,
+      "max_abs": 0.125,
+      "mean_abs": 0.007920418466840471
+    },
+    {
+      "stage": "input_norm",
+      "layer": "15",
+      "width": 3584,
+      "different_bf16_elements": 3153,
+      "max_abs": 0.09375,
+      "mean_abs": 0.005563003410186086
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "15",
+      "width": 4608,
+      "different_bf16_elements": 4067,
+      "max_abs": 0.0625,
+      "mean_abs": 0.007552442244357533
+    },
+    {
+      "stage": "query_rope",
+      "layer": "15",
+      "width": 3584,
+      "different_bf16_elements": 2943,
+      "max_abs": 0.125,
+      "mean_abs": 0.0074477121233940125
+    },
+    {
+      "stage": "attention_context",
+      "layer": "15",
+      "width": 3584,
+      "different_bf16_elements": 3291,
+      "max_abs": 0.033203125,
+      "mean_abs": 0.0026744695122553302
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "15",
+      "width": 3584,
+      "different_bf16_elements": 3316,
+      "max_abs": 0.0390625,
+      "mean_abs": 0.002911292058083096
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "15",
+      "width": 3584,
+      "different_bf16_elements": 3186,
+      "max_abs": 0.125,
+      "mean_abs": 0.008506366184779577
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "15",
+      "width": 3584,
+      "different_bf16_elements": 3179,
+      "max_abs": 0.0625,
+      "mean_abs": 0.00577035014118467
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "15",
+      "width": 3584,
+      "different_bf16_elements": 3319,
+      "max_abs": 0.0859375,
+      "mean_abs": 0.005025796193097319
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "15",
+      "width": 3584,
+      "different_bf16_elements": 3189,
+      "max_abs": 0.25,
+      "mean_abs": 0.008534082344600133
+    },
+    {
+      "stage": "input_norm",
+      "layer": "16",
+      "width": 3584,
+      "different_bf16_elements": 3242,
+      "max_abs": 0.25,
+      "mean_abs": 0.006719689017960003
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "16",
+      "width": 4608,
+      "different_bf16_elements": 4098,
+      "max_abs": 0.0625,
+      "mean_abs": 0.00861152414129012
+    },
+    {
+      "stage": "query_rope",
+      "layer": "16",
+      "width": 3584,
+      "different_bf16_elements": 3097,
+      "max_abs": 0.0625,
+      "mean_abs": 0.008564476455960954
+    },
+    {
+      "stage": "attention_context",
+      "layer": "16",
+      "width": 3584,
+      "different_bf16_elements": 3312,
+      "max_abs": 0.0703125,
+      "mean_abs": 0.0034937940404883455
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "16",
+      "width": 3584,
+      "different_bf16_elements": 3365,
+      "max_abs": 0.046875,
+      "mean_abs": 0.003136635891028813
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "16",
+      "width": 3584,
+      "different_bf16_elements": 3218,
+      "max_abs": 0.25,
+      "mean_abs": 0.00910224233354841
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "16",
+      "width": 3584,
+      "different_bf16_elements": 3239,
+      "max_abs": 0.0625,
+      "mean_abs": 0.005990537415657725
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "16",
+      "width": 3584,
+      "different_bf16_elements": 3313,
+      "max_abs": 0.02557373046875,
+      "mean_abs": 0.0045914653954761365
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "16",
+      "width": 3584,
+      "different_bf16_elements": 3205,
+      "max_abs": 0.25,
+      "mean_abs": 0.009082215172903878
+    },
+    {
+      "stage": "input_norm",
+      "layer": "17",
+      "width": 3584,
+      "different_bf16_elements": 3221,
+      "max_abs": 0.125,
+      "mean_abs": 0.00745488383940288
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "17",
+      "width": 4608,
+      "different_bf16_elements": 4102,
+      "max_abs": 0.06640625,
+      "mean_abs": 0.008786127398100993
+    },
+    {
+      "stage": "query_rope",
+      "layer": "17",
+      "width": 3584,
+      "different_bf16_elements": 3091,
+      "max_abs": 0.0625,
+      "mean_abs": 0.008666396141052246
+    },
+    {
+      "stage": "attention_context",
+      "layer": "17",
+      "width": 3584,
+      "different_bf16_elements": 3347,
+      "max_abs": 0.0625,
+      "mean_abs": 0.0027333044563420117
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "17",
+      "width": 3584,
+      "different_bf16_elements": 3294,
+      "max_abs": 0.078125,
+      "mean_abs": 0.0025798772694543004
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "17",
+      "width": 3584,
+      "different_bf16_elements": 3228,
+      "max_abs": 0.125,
+      "mean_abs": 0.009381098406655448
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "17",
+      "width": 3584,
+      "different_bf16_elements": 3183,
+      "max_abs": 0.0625,
+      "mean_abs": 0.006412108029638018
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "17",
+      "width": 3584,
+      "different_bf16_elements": 3315,
+      "max_abs": 0.03515625,
+      "mean_abs": 0.005574994853564671
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "17",
+      "width": 3584,
+      "different_bf16_elements": 3222,
+      "max_abs": 0.25,
+      "mean_abs": 0.009967820984976632
+    },
+    {
+      "stage": "input_norm",
+      "layer": "18",
+      "width": 3584,
+      "different_bf16_elements": 3160,
+      "max_abs": 0.125,
+      "mean_abs": 0.007216291236025947
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "18",
+      "width": 4608,
+      "different_bf16_elements": 4071,
+      "max_abs": 0.078125,
+      "mean_abs": 0.008889010848684443
+    },
+    {
+      "stage": "query_rope",
+      "layer": "18",
+      "width": 3584,
+      "different_bf16_elements": 3004,
+      "max_abs": 0.0625,
+      "mean_abs": 0.0088201676096235
+    },
+    {
+      "stage": "attention_context",
+      "layer": "18",
+      "width": 3584,
+      "different_bf16_elements": 3270,
+      "max_abs": 0.046875,
+      "mean_abs": 0.004254519191038396
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "18",
+      "width": 3584,
+      "different_bf16_elements": 3310,
+      "max_abs": 0.09375,
+      "mean_abs": 0.004099536454305053
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "18",
+      "width": 3584,
+      "different_bf16_elements": 3228,
+      "max_abs": 0.25,
+      "mean_abs": 0.01018061169556209
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "18",
+      "width": 3584,
+      "different_bf16_elements": 3193,
+      "max_abs": 0.0625,
+      "mean_abs": 0.0064829013177326745
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "18",
+      "width": 3584,
+      "different_bf16_elements": 3320,
+      "max_abs": 0.0625,
+      "mean_abs": 0.006513084401376545
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "18",
+      "width": 3584,
+      "different_bf16_elements": 3208,
+      "max_abs": 0.125,
+      "mean_abs": 0.010758689471653529
+    },
+    {
+      "stage": "input_norm",
+      "layer": "19",
+      "width": 3584,
+      "different_bf16_elements": 3142,
+      "max_abs": 0.125,
+      "mean_abs": 0.007587246596813202
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "19",
+      "width": 4608,
+      "different_bf16_elements": 4109,
+      "max_abs": 0.09375,
+      "mean_abs": 0.00969106579820315
+    },
+    {
+      "stage": "query_rope",
+      "layer": "19",
+      "width": 3584,
+      "different_bf16_elements": 3035,
+      "max_abs": 0.125,
+      "mean_abs": 0.010196088680199214
+    },
+    {
+      "stage": "attention_context",
+      "layer": "19",
+      "width": 3584,
+      "different_bf16_elements": 3291,
+      "max_abs": 0.04296875,
+      "mean_abs": 0.004394495468919298
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "19",
+      "width": 3584,
+      "different_bf16_elements": 3284,
+      "max_abs": 0.15625,
+      "mean_abs": 0.004783140761511666
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "19",
+      "width": 3584,
+      "different_bf16_elements": 3223,
+      "max_abs": 0.125,
+      "mean_abs": 0.011418087141854423
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "19",
+      "width": 3584,
+      "different_bf16_elements": 3145,
+      "max_abs": 0.046875,
+      "mean_abs": 0.0067208244332245416
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "19",
+      "width": 3584,
+      "different_bf16_elements": 3279,
+      "max_abs": 0.033203125,
+      "mean_abs": 0.006995516380162111
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "19",
+      "width": 3584,
+      "different_bf16_elements": 3195,
+      "max_abs": 0.125,
+      "mean_abs": 0.012027502059936523
+    },
+    {
+      "stage": "input_norm",
+      "layer": "20",
+      "width": 3584,
+      "different_bf16_elements": 3147,
+      "max_abs": 0.125,
+      "mean_abs": 0.007721230387687683
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "20",
+      "width": 4608,
+      "different_bf16_elements": 4084,
+      "max_abs": 0.0625,
+      "mean_abs": 0.009224298513597913
+    },
+    {
+      "stage": "query_rope",
+      "layer": "20",
+      "width": 3584,
+      "different_bf16_elements": 3078,
+      "max_abs": 0.125,
+      "mean_abs": 0.009250308786119734
+    },
+    {
+      "stage": "attention_context",
+      "layer": "20",
+      "width": 3584,
+      "different_bf16_elements": 3304,
+      "max_abs": 0.0703125,
+      "mean_abs": 0.00416189457713959
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "20",
+      "width": 3584,
+      "different_bf16_elements": 3299,
+      "max_abs": 0.125,
+      "mean_abs": 0.003951228888971465
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "20",
+      "width": 3584,
+      "different_bf16_elements": 3188,
+      "max_abs": 0.25,
+      "mean_abs": 0.012795720781598772
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "20",
+      "width": 3584,
+      "different_bf16_elements": 3131,
+      "max_abs": 0.078125,
+      "mean_abs": 0.007356319576501846
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "20",
+      "width": 3584,
+      "different_bf16_elements": 3302,
+      "max_abs": 0.2109375,
+      "mean_abs": 0.008654174927089895
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "20",
+      "width": 3584,
+      "different_bf16_elements": 3151,
+      "max_abs": 0.25,
+      "mean_abs": 0.013908616134098597
+    },
+    {
+      "stage": "input_norm",
+      "layer": "21",
+      "width": 3584,
+      "different_bf16_elements": 3152,
+      "max_abs": 0.109375,
+      "mean_abs": 0.0076922910021884104
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "21",
+      "width": 4608,
+      "different_bf16_elements": 4057,
+      "max_abs": 0.09375,
+      "mean_abs": 0.00892792342023717
+    },
+    {
+      "stage": "query_rope",
+      "layer": "21",
+      "width": 3584,
+      "different_bf16_elements": 3040,
+      "max_abs": 0.09375,
+      "mean_abs": 0.009194858372211456
+    },
+    {
+      "stage": "attention_context",
+      "layer": "21",
+      "width": 3584,
+      "different_bf16_elements": 3370,
+      "max_abs": 0.095703125,
+      "mean_abs": 0.005969229952565261
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "21",
+      "width": 3584,
+      "different_bf16_elements": 3385,
+      "max_abs": 0.1875,
+      "mean_abs": 0.007699941284954548
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "21",
+      "width": 3584,
+      "different_bf16_elements": 3186,
+      "max_abs": 0.25,
+      "mean_abs": 0.01604557888848441
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "21",
+      "width": 3584,
+      "different_bf16_elements": 3134,
+      "max_abs": 0.1875,
+      "mean_abs": 0.008798419630953245
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "21",
+      "width": 3584,
+      "different_bf16_elements": 3299,
+      "max_abs": 0.09375,
+      "mean_abs": 0.011150124150195293
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "21",
+      "width": 3584,
+      "different_bf16_elements": 3196,
+      "max_abs": 0.5,
+      "mean_abs": 0.018869740622384206
+    },
+    {
+      "stage": "input_norm",
+      "layer": "22",
+      "width": 3584,
+      "different_bf16_elements": 3160,
+      "max_abs": 0.15625,
+      "mean_abs": 0.009250506226505553
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "22",
+      "width": 4608,
+      "different_bf16_elements": 4078,
+      "max_abs": 0.0625,
+      "mean_abs": 0.010201135443316566
+    },
+    {
+      "stage": "query_rope",
+      "layer": "22",
+      "width": 3584,
+      "different_bf16_elements": 3114,
+      "max_abs": 0.0625,
+      "mean_abs": 0.010251219783510481
+    },
+    {
+      "stage": "attention_context",
+      "layer": "22",
+      "width": 3584,
+      "different_bf16_elements": 3318,
+      "max_abs": 0.056640625,
+      "mean_abs": 0.0038642006859715495
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "22",
+      "width": 3584,
+      "different_bf16_elements": 3239,
+      "max_abs": 0.03125,
+      "mean_abs": 0.005232536233961582
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "22",
+      "width": 3584,
+      "different_bf16_elements": 3217,
+      "max_abs": 0.5,
+      "mean_abs": 0.020009722028459822
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "22",
+      "width": 3584,
+      "different_bf16_elements": 3189,
+      "max_abs": 0.125,
+      "mean_abs": 0.01023034006357193
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "22",
+      "width": 3584,
+      "different_bf16_elements": 3292,
+      "max_abs": 0.1875,
+      "mean_abs": 0.014469805306621961
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "22",
+      "width": 3584,
+      "different_bf16_elements": 3218,
+      "max_abs": 0.5,
+      "mean_abs": 0.024507863180977956
+    },
+    {
+      "stage": "input_norm",
+      "layer": "23",
+      "width": 3584,
+      "different_bf16_elements": 3094,
+      "max_abs": 0.1796875,
+      "mean_abs": 0.008792068277086531
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "23",
+      "width": 4608,
+      "different_bf16_elements": 4073,
+      "max_abs": 0.0625,
+      "mean_abs": 0.009842871791786618
+    },
+    {
+      "stage": "query_rope",
+      "layer": "23",
+      "width": 3584,
+      "different_bf16_elements": 3086,
+      "max_abs": 0.06640625,
+      "mean_abs": 0.009423351713589259
+    },
+    {
+      "stage": "attention_context",
+      "layer": "23",
+      "width": 3584,
+      "different_bf16_elements": 3289,
+      "max_abs": 0.0625,
+      "mean_abs": 0.00609921890177897
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "23",
+      "width": 3584,
+      "different_bf16_elements": 3238,
+      "max_abs": 0.25,
+      "mean_abs": 0.007770023175648281
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "23",
+      "width": 3584,
+      "different_bf16_elements": 3230,
+      "max_abs": 1.0,
+      "mean_abs": 0.026825836726597378
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "23",
+      "width": 3584,
+      "different_bf16_elements": 3224,
+      "max_abs": 0.125,
+      "mean_abs": 0.011937137160982405
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "23",
+      "width": 3584,
+      "different_bf16_elements": 3304,
+      "max_abs": 0.25,
+      "mean_abs": 0.013745954792414392
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "23",
+      "width": 3584,
+      "different_bf16_elements": 3209,
+      "max_abs": 1.0,
+      "mean_abs": 0.030561276844569614
+    },
+    {
+      "stage": "input_norm",
+      "layer": "24",
+      "width": 3584,
+      "different_bf16_elements": 3212,
+      "max_abs": 0.15625,
+      "mean_abs": 0.009161551482975483
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "24",
+      "width": 4608,
+      "different_bf16_elements": 4015,
+      "max_abs": 0.0859375,
+      "mean_abs": 0.010681990016665723
+    },
+    {
+      "stage": "query_rope",
+      "layer": "24",
+      "width": 3584,
+      "different_bf16_elements": 3080,
+      "max_abs": 0.064453125,
+      "mean_abs": 0.009832126753670829
+    },
+    {
+      "stage": "attention_context",
+      "layer": "24",
+      "width": 3584,
+      "different_bf16_elements": 3304,
+      "max_abs": 0.109375,
+      "mean_abs": 0.0060799447154360154
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "24",
+      "width": 3584,
+      "different_bf16_elements": 3291,
+      "max_abs": 0.125,
+      "mean_abs": 0.00838484734828983
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "24",
+      "width": 3584,
+      "different_bf16_elements": 3211,
+      "max_abs": 1.0,
+      "mean_abs": 0.032704029764447896
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "24",
+      "width": 3584,
+      "different_bf16_elements": 3194,
+      "max_abs": 0.25,
+      "mean_abs": 0.012125194604907717
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "24",
+      "width": 3584,
+      "different_bf16_elements": 3294,
+      "max_abs": 0.125,
+      "mean_abs": 0.015532339906453021
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "24",
+      "width": 3584,
+      "different_bf16_elements": 3240,
+      "max_abs": 1.0,
+      "mean_abs": 0.03722374779837472
+    },
+    {
+      "stage": "input_norm",
+      "layer": "25",
+      "width": 3584,
+      "different_bf16_elements": 3219,
+      "max_abs": 0.15234375,
+      "mean_abs": 0.008538027959210532
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "25",
+      "width": 4608,
+      "different_bf16_elements": 4080,
+      "max_abs": 0.078125,
+      "mean_abs": 0.009338623844087124
+    },
+    {
+      "stage": "query_rope",
+      "layer": "25",
+      "width": 3584,
+      "different_bf16_elements": 2988,
+      "max_abs": 0.0625,
+      "mean_abs": 0.008676503385816301
+    },
+    {
+      "stage": "attention_context",
+      "layer": "25",
+      "width": 3584,
+      "different_bf16_elements": 3284,
+      "max_abs": 0.09375,
+      "mean_abs": 0.006662085444466876
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "25",
+      "width": 3584,
+      "different_bf16_elements": 3228,
+      "max_abs": 0.0386962890625,
+      "mean_abs": 0.008110626201544489
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "25",
+      "width": 3584,
+      "different_bf16_elements": 3209,
+      "max_abs": 1.0,
+      "mean_abs": 0.037923063550676615
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "25",
+      "width": 3584,
+      "different_bf16_elements": 3211,
+      "max_abs": 0.125,
+      "mean_abs": 0.012351962604693003
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "25",
+      "width": 3584,
+      "different_bf16_elements": 3281,
+      "max_abs": 0.21875,
+      "mean_abs": 0.01855457787002836
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "25",
+      "width": 3584,
+      "different_bf16_elements": 3251,
+      "max_abs": 1.0,
+      "mean_abs": 0.04536164232662746
+    },
+    {
+      "stage": "input_norm",
+      "layer": "26",
+      "width": 3584,
+      "different_bf16_elements": 3189,
+      "max_abs": 0.173828125,
+      "mean_abs": 0.008225280126290662
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "26",
+      "width": 4608,
+      "different_bf16_elements": 4055,
+      "max_abs": 0.10546875,
+      "mean_abs": 0.010895436215731833
+    },
+    {
+      "stage": "query_rope",
+      "layer": "26",
+      "width": 3584,
+      "different_bf16_elements": 3063,
+      "max_abs": 0.0625,
+      "mean_abs": 0.008886822632380895
+    },
+    {
+      "stage": "attention_context",
+      "layer": "26",
+      "width": 3584,
+      "different_bf16_elements": 3273,
+      "max_abs": 0.09375,
+      "mean_abs": 0.011002923361957073
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "26",
+      "width": 3584,
+      "different_bf16_elements": 3243,
+      "max_abs": 0.07421875,
+      "mean_abs": 0.01414794341794082
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "26",
+      "width": 3584,
+      "different_bf16_elements": 3221,
+      "max_abs": 0.28125,
+      "mean_abs": 0.04764885561806815
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "26",
+      "width": 3584,
+      "different_bf16_elements": 3134,
+      "max_abs": 0.125,
+      "mean_abs": 0.012503155640193395
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "26",
+      "width": 3584,
+      "different_bf16_elements": 3228,
+      "max_abs": 0.16015625,
+      "mean_abs": 0.02505921040262495
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "26",
+      "width": 3584,
+      "different_bf16_elements": 3212,
+      "max_abs": 0.5,
+      "mean_abs": 0.05705036435808454
+    },
+    {
+      "stage": "input_norm",
+      "layer": "27",
+      "width": 3584,
+      "different_bf16_elements": 3200,
+      "max_abs": 0.25,
+      "mean_abs": 0.007778099605015346
+    },
+    {
+      "stage": "qkv_prebias",
+      "layer": "27",
+      "width": 4608,
+      "different_bf16_elements": 3993,
+      "max_abs": 0.25,
+      "mean_abs": 0.012060228321287367
+    },
+    {
+      "stage": "query_rope",
+      "layer": "27",
+      "width": 3584,
+      "different_bf16_elements": 2980,
+      "max_abs": 0.5,
+      "mean_abs": 0.010453475373131889
+    },
+    {
+      "stage": "attention_context",
+      "layer": "27",
+      "width": 3584,
+      "different_bf16_elements": 3274,
+      "max_abs": 0.109375,
+      "mean_abs": 0.013704523976360048
+    },
+    {
+      "stage": "attention_projection",
+      "layer": "27",
+      "width": 3584,
+      "different_bf16_elements": 3251,
+      "max_abs": 1.0,
+      "mean_abs": 0.01572655068178262
+    },
+    {
+      "stage": "attention_residual",
+      "layer": "27",
+      "width": 3584,
+      "different_bf16_elements": 3219,
+      "max_abs": 2.0,
+      "mean_abs": 0.059070050716400146
+    },
+    {
+      "stage": "post_attention_norm",
+      "layer": "27",
+      "width": 3584,
+      "different_bf16_elements": 3273,
+      "max_abs": 0.25,
+      "mean_abs": 0.015007913644824709
+    },
+    {
+      "stage": "mlp_down",
+      "layer": "27",
+      "width": 3584,
+      "different_bf16_elements": 3242,
+      "max_abs": 2.0,
+      "mean_abs": 0.035684787801333835
+    },
+    {
+      "stage": "layer_residual",
+      "layer": "27",
+      "width": 3584,
+      "different_bf16_elements": 3214,
+      "max_abs": 4.0,
+      "mean_abs": 0.07398223876953125
+    },
+    {
+      "stage": "final_norm",
+      "layer": "-",
+      "width": 3584,
+      "different_bf16_elements": 3222,
+      "max_abs": 2.0,
+      "mean_abs": 0.04823865209306989
+    },
+    {
+      "stage": "logits",
+      "layer": "-",
+      "width": 152064,
+      "different_bf16_elements": 118388,
+      "max_abs": 0.21875,
+      "mean_abs": 0.03186343278130673
+    }
+  ],
+  "first_different_stage": {
+    "stage": "query_rope",
+    "layer": "0",
+    "width": 3584,
+    "different_bf16_elements": 944,
+    "max_abs": 0.25,
+    "mean_abs": 0.0016657539776393346
+  },
+  "raw_logits_argmax": {
+    "riley": 264,
+    "hf": 5257
+  },
+  "selected_token_logits": {
+    "264": {
+      "riley": 18.375,
+      "hf": 18.25
+    },
+    "5257": {
+      "riley": 18.375,
+      "hf": 18.375
+    }
+  }
+}

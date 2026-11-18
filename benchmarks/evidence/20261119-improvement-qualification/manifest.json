@@ -1,5 +1,5 @@
 {
-  "audited_main": "2e15553dd9332f415d3a08419d36f41c70b06f66",
+  "audited_main": "f33e949fcff38e832d82daf5bba16c3fc1d6a3d0",
   "release_status": "hold",
   "shared_program_git_objects": {
     "Cargo.toml": "e75f6ce3a2ad13911f1a91fc2b982a410f9d32f2",
@@ -148,6 +148,18 @@
         {
           "path": "benchmarks/evidence/20261119-w4-gsm8k/qwen7-comparison.json",
           "sha256": "acc568bac8f1bb1c68d6a486009e715ba00e038f2ba4be465e1b55a93feca53e"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-gsm8k/llama3-riley/receipt.json",
+          "sha256": "e290df7b48718323fa3cb5bde848a4aaf6c153433f9fa44de496a3e87f1492eb"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-gsm8k/llama3-vllm/receipt.json",
+          "sha256": "67b310e890f64a218b84dbad23c89cd56e2f383eccfb186a45b6b51673291477"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-gsm8k/llama3-comparison.json",
+          "sha256": "72e611343c9a9d0b89fbcc26645805362bd9bb41f163992b0aa5bdc50a02eae7"
         }
       ]
     }
@@ -184,6 +196,36 @@
     "qwen3_4b_initial_nsight_attempt": {
       "path": "benchmarks/evidence/20261119-w3-rag-profile/qwen4-profile-initial/receipt.json",
       "sha256": "6474f5c6c614063f8078e9214b8b35a37b2d6af2690968cd17368689709add6a"
+    },
+    "qwen2_5_7b_diagnostic_prefill": {
+      "binary_sha256": "17890dea81b859d007e1cd403b35408249451c1545b776a8ed0f649d57156089",
+      "source_revision": "1881748801dc4975b2d0b5788147e73d7a3d012f",
+      "artifacts": [
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/trace-result-SHA256SUMS",
+          "sha256": "439c82a9d5a5daec014c8c97e5efa05663182c999d9f8088848190315a3b4ca4"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/trace-result/case3-comparison.json",
+          "sha256": "01dceeeece68f1ed671efcdd121f6a2a7b8e676da722fa0bdbf9cdb828f8efa2"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/trace-result/case9-comparison.json",
+          "sha256": "1c6ab8e4c9b0fd7e95788b421b7ddf2b89c31deaf4155d0d30ca6a67a0b44b10"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/tools/replay_layer0_query.py",
+          "sha256": "6153850f33a88c2827ea29b9a71f1038df1f949d6d6b5813a2c9be11d7941d63"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/bias-order-SHA256SUMS",
+          "sha256": "4eaf62fcfb1423fe3f0b07aa7d36b361136d79c8db0403d511893e3ac295c932"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/prefill-partition-SHA256SUMS",
+          "sha256": "e859e9fb365b8d043c6d896c942c7b9b5e81b7fe6d11abf71501a195fce24fae"
+        }
+      ]
     }
   }
 }

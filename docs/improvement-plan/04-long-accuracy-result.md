@@ -32,7 +32,7 @@ Riley는 logprobs 요청에서도 18건 모두 일반 요청과 같은 ID를 생
 | 12 | 669 | 9 | 34235 | 13638 | 0.125 | 0 |
 | 14 | 2,196 | 9 | 11931 | 38973 | 0 | 0.125 |
 
-사례 0의 동일 prefix에서 HF attention을 eager로 바꾸면 SDPA에서 0.125 차이였던 두 ID의 점수가 19.75로 같아졌다. Riley와 HF SDPA가 갈라진 다섯 위치 모두 각 경로의 상위 두 점수가 0.125 이내였다. Riley 쪽 수치는 공개 API가 보고한 logprob 간격이고 전체 vocabulary의 raw logit은 수집하지 않았다. 다섯 사례의 최초 분기 위치와 attention backend에 따른 점수 변화를 확인했다. 최초로 달라지는 Riley 내부 층·연산과 KV 위치·mask의 영향은 추가 비교가 필요하다.
+사례 0의 동일 prefix에서 HF attention을 eager로 바꾸면 SDPA에서 0.125 차이였던 두 ID의 점수가 19.75로 같아졌다. Riley와 HF SDPA가 갈라진 다섯 위치 모두 각 경로의 상위 두 점수가 0.125 이내였다. 표의 Riley 수치는 공개 API가 보고한 logprob 간격이다. 아래 prefill 추적에서 사례 3과 9의 전체 vocabulary logits와 첫 BF16 불일치 지점을 수집했다.
 
 다국어·코드·수치·경계 길이 holdout은 아래에 별도로 기록했다. GSM8K 전수 품질 대조는 하단에 기록했다.
 
@@ -70,7 +70,22 @@ Hugging Face SDPA에는 같은 입력 ID를 공급하고 원래 첫 출력 ID를
 
 격리 소스에서 Rust 타입 검사와 합성 BF16 비교기 검산을 통과했다. 첫 Linux CUDA 빌드는 소스 묶음에서 `kernels/CMakeLists.txt`가 빠져 코드 101로 종료됐다. 서버에 이미 있던 W4 빌드의 커널 파일을 기준 커밋의 34개 파일 해시와 대조했다. 같은 소스 묶음과 진단 패치에 검증한 커널 파일을 보완하며, GPU 7의 W3 성능 측정이 끝나면 GPU 6에서 진단을 수행하도록 등록했다. [진단 패치 (gzip)](../../benchmarks/evidence/20261119-w4-layer-trace/final-prefill.patch.gz) · [첫 빌드 로그](../../benchmarks/evidence/20261119-w4-layer-trace/initial-build.log.gz) · [커널 검증 로그](../../benchmarks/evidence/20261119-w4-layer-trace/retry-admission-kernels.log) · [재실행 명령](../../benchmarks/evidence/20261119-w4-layer-trace/retry-campaign.sh)
 
-두 번째 시도는 CUDA 빌드와 사례 3의 추론까지 완료했다. 첫 출력 ID 264를 포함해 생성 ID·텍스트·종료 사유가 원래 실행과 일치했다. 진단 훅은 펼친 토큰 인덱스로 시퀀스 행 종류 배열을 조회해 대상 행을 기록하지 못했다. 출력 슬롯에서 토큰 인덱스와 시퀀스 행 인덱스를 각각 읽도록 교정했고, 기존 CSR 출력 매핑 테스트를 통과했다. 교정한 추적의 CUDA 빌드도 완료됐고 GPU 6에서 재실행을 시작했다. [두 번째 실패 기록](../../benchmarks/evidence/20261119-w4-layer-trace/retry-capture-failure/native3/receipt.json) · [원래 출력 비교](../../benchmarks/evidence/20261119-w4-layer-trace/retry-capture-failure/native3/response.json.gz) · [교정 패치](../../benchmarks/evidence/20261119-w4-layer-trace/selector-retry/selector.patch.gz) · [실행 순서](../../benchmarks/evidence/20261119-w4-layer-trace/selector-retry/campaign.sh)
+두 번째 시도는 CUDA 빌드와 사례 3의 추론까지 완료했다. 첫 출력 ID 264를 포함해 생성 ID·텍스트·종료 사유가 원래 실행과 일치했다. 진단 훅은 펼친 토큰 인덱스로 시퀀스 행 종류 배열을 조회해 대상 행을 기록하지 못했다. 출력 슬롯에서 토큰 인덱스와 시퀀스 행 인덱스를 각각 읽도록 교정했고, 기존 CSR 출력 매핑 테스트를 통과했다. [두 번째 실패 기록](../../benchmarks/evidence/20261119-w4-layer-trace/retry-capture-failure/native3/receipt.json) · [교정 패치](../../benchmarks/evidence/20261119-w4-layer-trace/selector-retry/selector.patch.gz) · [실행 순서](../../benchmarks/evidence/20261119-w4-layer-trace/selector-retry/campaign.sh)
+
+교정한 빌드로 GPU 6에서 두 사례의 Riley·HF 추적 네 건을 완료했다. Riley는 양쪽 사례에서 원래 생성 ID 전체와 텍스트·종료 사유를 재현했다. HF는 두 사례의 기존 첫 토큰을 재현했다. 각 실행 직후 같은 홀더의 20GiB 예약 복귀를 확인했다. [실행 로그](../../benchmarks/evidence/20261119-w4-layer-trace/trace-result/campaign.log) · [원본 추적과 실행 기록 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/trace-result-SHA256SUMS)
+
+| 사례 | 첫 BF16 차이 | 다른 원소 | 최대 절대차 | Riley / HF 첫 ID |
+|---:|---|---:|---:|---|
+| 3 | 0번 레이어, RoPE 적용 직후 query | 944/3,584 | 0.25 | 264 / 5257 |
+| 9 | 0번 레이어, RoPE 적용 직후 query | 950/3,584 | 0.25 | 264 / 264 |
+
+두 사례 모두 마지막 프롬프트 행의 embedding, 첫 norm, bias 적용 전 QKV 투영 값이 비트 단위로 일치했다. Riley의 사례 3 raw logits에서 ID 264와 5257은 18.375로 같았다. HF에서는 264가 18.25, 5257이 18.375였다. [사례 3 전체 지점](../../benchmarks/evidence/20261119-w4-layer-trace/trace-result/case3-comparison.json) · [사례 9 전체 지점](../../benchmarks/evidence/20261119-w4-layer-trace/trace-result/case9-comparison.json)
+
+같은 pre-bias 투영을 BF16으로 반올림한 상태에서 bias와 RoPE를 적용하는 CPU 재계산은 두 사례 모두 Riley의 query 3,584개를 정확히 재현했다. FP64 누산에 bias를 먼저 더한 뒤 BF16으로 반올림하는 재계산은 HF query와 각각 7개 원소에서 달랐다. 이 결과는 첫 관측 차이를 투영 반올림과 bias 적용 순서에 연결한다. [재계산 도구](../../benchmarks/evidence/20261119-w4-layer-trace/tools/replay_layer0_query.py) · [사례 3 재계산](../../benchmarks/evidence/20261119-w4-layer-trace/trace-result/case3-query-replay.json) · [사례 9 재계산](../../benchmarks/evidence/20261119-w4-layer-trace/trace-result/case9-query-replay.json)
+
+GPU 6의 HF SDPA에서 첫 레이어 Q만, 첫 레이어 QKV, 전체 레이어 QKV의 bias를 각각 BF16 투영 후 더했다. 두 사례에서 세 조건의 전체 logits 해시는 모두 기준값과 달랐다. 첫 토큰은 각 조건에서 기준과 같았고, 사례 3에서는 ID 264와 5257의 점수도 18.25와 18.375로 유지됐다. 로짓 전체가 같은 기준 반복 결과도 확인했다. 이 HF 실행에서는 bias 적용 순서만으로 Riley의 사례 3 첫 토큰이 재현되지 않았다. [bias 대조 원본](../../benchmarks/evidence/20261119-w4-layer-trace/bias-order-control/result.json) · [도구와 실행 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/bias-order-SHA256SUMS)
+
+같은 HF 모델에서 캐시를 유지한 채 prefill을 나눴다. 사례 3은 `3072+229`와 `1024+1024+1024+229`, 사례 9는 `3328+2`와 `1024+1024+1024+256+2`로 실행했다. 각 구간 뒤 캐시 길이는 소비한 입력 길이와 일치했다. 사례 3의 `3072+229` 조건에서는 ID 5257의 logit이 18.375에서 18.5로 올랐고 두 사례의 첫 토큰은 모든 분할에서 HF 기준과 같았다. Riley의 attention과 paged KV를 각각 교체하는 대조는 남아 있다. [prefill 분할 원본](../../benchmarks/evidence/20261119-w4-layer-trace/prefill-partition-control/result.json) · [도구와 실행 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/prefill-partition-SHA256SUMS)
 
 ## GSM8K 전수 품질 대조
 
@@ -79,5 +94,8 @@ Qwen2.5-7B-Instruct의 Riley와 vLLM이 각각 1,319문제를 오류 없이 완�
 | 모델 | Riley 정답 | vLLM 정답 | Riley − vLLM | 판정 |
 |---|---:|---:|---:|---|
 | Qwen2.5-7B-Instruct | 1,121/1,319 (84.99%) | 1,114/1,319 (84.46%) | +0.53%p | −1.2%p 품질 기준 통과 |
+| Llama-3.2-3B-Instruct | 866/1,319 (65.66%) | 873/1,319 (66.19%) | −0.53%p | −1.2%p 품질 기준 통과 |
 
-Riley만 맞힌 문제는 35개, vLLM만 맞힌 문제는 28개였다. 출력 ID와 텍스트는 각각 578개에서 같았다. 결과는 고정 채점 기준의 정확도를 나타낸다. 각 엔진 종료 뒤 GPU 7의 20GiB 예약 복귀를 확인했다. Llama-3.2-3B-Instruct, Qwen3-4B, Qwen2.5-3B-Instruct 비교를 진행 중이다. [Riley 원본](../../benchmarks/evidence/20261119-w4-gsm8k/qwen7-riley/result.json.gz) · [vLLM 원본](../../benchmarks/evidence/20261119-w4-gsm8k/qwen7-vllm/result.json.gz) · [양쪽 실행 체크섬](../../benchmarks/evidence/20261119-w4-gsm8k/qwen7-SHA256SUMS)
+Qwen2.5-7B에서 Riley만 맞힌 문제는 35개, vLLM만 맞힌 문제는 28개였다. 출력 ID와 텍스트는 각각 578개에서 같았다. [Qwen2.5-7B 양쪽 실행 체크섬](../../benchmarks/evidence/20261119-w4-gsm8k/qwen7-SHA256SUMS)
+
+Llama-3.2-3B에서도 두 엔진의 1,319개 요청 설정과 입력 ID 해시가 일치했고 오류는 0건이었다. Riley만 맞힌 문제는 19개, vLLM만 맞힌 문제는 26개, 출력 ID와 텍스트가 같은 문제는 각각 899개였다. 두 모델 모두 각 엔진 종료 뒤 GPU 7의 20GiB 예약 복귀를 확인했다. Qwen3-4B와 Qwen2.5-3B-Instruct 비교를 진행 중이다. [Llama 결과](../../benchmarks/evidence/20261119-w4-gsm8k/llama3-comparison.json) · [Llama 양쪽 실행 체크섬](../../benchmarks/evidence/20261119-w4-gsm8k/llama3-SHA256SUMS)

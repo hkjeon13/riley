@@ -1,0 +1,62 @@
+{
+  "mode": "native9",
+  "gpu_uuid": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+  "holder_pid": 2431228,
+  "holder_start_ticks": "6339570869",
+  "server_argv": [
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-layer-trace-r3-20261119.qpoSLydn/target/release/riley",
+    "serve",
+    "--model",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-7B-Instruct",
+    "--model-id",
+    "m",
+    "--bind",
+    "127.0.0.1:60627",
+    "--max-active-sequences",
+    "32",
+    "--max-weight-bytes",
+    "68719476736",
+    "--inference-profile",
+    "native-bf16-varlen-v1",
+    "--max-sequence-tokens",
+    "8192",
+    "--max-output-tokens",
+    "256"
+  ],
+  "client_argv": [
+    "/usr/bin/python3",
+    "-B",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-layer-trace-r3-20261119.qpoSLydn/tools/layer_trace.py",
+    "native",
+    "127.0.0.1:60627",
+    "m",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-layer-trace-r3-20261119.qpoSLydn/fixtures/legacy.json",
+    "9",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-layer-trace-r3-20261119.qpoSLydn/native9/response.json"
+  ],
+  "sha256": {
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-layer-trace-r3-20261119.qpoSLydn/target/release/riley": "17890dea81b859d007e1cd403b35408249451c1545b776a8ed0f649d57156089",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-7B-Instruct/riley-checkpoint.json": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-7B-Instruct/generation_config.json": "3a8f9087e486054c8a4a08dae2e5a3ba62e23da212b5b8c08bc42cb983c3459f",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-7B-Instruct/tokenizer.json": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-layer-trace-r3-20261119.qpoSLydn/tools/run_trace.py": "997f08196dd44e6122af3f19573895379f6584423e0f7fe2ca3701fd22eb2121",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-layer-trace-r3-20261119.qpoSLydn/tools/layer_trace.py": "8c338839a2c2957226c000e3a6744c7cac7074a279d1379342cb839b3afdf4f1",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-layer-trace-r3-20261119.qpoSLydn/fixtures/legacy.json": "699f1efd9cb26ccc5b848e641c5c9dc1ebc294904d005837ec3584ecf40e1de9",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-layer-trace-r3-20261119.qpoSLydn/fixtures/reference.json": "c9927fa7a3650a13cbb37bc5cf4d72ee3e5683e793b49f79cf832d3da4a34a04",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-layer-trace-r3-20261119.qpoSLydn/final-prefill.patch": "44c9032d25b125f4455abf2e165a0e2d3a9e496f9ecf748dea21ed021b1010f1"
+  },
+  "case": 9,
+  "trace_target": {
+    "position": 3329,
+    "token_id": 911
+  },
+  "status": "passed",
+  "result_sha256": {
+    "rows.bf16": "c66a94b0af44317a50ef5c5ada5d51f9736198986b1841dfbecd3fb1da936e3f",
+    "index.tsv": "125f71f194bb585e1281b84b1eedb55e0405a7ca9e639737ad04303b59c1a6f7",
+    "response.json": "abea2f4e5370319950ed0a8273aee16ee6cbe02143f4ec5b70193c6d996f9169"
+  },
+  "nvml_samples": 121,
+  "max_process_memory_mib": 30212.0,
+  "observed_active": true
+}
