@@ -60,6 +60,10 @@ CUDA·cuBLAS·PyTorch·Transformers와 attention backend를 기록한다. GPU �
 
 기존 18개 표본에만 맞추지 않도록 고정된 추가 holdout을 둔다. 다국어·코드·숫자·반복 토큰·schema/tool·긴 출력과 256/512/1024 경계 앞뒤를 포함한다. prompt+output은 실제 지원 문맥 상한 안으로 제한한다. GSM8K는 같은 1,319문항·4-shot·generation 설정을 사용하며 축약 smoke로 최종 품질을 대신하지 않는다.
 
+Qwen2.5-7B의 검증된 tokenizer로 별도 greedy holdout 11개를 고정했다. 입력은 255/256/257, 511/512/513, 1,023/1,024/1,025, 7,836, 7,917토큰이다. 한국어·일본어·코드·숫자·반복 작업을 포함하며, 출력 상한은 64·128·256토큰이다. 입력과 출력 상한의 합은 최대 8,173토큰이다. 도구는 Riley가 반환하는 입력 ID와 Hugging Face tokenizer가 만드는 ID를 각각 fixture에 맞춰 검사한다. 같은 raw ID를 vLLM에도 보내고 응답에서 입력 ID를 대조한다. Riley는 C1을 기준으로 C8·C32에서 각 입력을 세 번 반복한다. [고정 입력과 토큰 ID (gzip)](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [GPU 실행 명령](../../benchmarks/evidence/20261119-w4-holdout/tools/run_accuracy.py)
+
+이번 fixture는 greedy 생성과 배치에 따른 출력 차이를 확인한다. 실행은 W5-B의 두 혼합 부하 조건이 종료된 뒤 같은 GPU 7에서 순서대로 시작한다. 장문 schema/tool과 GSM8K 전수 비교는 별도의 실행 항목이다. [GPU 예약 및 실행 순서](../../benchmarks/evidence/20261119-w4-holdout/campaign.sh)
+
 ## 3. W4-B: 스키마 의미를 일치시키는 절차
 
 ### W4-B1. 계약표와 최소 반례 작성
