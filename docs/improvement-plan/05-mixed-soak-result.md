@@ -57,4 +57,10 @@ A를 처음 보낸 뒤 두 요청에 공통인 16토큰 블록을 B가 재사용
 
 16개 스트리밍 요청을 동시에 보냈을 때 3개가 정상 완료되고 13개가 HTTP 429를 반환했다. 과부하 카운터도 13 증가했다. 큐가 비워진 뒤 단건 추론이 정상 완료됐고 활성·대기 요청과 요청 KV가 0이었다. 서버는 종료 코드 0과 native 할당 0을 남겼으며 GPU 6의 동일 홀더는 20GiB 예약으로 돌아왔다. [종료 메트릭](../../benchmarks/evidence/20261119-w5-operational/rerun/shutdown-metrics.json) · [GPU 6 예약 복귀](../../benchmarks/evidence/20261119-w5-operational/rerun/idle-after.json)
 
-검증 범위는 합성 요청을 사용한 한 체크포인트의 서빙이다. 실제 운영 트래픽 분포, 느린 소비자의 스트리밍, 실제 장치 장애, 배포 이미지에서의 GPU 추론은 추가 검증 항목이다.
+## 느린 스트리밍 소비자와 연결 취소
+
+A100 GPU 6에서 같은 Qwen2.5-7B-Instruct CUDA 바이너리로 Linux loopback SSE 연결의 읽기를 중단했다. 수신 버퍼는 8,192바이트였고 서버 TCP 송신 큐가 16,250·39,189·63,042바이트로 세 번 연속 그 크기를 넘었다. 그 동안 별도의 정상 스트림이 약 222ms에 완료됐으며, 그 시점에도 느린 연결에 송신 큐 95,398바이트가 남아 있었다. 읽기를 재개한 연결은 SSE 종료와 토큰 usage를 받고 약 27.53초에 완료했다. [느린 스트림 원본](../../benchmarks/evidence/20261119-w5-slow-stream/result/slow-stream.json)
+
+두 번째 연결의 송신 큐가 차고 활성 요청이 하나인 상태에서 연결을 닫았다. `disconnects`와 `cancellations`는 각각 1 증가했다. 활성·대기 요청과 요청 KV는 0으로 돌아갔고, 서버 실행 중 native 할당은 시작 전 값으로 회복됐다. 종료 코드는 0이었고 종료 시 device·pinned 할당은 0이었다. GPU 6은 동일 홀더의 20GiB 예약으로 복귀했다. [실행 기록](../../benchmarks/evidence/20261119-w5-slow-stream/result/receipt.json) · [종료 메트릭](../../benchmarks/evidence/20261119-w5-slow-stream/result/shutdown-metrics.json) · [예약 복귀](../../benchmarks/evidence/20261119-w5-slow-stream/result/idle-after.json)
+
+장치 메모리 갱신 실패를 가정한 CPU 단위 테스트는 tentative KV 블록 회수와 sidecar 무효화를 확인했다. 실제 운영 트래픽 분포, GPU 장치 장애, 배포 이미지 추론은 추가 검증 항목이다. [장치 실패 시 KV 회수 테스트](../../crates/riley-runtime/src/paged_kv.rs#L2186)

@@ -126,7 +126,7 @@ python3 benchmarks/live/soak.py "$TEST_ADDRESS" "$MODEL_ID" \
 
 캐시를 켠 전용 서버에서 [운영 검사기](../../benchmarks/live/operational_check.py)로 요청의 재사용 토큰, 공통 prefix 보존, 용량 압력 뒤 A 전용 블록 퇴거, 포화의 HTTP 429와 추론 회복을 확인했다. 검사는 활성 2개·대기 1개·캐시 128블록으로 구성하고 loopback에서 수행했다. [A100 운영 결과](05-mixed-soak-result.md#캐시-재사용퇴거와-큐-포화-후-회복)
 
-느린 스트리밍은 loopback 클라이언트의 읽기를 멈추고 소켓의 실제 송신 큐가 수신 버퍼보다 큰 상태가 이어지는지 확인한다. 첫 요청은 그 동안 정상 요청을 완료한 뒤 읽기를 재개해 SSE 종료와 토큰 usage를 확인한다. 두 번째 요청은 활성 생성을 확인한 뒤 연결을 닫아 취소·disconnect 증가와 자원 회수를 본다. Linux loopback에서 송신 큐를 읽는 경로를 확인했다. 실제 추론은 진행 중인 성능 비교가 끝난 뒤 A100 GPU 6에서 실행한다. [느린 스트리밍 검사기](../../benchmarks/live/slow_stream_check.py) · [A100 실행 순서](../../benchmarks/evidence/20261119-w5-slow-stream/campaign.sh)
+느린 스트리밍은 loopback 클라이언트의 읽기를 멈추고 소켓의 실제 송신 큐가 수신 버퍼보다 큰 상태가 이어지는지 확인한다. A100 GPU 6의 실제 Qwen2.5-7B 실행에서 느린 읽기 도중 정상 요청 완료, 읽기 재개 뒤 SSE 종료와 토큰 usage, 활성 스트림 연결 종료 뒤 취소·disconnect와 자원 회수를 확인했다. [느린 스트리밍 검사기](../../benchmarks/live/slow_stream_check.py) · [A100 실행 순서](../../benchmarks/evidence/20261119-w5-slow-stream/campaign.sh) · [검증 결과](05-mixed-soak-result.md#느린-스트리밍-소비자와-연결-취소)
 
 현재 공개 `/metrics`의 KV 사용량은 요청이 쓰는 블록을 보여 준다. 요청별 재사용 토큰은 응답 `usage`에서 확인했다. 스케줄러 내부의 전체 prefix hit 토큰 및 eviction 블록 카운터를 운영 응답에서 조회하려면 별도 계측 계약이 필요하다. [스케줄러 메트릭](../../crates/riley-scheduler/src/metrics.rs)
 
