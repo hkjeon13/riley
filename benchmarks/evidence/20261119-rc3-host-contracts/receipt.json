@@ -1,0 +1,38 @@
+{
+  "source_revision": "76eb4dc1eb13faf163072e13d1e9b12ef483d3c9",
+  "workflow_run_id": 44367370717,
+  "workflow_job_id": 135024640542,
+  "status": "passed",
+  "runtime_image_id": "sha256:75c29abb87212f1102c172b5a4c39177dd5b9b032c839edfe248f10840b8780b",
+  "jammy_base_manifest": "sha256:45e9ddc6895604674618a409ca9f73d301da8fdb75fe330e8e9a27b3b219e4ad",
+  "kernel": "Linux 7.0.0-1014-aws x86_64",
+  "repository_path": "/home/psyche/rustinfer-vllm-roadmap-serial",
+  "interpreter": {
+    "path": "/usr/bin/python3.10",
+    "uid": 0,
+    "mode": "0755",
+    "sha256": "7d51cd6b48b521277f5caa4610a82126e315fa2be4df069823a8b1eeb5bd4a86",
+    "package_version": "3.10.12-1~22.04.16",
+    "ubuntu_snapshot": "20260826T090000Z"
+  },
+  "tests": {
+    "test_rc3_gate_e_private_raw_core_v1.py": 5,
+    "test_run_remote_rc3_gate_e_session_v2.py": 4,
+    "test_run_remote_rc3_gate_e_session_v3.py": 5,
+    "test_verify_rc3_gate_e_execution_anchor_v1.py": 7,
+    "test_check_reconstructed_runtime_python_prerequisite_v1.py": 13
+  },
+  "passed": 34,
+  "skipped": 0,
+  "failed": 0,
+  "earlier_attempts": [
+    {
+      "workflow_run_id": 44366382491,
+      "reason": "Ubuntu snapshot jammy-security InRelease returned HTTP 500"
+    },
+    {
+      "workflow_run_id": 44366974270,
+      "reason": "Python identity passed; the v2 probe rejected the checkout mounted at /workspace"
+    }
+  ]
+}

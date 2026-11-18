@@ -105,7 +105,7 @@ ci/check_workspace_without_research_tools.sh
 - [x] W1-3 로컬: 계약 정상 경로와 drift 거부 경로가 모두 통과한다. 과거 릴리스 근거의 검증 가능 범위가 보존된다.
 - [x] W1-4: 부하 실행 실패·누락 JSON·무효 셀이 전체 성공으로 승격되지 않는다.
 - [x] [결과·결정 기록](01-validation-result.md)에 변경 전 실패, 수정 근거, 실행한 검사, 미실행 검사를 명시했다.
-- [ ] 과거 RC3 고정 호스트 실행이 필요할 때 전용 lane에서 수행한다. 일반 CI의 명시적 skip은 해당 계약의 실행 통과를 뜻하지 않는다.
+- [x] 과거 RC3의 정확한 Python·체크아웃 경로를 가진 Linux 격리 컨테이너에서 고정 테스트 34건을 통과했다. [독립 CI 실행](https://github.com/hkjeon13/riley/actions/runs/44367370717)
 
 ## 6. 다른 작업과의 관계
 

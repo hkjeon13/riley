@@ -3,7 +3,7 @@
 작성일: 2026-11-13 (Asia/Seoul)\
 작업 기준: `main` `37ede444562b1d6c3718fae0a8db314f81fbba92`\
 작업 브랜치: `codex/restore-validation-release-contracts`\
-최신 판정: 로컬 및 Linux CI 검증, CUDA 12.4 배포 이미지 빌드·CPU 검사 완료. 과거 고정 호스트 lane과 배포 이미지의 GPU 추론 검증은 미완료.
+최신 판정: 로컬·Linux CI, 격리 컨테이너의 과거 RC3 고정 테스트, CUDA 12.4 배포 이미지 빌드·CPU 검사 완료. 배포 이미지의 GPU 추론 검증은 미완료.
 
 [W1 계획](01-validation-and-release.md) · [종합 계획](README.md) · [검사 사용법](../../ci/README.md)
 
@@ -101,6 +101,12 @@ Linux 디스크립터 의미론이 필요한 fixture는 macOS에서 명시적으
 GitHub Actions Linux Production CPU가 `9ca18cb0f`에서 통과했다. 로그에서 `RILEY_REQUIRE_LINUX_CONTRACT_TESTS=1`과 릴리스 테스트 1,314건 중 1,284건 통과·30건 skip을 확인했다. 별도 과거 RC3 고정 호스트 lane은 skip 상태이며 수동 실행 항목으로 남아 있다. [Production CPU 실행](https://github.com/hkjeon13/riley/actions/runs/44221081481) · [체크포인트 도구 CI](https://github.com/hkjeon13/riley/actions/runs/44221081323)
 
 CUDA 관련 Rust 포맷·문서·host cast 변경도 있으므로 릴리스 전 CUDA compile/link lane과 영향받는 GPU 검증을 실행해야 한다. 기존 커널·임계값·측정 근거가 유지되었다는 사실만으로 GPU 실행 동등성을 확정하지 않는다.
+
+### 과거 RC3 고정 테스트의 실제 실행
+
+2026-11-19 KST에 GitHub Actions의 격리된 Jammy 컨테이너에서 `3.10.12-1~22.04.16` 패키지의 `/usr/bin/python3.10`을 사용했다. 바이너리 해시와 소유권이 계약과 일치했고 체크아웃은 지정 경로에 읽기 전용으로 마운트했다. 다섯 파일의 테스트 34건이 통과했고 실패·skip은 0건이었다. 기존 self-hosted 작업과 같은 실행 스크립트를 쓴다. [성공한 실행](https://github.com/hkjeon13/riley/actions/runs/44367370717) · [패키지 해시](../../ci/release/LegacyHostContracts.sha256) · [결과 및 환경 기록](../../benchmarks/evidence/20261119-rc3-host-contracts/receipt.json)
+
+첫 시도는 Ubuntu 스냅샷 인덱스의 HTTP 500으로 멈췄다. 패키지 SHA-256을 고정해 직접 가져온 뒤에는 Python 검증이 통과했지만, 다른 마운트 경로를 RC3 v2 검사기가 거부했다. 원래 경로를 컨테이너에 재현하고 같은 검사기를 실행했다. 검증 범위는 Linux에서 수행한 CPU 계약 테스트다. 실제 RC3 복구·재생과 배포 자격 검증은 각각의 운영 조건을 따른다.
 
 ### 현행 배포 이미지
 

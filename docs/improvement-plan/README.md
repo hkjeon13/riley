@@ -113,7 +113,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 
 - [x] W1 로컬: CPU 검사와 릴리스·성능 계약의 정상/드리프트 경로가 통과한다([결과](01-validation-result.md)).
 - [x] W1 CI: Linux hosted workflow의 본 검사와 Linux 전용 항목을 통과했다. [실행 결과](01-validation-result.md)
-- [ ] W1 CI: 과거 RC3 고정 호스트 lane의 실제 실행 결과를 기록한다.
+- [x] W1 CI: 과거 RC3의 고정 Python·경로를 재현한 Linux 컨테이너에서 34건을 통과했다. [실행 결과](01-validation-result.md#과거-rc3-고정-테스트의-실제-실행)
 - [ ] W4: 장문 차이는 재현 입력·최초 분기·원인 또는 남은 불확실성이 기록되어 있다.
 - [x] W4: 문서화한 스키마 부분집합을 독립 판정과 대조하고, 미지원 제약의 오류를 검증했다. [스키마 검증](04-structured-output-result.md)
 - [ ] W2·W3: 단독·결합 결과에서 기존 정확성·회귀 가드레일을 충족한다.
