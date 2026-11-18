@@ -13,5 +13,20 @@ burst를 일찍 제한하면 `rag-c8`의 토큰 간 지연 p99가 두 seed에서
 
 각 `rag-c8` 셀의 완료 요청은 64건이므로 p95는 후보 선별에 사용했다. 절대 기준의 달성 여부와 14B tail의 원인은 추가 측정이 필요하다.
 
+## Qwen3-4B 단독 입력 길이 곡선
+
+같은 GPU에서 Qwen3-4B로 C1 요청을 길이당 12건씩 실행했다. 1,024행 burst와 출력 상한 32토큰을 고정했고, 아래 입력 길이는 서버가 보고한 평균 토큰 수다.
+
+| 입력 토큰 | TTFT p50 (ms) | TPOT p50 (ms) |
+|---:|---:|---:|
+| 50 | 9.5 | 7.68 |
+| 1,984 | 93.5 | 8.50 |
+| 4,056 | 205.5 | 8.64 |
+| 6,064 | 337.5 | 8.78 |
+| 7,847 | 481.1 | 9.01 |
+
+60건 모두 성공했다. 동시 요청이 없는 상태에서도 문맥이 길어질수록 첫 토큰 지연 증가 폭이 커졌다. 다음에는 이 입력을 그대로 프로파일링해 prefill GEMM, attention 및 호스트 비용을 구분한다.
+
 - [Burst 제한 결과와 실행 근거](../../benchmarks/evidence/20261119-w3-small-rag/summary.json)
 - [Prompt 묶기 결과와 실행 근거](../../benchmarks/evidence/20261119-w3-coalescing/summary.json)
+- [Qwen3-4B 입력 길이 곡선](../../benchmarks/evidence/20261119-w3-qwen3-lengths/summary.json)

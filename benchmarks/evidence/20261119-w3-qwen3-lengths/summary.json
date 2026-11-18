@@ -1,0 +1,48 @@
+{
+  "model": "Qwen3-4B",
+  "gpu": 7,
+  "max_tokens": 32,
+  "concurrency": 1,
+  "cells": [
+    {
+      "words": 30,
+      "prompt_tokens_mean": 50.25,
+      "p50_ttft_ms": 9.489543735980988,
+      "p95_ttft_ms": 10.760895907878876,
+      "p50_tpot_ms": 7.684535316882595,
+      "completed_requests": 12
+    },
+    {
+      "words": 1700,
+      "prompt_tokens_mean": 1983.5,
+      "p50_ttft_ms": 93.49586814641953,
+      "p95_ttft_ms": 93.64805370569229,
+      "p50_tpot_ms": 8.500138598103677,
+      "completed_requests": 12
+    },
+    {
+      "words": 3500,
+      "prompt_tokens_mean": 4056.25,
+      "p50_ttft_ms": 205.4898664355278,
+      "p95_ttft_ms": 206.5872848033905,
+      "p50_tpot_ms": 8.638494678082006,
+      "completed_requests": 12
+    },
+    {
+      "words": 5250,
+      "prompt_tokens_mean": 6063.916666666667,
+      "p50_ttft_ms": 337.48482167720795,
+      "p95_ttft_ms": 338.11815083026886,
+      "p50_tpot_ms": 8.77626552697151,
+      "completed_requests": 12
+    },
+    {
+      "words": 6800,
+      "prompt_tokens_mean": 7847.333333333333,
+      "p50_ttft_ms": 481.0895249247551,
+      "p95_ttft_ms": 488.17531019449234,
+      "p50_tpot_ms": 9.014091905086271,
+      "completed_requests": 12
+    }
+  ]
+}
