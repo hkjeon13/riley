@@ -1,0 +1,71 @@
+{
+  "mode": "immediate1",
+  "gpu_uuid": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+  "holder_pid": 2431237,
+  "holder_start_ticks": "6339570875",
+  "server_argv": [
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/bin/riley-lp16",
+    "serve",
+    "--model",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/SmolLM2-1.7B-Instruct",
+    "--model-id",
+    "m",
+    "--bind",
+    "127.0.0.1:48551",
+    "--max-active-sequences",
+    "32",
+    "--max-weight-bytes",
+    "68719476736",
+    "--inference-profile",
+    "native-bf16-varlen-v1",
+    "--event-publication",
+    "immediate-v1",
+    "--max-sequence-tokens",
+    "8192",
+    "--max-output-tokens",
+    "2048",
+    "--kv-blocks",
+    "9006"
+  ],
+  "seed": 1,
+  "event_publication": "immediate-v1",
+  "cells": {
+    "reason-c32": {
+      "load_argv": [
+        "/usr/bin/python3",
+        "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w2-event-retest-20261119.qcD5rfp2/tools/load.py",
+        "127.0.0.1:48551",
+        "m",
+        "--prompt-words",
+        "30",
+        "--max-tokens",
+        "1024",
+        "--concurrency",
+        "32",
+        "--requests",
+        "64",
+        "--warmup",
+        "32",
+        "--seed",
+        "1",
+        "--out",
+        "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w2-event-retest-20261119.qcD5rfp2/immediate1/reason-c32.json",
+        "--records",
+        "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w2-event-retest-20261119.qcD5rfp2/immediate1/reason-c32.records.json"
+      ],
+      "summary_sha256": "859397d5bd73b036f3e8cca232dae59f9468e184a7374d72c85fcf808e395f8e",
+      "records_sha256": "eefb376259f1a830b1d26428e885c0cb78aacc19cc44a4c525a7f22df60aea7c"
+    }
+  },
+  "sha256": {
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/bin/riley-lp16": "311c24eb5d9327c1a564c0435661a630104b9dfd2bd5c7128fad04d7ff94a763",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/SmolLM2-1.7B-Instruct/riley-checkpoint.json": "592dba98659d43036538251cd53b8f76e0cf6ea292564cf4b3c300f1f6f11753",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w2-event-retest-20261119.qcD5rfp2/tools/measure_event_publication.py": "0b97871d675ae8dc54f875d39d3284064e8fdbdf423a9f67b2f74de4b9d3717f",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w2-event-retest-20261119.qcD5rfp2/tools/load.py": "fb3a3de6fcd8904d6379433ad8fcff284530e46e388aa40c2b7b75cfd0d0c8b0"
+  },
+  "status": "passed",
+  "server_exit": 0,
+  "nvml_samples": 55,
+  "max_process_memory_mib": 31370.0,
+  "observed_active": true
+}
