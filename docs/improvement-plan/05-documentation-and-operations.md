@@ -10,10 +10,10 @@ Qwen2.5-7B CUDA 서버에서 90초 사전 검증과 cache off·on 각 30분의 �
 
 | 항목 | 확인 내용 | 개선 이유 |
 |---|---|---|
-| 문서의 측정 시점 차이 | README의 작은 모델 TPOT·32B 상태가 최신 목표·서빙 검증과 다름 | 사용자가 과거 셀과 현재 결과를 혼동할 수 있음 |
-| 기본값 설명 드리프트 | serving-validation에 과거 KV chunk 1024 기본값 설명, 최신 configuration은 512 및 일부 생성 256 | 문서만 보고 승인 프로파일을 재현하기 어려움 |
-| API 비용 설명 | api.md에 logprobs가 항상 CPU logits 비용을 낸다는 과거 설명, engine에는 GPU summary 경로 존재 | 사용 경로·기능 조합별 실제 비용을 구분해야 함 |
-| 모델 지원 의미 혼합 | model-support는 owned HF 프로파일·특정 pinned 모델 검증, README는 일반 native qualification | 모델 지원·HF exact·속도 qualification을 분리해야 함 |
+| 문서의 측정 시점 차이 | README에 10월 24개 모델 판정과 11월 장문·GSM8K 재검증의 날짜와 셀을 명시했다. | 시점과 워크로드를 기준으로 근거를 찾을 수 있음 |
+| 기본값 설명 드리프트 | README·configuration에서 일반 CLI, fixed-tile 한도, 프로파일 기본값과 과거 KV chunk 값을 확인했다. | 사용자가 프로파일을 재현할 수 있음 |
+| API 비용 설명 | api.md는 사용 조건에 따른 CPU logits 및 GPU summary 동작을 문서화했다. | 실제 비용을 기능 조합별로 확인할 수 있음 |
+| 모델 지원 의미 혼합 | 누락된 두 모델을 README의 A100 판정 목록에 복구하고, model-support의 owned 경로 기록에 조사 시점을 표시했다. | 일반 native 성능과 pinned 모델의 HF 정확성에 각각 근거가 생김 |
 | GPU CI 범위 | native-cuda workflow는 nightly compile, GPU runtime/memory smoke는 수동 opt-in | 모델 추론·routing·성능 회귀가 PR마다 자동 검증되지 않음 |
 | 운영 근거 | 합성 트래픽 30분 soak 기록. 실제 production trace 미검증 | 실제 길이·도착·취소·기능 혼합의 차이를 모름 |
 | prefix cache | 캐시 활성 30분 합성 부하를 통과했다. 실제 device failure 검증은 미실행 | 장치 장애 뒤 prefix 폐기와 다양한 캐시 압력 조건은 별도 확인 필요 |
@@ -41,6 +41,7 @@ Qwen2.5-7B CUDA 서버에서 90초 사전 검증과 cache off·on 각 30분의 �
 | [모델별 지원과 독립 참조](../model-support.md) | [네이티브 A100 성능표](../model-coverage-a100-perf-table.md), [모델별 독립 참조](../model-support.md) | 각 기록의 체크포인트·길이·기능 조건에서 whole-model 일치와 성능 자격을 각각 판정 |
 | [현행 운영 메트릭](../api.md#get-metrics) | [서버 응답 구조](../../crates/riley-server/src/service.rs), [엔진 bucket 정의](../../crates/riley-server/src/engine.rs), [A100 응답 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/smoke/soak.json) | `batch_shapes.buckets` 배열은 24개 슬롯이며 측정한 프로파일은 그중 21개를 구성했다. |
 | [고정 RC 릴리스 soak 메트릭](../../benchmarks/soak/README.md#target-contract) | [릴리스 검사기](../../benchmarks/scripts/check_reliability_soak.py) | 과거 SmolLM2 경로에 고정 10개 슬롯을 적용한다. |
+| [README 모델·프로파일](../../README.md#supported) | [24개 모델의 원래 판정](../model-coverage-a100-perf-table.md), [프로파일 확장·경계 검증](../../crates/riley-server/src/main.rs#L7777), [GSM8K 동일 입력 대조](04-long-accuracy-result.md#gsm8k-전수-품질-대조) | 24개 모델의 10월 성능 판정, 4개 모델의 11월 정확성, 일반 CLI와 fixed-tile 한도를 각각 명시 |
 
 ### W5-A2. 사용자 문서와 연구 기록의 역할 정리
 
@@ -58,6 +59,8 @@ Qwen2.5-7B CUDA 서버에서 90초 사전 검증과 cache off·on 각 30분의 �
 ### W5-A3. 반복 가능한 문서 검증
 
 링크·코드 경로·필수 지원표·기본값 일치는 가벼운 검사로 확인한다. CLI 전체 help를 무조건 snapshot으로 고정하기보다 중요한 옵션의 이름·기본값·프로파일 override를 검증한다. W1의 해시 결속 검사와 문서 의미 검사는 역할이 다르다.
+
+README의 24개 성능 행을 A100 원본 요약과 대조하고 이번에 수정한 문서의 로컬 링크를 확인했다. `native_profile_cli_tests` 4건에서 기본값, 옵션 override, 고정 타일 상한과 KV 분할을 확인했고 `ci/check_serving_source_contract.py`도 통과했다. [프로파일 테스트](../../crates/riley-server/src/main.rs#L7763)
 
 성능표를 생성한다면 raw→검증된 집계→표의 입력·출력·버전이 명확한 작은 생성기를 둔다. 과거 결과와 새 후보를 섞거나 집계 중 실패 셀을 제거하지 않는다. 이 생성기는 제안이며 현재 구현되어 있지 않다.
 
@@ -141,7 +144,7 @@ python3 benchmarks/live/soak.py "$TEST_ADDRESS" "$MODEL_ID" \
 
 ## 6. 완료 조건과 최종 산출물
 
-- [ ] W5-A: 사용자 문서의 버전·기본값·성능 주장이 소스·동일 설정 근거와 연결되고 과거 측정은 시점이 표시된다.
+- [x] W5-A: 점검한 사용자 문서의 버전·기본값·성능 주장을 소스나 해당 실행에 연결하고 과거 측정 시점을 표시했다. [주장별 확인 기록](#w5-a1-주장별-근거-목록-작성)
 - [x] W5-B: A100에서 네이티브 모델 추론을 실제로 실행했고, 통과·초기 실패·미검증 범위를 기록했다. [운영 결과](05-mixed-soak-result.md)
 - [ ] 후보별 correctness·API·performance·soak·패키징 결과가 같은 manifest로 연결된다.
 - [ ] prefix cache·취소·shutdown·관측 비용을 검증하고 미검증 범위를 명시한다.

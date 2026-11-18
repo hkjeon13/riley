@@ -1,8 +1,8 @@
 # Riley
 
-**A Rust-native LLM inference server for NVIDIA GPUs — higher throughput and
-lower time to first token than vLLM 0.27.1 on all 24 qualified single-GPU
-models.**
+**A Rust-native LLM inference server for NVIDIA GPUs.** In the 24-model A100
+qualification, Riley served more tokens per second at 8–32 concurrent clients
+and reached the first token sooner than vLLM 0.27.1 on the tested workloads.
 
 Riley (Rust Inference LLM Engine) serves Llama- and Qwen-style models over an
 OpenAI-compatible completions API. The server, scheduler and KV-cache manager
@@ -15,8 +15,8 @@ cuBLASLt. There is no Python in the serving process.
 
 ## Performance
 
-**24 qualified models on one A100-SXM4-40GB, against vLLM 0.27.1 on the same GPU in the
-same run:**
+**October 2026 qualification.** Riley and vLLM 0.27.1 ran on the same
+A100-SXM4-40GB for each of the 24 models.
 
 | | Riley vs vLLM |
 |---|---|
@@ -128,7 +128,7 @@ may share that knowledge.
 
 ### Output quality
 
-GSM8K (1319 questions, 4-shot, greedy) on the same servers, Riley / vLLM:
+October 2026 GSM8K qualification (1,319 questions, 4-shot, greedy), Riley / vLLM:
 the two engines are within 1.2 points on every model except where vLLM's
 tokenizer is broken (DeepSeek-R1-Distill-Llama-8B: Riley 67.2 %, vLLM 42.9 %,
 see below). For example Qwen2.5-7B 86.3 / 86.2 %, Qwen3-8B 87.7 / 87.6 %,
@@ -138,6 +138,12 @@ Token agreement with Hugging Face BF16 is in the same range as vLLM's on all
 20 compared models, after a fix for FlashInfer's finite mask value, which
 Qwen2.5-7B's attention logits exceeded
 ([section 6.6](docs/model-coverage-a100.md#66-qwen25-7b-계열의-낮은-hf-일치-flashinfer-logit-범위-2026-11-01)).
+
+The November 19 candidate recheck used identical prompt token IDs between
+Riley and vLLM for all 1,319 questions on each of Qwen2.5-3B, Qwen2.5-7B,
+Llama-3.2-3B and Qwen3-4B. All four met the −1.2 percentage-point quality
+threshold. The same report records the remaining long-prompt token differences
+against Hugging Face BF16 SDPA. [Candidate quality results](docs/improvement-plan/04-long-accuracy-result.md)
 
 Older campaigns (RTX 4090, Qwen3-4B kernel experiments, rejected candidates)
 are kept in the [performance experiment log](docs/performance-experiments.md).
@@ -151,7 +157,7 @@ are kept in the [performance experiment log](docs/performance-experiments.md).
 - **Verified checkpoints**: Hugging Face safetensors are loaded directly, and
   only if every file matches a hashed manifest.
 - **Streaming, cancellation and bounded queues** built into the server.
-- **Agent API**: JSON Schema `response_format` enforced by a grammar, OpenAI
+- **Agent API**: a supported subset of JSON Schema constrained by a grammar, OpenAI
   `tools` with forced `tool_choice`, `logprobs`, Bearer API keys, and contexts
   of up to 8,192 tokens. See the [API reference](docs/api.md).
 - **LoRA adapters** merged into a checkpoint with
@@ -325,7 +331,8 @@ The destination directory must not exist yet. Details and guarantees:
 
 ### Start the server
 
-The configuration behind the performance numbers above is the native profile:
+The example below uses the fixed-tile native profile. The performance tables
+link to the settings used for each model and workload.
 
 ```bash
 ./target/release/riley serve \
@@ -338,10 +345,10 @@ The configuration behind the performance numbers above is the native profile:
 
 | Option | What it sets |
 |---|---|
-| `--inference-profile native-bf16-varlen-v1` | Fast BF16 kernels, CUDA graphs and fixed-tile attention, with up to 8,192-token context and a 1,024-row step budget (defaults 1,024 and 256). Any option you pass explicitly overrides the profile's value |
-| `--max-active-sequences 32` | Requests generating at once (profile limit: 32). Further requests queue |
+| `--inference-profile native-bf16-varlen-v1` | BF16 kernels, decode-step CUDA capture and fixed-tile attention. The profile supplies 1,024 context tokens, 256 step rows and 256 prefill tokens by default. The fixed-tile route supports up to 8,192 context tokens and 1,024 step rows. Explicit CLI values override the profile |
+| `--max-active-sequences 32` | Maximum active requests in this example. The CLI defaults to 8, and the fixed-tile route accepts up to 32 |
 | `--max-output-tokens 128` | Upper bound for a request's `max_tokens` |
-| `--max-weight-bytes` | Largest checkpoint the server accepts (default 2 GiB; 32 GiB here) |
+| `--max-weight-bytes` | Largest checkpoint the server accepts. Defaults to 2 GiB or 8 GiB with the D128 native backend. This example allows 32 GiB |
 | `--bind`, `--device` | Listener address (default `127.0.0.1:8080`) and CUDA device |
 
 The native profile needs a head dimension of 64 or 128, which every listed
@@ -427,7 +434,7 @@ status 0.
 | | |
 |---|---|
 | Architectures | `LlamaForCausalLM` (Llama 3.x, SmolLM2), `Qwen2ForCausalLM` (Qwen2.5), dense `Qwen3ForCausalLM` (Qwen3) |
-| Qualified models | Qwen2.5 0.5B / 1.5B / 3B / 7B / 14B Instruct, Qwen2.5-Coder 1.5B / 3B / 7B / 14B Instruct, DeepSeek-R1-Distill-Qwen 1.5B / 7B / 14B, Qwen3 0.6B / 1.7B / 4B / 8B, SmolLM2 135M / 360M / 1.7B, Llama-3.2 1B / 3B Instruct, Llama-3.1-8B Instruct |
+| A100-qualified models | Qwen2.5 0.5B / 1.5B / 3B / 7B / 14B Instruct, Qwen2.5-Coder 1.5B / 3B / 7B / 14B Instruct, DeepSeek-R1-Distill-Qwen 1.5B / 7B / 14B, DeepSeek-R1-Distill-Llama-8B, Qwen3 0.6B / 1.7B / 4B / 8B / 14B, SmolLM2 135M / 360M / 1.7B, Llama-3.2 1B / 3B Instruct, Llama-3.1-8B Instruct |
 | Precision | BF16 |
 | Hardware | One NVIDIA GPU (A100 and RTX 4090 measured); tensor parallelism over 2–8 peer-connected GPUs (2 × A100 measured) |
 | API | `POST /v1/chat/completions` and `POST /v1/completions` with streaming; models, health and metrics endpoints |

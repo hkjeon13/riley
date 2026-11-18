@@ -1,11 +1,13 @@
 # Native model coverage and A100 qualification
 
 Source adapters, a successful build, numerical correctness and competitive
-performance are separate stages. The current campaign runs only on
-`aws-a100` physical GPUs 2 and 3, compiled for `sm_80` with CUDA 12.4.
-GPU processes belonging to other users must not be stopped by the campaign.
+performance are separate stages. This page records the October 2026 native and
+owned-profile investigations on `aws-a100` physical GPUs 2 and 3, compiled for
+`sm_80` with CUDA 12.4. The later 24-model single-GPU performance results and
+the November candidate's verification are recorded in their own reports.
+[A100 performance qualification](model-coverage-a100-perf-table.md) · [November candidate verification](improvement-plan/06-candidate-qualification.md)
 
-| HF configuration family | Native path | Current campaign evidence |
+| HF configuration family | Native path | October investigation evidence |
 |---|---|---|
 | Llama / SmolLM2 | Existing dense decoder and ByteLevel BPE | Pinned 135M owned profile matches HF at C1/C8/C32 with CUDA 12.9 libraries; CUDA 12.4 retains one differing prompt; performance pending |
 | Qwen2 / Qwen2.5 | Existing dense decoder, Q/K/V bias and Qwen tokenizer | Pinned 3B owned profile now matches HF at C1/C8/C32 through 128 tokens after bias split-K correction; performance pending |
