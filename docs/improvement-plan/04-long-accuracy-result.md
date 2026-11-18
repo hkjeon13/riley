@@ -89,6 +89,19 @@ GPU 6의 HF SDPA에서 첫 레이어 Q만, 첫 레이어 QKV, 전체 레이어 Q
 
 Riley 네이티브 빌드 `f7c956d3c`에서 기준을 `dense-v1`과 `fused-split-v1`로 명시했다. A100 GPU 6에서 prompt attention을 `shared-kv-v1`로 바꾸는 실행과 KV 쓰기를 `separate-v1`로 바꾸는 실행을 각각 완료했다. 사례 3과 9에 같은 토큰 ID를 공급했고 세 조건 모두 일반·logprobs·일반 반복 요청의 생성 ID·텍스트·종료 사유가 원래 Riley와 같았다. 첫 토큰의 상위 logprobs도 세 조건에서 일치했다. 사례 3의 Riley 첫 토큰은 세 조건 모두 264였고 HF SDPA는 5257이었다. 각 서버는 코드 0, 활성·대기 요청과 KV·native 할당 0으로 종료했고 GPU 6은 동일 홀더의 20GiB 예약으로 복귀했다. KV 주소와 causal mask의 내부 상태는 별도 검증 범위다. [세 조건 비교](../../benchmarks/evidence/20261119-w4-layer-trace/attention-controls/result/comparison.json) · [실행 원본과 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/attention-controls/result-SHA256SUMS)
 
+### 마지막 norm과 첫 토큰 순위
+
+같은 모델 체크포인트의 토큰 264·5257 출력 가중치와 두 엔진이 남긴 마지막 norm 행으로 내적을 FP64에서 독립 재계산했다. 저장된 추적과 입력의 해시를 검증했으며, 두 사례·두 엔진에서 BF16으로 반올림한 두 점수 모두 실제 logits와 일치했다. [원본·가중치 행 해시와 점수](../../benchmarks/evidence/20261119-w4-layer-trace/final-head-control/result.json) · [CPU 재계산기](../../benchmarks/evidence/20261119-w4-layer-trace/tools/replay_final_head.py)
+
+| 사례 | 엔진 | FP64 점수 차이 5257 − 264 | 관측 BF16 점수 264 / 5257 | 첫 출력 ID |
+|---:|---|---:|---:|---:|
+| 3 | Riley | +0.020146 | 18.375 / 18.375 | 264 |
+| 3 | HF | +0.085401 | 18.25 / 18.375 | 5257 |
+| 9 | Riley | −0.061039 | 18.25 / 18.25 | 264 |
+| 9 | HF | +0.008971 | 18.375 / 18.375 | 264 |
+
+사례 3에서 Riley의 FP64 점수 차이는 BF16 반올림 뒤 동점이 된다. HF의 마지막 norm 행으로 계산한 차이는 반올림 뒤에도 남는다. 동일한 출력 가중치로 두 엔진의 관측값을 재현했으므로 이 두 토큰의 차이는 출력 투영에 들어온 마지막 norm 행에서 이미 설명된다. 앞단의 어느 연산 조합이 그 norm 차이를 만들었는지는 추가 확인 범위다.
+
 ### Native KV와 causal mask 재계산
 
 GPU 6에서 두 사례의 첫 레이어가 사용한 물리 KV 페이지 207개와 209개를 읽었다. 마지막 prefill 묶음의 첫 행과 끝 행에서 KV head 0을 공유하는 query head 7개씩 비교했다. Native Q/K/V와 논리 위치의 causal 범위를 사용한 독립 FP64 재계산의 RMS 차이는 네 행에서 0.000133–0.000197이었다. 마지막 visible 토큰을 제외하면 RMS 차이는 0.0875–0.1171이었고, 첫 행에 미래 토큰을 포함하면 0.00175–0.02668이었다. [사례 3](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/result/case3-replay.json) · [사례 9](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/result/case9-replay.json)
