@@ -111,4 +111,14 @@ Riley 실행은 스텝당 1,024토큰을 명시했다. 서버에 설치된 vLLM 
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
 
-A100 GPU 6에서 실행하도록 등록했다. 성능 측정 중 다른 CUDA 작업의 간섭을 줄이기 위해 진행 중인 14B 측정·레이어 추적·GSM8K 비교가 종료된 뒤 시작한다. 집계기는 현재 wide 기준 `after-submit-v1`/32행 대비 각 조건의 지표와, 두 이벤트 발행 모드에서 2행 정책 효과가 달라지는 비율을 seed별로 기록한다. 완료 처리, 같은 요청, 응답 일치, 종료 자원을 검증하고 원본이 바뀌면 해시 검사에서 실패한다. [실행 순서](../../benchmarks/evidence/20261119-w23-matrix/campaign.sh) · [측정 도구](../../benchmarks/evidence/20261119-w23-matrix/tools/measure_matrix.py) · [결과 집계기](../../benchmarks/evidence/20261119-w23-matrix/tools/summarize_matrix.py)
+A100 GPU 6에서 네 조합을 두 seed로 실행했다. 8번의 실행에서 총 2,688개 측정 요청을 오류·429 없이 완료했다. 각 seed에서 네 조합의 요청·도착 일정과 응답 텍스트·종료 사유·토큰 사용량이 일치했다. 각 조합의 별도 C1·C8 검사에서는 8개 프롬프트의 생성 토큰 ID까지 같았다. 각 서버 종료 뒤 활성·대기 요청과 KV 및 native 할당은 0이었고 GPU 6의 동일 홀더가 20GiB 예약으로 복귀했다. [전체 비교](../../benchmarks/evidence/20261119-w23-matrix/result/comparison.json) · [요청별 원본과 체크섬](../../benchmarks/evidence/20261119-w23-matrix/result-SHA256SUMS)
+
+아래 수치는 같은 seed의 `after-submit-v1`/32행 대비 변화율이다. 각 셀은 seed 1 / seed 2 순서다.
+
+| 검증 조합 | closed-c32 처리량 | closed-c32 TPOT p50 | rag-c8 TTFT p95 | rag-c8 ITL p99 |
+|---|---:|---:|---:|---:|
+| `immediate-v1` / 32행 | −6.4% / −2.0% | +7.2% / +1.4% | +0.4% / +10.3% | +2.1% / +1.1% |
+| `after-submit-v1` / 2행 | −0.6% / −0.1% | +0.2% / −0.6% | +65.1% / +174.3% | −58.6% / −58.5% |
+| `immediate-v1` / 2행 | −3.5% / −1.4% | +2.3% / +1.5% | +67.1% / +128.8% | −58.6% / −58.5% |
+
+2행 설정은 두 이벤트 모드와 두 seed에서 `rag-c8` ITL 꼬리를 줄였으며 첫 토큰 p95를 늘렸다. `after-submit-v1`의 `closed-c32` TTFT p95는 2행으로 바꿨을 때 −31.5% / +1.0%로 seed별 방향이 달랐다. `immediate-v1`의 32행과 2행은 두 seed 모두 `closed-c32` TPOT p50이 1% 이상 늘었다. 이 범위에서는 `after-submit-v1`과 wide 기준을 채택 비교의 기준으로 유지한다. 이번 성능 결론은 Qwen2.5-0.5B와 고정 부하에 적용된다. [실행 순서](../../benchmarks/evidence/20261119-w23-matrix/campaign.sh) · [측정 도구](../../benchmarks/evidence/20261119-w23-matrix/tools/measure_matrix.py) · [결과 집계기](../../benchmarks/evidence/20261119-w23-matrix/tools/summarize_matrix.py)
