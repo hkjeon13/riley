@@ -3213,6 +3213,23 @@ mod cuda_backend {
                 RequestFinishReason::Length
                 | RequestFinishReason::Stop
                 | RequestFinishReason::Cancelled => {
+                    if let (RequestFinishReason::Stop, Some(structured)) =
+                        (completion.reason(), request.structured.as_mut())
+                    {
+                        let mut automaton = structured
+                            .automaton
+                            .lock()
+                            .map_err(|_| internal("grammar automaton lock poisoned"))?;
+                        if !automaton.is_accepting(&mut structured.cursor) {
+                            events.push(BackendEvent::new(
+                                request.engine_id,
+                                GenerationEvent::Failed {
+                                    class: ServiceErrorClass::Internal,
+                                },
+                            ));
+                            return Ok(events);
+                        }
+                    }
                     let usage = TokenUsage::new(
                         request.prompt_tokens,
                         u64::try_from(completion.generated_token_ids().len())
@@ -3479,8 +3496,9 @@ mod cuda_backend {
                                 &self.token_index,
                                 &mut self.allowed_tokens,
                             );
-                            // End-of-sequence is the only way out of a complete
-                            // sentence, and of a vocabulary that cannot continue.
+                            // EOS can settle an exhausted vocabulary. Completion
+                            // then publishes a request-local failure if the grammar
+                            // is incomplete, instead of a successful stop.
                             if complete || !continuable {
                                 for &token_id in self.model.spec().special_tokens().eos() {
                                     if let Some(allowed) =

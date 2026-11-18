@@ -4,6 +4,8 @@
 종합 계획: [의존관계·가드레일](README.md)\
 구성: W4-A는 장문 수치 정확성, W4-B는 스키마 계약이다. 조사·수정·완료 여부를 각각 기록한다.
 
+2026-11-19에 `oneOf`와 강제할 수 없는 형제 제약을 거부하고, `type`과 `enum`·`const`의 교집합을 강제했다. Draft 2020-12 독립 검증기 `jsonschema 4.23.0`과 공유 fixture 13개·인스턴스 28개를 대조했다. 실제 CUDA API 실행 검증과 W4-A 장문 추적은 별도로 진행한다. [검증기 실행 파일](../../benchmarks/scripts/check_structured_schema_oracle.py) · [현행 API 계약](../api.md)
+
 ## 1. 현재 근거와 해석
 
 | 항목 | 확인 내용 | 해석 |

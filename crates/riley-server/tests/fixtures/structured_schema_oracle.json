@@ -1,0 +1,63 @@
+[
+  {
+    "schema": {"type": "string", "enum": ["ready", 1, null]},
+    "samples": [{"text": "\"ready\"", "valid": true}, {"text": "1", "valid": false}, {"text": "null", "valid": false}]
+  },
+  {
+    "schema": {"type": ["null", "integer"], "enum": [1.0, 1.5, null, "1"]},
+    "samples": [{"text": "1.0", "valid": true}, {"text": "1.5", "valid": false}, {"text": "null", "valid": true}, {"text": "\"1\"", "valid": false}]
+  },
+  {
+    "schema": {"type": "integer", "const": 1},
+    "samples": [{"text": "1", "valid": true}, {"text": "2", "valid": false}]
+  },
+  {
+    "schema": {"anyOf": [{"type": "integer"}, {"type": "integer", "minimum": 0}]},
+    "samples": [{"text": "1", "valid": true}, {"text": "-1", "valid": true}, {"text": "\"a\"", "valid": false}]
+  },
+  {
+    "schema": {"oneOf": [{"type": "integer"}, {"type": "integer", "minimum": 0}]},
+    "reject_keyword": "oneOf",
+    "samples": [{"text": "1", "valid": false}, {"text": "-1", "valid": true}]
+  },
+  {
+    "schema": {"oneOf": [{"const": 2}, {"const": 2}]},
+    "reject_keyword": "oneOf",
+    "samples": [{"text": "2", "valid": false}]
+  },
+  {
+    "schema": {"type": "array", "items": {"$ref": "#/$defs/member"}, "$defs": {"member": {"oneOf": [{"type": "string"}, {"type": "string", "maxLength": 1}]}}},
+    "reject_keyword": "oneOf",
+    "samples": [{"text": "[\"a\"]", "valid": false}, {"text": "[\"ab\"]", "valid": true}]
+  },
+  {
+    "schema": {"const": 1, "minimum": 2},
+    "reject_keyword": "minimum",
+    "samples": [{"text": "1", "valid": false}]
+  },
+  {
+    "schema": {"enum": [1, 2], "not": {"const": 1}},
+    "reject_keyword": "not",
+    "samples": [{"text": "1", "valid": false}, {"text": "2", "valid": true}]
+  },
+  {
+    "schema": {"anyOf": [{"type": "string"}, {"type": "integer"}], "type": "integer"},
+    "reject_keyword": "type",
+    "samples": [{"text": "\"a\"", "valid": false}, {"text": "1", "valid": true}]
+  },
+  {
+    "schema": {"allOf": [{"type": "integer"}], "minimum": 2},
+    "reject_keyword": "minimum",
+    "samples": [{"text": "1", "valid": false}, {"text": "2", "valid": true}]
+  },
+  {
+    "schema": {"type": ["number", "integer"], "maximum": 2},
+    "reject_keyword": "maximum",
+    "samples": [{"text": "2.5", "valid": false}, {"text": "1.5", "valid": true}]
+  },
+  {
+    "schema": {"type": "object", "minProperties": 2},
+    "reject_keyword": "minProperties",
+    "samples": [{"text": "{\"a\":0,\"a\":1}", "valid": false}, {"text": "{\"a\":0,\"b\":1}", "valid": true}]
+  }
+]

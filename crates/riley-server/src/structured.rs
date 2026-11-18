@@ -29,6 +29,9 @@ const ANNOTATIONS: [&str; 10] = [
 const MAX_REPETITION: u64 = 1_024;
 /// Bound on grammar rules for one schema.
 const MAX_RULES: usize = 200_000;
+const JSON_TYPES: [&str; 7] = [
+    "null", "boolean", "string", "integer", "number", "array", "object",
+];
 
 /// Why a schema cannot be enforced; the text goes to the client.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -44,6 +47,69 @@ impl std::error::Error for SchemaError {}
 
 fn unsupported(what: impl std::fmt::Display) -> SchemaError {
     SchemaError(format!("unsupported JSON Schema: {what}"))
+}
+
+fn reject_siblings(
+    object: &Map<String, Value>,
+    keyword: &str,
+    allow_type: bool,
+) -> Result<(), SchemaError> {
+    if let Some(key) = object.keys().find(|key| {
+        *key != keyword && !(allow_type && *key == "type") && !ANNOTATIONS.contains(&key.as_str())
+    }) {
+        return Err(unsupported(format!("{key} beside {keyword}")));
+    }
+    Ok(())
+}
+
+fn schema_types(value: &Value) -> Result<Vec<&str>, SchemaError> {
+    let values = match value {
+        Value::String(_) => std::slice::from_ref(value),
+        Value::Array(values) if !values.is_empty() => values,
+        _ => {
+            return Err(SchemaError(
+                "type must be a string or a non-empty array".to_owned(),
+            ));
+        }
+    };
+    let mut names = Vec::new();
+    for value in values {
+        let name = value
+            .as_str()
+            .ok_or_else(|| SchemaError("type entries must be strings".to_owned()))?;
+        if !JSON_TYPES.contains(&name) || names.contains(&name) {
+            return Err(SchemaError(format!("unknown or duplicate type {name}")));
+        }
+        names.push(name);
+    }
+    Ok(names)
+}
+
+fn literal_has_type(value: &Value, name: &str) -> bool {
+    match name {
+        "null" => value.is_null(),
+        "boolean" => value.is_boolean(),
+        "string" => value.is_string(),
+        // JSON Schema defines integers by the mathematical value, including `1.0`.
+        "integer" => {
+            value.is_i64() || value.is_u64() || value.as_f64().is_some_and(|n| n.fract() == 0.0)
+        }
+        "number" => value.is_number(),
+        "array" => value.is_array(),
+        "object" => value.is_object(),
+        _ => false,
+    }
+}
+
+fn unsigned_bound(object: &Map<String, Value>, key: &str) -> Result<Option<u64>, SchemaError> {
+    object
+        .get(key)
+        .map(|value| {
+            value
+                .as_u64()
+                .ok_or_else(|| SchemaError(format!("{key} must be a non-negative integer")))
+        })
+        .transpose()
 }
 
 fn bytes(text: &str) -> Vec<GrammarElement> {
@@ -170,8 +236,41 @@ impl SchemaCompiler {
                 .union(ByteClass::range(b'a', b'f'))
                 .union(ByteClass::range(b'A', b'F')),
         );
-        self.builder
-            .alternative(id, concat(vec![bytes("\\u"), vec![hex; 4]]));
+        let not_d = ByteClass::range(b'0', b'9')
+            .union(ByteClass::range(b'a', b'c'))
+            .union(ByteClass::range(b'A', b'C'))
+            .union(ByteClass::range(b'e', b'f'))
+            .union(ByteClass::range(b'E', b'F'));
+        let d = GrammarElement::Bytes(ByteClass::byte(b'd').union(ByteClass::byte(b'D')));
+        self.builder.alternative(
+            id,
+            concat(vec![
+                bytes("\\u"),
+                vec![GrammarElement::Bytes(not_d), hex, hex, hex],
+            ]),
+        );
+        self.builder.alternative(
+            id,
+            concat(vec![bytes("\\u"), vec![d, class(b'0', b'7'), hex, hex]]),
+        );
+        // A paired surrogate escape is one decoded character. Standalone
+        // surrogates do not represent a Unicode scalar value.
+        let high = GrammarElement::Bytes(
+            ByteClass::range(b'8', b'9')
+                .union(ByteClass::range(b'a', b'b'))
+                .union(ByteClass::range(b'A', b'B')),
+        );
+        let low =
+            GrammarElement::Bytes(ByteClass::range(b'c', b'f').union(ByteClass::range(b'C', b'F')));
+        self.builder.alternative(
+            id,
+            concat(vec![
+                bytes("\\u"),
+                vec![d, high, hex, hex],
+                bytes("\\u"),
+                vec![d, low, hex, hex],
+            ]),
+        );
         let multibyte = self.multibyte_char();
         self.builder.alternative(id, vec![rule(multibyte)]);
         self.common.string_char = Some(id);
@@ -542,6 +641,35 @@ impl SchemaCompiler {
         Ok(id)
     }
 
+    fn literal_schema(
+        &mut self,
+        object: &Map<String, Value>,
+        keyword: &str,
+        values: &[Value],
+    ) -> Result<u32, SchemaError> {
+        reject_siblings(object, keyword, true)?;
+        let types = object.get("type").map(schema_types).transpose()?;
+        let mut matches = values.iter().filter(|value| {
+            types
+                .as_ref()
+                .is_none_or(|types| types.iter().any(|name| literal_has_type(value, name)))
+        });
+        let first = matches
+            .next()
+            .ok_or_else(|| unsupported(format!("{keyword} has no value of the declared type")))?;
+        let first = self.literal_value(first)?;
+        let Some(second) = matches.next() else {
+            return Ok(first);
+        };
+        let id = self.builder.rule();
+        self.builder.alternative(id, vec![rule(first)]);
+        for value in std::iter::once(second).chain(matches) {
+            let branch = self.literal_value(value)?;
+            self.builder.alternative(id, vec![rule(branch)]);
+        }
+        Ok(id)
+    }
+
     fn reference(&mut self, target: &str) -> Result<u32, SchemaError> {
         if let Some(&id) = self.references.get(target) {
             return Ok(id);
@@ -574,51 +702,44 @@ impl SchemaCompiler {
             Value::Object(object) => object,
             _ => return Err(SchemaError("a schema must be an object".to_owned())),
         };
+        if object.contains_key("oneOf") {
+            return Err(unsupported("oneOf requires exactly one matching branch"));
+        }
         if let Some(target) = object.get("$ref") {
+            reject_siblings(object, "$ref", false)?;
             let target = target
                 .as_str()
                 .ok_or_else(|| SchemaError("$ref must be a string".to_owned()))?;
-            if let Some(key) = object
-                .keys()
-                .find(|key| *key != "$ref" && !ANNOTATIONS.contains(&key.as_str()))
-            {
-                return Err(unsupported(format!("{key} beside $ref")));
-            }
             return self.reference(target);
         }
         if let Some(value) = object.get("const") {
-            return self.literal_value(value);
+            return self.literal_schema(object, "const", std::slice::from_ref(value));
         }
         if let Some(values) = object.get("enum") {
             let values = values
                 .as_array()
                 .filter(|values| !values.is_empty())
                 .ok_or_else(|| SchemaError("enum must be a non-empty array".to_owned()))?;
+            return self.literal_schema(object, "enum", values);
+        }
+        if let Some(branches) = object.get("anyOf") {
+            reject_siblings(object, "anyOf", false)?;
+            let branches = branches
+                .as_array()
+                .filter(|branches| !branches.is_empty())
+                .ok_or_else(|| SchemaError("anyOf must be a non-empty array".to_owned()))?;
             let id = self.builder.rule();
-            for value in values {
-                let branch = self.literal_value(value)?;
+            for branch in branches {
+                let branch = self.schema(branch)?;
                 self.builder.alternative(id, vec![rule(branch)]);
             }
             return Ok(id);
         }
-        for keyword in ["anyOf", "oneOf"] {
-            if let Some(branches) = object.get(keyword) {
-                let branches = branches
-                    .as_array()
-                    .filter(|branches| !branches.is_empty())
-                    .ok_or_else(|| SchemaError(format!("{keyword} must be a non-empty array")))?;
-                let id = self.builder.rule();
-                for branch in branches {
-                    let branch = self.schema(branch)?;
-                    self.builder.alternative(id, vec![rule(branch)]);
-                }
-                return Ok(id);
-            }
-        }
         if let Some(branches) = object.get("allOf") {
+            reject_siblings(object, "allOf", false)?;
             return match branches.as_array().map(Vec::as_slice) {
                 Some([only]) => self.schema(only),
-                _ => Err(unsupported("allOf with more than one schema")),
+                _ => Err(unsupported("allOf requires exactly one schema")),
             };
         }
         match object.get("type") {
@@ -633,12 +754,9 @@ impl SchemaCompiler {
                 Ok(self.value())
             }
             Some(Value::String(name)) => self.typed(name, object),
-            Some(Value::Array(names)) => {
+            Some(value @ Value::Array(_)) => {
                 let id = self.builder.rule();
-                for name in names {
-                    let name = name
-                        .as_str()
-                        .ok_or_else(|| SchemaError("type entries must be strings".to_owned()))?;
+                for name in schema_types(value)? {
                     let branch = self.typed(name, object)?;
                     self.builder.alternative(id, vec![rule(branch)]);
                 }
@@ -681,9 +799,14 @@ impl SchemaCompiler {
             let known_elsewhere = TYPE_KEYWORDS
                 .iter()
                 .any(|(_, keywords)| keywords.contains(&key.as_str()));
+            // Integer-only implementation does not make a bound inapplicable
+            // to a `number` branch of the same type union.
+            let applies_to_number = name == "number"
+                && ["maximum", "exclusiveMinimum", "exclusiveMaximum"].contains(&key.as_str());
             if key != "type"
                 && !ANNOTATIONS.contains(&key.as_str())
-                && !(allowed.contains(&key.as_str()) || multiple && known_elsewhere)
+                && !(allowed.contains(&key.as_str())
+                    || multiple && known_elsewhere && !applies_to_number)
             {
                 return Err(unsupported(format!("{key} on type {name}")));
             }
@@ -710,7 +833,13 @@ impl SchemaCompiler {
                     })
                 };
                 let above = |key: &str, step: i64| -> Result<Option<i64>, SchemaError> {
-                    Ok(bound(key)?.map(|value| value.saturating_add(step)))
+                    bound(key)?
+                        .map(|value| {
+                            value.checked_add(step).ok_or_else(|| {
+                                unsupported(format!("{key} outside the supported integer range"))
+                            })
+                        })
+                        .transpose()
                 };
                 let tightest =
                     |a: Option<i64>, b: Option<i64>, pick: fn(i64, i64) -> i64| match (a, b) {
@@ -751,8 +880,10 @@ impl SchemaCompiler {
             }
             return self.string_format(format.as_str().unwrap_or_default());
         }
-        let bound = |key: &str| object.get(key).and_then(Value::as_u64);
-        self.bounded_string(bound("minLength").unwrap_or(0), bound("maxLength"))
+        self.bounded_string(
+            unsigned_bound(object, "minLength")?.unwrap_or(0),
+            unsigned_bound(object, "maxLength")?,
+        )
     }
 
     /// A JSON Schema `pattern`: unanchored ends match any text, as in the spec.
@@ -988,12 +1119,11 @@ impl SchemaCompiler {
         };
         let separator = self.separator();
         let lead = concat(vec![bytes(","), vec![rule(separator)]]);
-        let bound = |key: &str| object.get(key).and_then(Value::as_u64);
         let items = self.repetition(
             item,
             Some(&lead),
-            bound("minItems").unwrap_or(0),
-            bound("maxItems"),
+            unsigned_bound(object, "minItems")?.unwrap_or(0),
+            unsigned_bound(object, "maxItems")?,
         )?;
         let id = self.builder.rule();
         self.builder
@@ -1002,38 +1132,64 @@ impl SchemaCompiler {
     }
 
     fn object_schema(&mut self, object: &Map<String, Value>) -> Result<u32, SchemaError> {
-        let bound = |key: &str| object.get(key).and_then(Value::as_u64);
-        let Some(properties) = object.get("properties").and_then(Value::as_object) else {
+        let properties = object
+            .get("properties")
+            .map(|value| {
+                value
+                    .as_object()
+                    .ok_or_else(|| SchemaError("properties must be an object".to_owned()))
+            })
+            .transpose()?;
+        let additional = object.get("additionalProperties");
+        if additional.is_some_and(|value| !value.is_boolean() && !value.is_object()) {
+            return Err(SchemaError(
+                "additionalProperties must be a schema".to_owned(),
+            ));
+        }
+        let Some(properties) = properties else {
             if object.contains_key("required") {
                 return Err(unsupported("required without properties"));
             }
-            let value = match object.get("additionalProperties") {
+            let minimum = unsigned_bound(object, "minProperties")?.unwrap_or(0);
+            let maximum = unsigned_bound(object, "maxProperties")?;
+            if minimum > 1 {
+                return Err(unsupported(
+                    "minProperties above 1 needs unique property names",
+                ));
+            }
+            let value = match additional {
                 Some(schema @ Value::Object(_)) => self.schema(schema)?,
                 Some(Value::Bool(false)) => {
+                    if minimum != 0 {
+                        return Err(unsupported(
+                            "minProperties with additionalProperties false and no named properties",
+                        ));
+                    }
                     let id = self.builder.rule();
                     self.builder.alternative(id, bytes("{}"));
                     return Ok(id);
                 }
                 _ => self.value(),
             };
-            return self.object_map(
-                value,
-                bound("minProperties").unwrap_or(0),
-                bound("maxProperties"),
-            );
+            return self.object_map(value, minimum, maximum);
         };
         if object.contains_key("minProperties") || object.contains_key("maxProperties") {
             return Err(unsupported("minProperties with properties"));
         }
-        if matches!(object.get("additionalProperties"), Some(Value::Object(_))) {
+        if matches!(additional, Some(Value::Object(_))) {
             return Err(unsupported("additionalProperties schema with properties"));
         }
         let required: Vec<&str> = match object.get("required") {
             None => Vec::new(),
             Some(names) => names
                 .as_array()
-                .map(|names| names.iter().filter_map(Value::as_str).collect())
-                .ok_or_else(|| SchemaError("required must be an array".to_owned()))?,
+                .ok_or_else(|| SchemaError("required must be an array".to_owned()))?
+                .iter()
+                .map(|name| {
+                    name.as_str()
+                        .ok_or_else(|| SchemaError("required entries must be strings".to_owned()))
+                })
+                .collect::<Result<_, _>>()?,
         };
         if let Some(name) = required
             .iter()
@@ -1246,6 +1402,13 @@ mod tests {
         assert!(accepts(&schema, r#""é""#));
         assert!(!accepts(&schema, "\"a\nb\""));
         assert!(!accepts(&schema, r#""\x""#));
+        let one = json!({"type": "string", "minLength": 1, "maxLength": 1});
+        assert!(accepts(&one, r#""\uD83d\udE00""#));
+        assert!(accepts(&one, r#""\uD7FF""#));
+        assert!(accepts(&one, r#""\uE000""#));
+        assert!(!accepts(&one, r#""\ud83d\ude00a""#));
+        assert!(!accepts(&schema, r#""\ud83d""#));
+        assert!(!accepts(&schema, r#""\ude00\ud83d""#));
         let mut automaton = GrammarAutomaton::new(compile_schema(&schema).unwrap());
         let mut cursor = automaton.start();
         assert!(!automaton.advance(&mut cursor, b"\"\xff"));
@@ -1391,5 +1554,59 @@ mod tests {
         assert!(rejected(json!({"$ref": "#/nope"})).contains("unresolved"));
         assert!(rejected(json!({"type": "string", "format": "email"})).contains("email"));
         assert!(rejected(json!({"type": "wat"})).contains("wat"));
+    }
+
+    #[test]
+    fn compiler_agrees_with_the_recorded_draft_2020_12_fixtures() {
+        let cases: Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/structured_schema_oracle.json"
+        ))
+        .unwrap();
+        for case in cases.as_array().unwrap() {
+            let schema = &case["schema"];
+            if let Some(keyword) = case["reject_keyword"].as_str() {
+                assert!(
+                    compile_schema(schema).unwrap_err().0.contains(keyword),
+                    "{schema}"
+                );
+            } else {
+                for sample in case["samples"].as_array().unwrap() {
+                    let text = sample["text"].as_str().unwrap();
+                    assert_eq!(
+                        accepts(schema, text),
+                        sample["valid"].as_bool().unwrap(),
+                        "schema={schema}, input={text}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn malformed_constraints_cannot_turn_into_unbounded_grammars() {
+        for (schema, keyword) in [
+            (json!({"type": "string", "maxLength": -1}), "maxLength"),
+            (json!({"type": "array", "maxItems": "1"}), "maxItems"),
+            (json!({"type": "object", "properties": []}), "properties"),
+            (
+                json!({"type": "object", "additionalProperties": 7}),
+                "additionalProperties",
+            ),
+            (
+                json!({"type": "object", "properties": {"x": {}}, "required": [7]}),
+                "required",
+            ),
+            (
+                json!({"type": "integer", "exclusiveMinimum": i64::MAX}),
+                "exclusiveMinimum",
+            ),
+            (
+                json!({"type": "integer", "exclusiveMaximum": i64::MIN}),
+                "exclusiveMaximum",
+            ),
+            (json!({"type": []}), "type"),
+        ] {
+            assert!(rejected(schema).contains(keyword), "{keyword}");
+        }
     }
 }

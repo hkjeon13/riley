@@ -124,29 +124,37 @@ The response is a `chat.completion` with `choices[0].message` =
 ### Structured output
 
 `response_format` takes `{"type": "text"}`, `{"type": "json_object"}` or
-`{"type": "json_schema", "json_schema": {"name": …, "schema": {…}}}`. The
-output is held to the schema token by token, so a response that finishes with
-`stop` is valid. One cut off by `max_tokens` finishes with `length` and is not:
-leave room, and bound free-text fields with `maxLength`.
+`{"type": "json_schema", "json_schema": {"name": …, "schema": {…}}}`.
+The grammar constrains output token by token. A successful `stop` requires a
+complete grammar match. Reaching `max_tokens` can leave a partial value with
+`finish_reason: "length"`. If the vocabulary cannot complete the grammar, the
+request ends with an error.
+
+Requests with a structured output grammar must omit `stop` strings. Such strings
+would truncate a JSON value or tool call before the grammar completes.
 
 Output is compact JSON with properties in schema order and at most one space
 after `:` and `,`. Enforced keywords:
 
 | Type | Keywords |
 |---|---|
-| any | `type` (string or array), `enum`, `const`, `anyOf`, `oneOf`, one-element `allOf`, `$ref` to `#/…` including recursion |
-| `object` | `properties`, `required`, `additionalProperties` (as `false`, or as a schema when there are no `properties`), `minProperties` and `maxProperties` without `properties` |
+| any | `type` (string or array), `enum`, `const`, `anyOf`, one-element `allOf`, `$ref` to `#/…` including recursion |
+| `object` | `properties`, `required`, `additionalProperties` (as `false`, or as a schema when there are no `properties`), `minProperties` of 0 or 1 and `maxProperties` without `properties` |
 | `array` | `items`, `minItems`, `maxItems` |
-| `string` | `minLength`, `maxLength`, `format` of `date`, `time`, `date-time` or `uuid`, `pattern` |
+| `string` | `minLength`, `maxLength`, lexical `format` shapes for `date`, `time`, `date-time` or `uuid`, `pattern` |
 | `integer` | `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum` |
 | `number` | `minimum: 0` |
 
-Properties outside `properties` are never generated. `oneOf` is treated as
-`anyOf`. Annotations (`title`, `description`, `default`, `examples`, `$schema`,
-`$comment`) are ignored. Every other keyword, such as `uniqueItems`, `not` or
-`multipleOf`, is refused with 400 `invalid_schema` and the keyword's name: a
-schema is never accepted and then not enforced. Repetition bounds above 1,024
-are refused too.
+The grammar emits only declared names when `properties` is present. Annotations
+such as `title`, `description`, `default`, `examples`, `$schema` and `$comment`
+are ignored. `const` and `enum` can be combined with `type`. Other validation
+siblings of these keywords, `$ref`, `anyOf` and single-entry `allOf` are refused
+with 400 `invalid_schema`. A client using `oneOf` also receives 400
+`invalid_schema`; it can use `anyOf` when multiple matching branches are allowed
+by the application. These checks apply to `response_format` schemas and to
+tools whose parameters are constrained by `tool_choice`. Unsupported keywords
+such as `uniqueItems`, `not` and `multipleOf`, as well as repetition bounds above
+1,024, are refused with a named error.
 
 `pattern` supports literals, `.`, classes with ranges and `^` negation, `\\d`,
 `\\w`, `\\s` (a space), groups, `|`, and the greedy quantifiers `*`, `+`, `?` and

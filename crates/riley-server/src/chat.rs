@@ -595,6 +595,12 @@ pub fn normalize_chat_request(
     // The template already wrote any begin-of-text token.
     generation.add_special_tokens = false;
     generation.grammar = tool_grammar.or(format_grammar);
+    if generation.grammar.is_some() && !generation.stop_sequences.is_empty() {
+        return Err(invalid(
+            "stop",
+            "stop strings cannot truncate structured output",
+        ));
+    }
     generation.logprobs_top = logprobs_top;
     generation.include_token_ids |= logprobs_top.is_some();
     Ok(generation)
@@ -1079,6 +1085,43 @@ mod tests {
             normalize_chat_request(request(named), &template(TOOLS), limits()),
             Err(ChatRequestError::Invalid(_))
         ));
+    }
+
+    #[test]
+    fn overlapping_one_of_fails_before_forced_tool_generation() {
+        let mut tools = weather();
+        tools[0]["function"]["parameters"]["properties"]["city"] = json!({
+            "oneOf": [{"type": "string"}, {"type": "string", "minLength": 2}]
+        });
+        for choice in [
+            "required".into(),
+            json!({"type": "function", "function": {"name": "weather"}}),
+        ] {
+            let body = request(json!({"model": "m", "tools": tools, "tool_choice": choice,
+                "messages": [{"role": "user", "content": "x"}]}));
+            assert!(matches!(
+                normalize_chat_request(body, &template(TOOLS), limits()),
+                Err(ChatRequestError::Schema { parameter: "tools", message }) if message.contains("oneOf")
+            ));
+        }
+    }
+
+    #[test]
+    fn stop_strings_cannot_cut_off_a_compiled_schema_or_tool_call() {
+        let messages = json!([{"role": "user", "content": "x"}]);
+        for payload in [
+            json!({"model": "m", "messages": messages, "stop": "}",
+                "response_format": {"type": "json_object"}}),
+            json!({"model": "m", "messages": messages, "stop": ["}"],
+                "tools": weather(), "tool_choice": "required"}),
+        ] {
+            assert!(matches!(
+                normalize_chat_request(request(payload), &template(TOOLS), limits()),
+                Err(ChatRequestError::Invalid(error)) if error.parameter() == "stop"
+            ));
+        }
+        let plain = request(json!({"model": "m", "messages": messages, "stop": "}"}));
+        assert!(normalize_chat_request(plain, &template(TOOLS), limits()).is_ok());
     }
 
     #[test]
