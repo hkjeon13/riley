@@ -64,6 +64,10 @@ Qwen2.5-7B의 검증된 tokenizer로 별도 greedy holdout 11개를 고정했다
 
 이번 fixture는 greedy 생성과 배치에 따른 출력 차이를 확인한다. 실행은 W5-B의 두 혼합 부하 조건이 종료된 뒤 같은 GPU 7에서 순서대로 시작한다. 장문 schema/tool과 GSM8K 전수 비교는 별도의 실행 항목이다. [GPU 예약 및 실행 순서](../../benchmarks/evidence/20261119-w4-holdout/campaign.sh)
 
+GSM8K는 기존 train 7,473행과 test 1,319행의 파일 해시를 고정했다. 기존 세 모델인 Qwen2.5-7B, Llama-3.2-3B, Qwen3-4B와 두 KV-head 모델 Qwen2.5-3B를 Riley·vLLM에서 전수 비교한다. 두 엔진에서 4-shot, greedy, 최대 256토큰, `Question:` 종료 문자열, 문맥 4,096과 클라이언트 동시성 32를 사용한다. 요청 본문과 서버가 받은 토큰 ID를 모두 대조하고, 응답 오류가 하나라도 있으면 점수 비교는 무효다. [고정 데이터](../../benchmarks/evidence/20261119-w4-gsm8k/dataset.json) · [비교 검사기](../../benchmarks/evidence/20261119-w4-gsm8k/tools/compare_gsm8k.py)
+
+CPU에서 과거 세 Riley 결과의 1,319문항별 정오를 각각 재계산해 원래 결과와 일치함을 확인했다. 이는 채점 호환성 근거다. 현재 GPU 빌드의 전수 평가는 앞선 소크·정확성·성능 검증 뒤 실행한다. [과거 결과 재채점](../../benchmarks/evidence/20261119-w4-gsm8k/preflight.json) · [GPU 실행 순서](../../benchmarks/evidence/20261119-w4-gsm8k/campaign.sh)
+
 ## 3. W4-B: 스키마 의미를 일치시키는 절차
 
 ### W4-B1. 계약표와 최소 반례 작성

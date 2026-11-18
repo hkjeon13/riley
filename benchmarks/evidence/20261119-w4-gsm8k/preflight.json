@@ -1,0 +1,31 @@
+{
+  "status": "passed",
+  "scope": "historical score replay and dataset binding, CPU only",
+  "dataset": {
+    "train": {
+      "sha256": "17f347dc51477c50d4efb83959dbb7c56297aba886e5544ee2aaed3024813465",
+      "rows": 7473
+    },
+    "test": {
+      "sha256": "3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14",
+      "rows": 1319
+    }
+  },
+  "archived_riley_runs": {
+    "Qwen2.5-7B-Instruct": {
+      "source_sha256": "6cb10dbf324470ae5f9cd3f2a0f91714235b58b9ce6a0e230d1724c4ea93283b",
+      "questions": 1319,
+      "correct": 1121
+    },
+    "Llama-3.2-3B-Instruct": {
+      "source_sha256": "b97f84a62188e0699465e1ad0aea9beffa84fc7ce1bba603b20d96c0ad18fb22",
+      "questions": 1319,
+      "correct": 866
+    },
+    "Qwen3-4B": {
+      "source_sha256": "015e2b22a6251cec7c8ee0441d01d62521102b2ccc97433df5a9bea9892d1081",
+      "questions": 1319,
+      "correct": 1133
+    }
+  }
+}
