@@ -170,7 +170,19 @@ SSE 요청 ID로 엔진 제출부터 첫 응답 조각 생성까지를 연결했
 
 요청별 `prefill_start`와 `prefill_return`을 다시 읽어 각 요청의 남은 토큰을 대조했다. 두 `rag-c8` seed에서 선두 요청은 이번 스텝에서 끝낼 수 없지만 다른 요청은 끝낼 수 있는 경우가 각각 180스텝 중 41개와 168스텝 중 37개 있었다. 모두 decode가 진행 중이었다. 계측 시각으로 readiness를 근사한 후보 선별 집계이며 실제 우선순위 변경 횟수는 별도 실행에서 확인한다. [추적 집계](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/finishing-opportunities.json) · [집계 도구](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/scan_finishing_opportunities.py)
 
-새 후보는 기존 aging override 직후의 decode 우선 스텝에서만 동작한다. 기존 decode 행을 먼저 배정하고, 남은 예산에 들어오는 완료 가능한 요청 한 개를 앞당긴다. 다음 aging override는 기존 순서를 사용한다. 격리한 스케줄러 CPU 테스트 146건과 진단 표지를 포함한 최종 단위 테스트 37건을 통과했다. CUDA 기능 구성은 로컬 Rust 타입 검사까지 확인했다. 워크스페이스 기본값은 유지하고, 실제 두 설정 비교는 A100 7번 RSS 시험 종료 뒤 GPU 6번에서 시작한다. [진단 패치·실행 순서](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/campaign.sh) · [로컬 검사 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/local-checks.sha256) · [검증기](../../benchmarks/evidence/20261119-w3-rag-profile/tools/compare_prefill_finish.py)
+이 후보는 기존 aging override 직후의 decode 우선 스텝에서만 동작한다. 기존 decode 행을 먼저 배정하고, 남은 예산에 들어오는 완료 가능한 요청 한 개를 앞당긴다. 다음 aging override는 기존 순서를 사용한다. 격리한 스케줄러 CPU 테스트 146건과 진단 표지를 포함한 최종 단위 테스트 37건을 통과했다. CUDA 기능 구성은 로컬 Rust 타입 검사까지 확인했다. [진단 패치·실행 순서](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/campaign.sh) · [로컬 검사 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/local-checks.sha256)
+
+CUDA 12.4 SM80 진단 바이너리로 A100 6번에서 같은 부하 여섯 개를 옵션 off·on 순으로 한 번씩 실행했다. 후보 설정 로그에서 실제 순서 변경을 확인했다. 오류·429는 0건이었고 측정 320쌍의 출력 텍스트·완료 토큰 수·종료 사유가 일치했다. 별도 장문 8개는 C1·C8과 두 설정 모두에서 토큰 ID가 일치했다. 두 서버가 코드 0으로 종료했고 동일 홀더가 각 실행 뒤 20GiB를 다시 예약했다. 원본은 A100 호스트에서 검증했고 집계에 바이너리 및 원본 파일의 체크섬을 기록했다. [GPU 비교 결과](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/result/summary.json) · [검증기](../../benchmarks/evidence/20261119-w3-rag-profile/tools/compare_prefill_finish.py)
+
+| 부하 | TTFT p95 변화 | decode TPOT p50 변화 | ITL p99 변화 | 처리량 변화 |
+|---|---:|---:|---:|---:|
+| `rag-c8` seed 1 | −7.43% | +0.93% | +1.78% | −0.26% |
+| `rag-c8` seed 2 | +20.45% | −1.99% | +2.50% | −0.47% |
+| `wave-sync` | −0.88% | +10.76% | +87.80% | +0.09% |
+| `wave-50ms` | −0.02% | +7.04% | +87.68% | +0.06% |
+| 짧은 `C32` | −0.15% | −0.34% | −0.87% | +0.36% |
+
+이 후보는 채택하지 않았다. 기존 자동 판정은 짧은 `C32`의 TTFT·처리량과 `C32`·두 `rag-c8`의 TPOT를 통과시켰다. 실제 긴 요청의 TTFT p95는 seed마다 방향이 달랐고, 두 동시 유입 조건에서 decode TPOT와 ITL 꼬리가 모두 늘었다. 단일 실행 쌍에서 관측한 변화이므로 후속 후보 검증은 실행 순서를 뒤집어 반복하고 두 동시 유입 조건의 decode 지연도 판정에 포함한다.
 
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
