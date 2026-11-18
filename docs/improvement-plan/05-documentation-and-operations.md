@@ -28,6 +28,17 @@
 
 단일 최신 숫자를 모든 표에 복사하지 않는다. 예를 들어 과거 qualification은 fixed/natural 8셀이고 최신 TP=2 서빙 검증은 64-token 셀이다. 새 결과가 좋다고 기존 8셀 qualification을 충족했다고 선언하지 않는다. README의 "32B 미충족"은 어떤 매트릭스의 판정인지 남기고 최신 별도 결과를 함께 설명한다.
 
+2026-11-19에 아래 주장을 소스와 실험 기록에 대조했다.
+
+| 사용자 문서 | 확인한 근거 | 적용 범위와 제한 |
+|---|---|---|
+| [README 벤치마크](../../README.md#performance) | [0.1.0 목표 재측정](../goal.md), 2026-11-14 | 24개 모델의 64토큰 `closed-c1`과 opt-in prefill burst RAG를 각 설정으로 표기 |
+| [README TP=2](../../README.md#two-gpus-qwen25-32b-with-tensor-parallelism) | [TP 설계의 원래 매트릭스](../tensor-parallel-design.md#status-2026-11-01), [0.1.0 목표 재측정](../goal.md) | 원래 fixed/natural 8셀과 후속 fixed 64토큰 4셀에 각각의 판정 적용 |
+| [CLI 실행 옵션](../configuration.md#execution-options) | [프로파일 resolver](../../crates/riley-server/src/inference_profile.rs), [서버 옵션](../../crates/riley-server/src/main.rs), [실행 구현](../../crates/riley-server/src/engine.rs) | 프로파일 공급값, 일반 CLI 기본값, 실험값을 각각 표기 |
+| [logprobs](../api.md#log-probabilities) | [`sample_iteration` 구현](../../crates/riley-server/src/engine.rs) | GPU 요약 사용 여부는 해당 배치 조건에 의존. 공개 분포와 응답 형태는 같은 계약을 따름 |
+| [모델별 지원과 독립 참조](../model-support.md) | [네이티브 A100 성능표](../model-coverage-a100-perf-table.md), [모델별 독립 참조](../model-support.md) | 각 기록의 체크포인트·길이·기능 조건에서 whole-model 일치와 성능 자격을 각각 판정 |
+| [릴리스 soak 메트릭](../../benchmarks/soak/README.md#target-contract) | [서버 응답 구조](../../crates/riley-server/src/service.rs), [릴리스 검사기](../../benchmarks/scripts/check_reliability_soak.py) | 최상위 `batch_shapes`와 고정 10개 bucket 계약 포함 |
+
 ### W5-A2. 사용자 문서와 연구 기록의 역할 정리
 
 | 문서 | 최종 역할 |
@@ -105,7 +116,7 @@ python3 benchmarks/live/soak.py "$TEST_ADDRESS" "$MODEL_ID" \
   --seconds 1800 --rate 8 --pid "$TEST_SERVER_PID" --out "$SOAK_RESULT_PATH"
 ```
 
-현재 도구의 인증·동시 서버·endpoint 가정은 실행 전 확인한다. 기존 soak가 모든 신규 시나리오를 생성한다고 가정하지 말고 빠진 cache·drain·quota 시나리오는 별도 추가한다.
+현재 도구의 인증·동시 서버·endpoint 가정은 실행 전 확인한다. `benchmarks/live/soak.py`의 출력은 혼합 부하 탐색용이다. 현재 구현은 중간 EOF에서 `[DONE]`을 강제하지 않고, 관찰 구간별 지연과 실패 시 종료 코드도 제공하지 않는다. 최신 후보의 혼합 soak 판정에는 이 경계를 보완한다. 별도의 [릴리스 soak 드라이버와 검사기](../../benchmarks/soak/README.md)는 고정 SmolLM2 workload·정식 golden·이미지 계보를 요구한다. 해당 계약을 실행할 수 있는 경우 패키징 판정에 사용한다.
 
 ### W5-B5. 실패 분류와 회수
 

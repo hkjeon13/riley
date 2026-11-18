@@ -379,7 +379,8 @@ pays for itself. Qwen2.5-7B, two runs each, 8,192-token server:
 | rag-r3 TTFT p50 ms | 452 | 472 | 441 | **412** |
 | reason-c32 tok/s | 2097 | **2108** | 2094 | 2078 |
 
-The default is 1,024:
+This experiment used a 1,024-token split. Current defaults are documented under
+[Configuration](configuration.md#execution-options). At the tested split:
 
 - A row of up to 1,024 tokens is one part and keeps the same bytes, confirmed by
   a GPU test across query and KV head counts. A server with a context of 1,024

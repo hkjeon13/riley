@@ -52,8 +52,9 @@ binary or model. The reviewed v1 manifest keeps `target.kind=process` because
 the driver runs inside that test layer and observes the real server process
 directly; changing the target kind would change the pinned release contract.
 
-`GET /metrics` must return this closed JSON object (all values are nonnegative
-integers):
+`GET /metrics` must return `active_requests`, `waiting_requests`,
+`kv_allocated_blocks`, `allocation`, `batch_shapes`, and `counters`. The
+request, KV, allocation and counter fields are nonnegative integers:
 
 ```json
 {
@@ -74,6 +75,12 @@ integers):
   }
 }
 ```
+
+`batch_shapes` contains the degradation flag, the last observed shape, the
+number of configured buckets, and a fixed list of ten bucket entries. Unused
+entries are zeroed. The [checker](../scripts/check_reliability_soak.py) verifies
+the complete object, including consistency of the latest committed shape and
+the sample counts and timing fields for each bucket.
 
 Counters are monotonic for one server lifetime. `dropped_observations` is the
 number of request summaries evicted from the bounded diagnostics ring; a

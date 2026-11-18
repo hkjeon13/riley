@@ -74,12 +74,13 @@ alternately twice in the same session and averaged. Prefix caching is off on
 both. vLLM uses its normal compile + CUDA Graph path with
 `--gpu-memory-utilization 0.6` (0.9 for the 14B models, which do not load at 0.6).
 
-Known limits: with prompts of 2,000 tokens or more, vLLM's first token arrives
-about 1.25× sooner at one client and 1.8× sooner at the p95 under load; with
-400-token prompts its tail TTFT is lower under load. See [serving validation](docs/serving-validation.md), which covers
-open-loop arrivals, long prompts and outputs, structured output and a 30-minute
-mixed soak. At one client with fixed-length output, the smallest models (Qwen2.5-0.5B,
-Qwen3-0.6B, SmolLM2-360M) are 11–13 % behind on TPOT. Eighteen models were measured
+In the 0.1.0 long-context remeasurement with the opt-in prefill burst, Riley's
+first-token latency relative to vLLM was 0.52–1.10× for `rag-c1` and 0.62–1.19×
+for `rag6k-c1`. The heaviest `rag-c8` tail reached 1.44× at p95. In the separate
+64-token `closed-c1` remeasurement, TPOT across the 24 models was 0.882–1.015×.
+These figures refer to their respective workload settings. See the
+[current goal measurements](docs/goal.md) and [serving validation](docs/serving-validation.md).
+In the original qualification matrix, eighteen models were measured
 with the native profile shown under [Usage](#start-the-server); six
 Qwen2.5/SmolLM2 models used earlier flag sets, listed in the
 [measurement sources](docs/model-coverage-a100-perf-table.md#측정-출처).
@@ -89,7 +90,7 @@ Qwen2.5/SmolLM2 models used earlier flag sets, listed in the
 Qwen2.5-32B-Instruct does not fit on one 40 GB A100 for either engine. With
 `--tensor-parallel-devices 6,7` Riley splits it over two NVLink-connected
 A100s (its own deterministic all-reduce, so outputs stay batch-invariant)
-against vLLM `--tensor-parallel-size 2`:
+against vLLM `--tensor-parallel-size 2`. The original qualification matrix was:
 
 | Clients | Throughput tok/s (fixed / natural) | TTFT p50 ms (fixed) | TPOT p50 ms (fixed) |
 |---|---|---:|---:|
@@ -98,11 +99,12 @@ against vLLM `--tensor-parallel-size 2`:
 | 16 | **375.6** / **443.2** vs 352.9 / 429.4 | **107.6** / 144.6 | **36.51** / 37.44 |
 | 32 | **557.9** / **724.4** vs 511.5 / 687.1 | **139.6** / 192.6 | **46.42** / 50.26 |
 
-Riley first, vLLM second. Throughput is at or above vLLM and TTFT is lower in
-all 8 cells. The two 8-client cells still miss, by TPOT p50 alone (+0.1 % and
-+0.3 %), so 32B does not qualify yet. The low-latency all-reduce (no staging
-copy, no barrier) took 1-client TPOT from 29.19 to 27.77 ms.
-Details are in the [tensor-parallel design](docs/tensor-parallel-design.md#status-2026-11-01).
+Riley first, vLLM second. The original eight-cell matrix narrowly missed its
+TPOT target in both eight-client cells. The later 0.1.0 64-token `closed`
+remeasurement had TPOT ratios of 0.981, 1.008, 1.021 and 1.000 at C1/C8/C16/C32.
+All four landed within the ±3% tie band, with higher throughput and lower
+TTFT. Eight-cell qualification still uses the original fixed/natural matrix.
+[Tensor-parallel design](docs/tensor-parallel-design.md#status-2026-11-01) · [Remeasurement](docs/goal.md)
 
 ### Shared prompts: the prefix cache
 

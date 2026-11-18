@@ -106,15 +106,18 @@ in the last bits:
 | `--decode-attention-merge` | `global-max-v1` | Merge attention pages in one kernel |
 | `--decode-attention-producer` | `tensor-core-v1` | Compute attention pages with tensor-core arithmetic |
 
-The D128 backend accepts only the Qwen2.5-3B attention geometry and a step
-budget of at most 256. Other models use the default backend.
+The component reference path is scoped to its qualified attention geometry.
+The `native-bf16-varlen-v1` profile selects fixed-tile attention for supported
+64- and 128-dimensional heads. It supplies a 1,024-token context and 256-row
+step and prefill budgets by default, along with `--event-publication
+after-submit-v1`. Without a profile the event publication option defaults to
+`immediate-v1`. Explicit options take precedence over profile values.
 
-`--inference-profile native-bf16-varlen-v1` allows a context up to 8,192 tokens,
-a step budget up to 512 and 32 active sequences. For long prompts, pass
-`--max-sequence-tokens 8192`. A budget of 512 also needs
-`--prefill-chunk-tokens 512` and matching `--batch-shape-buckets`; it shortens
-long-prompt TTFT a little and lengthens short-prompt TTFT
-([measurements](serving-validation.md#prompt-speed)).
+For long prompts, the fixed-tile route supports up to 8,192 context tokens and
+1,024 rows per step in the measured configuration. To expand the context, pass
+`--max-sequence-tokens 8192` within the checkpoint's supported range. Set the
+step and prefill budgets and the bucket list together when using a wider step.
+[Profile source](../crates/riley-server/src/inference_profile.rs) · [Long-prompt measurements](serving-validation.md#prompt-steps-of-1024-rows)
 
 `--attention-kv-chunk-tokens N`, a multiple of 16 with default 512 (1,024 before
 2026-11-05), sets where this attention cuts a row's context. Without it,

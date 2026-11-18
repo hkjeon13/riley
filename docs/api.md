@@ -82,11 +82,12 @@ Ties in `top_logprobs` go to the lower token ID. `/v1/completions` returns
 `tokens`, `token_logprobs`, `top_logprobs` and `text_offset` arrays;
 `/v1/chat/completions` returns `content` entries with `token`, `logprob`,
 `bytes` and `top_logprobs`. Streamed chunks carry the entry of their own token.
-The end-of-sequence token, when generated, is included. With
-`--sampling-backend gpu-greedy`, a request without a grammar has each token's
-row summarized on the GPU (its maximum, partial sums of the normalizer and the
-top tokens), and the CPU finishes the values from that summary. They have the
-same bytes as the full-row CPU pass, which other requests still use.
+The end-of-sequence token, when generated, is included. If the current batch
+uses `--sampling-backend gpu-greedy`, eligible requests without a grammar can
+download a compact GPU summary of each logit row. The CPU finishes the values
+from its maximum, partial sums and top tokens. Requests that need full logits
+use the CPU formula with the same public distribution contract. Backend
+selection can depend on the other requests in the current batch.
 
 ## `POST /v1/chat/completions`
 
