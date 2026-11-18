@@ -96,6 +96,7 @@ const NATIVE_BF16_PAGED_SPLIT_GQA_PARAMS_V2_SIZE: u32 = 584;
 const PACKED_BATCH_V1_SIZE: u32 = 320;
 const RAGGED_PAGED_KV_CACHE_WRITE_PARAMS_SIZE: u32 = 568;
 const RAGGED_PAGED_ATTENTION_PARAMS_SIZE: u32 = 592;
+#[allow(dead_code, reason = "Kept for the native V2 layout assertion")]
 const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V2_SIZE: u32 = 744;
 const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V3_SIZE: u32 = 752;
 const FIXED37_RAGGED_PAGED_ATTENTION_PARAMS_SIZE: u32 = 600;
@@ -1190,6 +1191,7 @@ struct RawRaggedPagedAttentionParams {
 }
 
 #[repr(C)]
+#[allow(dead_code, reason = "Compile-time layout mirror for the native V2 ABI")]
 struct RawNativeBf16RaggedPagedSplitGqaParamsV2 {
     struct_size: u32,
     format_version: u32,
@@ -1824,6 +1826,10 @@ unsafe extern "C" {
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
+    #[allow(
+        dead_code,
+        reason = "Preserve the original C ABI declaration checked by the graph contract"
+    )]
     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
         stream: *mut RawStream,
         input: *mut RawDeviceBuffer,
@@ -2288,16 +2294,19 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_hugging_face_qwen_head128_rms_norm_execute(
         params: *const RawRmsNormParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_hugging_face_qwen_wide_rms_norm_execute(
         params: *const RawRmsNormParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_hugging_face_qwen_singleton_rms_norm_execute(
         params: *const RawRmsNormParams,
         stream: *mut RawStream,
@@ -2405,6 +2414,7 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     fn riley_cuda_hf_pack_qkv_execute(
         q: RawBufferSpan,
         k: RawBufferSpan,
@@ -3990,6 +4000,10 @@ impl StreamHandle {
         ))
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "The wrapper mirrors the independent native buffers, handles, and launch dimensions"
+    )]
     pub(super) fn begin_graph_canonical_rms_norm_bf16_capture(
         &mut self,
         input: &DeviceBufferHandle,
@@ -4082,6 +4096,10 @@ impl StreamHandle {
         ))
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "The wrapper mirrors the independent native buffers, handles, and launch dimensions"
+    )]
     pub(super) fn begin_graph_hf_smollm2_rms_norm_bf16_capture(
         &mut self,
         input: &DeviceBufferHandle,
@@ -4262,6 +4280,10 @@ impl StreamHandle {
         ))
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "The wrapper mirrors the independent native buffers, handles, and launch dimensions"
+    )]
     pub(super) fn begin_graph_bf16_row_gather_capture(
         &mut self,
         input: &DeviceBufferHandle,
@@ -4354,6 +4376,10 @@ impl StreamHandle {
         ))
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "The wrapper mirrors the independent native buffers, handles, and launch dimensions"
+    )]
     pub(super) fn begin_graph_bf16_row_gather_argmax_capture(
         &mut self,
         input: &DeviceBufferHandle,
@@ -4448,6 +4474,10 @@ impl StreamHandle {
         ))
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "The wrapper mirrors the independent native buffers, handles, and launch dimensions"
+    )]
     pub(super) fn begin_graph_bf16_row_gather_argmax_d2h_capture(
         &mut self,
         input: &DeviceBufferHandle,
@@ -4668,6 +4698,10 @@ impl StreamHandle {
         )
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "The wrapper mirrors the independent native buffers, handles, and launch dimensions"
+    )]
     pub(super) fn begin_graph_indexed_rope_bf16_span_capture(
         &mut self,
         input: &DeviceBufferHandle,
@@ -7454,6 +7488,7 @@ pub(super) fn hugging_face_qwen_p2051_rms_norm_execute(
         },
     )
 }
+#[cfg(feature = "cuda-cublas-gemm-probe")]
 pub(super) fn hugging_face_qwen_head128_rms_norm_execute(
     input: RawBufferSpan,
     weight: RawBufferSpan,
@@ -7485,6 +7520,7 @@ pub(super) fn hugging_face_qwen_head128_rms_norm_execute(
         },
     )
 }
+#[cfg(feature = "cuda-cublas-gemm-probe")]
 pub(super) fn hugging_face_qwen_wide_rms_norm_execute(
     input: RawBufferSpan,
     weight: RawBufferSpan,
@@ -7517,6 +7553,7 @@ pub(super) fn hugging_face_qwen_wide_rms_norm_execute(
     )
 }
 
+#[cfg(feature = "cuda-cublas-gemm-probe")]
 pub(super) fn hugging_face_qwen_singleton_rms_norm_execute(
     input: RawBufferSpan,
     weight: RawBufferSpan,
@@ -9943,6 +9980,10 @@ impl GemmPlanHandle {
         })
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "The wrapper mirrors the independent native buffers, handles, and launch dimensions"
+    )]
     pub(super) fn create_anchored(
         context: &ContextHandle,
         m: u64,
@@ -10106,6 +10147,10 @@ pub(super) struct BiasGemmPlanHandle {
 unsafe impl Send for BiasGemmPlanHandle {}
 
 impl BiasGemmPlanHandle {
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "The wrapper mirrors the independent native buffers, handles, and launch dimensions"
+    )]
     pub(super) fn create(
         context: &ContextHandle,
         m: u64,
@@ -12105,7 +12150,7 @@ mod aggregate_transfer_gpu_tests {
             for step in 0..32_u8 {
                 let mut payload = [0_u8; 257];
                 for (i, byte) in payload.iter_mut().enumerate() {
-                    *byte = (i as u8)
+                    *byte = i.to_le_bytes()[0]
                         .wrapping_mul(17)
                         .wrapping_add(step)
                         .wrapping_add(cycle);
@@ -12253,6 +12298,7 @@ unsafe extern "C" {
     ) -> i32;
 }
 impl GraphResourcesHandle {
+    #[cfg(test)]
     pub(super) fn record_mlp(
         &mut self,
         devices: [&DeviceBufferHandle; 11],
@@ -12263,6 +12309,7 @@ impl GraphResourcesHandle {
     ) -> CudaResult<()> {
         self.record_mlp_with_norm(devices, workspace, intermediate, down, staging, None)
     }
+    #[cfg(test)]
     pub(super) fn record_mlp_with_norm(
         &mut self,
         devices: [&DeviceBufferHandle; 11],
@@ -12274,6 +12321,10 @@ impl GraphResourcesHandle {
     ) -> CudaResult<()> {
         self.record_mlp_with_tail(devices, workspace, intermediate, down, staging, norm, None)
     }
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "The wrapper mirrors the independent native buffers, handles, and launch dimensions"
+    )]
     pub(super) fn record_mlp_with_tail(
         &mut self,
         devices: [&DeviceBufferHandle; 11],
@@ -12342,6 +12393,10 @@ mod mlp_native_gpu_tests {
     use super::*;
     #[test]
     #[ignore = "requires CUDA GPU"]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Exercise capture, comparison, and resource cleanup in one test lifecycle"
+    )]
     fn mlp_reserved_geometry_capture_close_and_rejection() -> CudaResult<()> {
         let _runtime = crate::CudaRuntime::initialize()?;
         let mut context = ContextHandle::create(0)?;
@@ -12557,6 +12612,7 @@ unsafe extern "C" {
     ) -> i32;
 }
 impl GraphResourcesHandle {
+    #[cfg(test)]
     pub(super) fn record_norm_qkv(
         &mut self,
         devices: [&DeviceBufferHandle; 9],
@@ -12568,6 +12624,11 @@ impl GraphResourcesHandle {
     ) -> CudaResult<()> {
         self.record_qkv_with_rope(devices, workspace, plans, staging, epsilon, hf, None)
     }
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "The wrapper mirrors the independent native buffers, handles, and launch dimensions"
+    )]
+    #[cfg(test)]
     pub(super) fn record_qkv_with_rope(
         &mut self,
         devices: [&DeviceBufferHandle; 9],
@@ -12580,6 +12641,11 @@ impl GraphResourcesHandle {
     ) -> CudaResult<()> {
         self.record_qkv_with_cache(devices, workspace, plans, staging, epsilon, hf, rope, None)
     }
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "The wrapper mirrors the independent native buffers, handles, and launch dimensions"
+    )]
+    #[cfg(test)]
     pub(super) fn record_qkv_with_cache(
         &mut self,
         devices: [&DeviceBufferHandle; 9],
@@ -12595,6 +12661,10 @@ impl GraphResourcesHandle {
             devices, workspace, plans, staging, epsilon, hf, rope, caches, None,
         )
     }
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "The wrapper mirrors the independent native buffers, handles, and launch dimensions"
+    )]
     pub(super) fn record_attention_impl(
         &mut self,
         devices: [&DeviceBufferHandle; 9],
@@ -12695,6 +12765,10 @@ mod norm_qkv_native_gpu_tests {
     use super::*;
     #[test]
     #[ignore = "requires CUDA GPU"]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Exercise capture, comparison, and resource cleanup in one test lifecycle"
+    )]
     fn norm_qkv_parent_geometry_capture_and_cleanup() -> CudaResult<()> {
         let _runtime = crate::CudaRuntime::initialize()?;
         let mut context = ContextHandle::create(0)?;
@@ -12813,6 +12887,10 @@ mod qkv_rope_native_gpu_tests {
     use super::*;
     #[test]
     #[ignore = "requires CUDA GPU"]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Exercise capture, comparison, and resource cleanup in one test lifecycle"
+    )]
     fn qkv_rope_capture_position_guard_and_cleanup() -> CudaResult<()> {
         let _runtime = crate::CudaRuntime::initialize()?;
         let mut context = ContextHandle::create(0)?;
@@ -13061,7 +13139,7 @@ impl GraphResourcesHandle {
         profile: u32,
         publish_logits: bool,
         prefill: Option<[&DeviceBufferHandle; 12]>,
-        packed: Option<[&DeviceBufferHandle; 62]>,
+        packed: Option<&[&DeviceBufferHandle; 62]>,
         packed_plans: Option<[&GemmPlanHandle; 2]>,
     ) -> CudaResult<()> {
         if packed.is_some() != packed_plans.is_some() || (packed.is_some() && prefill.is_none()) {
@@ -13093,7 +13171,8 @@ impl GraphResourcesHandle {
         let weights: Vec<_> = weights.iter().map(|d| d.as_ptr()).collect();
         let plans = plans.map(GemmPlanHandle::as_ptr);
         let prefill = prefill.map(|buffers| buffers.map(DeviceBufferHandle::as_ptr));
-        let packed = packed.map(|buffers| buffers.map(DeviceBufferHandle::as_ptr));
+        let packed: Option<[_; 62]> =
+            packed.map(|buffers| std::array::from_fn(|i| buffers[i].as_ptr()));
         let packed_plans = packed_plans.map(|plans| plans.map(GemmPlanHandle::as_ptr));
         let mut error = ErrorInfo::new();
         // SAFETY: fixed descriptor lengths above; all handles live under retained parents.
@@ -13199,6 +13278,11 @@ pub(super) fn bf16_logprob_summary_execute(
   unsafe{riley_cuda_bf16_logprob_summary_execute(logits,greedy,summaries,row_count,vocabulary_size,addressable,top_count,stream,error)},
     )
 }
+#[allow(
+    clippy::too_many_arguments,
+    reason = "The wrapper mirrors the independent native buffers, handles, and launch dimensions"
+)]
+#[cfg(feature = "cuda-cublas-gemm-probe")]
 pub(super) fn hf_pack_qkv_execute(
     q: RawBufferSpan,
     k: RawBufferSpan,

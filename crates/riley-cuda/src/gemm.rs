@@ -3916,7 +3916,7 @@ mod hf_attention_contract_tests {
     }
 }
 
-#[cfg(any(feature = "cuda", test))]
+#[cfg(any(feature = "cuda-cublas-gemm-probe", test))]
 fn exact_decode_chunk_tokens_bounded<const MAX: usize>(
     positions: &[u32],
     slots: &[u32],
@@ -3947,7 +3947,7 @@ fn exact_decode_chunk_tokens_bounded<const MAX: usize>(
     }
     Some((tokens, total))
 }
-#[cfg(any(feature = "cuda", test))]
+#[cfg(any(feature = "cuda-cublas-gemm-probe", test))]
 fn exact_decode_chunk_tokens(
     p: &[u32],
     s: &[u32],
@@ -3956,7 +3956,7 @@ fn exact_decode_chunk_tokens(
 ) -> Option<([u64; 8], u64)> {
     exact_decode_chunk_tokens_bounded::<8>(p, s, begin, requests)
 }
-#[cfg(any(feature = "cuda", test))]
+#[cfg(any(feature = "cuda-cublas-gemm-probe", test))]
 fn exact_wide_decode_chunk_tokens(
     p: &[u32],
     s: &[u32],

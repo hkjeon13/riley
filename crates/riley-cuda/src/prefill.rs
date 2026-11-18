@@ -1191,8 +1191,10 @@ impl PreparedPrefillAttention {
     /// context, or any native launch/completion failure. A native failure
     /// poisons the prepared probe just as [`Self::execute`] does.
     #[allow(clippy::too_many_lines)]
-    // CUDA builds consume this ownership descriptor; keep one API in CPU builds.
-    #[cfg_attr(not(feature = "cuda"), allow(clippy::needless_pass_by_value))]
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "The tracing call takes exclusive output spans"
+    )]
     pub fn execute_hf_eager_qwen_p2051_last_row_traced(
         &self,
         params: &mut PrefillAttentionParams<'_>,

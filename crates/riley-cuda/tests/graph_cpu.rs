@@ -2538,8 +2538,11 @@ fn owned_bf16_row_gather_argmax_graph_uses_fixed_four_buffer_lifecycle_without_c
         "begin_graph_bf16_row_gather_argmax_capture",
         "C05-15 BF16 row-gather -> argmax Rust preflight",
     );
-    assert!(
-        owned_begin.contains("let output_row_count = match u64::try_from(row_indices_host.len())")
+    assert_precedes(
+        owned_begin,
+        "u64::try_from(row_indices_host.len())",
+        "validate_graph_bf16_row_gather_argmax_capture_preflight",
+        "C05-15 derives output_row_count from the host mirror before preflight",
     );
     assert!(
         !owned_begin.contains("output_row_count: u64"),
@@ -2797,8 +2800,11 @@ fn owned_bf16_row_gather_argmax_d2h_graph_has_completion_scoped_pinned_result_co
         "begin_graph_bf16_row_gather_argmax_d2h_capture",
         "C05-16 Rust preflight",
     );
-    assert!(
-        owned_begin.contains("let output_row_count = match u64::try_from(row_indices_host.len())")
+    assert_precedes(
+        owned_begin,
+        "u64::try_from(row_indices_host.len())",
+        "validate_graph_bf16_row_gather_argmax_d2h_capture_preflight",
+        "C05-16 derives output_row_count from the host mirror before preflight",
     );
     assert!(
         !owned_begin.contains("output_row_count: u64"),
@@ -3284,8 +3290,11 @@ fn owned_indexed_rope_bf16_graph_has_fixed_five_buffer_lifecycle() {
         "begin_graph_indexed_rope_bf16_capture",
         "C05-17 Rust preflight",
     );
-    assert!(
-        owned_begin.contains("let active_row_count = match u64::try_from(positions_host.len())")
+    assert_precedes(
+        owned_begin,
+        "u64::try_from(positions_host.len())",
+        "validate_graph_indexed_rope_bf16_capture_preflight",
+        "C05-17 derives active_row_count from the host mirror before preflight",
     );
     assert!(
         !owned_begin.contains("active_row_count: u64"),

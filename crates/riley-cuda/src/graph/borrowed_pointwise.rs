@@ -197,21 +197,6 @@ impl<'a> BorrowedPointwiseGraph<'a> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::PointwiseGraphOperation as Op;
-    #[test]
-    fn pointwise_graph_requires_exact_arity_and_nonoverflowing_bf16_span() {
-        for op in [Op::Silu, Op::GatedMultiply, Op::ResidualAdd] {
-            let binary = op != Op::Silu;
-            assert!(op.validate(257, binary).is_ok());
-            assert!(op.validate(257, !binary).is_err());
-            assert!(op.validate(0, binary).is_err());
-            assert!(op.validate(u64::MAX, binary).is_err());
-        }
-    }
-}
-
 #[cfg(feature = "cuda")]
 fn validate_resources(resources: &BorrowedPointwiseResources<'_>, elements: u64) -> CudaResult<()> {
     const OP: &str = "BorrowedPointwiseGraph::prepare";
@@ -242,4 +227,19 @@ fn validate_resources(resources: &BorrowedPointwiseResources<'_>, elements: u64)
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PointwiseGraphOperation as Op;
+    #[test]
+    fn pointwise_graph_requires_exact_arity_and_nonoverflowing_bf16_span() {
+        for op in [Op::Silu, Op::GatedMultiply, Op::ResidualAdd] {
+            let binary = op != Op::Silu;
+            assert!(op.validate(257, binary).is_ok());
+            assert!(op.validate(257, !binary).is_err());
+            assert!(op.validate(0, binary).is_err());
+            assert!(op.validate(u64::MAX, binary).is_err());
+        }
+    }
 }

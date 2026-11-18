@@ -1862,6 +1862,10 @@ impl PreparedDecodeAttention {
     ///
     /// Returns for a non-reference plan, logical-length, trace-span, context,
     /// native launch, copy, or synchronization failure.
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "The tracing call takes an exclusive output span"
+    )]
     pub fn execute_reference_with_scaled_scores_trace(
         &self,
         logical_token_count: u64,

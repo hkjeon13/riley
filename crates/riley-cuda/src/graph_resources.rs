@@ -252,12 +252,18 @@ mod swiglu_gpu_tests {
 
     #[test]
     #[ignore = "requires CUDA GPU"]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Exercise capture, comparison, and resource cleanup in one test lifecycle"
+    )]
     fn swiglu_chain_matches_eager_across_sizes_and_fresh_inputs() -> CudaResult<()> {
         let context = CudaRuntime::initialize()?.device(0)?.create_context()?;
         let mut stream = context.create_stream()?;
         let empty = context.allocation_stats()?;
-        for elements in [1_u64, 257, 1536] {
-            let bytes = elements * 2;
+        for elements in [1_u16, 257, 1536] {
+            let element_count = u64::from(elements);
+            let bytes = element_count * 2;
+            let bytes_usize = usize::from(elements) * 2;
             let mut gate = context.allocate_device_buffer(bytes)?;
             let mut up = context.allocate_device_buffer(bytes)?;
             let mut activated = context.allocate_device_buffer(bytes)?;
@@ -270,7 +276,7 @@ mod swiglu_gpu_tests {
             let mut eager_staging = context.allocate_pinned_host_buffer(bytes * 4)?;
             let mut eager_stream = context.create_stream()?;
             let expected_stats = context.allocation_stats()?;
-            staging.write(0, &vec![0xa5; (bytes * 4 + 64) as usize])?;
+            staging.write(0, &vec![0xa5; bytes_usize * 4 + 64])?;
             for cycle in 0..2 {
                 let mut graph =
                     BorrowedGraphResourceReservation::reserve(BorrowedGraphResourceParents {
@@ -282,25 +288,25 @@ mod swiglu_gpu_tests {
                 assert!(graph.record_swiglu([0, 1, 2, 99], 0).is_err());
                 assert!(graph.record_swiglu([0, 0, 2, 3], 0).is_err());
                 graph.record_swiglu([0, 1, 2, 3], 0)?;
-                let mut output = vec![0; (bytes * 2) as usize];
+                let mut output = vec![0; bytes_usize * 2];
                 assert!(graph.read_transfer(&mut output).is_err());
-                for step in 0..32_u32 {
+                for step in 0..32_u16 {
                     // Finite, signed BF16 values; vary every input on one retained exec.
                     let payload: Vec<u8> = (0..elements * 2)
                         .flat_map(|i| {
-                            let value = ((i % 97) as f32 - 48.0 + step as f32) / 8.0;
+                            let value = (f32::from(i % 97) - 48.0 + f32::from(step)) / 8.0;
                             ((value.to_bits() >> 16) as u16).to_le_bytes()
                         })
                         .collect();
                     eager_gate.upload_from_slice(
                         0,
-                        &payload[..bytes as usize],
+                        &payload[..bytes_usize],
                         &mut eager_staging,
                         &mut eager_stream,
                     )?;
                     eager_up.upload_from_slice(
                         0,
-                        &payload[bytes as usize..],
+                        &payload[bytes_usize..],
                         &mut eager_staging,
                         &mut eager_stream,
                     )?;
@@ -313,7 +319,7 @@ mod swiglu_gpu_tests {
                                 0,
                                 bytes,
                             )?,
-                            element_count: elements,
+                            element_count,
                         },
                         &mut eager_stream,
                     )?;
@@ -332,20 +338,20 @@ mod swiglu_gpu_tests {
                                 0,
                                 bytes,
                             )?,
-                            element_count: elements,
+                            element_count,
                         },
                         &mut eager_stream,
                     )?;
                     let mut expected = vec![0; output.len()];
                     eager_activated.download_to_slice(
                         0,
-                        &mut expected[..bytes as usize],
+                        &mut expected[..bytes_usize],
                         &mut eager_staging,
                         &mut eager_stream,
                     )?;
                     eager_product.download_to_slice(
                         0,
-                        &mut expected[bytes as usize..],
+                        &mut expected[bytes_usize..],
                         &mut eager_staging,
                         &mut eager_stream,
                     )?;
@@ -364,7 +370,7 @@ mod swiglu_gpu_tests {
                 } else {
                     drop(graph);
                 }
-                assert_eq!(&staging.to_vec()?[(bytes * 4) as usize..], &[0xa5; 64]);
+                assert_eq!(&staging.to_vec()?[bytes_usize * 4..], &[0xa5; 64]);
                 assert_eq!(context.allocation_stats()?, expected_stats);
             }
             eager_stream.close()?;
@@ -974,7 +980,7 @@ impl BorrowedGraphResourceReservation<'_> {
                 profile as u32,
                 publish_logits,
                 prefill,
-                packed,
+                packed.as_ref(),
                 packed_plans,
             )
         }

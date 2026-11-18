@@ -4733,6 +4733,10 @@ fn take_owned_graph_canonical_rms_norm_bf16_resources(
 }
 
 #[cfg(feature = "cuda")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Preflight validates the same buffers and geometry passed to native capture"
+)]
 fn validate_graph_canonical_rms_norm_bf16_capture_preflight(
     stream: &CudaStream,
     input: &CudaDeviceBuffer,
@@ -5837,6 +5841,10 @@ fn take_owned_graph_bf16_row_gather_resources(
 }
 
 #[cfg(feature = "cuda")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Preflight validates the same buffers and geometry passed to native capture"
+)]
 fn validate_graph_bf16_row_gather_capture_preflight(
     stream: &CudaStream,
     input: &CudaDeviceBuffer,
@@ -6459,6 +6467,11 @@ fn take_owned_graph_bf16_row_gather_argmax_resources(
 }
 
 #[cfg(feature = "cuda")]
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "Preflight validates the same buffers and geometry passed to native capture"
+)]
 fn validate_graph_bf16_row_gather_argmax_capture_preflight(
     stream: &CudaStream,
     input: &CudaDeviceBuffer,
@@ -7202,6 +7215,11 @@ fn take_owned_graph_bf16_row_gather_argmax_d2h_resources(
 }
 
 #[cfg(feature = "cuda")]
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "Preflight validates the same buffers and geometry passed to native capture"
+)]
 fn validate_graph_bf16_row_gather_argmax_d2h_capture_preflight(
     stream: &CudaStream,
     input: &CudaDeviceBuffer,
@@ -7863,6 +7881,11 @@ fn take_owned_graph_indexed_rope_bf16_resources(
 }
 
 #[cfg(feature = "cuda")]
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "Preflight validates the same buffers and geometry passed to native capture"
+)]
 fn validate_graph_indexed_rope_bf16_capture_preflight(
     stream: &CudaStream,
     input: &CudaDeviceBuffer,
@@ -8575,6 +8598,11 @@ fn take_owned_graph_ragged_paged_kv_cache_write_bf16_resources(
 }
 
 #[cfg(feature = "cuda")]
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "Preflight validates the same buffers and geometry passed to native capture"
+)]
 fn validate_graph_ragged_paged_kv_cache_write_bf16_capture_preflight(
     stream: &CudaStream,
     key_source: &CudaDeviceBuffer,
@@ -9297,6 +9325,10 @@ impl Drop for OwnedGraphGroupedRaggedPagedAttentionBf16Launch<'_> {
 
 #[cfg(feature = "cuda")]
 #[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Validate the full capture contract before acquiring native leases"
+)]
 fn validate_graph_grouped_ragged_paged_attention_bf16_capture_preflight(
     stream: &CudaStream,
     query: &CudaDeviceBuffer,
@@ -11403,6 +11435,10 @@ fn validate_graph_canonical_rms_norm_gemm_bf16_capture_preflight(
 }
 
 #[cfg(feature = "cuda")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Preflight validates the same buffers and geometry passed to native capture"
+)]
 fn validate_graph_bf16_embedding_status_d2h_capture_preflight(
     stream: &CudaStream,
     table: &CudaDeviceBuffer,
@@ -11629,6 +11665,10 @@ impl CudaStream {
     /// [`OwnedGraphH2DCaptureBeginError::into_resources`]. After native entry,
     /// errors return no reusable resources because native capture may retain
     /// the raw source/destination/stream leases fail-closed.
+    #[allow(
+        clippy::result_large_err,
+        reason = "Return the original resources to the caller when preflight fails"
+    )]
     pub fn begin_owned_graph_h2d_capture(
         self,
         source: CudaPinnedHostBuffer,
@@ -12131,17 +12171,14 @@ impl CudaStream {
         #[cfg(feature = "cuda")]
         {
             const OPERATION: &str = "CudaStream::begin_owned_graph_bf16_row_gather_capture";
-            let output_row_count = match u64::try_from(row_indices_host.len()) {
-                Ok(value) => value,
-                Err(_) => {
-                    return Err(OwnedGraphBf16RowGatherCaptureBeginError::recoverable(
-                        CudaError::out_of_range(
-                            OPERATION,
-                            "row_indices_host length exceeds the U64 row-count range",
-                        ),
-                        resources,
-                    ));
-                }
+            let Ok(output_row_count) = u64::try_from(row_indices_host.len()) else {
+                return Err(OwnedGraphBf16RowGatherCaptureBeginError::recoverable(
+                    CudaError::out_of_range(
+                        OPERATION,
+                        "row_indices_host length exceeds the U64 row-count range",
+                    ),
+                    resources,
+                ));
             };
             if let Err(error) = validate_graph_bf16_row_gather_capture_preflight(
                 &resources.stream,
@@ -12248,17 +12285,14 @@ impl CudaStream {
         #[cfg(feature = "cuda")]
         {
             const OPERATION: &str = "CudaStream::begin_owned_graph_bf16_row_gather_argmax_capture";
-            let output_row_count = match u64::try_from(row_indices_host.len()) {
-                Ok(value) => value,
-                Err(_) => {
-                    return Err(OwnedGraphBf16RowGatherArgmaxCaptureBeginError::recoverable(
-                        CudaError::out_of_range(
-                            OPERATION,
-                            "row_indices_host length exceeds the U64 row-count range",
-                        ),
-                        resources,
-                    ));
-                }
+            let Ok(output_row_count) = u64::try_from(row_indices_host.len()) else {
+                return Err(OwnedGraphBf16RowGatherArgmaxCaptureBeginError::recoverable(
+                    CudaError::out_of_range(
+                        OPERATION,
+                        "row_indices_host length exceeds the U64 row-count range",
+                    ),
+                    resources,
+                ));
             };
             if let Err(error) = validate_graph_bf16_row_gather_argmax_capture_preflight(
                 &resources.stream,
@@ -12372,19 +12406,16 @@ impl CudaStream {
         {
             const OPERATION: &str =
                 "CudaStream::begin_owned_graph_bf16_row_gather_argmax_d2h_capture";
-            let output_row_count = match u64::try_from(row_indices_host.len()) {
-                Ok(value) => value,
-                Err(_) => {
-                    return Err(
-                        OwnedGraphBf16RowGatherArgmaxD2HCaptureBeginError::recoverable(
-                            CudaError::out_of_range(
-                                OPERATION,
-                                "row_indices_host length exceeds the U64 row-count range",
-                            ),
-                            resources,
+            let Ok(output_row_count) = u64::try_from(row_indices_host.len()) else {
+                return Err(
+                    OwnedGraphBf16RowGatherArgmaxD2HCaptureBeginError::recoverable(
+                        CudaError::out_of_range(
+                            OPERATION,
+                            "row_indices_host length exceeds the U64 row-count range",
                         ),
-                    );
-                }
+                        resources,
+                    ),
+                );
             };
             if let Err(error) = validate_graph_bf16_row_gather_argmax_d2h_capture_preflight(
                 &resources.stream,
@@ -12490,17 +12521,14 @@ impl CudaStream {
         #[cfg(feature = "cuda")]
         {
             const OPERATION: &str = "CudaStream::begin_owned_graph_indexed_rope_bf16_capture";
-            let active_row_count = match u64::try_from(positions_host.len()) {
-                Ok(value) => value,
-                Err(_) => {
-                    return Err(OwnedGraphIndexedRopeBf16CaptureBeginError::recoverable(
-                        CudaError::out_of_range(
-                            OPERATION,
-                            "positions_host length exceeds the U64 active-row-count range",
-                        ),
-                        resources,
-                    ));
-                }
+            let Ok(active_row_count) = u64::try_from(positions_host.len()) else {
+                return Err(OwnedGraphIndexedRopeBf16CaptureBeginError::recoverable(
+                    CudaError::out_of_range(
+                        OPERATION,
+                        "positions_host length exceeds the U64 active-row-count range",
+                    ),
+                    resources,
+                ));
             };
             if let Err(error) = validate_graph_indexed_rope_bf16_capture_preflight(
                 &resources.stream,
@@ -13548,6 +13576,10 @@ mod tests {
     #[cfg(feature = "cuda")]
     #[test]
     #[ignore = "remote GPU"]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Exercise capture, comparison, and resource cleanup in one test lifecycle"
+    )]
     fn raw_bf16_row_gather_oob_device_index_matches_eager_nan_bytes()
     -> Result<(), Box<dyn std::error::Error>> {
         // This is deliberately below the public safe API boundary: safe row
@@ -13592,7 +13624,7 @@ mod tests {
             .collect();
         // The middle row is deliberately OOB in device memory. There is no
         // host mirror passed to either raw FFI lifecycle below.
-        let host_row_indices = [2_u32, INPUT_ROW_COUNT as u32, 0];
+        let host_row_indices = [2_u32, u32::try_from(INPUT_ROW_COUNT)?, 0];
         let host_row_index_bytes: Vec<u8> = host_row_indices
             .iter()
             .flat_map(|&index| index.to_ne_bytes())
@@ -13727,6 +13759,10 @@ mod tests {
     #[cfg(feature = "cuda")]
     #[test]
     #[ignore = "remote GPU"]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Exercise capture, comparison, and resource cleanup in one test lifecycle"
+    )]
     fn raw_bf16_row_gather_argmax_oob_device_index_matches_eager_nan_result_bytes()
     -> Result<(), Box<dyn std::error::Error>> {
         // This deliberately stays below the safe composite-owner boundary.
@@ -13777,7 +13813,7 @@ mod tests {
             .collect();
         // The middle row is deliberately OOB in device memory. No safe host
         // mirror reaches either raw eager or raw graph call below.
-        let host_row_indices = [2_u32, INPUT_ROW_COUNT as u32, 0];
+        let host_row_indices = [2_u32, u32::try_from(INPUT_ROW_COUNT)?, 0];
         let host_row_index_bytes: Vec<u8> = host_row_indices
             .iter()
             .flat_map(|&index| index.to_ne_bytes())
