@@ -70,6 +70,20 @@ GPU 7에서 `f7c956d3c`의 Riley CUDA 바이너리와 vLLM을 순차 실행했�
 
 같은 실행의 host trace는 128스텝 평균을 44개 기록했다. 이 평균값들의 중앙값은 제출 1.57ms, 완료 대기 32.90ms였다. 명령 처리·제출·완료 대기를 제외한 나머지 호스트 단계 합은 구간당 스텝 평균의 중앙값이 0.179ms였고, 이 중 plan 55.7µs, pack 31.5µs, download 36.8µs를 기록했다. 이 표본은 여러 부하와 워밍업을 포함한다. 요청별 큐 대기와 GPU 계산 중 실제로 겹친 CPU 시간은 추가 계측 항목이다. [host trace 원본](../../benchmarks/evidence/20261119-w3-rag-profile/qwen14-profile/server.log.gz)
 
+### Qwen2.5-Coder-14B-Instruct 일반 서빙
+
+GPU 7에서 실행 순서를 vLLM → Riley로 바꿨다. KV 용량 41,216토큰과 엔진별 워밍업 36건·측정 224건을 확인했다. 두 엔진은 모든 측정 요청에서 본문 지문과 입력 토큰 수가 일치했고 각각 128토큰을 생성했다. 측정과 워밍업의 오류·429는 0건이었다. 출력 텍스트와 종료 사유는 50/224에서 일치했다. [Riley 실행 조건](../../benchmarks/evidence/20261119-w3-rag-profile/coder14-riley/receipt.json) · [vLLM 실행 조건과 KV](../../benchmarks/evidence/20261119-w3-rag-profile/coder14-vllm/receipt.json) · [케이스별 결과](../../benchmarks/evidence/20261119-w3-rag-profile/coder14-comparison.json)
+
+| 부하 | 완료 건수 | TTFT p95 Riley / vLLM (ms) | TPOT p50 Riley / vLLM (ms) |
+|---|---:|---:|---:|
+| `rag-c1` | 16 | 465 / 453 | 24.03 / 23.96 |
+| `rag-c8` seed 1 | 64 | 1,760 / 1,224 | 39.77 / 39.82 |
+| `rag-c8` seed 2 | 64 | 1,531 / 1,089 | 38.78 / 38.80 |
+| 8개 동시 전송 | 40 | 3,246 / 2,975 | 29.41 / 34.05 |
+| 8개 50ms 간격 전송 | 40 | 3,001 / 2,666 | 30.35 / 32.91 |
+
+Instruct와 비슷하게 단일 요청의 Riley TTFT p95는 vLLM 대비 +2.7%였고 동시성 8에서는 +43.8%, +40.6%였다. 동시 전송을 50ms 간격으로 바꾸면 Riley의 TTFT p95는 7.54% 감소하고 TPOT p50은 3.20% 증가했다. vLLM은 각각 10.38%, 3.34% 감소했다. 실험은 입출력 길이와 KV 용량을 통제했고, 각 엔진의 기존 스케줄러 설정을 사용했다. 두 실행이 끝난 뒤 GPU 7의 20GiB 예약 복귀를 확인했다. [원본 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/coder14-SHA256SUMS)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

@@ -1,0 +1,198 @@
+{
+  "model": "Qwen2.5-Coder-14B-Instruct",
+  "physical_gpu": 7,
+  "both_arms_requested_kv_tokens": 41216,
+  "vllm_reported_kv_tokens": [
+    41216
+  ],
+  "kv_capacity_matches": true,
+  "cells": {
+    "rag-c1": {
+      "requests": 16,
+      "warmup": 4,
+      "matching_prompt_token_counts": 16,
+      "matching_output_text_and_finish": 4,
+      "riley": {
+        "ttft_p50_ms": 463.1681516766548,
+        "ttft_p95_ms": 465.202271938324,
+        "tpot_p50_ms": 24.033539935829133,
+        "itl_p99_ms": 24.15090799331665,
+        "output_tok_s": 37.90651912569976,
+        "completion_tokens_mean": 128.0
+      },
+      "vllm": {
+        "ttft_p50_ms": 442.36790388822556,
+        "ttft_p95_ms": 452.94512808322906,
+        "tpot_p50_ms": 23.955377713432462,
+        "itl_p99_ms": 24.326950311660767,
+        "output_tok_s": 38.291358799053434,
+        "completion_tokens_mean": 128.0
+      },
+      "riley_relative_to_vllm_percent": {
+        "ttft_p50_ms": 4.702024628279755,
+        "ttft_p95_ms": 2.7060990603794854,
+        "tpot_p50_ms": 0.3262825714196227,
+        "itl_p99_ms": -0.7236514075491529,
+        "output_tok_s": -1.005030078387259
+      }
+    },
+    "rag-c8-s1": {
+      "requests": 64,
+      "warmup": 8,
+      "matching_prompt_token_counts": 64,
+      "matching_output_text_and_finish": 12,
+      "riley": {
+        "ttft_p50_ms": 816.1531686782837,
+        "ttft_p95_ms": 1760.0585296750069,
+        "tpot_p50_ms": 39.76719075535226,
+        "itl_p99_ms": 263.6430710554123,
+        "output_tok_s": 170.4121657030735,
+        "completion_tokens_mean": 128.0
+      },
+      "vllm": {
+        "ttft_p50_ms": 725.7551923394203,
+        "ttft_p95_ms": 1224.2515161633492,
+        "tpot_p50_ms": 39.81751567266119,
+        "itl_p99_ms": 248.56434017419815,
+        "output_tok_s": 175.22631014454095,
+        "completion_tokens_mean": 128.0
+      },
+      "riley_relative_to_vllm_percent": {
+        "ttft_p50_ms": 12.455711966382488,
+        "ttft_p95_ms": 43.76608943812541,
+        "tpot_p50_ms": -0.12638889307572398,
+        "itl_p99_ms": 6.066329092357625,
+        "output_tok_s": -2.747386758013881
+      }
+    },
+    "rag-c8-s2": {
+      "requests": 64,
+      "warmup": 8,
+      "matching_prompt_token_counts": 64,
+      "matching_output_text_and_finish": 21,
+      "riley": {
+        "ttft_p50_ms": 811.7827922105789,
+        "ttft_p95_ms": 1530.7455509901047,
+        "tpot_p50_ms": 38.77969590697702,
+        "itl_p99_ms": 260.90243458747864,
+        "output_tok_s": 174.51284355911665,
+        "completion_tokens_mean": 128.0
+      },
+      "vllm": {
+        "ttft_p50_ms": 694.5435330271721,
+        "ttft_p95_ms": 1088.8221859931946,
+        "tpot_p50_ms": 38.80175167885353,
+        "itl_p99_ms": 250.28809159994125,
+        "output_tok_s": 179.69856801626312,
+        "completion_tokens_mean": 128.0
+      },
+      "riley_relative_to_vllm_percent": {
+        "ttft_p50_ms": 16.880044750027224,
+        "ttft_p95_ms": 40.58728511247218,
+        "tpot_p50_ms": -0.05684220665874706,
+        "itl_p99_ms": 4.240850181759059,
+        "output_tok_s": -2.8857906406227762
+      }
+    },
+    "wave-sync": {
+      "requests": 40,
+      "warmup": 8,
+      "matching_prompt_token_counts": 40,
+      "matching_output_text_and_finish": 7,
+      "riley": {
+        "ttft_p50_ms": 2508.078195154667,
+        "ttft_p95_ms": 3246.2559193372726,
+        "tpot_p50_ms": 29.4053040034189,
+        "itl_p99_ms": 144.4266438484192,
+        "output_tok_s": 161.28304310787377,
+        "completion_tokens_mean": 128.0
+      },
+      "vllm": {
+        "ttft_p50_ms": 1716.0361632704735,
+        "ttft_p95_ms": 2975.05234926939,
+        "tpot_p50_ms": 34.05108120967084,
+        "itl_p99_ms": 250.41895359754562,
+        "output_tok_s": 168.5496589124959,
+        "completion_tokens_mean": 128.0
+      },
+      "riley_relative_to_vllm_percent": {
+        "ttft_p50_ms": 46.155322879367276,
+        "ttft_p95_ms": 9.115925981419593,
+        "tpot_p50_ms": -13.643552689694015,
+        "itl_p99_ms": -42.32599339084743,
+        "output_tok_s": -4.311261055944737
+      }
+    },
+    "wave-50ms": {
+      "requests": 40,
+      "warmup": 8,
+      "matching_prompt_token_counts": 40,
+      "matching_output_text_and_finish": 6,
+      "riley": {
+        "ttft_p50_ms": 2215.779609978199,
+        "ttft_p95_ms": 3001.4117062091827,
+        "tpot_p50_ms": 30.345016518446403,
+        "itl_p99_ms": 145.4876810312271,
+        "output_tok_s": 161.50671043223184,
+        "completion_tokens_mean": 128.0
+      },
+      "vllm": {
+        "ttft_p50_ms": 1627.422347664833,
+        "ttft_p95_ms": 2666.241556406021,
+        "tpot_p50_ms": 32.9148684899638,
+        "itl_p99_ms": 248.12311679124832,
+        "output_tok_s": 168.00698222971866,
+        "completion_tokens_mean": 128.0
+      },
+      "riley_relative_to_vllm_percent": {
+        "ttft_p50_ms": 36.15270880098163,
+        "ttft_p95_ms": 12.570884622132915,
+        "tpot_p50_ms": -7.80757174315,
+        "itl_p99_ms": -41.36472130743495,
+        "output_tok_s": -3.8690486021580317
+      }
+    }
+  },
+  "staggered_relative_to_sync_percent": {
+    "riley": {
+      "ttft_p50_ms": -11.654285171058731,
+      "ttft_p95_ms": -7.542357078799721,
+      "tpot_p50_ms": 3.19572453635657,
+      "itl_p99_ms": 0.7346547385823854,
+      "output_tok_s": 0.13868000010917036
+    },
+    "vllm": {
+      "ttft_p50_ms": -5.163866444210452,
+      "ttft_p95_ms": -10.380012067324007,
+      "tpot_p50_ms": -3.336788963354098,
+      "itl_p99_ms": -0.9167983386700773,
+      "output_tok_s": -0.3219684253760291
+    }
+  },
+  "socket_send_spans": {
+    "riley": {
+      "0": {
+        "waves": 5,
+        "p50_send_span_ms": 0.17139315605163574,
+        "max_send_span_ms": 0.22535771131515503
+      },
+      "50": {
+        "waves": 5,
+        "p50_send_span_ms": 350.67475587129593,
+        "max_send_span_ms": 350.9972393512726
+      }
+    },
+    "vllm": {
+      "0": {
+        "waves": 5,
+        "p50_send_span_ms": 0.18487125635147095,
+        "max_send_span_ms": 0.34705549478530884
+      },
+      "50": {
+        "waves": 5,
+        "p50_send_span_ms": 350.1175194978714,
+        "max_send_span_ms": 351.27097368240356
+      }
+    }
+  }
+}

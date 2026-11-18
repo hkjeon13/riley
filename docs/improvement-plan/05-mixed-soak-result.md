@@ -39,6 +39,8 @@
 
 각 조건의 운영 메트릭 32개 표본에서 24개 `batch_shapes` 슬롯 중 21개가 구성됐다. 비어 있는 슬롯은 모두 0이었고, 저장된 스텝 수와 GPU 시간 표본 수가 각 bucket에서 일치했다. 두 조건 모두 진단 링에서 오래된 요청 요약 13,425개가 제거됐다. 부하 측정의 오류 수와 표본 수는 별도로 기록됐다. [bucket 검증 집계](../../benchmarks/evidence/20261119-w5-mixed-soak/live-batch-shapes.json) · [cache off 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off/soak.json.gz) · [cache on 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-on/soak.json.gz) · [양쪽 실행 근거 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/SHA256SUMS)
 
+90초 사전 검증과 30분 시험의 도구는 native 할당과 RSS를 각각 기록한다. Cache off의 후반 RSS 표본은 900초부터 15,161.14MiB였고 1,560초 표본부터 15,161.89MiB였다. Cache on은 900초부터 종료 직전까지 15,163.53MiB였다. Cache off의 0.75MiB 변화는 [운영 품질 기준](../goal.md#33-운영-품질)의 RSS 증가 0 조건에 남겨 둔다.
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)
