@@ -141,7 +141,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 fn sha256_file(path: &Path) -> TestResult<String> {
     let mut file = File::open(path)?;
     let mut digest = Sha256::new();
-    let mut buffer = [0_u8; 1_048_576];
+    let mut buffer = vec![0_u8; 1_048_576];
     loop {
         let read = file.read(&mut buffer)?;
         if read == 0 {
@@ -999,7 +999,7 @@ fn metrics(hf: &[u8], riley: &[u8]) -> TestResult<Value> {
         hf_square += expected * expected;
         riley_square += actual * actual;
     }
-    let elements = u64::try_from(hf.len() / BF16_BYTES)?;
+    let elements = u32::try_from(hf.len() / BF16_BYTES)?;
     let cosine = if hf_square == 0.0 || riley_square == 0.0 {
         Value::Null
     } else {
@@ -1010,7 +1010,7 @@ fn metrics(hf: &[u8], riley: &[u8]) -> TestResult<Value> {
         "bf16_exact": unequal == 0,
         "unequal_element_count": unequal,
         "max_abs_bf16_as_f32": max_abs,
-        "mean_abs_bf16_as_f32": sum_abs / elements as f64,
+        "mean_abs_bf16_as_f32": sum_abs / f64::from(elements),
         "cosine_similarity": cosine,
         "hf_bf16_le_sha256": sha256_hex(hf),
         "riley_bf16_le_sha256": sha256_hex(riley),
@@ -1210,9 +1210,8 @@ fn write_artifact_exclusive(path: &Path, document: &Value) -> TestResult {
         .create_new(true)
         .write(true)
         .open(output)?;
-    if let Err(error) = file.write_all(&payload).and_then(|_| file.sync_all()) {
-        return Err(error.into());
-    }
+    file.write_all(&payload)?;
+    file.sync_all()?;
     Ok(())
 }
 

@@ -1737,41 +1737,6 @@ pub(super) fn execute_bias_epilogue_gemm<S: CudaExecutionStream + ?Sized>(
         .map_err(|source| LlamaForwardError::cuda(site, source))
 }
 
-/// Selects the prepared fused Q/K/V plan when present, otherwise preserves
-/// the strict standalone-GEMM and row-bias sequence.
-#[allow(clippy::too_many_arguments)]
-pub(super) fn execute_projection_with_optional_bias_epilogue<S: CudaExecutionStream + ?Sized>(
-    strict_plan: &mut PreparedLlamaGemm,
-    fused_plan: Option<&mut CudaPreparedBiasEpilogueGemm>,
-    weights: &CudaUploadedWeights,
-    bias_id: Option<PhysicalWeightId>,
-    input: &CudaDeviceBuffer,
-    weight: CudaBufferSpan<'_>,
-    output: &mut CudaDeviceBuffer,
-    workspace: &mut Option<CudaDeviceBuffer>,
-    row_count: u64,
-    column_count: u64,
-    stream: &mut S,
-    site: ExecutionSite,
-) -> LlamaForwardResult<()> {
-    if let Some(fused_plan) = fused_plan {
-        execute_bias_epilogue_gemm(
-            fused_plan, weights, bias_id, input, weight, output, workspace, stream, site,
-        )
-    } else {
-        execute_gemm(strict_plan, input, weight, output, workspace, stream, site)?;
-        execute_projection_bias(
-            weights,
-            bias_id,
-            output,
-            row_count,
-            column_count,
-            stream,
-            site,
-        )
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum LlamaRmsNormProfile {
     Canonical,
@@ -3110,6 +3075,7 @@ impl PreparedLlamaForwardConfig {
     }
 
     /// MLP Linear implementation selected during cold preparation.
+    #[cfg(test)]
     #[must_use]
     pub(super) const fn mlp_projection_mode(self) -> LlamaMlpProjectionMode {
         self.mlp_projection_mode
@@ -6707,7 +6673,7 @@ pub(super) fn prepare_gemms(
 ) -> LlamaForwardResult<GemmPlans> {
     #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
     let _ = (output_projection_mode, mlp_projection_mode, lm_head_mode);
-    #[cfg(not(feature = "cuda"))]
+    #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
     let _ = owned_hf_eager_bf16;
     let sequence = to_u64(plan.sequence_length(), LlamaForwardResource::HiddenCurrent)?;
     let dimensions = plan.dimensions();

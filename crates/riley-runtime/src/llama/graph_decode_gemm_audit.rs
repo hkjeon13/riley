@@ -339,9 +339,7 @@ fn probe(
                 None
             } else {
                 Some(CudaBufferSpanMut::new(
-                    workspace
-                        .as_deref_mut()
-                        .ok_or(AuditError::Invalid("workspace missing"))?,
+                    workspace.ok_or(AuditError::Invalid("workspace missing"))?,
                     CudaDType::U8,
                     0,
                     workspace_bytes,

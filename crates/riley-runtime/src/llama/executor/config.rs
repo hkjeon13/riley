@@ -326,6 +326,7 @@ impl PreparedLlamaBatchExecutorConfig {
     }
     /// Explicit SM80-only Gate/Up row batches, each native GEMM bounded to16 rows.
     /// Unknown environments and model geometries are rejected during preparation.
+    #[must_use]
     pub const fn with_bounded_sm80_gateup_batch(mut self) -> Self {
         self.owned_decode_batch = 6;
         self
@@ -342,11 +343,13 @@ impl PreparedLlamaBatchExecutorConfig {
         self
     }
     /// Explicit native-order projections with vector GQA staging and fused decode scaling.
+    #[must_use]
     pub const fn with_bounded_sm80_attention_batch(mut self) -> Self {
         self.owned_decode_batch = 9;
         self
     }
     /// Native-equivalent contiguous prefill row batches on qualified SM80 geometry.
+    #[must_use]
     pub const fn with_bounded_sm80_prefill_batch(mut self) -> Self {
         self.owned_decode_batch = 10;
         self

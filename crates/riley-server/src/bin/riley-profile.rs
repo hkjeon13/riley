@@ -1006,6 +1006,10 @@ fn materialize_token_rows(
     Ok(rows)
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep benchmark initialization, iteration measurement, and shutdown in one lifecycle"
+)]
 fn benchmark_config(options: &Options) -> Result<NativeBenchmarkConfig, String> {
     let workload = &options.workload;
     let graph_lane = matches!(

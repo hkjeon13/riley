@@ -154,6 +154,10 @@ impl PureDecodeGraphV1ExactDeviceSlab {
     /// A mismatch has no native side effect and reports both diagnostic digests.
     /// A matching result has no copy or other native operation; it carries only
     /// opaque pinned and device buffers with their common cold geometry.
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "End the caller’s individual pinned-slab lease when rebinding it"
+    )]
     pub(crate) fn bind_pinned_host_lease<'device, 'pinned>(
         &'device mut self,
         source: PureDecodeGraphV1ExactPinnedHostSlabLease<'pinned>,

@@ -23,6 +23,10 @@ fn read(
     staging: &mut CudaPinnedHostBuffer,
     stream: &mut CudaStream,
 ) -> riley_cuda::CudaResult<Vec<u8>> {
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "CUDA audit buffers are allocated within the address space of the supported 64-bit host"
+    )]
     let mut bytes = vec![0; b.byte_len() as usize];
     b.download_to_slice(0, &mut bytes, staging, stream)?;
     Ok(bytes)

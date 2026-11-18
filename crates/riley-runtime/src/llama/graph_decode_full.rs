@@ -13,7 +13,11 @@ use crate::llama::executor::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResult, cuda_error,
 };
 use crate::llama::forward::{LlamaRmsNormProfile, PreparedLlamaGemm};
-use crate::llama::{ExecutionSite, LlamaOp};
+use crate::llama::plan::PhysicalWeightId;
+use crate::llama::{
+    ExecutionSite, LlamaBatchBlockTable, LlamaBatchRow, LlamaBatchRowKind, LlamaOp,
+};
+use crate::paged_kv::BLOCK_TABLE_V1_VERSION;
 use riley_cuda::{
     BorrowedGraphResourceParents, BorrowedGraphResourceReservation, CudaDeviceBuffer,
     CudaPinnedHostBuffer, CudaStream,
@@ -65,6 +69,10 @@ impl PreparedLlamaBatchExecutor {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Keep shape validation and ordered graph resource preparation together"
+    )]
     fn prepare_full_decode_with_prefill<'a>(
         &'a mut self,
         stream: &'a mut CudaStream,
@@ -129,7 +137,7 @@ impl PreparedLlamaBatchExecutor {
                     l.up_weight(),
                     l.down_weight(),
                 ]
-                .map(|w| w.index()),
+                .map(PhysicalWeightId::index),
             );
             eps.extend([l.input_norm_epsilon(), l.post_attention_norm_epsilon()]);
         }
@@ -185,7 +193,11 @@ impl PreparedLlamaBatchExecutor {
         .into_iter()
         .map(|p| match p {
             PreparedLlamaGemm::Canonical(p) => Ok(p),
-            _ => Err(rejected("canonical selected plans required")),
+            PreparedLlamaGemm::Fixed37(_) => Err(rejected("canonical selected plans required")),
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            PreparedLlamaGemm::ClassicDiagnostic(_) | PreparedLlamaGemm::ClassicRequestRows(_) => {
+                Err(rejected("canonical selected plans required"))
+            }
         })
         .collect::<LlamaBatchExecutorResult<Vec<_>>>()?;
         let (packed_indices, packed_plan_indices) = match packed {
@@ -288,7 +300,10 @@ impl PreparedLlamaBatchExecutor {
                         && p.algorithm_metadata().reduction_scheme() == 0
                         && p.algorithm_metadata().workspace_bytes() == 0
                 }
-                _ => false,
+                PreparedLlamaGemm::Fixed37(_) => false,
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                PreparedLlamaGemm::ClassicDiagnostic(_)
+                | PreparedLlamaGemm::ClassicRequestRows(_) => false,
             })
     }
 
@@ -323,6 +338,14 @@ impl PreparedLlamaBatchExecutor {
     /// Require rejects unsupported configurations before prefill or capture.
     /// # Errors
     /// Returns validation, required-graph, capture, replay or completion errors.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the retained graph's fixed status buffer layout is internally inconsistent.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Keep shape validation and ordered graph resource preparation together"
+    )]
     pub fn generate_greedy_with_decode_graph_policy(
         mut self,
         context: &riley_cuda::CudaContext,
@@ -336,8 +359,6 @@ impl PreparedLlamaBatchExecutor {
                 "vllm-smol-p128-v1 requires the persistent owned executor",
             ));
         }
-        use crate::llama::{LlamaBatchBlockTable, LlamaBatchRow, LlamaBatchRowKind};
-        use crate::paged_kv::BLOCK_TABLE_V1_VERSION;
         if self.is_poisoned() {
             return Err(LlamaBatchExecutorError::Poisoned);
         }
@@ -368,14 +389,21 @@ impl PreparedLlamaBatchExecutor {
             None
         };
         let mut generated = Vec::with_capacity(steps as usize);
-        let mapping: Vec<u32> = (0..capacity).map(|i| i as u32).collect();
-        let first_decode_position = (prompt.len() - 1) as u32;
+        let block_count =
+            u32::try_from(capacity).map_err(|_| rejected("block count exceeds U32"))?;
+        let mapping: Vec<u32> = (0..block_count).collect();
+        let first_decode_position =
+            u32::try_from(prompt.len() - 1).map_err(|_| rejected("prompt position exceeds U32"))?;
+        first_decode_position
+            .checked_add(steps)
+            .ok_or_else(|| rejected("generation positions exceed U32"))?;
         // Complete the prefix before capture; graph lifetime then excludes all eager use.
         for (position, &input_token) in prompt[..prompt.len() - 1].iter().enumerate() {
-            let pos = position as u32;
+            let pos =
+                u32::try_from(position).map_err(|_| rejected("prefill position exceeds U32"))?;
             let live = position / 16 + 1;
             let mut valid = vec![16_u16; live];
-            valid[live - 1] = (pos % 16 + 1) as u16;
+            valid[live - 1] = u16::try_from(pos % 16 + 1).expect("block token count is at most 16");
             let input = [input_token];
             let rows = [LlamaBatchRow::new(
                 1,
@@ -402,7 +430,8 @@ impl PreparedLlamaBatchExecutor {
                 let pos = first_decode_position + step;
                 let live = pos as usize / 16 + 1;
                 let mut valid = vec![16_u16; live];
-                valid[live - 1] = (pos % 16 + 1) as u16;
+                valid[live - 1] =
+                    u16::try_from(pos % 16 + 1).expect("block token count is at most 16");
                 let input = [token];
                 let rows = [LlamaBatchRow::new(
                     1,
@@ -463,13 +492,15 @@ impl PreparedLlamaBatchExecutor {
                 payload.fill(0);
                 payload[..4].copy_from_slice(&token.to_le_bytes());
                 payload[4..8].copy_from_slice(&pos.to_le_bytes());
-                payload[12..16].copy_from_slice(&(live as u32).to_le_bytes());
+                let live_blocks =
+                    u32::try_from(live).map_err(|_| rejected("live block count exceeds U32"))?;
+                payload[12..16].copy_from_slice(&live_blocks.to_le_bytes());
                 for (i, physical) in mapping[..live].iter().enumerate() {
                     payload[16 + 4 * i..20 + 4 * i].copy_from_slice(&physical.to_le_bytes());
                     let valid = if i + 1 < live {
                         16_u16
                     } else {
-                        (pos % 16 + 1) as u16
+                        u16::try_from(pos % 16 + 1).expect("block token count is at most 16")
                     };
                     let o = 16 + 4 * capacity + 2 * i;
                     payload[o..o + 2].copy_from_slice(&valid.to_le_bytes());
@@ -485,7 +516,7 @@ impl PreparedLlamaBatchExecutor {
                 if read(logits_bytes + 4) != 0
                     || read(logits_bytes + 8) != 32
                     || read(logits_bytes + 12) != 0
-                    || read(logits_bytes) >= vocab as u32
+                    || read(logits_bytes) as usize >= vocab
                 {
                     return Err(rejected("completed decode returned invalid output status"));
                 }
@@ -502,7 +533,16 @@ impl PreparedLlamaBatchExecutor {
     }
 }
 
-use crate::llama::graph::*;
+use crate::llama::graph::{
+    ExecutionGraphPolicy, ExecutionMode, GraphCaptureSafety, GraphComputeType, GraphDataType,
+    GraphDeviceSignature, GraphDispatchEligibility, GraphDispatchRequest, GraphGemmPlanSetId,
+    GraphGeometrySignature, GraphImplementationId, GraphImplementationSignature,
+    GraphInventoryState, GraphIterationSignature, GraphLayoutSignature,
+    GraphMetadataLayoutSignature, GraphModelArchitecture, GraphModelSignature,
+    GraphOperatorCapability, GraphReductionPolicyId, GraphRevisionFingerprint,
+    GraphSamplingBackend, GraphSignature, GraphStaticSignature, GraphTensorSignature,
+    GraphWorkloadStage, select_execution_graph,
+};
 use crate::llama::graph_registry::{
     GraphEntryFootprint, GraphRegistry, GraphRegistryEntry, GraphRegistryEntryState,
     GraphRegistryLimits, GraphReplayMode, GraphReplaySlot,
@@ -633,6 +673,14 @@ impl PreparedLlamaBatchExecutor {
         self.full_decode_signature_with_packed(stream, None)
     }
 
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "Match the established GEMM geometry and buffer names"
+    )]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Keep shape validation and ordered graph resource preparation together"
+    )]
     fn full_decode_signature_with_packed(
         &mut self,
         stream: &mut CudaStream,
@@ -664,7 +712,10 @@ impl PreparedLlamaBatchExecutor {
             match f.rms_norm_profile() {
                 LlamaRmsNormProfile::Canonical => 0_u32,
                 LlamaRmsNormProfile::HuggingFaceSmolLm2 => 1,
-                _ => unreachable!(),
+                LlamaRmsNormProfile::FixedContiguous37Balanced => unreachable!(),
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                LlamaRmsNormProfile::HuggingFaceCudaQwenP2051Probe
+                | LlamaRmsNormProfile::HuggingFaceCudaQwenP2048CacheOnProbe => unreachable!(),
             }
         };
         let mut digest = Sha256::new();
@@ -719,7 +770,7 @@ impl PreparedLlamaBatchExecutor {
             native_identity = Some(identity);
             for v in [
                 m.backend_id(),
-                m.algorithm_id() as u32,
+                u32::from_le_bytes(m.algorithm_id().to_le_bytes()),
                 m.tile_id(),
                 m.stages_id(),
                 m.split_k(),
@@ -763,7 +814,8 @@ impl PreparedLlamaBatchExecutor {
                 .ok_or_else(|| rejected("footprint overflow"))?;
             let mut offset = 0;
             while offset < buffer.byte_len() {
-                let count = (buffer.byte_len() - offset).min(chunk.len() as u64) as usize;
+                let count = usize::try_from((buffer.byte_len() - offset).min(chunk.len() as u64))
+                    .map_err(|_| rejected("weight chunk exceeds host size"))?;
                 buffer
                     .download_to_slice(offset, &mut chunk[..count], &mut f.io_staging, stream)
                     .map_err(|e| {
@@ -846,7 +898,7 @@ impl PreparedLlamaBatchExecutor {
         let ((major, minor), runtime, cublas) =
             native_identity.ok_or_else(|| rejected("missing native plan identity"))?;
         if self.config.vllm_smol_p128_graph()
-            && (major != 8 || minor != 9 || runtime != 13000 || cublas != 130101)
+            && (major != 8 || minor != 9 || runtime != 13_000 || cublas != 130_101)
         {
             return Err(rejected("vllm-smol-p128-v1 environment mismatch"));
         }
@@ -872,16 +924,24 @@ impl PreparedLlamaBatchExecutor {
                     GraphComputeType::Float32,
                 ),
                 GraphGeometrySignature::new(
-                    f.plan.layers().len() as u32,
-                    dims.hidden_size() as u32,
-                    dims.intermediate_size() as u32,
-                    dims.vocabulary_size() as u32,
-                    dims.query_heads() as u32,
-                    dims.key_value_heads() as u32,
-                    dims.head_dimension() as u32,
+                    u32::try_from(f.plan.layers().len())
+                        .map_err(|_| rejected("model graph geometry exceeds U32"))?,
+                    u32::try_from(dims.hidden_size())
+                        .map_err(|_| rejected("model graph geometry exceeds U32"))?,
+                    u32::try_from(dims.intermediate_size())
+                        .map_err(|_| rejected("model graph geometry exceeds U32"))?,
+                    u32::try_from(dims.vocabulary_size())
+                        .map_err(|_| rejected("model graph geometry exceeds U32"))?,
+                    u32::try_from(dims.query_heads())
+                        .map_err(|_| rejected("model graph geometry exceeds U32"))?,
+                    u32::try_from(dims.key_value_heads())
+                        .map_err(|_| rejected("model graph geometry exceeds U32"))?,
+                    u32::try_from(dims.head_dimension())
+                        .map_err(|_| rejected("model graph geometry exceeds U32"))?,
                 ),
                 GraphLayoutSignature::new(
-                    (capacity * 16) as u32,
+                    u32::try_from(capacity * 16)
+                        .map_err(|_| rejected("graph slot capacity exceeds U32"))?,
                     16,
                     1,
                     GraphMetadataLayoutSignature::new(
@@ -1041,7 +1101,7 @@ mod tests {
         for pos in 0..steps {
             let live = pos as usize / 16 + 1;
             let mut valid = vec![16_u16; live];
-            valid[live - 1] = (pos % 16 + 1) as u16;
+            valid[live - 1] = u16::try_from(pos % 16 + 1).expect("block token count is at most 16");
             let input = [token];
             let rows = [LlamaBatchRow::new(
                 1,
@@ -1356,6 +1416,10 @@ struct FullDecodeParents {
 /// Persistent, thread-confined M=1 graph session on the executor's actual KV pool.
 /// The owner exposes no eager access while CUDA graph leases are active.
 /// Full logits are retained so ordinary CPU sampling and stop masks remain valid.
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "Recorded topology, output readiness, and poison state are independent"
+)]
 pub struct OwnedLlamaDecodeExecutor {
     graph: riley_cuda::OwnedGraphResourceReservation<FullDecodeParents>,
     registry: GraphRegistry<1>,
@@ -1383,6 +1447,10 @@ impl PreparedLlamaBatchExecutor {
     /// movable Rust values are retained; the CUDA layer owns stable native handles.
     /// # Errors
     /// Rejects unsupported configurations or failed capture before publication.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Keep shape validation and ordered graph resource preparation together"
+    )]
     pub fn into_owned_decode_graph(
         mut self,
         context: &riley_cuda::CudaContext,
@@ -1526,7 +1594,7 @@ impl OwnedLlamaDecodeExecutor {
     pub const fn vocabulary_size(&self) -> usize {
         self.vocabulary_size
     }
-    /// Absolute RoPE position capacity.
+    /// Absolute `RoPE` position capacity.
     #[must_use]
     pub const fn maximum_position_count(&self) -> usize {
         self.maximum_position_count
@@ -1537,20 +1605,34 @@ impl OwnedLlamaDecodeExecutor {
         self.replays
     }
     /// Exact device argmax from the last successful execution.
-    #[must_use]
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when no output is ready or the saved result is incomplete.
     pub fn greedy_token(&self) -> LlamaBatchExecutorResult<u32> {
         if self.poisoned || !self.output_ready {
             return Err(LlamaBatchExecutorError::OutputNotReady);
         }
         let offset = self.vocabulary_size * 2;
-        Ok(u32::from_le_bytes(
-            self.output[offset..offset + 4].try_into().expect("token"),
-        ))
+        let token = self
+            .output
+            .get(offset..offset + 4)
+            .and_then(|bytes| bytes.try_into().ok())
+            .ok_or(LlamaBatchExecutorError::OutputNotReady)?;
+        Ok(u32::from_le_bytes(token))
     }
     /// Executes one decode token or the configured complete P128 prefill.
     /// No retry or further publication is permitted after an execution error.
     /// # Errors
     /// Rejects invalid metadata before dispatch, or poisoned/failed execution.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the retained graph's fixed transfer buffer layout is internally inconsistent.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Validate, pack, and replay within the same graph ownership scope"
+    )]
     pub fn execute(
         &mut self,
         rows: &[crate::llama::LlamaBatchRow<'_>],
@@ -1578,7 +1660,7 @@ impl OwnedLlamaDecodeExecutor {
                     .position_ids()
                     .iter()
                     .enumerate()
-                    .all(|(i, &p)| p == i as u32))
+                    .all(|(i, &p)| u32::try_from(i) == Ok(p)))
                 || (input_count == 1 && (128..160).contains(&pos)))
         {
             return Err(rejected(
@@ -1619,8 +1701,9 @@ impl OwnedLlamaDecodeExecutor {
         self.payload.fill(0);
         self.payload[..4].copy_from_slice(&token.to_le_bytes());
         self.payload[4..8].copy_from_slice(&pos.to_le_bytes());
-        self.payload[12..16]
-            .copy_from_slice(&(packed.physical_block_ids().len() as u32).to_le_bytes());
+        let block_count = u32::try_from(packed.physical_block_ids().len())
+            .map_err(|_| rejected("packed block count exceeds U32"))?;
+        self.payload[12..16].copy_from_slice(&block_count.to_le_bytes());
         for (i, &physical) in packed.physical_block_ids().iter().enumerate() {
             self.payload[16 + 4 * i..20 + 4 * i].copy_from_slice(&physical.to_le_bytes());
             let offset = 16 + 4 * capacity + 2 * i;
@@ -1630,8 +1713,9 @@ impl OwnedLlamaDecodeExecutor {
         if self.batched_prefill {
             let offset = ((16 + 6 * capacity + 3) & !3) + 4;
             self.payload[offset..offset + 4].copy_from_slice(&PREFILL128_MAGIC.to_le_bytes());
-            self.payload[offset + 4..offset + 8]
-                .copy_from_slice(&(input_count as u32).to_le_bytes());
+            let input_count_u32 = u32::try_from(input_count)
+                .map_err(|_| rejected("packed input count exceeds U32"))?;
+            self.payload[offset + 4..offset + 8].copy_from_slice(&input_count_u32.to_le_bytes());
             if input_count == 128 {
                 for (i, &id) in packed.input_token_ids().iter().enumerate() {
                     let at = offset + 8 + 4 * i;

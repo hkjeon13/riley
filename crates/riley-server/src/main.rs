@@ -2738,11 +2738,11 @@ fn run_serve(
             .with_serving_sequence_token_bound(max_sequence_tokens),
         DecodeAttentionBackendMode::Existing => {
             if options.execution_graph_policy
-                != riley_runtime::llama::ExecutionGraphPolicy::Disabled
+                == riley_runtime::llama::ExecutionGraphPolicy::Disabled
             {
-                executor.with_grouped_ragged_attention_heads()
-            } else {
                 executor
+            } else {
+                executor.with_grouped_ragged_attention_heads()
             }
         }
         DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage => {
@@ -3519,7 +3519,7 @@ struct C02AuditProcessIdentity {
     start_ticks: u64,
 }
 
-#[cfg(any(feature = "cuda", test))]
+#[cfg(any(all(feature = "cuda", target_os = "linux"), test))]
 fn c02_process_identity_from_linux_proc_stat(
     stat: &str,
 ) -> Result<C02AuditProcessIdentity, String> {

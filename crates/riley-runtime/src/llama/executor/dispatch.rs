@@ -1508,7 +1508,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     tensor_parallel: Option<(&riley_cuda::CudaPeerAllReduceGroup, u32)>,
     stream: &mut S,
 ) -> LlamaBatchExecutorResult<()> {
-    #[cfg(not(feature = "cuda"))]
+    #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
     let _ = (smol_qkv_fusion_eligible, piecewise_active_rows);
     let dense_rows = usize_u64(
         plan.sequence_length(),

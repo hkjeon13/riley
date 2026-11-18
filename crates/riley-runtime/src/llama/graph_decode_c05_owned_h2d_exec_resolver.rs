@@ -46,7 +46,10 @@ impl PureDecodeGraphV1C05OwnedH2DReplaySlot {
     /// constructor neither validates native graph semantics nor publishes a
     /// C06 registry entry; it records only the exact immutable identity used
     /// for a later fail-closed exclusive borrow.
-    #[must_use]
+    #[allow(
+        clippy::large_types_passed_by_value,
+        reason = "Keep the exact signature and provenance value bound to this operation"
+    )]
     pub(crate) const fn new(
         signature_binding: PureDecodeGraphV1C06SignatureBinding,
         replay_slot: GraphReplaySlot,
@@ -79,6 +82,14 @@ impl PureDecodeGraphV1C05OwnedH2DReplaySlot {
     /// graph rather than attaching its full-graph owner to another mode. A
     /// selected full graph must match the complete C06 signature and logical
     /// slot before the executable can be borrowed.
+    #[allow(
+        clippy::result_large_err,
+        reason = "Preserve exact mismatch details or return the original resources to the caller"
+    )]
+    #[allow(
+        clippy::large_types_passed_by_value,
+        reason = "Keep the exact signature and provenance value bound to this operation"
+    )]
     pub(crate) fn resolve(
         &mut self,
         selection: PureDecodeGraphV1C06RegistryDispatchBinding,
@@ -159,6 +170,10 @@ impl PureDecodeGraphV1C05ResolvedH2DExec<'_> {
 /// Typed reason one C07 decision cannot borrow this private full-graph owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "Carry both exact signatures inline in the diagnostic"
+)]
 pub(crate) enum PureDecodeGraphV1C05H2DReplayResolveError {
     /// A selected full graph named a different complete immutable identity.
     SignatureMismatch {
@@ -215,6 +230,10 @@ enum PureDecodeGraphV1C05H2DReplaySelection {
 /// The helper is separate so unit tests can cover C06 decision ordering without
 /// constructing a native graph. It must remain the only place that interprets
 /// a selected C06 decision in this C07 boundary.
+#[allow(
+    clippy::result_large_err,
+    reason = "Preserve exact mismatch details or return the original resources to the caller"
+)]
 fn validate_selected_h2d_full_graph(
     owned_signature: GraphSignature,
     owned_slot: GraphReplaySlot,

@@ -30,6 +30,10 @@ fn read(
     p: &mut CudaPinnedHostBuffer,
     s: &mut CudaStream,
 ) -> riley_cuda::CudaResult<Vec<u8>> {
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "CUDA audit buffers are allocated within the address space of the supported 64-bit host"
+    )]
     let mut v = vec![0; b.byte_len() as usize];
     b.download_to_slice(0, &mut v, p, s)?;
     Ok(v)
@@ -64,6 +68,10 @@ impl PreparedLlamaBatchExecutor {
         self.audit_qkv_impl(Some(rows), stream, true, true)
     }
     #[allow(clippy::too_many_lines)]
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "Match the short Q, K, V and shape notation in the CUDA descriptors"
+    )]
     fn audit_qkv_impl(
         &mut self,
         rows: Option<&[LlamaBatchRow<'_>]>,

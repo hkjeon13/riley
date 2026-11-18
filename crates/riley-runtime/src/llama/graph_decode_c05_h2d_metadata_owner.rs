@@ -38,6 +38,10 @@ use super::graph_registry::GraphReplaySlot;
 /// One C07 metadata resource checked against the signature-bound cold layout.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
+#[allow(
+    clippy::enum_variant_names,
+    reason = "Each variant identifies a distinct slab in the metadata transfer"
+)]
 pub(crate) enum PureDecodeGraphV1C05H2DMetadataResource {
     /// The successful exact host-slab lease being staged.
     HostSlab,
@@ -255,6 +259,10 @@ struct PureDecodeGraphV1C05H2DMetadataProvenance {
 }
 
 impl PureDecodeGraphV1C05H2DMetadataProvenance {
+    #[allow(
+        clippy::large_types_passed_by_value,
+        reason = "Keep the exact signature and provenance value bound to this operation"
+    )]
     fn from_signature_binding(signature_binding: PureDecodeGraphV1C06SignatureBinding) -> Self {
         let metadata_binding = signature_binding.identity().metadata_binding();
         let layout = metadata_binding.layout();
@@ -305,6 +313,14 @@ impl PureDecodeGraphV1C05H2DColdResources {
     /// Layout comparison is complete and precedes every digest and byte-length
     /// check. A mismatch returns every moved resource untouched and does not
     /// enter CUDA capture or submit a transfer.
+    #[allow(
+        clippy::result_large_err,
+        reason = "Preserve exact mismatch details or return the original resources to the caller"
+    )]
+    #[allow(
+        clippy::large_types_passed_by_value,
+        reason = "Keep the exact signature and provenance value bound to this operation"
+    )]
     pub(crate) fn try_new(
         signature_binding: PureDecodeGraphV1C06SignatureBinding,
         stream: CudaStream,
@@ -357,6 +373,10 @@ impl PureDecodeGraphV1C05H2DColdResources {
     /// The host lease is retained only for the synchronous pinned write; it is
     /// never stored in the graph owner. No C07 execution entry point is made
     /// available by this method.
+    #[allow(
+        clippy::result_large_err,
+        reason = "Preserve exact mismatch details or return the original resources to the caller"
+    )]
     pub(crate) fn instantiate_exact_owner(
         mut self,
         host_lease: PureDecodeGraphV1ExactHostSlabLease<'_>,
@@ -492,6 +512,10 @@ impl PureDecodeGraphV1C05H2DColdResources {
         )
     }
 
+    #[allow(
+        clippy::large_types_passed_by_value,
+        reason = "Keep the exact signature and provenance value bound to this operation"
+    )]
     fn from_known_c05_graph_release(
         provenance: PureDecodeGraphV1C05H2DMetadataProvenance,
         resources: OwnedGraphH2DResources,
@@ -558,6 +582,14 @@ impl PureDecodeGraphV1C05ExactMetadataH2DOwner {
     ///
     /// A successful full-graph result only holds an exclusive owner borrow; it
     /// exposes no production execution operation at this boundary.
+    #[allow(
+        clippy::result_large_err,
+        reason = "Preserve exact mismatch details or return the original resources to the caller"
+    )]
+    #[allow(
+        clippy::large_types_passed_by_value,
+        reason = "Keep the exact signature and provenance value bound to this operation"
+    )]
     pub(crate) fn resolve(
         &mut self,
         selection: PureDecodeGraphV1C06RegistryDispatchBinding,
@@ -584,6 +616,10 @@ impl PureDecodeGraphV1C05ExactMetadataH2DOwner {
     }
 }
 
+#[allow(
+    clippy::large_types_passed_by_value,
+    reason = "Keep the exact signature and provenance value bound to this operation"
+)]
 fn validate_exact_metadata_resource(
     provenance: PureDecodeGraphV1C05H2DMetadataProvenance,
     resource: PureDecodeGraphV1C05H2DMetadataResource,

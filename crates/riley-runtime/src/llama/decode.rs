@@ -51,7 +51,9 @@ const PAGED_CACHE_PINNED_ALLOCATION_COUNT: u64 = 1;
 const ROPE_ALLOCATION_COUNT: u64 = 2;
 const ATTENTION_ALLOCATION_COUNT: u64 = 1;
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH: usize = 2_048;
+#[cfg(feature = "cuda-cublas-gemm-probe")]
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_MAXIMUM_LENGTH: usize = 2_050;
+#[cfg(feature = "cuda-cublas-gemm-probe")]
 const HF_EAGER_QWEN_P2048_CACHE_ON_FULL128_MAXIMUM_LENGTH: usize = 2_175;
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_WORKSPACE_BYTES: u64 = 8_519_680;
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_AV_WORKSPACE_BYTES: u64 = 33_554_432;
@@ -2173,6 +2175,7 @@ pub struct PreparedLlamaDecode {
     phase: LlamaDecodePhase,
     latest_output: Option<LatestOutput>,
     hf_eager_qwen_p2048_cache_on_m1_trace_probe: bool,
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
     hf_eager_qwen_p2048_cache_on_full128_trace_probe: bool,
     hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate: bool,
     hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate: bool,
@@ -2329,6 +2332,7 @@ impl PreparedLlamaDecode {
         #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
         let hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate = false;
 
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
         let hf_eager_qwen_p2048_cache_on_full128_trace_probe =
             config.hf_eager_qwen_p2048_cache_on_full128_trace_probe;
 
@@ -2643,6 +2647,7 @@ impl PreparedLlamaDecode {
             phase: LlamaDecodePhase::Empty,
             latest_output: None,
             hf_eager_qwen_p2048_cache_on_m1_trace_probe,
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
             hf_eager_qwen_p2048_cache_on_full128_trace_probe,
             hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate,
             hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate,
@@ -3117,10 +3122,9 @@ impl PreparedLlamaDecode {
     ) -> LlamaDecodeResult<()> {
         let hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate =
             self.hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate;
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
         let hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate =
             self.hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate;
-        #[cfg(not(feature = "cuda"))]
-        let _ = &hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate;
         let forward = &mut self.forward;
         let rms_norm_profile = forward.rms_norm_profile();
         let plan = &forward.plan;
@@ -4370,7 +4374,8 @@ impl PreparedLlamaDecode {
             phase: _,
             latest_output: _,
             hf_eager_qwen_p2048_cache_on_m1_trace_probe: _,
-            hf_eager_qwen_p2048_cache_on_full128_trace_probe: _,
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+                hf_eager_qwen_p2048_cache_on_full128_trace_probe: _,
             hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate: _,
             hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate: _,
         } = self;

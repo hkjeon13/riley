@@ -2192,7 +2192,8 @@ mod cuda_backend {
     };
     use riley_runtime::grammar::{Grammar, GrammarAutomaton, GrammarCursor, TokenIndex};
     use riley_runtime::llama::{
-        MAX_LLAMA_BATCH_SHAPE_BUCKETS, PreparedLlamaBatchExecutor, PreparedLlamaBatchExecutorConfig,
+        ExecutionGraphPolicy, MAX_LLAMA_BATCH_SHAPE_BUCKETS, PreparedLlamaBatchExecutor,
+        PreparedLlamaBatchExecutorConfig,
     };
     use riley_runtime::sampling::{SamplingParams, SamplingWorkspace, TokenConstraints};
     use riley_runtime::{CudaContext, CudaRuntime, CudaStream};
@@ -2224,6 +2225,10 @@ mod cuda_backend {
     /// Prepares every rank of a tensor-parallel group, each on its own device
     /// and host thread, links them with a peer all-reduce group and returns
     /// rank 0, which drives the others.
+    #[allow(
+        clippy::large_types_passed_by_value,
+        reason = "Keep an owned executor configuration for each worker thread"
+    )]
     fn prepare_tensor_parallel(
         model: &LoadedModel,
         runtime: &CudaRuntime,
@@ -2552,6 +2557,10 @@ mod cuda_backend {
         ///
         /// Returns a private diagnostic for invalid metadata, device/runtime
         /// initialization, executor preparation, or scheduler construction.
+        #[allow(
+            clippy::too_many_lines,
+            reason = "Keep CUDA preparation and the allocation or setup failure path together"
+        )]
         pub fn prepare(
             metadata: ModelMetadata,
             model: LoadedModel,
@@ -2921,7 +2930,7 @@ mod cuda_backend {
         display_len: usize,
         chosen: (u32, f64),
         top: &[(u32, f64)],
-    ) -> Box<TokenLogprob> {
+    ) -> TokenLogprob {
         let mut display = vec![0_u8; display_len];
         let mut describe = |token_id: u32, logprob: f64| {
             let count = model
@@ -2945,7 +2954,7 @@ mod cuda_backend {
             .iter()
             .map(|&(token_id, value)| describe(token_id, value))
             .collect();
-        Box::new(TokenLogprob { chosen, top })
+        TokenLogprob { chosen, top }
     }
 
     struct StructuredRequest {
@@ -3012,6 +3021,10 @@ mod cuda_backend {
     }
 
     impl CudaBackend {
+        #[allow(
+            clippy::too_many_lines,
+            reason = "Keep the admission checks and executor resource initialization together"
+        )]
         fn new(resources: CudaEngineResources) -> Result<Self, BackendError> {
             let vocabulary_size = resources.executor.vocabulary_size();
             let addressable_tokens = resources.model.tokenizer().addressable_token_count();
@@ -3082,7 +3095,6 @@ mod cuda_backend {
                     .map(|bucket| bucket.dense_rows()),
             )
             .map_err(internal)?;
-            use riley_runtime::llama::ExecutionGraphPolicy;
             if resources.executor.config().vllm_smol_p128_graph()
                 && resources.execution_graph_policy != ExecutionGraphPolicy::Require
             {
@@ -3174,6 +3186,10 @@ mod cuda_backend {
                 .position(|request| request.scheduler_id == request_id)
         }
 
+        #[allow(
+            clippy::too_many_lines,
+            reason = "Publish terminal audit and response state from the same scheduler completion"
+        )]
         fn process_completion(
             &mut self,
             completion: &RequestCompletion,
@@ -3303,12 +3319,17 @@ mod cuda_backend {
             Ok(events)
         }
 
+        #[allow(
+            clippy::too_many_lines,
+            reason = "Keep selection, token constraints, and response provenance in one ordered iteration"
+        )]
         fn sample_iteration(
             &mut self,
             plan: &riley_scheduler::IterationPlan,
             downloaded: &riley_scheduler::DownloadedLlamaIteration,
             selection: C02CommittedSamplingSelection,
         ) -> Result<(), BackendError> {
+            const SUMMARY_BYTES: usize = riley_runtime::BF16_LOGPROB_SUMMARY_WORDS * 4;
             self.samples.clear();
             self.pending_tokens.clear();
             let gpu_greedy = selection.selected_backend == C02SamplingBackend::GpuGreedy;
@@ -3337,7 +3358,6 @@ mod cuda_backend {
                     }
                 }
             }
-            const SUMMARY_BYTES: usize = riley_runtime::BF16_LOGPROB_SUMMARY_WORDS * 4;
             if let Some(top) = summary_top {
                 let bytes = plan.output_slots().len() * SUMMARY_BYTES;
                 self.logprob_summaries.resize(bytes, 0);
@@ -3442,12 +3462,12 @@ mod cuda_backend {
                         &top_logits[..count],
                         &mut self.top_logprobs,
                     );
-                    logprob = Some(describe_logprobs(
+                    logprob = Some(Box::new(describe_logprobs(
                         &self.model,
                         request.decoded_token_bytes.len(),
                         (token_id, chosen),
                         &self.top_logprobs,
-                    ));
+                    )));
                     (token_id, Some(0.0))
                 } else {
                     let logits = if gpu_greedy {
@@ -3553,12 +3573,12 @@ mod cuda_backend {
                             usize::from(top),
                             &mut self.top_logprobs,
                         );
-                        logprob = Some(describe_logprobs(
+                        logprob = Some(Box::new(describe_logprobs(
                             &self.model,
                             request.decoded_token_bytes.len(),
                             (sampled_id, selected),
                             &self.top_logprobs,
-                        ));
+                        )));
                     }
                     (sampled_id, sampled_logprob)
                 };
@@ -3836,6 +3856,10 @@ mod cuda_backend {
             self.process_completions(updates.completions())
         }
 
+        #[allow(
+            clippy::too_many_lines,
+            reason = "Finalize accounting and close every owned CUDA resource on the same path"
+        )]
         fn close_resources(&mut self) -> Result<(), BackendError> {
             let mut first_error = None;
             let mut final_scheduler = None;
@@ -3945,24 +3969,22 @@ mod cuda_backend {
                     first_error.get_or_insert_with(|| format!("context close failed: {source}"));
                 }
             }
-            match first_error {
-                Some(detail) => Err(internal(detail)),
-                None => {
-                    let allocation = final_allocation
-                        .expect("successful CUDA close always samples allocation metrics");
-                    self.final_metrics = EngineMetricsSnapshot {
-                        // Preserve the pre-existing generic shutdown payload;
-                        // C02 consumes the typed scheduler close snapshot below.
-                        scheduler: None,
-                        batch_shapes: Some(self.batch_shapes),
-                        allocation: Some(allocation),
-                    };
-                    self.final_c02_metrics = final_scheduler.and_then(|scheduler| {
-                        C02CaptureMetrics::from_source_snapshots(false, scheduler, allocation).ok()
-                    });
-                    Ok(())
-                }
+            if let Some(detail) = first_error {
+                return Err(internal(detail));
             }
+            let allocation =
+                final_allocation.expect("successful CUDA close always samples allocation metrics");
+            self.final_metrics = EngineMetricsSnapshot {
+                // Preserve the pre-existing generic shutdown payload;
+                // C02 consumes the typed scheduler close snapshot below.
+                scheduler: None,
+                batch_shapes: Some(self.batch_shapes),
+                allocation: Some(allocation),
+            };
+            self.final_c02_metrics = final_scheduler.and_then(|scheduler| {
+                C02CaptureMetrics::from_source_snapshots(false, scheduler, allocation).ok()
+            });
+            Ok(())
         }
     }
 
@@ -4008,6 +4030,10 @@ mod cuda_backend {
             Some(self.model.shared_tokenizer())
         }
 
+        #[allow(
+            clippy::too_many_lines,
+            reason = "Validate and reserve scheduler state before admitting the request"
+        )]
         fn admit_tokenized(
             &mut self,
             request_id: EngineRequestId,

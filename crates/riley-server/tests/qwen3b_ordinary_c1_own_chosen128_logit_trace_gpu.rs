@@ -68,8 +68,16 @@ const SERVER_PREFILL_CHUNK_TOKENS: usize = 32;
 const SERVER_PHYSICAL_KV_BLOCKS: usize = 136;
 const TRACE_OUTPUT_ROWS: usize = 128;
 const TOP_K: usize = 32;
+#[allow(
+    dead_code,
+    reason = "Retain the standalone dense reference diagnostic for future trace comparisons"
+)]
 const DENSE_REFERENCE_CONTROL_STEP: usize = 3;
 const NATIVE_D128_BACKEND_ID: &str = "riley.cuda.ragged-paged-attention.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16.transition-v2";
+#[allow(
+    dead_code,
+    reason = "Retain the standalone dense reference diagnostic for future trace comparisons"
+)]
 const DENSE_REFERENCE_ATTENTION_BACKEND_ID: &str = "riley.cuda.materialized-gqa-prefill.bf16";
 
 #[derive(Debug)]
@@ -109,7 +117,15 @@ struct HfStep {
 
 #[derive(Debug)]
 struct HfSidecarBinding {
+    #[allow(
+        dead_code,
+        reason = "Retain trace source metadata for the reference diagnostic"
+    )]
     basename: String,
+    #[allow(
+        dead_code,
+        reason = "Retain trace source metadata for the reference diagnostic"
+    )]
     sha256: String,
     bytes: Vec<u8>,
     tensor_data_start: usize,
@@ -118,11 +134,23 @@ struct HfSidecarBinding {
 
 #[derive(Debug)]
 struct HfTeacherForcedOracle {
+    #[allow(
+        dead_code,
+        reason = "Retain trace source metadata for the reference diagnostic"
+    )]
     artifact_sha256: String,
     teacher_token_ids: Vec<u32>,
     cache_off_steps: Vec<HfStep>,
     cache_on_steps: Vec<HfStep>,
+    #[allow(
+        dead_code,
+        reason = "Retain trace source metadata for the reference diagnostic"
+    )]
     cache_off_sidecar: HfSidecarBinding,
+    #[allow(
+        dead_code,
+        reason = "Retain trace source metadata for the reference diagnostic"
+    )]
     cache_on_sidecar: HfSidecarBinding,
 }
 
@@ -157,6 +185,10 @@ struct ModeTrace {
 }
 
 #[derive(Debug)]
+#[allow(
+    dead_code,
+    reason = "Retain the standalone dense reference diagnostic for future trace comparisons"
+)]
 struct DenseReferenceControl {
     step: usize,
     input_token_count: usize,
@@ -174,6 +206,7 @@ struct DenseReferenceControl {
 #[derive(Clone, Copy, Debug)]
 enum TraceShapePolicy {
     FixedMaximum,
+    #[allow(dead_code, reason = "Retain the variable-shape diagnostic option")]
     ActiveRowBuckets,
 }
 
@@ -203,16 +236,19 @@ impl TraceShapePolicy {
 }
 
 fn required_path(name: &'static str) -> PathBuf {
-    std::env::var_os(name)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| panic!("{name} must name the remote Qwen3B artifact"))
+    std::env::var_os(name).map_or_else(
+        || panic!("{name} must name the remote Qwen3B artifact"),
+        PathBuf::from,
+    )
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    use std::fmt::Write as _;
+    let mut hex = String::with_capacity(64);
+    for byte in Sha256::digest(bytes) {
+        write!(hex, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    hex
 }
 
 fn json_u32(value: &Value, label: &'static str) -> TestResult<u32> {
@@ -1654,6 +1690,10 @@ fn trace_mode(
     }
 }
 
+#[allow(
+    dead_code,
+    reason = "Retain the standalone dense reference diagnostic for future trace comparisons"
+)]
 fn close_dense_reference_resources(
     forward: Option<PreparedLlamaForward>,
     stream: CudaStream,
@@ -1678,6 +1718,10 @@ fn close_dense_reference_resources(
     }
 }
 
+#[allow(
+    dead_code,
+    reason = "Retain the standalone dense reference diagnostic for future trace comparisons"
+)]
 fn dense_cache_free_reference_control(
     model: &LoadedModel,
     workload: &ServingWorkload,
@@ -1863,6 +1907,10 @@ fn trace_json(mode: &ModeTrace) -> Value {
     })
 }
 
+#[allow(
+    dead_code,
+    reason = "Retain the standalone dense reference diagnostic for future trace comparisons"
+)]
 fn dense_cache_free_reference_control_json(control: &DenseReferenceControl) -> Value {
     let hf_cache_off = &control.hf_cache_off;
     let logits = &hf_cache_off.logits;
@@ -1970,7 +2018,7 @@ fn qwen3b_ordinary_c1_own_chosen128_logit_trace() -> TestResult {
                 "reduction_profile": "canonical-v1", "residual_rmsnorm": "separate",
                 "execution_graph_policy": "disabled",
                 "HF_comparison_rule": "raw comparison has same-input meaning only if preceding own tokens equal HF teacher prefix",
-                "raw_sidecar_dtype": "BF16 little-endian", "raw_sidecar_elements": 151936
+                "raw_sidecar_dtype": "BF16 little-endian", "raw_sidecar_elements": 151_936
             },
             "own_token_ids": own_tokens, "trace": trace,
             "serving_performance": "미실행", "goal_achieved": false

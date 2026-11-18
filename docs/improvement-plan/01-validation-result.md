@@ -127,7 +127,9 @@ GPU 없는 runner에서 Riley 바이너리는 NVIDIA가 주입하는 `libcuda.so
 
 첫 수정에서는 그래프 실행의 기존 오류 상태 전이를 유지하면서 자원 확인을 정리했고, H2D 실행은 이미 확인한 소스 참조를 재사용한다. FFI의 포인터 표현, 문서 표기와 `Debug` 표시도 정리했다. macOS 격리 복사본에서 Rust만 검사한 CUDA Clippy 라이브러리 진단이 69건에서 49건으로 줄었다. 같은 소스의 CUDA를 끈 CPU 테스트 225건이 통과했다. 남은 CUDA 린트는 기존 `-D warnings`로 다시 판정한다.
 
-두 번째 수정에서는 CUDA 라이브러리의 probe 전용 함수와 테스트 전용 helper에 호출자와 같은 기능 조건을 적용했다. 그래프 preflight와 FFI의 반환 타입과 C ABI는 유지했고, GPU 테스트에서 사용하는 크기·인덱스 변환은 범위를 확인하도록 수정했다. CPU 구성에서 `riley-cuda` 테스트 225건을 통과했다. 격리한 macOS 환경에서 네이티브 빌드 스크립트를 임시 대체해 Rust 코드만 확인한 결과, `riley-cuda`와 `riley-tensor`의 CUDA 기능 전체 타깃 Clippy가 기존 `-D warnings`로 통과했다. 네이티브 도구 체인에서의 전체 워크플로와 서버·런타임 lint 판정은 진행 중이다.
+두 번째 수정에서는 CUDA 라이브러리의 probe 전용 함수와 테스트 전용 helper에 호출자와 같은 기능 조건을 적용했다. 그래프 preflight와 FFI의 반환 타입과 C ABI는 유지했고, GPU 테스트에서 사용하는 크기·인덱스 변환은 범위를 확인하도록 수정했다. CPU 구성에서 `riley-cuda` 테스트 225건을 통과했다. 격리한 macOS 환경에서 네이티브 빌드 스크립트를 임시 대체해 Rust 코드만 확인한 결과, `riley-cuda`와 `riley-tensor`의 CUDA 기능 전체 타깃 Clippy가 기존 `-D warnings`로 통과했다. 같은 빌드의 GitHub Actions에서 `riley-cuda`·`riley-tensor` Clippy를 통과했다. 이어서 `riley-server` Clippy에 포함되는 `riley-runtime` 진단 124건에서 멈췄다. [CUDA 12.8 실행](https://github.com/hkjeon13/riley/actions/runs/44408233868)
+
+서버와 런타임에서 probe 전용 코드의 기능 조건을 맞췄다. 그래프의 호스트 크기와 U32 변환에 검사를 추가하고, argmax 결과 버퍼가 짧을 때는 기존 `OutputNotReady` 오류로 처리한다. Linux 프로세스 통계 파서는 Linux CUDA와 단위 테스트에서만 빌드한다. 서버 진입점의 분기 동작을 대조한 뒤 현행 소스 계약의 해당 해시 한 건을 갱신했다. 로컬 Rust 전용 검사에서 `riley-server`·`riley-native`까지 기존 CUDA Clippy 명령 네 개가 모두 통과했다. 실제 CUDA 네이티브 CI에서 전체 명령을 다시 검증한다. [현행 소스 계약](../../ci/serving-source-contract.json)
 
 같은 커밋의 CUDA 12.4 배포 이미지 빌드와 CPU 검증은 통과했다. 소스 아카이브 해시를 로컬에서 재계산했고, 이전 이미지와 런타임 파일 목록이 같으며 Riley 실행 파일의 해시만 달라진 것을 확인했다. 이미지 ID와 새 실행 파일의 해시를 보존했다. [배포 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/44403168877) · [바인딩 수정 이미지 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/ffi-fix/receipt.json)
 

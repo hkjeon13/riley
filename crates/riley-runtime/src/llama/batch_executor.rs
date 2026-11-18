@@ -62,7 +62,6 @@ use crate::paged_kv::{KV_BLOCK_SIZE, KvLayout};
 #[cfg(test)]
 use super::forward::PreparedLlamaForwardConfig;
 
-const BF16_BYTES: u64 = 2;
 const BF16_BYTES_USIZE: usize = 2;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum BatchOutputMode {
@@ -470,6 +469,10 @@ impl PreparedLlamaBatchExecutor {
     /// are created. Future requests overwrite their logical prefixes normally.
     /// The caller must choose the same output mode as serving. Logit and greedy
     /// graphs have separate keys, so switching mode cannot reuse stale outputs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a warmup execution or cleanup fails.
     // Keep cold validation and the audited execution/cleanup sequence together.
     #[allow(clippy::too_many_lines)]
     // Local types/imports document the adjacent prepared-workspace path.
@@ -2114,7 +2117,7 @@ mod resource_audit;
 #[path = "graph_decode_mlp_audit.rs"]
 mod mlp_audit;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(test, feature = "cuda"))]
 #[path = "graph_decode_qkv_audit.rs"]
 mod qkv_audit;
 

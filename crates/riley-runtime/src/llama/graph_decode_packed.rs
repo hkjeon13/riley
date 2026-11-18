@@ -146,8 +146,8 @@ fn validate_plan(
         || plan.device_ordinal() != context.device_ordinal()
         || metadata.dimensions() != (1, config.n(), HIDDEN)
         || metadata.compute_capability() != (8, 9)
-        || metadata.runtime_version() != 13000
-        || metadata.cublaslt_version() != 130101
+        || metadata.runtime_version() != 13_000
+        || metadata.cublaslt_version() != 130_101
         || metadata.backend_id() != 1
         || metadata.algorithm_id() != 13
         || metadata.custom_option() != 74
@@ -158,7 +158,7 @@ fn validate_plan(
         || metadata.reduction_scheme() != 0
         || metadata.workspace_bytes() != 0
         || !metadata.deterministic()
-        || metadata.numerical_implementation_flags() != 131585
+        || metadata.numerical_implementation_flags() != 131_585
     {
         return Err(rejected(
             "packed plan differs from the qualified projection metadata",
@@ -186,6 +186,10 @@ fn read_weight(
 }
 
 impl PackedDecodeParents {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Keep shape validation and ordered graph resource preparation together"
+    )]
     pub(super) fn prepare(
         executor: &mut PreparedLlamaBatchExecutor,
         context: &CudaContext,
@@ -277,7 +281,9 @@ impl PackedDecodeParents {
                     let source_bytes = widths[projection] * HIDDEN * 2;
                     digest.update((id.index() as u64).to_le_bytes());
                     digest.update(source_bytes.to_le_bytes());
-                    let end = offset + source_bytes as usize;
+                    let end = offset
+                        + usize::try_from(source_bytes)
+                            .map_err(|_| rejected("packed source exceeds host size"))?;
                     let original = forward.weights.borrow_graph_weight(id).map_err(|source| {
                         LlamaForwardError::Weight {
                             site: Some(ExecutionSite::global(LlamaOp::IterationCompletion)),

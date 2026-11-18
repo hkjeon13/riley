@@ -7,9 +7,9 @@
 //!
 //! A native `Supported` result is mapped only to the semantically identical
 //! C07 operation: whole-slab H2D to metadata transfer, canonical generic
-//! BF16 RMSNorm to the per-layer normalization slot, fixed-address BF16
-//! indexed RoPE to the decode RoPE slot, fixed-address BF16 ragged paged K/V
-//! write to the decode K/V-write slot, fixed-address BF16 SiLU to the MLP
+//! BF16 `RMSNorm` to the per-layer normalization slot, fixed-address BF16
+//! indexed `RoPE` to the decode `RoPE` slot, fixed-address BF16 ragged paged K/V
+//! write to the decode K/V-write slot, fixed-address BF16 `SiLU` to the MLP
 //! BF16-SiLU activation, fixed-address BF16 multiplication of an activated
 //! gate with an up projection to the MLP gated multiply, and fixed-address
 //! BF16 residual addition to the decode residual slot. Every other C07
@@ -25,6 +25,10 @@ use super::{
     },
 };
 
+#[allow(
+    clippy::match_same_arms,
+    reason = "Document the current Unknown value alongside the fallback for future native capability values"
+)]
 fn map_exact_c05_capability(capability: CudaGraphCaptureCapability) -> GraphOperatorCapability {
     match capability {
         CudaGraphCaptureCapability::Unknown => GraphOperatorCapability::Unknown,

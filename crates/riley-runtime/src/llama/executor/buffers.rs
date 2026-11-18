@@ -33,6 +33,10 @@ pub(crate) struct PerOperationDeviceMetadata {
     pub(crate) token_ids: Option<CudaDeviceBuffer>,
 }
 
+#[allow(
+    clippy::large_enum_variant,
+    reason = "Keep the prepared metadata in its existing owner without an extra allocation"
+)]
 pub(crate) enum BatchDeviceInput {
     PerOperation(PerOperationDeviceMetadata),
     IterationBatch { slab: CudaDeviceBuffer },

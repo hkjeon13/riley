@@ -21,6 +21,10 @@ fn ids(v: &Value) -> Result<Vec<u32>> {
 }
 #[test]
 #[ignore = "pinned single GPU and fresh HF fixtures"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Compare every replay output and verify cleanup on the same test executor"
+)]
 fn batch_executor_owns_all_model_greedy_prefixes_and_resources() -> Result {
     let root = PathBuf::from(std::env::var("RILEY_FRESH_HF_ROOT")?);
     let output = PathBuf::from(std::env::var("RILEY_BATCH_NATIVE_OUTPUT")?);
@@ -106,11 +110,11 @@ fn batch_executor_owns_all_model_greedy_prefixes_and_resources() -> Result {
                 for t in &expected {
                     h.update(t.to_le_bytes());
                 }
-                let expected_hash = h
-                    .finalize()
-                    .iter()
-                    .map(|b| format!("{b:02x}"))
-                    .collect::<String>();
+                let mut expected_hash = String::with_capacity(64);
+                for byte in h.finalize() {
+                    use std::fmt::Write as _;
+                    write!(expected_hash, "{byte:02x}")?;
+                }
                 let trial = engine.prepare_trial(
                     vec![PretokenizedBenchmarkRequest::new(ids(
                         &c["prompt_token_ids"],

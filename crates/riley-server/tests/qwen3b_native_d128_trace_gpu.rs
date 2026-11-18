@@ -216,16 +216,19 @@ impl TraceShapePolicy {
 }
 
 fn required_path(name: &'static str) -> PathBuf {
-    std::env::var_os(name)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| panic!("{name} must name the remote Qwen3B artifact"))
+    std::env::var_os(name).map_or_else(
+        || panic!("{name} must name the remote Qwen3B artifact"),
+        PathBuf::from,
+    )
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    use std::fmt::Write as _;
+    let mut hex = String::with_capacity(64);
+    for byte in Sha256::digest(bytes) {
+        write!(hex, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    hex
 }
 
 fn json_u32(value: &Value, label: &'static str) -> TestResult<u32> {
