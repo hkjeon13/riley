@@ -1,0 +1,115 @@
+# W3. 긴 프롬프트와 혼합 부하 성능 개선
+
+작성일: 2026-11-13\
+선행 조건: [W1 측정·판정 복구](01-validation-and-release.md), [W4 장문 정확성](04-correctness-and-schema.md)\
+연계: [W2 비동기 스텝](02-async-step.md), [종합 계획](README.md)
+
+## 1. 남아 있는 문제
+
+[0.1.0 RAG 재측정](../../benchmarks/evidence/20261104-goal/stage1t16-table.md)의 비율은 Riley/vLLM이며 지연은 낮을수록 좋다.
+
+| 현상 | 대표 근거 | 해결할 질문 |
+|---|---|---|
+| 6K prompt 첫 토큰 지연 | Qwen3-4B rag6k-c1 1.19배, Qwen3-8B 1.17배 | prefill·attention·호스트 중 무엇이 문맥과 함께 늘어나는가? |
+| 부하에서 tail 악화 | Qwen2.5-14B rag-c8 TTFT p95 1.44배, Coder-14B 1.43배 | 긴 스텝·대기열·KV·동시 도착 중 p95의 원인은? |
+| prefill 개선이 decode 비용으로 이동 | Qwen2.5-0.5B rag-c8 TPOT 1.15배 | burst 범위·기동 조건을 어떻게 제한할 것인가? |
+| 짧은 혼합 부하 잔여 지연 | Coder-14B closed-c32 TPOT 반복 합산 1.039배 | 혼합 256행 스텝의 추가 비용을 줄일 수 있는가? |
+
+1,024행 burst·GEMM 동등 테이블·고정 KV 분할·element-wise kernel 최적화·불필요 LM head 생략이 이미 적용됐다. 큰 모델 rag-c1과 일부 p95는 구조 한계로 닫혔다. 같은 budget·GEMM 탐색은 새 근거 없이 반복하지 않는다.
+
+## 2. 기존 목표와 범위
+
+[목표 문서](../goal.md)를 유지한다.
+
+- rag-c1/rag6k-c1 TTFT p50: 1단계 1.15배 이내, 최종 1.05배 이내.
+- rag-c8/rag-r3 TTFT p95: 1단계 1.4배 이내, 최종 1.15배 이내.
+- 짧은 워크로드·decode의 기존 회귀 제한을 유지한다. ±3% 동률과 회귀 허용치를 혼동하지 않는다.
+
+구조 한계로 수용한 기록을 보존한다. 새 후보가 빨라져도 최종 기준에 못 미치면 부분 개선이다. 출력이 달라지는 split-K 재기준·attention 분할은 별도 승인·모델 재검증 대상이며 이 계획으로 실행 승인을 대신하지 않는다.
+
+## 3. 조사 지도와 비교 조건
+
+- [scheduler](../../crates/riley-scheduler/src/scheduler.rs), [계획](../../crates/riley-scheduler/src/plan.rs): prompt/decode 예산·KV 대기·공정성.
+- [CLI](../../crates/riley-server/src/main.rs), [설정 문서](../configuration.md): burst·plateau·버킷·context 조합.
+- [engine](../../crates/riley-server/src/engine.rs), [host trace](../../crates/riley-runtime/src/host_trace.rs): 입력→대기→GPU→응답의 임계 경로.
+- [forward](../../crates/riley-runtime/src/llama/forward.rs), [batch executor](../../crates/riley-runtime/src/llama/batch_executor.rs): wide GEMM·attention·LM head.
+- [비교 실행기](../../benchmarks/live/compare.py), [최신 성능표](../../benchmarks/evidence/20261104-goal/full16-table.md): 셀·설정·근거.
+
+단어 수가 같아도 모델별 토큰 수가 다르므로 실제 prompt/output 길이를 기록한다. 14B는 KV 몫 차이로 reason 결과가 달랐던 이력이 있으므로 양쪽 KV 블록 수뿐 아니라 실제 바이트·수용량을 맞춘다.
+
+## 4. 원인을 찾는 실험
+
+### W3-1. 대기 시간 분해
+
+요청별 `수신→토큰화 완료→admission→첫 prefill→마지막 prefill→첫 토큰 발행`을 측정한다. 각 GPU 스텝에 prompt/decode 행 수, 버킷, attention work, graph/eager, 시간, 남은 KV를 연결한다.
+
+계측은 제안이며 현재 이 timestamp가 모두 공개돼 있다는 뜻은 아니다. 재현 ID를 사용하고 사용자 prompt를 운영 로그에 직접 쓰지 않는다. W5와 계측 비용을 확인한다.
+
+### W3-2. 단독 길이 곡선으로 계산 비용 분리
+
+짧은 입력부터 2K·4K·6K와 지원 상한 부근까지 C1에서 측정한다. 토큰화·GEMM·attention·기타 kernel·호스트 비용을 분리하고 실제 causal context·row 수를 기록한다.
+
+kernel probe의 빠른 알고리즘은 실제 모델 activation과 서버 프로파일로 확인한다. 기존 문서에도 무작위 데이터의 GEMM 순위와 서버 결과가 달랐던 사례가 있다. 같은 바이트의 동등성 검증 전에는 row별 알고리즘 변경을 채택하지 않는다.
+
+### W3-3. 혼합 부하로 tail 원인 분리
+
+| 부하 | 바꾸는 축 | 보는 지표 |
+|---|---|---|
+| 짧은 decode 중 긴 prompt 삽입 | 삽입 시점·길이·decode 수 | 기존 inter-token gap p95/p99, 신규 TTFT |
+| 긴 prompt 동시 도착 | C1/C8, 동기/지연 도착 | queue wait·최장 스텝·TTFT p95 |
+| open-loop RAG | rate·burst·seed | 완료율·오류율·큐 길이·p95 |
+| prefix cache | off/on, cold/warm, prefix 개수 | hit·tokenization·KV 압력 |
+| KV 부족 | 동일 총 바이트에서 문맥·동시성 변화 | block 대기·공정성·starvation |
+
+같은 입력·도착 순서를 기준/후보에 재생한다. closed-loop는 느려질수록 새 요청도 늦어지므로 open-loop와 구분한다. 예정 도착 시각과 실제 전송 지연을 기록해 부하 생성기 병목도 확인한다.
+
+## 5. 개선 후보와 채택 순서
+
+### W3-4. 바이트를 보존하는 스케줄 후보
+
+1. **decode가 있는 스텝의 prompt 예산 제한:** 행 수만 보지 않고 측정된 모델별 스텝 비용으로 burst를 제한한다. 타깃 예산·비용표는 실험 전에 고정한다.
+2. **대기 시간·공정성:** 짧은 요청 우선으로 긴 요청이 굶지 않게 대기 시간과 진행 보장을 검사한다.
+3. **모델군별 정책:** 작은 2-KV-head와 14B의 비용이 다르므로 범용 기본값보다 명시적 프로파일·opt-in을 먼저 평가한다.
+4. **넓은 prefill 선택:** decode가 없거나 여유가 있을 때 wide step을 사용한다. 기존 burst와 실제로 다른 조건·효과인지 검증한다.
+
+스케줄도 chunk 구성을 바꾸므로 출력 불변성을 확인한다. 실행 중 kernel 선점을 가정하지 말고 다음 스텝 예산에서 조절한다.
+
+### W3-5. 계산 병목이 확인된 경우
+
+- **GEMM:** activation 기반 동등 테이블 선택·workspace·wide shape 사용을 확인한다. 이미 최적인 범위는 새 증거가 있을 때만 재탐색한다.
+- **Attention:** 고정 token 경계·동일 fold/reduction을 지키며 work 분배·merge를 조사한다. reduction이 달라지면 수치 변경 트랙이다.
+- **불필요 계산:** 무출력 행 LM head, padding, wide shape가 decode graph 예산을 소모하는지 확인한다.
+- **호스트:** W2와 연결한다. 아직 검증되지 않은 비동기 이득을 전제로 정책을 채택하지 않는다.
+
+disaggregated prefill·다중 프로세스·다중 호스트는 별도 설계다. 단일 GPU 후보의 근거와 한계가 나온 뒤 평가한다.
+
+## 6. 실행 템플릿과 도구 한계
+
+기존 캠페인 구조의 Linux GPU 호스트에서만 사용한다. 다음 변수는 실제 값으로 사전 지정하고 manifest에 기록한다.
+
+```bash
+python3 benchmarks/live/compare.py \
+  "$CAMPAIGN_ROOT" "$RUN_LABEL" "$MODEL_NAME" "$GPU_ID" "$RILEY_BUILD_SUFFIX" \
+  --order rvvr \
+  --scenarios closed-c8,closed-c32,rag-c1,rag6k-c1,rag-c8,rag-r3,reason-c8,reason-c32
+```
+
+현재 실행기는 `ROOT/src/benchmarks/live/load.py`, `ROOT/models/<MODEL_NAME>`, `ROOT/bin/riley-<suffix>`, 전용 vLLM venv·CUDA 경로를 가정한다. 일반 clone에서 바로 실행된다고 보장하지 않는다. `--riley-short`, `--riley-long`, `--vllm-memory`, KV는 승인 설정으로 명시하고 기본값에 맡기지 않는다. W1의 실패 전파 보완 전에는 원본 JSON·종료 코드를 직접 확인한다.
+
+## 7. 검증 확대와 종료 조건
+
+초기 진단은 Qwen2.5-0.5B·3B·7B, Qwen3-4B·8B, Qwen2.5-14B·Coder-14B로 시작한다. 전역 scheduler 기본값을 바꾸면 최종적으로 24개 qualified 모델과 TP=2 영향 경로를 검사한다.
+
+최종 p95는 사전 지정한 다중 seed·반복과 충분한 표본으로 판정한다. 셀당 완료 1,000건 이상·3회 반복을 신규 제안으로 검토하되 실행 시간·분산을 확인해 사전 확정한다. 기존 qualification 표본을 소급 변경하는 기준은 아니다.
+
+- [ ] 병목을 queue·host·GEMM·attention·KV별 trace로 설명한다.
+- [ ] 단독 이득과 decode·짧은 요청 비용을 함께 제시한다.
+- [ ] W4 장문·chunk 경계·배치 불변성 검사를 통과한다.
+- [ ] W2 결합 시 네 후보 조합의 상호작용을 확인한다.
+- [ ] 최종 목표 충족/부분 개선/opt-in/기각/구조 한계를 구분한다.
+
+가드레일을 지키는 레버 두 개가 각각 2% 미만이면 기존 규칙에 따라 닫는다. 특정 워크로드에만 유효하면 비용을 명시해 opt-in으로 둘 수 있다. 회수할 때 기존 정책·비용표·설정을 함께 복구한다.
+
+## 8. 다른 작업에 넘길 결과
+
+W1에는 새 측정·판정 필드를, W4에는 chunk·schedule의 정확성 경계를, W5에는 권장 프로파일·지원 범위·트래픽 시나리오를 넘긴다. 최종 설명은 모델·prompt 길이·동시성·부하·설정·기준 후보를 연결한다.

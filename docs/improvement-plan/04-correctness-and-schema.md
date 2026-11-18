@@ -1,0 +1,126 @@
+# W4. 장문 정확성과 structured output 계약 개선
+
+작성일: 2026-11-13\
+종합 계획: [의존관계·가드레일](README.md)\
+구성: W4-A는 장문 수치 정확성, W4-B는 스키마 계약이다. 조사·수정·완료 여부를 각각 기록한다.
+
+## 1. 현재 근거와 해석
+
+| 항목 | 확인 내용 | 해석 |
+|---|---|---|
+| 장문 배치 불변성 | Qwen2.5-7B C8/C32 각각 54/54 | 18개 prompt를 세 번 반복한 비교다. 54개 독립 prompt의 품질 평가가 아니다. |
+| 장문 HF 일치 | 같은 표본에서 Riley 텍스트 12/18, vLLM 16/18 | 배치 불변성과 HF 수치·출력 일치는 별도 기준이다. 원인이 열려 있다. |
+| `oneOf` | compiler가 `anyOf`와 같은 분기 합집합으로 처리 | 정확히 하나만 만족한다는 의미를 보장하지 않는다. 현재 API 문서에도 제한이 적혀 있다. |
+| 스키마 조기 반환 | `$ref`, `const`, `enum`, 조합 키워드 처리 뒤 반환 | 형제 제약·미지원 키워드가 누락되는 추가 경계가 있는지 재현 검사가 필요하다. |
+| HF 기준 경로 | `long_check.py`는 HF BF16 `sdpa` 사용 | owned HF-eager 프로파일 기록과 섞어 같은 기준이라고 주장하면 안 된다. |
+
+근거: [장문 정확성 기록](../serving-validation.md), [스키마 구현](../../crates/riley-server/src/structured.rs), [API 제한](../api.md), [long_check](../../benchmarks/live/long_check.py), [owned 프로파일 조건](../model-support.md).
+
+## 2. W4-A: 장문 차이의 원인을 찾는 절차
+
+### W4-A1. 입력과 참조 환경을 먼저 일치시킨다
+
+모델 revision·파일 해시·tokenizer·chat template·BOS/EOS·special token·stop·generation 설정을 고정한다. Riley가 받은 prompt token ID를 HF에도 그대로 넣고, vLLM에도 실제로 같은 ID가 전달됐는지 확인한다. tokenizer 차이를 GEMM 문제로 오인하지 않는다.
+
+CUDA·cuBLAS·PyTorch·Transformers와 attention backend를 기록한다. GPU 라이브러리 정렬은 원인 분리 실험이며 프로덕션 요구사항으로 자동 승격하지 않는다. HF exact를 주장할 때는 어떤 backend·버전·모델·문맥·출력 길이에 대한 주장인지 명시한다.
+
+최초 재현은 기존 18개 prompt·32 output token을 보존한다. `long_check.py`가 저장하는 raw token과 EOS 제거·길이 비교를 점검한다. EOS를 중간에서도 일괄 제거하거나 길이가 다른 출력을 공통 prefix만으로 같다고 판정하지 않게 한다.
+
+### W4-A2. 최초 분기 token에서 teacher forcing으로 좁힌다
+
+1. 요청별 prompt ID, Riley/HF/vLLM raw generated ID, 종료 사유, 최초 분기 위치를 저장한다.
+2. 분기 전까지 동일한 token prefix를 세 엔진에 강제로 공급한다. 이미 다른 경로를 생성한 logits끼리 비교하지 않는다.
+3. 첫 차이의 top-1/top-2 margin, 선택 token, finite 여부, 전체 vocabulary logits의 오차·분포 지표를 진단한다.
+4. 같은 prefix에서 norm→QKV/bias→RoPE→attention→o_proj→MLP→최종 norm/LM head 순으로 중간 activation을 비교한다.
+5. 처음 차이가 생기는 층·연산·prefill/decode 경계를 찾고 pinned checkpoint 실제 입력의 독립 GPU 재현으로 줄인다.
+
+작은 margin 때문에 다른 token이 나왔다는 설명만으로 종료하지 않는다. 원인이 허용된 BF16 rounding인지, 잘못된 mask·position·bias·cache write인지 구분한다. 오차 임계값은 관측 결과에 맞춰 사후 조정하지 않는다.
+
+### W4-A3. 원인별 대조 실험
+
+| 가설 | 분리 실험 | 해결 방향 |
+|---|---|---|
+| 토큰화·BOS/EOS | 같은 prompt ID·template·종료 규칙 | tokenizer 또는 benchmark 입력 수정, 기존 결과 영향 명시 |
+| KV position·mask·chunk | 길이 경계 앞뒤, cache on/off, C1/C8/C32 | cache 주소·row kind·position/mask 수정 후 정확성 재검증 |
+| norm·RoPE·bias | 동일 activation, library 정렬·프로파일별 비교 | 잘못된 선택·epsilon·bias epilogue 교정 |
+| GEMM·attention reduction | 같은 입력·같은 알고리즘·chunk, 강제 prefix | 수치 계약 차이인지 구현 결함인지 분리 |
+| 참조 경로 차이 | HF sdpa/eager를 별개 baseline으로 기록 | 기준을 고정하고 주장 범위 제한 |
+
+기존 `owned_teacher_logits_gpu` 진단과 component oracle을 재사용할 수 있는지 [model-support](../model-support.md)에서 확인한다. 특정 pinned geometry를 지원하는 진단을 임의 모델에 그대로 적용하지 않는다.
+
+### W4-A4. 수정과 재평가
+
+결함이면 최소 재현을 회귀 검사로 남기고 affected 모델·프로파일·경계 길이를 모두 재평가한다. 수치 구조 차이면 선택지를 분리한다.
+
+- 기존 바이트를 보존한 구현 수정: W2·W3의 공통 정확성 기준에 적용한다.
+- 출력이 달라지는 새 수치 기준: 별도 변경으로 검토하고 기존 사전 승인·전체 affected 모델 품질 검증을 거친다.
+- 원인은 확인됐지만 채택할 수정이 없음: HF 일치 범위·한계·미해결 이유를 공개하고 통과로 바꾸지 않는다.
+
+기존 18개 표본에만 맞추지 않도록 고정된 추가 holdout을 둔다. 다국어·코드·숫자·반복 토큰·schema/tool·긴 출력과 256/512/1024 경계 앞뒤를 포함한다. prompt+output은 실제 지원 문맥 상한 안으로 제한한다. GSM8K는 같은 1,319문항·4-shot·generation 설정을 사용하며 축약 smoke로 최종 품질을 대신하지 않는다.
+
+## 3. W4-B: 스키마 의미를 일치시키는 절차
+
+### W4-B1. 계약표와 최소 반례 작성
+
+각 keyword를 `완전 강제`, `제한된 형태만 강제`, `명시적 거부`, `annotation`으로 표기한다. `schema()`의 분기 순서와 typed keyword 검사를 연결하고 형제 제약도 포함한다.
+
+대표 반례는 다음과 같다. 값 `1`은 두 분기를 모두 만족하므로 `oneOf`에는 부적합하고 `anyOf`에는 적합하다. `-1`은 첫 분기만 만족한다.
+
+```json
+{
+  "oneOf": [
+    {"type": "integer"},
+    {"type": "integer", "minimum": 0}
+  ]
+}
+```
+
+추가로 `const`/`enum`과 범위·길이·type·미지원 keyword의 조합, `anyOf`와 형제 제약, 중복 `oneOf` branch, 중첩·재귀 `$ref`, optional property, unicode·escape·빈 배열을 검사한다. 조기 반환 위험은 이 재현 전까지 확정된 HTTP 오출력으로 보고하지 않는다.
+
+### W4-B2. 단기 수정은 보장하지 못하는 입력을 거부
+
+일반 `oneOf`의 정확한 의미를 구현하기 전에는 이를 명시적 400 `invalid_schema`로 거부하는 방향을 우선 검토한다. 정적 분석으로 분기 배타성을 증명하는 부분 지원은 후속 후보이며 얕은 휴리스틱으로 판정하지 않는다.
+
+기존 문서가 `oneOf` 제한을 알렸더라도, 지원 입력을 거부하게 바꾸면 API 호환성 변경이다. 영향 요청·오류 메시지·이행 방법을 기록한다. 사용자가 합집합을 원할 때에만 `anyOf`로 바꾸도록 안내하며 의미가 같은 대체라고 자동 치환하지 않는다.
+
+다른 keyword도 "모두 강제하거나 명시적으로 거부" 원칙으로 정리한다. 성공 HTTP 응답 뒤에 독립 validator를 붙이는 것만으로 token 단위 보장을 대체하지 않는다. 특히 streaming에서 이미 발행한 바이트는 회수할 수 없다.
+
+### W4-B3. 독립 판정으로 검증
+
+지원 JSON Schema draft·validator 버전을 테스트 환경에 고정한다. validator는 개발·검증 의존성으로 두고 Rust serving에 Python을 추가하지 않는다. 지원 subset과 선택 draft의 의미가 맞는지도 명시한다.
+
+검사 층은 다음처럼 분리한다.
+
+1. CPU compiler/grammar: 유효한 값은 받아들이고 무효한 값은 거부하는지 독립 validator와 비교한다. 현재 compiler와 동일한 로직을 복제한 oracle은 쓰지 않는다.
+2. 오류 계약: 미지원 keyword·조합은 구체적 이름과 400을 반환하며 요청을 부분 수락하지 않는다.
+3. 실제 GPU API: nonstream/stream, `tool_choice` required·forced, logprobs 혼합에서 완성된 output을 독립 검증한다.
+4. 종료 경계: `finish_reason=stop` 성공 출력은 schema-valid여야 한다. 토큰 예산으로 끝난 `length`는 불완전할 수 있으며 성공 보장과 구분한다. 부분 tool call 처리도 확인한다.
+
+유효한 문법이 있다는 사실과 모델이 토큰 제한 안에 완성한다는 사실을 분리한다. 모델이 tool을 반복하는 현상과 서버 parser 결함도 같은 rendered prompt의 HF 비교로 구분한다.
+
+## 4. 의미 있는 회귀 검사
+
+| 트랙 | 최소 검사 | 확대 조건 |
+|---|---|---|
+| W4-A 입력 | BOS/EOS·template·prompt ID·종료 경계 | tokenizer·generation 입력 변경 시 전체 관련 모델 |
+| W4-A 수치 | 최초 분기 연산·실제 activation·경계 길이 | kernel·chunk·reduction 변경 시 affected geometry 전부 |
+| W4-A 배치 | C1 대비 C8/C32, 혼합 stage·취소·cache | W2·W3 변경 시 필수 |
+| W4-B 의미 | overlapping oneOf·형제 제약·미지원 조합 | compiler 변경 시 지원 subset 전체 |
+| W4-B API | API 기본 검사와 독립 schema/tool 검사 | 실제 serving 경로 변경 시 GPU 재실행 |
+
+새 테스트는 의도적으로 잘못된 후보가 실패하는지 확인한다. 기존 known limitation을 무조건 통과 처리하는 snapshot으로 고정하지 않는다.
+
+## 5. 실행 시 주의할 실제 도구 동작
+
+- `benchmarks/live/long_check.py ADDRESS MODEL_ID MODEL_DIR OUT [SERVER_PID]`는 HF 모델을 GPU에 올린다. 선택적 PID를 전달하면 서버에 SIGTERM을 보낸다. 전용 실험 서버만 대상으로 하며 공유 서비스 PID를 전달하지 않는다. 한 GPU에 양쪽 모델이 안 맞으면 Riley 결과를 보존한 뒤 전용 서버를 정리하고 HF를 순차 실행하는 형태로 분리한다.
+- `benchmarks/live/api_check.py ADDRESS MODEL --tools --out FILE`은 실제 API를 호출한다. schema 의미 검증은 기존 40개 검사 외에 별도로 추가한다.
+- `benchmarks/live/gsm8k.py ADDRESS MODEL DATA_DIR OUT`은 로컬 `train.jsonl`·`test.jsonl`을 기대한다. 입력 파일 해시·문항 수·shot 구성을 근거에 남긴다.
+
+## 6. 완료 조건과 다른 작업의 사용법
+
+- [ ] W4-A: 장문 차이가 동일 입력에서 재현되고 최초 분기 위치·연산·원인 또는 남은 불확실성이 기록돼 있다.
+- [ ] W4-A: 결함 수정 또는 수치 기준 변경의 영향 모델·품질 결과가 명확하다. 모든 HF 문자열을 무조건 같게 만들었다고 과장하지 않는다.
+- [ ] W4-B: 지원 제약은 독립 판정과 일치하고 미지원은 오류이며, oneOf·형제 제약 반례가 검증된다.
+- [ ] 공통: 배치 불변성·기존 품질 범위·W2/W3 성능 회귀 제한을 함께 만족한다.
+
+W1은 이 검사를 필수 후보 판정에 연결한다. W2·W3는 같은 corpus·raw token·oracle을 사용하고 수치 변경 여부를 선언한다. W5는 API 지원표·known limitation·모델별 품질 주장을 갱신한다. 스키마 수정의 회수 시에도 약한 의미를 숨겨 성공시키지 말고 이전 계약·문서·버전을 함께 복구한다.
