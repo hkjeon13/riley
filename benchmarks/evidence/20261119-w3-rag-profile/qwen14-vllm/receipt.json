@@ -1,0 +1,41 @@
+{
+  "model": "Qwen2.5-14B-Instruct",
+  "mode": "vllm",
+  "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+  "holder_pid": 2431237,
+  "holder_start_ticks": "6339570875",
+  "common_kv_blocks": 2576,
+  "kv_block_bytes": 3145728,
+  "kv_cache_bytes": 8103395328,
+  "sha256": {
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/vllm-venv/bin/vllm": "32fd9124908199541eebb45e23c734806ce95f6de8be3d7b681aecd096c9ade1",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-14B-Instruct/riley-checkpoint.json": "8210d56941a9c3a257f8f20ab65b40a19479f292036b2add12e66484b42e9e4d",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-14B-Instruct/config.json": "0f2085dbbe2ee251bd6a6a0797d84a6ce34436044d629aa3cba793b43d311a9e",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-14B-Instruct/tokenizer.json": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/qwen14-vllm/plan.json": "598a6d4323075fef82a6dbfeb6491ca8cfdabd040d47ba80086eec3189d2cded",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/run_profile.py": "f8cc5a624063bc693e7176cd7be04f49779bf672a6e23e47fead9441533cc3d8",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/profile_workload.py": "781f4654d3c0f6ad205da57950b582ba49886ddd445a8380cb7f5e08655a6b08",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/load.py": "fb3a3de6fcd8904d6379433ad8fcff284530e46e388aa40c2b7b75cfd0d0c8b0",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/profile_summary.py": "edf89f5ccc1caae92b358f855eb5cfa606dea7b1fcb1e1c1ad51e3262dda5207"
+  },
+  "status": "passed",
+  "command": [
+    "/usr/bin/python3",
+    "-B",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/profile_workload.py",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/qwen14-vllm/plan.json"
+  ],
+  "results": {
+    "rag-c1": "51baa9b94a87c7e115e93b9092841efb44520f69f77594392dce503940d4f0d8",
+    "rag-c8-s1": "5350bafb2e7e3259d52779edacbfdc3180bcc6e1f42db2162c6a420bdefc8395",
+    "rag-c8-s2": "546ff2e4ecf37c03e181f8e7d88ba4b0dab6102910fe385a22950188913090b9",
+    "wave-sync": "7fc18a52e7f1add1b77be14ea67bc1412ea05f4a26dc342945b1711e424dd528",
+    "wave-50ms": "32251c3ef15278c22f3a5b1d2f91ad33eda2157c3b100edff89afd6159c7a697"
+  },
+  "reported_kv_tokens": [
+    41216
+  ],
+  "kv_capacity_matches": true,
+  "nvml_samples": 461,
+  "max_process_memory_mib": 37602.0
+}

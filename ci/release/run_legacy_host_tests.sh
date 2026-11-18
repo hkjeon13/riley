@@ -14,6 +14,7 @@ if reason:
     raise SystemExit(reason)
 '
 
+result=0
 for target in \
     test_rc3_gate_e_private_raw_core_v1.py \
     test_run_remote_rc3_gate_e_session_v2.py \
@@ -21,5 +22,6 @@ for target in \
     test_verify_rc3_gate_e_execution_anchor_v1.py \
     test_check_reconstructed_runtime_python_prerequisite_v1.py
 do
-    /usr/bin/python3.10 -B -m unittest discover -s ci/release -p "$target" -v
+    /usr/bin/python3.10 -B -m unittest discover -s ci/release -p "$target" -v || result=1
 done
+exit "$result"

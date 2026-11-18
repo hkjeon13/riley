@@ -41,12 +41,13 @@ jobs:
         run: |
           set -euo pipefail
           image=$(docker image inspect --format '{{.Id}}' "riley-rc3-fixtures:$GITHUB_RUN_ID")
+          checkout=/home/psyche/rustinfer-vllm-roadmap-serial
           printf 'runtime image %s\n' "$image"
           docker run --rm --network none --read-only --cap-drop ALL \
             --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
             --tmpfs /tmp:rw,mode=1777,size=268435456 \
-            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/workspace,readonly" \
-            --workdir /workspace "$image" /bin/bash -euc '
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=$checkout,readonly" \
+            --workdir "$checkout" "$image" /bin/bash -euc '
               uname -srm
               sha256sum /usr/bin/python3.10
               stat -c "%u %a %n" /usr/bin/python3.10

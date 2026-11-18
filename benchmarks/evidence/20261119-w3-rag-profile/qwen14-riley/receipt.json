@@ -1,0 +1,37 @@
+{
+  "model": "Qwen2.5-14B-Instruct",
+  "mode": "riley",
+  "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+  "holder_pid": 2431237,
+  "holder_start_ticks": "6339570875",
+  "common_kv_blocks": 2576,
+  "kv_block_bytes": 3145728,
+  "kv_cache_bytes": 8103395328,
+  "sha256": {
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-schema-build-20261119.QWnmhslP/target/release/riley": "3e070d05c93b6784e24eefd423a77ed260162c7ddd9fcde67bec135c3dc53e70",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-14B-Instruct/riley-checkpoint.json": "8210d56941a9c3a257f8f20ab65b40a19479f292036b2add12e66484b42e9e4d",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-14B-Instruct/config.json": "0f2085dbbe2ee251bd6a6a0797d84a6ce34436044d629aa3cba793b43d311a9e",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-14B-Instruct/tokenizer.json": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/qwen14-riley/plan.json": "f9ee2f6bb0885626bcb25745c7b5362b8c727a7a18d0aea2ad3117b2e144bb4c",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/run_profile.py": "f8cc5a624063bc693e7176cd7be04f49779bf672a6e23e47fead9441533cc3d8",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/profile_workload.py": "781f4654d3c0f6ad205da57950b582ba49886ddd445a8380cb7f5e08655a6b08",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/load.py": "fb3a3de6fcd8904d6379433ad8fcff284530e46e388aa40c2b7b75cfd0d0c8b0",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/profile_summary.py": "edf89f5ccc1caae92b358f855eb5cfa606dea7b1fcb1e1c1ad51e3262dda5207"
+  },
+  "status": "passed",
+  "command": [
+    "/usr/bin/python3",
+    "-B",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/profile_workload.py",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-profile-20261119.FE1ZUFeE/qwen14-riley/plan.json"
+  ],
+  "results": {
+    "rag-c1": "6d984dbe102baffe7a96812134bfe06aad997b298030366a8047f47cb06e7d8b",
+    "rag-c8-s1": "9771f41aa636d11930f9edaa1b933cffe03d4799466885c897126b64e5b50eaf",
+    "rag-c8-s2": "fc61ff0077adef88b26eb039b84d58c4b7b6a61a929c0c907233a779efb1473d",
+    "wave-sync": "b59f819e7214bf4714967dbd960e6b8195830aab214a1b0961df113750eae589",
+    "wave-50ms": "7a49accde0464361bb943f5f0170128fa0dc95e0314c2ede752bc748ce14173b"
+  },
+  "nvml_samples": 532,
+  "max_process_memory_mib": 37932.0
+}
