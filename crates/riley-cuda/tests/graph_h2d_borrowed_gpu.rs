@@ -18,8 +18,8 @@ fn borrowed_h2d_exact_slabs_reject_refresh_and_drop() -> Result<(), Box<dyn std:
         .is_err()
     );
     for seed in 0..3_u8 {
-        let mut bytes: Vec<u8> = (0..257)
-            .map(|i| (i as u8).wrapping_mul(17).wrapping_add(seed))
+        let mut bytes: Vec<u8> = (0..257_u16)
+            .map(|i| i.to_le_bytes()[0].wrapping_mul(17).wrapping_add(seed))
             .collect();
         source.write(0, &bytes)?;
         device.upload_from_slice(0, &vec![0xff; 257], &mut staging, &mut stream)?;

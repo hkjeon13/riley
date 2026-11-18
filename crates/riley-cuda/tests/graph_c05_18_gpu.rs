@@ -459,7 +459,11 @@ fn owned_ragged_paged_kv_write_graph_preserves_bounds_invalid_raw_row_noop() -> 
     let fixture = RaggedFixture::new();
     // Host admission stays valid. Only the pre-uploaded fixed device row
     // metadata becomes invalid, exercising the same bounds guard as eager.
-    let raw_row_slots = vec![0_u32, SEQUENCE_COUNT as u32, 1];
+    let raw_row_slots = vec![
+        0_u32,
+        u32::try_from(SEQUENCE_COUNT).expect("fixture dimensions fit"),
+        1,
+    ];
     let raw_row_slots_bytes = u32_words_to_ne_bytes(&raw_row_slots);
     let offsets_bytes = u32_words_to_ne_bytes(&fixture.offsets);
     let block_ids_bytes = u32_words_to_ne_bytes(&fixture.block_ids);
@@ -652,15 +656,15 @@ fn owned_ragged_paged_kv_write_graph_preserves_bounds_invalid_raw_row_noop() -> 
     let resources = exec.close()?;
     let (
         capture_stream,
-        _graph_key_source,
-        _graph_value_source,
+        graph_key_source,
+        graph_value_source,
         mut graph_key_pool,
         mut graph_value_pool,
-        _graph_offsets,
-        _graph_block_ids,
-        _graph_valid_tokens,
-        _graph_row_slots,
-        _graph_row_positions,
+        graph_offsets,
+        graph_block_ids,
+        graph_valid_tokens,
+        graph_row_slots,
+        graph_row_positions,
     ) = resources.into_parts();
     let graph_key_pool_bytes = download(&mut graph_key_pool, &mut staging, &mut transfer_stream)?;
     let graph_value_pool_bytes =
@@ -689,7 +693,7 @@ fn owned_ragged_paged_kv_write_graph_preserves_bounds_invalid_raw_row_noop() -> 
     // The remaining graph buffers were intentionally not read, but must still
     // be closed after their known graph lease release.
     let (
-        _stream,
+        stream,
         graph_key_source,
         graph_value_source,
         graph_offsets,
@@ -699,13 +703,13 @@ fn owned_ragged_paged_kv_write_graph_preserves_bounds_invalid_raw_row_noop() -> 
         graph_row_positions,
     ) = (
         capture_stream,
-        _graph_key_source,
-        _graph_value_source,
-        _graph_offsets,
-        _graph_block_ids,
-        _graph_valid_tokens,
-        _graph_row_slots,
-        _graph_row_positions,
+        graph_key_source,
+        graph_value_source,
+        graph_offsets,
+        graph_block_ids,
+        graph_valid_tokens,
+        graph_row_slots,
+        graph_row_positions,
     );
     graph_row_positions.close()?;
     graph_row_slots.close()?;
@@ -724,7 +728,7 @@ fn owned_ragged_paged_kv_write_graph_preserves_bounds_invalid_raw_row_noop() -> 
     eager_value_source.close()?;
     eager_key_source.close()?;
     staging.close()?;
-    _stream.close()?;
+    stream.close()?;
     eager_stream.close()?;
     transfer_stream.close()?;
     assert_eq!(context.allocation_stats()?, allocation_baseline);

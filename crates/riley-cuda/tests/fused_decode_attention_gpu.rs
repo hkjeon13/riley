@@ -87,10 +87,13 @@ fn bf16_bits(value: f32) -> u16 {
     (bits.wrapping_add(0x7fff + ((bits >> 16) & 1)) >> 16) as u16
 }
 
-fn pattern(count: usize, multiplier: usize, offset: usize, modulus: usize, scale: f32) -> Vec<u8> {
+fn pattern(count: usize, multiplier: usize, offset: usize, modulus: u16, scale: f32) -> Vec<u8> {
     (0..count)
         .flat_map(|index| {
-            let centered = ((index * multiplier + offset) % modulus) as f32 - modulus as f32 / 2.0;
+            let centered = f32::from(
+                u16::try_from((index * multiplier + offset) % usize::from(modulus))
+                    .expect("bounded fixture value"),
+            ) - f32::from(modulus) / 2.0;
             bf16_bits(centered / scale).to_ne_bytes()
         })
         .collect()
@@ -187,11 +190,11 @@ fn run(
     if let Some((kinds, with_list)) = prompt_kinds {
         position_words.extend_from_slice(kinds);
         if with_list {
-            let list: Vec<u32> = (0..row_count as u32)
+            let list: Vec<u32> = (0..u32::try_from(row_count).expect("fixture dimensions fit"))
                 .filter(|row| kinds[*row as usize] != 1)
                 .collect();
             generated = Some((position_words.len() as u64, row_count as u64));
-            position_words.push(list.len() as u32);
+            position_words.push(u32::try_from(list.len()).expect("fixture dimensions fit"));
             position_words.extend_from_slice(&list);
             position_words.resize(position_words.len() + row_count - list.len(), 0);
         }
@@ -330,6 +333,8 @@ fn fused_decode_matches_the_two_kernel_path_byte_for_byte() -> TestResult {
     Ok(())
 }
 
+type ComparisonCase<'a> = (&'a str, &'a [Row], Option<(&'a [u32], bool)>);
+
 fn check_geometry(
     runtime: &CudaRuntime,
     heads: Heads,
@@ -343,12 +348,17 @@ fn check_geometry(
     let physical_blocks = SEQUENCES * pages_per_sequence;
     let pool_elements = physical_blocks * heads.key_value * PAGE_SIZE * HEAD_SIZE;
     let sequence_block_offsets: Vec<u32> = (0..=SEQUENCES)
-        .map(|sequence| (sequence * pages_per_sequence) as u32)
+        .map(|sequence| {
+            u32::try_from(sequence * pages_per_sequence).expect("fixture dimensions fit")
+        })
         .collect();
     let block_ids: Vec<u32> = (0..physical_blocks)
-        .map(|block| ((block * 29 + 5) % physical_blocks) as u32)
+        .map(|block| {
+            u32::try_from((block * 29 + 5) % physical_blocks).expect("fixture dimensions fit")
+        })
         .collect();
-    let valid_tokens = vec![PAGE_SIZE as u16; physical_blocks];
+    let valid_tokens =
+        vec![u16::try_from(PAGE_SIZE).expect("fixture dimensions fit"); physical_blocks];
     let pools = Pools {
         heads,
         pages_per_sequence,
@@ -386,7 +396,7 @@ fn check_geometry(
         valid_tokens,
     };
 
-    let last = (pages_per_sequence * PAGE_SIZE - 1) as u32;
+    let last = u32::try_from(pages_per_sequence * PAGE_SIZE - 1).expect("fixture dimensions fit");
     // Prompt runs (kind 1) and single decode rows of every page class: one
     // page, a page boundary on either side, many pages, the last position.
     let mut arrangement = rows(0, 0..40);
@@ -413,7 +423,7 @@ fn check_geometry(
         .filter(|(_, kind)| **kind == 0)
         .map(|(row, _)| *row)
         .collect();
-    let cases: Vec<(&str, &[Row], Option<(&[u32], bool)>)> = vec![
+    let cases: [ComparisonCase<'_>; 5] = [
         ("all-rows-per-page", &arrangement, None),
         ("decode-only", &decode_only, None),
         ("decode-single", &decode_only[..1], None),

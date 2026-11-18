@@ -279,6 +279,10 @@ fn bf16_row_bias_rejects_overflow_capacity_and_foreign_context_before_write() ->
 /// the host and running the established row-bias add on each slice.
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn merged_qkv_split_bias_matches_separate_row_bias_adds() -> TestResult {
     let (_runtime, device) = first_device()?;
     let context = device.create_context()?;

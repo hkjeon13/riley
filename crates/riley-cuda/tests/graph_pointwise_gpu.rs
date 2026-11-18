@@ -6,6 +6,10 @@ use riley_cuda::{
 };
 #[test]
 #[ignore = "requires CUDA; borrowed pointwise parity, tails and lifecycle"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn borrowed_pointwise_matches_eager_and_preserves_owners() -> Result<(), Box<dyn std::error::Error>>
 {
     let context = CudaRuntime::initialize()?.device(0)?.create_context()?;
@@ -122,7 +126,10 @@ fn borrowed_pointwise_matches_eager_and_preserves_owners() -> Result<(), Box<dyn
                 let mut actual = vec![0; a.len()];
                 output.download_to_slice(0, &mut actual, &mut staging, &mut stream)?;
                 assert_eq!(actual, expected);
-                assert_eq!(&actual[elements as usize * 2..], &[0xa5; 16]);
+                assert_eq!(
+                    &actual[usize::try_from(elements).expect("fixture dimensions fit") * 2..],
+                    &[0xa5; 16]
+                );
                 input.download_to_slice(0, &mut actual, &mut staging, &mut stream)?;
                 assert_eq!(actual, a);
                 other.download_to_slice(0, &mut actual, &mut staging, &mut stream)?;

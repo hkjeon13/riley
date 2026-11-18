@@ -228,6 +228,10 @@ fn load_artifact() -> TestResult<BoundaryArtifact> {
     {
         return Err("HF boundary artifact contract differs".into());
     }
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "The recorded JSON scale is compared in the kernel’s f32 domain"
+    )]
     let scale = document["contract"]["scale"]
         .as_f64()
         .ok_or("HF boundary artifact scale is missing")? as f32;

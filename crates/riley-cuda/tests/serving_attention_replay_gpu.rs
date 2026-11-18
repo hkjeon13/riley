@@ -7,6 +7,10 @@ use riley_cuda::{
 use std::{error::Error, fs, path::PathBuf};
 #[test]
 #[ignore = "requires CUDA and captured serving tensors"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn replay_actual_serving_attention() -> Result<(), Box<dyn Error>> {
     let root = PathBuf::from(std::env::var_os("RILEY_SERVING_TRACE").ok_or("trace root")?);
     let context = CudaRuntime::initialize()?.device(0)?.create_context()?;
@@ -36,15 +40,19 @@ fn replay_actual_serving_attention() -> Result<(), Box<dyn Error>> {
                     vp[dst..dst + 128].copy_from_slice(&values[src..src + 128]);
                 }
             }
-            let offsets = [0_u32, blocks as u32];
-            let ids: Vec<u32> = (0..blocks as u32).collect();
+            let offsets = [
+                0_u32,
+                u32::try_from(blocks).expect("fixture dimensions fit"),
+            ];
+            let ids: Vec<u32> =
+                (0..u32::try_from(blocks).expect("fixture dimensions fit")).collect();
             let mut valid = vec![16_u16; blocks];
-            valid[blocks - 1] = ((len - 1) % 16 + 1) as u16;
+            valid[blocks - 1] = u16::try_from((len - 1) % 16 + 1).expect("fixture dimensions fit");
             let slots = vec![0_u32; rows];
             let positions: Vec<u32> = if call == 0 {
                 (0..128).collect()
             } else {
-                vec![(len - 1) as u32]
+                vec![u32::try_from(len - 1).expect("fixture dimensions fit")]
             };
             let rawq = fs::read(root.join(format!("layer{layer}-call{call}-q.bf16")))?;
             assert_eq!(rawq.len(), rows * 576 * 2);
@@ -93,7 +101,7 @@ fn replay_actual_serving_attention() -> Result<(), Box<dyn Error>> {
                 },
                 &mut stream,
             )?;
-            let mut raw = vec![0; bytes as usize];
+            let mut raw = vec![0; usize::try_from(bytes).expect("fixture dimensions fit")];
             output.download_to_slice(0, &mut raw, &mut staging, &mut stream)?;
             fs::write(
                 root.join(format!("layer{layer}-call{call}-riley-context.bf16")),

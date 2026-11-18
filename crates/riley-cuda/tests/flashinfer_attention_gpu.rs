@@ -1,4 +1,4 @@
-//! FlashInfer attention mode of the D128 two-stage attention (head size 64
+//! `FlashInfer` attention mode of the D128 two-stage attention (head size 64
 //! and 128): every row's
 //! output bytes (prompt and decode) must not depend on its tile alignment,
 //! neighbouring rows, run order, the chunk a prompt arrives in or whether the
@@ -22,6 +22,8 @@ use riley_cuda::{
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
+
+type RowOutputs = (std::collections::HashMap<Row, Vec<u8>>, Vec<Vec<u8>>);
 
 /// Query and key/value head counts and head size of one checked geometry.
 #[derive(Clone, Copy, Debug)]
@@ -129,10 +131,13 @@ fn bf16_value(bits: u16) -> f32 {
     f32::from_bits(u32::from(bits) << 16)
 }
 
-fn pattern(count: usize, multiplier: usize, offset: usize, modulus: usize, scale: f32) -> Vec<u8> {
+fn pattern(count: usize, multiplier: usize, offset: usize, modulus: u16, scale: f32) -> Vec<u8> {
     (0..count)
         .flat_map(|index| {
-            let centered = ((index * multiplier + offset) % modulus) as f32 - modulus as f32 / 2.0;
+            let centered = f32::from(
+                u16::try_from((index * multiplier + offset) % usize::from(modulus))
+                    .expect("bounded fixture value"),
+            ) - f32::from(modulus) / 2.0;
             bf16_bits(centered / scale).to_ne_bytes()
         })
         .collect()
@@ -147,7 +152,12 @@ fn random_pattern(count: usize, mut state: u64, scale: f32) -> Vec<u8> {
             state ^= state << 13;
             state ^= state >> 7;
             state ^= state << 17;
-            let value = ((state >> 40) as f32 / 16_777_216.0 - 0.5) * scale;
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "The shifted state has 24 bits, all exactly representable in f32"
+            )]
+            let unit = (state >> 40) as f32 / 16_777_216.0;
+            let value = (unit - 0.5) * scale;
             bf16_bits(value).to_ne_bytes()
         })
         .collect()
@@ -265,11 +275,11 @@ fn run(
     if let Some((kinds, with_list)) = prompt_kinds {
         position_words.extend_from_slice(kinds);
         if with_list {
-            let list: Vec<u32> = (0..row_count as u32)
+            let list: Vec<u32> = (0..u32::try_from(row_count).expect("fixture dimensions fit"))
                 .filter(|row| kinds[*row as usize] != 1)
                 .collect();
             generated = Some((position_words.len() as u64, row_count as u64));
-            position_words.push(list.len() as u32);
+            position_words.push(u32::try_from(list.len()).expect("fixture dimensions fit"));
             position_words.extend_from_slice(&list);
             position_words.resize(position_words.len() + row_count - list.len(), 0);
         }
@@ -484,7 +494,7 @@ fn run_kinds(
     pools: &Pools,
     rows: &[(Row, u32)],
     with_list: bool,
-) -> TestResult<(std::collections::HashMap<Row, Vec<u8>>, Vec<Vec<u8>>)> {
+) -> TestResult<RowOutputs> {
     let addresses: Vec<Row> = rows.iter().map(|(row, _)| *row).collect();
     let kinds: Vec<u32> = rows.iter().map(|(_, kind)| *kind).collect();
     let output = run(
@@ -520,12 +530,17 @@ fn check_geometry(
     let physical_blocks = SEQUENCES * pages_per_sequence;
     let pool_elements = physical_blocks * heads.key_value * PAGE_SIZE * heads.head;
     let sequence_block_offsets: Vec<u32> = (0..=SEQUENCES)
-        .map(|sequence| (sequence * pages_per_sequence) as u32)
+        .map(|sequence| {
+            u32::try_from(sequence * pages_per_sequence).expect("fixture dimensions fit")
+        })
         .collect();
     let block_ids: Vec<u32> = (0..physical_blocks)
-        .map(|block| ((block * 29 + 5) % physical_blocks) as u32)
+        .map(|block| {
+            u32::try_from((block * 29 + 5) % physical_blocks).expect("fixture dimensions fit")
+        })
         .collect();
-    let valid_tokens = vec![PAGE_SIZE as u16; physical_blocks];
+    let valid_tokens =
+        vec![u16::try_from(PAGE_SIZE).expect("fixture dimensions fit"); physical_blocks];
     let mut pools = Pools {
         heads,
         random_seed,
@@ -572,8 +587,8 @@ fn check_geometry(
         valid_tokens,
     };
 
-    let last = (pages_per_sequence * PAGE_SIZE - 1) as u32;
-    let prompt = |sequence: u32, positions: std::ops::Range<u32>| -> Vec<(Row, u32)> {
+    let last = u32::try_from(pages_per_sequence * PAGE_SIZE - 1).expect("fixture dimensions fit");
+    let prompt = |sequence: u32, positions: std::ops::RangeInclusive<u32>| -> Vec<(Row, u32)> {
         positions
             .map(|position| (Row { sequence, position }, 1))
             .collect()
@@ -587,10 +602,10 @@ fn check_geometry(
     // Prompt runs from position 0, across pages and query tiles, a late long
     // run and a short one; decode rows of every page class of other
     // sequences.
-    let run_a = prompt(0, 0..70);
-    let run_b = prompt(1, 60..101);
-    let run_c = prompt(2, last - 40..last + 1);
-    let run_d = prompt(3, 15..18);
+    let run_a = prompt(0, 0..=69);
+    let run_b = prompt(1, 60..=100);
+    let run_c = prompt(2, (last - 40)..=last);
+    let run_d = prompt(3, 15..=17);
     let decodes = [
         decode(4, &[0, 15, 16, 255, last]),
         decode(5, &[64, 127, 300, last - 1]),
@@ -640,7 +655,7 @@ fn check_geometry(
     if let Some(generated) = generated_chunk {
         // Prompt rows take the bytes of the prompt chunk alone and every other
         // row those of the generated-row chunk alone.
-        set_native_flashinfer_generated_kv_chunk(None);
+        assert!(set_native_flashinfer_generated_kv_chunk(None));
         let (prompt_only, _) = run_kinds(
             &context,
             &mut stream,
@@ -659,7 +674,7 @@ fn check_geometry(
             true,
         )?;
         set_native_flashinfer_kv_chunk(outer_chunk);
-        set_native_flashinfer_generated_kv_chunk(Some(generated));
+        assert!(set_native_flashinfer_generated_kv_chunk(Some(generated)));
         for (row, kind) in &reference {
             let expected = if *kind == 1 {
                 &prompt_only
@@ -749,8 +764,8 @@ fn check_geometry(
     // A long prompt (sequence 3 from position 20) in serving-like prefill
     // chunks of different sizes, next to decode rows: each split must give the
     // rows the bytes of the whole run.
-    let long_end = (last + 1).min(420);
-    let long_run = prompt(3, 20..long_end);
+    let long_last = last.min(419);
+    let long_run = prompt(3, 20..=long_last);
     let mut long_checked = 0_usize;
     let (long_whole, _) = run_kinds(
         &context,
@@ -905,12 +920,12 @@ fn check_high_amplitude_against_f64(
     let keys = random_pattern(elements, seed, amplitude);
     let values = random_pattern(elements, seed ^ 0xd1b5_4a32_d192_ed03, 2.0);
     let offsets: Vec<u32> = (0..=SEQUENCES)
-        .map(|s| (s * pages_per_sequence) as u32)
+        .map(|s| u32::try_from(s * pages_per_sequence).expect("fixture dimensions fit"))
         .collect();
     let ids: Vec<u32> = (0..physical_blocks)
-        .map(|b| ((b * 29 + 5) % physical_blocks) as u32)
+        .map(|b| u32::try_from((b * 29 + 5) % physical_blocks).expect("fixture dimensions fit"))
         .collect();
-    let valid = vec![PAGE_SIZE as u16; physical_blocks];
+    let valid = vec![u16::try_from(PAGE_SIZE).expect("fixture dimensions fit"); physical_blocks];
     let pools = Pools {
         heads,
         random_seed: Some(seed),
@@ -1039,7 +1054,7 @@ fn check_high_amplitude_against_f64(
         }
     }
     assert!(
-        candidate_error <= 0.0078125,
+        candidate_error <= 0.007_812_5,
         "high-amplitude attention differs from f64 reference by {candidate_error}"
     );
     println!(

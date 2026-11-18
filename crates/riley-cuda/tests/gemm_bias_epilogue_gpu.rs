@@ -196,16 +196,20 @@ fn constant_bf16_bytes(element_count: u64, value: f32) -> TestResult<Vec<u8>> {
     )))
 }
 
-fn workspace_span<'a>(
-    workspace: Option<&'a mut CudaDeviceBuffer>,
+fn workspace_span(
+    workspace: Option<&mut CudaDeviceBuffer>,
     bytes: u64,
-) -> TestResult<Option<CudaBufferSpanMut<'a>>> {
+) -> TestResult<Option<CudaBufferSpanMut<'_>>> {
     workspace
         .map(|buffer| CudaBufferSpanMut::new(buffer, CudaDType::U8, 0, bytes))
         .transpose()
         .map_err(Into::into)
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Pass the separate plans, buffers, and execution metadata to the fixture"
+)]
 fn execute(
     plan: &mut riley_cuda::CudaPreparedBiasEpilogueGemm,
     config: CudaGemmConfig,
@@ -273,6 +277,10 @@ fn assert_metadata(
     );
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn run_qwen_projection_case(
     context: &CudaContext,
     stream: &mut CudaStream,

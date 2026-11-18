@@ -1091,11 +1091,11 @@ fn residual_rms_norm_validation_is_fail_closed_and_zero_rows_are_a_noop() -> Tes
 #[test]
 #[ignore = "remote GPU"]
 fn rope_table_matches_hugging_face_cuda_bf16_boundaries() -> TestResult {
+    const POSITION_COUNT: u16 = 8_192;
+    const HALF_DIMENSION: u16 = 32;
     let (_runtime, device) = first_device()?;
     let context = device.create_context()?;
     let mut stream = context.create_stream()?;
-    const POSITION_COUNT: u16 = 8_192;
-    const HALF_DIMENSION: u16 = 32;
     let element_count = usize::from(POSITION_COUNT) * usize::from(HALF_DIMENSION);
     let mut angles = Vec::with_capacity(element_count);
     let mut cpu_cos_bf16 = Vec::with_capacity(element_count);
@@ -1308,7 +1308,7 @@ fn qwen_layer3_isolated_rms_norm_captured_input_replay() -> TestResult {
                 output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, byte_len)?,
                 row_count: rows,
                 hidden_size: 2048,
-                epsilon: f32::from_bits(0x358637bd),
+                epsilon: f32::from_bits(0x3586_37bd),
             };
             riley_cuda::hugging_face_qwen_p2051_rms_norm(&mut params, &mut stream)?;
             let actual = download(&context, &mut stream, &mut output)?;

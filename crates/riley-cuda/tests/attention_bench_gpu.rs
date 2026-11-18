@@ -37,14 +37,13 @@ fn bf16_bits(value: f32) -> u16 {
     (bits.wrapping_add(0x7fff + ((bits >> 16) & 1)) >> 16) as u16
 }
 
-fn bf16_value(bits: u16) -> f32 {
-    f32::from_bits(u32::from(bits) << 16)
-}
-
-fn pattern(count: usize, multiplier: usize, offset: usize, modulus: usize, scale: f32) -> Vec<u8> {
+fn pattern(count: usize, multiplier: usize, offset: usize, modulus: u16, scale: f32) -> Vec<u8> {
     (0..count)
         .flat_map(|index| {
-            let centered = ((index * multiplier + offset) % modulus) as f32 - modulus as f32 / 2.0;
+            let centered = f32::from(
+                u16::try_from((index * multiplier + offset) % usize::from(modulus))
+                    .expect("bounded fixture value"),
+            ) - f32::from(modulus) / 2.0;
             bf16_bits(centered / scale).to_ne_bytes()
         })
         .collect()
@@ -91,7 +90,7 @@ fn natural_context(sequence: usize) -> u32 {
         1 => 128 + (sequence * 13) % 64,
         _ => 398 + (sequence * 17) % 128,
     };
-    length as u32
+    u32::try_from(length).expect("fixture dimensions fit")
 }
 
 /// Rows `(sequence, position, kind)`; kind 1 is a prompt row.
@@ -102,25 +101,31 @@ fn step_rows(mixed: bool) -> Vec<(u32, u32, u32)> {
     }
     let first = usize::from(mixed);
     for sequence in first..SEQUENCES {
-        rows.push((sequence as u32, natural_context(sequence) - 1, 0));
+        rows.push((
+            u32::try_from(sequence).expect("fixture dimensions fit"),
+            natural_context(sequence) - 1,
+            0,
+        ));
     }
     rows
 }
+
+type TimingPools = (
+    CudaDeviceBuffer,
+    CudaDeviceBuffer,
+    CudaDeviceBuffer,
+    CudaDeviceBuffer,
+    CudaDeviceBuffer,
+    Vec<u32>,
+    Vec<u32>,
+    Vec<u16>,
+);
 
 fn time_mode(
     context: &CudaContext,
     stream: &mut CudaStream,
     staging: &mut CudaPinnedHostBuffer,
-    pools: &(
-        CudaDeviceBuffer,
-        CudaDeviceBuffer,
-        CudaDeviceBuffer,
-        CudaDeviceBuffer,
-        CudaDeviceBuffer,
-        Vec<u32>,
-        Vec<u32>,
-        Vec<u16>,
-    ),
+    pools: &TimingPools,
     rows: &[(u32, u32, u32)],
 ) -> TestResult<f64> {
     let (
@@ -237,7 +242,8 @@ fn time_mode(
             )?;
         }
         stream.synchronize()?;
-        elapsed = started.elapsed().as_secs_f64() * 1e6 / ITERATIONS as f64;
+        elapsed = started.elapsed().as_secs_f64() * 1e6
+            / f64::from(u32::try_from(ITERATIONS).expect("bounded iteration count"));
     }
     for buffer in [
         query,
@@ -263,12 +269,17 @@ fn attention_step_shapes_timing() -> TestResult {
     let physical_blocks = SEQUENCES * PAGES_PER_SEQUENCE;
     let pool_elements = physical_blocks * KEY_VALUE_HEADS * PAGE_SIZE * HEAD_SIZE;
     let sequence_block_offsets: Vec<u32> = (0..=SEQUENCES)
-        .map(|sequence| (sequence * PAGES_PER_SEQUENCE) as u32)
+        .map(|sequence| {
+            u32::try_from(sequence * PAGES_PER_SEQUENCE).expect("fixture dimensions fit")
+        })
         .collect();
     let block_ids: Vec<u32> = (0..physical_blocks)
-        .map(|block| ((block * 29 + 5) % physical_blocks) as u32)
+        .map(|block| {
+            u32::try_from((block * 29 + 5) % physical_blocks).expect("fixture dimensions fit")
+        })
         .collect();
-    let valid_tokens = vec![PAGE_SIZE as u16; physical_blocks];
+    let valid_tokens =
+        vec![u16::try_from(PAGE_SIZE).expect("fixture dimensions fit"); physical_blocks];
     let pools = (
         upload(
             &context,

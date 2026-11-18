@@ -105,10 +105,10 @@ fn recorded_step_replays_with_new_inputs_and_matches_eager() -> TestResult {
     let mut eager_out = context.allocate_device_buffer(bytes)?;
 
     let first_left: Vec<f32> = (0..ELEMENTS)
-        .map(|index| index as f32 * 0.25 - 7.0)
+        .map(|index| f32::from(u16::try_from(index).expect("bounded fixture value")) * 0.25 - 7.0)
         .collect();
     let first_right: Vec<f32> = (0..ELEMENTS)
-        .map(|index| 3.5 - index as f32 * 0.125)
+        .map(|index| 3.5 - f32::from(u16::try_from(index).expect("bounded fixture value")) * 0.125)
         .collect();
     upload_into(&mut left, &mut stream, &mut staging, &first_left)?;
     upload_into(&mut right, &mut stream, &mut staging, &first_right)?;
@@ -139,11 +139,13 @@ fn recorded_step_replays_with_new_inputs_and_matches_eager() -> TestResult {
     for round in 0..3 {
         let new_left: Vec<f32> = first_left
             .iter()
-            .map(|value| value + round as f32)
+            .map(|value| value + f32::from(u16::try_from(round).expect("bounded fixture value")))
             .collect();
         let new_right: Vec<f32> = first_right
             .iter()
-            .map(|value| value * (round + 1) as f32)
+            .map(|value| {
+                value * f32::from(u16::try_from(round + 1).expect("bounded fixture value"))
+            })
             .collect();
         upload_into(&mut left, &mut stream, &mut staging, &new_left)?;
         upload_into(&mut right, &mut stream, &mut staging, &new_right)?;

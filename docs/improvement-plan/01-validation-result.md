@@ -127,6 +127,8 @@ GPU 없는 runner에서 Riley 바이너리는 NVIDIA가 주입하는 `libcuda.so
 
 첫 수정에서는 그래프 실행의 기존 오류 상태 전이를 유지하면서 자원 확인을 정리했고, H2D 실행은 이미 확인한 소스 참조를 재사용한다. FFI의 포인터 표현, 문서 표기와 `Debug` 표시도 정리했다. macOS 격리 복사본에서 Rust만 검사한 CUDA Clippy 라이브러리 진단이 69건에서 49건으로 줄었다. 같은 소스의 CUDA를 끈 CPU 테스트 225건이 통과했다. 남은 CUDA 린트는 기존 `-D warnings`로 다시 판정한다.
 
+두 번째 수정에서는 CUDA 라이브러리의 probe 전용 함수와 테스트 전용 helper에 호출자와 같은 기능 조건을 적용했다. 그래프 preflight와 FFI의 반환 타입과 C ABI는 유지했고, GPU 테스트에서 사용하는 크기·인덱스 변환은 범위를 확인하도록 수정했다. CPU 구성에서 `riley-cuda` 테스트 225건을 통과했다. 격리한 macOS 환경에서 네이티브 빌드 스크립트를 임시 대체해 Rust 코드만 확인한 결과, `riley-cuda`와 `riley-tensor`의 CUDA 기능 전체 타깃 Clippy가 기존 `-D warnings`로 통과했다. 네이티브 도구 체인에서의 전체 워크플로와 서버·런타임 lint 판정은 진행 중이다.
+
 같은 커밋의 CUDA 12.4 배포 이미지 빌드와 CPU 검증은 통과했다. 소스 아카이브 해시를 로컬에서 재계산했고, 이전 이미지와 런타임 파일 목록이 같으며 Riley 실행 파일의 해시만 달라진 것을 확인했다. 이미지 ID와 새 실행 파일의 해시를 보존했다. [배포 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/44403168877) · [바인딩 수정 이미지 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/ffi-fix/receipt.json)
 
 W2·W3는 이 runner의 새 label·실패 판정·실행 argv/해시를 사용한다. W4는 정확성 판정 결과를 같은 후보에 결속한다. W5는 현행 이미지와 네이티브 GPU 실행 근거를 릴리스 문서에 연결한다. M5 판정에는 동일 후보의 패키징·GPU 실행·품질 근거가 필요하다.

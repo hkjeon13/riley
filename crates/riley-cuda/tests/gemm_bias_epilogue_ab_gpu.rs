@@ -183,10 +183,10 @@ fn download(
     Ok(bytes)
 }
 
-fn workspace_span<'a>(
-    workspace: Option<&'a mut CudaDeviceBuffer>,
+fn workspace_span(
+    workspace: Option<&mut CudaDeviceBuffer>,
     bytes: u64,
-) -> TestResult<Option<CudaBufferSpanMut<'a>>> {
+) -> TestResult<Option<CudaBufferSpanMut<'_>>> {
     workspace
         .map(|buffer| CudaBufferSpanMut::new(buffer, CudaDType::U8, 0, bytes))
         .transpose()
@@ -351,6 +351,10 @@ fn assert_metadata(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn run_case(
     context: &CudaContext,
     stream: &mut CudaStream,

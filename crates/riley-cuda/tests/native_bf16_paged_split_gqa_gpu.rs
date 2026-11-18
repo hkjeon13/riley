@@ -486,6 +486,10 @@ fn timed_execute(
 }
 
 #[derive(Clone, Copy, Debug)]
+#[allow(
+    clippy::struct_field_names,
+    reason = "The suffix identifies the unit for each independent region"
+)]
 struct NativeV2WorkspaceLayout {
     state_prefix_bytes: u64,
     transition_step_bytes: u64,
@@ -1490,7 +1494,7 @@ fn native_bf16_ragged_paged_d128_two_stage_v3_c2048_b8_matches_v1_prefix_reducer
 
     let row_state_bytes = layout.partial_state_bytes() / u64::try_from(OUTPUT_ROWS)?;
     let mut generic_outputs = Vec::with_capacity(ACTIVE_ROWS);
-    for row in 0..ACTIVE_ROWS {
+    for (row, &position) in row_positions[..ACTIVE_ROWS].iter().enumerate() {
         let mut generic = upload(
             &context,
             &mut stream,
@@ -1498,7 +1502,7 @@ fn native_bf16_ragged_paged_d128_two_stage_v3_c2048_b8_matches_v1_prefix_reducer
             &encode_bf16(&vec![OUTPUT_SENTINEL; QUERY_HEADS * HEAD_SIZE]),
         )?;
         let generic_len = generic.byte_len();
-        let partial_state_count = u64::from(row_positions[row]) / u64::try_from(PAGE_SIZE)? + 1;
+        let partial_state_count = u64::from(position) / u64::try_from(PAGE_SIZE)? + 1;
         decode_partial_states_reduce(
             &mut DecodePartialStateReduceParams {
                 partial_states: CudaBufferSpan::new(

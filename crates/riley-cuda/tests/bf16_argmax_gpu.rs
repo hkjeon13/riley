@@ -400,6 +400,10 @@ fn cpu_bounded_argmax(bits: &[u16], vocabulary: usize, bound: usize) -> Vec<u8> 
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn bounded_argmax_matches_cpu_oracle_and_ignores_columns_past_the_bound() -> TestResult {
     const ROW_COUNT: usize = 6;
     const VOCABULARY_SIZE: usize = 1_031;
@@ -534,7 +538,11 @@ fn deterministic_bf16_argmax_matches_cpu_bytes_for_model_vocabularies() -> TestR
         // Pseudo-random finite logits in [-8, 8) as BF16 bits.
         let mut bits: Vec<u16> = (0..row_count * vocabulary_size)
             .map(|i| {
-                let unit = ((i.wrapping_mul(2_654_435_761) >> 7) % 4096) as f32 / 256.0 - 8.0;
+                let unit = f32::from(
+                    u16::try_from((i.wrapping_mul(2_654_435_761) >> 7) % 4096)
+                        .expect("bounded fixture value"),
+                ) / 256.0
+                    - 8.0;
                 (unit.to_bits() >> 16) as u16
             })
             .collect();
@@ -766,13 +774,13 @@ fn fp32_tie_break_rescores_only_tied_maxima_per_row() -> TestResult {
     let indices_buffer = upload(&context, &mut stream, &mut staging, &u32_bytes(&indices))?;
     let mut results = context.allocate_device_buffer(u64::try_from(ROWS * 8)?)?;
 
-    let mut run = |hidden: &CudaDeviceBuffer,
-                   gathered_rows: bool,
-                   row_count: usize,
-                   logits_offset: usize,
-                   candidate_count: usize,
-                   stream: &mut CudaStream,
-                   results: &mut CudaDeviceBuffer|
+    let run = |hidden: &CudaDeviceBuffer,
+               gathered_rows: bool,
+               row_count: usize,
+               logits_offset: usize,
+               candidate_count: usize,
+               stream: &mut CudaStream,
+               results: &mut CudaDeviceBuffer|
      -> TestResult<Vec<u32>> {
         {
             let mut params = Bf16ArgmaxParams {
@@ -848,10 +856,10 @@ fn fp32_tie_break_rescores_only_tied_maxima_per_row() -> TestResult {
         unbounded
     );
     // A row alone selects what it selects inside the batch.
-    for row in 0..ROWS {
+    for (row, &token) in unbounded[..ROWS].iter().enumerate() {
         assert_eq!(
             run(&gathered, true, 1, row, 0, &mut stream, &mut results)?,
-            vec![unbounded[row]],
+            vec![token],
             "row {row} alone"
         );
     }
@@ -873,6 +881,10 @@ fn fp32_tie_break_rescores_only_tied_maxima_per_row() -> TestResult {
 #[test]
 #[ignore = "remote GPU"]
 #[allow(clippy::cast_precision_loss)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn fp32_tie_break_launch_cost_screen() -> TestResult {
     const VOCABULARY: usize = 151_936;
     const HIDDEN: usize = 1024;
@@ -1001,7 +1013,7 @@ fn fp32_window_rescores_logits_near_the_maximum() -> TestResult {
         weight[20 * HIDDEN + k] = 2.0; // one step below, score 64
         weight[30 * HIDDEN + k] = 3.0; // two steps below, score 96
     }
-    let hidden = vec![1.0f32; HIDDEN];
+    let hidden = [1.0f32; HIDDEN];
     // At exponent 2 (values in [4, 8)) one BF16 step is 1/32.
     let mut logits = vec![bf16_of(-8.0); VOCABULARY];
     logits[10] = bf16_of(4.5);

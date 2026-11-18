@@ -6,6 +6,10 @@ use riley_cuda::{
 
 #[test]
 #[ignore = "requires CUDA; packed position parent span and lifecycle"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn borrowed_rope_position_span_matches_eager_and_preserves_parent()
 -> Result<(), Box<dyn std::error::Error>> {
     let context = CudaRuntime::initialize()?.device(0)?.create_context()?;
@@ -17,15 +21,24 @@ fn borrowed_rope_position_span_matches_eager_and_preserves_parent()
             .flat_map(|i| (0x3e00_u16 + (i % 127) as u16).to_le_bytes())
             .collect();
         let cos_bytes: Vec<u8> = (0..8 * 32)
-            .flat_map(|i| ((i as f32 * 0.03).cos()).to_le_bytes())
+            .flat_map(|i| {
+                ((f32::from(u16::try_from(i).expect("bounded fixture value")) * 0.03).cos())
+                    .to_le_bytes()
+            })
             .collect();
         let sin_bytes: Vec<u8> = (0..8 * 32)
-            .flat_map(|i| ((i as f32 * 0.03).sin()).to_le_bytes())
+            .flat_map(|i| {
+                ((f32::from(u16::try_from(i).expect("bounded fixture value")) * 0.03).sin())
+                    .to_le_bytes()
+            })
             .collect();
-        let positions_host: Vec<u32> = (0..rows).map(|r| r as u32 + 2).collect();
-        let mut parent_bytes = vec![0xa5; (offset + rows * 4 + 32) as usize];
+        let positions_host: Vec<u32> = (0..rows)
+            .map(|r| u32::try_from(r).expect("fixture dimensions fit") + 2)
+            .collect();
+        let mut parent_bytes =
+            vec![0xa5; usize::try_from(offset + rows * 4 + 32).expect("fixture dimensions fit")];
         for (i, p) in positions_host.iter().enumerate() {
-            let start = offset as usize + i * 4;
+            let start = usize::try_from(offset).expect("fixture dimensions fit") + i * 4;
             parent_bytes[start..start + 4].copy_from_slice(&p.to_le_bytes());
         }
         let mut input = context.allocate_device_buffer(input_bytes.len() as u64)?;
@@ -109,7 +122,10 @@ fn borrowed_rope_position_span_matches_eager_and_preserves_parent()
             let mut actual = vec![0; input_bytes.len()];
             output.download_to_slice(0, &mut actual, &mut staging, &mut stream)?;
             assert_eq!(actual, expected);
-            assert_eq!(&actual[bytes as usize..], &[0x5a; 16]);
+            assert_eq!(
+                &actual[usize::try_from(bytes).expect("fixture dimensions fit")..],
+                &[0x5a; 16]
+            );
             input.download_to_slice(0, &mut actual, &mut staging, &mut stream)?;
             assert_eq!(actual, input_bytes);
             let mut parent = vec![0; parent_bytes.len()];

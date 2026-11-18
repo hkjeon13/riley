@@ -1,7 +1,7 @@
 //! The head-norm form of the merged-QKV split (no bias; an RMS norm over every
 //! query head and key head before the rotary embedding, Qwen3) must store the
 //! same bytes as the separate launches it replaces: slicing the merged matrix,
-//! the BF16 RMS norm on rows of one head, the indexed RoPE and the KV cache
+//! the BF16 RMS norm on rows of one head, the indexed `RoPE` and the KV cache
 //! write. Checked for the immediate launch and for the launch deferred to the
 //! cache write.
 
@@ -80,6 +80,10 @@ fn span(buffer: &CudaDeviceBuffer, dtype: CudaDType) -> TestResult<CudaBufferSpa
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn head_norm_split_matches_slice_norm_rope_and_cache_write() -> TestResult {
     let runtime = CudaRuntime::initialize()?;
     let context = runtime.device(0)?.create_context()?;
@@ -119,7 +123,8 @@ fn head_norm_split_matches_slice_norm_rope_and_cache_write() -> TestResult {
         .map(|i| {
             let unit = ((i * 2_654_435_761_usize) >> 7) % 4093;
             let magnitude = [0.031_f32, 0.27, 1.9, 7.3][(i / 5) % 4];
-            (unit as f32 / 2046.5 - 1.0) * magnitude
+            (f32::from(u16::try_from(unit).expect("bounded fixture value")) / 2046.5 - 1.0)
+                * magnitude
         })
         .collect();
     let slice = |offset: usize, width: usize| -> Vec<u8> {
@@ -146,26 +151,36 @@ fn head_norm_split_matches_slice_norm_rope_and_cache_write() -> TestResult {
         &context,
         &mut stream,
         &mut staging,
-        &encode_bf16((0..HEAD).map(|i| 0.6 + ((i * 29 + 3) % 61) as f32 / 40.0)),
+        &encode_bf16((0..HEAD).map(|i| {
+            0.6 + f32::from(u16::try_from((i * 29 + 3) % 61).expect("bounded fixture value")) / 40.0
+        })),
     )?;
     let key_scale = upload(
         &context,
         &mut stream,
         &mut staging,
-        &encode_bf16((0..HEAD).map(|i| 0.4 + ((i * 17 + 7) % 53) as f32 / 30.0)),
+        &encode_bf16((0..HEAD).map(|i| {
+            0.4 + f32::from(u16::try_from((i * 17 + 7) % 53).expect("bounded fixture value")) / 30.0
+        })),
     )?;
-    let cos = upload(
-        &context,
-        &mut stream,
-        &mut staging,
-        &encode_f32((0..table_positions * HEAD / 2).map(|i| (i as f32 * 0.013).cos())),
-    )?;
-    let sin = upload(
-        &context,
-        &mut stream,
-        &mut staging,
-        &encode_f32((0..table_positions * HEAD / 2).map(|i| (i as f32 * 0.013).sin())),
-    )?;
+    let cos =
+        upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &encode_f32((0..table_positions * HEAD / 2).map(|i| {
+                (f32::from(u16::try_from(i).expect("bounded fixture value")) * 0.013).cos()
+            })),
+        )?;
+    let sin =
+        upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &encode_f32((0..table_positions * HEAD / 2).map(|i| {
+                (f32::from(u16::try_from(i).expect("bounded fixture value")) * 0.013).sin()
+            })),
+        )?;
     let offsets_device = upload(
         &context,
         &mut stream,

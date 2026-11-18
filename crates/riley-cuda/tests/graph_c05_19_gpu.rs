@@ -655,7 +655,13 @@ fn owned_grouped_ragged_attention_graph_preserves_bounds_invalid_raw_row_nan() -
     let fixture = GroupedAttentionFixture::new();
     // Host admission remains valid; one fixed device row slot becomes invalid
     // to exercise the eager kernel's in-kernel non-finite output path.
-    let raw_row_slots = vec![0_u32, SEQUENCE_COUNT as u32, 0, 1, 0];
+    let raw_row_slots = vec![
+        0_u32,
+        u32::try_from(SEQUENCE_COUNT).expect("fixture dimensions fit"),
+        0,
+        1,
+        0,
+    ];
     let raw_row_slots_bytes = u32_words_to_ne_bytes(&raw_row_slots);
     let offsets_bytes = u32_words_to_ne_bytes(&fixture.offsets);
     let block_ids_bytes = u32_words_to_ne_bytes(&fixture.block_ids);
@@ -808,15 +814,15 @@ fn owned_grouped_ragged_attention_graph_preserves_bounds_invalid_raw_row_nan() -
     let resources = exec.close()?;
     let (
         capture_stream,
-        _graph_query,
-        _graph_key_pool,
-        _graph_value_pool,
+        graph_query,
+        graph_key_pool,
+        graph_value_pool,
         mut graph_output,
-        _graph_offsets,
-        _graph_block_ids,
-        _graph_valid_tokens,
-        _graph_row_slots,
-        _graph_row_positions,
+        graph_offsets,
+        graph_block_ids,
+        graph_valid_tokens,
+        graph_row_slots,
+        graph_row_positions,
     ) = resources.into_parts();
     let graph_output_bytes = download(&mut graph_output, &mut staging, &mut transfer_stream)?;
     let eager_output_bytes = download(&mut eager_output, &mut staging, &mut transfer_stream)?;
@@ -832,7 +838,7 @@ fn owned_grouped_ragged_attention_graph_preserves_bounds_invalid_raw_row_nan() -
 
     graph_output.close()?;
     let (
-        _stream,
+        stream,
         graph_query,
         graph_key_pool,
         graph_value_pool,
@@ -843,14 +849,14 @@ fn owned_grouped_ragged_attention_graph_preserves_bounds_invalid_raw_row_nan() -
         graph_row_positions,
     ) = (
         capture_stream,
-        _graph_query,
-        _graph_key_pool,
-        _graph_value_pool,
-        _graph_offsets,
-        _graph_block_ids,
-        _graph_valid_tokens,
-        _graph_row_slots,
-        _graph_row_positions,
+        graph_query,
+        graph_key_pool,
+        graph_value_pool,
+        graph_offsets,
+        graph_block_ids,
+        graph_valid_tokens,
+        graph_row_slots,
+        graph_row_positions,
     );
     graph_row_positions.close()?;
     graph_row_slots.close()?;
@@ -870,7 +876,7 @@ fn owned_grouped_ragged_attention_graph_preserves_bounds_invalid_raw_row_nan() -
     eager_key_pool.close()?;
     eager_query.close()?;
     staging.close()?;
-    _stream.close()?;
+    stream.close()?;
     eager_stream.close()?;
     transfer_stream.close()?;
     assert_eq!(context.allocation_stats()?, allocation_baseline);

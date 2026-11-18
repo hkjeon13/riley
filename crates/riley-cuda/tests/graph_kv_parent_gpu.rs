@@ -6,6 +6,10 @@ use riley_cuda::{
 
 #[test]
 #[ignore = "requires CUDA; packed write parent/layer isolation"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn packed_kv_write_preserves_other_layers_metadata_and_sources()
 -> Result<(), Box<dyn std::error::Error>> {
     let context = CudaRuntime::initialize()?.device(0)?.create_context()?;
@@ -26,11 +30,11 @@ fn packed_kv_write_preserves_other_layers_metadata_and_sources()
     payload[40..44].copy_from_slice(&[16, 0, 2, 0]);
     let metadata =
         PackedAttentionMetadataLayout::new(64, [(8, 8), (24, 8), (40, 4), (0, 8), (48, 8)])?;
-    let k: Vec<u8> = (0..264)
-        .flat_map(|i| (0x3e00_u16 + (i % 127) as u16).to_le_bytes())
+    let k: Vec<u8> = (0..264_u16)
+        .flat_map(|i| (0x3e00_u16 + i % 127).to_le_bytes())
         .collect();
-    let v: Vec<u8> = (0..264)
-        .flat_map(|i| (0x3f00_u16 + (i % 127) as u16).to_le_bytes())
+    let v: Vec<u8> = (0..264_u16)
+        .flat_map(|i| (0x3f00_u16 + i % 127).to_le_bytes())
         .collect();
     let geometry = AttentionParentLayer::new(3, 0, 2, 2)?;
     let mut key = context.allocate_device_buffer(k.len() as u64)?;
@@ -44,7 +48,11 @@ fn packed_kv_write_preserves_other_layers_metadata_and_sources()
     let stats = context.allocation_stats()?;
     for layer in 0..3 {
         let geometry = AttentionParentLayer::new(3, layer, 2, 2)?;
-        let original = vec![0x5a; geometry.parent_byte_len() as usize];
+        let original = vec![
+            0x5a;
+            usize::try_from(geometry.parent_byte_len())
+                .expect("fixture dimensions fit")
+        ];
         kp.upload_from_slice(0, &original, &mut staging, &mut stream)?;
         vp.upload_from_slice(0, &original, &mut staging, &mut stream)?;
         for explicit in [true, false] {
@@ -74,7 +82,8 @@ fn packed_kv_write_preserves_other_layers_metadata_and_sources()
                 let mut expected = original.clone();
                 for (row, block) in [(0, 1), (1, 0)] {
                     for head in 0..2 {
-                        let dst = geometry.byte_offset() as usize
+                        let dst = usize::try_from(geometry.byte_offset())
+                            .expect("fixture dimensions fit")
                             + (block * 2 * 16 * 64 + head * 16 * 64 + 64) * 2;
                         let src = (row * 2 + head) * 64 * 2;
                         expected[dst..dst + 128].copy_from_slice(&source[src..src + 128]);

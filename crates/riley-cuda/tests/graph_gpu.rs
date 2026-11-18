@@ -85,7 +85,7 @@ fn h2d_payload(byte_len: usize, replay: usize) -> Vec<u8> {
                 .wrapping_mul(29)
                 .wrapping_add(replay.wrapping_mul(71))
                 .wrapping_add(replay.rotate_left(3));
-            (mixed & 0xff) as u8
+            mixed.to_le_bytes()[0]
         })
         .collect()
 }
@@ -425,6 +425,10 @@ fn owned_bf16_silu_graph_preflight_and_abort_recover_every_resource() -> Result<
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn owned_bf16_gated_multiply_graph_replays_fixed_inputs_byte_exact_against_eager()
 -> Result<(), Box<dyn Error>> {
     const ELEMENT_COUNT: u64 = 4_096;
@@ -628,6 +632,10 @@ fn owned_bf16_gated_multiply_graph_preflight_and_abort_recover_every_resource()
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn owned_bf16_residual_add_graph_replays_fixed_inputs_byte_exact_against_eager()
 -> Result<(), Box<dyn Error>> {
     const ELEMENT_COUNT: u64 = 4_096;
@@ -818,6 +826,10 @@ fn owned_bf16_residual_add_graph_preflight_and_abort_recover_every_resource()
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn owned_canonical_bf16_rms_norm_graph_replays_fixed_inputs_byte_exact_against_eager()
 -> Result<(), Box<dyn Error>> {
     // This deliberately uses a generic, non-model geometry. It must remain
@@ -1060,6 +1072,10 @@ fn owned_canonical_bf16_rms_norm_graph_preflight_and_abort_recover_every_resourc
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn owned_bf16_argmax_graph_replays_edge_fixture_byte_exact_against_eager()
 -> Result<(), Box<dyn Error>> {
     const ROW_COUNT: u64 = 7;
@@ -1305,6 +1321,10 @@ fn owned_bf16_argmax_graph_preflight_and_abort_recover_every_resource() -> Resul
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn owned_bf16_row_gather_graph_replays_unique_permutation_byte_exact_against_eager()
 -> Result<(), Box<dyn Error>> {
     const INPUT_ROW_COUNT: u64 = 13;
@@ -1484,6 +1504,10 @@ fn owned_bf16_row_gather_graph_replays_unique_permutation_byte_exact_against_eag
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn owned_bf16_row_gather_graph_preflight_and_abort_recover_every_resource()
 -> Result<(), Box<dyn Error>> {
     const INPUT_ROW_COUNT: u64 = 8;
@@ -1582,7 +1606,12 @@ fn owned_bf16_row_gather_graph_preflight_and_abort_recover_every_resource()
     let (stream, input, row_indices, output) = resources.into_parts();
     assert_eq!(context.allocation_stats()?, allocation_with_resources);
 
-    let out_of_range_host_mirror = [0_u32, 1, 2, INPUT_ROW_COUNT as u32];
+    let out_of_range_host_mirror = [
+        0_u32,
+        1,
+        2,
+        u32::try_from(INPUT_ROW_COUNT).expect("fixture dimensions fit"),
+    ];
     let error = match stream.begin_owned_graph_bf16_row_gather_capture(
         input,
         row_indices,
@@ -1641,6 +1670,10 @@ fn owned_bf16_row_gather_graph_preflight_and_abort_recover_every_resource()
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn owned_bf16_row_gather_argmax_graph_replays_unique_permutation_byte_exact_against_eager()
 -> Result<(), Box<dyn Error>> {
     const INPUT_ROW_COUNT: u64 = 13;
@@ -1898,6 +1931,10 @@ fn owned_bf16_row_gather_argmax_graph_replays_unique_permutation_byte_exact_agai
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn owned_bf16_row_gather_argmax_graph_preflight_and_abort_recover_every_resource()
 -> Result<(), Box<dyn Error>> {
     const INPUT_ROW_COUNT: u64 = 8;
@@ -2022,7 +2059,12 @@ fn owned_bf16_row_gather_argmax_graph_preflight_and_abort_recover_every_resource
     let (stream, input, row_indices, gathered_logits, results) = resources.into_parts();
     assert_eq!(context.allocation_stats()?, allocation_with_resources);
 
-    let out_of_range_host_mirror = [0_u32, 1, 2, INPUT_ROW_COUNT as u32];
+    let out_of_range_host_mirror = [
+        0_u32,
+        1,
+        2,
+        u32::try_from(INPUT_ROW_COUNT).expect("fixture dimensions fit"),
+    ];
     let error = match stream.begin_owned_graph_bf16_row_gather_argmax_capture(
         input,
         row_indices,
@@ -2086,6 +2128,10 @@ fn owned_bf16_row_gather_argmax_graph_preflight_and_abort_recover_every_resource
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn owned_bf16_row_gather_argmax_d2h_graph_replays_raw_result_bytes_exactly_against_eager()
 -> Result<(), Box<dyn Error>> {
     const INPUT_ROW_COUNT: u64 = 13;
@@ -2419,6 +2465,10 @@ fn owned_bf16_row_gather_argmax_d2h_graph_requires_exact_pinned_results_and_reco
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn owned_bf16_row_gather_argmax_d2h_graph_preserves_device_index_oob_raw_result_bytes()
 -> Result<(), Box<dyn Error>> {
     const INPUT_ROW_COUNT: u64 = 4;
@@ -2432,7 +2482,11 @@ fn owned_bf16_row_gather_argmax_d2h_graph_preserves_device_index_oob_raw_result_
     // device index is deliberately OOB to exercise the raw CUDA primitive's
     // NaN -> non-finite argmax record behavior through C05-16 D2H.
     let host_mirror = [2_u32, 3, 0];
-    let device_indices = [2_u32, INPUT_ROW_COUNT as u32, 0];
+    let device_indices = [
+        2_u32,
+        u32::try_from(INPUT_ROW_COUNT).expect("fixture dimensions fit"),
+        0,
+    ];
     let host_input_bits = [
         0x3f80_u16, 0x4000, 0x4040, 0x4080, 0x40a0, // row 0: token 4
         0xbf80, 0xc000, 0xc040, 0xc080, 0xc0a0, // row 1: token 0
@@ -2624,6 +2678,10 @@ fn owned_bf16_row_gather_argmax_d2h_graph_preserves_device_index_oob_raw_result_
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn owned_indexed_rope_bf16_graph_replays_byte_exact_against_eager() -> Result<(), Box<dyn Error>> {
     const ACTIVE_ROW_COUNT: u64 = 3;
     const HEAD_COUNT: u64 = 1;
@@ -2831,6 +2889,10 @@ fn owned_indexed_rope_bf16_graph_replays_byte_exact_against_eager() -> Result<()
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn owned_indexed_rope_bf16_graph_preserves_device_position_oob_nan_bytes()
 -> Result<(), Box<dyn Error>> {
     const ACTIVE_ROW_COUNT: u64 = 3;
@@ -2846,7 +2908,11 @@ fn owned_indexed_rope_bf16_graph_preserves_device_position_oob_nan_bytes()
     // the eager primitive's raw OOB sentinel path instead.
     let eager_positions_host = [4_u32, 0, 2];
     let graph_positions_host = vec![4_u32, 0, 2];
-    let device_positions = [4_u32, TABLE_POSITION_COUNT as u32, 2];
+    let device_positions = [
+        4_u32,
+        u32::try_from(TABLE_POSITION_COUNT).expect("fixture dimensions fit"),
+        2,
+    ];
     let host_input = graph_indexed_rope_bf16_fixture_bytes();
     let (host_cos, host_sin) = graph_indexed_rope_table_bytes();
     let host_device_positions = u32_words_to_ne_bytes(&device_positions);
@@ -3047,7 +3113,11 @@ fn owned_indexed_rope_bf16_graph_preflight_and_abort_recover_every_resource()
     let short_output = context.allocate_device_buffer(TENSOR_BYTE_LEN - 2)?;
     let allocation_with_resources = context.allocation_stats()?;
     let valid_positions_host = [0_u32, 1, 2];
-    let oob_positions_host = [0_u32, 1, TABLE_POSITION_COUNT as u32];
+    let oob_positions_host = [
+        0_u32,
+        1,
+        u32::try_from(TABLE_POSITION_COUNT).expect("fixture dimensions fit"),
+    ];
 
     let error = match stream.begin_owned_graph_indexed_rope_bf16_capture(
         input,

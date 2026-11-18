@@ -191,7 +191,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 fn sha256_file(path: &Path) -> TestResult<String> {
     let mut file = File::open(path)?;
     let mut digest = Sha256::new();
-    let mut buffer = [0_u8; 1_048_576];
+    let mut buffer = vec![0_u8; 1_048_576];
     loop {
         let read = file.read(&mut buffer)?;
         if read == 0 {
@@ -282,7 +282,7 @@ fn repository_root() -> TestResult<PathBuf> {
         .parent()
         .and_then(Path::parent)
         .ok_or_else(|| std::io::Error::other("workspace root is unavailable"))
-        .and_then(|root| root.canonicalize())
+        .and_then(std::path::Path::canonicalize)
         .map_err(Into::into)
 }
 
@@ -486,10 +486,10 @@ fn validate_manifest_contract(manifest: &Value) -> TestResult<usize> {
 }
 
 fn validate_finite_bf16(bytes: &[u8], label: &str) -> TestResult {
-    if bytes.len() % BF16_BYTES as usize != 0 {
+    if bytes.len() % usize::try_from(BF16_BYTES).expect("fixture dimensions fit") != 0 {
         return Err(format!("{label} byte count differs").into());
     }
-    for pair in bytes.chunks_exact(BF16_BYTES as usize) {
+    for pair in bytes.chunks_exact(usize::try_from(BF16_BYTES).expect("fixture dimensions fit")) {
         let bits = u16::from_le_bytes([pair[0], pair[1]]);
         if bits & 0x7f80 == 0x7f80 {
             return Err(format!("{label} contains non-finite BF16").into());
@@ -716,15 +716,17 @@ fn download_full(
 }
 
 fn bf16_metrics(expected: &[u8], actual: &[u8]) -> TestResult<Value> {
-    if expected.len() != actual.len() || expected.len() % BF16_BYTES as usize != 0 {
+    if expected.len() != actual.len()
+        || expected.len() % usize::try_from(BF16_BYTES).expect("fixture dimensions fit") != 0
+    {
         return Err("BF16 metric input byte lengths differ".into());
     }
     let mut mismatch_count = 0_u64;
     let mut first_mismatch = None;
     let mut max_abs = 0.0_f32;
     for (index, (expected_bits, actual_bits)) in expected
-        .chunks_exact(BF16_BYTES as usize)
-        .zip(actual.chunks_exact(BF16_BYTES as usize))
+        .chunks_exact(usize::try_from(BF16_BYTES).expect("fixture dimensions fit"))
+        .zip(actual.chunks_exact(usize::try_from(BF16_BYTES).expect("fixture dimensions fit")))
         .enumerate()
     {
         if expected_bits != actual_bits {
@@ -740,7 +742,7 @@ fn bf16_metrics(expected: &[u8], actual: &[u8]) -> TestResult<Value> {
     }
     Ok(json!({
         "bf16_exact": mismatch_count == 0,
-        "element_count": expected.len() / BF16_BYTES as usize,
+        "element_count": expected.len() / usize::try_from(BF16_BYTES).expect("fixture dimensions fit"),
         "bf16_mismatch_count": mismatch_count,
         "first_bf16_mismatch_index": first_mismatch,
         "max_absolute_error": max_abs,
@@ -756,6 +758,10 @@ fn exact(metrics: &Value) -> TestResult<bool> {
         .ok_or("stage metric omits bf16_exact".into())
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Pass the separate plans, buffers, and execution metadata to the fixture"
+)]
 fn execute_once(
     prepared: &PreparedPrefillAttention,
     query: &CudaDeviceBuffer,

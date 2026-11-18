@@ -1038,7 +1038,7 @@ fn varied_bf16_bytes(element_count: u64, seed: u64, exponent_base: u64) -> TestR
         state ^= state << 17;
         let bits = state >> 20;
         let value =
-            ((bits >> 40 & 1) << 15) | ((exponent_base + (bits >> 8) % 6) << 7) | (bits & 0x7f);
+            (((bits >> 40) & 1) << 15) | ((exponent_base + (bits >> 8) % 6) << 7) | (bits & 0x7f);
         bytes.extend_from_slice(&u16::try_from(value & 0xffff)?.to_ne_bytes());
     }
     Ok(bytes)

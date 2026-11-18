@@ -11,8 +11,8 @@ fn borrowed_embedding_reports_invalid_tokens_without_output_writes()
     let mut stream = context.create_stream()?;
     let mut staging = context.allocate_pinned_host_buffer(4096)?;
     let mut report = context.allocate_pinned_host_buffer(32)?;
-    let table_bytes: Vec<u8> = (0..7 * 64 + 8)
-        .flat_map(|i| (0x3e00_u16 + (i % 511) as u16).to_le_bytes())
+    let table_bytes: Vec<u8> = (0..7 * 64 + 8_u16)
+        .flat_map(|i| (0x3e00_u16 + i % 511).to_le_bytes())
         .collect();
     let mut table = context.allocate_device_buffer(table_bytes.len() as u64)?;
     let mut tokens = context.allocate_device_buffer(64)?;

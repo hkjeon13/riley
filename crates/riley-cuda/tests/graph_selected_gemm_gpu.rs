@@ -12,7 +12,6 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 // This is the canonical decode projection shape used by the roadmap.  It is
 // large enough to exercise the actual cuBLASLt path without turning this
 // lifecycle/parity test into a throughput benchmark.
-const MAX_WORKSPACE_BYTES: u64 = 8 * 1024 * 1024;
 
 fn finite_bf16_pattern(element_count: u64, seed: u64) -> TestResult<Vec<u8>> {
     let byte_len = element_count
@@ -119,7 +118,10 @@ fn selected_gemm_preserves_policy_optional_workspace_and_lifetimes() -> TestResu
                 &context,
                 &mut stream,
                 &mut staging,
-                &vec![0xff; config.output_bytes() as usize],
+                &vec![
+                    0xff;
+                    usize::try_from(config.output_bytes()).expect("fixture dimensions fit")
+                ],
             )?;
             let mut empty = context.allocate_device_buffer(0)?;
             let mut parent = upload(&context, &mut stream, &mut staging, &vec![0x5a; 4096])?;

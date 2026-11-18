@@ -25,7 +25,7 @@ fn approximate_exp(x: f32) -> f32 {
     let part = scaled - whole;
     let mantissa = 1.0
         + part
-            * (0.693_147_2
+            * (std::f32::consts::LN_2
                 + part
                     * (0.240_226_5
                         + part * (0.055_504_11 + part * (0.009_618_13 + part * 0.001_333_55))));
@@ -88,7 +88,12 @@ fn logprob_summaries_reproduce_the_host_lane_sums_and_top_tokens() -> TestResult
             state ^= state >> 17;
             state ^= state << 5;
             let value = (f64::from(state % 2001) - 1000.0) * 0.02;
-            logits.push(((value as f32).to_bits() >> 16) as u16);
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "Generate the fixture in f64 and round the samples to f32 before BF16 packing"
+            )]
+            let rounded = value as f32;
+            logits.push((rounded.to_bits() >> 16) as u16);
         }
         logits[3] = 0x8000;
         logits[4] = 0x0000;

@@ -63,6 +63,10 @@ fn bf16_fixture(element_count: usize, salt: u64) -> Vec<u8> {
         .collect()
 }
 
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "The PRNG uses at most 53 bits, all exactly representable in f64"
+)]
 fn f32_fixture(element_count: usize, salt: u64) -> Vec<u8> {
     (0..element_count)
         .flat_map(|index| {
@@ -76,6 +80,10 @@ fn f32_fixture(element_count: usize, salt: u64) -> Vec<u8> {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn run_case(
     context: &CudaContext,
     stream: &mut CudaStream,

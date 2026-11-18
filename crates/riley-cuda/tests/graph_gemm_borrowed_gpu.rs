@@ -107,7 +107,7 @@ fn borrowed_gemm_replay_reject_and_drop_preserve_resources() -> TestResult {
             &context,
             &mut stream,
             &mut staging,
-            &vec![0xff; config.output_bytes() as usize],
+            &vec![0xff; usize::try_from(config.output_bytes()).expect("fixture dimensions fit")],
         )?;
         let mut workspace =
             context.allocate_device_buffer(plan.algorithm_metadata().workspace_bytes())?;

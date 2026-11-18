@@ -20,6 +20,8 @@ use riley_cuda::{
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
+type RowOutputs = (std::collections::HashMap<Row, Vec<u8>>, Vec<Vec<u8>>);
+
 /// Query and key/value head counts of one checked geometry.
 #[derive(Clone, Copy, Debug)]
 struct Heads {
@@ -92,10 +94,13 @@ fn bf16_value(bits: u16) -> f32 {
     f32::from_bits(u32::from(bits) << 16)
 }
 
-fn pattern(count: usize, multiplier: usize, offset: usize, modulus: usize, scale: f32) -> Vec<u8> {
+fn pattern(count: usize, multiplier: usize, offset: usize, modulus: u16, scale: f32) -> Vec<u8> {
     (0..count)
         .flat_map(|index| {
-            let centered = ((index * multiplier + offset) % modulus) as f32 - modulus as f32 / 2.0;
+            let centered = f32::from(
+                u16::try_from((index * multiplier + offset) % usize::from(modulus))
+                    .expect("bounded fixture value"),
+            ) - f32::from(modulus) / 2.0;
             bf16_bits(centered / scale).to_ne_bytes()
         })
         .collect()
@@ -192,11 +197,11 @@ fn run(
     if let Some((kinds, with_list)) = prompt_kinds {
         position_words.extend_from_slice(kinds);
         if with_list {
-            let list: Vec<u32> = (0..row_count as u32)
+            let list: Vec<u32> = (0..u32::try_from(row_count).expect("fixture dimensions fit"))
                 .filter(|row| kinds[*row as usize] != 1)
                 .collect();
             generated = Some((position_words.len() as u64, row_count as u64));
-            position_words.push(list.len() as u32);
+            position_words.push(u32::try_from(list.len()).expect("fixture dimensions fit"));
             position_words.extend_from_slice(&list);
             position_words.resize(position_words.len() + row_count - list.len(), 0);
         }
@@ -314,13 +319,6 @@ fn run(
         .collect())
 }
 
-fn rows(sequence: u32, positions: impl IntoIterator<Item = u32>) -> Vec<Row> {
-    positions
-        .into_iter()
-        .map(|position| Row { sequence, position })
-        .collect()
-}
-
 #[test]
 #[ignore = "remote GPU"]
 fn direct_prompt_rows_are_batch_invariant_and_close_to_the_segment_path() -> TestResult {
@@ -342,7 +340,7 @@ fn run_kinds(
     pools: &Pools,
     rows: &[(Row, u32)],
     with_list: bool,
-) -> TestResult<(std::collections::HashMap<Row, Vec<u8>>, Vec<Vec<u8>>)> {
+) -> TestResult<RowOutputs> {
     let addresses: Vec<Row> = rows.iter().map(|(row, _)| *row).collect();
     let kinds: Vec<u32> = rows.iter().map(|(_, kind)| *kind).collect();
     let output = run(
@@ -368,6 +366,7 @@ fn check_geometry(
     pages_per_sequence: usize,
     page_capacity: usize,
 ) -> TestResult {
+    const HYBRID_PAGES: u32 = 4;
     let context = runtime.device(0)?.create_context()?;
     let mut stream = context.create_stream()?;
     let mut staging = context.allocate_pinned_host_buffer(128 << 20)?;
@@ -375,12 +374,17 @@ fn check_geometry(
     let physical_blocks = SEQUENCES * pages_per_sequence;
     let pool_elements = physical_blocks * heads.key_value * PAGE_SIZE * HEAD_SIZE;
     let sequence_block_offsets: Vec<u32> = (0..=SEQUENCES)
-        .map(|sequence| (sequence * pages_per_sequence) as u32)
+        .map(|sequence| {
+            u32::try_from(sequence * pages_per_sequence).expect("fixture dimensions fit")
+        })
         .collect();
     let block_ids: Vec<u32> = (0..physical_blocks)
-        .map(|block| ((block * 29 + 5) % physical_blocks) as u32)
+        .map(|block| {
+            u32::try_from((block * 29 + 5) % physical_blocks).expect("fixture dimensions fit")
+        })
         .collect();
-    let valid_tokens = vec![PAGE_SIZE as u16; physical_blocks];
+    let valid_tokens =
+        vec![u16::try_from(PAGE_SIZE).expect("fixture dimensions fit"); physical_blocks];
     let pools = Pools {
         heads,
         pages_per_sequence,
@@ -418,8 +422,8 @@ fn check_geometry(
         valid_tokens,
     };
 
-    let last = (pages_per_sequence * PAGE_SIZE - 1) as u32;
-    let prompt = |sequence: u32, positions: std::ops::Range<u32>| -> Vec<(Row, u32)> {
+    let last = u32::try_from(pages_per_sequence * PAGE_SIZE - 1).expect("fixture dimensions fit");
+    let prompt = |sequence: u32, positions: std::ops::RangeInclusive<u32>| -> Vec<(Row, u32)> {
         positions
             .map(|position| (Row { sequence, position }, 1))
             .collect()
@@ -432,10 +436,10 @@ fn check_geometry(
     };
     // Prompt runs: from position 0, crossing pages and tiles, a long late
     // run, and a short one; decode rows of other sequences in between.
-    let run_a = prompt(0, 0..37);
-    let run_b = prompt(1, 60..101);
-    let run_c = prompt(2, last - 40..last + 1);
-    let run_d = prompt(3, 15..18);
+    let run_a = prompt(0, 0..=36);
+    let run_b = prompt(1, 60..=100);
+    let run_c = prompt(2, (last - 40)..=last);
+    let run_d = prompt(3, 15..=17);
     let decodes = [
         decode(4, &[0, 15, 16, 255, last]),
         decode(5, &[64, 127, 300]),
@@ -501,7 +505,7 @@ fn check_geometry(
     // call, like successive prefill steps).
     for run_rows in [&run_a, &run_b, &run_c, &run_d] {
         let (output, _) = run_kinds(&context, &mut stream, &mut staging, &pools, run_rows, false)?;
-        for (row, _) in run_rows.iter() {
+        for (row, _) in run_rows {
             assert_eq!(
                 output[row], direct[row],
                 "{row:?}: output depends on neighbours"
@@ -554,7 +558,6 @@ fn check_geometry(
     // Hybrid: prompt rows within HYBRID_PAGES pages of their own context are
     // direct, longer ones keep the segment path, decided per row; the result
     // must not depend on the batch either.
-    const HYBRID_PAGES: u32 = 4;
     set_native_d128_prompt_direct_max_pages(u64::from(HYBRID_PAGES));
     let (hybrid, padding) = run_kinds(
         &context,
@@ -572,7 +575,7 @@ fn check_geometry(
     for (row, kind) in &reference {
         let expected = if *kind == 0 {
             &segment_path[row]
-        } else if row.position / PAGE_SIZE as u32 + 1 <= HYBRID_PAGES {
+        } else if row.position / u32::try_from(PAGE_SIZE)? < HYBRID_PAGES {
             short_rows += 1;
             &direct[row]
         } else {

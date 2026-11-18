@@ -7,13 +7,24 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{error::Error, fs, path::PathBuf};
 fn sha(b: &[u8]) -> String {
-    Sha256::digest(b)
-        .iter()
-        .map(|v| format!("{v:02x}"))
-        .collect()
+    use std::fmt::Write as _;
+
+    let mut hex = String::with_capacity(64);
+    for byte in Sha256::digest(b) {
+        write!(hex, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    hex
 }
 #[test]
 #[ignore = "GPU2 only; pre-change canonical GPU fixture required"]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "Short names match the existing reference input and output notation"
+)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn canonical_narrow_norm_preserves_frozen_gpu_bits() -> Result<(), Box<dyn Error>> {
     let root = PathBuf::from(std::env::var("RILEY_CANONICAL_NORM_ROOT")?);
     let record = std::env::var("RILEY_CANONICAL_NORM_RECORD").as_deref() == Ok("1");
@@ -51,7 +62,10 @@ fn canonical_narrow_norm_preserves_frozen_gpu_bits() -> Result<(), Box<dyn Error
                         let b = if i % 71 == 0 {
                             0u16
                         } else {
-                            let magnitude = (((i * 37 + salt * 11) % 1023) + 1) as f32 / 64.;
+                            let magnitude = f32::from(
+                                u16::try_from(((i * 37 + salt * 11) % 1023) + 1)
+                                    .expect("bounded fixture value"),
+                            ) / 64.;
                             let v = if (i + salt) % 3 == 0 {
                                 -magnitude
                             } else {

@@ -58,12 +58,16 @@ fn values(count: usize, salt: usize) -> impl Iterator<Item = f32> {
     (0..count).map(move |i| {
         let unit = (((i + salt) * 2_654_435_761_usize) >> 9) % 8191;
         let magnitude = [0.004_f32, 0.09, 0.8, 3.1, 11.0][((i + salt) / 7) % 5];
-        (unit as f32 / 4095.0 - 1.0) * magnitude
+        (f32::from(u16::try_from(unit).expect("bounded fixture value")) / 4095.0 - 1.0) * magnitude
     })
 }
 
 #[test]
 #[ignore = "remote GPU"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep setup, replay assertions, and cleanup in the same GPU test"
+)]
 fn wide_general_rms_norm_matches_the_256_thread_kernels() -> TestResult {
     const ROWS: usize = 300;
     const WIDE_ROWS: usize = 256;
@@ -94,7 +98,10 @@ fn wide_general_rms_norm_matches_the_256_thread_kernels() -> TestResult {
             &context,
             &mut stream,
             &mut staging,
-            &encode_bf16((0..hidden).map(|i| 0.5 + ((i * 31 + 5) % 73) as f32 / 48.0)),
+            &encode_bf16((0..hidden).map(|i| {
+                0.5 + f32::from(u16::try_from((i * 31 + 5) % 73).expect("bounded fixture value"))
+                    / 48.0
+            })),
         )?;
         let sentinel = encode_bf16(std::iter::repeat_n(-113.0_f32, ROWS * hidden));
         // [reference, wide] x [plain output, residual output, residual-normalized output]

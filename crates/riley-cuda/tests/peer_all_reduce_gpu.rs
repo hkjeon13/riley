@@ -212,7 +212,8 @@ fn time_rank(
     barrier.wait();
     let started = Instant::now();
     replay(REPLAYS)?;
-    Ok(started.elapsed().as_secs_f64() * 1e6 / (REPLAYS * CALLS_PER_GRAPH) as f64)
+    Ok(started.elapsed().as_secs_f64() * 1e6
+        / f64::from(u32::try_from(REPLAYS * CALLS_PER_GRAPH).expect("bounded iteration count")))
 }
 
 /// Per-call latency of recorded back-to-back reduces (run with --ignored).

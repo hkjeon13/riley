@@ -154,7 +154,11 @@ fn check_parent_layer(query_heads: u64, packed: bool) -> TestResult {
     };
     let mut f = GroupedAttentionFixture::new();
     f.query = finite_bf16_pattern(ACTIVE_ROW_COUNT * query_heads * HEAD_SIZE, 7);
-    f.output_sentinel = vec![0xa5; (OUTPUT_ROW_COUNT * query_heads * HEAD_SIZE * 2) as usize];
+    f.output_sentinel = vec![
+        0xa5;
+        usize::try_from(OUTPUT_ROW_COUNT * query_heads * HEAD_SIZE * 2)
+            .expect("fixture dimensions fit")
+    ];
     let context = CudaRuntime::initialize()?.device(0)?.create_context()?;
     let mut stream = context.create_stream()?;
     let mut staging = context.allocate_pinned_host_buffer((f.key_pool.len() * 3) as u64)?;
