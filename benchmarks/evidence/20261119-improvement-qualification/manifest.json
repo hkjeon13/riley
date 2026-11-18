@@ -363,6 +363,16 @@
       "path": "benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/result/SHA256SUMS",
       "sha256": "b5a64f878fa7d642faf420809b23dfa473f194ef9461d5b1846bf142ff31c98b"
     },
+    "qwen7_visible_page_omission": [
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/page-omission-sweep.json.gz",
+        "sha256": "07feb9336da9bbeeaee49deefc5e52f3cea9426e54b665a0b0c7eb95f630bafc"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/tools/sweep_visible_kv_pages.py",
+        "sha256": "7bf5c07dcf8b4b40feb47dcacde5c9a7a88692986e1ad6ce05af8e952e62d023"
+      }
+    ],
     "qwen7_allocator_and_host_rss_diagnostics": {
       "allocator_rollup_comparison": {
         "path": "benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/result/comparison.json",

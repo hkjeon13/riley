@@ -108,6 +108,8 @@ GPU 6에서 두 사례의 첫 레이어가 사용한 물리 KV 페이지 207개�
 
 두 사례의 관측 행에서는 causal 범위가 마지막 visible 토큰과 미래 토큰 대조보다 GPU 출력에 가까웠다. 첫 페이지를 뺐을 때 네 행의 RMS가 0.000136–0.000197로 비슷해 해당 페이지의 포함 여부를 이 대조로 판별하기 어렵다. 두 사례의 생성 ID·텍스트·종료 사유는 기존 Riley와 모두 같았고 GPU 6은 같은 홀더의 20GiB 예약으로 복귀했다. 원본 덤프에서 두 사례의 CPU 재계산을 다시 실행했다. 나머지 레이어·KV head와 Riley/HF 간 Q/K/V 차이의 원인은 여전히 확인 범위에 남는다. [실행 순서](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/campaign.sh) · [진단 패치](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/kv-trace.patch.gz) · [CPU 재계산기](../../benchmarks/evidence/20261119-w4-layer-trace/tools/replay_attention_mask.py) · [원본 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/result/SHA256SUMS)
 
+같은 네 행에서 visible 페이지를 한 장씩 제외한 818개 대조를 계산했다. 전체 페이지를 사용한 기준이 746개에서 관측값에 더 가까웠다. 마지막 visible 페이지를 제외하면 오차가 543–1,113배였고 첫 페이지를 제외하면 0.999–1.039배였다. 사례 9의 첫 행에서는 페이지 제외 대조 209개 중 58개가 기준과 같거나 더 가까웠다. 앞쪽 페이지의 포함 여부를 판별하려면 해당 페이지를 제외했을 때의 변화가 FP64 재계산과 GPU 출력 사이의 기준 오차보다 큰 입력을 선정해 다시 검증해야 한다. [페이지별 대조 결과](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/page-omission-sweep.json.gz) · [대조 도구](../../benchmarks/evidence/20261119-w4-layer-trace/tools/sweep_visible_kv_pages.py)
+
 ## GSM8K 전수 품질 대조
 
 네 모델에서 Riley와 vLLM이 각각 1,319문제를 오류 없이 완료했다. 같은 train·test 데이터 해시, 4-shot 입력, 온도 0, 출력 상한 256토큰, 동시 요청 32개, 마지막 숫자 채점 방식을 사용했다. 같은 모델의 두 엔진에서 모든 문제의 요청과 입력 토큰 ID 해시가 일치했다. 점수 차이는 원본 정답 수에서 계산했다. [데이터셋 매니페스트](../../benchmarks/evidence/20261119-w4-gsm8k/dataset.json) · [전체 실행 기록](../../benchmarks/evidence/20261119-w4-gsm8k/campaign-result.log)
