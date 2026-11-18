@@ -61,7 +61,7 @@ def read_bound_trace(trace_dir):
     return receipt, soak, delta, anon_delta
 
 
-def compare(reference, trace, inputs):
+def compare(reference, trace, inputs, *, runner_digest_file=None):
     base_receipt, base_soak, _ = run(reference / "cache-off", reference)
     receipt, soak, delta, anon_delta = read_bound_trace(trace)
     require(set(soak["checks"]) == (set(base_soak["checks"]) - {"precise_rss_coverage"}) | {RSS_GATE},
@@ -71,7 +71,7 @@ def compare(reference, trace, inputs):
     normalized = dict(receipt, client_argv=[arg for arg in cmd if arg != "--require-zero-rss-growth"])
     hashes = {
         "soak.py": sha256((inputs / "attribute_anon_rss.py").read_bytes()).hexdigest(),
-        "run_soak.py": source_digest(inputs / "strict-rss-runner.sha256", "tools/run_soak.py"),
+        "run_soak.py": source_digest(runner_digest_file or inputs / "strict-rss-runner.sha256", "tools/run_soak.py"),
     }
     require_matched_soaks(base_receipt, base_soak, normalized, soak, hashes)
     require_restored_reservation(trace)
