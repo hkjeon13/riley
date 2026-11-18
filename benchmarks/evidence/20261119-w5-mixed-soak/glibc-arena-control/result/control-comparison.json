@@ -1,0 +1,149 @@
+{
+  "strict_soak_status": "failed",
+  "rollup_rss_delta_kib": 932,
+  "rollup_anonymous_delta_kib": 932,
+  "mapping_rss_delta_kib": 932,
+  "mapping_anonymous_delta_kib": 932,
+  "delta_by_class_kib": {
+    "anonymous-private": {
+      "Rss": 932,
+      "Anonymous": 932,
+      "Private_Dirty": 932,
+      "AnonHugePages": 0
+    },
+    "file-or-device": {
+      "Rss": 0,
+      "Anonymous": 0,
+      "Private_Dirty": 60,
+      "AnonHugePages": 0
+    },
+    "heap": {
+      "Rss": 0,
+      "Anonymous": 0,
+      "Private_Dirty": 0,
+      "AnonHugePages": 0
+    },
+    "labeled-stack": {
+      "Rss": 0,
+      "Anonymous": 0,
+      "Private_Dirty": 0,
+      "AnonHugePages": 0
+    },
+    "other-kernel": {
+      "Rss": 0,
+      "Anonymous": 0,
+      "Private_Dirty": 0,
+      "AnonHugePages": 0
+    }
+  },
+  "largest_retained_anonymous_changes": [
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 460
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 28
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 28
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 24
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 24
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 24
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 24
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 20
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 20
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 20
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 20
+    },
+    {
+      "class": "anonymous-private",
+      "anonymous_delta_kib": 20
+    }
+  ],
+  "mapping_read_ms": [
+    213.56002241373062,
+    216.41167253255844
+  ],
+  "late_p95_change_percent_from_reference": {
+    "ttft_ms_p95": -0.12428562140200938,
+    "e2e_ms_p95": 0.2002499547351988
+  },
+  "counts": {
+    "plain": {
+      "completed": 7984
+    },
+    "schema": {
+      "completed": 1739,
+      "stop": 1739
+    },
+    "logprobs": {
+      "completed": 1160
+    },
+    "tools": {
+      "completed": 708,
+      "tool_calls": 708
+    },
+    "long": {
+      "completed": 1415
+    },
+    "reason": {
+      "completed": 743
+    },
+    "cancel": {
+      "disconnected": 700
+    }
+  },
+  "libc": "glibc 2.35",
+  "checks": {
+    "no_unexpected_http_or_stream_error": true,
+    "completed_schema_and_tool_covered": true,
+    "disconnects_observed": true,
+    "idle_after_drain": true,
+    "native_allocation_plateau": true,
+    "workload_coverage": true,
+    "p95_drift_at_most_5_percent": true,
+    "rss_growth_second_half_at_most_zero": false
+  },
+  "late_latency": {
+    "completed": 4163,
+    "ttft_ms_count": 4163,
+    "ttft_ms_p95": 332.2458043694496,
+    "e2e_ms_count": 4163,
+    "e2e_ms_p95": 4155.811063945293
+  },
+  "remote_file_sha256": {
+    "campaign.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "idle-before.json": "7e3e7bc64a32f76044185dd42bb65009e31d009a5088c5bb89c0fbb971343316",
+    "idle-after.json": "47b7d8e000ffc930f0b3e003717228059892363877741f6c4c16f8f055ed1109",
+    "cache-off/soak.json": "e5ad7d67507c96abf157c11e553336f1af05781299c1c3fb57314b3d3f93f028",
+    "cache-off/anon-attribution.json": "cc86ddd288e69bab40ad6149c6e945981a06dba0f3f35c3c0b82f57ef70bc5a4",
+    "cache-off/receipt.json": "2896ce993cf069f1361dfdecf370fafb0da323f6d541f39328c4cc39e3b5b39a",
+    "cache-off/shutdown-metrics.json": "e528ba34703c01513165bf763449f661ade1235afe21d7620700f582d98dfafe"
+  }
+}
