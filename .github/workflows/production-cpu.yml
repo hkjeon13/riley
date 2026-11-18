@@ -45,6 +45,14 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
 
+      - name: Validate CUDA C ABI feature combinations without a device
+        run: |
+          options=(-std=c11 -fsyntax-only -I kernels/include kernels/tests/abi_layout.c)
+          cc "${options[@]}"
+          cc "${options[@]}" -DRILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE=1
+          cc "${options[@]}" -DRILEY_CUDA_ENABLE_TEST_FAULT_INJECTION=1
+          cc "${options[@]}" -DRILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE=1 -DRILEY_CUDA_ENABLE_TEST_FAULT_INJECTION=1
+
       - name: Dependency, license, feature, and workspace boundary policy
         run: |
           python3 ci/check_workspace_boundaries.py --locked

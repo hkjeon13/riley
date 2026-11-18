@@ -3027,6 +3027,24 @@ RileyCudaStatus riley_cuda_cublas_gemm_probe_plan_execute(
 RileyCudaStatus riley_cuda_cublas_gemm_probe_plan_close(
     RileyCudaCublasGemmProbePlan** plan,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+/* Private qualified exact H9/KV3/D64 singleton attention. */
+int riley_cuda_cublas_hf_smol_exact_supported(
+    const RileyCudaCublasGemmProbePlan* plan,
+    uint64_t tokens) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_cublas_hf_smol_exact_execute(
+    RileyCudaCublasGemmProbePlan* plan,
+    const RileyCudaBufferSpan* raw,
+    uint64_t count,
+    const uint32_t* rows,
+    const uint64_t* tokens,
+    uint64_t requests,
+    uint64_t active,
+    uint64_t physical,
+    uint64_t sequences,
+    uint64_t ids,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 #endif
 
 // Diagnostic-only storage keeps generic tensor allocation outside PR 03.
@@ -3248,10 +3266,6 @@ RileyCudaStatus riley_cuda_peer_all_reduce_bf16_execute(
 RileyCudaStatus riley_cuda_peer_all_reduce_group_close(
     RileyCudaPeerAllReduceGroup** group,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
-
-/* Private qualified exact H9/KV3/D64 singleton attention. */
-int riley_cuda_cublas_hf_smol_exact_supported(const RileyCudaCublasGemmProbePlan*,uint64_t) RILEY_CUDA_NOEXCEPT;
-RileyCudaStatus riley_cuda_cublas_hf_smol_exact_execute(RileyCudaCublasGemmProbePlan*,const RileyCudaBufferSpan*,uint64_t,const uint32_t*,const uint64_t*,uint64_t,uint64_t,uint64_t,uint64_t,uint64_t,RileyCudaStream*,RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
 
 #ifdef __cplusplus
 }  // extern "C"
