@@ -39,4 +39,20 @@
 
 각 조건의 운영 메트릭 32개 표본에서 24개 `batch_shapes` 슬롯 중 21개가 구성됐다. 비어 있는 슬롯은 모두 0이었고, 저장된 스텝 수와 GPU 시간 표본 수가 각 bucket에서 일치했다. 두 조건 모두 진단 링에서 오래된 요청 요약 13,425개가 제거됐다. 부하 측정의 오류 수와 표본 수는 별도로 기록됐다. [bucket 검증 집계](../../benchmarks/evidence/20261119-w5-mixed-soak/live-batch-shapes.json) · [cache off 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-off/soak.json.gz) · [cache on 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/cache-on/soak.json.gz) · [양쪽 실행 근거 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/SHA256SUMS)
 
-검증 범위는 합성 부하를 사용한 한 체크포인트의 서빙이다. 실제 운영 분포, cache hit·eviction, 의도적 큐 포화 후 복구, 실제 장치 장애, 배포 이미지에서의 GPU 추론은 별도 검증 항목이다.
+## 캐시 재사용·퇴거와 큐 포화 후 회복
+
+같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)
+
+| 순서 | 요청 | 입력 토큰 | 재사용 토큰 |
+|---|---|---:|---:|
+| 1 | 프롬프트 A 최초 요청 | 1,403 | 0 |
+| 2 | A 반복 | 1,403 | 1,392 |
+| 3 | 캐시의 2,048토큰 용량을 넘는 프롬프트 B | 2,798 | 16 |
+| 4 | B 이후 A | 1,403 | 16 |
+| 5 | A 재반복 | 1,403 | 1,392 |
+
+A를 처음 보낸 뒤 두 요청에 공통인 16토큰 블록을 B가 재사용했다. B 이후 A에서 같은 수만큼만 재사용됐고, 다음 A에서는 1,392토큰 재사용이 복구됐다. 최초 시험은 4단계에서 0을 요구해 실패했다. 공통 블록 재사용을 반영해 검사기 판정을 교정하고 동일 조건으로 재실행했다. A 응답의 출력 바이트 해시와 종료 사유는 모든 단계에서 같았다. [최초 결과](../../benchmarks/evidence/20261119-w5-operational/initial/operational.json) · [재실행 결과](../../benchmarks/evidence/20261119-w5-operational/rerun/operational.json)
+
+16개 스트리밍 요청을 동시에 보냈을 때 3개가 정상 완료되고 13개가 HTTP 429를 반환했다. 과부하 카운터도 13 증가했다. 큐가 비워진 뒤 단건 추론이 정상 완료됐고 활성·대기 요청과 요청 KV가 0이었다. 서버는 종료 코드 0과 native 할당 0을 남겼으며 GPU 6의 동일 홀더는 20GiB 예약으로 돌아왔다. [종료 메트릭](../../benchmarks/evidence/20261119-w5-operational/rerun/shutdown-metrics.json) · [GPU 6 예약 복귀](../../benchmarks/evidence/20261119-w5-operational/rerun/idle-after.json)
+
+검증 범위는 합성 요청을 사용한 한 체크포인트의 서빙이다. 실제 운영 트래픽 분포, 느린 소비자의 스트리밍, 실제 장치 장애, 배포 이미지에서의 GPU 추론은 추가 검증 항목이다.

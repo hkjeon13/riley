@@ -124,7 +124,9 @@ python3 benchmarks/live/soak.py "$TEST_ADDRESS" "$MODEL_ID" \
 
 30분 비교는 cache off/on 양쪽에 같은 합성 workload와 seed를 사용한다. `--shared-prefix`를 켜면 장문 요청이 여덟 개의 고정 프롬프트 앞부분을 재사용한다. 실행 시간의 20–50% 구간과 70–100% 구간을 예약된 도착 시각으로 묶어 TTFT·전체 완료 지연 p95를 비교하며, 후반 증가가 5%를 넘거나 관측치가 비면 실패다. TTFT 표본 수는 첫 콘텐츠 또는 도구 조각이 관측된 요청 수다. 짧은 `--smoke`는 지연 판정을 빼고 종료·계약·정리 경계를 확인한다.
 
-현재 공개 `/metrics`의 KV 사용량은 요청이 쓰는 블록을 보여 준다. 스케줄러 내부에는 prefix hit 토큰과 eviction 블록 카운터가 있다. 이를 운영 응답에서 조회하려면 별도 계측 계약이 필요하다. [스케줄러 메트릭](../../crates/riley-scheduler/src/metrics.rs)
+캐시를 켠 전용 서버에서 [운영 검사기](../../benchmarks/live/operational_check.py)로 요청의 재사용 토큰, 공통 prefix 보존, 용량 압력 뒤 A 전용 블록 퇴거, 포화의 HTTP 429와 추론 회복을 확인했다. 검사는 활성 2개·대기 1개·캐시 128블록으로 구성하고 loopback에서 수행했다. [A100 운영 결과](05-mixed-soak-result.md#캐시-재사용퇴거와-큐-포화-후-회복)
+
+현재 공개 `/metrics`의 KV 사용량은 요청이 쓰는 블록을 보여 준다. 요청별 재사용 토큰은 응답 `usage`에서 확인했다. 스케줄러 내부의 전체 prefix hit 토큰 및 eviction 블록 카운터를 운영 응답에서 조회하려면 별도 계측 계약이 필요하다. [스케줄러 메트릭](../../crates/riley-scheduler/src/metrics.rs)
 
 [고정 RC 릴리스 soak 드라이버와 검사기](../../benchmarks/soak/README.md)는 SmolLM2 workload·정식 golden·이미지 계보와 10개 bucket 슬롯을 요구한다. 현행 서버 응답의 24개 슬롯을 검사하려면 현행 바이너리로 별도 계약을 검증해야 한다.
 
