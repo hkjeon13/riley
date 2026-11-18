@@ -8,7 +8,7 @@
 |---|---|
 | W1 검증·릴리스 | Linux Production CPU, 고정 RC3 테스트 34건, CUDA 12.4 이미지 빌드와 CPU 검증을 통과했다. 수정한 헤더가 포함된 이미지의 런타임 해시도 대조했다. [W1 결과](01-validation-result.md) |
 | W2 실행 중첩 | A100에서 이벤트 발행 두 모드를 명시해 비교했다. W3의 prefill 제한과 교차한 시험에서 즉시 발행의 짧은 요청 TPOT 회귀를 확인해 기존 `after-submit-v1`을 유지한다. [W2 결과](02-async-step-result.md) |
-| W3 장문·스케줄 | 14B `rag-c8`의 p95 이상 요청은 여러 prefill 스텝 사이에서 다른 요청의 prefill과 겹치는 대기를 기록했다. 같은 행 예산에서 선택 순서만 바꾸는 후보는 CUDA 오류 재시험 이후 비교한다. [W3 결과](03-long-context-result.md) |
+| W3 장문·스케줄 | 14B `rag-c8`의 p95 이상 요청은 여러 prefill 스텝 사이에서 다른 요청의 prefill과 겹치는 대기를 기록했다. 진행 중인 prefill을 우선한 후보는 출력 일치를 확인했으나 decode TPOT 회귀로 미채택했다. [W3 결과](03-long-context-result.md) |
 | W4 정확성·스키마 | 고정 장문과 holdout에서 엔진별 첫 분기 지점을 좁혔고 네 모델의 GSM8K를 같은 입력으로 비교했다. 구조화 출력의 지원 범위는 GPU API에서 검증했다. [장문·품질 결과](04-long-accuracy-result.md) · [스키마 결과](04-structured-output-result.md) |
 | W5 문서·운영 | 두 cache 조건에서 각각 정상 완료 13,749건과 의도적 연결 종료 700건을 처리하고 종료 자원 회수를 확인했다. Cache-off 후반 RSS는 두 비계측 실행에서 +0.75MiB, allocator 계측 실행에서 0.00MiB였다. 같은 부하의 페이지 테이블 기반 측정이 남아 있다. [문서 근거](05-documentation-and-operations.md) · [A100 운영 결과](05-mixed-soak-result.md) |
 

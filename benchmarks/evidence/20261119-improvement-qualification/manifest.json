@@ -376,6 +376,19 @@
     "ffi_fix_hosted_native_ci": {
       "path": "benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/hosted-native-ci.json",
       "sha256": "55e5d90c66cb661d9b236e13285457c55f833a9473866e3888f2e90d1f96ac69"
+    },
+    "qwen14_prefill_continuation": {
+      "decision": "not_adopted_decode_tpot_regression",
+      "artifacts": [
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/result/summary.json",
+          "sha256": "722a856dc3fa08df1f360ae6c94ca3aba4757a2a906fb9e7329d96ef3b380943"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/result/SHA256SUMS",
+          "sha256": "aa611eb03d26cf1a90dedd477b1eed28ff9b1199e1c5e40cefb8dc2a995ab4e0"
+        }
+      ]
     }
   },
   "follow_up_distribution_image": {

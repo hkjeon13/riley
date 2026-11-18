@@ -1,10 +1,12 @@
 """Screen a matched 14B prefill-order experiment for parity and regressions."""
 
 from argparse import ArgumentParser
+import gzip
+from hashlib import sha256
 import json
 from pathlib import Path
 
-from compare_profile_arms import CELLS, METRICS, arm, digest, ratio_percent, read, require
+from compare_profile_arms import CELLS, METRICS, arm, ratio_percent, read, require
 from summarize_profile_arm import stable_server
 
 
@@ -30,8 +32,10 @@ def compare(root):
         directory = root / f"qwen14-{mode}"
         require(read(directory / "server-exit.json")["exit"] == 0, "server did not stop gracefully")
         probe_path = directory / "token-id-probe.json"
-        require(digest(probe_path) == receipt["token_id_probe_sha256"], "token probe digest changed")
-        probe = read(probe_path)
+        raw = (probe_path.read_bytes() if probe_path.exists()
+               else gzip.decompress(probe_path.with_suffix(".json.gz").read_bytes()))
+        require(sha256(raw).hexdigest() == receipt["token_id_probe_sha256"], "token probe digest changed")
+        probe = json.loads(raw)
         require(len(probe["c1"]) == len(probe["c8"]) == 8
                 and probe["invariant"] == (probe["c1"] == probe["c8"]), "invalid token ID parity record")
         probes.append(probe)

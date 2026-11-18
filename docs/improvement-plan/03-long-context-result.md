@@ -156,7 +156,15 @@ SSE 요청 ID로 엔진 제출부터 첫 응답 조각 생성까지를 연결했
 
 두 seed에서 prefill 사이 대기 대부분은 다른 요청의 prefill 구간과 겹쳤다. 이 구간은 토큰화나 스텝 자체의 실행 시간과 별도로 확인됐다. 같은 행 예산으로 조각 선택 순서를 비교할 때는 첫 토큰 꼬리와 다른 요청의 대기·decode TPOT를 함께 측정해야 한다.
 
-후속 대조는 실행 중인 prefill을 기다린 지 100ms 미만인 새 prompt보다 먼저 고려한다. 100ms를 지난 요청은 기존 순서로 경쟁하며 decode 선택과 기존 aging override를 적용한다. 격리 패치의 스케줄러 CPU 테스트 146건과 CUDA 기능을 켠 Rust 타입 검사를 통과했다. A100에서는 같은 진단 바이너리로 옵션만 바꿔 위 다섯 부하와 32개 동시 짧은 요청을 실행한다. 별도 C1·C8 대조에서 장문 8개의 입력·생성 토큰 ID, 응답 텍스트와 종료 사유도 비교한다. GPU 7의 실측은 RSS와 CUDA 오류 시험 뒤에 등록했다. [실행 순서](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/campaign.sh) · [CPU 검사 원본](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/scheduler-tests.log.gz) · [채택 기준 대조 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/compare_prefill_continuation.py)
+후속 대조에서는 100ms 미만 기다린 새 prompt보다 진행 중인 prefill을 먼저 고려했다. 100ms를 지난 요청은 기존 순서로 경쟁하며 decode 선택과 기존 aging override를 적용했다. 격리 패치의 스케줄러 CPU 테스트 146건과 CUDA 기능을 켠 Rust 타입 검사가 통과했다. A100 GPU 7에서 같은 진단 바이너리의 옵션만 바꿔 위 다섯 부하와 32개 동시 짧은 요청을 실행했다. 두 조건의 측정 320쌍에서 출력이 일치했고, 별도 장문 8개는 C1·C8과 두 조건 모두에서 입력·생성 토큰 ID가 일치했다. 두 서버는 코드 0으로 종료했고 같은 홀더의 20GiB 예약으로 복귀했다. [실행 순서](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/campaign.sh) · [CPU 검사 원본](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/scheduler-tests.log.gz) · [GPU 원본과 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/result/SHA256SUMS)
+
+| 부하 | TTFT p95 변화 | decode TPOT p50 변화 | 처리량 변화 |
+|---|---:|---:|---:|
+| `rag-c8` seed 1 | −0.28% | −0.01% | +0.16% |
+| `rag-c8` seed 2 | +2.17% | +1.44% | +0.23% |
+| 짧은 `C32` | +0.21% | +0.03% | −0.07% |
+
+이 설정은 채택하지 않았다. `rag-c8` seed 2의 TTFT 중앙값은 25.41% 줄었으나 p95는 2.17% 늘었고, decode TPOT가 1% 회귀 기준을 넘었다. 두 seed의 결과는 각 조건을 한 번씩 실행한 근거다. [정확성·성능 대조](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/result/summary.json) · [집계 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/compare_prefill_continuation.py)
 
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 

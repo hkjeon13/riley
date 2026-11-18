@@ -106,6 +106,7 @@ python3 benchmarks/live/compare.py \
 
 - [ ] 병목을 queue·host·GEMM·attention·KV별 trace로 설명한다.
 - [x] Qwen2.5-14B의 요청별 prefill 대기와 다른 요청의 prefill 구간이 겹치는 시간을 실측했다. [요청별 계측](03-long-context-result.md#riley-14b의-요청별-대기와-prefill-계측)
+- [x] 14B에서 진행 중인 prefill을 우선한 후보의 배치 불변성과 회귀를 확인했다. Decode TPOT 기준을 넘긴 설정은 미채택으로 판정했다. [후보 결과](03-long-context-result.md#riley-14b의-요청별-대기와-prefill-계측)
 - [x] 시험한 burst 후보의 득실과 decode·짧은 요청 비용을 함께 기록했다. [W3 결과](03-long-context-result.md)
 - [ ] W4 장문·chunk 경계·배치 불변성 검사를 통과한다.
 - [x] 같은 CUDA 후보와 Qwen2.5-0.5B에서 네 조합을 두 seed로 교차 측정했다. [조합 결과](03-long-context-result.md#w2-이벤트-발행과-묶음-정책의-상호작용)
