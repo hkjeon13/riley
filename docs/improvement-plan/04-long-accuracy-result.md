@@ -123,6 +123,8 @@ GPU 6에서 두 사례의 첫 레이어가 사용한 물리 KV 페이지 207개�
 
 같은 네 행에서 visible 페이지를 한 장씩 제외한 818개 대조를 계산했다. 전체 페이지를 사용한 기준이 746개에서 관측값에 더 가까웠다. 마지막 visible 페이지를 제외하면 오차가 543–1,113배였고 첫 페이지를 제외하면 0.999–1.039배였다. 사례 9의 첫 행에서는 페이지 제외 대조 209개 중 58개가 기준과 같거나 더 가까웠다. 앞쪽 페이지의 포함 여부를 판별하려면 해당 페이지를 제외했을 때의 변화가 FP64 재계산과 GPU 출력 사이의 기준 오차보다 큰 입력을 선정해 다시 검증해야 한다. [페이지별 대조 결과](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/page-omission-sweep.json.gz) · [대조 도구](../../benchmarks/evidence/20261119-w4-layer-trace/tools/sweep_visible_kv_pages.py)
 
+두 사례의 마지막 입력 행에 대해 bias 이전의 BF16 투영값과 체크포인트의 K/V bias를 사용해 캐시 저장값을 독립 계산했다. 레이어 0, KV head 0에서 K의 RoPE 적용과 V의 bias 적용 결과가 기록된 페이지의 마지막 입력 슬롯과 각각 128/128개 일치했다. 두 사례 모두 직전 슬롯에서는 K 5/128개, V 0/128개만 일치했다. 이 대조는 추적된 두 마지막 입력 슬롯의 저장값을 확인한다. [KV 저장값 대조](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/final-slot-replay.json) · [재계산 도구](../../benchmarks/evidence/20261119-w4-layer-trace/tools/replay_final_kv_slot.py)
+
 ## GSM8K 전수 품질 대조
 
 네 모델에서 Riley와 vLLM이 각각 1,319문제를 오류 없이 완료했다. 같은 train·test 데이터 해시, 4-shot 입력, 온도 0, 출력 상한 256토큰, 동시 요청 32개, 마지막 숫자 채점 방식을 사용했다. 같은 모델의 두 엔진에서 모든 문제의 요청과 입력 토큰 ID 해시가 일치했다. 점수 차이는 원본 정답 수에서 계산했다. [데이터셋 매니페스트](../../benchmarks/evidence/20261119-w4-gsm8k/dataset.json) · [전체 실행 기록](../../benchmarks/evidence/20261119-w4-gsm8k/campaign-result.log)

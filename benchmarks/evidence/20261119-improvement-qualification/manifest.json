@@ -373,6 +373,16 @@
         "sha256": "7bf5c07dcf8b4b40feb47dcacde5c9a7a88692986e1ad6ce05af8e952e62d023"
       }
     ],
+    "qwen7_final_kv_slot": [
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/final-slot-replay.json",
+        "sha256": "a36371532e1c2d865d291c32e1ce1b349edd2304d1c050d353f8c298d567c37b"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/tools/replay_final_kv_slot.py",
+        "sha256": "149514fa8d9dee8eb6f4b17045c15980b5a3e5da979147fc4e40251074c85bff"
+      }
+    ],
     "qwen7_allocator_and_host_rss_diagnostics": {
       "allocator_rollup_comparison": {
         "path": "benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/result/comparison.json",
