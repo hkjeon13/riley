@@ -99,6 +99,8 @@ Riley ID가 단독 최대였던 두 decode 분기의 후속 진단을 등록했�
 
 두 decode 위치에서 임베딩과 28개 레이어의 attention 전후 residual을 순서대로 대조하는 진단을 등록했다. 지정한 Riley 스텝에서 CUDA Graph 재생을 우회한다. 기존 실행의 마지막 residual·최종 RMSNorm·전체 로짓 해시를 각 엔진에서 모두 재현한 경우에만 첫 불일치 경계를 판정한다. CPU 검산은 고정 위치·토큰 ID와 최초 분기 판정을 확인했고, 기존 로짓과 다른 추적을 거부했다. A100 7번에서 RAG 고정 시각 검증 뒤 실행한다. [레이어별 진단 등록](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-progression/registration.json) · [행 검산 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-progression/trace_decode_layers.py)
 
+A100 7번에서 두 엔진의 추적을 완료했다. 사례 12와 `numbers-1023` 모두 임베딩 3,584개 원소가 비트 단위로 같았고, 첫 관측 차이는 레이어 0의 attention residual이었다. 사례 12는 2,593개 원소가 달랐고 최대 절대차는 0.015625였다. `numbers-1023`은 2,099개 원소가 달랐고 최대 절대차는 0.00390625였다. 마지막 residual·최종 RMSNorm·전체 로짓은 두 엔진 모두 이전 실행과 해시가 일치했다. 실제 차이가 시작된 연산을 좁히려면 같은 두 decode 위치의 레이어 0에서 QKV와 RoPE, attention 계산 결과를 대조해야 한다. 종료 뒤 GPU 6·7은 같은 홀더의 20GiB 예약으로 복귀했다. [레이어별 독립 검산](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-progression/verified-result.json) · [실행과 예약 복구](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-progression/completion.json)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.

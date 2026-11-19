@@ -36,7 +36,7 @@ python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 
 W4의 A100 진단 빌드에서 보존된 C1 응답 8건을 재현하고 해당 BF16 점수 행을 검산했다. 첫 분기 7건 중 Riley·HF ID의 공동 최대 5건과 Riley 단독 최대 2건을 확인했다. 큰 ID를 고르는 동점 규칙을 계산하면 이미 일치한 대조 사례도 바뀌어 적용을 보류했다. [실제 점수 행 결과](04-long-accuracy-result.md#실제-bf16-점수-행의-분기-검산)
 
-Riley ID가 단독 최대였던 두 decode 사례에서는 최종 RMSNorm 전부터 두 엔진의 값이 달랐다. 같은 RMSNorm 계산식과 출력 가중치로 두 ID의 기록된 BF16 점수를 재현했다. 이 결과를 받아 같은 GPU 예약을 복구한 뒤 W5의 RAG 고정 시각 재생을 시작했다. [두 decode 사례 결과](04-long-accuracy-result.md#실제-bf16-점수-행의-분기-검산) · [RAG 재생 등록](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/registration.json)
+Riley ID가 단독 최대였던 두 decode 사례에서는 같은 RMSNorm 계산식과 출력 가중치로 두 ID의 BF16 점수를 재현했다. 레이어 추적에서는 두 사례 모두 임베딩이 일치했고, 레이어 0의 attention residual에서 처음 차이가 관측됐다. 추적 실행에서 각 엔진의 마지막 residual·최종 RMSNorm·전체 로짓 해시가 이전과 일치했다. 레이어 0의 어느 연산에서 차이가 시작됐는지는 확인이 남아 있다. [두 decode 사례 결과](04-long-accuracy-result.md#실제-bf16-점수-행의-분기-검산)
 
 W3의 QKV 추적 416건은 해당 비계측 요청·응답과 일치했다. 50ms 간격 부하의 동일 장문 요청에서 늘어난 첫 토큰 지연 528–541ms 중 381–392ms는 prefill 조각 사이 대기였다. RAG 첫 토큰 p95 개선이 일관되게 재현될 때까지 후보는 격리 시험에만 둔다. [두 순서의 단계별 결과](03-long-context-result.md#50ms-간격-유입의-추가-지연-위치)
 
