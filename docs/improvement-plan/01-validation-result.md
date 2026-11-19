@@ -147,7 +147,7 @@ python3 "$HOLDER_CONTROL" --lease-dir "$GPU_LEASE_DIR" --index "$PHYSICAL_GPU" r
     "$MODEL_DIR" "$MODEL_MANIFEST_SHA256" "$GPU_EVIDENCE_DIR"
 ```
 
-CPU에서는 이미지·실행 파일 식별, 체크포인트 해시 오류, API 실패 및 비정상 종료 시 판정과 컨테이너 정리 경로를 모의 테스트했다. A100 호스트의 Docker에는 검증 대상 `d3d8fe6e5` 이미지 ID가 없어 실제 추론 실행은 아직 남아 있다. [검사기 테스트](../../ci/tests/test_distribution_gpu.py)
+CPU에서는 이미지·실행 파일 식별, 체크포인트 해시 오류, API 실패 및 비정상 종료 시 판정과 컨테이너 정리 경로를 모의 테스트했다. `aws-a100`에서 승인된 `d3d8fe6e5` 소스로 이미지 `0a907408ec73`을 빌드하고 패키지 검사를 통과했다. `/opt/riley`의 런타임 파일 21개는 GitHub CI 빌드와 SHA-256이 모두 같았다. A100 6번에서 Qwen2.5-7B-Instruct 체크포인트 검사와 API 40건이 통과했다. 서버는 코드 0으로 종료했고, 활성·대기 요청과 KV·native 할당이 모두 0이었다. GPU는 같은 홀더의 20GiB 예약으로 복귀했다. [A100 이미지·GPU 증거](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-package-validation.json) · [검사기 테스트](../../ci/tests/test_distribution_gpu.py)
 
 같은 컨테이너에서 기존 장문 18개를 대조하려면 `--accuracy-baseline GOLDEN`을 추가한다. 11개 검증 입력은 `--accuracy-holdout WORKLOAD GOLDEN`으로 검사한다. 두 옵션을 함께 사용하면 기존 정확도 검증의 활성 요청 32개, 문맥 8,192토큰, 생성 상한 256토큰을 적용한다. C1 일반·진단 요청과 C8·C32에서 세 번씩 수집한 후보의 결과를 고정 Riley 캡처와 대조하고, 이미지 보고서에 기준 캡처 및 새 원본의 SHA-256을 남긴다. [장문 기준 캡처](../../benchmarks/evidence/20261119-w4-long/riley/capture.json.gz) · [별도 검증 입력](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [별도 기준 캡처](../../benchmarks/evidence/20261119-w4-holdout/riley/capture.json.gz)
 
