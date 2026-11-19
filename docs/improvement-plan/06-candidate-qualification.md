@@ -35,6 +35,8 @@ python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 
 기존 이벤트 발행 정책과 서빙 설정을 기준선으로 삼았다. 이전 빌드에서 관찰된 성능 실험은 입력·장비·바이너리에 연결하며, 새로운 수치 기준이나 기본값을 채택할 때는 종합 계획의 출력 불변성과 회귀 기준을 적용한다. [W2 결과](02-async-step-result.md) · [W3 결과](03-long-context-result.md) · [W4 정확성](04-long-accuracy-result.md) · [W5 운영 결과](05-mixed-soak-result.md)
 
+SmolLM2-1.7B의 같은 A100 바이너리에서 제출 후 발행의 32행 decode 커널 사이 공백 중앙값은 두 비교에서 51–72µs 줄었다. 네 일반 서빙 비교에서 처리량은 0.38–0.89% 늘었고 측정한 요청의 출력이 일치했다. `after-submit-v1`을 W2와 W3 후속 시험의 기준 정책으로 유지한다. [발행 정책별 계측](02-async-step-result.md#발행-정책과-32행-decode-커널-간격)
+
 W4의 A100 진단 빌드에서 보존된 C1 응답 8건을 재현하고 해당 BF16 점수 행을 검산했다. 첫 분기 7건 중 Riley·HF ID의 공동 최대 5건과 Riley 단독 최대 2건을 확인했다. 큰 ID를 고르는 동점 규칙을 계산하면 이미 일치한 대조 사례도 바뀌어 적용을 보류했다. [실제 점수 행 결과](04-long-accuracy-result.md#실제-bf16-점수-행의-분기-검산)
 
 Riley 단독 최대 두 사례의 레이어 0에서 같은 BF16 입력과 가중치로 bias 전 QKV 차이를 재현했다. CUDA 12.4에서 기존 병합 투영의 알고리즘 ID를 21에서 31로 바꾸면 두 행의 결과가 PyTorch 병합 투영과 비트 단위로 일치했다. 이 대조는 두 행의 연산 결과를 확인했으며, 알고리즘 채택 판정에 필요한 모델 출력과 성능 검증이 남아 있다. [동일한 피연산자의 투영 대조](04-long-accuracy-result.md#동일한-bf16-피연산자의-투영-대조)

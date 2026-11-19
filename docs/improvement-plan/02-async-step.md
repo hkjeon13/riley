@@ -8,6 +8,8 @@
 
 `aws-a100` GPU 7에서 기준선과 Nsight trace를 재현했다. 기존 `after-submit-v1` 옵션의 비교와 GPU 6·7 예약 상태는 [W2 GPU 실행 결과](02-async-step-result.md)에 기록했다.
 
+두 정책을 같은 바이너리에서 교차한 후속 시험에서 `after-submit-v1`의 32행 decode 커널 사이 공백 중앙값은 각각 약 51µs와 72µs 감소했다. 같은 두 정책의 일반 서빙 처리량은 +0.38–0.89%였다. [발행 정책별 계측](02-async-step-result.md#발행-정책과-32행-decode-커널-간격)
+
 ## 1. 해결할 문제와 근거
 
 SmolLM2-1.7B의 0.1.0 `reason-c32` 처리량은 vLLM 대비 0.968배, TPOT은 1.061배다. 이 모델은 MHA·KV head 32개·head dimension 64로 작은 GQA 모델과 병목이 다르다.

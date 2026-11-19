@@ -99,6 +99,19 @@ host trace의 연속 부하에 가까운 128스텝 구간 18개에서 submit과 
 
 W4·W5와 같은 CUDA 바이너리에서 두 이벤트 발행 모드와 W3의 두 burst 허용 상한을 교차했다. 두 seed에서 출력 일치와 종료 자원 회수를 확인했다. 현재 기준 대비 `immediate-v1`은 두 행 상한과 두 seed에서 모두 `closed-c32` TPOT p50이 1% 넘게 늘었다. [네 조합 결과와 판정](03-long-context-result.md#w2-이벤트-발행과-묶음-정책의-상호작용)
 
+### 발행 정책과 32행 decode 커널 간격
+
+A100 7번에서 승인 소스 `d3d8fe6e5` 기반의 같은 CUDA 바이너리와 SmolLM2-1.7B-Instruct를 사용했다. `immediate-v1` → `after-submit-v1` → `after-submit-v1` → `immediate-v1` 순으로 `reason-c32`와 `long-c32`를 실행한 뒤, 같은 순서로 `reason-c32` Nsight 계측을 했다. 일반 서빙 512건과 계측 128건을 오류·429 없이 완료했고, 측정 종류별로 입력·출력 지문과 토큰 수·종료 사유가 일치했다. 일반 서빙 네 실행의 별도 C1·C8 생성 ID 검사도 일치했다. [장비·실행 시각·요청 검산](../../benchmarks/evidence/20261119-w2-submit-prepare/publication-follow-up/verified-summary.json)
+
+| 비교 순서 | 32행 커널 사이 공백 중앙값, 즉시 → 제출 후 | `reason-c32` TPOT p50 / 처리량 변화 | `long-c32` TPOT p50 / 처리량 변화 |
+|---|---:|---:|---:|
+| 즉시 먼저 | 521.73 → 470.79µs | −0.76% / +0.53% | −0.63% / +0.89% |
+| 제출 후 먼저 | 545.22 → 473.57µs | −0.46% / +0.42% | −0.50% / +0.38% |
+
+계측 실행마다 32행 그래프 674–676개와 인접 공백 669–671개를 확인했다. 직전 커널 종료에서 다음 그래프 런치 호출까지의 시간은 각 비교에서 중앙값 54.32µs와 68.73µs 줄었다. 일반 서빙의 `reason-c32` TTFT p95 변화는 +0.22%와 −1.48%였다. 이 결과와 앞선 혼합 부하 회귀를 함께 고려해 제출 후 발행 기본값을 유지한다. 한 iteration에서 두 정책의 효과를 확인했으며, 여러 in-flight iteration의 성능과 상태 수명은 별도 검증 범위다. [계측 집계와 원본 해시](../../benchmarks/evidence/20261119-w2-submit-prepare/publication-follow-up/verified-summary.json)
+
+첫 계측 시도는 완료 요청 32건과 Nsight 파일이 저장됐지만 종료 중인 자체 서버 PID를 외부 프로세스로 분류해 종료 코드 1을 반환했다. 프로파일 실행기가 자식 생성 때 PID와 시작 시각을 남기도록 교정했다. Linux 사전 검사에서 같은 자식을 검증하고, 다른 PID와 같은 PID의 시작 시각 불일치를 각각 거부했다. 재실행한 네 계측은 모두 정상 종료했고 AWS 원본 SQLite에서 집계를 다시 계산해 일치함을 확인했다. 모든 비교 종료 뒤 GPU 6·7의 기존 홀더와 20GiB 예약을 확인했다. [초기 실행](../../benchmarks/evidence/20261119-w2-submit-prepare/publication-follow-up/initial/campaign.sh) · [재실행](../../benchmarks/evidence/20261119-w2-submit-prepare/publication-follow-up/campaign.sh) · [소유권 검사](../../benchmarks/evidence/20261119-w2-submit-prepare/publication-follow-up/server_owner.py)
+
 ## GPU 예약 방식
 
 시작 전에 GPU 6·7에서 활성 compute process가 없고 각 메모리 사용이 4MiB인 것을 확인했다. 기존 `gpu_hold` 도구로 각 장치에 20GiB 대기 예약을 시작했다. 7번 실험마다 예약을 64MiB로 낮췄다가 자식 프로세스 종료 후 20GiB로 되돌렸다. 동일 홀더의 PID와 시작 시각을 확인하며 전환했다. [기존 예약 도구](../../benchmarks/tools/gpu_hold/README.md)

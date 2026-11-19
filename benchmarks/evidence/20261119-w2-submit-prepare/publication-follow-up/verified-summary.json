@@ -1,0 +1,851 @@
+{
+  "result": {
+    "binary_sha256": "306a4b25f35ddd531fea9b7219484d5c10c5752084e312140dcfd15f5b1902b8",
+    "execution_order": [
+      "immediate-first",
+      "after-first",
+      "after-second",
+      "immediate-second",
+      "immediate-first-trace",
+      "after-first-trace",
+      "after-second-trace",
+      "immediate-second-trace"
+    ],
+    "chronology": [
+      [
+        "START",
+        "immediate-first",
+        "2026-11-19T20:40:23Z"
+      ],
+      [
+        "END",
+        "immediate-first",
+        "2026-11-19T20:41:29Z",
+        "exit=0"
+      ],
+      [
+        "START",
+        "after-first",
+        "2026-11-19T20:41:29Z"
+      ],
+      [
+        "END",
+        "after-first",
+        "2026-11-19T20:42:35Z",
+        "exit=0"
+      ],
+      [
+        "START",
+        "after-second",
+        "2026-11-19T20:42:36Z"
+      ],
+      [
+        "END",
+        "after-second",
+        "2026-11-19T20:43:44Z",
+        "exit=0"
+      ],
+      [
+        "START",
+        "immediate-second",
+        "2026-11-19T20:43:45Z"
+      ],
+      [
+        "END",
+        "immediate-second",
+        "2026-11-19T20:44:51Z",
+        "exit=0"
+      ],
+      [
+        "START",
+        "immediate-first-trace",
+        "2026-11-19T20:48:28Z"
+      ],
+      [
+        "END",
+        "immediate-first-trace",
+        "2026-11-19T20:49:31Z",
+        "exit=0"
+      ],
+      [
+        "START",
+        "after-first-trace",
+        "2026-11-19T20:49:33Z"
+      ],
+      [
+        "END",
+        "after-first-trace",
+        "2026-11-19T20:50:34Z",
+        "exit=0"
+      ],
+      [
+        "START",
+        "after-second-trace",
+        "2026-11-19T20:50:36Z"
+      ],
+      [
+        "END",
+        "after-second-trace",
+        "2026-11-19T20:51:39Z",
+        "exit=0"
+      ],
+      [
+        "START",
+        "immediate-second-trace",
+        "2026-11-19T20:51:41Z"
+      ],
+      [
+        "END",
+        "immediate-second-trace",
+        "2026-11-19T20:52:42Z",
+        "exit=0"
+      ]
+    ],
+    "arms": {
+      "immediate-first": {
+        "policy": "immediate-v1",
+        "receipt_sha256": "6f6c27d4b030ff2401afd5c617b7210d741ee77be6cc69b437958260182c3875",
+        "holders": {
+          "6": {
+            "physical_index": 6,
+            "pid": 2431228,
+            "start_ticks": "6339570869",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          },
+          "7": {
+            "physical_index": 7,
+            "pid": 2431237,
+            "start_ticks": "6339570875",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          }
+        },
+        "token_id_probe_sha256": "d7b1767fc3a35bde1f02149ef25f795b8e79201de09bfde5897359772d8e028e"
+      },
+      "after-first": {
+        "policy": "after-submit-v1",
+        "receipt_sha256": "ceebce4c935337a1f319d80cb9a9b9f8fd4209744ccd9244e76e863497d26258",
+        "holders": {
+          "6": {
+            "physical_index": 6,
+            "pid": 2431228,
+            "start_ticks": "6339570869",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          },
+          "7": {
+            "physical_index": 7,
+            "pid": 2431237,
+            "start_ticks": "6339570875",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          }
+        },
+        "token_id_probe_sha256": "d7b1767fc3a35bde1f02149ef25f795b8e79201de09bfde5897359772d8e028e"
+      },
+      "after-second": {
+        "policy": "after-submit-v1",
+        "receipt_sha256": "b8f3dc5a66e02be5a36ca082526801fd11e9a8cd63df29bddd7dcc4551160e4e",
+        "holders": {
+          "6": {
+            "physical_index": 6,
+            "pid": 2431228,
+            "start_ticks": "6339570869",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          },
+          "7": {
+            "physical_index": 7,
+            "pid": 2431237,
+            "start_ticks": "6339570875",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          }
+        },
+        "token_id_probe_sha256": "d7b1767fc3a35bde1f02149ef25f795b8e79201de09bfde5897359772d8e028e"
+      },
+      "immediate-second": {
+        "policy": "immediate-v1",
+        "receipt_sha256": "844421b56bab0b257462f58cbc7ccc9dfa13ba51945220b16eab841586100be9",
+        "holders": {
+          "6": {
+            "physical_index": 6,
+            "pid": 2431228,
+            "start_ticks": "6339570869",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          },
+          "7": {
+            "physical_index": 7,
+            "pid": 2431237,
+            "start_ticks": "6339570875",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          }
+        },
+        "token_id_probe_sha256": "d7b1767fc3a35bde1f02149ef25f795b8e79201de09bfde5897359772d8e028e"
+      },
+      "immediate-first-trace": {
+        "policy": "immediate-v1",
+        "receipt_sha256": "003d045bb7b66a1d6254492cb2192fc1a57fa20a1b42d73b85b38450058a36ac",
+        "holders": {
+          "6": {
+            "physical_index": 6,
+            "pid": 2431228,
+            "start_ticks": "6339570869",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          },
+          "7": {
+            "physical_index": 7,
+            "pid": 2431237,
+            "start_ticks": "6339570875",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          }
+        },
+        "server_owner_sha256": "8fb33610101fe56f50b975ab62bc539b5d82b67140d1e8f4f0f14d73b6f8e2f5",
+        "trace": {
+          "sqlite_sha256": "412f5bcf5e678c2bff8f71603f0bd6bfbfe8265b90acfa2bd54e48d879d6863b",
+          "sqlite_bytes": 35360768,
+          "graph_launches": 1099,
+          "matched_graphs": 676,
+          "matched_kernel_counts": {
+            "273": 676
+          },
+          "adjacent_matched_gaps": 671,
+          "intervals": {
+            "kernel_to_kernel": {
+              "count": 671,
+              "median_us": 521.729,
+              "p95_us": 561.792
+            },
+            "dma_coverage": {
+              "count": 671,
+              "median_us": 20.416,
+              "p95_us": 21.152
+            },
+            "cudaStreamSynchronize": {
+              "count": 671,
+              "median_us": 22.598,
+              "p95_us": 26.7245
+            },
+            "cudaEventSynchronize": {
+              "count": 671,
+              "median_us": 8.822,
+              "p95_us": 9.2145
+            },
+            "cudaDeviceSynchronize": {
+              "count": 671,
+              "median_us": 0.0,
+              "p95_us": 0.0
+            },
+            "dma_or_synchronization_coverage": {
+              "count": 671,
+              "median_us": 44.907,
+              "p95_us": 51.259
+            },
+            "unattributed_to_dma_or_synchronization": {
+              "count": 671,
+              "median_us": 478.218,
+              "p95_us": 514.4515
+            },
+            "next_graph_launch_api_coverage": {
+              "count": 671,
+              "median_us": 261.37,
+              "p95_us": 293.708
+            },
+            "next_kernel_minus_launch_return": {
+              "count": 671,
+              "median_us": 6.657,
+              "p95_us": 7.418
+            },
+            "prior_kernel_end_to_next_launch_call": {
+              "count": 671,
+              "median_us": 249.205,
+              "p95_us": 283.9605
+            },
+            "unattributed_to_dma_synchronization_or_launch_api": {
+              "count": 671,
+              "median_us": 219.768,
+              "p95_us": 251.7715
+            },
+            "stream_sync_after_event_sync_when_present": {
+              "count": 671,
+              "median_us": 2.447,
+              "p95_us": 2.582
+            }
+          },
+          "counts": {
+            "cudaStreamSynchronize_calls_overlapping": 1342,
+            "cudaStreamSynchronize_gaps_with_overlap": 671,
+            "cudaEventSynchronize_calls_overlapping": 671,
+            "cudaEventSynchronize_gaps_with_overlap": 671,
+            "cudaDeviceSynchronize_calls_overlapping": 0,
+            "cudaDeviceSynchronize_gaps_with_overlap": 0,
+            "gaps_with_stream_sync_after_event_sync": 671
+          },
+          "scope": "CPU calls and DMA are clipped to kernel-to-kernel gaps in one profiled graph lane. Ordering alone does not identify which fence a stream call waited for.",
+          "summary_sha256": "a47a03ede657f5ff7b1554a3156515243db22a33dcf5a63bc52eae5fdf540ca4",
+          "nsys_sha256": "ccc5904771ce1cdbcd96a9ce29f75a0d6cbaa4e08d47a3439232afe387f5a6fd"
+        }
+      },
+      "after-first-trace": {
+        "policy": "after-submit-v1",
+        "receipt_sha256": "6405c1668fda34fbb5f516fa4c2c009c48ecc27c717a4816db83fce5e6ac65e3",
+        "holders": {
+          "6": {
+            "physical_index": 6,
+            "pid": 2431228,
+            "start_ticks": "6339570869",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          },
+          "7": {
+            "physical_index": 7,
+            "pid": 2431237,
+            "start_ticks": "6339570875",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          }
+        },
+        "server_owner_sha256": "b310dd57af5ef72e83582092174424adac4dfa45b6d8590c4820dcb6ea6706bd",
+        "trace": {
+          "sqlite_sha256": "497f9427521fcb392ffa6986179d8d3e2c16d17c7326d48b34f0ccc0e9bafceb",
+          "sqlite_bytes": 35368960,
+          "graph_launches": 1100,
+          "matched_graphs": 676,
+          "matched_kernel_counts": {
+            "273": 676
+          },
+          "adjacent_matched_gaps": 671,
+          "intervals": {
+            "kernel_to_kernel": {
+              "count": 671,
+              "median_us": 470.785,
+              "p95_us": 513.553
+            },
+            "dma_coverage": {
+              "count": 671,
+              "median_us": 20.8,
+              "p95_us": 21.472
+            },
+            "cudaStreamSynchronize": {
+              "count": 671,
+              "median_us": 23.377,
+              "p95_us": 27.0795
+            },
+            "cudaEventSynchronize": {
+              "count": 671,
+              "median_us": 9.043,
+              "p95_us": 9.391
+            },
+            "cudaDeviceSynchronize": {
+              "count": 671,
+              "median_us": 0.0,
+              "p95_us": 0.0
+            },
+            "dma_or_synchronization_coverage": {
+              "count": 671,
+              "median_us": 46.054,
+              "p95_us": 51.9835
+            },
+            "unattributed_to_dma_or_synchronization": {
+              "count": 671,
+              "median_us": 424.407,
+              "p95_us": 463.9295
+            },
+            "next_graph_launch_api_coverage": {
+              "count": 671,
+              "median_us": 263.144,
+              "p95_us": 298.376
+            },
+            "next_kernel_minus_launch_return": {
+              "count": 671,
+              "median_us": 6.828,
+              "p95_us": 7.574
+            },
+            "prior_kernel_end_to_next_launch_call": {
+              "count": 671,
+              "median_us": 194.885,
+              "p95_us": 235.5455
+            },
+            "unattributed_to_dma_synchronization_or_launch_api": {
+              "count": 671,
+              "median_us": 164.994,
+              "p95_us": 203.4515
+            },
+            "stream_sync_after_event_sync_when_present": {
+              "count": 671,
+              "median_us": 2.518,
+              "p95_us": 2.757
+            }
+          },
+          "counts": {
+            "cudaStreamSynchronize_calls_overlapping": 1342,
+            "cudaStreamSynchronize_gaps_with_overlap": 671,
+            "cudaEventSynchronize_calls_overlapping": 671,
+            "cudaEventSynchronize_gaps_with_overlap": 671,
+            "cudaDeviceSynchronize_calls_overlapping": 0,
+            "cudaDeviceSynchronize_gaps_with_overlap": 0,
+            "gaps_with_stream_sync_after_event_sync": 671
+          },
+          "scope": "CPU calls and DMA are clipped to kernel-to-kernel gaps in one profiled graph lane. Ordering alone does not identify which fence a stream call waited for.",
+          "summary_sha256": "3fa0ddedf53fe6fefb90d21df287ec98475f9d56fbc2e2ca3466a788ba22bb02",
+          "nsys_sha256": "ccc5904771ce1cdbcd96a9ce29f75a0d6cbaa4e08d47a3439232afe387f5a6fd"
+        }
+      },
+      "after-second-trace": {
+        "policy": "after-submit-v1",
+        "receipt_sha256": "76cc630f18680374a91b140e0f619ca6d979a50e07f87d17be555c436b5bf9d8",
+        "holders": {
+          "6": {
+            "physical_index": 6,
+            "pid": 2431228,
+            "start_ticks": "6339570869",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          },
+          "7": {
+            "physical_index": 7,
+            "pid": 2431237,
+            "start_ticks": "6339570875",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          }
+        },
+        "server_owner_sha256": "fed26513bcd66e12c8b31f03f24ddd1c9ddaf575459d91d15506c4a9c7fe1614",
+        "trace": {
+          "sqlite_sha256": "437fcb02271a81f271c40e672a4f241814da5dceb02740864309185d747cad42",
+          "sqlite_bytes": 35368960,
+          "graph_launches": 1100,
+          "matched_graphs": 674,
+          "matched_kernel_counts": {
+            "273": 674
+          },
+          "adjacent_matched_gaps": 669,
+          "intervals": {
+            "kernel_to_kernel": {
+              "count": 669,
+              "median_us": 473.569,
+              "p95_us": 506.7722
+            },
+            "dma_coverage": {
+              "count": 669,
+              "median_us": 21.056,
+              "p95_us": 21.952
+            },
+            "cudaStreamSynchronize": {
+              "count": 669,
+              "median_us": 23.337,
+              "p95_us": 28.314
+            },
+            "cudaEventSynchronize": {
+              "count": 669,
+              "median_us": 8.939,
+              "p95_us": 9.452200000000001
+            },
+            "cudaDeviceSynchronize": {
+              "count": 669,
+              "median_us": 0.0,
+              "p95_us": 0.0
+            },
+            "dma_or_synchronization_coverage": {
+              "count": 669,
+              "median_us": 46.12,
+              "p95_us": 52.8838
+            },
+            "unattributed_to_dma_or_synchronization": {
+              "count": 669,
+              "median_us": 428.329,
+              "p95_us": 457.124
+            },
+            "next_graph_launch_api_coverage": {
+              "count": 669,
+              "median_us": 262.647,
+              "p95_us": 299.952
+            },
+            "next_kernel_minus_launch_return": {
+              "count": 669,
+              "median_us": 6.816,
+              "p95_us": 7.6546
+            },
+            "prior_kernel_end_to_next_launch_call": {
+              "count": 669,
+              "median_us": 194.547,
+              "p95_us": 227.48160000000001
+            },
+            "unattributed_to_dma_synchronization_or_launch_api": {
+              "count": 669,
+              "median_us": 164.79,
+              "p95_us": 194.91879999999998
+            },
+            "stream_sync_after_event_sync_when_present": {
+              "count": 669,
+              "median_us": 2.495,
+              "p95_us": 2.827
+            }
+          },
+          "counts": {
+            "cudaStreamSynchronize_calls_overlapping": 1338,
+            "cudaStreamSynchronize_gaps_with_overlap": 669,
+            "cudaEventSynchronize_calls_overlapping": 669,
+            "cudaEventSynchronize_gaps_with_overlap": 669,
+            "cudaDeviceSynchronize_calls_overlapping": 0,
+            "cudaDeviceSynchronize_gaps_with_overlap": 0,
+            "gaps_with_stream_sync_after_event_sync": 669
+          },
+          "scope": "CPU calls and DMA are clipped to kernel-to-kernel gaps in one profiled graph lane. Ordering alone does not identify which fence a stream call waited for.",
+          "summary_sha256": "1526ce301df326d40d001c3ff43ba4d2453c5ea96dbb4be00f05ad79aa42c283",
+          "nsys_sha256": "ccc5904771ce1cdbcd96a9ce29f75a0d6cbaa4e08d47a3439232afe387f5a6fd"
+        }
+      },
+      "immediate-second-trace": {
+        "policy": "immediate-v1",
+        "receipt_sha256": "a64ce3704ce817ec7ef5ca0a14a8c40fd3e4ac143a8f852a6979deb5bc00ded9",
+        "holders": {
+          "6": {
+            "physical_index": 6,
+            "pid": 2431228,
+            "start_ticks": "6339570869",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          },
+          "7": {
+            "physical_index": 7,
+            "pid": 2431237,
+            "start_ticks": "6339570875",
+            "phase": "idle",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480,
+            "other_processes": []
+          }
+        },
+        "server_owner_sha256": "d6c728aba308ddc00edd14b58e32da11ab796264b72639cca0ba4a53c6825e28",
+        "trace": {
+          "sqlite_sha256": "cc00309f19d13b7f8bce5ad7bbb78db54881cc6951502833638abb77e490b154",
+          "sqlite_bytes": 35340288,
+          "graph_launches": 1099,
+          "matched_graphs": 676,
+          "matched_kernel_counts": {
+            "273": 676
+          },
+          "adjacent_matched_gaps": 671,
+          "intervals": {
+            "kernel_to_kernel": {
+              "count": 671,
+              "median_us": 545.217,
+              "p95_us": 592.3375
+            },
+            "dma_coverage": {
+              "count": 671,
+              "median_us": 20.384,
+              "p95_us": 21.04
+            },
+            "cudaStreamSynchronize": {
+              "count": 671,
+              "median_us": 23.253,
+              "p95_us": 26.7695
+            },
+            "cudaEventSynchronize": {
+              "count": 671,
+              "median_us": 8.519,
+              "p95_us": 8.899
+            },
+            "cudaDeviceSynchronize": {
+              "count": 671,
+              "median_us": 0.0,
+              "p95_us": 0.0
+            },
+            "dma_or_synchronization_coverage": {
+              "count": 671,
+              "median_us": 44.962,
+              "p95_us": 50.98
+            },
+            "unattributed_to_dma_or_synchronization": {
+              "count": 671,
+              "median_us": 501.082,
+              "p95_us": 545.851
+            },
+            "next_graph_launch_api_coverage": {
+              "count": 671,
+              "median_us": 280.945,
+              "p95_us": 303.5485
+            },
+            "next_kernel_minus_launch_return": {
+              "count": 671,
+              "median_us": 6.493,
+              "p95_us": 7.3055
+            },
+            "prior_kernel_end_to_next_launch_call": {
+              "count": 671,
+              "median_us": 263.281,
+              "p95_us": 295.8595
+            },
+            "unattributed_to_dma_synchronization_or_launch_api": {
+              "count": 671,
+              "median_us": 232.041,
+              "p95_us": 262.38
+            },
+            "stream_sync_after_event_sync_when_present": {
+              "count": 671,
+              "median_us": 2.6,
+              "p95_us": 2.767
+            }
+          },
+          "counts": {
+            "cudaStreamSynchronize_calls_overlapping": 1342,
+            "cudaStreamSynchronize_gaps_with_overlap": 671,
+            "cudaEventSynchronize_calls_overlapping": 671,
+            "cudaEventSynchronize_gaps_with_overlap": 671,
+            "cudaDeviceSynchronize_calls_overlapping": 0,
+            "cudaDeviceSynchronize_gaps_with_overlap": 0,
+            "gaps_with_stream_sync_after_event_sync": 671
+          },
+          "scope": "CPU calls and DMA are clipped to kernel-to-kernel gaps in one profiled graph lane. Ordering alone does not identify which fence a stream call waited for.",
+          "summary_sha256": "0ca3f828fc612d0c122c6902fb23aded23452e4718e05a45221eccb3f5417b79",
+          "nsys_sha256": "ccc5904771ce1cdbcd96a9ce29f75a0d6cbaa4e08d47a3439232afe387f5a6fd"
+        }
+      }
+    },
+    "normal_serving": {
+      "reason-c32": {
+        "pairs_after_vs_immediate_percent": {
+          "first": {
+            "ttft_p95_ms": 0.22038847154142172,
+            "tpot_p50_ms": -0.7620544639088012,
+            "itl_p99_ms": -0.653684072867522,
+            "output_tok_s": 0.528871722045432
+          },
+          "second": {
+            "ttft_p95_ms": -1.480380692522576,
+            "tpot_p50_ms": -0.4605675327599923,
+            "itl_p99_ms": -0.7886200172866897,
+            "output_tok_s": 0.4185212400181104
+          }
+        },
+        "arms": {
+          "immediate-first": {
+            "metrics": {
+              "ttft_p95_ms": 15.41242003440857,
+              "tpot_p50_ms": 6.738828781005341,
+              "itl_p99_ms": 7.634267210960388,
+              "output_tok_s": 4168.236546932459
+            },
+            "requests": 64,
+            "sha256": "815ba9919d61a565dd0a885f474bdfcc02b94e62f9381ec7ee382cfd2883e906"
+          },
+          "after-first": {
+            "metrics": {
+              "ttft_p95_ms": 15.446387231349945,
+              "tpot_p50_ms": 6.687475235464519,
+              "itl_p99_ms": 7.584363222122192,
+              "output_tok_s": 4190.2811713371475
+            },
+            "requests": 64,
+            "sha256": "1fcc9f786b63082be2590b3698c26d8e29c541df6f1e87ca4b9bd734e4a325de"
+          },
+          "after-second": {
+            "metrics": {
+              "ttft_p95_ms": 15.366502106189728,
+              "tpot_p50_ms": 6.710341067316478,
+              "itl_p99_ms": 7.585659623146057,
+              "output_tok_s": 4185.4977315419455
+            },
+            "requests": 64,
+            "sha256": "d0c02164d546dd79ea562b6635fd233a91041450bb00484c30665607a4a3f55f"
+          },
+          "immediate-second": {
+            "metrics": {
+              "ttft_p95_ms": 15.597403049468994,
+              "tpot_p50_ms": 6.741389719621877,
+              "itl_p99_ms": 7.645957171916962,
+              "output_tok_s": 4168.053542172626
+            },
+            "requests": 64,
+            "sha256": "1577dd360efeb67a5474e4be8a7496960c5e99b125751f2b9aeb4f9c487b8366"
+          }
+        }
+      },
+      "long-c32": {
+        "pairs_after_vs_immediate_percent": {
+          "first": {
+            "ttft_p95_ms": 0.029456191605725657,
+            "tpot_p50_ms": -0.6309889278482417,
+            "itl_p99_ms": -0.5433448025400578,
+            "output_tok_s": 0.8898082625611092
+          },
+          "second": {
+            "ttft_p95_ms": 0.0672498727820603,
+            "tpot_p50_ms": -0.4976887820088871,
+            "itl_p99_ms": -0.26027048304495537,
+            "output_tok_s": 0.38067679038917834
+          }
+        },
+        "arms": {
+          "immediate-first": {
+            "metrics": {
+              "ttft_p95_ms": 875.7714033126831,
+              "tpot_p50_ms": 9.968880899980958,
+              "itl_p99_ms": 12.95550912618637,
+              "output_tok_s": 2402.030340553442
+            },
+            "requests": 64,
+            "sha256": "bd00d27a95cbfd2ad38595c05e1cdad6466a3c51b6b7a98efdfb4ab32f199706"
+          },
+          "after-first": {
+            "metrics": {
+              "ttft_p95_ms": 876.029372215271,
+              "tpot_p50_ms": 9.9059783652717,
+              "itl_p99_ms": 12.885116040706635,
+              "output_tok_s": 2423.4038049929113
+            },
+            "requests": 64,
+            "sha256": "7b5e4148a17dc7fcc0f6910b8b374a7bd2892af9fad4fcbd5ed73ff9c171e0bd"
+          },
+          "after-second": {
+            "metrics": {
+              "ttft_p95_ms": 876.0696426033974,
+              "tpot_p50_ms": 9.902413861424314,
+              "itl_p99_ms": 12.89398968219757,
+              "output_tok_s": 2424.2963185237113
+            },
+            "requests": 64,
+            "sha256": "b38a0dda5c6c1d69c9fb34aaead20789f77cf90a68d57d9785d57203bb77632a"
+          },
+          "immediate-second": {
+            "metrics": {
+              "ttft_p95_ms": 875.4808828234673,
+              "tpot_p50_ms": 9.951943568154876,
+              "itl_p99_ms": 12.927636504173279,
+              "output_tok_s": 2415.1025835241453
+            },
+            "requests": 64,
+            "sha256": "28fa1ed419daea7566822620d4f274867ba56f9ec42046acbef500c835995543"
+          }
+        }
+      }
+    },
+    "profiled_serving": {
+      "reason-c32": {
+        "pairs_after_vs_immediate_percent": {
+          "first": {
+            "ttft_p95_ms": -5.943625010566067,
+            "tpot_p50_ms": -0.9619946512760769,
+            "itl_p99_ms": -0.5604715187938591,
+            "output_tok_s": 0.9970533416263638
+          },
+          "second": {
+            "ttft_p95_ms": 5.089264978646035,
+            "tpot_p50_ms": -1.0314155971561934,
+            "itl_p99_ms": -1.1503497575411137,
+            "output_tok_s": 0.8289938199272484
+          }
+        },
+        "arms": {
+          "immediate-first-trace": {
+            "metrics": {
+              "ttft_p95_ms": 88.67163956165314,
+              "tpot_p50_ms": 6.7264938027449706,
+              "itl_p99_ms": 8.164815604686737,
+              "output_tok_s": 3786.120274904442
+            },
+            "requests": 32,
+            "sha256": "ba0b8390961a7ded5f8d64be9336b54730a0501ac6df17160822241d2b55b121"
+          },
+          "after-first-trace": {
+            "metrics": {
+              "ttft_p95_ms": 83.40132981538773,
+              "tpot_p50_ms": 6.661785292144147,
+              "itl_p99_ms": 8.119054138660431,
+              "output_tok_s": 3823.8699136233695
+            },
+            "requests": 32,
+            "sha256": "b24d32270edf2858b4de2d333995697f84dec6078d5ecb1a7badb5b213052cae"
+          },
+          "after-second-trace": {
+            "metrics": {
+              "ttft_p95_ms": 87.82552182674408,
+              "tpot_p50_ms": 6.665892228021384,
+              "itl_p99_ms": 8.168041706085205,
+              "output_tok_s": 3817.447664141302
+            },
+            "requests": 32,
+            "sha256": "1ec6f568fe4ff9eae12c929b048777177f9d6e408facfb49be7daa4eca1cdcac"
+          },
+          "immediate-second-trace": {
+            "metrics": {
+              "ttft_p95_ms": 83.57230573892593,
+              "tpot_p50_ms": 6.735361800153063,
+              "itl_p99_ms": 8.26309621334076,
+              "output_tok_s": 3786.061448712825
+            },
+            "requests": 32,
+            "sha256": "d93b668d43dd5e13baf7cd35337d7c93ea72a86839092e51464b6fe20767b2a9"
+          }
+        }
+      }
+    },
+    "same_complete_streams": true
+  },
+  "initial_trace": {
+    "stage": "w2-publication-gaps-20261120.aH6wKcia",
+    "failed_pid": 2700858,
+    "matches_own_server_pid": true,
+    "successful_measured_requests": 32,
+    "errors": 0,
+    "trace_retained": true,
+    "shutdown_receipt_seen": false,
+    "controller_exit": 1,
+    "receipt_sha256": "854b848ccb56697467f5ad4fff4caf40cd8a5d4043c075602af60375cb532f1a",
+    "controller_pid": 2678693,
+    "dispatch_tar_sha256": "5fa324a05cdf9d86c767338396fa8ce5d5b25ffdbe00e7a793ee07a12a6cef84"
+  },
+  "child_binding_preflight": {
+    "known_child": "accepted",
+    "different_pid": "rejected",
+    "different_start": "rejected"
+  },
+  "execution": {
+    "stage": "w2-publication-trace-retry-20261120.GgV4Ybyf",
+    "campaign_exit": 0,
+    "physical_gpu": 7,
+    "remote_verified_json_sha256": "61757568761a639dd07433e9dbc74dcbfe95bd9e8bb4db4b98ac4971c2d6cf31",
+    "remote_dispatch_and_result_digests_verified": true,
+    "remote_independent_comparison_byte_exact": true,
+    "remote_independent_sqlite_summaries_byte_exact": true,
+    "controller_pid": 2717075,
+    "dispatch_tar_sha256": "9a6f579cc7ba7731c546b053e6c0a181019e0588075e40770b03d174e3e80943"
+  }
+}

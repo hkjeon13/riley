@@ -7,7 +7,7 @@
 | 작업 | 현재 근거와 다음 검증 |
 |---|---|
 | W1 검증·릴리스 | Linux Production CPU, 고정 RC3 테스트 34건, CUDA 12.8 네이티브 빌드·Clippy와 CUDA 12.4 이미지 CPU 검증을 통과했다. 현재 배포 입력과 이미지 원본의 해시를 대조했다. [W1 결과](01-validation-result.md) |
-| W2 실행 중첩 | 즉시 발행의 짧은 요청 TPOT 회귀를 확인해 `after-submit-v1`을 유지한다. 정렬된 KV 테이블 후보는 A100에서 출력이 일치하고 계측된 제출 전 시간이 줄었으나 네 비교 모두 처리량이 0.11–0.36% 낮아 미채택했다. [W2 결과](02-async-step-result.md) |
+| W2 실행 중첩 | `after-submit-v1`은 A100 32행 decode의 커널 공백 중앙값을 51–72µs 줄였고 일반 서빙 처리량을 0.38–0.89% 높였다. 출력은 일치했고 기본값을 유지한다. 정렬된 KV 테이블 후보는 네 비교 모두 처리량이 0.11–0.36% 낮아 미채택했다. [발행 정책 계측](02-async-step-result.md#발행-정책과-32행-decode-커널-간격) · [정렬된 KV 테이블 결과](02-async-step-result.md#정렬된-kv-테이블의-a100-서빙-결과) |
 | W3 장문·스케줄 | 스케줄 후보 세 개는 지연 회귀로 미채택했다. 1,024행 QKV 후보는 두 RAG seed의 동일 도착 시각 재생에서 TTFT p95가 3.54–12.88% 줄었고 측정 1,024건의 출력이 일치했다. 50ms 간격 도착 대조에는 TTFT p95 증가 조건이 남아 기본값 적용을 보류한다. [고정 도착 결과](03-long-context-result.md#두-rag-seed의-고정-도착-재생) · [50ms 간격 대조](03-long-context-result.md#실제-요청의-도착-시각-대조) |
 | W4 정확성·스키마 | 장문 29건의 Riley·HF 첫 분기 7건 중 6건은 decode였다. 실제 Riley BF16 행에서 두 ID가 공동 최대인 경우가 5건이었다. Riley ID가 단독 최대인 두 decode 사례의 첫 차이를 동일 BF16 입력·가중치의 bias 전 QKV 투영에서 재현했다. 첫 prefill 분기의 레이어 대조와 네 모델의 GSM8K·구조화 출력 GPU API도 검증했다. [장문·품질 결과](04-long-accuracy-result.md#실제-bf16-점수-행의-분기-검산) · [투영 대조](04-long-accuracy-result.md#동일한-bf16-피연산자의-투영-대조) · [스키마 결과](04-structured-output-result.md) |
 | W5 문서·운영 | jemalloc 파생 이미지에서 두 캐시 설정의 30분 부하, 각 API 40건, 종료 자원 회수와 장문 출력 232건을 통과했다. 네 성능 실행에서 총 2,560건이 일치했다. RAG C8 seed 2의 닫힌 부하에서 TTFT p95는 +12.69%였고, 동일한 시각표를 재생한 두 대조에서는 +1.08%와 −2.29%였다. [운영 부하와 회수 절차](05-documentation-and-operations.md#합성-부하의-확인-기준) · [A100 성능 대조](05-mixed-soak-result.md#같은-gpu에서-비교한-서빙-성능) |
