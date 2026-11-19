@@ -1,0 +1,163 @@
+{
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "index_sha256": "624bf7c47cd12468fdc16e38a47cf4f19e0415b859a223ba3c027eed2f0e1028",
+  "weight_rows_sha256": {
+    "k": {
+      "weight": "8abb4da94153c3e0c7406fa38bae8a3e015d8baef14201a46e90c4dade47fa4f",
+      "bias": "4377d06b8b6ca24214b445d2bd626bf14bdaeb563985b5245312d64c14ecb186"
+    },
+    "v": {
+      "weight": "ac8fbc5c9ebf22ddaecb55f76216d969f1d19345522f04d1a88a382dea5a9927",
+      "bias": "12cecea0eb295e78a27a289cea2a4cc85be866d8ff8ba0dd3a6ed084c604e687"
+    }
+  },
+  "torch": "2.13.0+cu129",
+  "layer": 0,
+  "kv_head": 0,
+  "cases": {
+    "3": {
+      "position": 3300,
+      "native_capture_sha256": "86ee7e50587be139847600797a56fa96a4e4b31b1903c63dee481261abe9f8ba",
+      "vectors": {
+        "key": {
+          "before_bias_fp64_vs_captured_bf16": {
+            "elements": 128,
+            "different_bf16_elements": 0,
+            "max_abs": 0.0
+          },
+          "replay_vs_engine": {
+            "rounded_projection_then_bias": {
+              "riley": {
+                "elements": 128,
+                "different_bf16_elements": 0,
+                "max_abs": 0.0
+              },
+              "hf": {
+                "elements": 128,
+                "different_bf16_elements": 25,
+                "max_abs": 0.015625
+              }
+            },
+            "bias_then_rounded_projection": {
+              "riley": {
+                "elements": 128,
+                "different_bf16_elements": 25,
+                "max_abs": 0.015625
+              },
+              "hf": {
+                "elements": 128,
+                "different_bf16_elements": 0,
+                "max_abs": 0.0
+              }
+            }
+          }
+        },
+        "value": {
+          "before_bias_fp64_vs_captured_bf16": {
+            "elements": 128,
+            "different_bf16_elements": 0,
+            "max_abs": 0.0
+          },
+          "replay_vs_engine": {
+            "rounded_projection_then_bias": {
+              "riley": {
+                "elements": 128,
+                "different_bf16_elements": 0,
+                "max_abs": 0.0
+              },
+              "hf": {
+                "elements": 128,
+                "different_bf16_elements": 42,
+                "max_abs": 0.00390625
+              }
+            },
+            "bias_then_rounded_projection": {
+              "riley": {
+                "elements": 128,
+                "different_bf16_elements": 42,
+                "max_abs": 0.00390625
+              },
+              "hf": {
+                "elements": 128,
+                "different_bf16_elements": 0,
+                "max_abs": 0.0
+              }
+            }
+          }
+        }
+      }
+    },
+    "9": {
+      "position": 3329,
+      "native_capture_sha256": "2cbb0347612c9c9ef5deeb11e80a2d64771e8d1509ab8287dea0236e6b4fdf71",
+      "vectors": {
+        "key": {
+          "before_bias_fp64_vs_captured_bf16": {
+            "elements": 128,
+            "different_bf16_elements": 0,
+            "max_abs": 0.0
+          },
+          "replay_vs_engine": {
+            "rounded_projection_then_bias": {
+              "riley": {
+                "elements": 128,
+                "different_bf16_elements": 0,
+                "max_abs": 0.0
+              },
+              "hf": {
+                "elements": 128,
+                "different_bf16_elements": 31,
+                "max_abs": 0.015625
+              }
+            },
+            "bias_then_rounded_projection": {
+              "riley": {
+                "elements": 128,
+                "different_bf16_elements": 31,
+                "max_abs": 0.015625
+              },
+              "hf": {
+                "elements": 128,
+                "different_bf16_elements": 0,
+                "max_abs": 0.0
+              }
+            }
+          }
+        },
+        "value": {
+          "before_bias_fp64_vs_captured_bf16": {
+            "elements": 128,
+            "different_bf16_elements": 0,
+            "max_abs": 0.0
+          },
+          "replay_vs_engine": {
+            "rounded_projection_then_bias": {
+              "riley": {
+                "elements": 128,
+                "different_bf16_elements": 0,
+                "max_abs": 0.0
+              },
+              "hf": {
+                "elements": 128,
+                "different_bf16_elements": 42,
+                "max_abs": 0.00390625
+              }
+            },
+            "bias_then_rounded_projection": {
+              "riley": {
+                "elements": 128,
+                "different_bf16_elements": 42,
+                "max_abs": 0.00390625
+              },
+              "hf": {
+                "elements": 128,
+                "different_bf16_elements": 0,
+                "max_abs": 0.0
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

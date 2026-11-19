@@ -1,0 +1,226 @@
+{
+  "provenance": {
+    "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+    "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+    "source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+    "riley_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+    "cpu_report_sha256": "92f884b05c1101d4bfb6c49df9289483b698e4e64d88fdc1090705998a17de33",
+    "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+    "gpu_uuid": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+    "soak_server_arguments": [
+      "--max-active-sequences",
+      "32",
+      "--max-sequence-tokens",
+      "8192",
+      "--max-output-tokens",
+      "512",
+      "--kv-blocks",
+      "16384"
+    ]
+  },
+  "gpu_report_sha256": "cdf644641eeca453ab573c0c631cea5b32a22219381b65ab2a4d641ce4869cec",
+  "original_gpu_report_sha256": "9da95772458513f5a7584d8aaa1b69d3d89723953cfa61301fd97e69ec489628",
+  "diagnostic_report_sha256": "0bc83892568c3d973b130fba53ab92bea211a1214777c04f9ca4a00ea2c33f5f",
+  "original_uninstrumented_cache_off_rss_growth_kib": 700,
+  "pre_trim_strict_rss_gate_passed": false,
+  "diagnostic_pre_trim_rss_growth_kib": 612,
+  "same_outcome_counts": true,
+  "diagnostic_soak_failed_checks": [
+    "rss_growth_second_half_at_most_zero"
+  ],
+  "diagnostic_soak_p95_change_percent": {
+    "ttft_ms": 0.8477220341664315,
+    "e2e_ms": -13.855676078925939
+  },
+  "late_p95_ms": {
+    "ttft_ms_p95": {
+      "untrimmed": 334.195539355278,
+      "diagnostic": 333.80722999572754,
+      "difference_percent": -0.11619226285891626
+    },
+    "e2e_ms_p95": {
+      "untrimmed": 4157.334998250008,
+      "diagnostic": 4162.55996376276,
+      "difference_percent": 0.12568064673528223
+    }
+  },
+  "anonymous_drain_to_pretrim_kib": 0,
+  "anonymous_reclaimed_during_probe_kib": 42796,
+  "reservation_restored": true,
+  "glibc": {
+    "pid": 1,
+    "malloc_trim_return": 1,
+    "before": {
+      "arena": 497324032,
+      "in_use": 407718704,
+      "free": 89605328,
+      "mmap": 15231279104
+    },
+    "after": {
+      "arena": 464162816,
+      "in_use": 407718704,
+      "free": 56444112,
+      "mmap": 15231279104
+    }
+  },
+  "mappings": {
+    "totals_kib": {
+      "midpoint": {
+        "Rss": 15553576,
+        "Anonymous": 15366972,
+        "Private_Dirty": 15393044,
+        "AnonHugePages": 0
+      },
+      "drain": {
+        "Rss": 15554180,
+        "Anonymous": 15367576,
+        "Private_Dirty": 15393736,
+        "AnonHugePages": 0
+      },
+      "pretrim": {
+        "Rss": 15554180,
+        "Anonymous": 15367576,
+        "Private_Dirty": 15393736,
+        "AnonHugePages": 0
+      },
+      "posttrim": {
+        "Rss": 15511512,
+        "Anonymous": 15324780,
+        "Private_Dirty": 15350940,
+        "AnonHugePages": 0
+      }
+    },
+    "mapping_counts": {
+      "midpoint": 494,
+      "drain": 494,
+      "pretrim": 494,
+      "posttrim": 496
+    },
+    "mappings_with_same_extent_and_metadata": 455,
+    "growing_retained_mappings": [
+      {
+        "class": "anonymous-private",
+        "mapped_kib": 55596,
+        "growth_during_soak_kib": 144,
+        "drain_to_probe_kib": 0,
+        "reclaimed_during_probe_kib": 820
+      },
+      {
+        "class": "anonymous-private",
+        "mapped_kib": 1500,
+        "growth_during_soak_kib": 20,
+        "drain_to_probe_kib": 0,
+        "reclaimed_during_probe_kib": 24
+      },
+      {
+        "class": "anonymous-private",
+        "mapped_kib": 1496,
+        "growth_during_soak_kib": 20,
+        "drain_to_probe_kib": 0,
+        "reclaimed_during_probe_kib": 28
+      },
+      {
+        "class": "anonymous-private",
+        "mapped_kib": 1500,
+        "growth_during_soak_kib": 16,
+        "drain_to_probe_kib": 0,
+        "reclaimed_during_probe_kib": 24
+      },
+      {
+        "class": "anonymous-private",
+        "mapped_kib": 1492,
+        "growth_during_soak_kib": 16,
+        "drain_to_probe_kib": 0,
+        "reclaimed_during_probe_kib": 24
+      },
+      {
+        "class": "anonymous-private",
+        "mapped_kib": 1504,
+        "growth_during_soak_kib": 12,
+        "drain_to_probe_kib": 0,
+        "reclaimed_during_probe_kib": 24
+      },
+      {
+        "class": "anonymous-private",
+        "mapped_kib": 1500,
+        "growth_during_soak_kib": 12,
+        "drain_to_probe_kib": 0,
+        "reclaimed_during_probe_kib": 24
+      },
+      {
+        "class": "anonymous-private",
+        "mapped_kib": 1500,
+        "growth_during_soak_kib": 8,
+        "drain_to_probe_kib": 0,
+        "reclaimed_during_probe_kib": 28
+      },
+      {
+        "class": "anonymous-private",
+        "mapped_kib": 1500,
+        "growth_during_soak_kib": 8,
+        "drain_to_probe_kib": 0,
+        "reclaimed_during_probe_kib": 24
+      },
+      {
+        "class": "anonymous-private",
+        "mapped_kib": 1500,
+        "growth_during_soak_kib": 4,
+        "drain_to_probe_kib": 0,
+        "reclaimed_during_probe_kib": 24
+      },
+      {
+        "class": "anonymous-private",
+        "mapped_kib": 1488,
+        "growth_during_soak_kib": 4,
+        "drain_to_probe_kib": 0,
+        "reclaimed_during_probe_kib": 24
+      },
+      {
+        "class": "anonymous-private",
+        "mapped_kib": 1488,
+        "growth_during_soak_kib": 4,
+        "drain_to_probe_kib": 0,
+        "reclaimed_during_probe_kib": 24
+      },
+      {
+        "class": "anonymous-private",
+        "mapped_kib": 1476,
+        "growth_during_soak_kib": 4,
+        "drain_to_probe_kib": 0,
+        "reclaimed_during_probe_kib": 28
+      }
+    ],
+    "growing_retained_mappings_reclaimed_kib": 1120,
+    "growing_retained_mappings_idle_drift_kib": 0
+  },
+  "region_analysis": {
+    "matched_starts_and_metadata": 475,
+    "anonymous_net_growth_of_matched_kib": 604,
+    "anonymous_at_unmatched_midpoint_kib": 0,
+    "anonymous_at_unmatched_drain_kib": 0,
+    "growing_anonymous_private_regions": {
+      "same_extent_during_soak": {
+        "maps_growing": 13,
+        "growth_kib": 272,
+        "maps_with_lower_anonymous_rss_after_trim": 13,
+        "reclaimed_kib": 1120,
+        "maps_still_above_midpoint": 0,
+        "still_above_midpoint_kib": 0
+      },
+      "changed_extent_during_soak": {
+        "maps_growing": 19,
+        "growth_kib": 332,
+        "maps_with_lower_anonymous_rss_after_trim": 19,
+        "reclaimed_kib": 492,
+        "maps_still_above_midpoint": 2,
+        "still_above_midpoint_kib": 16
+      }
+    }
+  },
+  "raw_capture_sha256": {
+    "midpoint": "23bdf0b1e352ffd7712a1bebb15d5bfcbc0f7844b69c2c8464efad60ececd043",
+    "drain": "d0510d5c72cf74d51aaed031b029e8b21dc87d9c769f3a6c930ae9c23ebfc1dc",
+    "pretrim": "85845e025e2e67b191608d11f6792dfce2cbe12d1277f0246f81cb98be65fb69",
+    "posttrim": "d92c6497abf4db514214315831766d26dcc7f617c8c383dc154343dee463af78"
+  }
+}

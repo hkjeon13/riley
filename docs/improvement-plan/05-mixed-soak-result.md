@@ -107,6 +107,15 @@ AWS에서 재빌드한 `d3d8fe6e5` 이미지의 cache-on과 cache-off 시험은 
 
 W4의 첫 시도가 파서 체크섬 검사에서 종료된 뒤 GPU 6의 RSS 진단이 30분 부하를 시작했다. W4 재실행은 진행 중인 RSS 진단 뒤로 배치했다. [W4 재실행 기록](../../benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/retry/retry.json)
 
+같은 배포 이미지의 cache-off 진단은 30분 동안 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했다. 요청·지연·종료 자원 검사가 통과했고, 반환 호출 전 정밀 `smaps_rollup` RSS는 612KiB 증가해 증가량 0 기준을 넘었다. `smaps` 네 저장본을 별도로 대조했다. 부하 중 증가한 익명 RSS 604KiB는 시작 위치와 메타데이터가 일치하는 익명 private 매핑 32개에 있었다. Drain 이후 반환 직전까지 익명 RSS는 같았다. [동일 이미지 검산 및 원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/verified-result.json)
+
+| 매핑의 부하 중 범위 | 증가한 매핑 | 익명 RSS 증가 | 반환 호출 뒤 같은 매핑의 익명 RSS 감소 |
+|---|---:|---:|---:|
+| 그대로 유지 | 13개 | +272KiB | 1,120KiB |
+| 끝 위치 변경 | 19개 | +332KiB | 492KiB |
+
+`malloc_trim(0)` 뒤 32개 모두 익명 RSS가 줄었고, 두 매핑에 합계 16KiB가 중간 시점보다 더 남았다. 전체 프로세스의 익명 RSS는 42,796KiB 줄었고 glibc의 arena 사용 중 바이트는 407,718,704로 같았다. 이 결과는 부하 중 커졌던 매핑에서 glibc가 반환할 수 있는 페이지가 있었음을 확인한다. 개별 페이지와 최초 할당 지점은 매핑 단위 집계의 범위 밖이다. 서버는 코드 0으로 종료했고 GPU 6은 동일 홀더의 20GiB 예약으로 복귀했다. 운영 판정은 반환 전 기준에 따라 보류다. [검산 코드](../../benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/verify_allocator_trim.py)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)
