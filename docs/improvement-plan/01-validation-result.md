@@ -4,7 +4,7 @@
 작업 기준: `main` `37ede444562b1d6c3718fae0a8db314f81fbba92`\
 초기 복구 작업 브랜치: `codex/restore-validation-release-contracts`\
 반영 브랜치: `main`\
-최신 판정: 로컬·Linux CPU CI, CUDA 12.8 네이티브 빌드·Clippy, 격리 컨테이너의 과거 RC3 고정 테스트, CUDA 12.4 배포 이미지 빌드·CPU 검사 완료. 배포 이미지의 GPU 추론 검증은 미완료.
+최신 판정은 2026-11-19 KST 기준이다. 로컬·Linux CPU CI, CUDA 12.8 네이티브 빌드·Clippy, 과거 RC3 고정 테스트, CUDA 12.4 배포 이미지 빌드·CPU 검사를 완료했다. 승인된 `d3d8fe6e5` 이미지로 A100 API 40건, 장문 출력 232건과 두 캐시 설정의 30분 혼합 부하를 확인했다. 정밀 RSS 증가 0 기준은 미충족으로 릴리스를 보류한다. [배포 이미지 검증과 릴리스 판정](06-candidate-qualification.md)
 
 [W1 계획](01-validation-and-release.md) · [종합 계획](README.md) · [검사 사용법](../../ci/README.md)
 

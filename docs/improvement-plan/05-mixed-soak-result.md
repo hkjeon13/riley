@@ -183,7 +183,7 @@ A100 GPU 6에서 같은 Qwen2.5-7B-Instruct CUDA 바이너리로 Linux loopback 
 
 두 번째 연결의 송신 큐가 차고 활성 요청이 하나인 상태에서 연결을 닫았다. `disconnects`와 `cancellations`는 각각 1 증가했다. 활성·대기 요청과 요청 KV는 0으로 돌아갔고, 서버 실행 중 native 할당은 시작 전 값으로 회복됐다. 종료 코드는 0이었고 종료 시 device·pinned 할당은 0이었다. GPU 6은 동일 홀더의 20GiB 예약으로 복귀했다. [실행 기록](../../benchmarks/evidence/20261119-w5-slow-stream/result/receipt.json) · [종료 메트릭](../../benchmarks/evidence/20261119-w5-slow-stream/result/shutdown-metrics.json) · [예약 복귀](../../benchmarks/evidence/20261119-w5-slow-stream/result/idle-after.json)
 
-장치 메모리 갱신 실패를 가정한 CPU 단위 테스트는 tentative KV 블록 회수와 sidecar 무효화를 확인했다. 실제 운영 트래픽 분포, GPU 장치 장애, 배포 이미지 추론은 추가 검증 항목이다. [장치 실패 시 KV 회수 테스트](../../crates/riley-runtime/src/paged_kv.rs#L2186)
+장치 메모리 갱신 실패를 가정한 CPU 단위 테스트는 tentative KV 블록 회수와 sidecar 무효화를 확인했다. 배포 이미지의 A100 추론과 혼합 부하는 같은 문서에 기록했다. 이 절의 느린 소비자 TCP 송신 큐 대조는 네이티브 바이너리에서 실행했다. 실제 운영 트래픽 분포와 물리 장치 장애의 복구 검증이 남아 있다. [장치 실패 시 KV 회수 테스트](../../crates/riley-runtime/src/paged_kv.rs#L2186) · [배포 이미지의 혼합 부하](#배포-이미지의-혼합-부하)
 
 기존 테스트는 할당 생성·해제의 결과가 불명확한 경우와 복사 제출·완료 오류를 독립 자식 프로세스로 검사한다. 첫 시도는 C ABI 헤더에서 cuBLAS probe 전용 타입의 기능 조건이 누락돼 종료 코드 101을 기록했다. 헤더 수정 이후 실제 빌드는 Rust 바인딩의 기능 조건 여섯 곳에서 종료 코드 101을 기록했다. 두 수정 사항을 적용한 재시험은 정밀 RSS 대조가 끝난 뒤 GPU 6에서 실행했다. [실패 주입 테스트](../../crates/riley-cuda/tests/memory_fault_injection_gpu.rs) · [C ABI 실패 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/initial-build/SHA256SUMS) · [Rust 실패 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/rust-build/SHA256SUMS) · [재시험 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/campaign.sh)
 
