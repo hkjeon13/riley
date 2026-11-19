@@ -22,6 +22,8 @@ CHECKPOINT = "riley-checkpoint.json"
 SHUTDOWN = "/tmp/riley-distribution-shutdown.json"
 API_CHECK = Path(__file__).resolve().parents[1] / "benchmarks/live/api_check.py"
 ACCURACY_CHECK = API_CHECK.with_name("long_accuracy.py")
+SOAK_CHECK = API_CHECK.with_name("soak.py")
+CACHE_BLOCKS = {"cache-off": 0, "cache-on": 128}
 GPU_UUID = re.compile(r"GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 
@@ -92,7 +94,7 @@ def wait_ready(container, port):
 
 def log_command(out, file, argv, seconds, *, check=True):
     with (out / file).open("xb") as log:
-        subprocess.run(argv, stdout=log, stderr=subprocess.STDOUT, check=check, timeout=seconds)
+        return subprocess.run(argv, stdout=log, stderr=subprocess.STDOUT, check=check, timeout=seconds)
 
 
 def check_accuracy(out, address, label, golden, workload=None):
@@ -114,6 +116,34 @@ def check_accuracy(out, address, label, golden, workload=None):
             "verified_requests": sum(mode["matched"] for mode in result["modes"].values())}
 
 
+def check_mixed_soak(out, address, mode, container, pid):
+    path = out / "soak.json"
+    command = [sys.executable, "-B", str(SOAK_CHECK), address, "m", "--pid", str(pid),
+               "--docker-container", container, "--seconds", "1800", "--rate", "8", "--shared-prefix",
+               "--require-zero-rss-growth", "--out", str(path)]
+    completed = log_command(out, "soak.log", command, 2100, check=False)
+    result = json.loads(path.read_bytes())
+    checks = result["checks"]
+    rss_gate = "rss_growth_second_half_at_most_zero"
+    required_checks = {"no_unexpected_http_or_stream_error", "completed_schema_and_tool_covered", "disconnects_observed",
+                       "idle_after_drain", "native_allocation_plateau", "workload_coverage", "p95_drift_at_most_5_percent",
+                       rss_gate}
+    require(required_checks <= checks.keys() and all(type(passed) is bool for passed in checks.values()),
+            "missing or invalid strict soak checks")
+    rss = result["smaps_rollup_second_half"]
+    delta = rss["rss_growth_kib"]
+    require(checks[rss_gate] == (type(delta) is int and delta <= 0), "strict RSS verdict differs from the measurements")
+    failed = sorted(name for name, passed in checks.items() if not passed)
+    status = "failed" if failed else "passed"
+    require(result["status"] == status and completed.returncode == int(bool(failed))
+            and result["mode"] == "mixed_soak" and result["seconds"] == 1800 and result["rate"] == 8
+            and result["shared_prefixes"] == 8
+            and result["rss_source"] == {"container_id": container, "host_pid": pid, "container_pid": 1},
+            "mixed soak evidence differs from the requested container, workload or exit status")
+    return {"mode": mode, "status": status, "failed_checks": failed,
+            "rss": rss, "counts": result["counts"]}
+
+
 def find_interrupted_container(name):
     # The daemon can complete create after the Docker client is interrupted.
     try:
@@ -125,8 +155,11 @@ def find_interrupted_container(name):
     return record["Id"]
 
 
-def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_baseline=None, accuracy_holdout=None):
+def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_baseline=None, accuracy_holdout=None,
+              mixed_soak=None):
     require(GPU_UUID.fullmatch(gpu) and SHA256.fullmatch(model_sha), "pass a GPU UUID and model SHA-256")
+    require(mixed_soak is None or (mixed_soak in CACHE_BLOCKS and not (accuracy_baseline or accuracy_holdout)),
+            "select mixed soak or long accuracy for each container")
     cpu_report_bytes = cpu_report.read_bytes()
     report = json.loads(cpu_report_bytes)
     require(report["schema_version"] == "riley.distribution-image-check.v1" and report["status"] == "passed",
@@ -148,9 +181,13 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
     require(gpu_pids(gpu) == holders, "target GPU has an unexpected process before startup")
     out.mkdir()
     accuracy = {}
+    soak = None
     server_args = ()
     if accuracy_baseline or accuracy_holdout:
         server_args = ("--max-active-sequences", "32", "--max-sequence-tokens", "8192", "--max-output-tokens", "256")
+    elif mixed_soak is not None:
+        server_args = ("--max-active-sequences", "32", "--max-sequence-tokens", "8192", "--max-output-tokens", "512",
+                       "--kv-blocks", "16384", "--prefix-cache-blocks", str(CACHE_BLOCKS[mixed_soak]))
     mount = f"type=bind,source={model_dir},target=/models,readonly"
     name = f"riley-gpu-check-{uuid4().hex}"
     container = None
@@ -199,6 +236,8 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
         if accuracy_holdout is not None:
             workload, golden = accuracy_holdout
             accuracy["holdout"] = check_accuracy(out, address, "holdout", golden, workload)
+        if mixed_soak is not None:
+            soak = check_mixed_soak(out, address, mixed_soak, container, riley_pid)
         require(gpu_pids(gpu) == holders | {riley_pid}, "GPU process ownership changed during inference checks")
         require(digest(manifest) == model_sha, "checkpoint manifest changed during inference checks")
 
@@ -220,7 +259,8 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
             finally:
                 docker("rm", "--force", "--volumes", container)
 
-    result = {"schema_version": "riley.distribution-gpu-check.v1", "status": "passed", "image_id": image,
+    status = soak["status"] if soak is not None else "passed"
+    result = {"schema_version": "riley.distribution-gpu-check.v1", "status": status, "image_id": image,
               "source_revision": revision, "source_archive_sha256": archive, "riley_binary_sha256": observed,
               "cpu_report_sha256": sha256(cpu_report_bytes).hexdigest(), "checkpoint_sha256": model_sha,
               "checkpoint_source_model": checkpoint["source_model"], "checkpoint_source_revision": checkpoint["source_revision"],
@@ -230,9 +270,13 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
     if accuracy:
         result["accuracy_suites"] = accuracy
         result["accuracy_server_arguments"] = list(server_args)
+    if soak is not None:
+        result["mixed_soak"] = soak
+        result["soak_server_arguments"] = list(server_args)
     with (out / "report.json").open("x") as handle:
         json.dump(result, handle, indent=2)
         handle.write("\n")
+    return int(status != "passed")
 
 
 def main():
@@ -247,15 +291,17 @@ def main():
                         help="compare the historical long-context workload against a Riley capture")
     parser.add_argument("--accuracy-holdout", type=Path, nargs=2, metavar=("WORKLOAD", "GOLDEN"),
                         help="compare the pinned holdout against a Riley capture")
+    parser.add_argument("--mixed-soak", choices=CACHE_BLOCKS, help="run the strict 30-minute W5 load in this cache mode")
     args = parser.parse_args()
 
     def interrupted(_signal, _frame):
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, interrupted)
-    check_gpu(args.cpu_report, args.gpu_uuid, args.model_dir, args.model_manifest_sha256, args.output, args.tools,
-              accuracy_baseline=args.accuracy_baseline, accuracy_holdout=args.accuracy_holdout)
+    return check_gpu(args.cpu_report, args.gpu_uuid, args.model_dir, args.model_manifest_sha256, args.output, args.tools,
+                     accuracy_baseline=args.accuracy_baseline, accuracy_holdout=args.accuracy_holdout,
+                     mixed_soak=args.mixed_soak)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

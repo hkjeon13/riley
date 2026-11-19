@@ -2,9 +2,13 @@
 """Validate a synthetic, mixed, open-loop workload against a Riley server."""
 import argparse
 import asyncio
+from functools import partial
+from io import StringIO
 import json
 import math
 import random
+import re
+import subprocess
 import time
 import urllib.request
 
@@ -164,11 +168,33 @@ async def run_request(host, port, kind, body, scheduled):
     return {"kind": kind, "scheduled": scheduled, "dispatch_ms": (started - scheduled) * 1000, **result}
 
 
-def read_smaps_rollup(pid):
+def open_host_proc(pid, filename):
+    return open(f"/proc/{pid}/{filename}", encoding="utf-8")
+
+
+def open_container_proc(container, pid, filename):
+    """Read PID 1 with the server's uid while binding it to the host PID."""
+    inspect = ["docker", "container", "inspect", "--format", "{{.Id}} {{.State.Pid}} {{.RestartCount}}", container]
+    command = ["docker", "exec", container, "cat", f"/proc/1/{filename}"]
+    try:
+        before = subprocess.check_output(inspect, text=True, timeout=10).strip()
+        expected = f"{container} {pid} 0"
+        if before != expected:
+            raise ValueError("container process identity differs from the soak target")
+        content = subprocess.check_output(command, text=True, encoding="utf-8", timeout=10)
+        after = subprocess.check_output(inspect, text=True, timeout=10).strip()
+        if after != expected:
+            raise ValueError("container process identity changed during the proc read")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        raise OSError(f"cannot read container PID 1 {filename}: {type(error).__name__}") from error
+    return StringIO(content)
+
+
+def read_smaps_rollup(pid, *, open_proc=open_host_proc):
     fields = {"Rss": "rss_kib", "Anonymous": "anonymous_kib"}
     values = {}
     started = time.perf_counter()
-    with open(f"/proc/{pid}/smaps_rollup", encoding="ascii") as info:
+    with open_proc(pid, "smaps_rollup") as info:
         for line in info:
             key, _, body = line.partition(":")
             field = fields.get(key)
@@ -185,22 +211,24 @@ def read_smaps_rollup(pid):
     return values
 
 
-def record_smaps_rollup(sample, pid):
+def record_smaps_rollup(sample, pid, *, open_proc=open_host_proc):
     try:
-        sample["smaps_rollup"] = read_smaps_rollup(pid)
+        sample["smaps_rollup"] = read_smaps_rollup(pid, open_proc=open_proc)
     except (OSError, ValueError) as error:
         sample["smaps_rollup"] = None
         sample["smaps_rollup_error"] = str(error)
 
 
-def snapshot(pid, address, start, smaps_after_seconds=None):
-    with open(f"/proc/{pid}/status") as info:
-        rss = next(int(line.split()[1]) / 1024 for line in info if line.startswith("VmRSS"))
+def snapshot(pid, address, start, smaps_after_seconds=None, *, open_proc=open_host_proc):
+    with open_proc(pid, "status") as info:
+        rss = next((int(line.split()[1]) / 1024 for line in info if line.startswith("VmRSS:")), None)
+    if rss is None:
+        raise ValueError("missing VmRSS in process status")
     with urllib.request.urlopen(f"http://{address}/metrics", timeout=5) as response:
         metrics = json.load(response)
     sample = {"at_seconds": time.perf_counter() - start, "rss_mib": rss, "metrics": metrics}
     if smaps_after_seconds is not None and sample["at_seconds"] >= smaps_after_seconds:
-        record_smaps_rollup(sample, pid)
+        record_smaps_rollup(sample, pid, open_proc=open_proc)
     return sample
 
 
@@ -244,13 +272,13 @@ def smaps_growth_second_half(samples, final, duration):
     return comparison
 
 
-async def soak(args):
+async def soak(args, *, open_proc=open_host_proc):
     host, port = args.address.split(":")
     rng = random.Random(11)
     prefix_rng = random.Random(12)
     shared_prefixes = [document(prefix_rng, 512) for _ in range(8)] if args.shared_prefix else []
     start = time.perf_counter()
-    initial = await asyncio.to_thread(snapshot, args.pid, args.address, start)
+    initial = await asyncio.to_thread(snapshot, args.pid, args.address, start, open_proc=open_proc)
     if not idle(initial["metrics"]):
         raise ValueError("soak requires a dedicated idle server")
     start = time.perf_counter()
@@ -271,6 +299,7 @@ async def soak(args):
                     smaps_after_seconds = None
             poll = asyncio.create_task(asyncio.to_thread(
                 snapshot, args.pid, args.address, start, smaps_after_seconds=smaps_after_seconds,
+                open_proc=open_proc,
             ))
             running = []
             for task in tasks:
@@ -288,14 +317,14 @@ async def soak(args):
         samples.append(await poll)
     deadline = time.monotonic() + 10
     while True:
-        final = await asyncio.to_thread(snapshot, args.pid, args.address, start)
+        final = await asyncio.to_thread(snapshot, args.pid, args.address, start, open_proc=open_proc)
         if idle(final["metrics"]) or time.monotonic() >= deadline:
             break
         await asyncio.sleep(.5)
 
     smaps_comparison = None
     if args.require_zero_rss_growth:
-        record_smaps_rollup(final, args.pid)
+        record_smaps_rollup(final, args.pid, open_proc=open_proc)
         smaps_comparison = smaps_growth_second_half(samples, final, args.seconds)
 
     counts = {kind: {} for kind in KINDS}
@@ -348,6 +377,7 @@ def main():
     parser.add_argument("--seconds", type=float, default=1800)
     parser.add_argument("--rate", type=float, default=8)
     parser.add_argument("--pid", type=int, required=True)
+    parser.add_argument("--docker-container", help="read proc entries inside this full container ID using its user")
     parser.add_argument("--out")
     parser.add_argument("--shared-prefix", action="store_true", help="reuse eight fixed prefixes in the long-prompt traffic")
     parser.add_argument("--smoke", action="store_true", help="short runtime check without a latency-drift verdict")
@@ -356,7 +386,14 @@ def main():
     args = parser.parse_args()
     if not math.isfinite(args.seconds) or args.seconds <= 0 or not math.isfinite(args.rate) or args.rate <= 0:
         parser.error("seconds and rate must be finite and positive")
-    result = asyncio.run(soak(args))
+    open_proc = open_host_proc
+    if args.docker_container is not None:
+        if not re.fullmatch(r"[0-9a-f]{64}", args.docker_container) or args.pid <= 0:
+            parser.error("--docker-container requires a full container ID and its positive host PID")
+        open_proc = partial(open_container_proc, args.docker_container)
+    result = asyncio.run(soak(args, open_proc=open_proc))
+    if args.docker_container is not None:
+        result["rss_source"] = {"container_id": args.docker_container, "host_pid": args.pid, "container_pid": 1}
     print(json.dumps({key: result[key] for key in ("status", "checks", "counts", "p95_change_percent")}), flush=True)
     if args.out:
         with open(args.out, "x", encoding="utf-8") as output:

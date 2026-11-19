@@ -142,3 +142,20 @@ class MixedSoakTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([name for name, passed in result["checks"].items() if not passed],
                          ["rss_growth_second_half_at_most_zero"])
         self.assertEqual(result["status"], "failed")
+
+    def test_container_rss_uses_pid_one_and_rejects_a_changed_host_process(self):
+        container = "a" * 64
+        binding = f"{container} 42 0\n"
+        smaps = "Rss: 1500 kB\nAnonymous: 800 kB\n"
+        with patch.object(soak.subprocess, "check_output", side_effect=[binding, smaps, binding]) as run:
+            sample = soak.read_smaps_rollup(42, open_proc=soak.partial(soak.open_container_proc, container))
+            self.assertEqual(sample["rss_kib"], 1500)
+            self.assertEqual(sample["anonymous_kib"], 800)
+            self.assertEqual(run.call_args_list[1].args[0],
+                             ["docker", "exec", container, "cat", "/proc/1/smaps_rollup"])
+
+        with patch.object(soak.subprocess, "check_output", side_effect=[binding, smaps, f"{container} 43 1\n"]):
+            failed = {}
+            soak.record_smaps_rollup(failed, 42, open_proc=soak.partial(soak.open_container_proc, container))
+            self.assertIsNone(failed["smaps_rollup"])
+            self.assertIn("identity changed", failed["smaps_rollup_error"])

@@ -25,5 +25,32 @@
     "build_script_sha256": "77f0970660a80f57bf45cc3fe5e56e0a5d6b221597b4ef4768ee1f9c44121eed",
     "gpu_checker_sha256": "6e3c321ee216ac7323fc3ab76348a091adce8bf5677793ae71c8810b5cf6804c",
     "physical_gpu": 6
+  },
+  "follow_on_campaigns": {
+    "recorded_utc": "2026-11-19T00:14:13Z",
+    "expected_physical_gpu": 6,
+    "accuracy": {
+      "campaign": "w4-dist-d3d8fe6e5.FE5PU6Y4",
+      "campaign_pid": 698161,
+      "status_at_record_time": "waiting_for_base_image_gpu_check",
+      "expected_requests": 232,
+      "script_sha256": "9af4b2a6b0708262c015a11fd7441aed22b575f35443c3633f454613bde06123",
+      "checker_sha256": "447c7d9a02597e94489cdf3f6dc135a62788ff53d28cc8555f59116a95590cef",
+      "long_accuracy_sha256": "679aec2b87b87957810ebd6984d48a57d8345802287adb6fe127c753f2a47063"
+    },
+    "mixed_soak": {
+      "campaign": "w5-dist-d3d8fe6e5.GcPrN2e8",
+      "campaign_pid": 733311,
+      "status_at_record_time": "waiting_for_base_image_gpu_check_and_accuracy",
+      "cache_modes": [
+        "cache-off",
+        "cache-on"
+      ],
+      "seconds_per_cache_mode": 1800,
+      "linux_proc_parser_preflight": "passed",
+      "script_sha256": "e944678182d128eb2eae5f88ac749613c5379d3a8c1425738493604ac02d1b60",
+      "checker_sha256": "742cd7939cba993144c4fc98cc4774d4d435a9f71498ffd4fbe423d77a062130",
+      "soak_script_sha256": "700b3f8a9e10673212e3588472da9d5a521e0f03bb5f7cb787c87c5767dec2b1"
+    }
   }
 }

@@ -46,6 +46,7 @@ class DistributionGpuTest(unittest.TestCase):
         self.exit_code = 0
         self.device_pids = set()
         self.api_pass = True
+        self.soak_growth_kib = 0
         self.create_interrupted = False
         self.name = None
         self.calls = []
@@ -93,6 +94,22 @@ class DistributionGpuTest(unittest.TestCase):
             if file == "api.log":
                 self.assertIn("127.0.0.1:44321", argv)
                 (out / "api.json").write_text(json.dumps({"results": [{"passed": self.api_pass}]}))
+            if file == "soak.log":
+                self.assertIn("--require-zero-rss-growth", argv)
+                self.assertEqual(argv[argv.index("--docker-container") + 1], self.container)
+                self.assertEqual(argv[argv.index("--pid") + 1], str(self.pid))
+                passed = self.soak_growth_kib <= 0
+                (out / "soak.json").write_text(json.dumps({
+                    "status": "passed" if passed else "failed", "mode": "mixed_soak", "seconds": 1800,
+                    "rate": 8, "shared_prefixes": 8, "counts": {"plain": {"completed": 1}},
+                    "rss_source": {"container_id": self.container, "host_pid": self.pid, "container_pid": 1},
+                    "checks": {"rss_growth_second_half_at_most_zero": passed, "no_unexpected_http_or_stream_error": True,
+                               "completed_schema_and_tool_covered": True, "disconnects_observed": True,
+                               "idle_after_drain": True, "native_allocation_plateau": True, "workload_coverage": True,
+                               "p95_drift_at_most_5_percent": True},
+                    "smaps_rollup_second_half": {"rss_growth_kib": self.soak_growth_kib},
+                }))
+                return subprocess.CompletedProcess(argv, int(not passed))
 
         def copy_shutdown(argv, **_kwargs):
             self.assertEqual(argv[:3], ["docker", "cp", f"{self.container}:{checker.SHUTDOWN}"])
@@ -104,8 +121,8 @@ class DistributionGpuTest(unittest.TestCase):
               patch.object(checker, "wait_ready", return_value={"ready": True, "accepting": True}),
               patch.object(checker, "log_command", log_command),
               patch.object(checker.subprocess, "run", copy_shutdown)):
-            checker.check_gpu(self.cpu_report, self.gpu, self.root, model_hash or self.model_hash, self.out, False,
-                              **kwargs)
+            return checker.check_gpu(self.cpu_report, self.gpu, self.root, model_hash or self.model_hash, self.out, False,
+                                     **kwargs)
 
     def test_report_binds_the_image_process_and_api(self):
         self.check()
@@ -131,6 +148,18 @@ class DistributionGpuTest(unittest.TestCase):
         self.assertEqual(report["accuracy_server_arguments"][:2], ["--max-active-sequences", "32"])
         create = next(call for call in self.calls if call[0] == "create")
         self.assertEqual(list(create[-6:]), report["accuracy_server_arguments"])
+
+    def test_positive_soak_growth_fails_after_graceful_shutdown(self):
+        self.soak_growth_kib = 512
+        self.assertEqual(self.check(mixed_soak="cache-on"), 1)
+        report = json.loads((self.out / "report.json").read_bytes())
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["shutdown_exit"], 0)
+        self.assertTrue((self.out / "shutdown.json").is_file())
+        self.assertEqual(report["mixed_soak"]["failed_checks"], ["rss_growth_second_half_at_most_zero"])
+        self.assertEqual(report["soak_server_arguments"][-4:], ["--kv-blocks", "16384", "--prefix-cache-blocks", "128"])
+        create = next(call for call in self.calls if call[0] == "create")
+        self.assertEqual(list(create[-10:]), report["soak_server_arguments"])
 
     def test_checkpoint_drift_prevents_container_creation(self):
         with self.assertRaisesRegex(ValueError, "checkpoint manifest differs"):

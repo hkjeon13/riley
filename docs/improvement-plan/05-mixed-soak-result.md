@@ -75,6 +75,12 @@ GPU 7에서 같은 바이너리·모델·부하로 30분을 다시 실행했다.
 
 glibc 2.35 기본 설정의 30분 기준군은 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했다. 요청·지연·종료 자원 검사는 통과했다. 정밀 RSS와 익명 RSS가 각각 **932KiB 증가**했고 증가분 전체가 익명 private 매핑에 속했다. RSS 조건만 실패해 검사 프로세스는 코드 1을 반환했다. 동일 GPU 홀더의 20GiB 복귀를 확인한 뒤 arena 제한 조건을 시작했다. 두 조건의 비교 판정은 두 번째 실행 종료 후 갱신한다. [기준군 집계와 원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/glibc-arena-control/result/control-comparison.json)
 
+### 배포 이미지의 혼합 부하
+
+배포 이미지 GPU 검사기에 운영 시험을 연결했다. API 검사 후 30분 동안 초당 8회의 합성 도착과 공통 prefix 8개를 적용한다. Cache-off와 cache-on은 각각 0·128개 prefix-cache 블록을 사용한다. 두 조건 모두 활성 요청 32개, 문맥 8,192토큰, 생성 상한 512토큰, KV 블록 16,384개를 사용한다. [배포 GPU 검사기](../../ci/check_distribution_gpu.py)
+
+Docker가 보고한 호스트 PID와 컨테이너 ID를 각 표본 전후로 대조하고, 컨테이너 사용자로 `/proc/1/status`와 `/proc/1/smaps_rollup`을 읽는다. 기존 부하 검사기가 요청 처리, 취소, 지연 변동, RSS 증가 0을 판정한다. 정밀 표본 누락과 RSS 증가는 실패로 기록한다. 정상 종료와 자원 회수 검사가 끝나면 이미지 ID, 바이너리 해시, 혼합 부하 원본 및 정리 지표의 해시를 보존한다. CPU 테스트에서 프로세스 변경 검출과 RSS 실패 후 종료 경로를 확인했다. 실제 컨테이너 결과는 이미지 빌드 뒤 수집한다. [Linux 부하 검사기](../../benchmarks/live/soak.py) · [이미지 검사 방법](01-validation-result.md#배포-이미지-gpu-검사)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)
