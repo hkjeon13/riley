@@ -1,0 +1,363 @@
+{
+  "campaign": "w5-trim-7sec-retry-20261119.fKlbclsw",
+  "physical_gpu": 6,
+  "identity": {
+    "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+    "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+    "source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+    "riley_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+    "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+    "gpu_name": "NVIDIA A100-SXM4-40GB"
+  },
+  "both_rss_gates_passed": false,
+  "both_30minute_soak_checks_passed": false,
+  "both_same_20gib_holder_restored": true,
+  "image": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+  "api_checks_each_mode": [
+    40,
+    40
+  ],
+  "original_gate_and_clock_replayed_identically": true,
+  "modes": {
+    "cache-off": {
+      "candidate_status": "failed",
+      "candidate_failed_checks": [
+        "rss_growth_second_half_at_most_zero"
+      ],
+      "candidate_soak_p95_drift_percent": {
+        "ttft_ms": 1.3560744384129464,
+        "e2e_ms": -13.362935722459824
+      },
+      "same_outcome_counts": true,
+      "control_rss": {
+        "baseline": {
+          "rss_kib": 15553508,
+          "anonymous_kib": 15366920,
+          "read_ms": 392.03569293022156
+        },
+        "drain": {
+          "rss_kib": 15554208,
+          "anonymous_kib": 15367620,
+          "read_ms": 340.7674729824066
+        },
+        "rss_growth_kib": 700,
+        "anonymous_growth_kib": 700
+      },
+      "candidate_rss": {
+        "baseline": {
+          "rss_kib": 15507836,
+          "anonymous_kib": 15321300,
+          "read_ms": 358.05708914995193
+        },
+        "drain": {
+          "rss_kib": 15507880,
+          "anonymous_kib": 15321344,
+          "read_ms": 397.1829414367676
+        },
+        "rss_growth_kib": 44,
+        "anonymous_growth_kib": 44
+      },
+      "late_p95_ms": {
+        "ttft_ms_p95": {
+          "control": 334.195539355278,
+          "periodic": 334.73484963178635,
+          "difference_percent": 0.16137566574010442
+        },
+        "e2e_ms_p95": {
+          "control": 4157.334998250008,
+          "periodic": 4169.913470745087,
+          "difference_percent": 0.3025609555249664
+        }
+      },
+      "periodic_trim": {
+        "period_ms": 7000,
+        "calls": 294,
+        "returned_memory": 294,
+        "span_seconds": 2051.167156571,
+        "call_ms_p95": 0.768335,
+        "call_ms_max": 4.487165
+      },
+      "same_20gib_reservation_restored": true,
+      "control_report_sha256": "9da95772458513f5a7584d8aaa1b69d3d89723953cfa61301fd97e69ec489628",
+      "candidate_report_sha256": "77e847d47f240d34bd89d47d74d7662844c58c3c95071b8e73470215ef18a343",
+      "candidate_soak_sha256": "21d3ef53222b3edc77421f23d211c958c6d96dec01450353ea0dc024d8b28a7d",
+      "trim_telemetry_sha256": "5e6c80d32893706e0cffc9c64b0d62a09ced257ebddc71093e068119937dd253",
+      "completed_requests": 13749,
+      "intentional_disconnects": 700
+    },
+    "cache-on": {
+      "candidate_status": "failed",
+      "candidate_failed_checks": [
+        "rss_growth_second_half_at_most_zero"
+      ],
+      "candidate_soak_p95_drift_percent": {
+        "ttft_ms": 2.110474394480799,
+        "e2e_ms": -13.4928268417686
+      },
+      "same_outcome_counts": true,
+      "control_rss": {
+        "baseline": {
+          "rss_kib": 15553172,
+          "anonymous_kib": 15366416,
+          "read_ms": 330.4477035999298
+        },
+        "drain": {
+          "rss_kib": 15553788,
+          "anonymous_kib": 15367032,
+          "read_ms": 325.4677876830101
+        },
+        "rss_growth_kib": 616,
+        "anonymous_growth_kib": 616
+      },
+      "candidate_rss": {
+        "baseline": {
+          "rss_kib": 15507668,
+          "anonymous_kib": 15321052,
+          "read_ms": 321.3077560067177
+        },
+        "drain": {
+          "rss_kib": 15507960,
+          "anonymous_kib": 15321344,
+          "read_ms": 348.0594828724861
+        },
+        "rss_growth_kib": 292,
+        "anonymous_growth_kib": 292
+      },
+      "late_p95_ms": {
+        "ttft_ms_p95": {
+          "control": 325.79217106103897,
+          "periodic": 329.03576642274857,
+          "difference_percent": 0.995602611059021
+        },
+        "e2e_ms_p95": {
+          "control": 4131.356708705425,
+          "periodic": 4141.098327934742,
+          "difference_percent": 0.23579709805230387
+        }
+      },
+      "periodic_trim": {
+        "period_ms": 7000,
+        "calls": 293,
+        "returned_memory": 293,
+        "span_seconds": 2044.165469584,
+        "call_ms_p95": 0.654519,
+        "call_ms_max": 5.160181
+      },
+      "same_20gib_reservation_restored": true,
+      "control_report_sha256": "a07f24b13e13d53fde638a4565d4a2d73f1f30346797ba62539644b7ebc15d4c",
+      "candidate_report_sha256": "2619a6ae0118f57305728698724eb405429fe6672eda797d334fe317214e190f",
+      "candidate_soak_sha256": "8c42a06845e104e51e00e2c93f22700d044a177d4540711722aaeb719914de24",
+      "trim_telemetry_sha256": "2b18378304857f145b0f924d226ef492d2e8cbf3a03d497de1adb573e7a1921f",
+      "completed_requests": 13749,
+      "intentional_disconnects": 700
+    }
+  },
+  "timing": {
+    "cache-off": {
+      "mode": "cache-off",
+      "verdict": "failed",
+      "original_rss": {
+        "baseline": {
+          "rss_kib": 15507836,
+          "anonymous_kib": 15321300,
+          "read_ms": 358.05708914995193
+        },
+        "drain": {
+          "rss_kib": 15507880,
+          "anonymous_kib": 15321344,
+          "read_ms": 397.1829414367676
+        },
+        "rss_growth_kib": 44,
+        "anonymous_growth_kib": 44
+      },
+      "sample_bounds": {
+        "midpoint": {
+          "rollup_read": {
+            "preceding_trim": 164,
+            "preceding_trim_returned": 1,
+            "milliseconds_since_trim_at_start": 6436.478676,
+            "milliseconds_since_trim_at_end": 6794.546433,
+            "overlapping_trims": [],
+            "following_trim": 165
+          },
+          "map_read": {
+            "preceding_trim": 164,
+            "preceding_trim_returned": 1,
+            "milliseconds_since_trim_at_start": 6794.547709,
+            "milliseconds_since_trim_at_end": 7371.833471,
+            "overlapping_trims": [
+              165
+            ],
+            "following_trim": 166
+          },
+          "rollup_and_maps_rss_difference_kib": -140,
+          "rollup_and_maps_anonymous_difference_kib": -140
+        },
+        "drain": {
+          "rollup_read": {
+            "preceding_trim": 294,
+            "preceding_trim_returned": 1,
+            "milliseconds_since_trim_at_start": 188.910278,
+            "milliseconds_since_trim_at_end": 586.107871,
+            "overlapping_trims": [],
+            "following_trim": null
+          },
+          "map_read": {
+            "preceding_trim": 294,
+            "preceding_trim_returned": 1,
+            "milliseconds_since_trim_at_start": 586.109133,
+            "milliseconds_since_trim_at_end": 1037.108401,
+            "overlapping_trims": [],
+            "following_trim": null
+          },
+          "rollup_and_maps_rss_difference_kib": 0,
+          "rollup_and_maps_anonymous_difference_kib": 0
+        }
+      },
+      "same_extent_mapping_changes_by_class": {
+        "anonymous-private": {
+          "retained_delta_kib": -44,
+          "lost_kib": 7176,
+          "added_kib": 7404
+        },
+        "file-or-device": {
+          "retained_delta_kib": 0,
+          "lost_kib": 0,
+          "added_kib": 0
+        },
+        "heap": {
+          "retained_delta_kib": 0,
+          "lost_kib": 0,
+          "added_kib": 0
+        },
+        "labeled-stack": {
+          "retained_delta_kib": 0,
+          "lost_kib": 0,
+          "added_kib": 0
+        },
+        "other-kernel": {
+          "retained_delta_kib": 0,
+          "lost_kib": 0,
+          "added_kib": 0
+        }
+      },
+      "diagnostic_scope": "Map reads follow the scored RSS samples and can observe different pages."
+    },
+    "cache-on": {
+      "mode": "cache-on",
+      "verdict": "failed",
+      "original_rss": {
+        "baseline": {
+          "rss_kib": 15507668,
+          "anonymous_kib": 15321052,
+          "read_ms": 321.3077560067177
+        },
+        "drain": {
+          "rss_kib": 15507960,
+          "anonymous_kib": 15321344,
+          "read_ms": 348.0594828724861
+        },
+        "rss_growth_kib": 292,
+        "anonymous_growth_kib": 292
+      },
+      "sample_bounds": {
+        "midpoint": {
+          "rollup_read": {
+            "preceding_trim": 164,
+            "preceding_trim_returned": 1,
+            "milliseconds_since_trim_at_start": 3930.219985,
+            "milliseconds_since_trim_at_end": 4251.541512,
+            "overlapping_trims": [],
+            "following_trim": 165
+          },
+          "map_read": {
+            "preceding_trim": 164,
+            "preceding_trim_returned": 1,
+            "milliseconds_since_trim_at_start": 4251.542716,
+            "milliseconds_since_trim_at_end": 4630.418213,
+            "overlapping_trims": [],
+            "following_trim": 165
+          },
+          "rollup_and_maps_rss_difference_kib": 96,
+          "rollup_and_maps_anonymous_difference_kib": 96
+        },
+        "drain": {
+          "rollup_read": {
+            "preceding_trim": 293,
+            "preceding_trim_returned": 1,
+            "milliseconds_since_trim_at_start": 4702.687102,
+            "milliseconds_since_trim_at_end": 5050.757375,
+            "overlapping_trims": [],
+            "following_trim": null
+          },
+          "map_read": {
+            "preceding_trim": 293,
+            "preceding_trim_returned": 1,
+            "milliseconds_since_trim_at_start": 5050.758843,
+            "milliseconds_since_trim_at_end": 5473.593289,
+            "overlapping_trims": [],
+            "following_trim": null
+          },
+          "rollup_and_maps_rss_difference_kib": 0,
+          "rollup_and_maps_anonymous_difference_kib": 0
+        }
+      },
+      "same_extent_mapping_changes_by_class": {
+        "anonymous-private": {
+          "retained_delta_kib": -80,
+          "lost_kib": 7180,
+          "added_kib": 7456
+        },
+        "file-or-device": {
+          "retained_delta_kib": 0,
+          "lost_kib": 0,
+          "added_kib": 0
+        },
+        "heap": {
+          "retained_delta_kib": 0,
+          "lost_kib": 0,
+          "added_kib": 0
+        },
+        "labeled-stack": {
+          "retained_delta_kib": 0,
+          "lost_kib": 0,
+          "added_kib": 0
+        },
+        "other-kernel": {
+          "retained_delta_kib": 0,
+          "lost_kib": 0,
+          "added_kib": 0
+        }
+      },
+      "diagnostic_scope": "Map reads follow the scored RSS samples and can observe different pages."
+    }
+  },
+  "local_replay_archive_sha256": "6b3d417cdedb3dad609c6072a0daa22d67174095501f76581e6ea79dfc09b8dd",
+  "cache_on_adjacent_arena_shape": {
+    "scope": "64 MiB aligned anonymous writable segment with an adjacent inaccessible private reservation. Mapping geometry is compared, without reading allocator metadata or retained addresses.",
+    "heap_alignment_bytes": 67108864,
+    "midpoint_sha256": "ded60a9f4e465f4b9016158190078c5d604227a03c82a17c03c1d5f65c28324a",
+    "drain_sha256": "c202d297485c94837b1fb76b5fe45faa098c9a9a93b58a0ca8a1ec8330633ff9",
+    "matching_starts_at_both_samples": 36,
+    "matching_starts_with_exact_reservation_end_at_both_samples": 36,
+    "total_anonymous_rss_change_kib": 196,
+    "paired_groups": {
+      "matching_heap_shape": {
+        "same_extent_mappings": 20,
+        "same_extent_rss_change_kib": -80,
+        "same_extent_increased_mappings": 10,
+        "same_extent_decreased_mappings": 4,
+        "changed_extent_mappings": 16,
+        "changed_extent_rss_change_kib": 276,
+        "changed_extent_increased_mappings": 13,
+        "changed_extent_decreased_mappings": 2
+      },
+      "other_private_mapping": {
+        "same_extent_mappings": 320,
+        "same_extent_rss_change_kib": 0,
+        "same_extent_increased_mappings": 0,
+        "same_extent_decreased_mappings": 0
+      }
+    }
+  }
+}

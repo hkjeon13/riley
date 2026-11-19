@@ -150,6 +150,10 @@ Cache-on은 API 40건과 30분 부하의 모든 항목을 통과했다. 기준 �
 
 반환 호출 294회에서 모두 메모리가 반환됐고 호출 시간 p95는 0.77ms였다. 정밀 중간 표본은 직전 반환이 끝난 뒤 6.44–6.79초에, drain 표본은 0.19–0.59초에 읽혔다. 두 읽기 모두 반환 호출과 겹치지 않았다. Drain에서 직전 반환과의 간격이 더 짧아도 익명 RSS는 늘었다. 인접 `smaps`의 익명 RSS 순증가는 184KiB였다. 시작 주소와 속성이 같고 끝이 바뀐 16개 매핑은 합계 228KiB 늘었고, 범위가 유지된 매핑은 합계 44KiB 줄었다. 두 표본 중 한쪽에만 나타난 시작 주소의 익명 RSS는 모두 0이었다. 중간 매핑을 읽은 값은 먼저 읽은 정밀 표본보다 140KiB 낮아 판정에는 원래의 `smaps_rollup` 두 표본을 사용한다. [반환 시각과 인접 매핑 대조](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/retry/cache-off-verified.json)
 
+7초 주기의 cache-on 30분 부하도 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했다. API 40건과 지연·종료 자원 검사가 통과했고, 정밀 RSS와 익명 RSS가 각각 **292KiB 증가**해 RSS 증가 0 항목만 실패했다. 같은 이미지의 비계측 기준은 616KiB 증가했으며, 7초 조건의 drain RSS는 그 기준보다 45,828KiB 낮았다. 후반 TTFT p95와 완료 지연 p95는 기준 대비 각각 1.00%, 0.24% 높았다. 두 cache 모드 모두 같은 20GiB 홀더로 복귀했다. [두 모드의 원본 판정 재현](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/retry/paired-verified.json)
+
+Cache-on의 반환 호출은 293회였고 모두 메모리를 반환했다. 중간 정밀 표본은 직전 반환 후 3.93–4.25초에, drain 표본은 4.70–5.05초에 읽혔다. 인접 매핑의 익명 RSS 순증가 196KiB는 전부 보조 힙과 같은 배치에서 나왔다. 두 모드 모두 7초 후보의 RSS 증가 0 기준을 충족하지 못해 이 후보의 적용 판단은 보류다. [정밀 표본 시각과 매핑 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/retry/paired-verified.json)
+
 #### 보조 힙 배치 대조
 
 7초 및 이전 31초 cache-off의 인접 매핑을 다시 검산했다. 두 실행에서 각각 64MiB에 정렬된 쓰기 가능 익명 매핑 36개가 바로 뒤의 접근 불가 구간까지 합해 정확히 64MiB를 이루었다. 이 배치는 64비트 glibc 2.35의 보조 힙 할당 코드와 일치한다. 두 매핑 표본의 익명 RSS 순증가인 7초 +184KiB와 31초 +396KiB는 각각 전부 이 배치에서 나왔다. 주소와 권한으로 판별한 결과이며 개별 allocator 청크의 생존 여부는 추가 검증 범위다. [매핑 검산과 입력 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/arena-shape-comparison.json) · [glibc 2.35 힙 구현](https://raw.githubusercontent.com/bminor/glibc/glibc-2.35/malloc/arena.c) · [glibc 2.35 할당 상한](https://raw.githubusercontent.com/bminor/glibc/glibc-2.35/malloc/malloc.c)
