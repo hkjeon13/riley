@@ -140,6 +140,10 @@ Cache-on은 API 40건과 30분 부하의 모든 항목을 통과했다. 기준 �
 
 다음 대조는 독립 반환 스레드의 주기만 31초에서 7초로 바꾼다. 이전 drain 표본의 반환 후 대기는 약 9초였다. 두 캐시 설정에서 같은 30분 부하를 각각 실행하고 지연·종료·정밀 RSS 증가 0을 검산한다. 각 표본과 직전 반환 사이의 시차도 기록해 주기 변경의 영향을 본다. 검산기와 의존 파일은 새 실행 디렉터리에 함께 전송했고 두 기존 기준군의 원본 체크섬을 확인했다. GPU 7번의 QKV 서빙 대조가 종료되면 A100 6번에서 실행한다. [7초 대조 등록](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/registration.json) · [고정 입력](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/inputs.json)
 
+첫 실행에서 반환 라이브러리를 복사할 때 파일 권한이 `0600`으로 바뀌어 컨테이너의 UID 65532가 라이브러리를 읽지 못했다. 로더가 `LD_PRELOAD`를 무시한 상태로 cache-off 부하 30분과 API 40건을 끝냈다. 정밀 RSS와 익명 RSS는 각각 544KiB 증가했으며 주기적 반환 성능 판정에서 이 결과를 제외했다. 서버 종료 자원을 회수했지만 반환 로그가 없어 최종 GPU 보고서 생성이 실패했고 cache-on은 시작되지 않았다. A100 6번은 동일 홀더의 20GiB 예약으로 복귀했다. [첫 시도와 보존 원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/retry/first-attempt.json)
+
+재실행은 새 디렉터리에 같은 라이브러리를 `0644`로 설치했다. 동일 이미지의 UID 65532에서 파일 체크섬과 실제 프로세스 매핑을 먼저 확인했다. 각 30분 부하는 Riley PID 1의 라이브러리 매핑과 7초 주기의 첫 반환 기록을 확인한 뒤 시작한다. Cache-off의 실제 서버에서 이 검사를 통과했다. 부하·API·정밀 RSS 판정 코드는 고정된 버전을 사용한다. 재현 시 등록된 `campaign.sh`와 원래 `observe_soak.py`를 복사해 두 gzip 패치를 적용하고 `dispatch.sha256`을 검증한다. [재실행 등록과 패치 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/retry/registration.json)
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 

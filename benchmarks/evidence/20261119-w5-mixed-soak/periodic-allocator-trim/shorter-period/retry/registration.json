@@ -1,0 +1,33 @@
+{
+  "campaign": "w5-trim-7sec-retry-20261119.fKlbclsw",
+  "preceding_failed_campaign": "w5-trim-7sec-20261119.LByzvRHj",
+  "campaign_pid": 2928020,
+  "physical_gpu": 6,
+  "period_ms": 7000,
+  "library_file_mode": "0644",
+  "library_sha256": "5463d8ef947b88f08165c71378ef8dc2910f35989ab5bcf529516c0042ed9edf",
+  "container_preflight_uid": 65532,
+  "container_preflight_mapped_library": true,
+  "container_preflight_completed_utc": "2026-11-19T07:01:34Z",
+  "required_before_each_mixed_load": "Riley PID 1 maps the library and records its first 7000ms trim call",
+  "original_scoring_inputs_preserved": [
+    "soak.py",
+    "api_check.py",
+    "load.py",
+    "check_distribution_gpu.py"
+  ],
+  "files_sha256": {
+    "dispatch.sha256": "da99aec203af6033af38c340d190a1739c9ad01e019ff71667a39085f6107ecb",
+    "observer-retry.sha256": "d3117698586e4634db7ec5502a479eb7654503d54b0f11cc76d23bb6ca65206c",
+    "first-attempt.json": "cb6c0b69cf58393196b884ff37629f786f76b70b6a84e1874680ef8554f0ef90",
+    "campaign.sh.patch.gz": "38b09d0580b6621d921c4e95d0cdf1f44f1c240353b9541d91255ff7a308f952",
+    "observe_soak.py.patch.gz": "6bf21eebcedca5c495e9223ee706da0654bb50f5b6cad7a439f76eee79d470f7"
+  },
+  "verified_cache_off_start": {
+    "observed_utc": "2026-11-19T07:06:04Z",
+    "pid_in_container": 1,
+    "period_ms": 7000,
+    "marker": "W5-TRIM-ACTIVE pid=1 period_ms=7000",
+    "mixed_load_started": true
+  }
+}

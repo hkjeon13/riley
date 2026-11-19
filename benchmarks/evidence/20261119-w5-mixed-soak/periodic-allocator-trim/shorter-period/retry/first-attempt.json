@@ -1,0 +1,58 @@
+{
+  "campaign": "w5-trim-7sec-20261119.LByzvRHj",
+  "physical_gpu": 6,
+  "campaign_exit": 1,
+  "cache_off_checker_exit": 1,
+  "cache_on_started": false,
+  "periodic_trim_applied": false,
+  "mode_of_bound_library": "0600",
+  "mode_of_reference_library": "0644",
+  "container_uid": 65532,
+  "matching_preload_library_sha256": "5463d8ef947b88f08165c71378ef8dc2910f35989ab5bcf529516c0042ed9edf",
+  "loader_rejected_preload": true,
+  "periodic_telemetry_present": false,
+  "final_gpu_report_present": false,
+  "cache_off_load": {
+    "duration_seconds": 1800.0,
+    "scored_rss_kib": 544,
+    "scored_anonymous_rss_kib": 544,
+    "api_checks_passed": 40,
+    "failed_soak_checks": [
+      "rss_growth_second_half_at_most_zero"
+    ],
+    "workload_counts": {
+      "plain": {
+        "completed": 7984
+      },
+      "schema": {
+        "completed": 1739,
+        "stop": 1739
+      },
+      "logprobs": {
+        "completed": 1160
+      },
+      "tools": {
+        "completed": 708,
+        "tool_calls": 708
+      },
+      "long": {
+        "completed": 1415
+      },
+      "reason": {
+        "completed": 743
+      },
+      "cancel": {
+        "disconnected": 700
+      }
+    },
+    "shutdown_resources_zero": true
+  },
+  "same_20gib_holder_restored": true,
+  "original_artifact_sha256": {
+    "soak.json": "4fe74fc1d2d462702e72e93ff448f2f5cd3d27c710446da709e497212aca510c",
+    "api.json": "8824a8523b3efb5ceb48bd288f32818179175e840c8b7cb167bb364364077b4a",
+    "gpu-check.log": "a2a4a8695326890007eb2d8dae296865e286a0bf84a023c96c6e914b52861494",
+    "shutdown.json": "2be203316958533fc840ac2fc834f32138ea971a15043e5651e40d384808bfd9",
+    "server.log": "1a597b9dcae30e40eb09a58f21559157021eda8b67c8ca7ed881343f3d12c0ec"
+  }
+}
