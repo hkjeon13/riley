@@ -197,6 +197,14 @@ CUDA 12.4 SM80 진단 바이너리로 A100 6번에서 같은 부하 여섯 개�
 
 요청별 전송·첫 조각·마지막 조각 시각을 같은 요청끼리 비교했다. `wave-sync` 40개 중 24개, `wave-50ms` 40개 중 27개에서 TPOT가 늘었다. 묶음별 TPOT 변화 중앙값은 각각 5개 중 3개와 5개 전체에서 양수였다. 두 조건의 실행 간 실제 전송 간격 범위는 각각 0.171–0.231ms와 348.15–351.15ms였다. `rag-c8` seed 2에서 후보의 p95 이상 네 요청은 모두 같은 기준 요청보다 TTFT가 늘었고, 증가량 중앙값은 507.9ms였다. 요청별 원본에 토큰 간 개별 간격이 보존되지 않아 ITL p99 상승을 특정 스텝에 연결하려면 추가 계측이 필요하다. [요청 비교 집계](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-finish/result/request-latency.json) · [재계산 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/analyze_prefill_latency.py)
 
+## 14B 혼합 스텝의 행 예산
+
+요청별 계측에서 decode 요청 한두 개와 큰 prefill 조각을 함께 실행한 구간이 긴 요청의 대기와 겹쳤다. 이를 확인하기 위해 Qwen2.5-14B-Instruct에서 decode가 있는 스텝의 총 행을 512개로 제한하는 후보를 만들었다. 512는 기존 배치 shape 구간 중 일반 예산 256과 최대 예산 1,024 사이에 있다. prefill 전용 스텝은 1,024행까지 사용할 수 있고, 기존 정책이 256행을 선택하면 그 예산을 적용한다. [원인 계측](#riley-14b의-요청별-대기와-prefill-계측) · [진단 패치](../../benchmarks/evidence/20261119-w3-rag-profile/mixed-step-budget/source.patch.gz)
+
+`d3d8fe6e5` 아카이브에 패치를 적용한 CPU 스케줄러 시험에서 147건이 통과했다. 기본값과 제한 설정에서 prefill 전용 및 혼합 스텝을 비교했고, 오래 대기한 prefill의 aging 경로와 atomic prefill 충돌도 확인했다. 패치는 전용 진단 빌드에서 환경 변수 `RILEY_W3_MIXED_STEP_BUDGET`으로 활성화한다. [CPU 검증 기록](../../benchmarks/evidence/20261119-w3-rag-profile/mixed-step-budget/cpu-preflight.json)
+
+배포 이미지의 30분 운영 시험 뒤 A100 7번에서 같은 진단 바이너리를 기준 → 후보 → 후보 → 기준 순으로 실행하도록 등록했다. 두 RAG seed, 8개 동시 전송과 50ms 간격 전송, 짧은 C32에서 첫 토큰 지연과 decode TPOT·ITL을 비교한다. 같은 입력의 출력 지문과 별도 C1·C8 장문 토큰 ID도 대조한다. [실행 순서](../../benchmarks/evidence/20261119-w3-rag-profile/mixed-step-budget/campaign.sh) · [결과 검사기](../../benchmarks/evidence/20261119-w3-rag-profile/tools/compare_mixed_step_budget.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
