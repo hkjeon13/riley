@@ -113,9 +113,9 @@ CUDA 관련 Rust 포맷·문서·host cast 변경도 있으므로 릴리스 전 
 
 `96c04dbe4`의 소스 아카이브로 CUDA 12.4 Linux AMD64 이미지를 빌드했다. 비루트 UID/GID, entrypoint, Riley의 버전·서버 도움말, 체크포인트 도구, 16개 프리셋, 이진 파일 해시와 런타임 파일을 검증했다. [성공한 Actions 실행](https://github.com/hkjeon13/riley/actions/runs/44361292764) · [해시가 포함된 검증 보고서](../../benchmarks/evidence/20261119-cu124-distribution-image/report.json)
 
-GPU 없는 runner에서 Riley 바이너리는 NVIDIA가 주입하는 `libcuda.so.1`을 요구했다. CPU CLI 검사는 CUDA 12.4 SDK에서 가져온 스텁 파일을 읽기 전용으로 마운트해 수행했다. 완성 이미지의 드라이버 주입과 모델 추론은 GPU 호스트에서 추가 검증이 필요하다. W4·W5의 네이티브 GPU 실행은 자체 바이너리로 검증했다. [기본 링커 기록](../../benchmarks/evidence/20261119-cu124-distribution-image/runtime-dependencies.txt) · [CPU 검사 링커 기록](../../benchmarks/evidence/20261119-cu124-distribution-image/cpu-cli-dependencies.txt) · [A100 혼합 부하](05-mixed-soak-result.md)
+GPU 없는 runner에서 Riley 바이너리는 NVIDIA가 주입하는 `libcuda.so.1`을 요구했다. CPU CLI 검사는 CUDA 12.4 SDK에서 가져온 스텁 파일을 읽기 전용으로 마운트해 수행했다. 후속 `d3d8fe6e5` 이미지의 드라이버 주입과 모델 추론은 A100에서 검증했다. W4·W5의 초기 네이티브 GPU 실행은 자체 바이너리로 추적한다. [기본 링커 기록](../../benchmarks/evidence/20261119-cu124-distribution-image/runtime-dependencies.txt) · [CPU 검사 링커 기록](../../benchmarks/evidence/20261119-cu124-distribution-image/cpu-cli-dependencies.txt) · [A100 이미지 검증](06-candidate-qualification.md#실행-파일과-소스-연결)
 
-배포 이미지 재빌드에 쓰려던 소스 아카이브의 A100 전송은 자동 승인 검토에서 전송 자료의 범위와 목적지를 이유로 거절됐다. 배포 이미지의 GPU 검증은 승인된 경로에서 동일 이미지와 바이너리의 해시를 확인한 뒤 수행해야 한다.
+자동 승인 검토는 초기 아카이브 전송을 차단했다. 이후 사용자가 승인한 `96c04dbe4`와 `d3d8fe6e5` 아카이브를 `aws-a100`의 검증 전용 경로로 전송했다. 각 파일의 SHA-256을 원래 CI 기록과 대조했고, `d3d8fe6e5`의 재빌드 이미지에서 Riley 바이너리와 런타임 파일의 일치도 확인했다. [아카이브 검산](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-staged-sources.json) · [패키지·GPU 검증](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-package-validation.json)
 
 후속 CUDA 메모리 오류 빌드에서 cuBLAS 진단 기능을 끄면 C ABI 헤더가 그 기능의 내부 타입을 참조하는 오류를 확인했다. 관련 함수 두 개의 선언을 정의와 같은 기능 조건에 넣었다. GPU 없이 C ABI 테스트를 네 가지 기능 조합으로 컴파일하는 단계를 Production CPU에 추가했고, 로컬에서 첫 오류를 재현한 뒤 네 조합의 통과를 확인했다. A100의 CUDA 재빌드와 오류 주입 실행은 등록 상태다. [실패 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/initial-build/build.log) · [CI 검사](../../.github/workflows/production-cpu.yml)
 
