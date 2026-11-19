@@ -118,7 +118,9 @@ jobs:
       - name: Documentation
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc --locked --workspace --no-deps --no-default-features
+        run: |
+          python3 ci/check_improvement_evidence.py
+          cargo doc --locked --workspace --no-deps --no-default-features
 
       - name: CPU feature matrix
         run: ci/check_feature_matrix.sh

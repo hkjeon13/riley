@@ -62,6 +62,8 @@ Qwen2.5-7B CUDA 서버에서 90초 사전 검증과 cache off·on 각 30분의 �
 
 README의 24개 성능 행을 A100 원본 요약과 대조하고 이번에 수정한 문서의 로컬 링크를 확인했다. `native_profile_cli_tests` 4건에서 기본값, 옵션 override, 고정 타일 상한과 KV 분할을 확인했고 `ci/check_serving_source_contract.py`도 통과했다. [프로파일 테스트](../../crates/riley-server/src/main.rs#L7763)
 
+Production CPU의 Documentation 단계에서 개선 계획서의 상대 링크와 Markdown 제목, qualification manifest에 연결된 근거 파일의 SHA-256, 배포 입력을 대조한 두 Git 리비전의 객체를 검증한다. 로컬에서는 `python3.12 ci/check_improvement_evidence.py`를 실행한다. [검증 스크립트](../../ci/check_improvement_evidence.py) · [Production CPU 워크플로](../../.github/workflows/production-cpu.yml)
+
 성능표를 생성한다면 raw→검증된 집계→표의 입력·출력·버전이 명확한 작은 생성기를 둔다. 과거 결과와 새 후보를 섞거나 집계 중 실패 셀을 제거하지 않는다. 이 생성기는 제안이며 현재 구현되어 있지 않다.
 
 ## 3. W5-B: 실제 GPU 회귀 검증을 추가하는 방법
