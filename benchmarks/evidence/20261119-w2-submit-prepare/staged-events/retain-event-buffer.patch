@@ -1,0 +1,27 @@
+diff --git a/crates/riley-server/src/engine.rs b/crates/riley-server/src/engine.rs
+index 1e10dfdfb..c87feaa6c 100644
+--- a/crates/riley-server/src/engine.rs
++++ b/crates/riley-server/src/engine.rs
+@@ -1688,8 +1688,11 @@ fn stage_events(
+ fn deliver_staged_events() {
+     OUTBOX.with(|outbox| {
+         let mut outbox = outbox.borrow_mut();
+-        let staged = std::mem::take(&mut outbox.staged);
+-        for item in staged {
++        let Outbox {
++            staged,
++            slow_consumers,
++        } = &mut *outbox;
++        for item in staged.drain(..) {
+             let StagedEvent {
+                 request_id,
+                 event,
+@@ -1718,7 +1721,7 @@ fn deliver_staged_events() {
+                     )
+                     .is_ok()
+             {
+-                outbox.slow_consumers.push(request_id);
++                slow_consumers.push(request_id);
+             }
+         }
+     });

@@ -66,6 +66,12 @@ host trace의 연속 부하에 가까운 128스텝 구간 18개에서 submit과 
 
 별도 Nsight 계측 쌍에서 32행 decode 그래프 676개씩을 확인했다. 연속 쌍 671개의 커널 간격 중앙값은 468.416→454.752µs, p95는 505.696→496.640µs였다. 호스트의 `plan` 단계 중앙값은 38.55→32.75µs였다. 후보 계측에서는 측정 32건과 리포트가 저장된 뒤 종료 중인 자체 서버 PID를 실행기가 외부 GPU 프로세스로 분류했다. 전체 실행의 종료 코드 1과 후보의 종료 영수증 누락을 그대로 기록했다. 저장된 리포트를 CPU에서 재내보내고 서버 PID와 요청 32건, NVTX 시계, 그래프 개수를 대조해 측정 구간을 복원했다. 각 실행이 끝난 뒤 GPU 7에서 같은 홀더가 20GiB로 복귀한 것을 확인했다. [원본 해시와 복원 구간](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/verified-comparison.json) · [Nsight 복원 코드](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/recover-nsight.sh) · [복원 결과 검산기](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/verify_recovered_w2.py)
 
+### 제출 후 이벤트 버퍼 재사용의 CPU 측정
+
+제출 후 발행 경로는 이전 스텝의 이벤트를 보내면서 `staged` 벡터를 비운다. 벡터 용량을 유지하는 후보를 macOS ARM64 release에서 대조했다. 실제 `stage_events`와 `deliver_staged_events`에 활성 채널 32개의 토큰 이벤트를 전달했다. 기준 → 후보 → 후보 → 기준 순서를 다섯 번 반복했고 실행마다 1,000스텝 뒤 10,000스텝을 쟀다. 각 실행의 p50 중앙값은 667→500ns, p95 중앙값은 729.5→584ns였다. 모든 이벤트의 수신 내용이 일치했고, 기준과 후보에서 기존 엔진 테스트 22건씩 통과했다. 버퍼 용량은 발행 뒤 0개에서 32개로 바뀌었다. 측정 구간 절감이 0.167µs여서 GPU 검증 우선순위에서 제외했다. [후보 패치](../../benchmarks/evidence/20261119-w2-submit-prepare/staged-events/retain-event-buffer.patch) · [CPU 측정 코드](../../benchmarks/evidence/20261119-w2-submit-prepare/staged-events/outbox_probe.rs) · [실행별 수치와 바이너리 해시](../../benchmarks/evidence/20261119-w2-submit-prepare/staged-events/local-comparison.json)
+
+재현할 때는 별도 작업 디렉터리에서 `outbox_probe.rs`를 `engine.rs` 뒤에 추가한 뒤 `cargo test --locked --offline --release -p riley-server --features server --lib staged_event_reuse_probe -- --nocapture --test-threads=1`을 실행한다. 후보는 같은 소스에 패치를 적용하며 기존 엔진 테스트는 위 명령의 필터를 `engine::tests`로 바꿔 실행한다.
+
 ## 최초 이벤트 발행 실험의 설정 정정
 
 `riley-lp16`의 `after-submit-v1`은 다음 GPU 제출 직후 이전에 commit된 이벤트를 발행한다. `native-bf16-varlen-v1` 프로파일이 이 값을 설정하므로, 최초 비교에서 플래그를 생략한 두 실행도 `after-submit-v1`이었다. [생략한 실행의 인자](../../benchmarks/evidence/20261118-w2-sm17-a100/paired-off1/receipt.json) · [명시한 실행의 인자](../../benchmarks/evidence/20261118-w2-sm17-a100/event1/receipt.json) · [프로파일 구현](../../crates/riley-server/src/inference_profile.rs)

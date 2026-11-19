@@ -1180,6 +1180,20 @@
         "sha256": "cf2b84e84ae3238037543bf02030b1954a594e1d63954d375a99a310df19ccdc"
       }
     ],
+    "w2_staged_event_buffer_cpu": [
+      {
+        "path": "benchmarks/evidence/20261119-w2-submit-prepare/staged-events/local-comparison.json",
+        "sha256": "cba75f0711969e0590bb18a8c5fc152e2fc56ec019ac98e8b1c9ebda267c0400"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w2-submit-prepare/staged-events/outbox_probe.rs",
+        "sha256": "ace76a79faf185dc1d09bdbee928bb79c1695464516351bb9a238939ce0b9b9b"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w2-submit-prepare/staged-events/retain-event-buffer.patch",
+        "sha256": "cb216c7ee5f65e60fbb9778034f5bf966a4c9bcb3786fdd3cb9f672e30c9ef11"
+      }
+    ],
     "w2_ordered_kv_gpu_follow_up": [
       {
         "path": "benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/campaign.sh",

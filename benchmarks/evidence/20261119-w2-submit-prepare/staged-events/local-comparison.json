@@ -1,0 +1,187 @@
+{
+  "scope": "Synthetic macOS CPU interval of actual stage_events and deliver_staged_events with 32 active channels.",
+  "environment": {
+    "architecture": "arm64",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "rustc": "rustc 1.85.0 (4d91de4e4 2025-02-17)",
+    "source_revision": "d9dfe87e46d29d9f75940b6b568f40a013c1bb8c"
+  },
+  "input_sha256": {
+    "engine.base.rs": "2b584b8aa41fc84c2586e3a559005ce931ad201ce2d871850de1494e937a6e5c",
+    "engine.candidate.rs": "67d6233bf3d91c475aa2d5b6ea12f27763e42452b00444f45900f8237aee0a83",
+    "outbox_probe.rs": "ace76a79faf185dc1d09bdbee928bb79c1695464516351bb9a238939ce0b9b9b"
+  },
+  "binary_sha256": {
+    "base": "cdf49e84e668078156660a25058d3d3a53bb616bf06ba1d5ccdfeae75334137e",
+    "candidate": "0a96ab30f00637a57dc1936456a67d968ac6ba241b7cbe8c9d718b1456d6e974"
+  },
+  "engine_tests_passed": {
+    "base": 22,
+    "candidate": 22
+  },
+  "warmup_steps_per_run": 1000,
+  "trials": [
+    [
+      {
+        "variant": "base",
+        "samples": 10000,
+        "p50_ns": 708,
+        "p95_ns": 1750,
+        "staged_capacity_after_delivery": 0
+      },
+      {
+        "variant": "candidate",
+        "samples": 10000,
+        "p50_ns": 583,
+        "p95_ns": 709,
+        "staged_capacity_after_delivery": 32
+      },
+      {
+        "variant": "candidate",
+        "samples": 10000,
+        "p50_ns": 542,
+        "p95_ns": 625,
+        "staged_capacity_after_delivery": 32
+      },
+      {
+        "variant": "base",
+        "samples": 10000,
+        "p50_ns": 708,
+        "p95_ns": 750,
+        "staged_capacity_after_delivery": 0
+      }
+    ],
+    [
+      {
+        "variant": "base",
+        "samples": 10000,
+        "p50_ns": 667,
+        "p95_ns": 709,
+        "staged_capacity_after_delivery": 0
+      },
+      {
+        "variant": "candidate",
+        "samples": 10000,
+        "p50_ns": 500,
+        "p95_ns": 584,
+        "staged_capacity_after_delivery": 32
+      },
+      {
+        "variant": "candidate",
+        "samples": 10000,
+        "p50_ns": 541,
+        "p95_ns": 584,
+        "staged_capacity_after_delivery": 32
+      },
+      {
+        "variant": "base",
+        "samples": 10000,
+        "p50_ns": 667,
+        "p95_ns": 750,
+        "staged_capacity_after_delivery": 0
+      }
+    ],
+    [
+      {
+        "variant": "base",
+        "samples": 10000,
+        "p50_ns": 708,
+        "p95_ns": 750,
+        "staged_capacity_after_delivery": 0
+      },
+      {
+        "variant": "candidate",
+        "samples": 10000,
+        "p50_ns": 541,
+        "p95_ns": 584,
+        "staged_capacity_after_delivery": 32
+      },
+      {
+        "variant": "candidate",
+        "samples": 10000,
+        "p50_ns": 500,
+        "p95_ns": 584,
+        "staged_capacity_after_delivery": 32
+      },
+      {
+        "variant": "base",
+        "samples": 10000,
+        "p50_ns": 667,
+        "p95_ns": 709,
+        "staged_capacity_after_delivery": 0
+      }
+    ],
+    [
+      {
+        "variant": "base",
+        "samples": 10000,
+        "p50_ns": 667,
+        "p95_ns": 709,
+        "staged_capacity_after_delivery": 0
+      },
+      {
+        "variant": "candidate",
+        "samples": 10000,
+        "p50_ns": 500,
+        "p95_ns": 584,
+        "staged_capacity_after_delivery": 32
+      },
+      {
+        "variant": "candidate",
+        "samples": 10000,
+        "p50_ns": 500,
+        "p95_ns": 583,
+        "staged_capacity_after_delivery": 32
+      },
+      {
+        "variant": "base",
+        "samples": 10000,
+        "p50_ns": 667,
+        "p95_ns": 709,
+        "staged_capacity_after_delivery": 0
+      }
+    ],
+    [
+      {
+        "variant": "base",
+        "samples": 10000,
+        "p50_ns": 708,
+        "p95_ns": 750,
+        "staged_capacity_after_delivery": 0
+      },
+      {
+        "variant": "candidate",
+        "samples": 10000,
+        "p50_ns": 500,
+        "p95_ns": 584,
+        "staged_capacity_after_delivery": 32
+      },
+      {
+        "variant": "candidate",
+        "samples": 10000,
+        "p50_ns": 500,
+        "p95_ns": 584,
+        "staged_capacity_after_delivery": 32
+      },
+      {
+        "variant": "base",
+        "samples": 10000,
+        "p50_ns": 667,
+        "p95_ns": 709,
+        "staged_capacity_after_delivery": 0
+      }
+    ]
+  ],
+  "medians": {
+    "base": {
+      "p50_ns": 667.0,
+      "p95_ns": 729.5,
+      "staged_capacity_after_delivery": 0.0
+    },
+    "candidate": {
+      "p50_ns": 500.0,
+      "p95_ns": 584.0,
+      "staged_capacity_after_delivery": 32.0
+    }
+  }
+}
