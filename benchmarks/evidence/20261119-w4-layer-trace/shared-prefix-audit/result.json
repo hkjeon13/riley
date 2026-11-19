@@ -1,0 +1,571 @@
+{
+  "scope": "Existing Qwen2.5-7B-Instruct results, same normalized prefix and no new inference. Riley top logprobs are keyed by rendered text, so the reported gap can omit tied token IDs.",
+  "riley_gap_threshold": 0.25,
+  "suites": {
+    "long": {
+      "source_sha256": {
+        "riley/capture.json.gz": "b32bd641dab4e9516a8d3b45de2d77fbde91ad64acad893153f4b6c2090b72a6",
+        "hf/reference.json": "c9927fa7a3650a13cbb37bc5cf4d72ee3e5683e793b49f79cf832d3da4a34a04",
+        "vllm/results.json.gz": "6db61c8d9d1ee2dfdb36ff1f273d7c9a8c21bb16b97712699359683c15b1b962"
+      },
+      "cases": [
+        {
+          "case": 0,
+          "label": "0",
+          "prompt_tokens": 681,
+          "shared_prefix": {
+            "shared_decisions": 2,
+            "reported_top_two_available": 2,
+            "reported_tie": 1,
+            "reported_gap_at_most_0_25": 1
+          },
+          "divergence": {
+            "offset": 2,
+            "stage": "decode",
+            "riley_id": 6109,
+            "hf_sdpa_id": 56589,
+            "riley_reported_gap": 0.0,
+            "hf_sdpa": {
+              "scores": {
+                "riley": 19.75,
+                "hf": 19.875
+              },
+              "hf_id_minus_riley_id": 0.125,
+              "top_pair_gap": 0.125,
+              "unique_winner": 56589
+            },
+            "hf_eager": {
+              "scores": {
+                "riley": 19.75,
+                "hf": 19.75
+              },
+              "hf_id_minus_riley_id": 0.0,
+              "top_pair_gap": 0.0,
+              "unique_winner": null
+            },
+            "vllm_at_same_prefix": {
+              "state": "hf_sdpa",
+              "id": 56589
+            }
+          }
+        },
+        {
+          "case": 1,
+          "label": "1",
+          "prompt_tokens": 1301,
+          "shared_prefix": {
+            "shared_decisions": 32,
+            "reported_top_two_available": 32,
+            "reported_tie": 2,
+            "reported_gap_at_most_0_25": 5
+          }
+        },
+        {
+          "case": 2,
+          "label": "2",
+          "prompt_tokens": 2199,
+          "shared_prefix": {
+            "shared_decisions": 32,
+            "reported_top_two_available": 32,
+            "reported_tie": 2,
+            "reported_gap_at_most_0_25": 6
+          }
+        },
+        {
+          "case": 3,
+          "label": "3",
+          "prompt_tokens": 3301,
+          "shared_prefix": {},
+          "divergence": {
+            "offset": 0,
+            "stage": "prefill",
+            "riley_id": 264,
+            "hf_sdpa_id": 5257,
+            "riley_reported_gap": 0.0,
+            "hf_sdpa": {
+              "scores": {
+                "riley": 18.25,
+                "hf": 18.375
+              },
+              "hf_id_minus_riley_id": 0.125,
+              "top_pair_gap": 0.125,
+              "unique_winner": 5257
+            },
+            "hf_eager": {
+              "scores": {
+                "riley": 17.5,
+                "hf": 17.625
+              },
+              "hf_id_minus_riley_id": 0.125,
+              "top_pair_gap": 0.125,
+              "unique_winner": 5257
+            },
+            "vllm_at_same_prefix": {
+              "state": "hf_sdpa",
+              "id": 5257
+            }
+          }
+        },
+        {
+          "case": 4,
+          "label": "4",
+          "prompt_tokens": 4426,
+          "shared_prefix": {
+            "shared_decisions": 32,
+            "reported_top_two_available": 32,
+            "reported_tie": 1,
+            "reported_gap_at_most_0_25": 3
+          }
+        },
+        {
+          "case": 5,
+          "label": "5",
+          "prompt_tokens": 6042,
+          "shared_prefix": {
+            "shared_decisions": 32,
+            "reported_top_two_available": 32,
+            "reported_tie": 2,
+            "reported_gap_at_most_0_25": 6
+          }
+        },
+        {
+          "case": 6,
+          "label": "6",
+          "prompt_tokens": 667,
+          "shared_prefix": {
+            "shared_decisions": 14,
+            "reported_top_two_available": 14,
+            "reported_tie": 0,
+            "reported_gap_at_most_0_25": 2
+          },
+          "divergence": {
+            "offset": 14,
+            "stage": "decode",
+            "riley_id": 1741,
+            "hf_sdpa_id": 2670,
+            "riley_reported_gap": 0.0,
+            "hf_sdpa": {
+              "scores": {
+                "riley": 21.125,
+                "hf": 21.25
+              },
+              "hf_id_minus_riley_id": 0.125,
+              "top_pair_gap": 0.125,
+              "unique_winner": 2670
+            },
+            "hf_eager": {
+              "scores": {
+                "riley": 19.0,
+                "hf": 19.375
+              },
+              "hf_id_minus_riley_id": 0.375,
+              "top_pair_gap": 0.375,
+              "unique_winner": 2670
+            },
+            "vllm_at_same_prefix": {
+              "state": "riley",
+              "id": 1741
+            }
+          }
+        },
+        {
+          "case": 7,
+          "label": "7",
+          "prompt_tokens": 1331,
+          "shared_prefix": {
+            "shared_decisions": 32,
+            "reported_top_two_available": 32,
+            "reported_tie": 0,
+            "reported_gap_at_most_0_25": 6
+          }
+        },
+        {
+          "case": 8,
+          "label": "8",
+          "prompt_tokens": 2203,
+          "shared_prefix": {
+            "shared_decisions": 32,
+            "reported_top_two_available": 32,
+            "reported_tie": 1,
+            "reported_gap_at_most_0_25": 6
+          }
+        },
+        {
+          "case": 9,
+          "label": "9",
+          "prompt_tokens": 3330,
+          "shared_prefix": {
+            "shared_decisions": 32,
+            "reported_top_two_available": 32,
+            "reported_tie": 2,
+            "reported_gap_at_most_0_25": 7
+          }
+        },
+        {
+          "case": 10,
+          "label": "10",
+          "prompt_tokens": 4420,
+          "shared_prefix": {
+            "shared_decisions": 32,
+            "reported_top_two_available": 32,
+            "reported_tie": 3,
+            "reported_gap_at_most_0_25": 8
+          }
+        },
+        {
+          "case": 11,
+          "label": "11",
+          "prompt_tokens": 6082,
+          "shared_prefix": {
+            "shared_decisions": 32,
+            "reported_top_two_available": 32,
+            "reported_tie": 2,
+            "reported_gap_at_most_0_25": 13
+          }
+        },
+        {
+          "case": 12,
+          "label": "12",
+          "prompt_tokens": 669,
+          "shared_prefix": {
+            "shared_decisions": 9,
+            "reported_top_two_available": 9,
+            "reported_tie": 0,
+            "reported_gap_at_most_0_25": 1
+          },
+          "divergence": {
+            "offset": 9,
+            "stage": "decode",
+            "riley_id": 34235,
+            "hf_sdpa_id": 13638,
+            "riley_reported_gap": 0.125,
+            "hf_sdpa": {
+              "scores": {
+                "riley": 18.875,
+                "hf": 18.875
+              },
+              "hf_id_minus_riley_id": 0.0,
+              "top_pair_gap": 0.0,
+              "unique_winner": null
+            },
+            "hf_eager": {
+              "scores": {
+                "riley": 18.5,
+                "hf": 19.0
+              },
+              "hf_id_minus_riley_id": 0.5,
+              "top_pair_gap": 0.5,
+              "unique_winner": 13638
+            },
+            "vllm_at_same_prefix": {
+              "state": "hf_sdpa",
+              "id": 13638
+            }
+          }
+        },
+        {
+          "case": 13,
+          "label": "13",
+          "prompt_tokens": 1330,
+          "shared_prefix": {
+            "shared_decisions": 32,
+            "reported_top_two_available": 32,
+            "reported_tie": 1,
+            "reported_gap_at_most_0_25": 6
+          }
+        },
+        {
+          "case": 14,
+          "label": "14",
+          "prompt_tokens": 2196,
+          "shared_prefix": {
+            "shared_decisions": 9,
+            "reported_top_two_available": 9,
+            "reported_tie": 0,
+            "reported_gap_at_most_0_25": 1
+          },
+          "divergence": {
+            "offset": 9,
+            "stage": "decode",
+            "riley_id": 11931,
+            "hf_sdpa_id": 38973,
+            "riley_reported_gap": 0.0,
+            "hf_sdpa": {
+              "scores": {
+                "riley": 19.75,
+                "hf": 19.875
+              },
+              "hf_id_minus_riley_id": 0.125,
+              "top_pair_gap": 0.125,
+              "unique_winner": 38973
+            },
+            "hf_eager": {
+              "scores": {
+                "riley": 18.25,
+                "hf": 19.25
+              },
+              "hf_id_minus_riley_id": 1.0,
+              "top_pair_gap": 1.0,
+              "unique_winner": 38973
+            },
+            "vllm_at_same_prefix": {
+              "state": "hf_sdpa",
+              "id": 38973
+            }
+          }
+        },
+        {
+          "case": 15,
+          "label": "15",
+          "prompt_tokens": 3292,
+          "shared_prefix": {
+            "shared_decisions": 32,
+            "reported_top_two_available": 32,
+            "reported_tie": 2,
+            "reported_gap_at_most_0_25": 5
+          }
+        },
+        {
+          "case": 16,
+          "label": "16",
+          "prompt_tokens": 4397,
+          "shared_prefix": {
+            "shared_decisions": 32,
+            "reported_top_two_available": 32,
+            "reported_tie": 0,
+            "reported_gap_at_most_0_25": 3
+          }
+        },
+        {
+          "case": 17,
+          "label": "17",
+          "prompt_tokens": 6030,
+          "shared_prefix": {
+            "shared_decisions": 32,
+            "reported_top_two_available": 32,
+            "reported_tie": 2,
+            "reported_gap_at_most_0_25": 8
+          }
+        }
+      ]
+    },
+    "holdout": {
+      "source_sha256": {
+        "riley/capture.json.gz": "12d508ed51f03509432e6302b8d10855f56125f4f6b7f31a559cff03eb10b611",
+        "hf/reference.json": "f3c8abd676dbd6d5765ea15f16d1b1263d815adf9bda2d1fd220c8872ffb61a9",
+        "vllm/results.json.gz": "37472d55ea2dfbd58c02704662a7298218da8d7e294c78073bf15394441878c6",
+        "holdout.json.gz": "220f13a7306518f996480c608733623475471ff3721ea3aeb895a2d5f91abd11"
+      },
+      "cases": [
+        {
+          "case": 0,
+          "label": "korean-255",
+          "prompt_tokens": 255,
+          "shared_prefix": {
+            "shared_decisions": 19,
+            "reported_top_two_available": 19,
+            "reported_tie": 0,
+            "reported_gap_at_most_0_25": 0
+          }
+        },
+        {
+          "case": 1,
+          "label": "code-256",
+          "prompt_tokens": 256,
+          "shared_prefix": {
+            "shared_decisions": 25,
+            "reported_top_two_available": 25,
+            "reported_tie": 0,
+            "reported_gap_at_most_0_25": 0
+          }
+        },
+        {
+          "case": 2,
+          "label": "numbers-257",
+          "prompt_tokens": 257,
+          "shared_prefix": {
+            "shared_decisions": 64,
+            "reported_top_two_available": 64,
+            "reported_tie": 1,
+            "reported_gap_at_most_0_25": 5
+          }
+        },
+        {
+          "case": 3,
+          "label": "repeat-511",
+          "prompt_tokens": 511,
+          "shared_prefix": {
+            "shared_decisions": 7,
+            "reported_top_two_available": 7,
+            "reported_tie": 0,
+            "reported_gap_at_most_0_25": 0
+          }
+        },
+        {
+          "case": 4,
+          "label": "japanese-512",
+          "prompt_tokens": 512,
+          "shared_prefix": {
+            "shared_decisions": 23,
+            "reported_top_two_available": 23,
+            "reported_tie": 0,
+            "reported_gap_at_most_0_25": 1
+          }
+        },
+        {
+          "case": 5,
+          "label": "code-513",
+          "prompt_tokens": 513,
+          "shared_prefix": {
+            "shared_decisions": 6,
+            "reported_top_two_available": 6,
+            "reported_tie": 0,
+            "reported_gap_at_most_0_25": 0
+          }
+        },
+        {
+          "case": 6,
+          "label": "numbers-1023",
+          "prompt_tokens": 1023,
+          "shared_prefix": {
+            "shared_decisions": 67,
+            "reported_top_two_available": 67,
+            "reported_tie": 1,
+            "reported_gap_at_most_0_25": 5
+          },
+          "divergence": {
+            "offset": 67,
+            "stage": "decode",
+            "riley_id": 510,
+            "hf_sdpa_id": 311,
+            "riley_reported_gap": 0.25,
+            "hf_sdpa": {
+              "scores": {
+                "riley": 35.5,
+                "hf": 35.5
+              },
+              "hf_id_minus_riley_id": 0.0,
+              "top_pair_gap": 0.0,
+              "unique_winner": null
+            },
+            "hf_eager": {
+              "scores": {
+                "riley": 33.75,
+                "hf": 33.75
+              },
+              "hf_id_minus_riley_id": 0.0,
+              "top_pair_gap": 0.0,
+              "unique_winner": null
+            },
+            "vllm_at_same_prefix": {
+              "state": "riley",
+              "id": 510
+            }
+          }
+        },
+        {
+          "case": 7,
+          "label": "korean-1024",
+          "prompt_tokens": 1024,
+          "shared_prefix": {
+            "shared_decisions": 77,
+            "reported_top_two_available": 71,
+            "reported_tie": 0,
+            "reported_gap_at_most_0_25": 2
+          },
+          "divergence": {
+            "offset": 77,
+            "stage": "decode",
+            "riley_id": 12802,
+            "hf_sdpa_id": 42039,
+            "riley_reported_gap": 0.0,
+            "hf_sdpa": {
+              "scores": {
+                "riley": 20.125,
+                "hf": 20.25
+              },
+              "hf_id_minus_riley_id": 0.125,
+              "top_pair_gap": 0.125,
+              "unique_winner": 42039
+            },
+            "hf_eager": {
+              "scores": {
+                "riley": 20.625,
+                "hf": 20.125
+              },
+              "hf_id_minus_riley_id": -0.5,
+              "top_pair_gap": 0.5,
+              "unique_winner": 12802
+            },
+            "vllm_at_same_prefix": {
+              "state": "already_diverged_or_ended",
+              "riley_common_prefix": 57
+            }
+          }
+        },
+        {
+          "case": 8,
+          "label": "repeat-1025",
+          "prompt_tokens": 1025,
+          "shared_prefix": {
+            "shared_decisions": 56,
+            "reported_top_two_available": 56,
+            "reported_tie": 1,
+            "reported_gap_at_most_0_25": 4
+          }
+        },
+        {
+          "case": 9,
+          "label": "long-code-7836",
+          "prompt_tokens": 7836,
+          "shared_prefix": {
+            "shared_decisions": 256,
+            "reported_top_two_available": 256,
+            "reported_tie": 0,
+            "reported_gap_at_most_0_25": 1
+          }
+        },
+        {
+          "case": 10,
+          "label": "long-korean-7917",
+          "prompt_tokens": 7917,
+          "shared_prefix": {
+            "shared_decisions": 256,
+            "reported_top_two_available": 256,
+            "reported_tie": 1,
+            "reported_gap_at_most_0_25": 4
+          }
+        }
+      ]
+    }
+  },
+  "summary": {
+    "total_inputs": 29,
+    "exact_complete_generation": 22,
+    "matched_cases_with_a_reported_tie": 14,
+    "shared_prefix": {
+      "shared_decisions": 1306,
+      "reported_top_two_available": 1300,
+      "reported_tie": 25,
+      "reported_gap_at_most_0_25": 109
+    },
+    "divergences": 7,
+    "divergences_by_stage": {
+      "decode": 6,
+      "prefill": 1
+    },
+    "first_divergence_riley_gap_at_most_0_25": 7,
+    "first_divergence_riley_reported_ties": 5,
+    "first_divergence_max_hf_sdpa_pair_gap": 0.125,
+    "eager_unique_winners_or_top_ties": {
+      "top_tie": 2,
+      "hf_sdpa": 4,
+      "riley": 1
+    },
+    "vllm_at_same_prefix": {
+      "hf_sdpa": 4,
+      "riley": 2,
+      "already_diverged_or_ended": 1
+    }
+  }
+}

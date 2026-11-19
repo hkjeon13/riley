@@ -64,6 +64,14 @@ Riley의 C8·C32 반복에서는 각각 33/33의 생성 ID·텍스트·종료 �
 
 `d3d8fe6e5`에서 재빌드한 이미지 `0a907408ec73`을 A100 6번에서 실행했다. 고정된 Riley 캡처와 대조한 결과, 기존 18개 입력의 144건과 홀드아웃 11개 입력의 88건이 모두 일치했다. C1 일반·진단은 각각 한 번, C8·C32는 각각 세 번 실행했다. 입력 ID, 생성 ID, 텍스트, 종료 사유와 usage를 확인했다. 이전 GPU API 검사와 이미지·바이너리·체크포인트 해시가 같았고, 서버는 코드 0으로 종료한 뒤 자원이 모두 회수됐다. [A100 배포 이미지 결과](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-package-validation.json) · [대조기](../../benchmarks/live/long_accuracy.py) · [배포 이미지 실행 방법](01-validation-result.md#배포-이미지-gpu-검사)
 
+## 공통 접두부의 근소한 점수 차이
+
+두 입력군 29건의 원본 해시와 프롬프트 ID를 확인하고, Riley와 HF SDPA가 같은 접두부를 유지하는 동안 선택한 토큰을 다시 대조했다. 전체 생성 ID가 같은 요청은 22건이다. 첫 분기 7건 중 prefill 직후가 1건, decode가 6건이었다. 첫 분기에서 Riley가 보고한 상위 두 logprob 차이는 모두 0.25 이내였고, HF SDPA에서 두 엔진이 각각 선택한 ID의 점수 차이는 최대 0.125였다. [요청별 집계와 원본 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/result.json)
+
+두 엔진이 같은 ID를 선택한 위치는 1,306곳이다. 공개 `top_logprobs`에 두 항목 이상 남은 1,300곳 중 109곳은 차이가 0.25 이내였고, 25곳은 동점이었다. 전체 출력이 같았던 22건 중 14건에도 보고된 동점이 있었다. 이 필드는 디코딩된 텍스트를 키로 쓰므로, 표시가 같은 다른 ID는 집계에서 사라질 수 있다. 작은 점수 차이는 분기 원인을 좁히는 단서로 사용하며, 동점 처리 규칙 변경의 효과를 판정하려면 전체 토큰 ID별 점수가 필요하다. [공통 접두부 검산기](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/audit_shared_prefix.py)
+
+같은 7개 분기 위치의 HF eager 재생에서는 SDPA 선택이 단독 1위인 경우가 4건, Riley 선택이 단독 1위인 경우가 1건, 상위 동점이 2건이었다. vLLM이 같은 접두부까지 도달한 6건에서는 HF SDPA 선택과 4번, Riley 선택과 2번 일치했다. 나머지 1건은 더 앞에서 갈라졌다. 다음 수치 원인 대조는 현재 첫 토큰 추적에 아직 포함되지 않은 공통 접두부의 decode 결정을 우선한다. [엔진별 동일 접두부 대조](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/result.json)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.
