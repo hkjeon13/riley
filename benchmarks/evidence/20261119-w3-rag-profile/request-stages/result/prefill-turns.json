@@ -1,0 +1,290 @@
+{
+  "source_log_sha256": "d934b3cced520131e76176b66d098f247e9aa662237a55948e2d839981259e86",
+  "build_sha256": "11bcd9e050d05a95f65aa875e79a6e85c23bae91069024a09a660cc40a4fffd8",
+  "physical_gpu": 7,
+  "traced_requests": 308,
+  "prefill_steps": 756,
+  "requests_with_multiple_prefill_steps": 264,
+  "max_remaining_rows_for_near_completion": 512,
+  "tail_cohorts": {
+    "rag-c1": {
+      "requests": [
+        {
+          "request_index": 4,
+          "prompt_tokens": 3482,
+          "span_ms": {
+            "only_earlier_admissions": 0.0,
+            "only_later_admissions": 0.0,
+            "both_admission_orders": 0.0,
+            "with_finishing_competitor": 0.0,
+            "while_at_most_cap_tokens_remained": 0.0,
+            "later_only_after_100ms_with_decode": 0.0,
+            "other_prefill_step_total": 0.0,
+            "step_boundary_edges": 0.0
+          },
+          "later_only_fraction": null,
+          "near_completion_fraction": null
+        }
+      ],
+      "median_span_ms": {
+        "only_earlier_admissions": 0.0,
+        "only_later_admissions": 0.0,
+        "both_admission_orders": 0.0,
+        "with_finishing_competitor": 0.0,
+        "while_at_most_cap_tokens_remained": 0.0,
+        "later_only_after_100ms_with_decode": 0.0,
+        "other_prefill_step_total": 0.0,
+        "step_boundary_edges": 0.0
+      }
+    },
+    "rag-c8-s1": {
+      "requests": [
+        {
+          "request_index": 42,
+          "prompt_tokens": 3509,
+          "span_ms": {
+            "only_earlier_admissions": 0.0,
+            "only_later_admissions": 921.329202,
+            "both_admission_orders": 134.555037,
+            "with_finishing_competitor": 261.475388,
+            "while_at_most_cap_tokens_remained": 403.794722,
+            "later_only_after_100ms_with_decode": 518.936874,
+            "other_prefill_step_total": 1055.884239,
+            "step_boundary_edges": 0.0
+          },
+          "later_only_fraction": 0.8725664878496212,
+          "near_completion_fraction": 0.382423287596776
+        },
+        {
+          "request_index": 43,
+          "prompt_tokens": 3501,
+          "span_ms": {
+            "only_earlier_admissions": 279.45368,
+            "only_later_admissions": 518.936874,
+            "both_admission_orders": 271.10139,
+            "with_finishing_competitor": 398.021741,
+            "while_at_most_cap_tokens_remained": 398.641213,
+            "later_only_after_100ms_with_decode": 260.17394,
+            "other_prefill_step_total": 1069.491944,
+            "step_boundary_edges": 0.0
+          },
+          "later_only_fraction": 0.48521812334474207,
+          "near_completion_fraction": 0.37273886468844686
+        },
+        {
+          "request_index": 45,
+          "prompt_tokens": 3495,
+          "span_ms": {
+            "only_earlier_admissions": 283.729659,
+            "only_later_admissions": 269.17595,
+            "both_admission_orders": 402.663587,
+            "with_finishing_competitor": 402.663587,
+            "while_at_most_cap_tokens_remained": 269.17595,
+            "later_only_after_100ms_with_decode": 138.26367,
+            "other_prefill_step_total": 955.569196,
+            "step_boundary_edges": 0.0
+          },
+          "later_only_fraction": 0.28169174051106605,
+          "near_completion_fraction": 0.28169174051106605
+        },
+        {
+          "request_index": 46,
+          "prompt_tokens": 3504,
+          "span_ms": {
+            "only_earlier_admissions": 278.424188,
+            "only_later_admissions": 130.91228,
+            "both_admission_orders": 136.546353,
+            "with_finishing_competitor": 136.546353,
+            "while_at_most_cap_tokens_remained": 0.0,
+            "later_only_after_100ms_with_decode": 130.91228,
+            "other_prefill_step_total": 545.882821,
+            "step_boundary_edges": 0.093765
+          },
+          "later_only_fraction": 0.2398175486823023,
+          "near_completion_fraction": 0.0
+        }
+      ],
+      "median_span_ms": {
+        "only_earlier_admissions": 278.938934,
+        "only_later_admissions": 394.056412,
+        "both_admission_orders": 203.8238715,
+        "with_finishing_competitor": 329.74856450000004,
+        "while_at_most_cap_tokens_remained": 333.90858149999997,
+        "later_only_after_100ms_with_decode": 199.218805,
+        "other_prefill_step_total": 1005.7267175,
+        "step_boundary_edges": 0.0
+      }
+    },
+    "rag-c8-s2": {
+      "requests": [
+        {
+          "request_index": 18,
+          "prompt_tokens": 3495,
+          "span_ms": {
+            "only_earlier_admissions": 141.687235,
+            "only_later_admissions": 253.992091,
+            "both_admission_orders": 0.0,
+            "with_finishing_competitor": 0.0,
+            "while_at_most_cap_tokens_remained": 125.021368,
+            "later_only_after_100ms_with_decode": 0.0,
+            "other_prefill_step_total": 395.679326,
+            "step_boundary_edges": 0.093359
+          },
+          "later_only_fraction": 0.6419139801102471,
+          "near_completion_fraction": 0.3159663894089832
+        },
+        {
+          "request_index": 28,
+          "prompt_tokens": 3513,
+          "span_ms": {
+            "only_earlier_admissions": 130.144996,
+            "only_later_admissions": 510.732732,
+            "both_admission_orders": 0.0,
+            "with_finishing_competitor": 130.421244,
+            "while_at_most_cap_tokens_remained": 254.629377,
+            "later_only_after_100ms_with_decode": 127.261918,
+            "other_prefill_step_total": 640.877728,
+            "step_boundary_edges": 0.030864
+          },
+          "later_only_fraction": 0.7969269482867721,
+          "near_completion_fraction": 0.39731350595475834
+        },
+        {
+          "request_index": 44,
+          "prompt_tokens": 3503,
+          "span_ms": {
+            "only_earlier_admissions": 276.112983,
+            "only_later_admissions": 384.004075,
+            "both_admission_orders": 135.163347,
+            "with_finishing_competitor": 265.344708,
+            "while_at_most_cap_tokens_remained": 0.0,
+            "later_only_after_100ms_with_decode": 384.004075,
+            "other_prefill_step_total": 795.280405,
+            "step_boundary_edges": 0.0
+          },
+          "later_only_fraction": 0.48285368605303436,
+          "near_completion_fraction": 0.0
+        },
+        {
+          "request_index": 68,
+          "prompt_tokens": 3519,
+          "span_ms": {
+            "only_earlier_admissions": 278.136145,
+            "only_later_admissions": 252.015495,
+            "both_admission_orders": 139.372633,
+            "with_finishing_competitor": 139.372633,
+            "while_at_most_cap_tokens_remained": 0.0,
+            "later_only_after_100ms_with_decode": 252.015495,
+            "other_prefill_step_total": 669.524273,
+            "step_boundary_edges": 0.030658
+          },
+          "later_only_fraction": 0.37640979597464125,
+          "near_completion_fraction": 0.0
+        }
+      ],
+      "median_span_ms": {
+        "only_earlier_admissions": 208.900109,
+        "only_later_admissions": 318.998083,
+        "both_admission_orders": 67.5816735,
+        "with_finishing_competitor": 134.8969385,
+        "while_at_most_cap_tokens_remained": 62.510684,
+        "later_only_after_100ms_with_decode": 189.63870649999998,
+        "other_prefill_step_total": 655.2010005,
+        "step_boundary_edges": 0.030761
+      }
+    },
+    "wave-sync": {
+      "requests": [
+        {
+          "request_index": 40,
+          "prompt_tokens": 3509,
+          "span_ms": {
+            "only_earlier_admissions": 277.957441,
+            "only_later_admissions": 1868.734257,
+            "both_admission_orders": 134.924662,
+            "with_finishing_competitor": 283.04015,
+            "while_at_most_cap_tokens_remained": 148.115488,
+            "later_only_after_100ms_with_decode": 824.257558,
+            "other_prefill_step_total": 2281.61636,
+            "step_boundary_edges": 0.092808
+          },
+          "later_only_fraction": 0.819039646524975,
+          "near_completion_fraction": 0.064916911798441
+        },
+        {
+          "request_index": 41,
+          "prompt_tokens": 3503,
+          "span_ms": {
+            "only_earlier_admissions": 1242.510536,
+            "only_later_admissions": 526.268388,
+            "both_admission_orders": 134.924662,
+            "with_finishing_competitor": 266.663284,
+            "while_at_most_cap_tokens_remained": 429.750561,
+            "later_only_after_100ms_with_decode": 0.0,
+            "other_prefill_step_total": 1903.703586,
+            "step_boundary_edges": 0.176358
+          },
+          "later_only_fraction": 0.27644450106110163,
+          "near_completion_fraction": 0.22574447207034887
+        }
+      ],
+      "median_span_ms": {
+        "only_earlier_admissions": 760.2339885,
+        "only_later_admissions": 1197.5013225,
+        "both_admission_orders": 134.924662,
+        "with_finishing_competitor": 274.851717,
+        "while_at_most_cap_tokens_remained": 288.9330245,
+        "later_only_after_100ms_with_decode": 412.128779,
+        "other_prefill_step_total": 2092.659973,
+        "step_boundary_edges": 0.134583
+      }
+    },
+    "wave-50ms": {
+      "requests": [
+        {
+          "request_index": 28,
+          "prompt_tokens": 3496,
+          "span_ms": {
+            "only_earlier_admissions": 410.009542,
+            "only_later_admissions": 1201.516903,
+            "both_admission_orders": 143.865139,
+            "with_finishing_competitor": 425.963143,
+            "while_at_most_cap_tokens_remained": 145.84545,
+            "later_only_after_100ms_with_decode": 406.968462,
+            "other_prefill_step_total": 1755.391584,
+            "step_boundary_edges": 0.089679
+          },
+          "later_only_fraction": 0.6844722932202459,
+          "near_completion_fraction": 0.0830842823500742
+        },
+        {
+          "request_index": 42,
+          "prompt_tokens": 3509,
+          "span_ms": {
+            "only_earlier_admissions": 414.843573,
+            "only_later_admissions": 1451.800978,
+            "both_admission_orders": 282.512673,
+            "with_finishing_competitor": 560.330838,
+            "while_at_most_cap_tokens_remained": 290.083849,
+            "later_only_after_100ms_with_decode": 401.452134,
+            "other_prefill_step_total": 2149.157224,
+            "step_boundary_edges": 0.060174
+          },
+          "later_only_fraction": 0.6755210655542063,
+          "near_completion_fraction": 0.13497562940513838
+        }
+      ],
+      "median_span_ms": {
+        "only_earlier_admissions": 412.4265575,
+        "only_later_admissions": 1326.6589405,
+        "both_admission_orders": 213.188906,
+        "with_finishing_competitor": 493.1469905,
+        "while_at_most_cap_tokens_remained": 217.9646495,
+        "later_only_after_100ms_with_decode": 404.21029799999997,
+        "other_prefill_step_total": 1952.274404,
+        "step_boundary_edges": 0.0749265
+      }
+    }
+  },
+  "scope": "Recorded host prefill interval overlap between completed turns, classified by engine admission time. The 100 ms interval is elapsed since the traced step return, without scheduler readiness state."
+}

@@ -167,6 +167,19 @@ SSE 요청 ID로 엔진 제출부터 첫 응답 조각 생성까지를 연결했
 
 긴 prefill 스텝이 decode 1–2행과 겹친 시간도 두 seed에서 컸다. 후속 대조에서는 decode 행 개수와 혼합 스텝의 토큰 예산을 따로 바꿔 평가한다. 위 수치는 관측한 실행 구간의 중첩이며, 스텝을 제한했을 때의 지연 변화는 실제 대조가 필요하다.
 
+#### 대기 중 처리된 prefill 요청의 입장 순서
+
+같은 진단 원본에서 요청 308개의 prefill 기록을 756개 스텝으로 재구성했다. 겹친 기록은 배치 행 수·decode 행 수·CUDA 시간이 일치하고 개별 prompt 행의 합이 배치와 맞는 경우 같은 스텝으로 묶었다. 각 TTFT 꼬리 요청의 prefill 사이 대기 중 처리된 prompt를 해당 요청보다 엔진에 먼저 들어왔는지로 분류했다. [요청별 시간과 원본 해시](../../benchmarks/evidence/20261119-w3-rag-profile/request-stages/result/prefill-turns.json) · [재계산 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/analyze_prefill_turns.py)
+
+| 부하 | 전체 겹침 중앙값 | 먼저 입장한 prompt만 | 나중에 입장한 prompt만 | 두 순서가 섞인 스텝 | 후발 prompt만 처리한 스텝 중 이전 조각 반환 100ms 뒤에도 decode가 있던 구간 |
+|---|---:|---:|---:|---:|---:|
+| `rag-c8` seed 1 | 1,006ms | 279ms | 394ms | 204ms | 199ms |
+| `rag-c8` seed 2 | 655ms | 209ms | 319ms | 68ms | 190ms |
+| 8개 동시 전송 | 2,093ms | 760ms | 1,198ms | 135ms | 412ms |
+| 8개 50ms 간격 전송 | 1,952ms | 412ms | 1,327ms | 213ms | 404ms |
+
+각 열은 요청별 측정의 독립 중앙값이다. 두 RAG seed에서 대기 중 남은 입력이 512토큰 이하였던 구간의 중앙값은 334ms와 63ms였다. 스케줄러는 조각이 끝날 때 `ready_since_ns`를 갱신하며, 다음 선택은 이 시각과 aging 조건을 사용한다. 입장 순서와 반환 후 경과 시간은 추적에 기록됐다. 실제 우선순위와 aging 적용 여부는 다음 선택 시점의 `ready_since_ns`와 선택 사유를 기록해 확인한다. [prefill 선택](../../crates/riley-scheduler/src/scheduler.rs#L1745) · [조각 완료 처리](../../crates/riley-scheduler/src/scheduler.rs#L2568)
+
 후속 대조에서는 100ms 미만 기다린 새 prompt보다 진행 중인 prefill을 먼저 고려했다. 100ms를 지난 요청은 기존 순서로 경쟁하며 decode 선택과 기존 aging override를 적용했다. 격리 패치의 스케줄러 CPU 테스트 146건과 CUDA 기능을 켠 Rust 타입 검사가 통과했다. A100 GPU 7에서 같은 진단 바이너리의 옵션만 바꿔 위 다섯 부하와 32개 동시 짧은 요청을 실행했다. 두 조건의 측정 320쌍에서 출력이 일치했고, 별도 장문 8개는 C1·C8과 두 조건 모두에서 입력·생성 토큰 ID가 일치했다. 두 서버는 코드 0으로 종료했고 같은 홀더의 20GiB 예약으로 복귀했다. [실행 순서](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/campaign.sh) · [CPU 검사 원본](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/scheduler-tests.log.gz) · [GPU 원본과 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/result/SHA256SUMS)
 
 | 부하 | TTFT p95 변화 | decode TPOT p50 변화 | 처리량 변화 |
