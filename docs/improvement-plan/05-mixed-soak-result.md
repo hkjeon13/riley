@@ -195,6 +195,10 @@ macOS ARM64에서 후보의 서버 라이브러리 테스트 101건이 통과했
 
 두 캐시 설정의 스레드별 할당 캐시 단독 대조가 완료되면 이 후보의 실행 여부를 판단하도록 등록했다. 두 설정 모두 기준을 통과하면 별도 후보를 실행하지 않는다. RSS만 실패한 경우에는 W4 GPU 시험 뒤 승인본 `d3d8fe6e5`에 HTTP 후보 패치를 적용하고 같은 CUDA 12.4 Dockerfile로 별도 이미지를 빌드한다. 이미지 라벨에 기준 커밋과 변경된 아카이브·패치 해시를 결속한다. Riley 실행 파일을 제외한 런타임 파일 20개의 바이트가 같을 때 A100 6번에서 기존 API·30분 부하·RSS·지연·종료 검사를 진행한다. [A100 조건부 실행 등록](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/registration.json) · [실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/campaign.sh) · [이미지와 부하 비교기](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/compare_candidate.py)
 
+별도 이미지 `e019db74d2f0`의 CUDA 12.4 빌드와 CPU 패키지 검사가 완료됐다. 빌드에 사용한 두 소스 아카이브의 항목 8,995개를 대조해 `crates/riley-server/src/http.rs` 한 파일만 달라진 것을 확인했다. 패키지의 나머지 런타임 파일 20개는 기준과 바이트가 일치했다. [소스 비교와 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/source-inventory-verified.json) · [이미지 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/cpu-comparison-verified.json)
+
+A100 6번의 `cache-on` 컨테이너에서 API 40건이 통과했고 30분 부하가 시작됐다. 실행 중인 Riley의 바이너리 해시, GPU 프로세스, 캐시 128블록과 `GLIBC_TUNABLES`·`LD_PRELOAD`·`MALLOC_ARENA_MAX` 추가 설정의 부재를 확인했다. GPU 7번에는 같은 20GiB 예약이 유지됐다. 두 설정의 최종 RSS와 종료 후 자원 회수는 완료 영수증으로 판정한다. [실행 식별과 API 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/first-launch-verified.json)
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
