@@ -144,6 +144,10 @@ Cache-on은 API 40건과 30분 부하의 모든 항목을 통과했다. 기준 �
 
 재실행은 새 디렉터리에 같은 라이브러리를 `0644`로 설치했다. 동일 이미지의 UID 65532에서 파일 체크섬과 실제 프로세스 매핑을 먼저 확인했다. 각 30분 부하는 Riley PID 1의 라이브러리 매핑과 7초 주기의 첫 반환 기록을 확인한 뒤 시작한다. Cache-off의 실제 서버에서 이 검사를 통과했다. 부하·API·정밀 RSS 판정 코드는 고정된 버전을 사용한다. 재현 시 등록된 `campaign.sh`와 원래 `observe_soak.py`를 복사해 두 gzip 패치를 적용하고 `dispatch.sha256`을 검증한다. [재실행 등록과 패치 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/retry/registration.json)
 
+7초 주기의 cache-off 30분 부하는 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했다. API 40건과 지연·종료 자원 검사가 통과했다. 정밀 RSS와 익명 RSS가 각각 **44KiB 증가**해 RSS 증가 0 항목만 실패했다. 같은 이미지의 비계측 기준은 700KiB 증가했고, 7초 조건의 drain RSS 절대값은 그 기준보다 46,328KiB 낮았다. 후반 TTFT p95와 완료 지연 p95는 기준 대비 각각 0.16%, 0.30% 높았다. 같은 홀더의 20GiB 예약을 복구한 뒤 cache-on 시험을 시작했다. [원본 체크섬과 두 검산 결과](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/retry/cache-off-verified.json)
+
+반환 호출 294회에서 모두 메모리가 반환됐고 호출 시간 p95는 0.77ms였다. 정밀 중간 표본은 직전 반환이 끝난 뒤 6.44–6.79초에, drain 표본은 0.19–0.59초에 읽혔다. 두 읽기 모두 반환 호출과 겹치지 않았다. Drain에서 직전 반환과의 간격이 더 짧아도 익명 RSS는 늘었다. 인접 `smaps`의 익명 RSS 순증가는 184KiB였다. 시작 주소와 속성이 같고 끝이 바뀐 16개 매핑은 합계 228KiB 늘었고, 범위가 유지된 매핑은 합계 44KiB 줄었다. 두 표본 중 한쪽에만 나타난 시작 주소의 익명 RSS는 모두 0이었다. 중간 매핑을 읽은 값은 먼저 읽은 정밀 표본보다 140KiB 낮아 판정에는 원래의 `smaps_rollup` 두 표본을 사용한다. [반환 시각과 인접 매핑 대조](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/retry/cache-off-verified.json)
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
