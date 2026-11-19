@@ -627,6 +627,90 @@
       "path": "benchmarks/evidence/20261119-w5-mixed-soak/glibc-arena-control/result/paired-comparison.json",
       "sha256": "241f69b5497895317357286f4a4bd9b6dfe279cd0e810395daa8d9f3331117a5"
     },
+    "distribution_periodic_trim_preflight": {
+      "artifacts": [
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/early-telemetry.jsonl",
+          "sha256": "39e7832f2f353c67f017cb0cfe3364edc7a399d7fc41a737c97dfbf67b2d6029"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/prepare.sh",
+          "sha256": "5fead313a52da43d84797ba19f9624d288b282148bb899b59816bdebb661eeff"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/campaign.sh",
+          "sha256": "fc1a871ae8feb3f149bd28bf0b93386cbcfb4c531e146d29d2c4436540c482bf"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/container-smoke.sh",
+          "sha256": "20ed0b933515a89b6b902e76681ed5c849f4b2bbfdaa6797649df53e655b9b82"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/periodic_trim.c",
+          "sha256": "9188542eaa8815043f830cf3edf12e227a02de21220ed349818638f7d2aee221"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/periodic_trim.py",
+          "sha256": "4e039816e1d5cad956eb9b1706ce5efde035a4463f091d57739cd7899af86a64"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/verify_periodic_trim.py",
+          "sha256": "eba004797e76ce9c43e05181419e8f498f8e28a58b8f9f3a2146c94b44cb7448"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/harness-base.sha256",
+          "sha256": "0bc1de88cbe6789d8323dce77d875766c5571c71b584676bd7c61d4194b9ff03"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/harness.sha256",
+          "sha256": "07b11ba0897ee78554aa25327953afdd726288aa2f0c2e69d5f3bcf3635c60c3"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/dispatch.sha256",
+          "sha256": "9a7d4f29d5c400cab11bafc3e5d3f11b50d6cc60724305889e106e8c28b057af"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/harness.patch.gz",
+          "sha256": "8204f77e8c2d33b98f9fc1f681e7fd7b6dd02929a8179343b938592d65237be1"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/cpu-preflight.json",
+          "sha256": "d830d5d97123375d8b33bceb1afeb4c474375035ce59b22f149a2b108387d689"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/trim_smoke.c",
+          "sha256": "a3d802a24aeb938c1689a65e560ff9df03c0f50b8ad5406ad4e8db50414767bd"
+        }
+      ]
+    },
+    "qwen7_hf_bias_partition_preflight": {
+      "artifacts": [
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/bias-partition/campaign.sh",
+          "sha256": "4607a426e52d1555d7b1816bc34971c02528260dcf2e9b9c5e245954274ee51f"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/bias-partition/hf_bias_partition_cross.py",
+          "sha256": "66ed4c1b0e025f2b97a7c28b5888f1a571ce31732d51da6787b6a6ffed17ea7d"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/bias-partition/preflight.py",
+          "sha256": "45178805cb5eb70bf7e6df268c32f3e6b4d10667d51258ef28e408afc8fa4590"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/bias-partition/preflight-result.json",
+          "sha256": "c322318b7afbb7763c93f895ef3de49a70fbda75e4b1165bf475d468bea9eba5"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/bias-partition/dispatch.sha256",
+          "sha256": "db1649c0dfb22ac35d573574b6975bbf12d035617d494161d0cd970529373ed2"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/bias-partition/retry.json",
+          "sha256": "f92f3ce49a68aec294c27a67b9671ef4eb9226d2883e13cf8d73978aad6011eb"
+        }
+      ]
+    },
     "distribution_allocator_trim_preflight": {
       "artifacts": [
         {

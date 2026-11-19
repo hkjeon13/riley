@@ -116,6 +116,12 @@ W4의 첫 시도가 파서 체크섬 검사에서 종료된 뒤 GPU 6의 RSS 진
 
 `malloc_trim(0)` 뒤 32개 모두 익명 RSS가 줄었고, 두 매핑에 합계 16KiB가 중간 시점보다 더 남았다. 전체 프로세스의 익명 RSS는 42,796KiB 줄었고 glibc의 arena 사용 중 바이트는 407,718,704로 같았다. 이 결과는 부하 중 커졌던 매핑에서 glibc가 반환할 수 있는 페이지가 있었음을 확인한다. 개별 페이지와 최초 할당 지점은 매핑 단위 집계의 범위 밖이다. 서버는 코드 0으로 종료했고 GPU 6은 동일 홀더의 20GiB 예약으로 복귀했다. 운영 판정은 반환 전 기준에 따라 보류다. [검산 코드](../../benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/verify_allocator_trim.py)
 
+### 배포 이미지의 주기적 메모리 반환 후보
+
+같은 `d3d8fe6e5` 이미지에서 Riley 프로세스의 실험용 스레드가 31초 간격으로 `malloc_trim(0)`을 호출한다. 첫 호출 시각은 프로세스 기동에서 정해지며, 이후 호출은 직전 반환 종료 시각부터 센다. 31초는 검사기의 60초 표본 주기와 서로 다른 위상에서 동작하도록 정한 실험값이다. 각 호출의 소요 시간·반환 여부를 저장한다. 캐시 off·on에서 기존 API 40건과 같은 30분 부하를 각각 실행하고, 저장된 기준 실행과 결과를 비교한다. `soak.py`·`load.py` 원본의 해시와 RSS 증가량 0·지연 드리프트 판정을 그대로 사용한다. [실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/campaign.sh) · [대조 검사기](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/verify_periodic_trim.py)
+
+동일 이미지의 CPU 사전시험은 400ms 간격에서 네 번 호출했고, 익명 RSS가 8,316KiB에서 124KiB로 줄었다. A100 6번의 cache-off 기동·API 검사·부하 초반에서 Riley PID 1의 반환 호출 14건을 검산했다. 첫 14건의 호출 시간 p95는 2.27ms였다. 두 캐시 설정의 실제 RSS와 요청 지연을 확인한 뒤 후보를 판정한다. 재현 절차는 이전 `packaged-allocator-trim/trim_smoke.c`를 검사 디렉터리에 복사하고 `gzip -dc harness.patch.gz >harness.patch`로 패치를 복원한 뒤 `dispatch.sha256`을 검증한다. [사전시험 원본·체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/cpu-preflight.json) · [A100 초반 반환 기록](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/early-telemetry.jsonl)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)

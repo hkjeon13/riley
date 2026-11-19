@@ -1,0 +1,47 @@
+{
+  "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+  "compiled_sha256": {
+    "w5-periodic-trim.so": "5463d8ef947b88f08165c71378ef8dc2910f35989ab5bcf529516c0042ed9edf",
+    "w5-trim-smoke": "2a1cac0f523440162dde6fa88b97d8d1f84fa06f9086511f546a4487bd6c7a00"
+  },
+  "container_smoke_log_sha256": "f41347b4c60e9f8ddeca6d86f03ef9aa1db38273969de0530b3c8e94776d6631",
+  "smoke_output": "glibc 2.35\npid=9 anonymous_before_kib=8316 anonymous_after_kib=124\n{\"pid\":9,\"period_ms\":400,\"index\":1,\"started_ns\":63488286542386517,\"completed_ns\":63488286543320963,\"returned\":1}\n{\"pid\":9,\"period_ms\":400,\"index\":2,\"started_ns\":63488286943382301,\"completed_ns\":63488286943383740,\"returned\":0}\n{\"pid\":9,\"period_ms\":400,\"index\":3,\"started_ns\":63488287343444152,\"completed_ns\":63488287343445335,\"returned\":0}\n{\"pid\":9,\"period_ms\":400,\"index\":4,\"started_ns\":63488287743507154,\"completed_ns\":63488287743508508,\"returned\":0}\n",
+  "smoke_telemetry": {
+    "period_ms": 400,
+    "calls": 4,
+    "returned_memory": 1,
+    "span_seconds": 1.201121991,
+    "call_ms_p95": 0.934446,
+    "call_ms_max": 0.934446
+  },
+  "smoke_anonymous_kib": {
+    "anonymous_before_kib": 8316,
+    "anonymous_after_kib": 124
+  },
+  "campaign": "w5-periodic-trim-20261119.mI9aaaEp",
+  "campaign_pid": 1874798,
+  "current_campaign_log": [
+    "w5-periodic-trim.so: OK",
+    "w5-trim-smoke: OK",
+    "START cache-off 2026-11-19T03:30:05Z"
+  ],
+  "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+  "period_ms_on_a100": 31000,
+  "physical_gpu": 6,
+  "modes": [
+    "cache-off",
+    "cache-on"
+  ],
+  "status_at_record_time": "cache_off_mixed_soak_running",
+  "cache_off_early_telemetry": {
+    "captured_at_utc": "2026-11-19T03:37:25Z",
+    "scope": "startup, API checks and the first minutes of the load",
+    "period_ms": 31000,
+    "calls": 14,
+    "returned_memory": 14,
+    "span_seconds": 403.011466007,
+    "call_ms_p95": 2.266955,
+    "call_ms_max": 2.266955,
+    "sha256": "39e7832f2f353c67f017cb0cfe3364edc7a399d7fc41a737c97dfbf67b2d6029"
+  }
+}
