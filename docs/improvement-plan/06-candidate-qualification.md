@@ -9,7 +9,7 @@
 | A100 네이티브 빌드 | `f7c956d3c` | CUDA 12.4, SM80. API, 장문 정확성, Qwen2.5-14B 성능, Qwen2.5-7B 운영 검증 |
 | Linux AMD64 배포 이미지 | `d3d8fe6e5` | CUDA 12.4, SM80·SM86·SM89. 이미지 빌드, 비루트 사용자, CLI, 동적 링크, 런타임 파일 무결성 |
 | A100에서 재빌드한 배포 이미지 | `d3d8fe6e5` | 이미지 ID `0a907408ec73`. A100 6번의 CUDA 드라이버 주입, Qwen2.5-7B-Instruct API 40건, 장문 출력 대조 232건, GPU 자원 회수 |
-| jemalloc을 포함한 파생 시험 이미지 | `d3d8fe6e5`의 실행 파일 | 이미지 ID `1fc444b1840e`. CPU 패키지 무결성, Qwen2.5-7B-Instruct API 40건, 두 캐시 모드 30분 운영 기준, 장문 출력 232건 통과 |
+| jemalloc을 포함한 파생 시험 이미지 | `d3d8fe6e5`의 실행 파일 | 이미지 ID `1fc444b1840e`. CPU 패키지 무결성, Qwen2.5-7B-Instruct API 40건, 두 캐시 모드 30분 운영 기준, 장문 출력 232건, 사전 성능 회귀 기준 통과. RAG C8 seed 2 꼬리 지연 증가 |
 
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)
 
@@ -30,7 +30,7 @@ python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 | W2·W3 성능 | 이벤트 발행·스케줄 네 조합, 14B 두 모델의 동일 KV·커널 계측, Qwen2.5-14B의 prefill 대기와 vLLM 한도 대조, Qwen3-4B 길이별 대조. 스케줄 후보 세 개는 지연 회귀로 미채택했다. 정렬된 KV 테이블 후보도 A100에서 출력 일치 후 네 비교에서 서빙 처리량이 감소해 미채택했다. Qwen2.5-14B의 1,024행 QKV 후보는 네 실행의 출력과 장문 토큰 ID가 일치했고 decode·짧은 요청 기준을 통과했다. RAG 첫 토큰 p95 개선이 일관되지 않아 기본값 적용을 보류했다. | 채택 후보의 RAG p95 재현성과 영향 모델의 출력·성능 기준 확인 |
 | W4 장문·정확성 | 고정 입력 18개와 holdout 11개의 엔진 비교, 두 사례의 첫 BF16 차이 및 28개 레이어 residual·최종 norm 재계산, 네 모델의 동일 입력 GSM8K 품질 기준 통과. A100 재빌드 이미지의 장문 대조 232건 일치. 두 사례의 첫 레이어 KV와 attention 출력을 대조했고 마지막 입력 위치의 K·V 차이를 bias·반올림 순서로 재현. HF에서 bias 순서와 prefill 분할을 교차한 네 조건에서 사례 3의 첫 ID는 모두 5257. 같은 BF16 입력의 MLP 출력 대조도 기록 | 다른 위치와 레이어 및 해당 차이가 최종 점수까지 전파되는 정도 |
 | W4 스키마 | 문서화한 부분집합에서 GPU 일반 API 40건과 schema 계약 11건을 통과했다. A100 재빌드 이미지의 대표 모델 API 40건도 통과했다. | W5의 최종 운영 기준 충족 |
-| W5 운영 | 기준 배포 이미지의 익명 RSS는 cache-on +616KiB, cache-off +700KiB였다. jemalloc 파생 이미지에서 각각 −440KiB와 −640KiB로 두 설정의 30분 운영 기준을 통과했다. 같은 이미지에서 장문 232건이 일치했다. 느린 SSE·취소와 GPU 메모리 오류 주입 네 사례도 별도 실행에서 확인했다. | 파생 이미지의 성능 비교와 실제 운영 분포 확인 |
+| W5 운영 | 기준 배포 이미지의 익명 RSS는 cache-on +616KiB, cache-off +700KiB였다. jemalloc 파생 이미지에서 각각 −440KiB와 −640KiB로 두 설정의 30분 운영 기준을 통과했다. 같은 이미지에서 장문 232건이 일치했다. 성능 대조의 사전 회귀 기준을 통과했고 RAG C8 seed 2에서 TTFT p95가 12.69% 증가했다. | 동일 도착 시각에서 RAG 지연 확인, 실제 운영 분포 확인 |
 
 기존 이벤트 발행 정책과 서빙 설정을 기준선으로 삼았다. 이전 빌드에서 관찰된 성능 실험은 입력·장비·바이너리에 연결하며, 새로운 수치 기준이나 기본값을 채택할 때는 종합 계획의 출력 불변성과 회귀 기준을 적용한다. [W2 결과](02-async-step-result.md) · [W3 결과](03-long-context-result.md) · [W4 정확성](04-long-accuracy-result.md) · [W5 운영 결과](05-mixed-soak-result.md)
 
@@ -79,4 +79,4 @@ HTTP 프레이밍 이미지의 30분 실행에서 정밀 RSS는 `cache-on`에서
 
 파생 이미지 `1fc444b1840e`에서 `cache-on`과 `cache-off`의 정밀 RSS는 각각 440KiB와 640KiB 감소했다. 각 모드에서 API 40건과 요청·지연·종료 자원 검사를 모두 통과했고, 같은 20GiB 예약이 복구됐다. 같은 이미지에서 기준 144건과 홀드아웃 88건의 출력이 일치했다. [두 30분 부하 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/verified-soaks.json) · [장문 정확성 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/accuracy-verified.json)
 
-두 부하와 장문 검증을 통과한 이미지로 기준 이미지와 교대 실행해 출력과 서빙 회귀를 확인하고 있다. 이 대조는 Qwen2.5-7B-Instruct와 A100 6번, 등록한 여섯 부하에 적용한다. [후보 이미지 성능 대조 등록](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/registration.json)
+두 부하와 장문 검증을 통과한 파생 이미지를 기준 이미지와 교대로 두 번씩 실행했다. 여섯 부하에서 총 2,560건의 요청을 오류 없이 처리했고 대응하는 출력이 모두 일치했다. 짧은 요청·decode 회귀 기준은 통과했다. RAG C8 seed 2의 TTFT p95는 두 실행 순서에서 7.43%와 18.19% 증가했다. Qwen2.5-7B-Instruct, A100 6번, 고정 부하에 해당하는 결과다. 이 RAG 비용을 확인해 파생 설정의 기본값 적용과 릴리스를 보류한다. [성능 대조와 지연 위치](05-mixed-soak-result.md#같은-gpu에서-비교한-서빙-성능)

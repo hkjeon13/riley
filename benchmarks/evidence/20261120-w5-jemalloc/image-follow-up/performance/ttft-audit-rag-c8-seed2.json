@@ -1,0 +1,143 @@
+{
+  "scope": "Exploratory audit of captured TTFT from the matched packaged image campaign.",
+  "cell": "rag-c8-seed2",
+  "interpretation": "Write-to-first-visible-text includes socket and server processing, GPU work, and SSE delivery.",
+  "arms": {
+    "parent-first": {
+      "requests": 64,
+      "records_sha256": "a42bc22ad0575cb67c2d3f9b4dd9cfb3362e008069152aa8eb7e6114ef79c793",
+      "p95_ms": {
+        "ttft_ms": 889.0555873513222,
+        "start_to_write_ms": 0.4622712731361389,
+        "write_to_first_visible_text_ms": 888.6417299509048
+      },
+      "ttft_p95_rank_request": {
+        "index": 9,
+        "ttft_ms": 889.0555873513222,
+        "start_to_write_ms": 0.4138574004173279,
+        "write_to_first_visible_text_ms": 888.6417299509048
+      },
+      "top_10_ttft_request_indices": [
+        18,
+        14,
+        44,
+        52,
+        43,
+        62,
+        9,
+        12,
+        15,
+        13
+      ]
+    },
+    "packaged-first": {
+      "requests": 64,
+      "records_sha256": "88e4e6fdfe99942f07304229562b624c56c920d444e2498b5b46f6f31981db6d",
+      "p95_ms": {
+        "ttft_ms": 955.1020711660385,
+        "start_to_write_ms": 0.6403550505638123,
+        "write_to_first_visible_text_ms": 954.7586292028427
+      },
+      "ttft_p95_rank_request": {
+        "index": 44,
+        "ttft_ms": 955.1020711660385,
+        "start_to_write_ms": 0.3434419631958008,
+        "write_to_first_visible_text_ms": 954.7586292028427
+      },
+      "top_10_ttft_request_indices": [
+        43,
+        47,
+        62,
+        33,
+        9,
+        61,
+        44,
+        12,
+        15,
+        13
+      ]
+    },
+    "packaged-second": {
+      "requests": 64,
+      "records_sha256": "d79ef80216170f1b6fb0031dd3d33696945c0ba7997c233d361b7b768720fcdc",
+      "p95_ms": {
+        "ttft_ms": 1002.7472227811813,
+        "start_to_write_ms": 0.45833736658096313,
+        "write_to_first_visible_text_ms": 1002.2761151194572
+      },
+      "ttft_p95_rank_request": {
+        "index": 12,
+        "ttft_ms": 1002.7472227811813,
+        "start_to_write_ms": 0.4711076617240906,
+        "write_to_first_visible_text_ms": 1002.2761151194572
+      },
+      "top_10_ttft_request_indices": [
+        55,
+        50,
+        62,
+        9,
+        52,
+        43,
+        12,
+        13,
+        15,
+        44
+      ]
+    },
+    "parent-second": {
+      "requests": 64,
+      "records_sha256": "d2b131fb6f5f66a55b330f951c0702a6b997013dbdbad702e7595c37799a0924",
+      "p95_ms": {
+        "ttft_ms": 848.3923226594925,
+        "start_to_write_ms": 0.44570863246917725,
+        "write_to_first_visible_text_ms": 847.9864075779915
+      },
+      "ttft_p95_rank_request": {
+        "index": 9,
+        "ttft_ms": 848.3923226594925,
+        "start_to_write_ms": 0.4059150815010071,
+        "write_to_first_visible_text_ms": 847.9864075779915
+      },
+      "top_10_ttft_request_indices": [
+        23,
+        22,
+        18,
+        44,
+        62,
+        43,
+        9,
+        12,
+        13,
+        15
+      ]
+    }
+  },
+  "pairs": {
+    "first": {
+      "delta_p95_ms": {
+        "ttft_ms": 66.04648381471634,
+        "start_to_write_ms": 0.17808377742767334,
+        "write_to_first_visible_text_ms": 66.11689925193787
+      },
+      "p95_delta_after_substituting_same_request_parent_start_to_write_ms": 66.10459089279175,
+      "candidate_slower_requests": 42,
+      "paired_ttft_delta_p50_ms": 55.625975131988525,
+      "paired_ttft_delta_p95_ms": 276.36032551527023,
+      "ttft_p95_delta_ms": 66.04648381471634,
+      "top_10_ttft_index_overlap": 7
+    },
+    "second": {
+      "delta_p95_ms": {
+        "ttft_ms": 154.35490012168884,
+        "start_to_write_ms": 0.012628734111785889,
+        "write_to_first_visible_text_ms": 154.28970754146576
+      },
+      "p95_delta_after_substituting_same_request_parent_start_to_write_ms": 154.3029621243477,
+      "candidate_slower_requests": 46,
+      "paired_ttft_delta_p50_ms": 63.02054971456528,
+      "paired_ttft_delta_p95_ms": 321.2905302643776,
+      "ttft_p95_delta_ms": 154.35490012168884,
+      "top_10_ttft_index_overlap": 7
+    }
+  }
+}

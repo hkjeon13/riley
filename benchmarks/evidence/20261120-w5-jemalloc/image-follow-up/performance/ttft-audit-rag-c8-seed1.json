@@ -1,0 +1,143 @@
+{
+  "scope": "Exploratory audit of captured TTFT from the matched packaged image campaign.",
+  "cell": "rag-c8-seed1",
+  "interpretation": "Write-to-first-visible-text includes socket and server processing, GPU work, and SSE delivery.",
+  "arms": {
+    "parent-first": {
+      "requests": 64,
+      "records_sha256": "76025dd6bb6ac8a650718335411663df5ae14af7e4e507b22ab92667ac77ff2b",
+      "p95_ms": {
+        "ttft_ms": 1110.952004790306,
+        "start_to_write_ms": 0.517040491104126,
+        "write_to_first_visible_text_ms": 1110.4977205395699
+      },
+      "ttft_p95_rank_request": {
+        "index": 63,
+        "ttft_ms": 1110.952004790306,
+        "start_to_write_ms": 0.4542842507362366,
+        "write_to_first_visible_text_ms": 1110.4977205395699
+      },
+      "top_10_ttft_request_indices": [
+        15,
+        29,
+        65,
+        31,
+        28,
+        30,
+        63,
+        64,
+        9,
+        11
+      ]
+    },
+    "packaged-first": {
+      "requests": 64,
+      "records_sha256": "731291be9fca208a21420785fbdead27598e12fdd0b7f50cc2e2a9d9e1ba5b8e",
+      "p95_ms": {
+        "ttft_ms": 1041.1283150315285,
+        "start_to_write_ms": 0.4620552062988281,
+        "write_to_first_visible_text_ms": 1040.7910346984863
+      },
+      "ttft_p95_rank_request": {
+        "index": 31,
+        "ttft_ms": 1041.1283150315285,
+        "start_to_write_ms": 0.3372803330421448,
+        "write_to_first_visible_text_ms": 1040.7910346984863
+      },
+      "top_10_ttft_request_indices": [
+        65,
+        19,
+        28,
+        20,
+        15,
+        29,
+        31,
+        30,
+        9,
+        11
+      ]
+    },
+    "packaged-second": {
+      "requests": 64,
+      "records_sha256": "8b7fc581b62c245888586de53343da90d348b221d0d1f0e74c6b4cde9b44e4f1",
+      "p95_ms": {
+        "ttft_ms": 1039.0253216028214,
+        "start_to_write_ms": 0.4948750138282776,
+        "write_to_first_visible_text_ms": 1038.6238396167755
+      },
+      "ttft_p95_rank_request": {
+        "index": 31,
+        "ttft_ms": 1039.0253216028214,
+        "start_to_write_ms": 0.4014819860458374,
+        "write_to_first_visible_text_ms": 1038.6238396167755
+      },
+      "top_10_ttft_request_indices": [
+        65,
+        19,
+        28,
+        20,
+        15,
+        29,
+        31,
+        30,
+        9,
+        11
+      ]
+    },
+    "parent-second": {
+      "requests": 64,
+      "records_sha256": "9080d6e0885ab9d034d167dc8ed3802c38b4af8166024bb18ad0634822ea22c5",
+      "p95_ms": {
+        "ttft_ms": 1038.5512709617615,
+        "start_to_write_ms": 0.46678632497787476,
+        "write_to_first_visible_text_ms": 1038.214161992073
+      },
+      "ttft_p95_rank_request": {
+        "index": 31,
+        "ttft_ms": 1038.5512709617615,
+        "start_to_write_ms": 0.3371089696884155,
+        "write_to_first_visible_text_ms": 1038.214161992073
+      },
+      "top_10_ttft_request_indices": [
+        65,
+        19,
+        28,
+        20,
+        15,
+        29,
+        31,
+        30,
+        9,
+        11
+      ]
+    }
+  },
+  "pairs": {
+    "first": {
+      "delta_p95_ms": {
+        "ttft_ms": -69.82368975877762,
+        "start_to_write_ms": -0.05498528480529785,
+        "write_to_first_visible_text_ms": -69.70668584108353
+      },
+      "p95_delta_after_substituting_same_request_parent_start_to_write_ms": -69.83162462711334,
+      "candidate_slower_requests": 28,
+      "paired_ttft_delta_p50_ms": -0.5948171019554138,
+      "paired_ttft_delta_p95_ms": 37.29863464832306,
+      "ttft_p95_delta_ms": -69.82368975877762,
+      "top_10_ttft_index_overlap": 8
+    },
+    "second": {
+      "delta_p95_ms": {
+        "ttft_ms": 0.4740506410598755,
+        "start_to_write_ms": 0.028088688850402832,
+        "write_to_first_visible_text_ms": 0.4096776247024536
+      },
+      "p95_delta_after_substituting_same_request_parent_start_to_write_ms": 0.4096776247024536,
+      "candidate_slower_requests": 25,
+      "paired_ttft_delta_p50_ms": -0.27108192443847656,
+      "paired_ttft_delta_p95_ms": 1.2446790933609009,
+      "ttft_p95_delta_ms": 0.4740506410598755,
+      "top_10_ttft_index_overlap": 10
+    }
+  }
+}

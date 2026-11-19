@@ -294,7 +294,24 @@ A100 6번의 `cache-on`에서 추론 PID의 할당기 매핑과 API 40건을 확
 
 두 모드의 통과 뒤 같은 이미지에서 장문 출력 232건이 기준과 일치했다. API 40건과 종료 자원 회수를 확인했고 GPU 6·7은 동일 홀더의 20GiB 예약 상태로 복귀했다. [장문 출력과 실행 파일 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/accuracy-verified.json)
 
-두 부하와 장문 검증을 통과한 뒤 같은 GPU 6에서 기준 → 후보 → 후보 → 기준 순의 성능 대조를 시작했다. 각 실행에서 동일 체크포인트·서빙 인자로 짧은 C1·C32, RAG C8 두 seed, 긴 생성 C32, prefix 공유 C8의 640건을 측정한다. 요청별 출력 해시·토큰 수·종료 사유를 확인하고 실행 순서별 지표를 기록한다. 두 실행의 평균으로 짧은 요청의 TTFT·처리량 2%와 decode TPOT 1% 회귀 기준을 판정한다. [성능 시험 등록과 워크로드](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/registration.json) · [출력과 성능 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/compare_allocator_performance.py)
+#### 같은 GPU에서 비교한 서빙 성능
+
+Qwen2.5-7B-Instruct를 A100 6번에서 기준 이미지 `0a907408ec73` → 파생 이미지 `1fc444b1840e` → 파생 → 기준 순으로 실행했다. 네 실행의 체크포인트와 서빙 인자가 같았다. 실행마다 API 40건과 성능 요청 640건을 통과했고, 요청별 출력 해시·입력과 생성 토큰 수·종료 사유가 네 실행에서 일치했다. 종료 뒤 같은 GPU 홀더의 20GiB 예약을 확인했다. [성능 시험 등록](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/registration.json) · [네 실행의 독립 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/verified-performance.json)
+
+아래 수치는 기준과 후보의 두 실행 평균을 대조한 결과다. 짧은 C1·C32의 TTFT p95·처리량 2%와 여섯 부하의 decode TPOT 1% 회귀 기준을 통과했다.
+
+| 부하 | TTFT p95 | TPOT p50 | 출력 처리량 |
+|---|---:|---:|---:|
+| 짧은 C1 | +0.46% | −0.02% | +0.01% |
+| 짧은 C32 | −8.67% | −0.19% | +0.50% |
+| RAG C8 seed 1 | −3.23% | +0.60% | +0.62% |
+| RAG C8 seed 2 | +12.69% | −1.94% | −1.77% |
+| 긴 생성 C32 | +0.68% | −0.10% | +0.08% |
+| prefix 공유 C8 | −0.10% | +0.01% | −0.005% |
+
+짧은 C32의 TTFT p95 변화는 첫 실행 쌍에서 +14.45%, 두 번째에서 −24.26%였다. 기준 이미지의 두 p95는 58.57ms와 86.84ms였고 후보는 67.03ms와 65.77ms였다. 평균은 사전 기준을 충족했으며 두 실행 쌍에서 개선 방향은 일치하지 않았다. RAG C8 seed 2는 두 순서에서 TTFT p95가 각각 7.43%와 18.19% 증가했다. [C32 지연 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/ttft-audit-closed-c32.json) · [RAG seed 1 지연 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/ttft-audit-rag-c8-seed1.json) · [RAG seed 2 지연 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/ttft-audit-rag-c8-seed2.json)
+
+RAG C8 seed 2에서 요청 시작부터 클라이언트의 소켓 쓰기까지의 p95 변화는 +0.18ms와 +0.01ms였다. 쓰기 뒤 첫 텍스트까지의 p95는 +66.12ms와 +154.29ms였다. 이 구간에는 소켓 전달, 서버 대기·처리, GPU 계산, SSE 전달이 포함된다. 다음 대조에서는 같은 요청 도착 시각을 두 이미지에 재생해 RAG 차이가 유지되는지 확인한다. 기준 이미지의 설정을 유지하고 파생 설정의 기본값 적용을 보류한다.
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
