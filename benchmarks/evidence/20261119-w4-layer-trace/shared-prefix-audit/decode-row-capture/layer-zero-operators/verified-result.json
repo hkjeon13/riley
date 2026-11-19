@@ -1,0 +1,196 @@
+{
+  "scope": "Earliest differing measured layer-zero operation in two C1 decode steps.",
+  "baseline_endpoint_summary_sha256": "39bfb851792074b968ead3f597d69d58cb2b9e1515b81e926f641921728d03bb",
+  "hf_reconstruction": [
+    "qkv_prebias",
+    "query_rope"
+  ],
+  "cases": {
+    "669-9": {
+      "suite": "long",
+      "case": "12",
+      "position": 677,
+      "input_token": 264,
+      "preexisting_endpoints_exact": true,
+      "earliest_observed_difference": {
+        "stage": "qkv_prebias",
+        "layer": "0",
+        "width": 4608,
+        "different_bf16_words": 8,
+        "max_abs": 0.00390625,
+        "rms": 5.760113381324041e-05
+      },
+      "source_trace_sha256": {
+        "riley": "91cf2a7a49f43db8af08a486d0c439690e773683eb3cca33372b44a7a5b5a05b",
+        "hf": "c80a7384750f5d33a714abf94f8e188cfc383c4ca74280b080eca04b54549d64"
+      },
+      "comparisons": [
+        {
+          "stage": "embedding",
+          "layer": "-",
+          "width": 3584,
+          "different_bf16_words": 0,
+          "max_abs": 0,
+          "rms": 0
+        },
+        {
+          "stage": "input_norm",
+          "layer": "0",
+          "width": 3584,
+          "different_bf16_words": 0,
+          "max_abs": 0,
+          "rms": 0
+        },
+        {
+          "stage": "qkv_prebias",
+          "layer": "0",
+          "width": 4608,
+          "different_bf16_words": 8,
+          "max_abs": 0.00390625,
+          "rms": 5.760113381324041e-05
+        },
+        {
+          "stage": "query_rope",
+          "layer": "0",
+          "width": 3584,
+          "different_bf16_words": 865,
+          "max_abs": 0.25,
+          "rms": 0.005224793139555303
+        },
+        {
+          "stage": "attention_context",
+          "layer": "0",
+          "width": 3584,
+          "different_bf16_words": 2544,
+          "max_abs": 0.0078125,
+          "rms": 0.0004340890826373452
+        },
+        {
+          "stage": "attention_projection",
+          "layer": "0",
+          "width": 3584,
+          "different_bf16_words": 2714,
+          "max_abs": 0.015625,
+          "rms": 0.0005574921164916253
+        },
+        {
+          "stage": "attention_residual",
+          "layer": "0",
+          "width": 3584,
+          "different_bf16_words": 2593,
+          "max_abs": 0.015625,
+          "rms": 0.0005602581489763719
+        },
+        {
+          "stage": "layer_residual",
+          "layer": "27",
+          "width": 3584,
+          "different_bf16_words": 3150,
+          "max_abs": 1.0,
+          "rms": 0.09044848827862348
+        },
+        {
+          "stage": "final_norm",
+          "layer": "-",
+          "width": 3584,
+          "different_bf16_words": 3086,
+          "max_abs": 1.5,
+          "rms": 0.07886357908432741
+        }
+      ]
+    },
+    "1023-67": {
+      "suite": "holdout",
+      "case": "numbers-1023",
+      "position": 1089,
+      "input_token": 3208,
+      "preexisting_endpoints_exact": true,
+      "earliest_observed_difference": {
+        "stage": "qkv_prebias",
+        "layer": "0",
+        "width": 4608,
+        "different_bf16_words": 1,
+        "max_abs": 0.0009765625,
+        "rms": 1.4386124291718496e-05
+      },
+      "source_trace_sha256": {
+        "riley": "d3b081fcef19379c7cf8ae37e248e2b710b272b61ea54a43a51da6b8248f9568",
+        "hf": "4825f9b9ff7e2762641d3610842c3b3e408e8e5b1e5ab5701be69ad40aa97784"
+      },
+      "comparisons": [
+        {
+          "stage": "embedding",
+          "layer": "-",
+          "width": 3584,
+          "different_bf16_words": 0,
+          "max_abs": 0,
+          "rms": 0
+        },
+        {
+          "stage": "input_norm",
+          "layer": "0",
+          "width": 3584,
+          "different_bf16_words": 0,
+          "max_abs": 0,
+          "rms": 0
+        },
+        {
+          "stage": "qkv_prebias",
+          "layer": "0",
+          "width": 4608,
+          "different_bf16_words": 1,
+          "max_abs": 0.0009765625,
+          "rms": 1.4386124291718496e-05
+        },
+        {
+          "stage": "query_rope",
+          "layer": "0",
+          "width": 3584,
+          "different_bf16_words": 916,
+          "max_abs": 0.25,
+          "rms": 0.006754325275084562
+        },
+        {
+          "stage": "attention_context",
+          "layer": "0",
+          "width": 3584,
+          "different_bf16_words": 1974,
+          "max_abs": 0.0078125,
+          "rms": 0.0004829577896052157
+        },
+        {
+          "stage": "attention_projection",
+          "layer": "0",
+          "width": 3584,
+          "different_bf16_words": 2268,
+          "max_abs": 0.00390625,
+          "rms": 0.00048342985765337216
+        },
+        {
+          "stage": "attention_residual",
+          "layer": "0",
+          "width": 3584,
+          "different_bf16_words": 2099,
+          "max_abs": 0.00390625,
+          "rms": 0.0004979264378676535
+        },
+        {
+          "stage": "layer_residual",
+          "layer": "27",
+          "width": 3584,
+          "different_bf16_words": 3181,
+          "max_abs": 2.0,
+          "rms": 0.09792539394823768
+        },
+        {
+          "stage": "final_norm",
+          "layer": "-",
+          "width": 3584,
+          "different_bf16_words": 3177,
+          "max_abs": 2.0,
+          "rms": 0.06696934748998255
+        }
+      ]
+    }
+  }
+}

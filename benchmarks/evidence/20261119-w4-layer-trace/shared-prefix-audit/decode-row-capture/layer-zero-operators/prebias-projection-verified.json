@@ -1,0 +1,182 @@
+{
+  "scope": "FP64 dot products for the observed BF16 discrepancies at bias-free layer-zero QKV.",
+  "trace_summary_sha256": "b7c459a5558d1d371228c751b83ad6bf29aeed4ff6100f3d472300bf59ece10a",
+  "checkpoint_manifest_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "weights_index_sha256": "624bf7c47cd12468fdc16e38a47cf4f19e0415b859a223ba3c027eed2f0e1028",
+  "cases": {
+    "669-9": {
+      "same_norm_sha256": "d593b61d75afaf9035a377aa09b0706e4ee8be423cc42eb75d978ef8a51cf171",
+      "mismatched_products": 8,
+      "projections": {
+        "q": [
+          {
+            "row": 139,
+            "riley_bf16": -0.72265625,
+            "hf_bf16": -0.7265625,
+            "fp64_dot": -0.7246116343012545,
+            "fp64_rounded_bf16": -0.7265625,
+            "adjacent_bf16_values": true,
+            "distance_to_observed_midpoint_in_fp32_ulps": 37.90478515625,
+            "rounding_matches": [
+              "hf"
+            ],
+            "weight": {
+              "shard": "model-00001-of-00004.safetensors",
+              "header_sha256": "3afb560369ab8160cae46cbd11dad701a835c20a3ad9dd4562d0b2696e445cae",
+              "row_sha256": "28b15a69db238b5ca11191490d4130d121b2e634c3f854550f441675870d2f6c"
+            }
+          },
+          {
+            "row": 313,
+            "riley_bf16": 0.00018405914306640625,
+            "hf_bf16": 0.0001850128173828125,
+            "fp64_dot": 0.0001843988729888224,
+            "fp64_rounded_bf16": 0.00018405914306640625,
+            "adjacent_bf16_values": true,
+            "distance_to_observed_midpoint_in_fp32_ulps": 9421.9375,
+            "rounding_matches": [
+              "riley"
+            ],
+            "weight": {
+              "shard": "model-00001-of-00004.safetensors",
+              "header_sha256": "3afb560369ab8160cae46cbd11dad701a835c20a3ad9dd4562d0b2696e445cae",
+              "row_sha256": "bfb71fefc3726375cc3f26b774ae3c95f19dc02a2d164c6e19e62054629d5ba1"
+            }
+          },
+          {
+            "row": 1999,
+            "riley_bf16": 6.389617919921875e-05,
+            "hf_bf16": 6.341934204101562e-05,
+            "fp64_dot": 6.333663077384699e-05,
+            "fp64_rounded_bf16": 6.341934204101562e-05,
+            "adjacent_bf16_values": true,
+            "distance_to_observed_midpoint_in_fp32_ulps": 44135.75,
+            "rounding_matches": [
+              "hf"
+            ],
+            "weight": {
+              "shard": "model-00001-of-00004.safetensors",
+              "header_sha256": "3afb560369ab8160cae46cbd11dad701a835c20a3ad9dd4562d0b2696e445cae",
+              "row_sha256": "ccaf414314dd532f17a5f7f665400bb91e2bd31b0a3d6e711f0ca8ee9f0f3a10"
+            }
+          },
+          {
+            "row": 2424,
+            "riley_bf16": 0.0035400390625,
+            "hf_bf16": 0.0035247802734375,
+            "fp64_dot": 0.003532312115567038,
+            "fp64_rounded_bf16": 0.0035247802734375,
+            "adjacent_bf16_values": true,
+            "distance_to_observed_midpoint_in_fp32_ulps": 418.984375,
+            "rounding_matches": [
+              "hf"
+            ],
+            "weight": {
+              "shard": "model-00001-of-00004.safetensors",
+              "header_sha256": "3afb560369ab8160cae46cbd11dad701a835c20a3ad9dd4562d0b2696e445cae",
+              "row_sha256": "3d887a7b9138f627dd4cd0c9fd8a865f08d635357386e57b8f3c44ef61c59d6d"
+            }
+          },
+          {
+            "row": 2950,
+            "riley_bf16": 0.023193359375,
+            "hf_bf16": 0.0233154296875,
+            "fp64_dot": 0.023254966421518475,
+            "fp64_rounded_bf16": 0.0233154296875,
+            "adjacent_bf16_values": true,
+            "distance_to_observed_midpoint_in_fp32_ulps": 307.03125,
+            "rounding_matches": [
+              "hf"
+            ],
+            "weight": {
+              "shard": "model-00001-of-00004.safetensors",
+              "header_sha256": "3afb560369ab8160cae46cbd11dad701a835c20a3ad9dd4562d0b2696e445cae",
+              "row_sha256": "45c1a4115033462bae3b6dc089053e0d9f5ff05822b09dc94fc017fdf80836b0"
+            }
+          },
+          {
+            "row": 3094,
+            "riley_bf16": -0.0257568359375,
+            "hf_bf16": -0.02587890625,
+            "fp64_dot": -0.025818264606641605,
+            "fp64_rounded_bf16": -0.02587890625,
+            "adjacent_bf16_values": true,
+            "distance_to_observed_midpoint_in_fp32_ulps": 211.265625,
+            "rounding_matches": [
+              "hf"
+            ],
+            "weight": {
+              "shard": "model-00001-of-00004.safetensors",
+              "header_sha256": "3afb560369ab8160cae46cbd11dad701a835c20a3ad9dd4562d0b2696e445cae",
+              "row_sha256": "490ab80ebc4812b6eb40b901c13b46cfc8643a72d95b381a834bba0d0682d0c1"
+            }
+          }
+        ],
+        "k": [],
+        "v": [
+          {
+            "row": 434,
+            "riley_bf16": -1.609325408935547e-05,
+            "hf_bf16": -1.633167266845703e-05,
+            "fp64_dot": -1.6347516066161916e-05,
+            "fp64_rounded_bf16": -1.633167266845703e-05,
+            "adjacent_bf16_values": false,
+            "distance_to_observed_midpoint_in_fp32_ulps": 74246.0,
+            "rounding_matches": [
+              "hf"
+            ],
+            "weight": {
+              "shard": "model-00001-of-00004.safetensors",
+              "header_sha256": "3afb560369ab8160cae46cbd11dad701a835c20a3ad9dd4562d0b2696e445cae",
+              "row_sha256": "bdfa9d491d7cde699291809229bad457c407be9b57078f808f5bf463a180f14a"
+            }
+          },
+          {
+            "row": 497,
+            "riley_bf16": 0.000896453857421875,
+            "hf_bf16": 0.0009002685546875,
+            "fp64_dot": 0.0008984435098682297,
+            "fp64_rounded_bf16": 0.0009002685546875,
+            "adjacent_bf16_values": true,
+            "distance_to_observed_midpoint_in_fp32_ulps": 1413.96875,
+            "rounding_matches": [
+              "hf"
+            ],
+            "weight": {
+              "shard": "model-00001-of-00004.safetensors",
+              "header_sha256": "3afb560369ab8160cae46cbd11dad701a835c20a3ad9dd4562d0b2696e445cae",
+              "row_sha256": "828efaa3c33fca2022bb533d1dc9819bcbd26eb2ad6a9d6f73ff6c216614348a"
+            }
+          }
+        ]
+      }
+    },
+    "1023-67": {
+      "same_norm_sha256": "9b8a07a8d5b46a0b2375f133eb43826ab4c517a293688a54a11b3bf8427b2168",
+      "mismatched_products": 1,
+      "projections": {
+        "q": [
+          {
+            "row": 3201,
+            "riley_bf16": -0.2138671875,
+            "hf_bf16": -0.21484375,
+            "fp64_dot": -0.2143570211774204,
+            "fp64_rounded_bf16": -0.21484375,
+            "adjacent_bf16_values": true,
+            "distance_to_observed_midpoint_in_fp32_ulps": 104.181640625,
+            "rounding_matches": [
+              "hf"
+            ],
+            "weight": {
+              "shard": "model-00001-of-00004.safetensors",
+              "header_sha256": "3afb560369ab8160cae46cbd11dad701a835c20a3ad9dd4562d0b2696e445cae",
+              "row_sha256": "8f49d53231dac5730cae70927b250db04befb33868adc88768d826924af2e437"
+            }
+          }
+        ],
+        "k": [],
+        "v": []
+      }
+    }
+  }
+}
