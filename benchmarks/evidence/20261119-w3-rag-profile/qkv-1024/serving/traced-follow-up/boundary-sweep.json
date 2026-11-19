@@ -1,0 +1,130 @@
+{
+  "scope": "One engine command time relative to the first admission of the same wave. The other seven admissions and observed prefill windows are fixed independently in each arm.",
+  "limits": "Idealized admission at the first available plan boundary after command send and request 44. Result covers the first nine CPU prefill plans.",
+  "wave_receipt_sha256": "bc178f37b605a4dd368aeb833f0a8604e243f76b8989733149f6cd3e28851021",
+  "scheduler_inputs_sha256": {
+    "scheduler.rs": "5585da9cf2fe5ae0b8ea64c2a4903d4827c2d04b175ed8263d57935aa2fe9cbd",
+    "config.rs": "f9ff49e150d762e74d02548dc891fc7eb9d539d969276710e3d9ca148d015aae"
+  },
+  "verified_original_plans": 36,
+  "common_command_times": 61,
+  "scheduler_replays_in_sweep": 244,
+  "first_and_last_command_ns": [
+    244000000,
+    255000000
+  ],
+  "observed_command_ns": {
+    "riley-first": 250038573,
+    "qkv-first": 249531961,
+    "qkv-second": 249648099,
+    "riley-second": 249876810
+  },
+  "before_after_split_by_execution_order_ns": {
+    "first": {
+      "lower_exclusive_ns": 246095987,
+      "upper_inclusive_ns": 252733858,
+      "span_ns": 6637871
+    },
+    "second": {
+      "lower_exclusive_ns": 246104686,
+      "upper_inclusive_ns": 251969287,
+      "span_ns": 5864601
+    }
+  },
+  "example_outcomes_by_command_time_ns": {
+    "245000000": {
+      "riley-first": {
+        "modeled_admission_ns": 252624838,
+        "prefill_steps_8_and_9": [
+          45,
+          41
+        ]
+      },
+      "qkv-first": {
+        "modeled_admission_ns": 246025481,
+        "prefill_steps_8_and_9": [
+          45,
+          41
+        ]
+      },
+      "qkv-second": {
+        "modeled_admission_ns": 246060471,
+        "prefill_steps_8_and_9": [
+          45,
+          41
+        ]
+      },
+      "riley-second": {
+        "modeled_admission_ns": 251853437,
+        "prefill_steps_8_and_9": [
+          45,
+          41
+        ]
+      }
+    },
+    "249000000": {
+      "riley-first": {
+        "modeled_admission_ns": 252624838,
+        "prefill_steps_8_and_9": [
+          45,
+          41
+        ]
+      },
+      "qkv-first": {
+        "modeled_admission_ns": 365926614,
+        "prefill_steps_8_and_9": [
+          41,
+          45
+        ]
+      },
+      "qkv-second": {
+        "modeled_admission_ns": 365907151,
+        "prefill_steps_8_and_9": [
+          41,
+          45
+        ]
+      },
+      "riley-second": {
+        "modeled_admission_ns": 251853437,
+        "prefill_steps_8_and_9": [
+          45,
+          41
+        ]
+      }
+    },
+    "253000000": {
+      "riley-first": {
+        "modeled_admission_ns": 375822760,
+        "prefill_steps_8_and_9": [
+          41,
+          45
+        ]
+      },
+      "qkv-first": {
+        "modeled_admission_ns": 365926614,
+        "prefill_steps_8_and_9": [
+          41,
+          45
+        ]
+      },
+      "qkv-second": {
+        "modeled_admission_ns": 365907151,
+        "prefill_steps_8_and_9": [
+          41,
+          45
+        ]
+      },
+      "riley-second": {
+        "modeled_admission_ns": 374987759,
+        "prefill_steps_8_and_9": [
+          41,
+          45
+        ]
+      }
+    }
+  },
+  "full_sweep_outcomes_sha256": "8d3acc5f7cdd1a0dc407a98df91c346ed6f707c26e276e9dac2950ee20d84e3a",
+  "cpu_replay_binary_sha256": "3f565893c380b3584e3812d75f77d377a25450d3c4c2314043545b11c2fda11b",
+  "independent_cpu_replay_binary_sha256": "7f0bd5594817f485a4736d0c4eac52ab1867670283222765a41a829111e164ef",
+  "independent_rebuild_matches_all_outcomes": true
+}

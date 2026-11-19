@@ -1540,12 +1540,24 @@
     ],
     "qwen14_qkv_wave_admission": [
       {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/boundary-sweep.json",
+        "sha256": "9b2e5692f30a2c116d3cb74c838417239e652a83e0f8e73edf171e633db9230f"
+      },
+      {
         "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/compare_wave_admission.py",
         "sha256": "4afada3fdecde785eede70f4023877dc42d17db168aeeb276a8a5e7ed85a1bf2"
       },
       {
         "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/replay_wave.rs",
         "sha256": "b9f6e4978fa423ddfd6e726e28dc09c6a9622a9034e516a14aecefa5ef1668df"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/run_wave_boundary_sweep.sh",
+        "sha256": "a71b9e98d60837d539a55e9fc49b623dee834911d4ce55b036d330571715ce1e"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/sweep_wave_boundary.py",
+        "sha256": "758f44c5a5fe55b20b8e7408f365e96bd9f386f4a996cf4606ebe27ccb91a3cc"
       },
       {
         "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/wave-admission.json",
