@@ -1,0 +1,31 @@
+{
+  "same_riley_cli_version": "riley 0.1.0 (server=true, cuda=true, cuda_abi=1)",
+  "riley_symbols_resolved_to_jemalloc": [
+    "calloc",
+    "free",
+    "malloc",
+    "realloc"
+  ],
+  "service_uid_gid": "65532:65532",
+  "glibc": {
+    "malloc_provider": "/lib/x86_64-linux-gnu/libc.so.6",
+    "version": "",
+    "dirty_decay_ms": -1,
+    "muzzy_decay_ms": -1,
+    "oversize_threshold": 1,
+    "rss_ready_kib": 1360,
+    "rss_allocated_kib": 34376,
+    "rss_partially_freed_kib": 32472
+  },
+  "jemalloc": {
+    "malloc_provider": "/tmp/riley-w5-libjemalloc.so.2",
+    "version": "5.2.1-0-gea6b3e973b477b8061e0076bb257dbd7f3faa756",
+    "dirty_decay_ms": 0,
+    "muzzy_decay_ms": 0,
+    "oversize_threshold": 0,
+    "rss_ready_kib": 5316,
+    "rss_allocated_kib": 38504,
+    "rss_partially_freed_kib": 6184
+  },
+  "loader_binding_log_sha256": "c35821d12c02f36d7f7d98fd81cc1d54ca29f90eb4d73c9f94ac72f5629162c3"
+}

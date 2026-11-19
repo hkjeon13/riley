@@ -1,0 +1,32 @@
+{
+  "stage": "w5-jemalloc-20261120.hLPizqfG",
+  "mode": "cache-on",
+  "allocator": {
+    "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+    "container_id": "a5e7fabe88ff44a801e555fc389d3a837218acfcd50c16fc76a31d952e33a44b",
+    "host_pid": 1093203,
+    "library": "/tmp/riley-w5-libjemalloc.so.2",
+    "library_sha256": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9",
+    "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+    "library_mapping_present": true,
+    "exec_helper_uses_default_environment": true
+  },
+  "api_checks": 40,
+  "api_sha256": "c0f018ae2640dfc29a112a95f1eeb9fb848cfad869c3496fc94753bee2daf93a",
+  "gpu_states": {
+    "6": {
+      "physical_index": 6,
+      "phase": "active",
+      "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+      "pid": 2431228,
+      "allocation_bytes": 67108864
+    },
+    "7": {
+      "physical_index": 7,
+      "phase": "idle",
+      "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+      "pid": 2431237,
+      "allocation_bytes": 21474836480
+    }
+  }
+}

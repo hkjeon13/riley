@@ -1,0 +1,43 @@
+{
+  "scope": "Isolated allocator comparison using the already-reviewed CUDA 12.4 distribution image and unchanged soak checker.",
+  "stage": "w5-jemalloc-20261120.hLPizqfG",
+  "controller_pid": 1092951,
+  "first_started_utc": "2026-11-19T15:09:19Z",
+  "first_mode_at_registration": "cache-on",
+  "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+  "package": {
+    "name": "libjemalloc2",
+    "version": "5.2.1-4ubuntu1",
+    "architecture": "amd64",
+    "index": "Ubuntu jammy/universe",
+    "trusted_apt_indextarget": true,
+    "deb_sha256": "144eaa64b9da0319760c407ebe330b46d9d03ef9952fc067d48221cc9832e45c",
+    "library_sha256": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9"
+  },
+  "preflight_sha256_file_digest": "8318ad881eaf8b714fb5c886bd4fc8c0ed7fdafe0ba06ea813be79bead79912b",
+  "gpu_dispatch_tar_sha256": "1794a50b7df680b14bdc910675324b20733b89f94d62578491dd681b322812e8",
+  "gpu_dispatch_reused_verifier_path": "benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/verify_a100_candidate.py",
+  "gpu_control_soaks": {
+    "cache-on": {
+      "api_checks": 40,
+      "rss_growth_kib": 616
+    },
+    "cache-off": {
+      "api_checks": 40,
+      "rss_growth_kib": 700
+    }
+  },
+  "gpu": {
+    "physical_index": 6,
+    "idle_holder_pid": 2431228,
+    "other_idle_holder_pid": 2431237,
+    "idle_reservation_bytes": 21474836480
+  },
+  "settings": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+  "modes": [
+    "cache-on",
+    "cache-off"
+  ],
+  "seconds_per_mode": 1800,
+  "arrival_rate_per_second": 8
+}

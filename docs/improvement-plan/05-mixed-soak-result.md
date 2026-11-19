@@ -262,6 +262,13 @@ A100 6번의 `cache-on` 컨테이너에서 API 40건이 통과했고 30분 부�
 
 두 실행 모두 RSS 증가 0 항목만 실패해 후보 채택을 보류했다. 조건부 장문 검증기는 두 영수증과 이미지 해시를 확인한 뒤 실행을 건너뛰었으며, 그 판정을 서버에서 독립적으로 재계산했다. [조건부 정확성 미실행 영수증](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/accuracy-follow-up/accuracy-skip-verified.json)
 
+### 즉시 반환 설정의 할당기 대조
+
+기준 이미지에서 glibc의 반환·스레드 캐시 대조가 두 캐시 모드의 RSS 기준을 함께 충족하지 못했다. 기존 `d3d8fe6e5` 이미지에 Ubuntu Jammy의 `libjemalloc2` 패키지 `5.2.1-4ubuntu1`을 읽기 전용으로 연결해 비교한다. 패키지는 APT 인덱스의 SHA-256과 대조해 검사 경로에 풀었다. 이미지, Riley 바이너리, 모델, 서빙 옵션과 부하 검사기는 기준 실행의 것을 사용한다. 컨테이너 시작 시에만 `LD_PRELOAD`와 `MALLOC_CONF`를 지정한다. dirty·muzzy 페이지의 반환 지연을 0으로 두고 별도 초대형 할당 arena 기준을 비활성화했다. [등록과 패키지 해시](../../benchmarks/evidence/20261120-w5-jemalloc/registration.json) · [jemalloc 설정 문서](https://jemalloc.net/jemalloc.3.html)
+
+같은 이미지의 UID·GID 65532에서 16KiB 메모리 2,048개를 할당해 쓰고, 일부를 같은 간격으로 유지한 채 나머지를 해제했다. 해제 전후의 RSS는 glibc에서 34,376→32,472KiB, jemalloc에서 38,504→6,184KiB였다. 실제 Riley 바이너리의 `malloc`·`calloc`·`realloc`·`free`가 같은 jemalloc 파일에 연결됐고 CLI 버전 출력도 일치했다. 이 CPU 시험은 반환 설정과 로더 연결을 확인한다. 실제 추론의 RSS와 지연은 두 캐시 모드의 부하에서 판정한다. [사전시험 집계](../../benchmarks/evidence/20261120-w5-jemalloc/cpu-preflight.json) · [재현 스크립트](../../benchmarks/evidence/20261120-w5-jemalloc/preflight.sh)
+
+A100 6번의 `cache-on`에서 추론 PID의 할당기 매핑과 API 40건을 확인했고 첫 30분 부하를 시작했다. 그 시점에 GPU 7은 같은 홀더의 20GiB 예약을 유지했다. 두 모드에서 준비 직후와 종료 직전의 할당기 설정을 대조하고, 같은 PID에서 읽은 RSS·후반 p95·종료 자원·GPU 예약 복귀를 검산한다. 재현 시 승인 이미지의 기존 검사 도구와 `verify_a100_candidate.py`를 등록 파일의 경로 및 해시에 맞춘다. [기동과 API 검산](../../benchmarks/evidence/20261120-w5-jemalloc/startup-verified.json) · [GPU 실행 순서](../../benchmarks/evidence/20261120-w5-jemalloc/campaign.sh) · [집계기](../../benchmarks/evidence/20261120-w5-jemalloc/verify_zerodecay.py)
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
