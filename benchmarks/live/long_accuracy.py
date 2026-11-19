@@ -181,7 +181,12 @@ def complete(address, model, prompt, diagnostic=False, expected=None, *, limit=M
 
 
 def read_capture(path, workload):
-    document = json.loads(path.read_text(encoding="utf-8"))
+    raw = path.read_bytes()
+    return decode_capture(raw, path.suffix, workload)
+
+
+def decode_capture(raw, suffix, workload):
+    document = json.loads(gzip.decompress(raw) if suffix == ".gz" else raw)
     baseline = document["baseline"]
     expected = [sha256(case.prompt.encode()).hexdigest() for case in workload.cases]
     if len(baseline) != len(expected) or [row["prompt_sha256"] for row in baseline] != expected:
@@ -231,6 +236,43 @@ def capture(address, model, output, workload):
         print(f"C{clients} exact tokens, text and finish: {matches}/{len(results)}", flush=True)
     save(output, {"workload_sha256": workload.sha256, "baseline": baseline,
                   "diagnostic": diagnostic, "repeats": duration_results})
+
+
+def compare_captures(source, candidate, output, workload):
+    """Check a complete candidate capture against the same-mode Riley golden."""
+    paths = (source, candidate)
+    payloads = [path.read_bytes() for path in paths]
+    golden, current = (decode_capture(raw, path.suffix, workload)
+                       for path, raw in zip(paths, payloads, strict=True))
+    ordinals = list(range(len(workload.cases)))
+    modes = {"c1": (golden["baseline"], current["baseline"], ordinals),
+             "diagnostic": (golden["diagnostic"], current["diagnostic"], ordinals)}
+    for clients in (8, 32):
+        key = str(clients)
+        expected = ordinals * 3
+        rows = [record["repeats"][key] for record in (golden, current)]
+        if any(type(row["case"]) is not int for arm in rows for row in arm) or any(
+                [row["case"] for row in arm] != expected for arm in rows):
+            raise ValueError(f"incomplete or out-of-order C{clients} capture")
+        modes[f"c{clients}"] = (*rows, expected)
+
+    outcomes = {}
+    fields = ("tokens", "text", "finish", "usage")
+    for mode, (before, after, indices) in modes.items():
+        mismatches = []
+        for request, (old, new, index) in enumerate(zip(before, after, indices, strict=True)):
+            compared = (*fields, "prompt_tokens") if mode == "c1" else fields
+            changed = [key for key in compared if old[key] != new[key]]
+            if changed:
+                mismatches.append({"request": request, "case": workload.cases[index].label, "changed": changed,
+                                   "common_generation_prefix": common_prefix(old["tokens"], new["tokens"])})
+        outcomes[mode] = {"requests": len(indices), "matched": len(indices) - len(mismatches),
+                          "mismatches": mismatches}
+    passed = bool(ordinals) and all(not result["mismatches"] for result in outcomes.values())
+    save(output, {"status": "passed" if passed else "failed", "workload_sha256": workload.sha256,
+                  "golden_sha256": sha256(payloads[0]).hexdigest(), "candidate_sha256": sha256(payloads[1]).hexdigest(),
+                  "modes": outcomes})
+    return passed
 
 
 def vllm_capture(address, model, source, output, workload):
@@ -367,6 +409,11 @@ def main():
     prepared = kinds.add_parser("prepare-holdout")
     prepared.add_argument("tokenizer", type=Path)
     prepared.add_argument("output", type=Path)
+    comparison = kinds.add_parser("compare-captures")
+    comparison.add_argument("golden", type=Path)
+    comparison.add_argument("candidate", type=Path)
+    comparison.add_argument("output", type=Path)
+    comparison.add_argument("--workload", type=Path)
     args = parser.parse_args()
     if args.phase == "prepare-holdout":
         prepare_holdout(args.tokenizer, args.output)
@@ -376,9 +423,11 @@ def main():
         capture(args.address, args.model, args.output, workload)
     elif args.phase == "vllm":
         vllm_capture(args.address, args.model, args.source, args.output, workload)
+    elif args.phase == "compare-captures":
+        return int(not compare_captures(args.golden, args.candidate, args.output, workload))
     else:
         hf_reference(args.model_dir, args.source, args.output, workload)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

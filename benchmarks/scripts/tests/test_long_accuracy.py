@@ -1,4 +1,5 @@
 """Length and terminal-token behavior of the long-context correctness probe."""
+import gzip
 import importlib.util
 import json
 from pathlib import Path
@@ -50,3 +51,29 @@ class LongAccuracyTests(unittest.TestCase):
             path.write_text(json.dumps(document))
             with self.assertRaisesRegex(ValueError, "prompt IDs differ"):
                 probe.read_capture(path, workload)
+
+    def test_exact_capture_comparison_flags_drift_in_repeated_concurrency(self):
+        case = probe.Case("test", "a pinned prompt", 2, [1, 2])
+        workload = probe.Workload([case], None)
+        row = {"tokens": [3, 4], "text": "decoded text", "finish": "length", "usage": {"completion_tokens": 2}}
+        baseline = {**row, "prompt_sha256": probe.sha256(case.prompt.encode()).hexdigest(), "prompt_tokens": [1, 2]}
+        document = {"baseline": [baseline], "diagnostic": [row],
+                    "repeats": {str(clients): [{**row, "case": 0} for _ in range(3)] for clients in (8, 32)}}
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            golden = root / "golden.json.gz"
+            golden.write_bytes(gzip.compress(json.dumps(document).encode()))
+            candidate = root / "candidate.json"
+            candidate.write_text(json.dumps(document))
+            self.assertTrue(probe.compare_captures(golden, candidate, root / "passed.json", workload))
+            document["repeats"]["32"][1]["tokens"] = [3, 5]
+            candidate.write_text(json.dumps(document))
+            failure = root / "failed.json"
+            self.assertFalse(probe.compare_captures(golden, candidate, failure, workload))
+            self.assertEqual(json.loads(failure.read_text())["modes"]["c32"]["mismatches"], [
+                {"request": 1, "case": "test", "changed": ["tokens"], "common_generation_prefix": 1},
+            ])
+            document["repeats"]["32"].pop()
+            candidate.write_text(json.dumps(document))
+            with self.assertRaisesRegex(ValueError, "incomplete or out-of-order C32"):
+                probe.compare_captures(golden, candidate, root / "incomplete.json", workload)

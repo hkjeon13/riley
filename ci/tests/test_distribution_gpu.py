@@ -87,7 +87,7 @@ class DistributionGpuTest(unittest.TestCase):
             case _:
                 self.fail(f"unexpected Docker command {args!r}")
 
-    def check(self, model_hash=None):
+    def check(self, model_hash=None, **kwargs):
         def log_command(out, file, argv, _seconds, **_kwargs):
             (out / file).write_text("fixture log\n")
             if file == "api.log":
@@ -104,7 +104,8 @@ class DistributionGpuTest(unittest.TestCase):
               patch.object(checker, "wait_ready", return_value={"ready": True, "accepting": True}),
               patch.object(checker, "log_command", log_command),
               patch.object(checker.subprocess, "run", copy_shutdown)):
-            checker.check_gpu(self.cpu_report, self.gpu, self.root, model_hash or self.model_hash, self.out, False)
+            checker.check_gpu(self.cpu_report, self.gpu, self.root, model_hash or self.model_hash, self.out, False,
+                              **kwargs)
 
     def test_report_binds_the_image_process_and_api(self):
         self.check()
@@ -114,6 +115,22 @@ class DistributionGpuTest(unittest.TestCase):
         self.assertEqual(report["gpu_uuid"], self.gpu)
         self.assertEqual(report["artifacts_sha256"]["api.json"], checker.digest(self.out / "api.json"))
         self.assertEqual(self.calls[-1], ("rm", "--force", "--volumes", self.container))
+
+    def test_accuracy_suites_use_the_same_container_address_and_c32_limit(self):
+        golden = self.root / "golden.json.gz"
+        holdout = self.root / "holdout.json.gz"
+        holdout_golden = self.root / "holdout-golden.json.gz"
+        with patch.object(checker, "check_accuracy", return_value={"verified_requests": 10}) as accuracy:
+            self.check(accuracy_baseline=golden, accuracy_holdout=(holdout, holdout_golden))
+        self.assertEqual([call.args for call in accuracy.call_args_list], [
+            (self.out, "127.0.0.1:44321", "baseline", golden),
+            (self.out, "127.0.0.1:44321", "holdout", holdout_golden, holdout),
+        ])
+        report = json.loads((self.out / "report.json").read_bytes())
+        self.assertEqual(set(report["accuracy_suites"]), {"baseline", "holdout"})
+        self.assertEqual(report["accuracy_server_arguments"][:2], ["--max-active-sequences", "32"])
+        create = next(call for call in self.calls if call[0] == "create")
+        self.assertEqual(list(create[-6:]), report["accuracy_server_arguments"])
 
     def test_checkpoint_drift_prevents_container_creation(self):
         with self.assertRaisesRegex(ValueError, "checkpoint manifest differs"):

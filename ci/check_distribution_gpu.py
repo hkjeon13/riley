@@ -21,6 +21,7 @@ RILEY = "/opt/riley/bin/riley"
 CHECKPOINT = "riley-checkpoint.json"
 SHUTDOWN = "/tmp/riley-distribution-shutdown.json"
 API_CHECK = Path(__file__).resolve().parents[1] / "benchmarks/live/api_check.py"
+ACCURACY_CHECK = API_CHECK.with_name("long_accuracy.py")
 GPU_UUID = re.compile(r"GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 
@@ -94,6 +95,25 @@ def log_command(out, file, argv, seconds, *, check=True):
         subprocess.run(argv, stdout=log, stderr=subprocess.STDOUT, check=check, timeout=seconds)
 
 
+def check_accuracy(out, address, label, golden, workload=None):
+    captured = out / f"accuracy-{label}.json"
+    comparison = out / f"accuracy-{label}-comparison.json"
+    golden_sha256 = digest(golden)
+    workload_sha256 = digest(workload) if workload is not None else None
+    workload_args = ["--workload", str(workload)] if workload is not None else []
+    runner = [sys.executable, "-B", str(ACCURACY_CHECK)]
+    log_command(out, f"accuracy-{label}-capture.log",
+                [*runner, "capture", address, "m", str(captured), *workload_args], 1200)
+    log_command(out, f"accuracy-{label}-comparison.log",
+                [*runner, "compare-captures", str(golden), str(captured), str(comparison), *workload_args], 60)
+    result = json.loads(comparison.read_bytes())
+    require(result["status"] == "passed" and result["candidate_sha256"] == digest(captured)
+            and result["golden_sha256"] == golden_sha256 and result["workload_sha256"] == workload_sha256,
+            f"{label} accuracy evidence failed or changed")
+    return {"golden_sha256": result["golden_sha256"], "workload_sha256": result["workload_sha256"],
+            "verified_requests": sum(mode["matched"] for mode in result["modes"].values())}
+
+
 def find_interrupted_container(name):
     # The daemon can complete create after the Docker client is interrupted.
     try:
@@ -105,7 +125,7 @@ def find_interrupted_container(name):
     return record["Id"]
 
 
-def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools):
+def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_baseline=None, accuracy_holdout=None):
     require(GPU_UUID.fullmatch(gpu) and SHA256.fullmatch(model_sha), "pass a GPU UUID and model SHA-256")
     cpu_report_bytes = cpu_report.read_bytes()
     report = json.loads(cpu_report_bytes)
@@ -127,6 +147,10 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools):
     holders = holder_pids(gpu)
     require(gpu_pids(gpu) == holders, "target GPU has an unexpected process before startup")
     out.mkdir()
+    accuracy = {}
+    server_args = ()
+    if accuracy_baseline or accuracy_holdout:
+        server_args = ("--max-active-sequences", "32", "--max-sequence-tokens", "8192", "--max-output-tokens", "256")
     mount = f"type=bind,source={model_dir},target=/models,readonly"
     name = f"riley-gpu-check-{uuid4().hex}"
     container = None
@@ -135,7 +159,7 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools):
             "create", "--pull=never", "--name", name, "--label", f"io.riley.gpu-check={name}",
             "--gpus", f"device={gpu}", "--env", "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
             "--env", f"RILEY_SHUTDOWN_METRICS_PATH={SHUTDOWN}", "--publish", "127.0.0.1::8080",
-            "--mount", mount, image, "serve", "--model", "/models", "--model-id", "m",
+            "--mount", mount, image, "serve", "--model", "/models", "--model-id", "m", *server_args,
         ).strip()
         require(SHA256.fullmatch(created), "Docker did not return a full container ID")
         container = created
@@ -163,14 +187,20 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools):
                                                    "verify", "--checkpoint", "/models"], 600)
 
         api = out / "api.json"
-        command = [sys.executable, str(API_CHECK), f"127.0.0.1:{port}", "m", "--out", str(api)]
+        address = f"127.0.0.1:{port}"
+        command = [sys.executable, str(API_CHECK), address, "m", "--out", str(api)]
         if tools:
             command.append("--tools")
         log_command(out, "api.log", command, 600)
         results = json.loads(api.read_bytes())["results"]
         require(results and all(record["passed"] is True for record in results), "the live API suite failed")
-        require(gpu_pids(gpu) == holders | {riley_pid}, "GPU process ownership changed during the API suite")
-        require(digest(manifest) == model_sha, "checkpoint manifest changed during the API suite")
+        if accuracy_baseline is not None:
+            accuracy["baseline"] = check_accuracy(out, address, "baseline", accuracy_baseline)
+        if accuracy_holdout is not None:
+            workload, golden = accuracy_holdout
+            accuracy["holdout"] = check_accuracy(out, address, "holdout", golden, workload)
+        require(gpu_pids(gpu) == holders | {riley_pid}, "GPU process ownership changed during inference checks")
+        require(digest(manifest) == model_sha, "checkpoint manifest changed during inference checks")
 
         docker("stop", "--time", "20", container)
         state = inspect_container(container)["State"]
@@ -197,6 +227,9 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools):
               "gpu_uuid": device[0], "gpu_name": device[1], "driver_version": device[2], "api_checks": len(results),
               "tool_checks_enabled": tools, "shutdown_exit": state["ExitCode"],
               "artifacts_sha256": {path.name: digest(path) for path in sorted(out.iterdir())}}
+    if accuracy:
+        result["accuracy_suites"] = accuracy
+        result["accuracy_server_arguments"] = list(server_args)
     with (out / "report.json").open("x") as handle:
         json.dump(result, handle, indent=2)
         handle.write("\n")
@@ -210,13 +243,18 @@ def main():
     parser.add_argument("model_manifest_sha256")
     parser.add_argument("output", type=Path)
     parser.add_argument("--tools", action="store_true", help="also validate tool calls for a compatible checkpoint")
+    parser.add_argument("--accuracy-baseline", type=Path, metavar="GOLDEN",
+                        help="compare the historical long-context workload against a Riley capture")
+    parser.add_argument("--accuracy-holdout", type=Path, nargs=2, metavar=("WORKLOAD", "GOLDEN"),
+                        help="compare the pinned holdout against a Riley capture")
     args = parser.parse_args()
 
     def interrupted(_signal, _frame):
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, interrupted)
-    check_gpu(args.cpu_report, args.gpu_uuid, args.model_dir, args.model_manifest_sha256, args.output, args.tools)
+    check_gpu(args.cpu_report, args.gpu_uuid, args.model_dir, args.model_manifest_sha256, args.output, args.tools,
+              accuracy_baseline=args.accuracy_baseline, accuracy_holdout=args.accuracy_holdout)
 
 
 if __name__ == "__main__":
