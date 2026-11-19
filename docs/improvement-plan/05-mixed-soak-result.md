@@ -86,9 +86,11 @@ glibc 2.35의 두 조건을 각각 30분 실행했다. 두 조건 모두 정상 
 
 배포 이미지 GPU 검사기에 운영 시험을 연결했다. API 검사 후 30분 동안 초당 8회의 합성 도착과 공통 prefix 8개를 적용한다. Cache-off는 `--prefix-cache-blocks`를 생략하고 cache-on은 128개를 지정한다. 두 조건 모두 활성 요청 32개, 문맥 8,192토큰, 생성 상한 512토큰, KV 블록 16,384개를 사용한다. [배포 GPU 검사기](../../ci/check_distribution_gpu.py)
 
-Docker가 보고한 호스트 PID와 컨테이너 ID를 각 표본 전후로 대조하고, 컨테이너 사용자로 `/proc/1/status`와 `/proc/1/smaps_rollup`을 읽는다. 기존 부하 검사기가 요청 처리, 취소, 지연 변동, RSS 증가 0을 판정한다. 정밀 표본 누락과 RSS 증가는 실패로 기록한다. 정상 종료와 자원 회수 검사가 끝나면 이미지 ID, 바이너리 해시, 혼합 부하 원본 및 정리 지표의 해시를 보존한다. CPU 테스트에서 프로세스 변경 검출과 RSS 실패 후 종료 경로를 확인했다. 실제 컨테이너 결과는 이미지 빌드 뒤 수집한다. [Linux 부하 검사기](../../benchmarks/live/soak.py) · [이미지 검사 방법](01-validation-result.md#배포-이미지-gpu-검사)
+Docker가 보고한 호스트 PID와 컨테이너 ID를 각 표본 전후로 대조하고, 컨테이너 사용자로 `/proc/1/status`와 `/proc/1/smaps_rollup`을 읽는다. 기존 부하 검사기가 요청 처리, 취소, 지연 변동, RSS 증가 0을 판정한다. 정밀 표본 누락과 RSS 증가는 실패로 기록한다. 정상 종료와 자원 회수 검사가 끝나면 이미지 ID, 바이너리 해시, 혼합 부하 원본 및 정리 지표의 해시를 보존한다. CPU 테스트에서 프로세스 변경 검출과 RSS 실패 후 종료 경로를 확인했다. [Linux 부하 검사기](../../benchmarks/live/soak.py) · [이미지 검사 방법](01-validation-result.md#배포-이미지-gpu-검사)
 
-첫 cache-off 시도에서는 검사기가 `--prefix-cache-blocks 0`을 넘겼고 서버가 준비 단계에서 거부했다. 부하 측정은 시작되지 않았고 GPU는 동일 홀더의 20GiB 예약으로 복귀했다. 인자 생략과 128개 지정이 각각 유지되는 회귀 검사를 추가했다. 실행 중인 cache-on이 종료되면 같은 이미지와 체크포인트에서 수정한 cache-off 검사만 재실행하도록 등록했다. [첫 시도와 재실행 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-package-validation.json)
+첫 cache-off 시도에서는 검사기가 `--prefix-cache-blocks 0`을 넘겼고 서버가 준비 단계에서 거부했다. 부하 측정은 시작되지 않았고 GPU는 동일 홀더의 20GiB 예약으로 복귀했다. 인자 생략과 128개 지정의 회귀 검사를 추가했다. cache-on 종료 뒤 같은 이미지와 체크포인트에서 수정한 cache-off 검사를 시작했다. [첫 시도와 재실행 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-package-validation.json)
+
+AWS에서 재빌드한 `d3d8fe6e5` 이미지의 cache-on 시험은 A100 6번에서 30분 동안 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했다. 요청 오류와 과부하는 0건이었다. 후반 TTFT p95는 +1.04%, 전체 완료 p95는 −13.71%로 지연 기준을 충족했다. 약 900초 시점부터 요청이 모두 종료된 1,804초 시점까지 `smaps_rollup`의 RSS와 익명 RSS가 각각 616KiB 증가했다. 일반 `VmRSS`는 0MiB 변화였고, 정밀 RSS 증가 0 조건만 실패했다. 서버는 종료 코드 0으로 끝났고 활성·대기 요청, KV 블록, device·pinned 할당은 모두 0이었다. GPU 6은 같은 홀더의 20GiB 예약으로 복귀했다. [혼합 부하 결과와 원본 체크섬](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-package-validation.json)
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
