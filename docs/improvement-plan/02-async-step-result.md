@@ -37,6 +37,8 @@ host trace의 연속 부하에 가까운 128스텝 구간 18개에서 submit과 
 
 671개 모두에서 event 동기화 뒤 stream 동기화가 관측됐다. 호출 순서로 각 stream의 의존성은 판정할 수 없다. 같은 모델의 별도 host trace에서 `SUBMIT` 구간 중앙값은 86.7µs였다. 이 구간은 제출 이후 이벤트 훅까지 포함하며 Nsight의 단일 launch 호출과 측정 범위가 다르다. 따라서 Nsight에서 본 공백 470.72µs를 개선 가능 시간으로 사용할 수 없다. 후속 실행 후보를 평가할 때는 제출 전 작업의 비용과 Nsight를 끈 동일 부하의 지연을 확인한다. [호스트 구간 원본](../../benchmarks/evidence/20261118-w2-sm17-a100/summary.json) · [제출 훅과 구간 경계](../../crates/riley-runtime/src/llama/executor/dispatch.rs)
 
+현행 소스의 정상 다운로드 경로에서 계측을 켜면 다운로드에 전달한 stream에 종료 이벤트를 기록하고 기다린 뒤 같은 stream을 동기화한다. 계측을 끄면 마지막 stream 동기화가 다운로드의 완료를 기다리는 단계다. 기존 Nsight에서 마지막 호출의 중앙값 2.53µs는 별도 비계측 기준 실행의 TPOT 6.698ms에 견줘 약 0.04% 규모였다. 호출 제거는 실제 개선 여부와 비동기 오류 전달 계약을 새로 입증해야 하므로 GPU 시험 우선순위는 제출 경계의 작업 비용에 둔다. [다운로드·계측·동기화 경로](../../crates/riley-scheduler/src/execution.rs) · [Nsight 집계](../../benchmarks/evidence/20261118-w2-sm17-a100/nsys2/sync-gap-summary.json)
+
 ## 최초 이벤트 발행 실험의 설정 정정
 
 `riley-lp16`의 `after-submit-v1`은 다음 GPU 제출 직후 이전에 commit된 이벤트를 발행한다. `native-bf16-varlen-v1` 프로파일이 이 값을 설정하므로, 최초 비교에서 플래그를 생략한 두 실행도 `after-submit-v1`이었다. [생략한 실행의 인자](../../benchmarks/evidence/20261118-w2-sm17-a100/paired-off1/receipt.json) · [명시한 실행의 인자](../../benchmarks/evidence/20261118-w2-sm17-a100/event1/receipt.json) · [프로파일 구현](../../crates/riley-server/src/inference_profile.rs)
