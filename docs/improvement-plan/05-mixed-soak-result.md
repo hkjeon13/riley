@@ -126,6 +126,10 @@ Cache-off의 30분 실행에서 후반 RSS는 60KiB 증가했다. 기준 실행�
 
 API 40건이 통과했고 합성 부하는 기준 실행과 동일하게 정상 완료 13,749건, 의도적 연결 종료 700건으로 집계됐다. 반환 호출 66회에서 모두 페이지를 반환했고, 호출 시간 p95는 1.38ms였다. 종료 자원을 모두 회수한 뒤 GPU 6은 동일 홀더의 20GiB 예약으로 복귀했다. 이어 동일 GPU에서 cache-on 시험을 시작했다.
 
+같은 cache-off 원본에서 일반 `/proc/PID/status`의 `VmRSS`는 688KiB 감소했다. 같은 구간의 `smaps_rollup`은 익명 RSS가 60KiB 증가했다고 기록했다. 중간과 drain의 정밀 RSS는 주기적 반환 실행에서 기준 실행보다 각각 44,596KiB와 45,236KiB 낮았다. 상주 메모리 절대량은 낮아졌으며 증가 0 판정은 정밀 표본을 따랐다.
+
+후속 cache-off 진단은 원본 검사기가 `smaps_rollup`을 읽은 시간 범위를 기록한 뒤 인접한 매핑을 읽는다. 호스트와 Riley PID 1의 단조 시계 이름공간이 같은지 확인하고, 31초 주기 반환 호출의 시각·반환 여부를 정밀 표본 및 매핑에 연결한다. 두 읽기는 순차 실행되므로 매핑 합계와 정밀 표본의 차이도 결과에 남긴다. 같은 이미지·라이브러리·부하·RSS 판정을 사용하며 A100 6번에서 W3 추적 뒤 실행하도록 등록했다. [간격·매핑 진단 사전 검증](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/sample-timing/preflight.json)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)

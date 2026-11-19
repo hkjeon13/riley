@@ -1,0 +1,11 @@
+--- a/harness/ci/check_distribution_gpu.py
++++ b/harness/ci/check_distribution_gpu.py
+@@ -23,7 +23,7 @@
+ SHUTDOWN = "/tmp/riley-distribution-shutdown.json"
+ API_CHECK = Path(__file__).resolve().parents[1] / "benchmarks/live/api_check.py"
+ ACCURACY_CHECK = API_CHECK.with_name("long_accuracy.py")
+-SOAK_CHECK = API_CHECK.with_name("soak.py")
++SOAK_CHECK = API_CHECK.with_name("observe_soak.py")
+ CACHE_BLOCKS = {"cache-off": None, "cache-on": 128}
+ GPU_UUID = re.compile(r"GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
+ SHA256 = re.compile(r"[0-9a-f]{64}")

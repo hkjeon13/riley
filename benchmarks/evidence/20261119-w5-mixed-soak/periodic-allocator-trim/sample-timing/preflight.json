@@ -1,0 +1,48 @@
+{
+  "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+  "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+  "periodic_library_sha256": "5463d8ef947b88f08165c71378ef8dc2910f35989ab5bcf529516c0042ed9edf",
+  "previous_cache_off": {
+    "control": {
+      "midpoint_rss_kib": 15553508,
+      "drain_rss_kib": 15554208,
+      "smaps_rollup_growth_kib": 700,
+      "anonymous_growth_kib": 700,
+      "proc_status_growth_kib": 0
+    },
+    "periodic": {
+      "midpoint_rss_kib": 15508912,
+      "drain_rss_kib": 15508972,
+      "smaps_rollup_growth_kib": 60,
+      "anonymous_growth_kib": 60,
+      "proc_status_growth_kib": -688
+    },
+    "comparison_sha256": "e5176009c83a415278910b9634e177789bb94f3247fe373706d4d6405a739fe8"
+  },
+  "local_preflight": {
+    "original_rollup_values_preserved": true,
+    "overlapping_allocator_call_detected": true,
+    "tampered_mapping_archive_rejected": true,
+    "observations": "Synthetic mapping snapshots and clock intervals with original cache-off trim telemetry"
+  },
+  "remote_preflight": {
+    "original_harness_checksums": "passed",
+    "observer_patch_applies_to_original_harness": true,
+    "library_checksum": "passed"
+  },
+  "gpu_campaign": {
+    "stage": "w5-trim-sample-timing-20261119.UtiF64Me",
+    "pid": 2129835,
+    "physical_index": 6,
+    "mode": "cache-off",
+    "prerequisite": "w3-scheduler-choices-20261119.Hmy0dT5E",
+    "status_at_record_time": "waiting"
+  },
+  "files_sha256": {
+    "campaign.sh": "88b668cb4ea4c53fc28e539ba028366cbc548ecc15071100ed4bc6510eae42f6",
+    "compare_sample_timing.py": "445d1fae0a5928488e959d284d7f6d3cc9f56c0d65aacfd99f1ada5f7c077beb",
+    "observe_soak.py": "23d39308f3c5f65307fc057f110bd6646e73488c4a39f89dabb22f1402cddb2b",
+    "observer.patch": "72ea20da7a6713b64ce5ce4510014aeeebd94cfb0a651e88945c27d0a5a806ee",
+    "observer.sha256": "97bc3cb80e0e2d054ad7b928b875ca7389ab80c9a2c204a88a6b5e9c659dd552"
+  }
+}
