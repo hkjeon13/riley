@@ -1,0 +1,62 @@
+{
+  "scope": "One 31-second pair. The direct map-read wall intervals and the across-run metrics describe separate effects.",
+  "same_30m_workload_outcomes": true,
+  "report_sha256": {
+    "control": "fb54431aacdacbecc0658f43a29c81b223d1a0174b9f3a355b4ecd76b1c0a219",
+    "monitored": "b8d54633226a2ff15f4b75fc38bb4f1960857de3f4507b26f9918e0c6949b2f8"
+  },
+  "extra_map_read_wall_ms": {
+    "midpoint": 314.3402649999998,
+    "drain": 306.64166399999885
+  },
+  "late_latency_ms": {
+    "ttft_ms_p95": {
+      "control": 335.4187607765198,
+      "monitored": 335.601843893528,
+      "change_percent": 0.054583445655920215
+    },
+    "e2e_ms_p95": {
+      "control": 4169.173784554005,
+      "monitored": 4159.981831908226,
+      "change_percent": -0.2204742023427575
+    }
+  },
+  "gpu_steps": {
+    "control": {
+      "step_count": 133229,
+      "execution_time_total_ms": 1757303.89107,
+      "initial_allocation": {
+        "device_live_count": 291,
+        "device_live_bytes": 30495658464,
+        "pinned_live_count": 2,
+        "pinned_live_bytes": 4297400
+      },
+      "final_allocation": {
+        "device_live_count": 291,
+        "device_live_bytes": 30495658464,
+        "pinned_live_count": 2,
+        "pinned_live_bytes": 4297400
+      }
+    },
+    "monitored": {
+      "step_count": 133112,
+      "execution_time_total_ms": 1756246.686239,
+      "initial_allocation": {
+        "device_live_count": 291,
+        "device_live_bytes": 30495658464,
+        "pinned_live_count": 2,
+        "pinned_live_bytes": 4297400
+      },
+      "final_allocation": {
+        "device_live_count": 291,
+        "device_live_bytes": 30495658464,
+        "pinned_live_count": 2,
+        "pinned_live_bytes": 4297400
+      }
+    }
+  },
+  "scored_rollup_growth_kib": {
+    "control": 60,
+    "monitored": 500
+  }
+}

@@ -101,6 +101,8 @@ runner 동시성은 GPU별로 제한하고 각 실행에 별도 포트·디렉�
 
 관측 on/off의 CPU·RSS·GPU·지연 비용을 비교한다. `dropped_observations`는 기본 1,024건의 종료 관측 버퍼에서 밀려난 레코드 수다. 전체 요청 수와 지연은 클라이언트 원본으로 확인하고, 서버 취소·연결 종료·과부하 카운터를 함께 대조한다. [메트릭 계약](../api.md#get-metrics) · [30분 부하 원본 대조](05-mixed-soak-result.md#종료-관측-버퍼)
 
+동일한 31초 주기의 cache-off 부하 두 건에서 인접 매핑 읽기 경과 시간과 지연·GPU 스텝·할당 지표를 대조했다. 순서와 반환 이후 표본 시점의 영향을 분리할 반복 및 프로세스 CPU 시간은 추가 측정 범위다. [관측 비용 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/sample-timing/result/observer-cost.json)
+
 ## 5. 실제 트래픽 재현과 장기 안정성
 
 ### W5-B3. 재현용 workload 구성
