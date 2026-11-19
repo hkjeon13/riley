@@ -1,7 +1,8 @@
 # Configuration
 
-Everything is set on the command line of `riley serve`. `riley serve --help`
-prints the complete list; this page explains what matters.
+Use `riley serve --help` for the command-line options. The defaults in the
+capacity table apply to a direct CLI launch. The image adds the defaults
+listed under [Container defaults](#container-defaults).
 
 ## Capacity
 
@@ -27,6 +28,23 @@ A long context multiplies this. Qwen3-4B with 32 sequences of 8,192 tokens
 needs about 48 GiB of KV alone and fails with `op=kv_cache_write` on a 40 GB
 GPU. Pass `--kv-blocks` to serve the same limits from less memory; sequences
 then wait for blocks instead of being promised their whole context up front.
+
+## Container defaults
+
+The CUDA 12.4 distribution entrypoint fills in the following options when
+they are omitted. Explicit options passed to the wrapper take precedence.
+[Entrypoint](../deploy/docker/entrypoint.sh) · [CPU contract tests](../ci/tests/test_distribution_entrypoint.py)
+
+| Option | Image default |
+|---|---|
+| `--bind` | `RILEY_BIND`, or `0.0.0.0:8080` |
+| `--inference-profile` | `native-bf16-varlen-v1` |
+| `--model-id` | Hub repository name without its revision suffix, bundled preset name, or local directory basename |
+| `--max-weight-bytes` | Sum of the file sizes in `riley-checkpoint.json`, when the manifest is present |
+
+Hub downloads and bundled presets use `RILEY_MODEL_DIR`, which defaults to
+`/models`. The selected inference profile supplies the execution defaults
+described under [Execution options](#execution-options).
 
 ## Step size
 

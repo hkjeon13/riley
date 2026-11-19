@@ -37,6 +37,7 @@ Qwen2.5-7B CUDA 서버에서 90초 사전 검증과 cache off·on 각 30분의 �
 | [README 벤치마크](../../README.md#performance) | [0.1.0 목표 재측정](../goal.md), 2026-11-14 | 24개 모델의 64토큰 `closed-c1`과 opt-in prefill burst RAG를 각 설정으로 표기 |
 | [README TP=2](../../README.md#two-gpus-qwen25-32b-with-tensor-parallelism) | [TP 설계의 원래 매트릭스](../tensor-parallel-design.md#status-2026-11-01), [0.1.0 목표 재측정](../goal.md) | 원래 fixed/natural 8셀과 후속 fixed 64토큰 4셀에 각각의 판정 적용 |
 | [CLI 실행 옵션](../configuration.md#execution-options) | [프로파일 resolver](../../crates/riley-server/src/inference_profile.rs), [서버 옵션](../../crates/riley-server/src/main.rs), [실행 구현](../../crates/riley-server/src/engine.rs) | 프로파일 공급값, 일반 CLI 기본값, 실험값을 각각 표기 |
+| [컨테이너 기본값](../configuration.md#container-defaults) | [배포 entrypoint](../../deploy/docker/entrypoint.sh), [실제 전달 인자를 검증하는 CPU 테스트](../../ci/tests/test_distribution_entrypoint.py) | 컨테이너의 bind·모델 ID·프로파일·체크포인트 파일 크기 합계와 명시적 옵션 우선순위를 표기 |
 | [logprobs](../api.md#log-probabilities) | [`sample_iteration` 구현](../../crates/riley-server/src/engine.rs) | GPU 요약 사용 여부는 해당 배치 조건에 의존. 공개 분포와 응답 형태는 같은 계약을 따름 |
 | [모델별 지원과 독립 참조](../model-support.md) | [네이티브 A100 성능표](../model-coverage-a100-perf-table.md), [모델별 독립 참조](../model-support.md) | 각 기록의 체크포인트·길이·기능 조건에서 whole-model 일치와 성능 자격을 각각 판정 |
 | [현행 운영 메트릭](../api.md#get-metrics) | [서버 응답 구조](../../crates/riley-server/src/service.rs), [엔진 bucket 정의](../../crates/riley-server/src/engine.rs), [A100 응답 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/smoke/soak.json) | `batch_shapes.buckets` 배열은 24개 슬롯이며 측정한 프로파일은 그중 21개를 구성했다. |

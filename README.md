@@ -194,10 +194,11 @@ download and, if the Hub is unreachable, fall back to the newest one. Supported
 are the dense Llama, Qwen2.5/Qwen3 and SmolLM2 architectures in BF16
 safetensors; other models are refused before any weight is downloaded.
 
-`serve --model` adds `--model-id` (the id as given), the native profile shown
-under [Usage](#start-the-server), a fitting `--max-weight-bytes` and
-`--bind 0.0.0.0:8080`; any `riley serve` option you add is passed through and
-wins over these. Other commands:
+`serve --model` uses the Hub repository name, preset name or directory
+basename as the default API model ID. A Hub revision selects the checkpoint.
+The wrapper also supplies the native profile, a weight limit from the
+checkpoint manifest and `--bind 0.0.0.0:8080`. Explicit CLI options take
+precedence. [Container defaults](docs/configuration.md#container-defaults)
 
 | Command | What it does |
 |---|---|

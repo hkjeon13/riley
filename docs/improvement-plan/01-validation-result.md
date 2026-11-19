@@ -38,7 +38,7 @@ Rust 포맷을 맞추고 Clippy 경고를 수정했다. 문서의 오류 조건�
 
 과거 RC 패키징의 CUDA 12.8.1/sm_89 메타데이터에 현행 CLI 해시를 덮어쓰지 않았다. 당시 커밋 `21f445f4870a140346509144c36c7294f2f677f3`의 정확한 CLI blob을 [고정 fixture](../../ci/release/fixtures/legacy-server-defaults-21f445f.rs.txt)로 보존했다. 과거 패키지 정상 경로가 통과하고, 현행 CLI를 그 메타데이터로 묶으면 계속 거부하는 테스트를 추가했다.
 
-현행 배포는 CUDA 12.4/sm_80·86·89 경로다. [별도 source 계약](../../ci/serving-source-contract.json)이 CLI·inference profile·배포 Dockerfile·entrypoint 네 파일을 결속하고, [검사기](../../ci/check_serving_source_contract.py)가 byte drift·누락·링크·inventory 변경을 거부한다. 이는 검토한 소스를 식별하는 장치이며 CUDA 바이너리·실제 배포 qualification을 대신하지 않는다.
+현행 배포는 CUDA 12.4/sm_80·86·89 경로다. source 계약은 CLI·inference profile·배포 Dockerfile·전용 Dockerfile ignore·entrypoint의 다섯 파일을 결속한다. 검사기는 바이트 변경·누락·심볼릭 링크·파일 목록 변경을 거부한다. [소스 계약](../../ci/serving-source-contract.json) · [계약 검사기](../../ci/check_serving_source_contract.py)
 
 2026-11-19에 배포 Dockerfile 전용 ignore 파일을 계약에 추가했다. 배포 entrypoint의 `serve --help`와 `serve -h`는 모델 경로 없이 CLI에 전달하도록 수정했다. Linux Actions가 현행 Dockerfile의 빌드와 패키지 검사도 실행한다. [배포 이미지 CI](../../.github/workflows/distribution-image.yml) · [이미지 검사기](../../ci/check_distribution_image.py)
 
