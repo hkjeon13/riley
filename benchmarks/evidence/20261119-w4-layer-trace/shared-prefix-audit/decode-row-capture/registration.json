@@ -1,0 +1,18 @@
+{
+  "scope": "Queued A100 full BF16 row capture for existing C1 requests.",
+  "run_label": "w4-decode-logits-20261119.8VHxJvdK",
+  "campaign_pid": 3720332,
+  "wait_marker_utc": "2026-11-19T09:43:23Z",
+  "host_alias": "aws-a100",
+  "physical_gpu_index": 7,
+  "idle_holder_pid": 2431237,
+  "predecessor": "w5-tcache-only-20261119.G3IuT0Wh",
+  "source_archive": "w1-dist-d3d8fe6e5.YnZWdh5l/source.tar",
+  "source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+  "source_archive_transfer": "reuse already approved archive and original captures at the host",
+  "input_checksum_file": "inputs.sha256",
+  "dispatch_sha256": "1d09605f1cd973847f7e2466bedd5dee704a73a311c34322c3e6b17a9dfa73bf",
+  "required_outputs": 8,
+  "model": "Qwen2.5-7B-Instruct",
+  "normal_shutdown_code": 0
+}
