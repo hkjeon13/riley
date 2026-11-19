@@ -1,0 +1,59 @@
+--- a/crates/riley-scheduler/src/plan.rs
++++ b/crates/riley-scheduler/src/plan.rs
+@@ -579,25 +579,6 @@
+     items: [&[WorkItem]; 2],
+     block_tables: &[OwnedBlockTable],
+ ) -> SchedulerResult<()> {
+-    let block_entry_count = block_tables.iter().try_fold(0_usize, |count, table| {
+-        count.checked_add(table.physical_block_ids.len())
+-    });
+-    let Some(block_entry_count) = block_entry_count else {
+-        return Err(SchedulerError::ArithmeticOverflow {
+-            field: "iteration physical block entry count",
+-        });
+-    };
+-    let mut written = HashSet::new();
+-    written
+-        .try_reserve(block_entry_count)
+-        .map_err(|_| SchedulerError::HostAllocation {
+-            resource: "iteration physical block identity set",
+-            requested_elements: block_entry_count,
+-        })?;
+-    let alias = || SchedulerError::InvalidPlan {
+-        field: "block_tables",
+-        reason: "physical blocks written by a work item must not alias another table",
+-    };
+     let first_written = |item: &WorkItem| {
+         (item
+             .target_logical_length
+@@ -608,6 +589,30 @@
+                     .physical_block_ids
+                     .len(),
+             )
++    };
++    // Only writable blocks enter the set. The read-only prefix uses lookup alone.
++    let written_count = items
++        .into_iter()
++        .flatten()
++        .try_fold(0_usize, |count, item| {
++            let ids = &block_tables[item.block_table_index].physical_block_ids;
++            count.checked_add(ids.len() - first_written(item))
++        });
++    let Some(written_count) = written_count else {
++        return Err(SchedulerError::ArithmeticOverflow {
++            field: "iteration physical block entry count",
++        });
++    };
++    let mut written = HashSet::new();
++    written
++        .try_reserve(written_count)
++        .map_err(|_| SchedulerError::HostAllocation {
++            resource: "iteration physical block identity set",
++            requested_elements: written_count,
++        })?;
++    let alias = || SchedulerError::InvalidPlan {
++        field: "block_tables",
++        reason: "physical blocks written by a work item must not alias another table",
+     };
+     for item in items.into_iter().flatten() {
+         let ids = &block_tables[item.block_table_index].physical_block_ids;

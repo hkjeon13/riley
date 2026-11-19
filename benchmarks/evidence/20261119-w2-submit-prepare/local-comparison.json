@@ -1,0 +1,793 @@
+{
+  "scope": "Local CPU release microbenchmarks. No CUDA inference or end-to-end latency measurement.",
+  "source_commit": "be7bc4d9caa0159130abe8b8b814a8011efce8a7",
+  "source_git_objects": {
+    "crates/riley-cuda/src/batch.rs": "d8cf18bb944851383bc4cbc4d7afb1579e2a0400",
+    "crates/riley-scheduler/src/plan.rs": "21bd17abf0f9753a56185f83933380cc34a191d8"
+  },
+  "environment": {
+    "system": "Darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "model": "Mac16,10",
+    "rustc": "rustc 1.85.0 (4d91de4e4 2025-02-17)",
+    "profile": "release"
+  },
+  "method": {
+    "order": "baseline, candidate, candidate, baseline",
+    "rounds": 5,
+    "packed_constructor": {
+      "measured_calls": 10000,
+      "warmup_calls": 1000
+    },
+    "scheduler_plan_iteration": {
+      "measured_calls": 320,
+      "warmup_calls": 48,
+      "decode_rows": 32,
+      "all_timed_tables_strictly_increasing": true
+    }
+  },
+  "files_sha256": {
+    "compare_cpu.py": "7c05ae719f4dfe6172b64b7bfc8beb644685d9228439862dabf7d61ecd1b496d",
+    "ordered-physical-tables.patch": "8babc0072369cd9fd78392aa0c83e419e9389cd33af8171d29c5931988c3e942",
+    "ordered-row-addresses.patch.gz": "e203c7355fd07b8f00c74c83d14de24d9ee6ddaa7fd7b3743322d9fa7473f075",
+    "packed_metadata_probe.rs": "dd2b1275cf2cd31f03ce9ff27ff2ccd9a93f8e3fa335a308779daa882fc15585",
+    "scheduler_probe.rs": "4a93dffe6606e296a5204fd2b96bbe6c8989e218b6bca1b091d9e32f8f38964e",
+    "writable-set-capacity.patch": "cf2b84e84ae3238037543bf02030b1954a594e1d63954d375a99a310df19ccdc"
+  },
+  "comparisons": {
+    "ordered_row_addresses": {
+      "binary_sha256": {
+        "base": "18a14099ff7b32278d56e51414e3ee16ca54819fa824dcd09adfb64767080271",
+        "candidate": "128806402ced13f65e6cdcb24015a67f0cf6dfe6baf5987137bf68f9d32af9ff"
+      },
+      "runs": [
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 1486.662,
+            "decode32-1025": 4153.971,
+            "decode32-4097": 10325.208,
+            "prefill1024-ordered": 2213.042,
+            "prefill1024-reversed": 2263.363
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 1835.021,
+            "decode32-1025": 2760.238,
+            "decode32-4097": 10299.725,
+            "prefill1024-ordered": 1949.308,
+            "prefill1024-reversed": 2262.917
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 487.096,
+            "decode32-1025": 2611.154,
+            "decode32-4097": 10161.746,
+            "prefill1024-ordered": 1973.929,
+            "prefill1024-reversed": 2293.196
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 658.271,
+            "decode32-1025": 2953.392,
+            "decode32-4097": 10278.542,
+            "prefill1024-ordered": 2195.754,
+            "prefill1024-reversed": 2260.896
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 664.987,
+            "decode32-1025": 2926.679,
+            "decode32-4097": 10347.404,
+            "prefill1024-ordered": 2202.029,
+            "prefill1024-reversed": 2274.579
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 499.404,
+            "decode32-1025": 2637.229,
+            "decode32-4097": 10224.742,
+            "prefill1024-ordered": 1983.742,
+            "prefill1024-reversed": 2298.071
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 487.104,
+            "decode32-1025": 2729.342,
+            "decode32-4097": 10387.229,
+            "prefill1024-ordered": 2519.942,
+            "prefill1024-reversed": 2955.05
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 635.275,
+            "decode32-1025": 3041.708,
+            "decode32-4097": 10431.763,
+            "prefill1024-ordered": 2228.183,
+            "prefill1024-reversed": 2293.863
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 678.163,
+            "decode32-1025": 3027.346,
+            "decode32-4097": 10483.308,
+            "prefill1024-ordered": 2233.717,
+            "prefill1024-reversed": 2306.508
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 495.758,
+            "decode32-1025": 2663.617,
+            "decode32-4097": 10348.225,
+            "prefill1024-ordered": 1983.862,
+            "prefill1024-reversed": 2296.738
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 498.033,
+            "decode32-1025": 2651.733,
+            "decode32-4097": 10353.321,
+            "prefill1024-ordered": 2011.071,
+            "prefill1024-reversed": 2323.875
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 629.875,
+            "decode32-1025": 2968.463,
+            "decode32-4097": 10471.271,
+            "prefill1024-ordered": 2231.35,
+            "prefill1024-reversed": 2299.892
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 677.233,
+            "decode32-1025": 2957.096,
+            "decode32-4097": 10822.258,
+            "prefill1024-ordered": 2260.471,
+            "prefill1024-reversed": 2319.533
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 519.675,
+            "decode32-1025": 2998.975,
+            "decode32-4097": 13468.121,
+            "prefill1024-ordered": 1994.929,
+            "prefill1024-reversed": 2323.338
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 504.508,
+            "decode32-1025": 2690.35,
+            "decode32-4097": 10432.95,
+            "prefill1024-ordered": 1996.092,
+            "prefill1024-reversed": 2320.488
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 636.004,
+            "decode32-1025": 2991.558,
+            "decode32-4097": 12279.383,
+            "prefill1024-ordered": 2231.812,
+            "prefill1024-reversed": 2300.454
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 628.983,
+            "decode32-1025": 2950.129,
+            "decode32-4097": 10459.746,
+            "prefill1024-ordered": 2231.2,
+            "prefill1024-reversed": 2298.688
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 500.113,
+            "decode32-1025": 2654.704,
+            "decode32-4097": 10242.133,
+            "prefill1024-ordered": 1948.1,
+            "prefill1024-reversed": 2264.8
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 487.625,
+            "decode32-1025": 2620.6,
+            "decode32-4097": 10189.946,
+            "prefill1024-ordered": 2014.362,
+            "prefill1024-reversed": 2363.629
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 631.921,
+            "decode32-1025": 3029.046,
+            "decode32-4097": 11969.467,
+            "prefill1024-ordered": 2226.463,
+            "prefill1024-reversed": 2274.725
+          }
+        }
+      ],
+      "medians": {
+        "decode32-129": {
+          "baseline_median_ns": 647.1375,
+          "candidate_median_ns": 498.7185,
+          "difference_ns": -148.41900000000004,
+          "candidate_faster_pairs": 9,
+          "paired_delta_ns": [
+            348.3589999999999,
+            -171.17499999999995,
+            -165.58299999999997,
+            -148.171,
+            -182.40500000000003,
+            -131.84199999999998,
+            -157.558,
+            -131.49600000000004,
+            -128.86999999999995,
+            -144.29600000000005
+          ]
+        },
+        "decode32-1025": {
+          "baseline_median_ns": 2980.0105000000003,
+          "candidate_median_ns": 2659.1605,
+          "difference_ns": -320.85000000000036,
+          "candidate_faster_pairs": 9,
+          "paired_delta_ns": [
+            -1393.7329999999997,
+            -342.23799999999983,
+            -289.4500000000003,
+            -312.366,
+            -363.7289999999998,
+            -316.73,
+            41.878999999999905,
+            -301.2080000000001,
+            -295.4249999999997,
+            -408.4459999999999
+          ]
+        },
+        "decode32-4097": {
+          "baseline_median_ns": 10465.5085,
+          "candidate_median_ns": 10323.975,
+          "difference_ns": -141.53349999999955,
+          "candidate_faster_pairs": 9,
+          "paired_delta_ns": [
+            -25.483000000000175,
+            -116.79600000000028,
+            -122.66200000000026,
+            -44.53400000000147,
+            -135.08300000000054,
+            -117.95000000000073,
+            2645.8629999999994,
+            -1846.432999999999,
+            -217.61299999999937,
+            -1779.5210000000006
+          ]
+        },
+        "prefill1024-ordered": {
+          "baseline_median_ns": 2229.6915,
+          "candidate_median_ns": 1989.3955,
+          "difference_ns": -240.29599999999982,
+          "candidate_faster_pairs": 9,
+          "paired_delta_ns": [
+            -263.7339999999999,
+            -221.82499999999982,
+            -218.28700000000003,
+            291.759,
+            -249.85500000000002,
+            -220.279,
+            -265.5419999999999,
+            -235.7199999999998,
+            -283.0999999999999,
+            -212.1010000000001
+          ]
+        },
+        "prefill1024-reversed": {
+          "baseline_median_ns": 2296.2754999999997,
+          "candidate_median_ns": 2309.2794999999996,
+          "difference_ns": 13.003999999999905,
+          "candidate_faster_pairs": 3,
+          "paired_delta_ns": [
+            -0.4459999999999127,
+            32.29999999999973,
+            23.491999999999734,
+            661.1870000000004,
+            -9.769999999999982,
+            23.983000000000175,
+            3.805000000000291,
+            20.03399999999965,
+            -33.88799999999992,
+            88.904
+          ]
+        }
+      }
+    },
+    "writable_set_capacity": {
+      "binary_sha256": {
+        "base": "cdb37d6b6008eee214a51c8d97f0fdcf6f6d972c497e479e282e8f183d2bea0f",
+        "candidate": "8bc2377947dd195881bbb752ff80b0b149994042fa5e3a128172a8e89987ddd9"
+      },
+      "runs": [
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 13133.178,
+            "decode32-1025": 32442.297,
+            "decode32-4097": 100810.403
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 32877.209,
+            "decode32-1025": 54201.956,
+            "decode32-4097": 115917.169
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 13217.081,
+            "decode32-1025": 34503.666,
+            "decode32-4097": 107528.363
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12430.597,
+            "decode32-1025": 32024.991,
+            "decode32-4097": 99452.169
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12549.35,
+            "decode32-1025": 32075.047,
+            "decode32-4097": 99915.934
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 13256.469,
+            "decode32-1025": 34584.622,
+            "decode32-4097": 107156.613
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 13193.875,
+            "decode32-1025": 34454.05,
+            "decode32-4097": 107608.35
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12611.206,
+            "decode32-1025": 31935.028,
+            "decode32-4097": 98605.478
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12607.922,
+            "decode32-1025": 32153.519,
+            "decode32-4097": 99375.634
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 13062.5,
+            "decode32-1025": 34731.262,
+            "decode32-4097": 106664.728
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 13201.447,
+            "decode32-1025": 34582.819,
+            "decode32-4097": 107282.025
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12544.641,
+            "decode32-1025": 31863.903,
+            "decode32-4097": 98951.259
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12563.559,
+            "decode32-1025": 31974.241,
+            "decode32-4097": 98839.556
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 13216.263,
+            "decode32-1025": 34567.356,
+            "decode32-4097": 107184.1
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 13212.878,
+            "decode32-1025": 34574.869,
+            "decode32-4097": 107456.228
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12612.622,
+            "decode32-1025": 32149.597,
+            "decode32-4097": 98895.541
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12450.372,
+            "decode32-1025": 32374.606,
+            "decode32-4097": 98987.222
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 13240.084,
+            "decode32-1025": 34775.387,
+            "decode32-4097": 107753.634
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 13238.897,
+            "decode32-1025": 34382.822,
+            "decode32-4097": 110918.734
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12725.622,
+            "decode32-1025": 32456.106,
+            "decode32-4097": 102330.841
+          }
+        }
+      ],
+      "medians": {
+        "decode32-129": {
+          "baseline_median_ns": 12585.7405,
+          "candidate_median_ns": 13216.672,
+          "difference_ns": 630.9315000000006,
+          "candidate_faster_pairs": 0,
+          "paired_delta_ns": [
+            19744.031000000003,
+            786.4840000000004,
+            707.1189999999988,
+            582.6689999999999,
+            454.5779999999995,
+            656.8060000000005,
+            652.7040000000015,
+            600.2560000000012,
+            789.7120000000014,
+            513.2750000000015
+          ]
+        },
+        "decode32-1025": {
+          "baseline_median_ns": 32112.322,
+          "candidate_median_ns": 34578.844,
+          "difference_ns": 2466.521999999997,
+          "candidate_faster_pairs": 0,
+          "paired_delta_ns": [
+            21759.659,
+            2478.6749999999956,
+            2509.5750000000044,
+            2519.0220000000045,
+            2577.743000000002,
+            2718.9160000000047,
+            2593.114999999998,
+            2425.271999999997,
+            2400.7810000000027,
+            1926.7160000000003
+          ]
+        },
+        "decode32-4097": {
+          "baseline_median_ns": 99181.428,
+          "candidate_median_ns": 107492.29550000001,
+          "difference_ns": 8310.867500000008,
+          "candidate_faster_pairs": 0,
+          "paired_delta_ns": [
+            15106.765999999989,
+            8076.194000000003,
+            7240.679000000004,
+            9002.872000000003,
+            7289.093999999997,
+            8330.765999999989,
+            8344.544000000009,
+            8560.687000000005,
+            8766.412000000011,
+            8587.892999999996
+          ]
+        }
+      }
+    },
+    "ordered_physical_tables": {
+      "binary_sha256": {
+        "base": "cdb37d6b6008eee214a51c8d97f0fdcf6f6d972c497e479e282e8f183d2bea0f",
+        "candidate": "f7f9f781bfb04d004b9a43fb29628457d6835a7265ecad91482d9d77fd2f72a8"
+      },
+      "runs": [
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12958.306,
+            "decode32-1025": 34768.353,
+            "decode32-4097": 185830.737
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 9099.619,
+            "decode32-1025": 16003.906,
+            "decode32-4097": 50092.031
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 7218.887,
+            "decode32-1025": 15402.209,
+            "decode32-4097": 48877.081
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12638.288,
+            "decode32-1025": 32184.522,
+            "decode32-4097": 101504.844
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12719.919,
+            "decode32-1025": 32419.688,
+            "decode32-4097": 100304.294
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 7410.409,
+            "decode32-1025": 15800.803,
+            "decode32-4097": 46760.719
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 7409.372,
+            "decode32-1025": 15793.366,
+            "decode32-4097": 47059.637
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12724.362,
+            "decode32-1025": 32324.997,
+            "decode32-4097": 100526.587
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12721.862,
+            "decode32-1025": 32326.188,
+            "decode32-4097": 100135.156
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 7344.922,
+            "decode32-1025": 15638.556,
+            "decode32-4097": 46622.134
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 7268.1,
+            "decode32-1025": 15465.1,
+            "decode32-4097": 46669.809
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12734.922,
+            "decode32-1025": 32423.431,
+            "decode32-4097": 100390.994
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12634.35,
+            "decode32-1025": 32622.681,
+            "decode32-4097": 100259.775
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 7232.038,
+            "decode32-1025": 15610.269,
+            "decode32-4097": 47074.625
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 7195.559,
+            "decode32-1025": 15499.834,
+            "decode32-4097": 46999.244
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12698.284,
+            "decode32-1025": 32396.728,
+            "decode32-4097": 100754.694
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12704.278,
+            "decode32-1025": 32562.388,
+            "decode32-4097": 100396.494
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 7273.969,
+            "decode32-1025": 15679.806,
+            "decode32-4097": 46745.575
+          }
+        },
+        {
+          "mode": "candidate",
+          "ns_per_call": {
+            "decode32-129": 7389.222,
+            "decode32-1025": 15668.634,
+            "decode32-4097": 47111.434
+          }
+        },
+        {
+          "mode": "base",
+          "ns_per_call": {
+            "decode32-129": 12723.944,
+            "decode32-1025": 32456.366,
+            "decode32-4097": 100639.834
+          }
+        }
+      ],
+      "medians": {
+        "decode32-129": {
+          "baseline_median_ns": 12720.8905,
+          "candidate_median_ns": 7309.4455,
+          "difference_ns": -5411.445,
+          "candidate_faster_pairs": 10,
+          "paired_delta_ns": [
+            -3858.687,
+            -5419.401000000001,
+            -5309.51,
+            -5314.989999999999,
+            -5376.94,
+            -5466.822,
+            -5402.312000000001,
+            -5502.724999999999,
+            -5430.309,
+            -5334.722
+          ]
+        },
+        "decode32-1025": {
+          "baseline_median_ns": 32421.5595,
+          "candidate_median_ns": 15653.595000000001,
+          "difference_ns": -16767.9645,
+          "candidate_faster_pairs": 10,
+          "paired_delta_ns": [
+            -18764.447,
+            -16782.313000000002,
+            -16618.885,
+            -16531.631,
+            -16687.631999999998,
+            -16958.331,
+            -17012.412,
+            -16896.894,
+            -16882.582,
+            -16787.732000000004
+          ]
+        },
+        "decode32-4097": {
+          "baseline_median_ns": 100461.5405,
+          "candidate_median_ns": 47029.4405,
+          "difference_ns": -53432.100000000006,
+          "candidate_faster_pairs": 10,
+          "paired_delta_ns": [
+            -135738.706,
+            -52627.763,
+            -53543.575,
+            -53466.95,
+            -53513.022000000004,
+            -53721.185000000005,
+            -53185.149999999994,
+            -53755.450000000004,
+            -53650.91900000001,
+            -53528.4
+          ]
+        }
+      }
+    }
+  },
+  "checks": {
+    "ordered_row_addresses_cuda_host_batch_unit_tests_passed": 13,
+    "ordered_physical_tables_scheduler_unit_tests_passed": 36,
+    "scheduler_probe_preserved_order_and_rejected_duplicate_ids_and_noncanonical_token_counts": true
+  }
+}

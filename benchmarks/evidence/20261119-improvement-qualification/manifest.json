@@ -1040,6 +1040,36 @@
         "sha256": "f80cb5380a6e5a96a7071620d0c809c3222c9f7a582849517503bec71ff4b4ca"
       }
     },
+    "w2_submit_metadata_local_comparison": [
+      {
+        "path": "benchmarks/evidence/20261119-w2-submit-prepare/compare_cpu.py",
+        "sha256": "7c05ae719f4dfe6172b64b7bfc8beb644685d9228439862dabf7d61ecd1b496d"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w2-submit-prepare/local-comparison.json",
+        "sha256": "25653084cb73e02d15ed9bd8c8d99b83b4b72b3fbf77ce9374848cca71bd6ffd"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w2-submit-prepare/ordered-physical-tables.patch",
+        "sha256": "8babc0072369cd9fd78392aa0c83e419e9389cd33af8171d29c5931988c3e942"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w2-submit-prepare/ordered-row-addresses.patch.gz",
+        "sha256": "e203c7355fd07b8f00c74c83d14de24d9ee6ddaa7fd7b3743322d9fa7473f075"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w2-submit-prepare/packed_metadata_probe.rs",
+        "sha256": "dd2b1275cf2cd31f03ce9ff27ff2ccd9a93f8e3fa335a308779daa882fc15585"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w2-submit-prepare/scheduler_probe.rs",
+        "sha256": "4a93dffe6606e296a5204fd2b96bbe6c8989e218b6bca1b091d9e32f8f38964e"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w2-submit-prepare/writable-set-capacity.patch",
+        "sha256": "cf2b84e84ae3238037543bf02030b1954a594e1d63954d375a99a310df19ccdc"
+      }
+    ],
     "qwen14_qkv_1024_traced_follow_up": {
       "archived_baseline_timing": {
         "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/archived-wave-timing.json",

@@ -39,6 +39,18 @@ host trace의 연속 부하에 가까운 128스텝 구간 18개에서 submit과 
 
 현행 소스의 정상 다운로드 경로에서 계측을 켜면 다운로드에 전달한 stream에 종료 이벤트를 기록하고 기다린 뒤 같은 stream을 동기화한다. 계측을 끄면 마지막 stream 동기화가 다운로드의 완료를 기다리는 단계다. 기존 Nsight에서 마지막 호출의 중앙값 2.53µs는 별도 비계측 기준 실행의 TPOT 6.698ms에 견줘 약 0.04% 규모였다. 호출 제거는 실제 개선 여부와 비동기 오류 전달 계약을 새로 입증해야 하므로 GPU 시험 우선순위는 제출 경계의 작업 비용에 둔다. [다운로드·계측·동기화 경로](../../crates/riley-scheduler/src/execution.rs) · [Nsight 집계](../../benchmarks/evidence/20261118-w2-sm17-a100/nsys2/sync-gap-summary.json)
 
+### GPU 제출 전 KV 메타데이터 검사
+
+`be7bc4d9c`의 Rust 소스와 후보를 격리해서 macOS ARM64에서 release로 빌드했다. 실제 `PackedBatchHostV1::new`와 `Scheduler::plan_iteration`을 각각 호출했다. 세 후보마다 기준 → 후보 → 후보 → 기준 순서를 다섯 번 반복해 평균 호출 시간의 중앙값을 비교했다. 스케줄러는 32개 요청의 prefill을 먼저 완료하고 decode 계획 320개를 측정했다. 측정에 쓰인 각 KV 테이블의 물리 블록 번호는 엄격한 오름차순임을 확인했다. [원본 시료·바이너리 해시](../../benchmarks/evidence/20261119-w2-submit-prepare/local-comparison.json)
+
+| 후보 | 측정 결과 | 후속 판정 |
+|---|---|---|
+| 순서가 확인된 행 주소에서 중복 쌍 검사 생략 | decode 32행의 생성자에서 0.14–0.32µs 단축. 역순 1,024행은 +0.01µs | GPU 제출 지연 후보 우선순위에서 제외 |
+| 읽기 전용 블록을 뺀 쓰기 집합 용량 예약 | 129·1,025·4,097토큰으로 시작한 32행 decode의 계획 시간이 각각 0.63·2.47·8.31µs 증가 | 미채택 |
+| 물리 블록 번호가 엄격히 증가하는 테이블의 해시 중복 검사 생략 | 같은 입력 길이에서 각각 12.72→7.31, 32.42→15.65, 100.46→47.03µs. 모든 길이에서 10쌍 모두 단축 | 실제 서빙 비교 대상으로 선택 |
+
+세 번째 후보는 순서가 다른 테이블에도 기존 방식으로 중복을 검사한다. 정렬·비정렬 테이블 입력 순서를 보존했고 중복 번호와 비정규 `valid_tokens`는 계속 거부했다. 스케줄러 단위 테스트 36건도 통과했다. 이 수치는 재사용이나 prefix 공유가 많은 서빙 환경의 경로 선택 비율, GPU 유휴 구간, 처리량을 입증하지 않는다. A100 비교에서 짧은 `reason-c32`와 긴 decode 부하의 출력·지연 및 GPU 유휴를 확인한 뒤 채택을 판단한다. [후보 패치](../../benchmarks/evidence/20261119-w2-submit-prepare/ordered-physical-tables.patch) · [스케줄러 측정 코드](../../benchmarks/evidence/20261119-w2-submit-prepare/scheduler_probe.rs) · [행 주소 측정 코드](../../benchmarks/evidence/20261119-w2-submit-prepare/packed_metadata_probe.rs)
+
 ## 최초 이벤트 발행 실험의 설정 정정
 
 `riley-lp16`의 `after-submit-v1`은 다음 GPU 제출 직후 이전에 commit된 이벤트를 발행한다. `native-bf16-varlen-v1` 프로파일이 이 값을 설정하므로, 최초 비교에서 플래그를 생략한 두 실행도 `after-submit-v1`이었다. [생략한 실행의 인자](../../benchmarks/evidence/20261118-w2-sm17-a100/paired-off1/receipt.json) · [명시한 실행의 인자](../../benchmarks/evidence/20261118-w2-sm17-a100/event1/receipt.json) · [프로파일 구현](../../crates/riley-server/src/inference_profile.rs)

@@ -1,0 +1,33 @@
+--- a/crates/riley-scheduler/src/plan.rs
++++ b/crates/riley-scheduler/src/plan.rs
+@@ -108,18 +108,23 @@
+                 reason: "block count must exactly address the logical length",
+             });
+         }
++        // A strictly increasing table has no duplicate block IDs. Reused or shared
++        // pages can appear in arbitrary order and still need the general check.
++        let ordered_ids = physical_block_ids.windows(2).all(|pair| pair[0] < pair[1]);
+         let mut unique_ids = HashSet::new();
+-        unique_ids
+-            .try_reserve(physical_block_ids.len())
+-            .map_err(|_| SchedulerError::HostAllocation {
+-                resource: "block table physical ID set",
+-                requested_elements: physical_block_ids.len(),
+-            })?;
++        if !ordered_ids {
++            unique_ids
++                .try_reserve(physical_block_ids.len())
++                .map_err(|_| SchedulerError::HostAllocation {
++                    resource: "block table physical ID set",
++                    requested_elements: physical_block_ids.len(),
++                })?;
++        }
+         let mut token_sum = 0_usize;
+         for (index, (&physical_id, &valid)) in
+             physical_block_ids.iter().zip(&valid_tokens).enumerate()
+         {
+-            if !unique_ids.insert(physical_id) {
++            if !ordered_ids && !unique_ids.insert(physical_id) {
+                 return Err(SchedulerError::InvalidPlan {
+                     field: "block_tables",
+                     reason: "physical block IDs must be unique within one table",
