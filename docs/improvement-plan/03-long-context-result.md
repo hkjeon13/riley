@@ -156,6 +156,17 @@ SSE 요청 ID로 엔진 제출부터 첫 응답 조각 생성까지를 연결했
 
 두 seed에서 prefill 사이 대기 대부분은 다른 요청의 prefill 구간과 겹쳤다. 이 구간은 토큰화나 스텝 자체의 실행 시간과 별도로 확인됐다. 같은 행 예산으로 조각 선택 순서를 비교할 때는 첫 토큰 꼬리와 다른 요청의 대기·decode TPOT를 함께 측정해야 한다.
 
+같은 추적에서 prefill 사이 대기와 겹친 스텝을 실제 처리 행 수와 decode 행 수로 나눴다. 아래 값은 부하별 TTFT p95 이상 요청의 중앙값이며 일반 행 예산은 256행이었다. 일반 예산 이하 스텝과 겹친 시간의 중앙값은 표의 네 부하에서 0ms였다. 각 열의 중앙값은 독립적으로 계산했다. [스텝 형태별 분해](../../benchmarks/evidence/20261119-w3-rag-profile/request-stages/result/wait-shapes.json) · [재현 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/analyze_prefill_wait_shapes.py)
+
+| 부하 | TTFT 꼬리 요청 수 | 256행 초과, decode 0행 | 256행 초과, decode 1–2행 | 256행 초과, decode 3행 이상 |
+|---|---:|---:|---:|---:|
+| `rag-c8` seed 1 | 4 | 0ms | 535ms | 403ms |
+| `rag-c8` seed 2 | 4 | 0ms | 200ms | 401ms |
+| 8개 동시 전송 | 2 | 636ms | 1,457ms | 0.08ms |
+| 8개 50ms 간격 전송 | 2 | 837ms | 758ms | 358ms |
+
+긴 prefill 스텝이 decode 1–2행과 겹친 시간도 두 seed에서 컸다. 후속 대조에서는 decode 행 개수와 혼합 스텝의 토큰 예산을 따로 바꿔 평가한다. 위 수치는 관측한 실행 구간의 중첩이며, 스텝을 제한했을 때의 지연 변화는 실제 대조가 필요하다.
+
 후속 대조에서는 100ms 미만 기다린 새 prompt보다 진행 중인 prefill을 먼저 고려했다. 100ms를 지난 요청은 기존 순서로 경쟁하며 decode 선택과 기존 aging override를 적용했다. 격리 패치의 스케줄러 CPU 테스트 146건과 CUDA 기능을 켠 Rust 타입 검사가 통과했다. A100 GPU 7에서 같은 진단 바이너리의 옵션만 바꿔 위 다섯 부하와 32개 동시 짧은 요청을 실행했다. 두 조건의 측정 320쌍에서 출력이 일치했고, 별도 장문 8개는 C1·C8과 두 조건 모두에서 입력·생성 토큰 ID가 일치했다. 두 서버는 코드 0으로 종료했고 같은 홀더의 20GiB 예약으로 복귀했다. [실행 순서](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/campaign.sh) · [CPU 검사 원본](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/scheduler-tests.log.gz) · [GPU 원본과 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/result/SHA256SUMS)
 
 | 부하 | TTFT p95 변화 | decode TPOT p50 변화 | 처리량 변화 |
