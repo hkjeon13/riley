@@ -1050,6 +1050,10 @@
     },
     "distribution_tcache_only_comparison": [
       {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/tcache-only/cache-on-first-verified.json",
+        "sha256": "2a969a61a290cf35f3a2a7a3f2cfe5e497b15ba760d39b7ca7cd3de26263d032"
+      },
+      {
         "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/tcache-only/campaign.sh",
         "sha256": "f5d318fbc3f07071c392a53f6f6079f31b47c4111a96b12555e7f3f4efe88236"
       },
@@ -1200,6 +1204,28 @@
       {
         "path": "benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/verified-framing.json",
         "sha256": "d031e7522b9b4471bca9401b917964b7afbea0f3dee1db6e1e0527cb9d2431da"
+      }
+    ],
+    "w5_http_framing_a100_follow_up": [
+      {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/campaign.sh",
+        "sha256": "b28a6f06c6537f3b233eaf8c7c32ec5844cf5ca715c695ec47c0a2c21eb67b5b"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/compare_candidate.py",
+        "sha256": "085565c249d4b047acd496321c100b0707456d4be77bfb18cdda44b30571584f"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/dispatch.sha256",
+        "sha256": "f2078201c8f7991c8f227a84b4db88fcd6d583681e0d3ad3f9e154e76fd5cf79"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/harness.sha256",
+        "sha256": "0bc1de88cbe6789d8323dce77d875766c5571c71b584676bd7c61d4194b9ff03"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/registration.json",
+        "sha256": "c311827244fa9ad98eb18fbca8e5dfdeee06f52ce1a2f8cb4f09968525b1a980"
       }
     ],
     "w2_staged_event_buffer_cpu": [

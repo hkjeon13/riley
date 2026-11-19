@@ -1,0 +1,163 @@
+{
+  "scope": "First completed arm of the tcache-only comparison (cache-on).",
+  "cache_on_begin_utc": "2026-11-19T09:57:52Z",
+  "cache_on_end_utc": "2026-11-19T10:32:07Z",
+  "cache_off_begin_utc": "2026-11-19T10:32:07Z",
+  "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+  "riley_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+  "recorded_checks": {
+    "no_unexpected_http_or_stream_error": true,
+    "completed_schema_and_tool_covered": true,
+    "disconnects_observed": true,
+    "idle_after_drain": true,
+    "native_allocation_plateau": true,
+    "workload_coverage": true,
+    "p95_drift_at_most_5_percent": true,
+    "rss_growth_second_half_at_most_zero": false
+  },
+  "counts": {
+    "plain": {
+      "completed": 7984
+    },
+    "schema": {
+      "completed": 1739,
+      "stop": 1739
+    },
+    "logprobs": {
+      "completed": 1160
+    },
+    "tools": {
+      "completed": 708,
+      "tool_calls": 708
+    },
+    "long": {
+      "completed": 1415
+    },
+    "reason": {
+      "completed": 743
+    },
+    "cancel": {
+      "disconnected": 700
+    }
+  },
+  "p95_change_percent": {
+    "ttft_ms": 1.3310879600758163,
+    "e2e_ms": -13.437690913602063
+  },
+  "cpu_probe": {
+    "default": {
+      "uid": 65532,
+      "glibc": "2.35",
+      "request_bytes": 800,
+      "usable_bytes": 808,
+      "uordblks_before": 1520,
+      "uordblks_after": 1520,
+      "explicitly_disabled": false,
+      "other_tunable_present": false
+    },
+    "disabled": {
+      "uid": 65532,
+      "glibc": "2.35",
+      "request_bytes": 800,
+      "usable_bytes": 808,
+      "uordblks_before": 1520,
+      "uordblks_after": 704,
+      "explicitly_disabled": true,
+      "other_tunable_present": false
+    }
+  },
+  "verified_cache_on": {
+    "same_20gib_reservation_restored": true,
+    "same_request_outcomes": true,
+    "checks_api": 40,
+    "configurations": {
+      "unmodified": {
+        "report_sha256": "a07f24b13e13d53fde638a4565d4a2d73f1f30346797ba62539644b7ebc15d4c",
+        "status": "failed",
+        "failed_checks": [
+          "rss_growth_second_half_at_most_zero"
+        ],
+        "rss": {
+          "baseline": {
+            "rss_kib": 15553172,
+            "anonymous_kib": 15366416,
+            "read_ms": 330.4477035999298
+          },
+          "drain": {
+            "rss_kib": 15553788,
+            "anonymous_kib": 15367032,
+            "read_ms": 325.4677876830101
+          },
+          "rss_growth_kib": 616,
+          "anonymous_growth_kib": 616
+        },
+        "late_p95_ms": {
+          "ttft_ms_p95": 325.79217106103897,
+          "e2e_ms_p95": 4131.356708705425
+        }
+      },
+      "tcache_only": {
+        "report_sha256": "9436443e40c67f72bf37e6b5cc1b1457827da51be4c033b9fbc4c4f07f430208",
+        "status": "failed",
+        "failed_checks": [
+          "rss_growth_second_half_at_most_zero"
+        ],
+        "rss": {
+          "baseline": {
+            "rss_kib": 15547104,
+            "anonymous_kib": 15360472,
+            "read_ms": 274.4308337569237
+          },
+          "drain": {
+            "rss_kib": 15547304,
+            "anonymous_kib": 15360672,
+            "read_ms": 263.8162076473236
+          },
+          "rss_growth_kib": 200,
+          "anonymous_growth_kib": 200
+        },
+        "late_p95_ms": {
+          "ttft_ms_p95": 327.05008238554,
+          "e2e_ms_p95": 4131.370164453983
+        }
+      },
+      "tcache_with_trim": {
+        "report_sha256": "0df65d12e02a78a2f3cd81cfa11e697d81c54a14b0b0fd25a1032f811ca93bba",
+        "status": "failed",
+        "failed_checks": [
+          "rss_growth_second_half_at_most_zero"
+        ],
+        "rss": {
+          "baseline": {
+            "rss_kib": 15499780,
+            "anonymous_kib": 15313020,
+            "read_ms": 233.6575984954834
+          },
+          "drain": {
+            "rss_kib": 15499868,
+            "anonymous_kib": 15313108,
+            "read_ms": 254.63222712278366
+          },
+          "rss_growth_kib": 88,
+          "anonymous_growth_kib": 88
+        },
+        "late_p95_ms": {
+          "ttft_ms_p95": 326.09302550554276,
+          "e2e_ms_p95": 4143.364481627941
+        }
+      }
+    }
+  },
+  "files_sha256": {
+    "exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "idle-before.json": "5cc82a797ed7bbffaf57fd83b39f8d292ee429550f2bb5e3f59713415819a1f3",
+    "idle-after.json": "b25aafc9abe2ea1f7c6bf727e51613bf8f42fb57831183c2adc55296a6c17da6",
+    "comparison.json": "5560c0743e35d54c49c6453c4749e342a021769f27770efffd5e750b1851bb3e",
+    "gpu-evidence/report.json": "9436443e40c67f72bf37e6b5cc1b1457827da51be4c033b9fbc4c4f07f430208",
+    "gpu-evidence/soak.json": "8aaeafc93b1f297115de379ad0c334b18b04ad36d0386db8f7737f66a9328861",
+    "gpu-evidence/allocator-ready.txt": "9a8c62088f714123febaaa2b868d49a78b36e88a8cccc5c18de642997312c581",
+    "gpu-evidence/allocator-after-soak.txt": "9a8c62088f714123febaaa2b868d49a78b36e88a8cccc5c18de642997312c581",
+    "gpu-evidence/shutdown.json": "17791c744c7f34d55fe22c217440891c0866e94b2c32f7ea4373d8b1d7adc051",
+    "gpu-evidence/api.json": "29d4dc1e6695cd24e33941390942598a64757d5a8966b7a8df0a8d54021a27ec"
+  }
+}

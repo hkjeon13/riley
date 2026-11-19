@@ -1,0 +1,33 @@
+{
+  "scope": "Conditional isolated candidate review. No candidate image was built and no GPU launch occurred on registration.",
+  "host": "aws-a100",
+  "run_label": "w5-http-framing-20261119.IyUaTevw",
+  "pid": 3949016,
+  "registration_utc": "2026-11-19T10:31:10Z",
+  "gpu": {
+    "physical_index": 6,
+    "holder_pid": 2431228,
+    "idle_bytes": 21474836480,
+    "active_bytes": 67108864
+  },
+  "prerequisites": {
+    "tcache_only": "w5-tcache-only-20261119.G3IuT0Wh",
+    "skip": "Both original cache settings pass all their unchanged tcache-only requirements.",
+    "proceed": "Both control modes complete, and the only failing check is strict RSS in at least one mode.",
+    "wait_for_accuracy_campaign": "w4-decode-logits-20261119.8VHxJvdK"
+  },
+  "base_source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+  "base_source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+  "patch_sha256": "28f0ef9ed0e5e2e81b5f82d68f99554977c461ca3cfe91ea929b5becb38fd520",
+  "build": "Same Linux AMD64 CUDA 12.4 Dockerfile and source contract, with one isolated HTTP framing patch.",
+  "checks": {
+    "cpu": "Package contract and 20 identical runtime files besides the Riley executable.",
+    "gpu": "API 40, cache-on/off 30-minute strict RSS, latency, request outcome counts and clean shutdown."
+  },
+  "preflight": {
+    "validated_existing_remote_harness_hashes": true,
+    "pinned_cpu_driver_stub_present": true,
+    "bash_syntax_passed": true,
+    "verifier_rejected_unrelated_runtime_file_change_in_synthetic_fixture": true
+  }
+}
