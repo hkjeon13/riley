@@ -1,0 +1,21 @@
+{
+  "host": "aws-a100",
+  "campaign": "w5-framing-accuracy-20261119.jv9EuHuM",
+  "pid": 70581,
+  "registered_at_utc": "2026-11-19T11:35:02Z",
+  "conditional_on": "w5-http-framing-20261119.IyUaTevw",
+  "condition": "The strict RSS, request, tail latency and shutdown gates pass for both cache modes on the same image and binary.",
+  "candidate_image_id": "sha256:e019db74d2f0da3cb9c3e911fdb0658e42d28e115ca8d3518df140ff93eebbee",
+  "physical_gpu": 6,
+  "holder_pid": 2431228,
+  "expected_accuracy_comparisons": {
+    "baseline": 144,
+    "holdout": 88
+  },
+  "preflight": {
+    "both_pass_enabled_run": true,
+    "either_mode_failure_skipped_run": true,
+    "wrong_receipt_rejected": true,
+    "reused_harness_hashes_verified_on_host": true
+  }
+}

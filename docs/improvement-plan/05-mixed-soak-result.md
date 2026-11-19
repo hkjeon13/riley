@@ -199,6 +199,8 @@ macOS ARM64에서 후보의 서버 라이브러리 테스트 101건이 통과했
 
 A100 6번의 `cache-on` 컨테이너에서 API 40건이 통과했고 30분 부하가 시작됐다. 실행 중인 Riley의 바이너리 해시, GPU 프로세스, 캐시 128블록과 `GLIBC_TUNABLES`·`LD_PRELOAD`·`MALLOC_ARENA_MAX` 추가 설정의 부재를 확인했다. GPU 7번에는 같은 20GiB 예약이 유지됐다. 두 설정의 최종 RSS와 종료 후 자원 회수는 완료 영수증으로 판정한다. [실행 식별과 API 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/first-launch-verified.json)
 
+두 부하의 운영 기준을 모두 통과하면 같은 이미지에서 W4의 고정 장문 입력 29개를 대조하도록 등록했다. 기존 입력의 144건과 홀드아웃의 88건을 같은 체크포인트로 비교하고, 실제 실행 파일과 이미지의 해시를 W5 영수증에 연결한다. CPU 사전시험에서 한 조건만 실패하면 GPU 실행을 건너뛰고 영수증 해시가 다르면 오류로 끝나는 것을 확인했다. 재현할 때는 기존 [이미지 판정 검사기](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/verify_a100_candidate.py)를 같은 실행 경로에 놓는다. [조건부 정확성 등록](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/accuracy-follow-up/registration.json) · [실행과 판정 조건](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/accuracy-follow-up/campaign.sh)
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
