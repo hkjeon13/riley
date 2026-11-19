@@ -64,10 +64,24 @@ def read_arm(root, previous, mode):
     return binding, timings, digest(log)
 
 
-def compare(root, previous):
+def check_campaign(root):
     require((root / "campaign.exit").read_text().strip() == "0", "campaign did not finish")
-    starts = [line.split()[1] for line in (root / "campaign.log").read_text().splitlines() if line.startswith("START ")]
-    require(starts == list(ORDER), "unexpected campaign order")
+    records = [line.split() for line in (root / "campaign.log").read_text().splitlines()
+               if line.startswith(("START ", "END "))]
+    require(len(records) == 2 * len(ORDER), "incomplete campaign chronology")
+    times = {}
+    previous_end = ""
+    for mode, start, end in zip(ORDER, records[::2], records[1::2], strict=True):
+        require(len(start) == 3 and start[:2] == ["START", mode] and len(end) == 4
+                and end[:2] == ["END", mode] and end[3] == "exit=0" and previous_end <= start[2] < end[2],
+                f"{mode}: unexpected order, times or exit")
+        times[mode] = {"start_utc": start[2], "end_utc": end[2]}
+        previous_end = end[2]
+    return times
+
+
+def compare(root, previous):
+    check_campaign(root)
     runs = {mode: read_arm(root, previous, mode) for mode in ORDER}
     binding = runs[ORDER[0]][0]
     require(all(run[0] == binding for run in runs.values()), "the paired run inputs differ")

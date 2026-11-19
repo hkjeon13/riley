@@ -8,7 +8,7 @@
 |---|---|
 | W1 검증·릴리스 | Linux Production CPU, 고정 RC3 테스트 34건, CUDA 12.8 네이티브 빌드·Clippy와 CUDA 12.4 이미지 CPU 검증을 통과했다. 현재 배포 입력과 이미지 원본의 해시를 대조했다. [W1 결과](01-validation-result.md) |
 | W2 실행 중첩 | A100에서 이벤트 발행 두 모드를 명시해 비교했다. W3의 prefill 제한과 교차한 시험에서 즉시 발행의 짧은 요청 TPOT 회귀를 확인해 기존 `after-submit-v1`을 유지한다. [W2 결과](02-async-step-result.md) |
-| W3 장문·스케줄 | 14B `rag-c8`의 p95 이상 요청은 prefill 조각 사이에서 다른 요청의 prefill과 겹치는 대기를 기록했다. 스케줄 후보 세 개는 지연 회귀로 미채택했다. 1,024행 QKV 후보는 출력·decode 기준을 통과했으나 RAG 첫 토큰 p95가 일관되게 줄지 않아 기본값 적용을 보류했다. [W3 결과](03-long-context-result.md) |
+| W3 장문·스케줄 | 스케줄 후보 세 개는 지연 회귀로 미채택했다. 1,024행 QKV 후보는 출력·decode 기준을 통과했고 RAG 첫 토큰 p95 개선은 일관되지 않았다. 50ms 간격 추적에서 같은 장문 요청의 prefill과 대기 스텝이 두 실행 순서 모두 늘어 기본값 적용을 보류했다. [W3 결과](03-long-context-result.md#50ms-간격-유입의-추가-지연-위치) |
 | W4 정확성·스키마 | 고정 장문과 holdout에서 엔진별 첫 분기 지점을 좁혔다. A100의 순전파 대조에서 전체 prefill은 22번 MLP 교체, 분할 prefill은 전체 attention 교체로 사례 3의 Riley 토큰을 재현했다. 네 모델의 GSM8K와 구조화 출력 GPU API도 검증했다. [장문·품질 결과](04-long-accuracy-result.md) · [스키마 결과](04-structured-output-result.md) |
 | W5 문서·운영 | 두 cache 조건에서 각각 정상 완료 13,749건과 의도적 연결 종료 700건을 처리하고 종료 자원 회수를 확인했다. 7초 메모리 반환 후보의 정밀 RSS는 cache-off에서 44KiB, cache-on에서 292KiB 증가해 두 조건 모두 기존 증가 0 기준을 충족하지 못했다. A100 메모리 오류 주입 네 사례는 통과했다. [문서 근거](05-documentation-and-operations.md) · [A100 운영 결과](05-mixed-soak-result.md) |
 

@@ -291,6 +291,20 @@ A100 7번의 합성 입력 두 개에서 기존 wide 후보표의 split-K 3 알�
 
 후속 대조는 같은 바이너리에서 요청 계측을 두 조건 모두 켜고 1,024행 QKV 선택만 교대로 바꾼다. `wave-50ms`와 `rag-c8-s2`에서 비계측 결과와 요청·응답이 맞는지 확인하고, 50ms 묶음의 두 요청 및 각 조건의 p95 꼬리 요청을 단계별로 비교한다. 현재 후보 소스에 이전 계측 패치를 적용할 수 있는지 확인했고, 기존 단계 기록으로 검산기의 요청 결속과 후보 선택 실패 처리를 검사했다. RSS와 장문 시험 이후 A100 7번에서 시작하도록 등록했다. [실행 순서와 입력 해시](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/registration.json) · [단계 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/compare_traced_qkv.py)
 
+#### 50ms 간격 유입의 추가 지연 위치
+
+A100 7번에서 네 비교군을 완료했다. 이전 비계측 비교의 해당 입력과 대조한 416건에서 요청 해시, 출력 텍스트 해시, 토큰 수와 종료 사유가 일치했다. 두 후보 실행에서 알고리즘 선택 표지를 확인했고, 네 서버 모두 정상 종료 후 같은 홀더의 20GiB 예약을 복구했다. [실행 시각·출력 대조와 원본 해시](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/stage-attribution.json)
+
+| 계측 항목 | 기준 먼저 | 후보 먼저 |
+|---|---:|---:|
+| `rag-c8-s2` TTFT p95 변화 | +5.40% | −2.99% |
+| `wave-50ms` TTFT p95 변화 | +1.47% | +2.11% |
+| `wave-50ms` 41번 요청 TTFT 변화 | +527.67ms | +541.04ms |
+| 같은 요청의 prefill 조각 사이 대기 변화 | +380.57ms | +392.26ms |
+| 같은 요청의 prefill 스텝 실행 구간 변화 | +154.60ms | +157.31ms |
+
+3,503토큰인 41번 요청은 두 쌍 모두 자체 prefill이 4스텝에서 6스텝으로 늘었다. 자체 조각 사이의 다른 prefill은 14스텝에서 17스텝으로, 나중에 입장한 요청만 실행한 스텝은 12개에서 15개로 늘었다. 같은 요청의 첫 두 1,024행 스텝은 두 쌍에서 GPU 시간이 각각 −3.26·−1.14ms와 −3.22·+0.66ms 변했다. GPU 시간은 스텝 전체의 측정값이며, 이 원본으로는 알고리즘 변경이 스케줄 순서를 바꾼 시점이나 개별 QKV 호출의 실행 시간을 판정할 수 없다. `rag-c8-s2`는 순서마다 p95 변화 방향이 달랐다. 기본값 적용은 계속 보류한다. [요청별 실행 행·대기 구간](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/stage-attribution.json) · [스텝 구성 재검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/attribute_qkv_steps.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
