@@ -51,6 +51,8 @@ host trace의 연속 부하에 가까운 128스텝 구간 18개에서 submit과 
 
 세 번째 후보는 순서가 다른 테이블에도 기존 방식으로 중복을 검사한다. 정렬·비정렬 테이블 입력 순서를 보존했고 중복 번호와 비정규 `valid_tokens`는 계속 거부했다. 스케줄러 단위 테스트 36건도 통과했다. 이 수치는 재사용이나 prefix 공유가 많은 서빙 환경의 경로 선택 비율, GPU 유휴 구간, 처리량을 입증하지 않는다. A100 비교에서 짧은 `reason-c32`와 긴 decode 부하의 출력·지연 및 GPU 유휴를 확인한 뒤 채택을 판단한다. [후보 패치](../../benchmarks/evidence/20261119-w2-submit-prepare/ordered-physical-tables.patch) · [스케줄러 측정 코드](../../benchmarks/evidence/20261119-w2-submit-prepare/scheduler_probe.rs) · [행 주소 측정 코드](../../benchmarks/evidence/20261119-w2-submit-prepare/packed_metadata_probe.rs)
 
+2026-11-19 KST에 W5 RSS 시험 뒤 A100 7번에서 실행하도록 등록했다. 호스트에 있는 승인본 `d3d8fe6e5`를 기반으로 CUDA 12.4에서 기준과 후보를 빌드한다. SmolLM2-1.7B에서 KV 9,006블록과 기존 이벤트 발행 설정을 고정하고, 짧은 프롬프트와 긴 프롬프트의 C32 부하를 기준 → 후보 → 후보 → 기준 순으로 비교한다. 처리량·TTFT·TPOT와 응답을 대조하고 별도 8개 입력의 C1·C8 토큰 ID를 검사한다. 두 Nsight 실행에서는 32행 decode 그래프 사이의 커널 공백과 제출 스레드 구간을 각각 측정한다. 실행마다 기존 홀더의 예약 복귀를 확인하도록 구성했다. [실행 등록과 입력 해시](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/registration.json) · [실행 코드](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/campaign.sh) · [결과 검산기](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/verify_ordered_tables.py)
+
 ## 최초 이벤트 발행 실험의 설정 정정
 
 `riley-lp16`의 `after-submit-v1`은 다음 GPU 제출 직후 이전에 commit된 이벤트를 발행한다. `native-bf16-varlen-v1` 프로파일이 이 값을 설정하므로, 최초 비교에서 플래그를 생략한 두 실행도 `after-submit-v1`이었다. [생략한 실행의 인자](../../benchmarks/evidence/20261118-w2-sm17-a100/paired-off1/receipt.json) · [명시한 실행의 인자](../../benchmarks/evidence/20261118-w2-sm17-a100/event1/receipt.json) · [프로파일 구현](../../crates/riley-server/src/inference_profile.rs)

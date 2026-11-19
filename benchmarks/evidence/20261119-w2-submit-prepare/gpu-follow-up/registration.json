@@ -1,0 +1,64 @@
+{
+  "base_source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+  "base_source_archive": "w1-dist-d3d8fe6e5.YnZWdh5l/source.tar",
+  "base_source_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+  "source_archive_transfer": "reuse previously approved archive at the A100 host",
+  "candidate": "../ordered-physical-tables.patch",
+  "host_alias": "aws-a100",
+  "physical_gpu_index": 7,
+  "idle_holder_pid": 2431237,
+  "predecessor": "w5-tcache-control-20261119.liqVpVJ7",
+  "run_label": "w2-ordered-tables-20261119.e89GGsLO",
+  "campaign_pid": 3527838,
+  "wait_marker_utc": "2026-11-19T09:03:04Z",
+  "serving_order": [
+    "base-first",
+    "ordered-first",
+    "ordered-second",
+    "base-second"
+  ],
+  "profiler_order": [
+    "base-trace",
+    "ordered-trace"
+  ],
+  "model": "SmolLM2-1.7B-Instruct",
+  "checkpoint_manifest_sha256": "592dba98659d43036538251cd53b8f76e0cf6ea292564cf4b3c300f1f6f11753",
+  "kv_blocks": 9006,
+  "workloads": {
+    "reason-c32": {
+      "seed": 1,
+      "prompt_words": 30,
+      "max_new_tokens": 1024,
+      "concurrency": 32,
+      "measured": 64,
+      "warmup": 32
+    },
+    "long-c32": {
+      "seed": 2,
+      "prompt_words": 900,
+      "max_new_tokens": 256,
+      "concurrency": 32,
+      "measured": 64,
+      "warmup": 32
+    },
+    "reason-c32-nsight": {
+      "seed": 1,
+      "prompt_words": 30,
+      "max_new_tokens": 1024,
+      "concurrency": 32,
+      "measured": 32,
+      "warmup": 0
+    }
+  },
+  "dispatch_companion_files": {
+    "ordered-physical-tables.patch": "../ordered-physical-tables.patch",
+    "summarize_sync_gaps.py": "../../20261118-w2-sm17-a100/tools/summarize_sync_gaps.py"
+  },
+  "dispatch_sha256": "f917f16ca3844e8a03f859753f6460b771db735bd7355de9117b12615405d56e",
+  "replay_verifier_sha256": "bf1acddf63c42d8fdd223f445b208b8d8a99cb87cc106de7714850e8450ed721",
+  "local_verifier_synthetic_fixture": [
+    "matched_outputs",
+    "detect_output_mismatch",
+    "reject_incomplete_chronology"
+  ]
+}
