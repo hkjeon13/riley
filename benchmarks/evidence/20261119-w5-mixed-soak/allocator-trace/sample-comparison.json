@@ -518,6 +518,53 @@
           "max_kib": 15534748
         }
       }
+    },
+    "http_framing": {
+      "report_sha256": "4c5d88b892216fdcffd4e91148ea9c9e8d4d4ac33fb739c251cf93be50dd020f",
+      "soak_sha256": "bf5ff05bab9b6803404d0b1ea9627862ea39f58347545887adf49a4a6edf56d4",
+      "periodic_samples": 30,
+      "native_values_across_samples": {
+        "device_live_count": [
+          291
+        ],
+        "device_live_bytes": [
+          30495658464
+        ],
+        "pinned_live_count": [
+          2
+        ],
+        "pinned_live_bytes": [
+          4297400
+        ]
+      },
+      "gauges_at_baseline": {
+        "active_requests": 10,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 429
+      },
+      "gauges_at_drain": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0
+      },
+      "baseline_seconds": 900.1401595771313,
+      "drain_seconds": 1804.0174647122622,
+      "baseline_to_drain_anonymous_growth_kib": 580,
+      "baseline_to_drain_total_growth_kib": 580,
+      "coarse_rss_kib": {
+        "minutes_10_to_15": {
+          "n": 5,
+          "min_kib": 15534824,
+          "median_kib": 15534824,
+          "max_kib": 15534824
+        },
+        "minutes_20_to_25": {
+          "n": 5,
+          "min_kib": 15534824,
+          "median_kib": 15534824,
+          "max_kib": 15534824
+        }
+      }
     }
   }
 }

@@ -201,17 +201,22 @@ A100 6번의 `cache-on` 컨테이너에서 API 40건이 통과했고 30분 부�
 
 두 부하의 운영 기준을 모두 통과하면 같은 이미지에서 W4의 고정 장문 입력 29개를 대조하도록 등록했다. 기존 입력의 144건과 홀드아웃의 88건을 같은 체크포인트로 비교하고, 실제 실행 파일과 이미지의 해시를 W5 영수증에 연결한다. CPU 사전시험에서 한 조건만 실패하면 GPU 실행을 건너뛰고 영수증 해시가 다르면 오류로 끝나는 것을 확인했다. 재현할 때는 기존 [이미지 판정 검사기](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/verify_a100_candidate.py)를 같은 실행 경로에 놓는다. [조건부 정확성 등록](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/accuracy-follow-up/registration.json) · [실행과 판정 조건](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/accuracy-follow-up/campaign.sh)
 
-`cache-on`의 30분 실행에서 정밀 RSS와 익명 RSS가 각각 **632KiB 증가**했다. 기준 이미지에서는 각각 616KiB 증가했다. Riley PID 1의 900.16초 표본과 요청을 모두 처리한 1,803.99초 표본으로 증가량을 재계산했다. 정상 완료 13,749건과 의도적 연결 종료 700건은 기준과 같았고 API 40건·요청·지연·자원 회수 검사를 통과했다. 후반 TTFT p95는 328.24ms, 완료 지연 p95는 4,141.07ms였다. 전반 대비 각각 2.08% 증가, 13.47% 감소했다. [첫 부하 검산과 원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/cache-on-verified.json) · [검산 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/verify_framing_soak.py)
+두 모드의 30분 부하를 완료했다. 각각 기준과 동일한 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했고 API 40건·요청·지연·종료 자원 검사를 통과했다. 정밀 RSS와 익명 RSS의 증가량은 각 실행에서 같았다. Riley PID 1의 약 900초와 1,804초 표본을 직접 대조했다. [두 모드의 검산과 원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/paired-verified.json) · [검산 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/verify_framing_soak.py)
 
-RSS 증가 0 항목만 실패했다. 종료 뒤 기존 GPU 6 홀더의 20GiB 예약을 확인하고 `cache-off` 시험을 시작했다. 두 부하가 모두 통과해야 하는 장문 정확성 재실행의 조건은 이번 `cache-on` 결과로 충족되지 않았다.
+| 모드 | 기준 정밀 RSS 증가 | 후보 정밀 RSS 증가 | 후보 후반 TTFT p95 | 후보 후반 완료 지연 p95 |
+|---|---:|---:|---:|---:|
+| `cache-on` | +616KiB | **+632KiB** | 328.24ms | 4,141.07ms |
+| `cache-off` | +700KiB | **+580KiB** | 334.21ms | 4,160.60ms |
+
+두 모드 모두 RSS 증가 0 항목에서만 실패해 프레이밍 후보를 채택하지 않았다. 각각 종료 뒤 기존 GPU 6 홀더의 20GiB 예약을 확인했다. 조건부 장문 정확성 시험은 양쪽 결과를 확인한 뒤 실행을 건너뛰었다. [첫 부하 별도 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/cache-on-verified.json) · [정확성 판정 코드](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/accuracy-follow-up/accuracy_gate.py)
 
 ### RSS 표본과 실행 중 자원 지표 대조
 
-기준 이미지와 glibc 대조군, HTTP 프레이밍 `cache-on`을 포함한 A100 6번의 완료 실행 11건에서 부하 시작 전·60초 간격 표본 30개·drain의 메트릭을 다시 집계했다. 각 표본의 CUDA device 할당은 291건·30,495,658,464바이트, pinned host 할당은 2건·4,297,400바이트로 같았다. 약 900초의 메트릭에는 활성 요청이 10개였고 drain에서는 활성·대기 요청과 활성 KV가 0이었다. 두 메트릭 표본은 각각 해당 `smaps_rollup` 읽기 직전에 수집됐다. [11개 실행의 집계와 원본 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/sample-comparison.json) · [원본 대조 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/compare_soak_samples.py)
+기준 이미지와 glibc 대조군, HTTP 프레이밍 두 모드를 포함한 A100 6번의 완료 실행 12건에서 부하 시작 전·60초 간격 표본 30개·drain의 메트릭을 집계했다. 각 표본의 CUDA device 할당은 291건·30,495,658,464바이트, pinned host 할당은 2건·4,297,400바이트로 같았다. 약 900초의 메트릭에는 활성 요청이 10개였고 drain에서는 활성·대기 요청과 활성 KV가 0이었다. 두 메트릭 표본은 각각 해당 `smaps_rollup` 읽기 직전에 수집됐다. [12개 실행의 집계와 원본 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/sample-comparison.json) · [원본 대조 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/compare_soak_samples.py)
 
-기본 이미지·스레드별 할당 캐시 비활성화 단독군·HTTP 프레이밍 `cache-on`의 일반 `VmRSS`는 각 실행의 10–15분과 20–25분 표본에서 같은 값을 유지했다. 같은 실행들의 정밀 RSS는 후반 기준에서 drain까지 148–700KiB 증가했다. 표본에서 추적한 CUDA·pinned 할당 증가는 관측되지 않았다. 호스트 힙의 증가 추세를 판별하려면 추가 정밀 표본과 동일한 요청 처리 상태에서 수집한 대조가 필요하다. 현재 RSS 증가 0 판정은 기존 두 정밀 표본을 적용한다.
+기본 이미지·스레드별 할당 캐시 비활성화 단독군·HTTP 프레이밍 두 모드의 일반 `VmRSS`는 각 실행의 10–15분과 20–25분 표본에서 같은 값을 유지했다. 같은 실행들의 정밀 RSS는 후반 기준에서 drain까지 148–700KiB 증가했다. 호스트 힙의 증가 추세를 판별하려면 추가 정밀 표본과 동일한 요청 처리 상태에서 수집한 대조가 필요하다. 현재 RSS 증가 0 판정은 기존 두 정밀 표본을 적용한다.
 
-같은 기본 이미지에서 `cache-off` 30분 부하 중 5·10·20·25·29분과 drain 뒤 10·30·60초에 PID 1의 정밀 RSS를 추가로 읽는 진단을 등록했다. 원래 검사기가 선택한 약 900초 표본과 drain 표본으로 기존 RSS 증가 0 판정을 내린다. 진단은 요청 제출이 끝난 상태에서 최대 60초를 더 관측한 뒤 유휴 상태를 한 번 확인한다. CPU 사전시험에서 추가 계측을 넣어도 원래 RSS 실패 결과가 유지됐고, 별도로 같은 이미지의 UID 65532에서 실제 PID 1의 정밀 RSS를 읽었다. 프레이밍 두 실행의 판정과 동일 GPU 홀더의 예약 복구를 확인한 뒤에 후속 진단을 시작한다. [진단 등록과 CPU 검사](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/registration.json) · [계측 코드](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/observe_rss_series.py) · [실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/campaign.sh)
+같은 기본 이미지에서 `cache-off` 30분 부하 중 5·10·20·25·29분과 drain 뒤 10·30·60초에 PID 1의 정밀 RSS를 추가로 읽는 진단을 등록했다. 원래 검사기가 선택한 약 900초 표본과 drain 표본으로 기존 RSS 증가 0 판정을 내린다. 진단은 요청 제출이 끝난 상태에서 60초를 더 관측한 뒤 유휴 상태를 한 번 확인한다. CPU 사전시험에서는 원래 RSS 실패 결과가 유지됐고, 같은 이미지의 UID 65532에서 실제 PID 1의 정밀 RSS도 읽었다. 프레이밍 두 실행의 판정과 동일 GPU 홀더의 예약 복구를 확인한 뒤 이 진단을 시작했다. [진단 등록과 CPU 검사](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/registration.json) · [계측 코드](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/observe_rss_series.py) · [실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/campaign.sh)
 
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복

@@ -1,12 +1,13 @@
 """Recompute a completed framing soak mode against the unmodified image."""
 
 from argparse import ArgumentParser
+from hashlib import file_digest
 import json
 from pathlib import Path
+import subprocess
 import sys
 
 PAIR = ("cache-on", "cache-off")
-
 
 
 def verify_samples(soak, require):
@@ -66,11 +67,41 @@ def verify(stage, original, modes):
             "completed_modes": list(modes), "image": package, "comparisons": results, "receipts": receipts}
 
 
+def verify_accuracy_skip(stage, accuracy, comparisons):
+    from verify_periodic_trim import require
+
+    gate = accuracy / "decision.json"
+    replayed = subprocess.check_output([sys.executable, "-B", str(accuracy / "accuracy_gate.py"), str(stage)])
+    require(replayed == gate.read_bytes() and (accuracy / "campaign.exit").read_text().strip() == "0",
+            "the saved accuracy decision differs from replay or the campaign did not complete")
+    decision = json.loads(replayed)
+    expected = {
+        mode: {"status": result["candidate_status"], "failed_checks": result["candidate_failed_checks"],
+               "report_sha256": result["candidate_report_sha256"]}
+        for mode, result in comparisons.items()
+    }
+    require(decision["soak_modes"] == expected, "accuracy did not use the recomputed soak pair")
+    require(decision["run_accuracy"] is False and not (accuracy / "gpu-evidence").exists(),
+            "the framing GPU accuracy run was not skipped")
+    skip, = [line.split() for line in (accuracy / "campaign.log").read_text().splitlines()
+             if line.startswith("SKIP_STRICT_RSS ")]
+    with gate.open("rb") as stream:
+        digest = file_digest(stream, "sha256").hexdigest()
+    return {"campaign_exit": 0, "run_accuracy": False, "skip_utc": skip[1],
+            "decision_sha256": digest, "mode_verdicts": expected}
+
+
 if __name__ == "__main__":
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("stage", type=Path)
     parser.add_argument("original", type=Path)
     parser.add_argument("--first", action="store_true")
+    parser.add_argument("--accuracy", type=Path, help="verify the skipped accuracy follow-up to a completed pair")
     args = parser.parse_args()
+    if args.first and args.accuracy:
+        parser.error("--accuracy requires a completed pair")
     modes = PAIR[:1] if args.first else PAIR
-    print(json.dumps(verify(args.stage, args.original, modes), indent=2, allow_nan=False))
+    result = verify(args.stage, args.original, modes)
+    if args.accuracy:
+        result["accuracy_follow_up"] = verify_accuracy_skip(args.stage, args.accuracy, result["comparisons"])
+    print(json.dumps(result, indent=2, allow_nan=False))
