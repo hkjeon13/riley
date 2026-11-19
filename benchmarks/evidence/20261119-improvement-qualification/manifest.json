@@ -829,6 +829,10 @@
           "sha256": "a7bd73f698f708271ae656b76726cabbd0b0277735e9dc89cf7cc745aa4b0d81"
         }
       ]
+    },
+    "qwen14_scheduler_choices_preflight": {
+      "path": "benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/preflight.json",
+      "sha256": "ddd1c68750163d32b15e5b826dd8f7a180971a75ab5214d7bf9f465ce8a80710"
     }
   },
   "follow_up_distribution_image": {
@@ -855,7 +859,7 @@
     "gpu_inference": "pending"
   },
   "current_distribution_candidate": {
-    "audited_main": "27e36810bae3e966f80196b85f2e0dd6e7763c4b",
+    "audited_main": "e34cb5e4a02fa6a4b5cb5e9e5b54bad266b9477a",
     "matching_distribution_input_git_objects": {
       "Cargo.toml": "e75f6ce3a2ad13911f1a91fc2b982a410f9d32f2",
       "Cargo.lock": "afa446f5b2f1ad1ba2070de2d16343cf7a7a0a70",
@@ -886,6 +890,16 @@
       "status": "passed",
       "same_program_inputs": true
     },
-    "gpu_inference": "pending"
+    "gpu_inference": "not_run_on_hosted_ci_image",
+    "a100_rebuild_gpu_inference": {
+      "status": "passed",
+      "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+      "byte_matching_runtime_files": 21,
+      "api_checks": 40,
+      "evidence": {
+        "path": "benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-package-validation.json",
+        "sha256": "edd9262e9f003d503ea575aae5fd7e80ac33cb5ca82ff9f6d99af03a309500bc"
+      }
+    }
   }
 }

@@ -1,6 +1,6 @@
 # Riley 0.1.0 후보 검증 근거와 릴리스 판정
 
-2026-11-19에 `main` `27e36810b`의 배포 입력을 확인했다. 현재 판정은 **릴리스 보류**다. A100에서 확인한 네이티브 실행 파일과 배포 이미지의 실행 파일은 각자의 SHA-256으로 추적한다. [후보별 원본 목록과 해시](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
+2026-11-19에 `main` `e34cb5e4a`의 배포 입력을 확인했다. 현재 판정은 **릴리스 보류**다. A100에서 확인한 네이티브 실행 파일과 배포 이미지의 실행 파일은 각자의 SHA-256으로 추적한다. [후보별 원본 목록과 해시](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 
 ## 실행 파일과 소스 연결
 
@@ -12,7 +12,7 @@
 
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)
 
-현행 배포 검증 이미지 `d3d8fe6e5`의 이미지 ID·Riley 실행 파일 해시를 보존했다. 이 이미지와 감사 시점 `27e36810b`의 배포 입력 Git 객체가 모두 일치한다. 동일 Rust·CUDA 프로그램 입력인 `77c367003`에서는 CUDA 12.8 네이티브 빌드·C ABI·Clippy도 통과했다. [CUDA 12.4 이미지 원본](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/receipt.json) · [CUDA 12.8 네이티브 CI](https://github.com/hkjeon13/riley/actions/runs/44410425140)
+현행 배포 검증 이미지 `d3d8fe6e5`의 이미지 ID·Riley 실행 파일 해시를 보존했다. 이 이미지와 감사 시점 `e34cb5e4a`의 배포 입력 Git 객체 14개가 모두 일치한다. 동일 Rust·CUDA 프로그램 입력인 `77c367003`에서는 CUDA 12.8 네이티브 빌드·C ABI·Clippy도 통과했다. [CUDA 12.4 이미지 원본](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/receipt.json) · [CUDA 12.8 네이티브 CI](https://github.com/hkjeon13/riley/actions/runs/44410425140)
 
 
 ## 현재 판정
