@@ -1,0 +1,21 @@
+{
+  "campaign": "w5-trim-7sec-20261119.LByzvRHj",
+  "pid": 2550251,
+  "physical_gpu": 6,
+  "state_at_record_time": "waiting",
+  "prerequisite": "w3-qkv-serving-20261119.MhydzNsX",
+  "period_ms": 7000,
+  "modes": [
+    "cache-off",
+    "cache-on"
+  ],
+  "scored_workload_seconds_per_mode": 1800,
+  "copied_verifiers_and_both_controls_preflight": "passed",
+  "sha256": {
+    "campaign.sh": "6b936ae484a3243128a044517a29992b3f851e9d8d836cea6b35a480577dac52",
+    "dispatch.sha256": "314b2a83483f5c17bee3e5a99519047fd341285fd91be6f07a423166f038adaa",
+    "harness.sha256": "d97c286f04665c333995c7455f25250c10281675048e4afe2f407c9b06b243b8",
+    "inputs.json": "6a95fefef1af1daec34da9879a8c1247b6dbe17c48aa9ade327b2f6e63219c9c",
+    "periodic_trim.patch.gz": "011a8fdfca1651d2dde59d75347a49ca4f4306cb6f595db567ca5329a81625ed"
+  }
+}

@@ -261,6 +261,9 @@ TTFT가 p95 이상인 요청의 조각 사이 대기와 겹친 CUDA 시간을 �
 
 A100 7번의 합성 입력 두 개에서 기존 wide 후보표의 split-K 3 알고리즘은 128행 기준 알고리즘과 1,024행 BF16 결과가 달랐다. 두 입력 모두 기준과 같은 바이트를 만든 구성은 102개였다. 가장 일관되게 빠른 구성은 `{21, 20, 11, 1, 0}`이었다. 같은 입력과 GPU에서 세 차례 순서를 교대로 측정한 결과 QKV 시간 중앙값은 404.80µs에서 333.94µs로 줄었다. 두 실행 순서의 쌍별 비율 중앙값은 0.8251이었다. 이 수치는 단일 QKV GEMM의 합성 시험 결과다. 실제 서빙에서 같은 1,024행에만 적용해 응답 바이트·TTFT와 decode 지연을 대조할 후보로 선정했다. [구성별 바이트 판정과 시간](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/result/comparison.json)
 
+격리한 서빙 빌드에서는 cuBLASLt 12.4.5와 A100의 1,024행 QKV에만 후보를 적용한다. 기존 런타임 동등성 검사에 통과한 경우만 선택하고, 판정 로그가 기대와 다르면 실험 검산이 실패한다. A100 7번에 기준 → 후보 → 후보 → 기준 순서를 등록했다. 기존 C1·C8과 두 도착 조건, 짧은 C32의 요청별 응답을 비교하고 별도 장문 8개의 C1·C8 토큰 ID도 맞춘다. [서빙 대조 등록](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/registration.json) · [정확성·성능 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/compare_qkv_serving.py)
+
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

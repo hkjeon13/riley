@@ -138,6 +138,9 @@ Cache-on은 API 40건과 30분 부하의 모든 항목을 통과했다. 기준 �
 
 정밀 읽기 직후 매핑 합계는 중간에서 104KiB 높았고 drain에서 일치했다. 매핑 표본의 익명 RSS는 396KiB 증가했다. 크기와 메타데이터를 그대로 유지한 익명 private 매핑에서 28KiB, 나머지 익명 private 매핑의 순변화에서 368KiB가 관측됐다. API 40건·지연·자원 회수 검사는 통과했고 A100 6번은 동일한 20GiB 예약으로 돌아왔다. 서버의 자동 후처리는 이전 검산기 파일이 없어 종료 코드 2를 남겼다. 이미 완료된 GPU 파일을 보존하고 저장소의 검산기로 로컬에서 재계산했다. [원래 판정 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/sample-timing/result/original-gate.json) · [복구 및 원본 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/sample-timing/result/recovery.json)
 
+다음 대조는 독립 반환 스레드의 주기만 31초에서 7초로 바꾼다. 이전 drain 표본의 반환 후 대기는 약 9초였다. 두 캐시 설정에서 같은 30분 부하를 각각 실행하고 지연·종료·정밀 RSS 증가 0을 검산한다. 각 표본과 직전 반환 사이의 시차도 기록해 주기 변경의 영향을 본다. 검산기와 의존 파일은 새 실행 디렉터리에 함께 전송했고 두 기존 기준군의 원본 체크섬을 확인했다. GPU 7번의 QKV 서빙 대조가 종료되면 A100 6번에서 실행한다. [7초 대조 등록](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/registration.json) · [고정 입력](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/inputs.json)
+
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)
