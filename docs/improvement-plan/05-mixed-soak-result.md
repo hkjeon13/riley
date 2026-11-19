@@ -205,6 +205,12 @@ A100 6번의 `cache-on` 컨테이너에서 API 40건이 통과했고 30분 부�
 
 RSS 증가 0 항목만 실패했다. 종료 뒤 기존 GPU 6 홀더의 20GiB 예약을 확인하고 `cache-off` 시험을 시작했다. 두 부하가 모두 통과해야 하는 장문 정확성 재실행의 조건은 이번 `cache-on` 결과로 충족되지 않았다.
 
+### RSS 표본과 실행 중 자원 지표 대조
+
+기준 이미지와 glibc 대조군, HTTP 프레이밍 `cache-on`을 포함한 A100 6번의 완료 실행 11건에서 부하 시작 전·60초 간격 표본 30개·drain의 메트릭을 다시 집계했다. 각 표본의 CUDA device 할당은 291건·30,495,658,464바이트, pinned host 할당은 2건·4,297,400바이트로 같았다. 약 900초의 메트릭에는 활성 요청이 10개였고 drain에서는 활성·대기 요청과 활성 KV가 0이었다. 두 메트릭 표본은 각각 해당 `smaps_rollup` 읽기 직전에 수집됐다. [11개 실행의 집계와 원본 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/sample-comparison.json) · [원본 대조 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/compare_soak_samples.py)
+
+기본 이미지·스레드별 할당 캐시 비활성화 단독군·HTTP 프레이밍 `cache-on`의 일반 `VmRSS`는 각 실행의 10–15분과 20–25분 표본에서 같은 값을 유지했다. 같은 실행들의 정밀 RSS는 후반 기준에서 drain까지 148–700KiB 증가했다. 표본에서 추적한 CUDA·pinned 할당 증가는 관측되지 않았다. 호스트 힙의 증가 추세를 판별하려면 추가 정밀 표본과 동일한 요청 처리 상태에서 수집한 대조가 필요하다. 현재 RSS 증가 0 판정은 기존 두 정밀 표본을 적용한다.
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 

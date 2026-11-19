@@ -1,0 +1,523 @@
+{
+  "cache-on": {
+    "unmodified": {
+      "report_sha256": "a07f24b13e13d53fde638a4565d4a2d73f1f30346797ba62539644b7ebc15d4c",
+      "soak_sha256": "8b9aec408f30323ae456a8dd8a2c4475ddf1b50b48c4d48a070d4b9e85892a18",
+      "periodic_samples": 30,
+      "native_values_across_samples": {
+        "device_live_count": [
+          291
+        ],
+        "device_live_bytes": [
+          30495658464
+        ],
+        "pinned_live_count": [
+          2
+        ],
+        "pinned_live_bytes": [
+          4297400
+        ]
+      },
+      "gauges_at_baseline": {
+        "active_requests": 10,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 338
+      },
+      "gauges_at_drain": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0
+      },
+      "baseline_seconds": 900.1763883605599,
+      "drain_seconds": 1804.0310710817575,
+      "baseline_to_drain_anonymous_growth_kib": 616,
+      "baseline_to_drain_total_growth_kib": 616,
+      "coarse_rss_kib": {
+        "minutes_10_to_15": {
+          "n": 5,
+          "min_kib": 15531780,
+          "median_kib": 15531780,
+          "max_kib": 15531780
+        },
+        "minutes_20_to_25": {
+          "n": 5,
+          "min_kib": 15531780,
+          "median_kib": 15531780,
+          "max_kib": 15531780
+        }
+      }
+    },
+    "trim_31s": {
+      "report_sha256": "e85085bdbcd4158b59d44628c5bec34ee472d3d2096f1728e1042f8e795edefb",
+      "soak_sha256": "de31c3f60bccc3a8594391323ebc03868d27d83a0b35d831ee3d71f9f122d5ca",
+      "periodic_samples": 30,
+      "native_values_across_samples": {
+        "device_live_count": [
+          291
+        ],
+        "device_live_bytes": [
+          30495658464
+        ],
+        "pinned_live_count": [
+          2
+        ],
+        "pinned_live_bytes": [
+          4297400
+        ]
+      },
+      "gauges_at_baseline": {
+        "active_requests": 10,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 334
+      },
+      "gauges_at_drain": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0
+      },
+      "baseline_seconds": 900.1650918871164,
+      "drain_seconds": 1804.0095533505082,
+      "baseline_to_drain_anonymous_growth_kib": -108,
+      "baseline_to_drain_total_growth_kib": -108,
+      "coarse_rss_kib": {
+        "minutes_10_to_15": {
+          "n": 5,
+          "min_kib": 15484836,
+          "median_kib": 15485448,
+          "max_kib": 15485636
+        },
+        "minutes_20_to_25": {
+          "n": 5,
+          "min_kib": 15485776,
+          "median_kib": 15486084,
+          "max_kib": 15488220
+        }
+      }
+    },
+    "trim_7s": {
+      "report_sha256": "2619a6ae0118f57305728698724eb405429fe6672eda797d334fe317214e190f",
+      "soak_sha256": "8c42a06845e104e51e00e2c93f22700d044a177d4540711722aaeb719914de24",
+      "periodic_samples": 30,
+      "native_values_across_samples": {
+        "device_live_count": [
+          291
+        ],
+        "device_live_bytes": [
+          30495658464
+        ],
+        "pinned_live_count": [
+          2
+        ],
+        "pinned_live_bytes": [
+          4297400
+        ]
+      },
+      "gauges_at_baseline": {
+        "active_requests": 10,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 334
+      },
+      "gauges_at_drain": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0
+      },
+      "baseline_seconds": 900.1823849231005,
+      "drain_seconds": 1804.019891448319,
+      "baseline_to_drain_anonymous_growth_kib": 292,
+      "baseline_to_drain_total_growth_kib": 292,
+      "coarse_rss_kib": {
+        "minutes_10_to_15": {
+          "n": 5,
+          "min_kib": 15479696,
+          "median_kib": 15479752,
+          "max_kib": 15481380
+        },
+        "minutes_20_to_25": {
+          "n": 5,
+          "min_kib": 15475368,
+          "median_kib": 15476816,
+          "max_kib": 15476876
+        }
+      }
+    },
+    "trim_7s_tcache_off": {
+      "report_sha256": "0df65d12e02a78a2f3cd81cfa11e697d81c54a14b0b0fd25a1032f811ca93bba",
+      "soak_sha256": "ac9e42f48dceaa9a5c897db8e799f172573998a1f7d9717711de11dddba0b4e2",
+      "periodic_samples": 30,
+      "native_values_across_samples": {
+        "device_live_count": [
+          291
+        ],
+        "device_live_bytes": [
+          30495658464
+        ],
+        "pinned_live_count": [
+          2
+        ],
+        "pinned_live_bytes": [
+          4297400
+        ]
+      },
+      "gauges_at_baseline": {
+        "active_requests": 10,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 335
+      },
+      "gauges_at_drain": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0
+      },
+      "baseline_seconds": 900.1520949676633,
+      "drain_seconds": 1803.9978546202183,
+      "baseline_to_drain_anonymous_growth_kib": 88,
+      "baseline_to_drain_total_growth_kib": 88,
+      "coarse_rss_kib": {
+        "minutes_10_to_15": {
+          "n": 5,
+          "min_kib": 15463620,
+          "median_kib": 15465968,
+          "max_kib": 15469164
+        },
+        "minutes_20_to_25": {
+          "n": 5,
+          "min_kib": 15456820,
+          "median_kib": 15459948,
+          "max_kib": 15460964
+        }
+      }
+    },
+    "tcache_off": {
+      "report_sha256": "9436443e40c67f72bf37e6b5cc1b1457827da51be4c033b9fbc4c4f07f430208",
+      "soak_sha256": "8aaeafc93b1f297115de379ad0c334b18b04ad36d0386db8f7737f66a9328861",
+      "periodic_samples": 30,
+      "native_values_across_samples": {
+        "device_live_count": [
+          291
+        ],
+        "device_live_bytes": [
+          30495658464
+        ],
+        "pinned_live_count": [
+          2
+        ],
+        "pinned_live_bytes": [
+          4297400
+        ]
+      },
+      "gauges_at_baseline": {
+        "active_requests": 10,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 335
+      },
+      "gauges_at_drain": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0
+      },
+      "baseline_seconds": 900.1655420139432,
+      "drain_seconds": 1804.0221985951066,
+      "baseline_to_drain_anonymous_growth_kib": 200,
+      "baseline_to_drain_total_growth_kib": 200,
+      "coarse_rss_kib": {
+        "minutes_10_to_15": {
+          "n": 5,
+          "min_kib": 15531116,
+          "median_kib": 15531116,
+          "max_kib": 15531116
+        },
+        "minutes_20_to_25": {
+          "n": 5,
+          "min_kib": 15531116,
+          "median_kib": 15531116,
+          "max_kib": 15531116
+        }
+      }
+    },
+    "http_framing": {
+      "report_sha256": "edb054537bf6b34b4e95402005bc7c72f97b983b39a747b90db3ff1dc0de0337",
+      "soak_sha256": "4e8d9775c4a615b43c561f8f89f38d82b3074a00e5c3ed0f8a05c5e8d729ef43",
+      "periodic_samples": 30,
+      "native_values_across_samples": {
+        "device_live_count": [
+          291
+        ],
+        "device_live_bytes": [
+          30495658464
+        ],
+        "pinned_live_count": [
+          2
+        ],
+        "pinned_live_bytes": [
+          4297400
+        ]
+      },
+      "gauges_at_baseline": {
+        "active_requests": 10,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 336
+      },
+      "gauges_at_drain": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0
+      },
+      "baseline_seconds": 900.164392888546,
+      "drain_seconds": 1803.993911318481,
+      "baseline_to_drain_anonymous_growth_kib": 632,
+      "baseline_to_drain_total_growth_kib": 632,
+      "coarse_rss_kib": {
+        "minutes_10_to_15": {
+          "n": 5,
+          "min_kib": 15532104,
+          "median_kib": 15532104,
+          "max_kib": 15532104
+        },
+        "minutes_20_to_25": {
+          "n": 5,
+          "min_kib": 15532104,
+          "median_kib": 15532104,
+          "max_kib": 15532104
+        }
+      }
+    }
+  },
+  "cache-off": {
+    "unmodified": {
+      "report_sha256": "9da95772458513f5a7584d8aaa1b69d3d89723953cfa61301fd97e69ec489628",
+      "soak_sha256": "82ff8a77b07a569b32e3260fa234977db5b5868df5332f931b08ff480605d132",
+      "periodic_samples": 30,
+      "native_values_across_samples": {
+        "device_live_count": [
+          291
+        ],
+        "device_live_bytes": [
+          30495658464
+        ],
+        "pinned_live_count": [
+          2
+        ],
+        "pinned_live_bytes": [
+          4297400
+        ]
+      },
+      "gauges_at_baseline": {
+        "active_requests": 10,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 432
+      },
+      "gauges_at_drain": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0
+      },
+      "baseline_seconds": 900.1656845510006,
+      "drain_seconds": 1804.018725708127,
+      "baseline_to_drain_anonymous_growth_kib": 700,
+      "baseline_to_drain_total_growth_kib": 700,
+      "coarse_rss_kib": {
+        "minutes_10_to_15": {
+          "n": 5,
+          "min_kib": 15536500,
+          "median_kib": 15536500,
+          "max_kib": 15536500
+        },
+        "minutes_20_to_25": {
+          "n": 5,
+          "min_kib": 15536500,
+          "median_kib": 15536500,
+          "max_kib": 15536500
+        }
+      }
+    },
+    "trim_31s": {
+      "report_sha256": "fb54431aacdacbecc0658f43a29c81b223d1a0174b9f3a355b4ecd76b1c0a219",
+      "soak_sha256": "69006e93e759b2d105288f437153b775a21264ab6ea480a8458c116b7e114d7b",
+      "periodic_samples": 30,
+      "native_values_across_samples": {
+        "device_live_count": [
+          291
+        ],
+        "device_live_bytes": [
+          30495658464
+        ],
+        "pinned_live_count": [
+          2
+        ],
+        "pinned_live_bytes": [
+          4297400
+        ]
+      },
+      "gauges_at_baseline": {
+        "active_requests": 10,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 430
+      },
+      "gauges_at_drain": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0
+      },
+      "baseline_seconds": 900.1508188471198,
+      "drain_seconds": 1804.0071559920907,
+      "baseline_to_drain_anonymous_growth_kib": 60,
+      "baseline_to_drain_total_growth_kib": 60,
+      "coarse_rss_kib": {
+        "minutes_10_to_15": {
+          "n": 5,
+          "min_kib": 15488044,
+          "median_kib": 15489096,
+          "max_kib": 15489896
+        },
+        "minutes_20_to_25": {
+          "n": 5,
+          "min_kib": 15484480,
+          "median_kib": 15486152,
+          "max_kib": 15487000
+        }
+      }
+    },
+    "trim_7s": {
+      "report_sha256": "77e847d47f240d34bd89d47d74d7662844c58c3c95071b8e73470215ef18a343",
+      "soak_sha256": "21d3ef53222b3edc77421f23d211c958c6d96dec01450353ea0dc024d8b28a7d",
+      "periodic_samples": 30,
+      "native_values_across_samples": {
+        "device_live_count": [
+          291
+        ],
+        "device_live_bytes": [
+          30495658464
+        ],
+        "pinned_live_count": [
+          2
+        ],
+        "pinned_live_bytes": [
+          4297400
+        ]
+      },
+      "gauges_at_baseline": {
+        "active_requests": 10,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 431
+      },
+      "gauges_at_drain": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0
+      },
+      "baseline_seconds": 900.1768653318286,
+      "drain_seconds": 1803.9993889182806,
+      "baseline_to_drain_anonymous_growth_kib": 44,
+      "baseline_to_drain_total_growth_kib": 44,
+      "coarse_rss_kib": {
+        "minutes_10_to_15": {
+          "n": 5,
+          "min_kib": 15481160,
+          "median_kib": 15481724,
+          "max_kib": 15482660
+        },
+        "minutes_20_to_25": {
+          "n": 5,
+          "min_kib": 15479076,
+          "median_kib": 15480468,
+          "max_kib": 15481356
+        }
+      }
+    },
+    "trim_7s_tcache_off": {
+      "report_sha256": "66773a06b5420776f76070b004e2a9450a750ece128d2428291433a33d6de06b",
+      "soak_sha256": "361dd4007bbdaa5dd65590dbea4b3ce59a3782884218eae9729b7357203d2601",
+      "periodic_samples": 30,
+      "native_values_across_samples": {
+        "device_live_count": [
+          291
+        ],
+        "device_live_bytes": [
+          30495658464
+        ],
+        "pinned_live_count": [
+          2
+        ],
+        "pinned_live_bytes": [
+          4297400
+        ]
+      },
+      "gauges_at_baseline": {
+        "active_requests": 10,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 431
+      },
+      "gauges_at_drain": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0
+      },
+      "baseline_seconds": 900.1751954481006,
+      "drain_seconds": 1804.0057198479772,
+      "baseline_to_drain_anonymous_growth_kib": -144,
+      "baseline_to_drain_total_growth_kib": -144,
+      "coarse_rss_kib": {
+        "minutes_10_to_15": {
+          "n": 5,
+          "min_kib": 15477840,
+          "median_kib": 15478620,
+          "max_kib": 15480988
+        },
+        "minutes_20_to_25": {
+          "n": 5,
+          "min_kib": 15476640,
+          "median_kib": 15478808,
+          "max_kib": 15479660
+        }
+      }
+    },
+    "tcache_off": {
+      "report_sha256": "9746bb683056b7e0f4ea2b439def74f664fa3a7157f1ecd44417a6fd47b27e78",
+      "soak_sha256": "38432051baf4ae9e901ebe0fd6a79a7f06bafed41dba2a3a80bfcc18c899b671",
+      "periodic_samples": 30,
+      "native_values_across_samples": {
+        "device_live_count": [
+          291
+        ],
+        "device_live_bytes": [
+          30495658464
+        ],
+        "pinned_live_count": [
+          2
+        ],
+        "pinned_live_bytes": [
+          4297400
+        ]
+      },
+      "gauges_at_baseline": {
+        "active_requests": 10,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 430
+      },
+      "gauges_at_drain": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0
+      },
+      "baseline_seconds": 900.1520030796528,
+      "drain_seconds": 1804.0021619647741,
+      "baseline_to_drain_anonymous_growth_kib": 148,
+      "baseline_to_drain_total_growth_kib": 148,
+      "coarse_rss_kib": {
+        "minutes_10_to_15": {
+          "n": 5,
+          "min_kib": 15534748,
+          "median_kib": 15534748,
+          "max_kib": 15534748
+        },
+        "minutes_20_to_25": {
+          "n": 5,
+          "min_kib": 15534748,
+          "median_kib": 15534748,
+          "max_kib": 15534748
+        }
+      }
+    }
+  }
+}
