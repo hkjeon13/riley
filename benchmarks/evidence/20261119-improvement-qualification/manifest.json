@@ -905,6 +905,28 @@
         "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/bias-partition/result/verified-summary.json",
         "sha256": "57e936b23b626b4980e3569c3dd8ec1be5ecec3613666977c2f935cebdb91501"
       }
+    },
+    "qwen7_same_mlp_input_preflight": {
+      "path": "benchmarks/evidence/20261119-w4-layer-trace/same-mlp-input/registration.json",
+      "sha256": "fc4018d109065bc9d86473802d43ffe173aee6c18c512c5e18fb777d1c13a41e"
+    },
+    "qwen14_scheduler_choices_result": {
+      "campaign": "w3-scheduler-choices-20261119.Hmy0dT5E",
+      "comparison_pairs": 224,
+      "files": [
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/result/verified-summary.json",
+          "sha256": "ced72a46335c86fb24a8b939b317bd92ecbcdae59bfdf9039acbff9ffb2e4409"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/result/wait-attribution.json",
+          "sha256": "bbab7c317d03b7fbce68b7156ccab0dbd5346fb8ea4e8c99469bff31d3f1fb31"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/tools/attribute_scheduler_wait.py",
+          "sha256": "85aecb07ee04ee2df9f55bd299370a68f6d813e8f0aebc51e9b6cbbf79d992ac"
+        }
+      ]
     }
   },
   "follow_up_distribution_image": {

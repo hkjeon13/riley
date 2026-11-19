@@ -240,6 +240,19 @@ CUDA 12.4 SM80 진단 바이너리로 A100 6번에서 같은 부하 여섯 개�
 
 CPU에서는 기본 설정으로 스케줄러 테스트 146건이 통과했다. 계측을 켠 두 시험의 8개 계획에서 조각 완료 뒤 대기 순서 변경과 aging override 뒤 decode 우선 복귀를 재계산했다. A100 7번은 W5 RSS 시험과 W4 장문 비교가 끝난 뒤 같은 Qwen2.5-14B-Instruct 부하 다섯 개를 기준 실행과 계측 실행으로 대조하도록 등록했다. [CPU 검사와 GPU 실행 등록](../../benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/preflight.json)
 
+A100 7번의 두 실행에서 같은 합성 요청 224쌍의 출력 텍스트 해시·생성 토큰 수·종료 사유가 일치했다. 두 실행 모두 오류·429는 0건이었고 같은 홀더의 20GiB 예약으로 복귀했다. 계측 실행의 759개 prefill 스텝에서 스케줄러 선택·실행 행·CUDA 시간을 대조했다. 이 중 188개 스텝에서 aging이 대기 요청을 먼저 배정했다. 계측을 켠 한 번의 비교에서 두 RAG seed의 TTFT p95는 각각 −15.29%와 +8.81%였다. 이 실행의 성능 수치는 선택 원인을 추적하는 데 사용한다. [정확성·종료 검산](../../benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/result/verified-summary.json)
+
+TTFT가 p95 이상인 요청의 조각 사이 대기와 겹친 CUDA 시간을 집계했다. 나중에 입장한 요청의 대기 시작 시각이 더 앞서 선택된 경우를 실제 스케줄러 시각으로 확인했다. CUDA 시간은 함께 실행된 decode도 포함하며, 한 스텝을 기다린 요청별로 한 번씩 집계했다.
+
+| 부하 | 전체 CUDA 시간 중앙값 | 나중에 입장하고 더 일찍 준비된 prefill이 실행된 시간 중앙값 | 남은 512토큰 이하가 기존 일반 prefill 예산에 들어가는 TTFT 꼬리 요청 |
+|---|---:|---:|---:|
+| `rag-c8` seed 1 | 604.84ms | 331.05ms | 1/4 |
+| `rag-c8` seed 2 | 668.39ms | 529.35ms | 2/4 |
+| 8개 동시 전송 | 1,962.10ms | 1,001.87ms | 0/2 |
+| 8개 50ms 간격 전송 | 1,956.34ms | 1,543.52ms | 1/2 |
+
+마지막 열은 기존 decode 행과 aging으로 우선 배정된 요청을 그대로 두고, 나중에 입장한 요청이 선택된 스텝의 일반 prefill 행을 재배정해 앞선 요청을 완료할 수 있는 경우다. 관측한 실행 계획에서 계산한 범위다. 두 RAG seed의 TTFT 꼬리 요청 8개 중 3개가 이 조건에 해당했다. [대기 시간·완료 가능 조건 집계](../../benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/result/wait-attribution.json) · [CUDA 시간 연결 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/attribute_scheduler_wait.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

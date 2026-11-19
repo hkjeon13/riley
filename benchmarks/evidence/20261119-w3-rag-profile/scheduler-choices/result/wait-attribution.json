@@ -1,0 +1,318 @@
+{
+  "scheduler_choice_summary_sha256": "a2d3281c95eca2e49a6965cf84f82a1cb9c4ddfb66787a42c6ef63466aad9ef6",
+  "timed_prefill_iterations": 759,
+  "prefill_iterations_with_zero_cuda_time": 0,
+  "cells": {
+    "rag-c1": {
+      "all": {
+        "requests": 16,
+        "overlapping_prefill_steps": {},
+        "requests_with_overlap": {},
+        "overlapping_prefill_cuda_time_ms_per_request_p50": {}
+      },
+      "at_or_above_ttft_p95": {
+        "requests": 1,
+        "overlapping_prefill_steps": {},
+        "requests_with_overlap": {},
+        "overlapping_prefill_cuda_time_ms_per_request_p50": {}
+      }
+    },
+    "rag-c8-s1": {
+      "all": {
+        "requests": 64,
+        "overlapping_prefill_steps": {
+          "before_first_chunk": 42,
+          "before_first_chunk_past_threshold": 11,
+          "before_first_chunk_past_threshold_aging_alternated": 6,
+          "before_first_chunk_past_threshold_other_aging_winner": 5,
+          "between_chunks": 99,
+          "between_chunks_finish_with_non_aging_rows": 7,
+          "between_chunks_later_admitted_older_ready": 64,
+          "between_chunks_past_threshold": 27,
+          "between_chunks_past_threshold_aging_alternated": 14,
+          "between_chunks_past_threshold_other_aging_winner": 13
+        },
+        "requests_with_overlap": {
+          "before_first_chunk": 31,
+          "before_first_chunk_past_threshold": 10,
+          "before_first_chunk_past_threshold_aging_alternated": 6,
+          "before_first_chunk_past_threshold_other_aging_winner": 5,
+          "between_chunks": 41,
+          "between_chunks_finish_with_non_aging_rows": 7,
+          "between_chunks_later_admitted_older_ready": 26,
+          "between_chunks_past_threshold": 19,
+          "between_chunks_past_threshold_aging_alternated": 14,
+          "between_chunks_past_threshold_other_aging_winner": 12
+        },
+        "overlapping_prefill_cuda_time_ms_per_request_p50": {
+          "before_first_chunk": 0.0,
+          "before_first_chunk_past_threshold": 0.0,
+          "before_first_chunk_past_threshold_aging_alternated": 0.0,
+          "before_first_chunk_past_threshold_other_aging_winner": 0.0,
+          "between_chunks": 142.5018235,
+          "between_chunks_finish_with_non_aging_rows": 0.0,
+          "between_chunks_later_admitted_older_ready": 0.0,
+          "between_chunks_past_threshold": 0.0,
+          "between_chunks_past_threshold_aging_alternated": 0.0,
+          "between_chunks_past_threshold_other_aging_winner": 0.0
+        }
+      },
+      "at_or_above_ttft_p95": {
+        "requests": 4,
+        "overlapping_prefill_steps": {
+          "before_first_chunk": 5,
+          "before_first_chunk_past_threshold": 1,
+          "before_first_chunk_past_threshold_aging_alternated": 1,
+          "between_chunks": 18,
+          "between_chunks_finish_with_non_aging_rows": 1,
+          "between_chunks_later_admitted_older_ready": 11,
+          "between_chunks_past_threshold": 6,
+          "between_chunks_past_threshold_aging_alternated": 3,
+          "between_chunks_past_threshold_other_aging_winner": 3
+        },
+        "requests_with_overlap": {
+          "before_first_chunk": 4,
+          "before_first_chunk_past_threshold": 1,
+          "before_first_chunk_past_threshold_aging_alternated": 1,
+          "between_chunks": 4,
+          "between_chunks_finish_with_non_aging_rows": 1,
+          "between_chunks_later_admitted_older_ready": 3,
+          "between_chunks_past_threshold": 4,
+          "between_chunks_past_threshold_aging_alternated": 3,
+          "between_chunks_past_threshold_other_aging_winner": 3
+        },
+        "overlapping_prefill_cuda_time_ms_per_request_p50": {
+          "before_first_chunk": 138.574875,
+          "before_first_chunk_past_threshold": 0.0,
+          "before_first_chunk_past_threshold_aging_alternated": 0.0,
+          "between_chunks": 604.836128,
+          "between_chunks_finish_with_non_aging_rows": 0.0,
+          "between_chunks_later_admitted_older_ready": 331.050735,
+          "between_chunks_past_threshold": 197.082768,
+          "between_chunks_past_threshold_aging_alternated": 127.598095,
+          "between_chunks_past_threshold_other_aging_winner": 128.144512
+        }
+      }
+    },
+    "rag-c8-s2": {
+      "all": {
+        "requests": 64,
+        "overlapping_prefill_steps": {
+          "before_first_chunk": 53,
+          "before_first_chunk_past_threshold": 13,
+          "before_first_chunk_past_threshold_aging_alternated": 6,
+          "before_first_chunk_past_threshold_other_aging_winner": 7,
+          "between_chunks": 111,
+          "between_chunks_finish_with_non_aging_rows": 17,
+          "between_chunks_later_admitted_older_ready": 76,
+          "between_chunks_past_threshold": 24,
+          "between_chunks_past_threshold_aging_alternated": 12,
+          "between_chunks_past_threshold_other_aging_winner": 12
+        },
+        "requests_with_overlap": {
+          "before_first_chunk": 40,
+          "before_first_chunk_past_threshold": 12,
+          "before_first_chunk_past_threshold_aging_alternated": 6,
+          "before_first_chunk_past_threshold_other_aging_winner": 7,
+          "between_chunks": 46,
+          "between_chunks_finish_with_non_aging_rows": 15,
+          "between_chunks_later_admitted_older_ready": 35,
+          "between_chunks_past_threshold": 17,
+          "between_chunks_past_threshold_aging_alternated": 11,
+          "between_chunks_past_threshold_other_aging_winner": 11
+        },
+        "overlapping_prefill_cuda_time_ms_per_request_p50": {
+          "before_first_chunk": 129.157234,
+          "before_first_chunk_past_threshold": 0.0,
+          "before_first_chunk_past_threshold_aging_alternated": 0.0,
+          "before_first_chunk_past_threshold_other_aging_winner": 0.0,
+          "between_chunks": 142.032173,
+          "between_chunks_finish_with_non_aging_rows": 0.0,
+          "between_chunks_later_admitted_older_ready": 125.0136145,
+          "between_chunks_past_threshold": 0.0,
+          "between_chunks_past_threshold_aging_alternated": 0.0,
+          "between_chunks_past_threshold_other_aging_winner": 0.0
+        }
+      },
+      "at_or_above_ttft_p95": {
+        "requests": 4,
+        "overlapping_prefill_steps": {
+          "before_first_chunk": 7,
+          "before_first_chunk_past_threshold": 3,
+          "before_first_chunk_past_threshold_aging_alternated": 1,
+          "before_first_chunk_past_threshold_other_aging_winner": 2,
+          "between_chunks": 21,
+          "between_chunks_finish_with_non_aging_rows": 2,
+          "between_chunks_later_admitted_older_ready": 14,
+          "between_chunks_past_threshold": 8,
+          "between_chunks_past_threshold_aging_alternated": 3,
+          "between_chunks_past_threshold_other_aging_winner": 5
+        },
+        "requests_with_overlap": {
+          "before_first_chunk": 4,
+          "before_first_chunk_past_threshold": 2,
+          "before_first_chunk_past_threshold_aging_alternated": 1,
+          "before_first_chunk_past_threshold_other_aging_winner": 2,
+          "between_chunks": 4,
+          "between_chunks_finish_with_non_aging_rows": 2,
+          "between_chunks_later_admitted_older_ready": 3,
+          "between_chunks_past_threshold": 4,
+          "between_chunks_past_threshold_aging_alternated": 2,
+          "between_chunks_past_threshold_other_aging_winner": 4
+        },
+        "overlapping_prefill_cuda_time_ms_per_request_p50": {
+          "before_first_chunk": 205.543449,
+          "before_first_chunk_past_threshold": 67.0053405,
+          "before_first_chunk_past_threshold_aging_alternated": 0.0,
+          "before_first_chunk_past_threshold_other_aging_winner": 66.5896835,
+          "between_chunks": 668.388394,
+          "between_chunks_finish_with_non_aging_rows": 67.316078,
+          "between_chunks_later_admitted_older_ready": 529.351905,
+          "between_chunks_past_threshold": 263.190922,
+          "between_chunks_past_threshold_aging_alternated": 64.7364655,
+          "between_chunks_past_threshold_other_aging_winner": 133.2909585
+        }
+      }
+    },
+    "wave-sync": {
+      "all": {
+        "requests": 40,
+        "overlapping_prefill_steps": {
+          "before_first_chunk": 140,
+          "before_first_chunk_past_threshold": 105,
+          "between_chunks": 435,
+          "between_chunks_finish_with_non_aging_rows": 29,
+          "between_chunks_later_admitted_older_ready": 266,
+          "between_chunks_past_threshold": 337,
+          "between_chunks_past_threshold_aging_alternated": 67,
+          "between_chunks_past_threshold_other_aging_winner": 80
+        },
+        "requests_with_overlap": {
+          "before_first_chunk": 35,
+          "before_first_chunk_past_threshold": 30,
+          "between_chunks": 40,
+          "between_chunks_finish_with_non_aging_rows": 18,
+          "between_chunks_later_admitted_older_ready": 35,
+          "between_chunks_past_threshold": 40,
+          "between_chunks_past_threshold_aging_alternated": 30,
+          "between_chunks_past_threshold_other_aging_winner": 32
+        },
+        "overlapping_prefill_cuda_time_ms_per_request_p50": {
+          "before_first_chunk": 428.5043215,
+          "before_first_chunk_past_threshold": 307.844253,
+          "between_chunks": 1480.7666405,
+          "between_chunks_finish_with_non_aging_rows": 0.0,
+          "between_chunks_later_admitted_older_ready": 702.9206855,
+          "between_chunks_past_threshold": 1090.537003,
+          "between_chunks_past_threshold_aging_alternated": 267.7247615,
+          "between_chunks_past_threshold_other_aging_winner": 277.3683015
+        }
+      },
+      "at_or_above_ttft_p95": {
+        "requests": 2,
+        "overlapping_prefill_steps": {
+          "before_first_chunk": 9,
+          "before_first_chunk_past_threshold": 7,
+          "between_chunks": 29,
+          "between_chunks_later_admitted_older_ready": 15,
+          "between_chunks_past_threshold": 22,
+          "between_chunks_past_threshold_aging_alternated": 6,
+          "between_chunks_past_threshold_other_aging_winner": 6
+        },
+        "requests_with_overlap": {
+          "before_first_chunk": 2,
+          "before_first_chunk_past_threshold": 2,
+          "between_chunks": 2,
+          "between_chunks_later_admitted_older_ready": 1,
+          "between_chunks_past_threshold": 2,
+          "between_chunks_past_threshold_aging_alternated": 2,
+          "between_chunks_past_threshold_other_aging_winner": 2
+        },
+        "overlapping_prefill_cuda_time_ms_per_request_p50": {
+          "before_first_chunk": 552.0202205,
+          "before_first_chunk_past_threshold": 430.9618025,
+          "between_chunks": 1962.1048045,
+          "between_chunks_later_admitted_older_ready": 1001.871987,
+          "between_chunks_past_threshold": 1482.6220465,
+          "between_chunks_past_threshold_aging_alternated": 416.4906695,
+          "between_chunks_past_threshold_other_aging_winner": 422.8937145
+        }
+      }
+    },
+    "wave-50ms": {
+      "all": {
+        "requests": 40,
+        "overlapping_prefill_steps": {
+          "before_first_chunk": 122,
+          "before_first_chunk_past_threshold": 89,
+          "before_first_chunk_past_threshold_aging_alternated": 14,
+          "before_first_chunk_past_threshold_other_aging_winner": 12,
+          "between_chunks": 348,
+          "between_chunks_finish_with_non_aging_rows": 41,
+          "between_chunks_later_admitted_older_ready": 221,
+          "between_chunks_past_threshold": 255,
+          "between_chunks_past_threshold_aging_alternated": 71,
+          "between_chunks_past_threshold_other_aging_winner": 79
+        },
+        "requests_with_overlap": {
+          "before_first_chunk": 33,
+          "before_first_chunk_past_threshold": 28,
+          "before_first_chunk_past_threshold_aging_alternated": 10,
+          "before_first_chunk_past_threshold_other_aging_winner": 8,
+          "between_chunks": 38,
+          "between_chunks_finish_with_non_aging_rows": 15,
+          "between_chunks_later_admitted_older_ready": 33,
+          "between_chunks_past_threshold": 38,
+          "between_chunks_past_threshold_aging_alternated": 32,
+          "between_chunks_past_threshold_other_aging_winner": 32
+        },
+        "overlapping_prefill_cuda_time_ms_per_request_p50": {
+          "before_first_chunk": 386.0514025,
+          "before_first_chunk_past_threshold": 263.0054165,
+          "before_first_chunk_past_threshold_aging_alternated": 0.0,
+          "before_first_chunk_past_threshold_other_aging_winner": 0.0,
+          "between_chunks": 1222.734906,
+          "between_chunks_finish_with_non_aging_rows": 0.0,
+          "between_chunks_later_admitted_older_ready": 570.1376455,
+          "between_chunks_past_threshold": 886.1109735,
+          "between_chunks_past_threshold_aging_alternated": 271.2740175,
+          "between_chunks_past_threshold_other_aging_winner": 267.873993
+        }
+      },
+      "at_or_above_ttft_p95": {
+        "requests": 2,
+        "overlapping_prefill_steps": {
+          "before_first_chunk": 6,
+          "before_first_chunk_past_threshold": 4,
+          "between_chunks": 29,
+          "between_chunks_finish_with_non_aging_rows": 1,
+          "between_chunks_later_admitted_older_ready": 23,
+          "between_chunks_past_threshold": 20,
+          "between_chunks_past_threshold_aging_alternated": 4,
+          "between_chunks_past_threshold_other_aging_winner": 6
+        },
+        "requests_with_overlap": {
+          "before_first_chunk": 2,
+          "before_first_chunk_past_threshold": 2,
+          "between_chunks": 2,
+          "between_chunks_finish_with_non_aging_rows": 1,
+          "between_chunks_later_admitted_older_ready": 2,
+          "between_chunks_past_threshold": 2,
+          "between_chunks_past_threshold_aging_alternated": 2,
+          "between_chunks_past_threshold_other_aging_winner": 2
+        },
+        "overlapping_prefill_cuda_time_ms_per_request_p50": {
+          "before_first_chunk": 382.4799345,
+          "before_first_chunk_past_threshold": 254.623245,
+          "between_chunks": 1956.336019,
+          "between_chunks_finish_with_non_aging_rows": 73.336899,
+          "between_chunks_later_admitted_older_ready": 1543.5201465,
+          "between_chunks_past_threshold": 1328.4237265,
+          "between_chunks_past_threshold_aging_alternated": 278.2504735,
+          "between_chunks_past_threshold_other_aging_winner": 414.0107735
+        }
+      }
+    }
+  },
+  "scope": "CUDA timers cover the whole submitted iteration, including any decode rows. Each waiting request counts a selected step once; classification groups can overlap. The 512-row completion counts are static opportunities in existing plans."
+}
