@@ -868,6 +868,43 @@
           "sha256": "d213f416d02c71c18068e9edd76223078b339d3a65d23690f413f50db2e7e1fa"
         }
       ]
+    },
+    "distribution_periodic_trim_paired": {
+      "campaign": "w5-periodic-trim-20261119.mI9aaaEp",
+      "zero_growth_satisfied_in_both_cache_modes": false,
+      "modes": {
+        "cache-off": {
+          "status": "failed",
+          "control_rss_growth_kib": 700,
+          "periodic_rss_growth_kib": 60,
+          "failed_checks": [
+            "rss_growth_second_half_at_most_zero"
+          ]
+        },
+        "cache-on": {
+          "status": "passed",
+          "control_rss_growth_kib": 616,
+          "periodic_rss_growth_kib": -108,
+          "failed_checks": []
+        }
+      },
+      "evidence": {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/result/paired-comparison.json",
+        "sha256": "2775728c2a58bba33d4c7d86db690706de9028929559a2814677d80e46afb060"
+      },
+      "local_raw_archive_sha256": {
+        "cache-off": "31f965bbee4f640837bf9cf45821b977d373cff14c97a81d9f72d74ad383ee0f",
+        "cache-on": "009796b04d1c6224cdf4f393963ee4eb9d84dbb5c71d981eb99524c0e9434238"
+      }
+    },
+    "qwen7_hf_bias_partition_result": {
+      "campaign": "w4-hf-bias-partition-20261119.hj2XRENK",
+      "physical_gpu": 6,
+      "original_result_sha256": "96250d798bdbcb03ea6b002bbe2d24d7720b8f8de39fcf320c1290b486e5f773",
+      "evidence": {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/bias-partition/result/verified-summary.json",
+        "sha256": "57e936b23b626b4980e3569c3dd8ec1be5ecec3613666977c2f935cebdb91501"
+      }
     }
   },
   "follow_up_distribution_image": {

@@ -124,7 +124,11 @@ W4의 첫 시도가 파서 체크섬 검사에서 종료된 뒤 GPU 6의 RSS 진
 
 Cache-off의 30분 실행에서 후반 RSS는 60KiB 증가했다. 기준 실행의 증가량은 700KiB였으며, 두 실행 모두 익명 RSS 변화가 전체 증가분과 같았다. 주기적 반환 실행의 유일한 실패 항목은 RSS 증가 0 조건이었다. 후반 TTFT p95는 335.42ms, 완료 지연 p95는 4,169.17ms로 기준 실행 대비 각각 0.37%, 0.28% 높았다. 같은 실행의 전반 대비 후반 p95 변화는 TTFT +1.58%, 완료 지연 −13.46%로 5% 기준 이내였다. [원본 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/result/cache-off-comparison.json) · [전용 경로 원본의 해시](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 
-API 40건이 통과했고 합성 부하는 기준 실행과 동일하게 정상 완료 13,749건, 의도적 연결 종료 700건으로 집계됐다. 반환 호출 66회에서 모두 페이지를 반환했고, 호출 시간 p95는 1.38ms였다. 종료 자원을 모두 회수한 뒤 GPU 6은 동일 홀더의 20GiB 예약으로 복귀했다. 이어 동일 GPU에서 cache-on 시험을 시작했다.
+API 40건이 통과했고 합성 부하는 기준 실행과 동일하게 정상 완료 13,749건, 의도적 연결 종료 700건으로 집계됐다. 반환 호출 66회에서 모두 페이지를 반환했고, 호출 시간 p95는 1.38ms였다. 종료 자원을 모두 회수한 뒤 GPU 6은 동일 홀더의 20GiB 예약으로 복귀했다.
+
+Cache-on은 API 40건과 30분 부하의 모든 항목을 통과했다. 기준 실행의 정밀 RSS는 616KiB 증가했고, 주기적 반환 실행에서는 108KiB 감소했다. 두 값 모두 익명 RSS의 변화와 같았다. 후반 TTFT p95는 327.79ms로 기준 대비 0.61% 높았고, 완료 지연 p95는 4,126.81ms로 0.11% 낮았다. 같은 실행의 전반 대비 후반 p95 변화는 TTFT +1.49%, 완료 지연 −13.74%였다. 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했고 66번의 호출에서 모두 메모리를 반환했다. 호출 시간 p95는 1.15ms였다. 종료 후 GPU 6의 동일한 20GiB 예약을 확인했다. [두 설정의 검산 결과](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/result/paired-comparison.json)
+
+두 실행에 모두 적용되는 RSS 증가 0 조건은 cache-off에서 미충족이다. 동일 원본의 집계를 A100과 로컬에서 다시 계산해 파일의 바이트 일치를 확인했다. [검산 코드](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/verify_periodic_trim.py)
 
 같은 cache-off 원본에서 일반 `/proc/PID/status`의 `VmRSS`는 688KiB 감소했다. 같은 구간의 `smaps_rollup`은 익명 RSS가 60KiB 증가했다고 기록했다. 중간과 drain의 정밀 RSS는 주기적 반환 실행에서 기준 실행보다 각각 44,596KiB와 45,236KiB 낮았다. 상주 메모리 절대량은 낮아졌으며 증가 0 판정은 정밀 표본을 따랐다.
 

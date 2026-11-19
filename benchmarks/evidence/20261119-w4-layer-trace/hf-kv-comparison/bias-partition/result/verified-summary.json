@@ -1,0 +1,161 @@
+{
+  "result_sha256": "96250d798bdbcb03ea6b002bbe2d24d7720b8f8de39fcf320c1290b486e5f773",
+  "preflight_sha256": "c322318b7afbb7763c93f895ef3de49a70fbda75e4b1165bf475d468bea9eba5",
+  "reservation_restored": true,
+  "cases": {
+    "3": {
+      "prompt_sha256": "343ba4711df279dc535694caef24763595679307f22dc3a8171adc15e1bc581d",
+      "riley_first_id": 264,
+      "historical_control_logits_reproduced": true,
+      "runs": {
+        "fused_whole": {
+          "partition": [
+            3301
+          ],
+          "first_id": 5257,
+          "tracked_logits": {
+            "264": 18.25,
+            "5257": 18.375
+          },
+          "logits_sha256": "c82be997783c54586f737ac83d454bba61cdfb213e333e5ea567612ecdfc6378"
+        },
+        "split_whole": {
+          "partition": [
+            3301
+          ],
+          "first_id": 5257,
+          "tracked_logits": {
+            "264": 18.25,
+            "5257": 18.375
+          },
+          "logits_sha256": "347810054e4b6e004c8d10f354b6e22635f4911836f98d89aec4f625e7810420"
+        },
+        "fused_partitioned": {
+          "partition": [
+            1024,
+            1024,
+            1024,
+            229
+          ],
+          "first_id": 5257,
+          "tracked_logits": {
+            "264": 18.25,
+            "5257": 18.375
+          },
+          "logits_sha256": "dce5a27e64ee369de11fd637f9780fd53c215f08db914bf7aca9808abbcaa915"
+        },
+        "split_partitioned": {
+          "partition": [
+            1024,
+            1024,
+            1024,
+            229
+          ],
+          "first_id": 5257,
+          "tracked_logits": {
+            "264": 18.25,
+            "5257": 18.375
+          },
+          "logits_sha256": "56e5400b3249259c7214dae84ef4c45e5ca7ac9c91b775536897ef64e4a21c3e"
+        },
+        "fused_whole_repeat": {
+          "partition": [
+            3301
+          ],
+          "first_id": 5257,
+          "tracked_logits": {
+            "264": 18.25,
+            "5257": 18.375
+          },
+          "logits_sha256": "c82be997783c54586f737ac83d454bba61cdfb213e333e5ea567612ecdfc6378"
+        }
+      },
+      "logit_margin_5257_minus_264": {
+        "fused_whole": 0.125,
+        "split_whole": 0.125,
+        "fused_partitioned": 0.125,
+        "split_partitioned": 0.125,
+        "fused_whole_repeat": 0.125
+      },
+      "logit_margin_interaction": 0.0
+    },
+    "9": {
+      "prompt_sha256": "7fb5c6c22ae8635b52037b34674cb8d8f3583933fe3f7a8fcf7dcb26c64d6a3a",
+      "riley_first_id": 264,
+      "historical_control_logits_reproduced": true,
+      "runs": {
+        "fused_whole": {
+          "partition": [
+            3330
+          ],
+          "first_id": 264,
+          "tracked_logits": {
+            "264": 18.375,
+            "5257": 18.375
+          },
+          "logits_sha256": "55f7906950ed9969a492a907dc5e426fa2f82319692078815b649b4592e1c901"
+        },
+        "split_whole": {
+          "partition": [
+            3330
+          ],
+          "first_id": 264,
+          "tracked_logits": {
+            "264": 18.25,
+            "5257": 18.25
+          },
+          "logits_sha256": "b982452f8099015981566be0438c922c0aba335613ad04cef762c8e71f30a150"
+        },
+        "fused_partitioned": {
+          "partition": [
+            1024,
+            1024,
+            1024,
+            256,
+            2
+          ],
+          "first_id": 264,
+          "tracked_logits": {
+            "264": 18.375,
+            "5257": 18.375
+          },
+          "logits_sha256": "48241dbb7f616c8538c71d5fbfa66a290ab98bd65ac6da985e92a65e6b47f42a"
+        },
+        "split_partitioned": {
+          "partition": [
+            1024,
+            1024,
+            1024,
+            256,
+            2
+          ],
+          "first_id": 264,
+          "tracked_logits": {
+            "264": 18.25,
+            "5257": 18.25
+          },
+          "logits_sha256": "c64939edc5c58b8a5a3c69cad3f51e3f2d30894aa084d42794e2bc5b3f8ad857"
+        },
+        "fused_whole_repeat": {
+          "partition": [
+            3330
+          ],
+          "first_id": 264,
+          "tracked_logits": {
+            "264": 18.375,
+            "5257": 18.375
+          },
+          "logits_sha256": "55f7906950ed9969a492a907dc5e426fa2f82319692078815b649b4592e1c901"
+        }
+      },
+      "logit_margin_5257_minus_264": {
+        "fused_whole": 0.0,
+        "split_whole": 0.0,
+        "fused_partitioned": 0.0,
+        "split_partitioned": 0.0,
+        "fused_whole_repeat": 0.0
+      },
+      "logit_margin_interaction": 0.0
+    }
+  }
+}
