@@ -943,6 +943,40 @@
           "sha256": "dead5e03eb539326bfd5315ad35741e8f678edbb97fb35f6ab91c2fc8199293b"
         }
       ]
+    },
+    "distribution_rss_sample_timing_result": {
+      "campaign": "w5-trim-sample-timing-20261119.UtiF64Me",
+      "rss_growth_kib": 500,
+      "files": [
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/sample-timing/result/original-gate.json",
+          "sha256": "0a5d9df6ade203a71ccd0170d97a9b761d7d9da81e4b09c6b089235b490540eb"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/sample-timing/result/recovery.json",
+          "sha256": "d3b0d2ad299f775085312b85ec13df436db603b1b5cfadb814b6754164b58902"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/sample-timing/result/timing-summary.json",
+          "sha256": "d4119592d14c956ae336a6e4ab7bacf2a569592f1e885d167bbed13811f3ff06"
+        }
+      ]
+    },
+    "qwen14_qkv_1024_synthetic_probe": {
+      "campaign": "w3-qkv-1024-20261119.IZQF8D4T",
+      "physical_gpu": 7,
+      "evidence": {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/result/comparison.json",
+        "sha256": "405b859862ff0aef0d12b98565fb514e741bea35c117bebeac1d1f4ccf6cdcb5"
+      }
+    },
+    "qwen7_same_mlp_input_result": {
+      "campaign": "w4-hf-mlp-input-20261119.rOd2VDeo",
+      "physical_gpu": 6,
+      "evidence": {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/same-mlp-input/result/verified-summary.json",
+        "sha256": "7239899e5c12e05767bf893abb696b50cfa13a0f402a751b9fc97a11088c44c6"
+      }
     }
   },
   "follow_up_distribution_image": {

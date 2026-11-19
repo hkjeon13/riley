@@ -1,0 +1,88 @@
+{
+  "mode": "cache-off",
+  "verdict": "failed",
+  "original_rss": {
+    "baseline": {
+      "rss_kib": 15508788,
+      "anonymous_kib": 15322160,
+      "read_ms": 287.1537059545517
+    },
+    "drain": {
+      "rss_kib": 15509288,
+      "anonymous_kib": 15322660,
+      "read_ms": 274.1783559322357
+    },
+    "rss_growth_kib": 500,
+    "anonymous_growth_kib": 500
+  },
+  "sample_bounds": {
+    "midpoint": {
+      "rollup_read": {
+        "preceding_trim": 37,
+        "preceding_trim_returned": 1,
+        "milliseconds_since_trim_at_start": 4161.141342,
+        "milliseconds_since_trim_at_end": 4448.30556,
+        "overlapping_trims": [],
+        "following_trim": 38
+      },
+      "map_read": {
+        "preceding_trim": 37,
+        "preceding_trim_returned": 1,
+        "milliseconds_since_trim_at_start": 4448.309061,
+        "milliseconds_since_trim_at_end": 4762.649326,
+        "overlapping_trims": [],
+        "following_trim": 38
+      },
+      "rollup_and_maps_rss_difference_kib": 104,
+      "rollup_and_maps_anonymous_difference_kib": 104
+    },
+    "drain": {
+      "rollup_read": {
+        "preceding_trim": 66,
+        "preceding_trim_returned": 1,
+        "milliseconds_since_trim_at_start": 8992.061409,
+        "milliseconds_since_trim_at_end": 9266.250803,
+        "overlapping_trims": [],
+        "following_trim": null
+      },
+      "map_read": {
+        "preceding_trim": 66,
+        "preceding_trim_returned": 1,
+        "milliseconds_since_trim_at_start": 9266.253898,
+        "milliseconds_since_trim_at_end": 9572.895562,
+        "overlapping_trims": [],
+        "following_trim": null
+      },
+      "rollup_and_maps_rss_difference_kib": 0,
+      "rollup_and_maps_anonymous_difference_kib": 0
+    }
+  },
+  "same_extent_mapping_changes_by_class": {
+    "anonymous-private": {
+      "retained_delta_kib": 28,
+      "lost_kib": 8536,
+      "added_kib": 8904
+    },
+    "file-or-device": {
+      "retained_delta_kib": 0,
+      "lost_kib": 0,
+      "added_kib": 0
+    },
+    "heap": {
+      "retained_delta_kib": 0,
+      "lost_kib": 0,
+      "added_kib": 0
+    },
+    "labeled-stack": {
+      "retained_delta_kib": 0,
+      "lost_kib": 0,
+      "added_kib": 0
+    },
+    "other-kernel": {
+      "retained_delta_kib": 0,
+      "lost_kib": 0,
+      "added_kib": 0
+    }
+  },
+  "diagnostic_scope": "Map reads follow the scored RSS samples and can observe different pages."
+}

@@ -1,0 +1,69 @@
+{
+  "campaign": "w5-trim-sample-timing-20261119.UtiF64Me",
+  "modes": {
+    "cache-off": {
+      "candidate_status": "failed",
+      "candidate_failed_checks": [
+        "rss_growth_second_half_at_most_zero"
+      ],
+      "candidate_soak_p95_drift_percent": {
+        "ttft_ms": 0.713038212435646,
+        "e2e_ms": -13.748859587845486
+      },
+      "same_outcome_counts": true,
+      "control_rss": {
+        "baseline": {
+          "rss_kib": 15553508,
+          "anonymous_kib": 15366920,
+          "read_ms": 392.03569293022156
+        },
+        "drain": {
+          "rss_kib": 15554208,
+          "anonymous_kib": 15367620,
+          "read_ms": 340.7674729824066
+        },
+        "rss_growth_kib": 700,
+        "anonymous_growth_kib": 700
+      },
+      "candidate_rss": {
+        "baseline": {
+          "rss_kib": 15508788,
+          "anonymous_kib": 15322160,
+          "read_ms": 287.1537059545517
+        },
+        "drain": {
+          "rss_kib": 15509288,
+          "anonymous_kib": 15322660,
+          "read_ms": 274.1783559322357
+        },
+        "rss_growth_kib": 500,
+        "anonymous_growth_kib": 500
+      },
+      "late_p95_ms": {
+        "ttft_ms_p95": {
+          "control": 334.195539355278,
+          "periodic": 335.601843893528,
+          "difference_percent": 0.42080290507855445
+        },
+        "e2e_ms_p95": {
+          "control": 4157.334998250008,
+          "periodic": 4159.981831908226,
+          "difference_percent": 0.06366659553134202
+        }
+      },
+      "periodic_trim": {
+        "period_ms": 31000,
+        "calls": 66,
+        "returned_memory": 66,
+        "span_seconds": 2015.04845924,
+        "call_ms_p95": 1.105026,
+        "call_ms_max": 2.75252
+      },
+      "same_20gib_reservation_restored": true,
+      "control_report_sha256": "9da95772458513f5a7584d8aaa1b69d3d89723953cfa61301fd97e69ec489628",
+      "candidate_report_sha256": "b8d54633226a2ff15f4b75fc38bb4f1960857de3f4507b26f9918e0c6949b2f8",
+      "candidate_soak_sha256": "eed392f3a1e5bbe4ad58f8c2d349299c9677fae99d2a6a7ab624fffd119ca5b8",
+      "trim_telemetry_sha256": "f292a4ff9b4ed0c6d66488a8e161a5056ea34374a049b635c9349874f840e083"
+    }
+  }
+}

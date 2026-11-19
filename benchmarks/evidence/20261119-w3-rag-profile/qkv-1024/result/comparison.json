@@ -1,0 +1,743 @@
+{
+  "cuda_library": 120405,
+  "m": 1024,
+  "k": 5120,
+  "n": 7168,
+  "anchor": "{21, 18, 18, 1, 0}",
+  "current_table_entry": "{21, 20, 11, 3, 1}",
+  "timed_baseline": "{21, 18, 18, 1, 0}",
+  "synthetic_checks": [
+    {
+      "seed": 0,
+      "table_valid": true,
+      "table_equal": false,
+      "matching_configurations": 102,
+      "enumerated_configurations": 5429
+    },
+    {
+      "seed": 1,
+      "table_valid": true,
+      "table_equal": false,
+      "matching_configurations": 102,
+      "enumerated_configurations": 5429
+    }
+  ],
+  "ranked_timings": [
+    {
+      "algorithm": "{21, 20, 11, 1, 0}",
+      "baseline_us_p50": 404.799,
+      "candidate_us_p50": 333.937,
+      "paired_time_ratio_p50": 0.8250885007126995,
+      "paired_time_ratio_max": 0.8251960561318842
+    },
+    {
+      "algorithm": "{6, 20, 11, 1, 0}",
+      "baseline_us_p50": 405.184,
+      "candidate_us_p50": 355.396,
+      "paired_time_ratio_p50": 0.8749990610281617,
+      "paired_time_ratio_max": 0.8771224924972358
+    },
+    {
+      "algorithm": "{21, 20, 17, 1, 0}",
+      "baseline_us_p50": 405.76,
+      "candidate_us_p50": 356.855,
+      "paired_time_ratio_p50": 0.8787196848455004,
+      "paired_time_ratio_max": 0.8794730875394322
+    },
+    {
+      "algorithm": "{21, 20, 12, 1, 0}",
+      "baseline_us_p50": 405.75,
+      "candidate_us_p50": 356.058,
+      "paired_time_ratio_p50": 0.8791866913123845,
+      "paired_time_ratio_max": 0.8796051315116615
+    },
+    {
+      "algorithm": "{21, 20, 15, 1, 0}",
+      "baseline_us_p50": 402.011,
+      "candidate_us_p50": 354.713,
+      "paired_time_ratio_p50": 0.8799057869799798,
+      "paired_time_ratio_max": 0.8823465029563867
+    },
+    {
+      "algorithm": "{21, 20, 10, 1, 0}",
+      "baseline_us_p50": 400.499,
+      "candidate_us_p50": 350.127,
+      "paired_time_ratio_p50": 0.874707391594363,
+      "paired_time_ratio_max": 0.8832441600878014
+    },
+    {
+      "algorithm": "{21, 21, 15, 1, 0}",
+      "baseline_us_p50": 401.004,
+      "candidate_us_p50": 373.764,
+      "paired_time_ratio_p50": 0.9329325727877594,
+      "paired_time_ratio_max": 0.9345362925636371
+    },
+    {
+      "algorithm": "{21, 19, 16, 1, 0}",
+      "baseline_us_p50": 400.906,
+      "candidate_us_p50": 379.838,
+      "paired_time_ratio_p50": 0.9472694347303359,
+      "paired_time_ratio_max": 0.9475611611831355
+    },
+    {
+      "algorithm": "{21, 19, 10, 1, 0}",
+      "baseline_us_p50": 401.1,
+      "candidate_us_p50": 383.476,
+      "paired_time_ratio_p50": 0.9560683121416105,
+      "paired_time_ratio_max": 0.9572445607133229
+    },
+    {
+      "algorithm": "{6, 20, 15, 1, 0}",
+      "baseline_us_p50": 405.119,
+      "candidate_us_p50": 387.929,
+      "paired_time_ratio_p50": 0.9589096876889476,
+      "paired_time_ratio_max": 0.9603523461968054
+    },
+    {
+      "algorithm": "{21, 21, 10, 1, 0}",
+      "baseline_us_p50": 400.223,
+      "candidate_us_p50": 387.536,
+      "paired_time_ratio_p50": 0.9681452590180973,
+      "paired_time_ratio_max": 0.9686825890792746
+    },
+    {
+      "algorithm": "{6, 21, 15, 1, 0}",
+      "baseline_us_p50": 405.31,
+      "candidate_us_p50": 392.314,
+      "paired_time_ratio_p50": 0.9779206039821371,
+      "paired_time_ratio_max": 0.9802455374030941
+    },
+    {
+      "algorithm": "{21, 17, 15, 1, 0}",
+      "baseline_us_p50": 405.366,
+      "candidate_us_p50": 398.701,
+      "paired_time_ratio_p50": 0.982317282284468,
+      "paired_time_ratio_max": 0.9853761785645565
+    },
+    {
+      "algorithm": "{21, 18, 16, 1, 0}",
+      "baseline_us_p50": 405.76,
+      "candidate_us_p50": 399.747,
+      "paired_time_ratio_p50": 0.9909182768138801,
+      "paired_time_ratio_max": 0.9922671283107916
+    },
+    {
+      "algorithm": "{21, 24, 9, 1, 0}",
+      "baseline_us_p50": 391.337,
+      "candidate_us_p50": 385.103,
+      "paired_time_ratio_p50": 0.9840699959370057,
+      "paired_time_ratio_max": 0.9948216590627356
+    },
+    {
+      "algorithm": "{21, 24, 12, 1, 0}",
+      "baseline_us_p50": 392.562,
+      "candidate_us_p50": 390.583,
+      "paired_time_ratio_p50": 0.9902537688314202,
+      "paired_time_ratio_max": 0.995473533167329
+    },
+    {
+      "algorithm": "{21, 18, 15, 1, 0}",
+      "baseline_us_p50": 404.943,
+      "candidate_us_p50": 403.327,
+      "paired_time_ratio_p50": 0.9960093148912317,
+      "paired_time_ratio_max": 0.9991950001111196
+    },
+    {
+      "algorithm": "{21, 23, 9, 1, 0}",
+      "baseline_us_p50": 396.922,
+      "candidate_us_p50": 396.432,
+      "paired_time_ratio_p50": 0.9815114739792484,
+      "paired_time_ratio_max": 1.0004492068218869
+    },
+    {
+      "algorithm": "{21, 18, 18, 1, 0}",
+      "baseline_us_p50": 406.146,
+      "candidate_us_p50": 406.268,
+      "paired_time_ratio_p50": 0.9998380074416889,
+      "paired_time_ratio_max": 1.0005022824304561
+    },
+    {
+      "algorithm": "{21, 17, 12, 1, 0}",
+      "baseline_us_p50": 405.462,
+      "candidate_us_p50": 402.669,
+      "paired_time_ratio_p50": 0.9983746935594457,
+      "paired_time_ratio_max": 1.0010811955149288
+    },
+    {
+      "algorithm": "{21, 23, 12, 1, 0}",
+      "baseline_us_p50": 393.483,
+      "candidate_us_p50": 392.54,
+      "paired_time_ratio_p50": 0.997603454278838,
+      "paired_time_ratio_max": 1.0019500989088126
+    },
+    {
+      "algorithm": "{6, 24, 15, 1, 0}",
+      "baseline_us_p50": 392.077,
+      "candidate_us_p50": 393.438,
+      "paired_time_ratio_p50": 1.0021424363071538,
+      "paired_time_ratio_max": 1.005846846869879
+    },
+    {
+      "algorithm": "{21, 17, 16, 1, 0}",
+      "baseline_us_p50": 401.116,
+      "candidate_us_p50": 403.606,
+      "paired_time_ratio_p50": 1.0051381645209865,
+      "paired_time_ratio_max": 1.0067372569561368
+    },
+    {
+      "algorithm": "{21, 24, 15, 1, 0}",
+      "baseline_us_p50": 392.031,
+      "candidate_us_p50": 394.8,
+      "paired_time_ratio_p50": 1.0025950365142307,
+      "paired_time_ratio_max": 1.0070632169394766
+    },
+    {
+      "algorithm": "{21, 18, 12, 1, 0}",
+      "baseline_us_p50": 405.195,
+      "candidate_us_p50": 406.624,
+      "paired_time_ratio_p50": 1.0071373042609113,
+      "paired_time_ratio_max": 1.0076224295155611
+    },
+    {
+      "algorithm": "{21, 17, 18, 1, 0}",
+      "baseline_us_p50": 400.759,
+      "candidate_us_p50": 404.176,
+      "paired_time_ratio_p50": 1.0080574483332043,
+      "paired_time_ratio_max": 1.0089754690474824
+    },
+    {
+      "algorithm": "{6, 23, 15, 1, 0}",
+      "baseline_us_p50": 387.231,
+      "candidate_us_p50": 386.447,
+      "paired_time_ratio_p50": 0.9979753687075673,
+      "paired_time_ratio_max": 1.0170191193511007
+    },
+    {
+      "algorithm": "{21, 23, 15, 1, 0}",
+      "baseline_us_p50": 389.355,
+      "candidate_us_p50": 396.67,
+      "paired_time_ratio_p50": 1.0187951869116871,
+      "paired_time_ratio_max": 1.0204779913045716
+    },
+    {
+      "algorithm": "{6, 24, 9, 1, 0}",
+      "baseline_us_p50": 395.552,
+      "candidate_us_p50": 403.302,
+      "paired_time_ratio_p50": 1.0193855675107193,
+      "paired_time_ratio_max": 1.0211915941611227
+    },
+    {
+      "algorithm": "{6, 21, 0, 1, 0}",
+      "baseline_us_p50": 396.623,
+      "candidate_us_p50": 441.294,
+      "paired_time_ratio_p50": 1.1100577737057704,
+      "paired_time_ratio_max": 1.1126283649712698
+    },
+    {
+      "algorithm": "{6, 17, 15, 1, 0}",
+      "baseline_us_p50": 400.124,
+      "candidate_us_p50": 448.98,
+      "paired_time_ratio_p50": 1.1221021483340163,
+      "paired_time_ratio_max": 1.1231086279080236
+    },
+    {
+      "algorithm": "{6, 18, 15, 1, 0}",
+      "baseline_us_p50": 401.255,
+      "candidate_us_p50": 470.366,
+      "paired_time_ratio_p50": 1.17325999840504,
+      "paired_time_ratio_max": 1.1749896956147035
+    },
+    {
+      "algorithm": "{21, 15, 12, 1, 0}",
+      "baseline_us_p50": 401.313,
+      "candidate_us_p50": 478.801,
+      "paired_time_ratio_p50": 1.217126600142871,
+      "paired_time_ratio_max": 1.2186646907417518
+    },
+    {
+      "algorithm": "{21, 15, 18, 1, 0}",
+      "baseline_us_p50": 395.451,
+      "candidate_us_p50": 497.292,
+      "paired_time_ratio_p50": 1.2567271292777107,
+      "paired_time_ratio_max": 1.2627921202722012
+    },
+    {
+      "algorithm": "{21, 15, 16, 1, 0}",
+      "baseline_us_p50": 397.04,
+      "candidate_us_p50": 505.318,
+      "paired_time_ratio_p50": 1.264827221438646,
+      "paired_time_ratio_max": 1.2743756966826556
+    },
+    {
+      "algorithm": "{5, 23, 0, 1, 0}",
+      "baseline_us_p50": 382.571,
+      "candidate_us_p50": 489.801,
+      "paired_time_ratio_p50": 1.2802094251785943,
+      "paired_time_ratio_max": 1.2820748131240636
+    },
+    {
+      "algorithm": "{5, 24, 0, 1, 0}",
+      "baseline_us_p50": 382.985,
+      "candidate_us_p50": 485.621,
+      "paired_time_ratio_p50": 1.2575560054862518,
+      "paired_time_ratio_max": 1.2839458464430722
+    },
+    {
+      "algorithm": "{6, 23, 0, 1, 0}",
+      "baseline_us_p50": 405.865,
+      "candidate_us_p50": 525.847,
+      "paired_time_ratio_p50": 1.295620464932921,
+      "paired_time_ratio_max": 1.2963395465945318
+    },
+    {
+      "algorithm": "{6, 17, 12, 1, 0}",
+      "baseline_us_p50": 396.018,
+      "candidate_us_p50": 506.605,
+      "paired_time_ratio_p50": 1.2792474079461036,
+      "paired_time_ratio_max": 1.304531251209512
+    },
+    {
+      "algorithm": "{21, 15, 25, 1, 0}",
+      "baseline_us_p50": 396.512,
+      "candidate_us_p50": 518.676,
+      "paired_time_ratio_p50": 1.3093216809166435,
+      "paired_time_ratio_max": 1.3099619833210645
+    },
+    {
+      "algorithm": "{6, 18, 12, 1, 0}",
+      "baseline_us_p50": 397.354,
+      "candidate_us_p50": 518.951,
+      "paired_time_ratio_p50": 1.306016801139538,
+      "paired_time_ratio_max": 1.3192569719389966
+    },
+    {
+      "algorithm": "{6, 18, 16, 1, 0}",
+      "baseline_us_p50": 401.327,
+      "candidate_us_p50": 532.631,
+      "paired_time_ratio_p50": 1.327011172140642,
+      "paired_time_ratio_max": 1.329155114803271
+    },
+    {
+      "algorithm": "{6, 17, 16, 1, 0}",
+      "baseline_us_p50": 396.815,
+      "candidate_us_p50": 531.098,
+      "paired_time_ratio_p50": 1.33579627786248,
+      "paired_time_ratio_max": 1.3394655657381365
+    },
+    {
+      "algorithm": "{5, 20, 0, 1, 0}",
+      "baseline_us_p50": 378.906,
+      "candidate_us_p50": 503.203,
+      "paired_time_ratio_p50": 1.330335704433967,
+      "paired_time_ratio_max": 1.3676479126749115
+    },
+    {
+      "algorithm": "{5, 23, 7, 1, 0}",
+      "baseline_us_p50": 386.155,
+      "candidate_us_p50": 550.111,
+      "paired_time_ratio_p50": 1.424585982312802,
+      "paired_time_ratio_max": 1.4316867884040458
+    },
+    {
+      "algorithm": "{6, 15, 17, 1, 0}",
+      "baseline_us_p50": 398.891,
+      "candidate_us_p50": 571.42,
+      "paired_time_ratio_p50": 1.4499711802154118,
+      "paired_time_ratio_max": 1.4502785142905694
+    },
+    {
+      "algorithm": "{5, 24, 7, 1, 0}",
+      "baseline_us_p50": 385.433,
+      "candidate_us_p50": 558.006,
+      "paired_time_ratio_p50": 1.4477379985626555,
+      "paired_time_ratio_max": 1.454903066325239
+    },
+    {
+      "algorithm": "{6, 18, 0, 1, 0}",
+      "baseline_us_p50": 387.681,
+      "candidate_us_p50": 564.572,
+      "paired_time_ratio_p50": 1.4562797764141138,
+      "paired_time_ratio_max": 1.4651802164525856
+    },
+    {
+      "algorithm": "{5, 20, 7, 1, 0}",
+      "baseline_us_p50": 383.023,
+      "candidate_us_p50": 589.793,
+      "paired_time_ratio_p50": 1.5341313955553697,
+      "paired_time_ratio_max": 1.5398370332852074
+    },
+    {
+      "algorithm": "{23, 20, 15, 1, 0}",
+      "baseline_us_p50": 383.697,
+      "candidate_us_p50": 600.489,
+      "paired_time_ratio_p50": 1.565785184740914,
+      "paired_time_ratio_max": 1.6124963187098154
+    },
+    {
+      "algorithm": "{23, 23, 15, 1, 0}",
+      "baseline_us_p50": 383.799,
+      "candidate_us_p50": 633.694,
+      "paired_time_ratio_p50": 1.651442551960792,
+      "paired_time_ratio_max": 1.6516530530838482
+    },
+    {
+      "algorithm": "{23, 24, 15, 1, 0}",
+      "baseline_us_p50": 382.976,
+      "candidate_us_p50": 639.477,
+      "paired_time_ratio_p50": 1.6703657670454546,
+      "paired_time_ratio_max": 1.6851439894319682
+    },
+    {
+      "algorithm": "{6, 15, 0, 1, 0}",
+      "baseline_us_p50": 384.931,
+      "candidate_us_p50": 650.834,
+      "paired_time_ratio_p50": 1.6907809451564046,
+      "paired_time_ratio_max": 1.6973862965531288
+    },
+    {
+      "algorithm": "{23, 21, 15, 1, 0}",
+      "baseline_us_p50": 384.588,
+      "candidate_us_p50": 738.935,
+      "paired_time_ratio_p50": 1.926085505909093,
+      "paired_time_ratio_max": 1.944095971514926
+    },
+    {
+      "algorithm": "{23, 19, 16, 1, 0}",
+      "baseline_us_p50": 382.631,
+      "candidate_us_p50": 770.313,
+      "paired_time_ratio_p50": 2.016548580747509,
+      "paired_time_ratio_max": 2.031566149399217
+    },
+    {
+      "algorithm": "{23, 18, 16, 1, 0}",
+      "baseline_us_p50": 383.097,
+      "candidate_us_p50": 814.229,
+      "paired_time_ratio_p50": 2.1107030334353967,
+      "paired_time_ratio_max": 2.127418474071868
+    },
+    {
+      "algorithm": "{23, 17, 16, 1, 0}",
+      "baseline_us_p50": 383.748,
+      "candidate_us_p50": 817.415,
+      "paired_time_ratio_p50": 2.1178514694201747,
+      "paired_time_ratio_max": 2.1741637741434485
+    },
+    {
+      "algorithm": "{23, 18, 15, 1, 0}",
+      "baseline_us_p50": 382.685,
+      "candidate_us_p50": 838.125,
+      "paired_time_ratio_p50": 2.189281954700638,
+      "paired_time_ratio_max": 2.2431595739639985
+    },
+    {
+      "algorithm": "{23, 17, 15, 1, 0}",
+      "baseline_us_p50": 378.954,
+      "candidate_us_p50": 833.462,
+      "paired_time_ratio_p50": 2.183104017901909,
+      "paired_time_ratio_max": 2.252216691502066
+    },
+    {
+      "algorithm": "{23, 23, 9, 1, 0}",
+      "baseline_us_p50": 382.915,
+      "candidate_us_p50": 870.144,
+      "paired_time_ratio_p50": 2.2584672838619535,
+      "paired_time_ratio_max": 2.273299422363997
+    },
+    {
+      "algorithm": "{23, 24, 9, 1, 0}",
+      "baseline_us_p50": 381.404,
+      "candidate_us_p50": 865.689,
+      "paired_time_ratio_p50": 2.270610034282875,
+      "paired_time_ratio_max": 2.285080911579323
+    },
+    {
+      "algorithm": "{6, 15, 18, 1, 0}",
+      "baseline_us_p50": 386.354,
+      "candidate_us_p50": 892.624,
+      "paired_time_ratio_p50": 2.307756616988565,
+      "paired_time_ratio_max": 2.3224430007259067
+    },
+    {
+      "algorithm": "{23, 17, 18, 1, 0}",
+      "baseline_us_p50": 384.853,
+      "candidate_us_p50": 912.625,
+      "paired_time_ratio_p50": 2.3634001745951085,
+      "paired_time_ratio_max": 2.3884444190379184
+    },
+    {
+      "algorithm": "{23, 18, 18, 1, 0}",
+      "baseline_us_p50": 381.938,
+      "candidate_us_p50": 911.563,
+      "paired_time_ratio_p50": 2.3866779424932845,
+      "paired_time_ratio_max": 2.436661027400509
+    },
+    {
+      "algorithm": "{23, 20, 10, 1, 0}",
+      "baseline_us_p50": 379.053,
+      "candidate_us_p50": 934.484,
+      "paired_time_ratio_p50": 2.443887794055185,
+      "paired_time_ratio_max": 2.4683598135161193
+    },
+    {
+      "algorithm": "{23, 15, 16, 1, 0}",
+      "baseline_us_p50": 378.896,
+      "candidate_us_p50": 993.582,
+      "paired_time_ratio_p50": 2.6258186604363014,
+      "paired_time_ratio_max": 2.627648963072732
+    },
+    {
+      "algorithm": "{23, 15, 18, 1, 0}",
+      "baseline_us_p50": 379.757,
+      "candidate_us_p50": 1066.129,
+      "paired_time_ratio_p50": 2.7897049955629525,
+      "paired_time_ratio_max": 2.8138362093963694
+    },
+    {
+      "algorithm": "{23, 19, 10, 1, 0}",
+      "baseline_us_p50": 383.429,
+      "candidate_us_p50": 1195.758,
+      "paired_time_ratio_p50": 3.1185904039600554,
+      "paired_time_ratio_max": 3.1188903877525407
+    },
+    {
+      "algorithm": "{21, 11, 14, 1, 0}",
+      "baseline_us_p50": 385.019,
+      "candidate_us_p50": 1189.41,
+      "paired_time_ratio_p50": 3.1054858160565946,
+      "paired_time_ratio_max": 3.1340909326666737
+    },
+    {
+      "algorithm": "{23, 21, 10, 1, 0}",
+      "baseline_us_p50": 383.758,
+      "candidate_us_p50": 1217.261,
+      "paired_time_ratio_p50": 3.162334075120258,
+      "paired_time_ratio_max": 3.2413841297634836
+    },
+    {
+      "algorithm": "{21, 11, 13, 1, 0}",
+      "baseline_us_p50": 382.182,
+      "candidate_us_p50": 1211.741,
+      "paired_time_ratio_p50": 3.170586265182557,
+      "paired_time_ratio_max": 3.2609435502989754
+    },
+    {
+      "algorithm": "{21, 11, 19, 1, 0}",
+      "baseline_us_p50": 382.979,
+      "candidate_us_p50": 1275.122,
+      "paired_time_ratio_p50": 3.31787643708924,
+      "paired_time_ratio_max": 3.3429975173134725
+    },
+    {
+      "algorithm": "{21, 11, 20, 1, 0}",
+      "baseline_us_p50": 379.775,
+      "candidate_us_p50": 1282.07,
+      "paired_time_ratio_p50": 3.355446962364812,
+      "paired_time_ratio_max": 3.4529998025146473
+    },
+    {
+      "algorithm": "{23, 17, 12, 1, 0}",
+      "baseline_us_p50": 380.826,
+      "candidate_us_p50": 1324.987,
+      "paired_time_ratio_p50": 3.487734897959721,
+      "paired_time_ratio_max": 3.514718007699054
+    },
+    {
+      "algorithm": "{23, 18, 12, 1, 0}",
+      "baseline_us_p50": 378.698,
+      "candidate_us_p50": 1352.735,
+      "paired_time_ratio_p50": 3.562857950836353,
+      "paired_time_ratio_max": 3.612818129485764
+    },
+    {
+      "algorithm": "{24, 20, 0, 1, 0}",
+      "baseline_us_p50": 378.476,
+      "candidate_us_p50": 1571.862,
+      "paired_time_ratio_p50": 4.152958179646794,
+      "paired_time_ratio_max": 4.157220031889829
+    },
+    {
+      "algorithm": "{21, 11, 8, 1, 0}",
+      "baseline_us_p50": 382.415,
+      "candidate_us_p50": 1579.202,
+      "paired_time_ratio_p50": 4.148530584004398,
+      "paired_time_ratio_max": 4.1693655248687955
+    },
+    {
+      "algorithm": "{24, 24, 0, 1, 0}",
+      "baseline_us_p50": 378.817,
+      "candidate_us_p50": 1627.566,
+      "paired_time_ratio_p50": 4.295810378098132,
+      "paired_time_ratio_max": 4.301042250245764
+    },
+    {
+      "algorithm": "{24, 23, 0, 1, 0}",
+      "baseline_us_p50": 378.78,
+      "candidate_us_p50": 1638.339,
+      "paired_time_ratio_p50": 4.325741599516466,
+      "paired_time_ratio_max": 4.326275338395511
+    },
+    {
+      "algorithm": "{23, 15, 25, 1, 0}",
+      "baseline_us_p50": 381.244,
+      "candidate_us_p50": 1649.847,
+      "paired_time_ratio_p50": 4.314169061100313,
+      "paired_time_ratio_max": 4.328813043615113
+    },
+    {
+      "algorithm": "{23, 15, 12, 1, 0}",
+      "baseline_us_p50": 379.225,
+      "candidate_us_p50": 1641.956,
+      "paired_time_ratio_p50": 4.32383129058155,
+      "paired_time_ratio_max": 4.3297672885490135
+    },
+    {
+      "algorithm": "{21, 11, 7, 1, 0}",
+      "baseline_us_p50": 378.737,
+      "candidate_us_p50": 1656.581,
+      "paired_time_ratio_p50": 4.358816266422017,
+      "paired_time_ratio_max": 4.373961350488597
+    },
+    {
+      "algorithm": "{23, 11, 13, 1, 0}",
+      "baseline_us_p50": 378.826,
+      "candidate_us_p50": 1775.17,
+      "paired_time_ratio_p50": 4.687209523407132,
+      "paired_time_ratio_max": 4.7089169037626215
+    },
+    {
+      "algorithm": "{23, 11, 14, 1, 0}",
+      "baseline_us_p50": 378.746,
+      "candidate_us_p50": 1804.594,
+      "paired_time_ratio_p50": 4.741231723667404,
+      "paired_time_ratio_max": 4.829252322136735
+    },
+    {
+      "algorithm": "{23, 11, 19, 1, 0}",
+      "baseline_us_p50": 379.651,
+      "candidate_us_p50": 1898.034,
+      "paired_time_ratio_p50": 4.970046173986108,
+      "paired_time_ratio_max": 5.0717595277001735
+    },
+    {
+      "algorithm": "{23, 11, 20, 1, 0}",
+      "baseline_us_p50": 379.956,
+      "candidate_us_p50": 1910.308,
+      "paired_time_ratio_p50": 4.993451873374811,
+      "paired_time_ratio_max": 5.07885508632432
+    },
+    {
+      "algorithm": "{24, 18, 0, 1, 0}",
+      "baseline_us_p50": 378.95,
+      "candidate_us_p50": 1952.859,
+      "paired_time_ratio_p50": 5.153342129568545,
+      "paired_time_ratio_max": 5.156569245685271
+    },
+    {
+      "algorithm": "{24, 17, 0, 1, 0}",
+      "baseline_us_p50": 378.32,
+      "candidate_us_p50": 1940.625,
+      "paired_time_ratio_p50": 5.1305489241214115,
+      "paired_time_ratio_max": 5.224300446879892
+    },
+    {
+      "algorithm": "{21, 5, 14, 1, 0}",
+      "baseline_us_p50": 383.667,
+      "candidate_us_p50": 2010.397,
+      "paired_time_ratio_p50": 5.250470937367284,
+      "paired_time_ratio_max": 5.257768885392938
+    },
+    {
+      "algorithm": "{21, 5, 19, 1, 0}",
+      "baseline_us_p50": 382.407,
+      "candidate_us_p50": 2005.682,
+      "paired_time_ratio_p50": 5.2540486202849435,
+      "paired_time_ratio_max": 5.310247981862257
+    },
+    {
+      "algorithm": "{21, 5, 13, 1, 0}",
+      "baseline_us_p50": 378.598,
+      "candidate_us_p50": 2028.207,
+      "paired_time_ratio_p50": 5.35738174363743,
+      "paired_time_ratio_max": 5.4329182932820554
+    },
+    {
+      "algorithm": "{21, 5, 20, 1, 0}",
+      "baseline_us_p50": 378.861,
+      "candidate_us_p50": 2027.544,
+      "paired_time_ratio_p50": 5.322733139594733,
+      "paired_time_ratio_max": 5.462034145490862
+    },
+    {
+      "algorithm": "{24, 15, 0, 1, 0}",
+      "baseline_us_p50": 378.687,
+      "candidate_us_p50": 2449.549,
+      "paired_time_ratio_p50": 6.473284197785993,
+      "paired_time_ratio_max": 6.478189111324128
+    },
+    {
+      "algorithm": "{21, 5, 7, 1, 0}",
+      "baseline_us_p50": 379.473,
+      "candidate_us_p50": 2803.256,
+      "paired_time_ratio_p50": 7.385234259090897,
+      "paired_time_ratio_max": 7.406733355527725
+    },
+    {
+      "algorithm": "{23, 11, 8, 1, 0}",
+      "baseline_us_p50": 378.305,
+      "candidate_us_p50": 3000.467,
+      "paired_time_ratio_p50": 7.931343757021451,
+      "paired_time_ratio_max": 7.935194050219784
+    },
+    {
+      "algorithm": "{23, 11, 7, 1, 0}",
+      "baseline_us_p50": 378.752,
+      "candidate_us_p50": 3034.337,
+      "paired_time_ratio_p50": 8.007936591753971,
+      "paired_time_ratio_max": 8.144096603199506
+    },
+    {
+      "algorithm": "{23, 5, 19, 1, 0}",
+      "baseline_us_p50": 379.481,
+      "candidate_us_p50": 3158.833,
+      "paired_time_ratio_p50": 8.320018657060565,
+      "paired_time_ratio_max": 8.35749202469567
+    },
+    {
+      "algorithm": "{23, 5, 20, 1, 0}",
+      "baseline_us_p50": 378.812,
+      "candidate_us_p50": 3145.395,
+      "paired_time_ratio_p50": 8.307448904666064,
+      "paired_time_ratio_max": 8.440006757719901
+    },
+    {
+      "algorithm": "{23, 5, 14, 1, 0}",
+      "baseline_us_p50": 379.143,
+      "candidate_us_p50": 3157.994,
+      "paired_time_ratio_p50": 8.339347110798922,
+      "paired_time_ratio_max": 8.443023935847922
+    },
+    {
+      "algorithm": "{23, 5, 13, 1, 0}",
+      "baseline_us_p50": 378.609,
+      "candidate_us_p50": 3226.238,
+      "paired_time_ratio_p50": 8.524229482130641,
+      "paired_time_ratio_max": 8.526359465516512
+    },
+    {
+      "algorithm": "{24, 11, 7, 1, 0}",
+      "baseline_us_p50": 378.826,
+      "candidate_us_p50": 5525.983,
+      "paired_time_ratio_p50": 14.58712707153152,
+      "paired_time_ratio_max": 14.606235626866857
+    },
+    {
+      "algorithm": "{23, 5, 7, 1, 0}",
+      "baseline_us_p50": 378.714,
+      "candidate_us_p50": 5859.142,
+      "paired_time_ratio_p50": 15.465248182005418,
+      "paired_time_ratio_max": 15.474421208871892
+    }
+  ],
+  "log_sha256": "0baaaaef87075a3b71febb29c98fb49331936231c6eef03887df6f0b3a28acad",
+  "scope": "Two synthetic BF16 inputs; interleaved paired exact-M timings. Server validation remains separate."
+}

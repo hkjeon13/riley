@@ -1,0 +1,354 @@
+{
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "cross_result_sha256": "96250d798bdbcb03ea6b002bbe2d24d7720b8f8de39fcf320c1290b486e5f773",
+  "layers": [
+    22,
+    27
+  ],
+  "cases": {
+    "3": {
+      "prompt_sha256": "343ba4711df279dc535694caef24763595679307f22dc3a8171adc15e1bc581d",
+      "prompt_tokens": 3301,
+      "capture_sha256": {
+        "riley": "a620c88cbcf61faf88374c730f89314373107fec6adfd373ad2dba0ca91ea58d",
+        "hf": "83967b9f30f70fa4c11dfc98c0166652050062d0af0e46794d1745c333e7734c"
+      },
+      "baseline_logits": {
+        "fused_whole": "c82be997783c54586f737ac83d454bba61cdfb213e333e5ea567612ecdfc6378",
+        "fused_partitioned": "dce5a27e64ee369de11fd637f9780fd53c215f08db914bf7aca9808abbcaa915"
+      },
+      "last_row_sha256": {
+        "22/post_attention_norm": {
+          "riley": "81933fa4ffee54f072c0f4cf501d4b1a6855ea6e69aa383b35511592a8df1688",
+          "hf": "0795da9c67ba29ccd38297e4932a440447a30dc0794ba3aadb08de0439ac2406"
+        },
+        "22/mlp_down": {
+          "riley": "106090cd2d93145d7c6c6faa1ff0c83228545397a1a4c8be6f076f96f5fb8217",
+          "hf": "ffa4ed3074fc981e5302e756cd015ffc571ef050f11a6e5d730ad1fa40bf37a2"
+        },
+        "27/post_attention_norm": {
+          "riley": "0a4f1216c2de673a9f45fe7eaae6b0e87ec65896f34cb1b82f73087a1fa404cc",
+          "hf": "0927c846ec714a21d621c7bb1b96bf67ca1d7b515672b0028071ba9e85357f41"
+        },
+        "27/mlp_down": {
+          "riley": "182fa040b546bb39e4a1f117ef17639012c55e94e5db25ca399db6d4ee7cd043",
+          "hf": "2f1ab538eae741dd32b40b7e62ff10f0dde42ccb9e6aac1d2b079ea1029ea763"
+        }
+      },
+      "riley_first_token": 264,
+      "modes": {
+        "fused_whole": {
+          "control": {
+            "partition": [
+              3301
+            ],
+            "first_id": 5257,
+            "tracked_logits": {
+              "264": 18.25,
+              "5257": 18.375
+            },
+            "logits_sha256": "c82be997783c54586f737ac83d454bba61cdfb213e333e5ea567612ecdfc6378"
+          },
+          "interventions": {
+            "22": {
+              "after_injection": {
+                "partition": [
+                  3301
+                ],
+                "first_id": 5257,
+                "tracked_logits": {
+                  "264": 18.25,
+                  "5257": 18.375
+                },
+                "logits_sha256": "5a4ad10b910d70e48bba89430aa94b2fea60cf26842d18eddd1d8b37c2f2f5e1"
+              },
+              "baseline_down_vs_riley": {
+                "bit_identical_elements": 292,
+                "elements": 3584,
+                "rms_error": 0.018655397377949696
+              },
+              "same_riley_input_down_vs_riley": {
+                "bit_identical_elements": 2197,
+                "elements": 3584,
+                "rms_error": 0.00218028389138964
+              },
+              "injected_down_sha256": "bbe69a9326d7fbf43dce9c210fa6843360cec357e3744bf28972234482c9e812"
+            },
+            "27": {
+              "after_injection": {
+                "partition": [
+                  3301
+                ],
+                "first_id": 5257,
+                "tracked_logits": {
+                  "264": 18.25,
+                  "5257": 18.375
+                },
+                "logits_sha256": "8b996e4e719b13f418c883c02070d2b29611d664971dbfff95a0908db60c7d20"
+              },
+              "baseline_down_vs_riley": {
+                "bit_identical_elements": 342,
+                "elements": 3584,
+                "rms_error": 0.06046289434605938
+              },
+              "same_riley_input_down_vs_riley": {
+                "bit_identical_elements": 2169,
+                "elements": 3584,
+                "rms_error": 0.03449885468665637
+              },
+              "injected_down_sha256": "d7ea67f012af063ba6dae84058643772b70edc562b25e6fe86b6fc7274fee031"
+            }
+          }
+        },
+        "fused_partitioned": {
+          "control": {
+            "partition": [
+              1024,
+              1024,
+              1024,
+              229
+            ],
+            "first_id": 5257,
+            "tracked_logits": {
+              "264": 18.25,
+              "5257": 18.375
+            },
+            "logits_sha256": "dce5a27e64ee369de11fd637f9780fd53c215f08db914bf7aca9808abbcaa915"
+          },
+          "interventions": {
+            "22": {
+              "after_injection": {
+                "partition": [
+                  1024,
+                  1024,
+                  1024,
+                  229
+                ],
+                "first_id": 5257,
+                "tracked_logits": {
+                  "264": 18.25,
+                  "5257": 18.375
+                },
+                "logits_sha256": "d28ad5bb4c15dfd71cf50c3fcc8e0b69d5e0f69f2e4c30a745d450a100c1e6fb"
+              },
+              "baseline_down_vs_riley": {
+                "bit_identical_elements": 245,
+                "elements": 3584,
+                "rms_error": 0.019384198681780443
+              },
+              "same_riley_input_down_vs_riley": {
+                "bit_identical_elements": 1600,
+                "elements": 3584,
+                "rms_error": 0.0034300863150578827
+              },
+              "injected_down_sha256": "bd36b66a0f9b18ca009e635b19ef9c8971c486f3f3af9126749953e06cb39880"
+            },
+            "27": {
+              "after_injection": {
+                "partition": [
+                  1024,
+                  1024,
+                  1024,
+                  229
+                ],
+                "first_id": 5257,
+                "tracked_logits": {
+                  "264": 18.25,
+                  "5257": 18.375
+                },
+                "logits_sha256": "75d17f6e2a26a8b03f9b59cb72a687529e4791d4c92831fe3cda8a0e7b7380e8"
+              },
+              "baseline_down_vs_riley": {
+                "bit_identical_elements": 299,
+                "elements": 3584,
+                "rms_error": 0.07085260125339492
+              },
+              "same_riley_input_down_vs_riley": {
+                "bit_identical_elements": 1576,
+                "elements": 3584,
+                "rms_error": 0.017513868918272047
+              },
+              "injected_down_sha256": "1feb9a6ea41eda525ee1e3b26fc47a45174e436cd95c0abde1ca46578f5d49e4"
+            }
+          }
+        }
+      }
+    },
+    "9": {
+      "prompt_sha256": "7fb5c6c22ae8635b52037b34674cb8d8f3583933fe3f7a8fcf7dcb26c64d6a3a",
+      "prompt_tokens": 3330,
+      "capture_sha256": {
+        "riley": "c66a94b0af44317a50ef5c5ada5d51f9736198986b1841dfbecd3fb1da936e3f",
+        "hf": "83dc8bf582bfb16254275033ad4f56313aebdcc3e8bb006e3a4302ebee4fc3b4"
+      },
+      "baseline_logits": {
+        "fused_whole": "55f7906950ed9969a492a907dc5e426fa2f82319692078815b649b4592e1c901",
+        "fused_partitioned": "48241dbb7f616c8538c71d5fbfa66a290ab98bd65ac6da985e92a65e6b47f42a"
+      },
+      "last_row_sha256": {
+        "22/post_attention_norm": {
+          "riley": "56fa0cbabb00a00c83da7ddd3478d67d6cfd3fc7218627c002082f933d0b6204",
+          "hf": "594b329f34bf48b2c3d08696e5c88633e0d71cee2158ee419f09ccef671b0cf9"
+        },
+        "22/mlp_down": {
+          "riley": "8c4c92ca392d591a872e1c99f9b7762b47ba7377913ea5c91f5795e6c000d29d",
+          "hf": "510a1610edceccf634b400506d18a5dc5236fe106b17c085876db544772a19b3"
+        },
+        "27/post_attention_norm": {
+          "riley": "eb93fa550299e39e37c52525117366f9469d2fe92e744e5215daa5b97781b5b0",
+          "hf": "21d8b96e3bd47a004ea1c3b5410a110a47786e8839844c7bee5ec841b83da5bd"
+        },
+        "27/mlp_down": {
+          "riley": "e73b9966d288446742497231025cb9a3752244f455826c790c04db233fca568a",
+          "hf": "3d5b347fdca72b9b998fbe0a1bb2520fc83e098e8a84141ce12bc46f25c8565d"
+        }
+      },
+      "riley_first_token": 264,
+      "modes": {
+        "fused_whole": {
+          "control": {
+            "partition": [
+              3330
+            ],
+            "first_id": 264,
+            "tracked_logits": {
+              "264": 18.375,
+              "5257": 18.375
+            },
+            "logits_sha256": "55f7906950ed9969a492a907dc5e426fa2f82319692078815b649b4592e1c901"
+          },
+          "interventions": {
+            "22": {
+              "after_injection": {
+                "partition": [
+                  3330
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.375,
+                  "5257": 18.375
+                },
+                "logits_sha256": "4f589943ac803ff0e5eaed3b5d16706a482c996e0378b61266a6de13d59bf800"
+              },
+              "baseline_down_vs_riley": {
+                "bit_identical_elements": 233,
+                "elements": 3584,
+                "rms_error": 0.021470065342881827
+              },
+              "same_riley_input_down_vs_riley": {
+                "bit_identical_elements": 2244,
+                "elements": 3584,
+                "rms_error": 0.0022750921382145113
+              },
+              "injected_down_sha256": "9c9f5d4af1db3ff21af92daaab1349451fa4930781a0f2a51bc76b84a922bcb1"
+            },
+            "27": {
+              "after_injection": {
+                "partition": [
+                  3330
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.375,
+                  "5257": 18.375
+                },
+                "logits_sha256": "e7bfaeab1020adbe86f7e24c4889814a5e5742f27b178cb8fee2482eaa43f5f3"
+              },
+              "baseline_down_vs_riley": {
+                "bit_identical_elements": 249,
+                "elements": 3584,
+                "rms_error": 0.07890464120296495
+              },
+              "same_riley_input_down_vs_riley": {
+                "bit_identical_elements": 2199,
+                "elements": 3584,
+                "rms_error": 0.008522093815159363
+              },
+              "injected_down_sha256": "4252307beb9d67adef1f7a1830e113ef3cdf1ba4f6aef31518f0a8c9fbe2f47b"
+            }
+          }
+        },
+        "fused_partitioned": {
+          "control": {
+            "partition": [
+              1024,
+              1024,
+              1024,
+              256,
+              2
+            ],
+            "first_id": 264,
+            "tracked_logits": {
+              "264": 18.375,
+              "5257": 18.375
+            },
+            "logits_sha256": "48241dbb7f616c8538c71d5fbfa66a290ab98bd65ac6da985e92a65e6b47f42a"
+          },
+          "interventions": {
+            "22": {
+              "after_injection": {
+                "partition": [
+                  1024,
+                  1024,
+                  1024,
+                  256,
+                  2
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.375,
+                  "5257": 18.375
+                },
+                "logits_sha256": "69084d420b4319f9ef7a659c3d32d70fc787dcf9089de24b997d660a7c66d2f6"
+              },
+              "baseline_down_vs_riley": {
+                "bit_identical_elements": 275,
+                "elements": 3584,
+                "rms_error": 0.017500738803058847
+              },
+              "same_riley_input_down_vs_riley": {
+                "bit_identical_elements": 1228,
+                "elements": 3584,
+                "rms_error": 0.004029021085894486
+              },
+              "injected_down_sha256": "98a396672577017f6cd70e6145d5a60e33288618d2ff6c06567affc517a767e9"
+            },
+            "27": {
+              "after_injection": {
+                "partition": [
+                  1024,
+                  1024,
+                  1024,
+                  256,
+                  2
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.375,
+                  "5257": 18.25
+                },
+                "logits_sha256": "59cbbbf9285f6794bc18e372edafe3b8be06fe449a3657cccc1bf53a63ed887f"
+              },
+              "baseline_down_vs_riley": {
+                "bit_identical_elements": 345,
+                "elements": 3584,
+                "rms_error": 0.06925426139068844
+              },
+              "same_riley_input_down_vs_riley": {
+                "bit_identical_elements": 1292,
+                "elements": 3584,
+                "rms_error": 0.012815043554512425
+              },
+              "injected_down_sha256": "3ddae01ff911ab129ce8b652613fec38c7bdcbcf920204e3ce8839e7c90c2ba3"
+            }
+          }
+        }
+      }
+    }
+  },
+  "torch": "2.13.0+cu129",
+  "transformers": "5.22.1",
+  "backend": "sdpa",
+  "source_result_sha256": "78f31396acbab2e080e1a96885ed21c42388c481361368f564f5f0b9bb5978a7",
+  "same_20gib_reservation_restored": true
+}

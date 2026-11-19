@@ -134,6 +134,10 @@ Cache-on은 API 40건과 30분 부하의 모든 항목을 통과했다. 기준 �
 
 후속 cache-off 진단은 원본 검사기가 `smaps_rollup`을 읽은 시간 범위를 기록한 뒤 인접한 매핑을 읽는다. 호스트와 Riley PID 1의 단조 시계 이름공간이 같은지 확인하고, 31초 주기 반환 호출의 시각·반환 여부를 정밀 표본 및 매핑에 연결한다. 두 읽기는 순차 실행되므로 매핑 합계와 정밀 표본의 차이도 결과에 남긴다. 같은 이미지·라이브러리·부하·RSS 판정을 사용하며 A100 6번에서 W3 추적 뒤 실행하도록 등록했다. [간격·매핑 진단 사전 검증](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/sample-timing/preflight.json)
 
+이 cache-off 후속 실행에서 정밀 RSS와 익명 RSS는 각각 500KiB 증가했고, RSS 증가 0 조건만 실패했다. 중간과 drain의 정밀 표본은 각각 가장 최근 반환 호출이 끝난 뒤 4.16–4.45초와 8.99–9.27초에 읽혔다. 두 표본의 읽는 동안 반환 호출은 겹치지 않았다. 같은 31초 주기에서도 두 표본의 반환 이후 경과 시간이 달랐다. 이번 대조는 주기가 결과에 미친 정도까지 확정하는 데 필요한 반복은 포함하지 않는다. [판정과 반환 시각](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/sample-timing/result/timing-summary.json)
+
+정밀 읽기 직후 매핑 합계는 중간에서 104KiB 높았고 drain에서 일치했다. 매핑 표본의 익명 RSS는 396KiB 증가했다. 크기와 메타데이터를 그대로 유지한 익명 private 매핑에서 28KiB, 나머지 익명 private 매핑의 순변화에서 368KiB가 관측됐다. API 40건·지연·자원 회수 검사는 통과했고 A100 6번은 동일한 20GiB 예약으로 돌아왔다. 서버의 자동 후처리는 이전 검산기 파일이 없어 종료 코드 2를 남겼다. 이미 완료된 GPU 파일을 보존하고 저장소의 검산기로 로컬에서 재계산했다. [원래 판정 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/sample-timing/result/original-gate.json) · [복구 및 원본 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/sample-timing/result/recovery.json)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)
