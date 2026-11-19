@@ -1,0 +1,15 @@
+{
+  "scope": "Isolated CUDA 12.4 image with the CPU-verified chat SSE patch.",
+  "campaign": "w5-chat-sse-20261119.T7Z99RAG",
+  "campaign_pid": 460663,
+  "dispatch_utc": "2026-11-19T12:57:47Z",
+  "condition": "The original image's precise RSS series completes and fails only the unchanged RSS gate.",
+  "wait_for": "w5-rss-series-20261119.DepEsJZ4",
+  "physical_gpu": 6,
+  "reserved_other_gpu": 7,
+  "modes": [
+    "cache-on",
+    "cache-off"
+  ],
+  "dispatch_archive_sha256": "39df053ffa5d9735124549ea80e0b203556d825f8977f5e1fbe952453f137fd2"
+}

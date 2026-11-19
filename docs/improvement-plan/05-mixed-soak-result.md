@@ -232,6 +232,8 @@ A100 6번의 `cache-on` 컨테이너에서 API 40건이 통과했고 30분 부�
 
 할당 요청 바이트에는 재할당 시 요청한 새 크기가 포함된다. macOS ARM64에서 계측기를 뺀 후보의 서버 테스트 101건과 포맷·Clippy 검사가 통과했다. 이 후보는 CPU 대조로 보관하며, A100의 실제 혼합 부하에서 지연과 정밀 RSS를 확인해야 채택 여부를 판단할 수 있다.
 
+기본 이미지의 추가 계측이 완료되고 RSS 항목만 실패하면, 승인본에 이 패치만 적용해 별도 CUDA 12.4 이미지를 빌드하도록 등록했다. 빌드 입력에서 달라진 파일 세 개와 Riley 실행 파일을 제외한 패키지 파일의 바이트를 검증한다. A100 6번에서 두 캐시 모드의 API 40건과 동일한 30분 부하를 각각 실행하고 매번 같은 20GiB 예약을 복구한다. 재현 시 상위 디렉터리의 `chat-delta.patch.gz`를 실행 디렉터리에 놓고 `dispatch.sha256`을 검증한다. [A100 조건부 등록](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/registration.json) · [실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/campaign.sh)
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
