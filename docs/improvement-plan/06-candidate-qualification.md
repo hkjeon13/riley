@@ -57,6 +57,8 @@ W5의 30분 실행에서 종료 뒤 GPU·pinned 메모리와 활성 KV는 0이�
 
 같은 이미지에서 장문 29개에 대한 232건을 확인했다. 초기 GPU 확인의 이미지 ID, CPU 보고서, Riley 바이너리 및 체크포인트 해시와 일치했다. Cache-on과 cache-off의 30분 혼합 부하는 각각 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했다. 두 서버 모두 정상 종료하고 자원을 회수했다. 후반 익명 RSS는 cache-on에서 616KiB, cache-off에서 700KiB 증가해 두 설정 모두 RSS 증가 0 기준을 충족하지 못했다. [장문 대조](04-long-accuracy-result.md) · [배포 이미지의 혼합 부하](05-mixed-soak-result.md#배포-이미지의-혼합-부하)
 
+A100 격리 복구 시험에서 파생 이미지 `1fc444b1840e`를 종료하고 같은 loopback 주소에 기준 이미지 `0a907408ec73`를 기동했다. 136.37초 뒤 기준 이미지의 준비 상태를 확인했다. 두 이미지가 API 40건씩 통과했고 스트리밍 출력과 캐시 재사용 112토큰이 일치했다. 종료 시 device·pinned 할당 및 KV는 0이었다. 복구 시간은 이번 A100 loopback 실행의 측정값이다. [복구 시험](05-mixed-soak-result.md#a100-격리-이미지-복구-시험)
+
 원본 보존 경로에서 패키지 영수증과 GPU API, 장문 비교, 두 혼합 부하의 체크섬을 다시 검증했다. 두 부하에서 후반 첫 정밀 표본과 drain 표본을 직접 빼서 RSS를 확인했다. 같은 바이너리·체크포인트·홀더를 사용했고 서버 인자의 차이는 `--prefix-cache-blocks 128`이었다. 최초 cache-off의 기동 실패도 기록에 남겼다. [통합 판정과 원본 해시](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/verified-a100-candidate.json)
 
 ```bash

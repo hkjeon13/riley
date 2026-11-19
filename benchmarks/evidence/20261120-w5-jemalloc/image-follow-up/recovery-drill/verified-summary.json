@@ -1,0 +1,207 @@
+{
+  "result": {
+    "scope": "isolated loopback recovery drill",
+    "image_order": [
+      "packaged-first",
+      "parent-second"
+    ],
+    "arms": {
+      "packaged-first": {
+        "image_id": "sha256:1fc444b1840e6f8d55b32fc603629e031ee018f674b9b1ab04b6a69c9445ff66",
+        "riley_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+        "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+        "api_checks": 40,
+        "gpu_receipt_sha256": "2f0505421c387f113a04699f34806b17ef0f5ed6bd29b4dd9d962c288decdcc2",
+        "shutdown_metrics": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 0,
+          "allocation": {
+            "device_live_count": 0,
+            "device_live_bytes": 0,
+            "pinned_live_count": 0,
+            "pinned_live_bytes": 0
+          }
+        },
+        "reservations_restored": {
+          "gpu6": {
+            "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+            "physical_index": 6,
+            "phase": "idle",
+            "pid": 2431228,
+            "start_ticks": "6339570869",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480
+          },
+          "gpu7": {
+            "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+            "physical_index": 7,
+            "phase": "idle",
+            "pid": 2431237,
+            "start_ticks": "6339570875",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480
+          }
+        },
+        "server_arguments": [
+          "serve",
+          "--model",
+          "/models",
+          "--model-id",
+          "m",
+          "--max-active-sequences",
+          "32",
+          "--max-sequence-tokens",
+          "8192",
+          "--max-output-tokens",
+          "1024",
+          "--kv-blocks",
+          "16384",
+          "--prefix-cache-blocks",
+          "128"
+        ],
+        "route": {
+          "endpoint": "127.0.0.1:53479",
+          "closed_before_start_ns": 63549234841410883,
+          "ready_ns": 63549369361935167,
+          "stop_requested_ns": 63549484409684921,
+          "closed_after_cleanup_ns": 63549486245304482
+        },
+        "probe": {
+          "endpoint": "127.0.0.1:53479",
+          "client_gated_ns": 63549484083440411,
+          "drained_ns": 63549484089131732,
+          "cached_prompt_tokens": 112,
+          "restored_stream": {
+            "input_sha256": "51e32fbcc6a156e442cfcd1fdbb9ec970e9da2677d1bc3d404a9bd30d34a2ec7",
+            "output_sha256": "cc285dc495e1c0393d1061ad390f259ab4b27b6c54654e70a154b287b348362a",
+            "prompt_tokens": 37,
+            "completion_tokens": 7,
+            "finish": "stop"
+          },
+          "drained": {
+            "active_requests": 0,
+            "waiting_requests": 0,
+            "kv_allocated_blocks": 0
+          }
+        }
+      },
+      "parent-second": {
+        "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+        "riley_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+        "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+        "api_checks": 40,
+        "gpu_receipt_sha256": "1b66b51735febd18fd3517ccb30f615a0781fa14477ac02a002728ba7300c80a",
+        "shutdown_metrics": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 0,
+          "allocation": {
+            "device_live_count": 0,
+            "device_live_bytes": 0,
+            "pinned_live_count": 0,
+            "pinned_live_bytes": 0
+          }
+        },
+        "reservations_restored": {
+          "gpu6": {
+            "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+            "physical_index": 6,
+            "phase": "idle",
+            "pid": 2431228,
+            "start_ticks": "6339570869",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480
+          },
+          "gpu7": {
+            "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+            "physical_index": 7,
+            "phase": "idle",
+            "pid": 2431237,
+            "start_ticks": "6339570875",
+            "allocation_bytes": 21474836480,
+            "torch_reserved_bytes": 21474836480
+          }
+        },
+        "server_arguments": [
+          "serve",
+          "--model",
+          "/models",
+          "--model-id",
+          "m",
+          "--max-active-sequences",
+          "32",
+          "--max-sequence-tokens",
+          "8192",
+          "--max-output-tokens",
+          "1024",
+          "--kv-blocks",
+          "16384",
+          "--prefix-cache-blocks",
+          "128"
+        ],
+        "route": {
+          "endpoint": "127.0.0.1:53479",
+          "closed_before_start_ns": 63549489448768914,
+          "ready_ns": 63549620778839907,
+          "stop_requested_ns": 63549736060638601,
+          "closed_after_cleanup_ns": 63549738190308948
+        },
+        "probe": {
+          "endpoint": "127.0.0.1:53479",
+          "client_gated_ns": 63549735753090363,
+          "drained_ns": 63549735758886895,
+          "cached_prompt_tokens": 112,
+          "restored_stream": {
+            "input_sha256": "51e32fbcc6a156e442cfcd1fdbb9ec970e9da2677d1bc3d404a9bd30d34a2ec7",
+            "output_sha256": "cc285dc495e1c0393d1061ad390f259ab4b27b6c54654e70a154b287b348362a",
+            "prompt_tokens": 37,
+            "completion_tokens": 7,
+            "finish": "stop"
+          },
+          "drained": {
+            "active_requests": 0,
+            "waiting_requests": 0,
+            "kv_allocated_blocks": 0
+          }
+        }
+      }
+    },
+    "stop_to_parent_ready_ms": 136369.154986,
+    "same_sse_probe_output": true
+  },
+  "execution": {
+    "stage": "w5-isolated-image-recovery-20261120.yi5Rmx3B",
+    "campaign_exit": 0,
+    "chronology": [
+      [
+        "START",
+        "packaged-first",
+        "2026-11-19T20:25:50Z"
+      ],
+      [
+        "END",
+        "packaged-first",
+        "2026-11-19T20:30:04Z",
+        "exit=0"
+      ],
+      [
+        "START",
+        "parent-second",
+        "2026-11-19T20:30:05Z"
+      ],
+      [
+        "END",
+        "parent-second",
+        "2026-11-19T20:34:16Z",
+        "exit=0"
+      ]
+    ],
+    "physical_gpu": 6,
+    "remote_verified_json_sha256": "3f79a2975e353fc490c385a58b30f175658cdb3ab3b1c616c0c69e632c8e7198",
+    "remote_dispatch_and_result_digests_verified": true,
+    "remote_independent_comparison_byte_exact": true,
+    "controller_pid": 2557008,
+    "dispatch_tar_sha256": "9aa755673a1f53ae1ef450f93f7d4c04f6032b64b4e08127cad920289399d669"
+  }
+}
