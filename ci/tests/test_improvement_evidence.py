@@ -1,10 +1,11 @@
-"""Check that a rehashed report still needs to describe the recorded image."""
+"""Check that linked reports and published claims match their evidence."""
 
 from copy import deepcopy
 from hashlib import sha256
 import importlib.util
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 
@@ -13,6 +14,30 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("improvement_evidence", ROOT / "ci/check_improvement_evidence.py")
 checker = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(checker)
+
+
+class ReadmeEvidenceTests(unittest.TestCase):
+    def test_readme_drift_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs").mkdir()
+            for filename in ("Cargo.toml", "docs/model-coverage-a100-perf-table.md"):
+                (root / filename).write_bytes((ROOT / filename).read_bytes())
+            path = root / "README.md"
+            original = (ROOT / path.name).read_text(encoding="utf-8")
+            path.write_text(original, encoding="utf-8")
+            self.assertEqual(checker.check_readme(root), 24)
+            for pattern, replacement, message in (
+                (r"lower in \d+ of", "lower in 0 of", "summary differs for Time per output token"),
+                (r"(higher in all \d+ cells — )\d+\.\d+×", r"\g<1>0.00×", "summary differs for Throughput"),
+                (r"> Status: \S+", "> Status: invalid", "Status version must match Cargo"),
+            ):
+                with self.subTest(message=message):
+                    changed, count = re.subn(pattern, replacement, original, count=1)
+                    self.assertEqual(count, 1)
+                    path.write_text(changed, encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, message):
+                        checker.check_readme(root)
 
 
 class AllocatorTrialTests(unittest.TestCase):

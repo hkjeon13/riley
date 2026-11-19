@@ -67,7 +67,7 @@ Production CPU의 Documentation 단계에서 개선 계획서의 상대 링크�
 
 파생 할당기 시험은 패키징, API, 두 캐시 모드의 30분 부하, 장문 정확성, 기본 성능과 고정 도착 대조를 `current_allocator_trial`의 이미지 ID에 연결한다. CI에서 패키징 증명의 소스와 실행 파일, GPU 부하·정확성의 공통 증명, 지연 시험의 이미지·실행 인자·할당기 설정을 대조한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [릴리스 판정](06-candidate-qualification.md)
 
-같은 검사에서 README의 10월 A100 최대 동시성 32·고정 길이 표를 저장소에 보존한 모델별 표와 대조한다. 24개 모델의 두 엔진 처리량·TTFT·TPOT와 표시된 처리량 배수를 확인한다. 당시 기록에 적힌 AWS 원본 경로는 이번 점검에서 확인되지 않아 이 자동 검사는 보존된 표 사이의 일치를 검증한다. [README 성능표](../../README.md#performance) · [보존된 측정값과 당시 실행 이름](../model-coverage-a100-perf-table.md#측정-출처)
+같은 검사에서 README의 `Status` 버전을 Cargo 워크스페이스 버전과 맞추고, 10월 A100 동시성 32·고정 길이 표의 24개 모델을 보존된 표와 대조한다. 성능 요약은 동시성 8–32의 처리량·TPOT 각 144셀, TTFT 192셀, 단일 클라이언트 처리량 48셀에서 다시 계산한다. 당시 기록에 적힌 AWS 원본 경로는 이번 점검에서 확인되지 않아 성능 검사의 근거는 저장소에 보존된 모델별 측정 표다. [워크스페이스 버전](../../Cargo.toml) · [README 성능표](../../README.md#performance) · [보존된 측정값과 당시 실행 이름](../model-coverage-a100-perf-table.md#측정-출처)
 
 성능표를 생성한다면 raw→검증된 집계→표의 입력·출력·버전이 명확한 작은 생성기를 둔다. 과거 결과와 새 후보를 섞거나 집계 중 실패 셀을 제거하지 않는다. 이 생성기는 제안이며 현재 구현되어 있지 않다.
 

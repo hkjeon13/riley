@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tomllib
 from urllib.parse import unquote, urlsplit
 
 
@@ -254,8 +255,26 @@ def markdown_table(path, header, section=None):
     return rows
 
 
-def check_readme_c32(root):
-    public = markdown_table(root / "README.md",
+def metric_pair(value):
+    match = METRIC_PAIR.fullmatch(value)
+    if match is None:
+        raise ValueError(f"invalid October A100 metric pair: {value!r}")
+    riley, vllm = map(Decimal, match.groups())
+    if min(riley, vllm) <= 0:
+        raise ValueError(f"nonpositive October A100 metric pair: {value!r}")
+    return riley, vllm
+
+
+def check_readme(root):
+    readme = root / "README.md"
+    with (root / "Cargo.toml").open("rb") as cargo:
+        version = tomllib.load(cargo)["workspace"]["package"]["version"]
+    status = re.findall(r"^> Status: (\S+) \(\d{4}-\d{2}-\d{2}\)\.",
+                        readme.read_text(encoding="utf-8"), flags=re.MULTILINE)
+    if status != [version]:
+        raise ValueError(f"README.md: Status version must match Cargo workspace version {version}")
+
+    public = markdown_table(readme,
                             ("Model", "Throughput tok/s", "Speed-up", "TTFT p50 ms", "TPOT p50 ms"))
     reference = root / "docs/model-coverage-a100-perf-table.md"
     columns = ("모델", "c1-fixed", "c1-natural", "c8-fixed", "c8-natural",
@@ -268,11 +287,42 @@ def check_readme_c32(root):
     for model, (throughput, ratio, ttft, tpot) in public.items():
         for name, value, source in zip(("throughput", "TTFT", "TPOT"), (throughput, ttft, tpot), sources, strict=True):
             expected = source[model][columns.index("c32-fixed") - 1]
-            if value != expected or METRIC_PAIR.fullmatch(value) is None:
+            if value != expected:
                 raise ValueError(f"README.md: {model} {name} differs from the October A100 C32 fixed table")
-        riley, vllm = map(Decimal, METRIC_PAIR.fullmatch(throughput).groups())
-        if min(riley, vllm) <= 0 or ratio != f"{riley / vllm:.2f}×":
+        riley, vllm = metric_pair(throughput)
+        if ratio != f"{riley / vllm:.2f}×":
             raise ValueError(f"README.md: {model} speed-up differs from the displayed throughput")
+
+    throughput, ttft, tpot = (
+        [[metric_pair(value) for value in row] for row in source.values()] for source in sources
+    )
+    # The first two cells in each row are the fixed and natural single-client trials.
+    c1 = [riley / vllm for row in throughput for riley, vllm in row[:2]]
+    throughput_ratios = [riley / vllm for row in throughput for riley, vllm in row[2:]]
+    ttft_ratios = [vllm / riley for row in ttft for riley, vllm in row]
+    tpot_ratios = [vllm / riley for row in tpot for riley, vllm in row[2:]]
+    if min(throughput_ratios) <= 1 or min(ttft_ratios) <= 1:
+        raise ValueError("README.md: October A100 summary no longer shows a win in every throughput or TTFT cell")
+    if not Decimal("0.97") <= min(c1) <= Decimal("1.03"):
+        raise ValueError("README.md: October A100 single-client throughput minimum is outside the stated tie band")
+
+    claims = {
+        "**Throughput** at 8–32 concurrent clients": (
+            f"higher in all {len(throughput_ratios)} cells — {min(throughput_ratios):.2f}× to "
+            f"{max(throughput_ratios):.2f}×"
+        ),
+        "**Time to first token** (p50)": (
+            f"lower in all {len(ttft_ratios)} cells — {min(ttft_ratios):.1f}× to {max(ttft_ratios):.1f}× faster"
+        ),
+        "**Time per output token** (p50) at 8–32 clients": (
+            f"lower in {sum(ratio > 1 for ratio in tpot_ratios)} of {len(tpot_ratios)} cells"
+        ),
+        "One client": f"within ±3 % (tie) to {max(c1):.1f}× faster on throughput",
+    }
+    summary = markdown_table(readme, ("", "Riley vs vLLM"))
+    for label, expected in claims.items():
+        if summary.get(label) != (expected,):
+            raise ValueError(f"README.md: October A100 summary differs for {label.replace('**', '')}")
     return len(public)
 
 
@@ -290,7 +340,7 @@ def main():
         allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],
                                                   manifest["current_distribution_candidate"])
         links = check_plan_links(root)
-        models = check_readme_c32(root)
+        models = check_readme(root)
         revision = None
         if args.distribution_revision is not None:
             revision = check_distribution_revision(root, manifest["current_distribution_candidate"],
@@ -299,7 +349,7 @@ def main():
         print(f"improvement evidence check failed: {error}", file=sys.stderr)
         return 1
     print(f"improvement evidence verified: {files} file hashes, {inputs} recorded Git inputs, "
-          f"{links} local links, {models} README performance rows, {allocator_reports} linked allocator reports")
+          f"{links} local links, {models} README performance rows and summary, {allocator_reports} linked allocator reports")
     if revision is not None:
         print(f"distribution source inputs match at {revision} ({inputs} recorded paths)")
     return 0
