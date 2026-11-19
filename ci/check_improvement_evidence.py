@@ -63,7 +63,7 @@ def check_evidence(root, manifest):
 
 def check_distribution_inputs(root, manifest):
     candidate = manifest["current_distribution_candidate"]
-    revisions = (candidate["audited_main"], candidate["source_revision"])
+    revisions = (candidate["audited_main"], candidate["source_revision"], *candidate.get("follow_up_audited_revisions", []))
     if any(not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision)
            for revision in revisions):
         raise ValueError("expected full Git revisions for the recorded distribution comparison")
@@ -86,6 +86,26 @@ def check_distribution_inputs(root, manifest):
         if actual != object_id:
             raise ValueError(f"recorded distribution input differs: {expression}")
     return len(inputs)
+
+
+def check_distribution_revision(root, candidate, revision):
+    current = subprocess.run(
+        ["git", "rev-parse", "--verify", "--end-of-options", f"{revision}^{{commit}}"],
+        cwd=root, capture_output=True, text=True,
+    )
+    if current.returncode:
+        raise ValueError(f"unable to resolve distribution comparison revision: {revision}")
+    commit = current.stdout.strip()
+    paths = candidate["matching_distribution_input_git_objects"]
+    diff = subprocess.run(
+        ["git", "diff", "--no-ext-diff", "--name-only", candidate["source_revision"], commit, "--", *paths],
+        cwd=root, capture_output=True, text=True,
+    )
+    if diff.returncode:
+        raise ValueError(f"unable to compare distribution inputs at {commit}: {diff.stderr.strip()}")
+    if diff.stdout:
+        raise ValueError(f"distribution inputs changed at {commit}: {', '.join(diff.stdout.splitlines())}")
+    return commit
 
 
 def prose_lines(path):
@@ -189,18 +209,27 @@ def check_readme_c32(root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[1])
-    root = parser.parse_args().repo_root.resolve()
+    parser.add_argument("--distribution-revision", metavar="REV",
+                        help="also require REV to match the recorded distribution image inputs")
+    args = parser.parse_args()
+    root = args.repo_root.resolve()
     try:
         manifest = json.loads((root / MANIFEST).read_bytes(), object_pairs_hook=unique_object)
         files = check_evidence(root, manifest)
         inputs = check_distribution_inputs(root, manifest)
         links = check_plan_links(root)
         models = check_readme_c32(root)
+        revision = None
+        if args.distribution_revision is not None:
+            revision = check_distribution_revision(root, manifest["current_distribution_candidate"],
+                                                   args.distribution_revision)
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f"improvement evidence check failed: {error}", file=sys.stderr)
         return 1
     print(f"improvement evidence verified: {files} file hashes, {inputs} recorded Git inputs, "
           f"{links} local links, {models} README performance rows")
+    if revision is not None:
+        print(f"distribution source inputs match at {revision} ({inputs} recorded paths)")
     return 0
 
 

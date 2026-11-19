@@ -13,6 +13,9 @@ cuBLASLt. There is no Python in the serving process.
 > greedy decoding, one GPU unless stated; they are model- and
 > workload-specific.
 
+The [November distribution qualification](docs/improvement-plan/06-candidate-qualification.md)
+records the tested image, A100 coverage, and outstanding release checks.
+
 ## Performance
 
 **October 2026 qualification.** Riley and vLLM 0.27.1 ran on the same
@@ -151,7 +154,8 @@ are kept in the [performance experiment log](docs/performance-experiments.md).
 ## Highlights
 
 - **Continuous batching**: prompt and decode work share each GPU step.
-- **Paged KV cache** sized at start-up, so memory does not grow under load.
+- **Paged KV cache** with device capacity set at start-up. Requests allocate
+  blocks within that capacity.
 - **Batch-invariant output**: a request produces the same tokens whatever else
   is in the batch.
 - **Verified checkpoints**: Hugging Face safetensors are loaded directly, and
@@ -353,9 +357,10 @@ link to the settings used for each model and workload.
 
 The native profile needs a head dimension of 64 or 128, which every listed
 model has. Without `--inference-profile` the server uses its most conservative
-numerical path, which is much slower. GPU memory is reserved at start-up from
-these limits and does not grow with load. All options:
-`riley serve --help` and [Configuration](docs/configuration.md).
+numerical path, which is much slower. These limits size the fixed device KV
+pool. Host RSS under load is measured separately in the
+[mixed-load results](docs/improvement-plan/05-mixed-soak-result.md#배포-이미지의-혼합-부하).
+See `riley serve --help` and [Configuration](docs/configuration.md) for all options.
 
 Wait until the model is loaded:
 

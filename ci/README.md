@@ -208,6 +208,14 @@ CLI-only probes mount the matching CUDA 12.4 SDK stub read-only. The build log,
 image ID, runtime bytes and stub hash are retained as evidence. GPU inference
 uses the host driver supplied by the NVIDIA Container Runtime.
 
+During release review, compare the selected revision with the recorded image
+inputs. This check names changed paths and returns a failure status when the
+source tree differs. GPU qualification is tracked against the measured image ID.
+
+```bash
+python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
+```
+
 ### CUDA development image
 
 The reproducible container lane is Linux/amd64 and pins both input images by
