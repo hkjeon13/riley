@@ -211,6 +211,8 @@ RSS 증가 0 항목만 실패했다. 종료 뒤 기존 GPU 6 홀더의 20GiB 예
 
 기본 이미지·스레드별 할당 캐시 비활성화 단독군·HTTP 프레이밍 `cache-on`의 일반 `VmRSS`는 각 실행의 10–15분과 20–25분 표본에서 같은 값을 유지했다. 같은 실행들의 정밀 RSS는 후반 기준에서 drain까지 148–700KiB 증가했다. 표본에서 추적한 CUDA·pinned 할당 증가는 관측되지 않았다. 호스트 힙의 증가 추세를 판별하려면 추가 정밀 표본과 동일한 요청 처리 상태에서 수집한 대조가 필요하다. 현재 RSS 증가 0 판정은 기존 두 정밀 표본을 적용한다.
 
+같은 기본 이미지에서 `cache-off` 30분 부하 중 5·10·20·25·29분과 drain 뒤 10·30·60초에 PID 1의 정밀 RSS를 추가로 읽는 진단을 등록했다. 원래 검사기가 선택한 약 900초 표본과 drain 표본으로 기존 RSS 증가 0 판정을 내린다. 진단은 요청 제출이 끝난 상태에서 최대 60초를 더 관측한 뒤 유휴 상태를 한 번 확인한다. CPU 사전시험에서 추가 계측을 넣어도 원래 RSS 실패 결과가 유지됐고, 별도로 같은 이미지의 UID 65532에서 실제 PID 1의 정밀 RSS를 읽었다. 프레이밍 두 실행의 판정과 동일 GPU 홀더의 예약 복구를 확인한 뒤에 후속 진단을 시작한다. [진단 등록과 CPU 검사](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/registration.json) · [계측 코드](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/observe_rss_series.py) · [실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/campaign.sh)
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 

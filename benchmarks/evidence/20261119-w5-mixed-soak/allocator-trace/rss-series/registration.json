@@ -1,0 +1,36 @@
+{
+  "scope": "Additional precise samples on the unmodified CUDA 12.4 image, with the original strict W5 score retained.",
+  "campaign": "w5-rss-series-20261119.DepEsJZ4",
+  "campaign_pid": 260470,
+  "dispatch_utc": "2026-11-19T12:15:22Z",
+  "condition": "The framing pair and its accuracy decision are terminal with an RSS-only failure before reservation handoff.",
+  "wait_for": "w5-framing-accuracy-20261119.jv9EuHuM",
+  "physical_gpu": 6,
+  "cache_mode": "cache-off",
+  "additional_load_seconds": [
+    300,
+    600,
+    1200,
+    1500,
+    1740
+  ],
+  "after_drain_seconds": [
+    10,
+    30,
+    60
+  ],
+  "dispatch_archive_sha256": "06ac39d20ca09bfb3152d11b16ef208561a5b8dd013078852fbfee8c21a03b85",
+  "cpu_preflight": {
+    "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+    "container_uid": 65532,
+    "pid": 1,
+    "gpu": false,
+    "pid1_read_ms": 102.6412770152092,
+    "supplementary_probe_passed": true
+  },
+  "remote_artifacts_sha256": {
+    "preflight.sha256": "70fdf470f4ac8ac0a8e50f7bb17d6ce858934db893fdceaa405a7f0d6fad2a65",
+    "harness-observer.sha256": "b9413e94ee5989efb6ccd1a5251fe443c85f409ca26a1e705e479ce1a0b0ed75",
+    "cpu-preflight.json": "975a18b451083f84367cd14e23ef7ce6c953ed02f536612fa2e1b1cdba69b95a"
+  }
+}
