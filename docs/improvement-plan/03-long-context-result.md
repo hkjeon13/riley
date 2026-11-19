@@ -331,6 +331,18 @@ A100 7번에서 같은 Qwen2.5-14B 추적 바이너리로 45번 요청만 기존
 
 W5 배포 이미지 부하와 조건부 장문 검증 절차가 종료되고 GPU 6·7의 기존 20GiB 예약을 확인한 뒤 시작한다. 각 실행에서 GPU 7의 예약을 시험에 넘겼다가 복구한다. 집계기는 실제 엔진 송신과 입장 시각을 41번 요청의 첫 prefill에 맞춰 비교하고, 예정한 조기·후기 조건이 실제로 성립했는지와 TTFT p95·TPOT·ITL을 확인한다. [GPU 실행 스크립트](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/campaign.sh) · [집계기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/verify_phase_gpu.py)
 
+네 실행에서 측정 요청 480건을 오류와 429 없이 완료했다. 이전 같은 요청의 입력·응답 텍스트 해시, 입력·생성 토큰 수와 종료 사유가 일치했다. 각 서버가 정상 종료했고 GPU 7은 동일 홀더의 20GiB 예약으로 복귀했다. GPU 6은 같은 예약을 유지했다. [실측 집계와 원본 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/verified-comparison.json)
+
+두 실행 순서에서 45번의 입장 시점이 41번의 첫 prefill 앞뒤로 어떻게 바뀌는지 확인했다. 지연 변화는 각 순서의 인접 기준군 대비 QKV 후보이며, 기준 먼저 / 후보 먼저 순이다.
+
+| 45번 도착 오프셋 | 기준 / 후보의 8→9번째 prefill | TTFT p95 변화 | Decode TPOT p50 변화 |
+|---|---|---:|---:|
+| −12ms | 45→41 / 45→41 | −2.50% / −2.59% | −2.88% / −2.76% |
+| 0ms | 45→41 / 41→45 | +2.15% / +1.77% | −5.50% / −2.81% |
+| +12ms | 41→45 / 41→45 | −2.44% / −2.45% | −2.59% / +0.62% |
+
+기존 시각에서 후보의 41번 첫 토큰 지연은 537–541ms 늘었다. 그중 389–391ms는 prefill 조각 사이의 대기 증가였다. 두 조건의 prefill 순서가 같았던 앞뒤 도착 시각에서는 해당 요청의 첫 토큰 지연도 줄었다. 이 결과는 한 seed의 50ms 간격 부하에서 입장 경계에 따라 QKV 후보의 p95 결과가 바뀐다는 점을 보여 준다. RAG p95의 일관성 기준이 남아 있어 기본값 적용은 보류한다.
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

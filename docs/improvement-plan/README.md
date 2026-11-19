@@ -8,7 +8,7 @@
 |---|---|
 | W1 검증·릴리스 | Linux Production CPU, 고정 RC3 테스트 34건, CUDA 12.8 네이티브 빌드·Clippy와 CUDA 12.4 이미지 CPU 검증을 통과했다. 현재 배포 입력과 이미지 원본의 해시를 대조했다. [W1 결과](01-validation-result.md) |
 | W2 실행 중첩 | 즉시 발행의 짧은 요청 TPOT 회귀를 확인해 `after-submit-v1`을 유지한다. 정렬된 KV 테이블 후보는 A100에서 출력이 일치하고 계측된 제출 전 시간이 줄었으나 네 비교 모두 처리량이 0.11–0.36% 낮아 미채택했다. [W2 결과](02-async-step-result.md) |
-| W3 장문·스케줄 | 스케줄 후보 세 개는 지연 회귀로 미채택했다. 1,024행 QKV 후보는 출력·decode 기준을 통과했고 RAG 첫 토큰 p95 개선은 일관되지 않았다. 같은 명령 송신 시각에서 prefill 순서가 갈리는 약 5.9–6.6ms 구간을 CPU에서 재현했다. 기본값 적용은 보류한다. [W3 결과](03-long-context-result.md#공통-명령-송신-시각에서의-스케줄러-대조) |
+| W3 장문·스케줄 | 스케줄 후보 세 개는 지연 회귀로 미채택했다. 1,024행 QKV 후보의 A100 대조 480건에서 같은 prefill 순서일 때 TTFT p95가 2.44–2.59% 감소했고, 기존 도착 시각에는 순서가 갈리며 1.77–2.15% 증가했다. 기본값 적용은 보류한다. [W3 결과](03-long-context-result.md#실제-요청의-도착-시각-대조) |
 | W4 정확성·스키마 | 장문 29건의 Riley·HF 첫 분기 7건 중 6건은 decode였다. 실제 Riley BF16 행에서 7건 중 5건은 두 ID가 공동 최대였고 2건은 Riley ID가 단독 최대였다. 첫 prefill 분기의 레이어 대조와 네 모델의 GSM8K·구조화 출력 GPU API도 검증했다. [장문·품질 결과](04-long-accuracy-result.md#실제-bf16-점수-행의-분기-검산) · [스키마 결과](04-structured-output-result.md) |
 | W5 문서·운영 | 두 캐시 설정의 30분 부하와 종료 자원 회수, A100 메모리 오류 주입 네 사례를 확인했다. 채팅 SSE 후보도 두 설정의 API·요청·지연·회수는 통과했고 RSS는 `cache-on` +508KiB, `cache-off` +608KiB였다. 릴리스는 보류다. [운영 부하와 회수 절차](05-documentation-and-operations.md#합성-부하의-확인-기준) · [A100 운영 결과](05-mixed-soak-result.md#채팅-스트림의-임시-json-할당) |
 
