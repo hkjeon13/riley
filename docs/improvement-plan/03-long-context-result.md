@@ -349,6 +349,23 @@ W5 배포 이미지 부하와 조건부 장문 검증 절차가 종료되고 GPU
 
 명령 송신 시각을 그대로 쓰면 12개 조건 모두에서 두 번째 스텝의 선택이 40번 요청에서 41번 요청으로 바뀌었다. 스텝 2에서 처음 순서가 바뀌는 최소 보정 폭은 76.879µs였다. 이 경계보다 작은 보정 폭에서는 선택 순서가 달라질 수 있는 시점을 검산했으며, 원래 도착 시각의 두 쌍에서 기존 8→9번째 순서 차이가 그대로 남았다. 따라서 이 규칙은 앞선 스텝을 유지하면서 관측한 입장 경계만 해소하는 후보에서 제외했다. 판정 범위는 기록한 실행 창을 고정한 prefill 재생이다. 첫 계획이 달라진 뒤의 실제 지연은 GPU에서 별도로 측정해야 한다. [보정 폭별 재계산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/command-clock-comparison.json)
 
+#### 두 RAG seed의 고정 도착 재생
+
+Qwen2.5-14B-Instruct의 닫힌 부하에서 기록한 기준군과 QKV 후보의 상대 송신 시각을 seed별로 가져왔다. 각 시각표에 요청 64건이 들어 있다. A100 7번에서 같은 바이너리와 KV 2,576블록으로 기준 → 후보 → 후보 → 기준 순서로 실행했다. 네 시각표를 매번 요청 완료와 독립적으로 재생하고, 뒤 두 실행에서는 seed별 시각표 순서도 뒤집었다. [실행 순서와 입력 검증](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/fixed-rag-arrivals/campaign.sh) · [도착 시각 재생 코드](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/fixed-rag-arrivals/fixed_w3.py)
+
+측정 1,024건을 오류와 429 없이 완료했다. 입력·응답 텍스트 해시, 입력·출력 토큰 수, 종료 사유가 기존 요청과 모두 일치했다. 별도 C1·C8 생성 ID 검사도 이전 네 실행을 재현했다. 후보 두 실행에서 cuBLASLt `120405`의 1,024행 계획 선택을 확인했다. 실제 송신 오차 p95는 각 실행에서 최대 2.24ms였고, 기준과 후보의 송신 시각 차이 p95는 각 비교에서 최대 1.51ms였다. 네 서버가 코드 0으로 종료됐고 GPU 7의 동일한 20GiB 예약이 매번 복구됐다. [집계·선택 기록·체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/fixed-rag-arrivals/verified-summary.json)
+
+아래는 기준 대비 후보의 변화율이다. 각 칸에 기준 먼저 / 후보 먼저 순서의 결과를 적었다.
+
+| seed | 시각표 출처 | TTFT p95 변화 | TPOT p50 변화 |
+|---:|---|---:|---:|
+| 1 | 기준군 | −10.30% / −10.12% | −9.35% / −4.37% |
+| 1 | QKV 후보 | −4.69% / −3.54% | −9.23% / −5.19% |
+| 2 | 기준군 | −4.28% / −3.62% | −4.13% / −3.85% |
+| 2 | QKV 후보 | −7.02% / −12.88% | −7.30% / −7.17% |
+
+네 시각표와 두 실행 순서에서 TTFT p95 및 TPOT p50이 모두 줄었다. 이 결과의 대상은 두 seed에서 수집한 도착 시각표다. 기존 50ms 간격 시험에는 TTFT p95가 증가한 조건이 남아 있어, 대상 모델의 다른 도착 분포에서 재현성과 회귀 기준을 확인할 때까지 후보는 격리 시험에 둔다. [독립 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/fixed-rag-arrivals/verify_fixed.py) · [원격 집계 절차](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/fixed-rag-arrivals/fetch-summary.sh)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

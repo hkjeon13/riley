@@ -1,0 +1,422 @@
+{
+  "result": {
+    "binary_sha256": "f5872f90e59b4cc99a3fb4e626aa1f6e7de090a039f2bd97a86ce501ee8d1037",
+    "matched_measured_requests": 1024,
+    "arms": {
+      "riley-first": {
+        "receipt_sha256": "3e8201b82050b44321785a2545d361d4cdf98e6d0c0d0d168db40f9fb23d3ca5",
+        "token_id_probe_sha256": "dd6539776fdf0ad23228ad16ffc99384ff1b9e7456bb9e78999c1746c49a2abf",
+        "holders": {
+          "6": {
+            "pid": 2431228,
+            "start_ticks": "6339570869",
+            "physical_index": 6,
+            "phase": "idle",
+            "allocation_bytes": 21474836480
+          },
+          "7": {
+            "pid": 2431237,
+            "start_ticks": "6339570875",
+            "physical_index": 7,
+            "phase": "idle",
+            "allocation_bytes": 21474836480
+          }
+        }
+      },
+      "qkv-first": {
+        "receipt_sha256": "bfdd57e83254c4e8af5f8d5af1b3aa448446f841891c7fcf71003b4cde189847",
+        "token_id_probe_sha256": "dd6539776fdf0ad23228ad16ffc99384ff1b9e7456bb9e78999c1746c49a2abf",
+        "holders": {
+          "6": {
+            "pid": 2431228,
+            "start_ticks": "6339570869",
+            "physical_index": 6,
+            "phase": "idle",
+            "allocation_bytes": 21474836480
+          },
+          "7": {
+            "pid": 2431237,
+            "start_ticks": "6339570875",
+            "physical_index": 7,
+            "phase": "idle",
+            "allocation_bytes": 21474836480
+          }
+        }
+      },
+      "qkv-second": {
+        "receipt_sha256": "ac75f6414d74b63c73f913d2537c2dbfa03dd700359257bc891685515ce6584d",
+        "token_id_probe_sha256": "dd6539776fdf0ad23228ad16ffc99384ff1b9e7456bb9e78999c1746c49a2abf",
+        "holders": {
+          "6": {
+            "pid": 2431228,
+            "start_ticks": "6339570869",
+            "physical_index": 6,
+            "phase": "idle",
+            "allocation_bytes": 21474836480
+          },
+          "7": {
+            "pid": 2431237,
+            "start_ticks": "6339570875",
+            "physical_index": 7,
+            "phase": "idle",
+            "allocation_bytes": 21474836480
+          }
+        }
+      },
+      "riley-second": {
+        "receipt_sha256": "f5944e131f0a1cec8d0a87b24e9d6a49c9d118fc0afac6edd16e359ae330fd89",
+        "token_id_probe_sha256": "dd6539776fdf0ad23228ad16ffc99384ff1b9e7456bb9e78999c1746c49a2abf",
+        "holders": {
+          "6": {
+            "pid": 2431228,
+            "start_ticks": "6339570869",
+            "physical_index": 6,
+            "phase": "idle",
+            "allocation_bytes": 21474836480
+          },
+          "7": {
+            "pid": 2431237,
+            "start_ticks": "6339570875",
+            "physical_index": 7,
+            "phase": "idle",
+            "allocation_bytes": 21474836480
+          }
+        }
+      }
+    },
+    "cells": {
+      "rag-c8-s1-riley-first": {
+        "arms": {
+          "riley-first": {
+            "ttft_p95_ms": 1889.0730440616608,
+            "tpot_p50_ms": 41.65033896373013,
+            "itl_p99_ms": 271.97718620300293,
+            "output_tok_s": 168.03892232764994,
+            "relative_write_error_absolute_p95_ms": 2.238638699054718,
+            "requests": 64,
+            "sha256": "53916447e749a2fc50e04108c13827b25b8742b4dbd4fe6e5ec19cb9a1985b95"
+          },
+          "qkv-first": {
+            "ttft_p95_ms": 1694.4617107510567,
+            "tpot_p50_ms": 37.75420567886097,
+            "itl_p99_ms": 258.26961547136307,
+            "output_tok_s": 168.29618173276702,
+            "relative_write_error_absolute_p95_ms": 1.6892030835151672,
+            "requests": 64,
+            "sha256": "2fe58ab3047d283c33007c9e58e481e678fc4ea38f07a35b65183db295ff31e7"
+          },
+          "qkv-second": {
+            "ttft_p95_ms": 1682.9947456717491,
+            "tpot_p50_ms": 37.46539342591143,
+            "itl_p99_ms": 255.77669590711594,
+            "output_tok_s": 168.33109825414724,
+            "relative_write_error_absolute_p95_ms": 1.5457123517990112,
+            "requests": 64,
+            "sha256": "c8bd9d0020d6552782e5ad7aab2d2215d1a16481065f45434819af645fdffcad"
+          },
+          "riley-second": {
+            "ttft_p95_ms": 1872.475951910019,
+            "tpot_p50_ms": 39.17899757154345,
+            "itl_p99_ms": 265.4224708676338,
+            "output_tok_s": 168.14300432723962,
+            "relative_write_error_absolute_p95_ms": 1.8276944756507874,
+            "requests": 64,
+            "sha256": "235b5ae4d4d16ca619d2b80fa4a4a227dbda9aa6a71bae8b2c6fa7dfedef5575"
+          }
+        },
+        "pairs_candidate_percent_change": {
+          "first": {
+            "ttft_p95_ms": -10.301948562675689,
+            "tpot_p50_ms": -9.354385538763522,
+            "itl_p99_ms": -5.039970786891135,
+            "output_tok_s": 0.1530951291245808,
+            "paired_write_error_abs_p95_ms": 1.0893046855926514
+          },
+          "second": {
+            "ttft_p95_ms": -10.119286501115788,
+            "tpot_p50_ms": -4.373782515754421,
+            "itl_p99_ms": -3.634121455122852,
+            "output_tok_s": 0.11186544909209672,
+            "paired_write_error_abs_p95_ms": 1.2112930417060852
+          }
+        },
+        "timing_valid": true
+      },
+      "rag-c8-s1-qkv-first": {
+        "arms": {
+          "riley-first": {
+            "ttft_p95_ms": 1802.4679571390152,
+            "tpot_p50_ms": 42.77145117521286,
+            "itl_p99_ms": 270.08092403411865,
+            "output_tok_s": 169.65382056327977,
+            "relative_write_error_absolute_p95_ms": 1.6005858778953552,
+            "requests": 64,
+            "sha256": "204bee8488ba4ebd313a43a8693ec2728ace7ada4e81910ef1c7636bb23f5927"
+          },
+          "qkv-first": {
+            "ttft_p95_ms": 1717.9373502731323,
+            "tpot_p50_ms": 38.82249251125366,
+            "itl_p99_ms": 259.1092735528946,
+            "output_tok_s": 169.92940763282715,
+            "relative_write_error_absolute_p95_ms": 2.012588083744049,
+            "requests": 64,
+            "sha256": "9266f620bd4f3d32aaac9448bebedfd356d648606a1eb6808855378947366ad2"
+          },
+          "qkv-second": {
+            "ttft_p95_ms": 1733.5843592882156,
+            "tpot_p50_ms": 39.63772577094281,
+            "itl_p99_ms": 260.73846966028214,
+            "output_tok_s": 169.8855372761492,
+            "relative_write_error_absolute_p95_ms": 1.5171095728874207,
+            "requests": 64,
+            "sha256": "eb0368f80853345070d2ec5402c7c3624b0b60b3a5183631ef846dbfc9bea617"
+          },
+          "riley-second": {
+            "ttft_p95_ms": 1797.1861436963081,
+            "tpot_p50_ms": 41.80675428214035,
+            "itl_p99_ms": 264.3369883298874,
+            "output_tok_s": 169.7804227667928,
+            "relative_write_error_absolute_p95_ms": 1.9610896706581116,
+            "requests": 64,
+            "sha256": "e90d2a38566ab2bb345b32ee9f496f435eb34315a7599e95707052e00ac441e0"
+          }
+        },
+        "pairs_candidate_percent_change": {
+          "first": {
+            "ttft_p95_ms": -4.689714817458112,
+            "tpot_p50_ms": -9.232697407862855,
+            "itl_p99_ms": -4.062356688263568,
+            "output_tok_s": 0.162440827228294,
+            "paired_write_error_abs_p95_ms": 1.3520121574401855
+          },
+          "second": {
+            "ttft_p95_ms": -3.538964766180619,
+            "tpot_p50_ms": -5.188225080950959,
+            "itl_p99_ms": -1.3613375458126908,
+            "output_tok_s": 0.061912031813449175,
+            "paired_write_error_abs_p95_ms": 1.0954588651657104
+          }
+        },
+        "timing_valid": true
+      },
+      "rag-c8-s2-riley-first": {
+        "arms": {
+          "riley-first": {
+            "ttft_p95_ms": 1585.7759863138199,
+            "tpot_p50_ms": 38.30599949115843,
+            "itl_p99_ms": 262.42227107286453,
+            "output_tok_s": 173.80642031619723,
+            "relative_write_error_absolute_p95_ms": 1.3970360159873962,
+            "requests": 64,
+            "sha256": "302e1dd8309fde3c963225b525a83e413623ec6276f847d524b80f464a2c9795"
+          },
+          "qkv-first": {
+            "ttft_p95_ms": 1517.9434791207314,
+            "tpot_p50_ms": 36.722865395658594,
+            "itl_p99_ms": 254.65189665555954,
+            "output_tok_s": 174.1406679989961,
+            "relative_write_error_absolute_p95_ms": 1.816384494304657,
+            "requests": 64,
+            "sha256": "69822cb04c9c2628760ccd2468dd91ecd1de3f6ea6ab5f7de17f56097f8c6322"
+          },
+          "qkv-second": {
+            "ttft_p95_ms": 1535.5558097362518,
+            "tpot_p50_ms": 36.68999941799584,
+            "itl_p99_ms": 252.93082743883133,
+            "output_tok_s": 174.09029888759653,
+            "relative_write_error_absolute_p95_ms": 1.6485527157783508,
+            "requests": 64,
+            "sha256": "1a42d8b3123ad31ba2618b1b13d4ad8a3e83d96a99f3af53a402009de72177d4"
+          },
+          "riley-second": {
+            "ttft_p95_ms": 1593.145377933979,
+            "tpot_p50_ms": 38.15834840216974,
+            "itl_p99_ms": 262.4772787094116,
+            "output_tok_s": 173.82104516413176,
+            "relative_write_error_absolute_p95_ms": 1.6297027468681335,
+            "requests": 64,
+            "sha256": "a6a61eb3094cc3f9a93d8f661bd217164338e3328e98a50dd37d90ed5b1bbce8"
+          }
+        },
+        "pairs_candidate_percent_change": {
+          "first": {
+            "ttft_p95_ms": -4.27755923778157,
+            "tpot_p50_ms": -4.132861996892279,
+            "itl_p99_ms": -2.961019423213307,
+            "output_tok_s": 0.1923103198321341,
+            "paired_write_error_abs_p95_ms": 0.897824764251709
+          },
+          "second": {
+            "ttft_p95_ms": -3.614834464913075,
+            "tpot_p50_ms": -3.848041243028244,
+            "itl_p99_ms": -3.6370581550981274,
+            "output_tok_s": 0.15490283308936537,
+            "paired_write_error_abs_p95_ms": 1.2340918183326721
+          }
+        },
+        "timing_valid": true
+      },
+      "rag-c8-s2-qkv-first": {
+        "arms": {
+          "riley-first": {
+            "ttft_p95_ms": 1612.141378223896,
+            "tpot_p50_ms": 41.392940118556886,
+            "itl_p99_ms": 266.25826209783554,
+            "output_tok_s": 175.60081907552103,
+            "relative_write_error_absolute_p95_ms": 1.788891851902008,
+            "requests": 64,
+            "sha256": "e93476c83fde4ee281a4c02f1c80c6f798bf75762c3bbf86f948fb8272ee1a52"
+          },
+          "qkv-first": {
+            "ttft_p95_ms": 1498.898059129715,
+            "tpot_p50_ms": 38.37083209687331,
+            "itl_p99_ms": 258.42998176813126,
+            "output_tok_s": 175.98681109403063,
+            "relative_write_error_absolute_p95_ms": 1.7733946442604065,
+            "requests": 64,
+            "sha256": "d7e88a489b047064475d12fdbc5e35719418c53bbc810ae576b1f6444f5a47be"
+          },
+          "qkv-second": {
+            "ttft_p95_ms": 1505.0292909145355,
+            "tpot_p50_ms": 38.38735214603229,
+            "itl_p99_ms": 256.82906061410904,
+            "output_tok_s": 175.9672118120236,
+            "relative_write_error_absolute_p95_ms": 1.8951445817947388,
+            "requests": 64,
+            "sha256": "02debd65a41b97c9e70fdaddeed744fc4a35d59285aaec59c06deb5ffce5de4d"
+          },
+          "riley-second": {
+            "ttft_p95_ms": 1727.4857759475708,
+            "tpot_p50_ms": 41.352294796095116,
+            "itl_p99_ms": 267.01153814792633,
+            "output_tok_s": 175.6077280859766,
+            "relative_write_error_absolute_p95_ms": 1.478925347328186,
+            "requests": 64,
+            "sha256": "52afaeb55ae4e13a19f45b6289a94ad386817bfca2f6c41440bf3dfd4bcdecb2"
+          }
+        },
+        "pairs_candidate_percent_change": {
+          "first": {
+            "ttft_p95_ms": -7.024403729339279,
+            "tpot_p50_ms": -7.301022862902984,
+            "itl_p99_ms": -2.9401079493367233,
+            "output_tok_s": 0.21981219708524513,
+            "paired_write_error_abs_p95_ms": 1.062348484992981
+          },
+          "second": {
+            "ttft_p95_ms": -12.877471301377986,
+            "tpot_p50_ms": -7.169959163530637,
+            "itl_p99_ms": -3.813497201074556,
+            "output_tok_s": 0.2047083747197087,
+            "paired_write_error_abs_p95_ms": 1.5125945210456848
+          }
+        },
+        "timing_valid": true
+      }
+    }
+  },
+  "source_schedules": {
+    "rag-c8-s1-riley-first": {
+      "seed": 1,
+      "requests": 64,
+      "warmup": 8,
+      "origin": "qwen14-riley-first",
+      "source_receipt_sha256": "f613b6bad3c18822aeb593f363fb1c7f9ec1dfaed93ede28eb66168bdaa3b17a"
+    },
+    "rag-c8-s1-qkv-first": {
+      "seed": 1,
+      "requests": 64,
+      "warmup": 8,
+      "origin": "qwen14-qkv-first",
+      "source_receipt_sha256": "8890e1454def31a57e6ef657a14e14e00f90ab0b053fe453350180de340aa216"
+    },
+    "rag-c8-s2-riley-first": {
+      "seed": 2,
+      "requests": 64,
+      "warmup": 8,
+      "origin": "qwen14-riley-first",
+      "source_receipt_sha256": "ce8ed9387347d6d93b611616a92b8d39dc26da0f9102c7cc6888556619e831bf"
+    },
+    "rag-c8-s2-qkv-first": {
+      "seed": 2,
+      "requests": 64,
+      "warmup": 8,
+      "origin": "qwen14-qkv-first",
+      "source_receipt_sha256": "1d66e814c4d11ad9bab69eab39e1c53d71d4b45f853543514ca0733ae68aa7be"
+    }
+  },
+  "runtime_selection": {
+    "riley-first": {
+      "successful_runtime_selection_records": 0,
+      "server_log_sha256": "66c6a9df701994a90dabf8ff82a16decaad12d887f3ca80a5736515848d92ddf"
+    },
+    "qkv-first": {
+      "successful_runtime_selection_records": 1,
+      "server_log_sha256": "a1afafb4d172b7f980c6eabd9e9f04ff268a0907a02c4e2e4dda45ddc0a6636a"
+    },
+    "qkv-second": {
+      "successful_runtime_selection_records": 1,
+      "server_log_sha256": "7a52386b036da0e8c2ec6eac14648446662b847d5acff42f5470040882cfbb39"
+    },
+    "riley-second": {
+      "successful_runtime_selection_records": 0,
+      "server_log_sha256": "b1e87abbd4c23c34bea3afab96821766182084b3622032ddbd5706cfd2e1711e"
+    }
+  },
+  "execution": {
+    "stage": "w3-qkv-fixed-arrival-20261120.RScZSBo3",
+    "campaign_exit": 0,
+    "chronology": [
+      [
+        "START",
+        "riley-first",
+        "2026-11-19T19:54:47Z"
+      ],
+      [
+        "END",
+        "riley-first",
+        "2026-11-19T20:02:33Z",
+        "exit=0"
+      ],
+      [
+        "START",
+        "qkv-first",
+        "2026-11-19T20:02:33Z"
+      ],
+      [
+        "END",
+        "qkv-first",
+        "2026-11-19T20:10:17Z",
+        "exit=0"
+      ],
+      [
+        "START",
+        "qkv-second",
+        "2026-11-19T20:10:17Z"
+      ],
+      [
+        "END",
+        "qkv-second",
+        "2026-11-19T20:18:05Z",
+        "exit=0"
+      ],
+      [
+        "START",
+        "riley-second",
+        "2026-11-19T20:18:05Z"
+      ],
+      [
+        "END",
+        "riley-second",
+        "2026-11-19T20:25:44Z",
+        "exit=0"
+      ]
+    ],
+    "physical_gpu": 7,
+    "remote_verified_json_sha256": "508858f1507c4d80841abf7dbdef90884ce2a2983520aeaeba8cdba1ab80774e",
+    "remote_dispatch_and_result_digests_verified": true,
+    "remote_independent_comparison_byte_exact": true,
+    "controller_pid": 2458506,
+    "dispatch_tar_sha256": "1183cf39a701b33cd3dd9c47677060543087ff60817416820060ed2bb9a77bba"
+  }
+}

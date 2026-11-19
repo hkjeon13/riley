@@ -47,6 +47,8 @@ W3의 QKV 추적 416건은 해당 비계측 요청·응답과 일치했다. 50ms
 
 첫 우선순위에 명령 송신 시각을 반영한 CPU 재생은 보정 폭 76.879µs에서 이미 두 번째 스텝을 바꿨다. 그보다 작은 보정 폭은 기존 도착 시각의 순서 차이를 해소하지 못해 후보에서 제외했다. [보정 폭 대조](03-long-context-result.md#명령-송신-시각을-사용한-우선순위-재생)
 
+Qwen2.5-14B에서 두 RAG seed와 기준·후보의 상대 도착 시각표 네 개를 교차 재생했다. 측정 1,024건의 입력·응답 지문과 종료 사유가 일치했고 두 실행 순서에서 TTFT p95는 3.54–12.88%, TPOT p50은 3.85–9.35% 감소했다. 실제 송신 시각 차이 p95의 최댓값은 1.51ms였다. 기존 50ms 간격 도착 시험의 TTFT p95 증가와 영향 모델 검증 범위를 고려해 후보는 격리 시험에 둔다. [두 RAG seed의 고정 도착 재생](03-long-context-result.md#두-rag-seed의-고정-도착-재생)
+
 W5의 30분 실행에서 종료 뒤 GPU·pinned 메모리와 활성 KV는 0이었다. Cache-off 정밀 실행에서 일반 RSS의 변화는 0이었고 `smaps_rollup`은 익명 RSS +700KiB를 기록했다. 따라서 RSS 증가 0 조건은 미충족이다. 정밀 판정기를 적용한 다음 실행에서 +812KiB를 확인했고 매핑별 합계에서 전부 익명 private에 속했다. 요청·지연·종료 회수 검사는 통과했고 RSS 검사만 실패했다. GPU 메모리 오류 주입은 A100 6번의 CUDA 12.4 SM80 테스트 바이너리에서 네 독립 사례가 통과했다. [운영 품질 기준](../goal.md#33-운영-품질) · [정밀 RSS 결과](05-mixed-soak-result.md#정밀-rss-재실행-결과) · [오류 주입 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/result/verification.json)
 
 같은 A100 바이너리의 후속 대조에서도 RSS가 기본값에서 +932KiB, `MALLOC_ARENA_MAX=2`에서 +3,648KiB 증가했다. 두 조건 모두 RSS 기준만 실패했고 arena 제한은 채택하지 않았다. [비교 결과](../../benchmarks/evidence/20261119-w5-mixed-soak/glibc-arena-control/result/paired-comparison.json)
