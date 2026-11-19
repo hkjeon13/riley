@@ -1,6 +1,6 @@
 # A100 모델별 성능 수치 (Riley vs vLLM 0.27.1)
 
-2026-10-29 정리, 2026-10-31 갱신(Qwen3-14B 재측정, DeepSeek-R1-Distill-Llama-8B 추가). A100-SXM4-40GB 한 장, 8셀(C1/C8/C16/C32 × fixed/natural), warm-up 32 + 측정 192, Riley와 vLLM을 같은 실행에서 순서를 바꿔 2회 측정한 평균이다. 모델마다 가장 최근의 8셀 판정 측정을 썼다. 원본은 호스트 `aws-a100`의 `/mnt/efs/nlp/psyche/riley-261013/evidence/<run>/result.json`이다. 판정 기준과 종료 근거는 [model coverage](model-coverage-a100.md)에 있다.
+2026-10-29 정리, 2026-10-31 갱신(Qwen3-14B 재측정, DeepSeek-R1-Distill-Llama-8B 추가). A100-SXM4-40GB 한 장, 8셀(C1/C8/C16/C32 × fixed/natural), warm-up 32 + 측정 192, Riley와 vLLM을 같은 실행에서 순서를 바꿔 2회 측정한 평균이다. 모델마다 가장 최근의 8셀 판정 측정을 썼다. 당시 실행은 `aws-a100`의 `/mnt/efs/nlp/psyche/riley-261013/evidence/<run>/result.json`에 원본을 남겼고, 이 문서는 당시 집계값을 보존한다. 판정 기준과 종료 근거는 [model coverage](model-coverage-a100.md)에 있다.
 
 각 칸은 **Riley / vLLM** 값이다. 굵게 표시한 칸은 Riley가 기준에 못 미친 곳이다(C8–C32의 처리량·TPOT은 vLLM보다 나쁨, C1의 처리량·TPOT은 ±3% 밖, TTFT p50은 vLLM보다 큼). E2E는 판정 기준이 아니라 표시하지 않는다.
 

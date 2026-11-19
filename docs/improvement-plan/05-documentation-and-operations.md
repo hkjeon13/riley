@@ -64,6 +64,8 @@ README의 24개 성능 행을 A100 원본 요약과 대조하고 이번에 수�
 
 Production CPU의 Documentation 단계에서 개선 계획서의 상대 링크와 Markdown 제목, qualification manifest에 연결된 근거 파일의 SHA-256, 배포 입력을 대조한 두 Git 리비전의 객체를 검증한다. 로컬에서는 `python3.12 ci/check_improvement_evidence.py`를 실행한다. [검증 스크립트](../../ci/check_improvement_evidence.py) · [Production CPU 워크플로](../../.github/workflows/production-cpu.yml)
 
+같은 검사에서 README의 10월 A100 최대 동시성 32·고정 길이 표를 저장소에 보존한 모델별 표와 대조한다. 24개 모델의 두 엔진 처리량·TTFT·TPOT와 표시된 처리량 배수를 확인한다. 당시 기록에 적힌 AWS 원본 경로는 이번 점검에서 확인되지 않아 이 자동 검사는 보존된 표 사이의 일치를 검증한다. [README 성능표](../../README.md#performance) · [보존된 측정값과 당시 실행 이름](../model-coverage-a100-perf-table.md#측정-출처)
+
 성능표를 생성한다면 raw→검증된 집계→표의 입력·출력·버전이 명확한 작은 생성기를 둔다. 과거 결과와 새 후보를 섞거나 집계 중 실패 셀을 제거하지 않는다. 이 생성기는 제안이며 현재 구현되어 있지 않다.
 
 ## 3. W5-B: 실제 GPU 회귀 검증을 추가하는 방법

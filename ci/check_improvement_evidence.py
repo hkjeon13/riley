@@ -2,6 +2,7 @@
 """Verify improvement-plan links, evidence digests, and recorded distribution inputs."""
 
 import argparse
+from decimal import Decimal
 from hashlib import file_digest
 import json
 from pathlib import Path
@@ -16,6 +17,7 @@ PLANS = Path("docs/improvement-plan")
 INLINE_LINK = re.compile(r"\[[^\]\n]+\]\((<[^>]+>|[^\s)]+)\)")
 ATX_HEADING = re.compile(r"^ {0,3}#{1,6}[ \t]+(.+?)\s*#*\s*$")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+METRIC_PAIR = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s*/\s*([0-9]+(?:\.[0-9]+)?)")
 
 
 def unique_object(pairs):
@@ -137,6 +139,53 @@ def check_plan_links(root):
     return count
 
 
+def markdown_table(path, header, section=None):
+    lines = iter(prose_lines(path))
+    if section is not None and not any(line == section for _, line in lines):
+        raise ValueError(f"{path.name}: missing section {section}")
+    for _, line in lines:
+        if line.startswith("## ") and section is not None:
+            raise ValueError(f"{path.name}: missing table in {section}")
+        if line.startswith("|") and tuple(cell.strip() for cell in line.strip("|").split("|")) == header:
+            break
+    else:
+        raise ValueError(f"{path.name}: missing table {header[0]}")
+
+    rows = {}
+    for number, line in lines:
+        if not line.startswith("|"):
+            break
+        fields = [field.strip() for field in line.strip("|").split("|")]
+        if all(re.fullmatch(r":?-{3,}:?", field) for field in fields):
+            continue
+        if len(fields) != len(header) or not fields[0] or fields[0] in rows:
+            raise ValueError(f"{path.name}:{number}: malformed or duplicate performance row")
+        rows[fields[0]] = tuple(value.replace("**", "") for value in fields[1:])
+    return rows
+
+
+def check_readme_c32(root):
+    public = markdown_table(root / "README.md",
+                            ("Model", "Throughput tok/s", "Speed-up", "TTFT p50 ms", "TPOT p50 ms"))
+    reference = root / "docs/model-coverage-a100-perf-table.md"
+    columns = ("모델", "c1-fixed", "c1-natural", "c8-fixed", "c8-natural",
+               "c16-fixed", "c16-natural", "c32-fixed", "c32-natural")
+    sections = ("## 처리량 (출력 tok/s, 높을수록 좋음)", "## TTFT p50 (ms, 낮을수록 좋음)",
+                "## TPOT p50 (ms, 낮을수록 좋음)")
+    sources = [markdown_table(reference, columns, section) for section in sections]
+    if len(public) != 24 or any(source.keys() != public.keys() for source in sources):
+        raise ValueError("README.md: October A100 C32 fixed table must match all 24 reference models")
+    for model, (throughput, ratio, ttft, tpot) in public.items():
+        for name, value, source in zip(("throughput", "TTFT", "TPOT"), (throughput, ttft, tpot), sources, strict=True):
+            expected = source[model][columns.index("c32-fixed") - 1]
+            if value != expected or METRIC_PAIR.fullmatch(value) is None:
+                raise ValueError(f"README.md: {model} {name} differs from the October A100 C32 fixed table")
+        riley, vllm = map(Decimal, METRIC_PAIR.fullmatch(throughput).groups())
+        if min(riley, vllm) <= 0 or ratio != f"{riley / vllm:.2f}×":
+            raise ValueError(f"README.md: {model} speed-up differs from the displayed throughput")
+    return len(public)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[1])
@@ -146,10 +195,12 @@ def main():
         files = check_evidence(root, manifest)
         inputs = check_distribution_inputs(root, manifest)
         links = check_plan_links(root)
+        models = check_readme_c32(root)
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f"improvement evidence check failed: {error}", file=sys.stderr)
         return 1
-    print(f"improvement evidence verified: {files} file hashes, {inputs} recorded Git inputs, {links} local links")
+    print(f"improvement evidence verified: {files} file hashes, {inputs} recorded Git inputs, "
+          f"{links} local links, {models} README performance rows")
     return 0
 
 
