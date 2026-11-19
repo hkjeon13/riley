@@ -1,0 +1,17 @@
+{
+  "tests": {
+    "passed": 101,
+    "failed": 0,
+    "ignored": 1,
+    "ignored_names": [
+      "service::tests::loopback_transport_timing"
+    ]
+  },
+  "test_command": "cargo test --locked --offline -p riley-server --features server --lib -- --test-threads=1",
+  "rustfmt": "passed: cargo fmt --all -- --check",
+  "clippy": "passed: cargo clippy --locked --offline -p riley-server --features server --lib -- -D warnings",
+  "raw_output_sha256": {
+    "server-lib-tests.log": "71bdaadae59eed95e5a2f3cf107186915acc4dafa4a2d664548c19f8e22b3def",
+    "http-clippy.log": "b67e77d2a149ed612102718afc3684c628b5b0e9f1496bcd48b9785a239f75ee"
+  }
+}

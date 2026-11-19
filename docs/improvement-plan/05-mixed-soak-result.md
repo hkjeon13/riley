@@ -172,6 +172,18 @@ Cache-on의 반환 호출은 293회였고 모두 메모리를 반환했다. 중�
 
 같은 이미지의 환경에 `GLIBC_TUNABLES=glibc.malloc.tcache_count=0`만 지정하는 대조를 등록했다. 준비 완료 직후와 부하 종료 뒤의 Riley PID 1에서 설정과 메모리 반환 라이브러리의 부재를 확인한다. W2 시험 종료 뒤 GPU 6번에서 `cache-on`과 `cache-off` 순으로 각각 API 40건과 30분 부하를 실행한다. 이전 기준군, 스레드별 할당 캐시 설정만 준 실행, 7초 주기 반환을 함께 적용한 실행의 이미지·실행 파일·부하·자원 회수를 검산한다. 양쪽 캐시 조건에서 고정 환경 설정만으로 RSS 증가 0을 충족하는지 판정한다. [실행 등록](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/tcache-only/registration.json) · [검사기 패치와 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/tcache-only/campaign.sh) · [원본 대조 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/tcache-only/compare_tcache_only.py)
 
+### HTTP 요청 버퍼 용량의 CPU 대조
+
+배포 기준 소스 `d3d8fe6e5`의 HTTP 프레이밍은 파싱 전부터 매 요청에 최대 헤더와 최대 본문을 합친 버퍼를 예약한다. 후보는 헤더 한도까지 먼저 예약하고, 검증한 `Content-Length`에 맞춰 필요한 용량만 추가로 확보한다. W5의 30분 요청 생성기를 같은 seed로 재생해 합성 요청 14,449개를 만들었다. 기준과 후보를 교대로 각 10회 실행해 모든 요청의 메서드·경로·본문 바이트를 확인했다. 분할 수신한 최대 본문은 양쪽에서 처리했고, 불완전·한도 초과 본문과 같은 읽기에 들어온 파이프라인은 양쪽에서 거부했다. [프레이밍 구현](../../crates/riley-server/src/http.rs) · [후보 패치](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/reserve-validated-body.patch.gz) · [재생 도구와 원본 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/verified-framing.json)
+
+| 요청 객체의 본문 버퍼 용량 | 기준 | 후보 |
+|---|---:|---:|
+| p50 | 1,064,960바이트 | 16,384바이트 |
+| p99 | 1,064,960바이트 | 24,872바이트 |
+| 최대 | 1,064,960바이트 | 25,040바이트 |
+
+macOS ARM64에서 후보의 서버 라이브러리 테스트 101건이 통과했고 별도 루프백 시간 측정 1건은 기본값대로 건너뛰었다. 포맷 및 Clippy 검사도 통과했다. 위 용량은 CPU에서 확인한 벡터 예약량이다. 두 캐시 설정의 배포 이미지 30분 부하와 종료 시 정밀 RSS가 후보 채택 조건이다. [CPU 검증 기록](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/cpu-tests.json) · [재현 명령이 있는 스크립트](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/compare_framing.py)
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 

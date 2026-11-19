@@ -1,0 +1,225 @@
+{
+  "scope": "CPU replay of W5 HTTP framing with no sockets or inference. Capacity is reserved bytes, not RSS.",
+  "base_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "rustc": "rustc 1.85.0 (4d91de4e4 2025-02-17)",
+  "inputs": {
+    "counts": {
+      "schema": 1739,
+      "plain": 7984,
+      "tools": 708,
+      "reason": 743,
+      "cancel": 700,
+      "logprobs": 1160,
+      "long": 1415
+    },
+    "requests": 14449,
+    "body_length_p50": 369,
+    "body_length_p99": 24743,
+    "body_length_max": 24911,
+    "sha256": "5d9a3c4cca3865f3c0ddfc7872ce4cf3909f8ab4a53f9864bc38757758c19be7"
+  },
+  "generator_sha256": {
+    "soak.py": "700b3f8a9e10673212e3588472da9d5a521e0f03bb5f7cb787c87c5767dec2b1",
+    "load.py": "fb3a3de6fcd8904d6379433ad8fcff284530e46e388aa40c2b7b75cfd0d0c8b0"
+  },
+  "http_source_sha256": {
+    "base": "c0d1b93d7605ab8d6fd55ea20756fd70c9975cd080144cabbea72a6dc57c7c79",
+    "candidate": "617f26a7d9333e44f8265666868a032ea539f303cd54ccac9edb408c74e5aef6"
+  },
+  "probe_sha256": "6a0d3403d65eccd9d4e92c9e5ae1885399f6974c4594d9fe897cce53db2d0ba6",
+  "patch_sha256": "28f0ef9ed0e5e2e81b5f82d68f99554977c461ca3cfe91ea929b5becb38fd520",
+  "binary_sha256": {
+    "base": "648a2b39cc9cab661e1710ba39f51416fe873d5abdfcbf3b3ebd8d2dd08f0edd",
+    "candidate": "adfaa780c742c79254bb2b11ce182c5542eba14f4d407d3f620e351d50f247bf"
+  },
+  "trials": [
+    {
+      "1-base": {
+        "requests": 14449,
+        "body_capacity_p50": 1064960,
+        "body_capacity_p99": 1064960,
+        "body_capacity_max": 1064960,
+        "time_p50_ns": 417,
+        "time_p95_ns": 1375
+      },
+      "2-candidate": {
+        "requests": 14449,
+        "body_capacity_p50": 16384,
+        "body_capacity_p99": 24872,
+        "body_capacity_max": 25040,
+        "time_p50_ns": 708,
+        "time_p95_ns": 2250
+      },
+      "3-candidate": {
+        "requests": 14449,
+        "body_capacity_p50": 16384,
+        "body_capacity_p99": 24872,
+        "body_capacity_max": 25040,
+        "time_p50_ns": 459,
+        "time_p95_ns": 1625
+      },
+      "4-base": {
+        "requests": 14449,
+        "body_capacity_p50": 1064960,
+        "body_capacity_p99": 1064960,
+        "body_capacity_max": 1064960,
+        "time_p50_ns": 458,
+        "time_p95_ns": 1459
+      }
+    },
+    {
+      "1-base": {
+        "requests": 14449,
+        "body_capacity_p50": 1064960,
+        "body_capacity_p99": 1064960,
+        "body_capacity_max": 1064960,
+        "time_p50_ns": 417,
+        "time_p95_ns": 1333
+      },
+      "2-candidate": {
+        "requests": 14449,
+        "body_capacity_p50": 16384,
+        "body_capacity_p99": 24872,
+        "body_capacity_max": 25040,
+        "time_p50_ns": 416,
+        "time_p95_ns": 1334
+      },
+      "3-candidate": {
+        "requests": 14449,
+        "body_capacity_p50": 16384,
+        "body_capacity_p99": 24872,
+        "body_capacity_max": 25040,
+        "time_p50_ns": 375,
+        "time_p95_ns": 1334
+      },
+      "4-base": {
+        "requests": 14449,
+        "body_capacity_p50": 1064960,
+        "body_capacity_p99": 1064960,
+        "body_capacity_max": 1064960,
+        "time_p50_ns": 417,
+        "time_p95_ns": 1375
+      }
+    },
+    {
+      "1-base": {
+        "requests": 14449,
+        "body_capacity_p50": 1064960,
+        "body_capacity_p99": 1064960,
+        "body_capacity_max": 1064960,
+        "time_p50_ns": 458,
+        "time_p95_ns": 1375
+      },
+      "2-candidate": {
+        "requests": 14449,
+        "body_capacity_p50": 16384,
+        "body_capacity_p99": 24872,
+        "body_capacity_max": 25040,
+        "time_p50_ns": 417,
+        "time_p95_ns": 1417
+      },
+      "3-candidate": {
+        "requests": 14449,
+        "body_capacity_p50": 16384,
+        "body_capacity_p99": 24872,
+        "body_capacity_max": 25040,
+        "time_p50_ns": 708,
+        "time_p95_ns": 2042
+      },
+      "4-base": {
+        "requests": 14449,
+        "body_capacity_p50": 1064960,
+        "body_capacity_p99": 1064960,
+        "body_capacity_max": 1064960,
+        "time_p50_ns": 458,
+        "time_p95_ns": 1375
+      }
+    },
+    {
+      "1-base": {
+        "requests": 14449,
+        "body_capacity_p50": 1064960,
+        "body_capacity_p99": 1064960,
+        "body_capacity_max": 1064960,
+        "time_p50_ns": 458,
+        "time_p95_ns": 1459
+      },
+      "2-candidate": {
+        "requests": 14449,
+        "body_capacity_p50": 16384,
+        "body_capacity_p99": 24872,
+        "body_capacity_max": 25040,
+        "time_p50_ns": 416,
+        "time_p95_ns": 1334
+      },
+      "3-candidate": {
+        "requests": 14449,
+        "body_capacity_p50": 16384,
+        "body_capacity_p99": 24872,
+        "body_capacity_max": 25040,
+        "time_p50_ns": 375,
+        "time_p95_ns": 1333
+      },
+      "4-base": {
+        "requests": 14449,
+        "body_capacity_p50": 1064960,
+        "body_capacity_p99": 1064960,
+        "body_capacity_max": 1064960,
+        "time_p50_ns": 417,
+        "time_p95_ns": 1375
+      }
+    },
+    {
+      "1-base": {
+        "requests": 14449,
+        "body_capacity_p50": 1064960,
+        "body_capacity_p99": 1064960,
+        "body_capacity_max": 1064960,
+        "time_p50_ns": 417,
+        "time_p95_ns": 1334
+      },
+      "2-candidate": {
+        "requests": 14449,
+        "body_capacity_p50": 16384,
+        "body_capacity_p99": 24872,
+        "body_capacity_max": 25040,
+        "time_p50_ns": 375,
+        "time_p95_ns": 1333
+      },
+      "3-candidate": {
+        "requests": 14449,
+        "body_capacity_p50": 16384,
+        "body_capacity_p99": 24872,
+        "body_capacity_max": 25040,
+        "time_p50_ns": 416,
+        "time_p95_ns": 1333
+      },
+      "4-base": {
+        "requests": 14449,
+        "body_capacity_p50": 1064960,
+        "body_capacity_p99": 1064960,
+        "body_capacity_max": 1064960,
+        "time_p50_ns": 417,
+        "time_p95_ns": 1375
+      }
+    }
+  ],
+  "medians": {
+    "base": {
+      "body_capacity_p50": 1064960.0,
+      "body_capacity_p99": 1064960.0,
+      "body_capacity_max": 1064960.0,
+      "time_p50_ns": 417.0,
+      "time_p95_ns": 1375.0
+    },
+    "candidate": {
+      "body_capacity_p50": 16384.0,
+      "body_capacity_p99": 24872.0,
+      "body_capacity_max": 25040.0,
+      "time_p50_ns": 416.0,
+      "time_p95_ns": 1334.0
+    }
+  },
+  "uncompressed_patch_sha256": "15dfbe98d0203d12bb516874167e1a8f45aadc461d7659157c6d054c515ae1eb"
+}
