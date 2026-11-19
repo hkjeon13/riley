@@ -266,5 +266,23 @@
         }
       }
     }
+  },
+  "operational_startup": {
+    "initial_cache_off": {
+      "campaign": "w5-dist-d3d8fe6e5.GcPrN2e8",
+      "exit": 1,
+      "phase": "before_readiness",
+      "error": "riley: invalid prefill plateau, coalescing or prefix cache policy: invalid scheduler configuration prefix_cache.max_blocks: must be positive and within the physical KV pool",
+      "server_log_sha256": "be4385c228c51a7d1254365c18696a1456e79e64f504653831e70135f85b72ff",
+      "checker_log_sha256": "c4bc37279223fbc99476b2389e73f8b7f27d26e33ac435866d61d344262723f8",
+      "restored_reservation_bytes": 21474836480
+    },
+    "scheduled_cache_off_retry": {
+      "campaign": "w5-dist-off-retry.ORBlgo3W",
+      "campaign_pid": 985885,
+      "status_at_record_time": "waiting_for_cache_on",
+      "dispatch_sha256": "93b0615d4e7291ddb799e2e601c564fd5a2a53d03c4a65d0cfb8451d7d84c4ad",
+      "checker_sha256": "2781ae9725f9267ab75d17603602df7391c874e8cc6b76c0a9043e75487c260a"
+    }
   }
 }

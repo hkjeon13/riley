@@ -161,6 +161,14 @@ class DistributionGpuTest(unittest.TestCase):
         create = next(call for call in self.calls if call[0] == "create")
         self.assertEqual(list(create[-10:]), report["soak_server_arguments"])
 
+    def test_cache_off_soak_does_not_supply_an_invalid_zero_block_budget(self):
+        self.assertEqual(self.check(mixed_soak="cache-off"), 0)
+        report = json.loads((self.out / "report.json").read_bytes())
+        create = next(call for call in self.calls if call[0] == "create")
+        self.assertNotIn("--prefix-cache-blocks", create)
+        self.assertEqual(report["soak_server_arguments"][-2:], ["--kv-blocks", "16384"])
+        self.assertEqual(report["mixed_soak"]["mode"], "cache-off")
+
     def test_checkpoint_drift_prevents_container_creation(self):
         with self.assertRaisesRegex(ValueError, "checkpoint manifest differs"):
             self.check("0" * 64)

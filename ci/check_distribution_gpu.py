@@ -23,7 +23,7 @@ SHUTDOWN = "/tmp/riley-distribution-shutdown.json"
 API_CHECK = Path(__file__).resolve().parents[1] / "benchmarks/live/api_check.py"
 ACCURACY_CHECK = API_CHECK.with_name("long_accuracy.py")
 SOAK_CHECK = API_CHECK.with_name("soak.py")
-CACHE_BLOCKS = {"cache-off": 0, "cache-on": 128}
+CACHE_BLOCKS = {"cache-off": None, "cache-on": 128}
 GPU_UUID = re.compile(r"GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 
@@ -187,7 +187,10 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
         server_args = ("--max-active-sequences", "32", "--max-sequence-tokens", "8192", "--max-output-tokens", "256")
     elif mixed_soak is not None:
         server_args = ("--max-active-sequences", "32", "--max-sequence-tokens", "8192", "--max-output-tokens", "512",
-                       "--kv-blocks", "16384", "--prefix-cache-blocks", str(CACHE_BLOCKS[mixed_soak]))
+                       "--kv-blocks", "16384")
+        cache_blocks = CACHE_BLOCKS[mixed_soak]
+        if cache_blocks is not None:
+            server_args += ("--prefix-cache-blocks", str(cache_blocks))
     mount = f"type=bind,source={model_dir},target=/models,readonly"
     name = f"riley-gpu-check-{uuid4().hex}"
     container = None
