@@ -1,0 +1,92 @@
+{
+  "scope": "Long-context GPU qualification of the same packaged allocator image as the two completed soaks.",
+  "combined_report_sha256": "bdf7abca990d1be4aa08b9615c18546696a303aee8a150824a79b845b33b1632",
+  "image_binding": {
+    "schema_version": "riley.distribution-image-check.v1",
+    "status": "passed",
+    "image_id": "sha256:1fc444b1840e6f8d55b32fc603629e031ee018f674b9b1ab04b6a69c9445ff66",
+    "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+    "source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+    "binaries": {
+      "/opt/riley/bin/riley": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+      "/opt/riley/bin/riley-checkpoint": "42b0c53f557d1fcc0ee23fae5527534eacecbee18c9177a6ab8e606ff3074b73"
+    },
+    "experimental_packaged_cpu_attestation_sha256": "10d0e97f0ec6fdbe01dda553ac5d7d4e08077b846e309f0c055137d97c946835",
+    "parent_image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1"
+  },
+  "gpu_checker_input_sha256": "3c51b4c2d8c3aba2a1a9e0b332fc41bcc34a411fea734e4654c438535233f214",
+  "result": {
+    "accuracy_suites": {
+      "baseline": {
+        "golden_sha256": "b32bd641dab4e9516a8d3b45de2d77fbde91ad64acad893153f4b6c2090b72a6",
+        "workload_sha256": null,
+        "verified_requests": 144
+      },
+      "holdout": {
+        "golden_sha256": "12d508ed51f03509432e6302b8d10855f56125f4f6b7f31a559cff03eb10b611",
+        "workload_sha256": "220f13a7306518f996480c608733623475471ff3721ea3aeb895a2d5f91abd11",
+        "verified_requests": 88
+      }
+    },
+    "status": "passed",
+    "api_checks": 40,
+    "same_reservations": {
+      "gpu6": {
+        "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+        "physical_index": 6,
+        "phase": "idle",
+        "pid": 2431228,
+        "start_ticks": "6339570869",
+        "allocation_bytes": 21474836480,
+        "torch_reserved_bytes": 21474836480
+      },
+      "gpu7": {
+        "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+        "physical_index": 7,
+        "phase": "idle",
+        "pid": 2431237,
+        "start_ticks": "6339570875",
+        "allocation_bytes": 21474836480,
+        "torch_reserved_bytes": 21474836480
+      }
+    },
+    "process_allocator": {
+      "container_id": "2e5d1bb7d247ad026f85985642d073c0e1ac00ff068a0d13c14a1a0dfd003928",
+      "host_pid": 1798380,
+      "image_id": "sha256:1fc444b1840e6f8d55b32fc603629e031ee018f674b9b1ab04b6a69c9445ff66",
+      "library_sha256": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9",
+      "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+      "mounts": [
+        "/models"
+      ]
+    },
+    "report_sha256": "67340f8ad9b261b5b6715f4b2945b6a414b11744c67d49ee7fc4f2c6949864d2",
+    "shutdown_metrics": {
+      "active_requests": 0,
+      "waiting_requests": 0,
+      "kv_allocated_blocks": 0,
+      "allocation": {
+        "device_live_count": 0,
+        "device_live_bytes": 0,
+        "pinned_live_count": 0,
+        "pinned_live_bytes": 0
+      }
+    },
+    "artifacts_sha256": {
+      "accuracy-baseline-capture.log": "0447e9e91dab0b8e529ac87dc1f3661d59bf1e91879511236998d0250420dc3d",
+      "accuracy-baseline-comparison.json": "5e504175562e5fad84b0dba383d9cf80de235554013eab42d73f89ec2ade1b6f",
+      "accuracy-baseline-comparison.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "accuracy-baseline.json": "8a00c5c439fb7ef7867c8242c15f74ce5bb2b91a059b0cfde2c7e5adb29bd4ce",
+      "accuracy-holdout-capture.log": "bed36ee241b500da8fafa41c559049c624f8481e2a36e026552a746fd29e3921",
+      "accuracy-holdout-comparison.json": "b49f41dbc1d824faf23b443425cf412fb06d73d0ef4e5b1bcefe0fc58b554a6e",
+      "accuracy-holdout-comparison.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "accuracy-holdout.json": "2b28ec348efd0048cacec7e61ab2a3ffdbfc09787c7d40bcb0241982d87f8b36",
+      "api.json": "6fd24e4798677f5d6e7c4bb0b98c64f7f2e13ca664ce22b0e2f00afd69d78357",
+      "api.log": "2a4c2ffde4d255d0d9d561afea2d00445730d3e3c6252055c95e620b8a78af00",
+      "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+      "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+      "server.log": "bc3f5c6ef4b53aff5500b0e2a2314918aea5a5f10786398f2c77c5b6923bfb1c",
+      "shutdown.json": "9a584b101002df9b515f954d74d5a21237cd05004900dd090ad2893233666869"
+    }
+  }
+}

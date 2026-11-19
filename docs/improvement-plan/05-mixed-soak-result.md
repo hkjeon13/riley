@@ -292,9 +292,9 @@ A100 6번의 `cache-on`에서 추론 PID의 할당기 매핑과 API 40건을 확
 | `cache-on` | **−440KiB** | +1.63% | −13.56% |
 | `cache-off` | **−640KiB** | +0.61% | −13.35% |
 
-두 모드의 통과를 확인한 뒤 같은 이미지의 장문 출력 232건 검증을 시작했다.
+두 모드의 통과 뒤 같은 이미지에서 장문 출력 232건이 기준과 일치했다. API 40건과 종료 자원 회수를 확인했고 GPU 6·7은 동일 홀더의 20GiB 예약 상태로 복귀했다. [장문 출력과 실행 파일 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/accuracy-verified.json)
 
-파생 이미지의 두 부하와 장문 검증을 모두 통과하면 같은 GPU 6에서 기준 → 후보 → 후보 → 기준 순으로 성능을 대조한다. 각 실행에서 동일 체크포인트·서빙 인자로 짧은 C1·C32, RAG C8 두 seed, 긴 생성 C32, prefix 공유 C8의 640건을 측정한다. 요청별 출력 해시·토큰 수·종료 사유를 확인하고 실행 순서별 지표를 기록한다. 두 실행의 평균으로 짧은 요청의 TTFT·처리량 2%와 decode TPOT 1% 회귀 기준을 판정한다. [성능 시험 등록과 워크로드](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/registration.json) · [출력과 성능 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/compare_allocator_performance.py)
+두 부하와 장문 검증을 통과한 뒤 같은 GPU 6에서 기준 → 후보 → 후보 → 기준 순의 성능 대조를 시작했다. 각 실행에서 동일 체크포인트·서빙 인자로 짧은 C1·C32, RAG C8 두 seed, 긴 생성 C32, prefix 공유 C8의 640건을 측정한다. 요청별 출력 해시·토큰 수·종료 사유를 확인하고 실행 순서별 지표를 기록한다. 두 실행의 평균으로 짧은 요청의 TTFT·처리량 2%와 decode TPOT 1% 회귀 기준을 판정한다. [성능 시험 등록과 워크로드](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/registration.json) · [출력과 성능 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/compare_allocator_performance.py)
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
