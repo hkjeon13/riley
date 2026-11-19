@@ -435,6 +435,38 @@
         "sha256": "42a8c9043f3899002b94c180db149e30a0dc8dd63d58a23da738e80d2fe41782"
       }
     },
+    "qwen7_hf_kv_comparison_retry": {
+      "artifacts": [
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/tools/replay_attention_mask.py",
+          "sha256": "604cf4dfd1107808dc263e3d222b7a81800a61efdcb340e8fcabc1ed959e849d"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/retry/campaign.sh",
+          "sha256": "f2f81dfdc2464cddfd04f8c7374894eca2e15e62683a7718d10e26e5fa80991e"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/retry/dispatch.sha256",
+          "sha256": "4ea02b39c9a2d81894a8f01345de75b950e9c28152aa3925355a34f2860c5889"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/retry/preflight_captures.py",
+          "sha256": "8c8d95908de05bdd6b8ab6d3d5b966af02d1d506d8518f09849b8aba59f01743"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/retry/preflight-captures.jsonl",
+          "sha256": "5b9e711047a8ae8f721866646041208b5c38d6ea7b919507ee80df734047e699"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/retry/verify_hf_kv.py",
+          "sha256": "e49c268ef25f1b05e35736760167afce9ea053f12908b886a83983631ff86948"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/retry/retry.json",
+          "sha256": "44e2135dc3ff2736792c80cc9fbbfc821dd37bd803bd68db9b7b99416489242b"
+        }
+      ]
+    },
     "qwen7_hf_kv_comparison_preflight": {
       "artifacts": [
         {
@@ -460,6 +492,26 @@
         {
           "path": "benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/preflight.json",
           "sha256": "4963fccf2e7916501b2a06002e74afff397fcff3cb097b08cda9febbc930185b"
+        }
+      ]
+    },
+    "qwen14_mixed_step_budget_result": {
+      "artifacts": [
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/mixed-step-budget/result/summary.json",
+          "sha256": "dc46a43f190d9ab52ac15a62d50f1d004d8c355121d997b41057f143b0cd9f96"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/mixed-step-budget/result/request-latency.json",
+          "sha256": "d98afa85366ab5709e42a1d98ee86b9491f2ddf5484c492614936d23daf583bf"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/mixed-step-budget/result/raw-results.tar.gz",
+          "sha256": "9fbe626e63387369a45db275a476f04fb505588408def92367a48ffa68980306"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/tools/analyze_mixed_step_requests.py",
+          "sha256": "e7e696b483353b01ba7e09dbcb330fe8263a4408610e00bc4b1cf7b863437f00"
         }
       ]
     },

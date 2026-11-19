@@ -105,6 +105,8 @@ AWS에서 재빌드한 `d3d8fe6e5` 이미지의 cache-on과 cache-off 시험은 
 
 배포 이미지의 CPU 사전시험에서 glibc 2.35와 같은 계측 라이브러리로 8MiB 할당을 사용한 뒤 해제했다. 반환 호출 전후의 익명 RSS는 8,308KiB에서 124KiB로 줄었고 glibc가 기록한 사용 중인 arena 바이트는 944바이트로 같았다. A100 호스트의 실제 `smaps` 파싱도 확인했다. Riley 부하 진단은 W4의 HF·Riley KV 대조 이후 GPU 6에서 실행하도록 등록했다. 재현할 때는 기존 `anon-mappings/attribute_anon_rss.py`를 같은 검사 디렉터리에 복사하고 `gzip -dc harness.patch.gz >harness.patch`로 검사기 패치를 복원한 뒤 `dispatch.sha256`을 확인한다. [CPU 사전시험과 라이브러리 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/cpu-preflight.json) · [재사용 파서](../../benchmarks/evidence/20261119-w5-mixed-soak/anon-mappings/attribute_anon_rss.py)
 
+W4의 첫 시도가 파서 체크섬 검사에서 종료된 뒤 GPU 6의 RSS 진단이 30분 부하를 시작했다. W4 재실행은 진행 중인 RSS 진단 뒤로 배치했다. [W4 재실행 기록](../../benchmarks/evidence/20261119-w4-layer-trace/hf-kv-comparison/retry/retry.json)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)
