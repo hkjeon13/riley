@@ -162,7 +162,11 @@ Cache-on의 반환 호출은 293회였고 모두 메모리를 반환했다. 중�
 
 스레드별 할당 캐시를 끈 `cache-off` 30분 실행에서 정밀 RSS와 익명 RSS가 각각 **144KiB 감소**해 증가 0 기준을 통과했다. 동일한 7초 반환 주기를 사용한 기본 할당 캐시 대조에서는 44KiB 증가했다. API 40건과 지연·자원 회수 검사가 모두 통과했다. 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했고, 같은 GPU 홀더의 20GiB 예약을 복구한 뒤 `cache-on`을 시작했다. 후반 TTFT p95와 완료 지연 p95는 앞선 대조보다 각각 0.17%, 0.16% 낮았다. [원래 판정과 독립 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/cache-off-verified.json)
 
-정밀 RSS는 중간에 직전 반환 후 4.30–4.67초, drain에서 5.08–5.47초에 읽었고 두 읽기 모두 반환 호출과 겹치지 않았다. 인접 매핑의 익명 RSS는 220KiB 줄었으며 순변화는 앞서 관측한 보조 힙 배치에서 나왔다. 한 쌍에서 관측한 결과이고 이전 시험과 표본의 반환 후 시각이 달랐다. `cache-on`의 동일 기준 판정과 반복성 확인이 남아 있다. [표본 시각과 매핑 합계](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/cache-off-verified.json)
+정밀 RSS는 중간에 직전 반환 후 4.30–4.67초, drain에서 5.08–5.47초에 읽었고 두 읽기 모두 반환 호출과 겹치지 않았다. 인접 매핑의 익명 RSS는 220KiB 줄었으며 순변화는 앞서 관측한 보조 힙 배치에서 나왔다. 한 쌍에서 관측한 결과이고 이전 시험과 표본의 반환 후 시각이 달랐다. [표본 시각과 매핑 합계](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/cache-off-verified.json)
+
+같은 설정의 `cache-on`에서 정밀 RSS와 익명 RSS가 각각 **88KiB 증가**해 증가 0 항목만 실패했다. 동일한 7초 반환 주기의 기본 할당 캐시 대조는 292KiB 증가했다. API 40건과 지연·종료 검사는 통과했고 정상 완료 13,749건, 의도적 연결 종료 700건을 기록했다. 앞선 대조에 견줘 후반 TTFT p95는 0.89% 낮고 완료 지연 p95는 0.05% 높았다. 두 실행 뒤 각각 기존 GPU 6 홀더의 20GiB 예약 복귀를 확인했다. [두 설정의 원본 판정과 독립 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/paired-verified.json)
+
+`cache-on` 정밀 표본은 직전 반환 후 중간에서 5.15–5.38초, drain에서 5.93–6.19초에 읽었다. 인접 매핑에서는 익명 RSS가 48KiB 증가했고, 순증가 전부가 보조 힙과 같은 주소 배치에 있었다. 관측 결과의 합계는 allocator의 개별 보존 청크나 할당 호출을 식별하지 않는다. 이 설정의 두 캐시 조건 중 하나가 RSS 기준을 충족해 후보 적용과 릴리스 판정은 보류다. [매핑·표본 시각](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/paired-verified.json)
 
 #### 스레드별 할당 캐시 설정 단독 대조
 
