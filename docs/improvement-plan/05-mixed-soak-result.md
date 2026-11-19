@@ -73,7 +73,14 @@ GPU 7에서 같은 바이너리·모델·부하로 30분을 다시 실행했다.
 
 익명 private 매핑 증가에 대한 단일 변수 대조를 등록했다. 같은 Riley 바이너리와 cache-off 부하를 기본 glibc 설정 그리고 서버 프로세스에만 `MALLOC_ARENA_MAX=2`를 지정한 설정으로 각각 30분 실행한다. 실행 중 서버 PID에서 해당 환경값을 확인하고, 두 조건의 익명 RSS·매핑 분포와 후반 TTFT·전체 완료 p95를 대조한다. A100 6번의 14B 시험이 끝나면 GPU 7의 동일 홀더로 순서대로 실행한다. [실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/glibc-arena-control/campaign.sh) · [결과 대조 검사기](../../benchmarks/evidence/20261119-w5-mixed-soak/tools/compare_glibc_arenas.py)
 
-glibc 2.35 기본 설정의 30분 기준군은 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했다. 요청·지연·종료 자원 검사는 통과했다. 정밀 RSS와 익명 RSS가 각각 **932KiB 증가**했고 증가분 전체가 익명 private 매핑에 속했다. RSS 조건만 실패해 검사 프로세스는 코드 1을 반환했다. 동일 GPU 홀더의 20GiB 복귀를 확인한 뒤 arena 제한 조건을 시작했다. 두 조건의 비교 판정은 두 번째 실행 종료 후 갱신한다. [기준군 집계와 원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/glibc-arena-control/result/control-comparison.json)
+glibc 2.35의 두 조건을 각각 30분 실행했다. 두 조건 모두 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했고 요청·지연·종료 자원 검사를 통과했다. 정밀 RSS 증가 0 조건만 실패했다. 두 실행을 마친 뒤 GPU 7은 같은 홀더의 20GiB 예약으로 복귀했다. [기준군 원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/glibc-arena-control/result/control-comparison.json) · [두 조건 대조와 원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/glibc-arena-control/result/paired-comparison.json)
+
+| 설정 | 정밀 RSS 증가 | 익명 private RSS 증가 | 가장 많이 증가한 유지 매핑 |
+|---|---:|---:|---:|
+| 기본값 | +932KiB | +932KiB | +460KiB |
+| `MALLOC_ARENA_MAX=2` | +3,648KiB | +3,648KiB | +3,648KiB |
+
+제한 조건의 후반 TTFT p95와 전체 완료 p95는 각각 0.22%, 0.19% 감소했다. 같은 조건의 RSS 증가는 2,716KiB 더 컸고 증가분 전체가 유지된 익명 private 매핑 하나에 집중됐다. arena 제한은 채택하지 않았다. 이 매핑을 만든 할당 경로는 두 조건의 측정만으로 판단할 수 없다.
 
 ### 배포 이미지의 혼합 부하
 

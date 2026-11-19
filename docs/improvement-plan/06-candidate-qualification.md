@@ -28,6 +28,8 @@
 
 W5의 30분 실행에서 종료 뒤 GPU·pinned 메모리와 활성 KV는 0이었다. Cache-off 정밀 실행에서 일반 RSS의 변화는 0이었고 `smaps_rollup`은 익명 RSS +700KiB를 기록했다. 따라서 RSS 증가 0 조건은 미충족이다. 정밀 판정기를 적용한 다음 실행에서 +812KiB를 확인했고 매핑별 합계에서 전부 익명 private에 속했다. 요청·지연·종료 회수 검사는 통과했고 RSS 검사만 실패했다. GPU 메모리 오류 주입은 A100 6번의 CUDA 12.4 SM80 테스트 바이너리에서 네 독립 사례가 통과했다. [운영 품질 기준](../goal.md#33-운영-품질) · [정밀 RSS 결과](05-mixed-soak-result.md#정밀-rss-재실행-결과) · [오류 주입 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/result/verification.json)
 
+같은 A100 바이너리의 후속 대조에서도 RSS가 기본값에서 +932KiB, `MALLOC_ARENA_MAX=2`에서 +3,648KiB 증가했다. 두 조건 모두 RSS 기준만 실패했고 arena 제한은 채택하지 않았다. [비교 결과](../../benchmarks/evidence/20261119-w5-mixed-soak/glibc-arena-control/result/paired-comparison.json)
+
 초기 자동 승인 검토 뒤 `96c04dbe4`와 `d3d8fe6e5` 아카이브의 전송을 각각 승인받았다. `aws-a100`의 전용 경로에서 두 아카이브의 SHA-256이 원래 CI에 기록된 값과 일치함을 확인했다. GPU 7의 RSS 비교 이후 `d3d8fe6e5`를 빌드하고 새 이미지 ID와 바이너리 해시를 고정해 GPU 6에서 대표 모델 API와 종료를 검증하는 작업을 시작했다. 실제 추론과 운영 근거가 확인되면 릴리스 판정을 갱신한다. [A100 스테이징 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-staged-sources.json) · [이미지 검증 범위](01-validation-result.md#현행-배포-이미지) · [종합 완료 조건](README.md#8-종합-완료-체크리스트)
 
 같은 이미지에서 장문 29개와 cache-off·on 30분 혼합 부하를 확인하는 후속 작업도 등록했다. 두 작업은 초기 GPU API 확인 결과의 이미지 ID, CPU 보고서 및 체크포인트 해시를 대조한 뒤 GPU 6에서 순서대로 실행한다. [장문 대조](04-long-accuracy-result.md) · [배포 이미지의 혼합 부하](05-mixed-soak-result.md#배포-이미지의-혼합-부하)

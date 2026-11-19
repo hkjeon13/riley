@@ -1,0 +1,258 @@
+{
+  "control": {
+    "strict_soak_status": "failed",
+    "rollup_rss_delta_kib": 932,
+    "rollup_anonymous_delta_kib": 932,
+    "mapping_rss_delta_kib": 932,
+    "mapping_anonymous_delta_kib": 932,
+    "delta_by_class_kib": {
+      "anonymous-private": {
+        "Rss": 932,
+        "Anonymous": 932,
+        "Private_Dirty": 932,
+        "AnonHugePages": 0
+      },
+      "file-or-device": {
+        "Rss": 0,
+        "Anonymous": 0,
+        "Private_Dirty": 60,
+        "AnonHugePages": 0
+      },
+      "heap": {
+        "Rss": 0,
+        "Anonymous": 0,
+        "Private_Dirty": 0,
+        "AnonHugePages": 0
+      },
+      "labeled-stack": {
+        "Rss": 0,
+        "Anonymous": 0,
+        "Private_Dirty": 0,
+        "AnonHugePages": 0
+      },
+      "other-kernel": {
+        "Rss": 0,
+        "Anonymous": 0,
+        "Private_Dirty": 0,
+        "AnonHugePages": 0
+      }
+    },
+    "largest_retained_anonymous_changes": [
+      {
+        "class": "anonymous-private",
+        "anonymous_delta_kib": 460
+      },
+      {
+        "class": "anonymous-private",
+        "anonymous_delta_kib": 28
+      },
+      {
+        "class": "anonymous-private",
+        "anonymous_delta_kib": 28
+      },
+      {
+        "class": "anonymous-private",
+        "anonymous_delta_kib": 24
+      },
+      {
+        "class": "anonymous-private",
+        "anonymous_delta_kib": 24
+      },
+      {
+        "class": "anonymous-private",
+        "anonymous_delta_kib": 24
+      },
+      {
+        "class": "anonymous-private",
+        "anonymous_delta_kib": 24
+      },
+      {
+        "class": "anonymous-private",
+        "anonymous_delta_kib": 20
+      },
+      {
+        "class": "anonymous-private",
+        "anonymous_delta_kib": 20
+      },
+      {
+        "class": "anonymous-private",
+        "anonymous_delta_kib": 20
+      },
+      {
+        "class": "anonymous-private",
+        "anonymous_delta_kib": 20
+      },
+      {
+        "class": "anonymous-private",
+        "anonymous_delta_kib": 20
+      }
+    ],
+    "mapping_read_ms": [
+      213.56002241373062,
+      216.41167253255844
+    ],
+    "late_p95_change_percent_from_reference": {
+      "ttft_ms_p95": -0.12428562140200938,
+      "e2e_ms_p95": 0.2002499547351988
+    },
+    "counts": {
+      "plain": {
+        "completed": 7984
+      },
+      "schema": {
+        "completed": 1739,
+        "stop": 1739
+      },
+      "logprobs": {
+        "completed": 1160
+      },
+      "tools": {
+        "completed": 708,
+        "tool_calls": 708
+      },
+      "long": {
+        "completed": 1415
+      },
+      "reason": {
+        "completed": 743
+      },
+      "cancel": {
+        "disconnected": 700
+      }
+    },
+    "check_results": {
+      "no_unexpected_http_or_stream_error": true,
+      "completed_schema_and_tool_covered": true,
+      "disconnects_observed": true,
+      "idle_after_drain": true,
+      "native_allocation_plateau": true,
+      "workload_coverage": true,
+      "p95_drift_at_most_5_percent": true,
+      "rss_growth_second_half_at_most_zero": false
+    }
+  },
+  "arena2": {
+    "strict_soak_status": "failed",
+    "rollup_rss_delta_kib": 3648,
+    "rollup_anonymous_delta_kib": 3648,
+    "mapping_rss_delta_kib": 3648,
+    "mapping_anonymous_delta_kib": 3648,
+    "delta_by_class_kib": {
+      "anonymous-private": {
+        "Rss": 3648,
+        "Anonymous": 3648,
+        "Private_Dirty": 3648,
+        "AnonHugePages": 0
+      },
+      "file-or-device": {
+        "Rss": 0,
+        "Anonymous": 0,
+        "Private_Dirty": 0,
+        "AnonHugePages": 0
+      },
+      "heap": {
+        "Rss": 0,
+        "Anonymous": 0,
+        "Private_Dirty": 0,
+        "AnonHugePages": 0
+      },
+      "labeled-stack": {
+        "Rss": 0,
+        "Anonymous": 0,
+        "Private_Dirty": 0,
+        "AnonHugePages": 0
+      },
+      "other-kernel": {
+        "Rss": 0,
+        "Anonymous": 0,
+        "Private_Dirty": 0,
+        "AnonHugePages": 0
+      }
+    },
+    "largest_retained_anonymous_changes": [
+      {
+        "class": "anonymous-private",
+        "anonymous_delta_kib": 3648
+      }
+    ],
+    "mapping_read_ms": [
+      225.2766489982605,
+      244.02986466884613
+    ],
+    "late_p95_change_percent_from_reference": {
+      "ttft_ms_p95": -0.33906869862414535,
+      "e2e_ms_p95": 0.011728877417405137
+    },
+    "counts": {
+      "plain": {
+        "completed": 7984
+      },
+      "schema": {
+        "completed": 1739,
+        "stop": 1739
+      },
+      "logprobs": {
+        "completed": 1160
+      },
+      "tools": {
+        "completed": 708,
+        "tool_calls": 708
+      },
+      "long": {
+        "completed": 1415
+      },
+      "reason": {
+        "completed": 743
+      },
+      "cancel": {
+        "disconnected": 700
+      }
+    },
+    "check_results": {
+      "no_unexpected_http_or_stream_error": true,
+      "completed_schema_and_tool_covered": true,
+      "disconnects_observed": true,
+      "idle_after_drain": true,
+      "native_allocation_plateau": true,
+      "workload_coverage": true,
+      "p95_drift_at_most_5_percent": true,
+      "rss_growth_second_half_at_most_zero": false
+    }
+  },
+  "libc": "glibc 2.35",
+  "late_p95_change_percent": {
+    "ttft_ms_p95": -0.21505035389078886,
+    "e2e_ms_p95": -0.18814431840535883
+  },
+  "campaign": {
+    "name": "w5-glibc-arena-20261119.VYPsh5mH",
+    "timing": [
+      "START control 2026-11-18T23:23:38Z",
+      "END control 2026-11-18T23:55:58Z exit=1",
+      "START arena2 2026-11-18T23:55:58Z",
+      "END arena2 2026-11-19T00:28:21Z exit=1"
+    ],
+    "remote_file_sha256": {
+      "campaign.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "campaign.log": "16e71eb2d46666255bc3a53fe4676ee081230471ab59698fcca70e7ca155dc73",
+      "runner.sha256": "a6db9c402f4d233a1fd829f993f3c310031244a0679fd6f5a2a72c469d20cef3",
+      "source-tools.sha256": "0d09adcc4129e5b5266289476d79ced2c35b40579057a70e364decaa559d6779",
+      "control/campaign.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "control/campaign.log": "646170f1835d7f23949f4f973107f5582bee73960d716314329dec98406e9064",
+      "control/idle-before.json": "7e3e7bc64a32f76044185dd42bb65009e31d009a5088c5bb89c0fbb971343316",
+      "control/idle-after.json": "47b7d8e000ffc930f0b3e003717228059892363877741f6c4c16f8f055ed1109",
+      "control/cache-off/receipt.json": "2896ce993cf069f1361dfdecf370fafb0da323f6d541f39328c4cc39e3b5b39a",
+      "control/cache-off/soak.json": "e5ad7d67507c96abf157c11e553336f1af05781299c1c3fb57314b3d3f93f028",
+      "control/cache-off/shutdown-metrics.json": "e528ba34703c01513165bf763449f661ade1235afe21d7620700f582d98dfafe",
+      "control/cache-off/anon-attribution.json": "cc86ddd288e69bab40ad6149c6e945981a06dba0f3f35c3c0b82f57ef70bc5a4",
+      "arena2/campaign.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "arena2/campaign.log": "646170f1835d7f23949f4f973107f5582bee73960d716314329dec98406e9064",
+      "arena2/idle-before.json": "47b7d8e000ffc930f0b3e003717228059892363877741f6c4c16f8f055ed1109",
+      "arena2/idle-after.json": "caab949c65c89407724359f76acb0e2f88371c5f2142e9d41451192c64d38aee",
+      "arena2/cache-off/receipt.json": "719a97d0dfc699448860ee804ddab8d2f9075bde3e2c48d706917deaca7a170b",
+      "arena2/cache-off/soak.json": "85acd853312cbef39715b2834aa053702b4b37486c794809dcc428626e5c5047",
+      "arena2/cache-off/shutdown-metrics.json": "99c95bb3a798a733244e23f56cba2abab98ec61eef44b792427a64b64dc93aca",
+      "arena2/cache-off/anon-attribution.json": "dcc859501f8c64c8f0110fcd1346cbdeb46150961b8f767ebb5c6852f98535ee"
+    }
+  }
+}
