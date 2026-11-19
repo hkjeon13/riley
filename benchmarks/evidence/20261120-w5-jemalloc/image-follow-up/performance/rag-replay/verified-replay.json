@@ -1,0 +1,349 @@
+{
+  "scope": "Qwen2.5-7B-Instruct A100 6 RAG C8 seed 2, two observed write schedules; diagnostic comparison.",
+  "order": [
+    "parent-first",
+    "packaged-first",
+    "packaged-second",
+    "parent-second"
+  ],
+  "arms": {
+    "parent-first": {
+      "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+      "allocator": "glibc",
+      "server_arguments": [
+        "serve",
+        "--model",
+        "/models",
+        "--model-id",
+        "m",
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "1024",
+        "--kv-blocks",
+        "16384",
+        "--prefix-cache-blocks",
+        "128"
+      ],
+      "report_sha256": "10d2871b560fdea346fe6b3bb35a1333118fe57ba6481f814ad3ad0171f34cd4",
+      "artifacts_sha256": {
+        "api.json": "5b75e5b2079faef199fb7a7c5b1cc487d0c709877bbc7d1fe633d8d3d63d3b89",
+        "api.log": "07f394bc200dfafdf5a41ea7eaf60fe092b14876e3651aac32ce900ea0724fba",
+        "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+        "packaged-first.records.json": "c57ab56b37f262c38e2744bb6e8311aff4590a6f94736cb7f8f5922fa69f8899",
+        "packaged-first.summary.json": "86838ad07e423cfeb6e0d0c1bddd00f44e014df4ed4b555c4ee0f344f32981b3",
+        "parent-first.records.json": "0d8da73e63142f5299d030de4f34320e7fe44c1a45a3a114c21554f51d5a425a",
+        "parent-first.summary.json": "6b5ccb4b14eff98b6aaac4f2377b0c03670f0e92e5e2fee61a37272eb2ebce05",
+        "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+        "server.log": "c67146d1ad81fa38d451635ab111ee02cf6f25ecede759d15f3ca05b643a2330",
+        "shutdown.json": "d82e2e73ee31ba28184b339fbeb34ce9c33c447c756197199a53d374d9e011a1"
+      },
+      "reservations_after": {
+        "gpu6": {
+          "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+          "physical_index": 6,
+          "phase": "idle",
+          "pid": 2431228,
+          "start_ticks": "6339570869",
+          "allocation_bytes": 21474836480,
+          "torch_reserved_bytes": 21474836480
+        },
+        "gpu7": {
+          "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+          "physical_index": 7,
+          "phase": "idle",
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "allocation_bytes": 21474836480,
+          "torch_reserved_bytes": 21474836480
+        }
+      }
+    },
+    "packaged-first": {
+      "image_id": "sha256:1fc444b1840e6f8d55b32fc603629e031ee018f674b9b1ab04b6a69c9445ff66",
+      "allocator": {
+        "container_id": "4c3a1a3f0f647793d868ada4693bbfbcc4251caea80e37472841016575a933d7",
+        "host_pid": 2061846,
+        "image_id": "sha256:1fc444b1840e6f8d55b32fc603629e031ee018f674b9b1ab04b6a69c9445ff66",
+        "library_sha256": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9",
+        "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+        "mounts": [
+          "/models"
+        ]
+      },
+      "server_arguments": [
+        "serve",
+        "--model",
+        "/models",
+        "--model-id",
+        "m",
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "1024",
+        "--kv-blocks",
+        "16384",
+        "--prefix-cache-blocks",
+        "128"
+      ],
+      "report_sha256": "92b6b11257c337c53e321eac06935e8816d3c8d8386f645af53f3996d7ebb6eb",
+      "artifacts_sha256": {
+        "api.json": "9e5928d91ad02ccf2faf2c4dcf7747f86d963034041d1cebe63aa5abe4d5250a",
+        "api.log": "07f394bc200dfafdf5a41ea7eaf60fe092b14876e3651aac32ce900ea0724fba",
+        "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+        "packaged-first.records.json": "d25092ee92adf416cb31ad85f71eda2f0427ec3050d1de4971a631c582e7453f",
+        "packaged-first.summary.json": "d0435737b1931a1837c08f044f2cf8b19b2754cec15e90f8e1d1ae0d47a5faab",
+        "parent-first.records.json": "5fa674ebbff2eb85c1c90dd9e144cfc083acd427f17b27f8e824b7a3d5bfd820",
+        "parent-first.summary.json": "ad4cf6d16e303888d4022350659748aeb01b66d4d1a7290da789911fb33918fe",
+        "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+        "server.log": "3df3d6c31e0d164255a13ff3e83a48664b66638aaa05b8126aff63b62117f8d1",
+        "shutdown.json": "a7570ce12c680418cbf745111c628c2eb567af66cdfc06edfc5cb8dd05309952"
+      },
+      "reservations_after": {
+        "gpu6": {
+          "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+          "physical_index": 6,
+          "phase": "idle",
+          "pid": 2431228,
+          "start_ticks": "6339570869",
+          "allocation_bytes": 21474836480,
+          "torch_reserved_bytes": 21474836480
+        },
+        "gpu7": {
+          "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+          "physical_index": 7,
+          "phase": "idle",
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "allocation_bytes": 21474836480,
+          "torch_reserved_bytes": 21474836480
+        }
+      }
+    },
+    "packaged-second": {
+      "image_id": "sha256:1fc444b1840e6f8d55b32fc603629e031ee018f674b9b1ab04b6a69c9445ff66",
+      "allocator": {
+        "container_id": "03a515282ae1b05f0b6bec4ca54a31aedf3f4433b2e1ff58b67aeedf6bc6a233",
+        "host_pid": 2086829,
+        "image_id": "sha256:1fc444b1840e6f8d55b32fc603629e031ee018f674b9b1ab04b6a69c9445ff66",
+        "library_sha256": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9",
+        "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+        "mounts": [
+          "/models"
+        ]
+      },
+      "server_arguments": [
+        "serve",
+        "--model",
+        "/models",
+        "--model-id",
+        "m",
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "1024",
+        "--kv-blocks",
+        "16384",
+        "--prefix-cache-blocks",
+        "128"
+      ],
+      "report_sha256": "6b52ebf67b0e1718d3d1dff9f36a9cc0c5354848c8c04cc8f4dbc770db01a412",
+      "artifacts_sha256": {
+        "api.json": "5df428582d5858bde1409eff41e7e8046b78fc1e3fb75ad8b2124b65f3e55b94",
+        "api.log": "1251ad5af193d442c515f79e46447f938818e9a38c1d13843ad0c1cb9587c7d6",
+        "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+        "packaged-first.records.json": "4c177cf409a9ee3a5f8c2904f31371421a620f2c16757ddc594ee5c1f5415e21",
+        "packaged-first.summary.json": "6c9b4f5df16fed3cb2345592518031d8a4a1385b179f2eb52fb146a899bcd1d7",
+        "parent-first.records.json": "b08cc7f8e6c07268464a4ba33f6e06b9f8f7e01f92972abc4cd3198b0c358324",
+        "parent-first.summary.json": "cbfeae0aa2c96993cc604f5134ee1a39717f988a36fa2cebba7d3dc15f78b402",
+        "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+        "server.log": "1ca37bf5612ce566d2559c4277df84ee0a33e67f817f87ec985cc40acde498c1",
+        "shutdown.json": "0598e847646fb4b9076d9163a9f5a3a0290b02ec92f61d513c7afd38b73772da"
+      },
+      "reservations_after": {
+        "gpu6": {
+          "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+          "physical_index": 6,
+          "phase": "idle",
+          "pid": 2431228,
+          "start_ticks": "6339570869",
+          "allocation_bytes": 21474836480,
+          "torch_reserved_bytes": 21474836480
+        },
+        "gpu7": {
+          "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+          "physical_index": 7,
+          "phase": "idle",
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "allocation_bytes": 21474836480,
+          "torch_reserved_bytes": 21474836480
+        }
+      }
+    },
+    "parent-second": {
+      "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+      "allocator": "glibc",
+      "server_arguments": [
+        "serve",
+        "--model",
+        "/models",
+        "--model-id",
+        "m",
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "1024",
+        "--kv-blocks",
+        "16384",
+        "--prefix-cache-blocks",
+        "128"
+      ],
+      "report_sha256": "640cbd660f2df6dfcf1c1c1b76b9c3fa9aedbf97fd05c6edf45066d17099bf44",
+      "artifacts_sha256": {
+        "api.json": "33fedf4b5306ffcf2f75bd612e41b34e26c067393609d2bba9740885f71b12a1",
+        "api.log": "1251ad5af193d442c515f79e46447f938818e9a38c1d13843ad0c1cb9587c7d6",
+        "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+        "packaged-first.records.json": "7212366c53d21ebbb1fb6691c550442d2a33da7ca5b4e6b719849d95902453b5",
+        "packaged-first.summary.json": "9094a23c9599d5101e4cdbeef0a7f813d422cf2c8f440a61fcd5818b187452f5",
+        "parent-first.records.json": "ed825fb3f4140b403e90dafb76085f18a8296ce1464e2c2da62d5bdbaea1b082",
+        "parent-first.summary.json": "cfc760105fdaef422e63f72d2330a6aedbb1a51bdb453f21dc5507a0de3860cd",
+        "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+        "server.log": "9dadecded6c2ee101b4b289aab23c201c9a2d1fd4f8ce075ba863f92e72958aa",
+        "shutdown.json": "abff9087d152e8e6dbd945197cfe81313729ac6c97d6ac61651067348964ccb1"
+      },
+      "reservations_after": {
+        "gpu6": {
+          "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+          "physical_index": 6,
+          "phase": "idle",
+          "pid": 2431228,
+          "start_ticks": "6339570869",
+          "allocation_bytes": 21474836480,
+          "torch_reserved_bytes": 21474836480
+        },
+        "gpu7": {
+          "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+          "physical_index": 7,
+          "phase": "idle",
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "allocation_bytes": 21474836480,
+          "torch_reserved_bytes": 21474836480
+        }
+      }
+    }
+  },
+  "schedules": {
+    "parent-first": {
+      "source_sha256": "a42bc22ad0575cb67c2d3f9b4dd9cfb3362e008069152aa8eb7e6114ef79c793",
+      "requests_per_arm": 64,
+      "streams_match_original": true,
+      "all_p95_relative_write_errors_at_most_5ms": true,
+      "metrics": {
+        "parent-first": {
+          "ttft_p95_ms": 732.5779646635056,
+          "tpot_p50_ms": 16.428898990623594,
+          "itl_p99_ms": 22.05798029899597,
+          "output_tok_s": 388.9445023328887,
+          "write_error_abs_p95_ms": 1.0644644498825073,
+          "write_error_abs_max_ms": 1.7926469445228577
+        },
+        "packaged-first": {
+          "ttft_p95_ms": 731.9570779800415,
+          "tpot_p50_ms": 16.401142057940714,
+          "itl_p99_ms": 22.003769874572754,
+          "output_tok_s": 388.8252942772165,
+          "write_error_abs_p95_ms": 1.8031224608421326,
+          "write_error_abs_max_ms": 1.9866004586219788
+        },
+        "packaged-second": {
+          "ttft_p95_ms": 740.9588247537613,
+          "tpot_p50_ms": 16.40697245992075,
+          "itl_p99_ms": 22.029317915439606,
+          "output_tok_s": 388.86188715531495,
+          "write_error_abs_p95_ms": 1.4786869287490845,
+          "write_error_abs_max_ms": 1.807473599910736
+        },
+        "parent-second": {
+          "ttft_p95_ms": 724.630206823349,
+          "tpot_p50_ms": 16.329851148166057,
+          "itl_p99_ms": 21.960578858852386,
+          "output_tok_s": 388.8704007336669,
+          "write_error_abs_p95_ms": 1.0935813188552856,
+          "write_error_abs_max_ms": 1.940600574016571
+        }
+      },
+      "paired_deltas": {
+        "first": {
+          "ttft_p95_change_percent": -0.08475366628714065,
+          "paired_relative_write_difference_abs_p95_ms": 1.1687353253364563
+        },
+        "second": {
+          "ttft_p95_change_percent": 2.25337251699651,
+          "paired_relative_write_difference_abs_p95_ms": 1.077607274055481
+        }
+      },
+      "ttft_p95_change_percent_by_arm_means": 1.0779332393477503
+    },
+    "packaged-first": {
+      "source_sha256": "88e4e6fdfe99942f07304229562b624c56c920d444e2498b5b46f6f31981db6d",
+      "requests_per_arm": 64,
+      "streams_match_original": true,
+      "all_p95_relative_write_errors_at_most_5ms": true,
+      "metrics": {
+        "parent-first": {
+          "ttft_p95_ms": 957.7547535300255,
+          "tpot_p50_ms": 16.332390153501915,
+          "itl_p99_ms": 22.033579647541046,
+          "output_tok_s": 381.1061044401988,
+          "write_error_abs_p95_ms": 1.7912164330482483,
+          "write_error_abs_max_ms": 2.08098441362381
+        },
+        "packaged-first": {
+          "ttft_p95_ms": 949.7572109103203,
+          "tpot_p50_ms": 16.328341554938337,
+          "itl_p99_ms": 22.01278507709503,
+          "output_tok_s": 381.1263801173838,
+          "write_error_abs_p95_ms": 1.1621564626693726,
+          "write_error_abs_max_ms": 1.6687959432601929
+        },
+        "packaged-second": {
+          "ttft_p95_ms": 915.3725281357765,
+          "tpot_p50_ms": 16.33416691164332,
+          "itl_p99_ms": 22.038429975509644,
+          "output_tok_s": 381.1433412516334,
+          "write_error_abs_p95_ms": 1.1791512370109558,
+          "write_error_abs_max_ms": 1.8374845385551453
+        },
+        "parent-second": {
+          "ttft_p95_ms": 951.1484354734421,
+          "tpot_p50_ms": 16.346049414375635,
+          "itl_p99_ms": 22.043131291866302,
+          "output_tok_s": 381.2242008690491,
+          "write_error_abs_p95_ms": 1.091785728931427,
+          "write_error_abs_max_ms": 1.5145018696784973
+        }
+      },
+      "paired_deltas": {
+        "first": {
+          "ttft_p95_change_percent": -0.8350303238097712,
+          "paired_relative_write_difference_abs_p95_ms": 1.2323632836341858
+        },
+        "second": {
+          "ttft_p95_change_percent": -3.7613379787412304,
+          "paired_relative_write_difference_abs_p95_ms": 0.9368360042572021
+        }
+      },
+      "ttft_p95_change_percent_by_arm_means": -2.2931204793168347
+    }
+  }
+}

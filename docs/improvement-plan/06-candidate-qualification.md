@@ -30,7 +30,7 @@ python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 | W2·W3 성능 | 이벤트 발행·스케줄 네 조합, 14B 두 모델의 동일 KV·커널 계측, Qwen2.5-14B의 prefill 대기와 vLLM 한도 대조, Qwen3-4B 길이별 대조. 스케줄 후보 세 개는 지연 회귀로 미채택했다. 정렬된 KV 테이블 후보도 A100에서 출력 일치 후 네 비교에서 서빙 처리량이 감소해 미채택했다. Qwen2.5-14B의 1,024행 QKV 후보는 네 실행의 출력과 장문 토큰 ID가 일치했고 decode·짧은 요청 기준을 통과했다. RAG 첫 토큰 p95 개선이 일관되지 않아 기본값 적용을 보류했다. | 채택 후보의 RAG p95 재현성과 영향 모델의 출력·성능 기준 확인 |
 | W4 장문·정확성 | 고정 입력 18개와 holdout 11개의 엔진 비교, 두 사례의 첫 BF16 차이 및 28개 레이어 residual·최종 norm 재계산, 네 모델의 동일 입력 GSM8K 품질 기준 통과. A100 재빌드 이미지의 장문 대조 232건 일치. 두 사례의 첫 레이어 KV와 attention 출력을 대조했고 마지막 입력 위치의 K·V 차이를 bias·반올림 순서로 재현. HF에서 bias 순서와 prefill 분할을 교차한 네 조건에서 사례 3의 첫 ID는 모두 5257. 같은 BF16 입력의 MLP 출력 대조도 기록 | 다른 위치와 레이어 및 해당 차이가 최종 점수까지 전파되는 정도 |
 | W4 스키마 | 문서화한 부분집합에서 GPU 일반 API 40건과 schema 계약 11건을 통과했다. A100 재빌드 이미지의 대표 모델 API 40건도 통과했다. | W5의 최종 운영 기준 충족 |
-| W5 운영 | 기준 배포 이미지의 익명 RSS는 cache-on +616KiB, cache-off +700KiB였다. jemalloc 파생 이미지에서 각각 −440KiB와 −640KiB로 두 설정의 30분 운영 기준을 통과했다. 같은 이미지에서 장문 232건이 일치했다. 성능 대조의 사전 회귀 기준을 통과했고 RAG C8 seed 2에서 TTFT p95가 12.69% 증가했다. | 동일 도착 시각에서 RAG 지연 확인, 실제 운영 분포 확인 |
+| W5 운영 | 기준 배포 이미지의 익명 RSS는 cache-on +616KiB, cache-off +700KiB였다. jemalloc 파생 이미지에서 각각 −440KiB와 −640KiB로 두 설정의 30분 운영 기준을 통과했다. 장문 232건이 일치했다. 사전 성능 기준은 통과했고 RAG C8 seed 2 닫힌 부하의 TTFT p95는 +12.69%였다. 고정 시각 대조에서는 +1.08%와 −2.29%였다. | 닫힌 부하에서 관측한 비용과 실제 운영 도착 분포를 반영한 기본값 판정 |
 
 기존 이벤트 발행 정책과 서빙 설정을 기준선으로 삼았다. 이전 빌드에서 관찰된 성능 실험은 입력·장비·바이너리에 연결하며, 새로운 수치 기준이나 기본값을 채택할 때는 종합 계획의 출력 불변성과 회귀 기준을 적용한다. [W2 결과](02-async-step-result.md) · [W3 결과](03-long-context-result.md) · [W4 정확성](04-long-accuracy-result.md) · [W5 운영 결과](05-mixed-soak-result.md)
 
@@ -82,3 +82,5 @@ HTTP 프레이밍 이미지의 30분 실행에서 정밀 RSS는 `cache-on`에서
 파생 이미지 `1fc444b1840e`에서 `cache-on`과 `cache-off`의 정밀 RSS는 각각 440KiB와 640KiB 감소했다. 각 모드에서 API 40건과 요청·지연·종료 자원 검사를 모두 통과했고, 같은 20GiB 예약이 복구됐다. 같은 이미지에서 기준 144건과 홀드아웃 88건의 출력이 일치했다. [두 30분 부하 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/verified-soaks.json) · [장문 정확성 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/accuracy-verified.json)
 
 두 부하와 장문 검증을 통과한 파생 이미지를 기준 이미지와 교대로 두 번씩 실행했다. 여섯 부하에서 총 2,560건의 요청을 오류 없이 처리했고 대응하는 출력이 모두 일치했다. 짧은 요청·decode 회귀 기준은 통과했다. RAG C8 seed 2의 TTFT p95는 두 실행 순서에서 7.43%와 18.19% 증가했다. Qwen2.5-7B-Instruct, A100 6번, 고정 부하에 해당하는 결과다. 이 RAG 비용을 확인해 파생 설정의 기본값 적용과 릴리스를 보류한다. [성능 대조와 지연 위치](05-mixed-soak-result.md#같은-gpu에서-비교한-서빙-성능)
+
+같은 RAG 요청의 두 시각표를 네 실행에서 재생했다. 측정 512건은 기존 출력과 일치했다. 각 시각표에서 기준 대비 TTFT p95는 +1.08%와 −2.29%였고, 시각표 자체를 바꾸면 두 이미지의 TTFT p95가 각각 31.00%, 26.63% 증가했다. 이 검증은 관측된 두 시각표에서 지연 차이를 분리한 증거다. 릴리스 판정에는 기존 닫힌 부하 결과와 실제 운영 도착 분포도 필요하다. [RAG 고정 시각 재생](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/verified-replay.json)

@@ -1,0 +1,34 @@
+{
+  "scope": "First observed differing residual boundary for two C1 decode positions.",
+  "stage": "w4-decode-layer-trace-20261120.kl10bRNz",
+  "controller_pid": 2108653,
+  "registered_utc": "2026-11-19T18:40:27Z",
+  "state_at_registration": "waiting_for_fixed_rag_replay",
+  "predecessor": "w5-rag-fixed-arrival-20261120.SUkecSlU",
+  "previous_endpoint_capture": "w4-decode-final-retry-20261120.5bTpAh8k",
+  "physical_gpu": 7,
+  "reservation_pid": 2431237,
+  "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+  "targets": [
+    {
+      "case": "669-9",
+      "position_0_based": 677,
+      "last_token": 264
+    },
+    {
+      "case": "1023-67",
+      "position_0_based": 1089,
+      "last_token": 3208
+    }
+  ],
+  "measured_rows": "embedding, attention residual and layer residual for 28 layers, plus the final norm; logits checked as an endpoint",
+  "endpoint_baseline_sha256": "39bfb851792074b968ead3f597d69d58cb2b9e1515b81e926f641921728d03bb",
+  "local_preflight": {
+    "pinned_positions_and_ids": "passed",
+    "synthetic_first_difference": "passed",
+    "changed_endpoint_rejected": true,
+    "bash_syntax": "passed",
+    "rust_typecheck": "passed with the existing local CUDA build-script stub"
+  },
+  "dispatch_tar_sha256": "4797c04b8ab2edbdffbaef19c3fdd9c4e8534d22de1104d70a1a8a6e1ef46b7d"
+}

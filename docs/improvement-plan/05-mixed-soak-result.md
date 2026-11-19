@@ -311,11 +311,20 @@ Qwen2.5-7B-Instruct를 A100 6번에서 기준 이미지 `0a907408ec73` → 파�
 
 짧은 C32의 TTFT p95 변화는 첫 실행 쌍에서 +14.45%, 두 번째에서 −24.26%였다. 기준 이미지의 두 p95는 58.57ms와 86.84ms였고 후보는 67.03ms와 65.77ms였다. 평균은 사전 기준을 충족했으며 두 실행 쌍에서 개선 방향은 일치하지 않았다. RAG C8 seed 2는 두 순서에서 TTFT p95가 각각 7.43%와 18.19% 증가했다. [C32 지연 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/ttft-audit-closed-c32.json) · [RAG seed 1 지연 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/ttft-audit-rag-c8-seed1.json) · [RAG seed 2 지연 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/ttft-audit-rag-c8-seed2.json)
 
-RAG C8 seed 2에서 요청 시작부터 클라이언트의 소켓 쓰기까지의 p95 변화는 +0.18ms와 +0.01ms였다. 쓰기 뒤 첫 텍스트까지의 p95는 +66.12ms와 +154.29ms였다. 이 구간에는 소켓 전달, 서버 대기·처리, GPU 계산, SSE 전달이 포함된다. 다음 대조에서는 같은 요청 도착 시각을 두 이미지에 재생해 RAG 차이가 유지되는지 확인한다. 기준 이미지의 설정을 유지하고 파생 설정의 기본값 적용을 보류한다.
+RAG C8 seed 2에서 요청 시작부터 클라이언트의 소켓 쓰기까지의 p95 변화는 +0.18ms와 +0.01ms였다. 쓰기 뒤 첫 텍스트까지의 p95는 +66.12ms와 +154.29ms였다. 이 구간에는 소켓 전달, 서버 대기·처리, GPU 계산, SSE 전달이 포함된다. 후속 대조에서는 같은 쓰기 시각표를 두 이미지에 적용했다.
 
 고정 시각 재생의 CPU 사전 검사에서 첫 기준·후보 기록의 요청 본문 해시를 각각 64건씩 재현했다. 두 소켓 쓰기 시각의 간격은 첫 측정 요청부터 마지막까지 19.137초와 19.354초였다. 두 이미지에 각 시각표를 적용하고 실제 쓰기 시각의 오차도 기록한다. 이 검사는 기존 닫힌 부하의 응답 속도에 따라 다음 요청 시각이 달라지는 효과를 조사하기 위한 후속 대조다. [고정 입력 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/preflight.json) · [재생 클라이언트](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/fixed_arrival.py)
 
 GPU 7의 W4 진단이 끝난 뒤 GPU 6에서 기준 → 후보 → 후보 → 기준 순으로 두 시각표를 각각 재생하는 검증을 시작했다. 첫 실행 쌍에서는 기준에서 얻은 시각표를 먼저, 두 번째 쌍에서는 후보에서 얻은 시각표를 먼저 사용한다. 실행마다 API 40건과 시각표별 64건을 확인한다. 출력·쓰기 시각 오차·TTFT p95를 함께 기록하며 실제 쓰기 오차 p95 5ms를 재생 정밀도의 기준으로 사용한다. [고정 시각 검증 등록](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/registration.json)
+
+네 실행에서 각각 API 40건을 통과했고, 측정 요청 512건의 출력 해시·토큰 수·종료 사유가 기존 기록과 일치했다. 설정한 시각과 실제 소켓 쓰기의 절대 오차 p95는 모든 실행에서 1.81ms 이하였다. 대응하는 요청끼리 두 이미지의 실제 상대 쓰기 시각을 비교한 절대 차이 p95는 1.24ms 이하였다. 두 GPU는 기존 홀더의 20GiB 예약으로 복귀했다. [고정 시각 재생 결과](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/verified-replay.json)
+
+| 고정 시각표의 출처 | 기준 이미지 TTFT p95 평균 | 후보 이미지 TTFT p95 평균 | 후보 변화 |
+|---|---:|---:|---:|
+| 첫 기준 실행 | 728.60ms | 736.46ms | +1.08% |
+| 첫 후보 실행 | 954.45ms | 932.56ms | −2.29% |
+
+같은 이미지에서 첫 기준의 시각표를 첫 후보의 시각표로 바꾸면 TTFT p95 평균이 기준 이미지에서 31.00%, 후보 이미지에서 26.63% 늘었다. 두 시각표 모두에서 기존 닫힌 부하의 +12.69% 증가가 재현되지 않았다. 이 결과는 고정된 RAG C8 seed 2와 기록된 두 시각표에 적용한다. 기존 닫힌 부하의 지연 비용과 실제 운영 도착 분포를 릴리스 판정에 남긴다. 파생 설정의 기본값 적용은 보류한다.
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
