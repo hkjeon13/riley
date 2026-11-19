@@ -767,6 +767,16 @@
       "path": "benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-package-validation.json",
       "sha256": "edd9262e9f003d503ea575aae5fd7e80ac33cb5ca82ff9f6d99af03a309500bc"
     },
+    "distribution_a100_integrated_gate": {
+      "verifier": {
+        "path": "benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/verify_a100_candidate.py",
+        "sha256": "3eff1731f1eea89163307c90c6466c8bc1a39b50a76dd83849a12138318684cc"
+      },
+      "verdict": {
+        "path": "benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/verified-a100-candidate.json",
+        "sha256": "4e80d848a838425a4b963ae6f606e00d66d03bfb57200c0f84131a5daaa30438"
+      }
+    },
     "distribution_a100_source_staging": {
       "path": "benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-staged-sources.json",
       "sha256": "d7c104d58ae23df05fb821efc65d17fe123c1033f6f7b935abdef2fa671f471a"

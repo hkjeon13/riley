@@ -1,0 +1,118 @@
+{
+  "scope": "A100 package, API, long-context and strict soak gates for the original distribution image.",
+  "status": "blocked",
+  "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+  "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+  "source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+  "cpu_report_sha256": "92f884b05c1101d4bfb6c49df9289483b698e4e64d88fdc1090705998a17de33",
+  "riley_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "gpu_uuid": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+  "package_api_cases": 40,
+  "package_api_receipt_sha256": "741eebe6bd41373c54639620fc565d5aa93b6ebd6ee03aee24135dfd3d3c3509",
+  "accuracy_verified_requests": 232,
+  "accuracy_receipt_sha256": "287aca2b1e422eb369405bd6a4aefa2f0cfbcd809f285fed29b2424997343925",
+  "original_holder_pid": 2431228,
+  "initial_cache_off_startup": {
+    "exit": 1,
+    "status": "no_report",
+    "server_log_sha256": "be4385c228c51a7d1254365c18696a1456e79e64f504653831e70135f85b72ff"
+  },
+  "operation_pair": {
+    "same_image_binary_checkpoint_and_holder": true,
+    "only_server_argument_difference": [
+      "--prefix-cache-blocks",
+      "128"
+    ],
+    "same_outcome_counts": true,
+    "rss_gate_passed_in_both": false
+  },
+  "mixed_soak": {
+    "cache-on": {
+      "status": "failed",
+      "exit": 1,
+      "api_checks": 40,
+      "failed_checks": [
+        "rss_growth_second_half_at_most_zero"
+      ],
+      "request_counts": {
+        "plain": {
+          "completed": 7984
+        },
+        "schema": {
+          "completed": 1739,
+          "stop": 1739
+        },
+        "logprobs": {
+          "completed": 1160
+        },
+        "tools": {
+          "completed": 708,
+          "tool_calls": 708
+        },
+        "long": {
+          "completed": 1415
+        },
+        "reason": {
+          "completed": 743
+        },
+        "cancel": {
+          "disconnected": 700
+        }
+      },
+      "rss_growth_kib": 616,
+      "anonymous_growth_kib": 616,
+      "rss_baseline_seconds": 900.1763883605599,
+      "rss_drain_seconds": 1804.0310710817575,
+      "p95_change_percent": {
+        "ttft_ms": 1.0391855527762894,
+        "e2e_ms": -13.706888384338301
+      },
+      "gpu_receipt_sha256": "a07f24b13e13d53fde638a4565d4a2d73f1f30346797ba62539644b7ebc15d4c",
+      "soak_sha256": "8b9aec408f30323ae456a8dd8a2c4475ddf1b50b48c4d48a070d4b9e85892a18"
+    },
+    "cache-off": {
+      "status": "failed",
+      "exit": 1,
+      "api_checks": 40,
+      "failed_checks": [
+        "rss_growth_second_half_at_most_zero"
+      ],
+      "request_counts": {
+        "plain": {
+          "completed": 7984
+        },
+        "schema": {
+          "completed": 1739,
+          "stop": 1739
+        },
+        "logprobs": {
+          "completed": 1160
+        },
+        "tools": {
+          "completed": 708,
+          "tool_calls": 708
+        },
+        "long": {
+          "completed": 1415
+        },
+        "reason": {
+          "completed": 743
+        },
+        "cancel": {
+          "disconnected": 700
+        }
+      },
+      "rss_growth_kib": 700,
+      "anonymous_growth_kib": 700,
+      "rss_baseline_seconds": 900.1656845510006,
+      "rss_drain_seconds": 1804.018725708127,
+      "p95_change_percent": {
+        "ttft_ms": 0.8196550893038612,
+        "e2e_ms": -13.926685729259525
+      },
+      "gpu_receipt_sha256": "9da95772458513f5a7584d8aaa1b69d3d89723953cfa61301fd97e69ec489628",
+      "soak_sha256": "82ff8a77b07a569b32e3260fa234977db5b5868df5332f931b08ff480605d132"
+    }
+  }
+}

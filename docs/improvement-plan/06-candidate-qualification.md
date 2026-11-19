@@ -43,6 +43,15 @@ W5의 30분 실행에서 종료 뒤 GPU·pinned 메모리와 활성 KV는 0이�
 
 같은 이미지에서 장문 29개에 대한 232건을 확인했다. 초기 GPU 확인의 이미지 ID, CPU 보고서, Riley 바이너리 및 체크포인트 해시와 일치했다. Cache-on과 cache-off의 30분 혼합 부하는 각각 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했다. 두 서버 모두 정상 종료하고 자원을 회수했다. 후반 익명 RSS는 cache-on에서 616KiB, cache-off에서 700KiB 증가해 두 설정 모두 RSS 증가 0 기준을 충족하지 못했다. [장문 대조](04-long-accuracy-result.md) · [배포 이미지의 혼합 부하](05-mixed-soak-result.md#배포-이미지의-혼합-부하)
 
+원본 보존 경로에서 패키지 영수증과 GPU API, 장문 비교, 두 혼합 부하의 체크섬을 다시 검증했다. 두 부하에서 후반 첫 정밀 표본과 drain 표본을 직접 빼서 RSS를 확인했다. 같은 바이너리·체크포인트·홀더를 사용했고 서버 인자의 차이는 `--prefix-cache-blocks 128`이었다. 최초 cache-off의 기동 실패도 기록에 남겼다. [통합 판정과 원본 해시](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/verified-a100-candidate.json)
+
+```bash
+python3.12 -B benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/verify_a100_candidate.py \
+  "$A100_EVIDENCE_ROOT"
+```
+
+`A100_EVIDENCE_ROOT`에는 검증한 실행 디렉터리의 공통 상위 경로를 지정한다. 검사기는 배포 이미지의 패키지·API·장문·혼합 부하를 판정한다. 종료 코드 0은 통과, 1은 검증된 원본의 기준 실패, 2는 원본 누락 또는 불일치다. 해당 이미지의 재검산은 코드 1을 반환했다. [재현 검사기](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/verify_a100_candidate.py)
+
 주기적으로 glibc가 메모리를 반환하도록 한 진단군의 cache-off 30분 실행은 익명 RSS가 60KiB 증가해 증가 0 조건을 충족하지 못했다. 같은 이미지의 비계측 기준은 700KiB 증가했다. Cache-on에서는 기준 +616KiB에서 주기적 반환 적용 시 −108KiB로 바뀌어 모든 검사를 통과했다. 두 설정 모두 API 40건과 지연·종료 검사를 통과했다. Cache-off가 남아 릴리스 판정은 보류다. [주기적 반환 결과](05-mixed-soak-result.md#배포-이미지의-주기적-메모리-반환-후보)
 
 31초 주기의 별도 cache-off 표본 진단에서도 익명 RSS가 500KiB 증가했다. 중간과 drain의 반환 이후 경과 시간을 확인했고, 증가 0 기준은 계속 미충족이다. [표본 시각과 매핑 대조](05-mixed-soak-result.md#배포-이미지의-주기적-메모리-반환-후보)
