@@ -287,6 +287,10 @@ A100 7번의 합성 입력 두 개에서 기존 wide 후보표의 split-K 3 알�
 
 50ms 간격 유입에서 후보가 빨랐던 요청은 각각 40개 중 35개와 37개였다. 다만 다섯 번째 유입 묶음의 두 번째 요청은 3,503토큰 입력에서 첫 토큰까지 530~533ms 더 걸렸다. 각 실행에서 같은 묶음의 첫 요청 이후 50~51ms에 전송됐고, 기준군과 후보군의 전체 전송 폭은 약 350ms였다. 다섯 번째 묶음을 제외한 민감도 계산에서 p95 변화는 두 순서 모두 감소로 바뀌었다. 전체 표본의 p95가 채택 판정에 적용되며, 요청별 대기와 GPU 스텝을 함께 계측할 경우 이 유입 묶음에서 확인을 시작한다. [전송 간격과 p95 민감도](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/tail-audit.json)
 
+이전 계측 빌드의 `wave-50ms` 요청 40개를 QKV 서빙 대조의 네 실행과 요청·응답 해시로 맞췄다. 느려졌던 다섯 번째 묶음의 두 번째 요청은 이전 기준 계측에서 첫 토큰까지 2,583.30ms였고, 1,831.02ms가 자체 prefill 조각 사이에 있었다. 그중 1,829.16ms는 다른 prefill 스텝과 겹쳤고 1,550.59ms는 나중에 입장한 요청만 처리한 스텝이었다. 이어지는 세 번째 요청은 prefill 조각 사이에 2,151.84ms를 기다렸다. 이 수치는 이전 기준 빌드에서 관측한 대기 구성이며 후보의 추가 지연 위치는 아래 대조에서 확인한다. [같은 요청의 단계 대조](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/archived-wave-timing.json)
+
+후속 대조는 같은 바이너리에서 요청 계측을 두 조건 모두 켜고 1,024행 QKV 선택만 교대로 바꾼다. `wave-50ms`와 `rag-c8-s2`에서 비계측 결과와 요청·응답이 맞는지 확인하고, 50ms 묶음의 두 요청 및 각 조건의 p95 꼬리 요청을 단계별로 비교한다. 현재 후보 소스에 이전 계측 패치를 적용할 수 있는지 확인했고, 기존 단계 기록으로 검산기의 요청 결속과 후보 선택 실패 처리를 검사했다. RSS와 장문 시험 이후 A100 7번에서 시작하도록 등록했다. [실행 순서와 입력 해시](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/registration.json) · [단계 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/compare_traced_qkv.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

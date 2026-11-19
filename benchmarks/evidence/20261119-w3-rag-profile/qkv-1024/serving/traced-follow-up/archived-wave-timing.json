@@ -1,0 +1,165 @@
+{
+  "scope": "Same 50ms workload as QKV ABBA. These stage timings come from the previous request-trace build without the QKV candidate.",
+  "same_request_and_response_counts_in_each_qkv_arm": {
+    "riley-first": 40,
+    "qkv-first": 40,
+    "qkv-second": 40,
+    "riley-second": 40
+  },
+  "traced_riley_binary_sha256": "11bcd9e050d05a95f65aa875e79a6e85c23bae91069024a09a660cc40a4fffd8",
+  "traced_wave_sha256": "42a0a1b8fbb6b31b27b20723ba4f35a53fbd093a4f2b3b5b32c019cf164dd91b",
+  "trace_log_sha256": "d934b3cced520131e76176b66d098f247e9aa662237a55948e2d839981259e86",
+  "qkv_comparison_local_archive_sha256": "39c9f779a04ae4fb2c73cb6579feae6212d0c641fffe3616fb5441ce00135325",
+  "requests": {
+    "41": {
+      "request_index": 41,
+      "client_ttft_ms": 2583.29688757658,
+      "tokenizer_thread": "front",
+      "server_ms": 2582.379114,
+      "shared_prefill_gpu_ms": 541.547196,
+      "prefill_steps": [
+        {
+          "begin": 0,
+          "end": 1024,
+          "batch_rows": 1024,
+          "decode_rows": 0,
+          "gpu_ms": 123.024765
+        },
+        {
+          "begin": 1024,
+          "end": 2048,
+          "batch_rows": 1024,
+          "decode_rows": 0,
+          "gpu_ms": 132.411942
+        },
+        {
+          "begin": 2048,
+          "end": 3070,
+          "batch_rows": 1024,
+          "decode_rows": 2,
+          "gpu_ms": 142.587708
+        },
+        {
+          "begin": 3070,
+          "end": 3503,
+          "batch_rows": 1024,
+          "decode_rows": 3,
+          "gpu_ms": 143.522781
+        }
+      ],
+      "other_prefill_during_wait_ms": {
+        "command_queue": 71.200265,
+        "before_first_step": 131.509737,
+        "between_steps": 1829.15992
+      },
+      "stages_ms": {
+        "front_other": 0.050006,
+        "tokenize": 2.423949,
+        "command_queue": 71.249122,
+        "admission_other": 0.048427,
+        "scheduler_wait_before_prefill": 131.970941,
+        "prefill_executing": 541.835172,
+        "prefill_between_steps": 1831.017479,
+        "after_prefill_to_first_delta": 3.784018
+      },
+      "between_step_wait_routing": {
+        "request_index": 41,
+        "prompt_tokens": 3503,
+        "span_ms": {
+          "only_earlier_admissions": 139.712536,
+          "only_later_admissions": 1550.592866,
+          "both_admission_orders": 138.854518,
+          "with_finishing_competitor": 405.214293,
+          "while_at_most_cap_tokens_remained": 544.467487,
+          "later_only_after_100ms_with_decode": 543.410783,
+          "other_prefill_step_total": 1829.15992,
+          "step_boundary_edges": 0.0
+        },
+        "later_only_fraction": 0.8477076547795778,
+        "near_completion_fraction": 0.2976598607080785
+      }
+    },
+    "42": {
+      "request_index": 42,
+      "client_ttft_ms": 3145.0446993112564,
+      "tokenizer_thread": "front",
+      "server_ms": 3144.072923,
+      "shared_prefill_gpu_ms": 710.882594,
+      "prefill_steps": [
+        {
+          "begin": 0,
+          "end": 1024,
+          "batch_rows": 1024,
+          "decode_rows": 0,
+          "gpu_ms": 123.042236
+        },
+        {
+          "begin": 1024,
+          "end": 2048,
+          "batch_rows": 1024,
+          "decode_rows": 0,
+          "gpu_ms": 131.422501
+        },
+        {
+          "begin": 2048,
+          "end": 2322,
+          "batch_rows": 1024,
+          "decode_rows": 2,
+          "gpu_ms": 134.154114
+        },
+        {
+          "begin": 2322,
+          "end": 3342,
+          "batch_rows": 1024,
+          "decode_rows": 4,
+          "gpu_ms": 145.444702
+        },
+        {
+          "begin": 3342,
+          "end": 3492,
+          "batch_rows": 1024,
+          "decode_rows": 5,
+          "gpu_ms": 146.89296
+        },
+        {
+          "begin": 3492,
+          "end": 3509,
+          "batch_rows": 52,
+          "decode_rows": 6,
+          "gpu_ms": 29.926081
+        }
+      ],
+      "other_prefill_during_wait_ms": {
+        "command_queue": 21.435812,
+        "before_first_step": 254.59564,
+        "between_steps": 2149.217398
+      },
+      "stages_ms": {
+        "front_other": 0.055145,
+        "tokenize": 2.480942,
+        "command_queue": 21.55854,
+        "admission_other": 0.050939,
+        "scheduler_wait_before_prefill": 255.240932,
+        "prefill_executing": 711.377754,
+        "prefill_between_steps": 2151.842305,
+        "after_prefill_to_first_delta": 1.466366
+      },
+      "between_step_wait_routing": {
+        "request_index": 42,
+        "prompt_tokens": 3509,
+        "span_ms": {
+          "only_earlier_admissions": 414.843573,
+          "only_later_admissions": 1451.800978,
+          "both_admission_orders": 282.512673,
+          "with_finishing_competitor": 560.330838,
+          "while_at_most_cap_tokens_remained": 290.083849,
+          "later_only_after_100ms_with_decode": 401.452134,
+          "other_prefill_step_total": 2149.157224,
+          "step_boundary_edges": 0.060174
+        },
+        "later_only_fraction": 0.6755210655542063,
+        "near_completion_fraction": 0.13497562940513838
+      }
+    }
+  }
+}

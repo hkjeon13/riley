@@ -1014,6 +1014,16 @@
       "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/first-candidate-startup.json",
       "sha256": "552c4fa70f7c13fa5a6bddba1b6b8f6d0a134898b85eb469a3f7b6da5f84c0fe"
     },
+    "qwen14_qkv_1024_traced_follow_up": {
+      "archived_baseline_timing": {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/archived-wave-timing.json",
+        "sha256": "0ea2c802df8543adb1bf988548278eab7538af5313abee702155b7a45136aabb"
+      },
+      "registration": {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/registration.json",
+        "sha256": "781b32be48b0c6750fc55f592f09deaf6a03c801ad10b4fb5b15ea71b88b3d07"
+      }
+    },
     "qwen14_qkv_1024_serving_result": {
       "decision": "keep_as_isolated_experiment_inconsistent_rag_tail_latency",
       "evidence": [
