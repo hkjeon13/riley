@@ -74,4 +74,4 @@ HTTP 프레이밍 이미지의 30분 실행에서 정밀 RSS는 `cache-on`에서
 
 채팅 SSE 후보 `06eed36dcc60`의 두 30분 부하에서 정밀 RSS는 `cache-on`에서 508KiB, `cache-off`에서 608KiB 증가했다. 기준 이미지의 616KiB와 700KiB보다 각각 108KiB와 92KiB 적었다. 두 모드에서 API 40건과 요청·지연·종료 자원 검사를 통과했고 RSS 증가 0 항목만 실패했다. 조건부 장문 비교를 건너뛰었으며 릴리스는 보류다. [두 실행의 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/paired-verified.json) · [장문 검증 판정](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/accuracy-follow-up/accuracy-skip-verified.json)
 
-기준 `d3d8fe6e5` 이미지의 별도 할당기 대조는 CPU 반환 시험과 실제 A100 추론 PID의 할당기 연결, 첫 API 40건까지 확인했다. 두 30분 부하의 결과가 운영 기준 충족 여부를 결정한다. [할당기 대조와 확인 범위](05-mixed-soak-result.md#즉시-반환-설정의-할당기-대조)
+기준 `d3d8fe6e5` 이미지의 별도 할당기 대조에서 `cache-on`은 정밀 RSS −680KiB로 증가 0 기준을 충족했다. 같은 실행의 요청·지연·종료 자원과 API 40건도 통과했다. `cache-off`를 실행 중이며, 두 설정이 통과할 경우 같은 할당기로 장문 정확성 232건을 대조한다. [할당기 시험과 운영 기준](05-mixed-soak-result.md#즉시-반환-설정의-할당기-대조)

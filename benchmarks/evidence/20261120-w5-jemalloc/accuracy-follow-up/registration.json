@@ -1,0 +1,34 @@
+{
+  "scope": "Run the same allocator and image against the release long-context inputs after both cache modes pass.",
+  "stage": "w5-jemalloc-accuracy-20261120.CJrnRg9W",
+  "controller_pid": 1275052,
+  "registered_utc": "2026-11-19T15:47:25Z",
+  "must_finish_stage": "w5-jemalloc-20261120.hLPizqfG",
+  "initial_state": "waiting_for_both_strict_soaks",
+  "dispatch_tar_sha256": "24bec4ff5ab4fbc7dd4740bce84f5d0005c590ced0bfc4a20507ab84cf03fbdf",
+  "soak_identity": {
+    "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+    "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+    "source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+    "riley_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+    "cpu_report_sha256": "92f884b05c1101d4bfb6c49df9289483b698e4e64d88fdc1090705998a17de33",
+    "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+    "gpu_uuid": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7"
+  },
+  "first_mode_verified_sha256": "347fa6066206291eb42f7404829b24dad76aa24e5f42a916a762eb185001f7f1",
+  "preflight_verified_original_requests": {
+    "baseline": 144,
+    "holdout": 88
+  },
+  "cpu_guard_checks": [
+    "paired passes",
+    "one mode fails strict RSS",
+    "paired evidence differs from replay",
+    "original long-context arguments and allocator wrapper forwarding"
+  ],
+  "gpu": {
+    "physical_index": 6,
+    "idle_holder_pid": 2431228,
+    "other_idle_holder_pid": 2431237
+  }
+}
