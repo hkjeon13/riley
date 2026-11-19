@@ -107,6 +107,8 @@ A100 7번에서 연산별 대조를 완료했다. 두 사례의 입력 norm은 �
 
 일치한 입력 norm과 체크포인트에서 읽은 가중치 행으로 달랐던 내적 9개를 FP64에서 재계산했다. 결과를 BF16으로 반올림하면 8개가 HF 재계산 값, 1개가 Riley 관측값과 일치했다. 두 엔진의 관측값은 8개에서 서로 인접한 BF16 값이었다. 이 결과는 두 C1 decode 행의 bias 전 투영에 해당한다. 실제 GPU에서 선택된 GEMM과 누산 경로를 대조해야 해당 차이가 생긴 이유를 판정할 수 있다. [FP64 재계산 결과](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/prebias-projection-verified.json) · [독립 내적 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/replay_prebias_projection.py)
 
+Riley의 두 decode 행을 다시 실행하면서 bias 전 QKV 호출 직전에 선택된 계획을 기록했다. 두 실행 행 모두 cuBLASLt에서 `M=1, N=4608, K=3584`, 알고리즘 21, tile 15, stages 18, Split-K 1, reduction scheme 0이었다. 계측 뒤 전체 연산 행의 해시는 이전 Riley 추적과 일치했다. 이 선택에 대응하는 HF 투영의 GEMM과 누산 순서는 다음 대조 범위에 남아 있다. 두 GPU에서 기존 20GiB 예약 복귀도 확인했다. 재현할 때는 등록 파일이 지정한 상위 경로의 수집기를 진단 파일과 같은 디렉터리에 둔다. [실제 GEMM 선택](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/gemm-plan/verified-plan.json) · [실행 영수증](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/gemm-plan/completion.json) · [재현 등록](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/gemm-plan/registration.json)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.

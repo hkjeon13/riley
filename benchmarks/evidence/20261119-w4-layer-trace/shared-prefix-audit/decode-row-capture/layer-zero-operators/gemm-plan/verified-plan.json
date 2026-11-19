@@ -1,0 +1,55 @@
+{
+  "scope": "Selected canonical cuBLASLt merged QKV plans for the two reproduced C1 rows.",
+  "operator_reference_sha256": "b7c459a5558d1d371228c751b83ad6bf29aeed4ff6100f3d472300bf59ece10a",
+  "checkpoint_manifest_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "cases": {
+    "669-9": {
+      "identical_operator_trace_sha256": "91cf2a7a49f43db8af08a486d0c439690e773683eb3cca33372b44a7a5b5a05b",
+      "gemm": {
+        "position": 677,
+        "token": 264,
+        "m": 1,
+        "n": 4608,
+        "k": 3584,
+        "backend": 1,
+        "id": 21,
+        "tile": 15,
+        "stages": 18,
+        "split_k": 1,
+        "reduction": 0,
+        "cta_swizzling": 0,
+        "custom_option": 0,
+        "workspace": 0,
+        "numeric_flags": 131586,
+        "cuda": 12040,
+        "cublaslt": 120405,
+        "deterministic": true,
+        "sm": "8.0"
+      }
+    },
+    "1023-67": {
+      "identical_operator_trace_sha256": "d3b081fcef19379c7cf8ae37e248e2b710b272b61ea54a43a51da6b8248f9568",
+      "gemm": {
+        "position": 1089,
+        "token": 3208,
+        "m": 1,
+        "n": 4608,
+        "k": 3584,
+        "backend": 1,
+        "id": 21,
+        "tile": 15,
+        "stages": 18,
+        "split_k": 1,
+        "reduction": 0,
+        "cta_swizzling": 0,
+        "custom_option": 0,
+        "workspace": 0,
+        "numeric_flags": 131586,
+        "cuda": 12040,
+        "cublaslt": 120405,
+        "deterministic": true,
+        "sm": "8.0"
+      }
+    }
+  }
+}

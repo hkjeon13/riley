@@ -1,0 +1,17 @@
+{
+  "scope": "Read actual selected canonical GEMM parameters in two matched C1 attempts.",
+  "stage": "w4-qkv-plan-20261120.hpF6Lg0W",
+  "controller_pid": 2277993,
+  "registered_utc": "2026-11-19T19:15:48Z",
+  "physical_gpu": 7,
+  "reservation_pid": 2431237,
+  "matched_reference": "w4-decode-layer0-ops-20261120.hYAOtc0n",
+  "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+  "dispatch_tar_sha256": "488084509002d1779c0d27afa73195af9d73da0396b858a926970b639e812b44",
+  "trace_client_source": "../trace_decode_layers.py",
+  "preflight": {
+    "rust_typecheck": "passed with local CUDA build-script stub",
+    "matched_fixture_accepted": true,
+    "duplicate_record_rejected": true
+  }
+}
