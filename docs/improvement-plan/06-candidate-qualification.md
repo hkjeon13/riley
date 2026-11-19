@@ -74,4 +74,4 @@ HTTP 프레이밍 이미지의 30분 실행에서 정밀 RSS는 `cache-on`에서
 
 채팅 SSE 후보 `06eed36dcc60`의 두 30분 부하에서 정밀 RSS는 `cache-on`에서 508KiB, `cache-off`에서 608KiB 증가했다. 기준 이미지의 616KiB와 700KiB보다 각각 108KiB와 92KiB 적었다. 두 모드에서 API 40건과 요청·지연·종료 자원 검사를 통과했고 RSS 증가 0 항목만 실패했다. 조건부 장문 비교를 건너뛰었으며 릴리스는 보류다. [두 실행의 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/paired-verified.json) · [장문 검증 판정](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/accuracy-follow-up/accuracy-skip-verified.json)
 
-기준 `d3d8fe6e5` 이미지에 jemalloc을 연결한 별도 대조에서 정밀 RSS는 `cache-on` −680KiB, `cache-off` −672KiB로 두 모드의 운영 기준을 통과했다. 각 모드에서 API 40건과 요청·지연·자원 회수를 확인했다. 같은 설정의 장문 정확성 232건을 시작했고, 이 판정 뒤 별도 시험 이미지의 CPU 검증이 이어진다. [할당기 시험과 운영 기준](05-mixed-soak-result.md#즉시-반환-설정의-할당기-대조)
+기준 `d3d8fe6e5` 이미지에 jemalloc을 연결한 별도 대조에서 정밀 RSS는 `cache-on` −680KiB, `cache-off` −672KiB로 두 모드의 운영 기준을 통과했다. 각 모드의 API 40건과 요청·지연·자원 회수에 이어 같은 설정의 장문 정확성 232건도 일치했다. 별도 시험 이미지 `1fc444b1840e`의 CPU 검증을 마쳤고, 이 이미지 ID의 GPU 검증을 진행 중이다. [할당기 시험과 운영 기준](05-mixed-soak-result.md#즉시-반환-설정의-할당기-대조)

@@ -1,0 +1,30 @@
+{
+  "stage": "w5-allocator-packaged-gpu-20261120.nQpLFMUS",
+  "mode": "cache-on",
+  "allocator": {
+    "container_id": "7960ba79961f251430e2c370ed90b3decbe259a62eaf9d5ac42b71d595c3afe8",
+    "host_pid": 1473543,
+    "image_id": "sha256:1fc444b1840e6f8d55b32fc603629e031ee018f674b9b1ab04b6a69c9445ff66",
+    "library_sha256": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9",
+    "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+    "mounts": [
+      "/models"
+    ]
+  },
+  "api_checks": 40,
+  "api_sha256": "138909791ebb10a61b55113cf677535e276f1db5789e1c058cee501517fb7e3a",
+  "reservations": {
+    "6": {
+      "physical_index": 6,
+      "pid": 2431228,
+      "phase": "active",
+      "allocation_bytes": 67108864
+    },
+    "7": {
+      "physical_index": 7,
+      "pid": 2431237,
+      "phase": "idle",
+      "allocation_bytes": 21474836480
+    }
+  }
+}

@@ -279,9 +279,11 @@ A100 6번의 `cache-on`에서 추론 PID의 할당기 매핑과 API 40건을 확
 
 첫 부하 도중 같은 호스트에서 W3 재생용 상대 시각을 집계했다. 집계 전송의 관측 구간은 UTC 15:24:18–15:24:25였으며, CPU 작업이 지연에 미친 영향은 별도로 측정하지 않았다. [W3 CPU 시각 집계](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/cpu-ready-inputs.json)
 
-두 캐시 모드의 운영 판정을 재계산해 장문 정확성 실행 조건을 충족했다. 고정 입력의 해시와 기존 232건 영수증, GPU 6의 20GiB 예약을 확인한 뒤 같은 이미지와 할당기로 기준 장문 144건 및 홀드아웃 88건의 검증을 시작했다. [조건부 정확성 등록](../../benchmarks/evidence/20261120-w5-jemalloc/accuracy-follow-up/registration.json) · [판정 및 실행 도구](../../benchmarks/evidence/20261120-w5-jemalloc/accuracy-follow-up/qualify_allocator.py)
+같은 이미지와 할당기의 장문 검증에서 기준 144건과 홀드아웃 88건의 출력이 모두 일치했다. 고정 입력·결과·실행 파일을 해시로 검산했고, API 40건과 종료 자원 회수를 확인했다. 시험 종료 뒤 GPU 6·7은 기존 홀더의 20GiB 예약으로 복귀했다. [장문 정확성 영수증](../../benchmarks/evidence/20261120-w5-jemalloc/accuracy-follow-up/verified-outcome.json)
 
-장문 검증까지 통과하면 기존 이미지에 할당기 파일과 패키지 고지문, `serve` 실행 스크립트를 넣은 별도 시험 이미지를 CPU에서 빌드한다. 기준 이미지의 이미지 ID와 패키지 해시를 연결하고, 기준 파일 전체와 새로 추가한 파일 3개의 해시를 대조한다. 이어 CLI 여섯 경로의 출력과 Riley의 할당 심볼 연결을 확인한다. 파생 이미지가 생기면 그 이미지 ID로 실제 GPU 검증을 다시 수행해야 한다. [패키징 등록](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/registration.json) · [CPU 검사기](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/verify_allocator_image.py)
+별도 시험 이미지 `1fc444b1840e`에 할당기 파일과 패키지 고지문, `serve` 실행 스크립트를 넣었다. CPU 검사는 Riley 실행 파일을 포함한 기준 파일 21개의 해시, 추가 파일 3개의 해시, CLI 여섯 경로의 출력, Riley의 할당 심볼 네 개를 검증했다. 첫 검사기는 로더가 남긴 `riley` 이름을 절대 경로로만 찾았다. 실행 경로를 함께 대조하도록 수정해 같은 이미지 ID로 재검사했고, 로더 기록의 해시도 일치했다. [패키징 등록](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/registration.json) · [재검사 이력과 CPU 결과](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/recheck/registration.json)
+
+이 파생 이미지 ID로 GPU 6에서 `cache-on` API 40건을 통과하고 첫 30분 부하를 시작했다. 실제 Riley PID가 이미지 내부 할당기를 적재했고 컨테이너 마운트는 체크포인트 경로 하나였다. GPU 7의 20GiB 예약도 확인했다. 두 캐시 모드의 부하에 모두 통과하면 같은 이미지로 장문 232건을 재검증한다. [패키징된 이미지의 GPU 검증 등록](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/registration.json) · [실제 기동 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/cache-on-launch-verified.json)
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
