@@ -1,0 +1,311 @@
+{
+  "scope": "Completed A100 6 pair, with the original image and all three allocator settings.",
+  "cpu_probe": {
+    "default": {
+      "uid": 65532,
+      "glibc": "2.35",
+      "request_bytes": 800,
+      "usable_bytes": 808,
+      "uordblks_before": 1520,
+      "uordblks_after": 1520,
+      "explicitly_disabled": false,
+      "other_tunable_present": false
+    },
+    "disabled": {
+      "uid": 65532,
+      "glibc": "2.35",
+      "request_bytes": 800,
+      "usable_bytes": 808,
+      "uordblks_before": 1520,
+      "uordblks_after": 704,
+      "explicitly_disabled": true,
+      "other_tunable_present": false
+    }
+  },
+  "paired_result_sha256": "5fb22202a1113021302ba38240de1a1aab99f30d4d72491e5967553ccb177c3a",
+  "campaign_log_sha256": "ed37b479da2ec4a30ec0fe50d2a25406dd60bd9a1cd079c02b18b7b29baf8b0c",
+  "artifact_sha256": {
+    "probe-default.json": "996e040b9d9ad0e47017960c9ddf74bc20fc486c9656989c2468ddd2c539ce1c",
+    "probe-disabled.json": "6dc752e83e8019c182be70a2a7d8799e7295096ca8c44284969ec371ff6a75cc",
+    "cpu-probe-proof.json": "27d45c17151c21239cecb9455c17604c81bd0950227ef92782322f1e16f3b6a4",
+    "cache-off/exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "cache-off/idle-before.json": "b25aafc9abe2ea1f7c6bf727e51613bf8f42fb57831183c2adc55296a6c17da6",
+    "cache-off/idle-after.json": "0d4968f959c3e2ba24ba34e5442013e1852717781039ccfec8621e720763271e",
+    "cache-off/comparison.json": "3601d3dc715da2a3cbf7a82163fabbb6f85bd4faa3a90c7ff872ee72a9e7dcdf",
+    "cache-on/exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "cache-on/idle-before.json": "5cc82a797ed7bbffaf57fd83b39f8d292ee429550f2bb5e3f59713415819a1f3",
+    "cache-on/idle-after.json": "b25aafc9abe2ea1f7c6bf727e51613bf8f42fb57831183c2adc55296a6c17da6",
+    "cache-on/comparison.json": "5560c0743e35d54c49c6453c4749e342a021769f27770efffd5e750b1851bb3e"
+  },
+  "modes": {
+    "cache-on": {
+      "same_20gib_reservation_restored": true,
+      "same_request_outcomes": true,
+      "checks_api": 40,
+      "configurations": {
+        "unmodified": {
+          "report_sha256": "a07f24b13e13d53fde638a4565d4a2d73f1f30346797ba62539644b7ebc15d4c",
+          "status": "failed",
+          "failed_checks": [
+            "rss_growth_second_half_at_most_zero"
+          ],
+          "rss": {
+            "baseline": {
+              "rss_kib": 15553172,
+              "anonymous_kib": 15366416,
+              "read_ms": 330.4477035999298
+            },
+            "drain": {
+              "rss_kib": 15553788,
+              "anonymous_kib": 15367032,
+              "read_ms": 325.4677876830101
+            },
+            "rss_growth_kib": 616,
+            "anonymous_growth_kib": 616
+          },
+          "late_p95_ms": {
+            "ttft_ms_p95": 325.79217106103897,
+            "e2e_ms_p95": 4131.356708705425
+          }
+        },
+        "tcache_only": {
+          "report_sha256": "9436443e40c67f72bf37e6b5cc1b1457827da51be4c033b9fbc4c4f07f430208",
+          "status": "failed",
+          "failed_checks": [
+            "rss_growth_second_half_at_most_zero"
+          ],
+          "rss": {
+            "baseline": {
+              "rss_kib": 15547104,
+              "anonymous_kib": 15360472,
+              "read_ms": 274.4308337569237
+            },
+            "drain": {
+              "rss_kib": 15547304,
+              "anonymous_kib": 15360672,
+              "read_ms": 263.8162076473236
+            },
+            "rss_growth_kib": 200,
+            "anonymous_growth_kib": 200
+          },
+          "late_p95_ms": {
+            "ttft_ms_p95": 327.05008238554,
+            "e2e_ms_p95": 4131.370164453983
+          }
+        },
+        "tcache_with_trim": {
+          "report_sha256": "0df65d12e02a78a2f3cd81cfa11e697d81c54a14b0b0fd25a1032f811ca93bba",
+          "status": "failed",
+          "failed_checks": [
+            "rss_growth_second_half_at_most_zero"
+          ],
+          "rss": {
+            "baseline": {
+              "rss_kib": 15499780,
+              "anonymous_kib": 15313020,
+              "read_ms": 233.6575984954834
+            },
+            "drain": {
+              "rss_kib": 15499868,
+              "anonymous_kib": 15313108,
+              "read_ms": 254.63222712278366
+            },
+            "rss_growth_kib": 88,
+            "anonymous_growth_kib": 88
+          },
+          "late_p95_ms": {
+            "ttft_ms_p95": 326.09302550554276,
+            "e2e_ms_p95": 4143.364481627941
+          }
+        }
+      }
+    },
+    "cache-off": {
+      "same_20gib_reservation_restored": true,
+      "same_request_outcomes": true,
+      "checks_api": 40,
+      "configurations": {
+        "unmodified": {
+          "report_sha256": "9da95772458513f5a7584d8aaa1b69d3d89723953cfa61301fd97e69ec489628",
+          "status": "failed",
+          "failed_checks": [
+            "rss_growth_second_half_at_most_zero"
+          ],
+          "rss": {
+            "baseline": {
+              "rss_kib": 15553508,
+              "anonymous_kib": 15366920,
+              "read_ms": 392.03569293022156
+            },
+            "drain": {
+              "rss_kib": 15554208,
+              "anonymous_kib": 15367620,
+              "read_ms": 340.7674729824066
+            },
+            "rss_growth_kib": 700,
+            "anonymous_growth_kib": 700
+          },
+          "late_p95_ms": {
+            "ttft_ms_p95": 334.195539355278,
+            "e2e_ms_p95": 4157.334998250008
+          }
+        },
+        "tcache_only": {
+          "report_sha256": "9746bb683056b7e0f4ea2b439def74f664fa3a7157f1ecd44417a6fd47b27e78",
+          "status": "failed",
+          "failed_checks": [
+            "rss_growth_second_half_at_most_zero"
+          ],
+          "rss": {
+            "baseline": {
+              "rss_kib": 15547512,
+              "anonymous_kib": 15360844,
+              "read_ms": 293.81299763917923
+            },
+            "drain": {
+              "rss_kib": 15547660,
+              "anonymous_kib": 15360992,
+              "read_ms": 341.3224592804909
+            },
+            "rss_growth_kib": 148,
+            "anonymous_growth_kib": 148
+          },
+          "late_p95_ms": {
+            "ttft_ms_p95": 333.1969529390335,
+            "e2e_ms_p95": 4160.339415073395
+          }
+        },
+        "tcache_with_trim": {
+          "report_sha256": "66773a06b5420776f76070b004e2a9450a750ece128d2428291433a33d6de06b",
+          "status": "passed",
+          "failed_checks": [],
+          "rss": {
+            "baseline": {
+              "rss_kib": 15499864,
+              "anonymous_kib": 15313292,
+              "read_ms": 362.074114382267
+            },
+            "drain": {
+              "rss_kib": 15499720,
+              "anonymous_kib": 15313148,
+              "read_ms": 389.0543505549431
+            },
+            "rss_growth_kib": -144,
+            "anonymous_growth_kib": -144
+          },
+          "late_p95_ms": {
+            "ttft_ms_p95": 334.15790647268295,
+            "e2e_ms_p95": 4163.233049213886
+          }
+        }
+      }
+    }
+  },
+  "run_receipts": {
+    "cache-on": {
+      "start_utc": "2026-11-19T09:57:52Z",
+      "end_utc": "2026-11-19T10:32:07Z",
+      "exit": 1,
+      "workload_counts": {
+        "plain": {
+          "completed": 7984
+        },
+        "schema": {
+          "completed": 1739,
+          "stop": 1739
+        },
+        "logprobs": {
+          "completed": 1160
+        },
+        "tools": {
+          "completed": 708,
+          "tool_calls": 708
+        },
+        "long": {
+          "completed": 1415
+        },
+        "reason": {
+          "completed": 743
+        },
+        "cancel": {
+          "disconnected": 700
+        }
+      },
+      "recorded_checks": {
+        "no_unexpected_http_or_stream_error": true,
+        "completed_schema_and_tool_covered": true,
+        "disconnects_observed": true,
+        "idle_after_drain": true,
+        "native_allocation_plateau": true,
+        "workload_coverage": true,
+        "p95_drift_at_most_5_percent": true,
+        "rss_growth_second_half_at_most_zero": false
+      },
+      "p95_change_percent": {
+        "ttft_ms": 1.3310879600758163,
+        "e2e_ms": -13.437690913602063
+      },
+      "gpu_artifact_sha256": {
+        "report.json": "9436443e40c67f72bf37e6b5cc1b1457827da51be4c033b9fbc4c4f07f430208",
+        "soak.json": "8aaeafc93b1f297115de379ad0c334b18b04ad36d0386db8f7737f66a9328861",
+        "allocator-ready.txt": "9a8c62088f714123febaaa2b868d49a78b36e88a8cccc5c18de642997312c581",
+        "allocator-after-soak.txt": "9a8c62088f714123febaaa2b868d49a78b36e88a8cccc5c18de642997312c581",
+        "api.json": "29d4dc1e6695cd24e33941390942598a64757d5a8966b7a8df0a8d54021a27ec",
+        "shutdown.json": "17791c744c7f34d55fe22c217440891c0866e94b2c32f7ea4373d8b1d7adc051"
+      }
+    },
+    "cache-off": {
+      "start_utc": "2026-11-19T10:32:07Z",
+      "end_utc": "2026-11-19T11:06:26Z",
+      "exit": 1,
+      "workload_counts": {
+        "plain": {
+          "completed": 7984
+        },
+        "schema": {
+          "completed": 1739,
+          "stop": 1739
+        },
+        "logprobs": {
+          "completed": 1160
+        },
+        "tools": {
+          "completed": 708,
+          "tool_calls": 708
+        },
+        "long": {
+          "completed": 1415
+        },
+        "reason": {
+          "completed": 743
+        },
+        "cancel": {
+          "disconnected": 700
+        }
+      },
+      "recorded_checks": {
+        "no_unexpected_http_or_stream_error": true,
+        "completed_schema_and_tool_covered": true,
+        "disconnects_observed": true,
+        "idle_after_drain": true,
+        "native_allocation_plateau": true,
+        "workload_coverage": true,
+        "p95_drift_at_most_5_percent": true,
+        "rss_growth_second_half_at_most_zero": false
+      },
+      "p95_change_percent": {
+        "ttft_ms": 1.2940863523940083,
+        "e2e_ms": -13.520450569929555
+      },
+      "gpu_artifact_sha256": {
+        "report.json": "9746bb683056b7e0f4ea2b439def74f664fa3a7157f1ecd44417a6fd47b27e78",
+        "soak.json": "38432051baf4ae9e901ebe0fd6a79a7f06bafed41dba2a3a80bfcc18c899b671",
+        "allocator-ready.txt": "9a8c62088f714123febaaa2b868d49a78b36e88a8cccc5c18de642997312c581",
+        "allocator-after-soak.txt": "9a8c62088f714123febaaa2b868d49a78b36e88a8cccc5c18de642997312c581",
+        "api.json": "5de521f15604cb59591ffb5b0022b00e85caaa5225d3fad6aa3a5e05e8831ed6",
+        "shutdown.json": "a231992423cea44977b4645fec749b8ee67a2e5d457ed1c776775d8d1852c977"
+      }
+    }
+  },
+  "tcache_only_passed_both_modes": false
+}

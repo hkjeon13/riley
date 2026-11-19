@@ -172,7 +172,14 @@ Cache-on의 반환 호출은 293회였고 모두 메모리를 반환했다. 중�
 
 같은 이미지의 환경에 `GLIBC_TUNABLES=glibc.malloc.tcache_count=0`만 지정하는 대조를 등록했다. 준비 완료 직후와 부하 종료 뒤의 Riley PID 1에서 설정과 메모리 반환 라이브러리의 부재를 확인한다. W2 시험 종료 뒤 GPU 6번에서 `cache-on`과 `cache-off` 순으로 각각 API 40건과 30분 부하를 실행한다. 이전 기준군, 스레드별 할당 캐시 설정만 준 실행, 7초 주기 반환을 함께 적용한 실행의 이미지·실행 파일·부하·자원 회수를 검산한다. 양쪽 캐시 조건에서 고정 환경 설정만으로 RSS 증가 0을 충족하는지 판정한다. [실행 등록](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/tcache-only/registration.json) · [검사기 패치와 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/tcache-only/campaign.sh) · [원본 대조 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/tcache-only/compare_tcache_only.py)
 
-`cache-on` 실행에서 정상 완료 13,749건, 의도적 연결 종료 700건을 기록했다. API 40건과 요청·지연·종료 자원 검사를 통과했다. 후반에서 drain까지 정밀 익명 RSS는 기본 이미지 +616KiB, 스레드별 할당 캐시 비활성화 단독 +200KiB, 7초 주기 반환과 함께 적용 +88KiB였다. 단독 설정은 RSS 증가 0 항목에서 실패했다. 같은 홀더가 20GiB로 복귀한 뒤 `cache-off` 시험을 시작했다. [첫 실행 검산과 원본 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/tcache-only/cache-on-first-verified.json)
+두 설정의 30분 부하가 완료됐다. 각 실행에서 정상 완료 13,749건, 의도적 연결 종료 700건을 기록했고 API 40건, 요청·지연·종료 자원 검사를 통과했다. 각각 종료 후 같은 GPU 6 홀더의 20GiB 예약이 복원됐다. [두 실행 검산과 원본 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/tcache-only/paired-verified.json) · [원본 재현 검사기](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/tcache-only/verify_pair.py)
+
+| 설정 | 기본 이미지 | 스레드별 할당 캐시 비활성화 | 7초 반환과 스레드별 할당 캐시 비활성화 |
+|---|---:|---:|---:|
+| `cache-on` 익명 RSS 변화 | +616KiB | +200KiB | +88KiB |
+| `cache-off` 익명 RSS 변화 | +700KiB | +148KiB | −144KiB |
+
+단독 설정은 두 모드 모두 증가량 0 기준에서 실패했다. 같은 두 단독 실행의 후반 TTFT p95는 초기 구간 대비 각각 1.33%, 1.29% 늘었다. 조건부 프레이밍 비교는 RSS 실패를 확인하고 W4 종료를 기다리는 상태로 전환했다. [후속 실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/campaign.sh)
 
 ### HTTP 요청 버퍼 용량의 CPU 대조
 
