@@ -1,0 +1,41 @@
+{
+  "scope": "Riley and HF SDPA final decode states at two original shared-prefix divergences.",
+  "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+  "host": "aws-a100",
+  "stage": "w4-decode-final-rows-20261120.Cx7FyiSc",
+  "controller_pid": 1756965,
+  "registered_utc": "2026-11-19T17:28:26Z",
+  "state_at_registration": "waiting_for_packaged_image_performance",
+  "predecessor": "w5-allocator-image-perf-20261120.tmZw0Cpo",
+  "original_row_capture": "w4-decode-retry-20261119.t5Ij5K7O",
+  "physical_gpu": 7,
+  "idle_holder_pid": 2431237,
+  "targets": [
+    {
+      "suite": "long",
+      "label": "12",
+      "prompt_tokens": 669,
+      "decode_offset": 9
+    },
+    {
+      "suite": "holdout",
+      "label": "numbers-1023",
+      "prompt_tokens": 1023,
+      "decode_offset": 67
+    }
+  ],
+  "dispatch_tar_sha256": "c062d95015a4999de3437e07bd3a95b68c0b5ad592df3c83ec5b53e4e2e5f205",
+  "local_preflight": {
+    "bash_syntax": "passed",
+    "patch_fits_staged_source": "passed",
+    "pinned_case_selection_matches_rust": "passed",
+    "bf16_dot_and_norm_fixture": "passed",
+    "truncated_capture_rejected": true,
+    "rust_feature_typecheck": "passed with a local CUDA build-script stub"
+  },
+  "proof": {
+    "riley": "Original response tokens, text, finish, usage, and prior BF16 logits SHA-256",
+    "reference": "Recorded HF SDPA BF16 scores after the exact same forced cached decode prefix",
+    "component": "Final norm input and output plus BF16-rounded FP64 projection of each engine's actual normalized row"
+  }
+}

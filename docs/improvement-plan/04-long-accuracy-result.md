@@ -84,6 +84,8 @@ Riley의 C8·C32 반복에서는 각각 33/33의 생성 ID·텍스트·종료 �
 
 기록된 행에서 공동 최대 중 큰 ID를 고르는 규칙을 계산하면 분기 5건의 선택이 HF와 같아지며, 현재 일치하는 사례 9는 264에서 5257로 바뀐다. 단독 최대였던 두 분기는 이 규칙에서도 남는다. 이 대조는 각 분기 위치에서 저장된 BF16 행에 적용했다. 전역 동점 선택 규칙의 변경은 미채택한다.
 
+Riley ID가 단독 최대였던 두 decode 분기의 후속 진단을 등록했다. 사례 12의 생성 위치 9와 `numbers-1023`의 위치 67에서 같은 토큰 접두부를 쓰고 최종 RMSNorm 전후 행과 로짓을 수집한다. Riley 응답과 전체 로짓 해시가 원래 캡처와 같고 HF SDPA가 기존 점수를 재현해야 비교를 진행한다. 두 엔진의 정규화 행에 같은 출력 가중치를 사용해 두 ID의 BF16 점수가 재현되는지 검산한다. 고정 입력 선택과 Rust 타입 검사를 통과했고, A100 7번의 실측은 W5 이미지 성능 대조 종료 뒤 실행한다. 원본 BF16 행은 실행 호스트에 보관한다. [후속 진단 등록](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/registration.json) · [수집·검산 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/capture_final_rows.py)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.
