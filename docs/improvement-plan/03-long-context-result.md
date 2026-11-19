@@ -343,6 +343,12 @@ W5 배포 이미지 부하와 조건부 장문 검증 절차가 종료되고 GPU
 
 기존 시각에서 후보의 41번 첫 토큰 지연은 537–541ms 늘었다. 그중 389–391ms는 prefill 조각 사이의 대기 증가였다. 두 조건의 prefill 순서가 같았던 앞뒤 도착 시각에서는 해당 요청의 첫 토큰 지연도 줄었다. 이 결과는 한 seed의 50ms 간격 부하에서 입장 경계에 따라 QKV 후보의 p95 결과가 바뀐다는 점을 보여 준다. RAG p95의 일관성 기준이 남아 있어 기본값 적용은 보류한다.
 
+#### 명령 송신 시각을 사용한 우선순위 재생
+
+위 GPU 시험의 12개 조건에서 다섯 번째 묶음의 요청 인덱스·입력 길이·상대 송신 및 입장 시각을 추출했다. 기존 스케줄러와 별도 계측 빌드에서 각각 GPU 기록의 첫 9스텝, 총 108개 계획을 다시 선택했다. CPU 재생은 실제 입장 시각과 스텝 시간을 입력으로 쓰고, 즉시 입장한 요청의 첫 prefill 우선순위 시각에 보정을 적용한다. [시각 근거와 원본 해시](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/cpu-ready-inputs.json) · [CPU 재현 스크립트](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/run_ready_replay.sh)
+
+명령 송신 시각을 그대로 쓰면 12개 조건 모두에서 두 번째 스텝의 선택이 40번 요청에서 41번 요청으로 바뀌었다. 스텝 2에서 처음 순서가 바뀌는 최소 보정 폭은 76.879µs였다. 이 경계보다 작은 보정 폭에서는 선택 순서가 달라질 수 있는 시점을 검산했으며, 원래 도착 시각의 두 쌍에서 기존 8→9번째 순서 차이가 그대로 남았다. 따라서 이 규칙은 앞선 스텝을 유지하면서 관측한 입장 경계만 해소하는 후보에서 제외했다. 판정 범위는 기록한 실행 창을 고정한 prefill 재생이다. 첫 계획이 달라진 뒤의 실제 지연은 GPU에서 별도로 측정해야 한다. [보정 폭별 재계산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/command-clock-comparison.json)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

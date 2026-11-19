@@ -1,0 +1,1096 @@
+{
+  "scope": "CPU counterfactual using engine command send only for initial readiness of immediately admitted requests.",
+  "limits": "Observed execution windows and actual admission boundaries are fixed. After a changed plan, subsequent order is advisory. No GPU timing or output is predicted.",
+  "verified_records": {
+    "cells": 12,
+    "unchanged_scheduler_plans": 108,
+    "candidate_admission_clock_plans": 108
+  },
+  "bindings_sha256": {
+    "timing_fixture": "0a536a62f699f48cf8997156b0f37c81cd8dbeb01b33c60456d6d343081ddffb",
+    "published_gpu_comparison": "50b3dbfc9d7efe02c35267b17d010f87545d8ec74be72aa9d732d969af27fdeb",
+    "stock_scheduler_source": "5585da9cf2fe5ae0b8ea64c2a4903d4827c2d04b175ed8263d57935aa2fe9cbd",
+    "candidate_patch": "a43276f18cb02025ccb65202eaf3511106adba8a456128e5dcd0b690c3b2f95d",
+    "stock_replay_executable": "923025c33179b7ef867ef784a8f93bb0ce1471148a8857e915c62e16c10814de",
+    "candidate_replay_executable": "1cf24f2a70a0f996d5f507fa29148b4c6c178e70216565264f12c0a20c4e28a8"
+  },
+  "arms": {
+    "riley-first": {
+      "wave-early": {
+        "observed_turns": [
+          40,
+          40,
+          41,
+          42,
+          40,
+          43,
+          44,
+          45,
+          41
+        ],
+        "first_different_turn": 2,
+        "first_different_plan": {
+          "observed": [
+            40,
+            1024,
+            2048
+          ],
+          "candidate": [
+            41,
+            0,
+            1024
+          ]
+        },
+        "fixed_clock_candidate_plans": [
+          [
+            40,
+            0,
+            1024
+          ],
+          [
+            41,
+            0,
+            1024
+          ],
+          [
+            42,
+            0,
+            1024
+          ],
+          [
+            40,
+            1024,
+            2048
+          ],
+          [
+            43,
+            0,
+            1024
+          ],
+          [
+            44,
+            0,
+            1024
+          ],
+          [
+            45,
+            0,
+            1024
+          ],
+          [
+            41,
+            1024,
+            2048
+          ],
+          [
+            46,
+            0,
+            1024
+          ]
+        ]
+      },
+      "wave-nominal": {
+        "observed_turns": [
+          40,
+          40,
+          41,
+          42,
+          40,
+          43,
+          44,
+          45,
+          41
+        ],
+        "first_different_turn": 2,
+        "first_different_plan": {
+          "observed": [
+            40,
+            1024,
+            2048
+          ],
+          "candidate": [
+            41,
+            0,
+            1024
+          ]
+        },
+        "fixed_clock_candidate_plans": [
+          [
+            40,
+            0,
+            1024
+          ],
+          [
+            41,
+            0,
+            1024
+          ],
+          [
+            42,
+            0,
+            1024
+          ],
+          [
+            40,
+            1024,
+            2048
+          ],
+          [
+            43,
+            0,
+            1024
+          ],
+          [
+            44,
+            0,
+            1024
+          ],
+          [
+            45,
+            0,
+            1024
+          ],
+          [
+            41,
+            1024,
+            2048
+          ],
+          [
+            46,
+            0,
+            1024
+          ]
+        ]
+      },
+      "wave-late": {
+        "observed_turns": [
+          40,
+          40,
+          41,
+          42,
+          40,
+          43,
+          44,
+          41,
+          45
+        ],
+        "first_different_turn": 2,
+        "first_different_plan": {
+          "observed": [
+            40,
+            1024,
+            2048
+          ],
+          "candidate": [
+            41,
+            0,
+            1024
+          ]
+        },
+        "fixed_clock_candidate_plans": [
+          [
+            40,
+            0,
+            1024
+          ],
+          [
+            41,
+            0,
+            1024
+          ],
+          [
+            42,
+            0,
+            1024
+          ],
+          [
+            40,
+            1024,
+            2048
+          ],
+          [
+            43,
+            0,
+            1024
+          ],
+          [
+            44,
+            0,
+            1024
+          ],
+          [
+            41,
+            1024,
+            2048
+          ],
+          [
+            45,
+            0,
+            1024
+          ],
+          [
+            46,
+            0,
+            1024
+          ]
+        ]
+      }
+    },
+    "qkv-first": {
+      "wave-early": {
+        "observed_turns": [
+          40,
+          40,
+          41,
+          42,
+          40,
+          43,
+          44,
+          45,
+          41
+        ],
+        "first_different_turn": 2,
+        "first_different_plan": {
+          "observed": [
+            40,
+            1024,
+            2048
+          ],
+          "candidate": [
+            41,
+            0,
+            1024
+          ]
+        },
+        "fixed_clock_candidate_plans": [
+          [
+            40,
+            0,
+            1024
+          ],
+          [
+            41,
+            0,
+            1024
+          ],
+          [
+            42,
+            0,
+            1024
+          ],
+          [
+            40,
+            1024,
+            2048
+          ],
+          [
+            43,
+            0,
+            1024
+          ],
+          [
+            44,
+            0,
+            1024
+          ],
+          [
+            45,
+            0,
+            1024
+          ],
+          [
+            41,
+            1024,
+            2048
+          ],
+          [
+            46,
+            0,
+            1024
+          ]
+        ]
+      },
+      "wave-nominal": {
+        "observed_turns": [
+          40,
+          40,
+          41,
+          42,
+          40,
+          43,
+          44,
+          41,
+          45
+        ],
+        "first_different_turn": 2,
+        "first_different_plan": {
+          "observed": [
+            40,
+            1024,
+            2048
+          ],
+          "candidate": [
+            41,
+            0,
+            1024
+          ]
+        },
+        "fixed_clock_candidate_plans": [
+          [
+            40,
+            0,
+            1024
+          ],
+          [
+            41,
+            0,
+            1024
+          ],
+          [
+            42,
+            0,
+            1024
+          ],
+          [
+            40,
+            1024,
+            2048
+          ],
+          [
+            43,
+            0,
+            1024
+          ],
+          [
+            44,
+            0,
+            1024
+          ],
+          [
+            41,
+            1024,
+            2048
+          ],
+          [
+            45,
+            0,
+            1024
+          ],
+          [
+            46,
+            0,
+            1024
+          ]
+        ]
+      },
+      "wave-late": {
+        "observed_turns": [
+          40,
+          40,
+          41,
+          42,
+          40,
+          43,
+          44,
+          41,
+          45
+        ],
+        "first_different_turn": 2,
+        "first_different_plan": {
+          "observed": [
+            40,
+            1024,
+            2048
+          ],
+          "candidate": [
+            41,
+            0,
+            1024
+          ]
+        },
+        "fixed_clock_candidate_plans": [
+          [
+            40,
+            0,
+            1024
+          ],
+          [
+            41,
+            0,
+            1024
+          ],
+          [
+            42,
+            0,
+            1024
+          ],
+          [
+            40,
+            1024,
+            2048
+          ],
+          [
+            43,
+            0,
+            1024
+          ],
+          [
+            44,
+            0,
+            1024
+          ],
+          [
+            41,
+            1024,
+            2048
+          ],
+          [
+            45,
+            0,
+            1024
+          ],
+          [
+            46,
+            0,
+            1024
+          ]
+        ]
+      }
+    },
+    "qkv-second": {
+      "wave-early": {
+        "observed_turns": [
+          40,
+          40,
+          41,
+          42,
+          40,
+          43,
+          44,
+          45,
+          41
+        ],
+        "first_different_turn": 2,
+        "first_different_plan": {
+          "observed": [
+            40,
+            1024,
+            2048
+          ],
+          "candidate": [
+            41,
+            0,
+            1024
+          ]
+        },
+        "fixed_clock_candidate_plans": [
+          [
+            40,
+            0,
+            1024
+          ],
+          [
+            41,
+            0,
+            1024
+          ],
+          [
+            42,
+            0,
+            1024
+          ],
+          [
+            40,
+            1024,
+            2048
+          ],
+          [
+            43,
+            0,
+            1024
+          ],
+          [
+            44,
+            0,
+            1024
+          ],
+          [
+            45,
+            0,
+            1024
+          ],
+          [
+            41,
+            1024,
+            2048
+          ],
+          [
+            46,
+            0,
+            1024
+          ]
+        ]
+      },
+      "wave-nominal": {
+        "observed_turns": [
+          40,
+          40,
+          41,
+          42,
+          40,
+          43,
+          44,
+          41,
+          45
+        ],
+        "first_different_turn": 2,
+        "first_different_plan": {
+          "observed": [
+            40,
+            1024,
+            2048
+          ],
+          "candidate": [
+            41,
+            0,
+            1024
+          ]
+        },
+        "fixed_clock_candidate_plans": [
+          [
+            40,
+            0,
+            1024
+          ],
+          [
+            41,
+            0,
+            1024
+          ],
+          [
+            42,
+            0,
+            1024
+          ],
+          [
+            40,
+            1024,
+            2048
+          ],
+          [
+            43,
+            0,
+            1024
+          ],
+          [
+            44,
+            0,
+            1024
+          ],
+          [
+            41,
+            1024,
+            2048
+          ],
+          [
+            45,
+            0,
+            1024
+          ],
+          [
+            46,
+            0,
+            1024
+          ]
+        ]
+      },
+      "wave-late": {
+        "observed_turns": [
+          40,
+          40,
+          41,
+          42,
+          40,
+          43,
+          44,
+          41,
+          45
+        ],
+        "first_different_turn": 2,
+        "first_different_plan": {
+          "observed": [
+            40,
+            1024,
+            2048
+          ],
+          "candidate": [
+            41,
+            0,
+            1024
+          ]
+        },
+        "fixed_clock_candidate_plans": [
+          [
+            40,
+            0,
+            1024
+          ],
+          [
+            41,
+            0,
+            1024
+          ],
+          [
+            42,
+            0,
+            1024
+          ],
+          [
+            40,
+            1024,
+            2048
+          ],
+          [
+            43,
+            0,
+            1024
+          ],
+          [
+            44,
+            0,
+            1024
+          ],
+          [
+            41,
+            1024,
+            2048
+          ],
+          [
+            45,
+            0,
+            1024
+          ],
+          [
+            46,
+            0,
+            1024
+          ]
+        ]
+      }
+    },
+    "riley-second": {
+      "wave-early": {
+        "observed_turns": [
+          40,
+          40,
+          41,
+          42,
+          40,
+          43,
+          44,
+          45,
+          41
+        ],
+        "first_different_turn": 2,
+        "first_different_plan": {
+          "observed": [
+            40,
+            1024,
+            2048
+          ],
+          "candidate": [
+            41,
+            0,
+            1024
+          ]
+        },
+        "fixed_clock_candidate_plans": [
+          [
+            40,
+            0,
+            1024
+          ],
+          [
+            41,
+            0,
+            1024
+          ],
+          [
+            42,
+            0,
+            1024
+          ],
+          [
+            40,
+            1024,
+            2048
+          ],
+          [
+            43,
+            0,
+            1024
+          ],
+          [
+            44,
+            0,
+            1024
+          ],
+          [
+            45,
+            0,
+            1024
+          ],
+          [
+            41,
+            1024,
+            2048
+          ],
+          [
+            46,
+            0,
+            1024
+          ]
+        ]
+      },
+      "wave-nominal": {
+        "observed_turns": [
+          40,
+          40,
+          41,
+          42,
+          40,
+          43,
+          44,
+          45,
+          41
+        ],
+        "first_different_turn": 2,
+        "first_different_plan": {
+          "observed": [
+            40,
+            1024,
+            2048
+          ],
+          "candidate": [
+            41,
+            0,
+            1024
+          ]
+        },
+        "fixed_clock_candidate_plans": [
+          [
+            40,
+            0,
+            1024
+          ],
+          [
+            41,
+            0,
+            1024
+          ],
+          [
+            42,
+            0,
+            1024
+          ],
+          [
+            40,
+            1024,
+            2048
+          ],
+          [
+            43,
+            0,
+            1024
+          ],
+          [
+            44,
+            0,
+            1024
+          ],
+          [
+            45,
+            0,
+            1024
+          ],
+          [
+            41,
+            1024,
+            2048
+          ],
+          [
+            46,
+            0,
+            1024
+          ]
+        ]
+      },
+      "wave-late": {
+        "observed_turns": [
+          40,
+          40,
+          41,
+          42,
+          40,
+          43,
+          44,
+          41,
+          45
+        ],
+        "first_different_turn": 2,
+        "first_different_plan": {
+          "observed": [
+            40,
+            1024,
+            2048
+          ],
+          "candidate": [
+            41,
+            0,
+            1024
+          ]
+        },
+        "fixed_clock_candidate_plans": [
+          [
+            40,
+            0,
+            1024
+          ],
+          [
+            41,
+            0,
+            1024
+          ],
+          [
+            42,
+            0,
+            1024
+          ],
+          [
+            40,
+            1024,
+            2048
+          ],
+          [
+            43,
+            0,
+            1024
+          ],
+          [
+            44,
+            0,
+            1024
+          ],
+          [
+            41,
+            1024,
+            2048
+          ],
+          [
+            45,
+            0,
+            1024
+          ],
+          [
+            46,
+            0,
+            1024
+          ]
+        ]
+      }
+    }
+  },
+  "pairs": {
+    "first": {
+      "wave-early": {
+        "previous_identical_plans_through_turn_9": true,
+        "fixed_clock_candidate_identical_through_turn_9": true
+      },
+      "wave-nominal": {
+        "previous_identical_plans_through_turn_9": false,
+        "fixed_clock_candidate_identical_through_turn_9": false
+      },
+      "wave-late": {
+        "previous_identical_plans_through_turn_9": true,
+        "fixed_clock_candidate_identical_through_turn_9": true
+      }
+    },
+    "second": {
+      "wave-early": {
+        "previous_identical_plans_through_turn_9": true,
+        "fixed_clock_candidate_identical_through_turn_9": true
+      },
+      "wave-nominal": {
+        "previous_identical_plans_through_turn_9": false,
+        "fixed_clock_candidate_identical_through_turn_9": false
+      },
+      "wave-late": {
+        "previous_identical_plans_through_turn_9": true,
+        "fixed_clock_candidate_identical_through_turn_9": true
+      }
+    }
+  },
+  "first_cap_changing_turn_2_in_any_cell_ns": 76879,
+  "turn_2_cap_thresholds_ns": {
+    "riley-first": {
+      "wave-early": 88684,
+      "wave-nominal": 93401,
+      "wave-late": 80190
+    },
+    "qkv-first": {
+      "wave-early": 98957,
+      "wave-nominal": 113831,
+      "wave-late": 89568
+    },
+    "qkv-second": {
+      "wave-early": 95159,
+      "wave-nominal": 96147,
+      "wave-late": 76879
+    },
+    "riley-second": {
+      "wave-early": 94655,
+      "wave-nominal": 79848,
+      "wave-late": 85642
+    }
+  },
+  "priority_breakpoint_probes_below_threshold_ns": [
+    0,
+    76877,
+    76878
+  ],
+  "bounded_adjustment_sweep": [
+    {
+      "max_adjustment_ns": 0,
+      "unchanged_first_seven_cells": 12,
+      "unchanged_shifted_control_cells": 8,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 1000,
+      "unchanged_first_seven_cells": 12,
+      "unchanged_shifted_control_cells": 8,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 2000,
+      "unchanged_first_seven_cells": 12,
+      "unchanged_shifted_control_cells": 8,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 4000,
+      "unchanged_first_seven_cells": 12,
+      "unchanged_shifted_control_cells": 8,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 8000,
+      "unchanged_first_seven_cells": 12,
+      "unchanged_shifted_control_cells": 8,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 16000,
+      "unchanged_first_seven_cells": 12,
+      "unchanged_shifted_control_cells": 8,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 32000,
+      "unchanged_first_seven_cells": 12,
+      "unchanged_shifted_control_cells": 8,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 64000,
+      "unchanged_first_seven_cells": 12,
+      "unchanged_shifted_control_cells": 8,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 76877,
+      "unchanged_first_seven_cells": 12,
+      "unchanged_shifted_control_cells": 8,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 76878,
+      "unchanged_first_seven_cells": 12,
+      "unchanged_shifted_control_cells": 8,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 76879,
+      "unchanged_first_seven_cells": 11,
+      "unchanged_shifted_control_cells": 7,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 128000,
+      "unchanged_first_seven_cells": 0,
+      "unchanged_shifted_control_cells": 0,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 256000,
+      "unchanged_first_seven_cells": 0,
+      "unchanged_shifted_control_cells": 0,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 512000,
+      "unchanged_first_seven_cells": 0,
+      "unchanged_shifted_control_cells": 0,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 1024000,
+      "unchanged_first_seven_cells": 0,
+      "unchanged_shifted_control_cells": 0,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 2048000,
+      "unchanged_first_seven_cells": 0,
+      "unchanged_shifted_control_cells": 0,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 4096000,
+      "unchanged_first_seven_cells": 0,
+      "unchanged_shifted_control_cells": 0,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 8192000,
+      "unchanged_first_seven_cells": 0,
+      "unchanged_shifted_control_cells": 0,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 16384000,
+      "unchanged_first_seven_cells": 0,
+      "unchanged_shifted_control_cells": 0,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 32768000,
+      "unchanged_first_seven_cells": 0,
+      "unchanged_shifted_control_cells": 0,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 65536000,
+      "unchanged_first_seven_cells": 0,
+      "unchanged_shifted_control_cells": 0,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    },
+    {
+      "max_adjustment_ns": 131072000,
+      "unchanged_first_seven_cells": 0,
+      "unchanged_shifted_control_cells": 0,
+      "nominal_pairs_with_same_first_nine_plans": 0
+    }
+  ],
+  "caps_preserving_prefixes_and_stabilizing_nominal_ns": []
+}

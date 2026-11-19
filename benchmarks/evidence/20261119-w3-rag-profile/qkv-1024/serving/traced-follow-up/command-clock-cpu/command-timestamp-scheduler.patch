@@ -1,0 +1,35 @@
+--- a/crates/riley-scheduler/src/scheduler.rs
++++ b/crates/riley-scheduler/src/scheduler.rs
+@@ -883,4 +883,26 @@
+         now_ns: u64,
+     ) -> SchedulerResult<Submission> {
++        self.submit_with_initial_prefill_timestamp_for_replay(descriptor, now_ns, now_ns)
++    }
++
++    /// Test-only entry point for replay of an immediately admitted prompt.
++    ///
++    /// The observed scheduler clock, admission state and queued path are unchanged.
++    ///
++    /// # Panics
++    ///
++    /// Panics if the initial scheduling timestamp is later than admission.
++    ///
++    /// # Errors
++    ///
++    /// Returns the same errors as [Self::submit].
++    #[doc(hidden)]
++    pub fn submit_with_initial_prefill_timestamp_for_replay(
++        &mut self,
++        descriptor: RequestDescriptor,
++        now_ns: u64,
++        ready_since_ns: u64,
++    ) -> SchedulerResult<Submission> {
++        assert!(ready_since_ns <= now_ns, "prefill arrival must precede admission");
+         self.ensure_completion_backlog_empty()?;
+         if !self.accepting {
+@@ -952,4 +974,5 @@
+         let state = if can_admit {
+             self.admit_record(&mut record, maximum_logical_length, now_ns)?;
++            record.ready_since_ns = ready_since_ns;
+             RequestState::Admitted
+         } else {

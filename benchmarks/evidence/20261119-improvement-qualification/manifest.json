@@ -1608,6 +1608,44 @@
         "sha256": "16d70dfdf06ace25f3eb5d57a69fd292785193fd3b8a2f187c6e493de4525710"
       }
     ],
+    "qwen14_qkv_command_clock_cpu": [
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/collect_ready_inputs.py",
+        "sha256": "b086f16a84173ed63358650b9e613e0da304c1ab3665b17b7e7f953993787a6e"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/command-clock-comparison.json",
+        "sha256": "82d000463444c32f72ea23b0b1b40f6287e3b8d0b3556c8c09f6dac501637938"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/command-timestamp-scheduler.patch",
+        "sha256": "a43276f18cb02025ccb65202eaf3511106adba8a456128e5dcd0b690c3b2f95d"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/compare_ready_replay.py",
+        "sha256": "f682f8f0dace5fe5aa4b1409033103694ee950501e187898f9a72fc2b0ca7581"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/compile_replay.py",
+        "sha256": "65ece7023774e348607309e6a6a18c1ea77fdb38c94a7f2325fbcce43e76085e"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/cpu-ready-inputs.json",
+        "sha256": "0a536a62f699f48cf8997156b0f37c81cd8dbeb01b33c60456d6d343081ddffb"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/local-verification.json",
+        "sha256": "f13a047794a0dc37495709f26cd3cc7ee70324d859c9c2f8b98c8914ed68294c"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/replay_ready_timestamp.rs",
+        "sha256": "7c9fb1b0a2ec3258fb67331429261f8ed896d7f290da5b252c917041135ed0c8"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/run_ready_replay.sh",
+        "sha256": "5d64aac327dbfde71f256bd610014a1fcf78d9303c028ee9f7f12bee24f38fb8"
+      }
+    ],
     "qwen14_qkv_phase_gpu_follow_up": [
       {
         "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/verified-comparison.json",
