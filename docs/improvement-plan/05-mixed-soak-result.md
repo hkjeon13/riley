@@ -218,6 +218,21 @@ A100 6번의 `cache-on` 컨테이너에서 API 40건이 통과했고 30분 부�
 
 같은 기본 이미지에서 `cache-off` 30분 부하 중 5·10·20·25·29분과 drain 뒤 10·30·60초에 PID 1의 정밀 RSS를 추가로 읽는 진단을 등록했다. 원래 검사기가 선택한 약 900초 표본과 drain 표본으로 기존 RSS 증가 0 판정을 내린다. 진단은 요청 제출이 끝난 상태에서 60초를 더 관측한 뒤 유휴 상태를 한 번 확인한다. CPU 사전시험에서는 원래 RSS 실패 결과가 유지됐고, 같은 이미지의 UID 65532에서 실제 PID 1의 정밀 RSS도 읽었다. 프레이밍 두 실행의 판정과 동일 GPU 홀더의 예약 복구를 확인한 뒤 이 진단을 시작했다. [진단 등록과 CPU 검사](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/registration.json) · [계측 코드](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/observe_rss_series.py) · [실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/campaign.sh)
 
+기준과 동일한 이미지·실행 파일·체크포인트에서 API 40건과 30분 부하를 완료했다. 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했다. 900.15초에서 1,804.00초까지 정밀 RSS와 익명 RSS가 각각 **480KiB 증가**했다. 기존 비계측 `cache-off`의 증가량은 700KiB였다. 후반 TTFT p95는 333.77ms, 완료 지연 p95는 4,157.68ms였다. 요청·지연·종료 자원 조건은 통과했고 RSS 증가 0 항목만 실패했다. [계측 결과와 원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/verified-series.json) · [독립 재검산](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/replay_rss_series.py)
+
+| 정밀 표본 | 15분 대비 RSS 및 익명 RSS 변화 | 표본 직전 활성 요청 |
+|---|---:|---:|
+| 5분 | −2,360KiB | 5 |
+| 10분 | −632KiB | 11 |
+| 15분 | 0KiB | 10 |
+| 20분 | +176KiB | 13 |
+| 25분 | +368KiB | 9 |
+| 29분 | +460KiB | 6 |
+| Drain | +480KiB | 0 |
+| Drain 뒤 10·30·60초 | +480KiB | — |
+
+29분부터 drain까지의 추가 증가는 20KiB였고, drain 뒤 세 표본의 값은 같았다. 마지막 표본 뒤 서비스가 유휴 상태임을 확인했다. 표본 사이 변화와 개별 할당 지점은 이 실행의 계측 범위에 포함되지 않는다. 종료 뒤 A100 6·7번에서 각자의 기존 홀더와 20GiB 예약을 확인했다.
+
 ### 채팅 스트림의 임시 JSON 할당
 
 `d3d8fe6e5`의 채팅 SSE는 토큰 이벤트를 텍스트 완성 SSE로 직렬화한 뒤 JSON을 다시 읽어 채팅 형태로 변환한다. 격리한 후보는 일반 토큰 이벤트의 구조체를 JSON 값으로 바로 전달해 이 중간 문자열과 재파싱을 줄인다. 같은 도구 호출 변환과 최종 사용량·오류·`[DONE]` 처리를 재사용했다. [현재 채팅 변환](../../crates/riley-server/src/chat.rs) · [격리 후보 패치](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/chat-delta.patch.gz)
