@@ -1,0 +1,131 @@
+{
+  "scope": "CPU-only candidate for typed chat delta conversion with the existing float logprob serialization path.",
+  "base_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+  "platform": {
+    "system": "Darwin",
+    "machine": "arm64",
+    "rustc": "rustc 1.85.0 (4d91de4e4 2025-02-17)"
+  },
+  "probe": {
+    "measurement": "System allocator calls for alloc, alloc_zeroed, and realloc; requested bytes include the full realloc request.",
+    "wire_digest": "The SHA-256 hashes each frame's little-endian u64 length followed by its bytes, followed by the terminal sentinel.",
+    "cases": {
+      "visible": {
+        "events_per_stream": 8,
+        "repetitions": 64,
+        "different_frames": 0,
+        "stream_sha256": "5d99694ebd2aa25c39a9d145aa3171562662354ccf519e7b825f7ae15881feed",
+        "allocation_calls": {
+          "base": 25984,
+          "candidate": 21696
+        },
+        "requested_bytes": {
+          "base": 2801344,
+          "candidate": 1725504
+        }
+      },
+      "hermes": {
+        "events_per_stream": 6,
+        "repetitions": 64,
+        "different_frames": 0,
+        "stream_sha256": "2fc519cbfed2b8ca518d5ed20c1035cdd64f7230e254babd1da4bb5e5a6b81b0",
+        "allocation_calls": {
+          "base": 23552,
+          "candidate": 20288
+        },
+        "requested_bytes": {
+          "base": 2516800,
+          "candidate": 1731840
+        }
+      },
+      "llama": {
+        "events_per_stream": 4,
+        "repetitions": 64,
+        "different_frames": 0,
+        "stream_sha256": "081f528847fa3361aa62bfbd242fbc2098ee6e2740b8588273a0cc6ddafef1d9",
+        "allocation_calls": {
+          "base": 17664,
+          "candidate": 15552
+        },
+        "requested_bytes": {
+          "base": 1900096,
+          "candidate": 1421568
+        }
+      },
+      "incomplete_tool": {
+        "events_per_stream": 3,
+        "repetitions": 64,
+        "different_frames": 0,
+        "stream_sha256": "0473d01e681d971546150cbea8f2b68daee129a5ee49d82ece56c7151df799b2",
+        "allocation_calls": {
+          "base": 11968,
+          "candidate": 10752
+        },
+        "requested_bytes": {
+          "base": 1307520,
+          "candidate": 998656
+        }
+      },
+      "committed_ids": {
+        "events_per_stream": 5,
+        "repetitions": 64,
+        "different_frames": 0,
+        "stream_sha256": "66f50fe68708090fbb9a260d0ddd9e06ee1f63fd4373206defa4a250631f0d26",
+        "allocation_calls": {
+          "base": 21120,
+          "candidate": 17664
+        },
+        "requested_bytes": {
+          "base": 54154304,
+          "candidate": 26760320
+        }
+      },
+      "logprobs": {
+        "events_per_stream": 5,
+        "repetitions": 64,
+        "different_frames": 0,
+        "stream_sha256": "76914e7f85506754617d7c23f0d44311d298b7d3d957b60f68538a5796eb2eb7",
+        "allocation_calls": {
+          "base": 46784,
+          "candidate": 46784
+        },
+        "requested_bytes": {
+          "base": 6281984,
+          "candidate": 6281984
+        }
+      },
+      "failed": {
+        "events_per_stream": 3,
+        "repetitions": 64,
+        "different_frames": 0,
+        "stream_sha256": "399e8ff0132e18113a45c4e159446e9e77ce2b1c2a41d1890fbab0ece44a1ffb",
+        "allocation_calls": {
+          "base": 7424,
+          "candidate": 6272
+        },
+        "requested_bytes": {
+          "base": 764032,
+          "candidate": 456640
+        }
+      }
+    },
+    "logprob_score_sweep": {
+      "scores": 4096,
+      "unguarded_different": 562,
+      "guarded_different": 0,
+      "example_f32_bits": "0xbcb7e584",
+      "example_wire_logprob": {
+        "base": "-0.022448308765888218",
+        "unguarded": "-0.022448308765888214"
+      }
+    }
+  },
+  "candidate_without_probe": {
+    "command": "cargo test --locked --offline -p riley-server --features server --lib -- --test-threads=1",
+    "passed": 101,
+    "failed": 0,
+    "ignored": 1,
+    "cargo_fmt_check": "passed",
+    "cargo_clippy_server_library": "passed"
+  }
+}

@@ -1286,6 +1286,24 @@
         "sha256": "cf2b84e84ae3238037543bf02030b1954a594e1d63954d375a99a310df19ccdc"
       }
     ],
+    "w5_chat_delta_cpu": [
+      {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/chat-delta.patch.gz",
+        "sha256": "01be0e56d60800f1270f555ec15ed10502a424f989c0e21d6305c605c7dd9d7b"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/chat_frame_probe.rs",
+        "sha256": "8647762bf6eb009e66d2d06ce720754375d5617556f8e4a71304efcb967356cb"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/run_cpu_probe.sh",
+        "sha256": "b1b176e684836a9da08607c5cc788f2a3a70477e38ae2b99df51d019dff12125"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/verified-cpu.json",
+        "sha256": "00b8faff3a2bdc0b05b20becdd1b6fc50e33f72591c40ae296bf45298a98c7da"
+      }
+    ],
     "w5_http_framing_capacity": [
       {
         "path": "benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/compare_framing.py",

@@ -218,6 +218,20 @@ A100 6번의 `cache-on` 컨테이너에서 API 40건이 통과했고 30분 부�
 
 같은 기본 이미지에서 `cache-off` 30분 부하 중 5·10·20·25·29분과 drain 뒤 10·30·60초에 PID 1의 정밀 RSS를 추가로 읽는 진단을 등록했다. 원래 검사기가 선택한 약 900초 표본과 drain 표본으로 기존 RSS 증가 0 판정을 내린다. 진단은 요청 제출이 끝난 상태에서 60초를 더 관측한 뒤 유휴 상태를 한 번 확인한다. CPU 사전시험에서는 원래 RSS 실패 결과가 유지됐고, 같은 이미지의 UID 65532에서 실제 PID 1의 정밀 RSS도 읽었다. 프레이밍 두 실행의 판정과 동일 GPU 홀더의 예약 복구를 확인한 뒤 이 진단을 시작했다. [진단 등록과 CPU 검사](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/registration.json) · [계측 코드](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/observe_rss_series.py) · [실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/allocator-trace/rss-series/campaign.sh)
 
+### 채팅 스트림의 임시 JSON 할당
+
+`d3d8fe6e5`의 채팅 SSE는 토큰 이벤트를 텍스트 완성 SSE로 직렬화한 뒤 JSON을 다시 읽어 채팅 형태로 변환한다. 격리한 후보는 일반 토큰 이벤트의 구조체를 JSON 값으로 바로 전달해 이 중간 문자열과 재파싱을 줄인다. 같은 도구 호출 변환과 최종 사용량·오류·`[DONE]` 처리를 재사용했다. [현재 채팅 변환](../../crates/riley-server/src/chat.rs) · [격리 후보 패치](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/chat-delta.patch.gz)
+
+초기 후보의 logprobs 점수 4,096개 가운데 562개에서 출력 바이트가 달랐다. JSON 부동소수점 왕복을 거친 기존 값과 직접 변환한 값의 마지막 자릿수가 달라진 사례를 확인했다. 최종 후보는 logprobs가 포함된 조각에 기존 직렬화 경로를 적용했다. 점수 4,096개 및 일반 텍스트·Hermes·Llama·불완전 도구 호출·토큰 ID·logprobs·오류의 합성 스트림 7종에서 기준과 출력 바이트가 일치했다. 별도로 빌드한 기준 커밋과 스트림 해시 및 기준 할당 건수도 일치했다. [CPU 원본 대조와 수치 예시](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/verified-cpu.json) · [재현 스크립트](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/run_cpu_probe.sh)
+
+| 합성 스트림 64회 | 기준 할당·재할당 호출 | 후보 호출 | 기준 요청 바이트 | 후보 요청 바이트 |
+|---|---:|---:|---:|---:|
+| 일반 텍스트 | 25,984 | 21,696 | 2,801,344 | 1,725,504 |
+| 토큰 ID | 21,120 | 17,664 | 54,154,304 | 26,760,320 |
+| logprobs | 46,784 | 46,784 | 6,281,984 | 6,281,984 |
+
+할당 요청 바이트에는 재할당 시 요청한 새 크기가 포함된다. macOS ARM64에서 계측기를 뺀 후보의 서버 테스트 101건과 포맷·Clippy 검사가 통과했다. 이 후보는 CPU 대조로 보관하며, A100의 실제 혼합 부하에서 지연과 정밀 RSS를 확인해야 채택 여부를 판단할 수 있다.
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
