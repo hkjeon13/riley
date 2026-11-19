@@ -126,10 +126,17 @@ in the last bits:
 
 The component reference path is scoped to its qualified attention geometry.
 The `native-bf16-varlen-v1` profile selects fixed-tile attention for supported
-64- and 128-dimensional heads. It supplies a 1,024-token context and 256-row
-step and prefill budgets by default, along with `--event-publication
-after-submit-v1`. Without a profile the event publication option defaults to
-`immediate-v1`. Explicit options take precedence over profile values.
+64- and 128-dimensional heads. Explicit options take precedence over the
+profile values below. The direct CLI defaults to `immediate-v1` event
+publication when no profile or explicit value is supplied.
+
+| Option | `native-bf16-varlen-v1` default |
+|---|---|
+| `--native-attention-mode` | `fixed-tile-unsplit-v1` |
+| `--max-sequence-tokens` | `1024` |
+| `--batch-token-budget` | `256` |
+| `--prefill-chunk-tokens` | `256` |
+| `--event-publication` | `after-submit-v1` |
 
 For long prompts, the fixed-tile route supports up to 8,192 context tokens and
 1,024 rows per step in the measured configuration. To expand the context, pass

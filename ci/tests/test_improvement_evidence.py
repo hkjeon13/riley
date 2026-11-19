@@ -6,6 +6,7 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import subprocess
 import tempfile
 import unittest
 
@@ -14,6 +15,40 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("improvement_evidence", ROOT / "ci/check_improvement_evidence.py")
 checker = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(checker)
+
+
+class DocumentedProfileTests(unittest.TestCase):
+    def test_varlen_defaults_match_the_profile_resolver(self):
+        profile = "native-bf16-varlen-v1"
+        configuration = ROOT / "docs/configuration.md"
+        rows = checker.markdown_table(configuration, ("Option", f"`{profile}` default"))
+        documented = {key.strip("`"): value.strip("`") for key, (value,) in rows.items()}
+        self.assertEqual(documented.keys(), {
+            "--native-attention-mode", "--max-sequence-tokens", "--batch-token-budget",
+            "--prefill-chunk-tokens", "--event-publication",
+        })
+
+        source = ROOT / "crates/riley-server/src/inference_profile.rs"
+        program = f"""
+#[path = {json.dumps(str(source), ensure_ascii=False)}]
+mod inference_profile;
+
+fn main() {{
+    let expanded = inference_profile::expand(std::env::args_os().skip(1)).unwrap();
+    for argument in expanded {{
+        println!("{{}}", argument.to_str().unwrap());
+    }}
+}}
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "resolve-profile"
+            subprocess.run(["rustc", "--edition=2024", "-o", str(binary), "-"], input=program,
+                           text=True, check=True, timeout=30, cwd=ROOT)
+            command = [str(binary), "serve", "--inference-profile", profile]
+            verb, *options = subprocess.check_output(command, text=True, timeout=5).splitlines()
+        self.assertEqual(verb, "serve")
+        resolved = dict(zip(options[::2], options[1::2], strict=True))
+        self.assertEqual(documented, {flag: resolved.get(flag) for flag in documented})
 
 
 class ReadmeEvidenceTests(unittest.TestCase):
