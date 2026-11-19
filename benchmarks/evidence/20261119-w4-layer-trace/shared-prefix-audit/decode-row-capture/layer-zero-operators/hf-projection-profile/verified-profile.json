@@ -1,0 +1,325 @@
+{
+  "scope": "Executed PyTorch/CUDA kernel evidence for the three reconstructed HF bias-free QKV products.",
+  "operator_reference_sha256": "b7c459a5558d1d371228c751b83ad6bf29aeed4ff6100f3d472300bf59ece10a",
+  "checkpoint_manifest_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "cases": {
+    "669-9": {
+      "identical_hf_trace_sha256": "c80a7384750f5d33a714abf94f8e188cfc383c4ca74280b080eca04b54549d64",
+      "profiled_projections": {
+        "q": [
+          {
+            "operator": "aten::linear",
+            "input_shapes": [
+              [
+                1,
+                1,
+                3584
+              ],
+              [
+                3584,
+                3584
+              ],
+              []
+            ],
+            "device_kernels": []
+          },
+          {
+            "operator": "aten::matmul",
+            "input_shapes": [
+              [
+                1,
+                1,
+                3584
+              ],
+              [
+                3584,
+                3584
+              ]
+            ],
+            "device_kernels": []
+          },
+          {
+            "operator": "aten::mm",
+            "input_shapes": [
+              [
+                1,
+                3584
+              ],
+              [
+                3584,
+                3584
+              ]
+            ],
+            "device_kernels": [
+              "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn"
+            ]
+          },
+          {
+            "operator": "Activity Buffer Request",
+            "input_shapes": [],
+            "device_kernels": [
+              "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn"
+            ]
+          }
+        ],
+        "k": [
+          {
+            "operator": "aten::linear",
+            "input_shapes": [
+              [
+                1,
+                1,
+                3584
+              ],
+              [
+                512,
+                3584
+              ],
+              []
+            ],
+            "device_kernels": []
+          },
+          {
+            "operator": "aten::matmul",
+            "input_shapes": [
+              [
+                1,
+                1,
+                3584
+              ],
+              [
+                3584,
+                512
+              ]
+            ],
+            "device_kernels": []
+          },
+          {
+            "operator": "aten::mm",
+            "input_shapes": [
+              [
+                1,
+                3584
+              ],
+              [
+                3584,
+                512
+              ]
+            ],
+            "device_kernels": [
+              "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, false, true, true, false, 7, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>)"
+            ]
+          }
+        ],
+        "v": [
+          {
+            "operator": "aten::linear",
+            "input_shapes": [
+              [
+                1,
+                1,
+                3584
+              ],
+              [
+                512,
+                3584
+              ],
+              []
+            ],
+            "device_kernels": []
+          },
+          {
+            "operator": "aten::matmul",
+            "input_shapes": [
+              [
+                1,
+                1,
+                3584
+              ],
+              [
+                3584,
+                512
+              ]
+            ],
+            "device_kernels": []
+          },
+          {
+            "operator": "aten::mm",
+            "input_shapes": [
+              [
+                1,
+                3584
+              ],
+              [
+                3584,
+                512
+              ]
+            ],
+            "device_kernels": [
+              "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, false, true, true, false, 7, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>)"
+            ]
+          }
+        ]
+      }
+    },
+    "1023-67": {
+      "identical_hf_trace_sha256": "4825f9b9ff7e2762641d3610842c3b3e408e8e5b1e5ab5701be69ad40aa97784",
+      "profiled_projections": {
+        "q": [
+          {
+            "operator": "aten::linear",
+            "input_shapes": [
+              [
+                1,
+                1,
+                3584
+              ],
+              [
+                3584,
+                3584
+              ],
+              []
+            ],
+            "device_kernels": []
+          },
+          {
+            "operator": "aten::matmul",
+            "input_shapes": [
+              [
+                1,
+                1,
+                3584
+              ],
+              [
+                3584,
+                3584
+              ]
+            ],
+            "device_kernels": []
+          },
+          {
+            "operator": "aten::mm",
+            "input_shapes": [
+              [
+                1,
+                3584
+              ],
+              [
+                3584,
+                3584
+              ]
+            ],
+            "device_kernels": [
+              "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn"
+            ]
+          },
+          {
+            "operator": "Activity Buffer Request",
+            "input_shapes": [],
+            "device_kernels": [
+              "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn"
+            ]
+          }
+        ],
+        "k": [
+          {
+            "operator": "aten::linear",
+            "input_shapes": [
+              [
+                1,
+                1,
+                3584
+              ],
+              [
+                512,
+                3584
+              ],
+              []
+            ],
+            "device_kernels": []
+          },
+          {
+            "operator": "aten::matmul",
+            "input_shapes": [
+              [
+                1,
+                1,
+                3584
+              ],
+              [
+                3584,
+                512
+              ]
+            ],
+            "device_kernels": []
+          },
+          {
+            "operator": "aten::mm",
+            "input_shapes": [
+              [
+                1,
+                3584
+              ],
+              [
+                3584,
+                512
+              ]
+            ],
+            "device_kernels": [
+              "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, false, true, true, false, 7, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>)"
+            ]
+          }
+        ],
+        "v": [
+          {
+            "operator": "aten::linear",
+            "input_shapes": [
+              [
+                1,
+                1,
+                3584
+              ],
+              [
+                512,
+                3584
+              ],
+              []
+            ],
+            "device_kernels": []
+          },
+          {
+            "operator": "aten::matmul",
+            "input_shapes": [
+              [
+                1,
+                1,
+                3584
+              ],
+              [
+                3584,
+                512
+              ]
+            ],
+            "device_kernels": []
+          },
+          {
+            "operator": "aten::mm",
+            "input_shapes": [
+              [
+                1,
+                3584
+              ],
+              [
+                3584,
+                512
+              ]
+            ],
+            "device_kernels": [
+              "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, false, true, true, false, 7, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>)"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "scope": "Profile the separate HF bias-free QKV projections from captured normalized inputs.",
+  "stage": "w4-hf-qkv-retry-20261120.e5y92toi",
+  "controller_pid": 2342117,
+  "registered_utc": "2026-11-19T19:29:22Z",
+  "physical_gpu": 7,
+  "reservation_pid": 2431237,
+  "reference_operator_trace": "w4-decode-layer0-ops-20261120.hYAOtc0n",
+  "riley_plan_reference": "w4-qkv-plan-20261120.hpF6Lg0W",
+  "dispatch_tar_sha256": "73b0fc38f1c78ea491e54088cf0d19e5a6cc7635480ae8b4c8a746966a0119fc",
+  "trace_client_source": "apply trace-capture.patch.gz to ../trace_decode_layers.py",
+  "preflight": {
+    "synthetic_gpu_profiler_cpu_cuda_region_duplication": "reproduced",
+    "cpu_scope_filter": "passed",
+    "profiled_input": "same captured BF16 norm row and pinned weights",
+    "profiled_output_hash": "identical to the complete unprofiled reference"
+  }
+}

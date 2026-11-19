@@ -1,0 +1,32 @@
+{
+  "scope": "HF BF16 projection profiling and restored A100 holders.",
+  "first_stage": "w4-hf-qkv-path-20261120.onM3Qlsv",
+  "first_exit": 1,
+  "first_error": "expected one profiler region for projection q",
+  "first_error_log_sha256": "1e19188526b911587bd917055fd5656e4b601391e41502e6d8ad50aaf2ff58d4",
+  "first_rows": 0,
+  "retry_stage": "w4-hf-qkv-retry-20261120.e5y92toi",
+  "retry_exit": 0,
+  "chronology_utc": [
+    "START hf 2026-11-19T19:29:23Z",
+    "END hf 2026-11-19T19:30:03Z exit=0"
+  ],
+  "verified_summary_sha256": "1a2e5f014dfc13b6cc28f3aa5da16f0ed730f6a61173e90d6bc2c805756caeed",
+  "result_hash_list_sha256": "904bc62193600b3b9bbdea76fcd4242a2fa75f2d2fde77c8b4cfa89ecada4963",
+  "reservations": {
+    "6": {
+      "physical_index": 6,
+      "phase": "idle",
+      "pid": 2431228,
+      "start_ticks": "6339570869",
+      "allocation_bytes": 21474836480
+    },
+    "7": {
+      "physical_index": 7,
+      "phase": "idle",
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "allocation_bytes": 21474836480
+    }
+  }
+}

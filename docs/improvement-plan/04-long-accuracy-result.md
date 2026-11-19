@@ -109,6 +109,10 @@ A100 7번에서 연산별 대조를 완료했다. 두 사례의 입력 norm은 �
 
 Riley의 두 decode 행을 다시 실행하면서 bias 전 QKV 호출 직전에 선택된 계획을 기록했다. 두 실행 행 모두 cuBLASLt에서 `M=1, N=4608, K=3584`, 알고리즘 21, tile 15, stages 18, Split-K 1, reduction scheme 0이었다. 계측 뒤 전체 연산 행의 해시는 이전 Riley 추적과 일치했다. 이 선택에 대응하는 HF 투영의 GEMM과 누산 순서는 다음 대조 범위에 남아 있다. 두 GPU에서 기존 20GiB 예약 복귀도 확인했다. 재현할 때는 등록 파일이 지정한 상위 경로의 수집기를 진단 파일과 같은 디렉터리에 둔다. [실제 GEMM 선택](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/gemm-plan/verified-plan.json) · [실행 영수증](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/gemm-plan/completion.json) · [재현 등록](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/gemm-plan/registration.json)
 
+HF의 첫 프로파일은 같은 구간 이름이 CPU와 CUDA에 각각 기록돼 중단됐다. 합성 GPU 시험에서 중복을 재현한 뒤 CPU 구간만 선택하고 모델 forward 뒤 저장된 입력 norm으로 세 투영을 계측했다. 재실행에서 계측한 QKV는 기존 BF16 행과 바이트 단위로 같았고 두 사례의 전체 HF 추적 해시도 일치했다. [초기 실패·재실행과 예약 복구](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/hf-projection-profile/execution.json)
+
+두 사례에서 HF 재계산의 `aten::mm`은 Q에 `ampere_bf16_s16816gemm` 계열 커널을, K·V에 `internal::gemvx::kernel`을 사용했다. Riley는 Q·K·V를 합친 한 번의 cuBLASLt 투영을 사용했다. 실제 선택 경로와 연산 형상이 다른 것을 확인했고, 개별 내적에서 어느 누산 단계가 BF16 차이를 만드는지는 별도 재현 범위에 남는다. 종료 뒤 GPU 6·7은 기존 20GiB 예약으로 복귀했다. [HF 투영의 연산과 커널](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/hf-projection-profile/verified-profile.json) · [계측 재현 등록](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/hf-projection-profile/registration.json)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.
