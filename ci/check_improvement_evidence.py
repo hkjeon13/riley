@@ -176,6 +176,25 @@ def check_allocator_trial(root, trial, distribution):
             elif (allocator["image_id"] != image or allocator["library_sha256"] != library
                   or allocator["malloc_conf"] != trial["malloc_conf"]):
                 raise ValueError(f"allocator {name} timing reports use different allocator settings")
+
+    original = reports["metrics_observer"]
+    warmed = reports["metrics_observer_warmed"]
+    for record in (original, warmed):
+        observation = record["result"]
+        execution = record["execution"]
+        raw = (json.dumps(observation, indent=2, allow_nan=False) + "\n").encode("utf-8")
+        if (execution["campaign_exit"] != 0 or execution["physical_gpu"] != 6
+                or execution["remote_verified_json_sha256"] != sha256(raw).hexdigest()
+                or observation["api_checks"] != soak["results"]["cache-on"]["api_checks"]
+                or observation["image_id"] != image
+                or observation["candidate_binary_sha256"] != distribution["binary_sha256"]):
+            raise ValueError("allocator metrics observation is not bound to the completed A100 image run")
+
+    replay_result = warmed["result"]
+    if (replay_result["matched_prior_report_sha256"] != original["execution"]["remote_verified_json_sha256"]
+            or replay_result["checkpoint_sha256"] != original["result"]["checkpoint_sha256"]
+            or replay_result["same_counts_per_phase"] != original["result"]["same_counts_per_phase"]):
+        raise ValueError("allocator warmed metrics observation does not match the original run")
     return len(reports)
 
 
