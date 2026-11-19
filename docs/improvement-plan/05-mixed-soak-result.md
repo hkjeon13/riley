@@ -372,3 +372,17 @@ A100 6번의 파생 이미지 `1fc444b1840e`에서 하나의 Qwen2.5-7B-Instruct
 | 후반 전체 완료 시간 p95 변화 | +0.12% | +0.09% |
 
 정밀 RSS의 구간 시작 대비 drain 변화는 실행 순서대로 +34,784KiB, −16KiB, +60KiB, +88KiB였다. 가장 큰 변화가 첫 기준 구간에 있어 이 대조에서 추가 조회와 구간 순서의 RSS 영향을 분리하기 어렵다. 정밀 RSS를 구간 시작 전과 drain 뒤 동일 프로세스에서 읽었고, CPU 델타는 `/proc`의 user·system ticks로 계산했다. 종료 시 요청·KV·device·pinned 할당은 0이었고, GPU 6·7의 기존 20GiB 예약을 확인했다. 측정 범위는 이 이미지와 1Hz 추가 조회의 단일 교차 실행이다. [부하·관측 코드](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/metrics-observer/observer_client.py) · [이미지와 결과 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/metrics-observer/verify_observer.py)
+
+### 워밍업 후 역순 교차 대조
+
+같은 이미지와 실행 인자에서 API 40건을 확인한 뒤, 추가 조회 없이 같은 90초 혼합 부하로 워밍업했다. 워밍업에서 정밀 RSS는 34,780KiB, 익명 RSS는 28,636KiB 늘었다. 앞선 실행에서 첫 기준 구간의 정밀 RSS 증가량은 34,784KiB였다. 이어 한 프로세스에서 추가 조회 → 기준 → 기준 → 추가 조회 순서로 측정했다. 워밍업과 각 측정 구간에서 687건이 정상 완료됐고 30건을 의도적으로 연결 종료했다. 추가 조회는 두 구간에서 각각 95건 성공했다. [워밍업 포함 실행 순서](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/metrics-observer/warmed-replay/campaign.sh) · [관측값과 체크섬](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/metrics-observer/warmed-replay/verified-summary.json)
+
+| 추가 조회 구간과 기준 구간의 차이 | 추가 조회 먼저 | 기준 먼저 |
+|---|---:|---:|
+| 프로세스 CPU 초 / 경과 초 | +0.046% | +0.022% |
+| GPU 스텝 실행 시간 합 | −0.008% | −0.006% |
+| 후반 TTFT p95 | +1.62% | +0.56% |
+| 후반 전체 완료 시간 p95 | +0.07% | +0.06% |
+| 정밀 RSS 변화량 차이 | −280KiB | +260KiB |
+
+워밍업 뒤 각 구간의 정밀 RSS 변화량은 실행 순서대로 −88KiB, +192KiB, −108KiB, +152KiB였다. 큰 RSS 증가는 두 실행 모두 추가 조회가 없는 첫 혼합 부하에 나타났다. 워밍업 뒤 추가 조회의 RSS 차이는 순서에 따라 부호가 달랐다. 결과는 같은 Qwen2.5-7B-Instruct 합성 부하와 1Hz 추가 조회에서 관측한 값이다. 종료 영수증과 두 GPU 홀더의 20GiB 예약 복귀를 확인했다. [워밍업과 4개 구간 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/metrics-observer/warmed-replay/verify_warmed.py)
