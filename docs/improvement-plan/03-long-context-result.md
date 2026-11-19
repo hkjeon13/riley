@@ -180,6 +180,8 @@ SSE 요청 ID로 엔진 제출부터 첫 응답 조각 생성까지를 연결했
 
 각 열은 요청별 측정의 독립 중앙값이다. 두 RAG seed에서 대기 중 남은 입력이 512토큰 이하였던 구간의 중앙값은 334ms와 63ms였다. 스케줄러는 조각이 끝날 때 `ready_since_ns`를 갱신하며, 다음 선택은 이 시각과 aging 조건을 사용한다. 입장 순서와 반환 후 경과 시간은 추적에 기록됐다. 실제 우선순위와 aging 적용 여부는 다음 선택 시점의 `ready_since_ns`와 선택 사유를 기록해 확인한다. [prefill 선택](../../crates/riley-scheduler/src/scheduler.rs#L1745) · [조각 완료 처리](../../crates/riley-scheduler/src/scheduler.rs#L2568)
 
+`d3d8fe6e5`의 스케줄러를 사용한 CPU 재현에서 먼저 입장한 요청, 나중에 입장한 요청, 먼저 입장한 요청 순으로 prefill을 선택했다. 각 스텝은 decode 1행과 prefill 15행을 처리했다. 각 요청의 대기 시간은 aging 임계값 100ms 미만이었고, 먼저 입장한 요청은 자신의 첫 조각을 commit한 뒤 한 차례 양보하고 다음 조각을 이어갔다. 이 실행은 모델 없이 스케줄러의 조각 단위 순서를 확인한다. [재현 테스트](../../benchmarks/evidence/20261119-w3-rag-profile/request-stages/scheduler-turn-repro/prefill_turn_repro.rs) · [실행 기록](../../benchmarks/evidence/20261119-w3-rag-profile/request-stages/scheduler-turn-repro/receipt.json)
+
 후속 대조에서는 100ms 미만 기다린 새 prompt보다 진행 중인 prefill을 먼저 고려했다. 100ms를 지난 요청은 기존 순서로 경쟁하며 decode 선택과 기존 aging override를 적용했다. 격리 패치의 스케줄러 CPU 테스트 146건과 CUDA 기능을 켠 Rust 타입 검사가 통과했다. A100 GPU 7에서 같은 진단 바이너리의 옵션만 바꿔 위 다섯 부하와 32개 동시 짧은 요청을 실행했다. 두 조건의 측정 320쌍에서 출력이 일치했고, 별도 장문 8개는 C1·C8과 두 조건 모두에서 입력·생성 토큰 ID가 일치했다. 두 서버는 코드 0으로 종료했고 같은 홀더의 20GiB 예약으로 복귀했다. [실행 순서](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/campaign.sh) · [CPU 검사 원본](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/scheduler-tests.log.gz) · [GPU 원본과 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/prefill-continuation/result/SHA256SUMS)
 
 | 부하 | TTFT p95 변화 | decode TPOT p50 변화 | 처리량 변화 |
