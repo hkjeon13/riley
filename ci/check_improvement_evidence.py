@@ -3,7 +3,7 @@
 
 import argparse
 from decimal import Decimal
-from hashlib import file_digest
+from hashlib import file_digest, sha256
 import json
 from pathlib import Path
 import re
@@ -106,6 +106,76 @@ def check_distribution_revision(root, candidate, revision):
     if diff.stdout:
         raise ValueError(f"distribution inputs changed at {commit}: {', '.join(diff.stdout.splitlines())}")
     return commit
+
+
+def check_allocator_trial(root, trial, distribution):
+    records = trial["evidence"]
+    reports = {kind: json.loads((root / entry["path"]).read_bytes(), object_pairs_hook=unique_object)
+               for kind, entry in records.items()}
+    package = reports["package"]
+    soak = reports["soak"]
+    accuracy = reports["accuracy"]
+    performance = reports["performance"]
+    replay = reports["rag_replay"]
+    image = trial["image_id"]
+    parent = distribution["a100_rebuild_gpu_inference"]["image_id"]
+    if (package["status"] != "passed" or package["image_id"] != image or package["parent_image_id"] != parent
+            or package["binaries"]["/opt/riley/bin/riley"] != distribution["binary_sha256"]
+            or any(package[key] != distribution[key] for key in ("source_revision", "source_archive_sha256"))):
+        raise ValueError("allocator package is not linked to the A100 parent and its binary")
+    binding = soak["image_binding"]
+    if (binding != accuracy["image_binding"] or binding["status"] != "passed"
+            or any(binding[key] != package[key] for key in ("image_id", "parent_image_id", "source_revision",
+                                                            "source_archive_sha256", "binaries"))
+            or binding["experimental_packaged_cpu_attestation_sha256"] != records["package"]["sha256"]
+            or soak["gpu_checker_input_sha256"] != accuracy["gpu_checker_input_sha256"]):
+        raise ValueError("allocator package, soak and accuracy attestations differ")
+    combined = {**soak, "results": {**soak["results"], "accuracy": accuracy["result"]}}
+    encoded = (json.dumps(combined, indent=2, allow_nan=False) + "\n").encode("utf-8")
+    if sha256(encoded).hexdigest() != accuracy["combined_report_sha256"]:
+        raise ValueError("allocator accuracy is not part of the recorded combined GPU report")
+
+    library = package["added_files_sha256"]["/opt/riley/lib/libjemalloc.so.2"]
+    for scope, result in combined["results"].items():
+        process = result["process_allocator"]
+        if (result["status"] != "passed" or result["api_checks"] != 40 or process["image_id"] != image
+                or process["library_sha256"] != library or process["malloc_conf"] != trial["malloc_conf"]):
+            raise ValueError(f"allocator {scope} did not use the tested image and settings")
+    if set(soak["results"]) != {"cache-on", "cache-off"}:
+        raise ValueError("allocator trial needs both cache modes")
+    for mode, result in soak["results"].items():
+        verified = result["verified_soak"]
+        rss = result["mixed_soak"]["rss"]
+        if (verified["duration_seconds"] != 1800 or verified["problem_count"] != 0
+                or verified["checks"]["rss_growth_second_half_at_most_zero"] is not True
+                or rss["rss_growth_kib"] != rss["drain"]["rss_kib"] - rss["baseline"]["rss_kib"]
+                or rss["rss_growth_kib"] > 0):
+            raise ValueError(f"allocator {mode} lacks a passing 30-minute RSS result")
+    counts = {name: suite["verified_requests"] for name, suite in accuracy["result"]["accuracy_suites"].items()}
+    if counts != trial["accuracy_requests"]:
+        raise ValueError("allocator accuracy coverage differs from the recorded qualification scope")
+
+    order = ["parent-first", "packaged-first", "packaged-second", "parent-second"]
+    if (performance["order"] != order or replay["order"] != order
+            or set(performance["arms"]) != set(order) or set(replay["arms"]) != set(order)):
+        raise ValueError("allocator performance and fixed replay comparison arms differ")
+    server_args = performance["arms"][order[0]]["server"]["server_arguments"]
+    for name in order:
+        closed = performance["arms"][name]
+        fixed = replay["arms"][name]
+        expected = parent if name.startswith("parent-") else image
+        if (closed["api_checks"] != 40 or closed["image_id"] != expected or fixed["image_id"] != expected
+                or closed["server"]["image_id"] != expected
+                or closed["server"]["server_arguments"] != server_args or fixed["server_arguments"] != server_args):
+            raise ValueError(f"allocator {name} timing reports use a different image or serving configuration")
+        for allocator in (closed["server"]["allocator"], fixed["allocator"]):
+            if expected == parent:
+                if allocator != "glibc":
+                    raise ValueError(f"allocator {name} parent is not running glibc")
+            elif (allocator["image_id"] != image or allocator["library_sha256"] != library
+                  or allocator["malloc_conf"] != trial["malloc_conf"]):
+                raise ValueError(f"allocator {name} timing reports use different allocator settings")
+    return len(reports)
 
 
 def prose_lines(path):
@@ -217,6 +287,8 @@ def main():
         manifest = json.loads((root / MANIFEST).read_bytes(), object_pairs_hook=unique_object)
         files = check_evidence(root, manifest)
         inputs = check_distribution_inputs(root, manifest)
+        allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],
+                                                  manifest["current_distribution_candidate"])
         links = check_plan_links(root)
         models = check_readme_c32(root)
         revision = None
@@ -227,7 +299,7 @@ def main():
         print(f"improvement evidence check failed: {error}", file=sys.stderr)
         return 1
     print(f"improvement evidence verified: {files} file hashes, {inputs} recorded Git inputs, "
-          f"{links} local links, {models} README performance rows")
+          f"{links} local links, {models} README performance rows, {allocator_reports} linked allocator reports")
     if revision is not None:
         print(f"distribution source inputs match at {revision} ({inputs} recorded paths)")
     return 0

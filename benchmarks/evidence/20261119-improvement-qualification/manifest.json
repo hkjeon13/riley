@@ -1558,10 +1558,6 @@
     ],
     "w5_jemalloc_follow_up": [
       {
-        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/verified-replay.json",
-        "sha256": "341de9919ec11f0a9882a4fb313a6a24cdcf5c4ad330e25561a7ec62c8236d93"
-      },
-      {
         "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/campaign.sh",
         "sha256": "7cd83e98d2703f321e7e7f13d51b214c26c0f36b18aee74bb419cc80c5ce507b"
       },
@@ -1590,10 +1586,6 @@
         "sha256": "f9e0edd732d3cd222ba7d45ef6f7624305b948f7c83ea1eae83a08dada33c77f"
       },
       {
-        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/verified-performance.json",
-        "sha256": "318ddb75a3c2dacfabbecf44acb30a603b34bad433f3d302e5101a8e27c0916c"
-      },
-      {
         "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/audit_allocator_ttft.py",
         "sha256": "b9c98150657fd350e4f68bf8b73b0cb33861f5e540ad41fe8c1249584afa4cf3"
       },
@@ -1608,14 +1600,6 @@
       {
         "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/ttft-audit-rag-c8-seed2.json",
         "sha256": "07abcf645970ad019cb9e4c7324120403df09167f8be0825235748c1f9bb7652"
-      },
-      {
-        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/accuracy-verified.json",
-        "sha256": "eb184e42eddfcab38e4a6b17a2ece0c8e4df58c9e14851b015113e7fec1ed2c2"
-      },
-      {
-        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/verified-soaks.json",
-        "sha256": "854c8f15badbc41ab350b6b721508926d8f9f241d552f9a4a6f789156848ffcc"
       },
       {
         "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/cache-off-launch-verified.json",
@@ -1676,10 +1660,6 @@
       {
         "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/recheck/registration.json",
         "sha256": "8f3cf33bd9c4bcfcc2a6b8f2aff1b89fbdd4b950ac967b1cf5317b4ca8409bd4"
-      },
-      {
-        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/recheck/verified-image.json",
-        "sha256": "10d0e97f0ec6fdbe01dda553ac5d7d4e08077b846e309f0c055137d97c946835"
       },
       {
         "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/campaign.sh",
@@ -2234,6 +2214,36 @@
       "sha256": "faae843905903f555319332d088360d94e9753a550e5f9539b89a959802d182e"
     },
     "gpu_inference": "pending"
+  },
+  "current_allocator_trial": {
+    "image_id": "sha256:1fc444b1840e6f8d55b32fc603629e031ee018f674b9b1ab04b6a69c9445ff66",
+    "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+    "accuracy_requests": {
+      "baseline": 144,
+      "holdout": 88
+    },
+    "evidence": {
+      "package": {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/recheck/verified-image.json",
+        "sha256": "10d0e97f0ec6fdbe01dda553ac5d7d4e08077b846e309f0c055137d97c946835"
+      },
+      "soak": {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/verified-soaks.json",
+        "sha256": "854c8f15badbc41ab350b6b721508926d8f9f241d552f9a4a6f789156848ffcc"
+      },
+      "accuracy": {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/accuracy-verified.json",
+        "sha256": "eb184e42eddfcab38e4a6b17a2ece0c8e4df58c9e14851b015113e7fec1ed2c2"
+      },
+      "performance": {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/verified-performance.json",
+        "sha256": "318ddb75a3c2dacfabbecf44acb30a603b34bad433f3d302e5101a8e27c0916c"
+      },
+      "rag_replay": {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/verified-replay.json",
+        "sha256": "341de9919ec11f0a9882a4fb313a6a24cdcf5c4ad330e25561a7ec62c8236d93"
+      }
+    }
   },
   "current_distribution_candidate": {
     "audited_main": "68788bee925a7bcb9f62c3da4cd63130a4186c5e",

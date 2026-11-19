@@ -65,6 +65,8 @@ README의 24개 성능 행을 A100 원본 요약과 대조하고 이번에 수�
 
 Production CPU의 Documentation 단계에서 개선 계획서의 상대 링크와 Markdown 제목, qualification manifest에 연결된 근거 파일의 SHA-256, 배포 입력을 대조한 두 Git 리비전의 객체를 검증한다. 로컬에서는 `python3.12 ci/check_improvement_evidence.py`를 실행한다. [검증 스크립트](../../ci/check_improvement_evidence.py) · [Production CPU 워크플로](../../.github/workflows/production-cpu.yml)
 
+파생 할당기 시험은 패키징, API, 두 캐시 모드의 30분 부하, 장문 정확성, 기본 성능과 고정 도착 대조를 `current_allocator_trial`의 이미지 ID에 연결한다. CI에서 패키징 증명의 소스와 실행 파일, GPU 부하·정확성의 공통 증명, 지연 시험의 이미지·실행 인자·할당기 설정을 대조한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [릴리스 판정](06-candidate-qualification.md)
+
 같은 검사에서 README의 10월 A100 최대 동시성 32·고정 길이 표를 저장소에 보존한 모델별 표와 대조한다. 24개 모델의 두 엔진 처리량·TTFT·TPOT와 표시된 처리량 배수를 확인한다. 당시 기록에 적힌 AWS 원본 경로는 이번 점검에서 확인되지 않아 이 자동 검사는 보존된 표 사이의 일치를 검증한다. [README 성능표](../../README.md#performance) · [보존된 측정값과 당시 실행 이름](../model-coverage-a100-perf-table.md#측정-출처)
 
 성능표를 생성한다면 raw→검증된 집계→표의 입력·출력·버전이 명확한 작은 생성기를 둔다. 과거 결과와 새 후보를 섞거나 집계 중 실패 셀을 제거하지 않는다. 이 생성기는 제안이며 현재 구현되어 있지 않다.
@@ -177,7 +179,7 @@ Qwen2.5-7B-Instruct의 A100 네이티브 실행에서 각 30분 동안 초당 �
 
 - [x] W5-A: 점검한 사용자 문서의 버전·기본값·성능 주장을 소스나 해당 실행에 연결하고 과거 측정 시점을 표시했다. [주장별 확인 기록](#w5-a1-주장별-근거-목록-작성)
 - [x] W5-B: A100에서 네이티브 모델 추론을 실제로 실행했고, 통과·초기 실패·미검증 범위를 기록했다. [운영 결과](05-mixed-soak-result.md)
-- [ ] 후보별 correctness·API·performance·soak·패키징 결과가 같은 manifest로 연결된다.
+- [x] 기준 A100 이미지와 파생 할당기 시험 이미지의 실행 근거를 하나의 매니페스트에 연결했다. 파생 시험의 correctness·API·performance·soak·패키징은 CI가 동일 이미지 및 설정인지 검사한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 - [ ] prefix cache·취소·shutdown·관측 비용을 검증하고 미검증 범위를 명시한다.
 - [x] 합성 부하의 분포와 확인 기준, 실패 분류 및 회수 절차를 기록했다. [합성 부하의 확인 기준](#합성-부하의-확인-기준) · [후보 회수와 복구 확인](#후보-회수와-복구-확인)
 - [ ] 실제 운영 트래픽 분포와 서비스 SLO를 확인하고 해당 환경의 복구 절차를 검증한다.

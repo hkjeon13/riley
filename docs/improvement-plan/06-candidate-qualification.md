@@ -21,6 +21,7 @@
 python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 ```
 
+같은 명령은 `current_allocator_trial`의 다섯 검증 보고서를 대조한다. 파생 이미지의 패키징 증명에서 30분 부하 두 모드와 장문 정확성 보고서를 연결하고, 별도 성능 시험과 고정 도착 진단의 실제 이미지·실행 인자·할당기 설정도 일치해야 한다. 검사를 통과한 파생 이미지는 아래 RAG 꼬리 지연과 운영 도착 분포의 검증이 남아 있어 릴리스 보류 상태다. [파생 후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 
 ## 현재 판정
 
