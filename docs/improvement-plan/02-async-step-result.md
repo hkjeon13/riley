@@ -23,6 +23,20 @@ host trace의 연속 부하에 가까운 128스텝 구간 18개에서 submit과 
 
 첫 Nsight 실행은 GPU에 나타난 별도 프로세스 그룹의 PID를 확인할 수 없어 중단했다. 중단 시 GPU 7에는 홀더만 남았다. 재시도는 UID, 시작 시각, 실행 파일, 포트를 포함한 인자 전체가 일치하는 프로파일 대상을 확인했고, 로컬 임시 디렉터리에서 수집해 SQLite로 내보냈다. 첫 실행의 실패 로그와 receipt는 보관했다.
 
+### 커널 사이 공백과 CUDA 호출 시간의 대조
+
+같은 Nsight SQLite 원본에서 32행 decode graph 676개와 인접 구간 671개를 재현했다. CUDA 호출은 동일한 제출 스레드에서, DMA는 동일한 CUDA 컨텍스트에서 집계했다. 각 시간 구간을 이전 graph의 마지막 커널과 다음 graph의 첫 커널 사이로 잘라 합산했다. [재집계 결과와 원본 해시](../../benchmarks/evidence/20261118-w2-sm17-a100/nsys2/sync-gap-summary.json) · [검산기](../../benchmarks/evidence/20261118-w2-sm17-a100/tools/summarize_sync_gaps.py)
+
+| 관측 항목 | 중앙값 | p95 |
+|---|---:|---:|
+| 커널 사이 전체 | 470.72µs | 516.69µs |
+| 다음 `cudaGraphLaunch` 호출과 겹친 시간 | 264.91µs | 294.46µs |
+| DMA와 CUDA 동기화 호출이 차지한 합집합 | 46.26µs | 53.28µs |
+| DMA·동기화·다음 graph 호출을 뺀 구간 | 167.75µs | 196.56µs |
+| `cudaEventSynchronize` 완료 뒤 다음 launch 전의 `cudaStreamSynchronize` | 2.53µs | 2.83µs |
+
+671개 모두에서 event 동기화 뒤 stream 동기화가 관측됐다. 호출 순서로 각 stream의 의존성은 판정할 수 없다. 같은 모델의 별도 host trace에서 `SUBMIT` 구간 중앙값은 86.7µs였다. 이 구간은 제출 이후 이벤트 훅까지 포함하며 Nsight의 단일 launch 호출과 측정 범위가 다르다. 따라서 Nsight에서 본 공백 470.72µs를 개선 가능 시간으로 사용할 수 없다. 후속 실행 후보를 평가할 때는 제출 전 작업의 비용과 Nsight를 끈 동일 부하의 지연을 확인한다. [호스트 구간 원본](../../benchmarks/evidence/20261118-w2-sm17-a100/summary.json) · [제출 훅과 구간 경계](../../crates/riley-runtime/src/llama/executor/dispatch.rs)
+
 ## 최초 이벤트 발행 실험의 설정 정정
 
 `riley-lp16`의 `after-submit-v1`은 다음 GPU 제출 직후 이전에 commit된 이벤트를 발행한다. `native-bf16-varlen-v1` 프로파일이 이 값을 설정하므로, 최초 비교에서 플래그를 생략한 두 실행도 `after-submit-v1`이었다. [생략한 실행의 인자](../../benchmarks/evidence/20261118-w2-sm17-a100/paired-off1/receipt.json) · [명시한 실행의 인자](../../benchmarks/evidence/20261118-w2-sm17-a100/event1/receipt.json) · [프로파일 구현](../../crates/riley-server/src/inference_profile.rs)

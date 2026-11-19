@@ -1,0 +1,82 @@
+{
+  "sqlite_sha256": "b7914af14373b69a4264fdfcdce7bb4e71240d9d919c115961913e0fff17c683",
+  "sqlite_bytes": 35508224,
+  "graph_launches": 1100,
+  "matched_graphs": 676,
+  "matched_kernel_counts": {
+    "273": 676
+  },
+  "adjacent_matched_gaps": 671,
+  "intervals": {
+    "kernel_to_kernel": {
+      "count": 671,
+      "median_us": 470.718,
+      "p95_us": 516.686
+    },
+    "dma_coverage": {
+      "count": 671,
+      "median_us": 20.992,
+      "p95_us": 22.144
+    },
+    "cudaStreamSynchronize": {
+      "count": 671,
+      "median_us": 23.246,
+      "p95_us": 27.304
+    },
+    "cudaEventSynchronize": {
+      "count": 671,
+      "median_us": 9.038,
+      "p95_us": 9.466
+    },
+    "cudaDeviceSynchronize": {
+      "count": 671,
+      "median_us": 0.0,
+      "p95_us": 0.0
+    },
+    "dma_or_synchronization_coverage": {
+      "count": 671,
+      "median_us": 46.255,
+      "p95_us": 53.28
+    },
+    "unattributed_to_dma_or_synchronization": {
+      "count": 671,
+      "median_us": 423.507,
+      "p95_us": 465.934
+    },
+    "next_graph_launch_api_coverage": {
+      "count": 671,
+      "median_us": 264.906,
+      "p95_us": 294.4585
+    },
+    "next_kernel_minus_launch_return": {
+      "count": 671,
+      "median_us": 6.57,
+      "p95_us": 7.4105
+    },
+    "prior_kernel_end_to_next_launch_call": {
+      "count": 671,
+      "median_us": 198.885,
+      "p95_us": 231.369
+    },
+    "unattributed_to_dma_synchronization_or_launch_api": {
+      "count": 671,
+      "median_us": 167.754,
+      "p95_us": 196.5565
+    },
+    "stream_sync_after_event_sync_when_present": {
+      "count": 671,
+      "median_us": 2.525,
+      "p95_us": 2.8315
+    }
+  },
+  "counts": {
+    "cudaStreamSynchronize_calls_overlapping": 1342,
+    "cudaStreamSynchronize_gaps_with_overlap": 671,
+    "cudaEventSynchronize_calls_overlapping": 671,
+    "cudaEventSynchronize_gaps_with_overlap": 671,
+    "cudaDeviceSynchronize_calls_overlapping": 0,
+    "cudaDeviceSynchronize_gaps_with_overlap": 0,
+    "gaps_with_stream_sync_after_event_sync": 671
+  },
+  "scope": "CPU calls and DMA are clipped to kernel-to-kernel gaps in one profiled graph lane. Ordering alone does not identify which fence a stream call waited for."
+}

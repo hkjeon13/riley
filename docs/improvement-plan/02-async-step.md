@@ -4,7 +4,7 @@
 선행 조건: [W1 검증 복구](01-validation-and-release.md), [W4 정확성 기준](04-correctness-and-schema.md)\
 종합 계획: [진행 단계·공통 가드레일](README.md)
 
-2026-11-18 사전 확인: [착수 범위·GPU 준비 기록](02-async-step-preflight.md)을 추가했다. 코드 조사·소유권 설계는 CPU에서 진행할 수 있다. 실제 비동기 실행 변경의 검증과 채택은 GPU 기준 측정 재현 뒤에 수행한다. W1 로컬 검사 복구는 완료했고 실제 Linux CI 확인은 남아 있다.
+2026-11-18 사전 확인: [착수 범위·GPU 준비 기록](02-async-step-preflight.md)을 추가했다. 코드 조사·소유권 설계는 CPU에서 진행할 수 있다. 실제 비동기 실행 변경의 검증과 채택은 GPU 기준 측정 재현 뒤에 수행한다. W1 로컬 검사와 Linux CI를 확인했다. [W1 검증 결과](01-validation-result.md)
 
 `aws-a100` GPU 7에서 기준선과 Nsight trace를 재현했다. 기존 `after-submit-v1` 옵션의 비교와 GPU 6·7 예약 상태는 [W2 GPU 실행 결과](02-async-step-result.md)에 기록했다.
 
