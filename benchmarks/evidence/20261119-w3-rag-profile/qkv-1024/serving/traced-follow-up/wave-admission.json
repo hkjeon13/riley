@@ -1,0 +1,1129 @@
+{
+  "scope": "Observed admission and prefill order, with the original scheduler replayed before the first decode.",
+  "cell": "wave-50ms",
+  "wave_request_indices": [
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47
+  ],
+  "target_request": 41,
+  "admission_changed_in_counterfactual": 45,
+  "first_changed_prefill_wave_step": 8,
+  "scheduler_inputs_sha256": {
+    "scheduler.rs": "5585da9cf2fe5ae0b8ea64c2a4903d4827c2d04b175ed8263d57935aa2fe9cbd",
+    "config.rs": "f9ff49e150d762e74d02548dc891fc7eb9d539d969276710e3d9ca148d015aae"
+  },
+  "cpu_replay_binary_sha256": "326707256920bd4723297c56c7a98a9c740dfe1792381e4b24ce9bdfa85486aa",
+  "gpu_trace_binary_sha256": "917caae4ff7467c58650ff5cf67004c17893aa862fd38371d2a940952c2ca398",
+  "arms": {
+    "riley-first": {
+      "server_log_sha256": "a46fffb9ca409994e68e88cd9c4d6c1e4cdf676393fe91743733c3b63ffa2f7a",
+      "traced_cell_sha256": "6cb488dbbd048c0ee53e0ddf69f7c2838b40eca213074cd8f64f93e1cdd4d894",
+      "target_prompt_tokens": 3503,
+      "request_45_send_minus_wave_step_3_start_ns": -2695285,
+      "request_45_admit_minus_wave_step_3_start_ns": -44304,
+      "request_45_admit_minus_wave_step_3_return_ns": -123133205,
+      "original_45_admission_ns": 252689554,
+      "moved_45_admission_ns": 375822760,
+      "wave_step_3_start_ns": 252733858,
+      "wave_step_3_end_ns": 375822759,
+      "cpu_replay_inputs": {
+        "admissions_ns": {
+          "40": 0,
+          "41": 120525608,
+          "42": 120591250,
+          "43": 252567359,
+          "44": 252624837,
+          "45": 252689554,
+          "46": 375922595,
+          "47": 375988178
+        },
+        "prompt_tokens": {
+          "40": 3509,
+          "41": 3503,
+          "42": 3509,
+          "43": 3501,
+          "44": 1802,
+          "45": 3495,
+          "46": 3504,
+          "47": 1772
+        },
+        "step_windows_ns": [
+          [
+            44179,
+            120433726
+          ],
+          [
+            120643487,
+            252482230
+          ],
+          [
+            252733858,
+            375822759
+          ],
+          [
+            376034525,
+            499119740
+          ],
+          [
+            499194212,
+            639136090
+          ],
+          [
+            639208437,
+            762219295
+          ],
+          [
+            762284511,
+            886269525
+          ],
+          [
+            886336233,
+            1014127519
+          ],
+          [
+            1014199913,
+            1147600748
+          ]
+        ]
+      },
+      "observed_early_plans": [
+        [
+          40,
+          0,
+          1024
+        ],
+        [
+          40,
+          1024,
+          2048
+        ],
+        [
+          41,
+          0,
+          1024
+        ],
+        [
+          42,
+          0,
+          1024
+        ],
+        [
+          40,
+          2048,
+          3072
+        ],
+        [
+          43,
+          0,
+          1024
+        ],
+        [
+          44,
+          0,
+          1024
+        ],
+        [
+          45,
+          0,
+          1024
+        ],
+        [
+          41,
+          1024,
+          2048
+        ]
+      ],
+      "scheduler_cpu_replay": [
+        [
+          40,
+          0,
+          1024
+        ],
+        [
+          40,
+          1024,
+          2048
+        ],
+        [
+          41,
+          0,
+          1024
+        ],
+        [
+          42,
+          0,
+          1024
+        ],
+        [
+          40,
+          2048,
+          3072
+        ],
+        [
+          43,
+          0,
+          1024
+        ],
+        [
+          44,
+          0,
+          1024
+        ],
+        [
+          45,
+          0,
+          1024
+        ],
+        [
+          41,
+          1024,
+          2048
+        ]
+      ],
+      "scheduler_cpu_replay_with_only_45_moved": [
+        [
+          40,
+          0,
+          1024
+        ],
+        [
+          40,
+          1024,
+          2048
+        ],
+        [
+          41,
+          0,
+          1024
+        ],
+        [
+          42,
+          0,
+          1024
+        ],
+        [
+          40,
+          2048,
+          3072
+        ],
+        [
+          43,
+          0,
+          1024
+        ],
+        [
+          44,
+          0,
+          1024
+        ],
+        [
+          41,
+          1024,
+          2048
+        ],
+        [
+          45,
+          0,
+          1024
+        ]
+      ],
+      "target_prefill_steps": [
+        {
+          "wave_step": 3,
+          "row_range": [
+            0,
+            1024
+          ],
+          "decode_rows": 0,
+          "batch_rows": 1024,
+          "peers": []
+        },
+        {
+          "wave_step": 9,
+          "row_range": [
+            1024,
+            2048
+          ],
+          "decode_rows": 0,
+          "batch_rows": 1024,
+          "peers": []
+        },
+        {
+          "wave_step": 15,
+          "row_range": [
+            2048,
+            3070
+          ],
+          "decode_rows": 2,
+          "batch_rows": 1024,
+          "peers": []
+        },
+        {
+          "wave_step": 20,
+          "row_range": [
+            3070,
+            3503
+          ],
+          "decode_rows": 3,
+          "batch_rows": 1024,
+          "peers": [
+            {
+              "request_index": 46,
+              "rows": 588
+            }
+          ]
+        }
+      ],
+      "verified_request_streams": 40
+    },
+    "qkv-first": {
+      "server_log_sha256": "07461406bd731a927a5bf6629965d43170707d322270a102853efeeebc38c140",
+      "traced_cell_sha256": "ed083cdbecd7ba90a251a211c9cc704097fdefc373812cac61645a3b2cf7cb3c",
+      "target_prompt_tokens": 3503,
+      "request_45_send_minus_wave_step_3_start_ns": 3435974,
+      "request_45_admit_minus_wave_step_3_start_ns": 119953345,
+      "request_45_admit_minus_wave_step_3_return_ns": 122719,
+      "original_45_admission_ns": 366049332,
+      "moved_45_admission_ns": 246025481,
+      "wave_step_3_start_ns": 246095987,
+      "wave_step_3_end_ns": 365926613,
+      "cpu_replay_inputs": {
+        "admissions_ns": {
+          "40": 0,
+          "41": 117336634,
+          "42": 117406238,
+          "43": 245950415,
+          "44": 246025480,
+          "45": 366049332,
+          "46": 366148824,
+          "47": 366225896
+        },
+        "prompt_tokens": {
+          "40": 3509,
+          "41": 3503,
+          "42": 3509,
+          "43": 3501,
+          "44": 1802,
+          "45": 3495,
+          "46": 3504,
+          "47": 1772
+        },
+        "step_windows_ns": [
+          [
+            45729,
+            117227788
+          ],
+          [
+            117453682,
+            245761030
+          ],
+          [
+            246095987,
+            365926613
+          ],
+          [
+            366283423,
+            486061365
+          ],
+          [
+            486155783,
+            622805560
+          ],
+          [
+            622880245,
+            742887486
+          ],
+          [
+            742966100,
+            863656862
+          ],
+          [
+            863748769,
+            996004602
+          ],
+          [
+            996084545,
+            1117175920
+          ]
+        ]
+      },
+      "observed_early_plans": [
+        [
+          40,
+          0,
+          1024
+        ],
+        [
+          40,
+          1024,
+          2048
+        ],
+        [
+          41,
+          0,
+          1024
+        ],
+        [
+          42,
+          0,
+          1024
+        ],
+        [
+          40,
+          2048,
+          3072
+        ],
+        [
+          43,
+          0,
+          1024
+        ],
+        [
+          44,
+          0,
+          1024
+        ],
+        [
+          41,
+          1024,
+          2048
+        ],
+        [
+          45,
+          0,
+          1024
+        ]
+      ],
+      "scheduler_cpu_replay": [
+        [
+          40,
+          0,
+          1024
+        ],
+        [
+          40,
+          1024,
+          2048
+        ],
+        [
+          41,
+          0,
+          1024
+        ],
+        [
+          42,
+          0,
+          1024
+        ],
+        [
+          40,
+          2048,
+          3072
+        ],
+        [
+          43,
+          0,
+          1024
+        ],
+        [
+          44,
+          0,
+          1024
+        ],
+        [
+          41,
+          1024,
+          2048
+        ],
+        [
+          45,
+          0,
+          1024
+        ]
+      ],
+      "scheduler_cpu_replay_with_only_45_moved": [
+        [
+          40,
+          0,
+          1024
+        ],
+        [
+          40,
+          1024,
+          2048
+        ],
+        [
+          41,
+          0,
+          1024
+        ],
+        [
+          42,
+          0,
+          1024
+        ],
+        [
+          40,
+          2048,
+          3072
+        ],
+        [
+          43,
+          0,
+          1024
+        ],
+        [
+          44,
+          0,
+          1024
+        ],
+        [
+          45,
+          0,
+          1024
+        ],
+        [
+          41,
+          1024,
+          2048
+        ]
+      ],
+      "target_prefill_steps": [
+        {
+          "wave_step": 3,
+          "row_range": [
+            0,
+            1024
+          ],
+          "decode_rows": 0,
+          "batch_rows": 1024,
+          "peers": []
+        },
+        {
+          "wave_step": 8,
+          "row_range": [
+            1024,
+            2048
+          ],
+          "decode_rows": 0,
+          "batch_rows": 1024,
+          "peers": []
+        },
+        {
+          "wave_step": 14,
+          "row_range": [
+            2048,
+            2293
+          ],
+          "decode_rows": 1,
+          "batch_rows": 1024,
+          "peers": [
+            {
+              "request_index": 44,
+              "rows": 778
+            }
+          ]
+        },
+        {
+          "wave_step": 19,
+          "row_range": [
+            2293,
+            3314
+          ],
+          "decode_rows": 3,
+          "batch_rows": 1024,
+          "peers": []
+        },
+        {
+          "wave_step": 23,
+          "row_range": [
+            3314,
+            3468
+          ],
+          "decode_rows": 3,
+          "batch_rows": 1024,
+          "peers": [
+            {
+              "request_index": 43,
+              "rows": 867
+            }
+          ]
+        },
+        {
+          "wave_step": 25,
+          "row_range": [
+            3468,
+            3503
+          ],
+          "decode_rows": 6,
+          "batch_rows": 47,
+          "peers": [
+            {
+              "request_index": 42,
+              "rows": 6
+            }
+          ]
+        }
+      ],
+      "verified_request_streams": 40
+    },
+    "qkv-second": {
+      "server_log_sha256": "f83d060f12c971c6e4ca2375a4907da1cb6f0de84e26f2ce216f544932b2a2cd",
+      "traced_cell_sha256": "feb3e5e3ca9e3893133cbc1fdee980a2dacce56e87b5c416bbc383290520b7a7",
+      "target_prompt_tokens": 3503,
+      "request_45_send_minus_wave_step_3_start_ns": 3543413,
+      "request_45_admit_minus_wave_step_3_start_ns": 119921161,
+      "request_45_admit_minus_wave_step_3_return_ns": 118697,
+      "original_45_admission_ns": 366025847,
+      "moved_45_admission_ns": 246060471,
+      "wave_step_3_start_ns": 246104686,
+      "wave_step_3_end_ns": 365907150,
+      "cpu_replay_inputs": {
+        "admissions_ns": {
+          "40": 0,
+          "41": 117440885,
+          "42": 117518020,
+          "43": 245994453,
+          "44": 246060470,
+          "45": 366025847,
+          "46": 366106474,
+          "47": 366171235
+        },
+        "prompt_tokens": {
+          "40": 3509,
+          "41": 3503,
+          "42": 3509,
+          "43": 3501,
+          "44": 1802,
+          "45": 3495,
+          "46": 3504,
+          "47": 1772
+        },
+        "step_windows_ns": [
+          [
+            46783,
+            117322826
+          ],
+          [
+            117576197,
+            245871523
+          ],
+          [
+            246104686,
+            365907150
+          ],
+          [
+            366218818,
+            486062008
+          ],
+          [
+            486142953,
+            622845393
+          ],
+          [
+            622917627,
+            743205327
+          ],
+          [
+            743274345,
+            863587222
+          ],
+          [
+            863663189,
+            995688346
+          ],
+          [
+            995768832,
+            1117859749
+          ]
+        ]
+      },
+      "observed_early_plans": [
+        [
+          40,
+          0,
+          1024
+        ],
+        [
+          40,
+          1024,
+          2048
+        ],
+        [
+          41,
+          0,
+          1024
+        ],
+        [
+          42,
+          0,
+          1024
+        ],
+        [
+          40,
+          2048,
+          3072
+        ],
+        [
+          43,
+          0,
+          1024
+        ],
+        [
+          44,
+          0,
+          1024
+        ],
+        [
+          41,
+          1024,
+          2048
+        ],
+        [
+          45,
+          0,
+          1024
+        ]
+      ],
+      "scheduler_cpu_replay": [
+        [
+          40,
+          0,
+          1024
+        ],
+        [
+          40,
+          1024,
+          2048
+        ],
+        [
+          41,
+          0,
+          1024
+        ],
+        [
+          42,
+          0,
+          1024
+        ],
+        [
+          40,
+          2048,
+          3072
+        ],
+        [
+          43,
+          0,
+          1024
+        ],
+        [
+          44,
+          0,
+          1024
+        ],
+        [
+          41,
+          1024,
+          2048
+        ],
+        [
+          45,
+          0,
+          1024
+        ]
+      ],
+      "scheduler_cpu_replay_with_only_45_moved": [
+        [
+          40,
+          0,
+          1024
+        ],
+        [
+          40,
+          1024,
+          2048
+        ],
+        [
+          41,
+          0,
+          1024
+        ],
+        [
+          42,
+          0,
+          1024
+        ],
+        [
+          40,
+          2048,
+          3072
+        ],
+        [
+          43,
+          0,
+          1024
+        ],
+        [
+          44,
+          0,
+          1024
+        ],
+        [
+          45,
+          0,
+          1024
+        ],
+        [
+          41,
+          1024,
+          2048
+        ]
+      ],
+      "target_prefill_steps": [
+        {
+          "wave_step": 3,
+          "row_range": [
+            0,
+            1024
+          ],
+          "decode_rows": 0,
+          "batch_rows": 1024,
+          "peers": []
+        },
+        {
+          "wave_step": 8,
+          "row_range": [
+            1024,
+            2048
+          ],
+          "decode_rows": 0,
+          "batch_rows": 1024,
+          "peers": []
+        },
+        {
+          "wave_step": 14,
+          "row_range": [
+            2048,
+            2293
+          ],
+          "decode_rows": 1,
+          "batch_rows": 1024,
+          "peers": [
+            {
+              "request_index": 44,
+              "rows": 778
+            }
+          ]
+        },
+        {
+          "wave_step": 19,
+          "row_range": [
+            2293,
+            3314
+          ],
+          "decode_rows": 3,
+          "batch_rows": 1024,
+          "peers": []
+        },
+        {
+          "wave_step": 23,
+          "row_range": [
+            3314,
+            3468
+          ],
+          "decode_rows": 3,
+          "batch_rows": 1024,
+          "peers": [
+            {
+              "request_index": 43,
+              "rows": 867
+            }
+          ]
+        },
+        {
+          "wave_step": 25,
+          "row_range": [
+            3468,
+            3503
+          ],
+          "decode_rows": 6,
+          "batch_rows": 47,
+          "peers": [
+            {
+              "request_index": 42,
+              "rows": 6
+            }
+          ]
+        }
+      ],
+      "verified_request_streams": 40
+    },
+    "riley-second": {
+      "server_log_sha256": "ca99784b10d4ae1c1201da59b566dcdb7510c911b210a599dbc221f41bbdcb24",
+      "traced_cell_sha256": "268e7d3b4310cc0a71de36f097fbc0adf6becbbf371f2b7577088b9acf0c2e4b",
+      "target_prompt_tokens": 3503,
+      "request_45_send_minus_wave_step_3_start_ns": -2092477,
+      "request_45_admit_minus_wave_step_3_start_ns": -42884,
+      "request_45_admit_minus_wave_step_3_return_ns": -123061355,
+      "original_45_admission_ns": 251926403,
+      "moved_45_admission_ns": 374987759,
+      "wave_step_3_start_ns": 251969287,
+      "wave_step_3_end_ns": 374987758,
+      "cpu_replay_inputs": {
+        "admissions_ns": {
+          "40": 0,
+          "41": 119530127,
+          "42": 119605587,
+          "43": 251793560,
+          "44": 251853436,
+          "45": 251926403,
+          "46": 375087213,
+          "47": 375164165
+        },
+        "prompt_tokens": {
+          "40": 3509,
+          "41": 3503,
+          "42": 3509,
+          "43": 3501,
+          "44": 1802,
+          "45": 3495,
+          "46": 3504,
+          "47": 1772
+        },
+        "step_windows_ns": [
+          [
+            41416,
+            119437363
+          ],
+          [
+            119655939,
+            251691350
+          ],
+          [
+            251969287,
+            374987758
+          ],
+          [
+            375213038,
+            498364429
+          ],
+          [
+            498503060,
+            638296600
+          ],
+          [
+            638381043,
+            761243591
+          ],
+          [
+            761321330,
+            884467523
+          ],
+          [
+            884551130,
+            1011295207
+          ],
+          [
+            1011383785,
+            1142750902
+          ]
+        ]
+      },
+      "observed_early_plans": [
+        [
+          40,
+          0,
+          1024
+        ],
+        [
+          40,
+          1024,
+          2048
+        ],
+        [
+          41,
+          0,
+          1024
+        ],
+        [
+          42,
+          0,
+          1024
+        ],
+        [
+          40,
+          2048,
+          3072
+        ],
+        [
+          43,
+          0,
+          1024
+        ],
+        [
+          44,
+          0,
+          1024
+        ],
+        [
+          45,
+          0,
+          1024
+        ],
+        [
+          41,
+          1024,
+          2048
+        ]
+      ],
+      "scheduler_cpu_replay": [
+        [
+          40,
+          0,
+          1024
+        ],
+        [
+          40,
+          1024,
+          2048
+        ],
+        [
+          41,
+          0,
+          1024
+        ],
+        [
+          42,
+          0,
+          1024
+        ],
+        [
+          40,
+          2048,
+          3072
+        ],
+        [
+          43,
+          0,
+          1024
+        ],
+        [
+          44,
+          0,
+          1024
+        ],
+        [
+          45,
+          0,
+          1024
+        ],
+        [
+          41,
+          1024,
+          2048
+        ]
+      ],
+      "scheduler_cpu_replay_with_only_45_moved": [
+        [
+          40,
+          0,
+          1024
+        ],
+        [
+          40,
+          1024,
+          2048
+        ],
+        [
+          41,
+          0,
+          1024
+        ],
+        [
+          42,
+          0,
+          1024
+        ],
+        [
+          40,
+          2048,
+          3072
+        ],
+        [
+          43,
+          0,
+          1024
+        ],
+        [
+          44,
+          0,
+          1024
+        ],
+        [
+          41,
+          1024,
+          2048
+        ],
+        [
+          45,
+          0,
+          1024
+        ]
+      ],
+      "target_prefill_steps": [
+        {
+          "wave_step": 3,
+          "row_range": [
+            0,
+            1024
+          ],
+          "decode_rows": 0,
+          "batch_rows": 1024,
+          "peers": []
+        },
+        {
+          "wave_step": 9,
+          "row_range": [
+            1024,
+            2048
+          ],
+          "decode_rows": 0,
+          "batch_rows": 1024,
+          "peers": []
+        },
+        {
+          "wave_step": 15,
+          "row_range": [
+            2048,
+            3070
+          ],
+          "decode_rows": 2,
+          "batch_rows": 1024,
+          "peers": []
+        },
+        {
+          "wave_step": 20,
+          "row_range": [
+            3070,
+            3503
+          ],
+          "decode_rows": 3,
+          "batch_rows": 1024,
+          "peers": [
+            {
+              "request_index": 46,
+              "rows": 588
+            }
+          ]
+        }
+      ],
+      "verified_request_streams": 40
+    }
+  }
+}

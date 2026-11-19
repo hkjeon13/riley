@@ -303,7 +303,15 @@ A100 7번에서 네 비교군을 완료했다. 이전 비계측 비교의 해당
 | 같은 요청의 prefill 조각 사이 대기 변화 | +380.57ms | +392.26ms |
 | 같은 요청의 prefill 스텝 실행 구간 변화 | +154.60ms | +157.31ms |
 
-3,503토큰인 41번 요청은 두 쌍 모두 자체 prefill이 4스텝에서 6스텝으로 늘었다. 자체 조각 사이의 다른 prefill은 14스텝에서 17스텝으로, 나중에 입장한 요청만 실행한 스텝은 12개에서 15개로 늘었다. 같은 요청의 첫 두 1,024행 스텝은 두 쌍에서 GPU 시간이 각각 −3.26·−1.14ms와 −3.22·+0.66ms 변했다. GPU 시간은 스텝 전체의 측정값이며, 이 원본으로는 알고리즘 변경이 스케줄 순서를 바꾼 시점이나 개별 QKV 호출의 실행 시간을 판정할 수 없다. `rag-c8-s2`는 순서마다 p95 변화 방향이 달랐다. 기본값 적용은 계속 보류한다. [요청별 실행 행·대기 구간](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/stage-attribution.json) · [스텝 구성 재검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/attribute_qkv_steps.py)
+3,503토큰인 41번 요청은 두 쌍 모두 자체 prefill이 4스텝에서 6스텝으로 늘었다. 자체 조각 사이의 다른 prefill은 14스텝에서 17스텝으로, 나중에 입장한 요청만 실행한 스텝은 12개에서 15개로 늘었다. 같은 요청의 첫 두 1,024행 스텝은 두 쌍에서 GPU 시간이 각각 −3.26·−1.14ms와 −3.22·+0.66ms 변했다. GPU 시간은 스텝 전체의 측정값이다. 개별 QKV 호출 시간은 별도 계측이 필요하다. `rag-c8-s2`는 순서마다 p95 변화 방향이 달랐다. 기본값 적용은 계속 보류한다. [요청별 실행 행·대기 구간](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/stage-attribution.json) · [스텝 구성 재검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/attribute_qkv_steps.py)
+
+#### 다섯 번째 묶음의 입장 시점과 prefill 순서
+
+같은 네 실행의 다섯 번째 묶음에서 세 번째 스텝은 모두 41번 요청의 첫 1,024행을 실행했다. 45번 요청의 엔진 명령 전송 시각은 기준군에서 이 스텝 시작보다 2.09–2.70ms 앞섰고, 후보군에서는 3.44–3.54ms 뒤였다. 기준군은 스텝 직전 45번을 입장시켰고, 후보군은 해당 스텝이 반환된 직후 입장시켰다. 일곱 번째 스텝까지 선택된 요청과 행은 네 실행에서 같았다. 여덟 번째·아홉 번째 스텝의 순서는 기준군에서 45→41, 후보군에서 41→45였다. [시각·순서와 원본 해시](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/wave-admission.json)
+
+CUDA 빌드와 `scheduler.rs`·`config.rs` 해시가 같은 스케줄러로 첫 9개 스텝을 CPU에서 재생했다. 네 실행의 요청 순서와 선택된 토큰 범위가 정확히 일치했다. 각 실행에서 45번의 입장 시점만 세 번째 스텝 경계 반대편으로 옮기자 여덟 번째·아홉 번째 선택도 두 방향에서 뒤집혔다. 별도 GPU 세션 없이 기존 기록으로 확인한 원인 범위는 첫 선택 차이까지다. [스케줄러 재생 코드](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/replay_wave.rs) · [기록 대조 도구](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/compare_wave_admission.py)
+
+뒤이은 41번의 세 번째 prefill은 기준군에서 1,022행을 받았다. 후보군의 해당 스텝은 44번의 완료 prefill 778행과 decode 1행을 함께 처리해 41번에 245행을 배정했다. QKV 후보의 채택은 입장 경계가 달라지는 부하에서도 TTFT p95와 decode 회귀 기준을 함께 만족하는지에 달려 있다.
 
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 

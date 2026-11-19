@@ -1306,6 +1306,20 @@
         "sha256": "16d70dfdf06ace25f3eb5d57a69fd292785193fd3b8a2f187c6e493de4525710"
       }
     ],
+    "qwen14_qkv_wave_admission": [
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/compare_wave_admission.py",
+        "sha256": "4afada3fdecde785eede70f4023877dc42d17db168aeeb276a8a5e7ed85a1bf2"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/replay_wave.rs",
+        "sha256": "b9f6e4978fa423ddfd6e726e28dc09c6a9622a9034e516a14aecefa5ef1668df"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/wave-admission.json",
+        "sha256": "bc178f37b605a4dd368aeb833f0a8604e243f76b8989733149f6cd3e28851021"
+      }
+    ],
     "qwen14_qkv_1024_traced_follow_up": {
       "archived_baseline_timing": {
         "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/archived-wave-timing.json",
