@@ -1,0 +1,30 @@
+{
+  "campaign": "w5-tcache-control-20261119.liqVpVJ7",
+  "campaign_pid": 3173050,
+  "state_at_registration": "waiting",
+  "physical_gpu": 6,
+  "prerequisite": "w3-qkv-tracing-20261119.s9zZEnqW",
+  "same_image_reference_campaign": "w5-trim-7sec-retry-20261119.fKlbclsw",
+  "allocator_setting": "GLIBC_TUNABLES=glibc.malloc.tcache_count=0",
+  "period_ms": 7000,
+  "modes": [
+    "cache-off",
+    "cache-on"
+  ],
+  "cpu_harness_fixture": "passed, including failed RSS gate and missing marker rejection",
+  "same_image_cpu_probe": "scheduled before using GPU",
+  "sha256": {
+    "campaign.sh": "9fd70b5c66286407b87ce8a0ef8ee4aedf026654cbba300724ae24048f3a573c",
+    "tcache_probe.c": "18213747242bf93587b46df5bcb9e30ccb3174d5e08a4cf3e797663098942131",
+    "compare_tcache.py": "112eef52b2b727a65e2bd6ce106e43bd4e04c29b4f79097e7fe68846d3cb080b",
+    "compare_arena_shape.py": "82ac2669c0f2e2a1910fb10d7440d3335092f22a5aa93956036164e335de2eed",
+    "periodic_trim.py.patch.gz": "22d6d5e3f71d9ed6f5c1bbcb61f172ec0b91697821d9b6aefac8124bb51d6b4e",
+    "observe_soak.py.patch.gz": "dc1a18205052aad5548b5caf1e31944fa02597e7612ce67dd2b5d6c309771cc0",
+    "patch-base.sha256": "7cf2e80bd056ba7eb95a1980121ba1e388041fa5da5aa9c60d4aeeaa88c61259",
+    "patch-result.sha256": "0a1ab9e99c1564ccd41991e3a1af4685c9b278cbca01da6ee240b6632b2c7120",
+    "helpers.sha256": "5a54c08fa3623e64445e1358c0388d957bcf7c2b99c2c2a5258a7f9fce27b146",
+    "harness-base.sha256": "db3c717151cb47252cf6c3c3c495ce702ff94c6299bcdbe0d3e06c4ba3b234ed",
+    "dispatch.sha256": "eb3e213d7a4df204b661baa48866a1f67c83764a2cc817bb14bee340cf9d625e",
+    "arena-shape-comparison.json": "33ad1f73d0c126cc9dfbc0aa45e3371167ae7c190e0829e90c59c6a2fa3f6ccc"
+  }
+}

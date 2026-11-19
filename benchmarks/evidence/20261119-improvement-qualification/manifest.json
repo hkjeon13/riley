@@ -1018,6 +1018,16 @@
       "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/first-candidate-startup.json",
       "sha256": "552c4fa70f7c13fa5a6bddba1b6b8f6d0a134898b85eb469a3f7b6da5f84c0fe"
     },
+    "distribution_7second_tcache_control": {
+      "arena_shape_analysis": {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/arena-shape-comparison.json",
+        "sha256": "33ad1f73d0c126cc9dfbc0aa45e3371167ae7c190e0829e90c59c6a2fa3f6ccc"
+      },
+      "registration": {
+        "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/registration.json",
+        "sha256": "f80cb5380a6e5a96a7071620d0c809c3222c9f7a582849517503bec71ff4b4ca"
+      }
+    },
     "qwen14_qkv_1024_traced_follow_up": {
       "archived_baseline_timing": {
         "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/archived-wave-timing.json",

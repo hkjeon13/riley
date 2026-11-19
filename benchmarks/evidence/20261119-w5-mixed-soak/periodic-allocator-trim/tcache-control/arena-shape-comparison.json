@@ -1,0 +1,63 @@
+{
+  "scope": "Adjacent anonymized smaps snapshots, not the scored smaps_rollup values.",
+  "upstream_sources": [
+    "https://raw.githubusercontent.com/bminor/glibc/glibc-2.35/malloc/arena.c",
+    "https://raw.githubusercontent.com/bminor/glibc/glibc-2.35/malloc/malloc.c"
+  ],
+  "cache_off_sample_map_replays": {
+    "7s": {
+      "scope": "64 MiB aligned anonymous writable segment with an adjacent inaccessible private reservation. Mapping geometry is compared, without reading allocator metadata or retained addresses.",
+      "heap_alignment_bytes": 67108864,
+      "midpoint_sha256": "f6d135617327df0d905fe8fb160e5e75734cc83b7a43df7ef0d14f34e2eab59c",
+      "drain_sha256": "be7fce9b14b709f59aa9cfcb942faa3374382d9a9b963d4371d616bc1d7554a3",
+      "matching_starts_at_both_samples": 36,
+      "matching_starts_with_exact_reservation_end_at_both_samples": 36,
+      "total_anonymous_rss_change_kib": 184,
+      "paired_groups": {
+        "matching_heap_shape": {
+          "same_extent_mappings": 20,
+          "same_extent_rss_change_kib": -44,
+          "same_extent_increased_mappings": 11,
+          "same_extent_decreased_mappings": 5,
+          "changed_extent_mappings": 16,
+          "changed_extent_rss_change_kib": 228,
+          "changed_extent_increased_mappings": 13,
+          "changed_extent_decreased_mappings": 3
+        },
+        "other_private_mapping": {
+          "same_extent_mappings": 320,
+          "same_extent_rss_change_kib": 0,
+          "same_extent_increased_mappings": 0,
+          "same_extent_decreased_mappings": 0
+        }
+      }
+    },
+    "31s": {
+      "scope": "64 MiB aligned anonymous writable segment with an adjacent inaccessible private reservation. Mapping geometry is compared, without reading allocator metadata or retained addresses.",
+      "heap_alignment_bytes": 67108864,
+      "midpoint_sha256": "5b8afc36f15eaa4e5e43c2b4a3ee221a8934cc75b0066a50f51f403741eeec3d",
+      "drain_sha256": "b3b444b2343a45bc937cdcfcadc829de0d9926d67ddec4dc221fee590735b330",
+      "matching_starts_at_both_samples": 36,
+      "matching_starts_with_exact_reservation_end_at_both_samples": 36,
+      "total_anonymous_rss_change_kib": 396,
+      "paired_groups": {
+        "matching_heap_shape": {
+          "same_extent_mappings": 17,
+          "same_extent_rss_change_kib": 28,
+          "same_extent_increased_mappings": 8,
+          "same_extent_decreased_mappings": 5,
+          "changed_extent_mappings": 19,
+          "changed_extent_rss_change_kib": 368,
+          "changed_extent_increased_mappings": 16,
+          "changed_extent_decreased_mappings": 1
+        },
+        "other_private_mapping": {
+          "same_extent_mappings": 316,
+          "same_extent_rss_change_kib": 0,
+          "same_extent_increased_mappings": 0,
+          "same_extent_decreased_mappings": 0
+        }
+      }
+    }
+  }
+}

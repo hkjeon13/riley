@@ -148,6 +148,12 @@ Cache-on은 API 40건과 30분 부하의 모든 항목을 통과했다. 기준 �
 
 반환 호출 294회에서 모두 메모리가 반환됐고 호출 시간 p95는 0.77ms였다. 정밀 중간 표본은 직전 반환이 끝난 뒤 6.44–6.79초에, drain 표본은 0.19–0.59초에 읽혔다. 두 읽기 모두 반환 호출과 겹치지 않았다. Drain에서 직전 반환과의 간격이 더 짧아도 익명 RSS는 늘었다. 인접 `smaps`의 익명 RSS 순증가는 184KiB였다. 시작 주소와 속성이 같고 끝이 바뀐 16개 매핑은 합계 228KiB 늘었고, 범위가 유지된 매핑은 합계 44KiB 줄었다. 두 표본 중 한쪽에만 나타난 시작 주소의 익명 RSS는 모두 0이었다. 중간 매핑을 읽은 값은 먼저 읽은 정밀 표본보다 140KiB 낮아 판정에는 원래의 `smaps_rollup` 두 표본을 사용한다. [반환 시각과 인접 매핑 대조](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/retry/cache-off-verified.json)
 
+#### 보조 힙 배치 대조
+
+7초 및 이전 31초 cache-off의 인접 매핑을 다시 검산했다. 두 실행에서 각각 64MiB에 정렬된 쓰기 가능 익명 매핑 36개가 바로 뒤의 접근 불가 구간까지 합해 정확히 64MiB를 이루었다. 이 배치는 64비트 glibc 2.35의 보조 힙 할당 코드와 일치한다. 두 매핑 표본의 익명 RSS 순증가인 7초 +184KiB와 31초 +396KiB는 각각 전부 이 배치에서 나왔다. 주소와 권한으로 판별한 결과이며 개별 allocator 청크의 생존 여부는 추가 검증 범위다. [매핑 검산과 입력 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/arena-shape-comparison.json) · [glibc 2.35 힙 구현](https://raw.githubusercontent.com/bminor/glibc/glibc-2.35/malloc/arena.c) · [glibc 2.35 할당 상한](https://raw.githubusercontent.com/bminor/glibc/glibc-2.35/malloc/malloc.c)
+
+동일 이미지와 7초 메모리 반환을 사용하고 `glibc.malloc.tcache_count`만 0으로 바꿔 두 cache 모드의 30분 부하를 등록했다. glibc의 스레드별 소형 할당 캐시 비활성화가 RSS와 지연에 미치는 영향을 앞선 7초 시험과 비교한다. GPU 검사는 이미지의 서비스 계정으로 소형 할당·해제 동작을 CPU에서 검증한 후 시작한다. 실제 Riley PID 1의 환경과 7초 반환 기록을 확인하고 원래 RSS·요청 지연·API·종료 판정을 적용한다. CPU 검산기 모의시험에서 기존 RSS 실패와 설정 확인 누락의 처리 경로를 확인했다. 선행 QKV 시험 이후 A100 6번에서 실행된다. [검사 등록과 재현 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/registration.json) · [glibc 2.35 설정 문서](https://raw.githubusercontent.com/bminor/glibc/glibc-2.35/manual/tunables.texi)
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
