@@ -62,7 +62,7 @@ Riley의 C8·C32 반복에서는 각각 33/33의 생성 ID·텍스트·종료 �
 
 7,836토큰 코드 입력에서는 세 엔진의 출력이 일치했다. 7,917토큰 한국어 입력에서 Riley와 HF는 일치했고 vLLM은 생성 위치 7에서 갈라졌다. 길이 경계에 따라 일관되게 분기하는 패턴은 이 표에서 확인되지 않았다. vLLM 종료 로그에는 semaphore 정리 경고 한 건이 남았으며, 각 단계 종료 뒤 GPU 7은 동일 홀더의 20GiB 예약으로 복귀했다. [Riley 캡처](../../benchmarks/evidence/20261119-w4-holdout/riley/capture.json.gz) · [HF 참조](../../benchmarks/evidence/20261119-w4-holdout/hf/reference.json) · [vLLM 원본](../../benchmarks/evidence/20261119-w4-holdout/vllm/results.json.gz) · [vLLM 로그](../../benchmarks/evidence/20261119-w4-holdout/vllm/server.log.gz) · [GPU 7 예약](../../benchmarks/evidence/20261119-w4-holdout/vllm/idle-after.json)
 
-배포 이미지 후보를 고정된 Riley 캡처와 대조하는 명령을 추가했다. 입력 29개에서 C1 일반·진단, C8·C32 세 번씩 총 232건을 확인한다. 생성 ID·텍스트·종료 사유·usage가 달라지면 요청과 생성 토큰의 공통 접두사 길이를 기록한다. 캡처 과정에서 모든 동시성의 입력 ID도 확인한다. 기존 두 캡처를 사용한 비교기 검사는 각각 144건·88건을 통과했다. 실제 배포 이미지로 실행한 결과는 별도 기록한다. [대조기](../../benchmarks/live/long_accuracy.py) · [배포 이미지 실행 방법](01-validation-result.md#배포-이미지-gpu-검사)
+`d3d8fe6e5`에서 재빌드한 이미지 `0a907408ec73`을 A100 6번에서 실행했다. 고정된 Riley 캡처와 대조한 결과, 기존 18개 입력의 144건과 홀드아웃 11개 입력의 88건이 모두 일치했다. C1 일반·진단은 각각 한 번, C8·C32는 각각 세 번 실행했다. 입력 ID, 생성 ID, 텍스트, 종료 사유와 usage를 확인했다. 이전 GPU API 검사와 이미지·바이너리·체크포인트 해시가 같았고, 서버는 코드 0으로 종료한 뒤 자원이 모두 회수됐다. [A100 배포 이미지 결과](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-package-validation.json) · [대조기](../../benchmarks/live/long_accuracy.py) · [배포 이미지 실행 방법](01-validation-result.md#배포-이미지-gpu-검사)
 
 ## 첫 prefill 분기 추적
 

@@ -142,5 +142,129 @@
   "campaign": {
     "directory": "w1-dist-d3d8fe6e5.YnZWdh5l",
     "exit": 0
+  },
+  "long_accuracy": {
+    "campaign": {
+      "directory": "w4-dist-d3d8fe6e5.FE5PU6Y4",
+      "exit": 0
+    },
+    "runtime": {
+      "schema_version": "riley.distribution-gpu-check.v1",
+      "status": "passed",
+      "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+      "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+      "source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+      "riley_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+      "cpu_report_sha256": "92f884b05c1101d4bfb6c49df9289483b698e4e64d88fdc1090705998a17de33",
+      "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+      "checkpoint_source_model": "Qwen/Qwen2.5-7B-Instruct",
+      "checkpoint_source_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+      "gpu_uuid": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+      "gpu_name": "NVIDIA A100-SXM4-40GB",
+      "driver_version": "550.127.05",
+      "api_checks": 40,
+      "tool_checks_enabled": true,
+      "shutdown_exit": 0,
+      "artifacts_sha256": {
+        "accuracy-baseline-capture.log": "0447e9e91dab0b8e529ac87dc1f3661d59bf1e91879511236998d0250420dc3d",
+        "accuracy-baseline-comparison.json": "5e504175562e5fad84b0dba383d9cf80de235554013eab42d73f89ec2ade1b6f",
+        "accuracy-baseline-comparison.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "accuracy-baseline.json": "8a00c5c439fb7ef7867c8242c15f74ce5bb2b91a059b0cfde2c7e5adb29bd4ce",
+        "accuracy-holdout-capture.log": "bed36ee241b500da8fafa41c559049c624f8481e2a36e026552a746fd29e3921",
+        "accuracy-holdout-comparison.json": "b49f41dbc1d824faf23b443425cf412fb06d73d0ef4e5b1bcefe0fc58b554a6e",
+        "accuracy-holdout-comparison.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "accuracy-holdout.json": "2b28ec348efd0048cacec7e61ab2a3ffdbfc09787c7d40bcb0241982d87f8b36",
+        "api.json": "6d8178f4fe8799469887c1d03b2d890a5a9231f9ea965e0eb15a6aa9a4bd4bf1",
+        "api.log": "2a4c2ffde4d255d0d9d561afea2d00445730d3e3c6252055c95e620b8a78af00",
+        "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+        "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+        "server.log": "b2dfc58d1d446746fde370ab1d434fae9df46ba3c4172cb0310ce667b8354a04",
+        "shutdown.json": "1ef4086f4899f027d279cf1e12c35370ad856f1ecd95eb020f1ab710873210f0"
+      },
+      "accuracy_suites": {
+        "baseline": {
+          "golden_sha256": "b32bd641dab4e9516a8d3b45de2d77fbde91ad64acad893153f4b6c2090b72a6",
+          "workload_sha256": null,
+          "verified_requests": 144
+        },
+        "holdout": {
+          "golden_sha256": "12d508ed51f03509432e6302b8d10855f56125f4f6b7f31a559cff03eb10b611",
+          "workload_sha256": "220f13a7306518f996480c608733623475471ff3721ea3aeb895a2d5f91abd11",
+          "verified_requests": 88
+        }
+      },
+      "accuracy_server_arguments": [
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "256"
+      ],
+      "exit": 0,
+      "gpu_receipt_sha256": "287aca2b1e422eb369405bd6a4aefa2f0cfbcd809f285fed29b2424997343925",
+      "holder": {
+        "pid": 2431228,
+        "start_ticks": "6339570869",
+        "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+        "physical_index": 6,
+        "phase": "idle",
+        "allocation_bytes": 21474836480,
+        "torch_reserved_bytes": 21474836480
+      },
+      "passed_api_cases": [
+        "plain chat",
+        "completions accepts user",
+        "chat logprobs present",
+        "greedy token is the most likely",
+        "top_logprobs sorted, five each, negative",
+        "token bytes rebuild the text",
+        "top mass at most one",
+        "legacy logprobs shape",
+        "sampled logprobs",
+        "streamed logprobs",
+        "json_object 0",
+        "json_object 1",
+        "json_object 2",
+        "json_object 3",
+        "json_object 4",
+        "json_object 5",
+        "json_object 6",
+        "json_object 7",
+        "json_schema 0",
+        "json_schema 1",
+        "json_schema 2",
+        "json_schema 3",
+        "json_schema 4",
+        "json_schema 5",
+        "json_schema 6",
+        "json_schema 7",
+        "most schema outputs finish inside max_tokens",
+        "streamed json_schema",
+        "unenforceable schema is 400",
+        "pattern is enforced",
+        "response_format text",
+        "mixed batches leave plain outputs identical",
+        "schema output is concurrency-invariant",
+        "tool_choice required",
+        "required call has valid arguments",
+        "named tool_choice",
+        "auto tool call (model's own choice)",
+        "tool_choice none",
+        "streamed tool call",
+        "tool result round trip"
+      ],
+      "shutdown_metrics": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0,
+        "allocation": {
+          "device_live_count": 0,
+          "device_live_bytes": 0,
+          "pinned_live_count": 0,
+          "pinned_live_bytes": 0
+        }
+      }
+    }
   }
 }
