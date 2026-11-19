@@ -1,0 +1,37 @@
+{
+  "stage": "w5-chat-sse-accuracy-20261119.BginwHRs",
+  "status": "skipped",
+  "time_utc": "2026-11-19T14:28:16Z",
+  "decision_sha256": "793747c0a98fe011f1ec136b9690c8c2b0e02acc8afdb0f5610770500f81cc15",
+  "decision": {
+    "run_accuracy": false,
+    "image": {
+      "image_id": "sha256:06eed36dcc604e942901422c90d8a94d26c8144eb09d3b515a0f78dfef2d0c51",
+      "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+      "source_archive_sha256": "828d81b99b228d3983c4674b07aa48eeacee2f20e4146af17fa1f091b1b819ec",
+      "riley_binary_sha256": "d62d19acf4984b7a31cef4fd10d3c20e8a3e2a4cb23ec4d1daa1a4c9e00a9a23",
+      "cpu_report_sha256": "2b66df3f60168dd6cbbc42e0b1831c9a9d046c0f46f7ead32c09e540ff4eba0c",
+      "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+      "gpu_uuid": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7"
+    },
+    "soak_modes": {
+      "cache-off": {
+        "status": "failed",
+        "failed_checks": [
+          "rss_growth_second_half_at_most_zero"
+        ],
+        "report_sha256": "35802c4f82f2ed12b9e2034de9c4d2d01a99a08e71a32930695459bd0532952b"
+      },
+      "cache-on": {
+        "status": "failed",
+        "failed_checks": [
+          "rss_growth_second_half_at_most_zero"
+        ],
+        "report_sha256": "f02ddb223e756c50c2acdcc54e371be2a53c6bf1f84867cdd80407cc743382b5"
+      }
+    },
+    "same_gpu7_reservation_in_both_modes": true,
+    "paired_checksums_sha256": "2156bf5a79fc069cc883bb3e290350ff084946905474675163080028d1625450"
+  },
+  "gpu_accuracy_evidence_created": false
+}

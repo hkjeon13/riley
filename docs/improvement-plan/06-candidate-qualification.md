@@ -68,4 +68,4 @@ HTTP 프레이밍 이미지의 30분 실행에서 정밀 RSS는 `cache-on`에서
 
 기본 이미지의 추가 정밀 계측에서 `cache-off`의 15분 이후 RSS는 480KiB 증가했다. 29분에 460KiB가 이미 관측됐고, drain 뒤 60초 표본까지 같은 RSS가 유지됐다. RSS 항목만 실패해 채팅 SSE 후보의 조건부 검증 단계로 넘어갔다. [시점별 계측과 종료 검산](05-mixed-soak-result.md#rss-표본과-실행-중-자원-지표-대조) · [채팅 SSE 후보](05-mixed-soak-result.md#채팅-스트림의-임시-json-할당)
 
-채팅 SSE 후보 `06eed36dcc60`의 `cache-on`에서는 정밀 RSS가 508KiB 증가했다. 원래 기준의 616KiB보다 108KiB 적었고 RSS 증가 0 항목에서 실패했다. 두 모드의 운영 조건을 함께 충족해야 하는 릴리스 판정은 보류다. [후보의 첫 30분 결과](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/cache-on-verified.json)
+채팅 SSE 후보 `06eed36dcc60`의 두 30분 부하에서 정밀 RSS는 `cache-on`에서 508KiB, `cache-off`에서 608KiB 증가했다. 기준 이미지의 616KiB와 700KiB보다 각각 108KiB와 92KiB 적었다. 두 모드에서 API 40건과 요청·지연·종료 자원 검사를 통과했고 RSS 증가 0 항목만 실패했다. 조건부 장문 비교를 건너뛰었으며 릴리스는 보류다. [두 실행의 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/paired-verified.json) · [장문 검증 판정](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/accuracy-follow-up/accuracy-skip-verified.json)

@@ -253,9 +253,14 @@ A100 6번의 `cache-on` 컨테이너에서 API 40건이 통과했고 30분 부�
 
 두 `cache-on`·`cache-off` 부하가 기존 운영 기준을 통과하면, 같은 이미지에서 기준 장문 144건과 홀드아웃 88건을 대조하도록 등록했다. 두 모드의 요청·RSS·지연·회수 영수증을 재검산해 실행 여부를 정한다. CPU 사전시험에서는 양쪽 통과, 한쪽 실패, 다른 바이너리와 달라진 GPU 7 예약의 처리 경로를 확인했다. [조건부 장문 검증 등록](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/accuracy-follow-up/registration.json) · [판정기](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/accuracy-follow-up/verify_chat_accuracy.py)
 
-`cache-on` 30분 부하에서 900.17초부터 요청 처리 종료까지 정밀 RSS와 익명 RSS가 각각 **508KiB 증가**했다. 기준 이미지의 같은 모드에서는 616KiB 증가했다. 일반 `VmRSS` 변화는 0이었다. 정상 완료 13,749건, 의도적 연결 종료 700건, API 40건을 확인했고 RSS 증가 0 항목만 실패했다. 후보의 후반 TTFT p95는 327.85ms, 완료 지연 p95는 4,143.58ms였다. 전반 대비 각각 1.57% 증가, 13.43% 감소했다. [첫 부하와 원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/cache-on-verified.json) · [공통 판정 재검산](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/verify_chat_soak.py)
+동일 이미지의 두 30분 혼합 부하를 끝냈다. 각 실행은 정상 완료 13,749건, 의도적 연결 종료 700건, API 40건을 확인했고 요청·지연·종료 자원 검사는 통과했다. 두 실행에서 약 900초와 1,804초의 RSS를 대조했다. 일반 `VmRSS` 변화는 0이었고, 정밀 RSS와 익명 RSS는 표의 값만큼 증가했다. 각각 종료 후 GPU 6이 기존 홀더의 20GiB 예약으로 복귀했고 GPU 7도 같은 예약을 유지했다. [두 실행의 독립 검산과 원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/paired-verified.json) · [cache-off 실행 식별](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/cache-off-launch-verified.json)
 
-첫 부하의 요청·CUDA 할당·활성 KV가 종료 후 회수됐다. GPU 6과 7은 각각 기존 홀더의 20GiB 예약을 확인했고, 이어 GPU 6에서 `cache-off`를 시작했다. `cache-on` 결과로 두 모드의 RSS 통과를 요구하는 채택 조건은 미충족이다.
+| 모드 | 기준 정밀 RSS 증가 | 후보 정밀 RSS 증가 | 후보 후반 TTFT p95 | 후보 후반 완료 지연 p95 |
+|---|---:|---:|---:|---:|
+| `cache-on` | +616KiB | **+508KiB** | 327.85ms | 4,143.58ms |
+| `cache-off` | +700KiB | **+608KiB** | 334.80ms | 4,158.05ms |
+
+두 실행 모두 RSS 증가 0 항목만 실패해 후보 채택을 보류했다. 조건부 장문 검증기는 두 영수증과 이미지 해시를 확인한 뒤 실행을 건너뛰었으며, 그 판정을 서버에서 독립적으로 재계산했다. [조건부 정확성 미실행 영수증](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/accuracy-follow-up/accuracy-skip-verified.json)
 
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
