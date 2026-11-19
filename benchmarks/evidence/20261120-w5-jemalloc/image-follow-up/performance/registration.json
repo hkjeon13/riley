@@ -1,0 +1,119 @@
+{
+  "scope": "Compare the actual packaged image to its exact parent using matching Riley binaries and the same model.",
+  "stage": "w5-allocator-image-perf-20261120.tmZw0Cpo",
+  "controller_pid": 1552954,
+  "registered_utc": "2026-11-19T16:45:04Z",
+  "must_finish_stage": "w5-allocator-packaged-gpu-20261120.nQpLFMUS",
+  "state_at_registration": "waiting_for_packaged_gpu_qualification",
+  "image_id": "sha256:1fc444b1840e6f8d55b32fc603629e031ee018f674b9b1ab04b6a69c9445ff66",
+  "parent_image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+  "order": [
+    "parent-first",
+    "packaged-first",
+    "packaged-second",
+    "parent-second"
+  ],
+  "gpu": {
+    "physical_index": 6,
+    "idle_holder_pid": 2431228,
+    "other_idle_holder_pid": 2431237
+  },
+  "dispatch_tar_sha256": "f1b2ba3e4664ee8e707fd82ced9880abbb14b017efda998efb09f0b51bfa1e04",
+  "preflight": {
+    "image_id": "sha256:1fc444b1840e6f8d55b32fc603629e031ee018f674b9b1ab04b6a69c9445ff66",
+    "cells": {
+      "closed-c1": [
+        [
+          "--prompt-words",
+          "30",
+          "--max-tokens",
+          "64",
+          "--concurrency",
+          "1",
+          "--requests",
+          "64",
+          "--warmup",
+          "8"
+        ],
+        1
+      ],
+      "closed-c32": [
+        [
+          "--prompt-words",
+          "30",
+          "--max-tokens",
+          "64",
+          "--concurrency",
+          "32",
+          "--requests",
+          "192"
+        ],
+        1
+      ],
+      "rag-c8-seed1": [
+        [
+          "--prompt-words",
+          "1500,3000",
+          "--max-tokens",
+          "128",
+          "--concurrency",
+          "8",
+          "--requests",
+          "64",
+          "--warmup",
+          "8"
+        ],
+        1
+      ],
+      "rag-c8-seed2": [
+        [
+          "--prompt-words",
+          "1500,3000",
+          "--max-tokens",
+          "128",
+          "--concurrency",
+          "8",
+          "--requests",
+          "64",
+          "--warmup",
+          "8"
+        ],
+        2
+      ],
+      "reason-c32": [
+        [
+          "--prompt-words",
+          "30",
+          "--max-tokens",
+          "1024",
+          "--concurrency",
+          "32",
+          "--requests",
+          "64",
+          "--warmup",
+          "32"
+        ],
+        1
+      ],
+      "shared-c8": [
+        [
+          "--shared-prefix-words",
+          "330",
+          "--prompt-words",
+          "20",
+          "--max-tokens",
+          "32",
+          "--concurrency",
+          "8",
+          "--requests",
+          "192"
+        ],
+        1
+      ]
+    },
+    "paired_cpu_fixture_passed": true
+  },
+  "measured_requests_per_arm": 640,
+  "guardrail_source": "docs/goal.md section 3.2",
+  "aggregation": "Ratio of the two arm means for each cell; individual adjacent pairs are retained."
+}
