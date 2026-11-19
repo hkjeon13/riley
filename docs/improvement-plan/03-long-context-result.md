@@ -234,6 +234,12 @@ CUDA 12.4 SM80 진단 바이너리로 A100 6번에서 같은 부하 여섯 개�
 
 512행 제한은 미채택으로 판정했다. 두 RAG seed의 첫 토큰 p95가 두 실행 순서 모두에서 악화됐고, 50ms 간격 유입 한 쌍이 decode TPOT 회귀 1% 조건을 넘었다. 같은 50ms 조건의 기준군끼리도 TPOT p50이 6.25% 달라 회귀 크기의 반복성은 제한적이다. RAG 두 seed에서 각 조건의 p95 이상 요청 네 개는 모두 3,471–3,528토큰의 긴 입력에 속했다. 첫 토큰 꼬리를 우선하는 후속 대조에서는 이 길이대 요청의 prefill 사이 대기를 스텝별로 연결해 확인한다. [요청별 집계](../../benchmarks/evidence/20261119-w3-rag-profile/mixed-step-budget/result/request-latency.json) · [입력 길이·유입 구간 재계산 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/analyze_mixed_step_requests.py)
 
+#### 실제 스텝의 prefill 선택과 aging 검증
+
+격리한 `d3d8fe6e5` 계측 빌드에서 prefill 대기 시작 시각과 순서, 토큰 예산, decode 행 수, aging 적용 대상, 실제 실행 계획의 prefill 행 수를 같은 iteration ID로 기록한다. 스케줄러 ID를 SSE 응답 ID와 연결하므로 장문 요청의 각 조각이 언제 선택됐고 어떤 요청이 그사이에 실행됐는지 확인할 수 있다. 검산기는 계측된 시각으로 선택을 재계산하고 스케줄러 기록, 엔진의 실행 직전 기록과 요청별 prefill 구간을 맞춘다. [진단 패치](../../benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/source.patch.gz) · [검산기](../../benchmarks/evidence/20261119-w3-rag-profile/tools/summarize_scheduler_choices.py)
+
+CPU에서는 기본 설정으로 스케줄러 테스트 146건이 통과했다. 계측을 켠 두 시험의 8개 계획에서 조각 완료 뒤 대기 순서 변경과 aging override 뒤 decode 우선 복귀를 재계산했다. A100 7번은 W5 RSS 시험과 W4 장문 비교가 끝난 뒤 같은 Qwen2.5-14B-Instruct 부하 다섯 개를 기준 실행과 계측 실행으로 대조하도록 등록했다. [CPU 검사와 GPU 실행 등록](../../benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/preflight.json)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

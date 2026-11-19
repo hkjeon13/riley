@@ -1,0 +1,37 @@
+{
+  "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+  "source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+  "rustc": "rustc 1.85.0 (4d91de4e4 2025-02-17)",
+  "cpu_default_tests_passed": 146,
+  "cpu_default_emitted_trace": false,
+  "cpu_opt_in_scenarios": [
+    "partial_commit_yields_to_a_later_admission_then_resumes",
+    "aging_prevents_prefill_starvation_under_a_one_token_budget"
+  ],
+  "cpu_opt_in_decisions_replayed": 8,
+  "sha256": {
+    "benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/campaign.sh": "539aeccc8d7c60b3bf9d7cbbe69ab2816177ff967b55f84c8464b94a0ee822cc",
+    "benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/scheduler-default.log.gz": "7260d7674bdf40941a4d93f75fe8ec0093efef8fb0928430f79b5f9b7509728e",
+    "benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/scheduler-opt-in.log.gz": "cb887111f15295008d56ad146b77450002e3adc62517f726d9e370a801be39e6",
+    "benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/source-base.sha256": "6a359162e43b0472de6b76424e43ef156066dd76cc884d0aec630444ce790b55",
+    "benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/source.patch.gz": "52e1532fa20e708486f9a9c7e9c1dae3566b0f45a3a01be94a48d3b835dda055",
+    "benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/source.sha256": "11143ef8c5ed6851603eac5f65b081282b62372f01a1d3f144b8314d6ef11040",
+    "benchmarks/evidence/20261119-w3-rag-profile/tools/summarize_scheduler_choices.py": "48b33e445466e5c020e32e8b5c22acd876bc31b71cf07053d1b51494b028cf9f",
+    "benchmarks/evidence/20261119-w3-rag-profile/request-stages/tools-base.sha256": "aaf4286a57dcca34124dfb52f7d23210ebbff13055d21ae69ca0da1e78b5b48e",
+    "benchmarks/evidence/20261119-w3-rag-profile/request-stages/tools.patch.gz": "9ef525cf8b478f605cf8bd7e930a0bb6f0014e137b152a4312ecc92cd39d9c18",
+    "benchmarks/evidence/20261119-w3-rag-profile/request-stages/tools.sha256": "2af12e88e0bb9756fc773338c27757e6f72308a48a408fc8974bf4517d0ec1f8",
+    "benchmarks/evidence/20261119-w3-rag-profile/request-stages/scheduler-turn-repro/prefill_turn_repro.rs": "37fa2487a40a1c2743d5fe3562f93ecba1f92ecb531c2cbfcef1de52138a6f8b"
+  },
+  "gpu_campaign": {
+    "stage": "w3-scheduler-choices-20261119.Hmy0dT5E",
+    "campaign_pid": 1962718,
+    "physical_index": 7,
+    "model": "Qwen2.5-14B-Instruct",
+    "status_at_record_time": "waiting",
+    "preceding_campaign": "w4-hf-bias-partition-20261119.hj2XRENK",
+    "arms": [
+      "riley",
+      "stage-trace"
+    ]
+  }
+}
