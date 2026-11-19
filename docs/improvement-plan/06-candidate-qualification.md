@@ -76,4 +76,6 @@ HTTP 프레이밍 이미지의 30분 실행에서 정밀 RSS는 `cache-on`에서
 
 기준 `d3d8fe6e5` 이미지에 jemalloc을 연결한 별도 대조에서 정밀 RSS는 `cache-on` −680KiB, `cache-off` −672KiB로 두 모드의 운영 기준을 통과했다. 각 모드의 API 40건과 요청·지연·자원 회수에 이어 같은 설정의 장문 정확성 232건도 일치했다. 별도 시험 이미지 `1fc444b1840e`의 CPU 검증을 마쳤고, 이 이미지 ID의 GPU 검증을 진행 중이다. [할당기 시험과 운영 기준](05-mixed-soak-result.md#즉시-반환-설정의-할당기-대조)
 
+같은 파생 이미지의 `cache-on` 실행에서 정밀 RSS −440KiB로 운영 기준을 만족했다. 요청·지연·종료 자원과 API 40건도 통과했고 `cache-off` 실행을 시작했다. [패키징 이미지 첫 부하 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/cache-on-verified.json)
+
 같은 파생 이미지의 두 부하와 장문 판정이 통과하면 기준 이미지와 교대로 실행해 출력과 서빙 회귀를 확인한다. 이 대조는 Qwen2.5-7B-Instruct와 A100 6번, 등록한 여섯 부하에 적용한다. [후보 이미지 성능 대조 등록](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/registration.json)
