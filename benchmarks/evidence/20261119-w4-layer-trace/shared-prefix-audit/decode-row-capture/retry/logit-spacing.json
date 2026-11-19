@@ -1,0 +1,163 @@
+{
+  "scope": "Two original selected token IDs per first divergence at the same token prefix.",
+  "source_sha256": "ddaa117da328cdcdec60d1054248312570372bd2678db30ca967fb7551b55e3b",
+  "all_first_divergences_one_bf16_step": true,
+  "positive_shift_on_riley_id": 4,
+  "negative_shift_on_hf_id": 3,
+  "cases": [
+    {
+      "suite": "long",
+      "case": "0",
+      "offset": 2,
+      "tokens": [
+        6109,
+        56589
+      ],
+      "riley_bf16_scores": [
+        19.75,
+        19.75
+      ],
+      "hf_sdpa_bf16_scores": [
+        19.75,
+        19.875
+      ],
+      "riley_minus_hf_bf16_steps": [
+        0,
+        -1
+      ],
+      "exactly_one_score_changed_by_one_bf16_step": true
+    },
+    {
+      "suite": "long",
+      "case": "3",
+      "offset": 0,
+      "tokens": [
+        264,
+        5257
+      ],
+      "riley_bf16_scores": [
+        18.375,
+        18.375
+      ],
+      "hf_sdpa_bf16_scores": [
+        18.25,
+        18.375
+      ],
+      "riley_minus_hf_bf16_steps": [
+        1,
+        0
+      ],
+      "exactly_one_score_changed_by_one_bf16_step": true
+    },
+    {
+      "suite": "long",
+      "case": "6",
+      "offset": 14,
+      "tokens": [
+        1741,
+        2670
+      ],
+      "riley_bf16_scores": [
+        21.25,
+        21.25
+      ],
+      "hf_sdpa_bf16_scores": [
+        21.125,
+        21.25
+      ],
+      "riley_minus_hf_bf16_steps": [
+        1,
+        0
+      ],
+      "exactly_one_score_changed_by_one_bf16_step": true
+    },
+    {
+      "suite": "long",
+      "case": "12",
+      "offset": 9,
+      "tokens": [
+        34235,
+        13638
+      ],
+      "riley_bf16_scores": [
+        18.875,
+        18.75
+      ],
+      "hf_sdpa_bf16_scores": [
+        18.875,
+        18.875
+      ],
+      "riley_minus_hf_bf16_steps": [
+        0,
+        -1
+      ],
+      "exactly_one_score_changed_by_one_bf16_step": true
+    },
+    {
+      "suite": "long",
+      "case": "14",
+      "offset": 9,
+      "tokens": [
+        11931,
+        38973
+      ],
+      "riley_bf16_scores": [
+        19.875,
+        19.875
+      ],
+      "hf_sdpa_bf16_scores": [
+        19.75,
+        19.875
+      ],
+      "riley_minus_hf_bf16_steps": [
+        1,
+        0
+      ],
+      "exactly_one_score_changed_by_one_bf16_step": true
+    },
+    {
+      "suite": "holdout",
+      "case": "numbers-1023",
+      "offset": 67,
+      "tokens": [
+        510,
+        311
+      ],
+      "riley_bf16_scores": [
+        35.5,
+        35.25
+      ],
+      "hf_sdpa_bf16_scores": [
+        35.5,
+        35.5
+      ],
+      "riley_minus_hf_bf16_steps": [
+        0,
+        -1
+      ],
+      "exactly_one_score_changed_by_one_bf16_step": true
+    },
+    {
+      "suite": "holdout",
+      "case": "korean-1024",
+      "offset": 77,
+      "tokens": [
+        12802,
+        42039
+      ],
+      "riley_bf16_scores": [
+        20.25,
+        20.25
+      ],
+      "hf_sdpa_bf16_scores": [
+        20.125,
+        20.25
+      ],
+      "riley_minus_hf_bf16_steps": [
+        1,
+        0
+      ],
+      "exactly_one_score_changed_by_one_bf16_step": true
+    }
+  ]
+}

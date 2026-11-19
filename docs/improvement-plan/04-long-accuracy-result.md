@@ -80,6 +80,8 @@ Riley의 C8·C32 반복에서는 각각 33/33의 생성 ID·텍스트·종료 �
 
 전체 주소 가능 토큰의 BF16 행을 AWS에서 재계산했다. Riley와 HF SDPA의 첫 분기 7건 중 5건에서 두 엔진이 고른 ID가 Riley 행의 공동 최대였다. Decode 분기만 보면 6건 중 4건이었다. 나머지 두 분기에서 Riley ID는 단독 최대였고, HF가 고른 ID의 점수는 사례 12에서 0.125, `numbers-1023`에서 0.25 낮았다. 이미 일치하던 사례 9의 Riley 행에서도 ID 264와 5257이 공동 최대였다. [사례별 검산과 원본 행 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/retry/verified-rows.json) · [점수 행 재계산 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/retry/verify_decode_capture.py)
 
+두 엔진이 선택한 ID의 점수를 BF16 비트로 비교했다. 첫 분기 7건 모두 두 ID 중 하나의 점수만 인접한 BF16 값으로 달라졌다. HF SDPA를 기준으로 Riley ID 점수가 한 단계 오른 경우가 4건, HF ID 점수가 한 단계 내린 경우가 3건이었다. 관측 범위는 공통 접두부에서의 최종 점수다. 차이가 시작된 연산을 확인하려면 사례 12의 생성 위치 9와 `numbers-1023`의 위치 67에서 같은 KV와 마지막 norm·출력 투영을 대조해야 한다. [BF16 간격 재계산](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/retry/logit-spacing.json) · [비트 비교 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/retry/compare_logit_spacing.py)
+
 기록된 행에서 공동 최대 중 큰 ID를 고르는 규칙을 계산하면 분기 5건의 선택이 HF와 같아지며, 현재 일치하는 사례 9는 264에서 5257로 바뀐다. 단독 최대였던 두 분기는 이 규칙에서도 남는다. 이 대조는 각 분기 위치에서 저장된 BF16 행에 적용했다. 전역 동점 선택 규칙의 변경은 미채택한다.
 
 ## 첫 prefill 분기 추적
