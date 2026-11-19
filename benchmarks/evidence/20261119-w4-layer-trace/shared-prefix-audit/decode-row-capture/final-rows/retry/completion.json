@@ -1,0 +1,37 @@
+{
+  "scope": "Completed A100 7 W4 retry and reservation checks.",
+  "campaign": "w4-decode-final-retry-20261120.5bTpAh8k",
+  "campaign_exit": 0,
+  "riley_process_exit": 0,
+  "riley_binary_sha256": "a6a3e0da4e8ba109b4b128d0c5fe7454cde442fa2332c9a5adfe34c5f28e2bf1",
+  "verified_report_sha256": "39bfb851792074b968ead3f597d69d58cb2b9e1515b81e926f641921728d03bb",
+  "source_hash_list_sha256": "51a0c0367e07a0bc6544df0ecf963b654cd34ae44390a00b19b800b17229cd93",
+  "chronology_utc": [
+    "PREDECESSOR_EXIT 0 2026-11-19T18:17:16Z",
+    "BUILD 2026-11-19T18:21:00Z",
+    "START riley 2026-11-19T18:22:22Z",
+    "END riley 2026-11-19T18:24:43Z exit=0",
+    "START hf 2026-11-19T18:24:43Z",
+    "END hf 2026-11-19T18:25:45Z exit=0"
+  ],
+  "original_reservations": {
+    "6": {
+      "pid": 2431228,
+      "start_ticks": "6339570869",
+      "phase": "idle",
+      "allocation_bytes": 21474836480
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "phase": "idle",
+      "allocation_bytes": 21474836480
+    }
+  },
+  "rag_replay_campaign": "w5-rag-fixed-arrival-20261120.SUkecSlU",
+  "rag_replay_controller_pid": 2031647,
+  "rag_replay_current_milestones": [
+    "PREDECESSOR_EXIT 0 2026-11-19T18:26:02Z",
+    "START parent-first 2026-11-19T18:26:03Z"
+  ]
+}

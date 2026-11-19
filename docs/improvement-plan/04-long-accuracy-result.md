@@ -88,7 +88,14 @@ jemalloc을 포함한 파생 이미지 `1fc444b1840e`에서도 같은 A100과 �
 
 Riley ID가 단독 최대였던 두 decode 분기의 후속 진단을 등록했다. 사례 12의 생성 위치 9와 `numbers-1023`의 위치 67에서 같은 토큰 접두부를 쓰고 최종 RMSNorm 전후 행과 로짓을 수집한다. Riley 응답과 전체 로짓 해시가 원래 캡처와 같고 HF SDPA가 기존 점수를 재현해야 비교를 진행한다. 두 엔진의 정규화 행에 같은 출력 가중치를 사용해 두 ID의 BF16 점수가 재현되는지 검산한다. 고정 입력 선택과 Rust 타입 검사를 통과했고, A100 7번의 실측은 W5 이미지 성능 대조 종료 뒤 실행한다. 원본 BF16 행은 실행 호스트에 보관한다. [후속 진단 등록](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/registration.json) · [수집·검산 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/capture_final_rows.py)
 
-첫 시도는 비루트 검사 컨테이너가 체크포인트를 읽지 못해 GPU 사용 전에 종료됐다. 읽기 전용 마운트를 사용하는 CPU 검사 컨테이너의 UID·GID를 작업 계정에 맞춘 뒤 체크포인트 manifest 해시를 확인했다. 같은 CUDA 진단 소스와 입력으로 재실행했으며 GPU 검증 결과는 진행 중이다. [실패와 재실행 영수증](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/retry/host-preflight.json) · [CPU 검사 실행 변경](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/retry/campaign-update.patch)
+첫 시도는 비루트 검사 컨테이너가 체크포인트를 읽지 못해 GPU 사용 전에 종료됐다. 읽기 전용 마운트를 사용하는 CPU 검사 컨테이너의 UID·GID를 작업 계정에 맞춘 뒤 같은 CUDA 진단 소스와 입력으로 재실행했다. A100 7번에서 Riley와 HF SDPA가 각각 원래 응답·로짓 해시와 지정된 분기 점수를 재현했다. 두 실행 모두 정상 종료했고 GPU 6·7은 같은 20GiB 홀더로 복귀했다. [초기 실패](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/retry/host-preflight.json) · [재실행과 예약 복구](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/retry/completion.json)
+
+| decode 사례 | RMSNorm 입력의 다른 원소 | 정규화 뒤 다른 원소 | Riley 두 ID 점수 | HF SDPA 두 ID 점수 |
+|---|---:|---:|---:|---:|
+| 사례 12, 위치 9 | 3,150/3,584 | 3,086/3,584 | 18.875 / 18.75 | 18.875 / 18.875 |
+| `numbers-1023`, 위치 67 | 3,181/3,584 | 3,177/3,584 | 35.5 / 35.25 | 35.5 / 35.5 |
+
+표의 점수 순서는 Riley가 고른 ID, HF가 고른 ID다. 각 엔진의 실제 residual 행에 같은 RMSNorm 계산과 BF16 두 단계 반올림을 적용하면 두 사례의 정규화 행 3,584개 원소가 모두 일치한다. 실제 정규화 행과 동일 체크포인트의 출력 가중치를 FP64로 내적하고 BF16으로 반올림해 두 엔진의 관측 점수도 모두 재현했다. 이 두 decode 사례의 수치 차이는 최종 RMSNorm에 들어오기 전에 이미 발생했다. 최초로 갈라지는 레이어와 연산은 추가 추적 범위에 남는다. [최종 행의 검산과 원본 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/retry/verified-result.json)
 
 ## 첫 prefill 분기 추적
 

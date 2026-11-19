@@ -36,6 +36,8 @@ python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 
 W4의 A100 진단 빌드에서 보존된 C1 응답 8건을 재현하고 해당 BF16 점수 행을 검산했다. 첫 분기 7건 중 Riley·HF ID의 공동 최대 5건과 Riley 단독 최대 2건을 확인했다. 큰 ID를 고르는 동점 규칙을 계산하면 이미 일치한 대조 사례도 바뀌어 적용을 보류했다. [실제 점수 행 결과](04-long-accuracy-result.md#실제-bf16-점수-행의-분기-검산)
 
+Riley ID가 단독 최대였던 두 decode 사례에서는 최종 RMSNorm 전부터 두 엔진의 값이 달랐다. 같은 RMSNorm 계산식과 출력 가중치로 두 ID의 기록된 BF16 점수를 재현했다. 이 결과를 받아 같은 GPU 예약을 복구한 뒤 W5의 RAG 고정 시각 재생을 시작했다. [두 decode 사례 결과](04-long-accuracy-result.md#실제-bf16-점수-행의-분기-검산) · [RAG 재생 등록](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/registration.json)
+
 W3의 QKV 추적 416건은 해당 비계측 요청·응답과 일치했다. 50ms 간격 부하의 동일 장문 요청에서 늘어난 첫 토큰 지연 528–541ms 중 381–392ms는 prefill 조각 사이 대기였다. RAG 첫 토큰 p95 개선이 일관되게 재현될 때까지 후보는 격리 시험에만 둔다. [두 순서의 단계별 결과](03-long-context-result.md#50ms-간격-유입의-추가-지연-위치)
 
 후속 480건에서 45번 요청의 도착 시각을 ±12ms 조정하면 기준과 후보에서 prefill 순서가 일치했고 후보의 TTFT p95는 2.44–2.59% 줄었다. 기존 도착 시각에서는 두 실행 순서 모두 prefill 순서가 갈렸고 p95는 1.77–2.15% 늘었다. 실제 도착 시각 대조는 한 seed에 해당하며 기본값 적용은 보류다. [실제 요청의 도착 시각 대조](03-long-context-result.md#실제-요청의-도착-시각-대조)

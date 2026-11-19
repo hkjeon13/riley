@@ -1,0 +1,37 @@
+{
+  "scope": "Matched two fixed schedules for the repeatable RAG seed-2 tail increase.",
+  "stage": "w5-rag-fixed-arrival-20261120.SUkecSlU",
+  "controller_pid": 2031647,
+  "registered_utc": "2026-11-19T18:25:01Z",
+  "state_at_registration": "waiting_for_w4_retry",
+  "predecessor": "w4-decode-final-retry-20261120.5bTpAh8k",
+  "reference_campaign": "w5-allocator-image-perf-20261120.tmZw0Cpo",
+  "physical_gpu": 6,
+  "reservation_pid": 2431228,
+  "order": [
+    "parent-first",
+    "packaged-first",
+    "packaged-second",
+    "parent-second"
+  ],
+  "schedule_order": {
+    "first_pair": [
+      "parent-first",
+      "packaged-first"
+    ],
+    "second_pair": [
+      "packaged-first",
+      "parent-first"
+    ]
+  },
+  "measured_requests_per_schedule": 64,
+  "precision_check": "Absolute p95 relative socket-write timing error at most 5ms per run; also report paired difference.",
+  "checks": [
+    "API 40 per arm",
+    "exact original input and output digests",
+    "first visible text p95",
+    "original GPU reservation holders restored"
+  ],
+  "dispatch_tar_sha256": "510e64fc4d8b34ec02a41d7ac04baff63fb354f002d53d9985fd536a1f73c3ca",
+  "local_result_checker": "valid synthetic timing fixture accepted; shifted planned write rejected"
+}

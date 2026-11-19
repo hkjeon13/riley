@@ -315,6 +315,8 @@ RAG C8 seed 2에서 요청 시작부터 클라이언트의 소켓 쓰기까지�
 
 고정 시각 재생의 CPU 사전 검사에서 첫 기준·후보 기록의 요청 본문 해시를 각각 64건씩 재현했다. 두 소켓 쓰기 시각의 간격은 첫 측정 요청부터 마지막까지 19.137초와 19.354초였다. 두 이미지에 각 시각표를 적용하고 실제 쓰기 시각의 오차도 기록한다. 이 검사는 기존 닫힌 부하의 응답 속도에 따라 다음 요청 시각이 달라지는 효과를 조사하기 위한 후속 대조다. [고정 입력 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/preflight.json) · [재생 클라이언트](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/fixed_arrival.py)
 
+GPU 7의 W4 진단이 끝난 뒤 GPU 6에서 기준 → 후보 → 후보 → 기준 순으로 두 시각표를 각각 재생하는 검증을 시작했다. 첫 실행 쌍에서는 기준에서 얻은 시각표를 먼저, 두 번째 쌍에서는 후보에서 얻은 시각표를 먼저 사용한다. 실행마다 API 40건과 시각표별 64건을 확인한다. 출력·쓰기 시각 오차·TTFT p95를 함께 기록하며 실제 쓰기 오차 p95 5ms를 재생 정밀도의 기준으로 사용한다. [고정 시각 검증 등록](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/registration.json)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)

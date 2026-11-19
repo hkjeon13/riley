@@ -1212,6 +1212,14 @@
     ],
     "w4_decode_final_rows": [
       {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/retry/completion.json",
+        "sha256": "950481682ffef243bca5a3e4714229bba180687514def3c4d188193cd89be480"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/retry/verified-result.json",
+        "sha256": "39bfb851792074b968ead3f597d69d58cb2b9e1515b81e926f641921728d03bb"
+      },
+      {
         "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/retry/campaign-update.patch",
         "sha256": "d04cc337bc172c18e3602abffd6fc4896a8188eba17e84038ce1b926e1268bae"
       },
@@ -1341,6 +1349,26 @@
       }
     ],
     "w5_jemalloc_follow_up": [
+      {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/campaign.sh",
+        "sha256": "7cd83e98d2703f321e7e7f13d51b214c26c0f36b18aee74bb419cc80c5ce507b"
+      },
+      {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/performance_client.py",
+        "sha256": "4b8bb6bc98cddf4c81d10ec6952dc971970931aacabfc78a83000522da4fcedd"
+      },
+      {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/verify_replay.py",
+        "sha256": "e933b15f45ff42b1a4702fd313bb8fb348f5af6cbdeab671b7743f16ae53cae3"
+      },
+      {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/dispatch.sha256",
+        "sha256": "3379578fd37676fa320dd6359972dc1e5fe3a475cc3a87952a1f8527e674d8cf"
+      },
+      {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/registration.json",
+        "sha256": "0a9080318d4fae85293f4dde57260f1703886ead59e0bd744acbc240ae5e69ab"
+      },
       {
         "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/fixed_arrival.py",
         "sha256": "b622f2999676f891fe4bc474921b7e236080648cda9b4de4e2189d58597957b3"
