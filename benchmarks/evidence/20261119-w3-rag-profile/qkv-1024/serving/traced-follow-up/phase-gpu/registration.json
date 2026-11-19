@@ -1,0 +1,98 @@
+{
+  "scope": "Registered 14B diagnostic of one request arrival offset with the preserved CUDA trace binary.",
+  "stage": "w3-phase-gpu-20261119.9BEN4gYI",
+  "registered_at_utc": "2026-11-19T14:11:37Z",
+  "controller_pid": 819623,
+  "state_at_registration": "waiting_for_w5",
+  "previous_trace_stage": "w3-qkv-tracing-20261119.s9zZEnqW",
+  "dispatch_tar_sha256": "8d7f777abb875ba3ae8d8de7a27ba7bbea4e70eca19afd91e0ca8e590f7c8642",
+  "used_sha256_file_digest": "951e274136105c7281405420791c4d5f799ebfad40b74d8aa8175e3987232e7d",
+  "files_in_dispatch": {
+    "campaign.sh": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/campaign.sh",
+    "phase_inputs.py": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/phase_inputs.py",
+    "phase_preflight.py": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/phase_preflight.py",
+    "prepare_phase_probe.py": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/prepare_phase_probe.py",
+    "verify_phase_gpu.py": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/verify_phase_gpu.py",
+    "compare_profile_arms.py": "benchmarks/evidence/20261119-w3-rag-profile/tools/compare_profile_arms.py",
+    "summarize_profile_arm.py": "benchmarks/evidence/20261119-w3-rag-profile/tools/summarize_profile_arm.py",
+    "summarize_request_stages.py": "benchmarks/evidence/20261119-w3-rag-profile/tools/summarize_request_stages.py",
+    "analyze_prefill_turns.py": "benchmarks/evidence/20261119-w3-rag-profile/tools/analyze_prefill_turns.py",
+    "analyze_prefill_wait_shapes.py": "benchmarks/evidence/20261119-w3-rag-profile/tools/analyze_prefill_wait_shapes.py",
+    "compare_traced_qkv.py": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/compare_traced_qkv.py"
+  },
+  "wait_for_stage_terminal": [
+    "w5-chat-sse-20261119.T7Z99RAG",
+    "w5-chat-sse-accuracy-20261119.BginwHRs"
+  ],
+  "gpu": {
+    "physical_index": 7,
+    "idle_holder_pid": 2431237,
+    "other_idle_holder_pid": 2431228,
+    "reservation_bytes": 21474836480
+  },
+  "variations": {
+    "wave-early": -12,
+    "wave-nominal": 0,
+    "wave-late": 12
+  },
+  "offset_applies_to_request_index": 45,
+  "order": [
+    "riley-first",
+    "qkv-first",
+    "qkv-second",
+    "riley-second"
+  ],
+  "measured_requests_per_cell": 40,
+  "warmup_requests_per_cell": 8,
+  "preflight": {
+    "offsets_checked_per_cell": 48,
+    "only_shifted_request_index": 45,
+    "identical_measured_request_bodies_per_cell": 40,
+    "prior_gpu_trace_cpu_replay": {
+      "riley-first": {
+        "admission_before_first_41_prefill": true,
+        "prefill_steps_8_and_9": [
+          [
+            45
+          ],
+          [
+            41
+          ]
+        ]
+      },
+      "qkv-first": {
+        "admission_before_first_41_prefill": false,
+        "prefill_steps_8_and_9": [
+          [
+            41
+          ],
+          [
+            45
+          ]
+        ]
+      },
+      "qkv-second": {
+        "admission_before_first_41_prefill": false,
+        "prefill_steps_8_and_9": [
+          [
+            41
+          ],
+          [
+            45
+          ]
+        ]
+      },
+      "riley-second": {
+        "admission_before_first_41_prefill": true,
+        "prefill_steps_8_and_9": [
+          [
+            45
+          ],
+          [
+            41
+          ]
+        ]
+      }
+    }
+  }
+}

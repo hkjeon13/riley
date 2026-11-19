@@ -1546,6 +1546,36 @@
         "sha256": "16d70dfdf06ace25f3eb5d57a69fd292785193fd3b8a2f187c6e493de4525710"
       }
     ],
+    "qwen14_qkv_phase_gpu_follow_up": [
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/campaign.sh",
+        "sha256": "d7e9ba8b8de01bba6e51858067b176595e18c67de408b13ec91e9f174be75cc3"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/dispatch.sha256",
+        "sha256": "7d99aef27638db5d380b6026e037daca4d6a032e1ca414c51aa1f5fede060046"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/phase_inputs.py",
+        "sha256": "f4c6cc91a1862fffe1de0e399677ebdee571636138288012ad63e0295259dc73"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/phase_preflight.py",
+        "sha256": "0fe316cfe93d97d0f05ccfa5e117bbaad2524e99dc181a4d578bcb5d11eb073f"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/prepare_phase_probe.py",
+        "sha256": "2651a676a2da948df592ca8a0387c1ccdf475e3e8e86d93bca47607d9e7bc14a"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/registration.json",
+        "sha256": "82f6054de367404cd94c2aac33b2b0f8a6f3d419bc4d218b825c6a6d75735a9b"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/verify_phase_gpu.py",
+        "sha256": "21d96ca63ed22511673bab5b13cbcd60be127d5032dccbfc3e087d1b604f847e"
+      }
+    ],
     "qwen14_qkv_wave_admission": [
       {
         "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/boundary-sweep.json",

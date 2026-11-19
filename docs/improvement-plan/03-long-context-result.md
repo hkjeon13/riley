@@ -325,6 +325,12 @@ CUDA 빌드와 `scheduler.rs`·`config.rs` 해시가 같은 스케줄러로 첫 
 
 두 군이 갈라지는 구간은 기준 먼저 실행에서 246.096–252.734ms, 후보 먼저 실행에서 246.105–251.969ms였다. 각각 약 6.64ms, 5.86ms 폭이다. 이 구간의 249ms에서는 같은 명령 시각으로도 측정된 스텝 경계에 따라 두 군의 순서가 달라졌다. 이 대조는 후속 GPU 시험에서 경계 안팎의 유입 조건을 정할 근거다. TTFT와 채택 여부는 실제 부하로 판정한다.
 
+#### 실제 요청의 도착 시각 대조
+
+A100 7번에서 같은 Qwen2.5-14B 추적 바이너리로 45번 요청만 기존 도착 시각에서 −12ms, 0ms, +12ms 이동하는 시험을 등록했다. 기준 → 후보 → 후보 → 기준 순서로 세 조건을 실행해 총 480건을 측정하고, 뒤의 두 실행에서는 조건 순서를 뒤집는다. CPU 사전 검증에서 각 조건의 48개 도착 일정과 측정 요청 40개의 동일한 입력을 확인했고, 기존 GPU 로그로 양쪽의 prefill 순서를 재현했다. [등록 및 사전 검증 영수증](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/registration.json)
+
+W5 배포 이미지 부하와 조건부 장문 검증 절차가 종료되고 GPU 6·7의 기존 20GiB 예약을 확인한 뒤 시작한다. 각 실행에서 GPU 7의 예약을 시험에 넘겼다가 복구한다. 집계기는 실제 엔진 송신과 입장 시각을 41번 요청의 첫 prefill에 맞춰 비교하고, 예정한 조기·후기 조건이 실제로 성립했는지와 TTFT p95·TPOT·ITL을 확인한다. [GPU 실행 스크립트](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/campaign.sh) · [집계기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/verify_phase_gpu.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
