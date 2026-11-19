@@ -112,6 +112,21 @@ A100 7번에서 승인 소스 `d3d8fe6e5` 기반의 같은 CUDA 바이너리와 
 
 첫 계측 시도는 완료 요청 32건과 Nsight 파일이 저장됐지만 종료 중인 자체 서버 PID를 외부 프로세스로 분류해 종료 코드 1을 반환했다. 프로파일 실행기가 자식 생성 때 PID와 시작 시각을 남기도록 교정했다. Linux 사전 검사에서 같은 자식을 검증하고, 다른 PID와 같은 PID의 시작 시각 불일치를 각각 거부했다. 재실행한 네 계측은 모두 정상 종료했고 AWS 원본 SQLite에서 집계를 다시 계산해 일치함을 확인했다. 모든 비교 종료 뒤 GPU 6·7의 기존 홀더와 20GiB 예약을 확인했다. [초기 실행](../../benchmarks/evidence/20261119-w2-submit-prepare/publication-follow-up/initial/campaign.sh) · [재실행](../../benchmarks/evidence/20261119-w2-submit-prepare/publication-follow-up/campaign.sh) · [소유권 검사](../../benchmarks/evidence/20261119-w2-submit-prepare/publication-follow-up/server_owner.py)
 
+### 커밋된 이벤트 데이터의 복사 제거
+
+격리한 `d3d8fe6e5`에서 스케줄러 커밋과 감사 기록이 끝난 뒤 이벤트를 만들 때 텍스트와 logprobs를 이동하도록 바꿨다. CUDA 12.4 SM80으로 빌드해 A100 7번에서 SmolLM2-1.7B-Instruct의 `after-submit-v1`을 고정하고 기준 → 후보 → 후보 → 기준 순으로 실행했다. 측정 512건이 오류와 429 없이 완료됐고 두 부하의 입력·출력 해시와 종료 사유·토큰 사용량이 일치했다. 별도 C1·C8 생성 ID 대조도 일치했다. [소스와 두 바이너리 해시](../../benchmarks/evidence/20261119-w2-submit-prepare/event-payload-follow-up/verified-summary.json) · [진단 패치](../../benchmarks/evidence/20261119-w2-submit-prepare/event-payload-follow-up/move-committed-payload.patch.gz)
+
+실행별 여덟 개의 별도 프롬프트에서 C1·C8 스트리밍을 검산했다. 요청 ID와 생성 시각을 제외한 SSE 응답 해시와 각 토큰의 상위 logprobs 세 개가 네 실행에서 일치했다. [스트리밍 검사기](../../benchmarks/evidence/20261119-w2-submit-prepare/event-payload-follow-up/logprob_probe.py)
+
+| 부하·순서 | TTFT p95 변화 | TPOT p50 변화 | 처리량 변화 |
+|---|---:|---:|---:|
+| `reason-c32` 기준 먼저 | +0.33% | +0.03% | +0.0025% |
+| `reason-c32` 후보 먼저 | +0.59% | −0.29% | +0.24% |
+| `long-c32` 기준 먼저 | +0.11% | −0.11% | −0.35% |
+| `long-c32` 후보 먼저 | −0.36% | −0.14% | +0.23% |
+
+두 부하에서 회귀 기준을 충족했다. SmolLM2 `reason-c32`에서 정렬된 KV 테이블과 이번 복사 제거는 각각 출력이 일치했고 처리량 개선 폭이 2% 미만이었다. 기존 단일 iteration 구조의 이 부하에 대한 두 후보를 미채택으로 확정한다. 여러 스텝의 동시 실행과 KV 수명 검증은 별도 범위다. 종료 뒤 GPU 6·7의 기존 20GiB 예약을 확인했다. 재현할 때는 같은 디렉터리에 `move-committed-payload.patch.gz`를 `move-committed-payload.patch`로 푼 뒤 `dispatch.sha256`으로 검사한다. [실행 순서](../../benchmarks/evidence/20261119-w2-submit-prepare/event-payload-follow-up/campaign.sh) · [측정별 결과](../../benchmarks/evidence/20261119-w2-submit-prepare/event-payload-follow-up/verified-summary.json)
+
 ## GPU 예약 방식
 
 시작 전에 GPU 6·7에서 활성 compute process가 없고 각 메모리 사용이 4MiB인 것을 확인했다. 기존 `gpu_hold` 도구로 각 장치에 20GiB 대기 예약을 시작했다. 7번 실험마다 예약을 64MiB로 낮췄다가 자식 프로세스 종료 후 20GiB로 되돌렸다. 동일 홀더의 PID와 시작 시각을 확인하며 전환했다. [기존 예약 도구](../../benchmarks/tools/gpu_hold/README.md)
