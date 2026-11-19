@@ -1,0 +1,8 @@
+--- a/campaign.sh
++++ b/campaign.sh
+@@ -72,3 +72,4 @@
+ test "$(docker image inspect --format '{{.Id}}' "$image")" = "$image"
+-docker run --rm --network none --mount "type=bind,src=$model,dst=/models,readonly" "$image" \
++docker run --rm --network none --env NVIDIA_VISIBLE_DEVICES=void \
++    --user "$(id -u):$(id -g)" --mount "type=bind,src=$model,dst=/models,readonly" "$image" \
+     riley-checkpoint verify --checkpoint /models >checkpoint-verify.log

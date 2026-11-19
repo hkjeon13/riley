@@ -313,6 +313,8 @@ Qwen2.5-7B-Instruct를 A100 6번에서 기준 이미지 `0a907408ec73` → 파�
 
 RAG C8 seed 2에서 요청 시작부터 클라이언트의 소켓 쓰기까지의 p95 변화는 +0.18ms와 +0.01ms였다. 쓰기 뒤 첫 텍스트까지의 p95는 +66.12ms와 +154.29ms였다. 이 구간에는 소켓 전달, 서버 대기·처리, GPU 계산, SSE 전달이 포함된다. 다음 대조에서는 같은 요청 도착 시각을 두 이미지에 재생해 RAG 차이가 유지되는지 확인한다. 기준 이미지의 설정을 유지하고 파생 설정의 기본값 적용을 보류한다.
 
+고정 시각 재생의 CPU 사전 검사에서 첫 기준·후보 기록의 요청 본문 해시를 각각 64건씩 재현했다. 두 소켓 쓰기 시각의 간격은 첫 측정 요청부터 마지막까지 19.137초와 19.354초였다. 두 이미지에 각 시각표를 적용하고 실제 쓰기 시각의 오차도 기록한다. 이 검사는 기존 닫힌 부하의 응답 속도에 따라 다음 요청 시각이 달라지는 효과를 조사하기 위한 후속 대조다. [고정 입력 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/preflight.json) · [재생 클라이언트](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/fixed_arrival.py)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)

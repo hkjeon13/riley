@@ -88,6 +88,8 @@ jemalloc을 포함한 파생 이미지 `1fc444b1840e`에서도 같은 A100과 �
 
 Riley ID가 단독 최대였던 두 decode 분기의 후속 진단을 등록했다. 사례 12의 생성 위치 9와 `numbers-1023`의 위치 67에서 같은 토큰 접두부를 쓰고 최종 RMSNorm 전후 행과 로짓을 수집한다. Riley 응답과 전체 로짓 해시가 원래 캡처와 같고 HF SDPA가 기존 점수를 재현해야 비교를 진행한다. 두 엔진의 정규화 행에 같은 출력 가중치를 사용해 두 ID의 BF16 점수가 재현되는지 검산한다. 고정 입력 선택과 Rust 타입 검사를 통과했고, A100 7번의 실측은 W5 이미지 성능 대조 종료 뒤 실행한다. 원본 BF16 행은 실행 호스트에 보관한다. [후속 진단 등록](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/registration.json) · [수집·검산 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/capture_final_rows.py)
 
+첫 시도는 비루트 검사 컨테이너가 체크포인트를 읽지 못해 GPU 사용 전에 종료됐다. 읽기 전용 마운트를 사용하는 CPU 검사 컨테이너의 UID·GID를 작업 계정에 맞춘 뒤 체크포인트 manifest 해시를 확인했다. 같은 CUDA 진단 소스와 입력으로 재실행했으며 GPU 검증 결과는 진행 중이다. [실패와 재실행 영수증](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/retry/host-preflight.json) · [CPU 검사 실행 변경](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/final-rows/retry/campaign-update.patch)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.
