@@ -1,0 +1,88 @@
+{
+  "scope": "Preflight for a separate A100 capture of actual Riley output rows. No CUDA execution completed.",
+  "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+  "engine_path": "crates/riley-server/src/engine.rs",
+  "engine_source_sha256": "2b584b8aa41fc84c2586e3a559005ce931ad201ce2d871850de1494e937a6e5c",
+  "patched_engine_sha256": "f47e61f0d047ead3690e33848522a79932879313fc2687b8e3b907107152b518",
+  "candidate_patch_sha256": "9a35c48c449da43a83d1011c8fc93bda71d2a02525ef1806bcf34db08e173714",
+  "original_inputs_sha256": {
+    "benchmarks/evidence/20261119-w4-long/riley/capture.json.gz": "b32bd641dab4e9516a8d3b45de2d77fbde91ad64acad893153f4b6c2090b72a6",
+    "benchmarks/evidence/20261119-w4-long/hf/reference.json": "c9927fa7a3650a13cbb37bc5cf4d72ee3e5683e793b49f79cf832d3da4a34a04",
+    "benchmarks/evidence/20261119-w4-holdout/riley/capture.json.gz": "12d508ed51f03509432e6302b8d10855f56125f4f6b7f31a559cff03eb10b611",
+    "benchmarks/evidence/20261119-w4-holdout/hf/reference.json": "f3c8abd676dbd6d5765ea15f16d1b1263d815adf9bda2d1fd220c8872ffb61a9",
+    "benchmarks/evidence/20261119-w4-holdout/holdout.json.gz": "220f13a7306518f996480c608733623475471ff3721ea3aeb895a2d5f91abd11"
+  },
+  "offset_is_zero_based": true,
+  "selected_prompt_length_and_offsets": [
+    [
+      681,
+      2
+    ],
+    [
+      3301,
+      0
+    ],
+    [
+      667,
+      14
+    ],
+    [
+      3330,
+      0
+    ],
+    [
+      669,
+      9
+    ],
+    [
+      2196,
+      9
+    ],
+    [
+      1023,
+      67
+    ],
+    [
+      1024,
+      77
+    ]
+  ],
+  "verification": {
+    "local_rust_typecheck": {
+      "result": "passed",
+      "features": [
+        "server",
+        "hf-exact-probe"
+      ],
+      "scope": "Rust type checking with a temporary local CUDA build-script stub; no linking"
+    },
+    "bf16_controls": {
+      "3": {
+        "tied_ids": [
+          264,
+          5257
+        ],
+        "value": 18.375
+      },
+      "9": {
+        "tied_ids": [
+          264,
+          5257
+        ],
+        "value": 18.25
+      }
+    },
+    "input_and_offset_selection": {
+      "requests": 8,
+      "decode_offsets": 6,
+      "prefill_offsets": 2
+    },
+    "rejected_synthetic_lower_rank_selected_token": true
+  },
+  "required_live_checks": [
+    "same original prompt IDs",
+    "same original output IDs, text, usage and finish",
+    "one full BF16 row per requested offset",
+    "read only addressable IDs for score comparisons"
+  ]
+}

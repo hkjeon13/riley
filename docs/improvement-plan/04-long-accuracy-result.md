@@ -72,6 +72,8 @@ Riley의 C8·C32 반복에서는 각각 33/33의 생성 ID·텍스트·종료 �
 
 같은 7개 분기 위치의 HF eager 재생에서는 SDPA 선택이 단독 1위인 경우가 4건, Riley 선택이 단독 1위인 경우가 1건, 상위 동점이 2건이었다. vLLM이 같은 접두부까지 도달한 6건에서는 HF SDPA 선택과 4번, Riley 선택과 2번 일치했다. 나머지 1건은 더 앞에서 갈라졌다. 다음 수치 원인 대조는 현재 첫 토큰 추적에 아직 포함되지 않은 공통 접두부의 decode 결정을 우선한다. [엔진별 동일 접두부 대조](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/result.json)
 
+여섯 decode 분기와 두 첫 토큰 대조점에서 실제 출력 슬롯의 BF16 점수 행을 수집하는 진단 패치를 준비했다. C1의 원래 샘플링 경로를 사용하고, 진단 클라이언트는 출력 ID·텍스트·종료 사유·usage가 보존된 응답과 일치할 때만 점수를 검산한다. 로컬 타입 검사와 저장된 두 prefill 행 재계산을 통과했다. CUDA 빌드와 실제 서버에서의 여덟 행 수집이 남아 있다. [고정 입력과 검증 범위](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/preflight.json) · [점수 행 검사기](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/capture_decode_rows.py)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.
