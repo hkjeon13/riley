@@ -1,0 +1,82 @@
+{
+  "scheduler_choice_summary_sha256": "a2d3281c95eca2e49a6965cf84f82a1cb9c4ddfb66787a42c6ef63466aad9ef6",
+  "existing_buckets": [
+    1,
+    2,
+    4,
+    8,
+    16,
+    24,
+    32,
+    48,
+    64,
+    80,
+    96,
+    112,
+    128,
+    144,
+    160,
+    176,
+    192,
+    208,
+    224,
+    240,
+    256,
+    512,
+    1024
+  ],
+  "all_prefill": {
+    "iterations": 759,
+    "at_budget": 627,
+    "cuda_ms": 92994.87155,
+    "cuda_ms_at_budget": 83145.838248,
+    "best_single_extra_aligned_bucket": {
+      "rows": 784,
+      "affected_iterations": 36,
+      "configured_padding_rows_removed": 8640
+    }
+  },
+  "ttft_tail_wait_between_chunks": {
+    "rag-c1": {
+      "requests": 1,
+      "iterations": 0,
+      "at_budget": 0,
+      "cuda_ms": 0.0,
+      "cuda_ms_at_budget": 0.0,
+      "best_single_extra_aligned_bucket": null
+    },
+    "rag-c8-s1": {
+      "requests": 4,
+      "iterations": 17,
+      "at_budget": 17,
+      "cuda_ms": 2258.568917,
+      "cuda_ms_at_budget": 2258.568917,
+      "best_single_extra_aligned_bucket": null
+    },
+    "rag-c8-s2": {
+      "requests": 4,
+      "iterations": 15,
+      "at_budget": 15,
+      "cuda_ms": 2021.684325,
+      "cuda_ms_at_budget": 2021.684325,
+      "best_single_extra_aligned_bucket": null
+    },
+    "wave-sync": {
+      "requests": 2,
+      "iterations": 29,
+      "at_budget": 29,
+      "cuda_ms": 3924.209609,
+      "cuda_ms_at_budget": 3924.209609,
+      "best_single_extra_aligned_bucket": null
+    },
+    "wave-50ms": {
+      "requests": 2,
+      "iterations": 29,
+      "at_budget": 29,
+      "cuda_ms": 3912.672038,
+      "cuda_ms_at_budget": 3912.672038,
+      "best_single_extra_aligned_bucket": null
+    }
+  },
+  "scope": "Plans are deduplicated within each workload. Matching a configured bucket is a static bound on padding rows. It does not establish which optional CUDA shape prepared or predict a speedup."
+}

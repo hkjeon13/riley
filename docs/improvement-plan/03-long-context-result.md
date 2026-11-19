@@ -253,6 +253,12 @@ TTFT가 p95 이상인 요청의 조각 사이 대기와 겹친 CUDA 시간을 �
 
 마지막 열은 기존 decode 행과 aging으로 우선 배정된 요청을 그대로 두고, 나중에 입장한 요청이 선택된 스텝의 일반 prefill 행을 재배정해 앞선 요청을 완료할 수 있는 경우다. 관측한 실행 계획에서 계산한 범위다. 두 RAG seed의 TTFT 꼬리 요청 8개 중 3개가 이 조건에 해당했다. [대기 시간·완료 가능 조건 집계](../../benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/result/wait-attribution.json) · [CUDA 시간 연결 도구](../../benchmarks/evidence/20261119-w3-rag-profile/tools/attribute_scheduler_wait.py)
 
+#### 1,024행 스텝의 계산 비용
+
+실제 prefill 스텝 759개 중 627개가 활성 토큰 1,024행을 채웠다. 이 스텝이 계측된 prefill CUDA 시간의 89.4%를 차지했다. TTFT 꼬리 요청이 조각 사이에 대기한 고유 스텝은 두 RAG seed에서 17개와 15개, 두 동시 유입 조건에서 각각 29개였다. 이 스텝은 모두 1,024행이었다. 16행 간격으로 버킷 하나를 추가하는 계산에서 784행이 전체 추적의 36스텝에 영향을 줄 수 있었고, 위 TTFT 꼬리 대기 구간에서 영향을 받는 스텝은 0개였다. 이 계산은 설정된 버킷 기준이며 CUDA에서 실제 준비에 성공한 형상과 지연은 별도 확인한다. [활성 행과 버킷 검산](../../benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/result/bucket-audit.json) · [검산기](../../benchmarks/evidence/20261119-w3-rag-profile/tools/inspect_prefill_buckets.py)
+
+다음 단일 변수는 A100의 Qwen2.5-14B QKV `M=1024, K=5120, N=7168` GEMM이다. 고정 소스의 128행 기준 알고리즘은 split-K 1이고 513–1,024행 후보표의 엔트리는 split-K 3이다. 실험은 첫 합성 입력을 서버의 준비 시점 BF16 바이트 검사와 같은 방식으로 생성한다. 별도 seed에서도 기준 결과가 일치하는 알고리즘만 남겨, 준비 검사와 같은 방식으로 정한 기준에 대해 세 번씩 순서를 교대로 측정한다. 실제 서빙 입력의 출력·TTFT·decode 회귀는 후속 대조에서 확인한다. CUDA 12.4 진단 바이너리를 빌드했고 기존 W4 시험이 끝나면 A100 7번에서 실행한다. 재현 시 `qkv1024.patch.gz`를 같은 디렉터리에서 `qkv1024.patch`로 풀고 `dispatch.sha256`을 검증한다. [고정 소스·빌드 검증](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/preflight.json) · [실행 등록](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/registration.json)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
