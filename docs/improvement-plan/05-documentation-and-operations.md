@@ -16,7 +16,7 @@ Qwen2.5-7B CUDA 서버에서 90초 사전 검증과 cache off·on 각 30분의 �
 | 모델 지원 의미 혼합 | 누락된 두 모델을 README의 A100 판정 목록에 복구하고, model-support의 owned 경로 기록에 조사 시점을 표시했다. | 일반 native 성능과 pinned 모델의 HF 정확성에 각각 근거가 생김 |
 | GPU CI 범위 | native-cuda workflow는 nightly compile, GPU runtime/memory smoke는 수동 opt-in | 모델 추론·routing·성능 회귀가 PR마다 자동 검증되지 않음 |
 | 운영 근거 | 합성 트래픽 30분 soak 기록. 실제 production trace 미검증 | 실제 길이·도착·취소·기능 혼합의 차이를 모름 |
-| prefix cache | 배포 이미지의 캐시 활성 30분 시험에서 응답·자원 회수는 통과했고 익명 RSS는 616KiB 증가했다. CUDA 메모리 오류 주입은 별도 진단 빌드에서 4건 통과했다. | 이미지의 RSS 증가 0과 실제 장치 장애 뒤 회복 경로가 검증 범위에 남음 |
+| prefix cache | 기준 배포 이미지의 캐시 활성 30분 시험에서 익명 RSS는 616KiB 증가했다. jemalloc을 포함한 파생 시험 이미지의 정밀 RSS는 캐시 활성에서 440KiB, 비활성에서 640KiB 감소했다. CUDA 메모리 오류 주입은 별도 진단 빌드에서 4건 통과했다. | 파생 이미지의 장문·성능과 실제 장치 장애 뒤의 운영 복구 경로를 계속 확인함 |
 
 근거: [README](../../README.md), [configuration](../configuration.md), [API](../api.md), [serving-validation](../serving-validation.md), [model-support](../model-support.md), [prefix-cache](../prefix-cache.md), [GPU CI](../../.github/workflows/native-cuda.yml).
 

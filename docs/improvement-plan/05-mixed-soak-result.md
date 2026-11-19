@@ -285,7 +285,14 @@ A100 6번의 `cache-on`에서 추론 PID의 할당기 매핑과 API 40건을 확
 
 이 파생 이미지 ID로 GPU 6에서 `cache-on` API 40건을 통과하고 첫 30분 부하를 시작했다. 실제 Riley PID가 이미지 내부 할당기를 적재했고 컨테이너 마운트는 체크포인트 경로 하나였다. GPU 7의 20GiB 예약도 확인했다. 두 캐시 모드의 부하에 모두 통과하면 같은 이미지로 장문 232건을 재검증한다. [패키징된 이미지의 GPU 검증 등록](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/registration.json) · [실제 기동 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/cache-on-launch-verified.json)
 
-파생 이미지의 `cache-on` 30분 부하에서 정밀 RSS와 익명 RSS가 각각 **440KiB 감소**했다. 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했으며, 전반 대비 후반 p95는 TTFT +1.63%, 완료 지연 −13.56%였다. 운영 검사와 종료 자원 회수를 확인했고 GPU 6·7의 기존 20GiB 예약으로 복귀했다. 다음 `cache-off`는 같은 이미지와 할당기로 API 40건을 통과한 뒤 30분 부하를 시작했다. [패키징 이미지 첫 부하의 독립 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/cache-on-verified.json) · [두 번째 기동 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/cache-off-launch-verified.json)
+파생 이미지 `1fc444b1840e`의 두 30분 부하에서 각 모드의 API 40건, 정상 완료 13,749건, 의도적 연결 종료 700건과 지연 기준을 확인했다. 각 실행에서 정밀 RSS와 익명 RSS의 변화량이 같았다. 종료 시 활성·대기 요청, 할당된 KV 블록, GPU·pinned 메모리는 모두 0이었다. GPU 6번은 두 실행 뒤 모두 같은 홀더의 20GiB 예약으로 복귀했고 GPU 7번은 기존 예약을 유지했다. [패키징 이미지의 두 부하 독립 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/verified-soaks.json)
+
+| 모드 | 후반 정밀 RSS 변화 | 전반 대비 후반 TTFT p95 | 전반 대비 후반 완료 지연 p95 |
+|---|---:|---:|---:|
+| `cache-on` | **−440KiB** | +1.63% | −13.56% |
+| `cache-off` | **−640KiB** | +0.61% | −13.35% |
+
+두 모드의 통과를 확인한 뒤 같은 이미지의 장문 출력 232건 검증을 시작했다.
 
 파생 이미지의 두 부하와 장문 검증을 모두 통과하면 같은 GPU 6에서 기준 → 후보 → 후보 → 기준 순으로 성능을 대조한다. 각 실행에서 동일 체크포인트·서빙 인자로 짧은 C1·C32, RAG C8 두 seed, 긴 생성 C32, prefix 공유 C8의 640건을 측정한다. 요청별 출력 해시·토큰 수·종료 사유를 확인하고 실행 순서별 지표를 기록한다. 두 실행의 평균으로 짧은 요청의 TTFT·처리량 2%와 decode TPOT 1% 회귀 기준을 판정한다. [성능 시험 등록과 워크로드](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/registration.json) · [출력과 성능 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/compare_allocator_performance.py)
 

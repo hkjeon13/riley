@@ -1,0 +1,289 @@
+{
+  "scope": "GPU qualification of the actual packaged allocator image.",
+  "image_binding": {
+    "schema_version": "riley.distribution-image-check.v1",
+    "status": "passed",
+    "image_id": "sha256:1fc444b1840e6f8d55b32fc603629e031ee018f674b9b1ab04b6a69c9445ff66",
+    "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+    "source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+    "binaries": {
+      "/opt/riley/bin/riley": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+      "/opt/riley/bin/riley-checkpoint": "42b0c53f557d1fcc0ee23fae5527534eacecbee18c9177a6ab8e606ff3074b73"
+    },
+    "experimental_packaged_cpu_attestation_sha256": "10d0e97f0ec6fdbe01dda553ac5d7d4e08077b846e309f0c055137d97c946835",
+    "parent_image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1"
+  },
+  "gpu_checker_input_sha256": "3c51b4c2d8c3aba2a1a9e0b332fc41bcc34a411fea734e4654c438535233f214",
+  "results": {
+    "cache-on": {
+      "mixed_soak": {
+        "mode": "cache-on",
+        "status": "passed",
+        "failed_checks": [],
+        "rss": {
+          "baseline": {
+            "rss_kib": 15486980,
+            "anonymous_kib": 15299708,
+            "read_ms": 313.1221532821655
+          },
+          "drain": {
+            "rss_kib": 15486540,
+            "anonymous_kib": 15299268,
+            "read_ms": 322.0970705151558
+          },
+          "rss_growth_kib": -440,
+          "anonymous_growth_kib": -440
+        },
+        "counts": {
+          "plain": {
+            "completed": 7984
+          },
+          "schema": {
+            "completed": 1739,
+            "stop": 1739
+          },
+          "logprobs": {
+            "completed": 1160
+          },
+          "tools": {
+            "completed": 708,
+            "tool_calls": 708
+          },
+          "long": {
+            "completed": 1415
+          },
+          "reason": {
+            "completed": 743
+          },
+          "cancel": {
+            "disconnected": 700
+          }
+        }
+      },
+      "verified_soak": {
+        "duration_seconds": 1800.0,
+        "arrival_rate": 8.0,
+        "shared_prefixes": 8,
+        "checks": {
+          "no_unexpected_http_or_stream_error": true,
+          "completed_schema_and_tool_covered": true,
+          "disconnects_observed": true,
+          "idle_after_drain": true,
+          "native_allocation_plateau": true,
+          "workload_coverage": true,
+          "p95_drift_at_most_5_percent": true,
+          "rss_growth_second_half_at_most_zero": true
+        },
+        "problem_count": 0,
+        "p95_change_percent": {
+          "ttft_ms": 1.6301448771727234,
+          "e2e_ms": -13.562633507194988
+        },
+        "counter_changes": {
+          "cancellations": 700,
+          "disconnects": 700,
+          "overloads": 0,
+          "dropped_observations": 13568
+        },
+        "rss_baseline_time_seconds": 900.1668682545424,
+        "rss_drain_time_seconds": 1804.0011699646711,
+        "rss_proc_status_growth_mib": 2.0390625,
+        "rss_source": {
+          "container_id": "7960ba79961f251430e2c370ed90b3decbe259a62eaf9d5ac42b71d595c3afe8",
+          "host_pid": 1473543,
+          "container_pid": 1
+        },
+        "rss_sample_errors": []
+      },
+      "status": "passed",
+      "api_checks": 40,
+      "same_reservations": {
+        "gpu6": {
+          "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+          "physical_index": 6,
+          "phase": "idle",
+          "pid": 2431228,
+          "start_ticks": "6339570869",
+          "allocation_bytes": 21474836480,
+          "torch_reserved_bytes": 21474836480
+        },
+        "gpu7": {
+          "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+          "physical_index": 7,
+          "phase": "idle",
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "allocation_bytes": 21474836480,
+          "torch_reserved_bytes": 21474836480
+        }
+      },
+      "process_allocator": {
+        "container_id": "7960ba79961f251430e2c370ed90b3decbe259a62eaf9d5ac42b71d595c3afe8",
+        "host_pid": 1473543,
+        "image_id": "sha256:1fc444b1840e6f8d55b32fc603629e031ee018f674b9b1ab04b6a69c9445ff66",
+        "library_sha256": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9",
+        "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+        "mounts": [
+          "/models"
+        ]
+      },
+      "report_sha256": "d6932291907970ecfad351d6141ffc31ac2ab927acc8ba693d27029efc910011",
+      "shutdown_metrics": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0,
+        "allocation": {
+          "device_live_count": 0,
+          "device_live_bytes": 0,
+          "pinned_live_count": 0,
+          "pinned_live_bytes": 0
+        }
+      },
+      "artifacts_sha256": {
+        "api.json": "138909791ebb10a61b55113cf677535e276f1db5789e1c058cee501517fb7e3a",
+        "api.log": "2a4c2ffde4d255d0d9d561afea2d00445730d3e3c6252055c95e620b8a78af00",
+        "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+        "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+        "server.log": "3df3d6c31e0d164255a13ff3e83a48664b66638aaa05b8126aff63b62117f8d1",
+        "shutdown.json": "19c9e440632a455a75d359d07e9715cb8ab00f7c8cbbf3845f1dab6edc096a32",
+        "soak.json": "df368d33da4466a4931f3b49e65246dc60b315c0d0263f33c9df8ba81d465115",
+        "soak.log": "6d11d58948b9131685711bcc7a79aebec37ff964f459d273f02ca0db49b406f4"
+      }
+    },
+    "cache-off": {
+      "mixed_soak": {
+        "mode": "cache-off",
+        "status": "passed",
+        "failed_checks": [],
+        "rss": {
+          "baseline": {
+            "rss_kib": 15486824,
+            "anonymous_kib": 15299472,
+            "read_ms": 299.8434528708458
+          },
+          "drain": {
+            "rss_kib": 15486184,
+            "anonymous_kib": 15298832,
+            "read_ms": 370.7524389028549
+          },
+          "rss_growth_kib": -640,
+          "anonymous_growth_kib": -640
+        },
+        "counts": {
+          "plain": {
+            "completed": 7984
+          },
+          "schema": {
+            "completed": 1739,
+            "stop": 1739
+          },
+          "logprobs": {
+            "completed": 1160
+          },
+          "tools": {
+            "completed": 708,
+            "tool_calls": 708
+          },
+          "long": {
+            "completed": 1415
+          },
+          "reason": {
+            "completed": 743
+          },
+          "cancel": {
+            "disconnected": 700
+          }
+        }
+      },
+      "verified_soak": {
+        "duration_seconds": 1800.0,
+        "arrival_rate": 8.0,
+        "shared_prefixes": 8,
+        "checks": {
+          "no_unexpected_http_or_stream_error": true,
+          "completed_schema_and_tool_covered": true,
+          "disconnects_observed": true,
+          "idle_after_drain": true,
+          "native_allocation_plateau": true,
+          "workload_coverage": true,
+          "p95_drift_at_most_5_percent": true,
+          "rss_growth_second_half_at_most_zero": true
+        },
+        "problem_count": 0,
+        "p95_change_percent": {
+          "ttft_ms": 0.6053553651202748,
+          "e2e_ms": -13.352034380372402
+        },
+        "counter_changes": {
+          "cancellations": 700,
+          "disconnects": 700,
+          "overloads": 0,
+          "dropped_observations": 13568
+        },
+        "rss_baseline_time_seconds": 900.1778338178992,
+        "rss_drain_time_seconds": 1804.0031254813075,
+        "rss_proc_status_growth_mib": 1.1875,
+        "rss_source": {
+          "container_id": "d58ac9d34e971e413f6dc93377e3e32f85135fa7b6ef9330a80090186fd77fbb",
+          "host_pid": 1636940,
+          "container_pid": 1
+        },
+        "rss_sample_errors": []
+      },
+      "status": "passed",
+      "api_checks": 40,
+      "same_reservations": {
+        "gpu6": {
+          "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+          "physical_index": 6,
+          "phase": "idle",
+          "pid": 2431228,
+          "start_ticks": "6339570869",
+          "allocation_bytes": 21474836480,
+          "torch_reserved_bytes": 21474836480
+        },
+        "gpu7": {
+          "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+          "physical_index": 7,
+          "phase": "idle",
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "allocation_bytes": 21474836480,
+          "torch_reserved_bytes": 21474836480
+        }
+      },
+      "process_allocator": {
+        "container_id": "d58ac9d34e971e413f6dc93377e3e32f85135fa7b6ef9330a80090186fd77fbb",
+        "host_pid": 1636940,
+        "image_id": "sha256:1fc444b1840e6f8d55b32fc603629e031ee018f674b9b1ab04b6a69c9445ff66",
+        "library_sha256": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9",
+        "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+        "mounts": [
+          "/models"
+        ]
+      },
+      "report_sha256": "503574995593193f157e37eff5b705307e9aa56b5af5dc4111f5c4216a613cb3",
+      "shutdown_metrics": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0,
+        "allocation": {
+          "device_live_count": 0,
+          "device_live_bytes": 0,
+          "pinned_live_count": 0,
+          "pinned_live_bytes": 0
+        }
+      },
+      "artifacts_sha256": {
+        "api.json": "71c95a302f5233df7223e77cf9fb4a10ddb505e5a9e5f5ee0818e719f7572aeb",
+        "api.log": "2a4c2ffde4d255d0d9d561afea2d00445730d3e3c6252055c95e620b8a78af00",
+        "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+        "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+        "server.log": "b2dfc58d1d446746fde370ab1d434fae9df46ba3c4172cb0310ce667b8354a04",
+        "shutdown.json": "84ea1396dffa4a39bbd681c145fee332c8bc5db18649357cc730126017ebadab",
+        "soak.json": "b66c005bc5b2dd3d4c612fa013f819cbc770851533ff62e7715fd346767f12c9",
+        "soak.log": "6e227a235419466f8e829eb732a32b0f26fb09b11019c5ad1fa6017bf278f06f"
+      }
+    }
+  }
+}
