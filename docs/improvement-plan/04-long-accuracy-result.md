@@ -113,6 +113,17 @@ HF의 첫 프로파일은 같은 구간 이름이 CPU와 CUDA에 각각 기록�
 
 두 사례에서 HF 재계산의 `aten::mm`은 Q에 `ampere_bf16_s16816gemm` 계열 커널을, K·V에 `internal::gemvx::kernel`을 사용했다. Riley는 Q·K·V를 합친 한 번의 cuBLASLt 투영을 사용했다. 실제 선택 경로와 연산 형상이 다른 것을 확인했고, 개별 내적에서 어느 누산 단계가 BF16 차이를 만드는지는 별도 재현 범위에 남는다. 종료 뒤 GPU 6·7은 기존 20GiB 예약으로 복귀했다. [HF 투영의 연산과 커널](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/hf-projection-profile/verified-profile.json) · [계측 재현 등록](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/hf-projection-profile/registration.json)
 
+#### 동일한 BF16 피연산자의 투영 대조
+
+A100 7번에서 저장된 두 행의 입력 norm과 체크포인트의 같은 BF16 Q·K·V 가중치를 네 경로에 공급했다. Riley의 실제 cuBLASLt 계획을 CUDA 12.4와 cuBLASLt `120405`에서 직접 재생했다. PyTorch `2.13.0+cu129`에서는 독립 가중치 세 개, 같은 연속 가중치에서 잘라낸 뷰 세 개, 연속 가중치 전체를 한 번에 곱하는 조건을 비교했다. 표의 각 칸은 원래 Riley / HF 행과 다른 원소 수이며, 행 크기는 4,608개다. [실행 결과와 피연산자 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/verified-summary.json)
+
+| 레이어 0 decode 행 | Riley 계획 재생 | PyTorch 개별 가중치 | PyTorch 뷰 세 개 | PyTorch 병합 투영 |
+|---|---:|---:|---:|---:|
+| 사례 12, `669-9` | 0 / 8 | 8 / 0 | 8 / 0 | 7 / 2 |
+| `numbers-1023`, `1023-67` | 0 / 1 | 1 / 0 | 1 / 0 | 1 / 0 |
+
+Riley 계획과 PyTorch의 두 개별 투영 조건은 각각 원래 Riley와 HF 결과를 비트 단위로 재현했다. PyTorch에서 가중치 저장소를 공유해도 개별 투영의 결과는 같았다. 같은 환경에서 병합 투영으로 바꾸면 사례 12의 두 값이 HF 개별 투영과 달라졌고 최대 절대차는 `3.814697265625e-06`이었다. 두 행 모두 병합 PyTorch 결과와 Riley 사이에 기존 최대 절대차가 남았다. 동일 피연산자에서 관찰된 차이를 두 투영 경로로 재현했으며, cuBLASLt의 알고리즘 선택과 라이브러리 버전은 이 시험에서 함께 달랐다. 개별 FP32 누산 단계와 최종 토큰에 대한 영향은 별도 검증 범위다. 실험 종료 뒤 GPU 7의 원래 20GiB 예약 복귀와 GPU 6의 기존 예약을 확인했고, 원본을 보존한 호스트에서 비교 통계를 독립 재계산했다. [실행 순서](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/campaign.sh) · [비교 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/projection_crossover.py) · [cuBLASLt 재생 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/replay_riley_lt.cu)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.

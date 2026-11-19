@@ -1,0 +1,296 @@
+{
+  "result": {
+    "scope": "Exact operand crossover for the captured layer-zero bias-free projections.",
+    "binding": {
+      "references": {
+        "operators": "b7c459a5558d1d371228c751b83ad6bf29aeed4ff6100f3d472300bf59ece10a",
+        "riley_plan": "77996ecda4a6b148504f353867fded9afc63cfca861a99e3818aaccc7b70e791",
+        "hf_profile": "1a2e5f014dfc13b6cc28f3aa5da16f0ed730f6a61173e90d6bc2c805756caeed",
+        "checkpoint": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f"
+      },
+      "cases": {
+        "669-9": {
+          "input": "d593b61d75afaf9035a377aa09b0706e4ee8be423cc42eb75d978ef8a51cf171",
+          "riley": "b2c2578c96b17946188fec31739c1e3d3be25f96a5b24b1591616d8193ea9e34",
+          "hf": "e7d9952def87688721880d7a7c5f16ce3a7b8e612951017ae5362a269a5e6385"
+        },
+        "1023-67": {
+          "input": "9b8a07a8d5b46a0b2375f133eb43826ab4c517a293688a54a11b3bf8427b2168",
+          "riley": "d083559d347da239f6bc921c8480a63c4edde731a5df34c84ebe683c15c2f6b7",
+          "hf": "f1c134419f39eb316bc4484288c4cacea4a4d44072cc28835de10aaff811e40a"
+        }
+      },
+      "packed_weights_sha256": "9610b4662ed1456e280e713d765468d1bde09f23b113aa9a0a2fcdbb45b70bcd",
+      "weights_index_sha256": "624bf7c47cd12468fdc16e38a47cf4f19e0415b859a223ba3c027eed2f0e1028",
+      "projection_weights": {
+        "q": {
+          "shard": "model-00001-of-00004.safetensors",
+          "tensor_sha256": "d2bbccdb5f2f2ff17e2e5d4798e20e549e7cc7f4035323e414069da50f850fa9",
+          "header_sha256": "3afb560369ab8160cae46cbd11dad701a835c20a3ad9dd4562d0b2696e445cae"
+        },
+        "k": {
+          "shard": "model-00001-of-00004.safetensors",
+          "tensor_sha256": "cebad24a60f2ec43ec037ed65b38ce741fb03d88e1fd38beb60917103bc632ed",
+          "header_sha256": "3afb560369ab8160cae46cbd11dad701a835c20a3ad9dd4562d0b2696e445cae"
+        },
+        "v": {
+          "shard": "model-00001-of-00004.safetensors",
+          "tensor_sha256": "3cf3a2c91bc7953b4069e6e1f628abd8a3178f8184519cc0c8e008d4adaccb9d",
+          "header_sha256": "3afb560369ab8160cae46cbd11dad701a835c20a3ad9dd4562d0b2696e445cae"
+        }
+      }
+    },
+    "torch": "2.13.0+cu129",
+    "torch_cuda": "12.9",
+    "cases": {
+      "669-9": {
+        "original_riley_vs_hf": {
+          "width": 4608,
+          "different_bf16_words": 8,
+          "max_abs": 0.00390625,
+          "rms": 5.760113381324041e-05
+        },
+        "replays": {
+          "torch-separate": {
+            "sha256": "e7d9952def87688721880d7a7c5f16ce3a7b8e612951017ae5362a269a5e6385",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 8,
+              "max_abs": 0.00390625,
+              "rms": 5.760113381324041e-05
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0
+            }
+          },
+          "torch-sliced": {
+            "sha256": "e7d9952def87688721880d7a7c5f16ce3a7b8e612951017ae5362a269a5e6385",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 8,
+              "max_abs": 0.00390625,
+              "rms": 5.760113381324041e-05
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0
+            }
+          },
+          "torch-merged": {
+            "sha256": "65f8d15b811b9d3ba56c462ef9eb4c02a3f266e53a41fe5e264e548159a813ff",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 7,
+              "max_abs": 0.00390625,
+              "rms": 5.760110632054956e-05
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 2,
+              "max_abs": 3.814697265625e-06,
+              "rms": 5.622323067323253e-08
+            }
+          },
+          "native-lt": {
+            "sha256": "b2c2578c96b17946188fec31739c1e3d3be25f96a5b24b1591616d8193ea9e34",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 8,
+              "max_abs": 0.00390625,
+              "rms": 5.760113381324041e-05
+            }
+          }
+        },
+        "torch_kernels": {
+          "separate_profile": {
+            "q": [
+              "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn"
+            ],
+            "k": [
+              "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, false, true, true, false, 7, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>)"
+            ],
+            "v": [
+              "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, false, true, true, false, 7, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>)"
+            ]
+          },
+          "sliced_profile": {
+            "q": [
+              "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn"
+            ],
+            "k": [
+              "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, false, true, true, false, 7, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>)"
+            ],
+            "v": [
+              "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, false, true, true, false, 7, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>)"
+            ]
+          },
+          "merged_kernels": [
+            "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn"
+          ]
+        }
+      },
+      "1023-67": {
+        "original_riley_vs_hf": {
+          "width": 4608,
+          "different_bf16_words": 1,
+          "max_abs": 0.0009765625,
+          "rms": 1.4386124291718496e-05
+        },
+        "replays": {
+          "torch-separate": {
+            "sha256": "f1c134419f39eb316bc4484288c4cacea4a4d44072cc28835de10aaff811e40a",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 1,
+              "max_abs": 0.0009765625,
+              "rms": 1.4386124291718496e-05
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0
+            }
+          },
+          "torch-sliced": {
+            "sha256": "f1c134419f39eb316bc4484288c4cacea4a4d44072cc28835de10aaff811e40a",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 1,
+              "max_abs": 0.0009765625,
+              "rms": 1.4386124291718496e-05
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0
+            }
+          },
+          "torch-merged": {
+            "sha256": "f1c134419f39eb316bc4484288c4cacea4a4d44072cc28835de10aaff811e40a",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 1,
+              "max_abs": 0.0009765625,
+              "rms": 1.4386124291718496e-05
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0
+            }
+          },
+          "native-lt": {
+            "sha256": "d083559d347da239f6bc921c8480a63c4edde731a5df34c84ebe683c15c2f6b7",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 1,
+              "max_abs": 0.0009765625,
+              "rms": 1.4386124291718496e-05
+            }
+          }
+        },
+        "torch_kernels": {
+          "separate_profile": {
+            "q": [
+              "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn"
+            ],
+            "k": [
+              "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, false, true, true, false, 7, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>)"
+            ],
+            "v": [
+              "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, false, true, true, false, 7, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>)"
+            ]
+          },
+          "sliced_profile": {
+            "q": [
+              "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn"
+            ],
+            "k": [
+              "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, false, true, true, false, 7, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>)"
+            ],
+            "v": [
+              "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, false, true, true, false, 7, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>)"
+            ]
+          },
+          "merged_kernels": [
+            "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn"
+          ]
+        }
+      }
+    }
+  },
+  "reservations": {
+    "6": {
+      "before": {
+        "physical_index": 6,
+        "pid": 2431228,
+        "start_ticks": "6339570869",
+        "phase": "idle",
+        "allocation_bytes": 21474836480,
+        "torch_reserved_bytes": 21474836480,
+        "other_processes": []
+      },
+      "after": {
+        "physical_index": 6,
+        "pid": 2431228,
+        "start_ticks": "6339570869",
+        "phase": "idle",
+        "allocation_bytes": 21474836480,
+        "torch_reserved_bytes": 21474836480,
+        "other_processes": []
+      }
+    },
+    "7": {
+      "before": {
+        "physical_index": 7,
+        "pid": 2431237,
+        "start_ticks": "6339570875",
+        "phase": "idle",
+        "allocation_bytes": 21474836480,
+        "torch_reserved_bytes": 21474836480,
+        "other_processes": []
+      },
+      "after": {
+        "physical_index": 7,
+        "pid": 2431237,
+        "start_ticks": "6339570875",
+        "phase": "idle",
+        "allocation_bytes": 21474836480,
+        "torch_reserved_bytes": 21474836480,
+        "other_processes": []
+      }
+    }
+  },
+  "execution": {
+    "stage": "w4-projection-crossover-20261120.J9REWUkf",
+    "controller_pid": 2406918,
+    "campaign_exit": 0,
+    "physical_gpu": 7,
+    "native_cuda_runtime": 12040,
+    "native_cublaslt_version": 120405,
+    "dispatch_tar_sha256": "95c7902da9449112e231db7e622baaf96e3204aed860e4726fd0a2b8c185ff64",
+    "remote_verified_json_sha256": "9bb140a4290330432613cd1a861bd629620b085be021a3fcfabd0e2e48fd9491",
+    "remote_dispatch_and_result_digests_verified": true,
+    "remote_independent_comparison_byte_exact": true
+  }
+}
