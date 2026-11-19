@@ -70,6 +70,17 @@ unset RILEY_HOST_STEP_TRACE
 
 스텝 ID, 요청 ID, 출력 slot, 버퍼 lease, CUDA event, 오류를 하나의 소유권 묶음으로 유지한다. 제출된 스텝의 handle 때문에 buffer 수명이 끊기지 않게 한다. 이 단계는 출력·오류 경로 동일성을 먼저 검증하며 성능 이득을 요구하지 않는다.
 
+현행 서빙 경로에서 토큰을 발행하기까지 관여하는 소유자와 경계는 다음과 같다.
+
+| 경계 | 현행 소유권과 해제 조건 |
+|---|---|
+| 계획·KV 예약 | `Scheduler`의 `InflightPlan`이 KV 예약을 보유하고 `PreparedLlamaIteration`은 계획의 block table과 입력을 빌린다. `plan_iteration`은 기존 계획이 열려 있으면 `IterationInFlight`를 반환한다. 해당 계획에 포함된 요청의 취소는 완료 또는 abort까지 유예한다. [계획](../../crates/riley-scheduler/src/scheduler.rs#L985) · [취소](../../crates/riley-scheduler/src/scheduler.rs#L1321) · [입력 준비](../../crates/riley-scheduler/src/execution.rs#L236) |
+| 명령 제출·완료 | `CudaCommandBatch`가 하나의 stream을 빌리고 명령이 참조하는 버퍼의 수명을 유지한다. 명령 제출 뒤 기존 hook에서 이전 스텝의 이벤트를 발행할 수 있고, `finish`가 현재 배치의 완료를 확인한다. [stream 소유권](../../crates/riley-cuda/src/runtime.rs#L661) · [제출 hook과 완료](../../crates/riley-runtime/src/llama/executor/dispatch.rs#L95) |
+| 출력 회수·커밋 | 일반 executor는 결과 다운로드를 제출하고 stream을 다시 동기화한 뒤 `DownloadedLlamaIteration`을 반환한다. 준비 시점의 ID와 출력 slot에 샘플링 결과를 결속해 `complete_iteration`으로 넘긴다. 잘못되거나 재사용된 feedback은 예약·토큰 기록을 갱신하기 전에 거절된다. [출력 회수](../../crates/riley-scheduler/src/execution.rs#L1345) · [샘플링과 커밋](../../crates/riley-server/src/engine.rs#L4288) · [커밋 검증](../../crates/riley-scheduler/src/scheduler.rs#L1037) |
+| 실행 실패 | stream이 정지했음을 확인한 실행 실패에는 `DeviceQuiescedMutationUnknown` 처분을 넘긴다. 정지 여부가 불명확하면 일반 경로에는 안전한 abort 정보가 없고 graph 오류도 서버 실패로 전달된다. [실패 분류](../../crates/riley-scheduler/src/execution.rs#L1386) · [graph 실패](../../crates/riley-server/src/engine.rs#L4240) |
+
+`cargo test --offline --locked -p riley-scheduler --no-default-features --test simulation --test inflight_mixed_program_routing`으로 현재 소스의 CPU 검사 37건을 재실행했다. 두 번째 계획 거절, 진행 중 취소, stale·중복 feedback 거절, 미제출 retry와 장치 정지 후 abort를 확인했다. `riley-cuda --no-default-features --doc` 검사 76건도 통과했으며 `CudaCommandBatch`와 명령 stream을 다른 스레드로 넘기려는 코드의 컴파일 실패를 포함한다. 위 `finish`와 다운로드 완료 사이를 변경하는 후보에는 동일한 라우팅·수명 조건과 실제 CUDA 오류 주입 검증을 적용한다. [스케줄러 시뮬레이션](../../crates/riley-scheduler/tests/simulation.rs) · [진행 중 계획 회귀 검사](../../crates/riley-scheduler/tests/inflight_mixed_program_routing.rs) · [CUDA 소유권 검사](../../crates/riley-cuda/src/runtime.rs#L633)
+
 ### W2-4. GPU 결과와 독립적인 CPU 작업부터 중첩
 
 - 새 요청 검증·토큰화, 이미 commit된 토큰의 직렬화, 메트릭 요약 등 독립 작업의 중첩 가능성을 측정한다.
