@@ -36,6 +36,8 @@ python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 
 W4의 A100 진단 빌드에서 보존된 C1 응답 8건을 재현하고 해당 BF16 점수 행을 검산했다. 첫 분기 7건 중 Riley·HF ID의 공동 최대 5건과 Riley 단독 최대 2건을 확인했다. 큰 ID를 고르는 동점 규칙을 계산하면 이미 일치한 대조 사례도 바뀌어 적용을 보류했다. [실제 점수 행 결과](04-long-accuracy-result.md#실제-bf16-점수-행의-분기-검산)
 
+Riley 단독 최대 두 사례의 레이어 0에서 같은 BF16 입력과 가중치로 bias 전 QKV 차이를 재현했다. CUDA 12.4에서 기존 병합 투영의 알고리즘 ID를 21에서 31로 바꾸면 두 행의 결과가 PyTorch 병합 투영과 비트 단위로 일치했다. 이 대조는 두 행의 연산 결과를 확인했으며, 알고리즘 채택 판정에 필요한 모델 출력과 성능 검증이 남아 있다. [동일한 피연산자의 투영 대조](04-long-accuracy-result.md#동일한-bf16-피연산자의-투영-대조)
+
 Riley ID가 단독 최대였던 두 decode 사례에서는 같은 RMSNorm 계산식과 출력 가중치로 두 ID의 BF16 점수를 재현했다. 연산별 추적에서 두 사례 모두 입력 norm이 일치했고 최초 차이는 레이어 0의 bias 전 QKV 투영이었다. 달랐던 9개 내적의 FP64 결과를 BF16으로 반올림하면 8개가 HF 재계산 값, 1개가 Riley 관측값과 일치했다. Riley는 병합 QKV에 cuBLASLt 알고리즘 21과 Split-K 1을 사용했고, HF 재계산은 Q에 GEMM, K·V에 GEMV 커널을 사용했다. 개별 내적의 누산 순서와 정밀도는 후속 대조 범위에 남아 있다. [두 decode 사례 결과](04-long-accuracy-result.md#실제-bf16-점수-행의-분기-검산)
 
 W3의 QKV 추적 416건은 해당 비계측 요청·응답과 일치했다. 50ms 간격 부하의 동일 장문 요청에서 늘어난 첫 토큰 지연 528–541ms 중 381–392ms는 prefill 조각 사이 대기였다. RAG 첫 토큰 p95 개선이 일관되게 재현될 때까지 후보는 격리 시험에만 둔다. [두 순서의 단계별 결과](03-long-context-result.md#50ms-간격-유입의-추가-지연-위치)

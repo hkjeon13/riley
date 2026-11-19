@@ -1,0 +1,644 @@
+{
+  "result": {
+    "prior_verified_sha256": "9bb140a4290330432613cd1a861bd629620b085be021a3fcfabd0e2e48fd9491",
+    "native_cuda": 12040,
+    "native_cublaslt": 120405,
+    "m": 1,
+    "n": 4608,
+    "k": 3584,
+    "workspace": 0,
+    "heuristic_results": 8,
+    "plans": {
+      "recorded": {
+        "config": {
+          "id": 21,
+          "tile": 15,
+          "stages": 18,
+          "split_k": 1,
+          "reduction": 0,
+          "cta_swizzling": 0,
+          "custom_option": 0,
+          "numeric_flags": 131586
+        },
+        "cases": {
+          "669-9": {
+            "sha256": "b2c2578c96b17946188fec31739c1e3d3be25f96a5b24b1591616d8193ea9e34",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0,
+              "different_by_projection": {
+                "q": 0,
+                "k": 0,
+                "v": 0
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 8,
+              "max_abs": 0.00390625,
+              "rms": 5.760113381324041e-05,
+              "different_by_projection": {
+                "q": 6,
+                "k": 0,
+                "v": 2
+              }
+            }
+          },
+          "1023-67": {
+            "sha256": "d083559d347da239f6bc921c8480a63c4edde731a5df34c84ebe683c15c2f6b7",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0,
+              "different_by_projection": {
+                "q": 0,
+                "k": 0,
+                "v": 0
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 1,
+              "max_abs": 0.0009765625,
+              "rms": 1.4386124291718496e-05,
+              "different_by_projection": {
+                "q": 1,
+                "k": 0,
+                "v": 0
+              }
+            }
+          }
+        }
+      },
+      "rank-0": {
+        "config": {
+          "id": 6,
+          "tile": 15,
+          "stages": 18,
+          "split_k": 1,
+          "reduction": 0,
+          "cta_swizzling": 1,
+          "custom_option": 0,
+          "numeric_flags": 131586
+        },
+        "cases": {
+          "669-9": {
+            "sha256": "b2c2578c96b17946188fec31739c1e3d3be25f96a5b24b1591616d8193ea9e34",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0,
+              "different_by_projection": {
+                "q": 0,
+                "k": 0,
+                "v": 0
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 8,
+              "max_abs": 0.00390625,
+              "rms": 5.760113381324041e-05,
+              "different_by_projection": {
+                "q": 6,
+                "k": 0,
+                "v": 2
+              }
+            }
+          },
+          "1023-67": {
+            "sha256": "d083559d347da239f6bc921c8480a63c4edde731a5df34c84ebe683c15c2f6b7",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0,
+              "different_by_projection": {
+                "q": 0,
+                "k": 0,
+                "v": 0
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 1,
+              "max_abs": 0.0009765625,
+              "rms": 1.4386124291718496e-05,
+              "different_by_projection": {
+                "q": 1,
+                "k": 0,
+                "v": 0
+              }
+            }
+          }
+        }
+      },
+      "rank-1": {
+        "config": {
+          "id": 6,
+          "tile": 15,
+          "stages": 17,
+          "split_k": 1,
+          "reduction": 0,
+          "cta_swizzling": 0,
+          "custom_option": 0,
+          "numeric_flags": 131586
+        },
+        "cases": {
+          "669-9": {
+            "sha256": "b2c2578c96b17946188fec31739c1e3d3be25f96a5b24b1591616d8193ea9e34",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0,
+              "different_by_projection": {
+                "q": 0,
+                "k": 0,
+                "v": 0
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 8,
+              "max_abs": 0.00390625,
+              "rms": 5.760113381324041e-05,
+              "different_by_projection": {
+                "q": 6,
+                "k": 0,
+                "v": 2
+              }
+            }
+          },
+          "1023-67": {
+            "sha256": "d083559d347da239f6bc921c8480a63c4edde731a5df34c84ebe683c15c2f6b7",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0,
+              "different_by_projection": {
+                "q": 0,
+                "k": 0,
+                "v": 0
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 1,
+              "max_abs": 0.0009765625,
+              "rms": 1.4386124291718496e-05,
+              "different_by_projection": {
+                "q": 1,
+                "k": 0,
+                "v": 0
+              }
+            }
+          }
+        }
+      },
+      "rank-2": {
+        "config": {
+          "id": 31,
+          "tile": 15,
+          "stages": 18,
+          "split_k": 1,
+          "reduction": 0,
+          "cta_swizzling": 0,
+          "custom_option": 0,
+          "numeric_flags": 131586
+        },
+        "cases": {
+          "669-9": {
+            "sha256": "65f8d15b811b9d3ba56c462ef9eb4c02a3f266e53a41fe5e264e548159a813ff",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 7,
+              "max_abs": 0.00390625,
+              "rms": 5.760110632054956e-05,
+              "different_by_projection": {
+                "q": 6,
+                "k": 0,
+                "v": 1
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 2,
+              "max_abs": 3.814697265625e-06,
+              "rms": 5.622323067323253e-08,
+              "different_by_projection": {
+                "q": 0,
+                "k": 0,
+                "v": 2
+              }
+            }
+          },
+          "1023-67": {
+            "sha256": "f1c134419f39eb316bc4484288c4cacea4a4d44072cc28835de10aaff811e40a",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 1,
+              "max_abs": 0.0009765625,
+              "rms": 1.4386124291718496e-05,
+              "different_by_projection": {
+                "q": 1,
+                "k": 0,
+                "v": 0
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0,
+              "different_by_projection": {
+                "q": 0,
+                "k": 0,
+                "v": 0
+              }
+            }
+          }
+        }
+      },
+      "rank-3": {
+        "config": {
+          "id": 31,
+          "tile": 15,
+          "stages": 18,
+          "split_k": 1,
+          "reduction": 0,
+          "cta_swizzling": 1,
+          "custom_option": 0,
+          "numeric_flags": 131586
+        },
+        "cases": {
+          "669-9": {
+            "sha256": "65f8d15b811b9d3ba56c462ef9eb4c02a3f266e53a41fe5e264e548159a813ff",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 7,
+              "max_abs": 0.00390625,
+              "rms": 5.760110632054956e-05,
+              "different_by_projection": {
+                "q": 6,
+                "k": 0,
+                "v": 1
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 2,
+              "max_abs": 3.814697265625e-06,
+              "rms": 5.622323067323253e-08,
+              "different_by_projection": {
+                "q": 0,
+                "k": 0,
+                "v": 2
+              }
+            }
+          },
+          "1023-67": {
+            "sha256": "f1c134419f39eb316bc4484288c4cacea4a4d44072cc28835de10aaff811e40a",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 1,
+              "max_abs": 0.0009765625,
+              "rms": 1.4386124291718496e-05,
+              "different_by_projection": {
+                "q": 1,
+                "k": 0,
+                "v": 0
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0,
+              "different_by_projection": {
+                "q": 0,
+                "k": 0,
+                "v": 0
+              }
+            }
+          }
+        }
+      },
+      "rank-4": {
+        "config": {
+          "id": 13,
+          "tile": 0,
+          "stages": 0,
+          "split_k": 1,
+          "reduction": 0,
+          "cta_swizzling": 0,
+          "custom_option": 11,
+          "numeric_flags": 131585
+        },
+        "cases": {
+          "669-9": {
+            "sha256": "b89b7a3d7692be6c8acddc0799a0fb9c87355b61bff97b1f37e429020a20ef8c",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 10,
+              "max_abs": 0.00390625,
+              "rms": 5.8048629540032027e-05,
+              "different_by_projection": {
+                "q": 8,
+                "k": 0,
+                "v": 2
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 4,
+              "max_abs": 0.00048828125,
+              "rms": 7.193967587570541e-06,
+              "different_by_projection": {
+                "q": 4,
+                "k": 0,
+                "v": 0
+              }
+            }
+          },
+          "1023-67": {
+            "sha256": "f64bde8ab4f5aa9d4cc5d09dcdeb738bf5d3065ecd595ab5bf74590ce49348fa",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 3,
+              "max_abs": 0.001953125,
+              "rms": 4.315837287515549e-05,
+              "different_by_projection": {
+                "q": 3,
+                "k": 0,
+                "v": 0
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 2,
+              "max_abs": 0.001953125,
+              "rms": 4.0690104166666664e-05,
+              "different_by_projection": {
+                "q": 2,
+                "k": 0,
+                "v": 0
+              }
+            }
+          }
+        }
+      },
+      "rank-5": {
+        "config": {
+          "id": 13,
+          "tile": 0,
+          "stages": 0,
+          "split_k": 1,
+          "reduction": 0,
+          "cta_swizzling": 0,
+          "custom_option": 75,
+          "numeric_flags": 131585
+        },
+        "cases": {
+          "669-9": {
+            "sha256": "b89b7a3d7692be6c8acddc0799a0fb9c87355b61bff97b1f37e429020a20ef8c",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 10,
+              "max_abs": 0.00390625,
+              "rms": 5.8048629540032027e-05,
+              "different_by_projection": {
+                "q": 8,
+                "k": 0,
+                "v": 2
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 4,
+              "max_abs": 0.00048828125,
+              "rms": 7.193967587570541e-06,
+              "different_by_projection": {
+                "q": 4,
+                "k": 0,
+                "v": 0
+              }
+            }
+          },
+          "1023-67": {
+            "sha256": "f64bde8ab4f5aa9d4cc5d09dcdeb738bf5d3065ecd595ab5bf74590ce49348fa",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 3,
+              "max_abs": 0.001953125,
+              "rms": 4.315837287515549e-05,
+              "different_by_projection": {
+                "q": 3,
+                "k": 0,
+                "v": 0
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 2,
+              "max_abs": 0.001953125,
+              "rms": 4.0690104166666664e-05,
+              "different_by_projection": {
+                "q": 2,
+                "k": 0,
+                "v": 0
+              }
+            }
+          }
+        }
+      },
+      "rank-6": {
+        "config": {
+          "id": 31,
+          "tile": 18,
+          "stages": 18,
+          "split_k": 1,
+          "reduction": 0,
+          "cta_swizzling": 0,
+          "custom_option": 0,
+          "numeric_flags": 131586
+        },
+        "cases": {
+          "669-9": {
+            "sha256": "65f8d15b811b9d3ba56c462ef9eb4c02a3f266e53a41fe5e264e548159a813ff",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 7,
+              "max_abs": 0.00390625,
+              "rms": 5.760110632054956e-05,
+              "different_by_projection": {
+                "q": 6,
+                "k": 0,
+                "v": 1
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 2,
+              "max_abs": 3.814697265625e-06,
+              "rms": 5.622323067323253e-08,
+              "different_by_projection": {
+                "q": 0,
+                "k": 0,
+                "v": 2
+              }
+            }
+          },
+          "1023-67": {
+            "sha256": "f1c134419f39eb316bc4484288c4cacea4a4d44072cc28835de10aaff811e40a",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 1,
+              "max_abs": 0.0009765625,
+              "rms": 1.4386124291718496e-05,
+              "different_by_projection": {
+                "q": 1,
+                "k": 0,
+                "v": 0
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 0,
+              "max_abs": 0,
+              "rms": 0,
+              "different_by_projection": {
+                "q": 0,
+                "k": 0,
+                "v": 0
+              }
+            }
+          }
+        }
+      },
+      "rank-7": {
+        "config": {
+          "id": 13,
+          "tile": 0,
+          "stages": 0,
+          "split_k": 1,
+          "reduction": 0,
+          "cta_swizzling": 0,
+          "custom_option": 101,
+          "numeric_flags": 131585
+        },
+        "cases": {
+          "669-9": {
+            "sha256": "b89b7a3d7692be6c8acddc0799a0fb9c87355b61bff97b1f37e429020a20ef8c",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 10,
+              "max_abs": 0.00390625,
+              "rms": 5.8048629540032027e-05,
+              "different_by_projection": {
+                "q": 8,
+                "k": 0,
+                "v": 2
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 4,
+              "max_abs": 0.00048828125,
+              "rms": 7.193967587570541e-06,
+              "different_by_projection": {
+                "q": 4,
+                "k": 0,
+                "v": 0
+              }
+            }
+          },
+          "1023-67": {
+            "sha256": "f64bde8ab4f5aa9d4cc5d09dcdeb738bf5d3065ecd595ab5bf74590ce49348fa",
+            "riley": {
+              "width": 4608,
+              "different_bf16_words": 3,
+              "max_abs": 0.001953125,
+              "rms": 4.315837287515549e-05,
+              "different_by_projection": {
+                "q": 3,
+                "k": 0,
+                "v": 0
+              }
+            },
+            "hf": {
+              "width": 4608,
+              "different_bf16_words": 2,
+              "max_abs": 0.001953125,
+              "rms": 4.0690104166666664e-05,
+              "different_by_projection": {
+                "q": 2,
+                "k": 0,
+                "v": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "reservations": {
+    "6": {
+      "before": {
+        "physical_index": 6,
+        "pid": 2431228,
+        "start_ticks": "6339570869",
+        "phase": "idle",
+        "allocation_bytes": 21474836480,
+        "torch_reserved_bytes": 21474836480,
+        "other_processes": []
+      },
+      "after": {
+        "physical_index": 6,
+        "pid": 2431228,
+        "start_ticks": "6339570869",
+        "phase": "idle",
+        "allocation_bytes": 21474836480,
+        "torch_reserved_bytes": 21474836480,
+        "other_processes": []
+      }
+    },
+    "7": {
+      "before": {
+        "physical_index": 7,
+        "pid": 2431237,
+        "start_ticks": "6339570875",
+        "phase": "idle",
+        "allocation_bytes": 21474836480,
+        "torch_reserved_bytes": 21474836480,
+        "other_processes": []
+      },
+      "after": {
+        "physical_index": 7,
+        "pid": 2431237,
+        "start_ticks": "6339570875",
+        "phase": "idle",
+        "allocation_bytes": 21474836480,
+        "torch_reserved_bytes": 21474836480,
+        "other_processes": []
+      }
+    }
+  },
+  "execution": {
+    "stage": "w4-native-plan-controls-20261120.n1qiR9dQ",
+    "controller_pid": 2427609,
+    "campaign_exit": 0,
+    "physical_gpu": 7,
+    "dispatch_tar_sha256": "13f9b1295fc26b1bfc81c4ab08035f8b9ab8e912e5099319d7c70eb598f8ab75",
+    "remote_verified_json_sha256": "339bed90fe18cf99cbce5cd91fcc7b9b1d1e4eb9e69cd50d83a4defbe49c83a3",
+    "remote_dispatch_and_result_digests_verified": true,
+    "remote_independent_comparison_byte_exact": true,
+    "consecutive_measurements_per_row_per_plan": 2,
+    "consecutive_measurements_bit_equal": true
+  }
+}
