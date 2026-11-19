@@ -1,0 +1,26 @@
+{
+  "campaign": "w4-residual-replace-20261119.DZyMRtQ6",
+  "pid": 2999262,
+  "prerequisite": "w5-trim-7sec-retry-20261119.fKlbclsw",
+  "physical_gpu": 6,
+  "status_at_record_time": "waiting_before_gpu",
+  "cpu_hook_smoke": {
+    "last_chunk_only": true,
+    "other_rows_preserved": true,
+    "installed_bf16_bytes_verified": true
+  },
+  "cpu_frozen_replay": {
+    "original_residual_and_norm_reproduced": true,
+    "all_update_swap_reproduced_peer_pair": true,
+    "independently_recomputed_layer_22_pair_in_both_cases": true
+  },
+  "files_sha256": {
+    "replay_residual_replacements.py": "ff4568808a3e120ed1eb7d2690183de6d1a21e77b1f975f0fb72e72d09ad9bc5",
+    "result.json.gz": "ae11f8a1074a5d46edde312423c94f5eba9c7011277f985fc927ed5b6d229960",
+    "hf_residual_replacement.py": "5bc5238f511199d300d08e004fcee86abe1691774e0b1ba60cdd12d7b0d27c3c",
+    "campaign.sh": "5be1a5a0ad22e6bf1ef8b230dedf0c8479ecf130e0dca54e3237357b9c204021",
+    "dispatch.sha256": "cce8b38e969bd46d5e32f0c31b03acae06e9b9a549c8ebd2528cb1fd1b4b590b",
+    "imports.sha256": "6afc40c134256d37bc86aef43ef1a0c43aed2347eca96acdd70c0dc978eaa5d4",
+    "frozen.sha256": "4858d7fbc420d9ac7b2dd8ac6767220a388177ad86003f96d8a7c1217f1a83c5"
+  }
+}

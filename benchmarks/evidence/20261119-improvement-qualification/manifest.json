@@ -986,6 +986,16 @@
       "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/registration.json",
       "sha256": "bd6058b9669a7e6329b501cfa7b2e8396902347952b3ce6762a5d5121c303370"
     },
+    "qwen7_residual_replacement_control": {
+      "frozen_cpu_comparison": {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/residual-replacement-control/result.json.gz",
+        "sha256": "ae11f8a1074a5d46edde312423c94f5eba9c7011277f985fc927ed5b6d229960"
+      },
+      "downstream_gpu_registration": {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/residual-replacement-control/registration.json",
+        "sha256": "29cb8b5c1a99e6477f249fde4704790c84846d446ce5004e1a76e13a60196b24"
+      }
+    },
     "distribution_periodic_trim_7sec_retry": {
       "initial_attempt": {
         "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/retry/first-attempt.json",

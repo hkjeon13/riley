@@ -152,6 +152,14 @@ A100 6번에서 네 교차 조건이 모두 완료됐다. 원래 HF 기준을 �
 
 A100 6번에서 두 입력과 두 prefill 형상의 기준 로짓을 모두 재현했다. 원래 HF의 전체 prefill에서는 22·27번 레이어의 관측 norm·MLP 행도 바이트 단위로 일치했다. 지정한 행에 Riley의 BF16 입력을 넣자 8개 조건 모두에서 Riley MLP 출력과 일치하는 원소가 늘었고 RMS 오차가 42.94–89.40% 감소했다. 모든 조건에서 수치 차이가 남았다. 첫 토큰은 사례 3에서 모든 조건이 5257, 사례 9에서 모든 조건이 264였다. 사례 9의 분할 실행에서 27번 레이어를 바꾼 조건은 로짓 5257의 값이 18.375에서 18.25로 바뀌었다. 이 결과는 두 레이어의 마지막 입력 행에 적용된다. 종료 뒤 GPU 6의 동일한 20GiB 예약을 확인했다. [같은 입력에서의 수치 대조](../../benchmarks/evidence/20261119-w4-layer-trace/same-mlp-input/result/verified-summary.json)
 
+#### 저장된 residual 업데이트 교체
+
+같은 두 사례에서 28개 레이어의 마지막 입력 행을 사용했다. 지정한 attention 출력 또는 MLP 출력 행만 상대 엔진의 저장값으로 바꿔 시간 순서대로 BF16 residual 덧셈과 최종 RMSNorm을 재계산했다. 원래 입력과 출력을 그대로 쓴 대조군은 두 엔진의 모든 residual 덧셈과 최종 norm을 정확히 재현했다. 모든 업데이트를 상대 엔진 값으로 교체하면 그 엔진의 두 토큰 점수가 정확히 재현됐다. 세 가중치 행의 해시는 체크포인트의 이전 대조 원본과 일치한다. [CPU 재계산기](../../benchmarks/evidence/20261119-w4-layer-trace/residual-replacement-control/replay_residual_replacements.py) · [레이어별 계산 결과](../../benchmarks/evidence/20261119-w4-layer-trace/residual-replacement-control/result.json.gz)
+
+사례 3의 Riley 저장값에서는 두 토큰이 18.375로 동점이었다. 전체 attention 교체 뒤에도 동점이었고, 전체 MLP를 HF 값으로 교체하면 264는 18.25, 5257은 18.375였다. 단독 MLP 교체에서는 7·14·21·22·23번 레이어가 동점을 풀었다. 역방향의 HF 저장값에서는 단일 레이어 교체로 두 토큰의 BF16 순위가 바뀐 사례가 없었고, 모든 MLP 출력을 Riley 값으로 교체하면 동점이 됐다. 사례 9는 양쪽에서 전체 MLP 교체 뒤에도 동점이었다. 이 계산은 저장된 후속 레이어 출력을 고정한 두 토큰의 민감도를 보여 준다. [원래 점수 및 역방향 대조](../../benchmarks/evidence/20261119-w4-layer-trace/residual-replacement-control/result.json.gz)
+
+후속 GPU 시험은 HF SDPA에서 같은 마지막 입력 위치의 출력 행을 교체한 뒤 나머지 순전파를 실제로 계산한다. 두 사례의 전체 prefill과 1,024토큰 분할에서 22번 레이어 MLP, 전체 attention, 전체 MLP, 두 종류 전체 교체를 각각 대조한다. 기준 로짓 재현과 교체 행의 BF16 바이트를 검증하며 전체 로짓 해시와 선택 토큰을 기록한다. CPU 훅 시험에서 마지막 조각의 마지막 행만 바뀌는 것을 확인했다. A100 6번의 RSS 시험이 끝난 뒤 이 검증을 시작하도록 등록했다. [후속 실행과 사전 검증](../../benchmarks/evidence/20261119-w4-layer-trace/residual-replacement-control/registration.json)
+
 같은 네 행에서 visible 페이지를 한 장씩 제외한 818개 대조를 계산했다. 전체 페이지를 사용한 기준이 746개에서 관측값에 더 가까웠다. 마지막 visible 페이지를 제외하면 오차가 543–1,113배였고 첫 페이지를 제외하면 0.999–1.039배였다. 사례 9의 첫 행에서는 페이지 제외 대조 209개 중 58개가 기준과 같거나 더 가까웠다. 앞쪽 페이지의 포함 여부를 판별하려면 해당 페이지를 제외했을 때의 변화가 FP64 재계산과 GPU 출력 사이의 기준 오차보다 큰 입력을 선정해 다시 검증해야 한다. [페이지별 대조 결과](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/page-omission-sweep.json.gz) · [대조 도구](../../benchmarks/evidence/20261119-w4-layer-trace/tools/sweep_visible_kv_pages.py)
 
 두 사례의 마지막 입력 행에 대해 bias 이전의 BF16 투영값과 체크포인트의 K/V bias를 사용해 캐시 저장값을 독립 계산했다. 레이어 0, KV head 0에서 K의 RoPE 적용과 V의 bias 적용 결과가 기록된 페이지의 마지막 입력 슬롯과 각각 128/128개 일치했다. 두 사례 모두 직전 슬롯에서는 K 5/128개, V 0/128개만 일치했다. 이 대조는 추적된 두 마지막 입력 슬롯의 저장값을 확인한다. [KV 저장값 대조](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/final-slot-replay.json) · [재계산 도구](../../benchmarks/evidence/20261119-w4-layer-trace/tools/replay_final_kv_slot.py)
