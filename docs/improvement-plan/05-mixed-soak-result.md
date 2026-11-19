@@ -270,11 +270,18 @@ A100 6번의 `cache-on` 컨테이너에서 API 40건이 통과했고 30분 부�
 
 A100 6번의 `cache-on`에서 추론 PID의 할당기 매핑과 API 40건을 확인했고 첫 30분 부하를 시작했다. 그 시점에 GPU 7은 같은 홀더의 20GiB 예약을 유지했다. 두 모드에서 준비 직후와 종료 직전의 할당기 설정을 대조하고, 같은 PID에서 읽은 RSS·후반 p95·종료 자원·GPU 예약 복귀를 검산한다. 재현 시 승인 이미지의 기존 검사 도구와 `verify_a100_candidate.py`를 등록 파일의 경로 및 해시에 맞춘다. [기동과 API 검산](../../benchmarks/evidence/20261120-w5-jemalloc/startup-verified.json) · [GPU 실행 순서](../../benchmarks/evidence/20261120-w5-jemalloc/campaign.sh) · [집계기](../../benchmarks/evidence/20261120-w5-jemalloc/verify_zerodecay.py)
 
-`cache-on` 30분 부하는 RSS 증가 0을 포함한 모든 운영 검사에 통과했다. 정밀 RSS와 익명 RSS는 각각 **680KiB 감소**했고, 동일 모드의 기준은 616KiB 증가했다. 정상 완료 13,749건과 의도적 연결 종료 700건이 기준과 일치했다. 후반 TTFT p95는 326.88ms, 완료 지연 p95는 4,131.06ms였다. 각각 기준 대비 +0.33%, −0.01%였다. 종료 자원과 GPU 6·7의 기존 20GiB 예약을 확인한 뒤 `cache-off`를 기동했다. 두 번째 모드에서도 동일한 할당기와 API 40건을 확인했고 30분 부하를 시작했다. [첫 모드 독립 검산과 원본 해시](../../benchmarks/evidence/20261120-w5-jemalloc/cache-on-verified.json) · [두 번째 모드 기동 검산](../../benchmarks/evidence/20261120-w5-jemalloc/cache-off-launch-verified.json)
+두 모드의 30분 부하가 RSS 증가 0과 API 40건, 요청·지연·종료 자원 검사를 모두 통과했다. 각 모드에서 정상 완료 13,749건과 의도적 연결 종료 700건이 기준과 일치했다. 시험 뒤 같은 홀더의 GPU 6·7 예약 20GiB를 확인했다. 두 모드에서 정밀 RSS 변화와 익명 RSS 변화는 각각 같았다. [두 모드 독립 검산과 원본 해시](../../benchmarks/evidence/20261120-w5-jemalloc/paired-verified.json)
+
+| 모드 | 기준 정밀 RSS 변화 | 후보 정밀 RSS 변화 | 후보 후반 TTFT p95 | 후보 후반 완료 지연 p95 |
+|---|---:|---:|---:|---:|
+| `cache-on` | +616KiB | **−680KiB** | 326.88ms (+0.33%) | 4,131.06ms (−0.01%) |
+| `cache-off` | +700KiB | **−672KiB** | 334.37ms (+0.05%) | 4,162.46ms (+0.12%) |
 
 첫 부하 도중 같은 호스트에서 W3 재생용 상대 시각을 집계했다. 집계 전송의 관측 구간은 UTC 15:24:18–15:24:25였으며, CPU 작업이 지연에 미친 영향은 별도로 측정하지 않았다. [W3 CPU 시각 집계](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/cpu-ready-inputs.json)
 
-두 캐시 모드가 기존 운영 기준을 만족하면 같은 이미지와 할당기로 기준 장문 144건 및 홀드아웃 88건을 검증하는 절차를 등록했다. 후보의 두 영수증을 서버에서 재계산한 뒤 GPU 6의 20GiB 예약을 확인하고 실행 여부를 결정한다. CPU 사전 검증에서 고정 장문 입력의 해시와 기존 232건 영수증, 양쪽 통과·한쪽 실패·영수증 불일치 경로를 확인했다. [조건부 정확성 등록](../../benchmarks/evidence/20261120-w5-jemalloc/accuracy-follow-up/registration.json) · [판정 및 실행 도구](../../benchmarks/evidence/20261120-w5-jemalloc/accuracy-follow-up/qualify_allocator.py)
+두 캐시 모드의 운영 판정을 재계산해 장문 정확성 실행 조건을 충족했다. 고정 입력의 해시와 기존 232건 영수증, GPU 6의 20GiB 예약을 확인한 뒤 같은 이미지와 할당기로 기준 장문 144건 및 홀드아웃 88건의 검증을 시작했다. [조건부 정확성 등록](../../benchmarks/evidence/20261120-w5-jemalloc/accuracy-follow-up/registration.json) · [판정 및 실행 도구](../../benchmarks/evidence/20261120-w5-jemalloc/accuracy-follow-up/qualify_allocator.py)
+
+장문 검증까지 통과하면 기존 이미지에 할당기 파일과 패키지 고지문, `serve` 실행 스크립트를 넣은 별도 시험 이미지를 CPU에서 빌드한다. 기준 이미지의 이미지 ID와 패키지 해시를 연결하고, 기준 파일 전체와 새로 추가한 파일 3개의 해시를 대조한다. 이어 CLI 여섯 경로의 출력과 Riley의 할당 심볼 연결을 확인한다. 파생 이미지가 생기면 그 이미지 ID로 실제 GPU 검증을 다시 수행해야 한다. [패키징 등록](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/registration.json) · [CPU 검사기](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/verify_allocator_image.py)
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
