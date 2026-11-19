@@ -515,6 +515,58 @@
       "path": "benchmarks/evidence/20261119-w5-mixed-soak/glibc-arena-control/result/paired-comparison.json",
       "sha256": "241f69b5497895317357286f4a4bd9b6dfe279cd0e810395daa8d9f3331117a5"
     },
+    "distribution_allocator_trim_preflight": {
+      "artifacts": [
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/anon-mappings/attribute_anon_rss.py",
+          "sha256": "2ef0f64c59851f140e5d9f3f5e4e49cbcdaa1e634ebbe13ec40980f959e7a788"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/allocator_probe.py",
+          "sha256": "f4f7018b3367083830617ad2c71fd1615cedf145f339737603b4dbb2711b3261"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/campaign.sh",
+          "sha256": "31588b654d3ff4d1dc757731ff88da8cafb65ba2ca92508c23d56367eaaea57e"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/container-smoke.sh",
+          "sha256": "774bcc9d518151b7b1a69f14a42b308519e102cdd9dcfd3889d09965350d3768"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/dispatch.sha256",
+          "sha256": "4439365b369d8c8d14e1545c261f92130751944d60b051abe8bd62e67f3a847d"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/harness-base.sha256",
+          "sha256": "9e3a71375607abca962e59c285d187c1b78d9ff9bb9bbb57e3edb001c31e8ba1"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/harness.patch.gz",
+          "sha256": "51d784247f9928ef7c8fb4516480a9865362b43cae44773fd81837d46419b7bf"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/harness.sha256",
+          "sha256": "4fe4ca97b76fc2ea934b5edf6494f79031a1595e8d87eff1ee73fb84d88bd025"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/prepare.sh",
+          "sha256": "b3a89dca47643a4049200d67c061916b53f65ece3fb40b361ec696547fe2d64a"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/trim_probe.c",
+          "sha256": "d7d421ba5f1afca981075bcd528ff540976cc357f85ee40ce2776efee96c93cd"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/trim_smoke.c",
+          "sha256": "a3d802a24aeb938c1689a65e560ff9df03c0f50b8ad5406ad4e8db50414767bd"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/cpu-preflight.json",
+          "sha256": "1de164265714c422f5c2fa70c85fc49eb06ddba5bc31d3334bed38fa1ad178ee"
+        }
+      ]
+    },
     "distribution_a100_package_validation": {
       "path": "benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-package-validation.json",
       "sha256": "edd9262e9f003d503ea575aae5fd7e80ac33cb5ca82ff9f6d99af03a309500bc"

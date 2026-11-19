@@ -1,0 +1,17 @@
+{
+  "runtime_image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+  "compiler_artifact_sha256": {
+    "w5-trim-probe.so": "c27646d8335bd5c0521bd7a0a1166b923ffa5ca853e857057cc23c6178eff868",
+    "w5-trim-smoke": "2a1cac0f523440162dde6fa88b97d8d1f84fa06f9086511f546a4487bd6c7a00"
+  },
+  "container_smoke_log_sha256": "ba3fb7c92b3c605ea2d941a00bdb42df3658f31a61ebf29b130c44dbd3c9ecf8",
+  "container_smoke": "glibc 2.35\npid=9 anonymous_before_kib=8308 anonymous_after_kib=124\n{\"pid\":9,\"malloc_trim_return\":1,\"before\":{\"arena\":8523776,\"in_use\":944,\"free\":8522832,\"mmap\":0},\"after\":{\"arena\":4096,\"in_use\":944,\"free\":3152,\"mmap\":0}}\n",
+  "host_mapping_count": 57,
+  "load_sha256": "fb3a3de6fcd8904d6379433ad8fcff284530e46e388aa40c2b7b75cfd0d0c8b0",
+  "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+  "status_at_record_time": "waiting_for_w4_hf_kv",
+  "campaign": "w5-allocator-trim-20261119.ZEkdRfD9",
+  "campaign_pid": 1443195,
+  "prerequisite_campaign": "w4-hf-kv-20261119.VwkutnPO",
+  "physical_gpu": 6
+}

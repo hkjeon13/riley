@@ -99,6 +99,12 @@ AWS에서 재빌드한 `d3d8fe6e5` 이미지의 cache-on과 cache-off 시험은 
 
 두 실행에서 일반 `VmRSS` 변화는 0MiB였고, 정밀 RSS 증가 0 조건만 실패했다. 두 서버는 각각 종료 코드 0으로 끝났고 활성·대기 요청, KV 블록, device·pinned 할당은 모두 0이었다. GPU 6은 각 시험 뒤 같은 홀더의 20GiB 예약으로 복귀했다.
 
+### 배포 이미지의 glibc 반환 진단
+
+같은 이미지와 cache-off 부하에서 약 900초 시점, drain 완료 직후, `malloc_trim(0)` 직전·직후의 `smaps`를 읽는 진단을 준비했다. 시험은 정밀 RSS 판정과 요청·지연 검사를 마친 뒤 컨테이너의 Riley PID 1에서 `malloc_trim(0)`을 한 번 호출한다. 두 구간에서 범위와 속성이 같은 매핑을 비교해 증가한 익명 RSS, drain 후 자연 변동, 반환 호출 뒤 감소량을 각각 기록한다. 같은 매핑의 변화량으로는 개별 페이지나 최초 할당 호출 위치까지 판별할 수 없다. [실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/campaign.sh) · [`malloc_trim` 동작](https://man7.org/linux/man-pages/man3/malloc_trim.3.html)
+
+배포 이미지의 CPU 사전시험에서 glibc 2.35와 같은 계측 라이브러리로 8MiB 할당을 사용한 뒤 해제했다. 반환 호출 전후의 익명 RSS는 8,308KiB에서 124KiB로 줄었고 glibc가 기록한 사용 중인 arena 바이트는 944바이트로 같았다. A100 호스트의 실제 `smaps` 파싱도 확인했다. Riley 부하 진단은 W4의 HF·Riley KV 대조 이후 GPU 6에서 실행하도록 등록했다. 재현할 때는 기존 `anon-mappings/attribute_anon_rss.py`를 같은 검사 디렉터리에 복사하고 `gzip -dc harness.patch.gz >harness.patch`로 검사기 패치를 복원한 뒤 `dispatch.sha256`을 확인한다. [CPU 사전시험과 라이브러리 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/packaged-allocator-trim/cpu-preflight.json) · [재사용 파서](../../benchmarks/evidence/20261119-w5-mixed-soak/anon-mappings/attribute_anon_rss.py)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)
