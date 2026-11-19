@@ -471,6 +471,199 @@
         },
         "rss_sample_errors": []
       }
+    },
+    "cache_off": {
+      "campaign": "w5-dist-off-retry.ORBlgo3W",
+      "schema_version": "riley.distribution-gpu-check.v1",
+      "status": "failed",
+      "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+      "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+      "source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+      "riley_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+      "cpu_report_sha256": "92f884b05c1101d4bfb6c49df9289483b698e4e64d88fdc1090705998a17de33",
+      "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+      "checkpoint_source_model": "Qwen/Qwen2.5-7B-Instruct",
+      "checkpoint_source_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+      "gpu_uuid": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+      "gpu_name": "NVIDIA A100-SXM4-40GB",
+      "driver_version": "550.127.05",
+      "api_checks": 40,
+      "tool_checks_enabled": true,
+      "shutdown_exit": 0,
+      "artifacts_sha256": {
+        "api.json": "3a15182a8a37be699ba387c39366b2667b22c7691eea208a269b1a6028fa03e2",
+        "api.log": "2a4c2ffde4d255d0d9d561afea2d00445730d3e3c6252055c95e620b8a78af00",
+        "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+        "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+        "server.log": "43d6b6c664f52344931a31912d7e55dc0ec0ce7f29680cf620a7ecdc6c151cae",
+        "shutdown.json": "b859506a5f6d0a0ea342cea9e52881ac358e280b43e10bcef098885fad2fee55",
+        "soak.json": "82ff8a77b07a569b32e3260fa234977db5b5868df5332f931b08ff480605d132",
+        "soak.log": "6e92acaf63b57fd972fa747a5a0c4872aab5e487e77c0c190f3b5975b5266b92"
+      },
+      "mixed_soak": {
+        "mode": "cache-off",
+        "status": "failed",
+        "failed_checks": [
+          "rss_growth_second_half_at_most_zero"
+        ],
+        "rss": {
+          "baseline": {
+            "rss_kib": 15553508,
+            "anonymous_kib": 15366920,
+            "read_ms": 392.03569293022156
+          },
+          "drain": {
+            "rss_kib": 15554208,
+            "anonymous_kib": 15367620,
+            "read_ms": 340.7674729824066
+          },
+          "rss_growth_kib": 700,
+          "anonymous_growth_kib": 700
+        },
+        "counts": {
+          "plain": {
+            "completed": 7984
+          },
+          "schema": {
+            "completed": 1739,
+            "stop": 1739
+          },
+          "logprobs": {
+            "completed": 1160
+          },
+          "tools": {
+            "completed": 708,
+            "tool_calls": 708
+          },
+          "long": {
+            "completed": 1415
+          },
+          "reason": {
+            "completed": 743
+          },
+          "cancel": {
+            "disconnected": 700
+          }
+        }
+      },
+      "soak_server_arguments": [
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "512",
+        "--kv-blocks",
+        "16384"
+      ],
+      "exit": 1,
+      "gpu_receipt_sha256": "9da95772458513f5a7584d8aaa1b69d3d89723953cfa61301fd97e69ec489628",
+      "holder": {
+        "pid": 2431228,
+        "start_ticks": "6339570869",
+        "gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+        "physical_index": 6,
+        "phase": "idle",
+        "allocation_bytes": 21474836480,
+        "torch_reserved_bytes": 21474836480
+      },
+      "passed_api_cases": [
+        "plain chat",
+        "completions accepts user",
+        "chat logprobs present",
+        "greedy token is the most likely",
+        "top_logprobs sorted, five each, negative",
+        "token bytes rebuild the text",
+        "top mass at most one",
+        "legacy logprobs shape",
+        "sampled logprobs",
+        "streamed logprobs",
+        "json_object 0",
+        "json_object 1",
+        "json_object 2",
+        "json_object 3",
+        "json_object 4",
+        "json_object 5",
+        "json_object 6",
+        "json_object 7",
+        "json_schema 0",
+        "json_schema 1",
+        "json_schema 2",
+        "json_schema 3",
+        "json_schema 4",
+        "json_schema 5",
+        "json_schema 6",
+        "json_schema 7",
+        "most schema outputs finish inside max_tokens",
+        "streamed json_schema",
+        "unenforceable schema is 400",
+        "pattern is enforced",
+        "response_format text",
+        "mixed batches leave plain outputs identical",
+        "schema output is concurrency-invariant",
+        "tool_choice required",
+        "required call has valid arguments",
+        "named tool_choice",
+        "auto tool call (model's own choice)",
+        "tool_choice none",
+        "streamed tool call",
+        "tool result round trip"
+      ],
+      "shutdown_metrics": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0,
+        "allocation": {
+          "device_live_count": 0,
+          "device_live_bytes": 0,
+          "pinned_live_count": 0,
+          "pinned_live_bytes": 0
+        }
+      },
+      "verified_soak": {
+        "duration_seconds": 1800.0,
+        "arrival_rate": 8.0,
+        "shared_prefixes": 8,
+        "checks": {
+          "no_unexpected_http_or_stream_error": true,
+          "completed_schema_and_tool_covered": true,
+          "disconnects_observed": true,
+          "idle_after_drain": true,
+          "native_allocation_plateau": true,
+          "workload_coverage": true,
+          "p95_drift_at_most_5_percent": true,
+          "rss_growth_second_half_at_most_zero": false
+        },
+        "problem_count": 0,
+        "p95_change_percent": {
+          "ttft_ms": 0.8196550893038612,
+          "e2e_ms": -13.926685729259525
+        },
+        "counter_changes": {
+          "cancellations": 700,
+          "disconnects": 700,
+          "overloads": 0,
+          "dropped_observations": 13568
+        },
+        "rss_baseline_time_seconds": 900.1656845510006,
+        "rss_drain_time_seconds": 1804.018725708127,
+        "rss_proc_status_growth_mib": 0.0,
+        "rss_source": {
+          "container_id": "bb5fbc1ce08a87ebb984b50a67aba606a4afb46364be7567ce9f0b7fe947918a",
+          "host_pid": 1174333,
+          "container_pid": 1
+        },
+        "rss_sample_errors": []
+      }
+    },
+    "comparison": {
+      "same_image_binary_checkpoint_and_holder": true,
+      "only_server_argument_difference": [
+        "--prefix-cache-blocks",
+        "128"
+      ],
+      "same_outcome_counts": true,
+      "rss_gate_passed_in_both": false
     }
   }
 }

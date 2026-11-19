@@ -88,9 +88,16 @@ glibc 2.35의 두 조건을 각각 30분 실행했다. 두 조건 모두 정상 
 
 Docker가 보고한 호스트 PID와 컨테이너 ID를 각 표본 전후로 대조하고, 컨테이너 사용자로 `/proc/1/status`와 `/proc/1/smaps_rollup`을 읽는다. 기존 부하 검사기가 요청 처리, 취소, 지연 변동, RSS 증가 0을 판정한다. 정밀 표본 누락과 RSS 증가는 실패로 기록한다. 정상 종료와 자원 회수 검사가 끝나면 이미지 ID, 바이너리 해시, 혼합 부하 원본 및 정리 지표의 해시를 보존한다. CPU 테스트에서 프로세스 변경 검출과 RSS 실패 후 종료 경로를 확인했다. [Linux 부하 검사기](../../benchmarks/live/soak.py) · [이미지 검사 방법](01-validation-result.md#배포-이미지-gpu-검사)
 
-첫 cache-off 시도에서는 검사기가 `--prefix-cache-blocks 0`을 넘겼고 서버가 준비 단계에서 거부했다. 부하 측정은 시작되지 않았고 GPU는 동일 홀더의 20GiB 예약으로 복귀했다. 인자 생략과 128개 지정의 회귀 검사를 추가했다. cache-on 종료 뒤 같은 이미지와 체크포인트에서 수정한 cache-off 검사를 시작했다. [첫 시도와 재실행 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-package-validation.json)
+첫 cache-off 시도에서는 검사기가 `--prefix-cache-blocks 0`을 넘겼고 서버가 준비 단계에서 거부했다. 부하 측정은 시작되지 않았고 GPU는 동일 홀더의 20GiB 예약으로 복귀했다. 인자 생략과 128개 지정의 회귀 검사를 추가했다. cache-on 종료 뒤 같은 이미지와 체크포인트에서 수정한 cache-off 시험을 완료했다. [첫 시도와 재실행 근거](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-package-validation.json)
 
-AWS에서 재빌드한 `d3d8fe6e5` 이미지의 cache-on 시험은 A100 6번에서 30분 동안 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했다. 요청 오류와 과부하는 0건이었다. 후반 TTFT p95는 +1.04%, 전체 완료 p95는 −13.71%로 지연 기준을 충족했다. 약 900초 시점부터 요청이 모두 종료된 1,804초 시점까지 `smaps_rollup`의 RSS와 익명 RSS가 각각 616KiB 증가했다. 일반 `VmRSS`는 0MiB 변화였고, 정밀 RSS 증가 0 조건만 실패했다. 서버는 종료 코드 0으로 끝났고 활성·대기 요청, KV 블록, device·pinned 할당은 모두 0이었다. GPU 6은 같은 홀더의 20GiB 예약으로 복귀했다. [혼합 부하 결과와 원본 체크섬](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-package-validation.json)
+AWS에서 재빌드한 `d3d8fe6e5` 이미지의 cache-on과 cache-off 시험은 A100 6번에서 각각 30분 동안 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했다. 두 실행의 이미지·Riley 바이너리·체크포인트·GPU 홀더는 같았으며 서버 인자의 차이는 cache-on의 `--prefix-cache-blocks 128`이었다. 요청 오류와 과부하는 0건이었다. 약 900초 시점과 모든 요청을 처리한 약 1,804초 시점의 정밀 RSS를 대조했다. [혼합 부하 결과와 원본 체크섬](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/a100-package-validation.json)
+
+| 설정 | 후반 TTFT p95 | 후반 전체 완료 p95 | 후반 정밀 RSS 증가 | 익명 RSS 증가 |
+|---|---:|---:|---:|---:|
+| Cache-on | +1.04% | −13.71% | +616KiB | +616KiB |
+| Cache-off | +0.82% | −13.93% | +700KiB | +700KiB |
+
+두 실행에서 일반 `VmRSS` 변화는 0MiB였고, 정밀 RSS 증가 0 조건만 실패했다. 두 서버는 각각 종료 코드 0으로 끝났고 활성·대기 요청, KV 블록, device·pinned 할당은 모두 0이었다. GPU 6은 각 시험 뒤 같은 홀더의 20GiB 예약으로 복귀했다.
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
