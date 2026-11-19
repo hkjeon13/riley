@@ -833,6 +833,23 @@
     "qwen14_scheduler_choices_preflight": {
       "path": "benchmarks/evidence/20261119-w3-rag-profile/scheduler-choices/preflight.json",
       "sha256": "ddd1c68750163d32b15e5b826dd8f7a180971a75ab5214d7bf9f465ce8a80710"
+    },
+    "distribution_periodic_trim_cache_off": {
+      "campaign": "w5-periodic-trim-20261119.mI9aaaEp",
+      "status": "failed",
+      "failed_checks": [
+        "rss_growth_second_half_at_most_zero"
+      ],
+      "control_rss_growth_kib": 700,
+      "periodic_rss_growth_kib": 60,
+      "files": [
+        {
+          "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/result/cache-off-comparison.json",
+          "sha256": "e5176009c83a415278910b9634e177789bb94f3247fe373706d4d6405a739fe8"
+        }
+      ],
+      "raw_archive_sha256": "31f965bbee4f640837bf9cf45821b977d373cff14c97a81d9f72d74ad383ee0f",
+      "raw_archive_storage": "local"
     }
   },
   "follow_up_distribution_image": {

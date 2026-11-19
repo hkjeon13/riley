@@ -122,6 +122,10 @@ W4의 첫 시도가 파서 체크섬 검사에서 종료된 뒤 GPU 6의 RSS 진
 
 동일 이미지의 CPU 사전시험은 400ms 간격에서 네 번 호출했고, 익명 RSS가 8,316KiB에서 124KiB로 줄었다. A100 6번의 cache-off 기동·API 검사·부하 초반에서 Riley PID 1의 반환 호출 14건을 검산했다. 첫 14건의 호출 시간 p95는 2.27ms였다. 두 캐시 설정의 실제 RSS와 요청 지연을 확인한 뒤 후보를 판정한다. 재현 절차는 이전 `packaged-allocator-trim/trim_smoke.c`를 검사 디렉터리에 복사하고 `gzip -dc harness.patch.gz >harness.patch`로 패치를 복원한 뒤 `dispatch.sha256`을 검증한다. [사전시험 원본·체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/cpu-preflight.json) · [A100 초반 반환 기록](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/early-telemetry.jsonl)
 
+Cache-off의 30분 실행에서 후반 RSS는 60KiB 증가했다. 기준 실행의 증가량은 700KiB였으며, 두 실행 모두 익명 RSS 변화가 전체 증가분과 같았다. 주기적 반환 실행의 유일한 실패 항목은 RSS 증가 0 조건이었다. 후반 TTFT p95는 335.42ms, 완료 지연 p95는 4,169.17ms로 기준 실행 대비 각각 0.37%, 0.28% 높았다. 같은 실행의 전반 대비 후반 p95 변화는 TTFT +1.58%, 완료 지연 −13.46%로 5% 기준 이내였다. [원본 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/result/cache-off-comparison.json) · [전용 경로 원본의 해시](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
+
+API 40건이 통과했고 합성 부하는 기준 실행과 동일하게 정상 완료 13,749건, 의도적 연결 종료 700건으로 집계됐다. 반환 호출 66회에서 모두 페이지를 반환했고, 호출 시간 p95는 1.38ms였다. 종료 자원을 모두 회수한 뒤 GPU 6은 동일 홀더의 20GiB 예약으로 복귀했다. 이어 동일 GPU에서 cache-on 시험을 시작했다.
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)
