@@ -993,6 +993,23 @@
     "qwen14_qkv_1024_serving_first_candidate_startup": {
       "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/first-candidate-startup.json",
       "sha256": "552c4fa70f7c13fa5a6bddba1b6b8f6d0a134898b85eb469a3f7b6da5f84c0fe"
+    },
+    "qwen14_qkv_1024_serving_result": {
+      "decision": "keep_as_isolated_experiment_inconsistent_rag_tail_latency",
+      "evidence": [
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/comparison.json",
+          "sha256": "da7445beb11d9a76c9b7c16804159b52b7c54391ff74c6cdec7b38a5bb17afaf"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/shape-scope.json",
+          "sha256": "4fafcfeb4a5f1b3757de4ca9cc7e1e3cdefba493965f3172138cc9285142c95c"
+        },
+        {
+          "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/tail-audit.json",
+          "sha256": "fbe0f773dc55fd89068f00ce08fe8e5fdde8dc5e70dc0fa51025ae97af304ba8"
+        }
+      ]
     }
   },
   "follow_up_distribution_image": {

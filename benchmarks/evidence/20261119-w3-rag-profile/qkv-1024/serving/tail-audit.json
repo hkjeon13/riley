@@ -1,0 +1,266 @@
+{
+  "scope": "Same-request TTFT and rank sensitivity in the completed Qwen2.5-14B-Instruct ABBA comparison.",
+  "local_archive_sha256": "39c9f779a04ae4fb2c73cb6579feae6212d0c641fffe3616fb5441ce00135325",
+  "quantile": "Sort ascending and select zero-based min(int(0.95 * n), n - 1).",
+  "wave_omission": "Omit the same one of five contiguous eight-request waves in both arms and recompute p95 as a sensitivity analysis.",
+  "measured_wave_5_request_41": {
+    "request_index_includes_warmup": 41,
+    "arms": {
+      "riley-first": {
+        "ttft_ms": 2585.9032571315765,
+        "sent_ms_after_first_request_of_wave": 50.40425807237625,
+        "prompt_tokens": 3503
+      },
+      "qkv-first": {
+        "ttft_ms": 3115.7741397619247,
+        "sent_ms_after_first_request_of_wave": 50.500400364398956,
+        "prompt_tokens": 3503
+      },
+      "qkv-second": {
+        "ttft_ms": 3113.2026463747025,
+        "sent_ms_after_first_request_of_wave": 49.96104538440704,
+        "prompt_tokens": 3503
+      },
+      "riley-second": {
+        "ttft_ms": 2579.94132488966,
+        "sent_ms_after_first_request_of_wave": 50.960324704647064,
+        "prompt_tokens": 3503
+      }
+    }
+  },
+  "cells": {
+    "rag-c8-s1": {
+      "requests_per_arm": 64,
+      "arms": {
+        "riley-first": {
+          "ttft_p95_ms": 1784.0724140405655,
+          "p95_through_max_request_indices": [
+            46,
+            43,
+            42,
+            45
+          ],
+          "captured_cell_sha256": "f613b6bad3c18822aeb593f363fb1c7f9ec1dfaed93ede28eb66168bdaa3b17a"
+        },
+        "qkv-first": {
+          "ttft_p95_ms": 1734.206847846508,
+          "p95_through_max_request_indices": [
+            46,
+            42,
+            43,
+            45
+          ],
+          "captured_cell_sha256": "8890e1454def31a57e6ef657a14e14e00f90ab0b053fe453350180de340aa216"
+        },
+        "qkv-second": {
+          "ttft_p95_ms": 1728.0065193772316,
+          "p95_through_max_request_indices": [
+            46,
+            42,
+            43,
+            45
+          ],
+          "captured_cell_sha256": "6e143be05e45af368ff9bae6a27f3f2e382a89c1c2b2007cc132c9c856df2326"
+        },
+        "riley-second": {
+          "ttft_p95_ms": 1767.9327130317688,
+          "p95_through_max_request_indices": [
+            46,
+            42,
+            43,
+            45
+          ],
+          "captured_cell_sha256": "2d7a194b8ad67fe2dcf759d16e9d923bb17f586164d362c666913cd0cfb54539"
+        }
+      },
+      "pairs": {
+        "first": {
+          "matched_request_ttft_delta_median_ms": -20.63736319541931,
+          "requests_with_shorter_ttft": 62,
+          "requests_with_longer_ttft": 2
+        },
+        "second": {
+          "matched_request_ttft_delta_median_ms": -18.109645694494247,
+          "requests_with_shorter_ttft": 63,
+          "requests_with_longer_ttft": 1
+        }
+      }
+    },
+    "rag-c8-s2": {
+      "requests_per_arm": 64,
+      "arms": {
+        "riley-first": {
+          "ttft_p95_ms": 1604.5695096254349,
+          "p95_through_max_request_indices": [
+            52,
+            28,
+            15,
+            43
+          ],
+          "captured_cell_sha256": "ce8ed9387347d6d93b611616a92b8d39dc26da0f9102c7cc6888556619e831bf"
+        },
+        "qkv-first": {
+          "ttft_p95_ms": 1507.099211215973,
+          "p95_through_max_request_indices": [
+            69,
+            13,
+            12,
+            68
+          ],
+          "captured_cell_sha256": "1d66e814c4d11ad9bab69eab39e1c53d71d4b45f853543514ca0733ae68aa7be"
+        },
+        "qkv-second": {
+          "ttft_p95_ms": 1507.3348358273506,
+          "p95_through_max_request_indices": [
+            69,
+            13,
+            12,
+            68
+          ],
+          "captured_cell_sha256": "99209012db805b1f3dd50175678ea3f6186aef0224fc595273adb402a1a8fb1e"
+        },
+        "riley-second": {
+          "ttft_p95_ms": 1468.0537059903145,
+          "p95_through_max_request_indices": [
+            61,
+            15,
+            44,
+            13
+          ],
+          "captured_cell_sha256": "c63877a924f43e6a3df7addfd6238d5a28bfb951845f46beea31d3051e78aeb8"
+        }
+      },
+      "pairs": {
+        "first": {
+          "matched_request_ttft_delta_median_ms": -13.799786567687988,
+          "requests_with_shorter_ttft": 45,
+          "requests_with_longer_ttft": 19
+        },
+        "second": {
+          "matched_request_ttft_delta_median_ms": -4.938524216413498,
+          "requests_with_shorter_ttft": 35,
+          "requests_with_longer_ttft": 29
+        }
+      }
+    },
+    "wave-50ms": {
+      "requests_per_arm": 40,
+      "arms": {
+        "riley-first": {
+          "ttft_p95_ms": 3017.16236025095,
+          "p95_through_max_request_indices": [
+            28,
+            42
+          ],
+          "wave_client_send_span_ms": [
+            350.16391426324844,
+            350.6561145186424,
+            351.08815878629684,
+            350.1562178134918,
+            350.2652943134308
+          ],
+          "p95_if_each_wave_omitted_ms": [
+            3017.16236025095,
+            3017.16236025095,
+            2998.345822095871,
+            3017.16236025095,
+            2916.9704392552376
+          ],
+          "captured_cell_sha256": "9d2b4595490afa2096b3f584bed8cc198f9104b3d792e8cdb532ec890663ed5c"
+        },
+        "qkv-first": {
+          "ttft_p95_ms": 3066.66699051857,
+          "p95_through_max_request_indices": [
+            42,
+            41
+          ],
+          "wave_client_send_span_ms": [
+            349.9937430024147,
+            349.96017068624496,
+            350.53783655166626,
+            350.32422095537186,
+            349.90186989307404
+          ],
+          "p95_if_each_wave_omitted_ms": [
+            3066.66699051857,
+            3066.66699051857,
+            3066.66699051857,
+            3066.66699051857,
+            2837.9822075366974
+          ],
+          "captured_cell_sha256": "71f2fb09cfeed2e3b707d8c921b410babcbeb4d66efa652e563ca7135731de2f"
+        },
+        "qkv-second": {
+          "ttft_p95_ms": 3062.5413209199905,
+          "p95_through_max_request_indices": [
+            42,
+            41
+          ],
+          "wave_client_send_span_ms": [
+            350.13845562934875,
+            350.36663711071014,
+            350.687213242054,
+            350.62912851572037,
+            350.6584018468857
+          ],
+          "p95_if_each_wave_omitted_ms": [
+            3062.5413209199905,
+            3062.5413209199905,
+            3062.5413209199905,
+            3062.5413209199905,
+            2834.4148322939873
+          ],
+          "captured_cell_sha256": "1609f3941831d49c949d2c0bdf9f3940ffb4168ae3af6c7e2f8c7a7163a0e8c7"
+        },
+        "riley-second": {
+          "ttft_p95_ms": 3009.509429335594,
+          "p95_through_max_request_indices": [
+            28,
+            42
+          ],
+          "wave_client_send_span_ms": [
+            350.68830847740173,
+            350.6229594349861,
+            350.27047246694565,
+            350.6801724433899,
+            350.00210255384445
+          ],
+          "p95_if_each_wave_omitted_ms": [
+            3009.509429335594,
+            3009.509429335594,
+            2991.589091718197,
+            3009.509429335594,
+            2909.71090644598
+          ],
+          "captured_cell_sha256": "8a10ed7899bdca5f89e6aacd691d49465ae7aa9e92c81323f13740ae19c727a0"
+        }
+      },
+      "pairs": {
+        "first": {
+          "matched_request_ttft_delta_median_ms": -57.476889342069626,
+          "requests_with_shorter_ttft": 35,
+          "requests_with_longer_ttft": 5,
+          "omitting_same_wave_ttft_p95_change_percent": [
+            1.640767859224601,
+            1.640767859224601,
+            2.2786286998389693,
+            1.640767859224601,
+            -2.7078859166878466
+          ]
+        },
+        "second": {
+          "matched_request_ttft_delta_median_ms": -53.80420386791229,
+          "requests_with_shorter_ttft": 37,
+          "requests_with_longer_ttft": 3,
+          "omitting_same_wave_ttft_p95_change_percent": [
+            1.7621440580136039,
+            1.7621440580136039,
+            2.3717237570565874,
+            1.7621440580136039,
+            -2.5877510368877865
+          ]
+        }
+      }
+    }
+  }
+}
