@@ -1,0 +1,384 @@
+{
+  "model_checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "frozen_replay_sha256": "d9c96b24195c9b946acc1bab68d934de1e55fc7bb7f4fed1c4633eb16b28a44b",
+  "original_gpu_result_sha256": "2e28dcdda4f933b32ac2d08fb6f9a6ccb48622e22a337bc6292eeb6428bffa60",
+  "same_20gib_holder_restored": true,
+  "torch": "2.13.0+cu129",
+  "transformers": "5.22.1",
+  "cases": {
+    "3": {
+      "riley_observed_pair": {
+        "264": 18.375,
+        "5257": 18.375
+      },
+      "runs": {
+        "fused_whole": {
+          "baseline": {
+            "partition": [
+              3301
+            ],
+            "first_id": 5257,
+            "tracked_logits": {
+              "264": 18.25,
+              "5257": 18.375
+            },
+            "logits_sha256": "c82be997783c54586f737ac83d454bba61cdfb213e333e5ea567612ecdfc6378"
+          },
+          "variants": {
+            "layer_22_mlp": {
+              "result": {
+                "partition": [
+                  3301
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.375,
+                  "5257": 18.375
+                },
+                "logits_sha256": "afd03356b8098c91500fb6b786f33cb8d47811a7fbac113ee5ad758dcf2880cb"
+              },
+              "installed_updates_verified": 1,
+              "pair_matches_traced_riley": true,
+              "full_logits_match_traced_riley": false
+            },
+            "all_attention": {
+              "result": {
+                "partition": [
+                  3301
+                ],
+                "first_id": 5257,
+                "tracked_logits": {
+                  "264": 18.25,
+                  "5257": 18.375
+                },
+                "logits_sha256": "bf5e92e66e065ece189ceb301fca30eb480c8c5d7f481d49ed8345f71fbedb12"
+              },
+              "installed_updates_verified": 28,
+              "pair_matches_traced_riley": false,
+              "full_logits_match_traced_riley": false
+            },
+            "all_mlp": {
+              "result": {
+                "partition": [
+                  3301
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.375,
+                  "5257": 18.375
+                },
+                "logits_sha256": "94e7879cdf105e40272af6059c6e124022b12d4802fb781f6e1b23e85890eb9d"
+              },
+              "installed_updates_verified": 28,
+              "pair_matches_traced_riley": true,
+              "full_logits_match_traced_riley": false
+            },
+            "all_attention_and_mlp": {
+              "result": {
+                "partition": [
+                  3301
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.375,
+                  "5257": 18.375
+                },
+                "logits_sha256": "c706edd8f8eb8b0cb9546d35064d7eaf7a5a99f82bd2ffe08f6d2c975809e0d4"
+              },
+              "installed_updates_verified": 56,
+              "pair_matches_traced_riley": true,
+              "full_logits_match_traced_riley": false
+            }
+          },
+          "unhooked_baseline_reproduced": true
+        },
+        "fused_partitioned": {
+          "baseline": {
+            "partition": [
+              1024,
+              1024,
+              1024,
+              229
+            ],
+            "first_id": 5257,
+            "tracked_logits": {
+              "264": 18.25,
+              "5257": 18.375
+            },
+            "logits_sha256": "dce5a27e64ee369de11fd637f9780fd53c215f08db914bf7aca9808abbcaa915"
+          },
+          "variants": {
+            "layer_22_mlp": {
+              "result": {
+                "partition": [
+                  1024,
+                  1024,
+                  1024,
+                  229
+                ],
+                "first_id": 5257,
+                "tracked_logits": {
+                  "264": 18.25,
+                  "5257": 18.375
+                },
+                "logits_sha256": "fac5f842845d30082a8295e0395488db5f6de24017fb4a483a15172f1ea640d2"
+              },
+              "installed_updates_verified": 1,
+              "pair_matches_traced_riley": false,
+              "full_logits_match_traced_riley": false
+            },
+            "all_attention": {
+              "result": {
+                "partition": [
+                  1024,
+                  1024,
+                  1024,
+                  229
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.375,
+                  "5257": 18.375
+                },
+                "logits_sha256": "7c2a3574b9abf2a33dc8a0845f8d3d5124c263c5aa9aa4285a3f28d39a4a2f4d"
+              },
+              "installed_updates_verified": 28,
+              "pair_matches_traced_riley": true,
+              "full_logits_match_traced_riley": false
+            },
+            "all_mlp": {
+              "result": {
+                "partition": [
+                  1024,
+                  1024,
+                  1024,
+                  229
+                ],
+                "first_id": 5257,
+                "tracked_logits": {
+                  "264": 18.25,
+                  "5257": 18.375
+                },
+                "logits_sha256": "3fbed0a2cbfa3e0f9eaefd7a8b77a80decb19d006e9892b5e99d6dbac26a1345"
+              },
+              "installed_updates_verified": 28,
+              "pair_matches_traced_riley": false,
+              "full_logits_match_traced_riley": false
+            },
+            "all_attention_and_mlp": {
+              "result": {
+                "partition": [
+                  1024,
+                  1024,
+                  1024,
+                  229
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.375,
+                  "5257": 18.375
+                },
+                "logits_sha256": "c706edd8f8eb8b0cb9546d35064d7eaf7a5a99f82bd2ffe08f6d2c975809e0d4"
+              },
+              "installed_updates_verified": 56,
+              "pair_matches_traced_riley": true,
+              "full_logits_match_traced_riley": false
+            }
+          },
+          "unhooked_baseline_reproduced": true
+        }
+      },
+      "riley_traced_full_logits_sha256": "44c8b37f3b1daf12ace76c3b9ca7b282d363f8ea5c473ed0a331b1a660f911fc"
+    },
+    "9": {
+      "riley_observed_pair": {
+        "264": 18.25,
+        "5257": 18.25
+      },
+      "runs": {
+        "fused_whole": {
+          "baseline": {
+            "partition": [
+              3330
+            ],
+            "first_id": 264,
+            "tracked_logits": {
+              "264": 18.375,
+              "5257": 18.375
+            },
+            "logits_sha256": "55f7906950ed9969a492a907dc5e426fa2f82319692078815b649b4592e1c901"
+          },
+          "variants": {
+            "layer_22_mlp": {
+              "result": {
+                "partition": [
+                  3330
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.375,
+                  "5257": 18.375
+                },
+                "logits_sha256": "ab21de2b125329c1a3e7fb2aae9eb1e21b7e1338ec8a75e25f9471f0b167dc2c"
+              },
+              "installed_updates_verified": 1,
+              "pair_matches_traced_riley": false,
+              "full_logits_match_traced_riley": false
+            },
+            "all_attention": {
+              "result": {
+                "partition": [
+                  3330
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.25,
+                  "5257": 18.25
+                },
+                "logits_sha256": "6b37080e919d37e38e0e744473d5a649f83485b68e5b51194de7ba5a92dfc7da"
+              },
+              "installed_updates_verified": 28,
+              "pair_matches_traced_riley": true,
+              "full_logits_match_traced_riley": false
+            },
+            "all_mlp": {
+              "result": {
+                "partition": [
+                  3330
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.375,
+                  "5257": 18.25
+                },
+                "logits_sha256": "d8855314c61e613492e204a3008d2d7162557c28d475fb9f0db776e048ff37cf"
+              },
+              "installed_updates_verified": 28,
+              "pair_matches_traced_riley": false,
+              "full_logits_match_traced_riley": false
+            },
+            "all_attention_and_mlp": {
+              "result": {
+                "partition": [
+                  3330
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.25,
+                  "5257": 18.25
+                },
+                "logits_sha256": "13fbbbfd5a9e4fee359c98063dd20cc2a637ef308a044a08e5b30ec7e2337a86"
+              },
+              "installed_updates_verified": 56,
+              "pair_matches_traced_riley": true,
+              "full_logits_match_traced_riley": false
+            }
+          },
+          "unhooked_baseline_reproduced": true
+        },
+        "fused_partitioned": {
+          "baseline": {
+            "partition": [
+              1024,
+              1024,
+              1024,
+              256,
+              2
+            ],
+            "first_id": 264,
+            "tracked_logits": {
+              "264": 18.375,
+              "5257": 18.375
+            },
+            "logits_sha256": "48241dbb7f616c8538c71d5fbfa66a290ab98bd65ac6da985e92a65e6b47f42a"
+          },
+          "variants": {
+            "layer_22_mlp": {
+              "result": {
+                "partition": [
+                  1024,
+                  1024,
+                  1024,
+                  256,
+                  2
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.375,
+                  "5257": 18.375
+                },
+                "logits_sha256": "0ebb1e461237ea0ca88d0c2c82a8a75b2cfa55b3403eb5685d77b8eeaaadbfee"
+              },
+              "installed_updates_verified": 1,
+              "pair_matches_traced_riley": false,
+              "full_logits_match_traced_riley": false
+            },
+            "all_attention": {
+              "result": {
+                "partition": [
+                  1024,
+                  1024,
+                  1024,
+                  256,
+                  2
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.25,
+                  "5257": 18.25
+                },
+                "logits_sha256": "9e59ae918cc4d3c913c76ce827f9ac106afc391c9a8cb531df818ad1166f366a"
+              },
+              "installed_updates_verified": 28,
+              "pair_matches_traced_riley": true,
+              "full_logits_match_traced_riley": false
+            },
+            "all_mlp": {
+              "result": {
+                "partition": [
+                  1024,
+                  1024,
+                  1024,
+                  256,
+                  2
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.25,
+                  "5257": 18.25
+                },
+                "logits_sha256": "6bd04806fd52fbe10a8d51494658928f42353d65b9a86ab64de12e2341b23f52"
+              },
+              "installed_updates_verified": 28,
+              "pair_matches_traced_riley": true,
+              "full_logits_match_traced_riley": false
+            },
+            "all_attention_and_mlp": {
+              "result": {
+                "partition": [
+                  1024,
+                  1024,
+                  1024,
+                  256,
+                  2
+                ],
+                "first_id": 264,
+                "tracked_logits": {
+                  "264": 18.25,
+                  "5257": 18.25
+                },
+                "logits_sha256": "13fbbbfd5a9e4fee359c98063dd20cc2a637ef308a044a08e5b30ec7e2337a86"
+              },
+              "installed_updates_verified": 56,
+              "pair_matches_traced_riley": true,
+              "full_logits_match_traced_riley": false
+            }
+          },
+          "unhooked_baseline_reproduced": true
+        }
+      },
+      "riley_traced_full_logits_sha256": "a959dbce58d4c5a36eea752c69ccf1c964c56c42338554d1bf0d1593e098bbaf"
+    }
+  },
+  "verified_remote_projection_sha256": "6e2030fa1ed8621d5e9bdd968e8263bd9fe54b1baf72d5c3ced97c540da26874"
+}

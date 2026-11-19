@@ -160,6 +160,17 @@ A100 6번에서 두 입력과 두 prefill 형상의 기준 로짓을 모두 재�
 
 후속 GPU 시험은 HF SDPA에서 같은 마지막 입력 위치의 출력 행을 교체한 뒤 나머지 순전파를 실제로 계산한다. 두 사례의 전체 prefill과 1,024토큰 분할에서 22번 레이어 MLP, 전체 attention, 전체 MLP, 두 종류 전체 교체를 각각 대조한다. 기준 로짓 재현과 교체 행의 BF16 바이트를 검증하며 전체 로짓 해시와 선택 토큰을 기록한다. CPU 훅 시험에서 마지막 조각의 마지막 행만 바뀌는 것을 확인했다. A100 6번의 RSS 시험이 끝난 뒤 이 검증을 시작하도록 등록했다. [후속 실행과 사전 검증](../../benchmarks/evidence/20261119-w4-layer-trace/residual-replacement-control/registration.json)
 
+A100 6번에서 두 사례, 두 prefill 형상의 4개 대조군과 16개 교체 실행을 완료했다. 각 조건의 원래 HF 전체 로짓 해시를 교체 전과 훅 제거 후 모두 재현했고, 교체된 1개·28개·56개 행은 해당 Riley 저장값과 BF16 바이트가 일치했다. 표는 최종 선택 토큰이다. [순전파 결과와 원본 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/residual-replacement-control/gpu-verified.json)
+
+| 사례·prefill | 기존 HF | 22번 MLP | 전체 attention | 전체 MLP | 전체 attention·MLP |
+|---|---:|---:|---:|---:|---:|
+| 3 전체 | 5257 | 264 | 5257 | 264 | 264 |
+| 3 분할 | 5257 | 5257 | 264 | 5257 | 264 |
+| 9 전체 | 264 | 264 | 264 | 264 | 264 |
+| 9 분할 | 264 | 264 | 264 | 264 | 264 |
+
+사례 3에서 전체 prefill은 22번 MLP 행 하나를 바꿔도 264와 5257의 점수가 18.375로 동점이 됐다. 분할 prefill은 전체 attention을 교체한 조건에서 그 동점을 재현했다. 두 종류를 함께 교체하면 두 사례와 두 prefill 형상 4개 모두에서 Riley가 선택한 토큰과 비교한 두 BF16 점수를 재현했다. 전체 어휘 로짓 해시는 모든 교체 실행에서 Riley 추적본과 달랐다. 시험 종료 뒤 기존 GPU 6 홀더의 20GiB 예약을 복구했다. [두 점수와 전체 로짓 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/residual-replacement-control/gpu-verified.json)
+
 같은 네 행에서 visible 페이지를 한 장씩 제외한 818개 대조를 계산했다. 전체 페이지를 사용한 기준이 746개에서 관측값에 더 가까웠다. 마지막 visible 페이지를 제외하면 오차가 543–1,113배였고 첫 페이지를 제외하면 0.999–1.039배였다. 사례 9의 첫 행에서는 페이지 제외 대조 209개 중 58개가 기준과 같거나 더 가까웠다. 앞쪽 페이지의 포함 여부를 판별하려면 해당 페이지를 제외했을 때의 변화가 FP64 재계산과 GPU 출력 사이의 기준 오차보다 큰 입력을 선정해 다시 검증해야 한다. [페이지별 대조 결과](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/page-omission-sweep.json.gz) · [대조 도구](../../benchmarks/evidence/20261119-w4-layer-trace/tools/sweep_visible_kv_pages.py)
 
 두 사례의 마지막 입력 행에 대해 bias 이전의 BF16 투영값과 체크포인트의 K/V bias를 사용해 캐시 저장값을 독립 계산했다. 레이어 0, KV head 0에서 K의 RoPE 적용과 V의 bias 적용 결과가 기록된 페이지의 마지막 입력 슬롯과 각각 128/128개 일치했다. 두 사례 모두 직전 슬롯에서는 K 5/128개, V 0/128개만 일치했다. 이 대조는 추적된 두 마지막 입력 슬롯의 저장값을 확인한다. [KV 저장값 대조](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/final-slot-replay.json) · [재계산 도구](../../benchmarks/evidence/20261119-w4-layer-trace/tools/replay_final_kv_slot.py)
