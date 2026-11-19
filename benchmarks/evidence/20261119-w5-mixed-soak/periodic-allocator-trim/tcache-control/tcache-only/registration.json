@@ -1,0 +1,49 @@
+{
+  "scope": "Set one fixed glibc tunable on the verified distribution image; the existing strict soak gate is preserved.",
+  "host_alias": "aws-a100",
+  "physical_gpu_index": 6,
+  "idle_holder_pid": 2431228,
+  "run_label": "w5-tcache-only-20261119.G3IuT0Wh",
+  "campaign_pid": 3618942,
+  "first_wait_marker_utc": "2026-11-19T09:21:44Z",
+  "predecessor": "w2-ordered-tables-20261119.e89GGsLO",
+  "comparison_with_trim": "w5-tcache-control-20261119.liqVpVJ7",
+  "original_controls": {
+    "cache-off": "w5-dist-off-retry.ORBlgo3W",
+    "cache-on": "w5-dist-d3d8fe6e5.GcPrN2e8"
+  },
+  "comparison_order": [
+    "cache-on",
+    "cache-off"
+  ],
+  "image_binding": {
+    "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+    "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+    "source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+    "riley_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+    "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f"
+  },
+  "gpu_checker_source_commit": "8d961d262fc2d70f65db7fa6f053d23251d1566a",
+  "workload": {
+    "duration_seconds": 1800,
+    "arrivals_per_second": 8,
+    "strict_rss_growth_kib_at_most": 0,
+    "api_checks": 40
+  },
+  "candidate_setting": "GLIBC_TUNABLES=glibc.malloc.tcache_count=0",
+  "runtime_proof_points": [
+    "after readiness",
+    "after soak before shutdown"
+  ],
+  "helper_sources": {
+    "small_allocation_probe": "../tcache_probe.c",
+    "cpu_probe_verifier": "../compare_tcache.py",
+    "strict_report_checks": "../../verify_periodic_trim.py",
+    "prior_tcache_constants": "../periodic_trim.py.patch.gz"
+  },
+  "dispatch_sha256": "d08a74a6c2ed8ba05adf9c56460cb20d998a8cc6ecdf227ef54c64c550234b1f",
+  "local_synthetic_controls": [
+    "strict RSS verdict reproduced",
+    "missing runtime proof rejected"
+  ]
+}

@@ -164,6 +164,10 @@ Cache-on의 반환 호출은 293회였고 모두 메모리를 반환했다. 중�
 
 정밀 RSS는 중간에 직전 반환 후 4.30–4.67초, drain에서 5.08–5.47초에 읽었고 두 읽기 모두 반환 호출과 겹치지 않았다. 인접 매핑의 익명 RSS는 220KiB 줄었으며 순변화는 앞서 관측한 보조 힙 배치에서 나왔다. 한 쌍에서 관측한 결과이고 이전 시험과 표본의 반환 후 시각이 달랐다. `cache-on`의 동일 기준 판정과 반복성 확인이 남아 있다. [표본 시각과 매핑 합계](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/cache-off-verified.json)
 
+#### 스레드별 할당 캐시 설정 단독 대조
+
+같은 이미지의 환경에 `GLIBC_TUNABLES=glibc.malloc.tcache_count=0`만 지정하는 대조를 등록했다. 준비 완료 직후와 부하 종료 뒤의 Riley PID 1에서 설정과 메모리 반환 라이브러리의 부재를 확인한다. W2 시험 종료 뒤 GPU 6번에서 `cache-on`과 `cache-off` 순으로 각각 API 40건과 30분 부하를 실행한다. 이전 기준군, 스레드별 할당 캐시 설정만 준 실행, 7초 주기 반환을 함께 적용한 실행의 이미지·실행 파일·부하·자원 회수를 검산한다. 양쪽 캐시 조건에서 고정 환경 설정만으로 RSS 증가 0을 충족하는지 판정한다. [실행 등록](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/tcache-only/registration.json) · [검사기 패치와 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/tcache-only/campaign.sh) · [원본 대조 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/tcache-only/compare_tcache_only.py)
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
