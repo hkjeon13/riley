@@ -201,6 +201,10 @@ A100 6번의 `cache-on` 컨테이너에서 API 40건이 통과했고 30분 부�
 
 두 부하의 운영 기준을 모두 통과하면 같은 이미지에서 W4의 고정 장문 입력 29개를 대조하도록 등록했다. 기존 입력의 144건과 홀드아웃의 88건을 같은 체크포인트로 비교하고, 실제 실행 파일과 이미지의 해시를 W5 영수증에 연결한다. CPU 사전시험에서 한 조건만 실패하면 GPU 실행을 건너뛰고 영수증 해시가 다르면 오류로 끝나는 것을 확인했다. 재현할 때는 기존 [이미지 판정 검사기](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/verify_a100_candidate.py)를 같은 실행 경로에 놓는다. [조건부 정확성 등록](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/accuracy-follow-up/registration.json) · [실행과 판정 조건](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/accuracy-follow-up/campaign.sh)
 
+`cache-on`의 30분 실행에서 정밀 RSS와 익명 RSS가 각각 **632KiB 증가**했다. 기준 이미지에서는 각각 616KiB 증가했다. Riley PID 1의 900.16초 표본과 요청을 모두 처리한 1,803.99초 표본으로 증가량을 재계산했다. 정상 완료 13,749건과 의도적 연결 종료 700건은 기준과 같았고 API 40건·요청·지연·자원 회수 검사를 통과했다. 후반 TTFT p95는 328.24ms, 완료 지연 p95는 4,141.07ms였다. 전반 대비 각각 2.08% 증가, 13.47% 감소했다. [첫 부하 검산과 원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/cache-on-verified.json) · [검산 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/verify_framing_soak.py)
+
+RSS 증가 0 항목만 실패했다. 종료 뒤 기존 GPU 6 홀더의 20GiB 예약을 확인하고 `cache-off` 시험을 시작했다. 두 부하가 모두 통과해야 하는 장문 정확성 재실행의 조건은 이번 `cache-on` 결과로 충족되지 않았다.
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 

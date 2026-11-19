@@ -62,4 +62,6 @@ python3.12 -B benchmarks/evidence/20261119-cu124-distribution-image/serving-lint
 
 7초 주기 반환과 스레드별 할당 캐시 비활성화를 함께 적용한 동일 이미지에서 `cache-off` 정밀 익명 RSS는 144KiB 감소했고 `cache-on`은 88KiB 증가했다. 두 시험 모두 API 40건과 요청·지연·자원 회수 항목을 통과했다. 증가 0 기준을 `cache-on`에서 충족하지 못해 릴리스 판정은 보류다. [두 설정의 검산과 원본 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/paired-verified.json)
 
-같은 배포 이미지에서 스레드별 할당 캐시 비활성화만 적용한 두 30분 실행은 `cache-on`에서 200KiB, `cache-off`에서 148KiB의 익명 RSS 증가를 기록했다. 각 실행의 API 40건과 요청·지연·종료 검사는 통과했다. 별도 HTTP 프레이밍 이미지 `e019db74d2f0`은 패키지 검사와 첫 API 40건을 통과했다. 두 캐시 모드의 최종 RSS 판정이 남아 릴리스는 보류다. [단독 대조 결과](05-mixed-soak-result.md#스레드별-할당-캐시-설정-단독-대조) · [프레이밍 이미지 검증](05-mixed-soak-result.md#http-요청-버퍼-용량의-cpu-대조)
+같은 배포 이미지에서 스레드별 할당 캐시 비활성화만 적용한 두 30분 실행은 `cache-on`에서 200KiB, `cache-off`에서 148KiB의 익명 RSS 증가를 기록했다. 각 실행의 API 40건과 요청·지연·종료 검사는 통과했다. 별도 HTTP 프레이밍 이미지 `e019db74d2f0`은 패키지 검사를 통과했다. [단독 대조 결과](05-mixed-soak-result.md#스레드별-할당-캐시-설정-단독-대조) · [프레이밍 이미지 검증](05-mixed-soak-result.md#http-요청-버퍼-용량의-cpu-대조)
+
+HTTP 프레이밍 이미지의 첫 30분 실행은 `cache-on`에서 정밀 RSS와 익명 RSS가 632KiB 증가해 RSS 항목만 실패했다. 기준 이미지의 증가량은 616KiB였다. API 40건과 지연·종료 자원 검사가 통과했고, 같은 20GiB 예약을 복구한 뒤 `cache-off`를 시작했다. 이 후보의 릴리스 판정은 보류다. [첫 부하의 표본·판정 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/http-framing-capacity/a100-follow-up/cache-on-verified.json)
