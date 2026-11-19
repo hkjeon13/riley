@@ -160,6 +160,10 @@ Cache-on의 반환 호출은 293회였고 모두 메모리를 반환했다. 중�
 
 동일 이미지와 7초 메모리 반환을 사용하고 `glibc.malloc.tcache_count`만 0으로 바꿔 두 cache 모드의 30분 부하를 등록했다. glibc의 스레드별 소형 할당 캐시 비활성화가 RSS와 지연에 미치는 영향을 앞선 7초 시험과 비교한다. GPU 검사는 이미지의 서비스 계정으로 소형 할당·해제 동작을 CPU에서 검증한 후 시작한다. 실제 Riley PID 1의 환경과 7초 반환 기록을 확인하고 원래 RSS·요청 지연·API·종료 판정을 적용한다. CPU 검산기 모의시험에서 기존 RSS 실패와 설정 확인 누락의 처리 경로를 확인했다. 선행 QKV 시험 이후 A100 6번에서 실행된다. [검사 등록과 재현 도구](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/registration.json) · [glibc 2.35 설정 문서](https://raw.githubusercontent.com/bminor/glibc/glibc-2.35/manual/tunables.texi)
 
+스레드별 할당 캐시를 끈 `cache-off` 30분 실행에서 정밀 RSS와 익명 RSS가 각각 **144KiB 감소**해 증가 0 기준을 통과했다. 동일한 7초 반환 주기를 사용한 기본 할당 캐시 대조에서는 44KiB 증가했다. API 40건과 지연·자원 회수 검사가 모두 통과했다. 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했고, 같은 GPU 홀더의 20GiB 예약을 복구한 뒤 `cache-on`을 시작했다. 후반 TTFT p95와 완료 지연 p95는 앞선 대조보다 각각 0.17%, 0.16% 낮았다. [원래 판정과 독립 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/cache-off-verified.json)
+
+정밀 RSS는 중간에 직전 반환 후 4.30–4.67초, drain에서 5.08–5.47초에 읽었고 두 읽기 모두 반환 호출과 겹치지 않았다. 인접 매핑의 익명 RSS는 220KiB 줄었으며 순변화는 앞서 관측한 보조 힙 배치에서 나왔다. 한 쌍에서 관측한 결과이고 이전 시험과 표본의 반환 후 시각이 달랐다. `cache-on`의 동일 기준 판정과 반복성 확인이 남아 있다. [표본 시각과 매핑 합계](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/cache-off-verified.json)
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 

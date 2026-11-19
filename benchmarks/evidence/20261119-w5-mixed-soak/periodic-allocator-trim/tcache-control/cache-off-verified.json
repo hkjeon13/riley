@@ -1,0 +1,267 @@
+{
+  "scope": "One completed cache-off diagnostic of the approved image. Cache-on has a separate gate.",
+  "run_label": "w5-tcache-control-20261119.liqVpVJ7",
+  "gpu_index": 6,
+  "start_utc": "2026-11-19T08:38:05Z",
+  "end_utc": "2026-11-19T09:12:30Z",
+  "image_binding": {
+    "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+    "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+    "source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+    "riley_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+    "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f"
+  },
+  "checker_exit": 0,
+  "server_exit": 0,
+  "api_passed": 40,
+  "counts": {
+    "plain": {
+      "completed": 7984
+    },
+    "schema": {
+      "completed": 1739,
+      "stop": 1739
+    },
+    "logprobs": {
+      "completed": 1160
+    },
+    "tools": {
+      "completed": 708,
+      "tool_calls": 708
+    },
+    "long": {
+      "completed": 1415
+    },
+    "reason": {
+      "completed": 743
+    },
+    "cancel": {
+      "disconnected": 700
+    }
+  },
+  "checks": {
+    "no_unexpected_http_or_stream_error": true,
+    "completed_schema_and_tool_covered": true,
+    "disconnects_observed": true,
+    "idle_after_drain": true,
+    "native_allocation_plateau": true,
+    "workload_coverage": true,
+    "p95_drift_at_most_5_percent": true,
+    "rss_growth_second_half_at_most_zero": true
+  },
+  "comparison": {
+    "cpu_probe": {
+      "default": {
+        "uid": 65532,
+        "glibc": "2.35",
+        "request_bytes": 800,
+        "usable_bytes": 808,
+        "uordblks_before": 1520,
+        "uordblks_after": 1520,
+        "explicitly_disabled": false,
+        "other_tunable_present": false
+      },
+      "disabled": {
+        "uid": 65532,
+        "glibc": "2.35",
+        "request_bytes": 800,
+        "usable_bytes": 808,
+        "uordblks_before": 1520,
+        "uordblks_after": 704,
+        "explicitly_disabled": true,
+        "other_tunable_present": false
+      }
+    },
+    "modes": {
+      "cache-off": {
+        "base_7second_report_sha256": "77e847d47f240d34bd89d47d74d7662844c58c3c95071b8e73470215ef18a343",
+        "disabled_report_sha256": "66773a06b5420776f76070b004e2a9450a750ece128d2428291433a33d6de06b",
+        "same_20gib_reservation_restored": true,
+        "default_failed_checks": [
+          "rss_growth_second_half_at_most_zero"
+        ],
+        "disabled_failed_checks": [],
+        "default_rss": {
+          "baseline": {
+            "rss_kib": 15507836,
+            "anonymous_kib": 15321300,
+            "read_ms": 358.05708914995193
+          },
+          "drain": {
+            "rss_kib": 15507880,
+            "anonymous_kib": 15321344,
+            "read_ms": 397.1829414367676
+          },
+          "rss_growth_kib": 44,
+          "anonymous_growth_kib": 44
+        },
+        "disabled_rss": {
+          "baseline": {
+            "rss_kib": 15499864,
+            "anonymous_kib": 15313292,
+            "read_ms": 362.074114382267
+          },
+          "drain": {
+            "rss_kib": 15499720,
+            "anonymous_kib": 15313148,
+            "read_ms": 389.0543505549431
+          },
+          "rss_growth_kib": -144,
+          "anonymous_growth_kib": -144
+        },
+        "default_return_calls": {
+          "period_ms": 7000,
+          "calls": 294,
+          "returned_memory": 294,
+          "span_seconds": 2051.167156571,
+          "call_ms_p95": 0.768335,
+          "call_ms_max": 4.487165
+        },
+        "disabled_return_calls": {
+          "period_ms": 7000,
+          "calls": 294,
+          "returned_memory": 294,
+          "span_seconds": 2051.154665,
+          "call_ms_p95": 0.560171,
+          "call_ms_max": 9.309697
+        },
+        "late_p95_ms": {
+          "ttft_ms_p95": {
+            "default": 334.73484963178635,
+            "disabled": 334.15790647268295,
+            "change_percent": -0.17235825900351331
+          },
+          "e2e_ms_p95": {
+            "default": 4169.913470745087,
+            "disabled": 4163.233049213886,
+            "change_percent": -0.1602052795116382
+          }
+        }
+      }
+    }
+  },
+  "timing": {
+    "mode": "cache-off",
+    "verdict": "passed",
+    "original_rss": {
+      "baseline": {
+        "rss_kib": 15499864,
+        "anonymous_kib": 15313292,
+        "read_ms": 362.074114382267
+      },
+      "drain": {
+        "rss_kib": 15499720,
+        "anonymous_kib": 15313148,
+        "read_ms": 389.0543505549431
+      },
+      "rss_growth_kib": -144,
+      "anonymous_growth_kib": -144
+    },
+    "sample_bounds": {
+      "midpoint": {
+        "rollup_read": {
+          "preceding_trim": 164,
+          "preceding_trim_returned": 1,
+          "milliseconds_since_trim_at_start": 4304.048605,
+          "milliseconds_since_trim_at_end": 4666.1288,
+          "overlapping_trims": [],
+          "following_trim": 165
+        },
+        "map_read": {
+          "preceding_trim": 164,
+          "preceding_trim_returned": 1,
+          "milliseconds_since_trim_at_start": 4666.129757,
+          "milliseconds_since_trim_at_end": 5008.658277,
+          "overlapping_trims": [],
+          "following_trim": 165
+        },
+        "rollup_and_maps_rss_difference_kib": 76,
+        "rollup_and_maps_anonymous_difference_kib": 76
+      },
+      "drain": {
+        "rollup_read": {
+          "preceding_trim": 293,
+          "preceding_trim_returned": 1,
+          "milliseconds_since_trim_at_start": 5076.729626,
+          "milliseconds_since_trim_at_end": 5465.793551,
+          "overlapping_trims": [],
+          "following_trim": 294
+        },
+        "map_read": {
+          "preceding_trim": 293,
+          "preceding_trim_returned": 1,
+          "milliseconds_since_trim_at_start": 5465.794957,
+          "milliseconds_since_trim_at_end": 5886.90991,
+          "overlapping_trims": [],
+          "following_trim": 294
+        },
+        "rollup_and_maps_rss_difference_kib": 0,
+        "rollup_and_maps_anonymous_difference_kib": 0
+      }
+    },
+    "same_extent_mapping_changes_by_class": {
+      "anonymous-private": {
+        "retained_delta_kib": -252,
+        "lost_kib": 660,
+        "added_kib": 692
+      },
+      "file-or-device": {
+        "retained_delta_kib": 0,
+        "lost_kib": 0,
+        "added_kib": 0
+      },
+      "heap": {
+        "retained_delta_kib": 0,
+        "lost_kib": 0,
+        "added_kib": 0
+      },
+      "labeled-stack": {
+        "retained_delta_kib": 0,
+        "lost_kib": 0,
+        "added_kib": 0
+      },
+      "other-kernel": {
+        "retained_delta_kib": 0,
+        "lost_kib": 0,
+        "added_kib": 0
+      }
+    },
+    "diagnostic_scope": "Map reads follow the scored RSS samples and can observe different pages."
+  },
+  "arena_mapping_shape": {
+    "scope": "64 MiB aligned anonymous writable segment with an adjacent inaccessible private reservation. Mapping geometry is compared, without reading allocator metadata or retained addresses.",
+    "heap_alignment_bytes": 67108864,
+    "midpoint_sha256": "53a7ee6344d3bfff5e29b9827b6b9e39aa5f17170e80b50ca60edc4c9bd78aa4",
+    "drain_sha256": "8a42d4661a23907ef883364b1fbd3df7bab15cb20bad978ffb680123f65a2960",
+    "matching_starts_at_both_samples": 36,
+    "matching_starts_with_exact_reservation_end_at_both_samples": 36,
+    "total_anonymous_rss_change_kib": -220,
+    "paired_groups": {
+      "matching_heap_shape": {
+        "same_extent_mappings": 33,
+        "same_extent_rss_change_kib": -252,
+        "same_extent_increased_mappings": 9,
+        "same_extent_decreased_mappings": 15,
+        "changed_extent_mappings": 3,
+        "changed_extent_rss_change_kib": 32,
+        "changed_extent_increased_mappings": 1,
+        "changed_extent_decreased_mappings": 2
+      },
+      "other_private_mapping": {
+        "same_extent_mappings": 332,
+        "same_extent_rss_change_kib": 0,
+        "same_extent_increased_mappings": 0,
+        "same_extent_decreased_mappings": 0
+      }
+    }
+  },
+  "original_artifacts_sha256": {
+    "report.json": "66773a06b5420776f76070b004e2a9450a750ece128d2428291433a33d6de06b",
+    "soak.json": "361dd4007bbdaa5dd65590dbea4b3ce59a3782884218eae9729b7357203d2601",
+    "soak.log": "b66b0f695a43b57518d81c2f34ca2bdc18b87ed49b60da908c25b0696fba7a92",
+    "shutdown.json": "d9d30b7eb792eb1f4483332a9bbea56e19ce2d853b57b27641f8af9d5d90e7f7",
+    "api.json": "61f0a3805bc8c72d074db5ee74c735fa8d76f6c6dcd6b8dfdd7b037b39b4dbcb",
+    "periodic-trim.jsonl": "7d2456e2b626d3806487385d8593a8a27ab728b0c49fa8f0314e4d010497e94d"
+  },
+  "independent_reproduction_matches_remote_json": true
+}

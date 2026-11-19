@@ -42,3 +42,5 @@ W5의 30분 실행에서 종료 뒤 GPU·pinned 메모리와 활성 KV는 0이�
 31초 주기의 별도 cache-off 표본 진단에서도 익명 RSS가 500KiB 증가했다. 중간과 drain의 반환 이후 경과 시간을 확인했고, 증가 0 기준은 계속 미충족이다. [표본 시각과 매핑 대조](05-mixed-soak-result.md#배포-이미지의-주기적-메모리-반환-후보)
 
 7초 주기의 첫 시도는 라이브러리 적재 실패로 후보 판정에서 제외했다. 같은 이미지에서 서비스 계정의 적재를 먼저 검증한 재실행에서 cache-off 익명 RSS는 44KiB, cache-on은 292KiB 증가했고 두 모드 모두 기존 RSS 증가 0 항목만 실패했다. Drain 표본은 각각 직전 반환 완료 후 0.19–0.59초와 4.70–5.05초에 읽혔다. 릴리스 보류 상태이며 동일한 7초 주기에 스레드별 할당 캐시 비활성화 대조를 등록했다. [재실행 결과](05-mixed-soak-result.md#배포-이미지의-주기적-메모리-반환-후보)
+
+스레드별 할당 캐시를 끈 `cache-off` 대조에서 정밀 익명 RSS가 144KiB 감소해 원래 증가 0 기준을 통과했다. API 40건과 요청·지연·자원 회수 판정도 모두 통과했다. 동일 설정의 `cache-on` 검증과 반복 확인이 남아 릴리스 판정은 보류다. [cache-off 검산과 원본 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/tcache-control/cache-off-verified.json)
