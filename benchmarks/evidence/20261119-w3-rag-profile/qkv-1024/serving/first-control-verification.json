@@ -1,0 +1,47 @@
+{
+  "scope": "First control compared with the older unmodified-policy mixed-step control",
+  "binary_sha256": "f5872f90e59b4cc99a3fb4e626aa1f6e7de090a039f2bd97a86ce501ee8d1037",
+  "requests": 320,
+  "identical_c1_c8_token_inputs": 8,
+  "same_20gib_holder_restored": true,
+  "candidate_markers_in_control": 0,
+  "cells": {
+    "rag-c1": {
+      "requests": 16,
+      "matching_outputs": 16,
+      "ttft_ms_p95": 478.23043167591095,
+      "tpot_ms_p50": 24.032826557403475
+    },
+    "rag-c8-s1": {
+      "requests": 64,
+      "matching_outputs": 64,
+      "ttft_ms_p95": 1784.0724140405655,
+      "tpot_ms_p50": 39.84981745950819
+    },
+    "rag-c8-s2": {
+      "requests": 64,
+      "matching_outputs": 64,
+      "ttft_ms_p95": 1604.5695096254349,
+      "tpot_ms_p50": 38.34665420017843
+    },
+    "wave-sync": {
+      "requests": 40,
+      "matching_outputs": 40,
+      "ttft_ms_p95": 3238.63522708416,
+      "tpot_ms_p50": 29.381439148441075
+    },
+    "wave-50ms": {
+      "requests": 40,
+      "matching_outputs": 40,
+      "ttft_ms_p95": 3017.16236025095,
+      "tpot_ms_p50": 30.34829547790092
+    },
+    "short-c32": {
+      "requests": 96,
+      "matching_outputs": 96,
+      "ttft_ms_p95": 112.89487034082413,
+      "tpot_ms_p50": 25.664963062823286
+    }
+  },
+  "local_archive_sha256": "0297a200d60e3ae6e8cb9e3740f353e936864f8ddc9e7dc1142e30d2317813f7"
+}

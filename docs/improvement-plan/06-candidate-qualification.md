@@ -1,6 +1,6 @@
 # Riley 0.1.0 후보 검증 근거와 릴리스 판정
 
-2026-11-19에 `main` `e34cb5e4a`의 배포 입력을 확인했다. 현재 판정은 **릴리스 보류**다. A100에서 확인한 네이티브 실행 파일과 배포 이미지의 실행 파일은 각자의 SHA-256으로 추적한다. [후보별 원본 목록과 해시](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
+2026-11-19에 `main` `68788bee9`의 배포 입력을 확인했다. 현재 판정은 **릴리스 보류**다. A100에서 확인한 네이티브 실행 파일과 배포 이미지의 실행 파일은 각자의 SHA-256으로 추적한다. [후보별 원본 목록과 해시](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 
 ## 실행 파일과 소스 연결
 
@@ -12,7 +12,7 @@
 
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)
 
-현행 배포 검증 이미지 `d3d8fe6e5`의 이미지 ID·Riley 실행 파일 해시를 보존했다. 이 이미지와 감사 시점 `e34cb5e4a`의 배포 입력 Git 객체 14개가 모두 일치한다. 동일 Rust·CUDA 프로그램 입력인 `77c367003`에서는 CUDA 12.8 네이티브 빌드·C ABI·Clippy도 통과했다. [CUDA 12.4 이미지 원본](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/receipt.json) · [CUDA 12.8 네이티브 CI](https://github.com/hkjeon13/riley/actions/runs/44410425140)
+현행 배포 검증 이미지 `d3d8fe6e5`의 이미지 ID·Riley 실행 파일 해시를 보존했다. 이 이미지와 감사 시점 `68788bee9`의 배포 입력 Git 객체 14개가 모두 일치한다. 동일 Rust·CUDA 프로그램 입력인 `77c367003`에서는 CUDA 12.8 네이티브 빌드·C ABI·Clippy도 통과했다. [CUDA 12.4 이미지 원본](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/receipt.json) · [CUDA 12.8 네이티브 CI](https://github.com/hkjeon13/riley/actions/runs/44410425140)
 
 
 ## 현재 판정
@@ -20,8 +20,8 @@
 | 조건 | 확인된 근거 | 남은 확인 |
 |---|---|---|
 | W1 Linux·과거 계약 | hosted Linux CPU·CUDA 검사와 고정 Python의 RC3 격리 테스트 34건 통과. A100에서 재빌드한 이미지의 NVIDIA 드라이버 주입과 실제 모델 API 40건 확인 | W5의 최종 운영 기준 충족 |
-| W2·W3 성능 | 이벤트 발행·스케줄 네 조합, 두 14B 모델의 동일 KV·커널 계측, Qwen2.5-14B 요청별 prefill 대기와 vLLM 한도 대조, Qwen3-4B 길이별 대조. 14B의 진행 중·완료 가능 prefill 우선 후보와 혼합 스텝 512행 제한 후보는 지연 회귀로 미채택 | 채택할 후보의 재현성과 영향을 받는 모델의 출력·회귀 판정. 동시 유입 조건의 decode 지연 포함 |
-| W4 장문·정확성 | 고정 입력 18개와 holdout 11개의 엔진 비교, 두 사례의 첫 BF16 차이 및 28개 레이어 residual·최종 norm 재계산, 네 모델의 동일 입력 GSM8K 품질 기준 통과. A100 재빌드 이미지의 장문 대조 232건 일치. 두 사례의 첫 레이어 KV와 attention 출력을 대조했고 마지막 입력 위치의 K·V 차이를 bias·반올림 순서로 재현. HF에서 bias 순서와 prefill 분할을 교차한 네 조건에서 사례 3의 첫 ID는 모두 5257 | 다른 위치와 레이어 및 해당 차이가 최종 점수까지 전파되는 정도 |
+| W2·W3 성능 | 이벤트 발행·스케줄 네 조합, 두 14B 모델의 동일 KV·커널 계측, Qwen2.5-14B 요청별 prefill 대기와 vLLM 한도 대조, Qwen3-4B 길이별 대조. 14B의 진행 중·완료 가능 prefill 우선 후보와 혼합 스텝 512행 제한 후보는 지연 회귀로 미채택. 1,024행 QKV 후보의 첫 기준군은 이전 기준과 출력 320건 일치 | 채택할 후보의 재현성과 영향을 받는 모델의 출력·회귀 판정. 동시 유입 조건의 decode 지연 포함 |
+| W4 장문·정확성 | 고정 입력 18개와 holdout 11개의 엔진 비교, 두 사례의 첫 BF16 차이 및 28개 레이어 residual·최종 norm 재계산, 네 모델의 동일 입력 GSM8K 품질 기준 통과. A100 재빌드 이미지의 장문 대조 232건 일치. 두 사례의 첫 레이어 KV와 attention 출력을 대조했고 마지막 입력 위치의 K·V 차이를 bias·반올림 순서로 재현. HF에서 bias 순서와 prefill 분할을 교차한 네 조건에서 사례 3의 첫 ID는 모두 5257. 같은 BF16 입력의 MLP 출력 대조도 기록 | 다른 위치와 레이어 및 해당 차이가 최종 점수까지 전파되는 정도 |
 | W4 스키마 | 문서화한 부분집합에서 GPU 일반 API 40건과 schema 계약 11건을 통과했다. A100 재빌드 이미지의 대표 모델 API 40건도 통과했다. | W5의 최종 운영 기준 충족 |
 | W5 운영 | 네이티브와 배포 이미지에서 각각 캐시 off·on 30분 부하와 종료 회수 확인. 배포 이미지의 익명 RSS는 cache-on +616KiB, cache-off +700KiB. 별도 진단에서 증가한 익명 private 매핑 32개가 glibc 반환 호출 뒤 감소했다. 느린 SSE·취소와 GPU 메모리 오류 주입 네 사례 확인 | 할당 지점을 좁히고 두 캐시 설정에서 RSS 증가 0 조건을 충족한다. 실제 운영 분포 확인 |
 

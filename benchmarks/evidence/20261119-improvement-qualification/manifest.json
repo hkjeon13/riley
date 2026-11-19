@@ -985,6 +985,14 @@
     "distribution_periodic_trim_7sec_registration": {
       "path": "benchmarks/evidence/20261119-w5-mixed-soak/periodic-allocator-trim/shorter-period/registration.json",
       "sha256": "bd6058b9669a7e6329b501cfa7b2e8396902347952b3ce6762a5d5121c303370"
+    },
+    "qwen14_qkv_1024_serving_first_control": {
+      "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/first-control-verification.json",
+      "sha256": "74447d0d0a547d34819ade8c3031cb33a7c1871d05e48c2589409ce0b5bf5091"
+    },
+    "qwen14_qkv_1024_serving_first_candidate_startup": {
+      "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/first-candidate-startup.json",
+      "sha256": "552c4fa70f7c13fa5a6bddba1b6b8f6d0a134898b85eb469a3f7b6da5f84c0fe"
     }
   },
   "follow_up_distribution_image": {
@@ -1011,7 +1019,7 @@
     "gpu_inference": "pending"
   },
   "current_distribution_candidate": {
-    "audited_main": "e34cb5e4a02fa6a4b5cb5e9e5b54bad266b9477a",
+    "audited_main": "68788bee925a7bcb9f62c3da4cd63130a4186c5e",
     "matching_distribution_input_git_objects": {
       "Cargo.toml": "e75f6ce3a2ad13911f1a91fc2b982a410f9d32f2",
       "Cargo.lock": "afa446f5b2f1ad1ba2070de2d16343cf7a7a0a70",

@@ -264,6 +264,10 @@ A100 7번의 합성 입력 두 개에서 기존 wide 후보표의 split-K 3 알�
 격리한 서빙 빌드에서는 cuBLASLt 12.4.5와 A100의 1,024행 QKV에만 후보를 적용한다. 기존 런타임 동등성 검사에 통과한 경우만 선택하고, 판정 로그가 기대와 다르면 실험 검산이 실패한다. A100 7번에 기준 → 후보 → 후보 → 기준 순서를 등록했다. 기존 C1·C8과 두 도착 조건, 짧은 C32의 요청별 응답을 비교하고 별도 장문 8개의 C1·C8 토큰 ID도 맞춘다. [서빙 대조 등록](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/registration.json) · [정확성·성능 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/compare_qkv_serving.py)
 
 
+첫 기준군은 오류·429 없이 320건을 완료했다. 이전 혼합 스텝 시험의 기준군과 입력·출력 텍스트 해시·생성 토큰 수·종료 사유가 일치했다. 장문 8개의 C1·C8 토큰 ID도 이전 기록과 같았고 같은 GPU 홀더의 20GiB 예약을 복구했다. [첫 기준군 검산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/first-control-verification.json)
+
+첫 후보 서버가 기준군과 같은 바이너리·cuBLASLt 12.4.5를 적재했다. 런타임 바이트 동등성 검사에 통과해 1,024행 QKV 후보를 실제로 선택했다. [후보 시작 시점의 검증](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/first-candidate-startup.json)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
