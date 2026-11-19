@@ -253,6 +253,10 @@ A100 6번의 `cache-on` 컨테이너에서 API 40건이 통과했고 30분 부�
 
 두 `cache-on`·`cache-off` 부하가 기존 운영 기준을 통과하면, 같은 이미지에서 기준 장문 144건과 홀드아웃 88건을 대조하도록 등록했다. 두 모드의 요청·RSS·지연·회수 영수증을 재검산해 실행 여부를 정한다. CPU 사전시험에서는 양쪽 통과, 한쪽 실패, 다른 바이너리와 달라진 GPU 7 예약의 처리 경로를 확인했다. [조건부 장문 검증 등록](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/accuracy-follow-up/registration.json) · [판정기](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/accuracy-follow-up/verify_chat_accuracy.py)
 
+`cache-on` 30분 부하에서 900.17초부터 요청 처리 종료까지 정밀 RSS와 익명 RSS가 각각 **508KiB 증가**했다. 기준 이미지의 같은 모드에서는 616KiB 증가했다. 일반 `VmRSS` 변화는 0이었다. 정상 완료 13,749건, 의도적 연결 종료 700건, API 40건을 확인했고 RSS 증가 0 항목만 실패했다. 후보의 후반 TTFT p95는 327.85ms, 완료 지연 p95는 4,143.58ms였다. 전반 대비 각각 1.57% 증가, 13.43% 감소했다. [첫 부하와 원본 체크섬](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/cache-on-verified.json) · [공통 판정 재검산](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/verify_chat_soak.py)
+
+첫 부하의 요청·CUDA 할당·활성 KV가 종료 후 회수됐다. GPU 6과 7은 각각 기존 홀더의 20GiB 예약을 확인했고, 이어 GPU 6에서 `cache-off`를 시작했다. `cache-on` 결과로 두 모드의 RSS 통과를 요구하는 채택 조건은 미충족이다.
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 

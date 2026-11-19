@@ -1,0 +1,168 @@
+{
+  "scope": "A100 6 chat SSE diagnostic, paired against the unmodified image for each mode.",
+  "completed_modes": [
+    "cache-on"
+  ],
+  "image": {
+    "base_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+    "patch_sha256": "01be0e56d60800f1270f555ec15ed10502a424f989c0e21d6305c605c7dd9d7b",
+    "base_source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+    "candidate_source_archive_sha256": "828d81b99b228d3983c4674b07aa48eeacee2f20e4146af17fa1f091b1b819ec",
+    "base_image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+    "candidate_image_id": "sha256:06eed36dcc604e942901422c90d8a94d26c8144eb09d3b515a0f78dfef2d0c51",
+    "candidate_binary_sha256": "d62d19acf4984b7a31cef4fd10d3c20e8a3e2a4cb23ec4d1daa1a4c9e00a9a23",
+    "base_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+    "unchanged_runtime_files": 20,
+    "candidate_cpu_report_sha256": "2b66df3f60168dd6cbbc42e0b1831c9a9d046c0f46f7ead32c09e540ff4eba0c"
+  },
+  "comparisons": {
+    "cache-on": {
+      "control_report_sha256": "a07f24b13e13d53fde638a4565d4a2d73f1f30346797ba62539644b7ebc15d4c",
+      "candidate_report_sha256": "f02ddb223e756c50c2acdcc54e371be2a53c6bf1f84867cdd80407cc743382b5",
+      "candidate_soak_sha256": "0b92bfb6e7ca8e28a17a4e8e4e4d8b41bb1cdbdae07320db7c159a06d4fdd4c3",
+      "identical_outcome_counts": true,
+      "counts": {
+        "plain": {
+          "completed": 7984
+        },
+        "schema": {
+          "completed": 1739,
+          "stop": 1739
+        },
+        "logprobs": {
+          "completed": 1160
+        },
+        "tools": {
+          "completed": 708,
+          "tool_calls": 708
+        },
+        "long": {
+          "completed": 1415
+        },
+        "reason": {
+          "completed": 743
+        },
+        "cancel": {
+          "disconnected": 700
+        }
+      },
+      "control_rss": {
+        "baseline": {
+          "rss_kib": 15553172,
+          "anonymous_kib": 15366416,
+          "read_ms": 330.4477035999298
+        },
+        "drain": {
+          "rss_kib": 15553788,
+          "anonymous_kib": 15367032,
+          "read_ms": 325.4677876830101
+        },
+        "rss_growth_kib": 616,
+        "anonymous_growth_kib": 616
+      },
+      "candidate_rss": {
+        "baseline": {
+          "rss_kib": 15552968,
+          "anonymous_kib": 15366500,
+          "read_ms": 281.6597744822502
+        },
+        "drain": {
+          "rss_kib": 15553476,
+          "anonymous_kib": 15367008,
+          "read_ms": 267.95144379138947
+        },
+        "rss_growth_kib": 508,
+        "anonymous_growth_kib": 508
+      },
+      "cache_mode": "cache-on",
+      "api_checks": 40,
+      "candidate_failed_checks": [
+        "rss_growth_second_half_at_most_zero"
+      ],
+      "control_late_p95_ms": {
+        "ttft_ms_p95": 325.79217106103897,
+        "e2e_ms_p95": 4131.356708705425
+      },
+      "candidate_late_p95_ms": {
+        "ttft_ms_p95": 327.8488218784332,
+        "e2e_ms_p95": 4143.57803016901
+      },
+      "same_20gib_reservation_restored": true,
+      "candidate_status": "failed"
+    }
+  },
+  "receipts": {
+    "cache-on": {
+      "status": "failed",
+      "exit": 1,
+      "start_utc": "2026-11-19T13:19:24Z",
+      "end_utc": "2026-11-19T13:53:42Z",
+      "p95_change_percent": {
+        "ttft_ms": 1.5686909223795231,
+        "e2e_ms": -13.432864254948985
+      },
+      "strict_checks": {
+        "no_unexpected_http_or_stream_error": true,
+        "completed_schema_and_tool_covered": true,
+        "disconnects_observed": true,
+        "idle_after_drain": true,
+        "native_allocation_plateau": true,
+        "workload_coverage": true,
+        "p95_drift_at_most_5_percent": true,
+        "rss_growth_second_half_at_most_zero": false
+      },
+      "candidate_rss_samples": {
+        "baseline_seconds": 900.1657148823142,
+        "drain_seconds": 1803.997042246163
+      },
+      "control_rss_samples": {
+        "baseline_seconds": 900.1763883605599,
+        "drain_seconds": 1804.0310710817575
+      },
+      "sha256": {
+        "api.json": "9a2d87f3c038612fa73329c5957eb79620fa20eacb69b3fcac7af7d5923b3281",
+        "shutdown.json": "613405438d4de2e6643401f5f1a48c45ce79e39e743bf79403797ff475e11101",
+        "report.json": "f02ddb223e756c50c2acdcc54e371be2a53c6bf1f84867cdd80407cc743382b5",
+        "soak.json": "0b92bfb6e7ca8e28a17a4e8e4e4d8b41bb1cdbdae07320db7c159a06d4fdd4c3"
+      }
+    }
+  },
+  "verified_soaks": {
+    "cache-on": {
+      "duration_seconds": 1800.0,
+      "arrival_rate": 8.0,
+      "shared_prefixes": 8,
+      "checks": {
+        "no_unexpected_http_or_stream_error": true,
+        "completed_schema_and_tool_covered": true,
+        "disconnects_observed": true,
+        "idle_after_drain": true,
+        "native_allocation_plateau": true,
+        "workload_coverage": true,
+        "p95_drift_at_most_5_percent": true,
+        "rss_growth_second_half_at_most_zero": false
+      },
+      "problem_count": 0,
+      "p95_change_percent": {
+        "ttft_ms": 1.5686909223795231,
+        "e2e_ms": -13.432864254948985
+      },
+      "counter_changes": {
+        "cancellations": 700,
+        "disconnects": 700,
+        "overloads": 0,
+        "dropped_observations": 13568
+      },
+      "rss_baseline_time_seconds": 900.1657148823142,
+      "rss_drain_time_seconds": 1803.997042246163,
+      "rss_proc_status_growth_mib": 0.0,
+      "rss_source": {
+        "container_id": "adc9238bc8e5a31b54e2a41b7681d0f32532e2c3aa70187d84cd76f86ff97a33",
+        "host_pid": 571432,
+        "container_pid": 1
+      },
+      "rss_sample_errors": []
+    }
+  },
+  "same_gpu7_reservation_in_verified_modes": true
+}
