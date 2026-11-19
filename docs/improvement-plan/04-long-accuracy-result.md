@@ -74,6 +74,14 @@ Riley의 C8·C32 반복에서는 각각 33/33의 생성 ID·텍스트·종료 �
 
 여섯 decode 분기와 두 첫 토큰 대조점에서 실제 출력 슬롯의 BF16 점수 행을 수집하는 진단 패치를 준비했다. C1의 원래 샘플링 경로를 사용하고, 진단 클라이언트는 출력 ID·텍스트·종료 사유·usage가 보존된 응답과 일치할 때만 점수를 검산한다. 로컬 타입 검사와 저장된 두 prefill 행 재계산을 통과했다. AWS 호스트 원본의 체크섬을 대조했고 W5 단독 설정 시험이 끝나면 A100 7번에서 CUDA 빌드와 여덟 행 수집을 시작하도록 등록했다. [고정 입력과 검증 범위](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/preflight.json) · [점수 행 검사기](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/capture_decode_rows.py) · [실행 등록](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/registration.json)
 
+### 실제 BF16 점수 행의 분기 검산
+
+첫 실행은 서버 기동 후 고정 Python 도구가 gzip 입력을 UTF-8로 읽어 요청 전송 전에 실패했다. GPU 7의 예약은 같은 20GiB 홀더로 복귀했다. 압축 판독만 수정해 원본 8건을 CPU에서 다시 확인하고, 같은 CUDA 바이너리와 입력으로 GPU 7에서 재실행했다. 응답 8건의 토큰 ID·텍스트·종료 사유·usage가 기존 기록과 일치했고, 서버 종료 코드는 0이었다. 모든 캡처에서 GPU greedy가 선택한 ID와 실제 서빙 ID가 일치했다. [첫 실행 실패 영수증](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/retry/initial-failure.json) · [같은 바이너리 재실행](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/retry/registration.json) · [압축 판독 패치](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/retry/restore-gzip-input.patch.gz)
+
+전체 주소 가능 토큰의 BF16 행을 AWS에서 재계산했다. Riley와 HF SDPA의 첫 분기 7건 중 5건에서 두 엔진이 고른 ID가 Riley 행의 공동 최대였다. Decode 분기만 보면 6건 중 4건이었다. 나머지 두 분기에서 Riley ID는 단독 최대였고, HF가 고른 ID의 점수는 사례 12에서 0.125, `numbers-1023`에서 0.25 낮았다. 이미 일치하던 사례 9의 Riley 행에서도 ID 264와 5257이 공동 최대였다. [사례별 검산과 원본 행 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/retry/verified-rows.json) · [점수 행 재계산 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/retry/verify_decode_capture.py)
+
+기록된 행에서 공동 최대 중 큰 ID를 고르는 규칙을 계산하면 분기 5건의 선택이 HF와 같아지며, 현재 일치하는 사례 9는 264에서 5257로 바뀐다. 단독 최대였던 두 분기는 이 규칙에서도 남는다. 이 대조는 각 분기 위치에서 저장된 BF16 행에 적용했다. 전역 동점 선택 규칙의 변경은 미채택한다.
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.

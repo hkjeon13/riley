@@ -1,0 +1,421 @@
+{
+  "scope": "Actual Riley BF16 logits at seven first divergences and one matching control.",
+  "cases": [
+    {
+      "suite": "long",
+      "case": "0",
+      "prompt_len": 681,
+      "offset": 2,
+      "riley_id": 6109,
+      "hf_id": 56589,
+      "captured_backend": "gpu_greedy",
+      "observed_output_hash": "1b74843c67e0805ed425d606d75194a1df8a1bfc83d793526c5ea131364efce3",
+      "row": {
+        "sha256": "d612cc3b27e5db61b276ba3330b6f772b4f98ce9e1f4587464b89bb2e370f805",
+        "addressable_vocabulary": 151665,
+        "captured_vocabulary": 152064,
+        "riley_logit": 19.75,
+        "hf_choice_logit": 19.75,
+        "riley_minus_hf_logit": 0.0,
+        "tied_maximum_ids": [
+          6109,
+          56589
+        ]
+      },
+      "prior_first_divergence": {
+        "offset": 2,
+        "stage": "decode",
+        "riley_id": 6109,
+        "hf_sdpa_id": 56589,
+        "riley_reported_gap": 0.0,
+        "hf_sdpa": {
+          "scores": {
+            "riley": 19.75,
+            "hf": 19.875
+          },
+          "hf_id_minus_riley_id": 0.125,
+          "top_pair_gap": 0.125,
+          "unique_winner": 56589
+        },
+        "hf_eager": {
+          "scores": {
+            "riley": 19.75,
+            "hf": 19.75
+          },
+          "hf_id_minus_riley_id": 0.0,
+          "top_pair_gap": 0.0,
+          "unique_winner": null
+        },
+        "vllm_at_same_prefix": {
+          "state": "hf_sdpa",
+          "id": 56589
+        }
+      },
+      "is_tied_with_hf_id_in_riley_row": true
+    },
+    {
+      "suite": "long",
+      "case": "3",
+      "prompt_len": 3301,
+      "offset": 0,
+      "riley_id": 264,
+      "hf_id": 5257,
+      "captured_backend": "gpu_greedy",
+      "observed_output_hash": "c3f9842e65f3df34fd4ddb0b5770f07297bc140d4687387610f3fffc821d7119",
+      "row": {
+        "sha256": "44c8b37f3b1daf12ace76c3b9ca7b282d363f8ea5c473ed0a331b1a660f911fc",
+        "addressable_vocabulary": 151665,
+        "captured_vocabulary": 152064,
+        "riley_logit": 18.375,
+        "hf_choice_logit": 18.375,
+        "riley_minus_hf_logit": 0.0,
+        "tied_maximum_ids": [
+          264,
+          5257
+        ]
+      },
+      "prior_first_divergence": {
+        "offset": 0,
+        "stage": "prefill",
+        "riley_id": 264,
+        "hf_sdpa_id": 5257,
+        "riley_reported_gap": 0.0,
+        "hf_sdpa": {
+          "scores": {
+            "riley": 18.25,
+            "hf": 18.375
+          },
+          "hf_id_minus_riley_id": 0.125,
+          "top_pair_gap": 0.125,
+          "unique_winner": 5257
+        },
+        "hf_eager": {
+          "scores": {
+            "riley": 17.5,
+            "hf": 17.625
+          },
+          "hf_id_minus_riley_id": 0.125,
+          "top_pair_gap": 0.125,
+          "unique_winner": 5257
+        },
+        "vllm_at_same_prefix": {
+          "state": "hf_sdpa",
+          "id": 5257
+        }
+      },
+      "is_tied_with_hf_id_in_riley_row": true
+    },
+    {
+      "suite": "long",
+      "case": "6",
+      "prompt_len": 667,
+      "offset": 14,
+      "riley_id": 1741,
+      "hf_id": 2670,
+      "captured_backend": "gpu_greedy",
+      "observed_output_hash": "3c7b03abc1744e4a36a503f5bb8064ab96a2ca6a9dea74a2f0786eafe04dfeb8",
+      "row": {
+        "sha256": "a905240b1dbb03d558515f7c982cebd578469dc950f57881e0b677b39083c16c",
+        "addressable_vocabulary": 151665,
+        "captured_vocabulary": 152064,
+        "riley_logit": 21.25,
+        "hf_choice_logit": 21.25,
+        "riley_minus_hf_logit": 0.0,
+        "tied_maximum_ids": [
+          1741,
+          2670
+        ]
+      },
+      "prior_first_divergence": {
+        "offset": 14,
+        "stage": "decode",
+        "riley_id": 1741,
+        "hf_sdpa_id": 2670,
+        "riley_reported_gap": 0.0,
+        "hf_sdpa": {
+          "scores": {
+            "riley": 21.125,
+            "hf": 21.25
+          },
+          "hf_id_minus_riley_id": 0.125,
+          "top_pair_gap": 0.125,
+          "unique_winner": 2670
+        },
+        "hf_eager": {
+          "scores": {
+            "riley": 19.0,
+            "hf": 19.375
+          },
+          "hf_id_minus_riley_id": 0.375,
+          "top_pair_gap": 0.375,
+          "unique_winner": 2670
+        },
+        "vllm_at_same_prefix": {
+          "state": "riley",
+          "id": 1741
+        }
+      },
+      "is_tied_with_hf_id_in_riley_row": true
+    },
+    {
+      "suite": "long",
+      "case": "9",
+      "prompt_len": 3330,
+      "offset": 0,
+      "riley_id": 264,
+      "hf_id": 264,
+      "captured_backend": "gpu_greedy",
+      "observed_output_hash": "dedb416dd58bd6b7d96facb4ff4c75f233882c6aadbe53e82c389ce7c33a1361",
+      "row": {
+        "sha256": "a959dbce58d4c5a36eea752c69ccf1c964c56c42338554d1bf0d1593e098bbaf",
+        "addressable_vocabulary": 151665,
+        "captured_vocabulary": 152064,
+        "riley_logit": 18.25,
+        "hf_choice_logit": 18.25,
+        "riley_minus_hf_logit": 0.0,
+        "tied_maximum_ids": [
+          264,
+          5257
+        ]
+      },
+      "prior_first_divergence": null,
+      "is_tied_with_hf_id_in_riley_row": true
+    },
+    {
+      "suite": "long",
+      "case": "12",
+      "prompt_len": 669,
+      "offset": 9,
+      "riley_id": 34235,
+      "hf_id": 13638,
+      "captured_backend": "gpu_greedy",
+      "observed_output_hash": "b80cd599b4034c2b87289599ef14181ae15952a99c501952aec5886c19e54028",
+      "row": {
+        "sha256": "339c9b0aefd87cc7c5c1ba2557ca8a4acc5e1b362b51b8cb3ddfb0cd9c5a8ce5",
+        "addressable_vocabulary": 151665,
+        "captured_vocabulary": 152064,
+        "riley_logit": 18.875,
+        "hf_choice_logit": 18.75,
+        "riley_minus_hf_logit": 0.125,
+        "tied_maximum_ids": [
+          34235
+        ]
+      },
+      "prior_first_divergence": {
+        "offset": 9,
+        "stage": "decode",
+        "riley_id": 34235,
+        "hf_sdpa_id": 13638,
+        "riley_reported_gap": 0.125,
+        "hf_sdpa": {
+          "scores": {
+            "riley": 18.875,
+            "hf": 18.875
+          },
+          "hf_id_minus_riley_id": 0.0,
+          "top_pair_gap": 0.0,
+          "unique_winner": null
+        },
+        "hf_eager": {
+          "scores": {
+            "riley": 18.5,
+            "hf": 19.0
+          },
+          "hf_id_minus_riley_id": 0.5,
+          "top_pair_gap": 0.5,
+          "unique_winner": 13638
+        },
+        "vllm_at_same_prefix": {
+          "state": "hf_sdpa",
+          "id": 13638
+        }
+      },
+      "is_tied_with_hf_id_in_riley_row": false
+    },
+    {
+      "suite": "long",
+      "case": "14",
+      "prompt_len": 2196,
+      "offset": 9,
+      "riley_id": 11931,
+      "hf_id": 38973,
+      "captured_backend": "gpu_greedy",
+      "observed_output_hash": "d54669c6e9b4573819b84f62e00cb242b1812d9d0809fb453a30b06993b12f45",
+      "row": {
+        "sha256": "d23e9a11b6ddb0ce5e13e4ba12a3c9ee65c2cf2b7ee85960ccfeb0aed1af649d",
+        "addressable_vocabulary": 151665,
+        "captured_vocabulary": 152064,
+        "riley_logit": 19.875,
+        "hf_choice_logit": 19.875,
+        "riley_minus_hf_logit": 0.0,
+        "tied_maximum_ids": [
+          11931,
+          38973
+        ]
+      },
+      "prior_first_divergence": {
+        "offset": 9,
+        "stage": "decode",
+        "riley_id": 11931,
+        "hf_sdpa_id": 38973,
+        "riley_reported_gap": 0.0,
+        "hf_sdpa": {
+          "scores": {
+            "riley": 19.75,
+            "hf": 19.875
+          },
+          "hf_id_minus_riley_id": 0.125,
+          "top_pair_gap": 0.125,
+          "unique_winner": 38973
+        },
+        "hf_eager": {
+          "scores": {
+            "riley": 18.25,
+            "hf": 19.25
+          },
+          "hf_id_minus_riley_id": 1.0,
+          "top_pair_gap": 1.0,
+          "unique_winner": 38973
+        },
+        "vllm_at_same_prefix": {
+          "state": "hf_sdpa",
+          "id": 38973
+        }
+      },
+      "is_tied_with_hf_id_in_riley_row": true
+    },
+    {
+      "suite": "holdout",
+      "case": "numbers-1023",
+      "prompt_len": 1023,
+      "offset": 67,
+      "riley_id": 510,
+      "hf_id": 311,
+      "captured_backend": "gpu_greedy",
+      "observed_output_hash": "a86ca8d76a4dfb1daf257b99b83a3bd5cc42453e71417dfff4a8db9b84f1fb1a",
+      "row": {
+        "sha256": "e41a6d2ca399ebec3db52170807ff650466e11a3846265b9b5253dfd3c0446e6",
+        "addressable_vocabulary": 151665,
+        "captured_vocabulary": 152064,
+        "riley_logit": 35.5,
+        "hf_choice_logit": 35.25,
+        "riley_minus_hf_logit": 0.25,
+        "tied_maximum_ids": [
+          510
+        ]
+      },
+      "prior_first_divergence": {
+        "offset": 67,
+        "stage": "decode",
+        "riley_id": 510,
+        "hf_sdpa_id": 311,
+        "riley_reported_gap": 0.25,
+        "hf_sdpa": {
+          "scores": {
+            "riley": 35.5,
+            "hf": 35.5
+          },
+          "hf_id_minus_riley_id": 0.0,
+          "top_pair_gap": 0.0,
+          "unique_winner": null
+        },
+        "hf_eager": {
+          "scores": {
+            "riley": 33.75,
+            "hf": 33.75
+          },
+          "hf_id_minus_riley_id": 0.0,
+          "top_pair_gap": 0.0,
+          "unique_winner": null
+        },
+        "vllm_at_same_prefix": {
+          "state": "riley",
+          "id": 510
+        }
+      },
+      "is_tied_with_hf_id_in_riley_row": false
+    },
+    {
+      "suite": "holdout",
+      "case": "korean-1024",
+      "prompt_len": 1024,
+      "offset": 77,
+      "riley_id": 12802,
+      "hf_id": 42039,
+      "captured_backend": "gpu_greedy",
+      "observed_output_hash": "e572a06f902da09e956af020e38476baf7d5ff12f530c922bc1129d6fad3fb32",
+      "row": {
+        "sha256": "6c049b3d7b4576ce8810700de3935b993840ef325d00473645a255616d719067",
+        "addressable_vocabulary": 151665,
+        "captured_vocabulary": 152064,
+        "riley_logit": 20.25,
+        "hf_choice_logit": 20.25,
+        "riley_minus_hf_logit": 0.0,
+        "tied_maximum_ids": [
+          12802,
+          42039
+        ]
+      },
+      "prior_first_divergence": {
+        "offset": 77,
+        "stage": "decode",
+        "riley_id": 12802,
+        "hf_sdpa_id": 42039,
+        "riley_reported_gap": 0.0,
+        "hf_sdpa": {
+          "scores": {
+            "riley": 20.125,
+            "hf": 20.25
+          },
+          "hf_id_minus_riley_id": 0.125,
+          "top_pair_gap": 0.125,
+          "unique_winner": 42039
+        },
+        "hf_eager": {
+          "scores": {
+            "riley": 20.625,
+            "hf": 20.125
+          },
+          "hf_id_minus_riley_id": -0.5,
+          "top_pair_gap": 0.5,
+          "unique_winner": 12802
+        },
+        "vllm_at_same_prefix": {
+          "state": "already_diverged_or_ended",
+          "riley_common_prefix": 57
+        }
+      },
+      "is_tied_with_hf_id_in_riley_row": true
+    }
+  ],
+  "input_audit_sha256": "73b3c46b0093bdef809a851975b64f48d160b8282a6d28b3be975d2490b0d922",
+  "decisions": {
+    "divergences": 7,
+    "decode_divergences": 6,
+    "riley_hf_id_ties": 5,
+    "riley_hf_id_decode_ties": 4,
+    "unique_riley_maxima": 2,
+    "largest_tied_id_would_match_hf_at_divergence": 5,
+    "largest_tied_id_would_change_matching_control": true
+  },
+  "binary_sha256": "d835f88853507b2d117a1b6ceb1e4b63088f61ea141cb441e99e2431737f0ae8",
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "gpu_server_exit": 0,
+  "nvml_samples": 127,
+  "original_20gib_holder_restored": true,
+  "result_sha256": {
+    "riley/receipt.json": "5ce948ac198c4025b97b278c5a907eae210258dc072868465537c3356926899f",
+    "riley/client.log": "3022e15460b08ccabd3ce11fac88787c251fbff9b2b9f5837a0f59bfbe88f3cf",
+    "riley/server.log": "b14cd1b8484655397b713effd964d546a72a897506f6dae7067ac04b6b4e8f76",
+    "idle-before.json": "11628c33765e9e0cdaf9320e8bfbd39e1a0c6a0b9c801cd4769f93a2509eebea",
+    "idle-after.json": "b42c19d8262502cc9fba798edd80de1053dbd5ceebbf5c32de7e69b8d49aeabb",
+    "riley/rows/1023-67.bf16": "e41a6d2ca399ebec3db52170807ff650466e11a3846265b9b5253dfd3c0446e6",
+    "riley/rows/1024-77.bf16": "6c049b3d7b4576ce8810700de3935b993840ef325d00473645a255616d719067",
+    "riley/rows/2196-9.bf16": "d23e9a11b6ddb0ce5e13e4ba12a3c9ee65c2cf2b7ee85960ccfeb0aed1af649d",
+    "riley/rows/3301-0.bf16": "44c8b37f3b1daf12ace76c3b9ca7b282d363f8ea5c473ed0a331b1a660f911fc",
+    "riley/rows/3330-0.bf16": "a959dbce58d4c5a36eea752c69ccf1c964c56c42338554d1bf0d1593e098bbaf",
+    "riley/rows/667-14.bf16": "a905240b1dbb03d558515f7c982cebd578469dc950f57881e0b677b39083c16c",
+    "riley/rows/669-9.bf16": "339c9b0aefd87cc7c5c1ba2557ca8a4acc5e1b362b51b8cb3ddfb0cd9c5a8ce5",
+    "riley/rows/681-2.bf16": "d612cc3b27e5db61b276ba3330b6f772b4f98ce9e1f4587464b89bb2e370f805"
+  }
+}
