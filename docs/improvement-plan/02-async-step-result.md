@@ -51,7 +51,20 @@ host trace의 연속 부하에 가까운 128스텝 구간 18개에서 submit과 
 
 세 번째 후보는 순서가 다른 테이블에도 기존 방식으로 중복을 검사한다. 정렬·비정렬 테이블 입력 순서를 보존했고 중복 번호와 비정규 `valid_tokens`는 계속 거부했다. 스케줄러 단위 테스트 36건도 통과했다. 이 수치는 재사용이나 prefix 공유가 많은 서빙 환경의 경로 선택 비율, GPU 유휴 구간, 처리량을 입증하지 않는다. A100 비교에서 짧은 `reason-c32`와 긴 decode 부하의 출력·지연 및 GPU 유휴를 확인한 뒤 채택을 판단한다. [후보 패치](../../benchmarks/evidence/20261119-w2-submit-prepare/ordered-physical-tables.patch) · [스케줄러 측정 코드](../../benchmarks/evidence/20261119-w2-submit-prepare/scheduler_probe.rs) · [행 주소 측정 코드](../../benchmarks/evidence/20261119-w2-submit-prepare/packed_metadata_probe.rs)
 
-2026-11-19 KST에 W5 RSS 시험 뒤 A100 7번에서 실행하도록 등록했다. 호스트에 있는 승인본 `d3d8fe6e5`를 기반으로 CUDA 12.4에서 기준과 후보를 빌드한다. SmolLM2-1.7B에서 KV 9,006블록과 기존 이벤트 발행 설정을 고정하고, 짧은 프롬프트와 긴 프롬프트의 C32 부하를 기준 → 후보 → 후보 → 기준 순으로 비교한다. 처리량·TTFT·TPOT와 응답을 대조하고 별도 8개 입력의 C1·C8 토큰 ID를 검사한다. 두 Nsight 실행에서는 32행 decode 그래프 사이의 커널 공백과 제출 스레드 구간을 각각 측정한다. 실행마다 기존 홀더의 예약 복귀를 확인하도록 구성했다. [실행 등록과 입력 해시](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/registration.json) · [실행 코드](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/campaign.sh) · [결과 검산기](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/verify_ordered_tables.py)
+### 정렬된 KV 테이블의 A100 서빙 결과
+
+2026-11-19 KST에 `aws-a100` 물리 GPU 7에서 승인본 `d3d8fe6e5`와 정렬된 KV 테이블 후보를 CUDA 12.4로 각각 빌드했다. SmolLM2-1.7B, KV 9,006블록, `native-bf16-varlen-v1`과 `after-submit-v1` 설정에서 기준 → 후보 → 후보 → 기준 순으로 실행했다. 짧은 부하의 프롬프트는 평균 71.84토큰, 긴 부하는 평균 1,046.39토큰이었다. 각 실행·부하에서 워밍업 32건과 측정 64건이 완료됐고, 429와 요청 오류는 0건이었다. 응답 256쌍의 텍스트 해시·종료 사유·토큰 사용량이 일치했다. 별도 입력 8개의 C1·C8 토큰 ID도 네 실행에서 모두 일치했다. [실행 등록과 입력 해시](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/registration.json) · [실행 코드](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/campaign.sh) · [검산 결과](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/verified-comparison.json)
+
+| 부하 | 기준과 후보의 비교 순서 | TTFT p95 | TPOT p50 | ITL p99 | 출력 처리량 |
+|---|---|---:|---:|---:|---:|
+| 짧은 `reason-c32` | 기준 → 후보 | +0.225% | +0.271% | +0.393% | −0.204% |
+| 짧은 `reason-c32` | 후보 → 기준 | +0.156% | +0.296% | +1.274% | −0.356% |
+| 긴 `long-c32` | 기준 → 후보 | +0.186% | +0.106% | −0.124% | −0.161% |
+| 긴 `long-c32` | 후보 → 기준 | +0.140% | +0.158% | −0.113% | −0.107% |
+
+변화율은 각각의 기준 대비 후보로 계산했다. 짧은 요청의 TTFT p95·처리량과 두 부하의 TPOT p50은 사전 회귀 한도를 충족했다. 네 비교 모두에서 처리량이 0.107–0.356% 낮고 TPOT p50이 0.106–0.296% 높아, 반복되는 서빙 개선이 확인되지 않은 이 후보는 미채택한다.
+
+별도 Nsight 계측 쌍에서 32행 decode 그래프 676개씩을 확인했다. 연속 쌍 671개의 커널 간격 중앙값은 468.416→454.752µs, p95는 505.696→496.640µs였다. 호스트의 `plan` 단계 중앙값은 38.55→32.75µs였다. 후보 계측에서는 측정 32건과 리포트가 저장된 뒤 종료 중인 자체 서버 PID를 실행기가 외부 GPU 프로세스로 분류했다. 전체 실행의 종료 코드 1과 후보의 종료 영수증 누락을 그대로 기록했다. 저장된 리포트를 CPU에서 재내보내고 서버 PID와 요청 32건, NVTX 시계, 그래프 개수를 대조해 측정 구간을 복원했다. 각 실행이 끝난 뒤 GPU 7에서 같은 홀더가 20GiB로 복귀한 것을 확인했다. [원본 해시와 복원 구간](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/verified-comparison.json) · [Nsight 복원 코드](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/recover-nsight.sh) · [복원 결과 검산기](../../benchmarks/evidence/20261119-w2-submit-prepare/gpu-follow-up/verify_recovered_w2.py)
 
 ## 최초 이벤트 발행 실험의 설정 정정
 

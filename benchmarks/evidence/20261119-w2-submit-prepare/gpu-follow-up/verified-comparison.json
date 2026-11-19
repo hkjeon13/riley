@@ -1,0 +1,477 @@
+{
+  "scope": "Uninstrumented serving comparison and recovered pre-shutdown Nsight intervals on A100 7.",
+  "campaign_wrapper_exit": 1,
+  "campaign_times_utc": {
+    "base-first": {
+      "start_utc": "2026-11-19T09:51:21Z",
+      "end_utc": "2026-11-19T09:52:28Z",
+      "exit": 0
+    },
+    "ordered-first": {
+      "start_utc": "2026-11-19T09:52:28Z",
+      "end_utc": "2026-11-19T09:53:35Z",
+      "exit": 0
+    },
+    "ordered-second": {
+      "start_utc": "2026-11-19T09:53:35Z",
+      "end_utc": "2026-11-19T09:54:41Z",
+      "exit": 0
+    },
+    "base-second": {
+      "start_utc": "2026-11-19T09:54:42Z",
+      "end_utc": "2026-11-19T09:55:48Z",
+      "exit": 0
+    },
+    "base-trace": {
+      "start_utc": "2026-11-19T09:55:48Z",
+      "end_utc": "2026-11-19T09:56:48Z",
+      "exit": 0
+    },
+    "ordered-trace": {
+      "start_utc": "2026-11-19T09:56:48Z",
+      "end_utc": "2026-11-19T09:57:43Z",
+      "exit": 1
+    }
+  },
+  "binaries_sha256": {
+    "base": "306a4b25f35ddd531fea9b7219484d5c10c5752084e312140dcfd15f5b1902b8",
+    "ordered": "356a68f3b7f70b4b21bafb35883c58592a4f4d5757d44ee3e0fb9417a6f0bb76"
+  },
+  "shared_inputs": {
+    "identity": {
+      "model": "SmolLM2-1.7B-Instruct",
+      "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+      "common_kv_blocks": 9006,
+      "kv_cache_bytes": 28330426368,
+      "holder_pid": 2431237,
+      "holder_start_ticks": "6339570875"
+    },
+    "inputs_sha256": {
+      "riley-checkpoint.json": "592dba98659d43036538251cd53b8f76e0cf6ea292564cf4b3c300f1f6f11753",
+      "config.json": "994f50b16abb4ae00880baefe03c10260b5bd608d2bf586f7056ca05a534feea",
+      "tokenizer.json": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+      "run_profile_retry.py": "1d9ec9658b772fca198d15ece18d513173de6403ac02ebf3428e71d97323773d",
+      "profile_workload.py": "051efb94522ac713210298c9b2ee1d492ae07200b9bce5ed2b50ae587b4993bf",
+      "load.py": "fdfd5389978f6c607c49ef0d0f2bda10885ac9f25701aa1cbec1479127b07ce0",
+      "profile_summary.py": "edf89f5ccc1caae92b358f855eb5cfa606dea7b1fcb1e1c1ad51e3262dda5207"
+    },
+    "server_flags": [
+      "serve",
+      "--model",
+      "/mnt/efs/nlp/psyche/riley-gap-20261102/models/SmolLM2-1.7B-Instruct",
+      "--model-id",
+      "m",
+      "--bind",
+      "--max-active-sequences",
+      "32",
+      "--max-weight-bytes",
+      "68719476736",
+      "--inference-profile",
+      "native-bf16-varlen-v1",
+      "--max-sequence-tokens",
+      "8192",
+      "--max-output-tokens",
+      "2048",
+      "--kv-blocks",
+      "9006",
+      "--event-publication",
+      "after-submit-v1"
+    ]
+  },
+  "serving": {
+    "reason-c32": {
+      "first": {
+        "complete_requests": 64,
+        "warmup_requests": 32,
+        "output_mismatch_request_indices": [],
+        "metrics": {
+          "ttft_p50_ms": {
+            "control": 14.13542777299881,
+            "candidate": 14.162130653858185,
+            "change_percent": 0.18890748329798424
+          },
+          "ttft_p95_ms": {
+            "control": 15.340238809585571,
+            "candidate": 15.374816954135895,
+            "change_percent": 0.22540812421196765
+          },
+          "tpot_p50_ms": {
+            "control": 6.686077694447742,
+            "candidate": 6.7041831588115866,
+            "change_percent": 0.2707935084104607
+          },
+          "itl_p99_ms": {
+            "control": 7.568538188934326,
+            "candidate": 7.598266005516052,
+            "change_percent": 0.3927814835523957
+          },
+          "output_tok_s": {
+            "control": 4197.673784565974,
+            "candidate": 4189.11900538049,
+            "change_percent": -0.20379809448122232
+          }
+        },
+        "guards": {
+          "exact_outputs": true,
+          "decode_tpot_under_1_percent_regression": true,
+          "short_ttft_under_2_percent_regression": true,
+          "short_throughput_under_2_percent_regression": true
+        }
+      },
+      "second": {
+        "complete_requests": 64,
+        "warmup_requests": 32,
+        "output_mismatch_request_indices": [],
+        "metrics": {
+          "ttft_p50_ms": {
+            "control": 14.167532324790955,
+            "candidate": 14.139614999294281,
+            "change_percent": -0.1970514332112927
+          },
+          "ttft_p95_ms": {
+            "control": 15.377871692180634,
+            "candidate": 15.40181040763855,
+            "change_percent": 0.15566988681592342
+          },
+          "tpot_p50_ms": {
+            "control": 6.683299530985768,
+            "candidate": 6.703101557370854,
+            "change_percent": 0.29629117015146367
+          },
+          "itl_p99_ms": {
+            "control": 7.55474716424942,
+            "candidate": 7.651008665561676,
+            "change_percent": 1.2741856109729888
+          },
+          "output_tok_s": {
+            "control": 4198.543008958874,
+            "candidate": 4183.594860978351,
+            "change_percent": -0.3560317936157187
+          }
+        },
+        "guards": {
+          "exact_outputs": true,
+          "decode_tpot_under_1_percent_regression": true,
+          "short_ttft_under_2_percent_regression": true,
+          "short_throughput_under_2_percent_regression": true
+        }
+      }
+    },
+    "long-c32": {
+      "first": {
+        "complete_requests": 64,
+        "warmup_requests": 32,
+        "output_mismatch_request_indices": [],
+        "metrics": {
+          "ttft_p50_ms": {
+            "control": 861.8399128317833,
+            "candidate": 862.593375146389,
+            "change_percent": 0.08742485737636141
+          },
+          "ttft_p95_ms": {
+            "control": 876.0383725166321,
+            "candidate": 877.6653185486794,
+            "change_percent": 0.1857162977203286
+          },
+          "tpot_p50_ms": {
+            "control": 9.902932480269786,
+            "candidate": 9.91347791517482,
+            "change_percent": 0.10648800167065708
+          },
+          "itl_p99_ms": {
+            "control": 12.924917042255402,
+            "candidate": 12.90883868932724,
+            "change_percent": -0.12439811316077298
+          },
+          "output_tok_s": {
+            "control": 2422.351167258758,
+            "candidate": 2418.4439388067,
+            "change_percent": -0.1612990100225531
+          }
+        },
+        "guards": {
+          "exact_outputs": true,
+          "decode_tpot_under_1_percent_regression": true
+        }
+      },
+      "second": {
+        "complete_requests": 64,
+        "warmup_requests": 32,
+        "output_mismatch_request_indices": [],
+        "metrics": {
+          "ttft_p50_ms": {
+            "control": 861.46230250597,
+            "candidate": 862.1872365474701,
+            "change_percent": 0.08415156872114693
+          },
+          "ttft_p95_ms": {
+            "control": 876.1176466941833,
+            "candidate": 877.3465603590012,
+            "change_percent": 0.14026811004832496
+          },
+          "tpot_p50_ms": {
+            "control": 9.901574312471876,
+            "candidate": 9.917215973723168,
+            "change_percent": 0.15797145744380625
+          },
+          "itl_p99_ms": {
+            "control": 12.903653085231781,
+            "candidate": 12.889131903648376,
+            "change_percent": -0.11253543076126249
+          },
+          "output_tok_s": {
+            "control": 2424.5442586031586,
+            "candidate": 2421.9509634136357,
+            "change_percent": -0.10696010932037536
+          }
+        },
+        "guards": {
+          "exact_outputs": true,
+          "decode_tpot_under_1_percent_regression": true
+        }
+      }
+    }
+  },
+  "all_four_c1_c8_token_probes_exact": true,
+  "token_probes_sha256": {
+    "base-first": "d7b1767fc3a35bde1f02149ef25f795b8e79201de09bfde5897359772d8e028e",
+    "ordered-first": "d7b1767fc3a35bde1f02149ef25f795b8e79201de09bfde5897359772d8e028e",
+    "ordered-second": "d7b1767fc3a35bde1f02149ef25f795b8e79201de09bfde5897359772d8e028e",
+    "base-second": "d7b1767fc3a35bde1f02149ef25f795b8e79201de09bfde5897359772d8e028e"
+  },
+  "same_20gib_holder_restored_after_each_arm": true,
+  "trace_cohort_exact_requests": 32,
+  "profile_source_sha256": {
+    "smol-ordered-trace/trace.nsys-rep": "baa02e94d61d8b98a109e5805feefaed4ce374dd22232ec8044cdaee087b3dfa",
+    "smol-base-trace/trace.sqlite": "9d36450bf92da916226c09180a6faa35f8f7b1546591763820d847910c7f1f45"
+  },
+  "nsys_sha256": "ccc5904771ce1cdbcd96a9ce29f75a0d6cbaa4e08d47a3439232afe387f5a6fd",
+  "trace": {
+    "base": {
+      "original_wrapper_status": "passed",
+      "server_exit_observed": true,
+      "server_pid": 3781680,
+      "clock_bracket_ns": [
+        23713,
+        21719
+      ],
+      "clock_offset_change_ns": 338,
+      "matched_requests": 32,
+      "host_windows_128_steps": 8,
+      "host_median_us_per_step": {
+        "cancel+commands": 0.9,
+        "plan": 38.55,
+        "prepare": 1.75,
+        "pack": 19.5,
+        "upload": 1.55,
+        "submit": 361.8,
+        "wait": 5908.950000000001,
+        "download": 30.35,
+        "sample": 24.25,
+        "commit": 15.05,
+        "events": 3.55,
+        "publish": 7.35
+      },
+      "file_sha256": {
+        "requests": "177f42d108359088d1700673b9aed2f7219d70bb62746b9949a9e2c0a5adc025",
+        "clock": "08fac6b4aa9d7a1a71007901ee8741417b1d2235a072d88cfb37f768d00e0bc3",
+        "server_log": "8914172023edd6b8f9f31d493820f920977fd18c3b37a2dffa8892b153eafdbc"
+      },
+      "graph_gaps": {
+        "sqlite_sha256": "9d36450bf92da916226c09180a6faa35f8f7b1546591763820d847910c7f1f45",
+        "sqlite_bytes": 35438592,
+        "graph_launches": 1100,
+        "matched_graphs": 676,
+        "matched_kernel_counts": {
+          "273": 676
+        },
+        "adjacent_matched_gaps": 671,
+        "intervals": {
+          "kernel_to_kernel": {
+            "count": 671,
+            "median_us": 468.416,
+            "p95_us": 505.6955
+          },
+          "dma_coverage": {
+            "count": 671,
+            "median_us": 21.056,
+            "p95_us": 22.272
+          },
+          "cudaStreamSynchronize": {
+            "count": 671,
+            "median_us": 22.953,
+            "p95_us": 26.664
+          },
+          "cudaEventSynchronize": {
+            "count": 671,
+            "median_us": 8.89,
+            "p95_us": 9.347
+          },
+          "cudaDeviceSynchronize": {
+            "count": 671,
+            "median_us": 0.0,
+            "p95_us": 0.0
+          },
+          "dma_or_synchronization_coverage": {
+            "count": 671,
+            "median_us": 45.932,
+            "p95_us": 52.5035
+          },
+          "unattributed_to_dma_or_synchronization": {
+            "count": 671,
+            "median_us": 423.088,
+            "p95_us": 456.891
+          },
+          "next_graph_launch_api_coverage": {
+            "count": 671,
+            "median_us": 261.212,
+            "p95_us": 307.7415
+          },
+          "next_kernel_minus_launch_return": {
+            "count": 671,
+            "median_us": 6.935,
+            "p95_us": 7.675
+          },
+          "prior_kernel_end_to_next_launch_call": {
+            "count": 671,
+            "median_us": 192.35,
+            "p95_us": 226.2175
+          },
+          "unattributed_to_dma_synchronization_or_launch_api": {
+            "count": 671,
+            "median_us": 163.053,
+            "p95_us": 196.1185
+          },
+          "stream_sync_after_event_sync_when_present": {
+            "count": 671,
+            "median_us": 2.491,
+            "p95_us": 2.6225
+          }
+        },
+        "counts": {
+          "cudaStreamSynchronize_calls_overlapping": 1342,
+          "cudaStreamSynchronize_gaps_with_overlap": 671,
+          "cudaEventSynchronize_calls_overlapping": 671,
+          "cudaEventSynchronize_gaps_with_overlap": 671,
+          "cudaDeviceSynchronize_calls_overlapping": 0,
+          "cudaDeviceSynchronize_gaps_with_overlap": 0,
+          "gaps_with_stream_sync_after_event_sync": 671
+        },
+        "scope": "CPU calls and DMA are clipped to kernel-to-kernel gaps in one profiled graph lane. Ordering alone does not identify which fence a stream call waited for."
+      }
+    },
+    "candidate": {
+      "original_wrapper_status": "failed",
+      "server_exit_observed": false,
+      "server_pid": 3786618,
+      "clock_bracket_ns": [
+        23612,
+        21957
+      ],
+      "clock_offset_change_ns": 1022,
+      "matched_requests": 32,
+      "host_windows_128_steps": 8,
+      "host_median_us_per_step": {
+        "cancel+commands": 0.95,
+        "plan": 32.75,
+        "prepare": 1.7000000000000002,
+        "pack": 19.25,
+        "upload": 1.65,
+        "submit": 362.20000000000005,
+        "wait": 5945.25,
+        "download": 30.2,
+        "sample": 22.85,
+        "commit": 14.799999999999999,
+        "events": 3.6,
+        "publish": 7.25
+      },
+      "file_sha256": {
+        "requests": "c520295dc898acb900eb4a53e2fbc870b8e6662c36146add1d3f1b819f3b0237",
+        "clock": "ba82258ad6b5fa2960a5bbad775955d7d18a9b7ca17b2a960a85e63e45b7958e",
+        "server_log": "380f93449708213d4a522deb19ed896e3bfce74f0bea2ed10166f0099d272890"
+      },
+      "graph_gaps": {
+        "sqlite_sha256": "222cf93cbbe708c20526f8ea9cab03143450f7ca5098b15b085256260de4af36",
+        "sqlite_bytes": 35459072,
+        "graph_launches": 1100,
+        "matched_graphs": 676,
+        "matched_kernel_counts": {
+          "273": 676
+        },
+        "adjacent_matched_gaps": 671,
+        "intervals": {
+          "kernel_to_kernel": {
+            "count": 671,
+            "median_us": 454.752,
+            "p95_us": 496.6395
+          },
+          "dma_coverage": {
+            "count": 671,
+            "median_us": 20.992,
+            "p95_us": 21.92
+          },
+          "cudaStreamSynchronize": {
+            "count": 671,
+            "median_us": 22.459,
+            "p95_us": 26.816
+          },
+          "cudaEventSynchronize": {
+            "count": 671,
+            "median_us": 9.07,
+            "p95_us": 9.443
+          },
+          "cudaDeviceSynchronize": {
+            "count": 671,
+            "median_us": 0.0,
+            "p95_us": 0.0
+          },
+          "dma_or_synchronization_coverage": {
+            "count": 671,
+            "median_us": 45.778,
+            "p95_us": 52.2385
+          },
+          "unattributed_to_dma_or_synchronization": {
+            "count": 671,
+            "median_us": 409.297,
+            "p95_us": 447.7735
+          },
+          "next_graph_launch_api_coverage": {
+            "count": 671,
+            "median_us": 262.378,
+            "p95_us": 289.1645
+          },
+          "next_kernel_minus_launch_return": {
+            "count": 671,
+            "median_us": 6.915,
+            "p95_us": 7.592
+          },
+          "prior_kernel_end_to_next_launch_call": {
+            "count": 671,
+            "median_us": 181.783,
+            "p95_us": 219.9465
+          },
+          "unattributed_to_dma_synchronization_or_launch_api": {
+            "count": 671,
+            "median_us": 151.86,
+            "p95_us": 188.2015
+          },
+          "stream_sync_after_event_sync_when_present": {
+            "count": 671,
+            "median_us": 2.509,
+            "p95_us": 2.646
+          }
+        },
+        "counts": {
+          "cudaStreamSynchronize_calls_overlapping": 1342,
+          "cudaStreamSynchronize_gaps_with_overlap": 671,
+          "cudaEventSynchronize_calls_overlapping": 671,
+          "cudaEventSynchronize_gaps_with_overlap": 671,
+          "cudaDeviceSynchronize_calls_overlapping": 0,
+          "cudaDeviceSynchronize_gaps_with_overlap": 0,
+          "gaps_with_stream_sync_after_event_sync": 671
+        },
+        "scope": "CPU calls and DMA are clipped to kernel-to-kernel gaps in one profiled graph lane. Ordering alone does not identify which fence a stream call waited for."
+      }
+    }
+  }
+}
