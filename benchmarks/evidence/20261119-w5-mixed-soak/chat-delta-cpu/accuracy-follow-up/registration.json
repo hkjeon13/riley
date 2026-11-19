@@ -1,0 +1,23 @@
+{
+  "host": "aws-a100",
+  "campaign": "w5-chat-sse-accuracy-20261119.BginwHRs",
+  "pid": 595341,
+  "registered_at_utc": "2026-11-19T13:24:05Z",
+  "conditional_on": "w5-chat-sse-20261119.T7Z99RAG",
+  "condition": "Both original strict W5 cache modes pass with the exact staged image, binary, workload and reservations.",
+  "candidate_image_id": "sha256:06eed36dcc604e942901422c90d8a94d26c8144eb09d3b515a0f78dfef2d0c51",
+  "candidate_binary_sha256": "d62d19acf4984b7a31cef4fd10d3c20e8a3e2a4cb23ec4d1daa1a4c9e00a9a23",
+  "physical_gpu": 6,
+  "expected_accuracy_comparisons": {
+    "baseline": 144,
+    "holdout": 88
+  },
+  "dispatch_archive_sha256": "effd47d32c12b69522938150be3df89aba0638adfba514f9edb673d8b5f1773d",
+  "preflight": {
+    "both_pass_eligible": true,
+    "either_failure_ineligible": true,
+    "different_binary_rejected": true,
+    "changed_gpu7_reservation_rejected": true,
+    "prior_helper_checksums_verified_on_host": true
+  }
+}

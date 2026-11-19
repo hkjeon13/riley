@@ -1,0 +1,46 @@
+{
+  "image": {
+    "base_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+    "patch_sha256": "01be0e56d60800f1270f555ec15ed10502a424f989c0e21d6305c605c7dd9d7b",
+    "base_source_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+    "candidate_source_archive_sha256": "828d81b99b228d3983c4674b07aa48eeacee2f20e4146af17fa1f091b1b819ec",
+    "base_image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+    "candidate_image_id": "sha256:06eed36dcc604e942901422c90d8a94d26c8144eb09d3b515a0f78dfef2d0c51",
+    "candidate_binary_sha256": "d62d19acf4984b7a31cef4fd10d3c20e8a3e2a4cb23ec4d1daa1a4c9e00a9a23",
+    "base_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+    "unchanged_runtime_files": 20,
+    "candidate_cpu_report_sha256": "2b66df3f60168dd6cbbc42e0b1831c9a9d046c0f46f7ead32c09e540ff4eba0c"
+  },
+  "source_inventory": {
+    "scope": "File bytes and executable permission in isolated Docker build inputs.",
+    "base_archive_sha256": "cbf8f5cd29ac5d4fa942d1e2792ea3c4559cf0a6a011700d8d16ba3e90ca5dd5",
+    "candidate_archive_sha256": "828d81b99b228d3983c4674b07aa48eeacee2f20e4146af17fa1f091b1b819ec",
+    "regular_and_symlink_entries": 8995,
+    "unchanged_entries": 8992,
+    "changed": {
+      "crates/riley-server/src/chat.rs": {
+        "base": "0becb2ad5d303ced819860c3abede489388cc6779f648d222d9ef00a27ed2d17",
+        "candidate": "2a09afca96a8065117fd22c7a647f5482fbec6cf39aeb2c49602ccb44aeea4cb"
+      },
+      "crates/riley-server/src/openai.rs": {
+        "base": "054eb01a8a0b5c0436b5f63f7ec09cec40d464ab7c166334d3487f4b052ee0f9",
+        "candidate": "59d93fac922cd92060fc88f42be01ce797e7d346fd4c10d36daa9912fe2a8af2"
+      },
+      "crates/riley-server/src/service.rs": {
+        "base": "47a0f0a3de7f9f203efbfe664a0be76ee1f349e18d1f6948457d1e848f16a005",
+        "candidate": "4c6cf027c107d4665cc5cf0583a6fe26138e8e08c145f79fa67a7eabc659a873"
+      }
+    }
+  },
+  "cache_on_launch_utc": "2026-11-19T13:19:24Z",
+  "reservations_before_cache_on": {
+    "6": {
+      "holder_pid": 2431228,
+      "reserved_bytes": 21474836480
+    },
+    "7": {
+      "holder_pid": 2431237,
+      "reserved_bytes": 21474836480
+    }
+  }
+}

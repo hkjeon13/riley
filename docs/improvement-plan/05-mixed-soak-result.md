@@ -249,6 +249,10 @@ A100 6번의 `cache-on` 컨테이너에서 API 40건이 통과했고 30분 부�
 
 기본 이미지의 추가 계측이 완료되고 RSS 항목만 실패하면, 승인본에 이 패치만 적용해 별도 CUDA 12.4 이미지를 빌드하도록 등록했다. 빌드 입력에서 달라진 파일 세 개와 Riley 실행 파일을 제외한 패키지 파일의 바이트를 검증한다. A100 6번에서 두 캐시 모드의 API 40건과 동일한 30분 부하를 각각 실행하고 매번 같은 20GiB 예약을 복구한다. 재현 시 상위 디렉터리의 `chat-delta.patch.gz`를 실행 디렉터리에 놓고 `dispatch.sha256`을 검증한다. [A100 조건부 등록](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/registration.json) · [실행 순서](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/campaign.sh)
 
+후보 이미지 `06eed36dcc60`의 Linux AMD64 빌드와 CPU 패키지 검사를 완료했다. 소스 항목 8,995개에서 `chat.rs`·`openai.rs`·`service.rs`의 변경을 확인했고, 패키지의 Riley 실행 파일 이외 20개 파일은 기준과 바이트가 일치했다. A100 6번의 `cache-on`에서 실행 중인 PID 1 바이너리 해시가 패키지 보고서와 일치했고 API 40건과 캐시 128블록을 확인했다. 혼합 부하를 시작한 시점에 GPU 7은 같은 홀더의 20GiB 예약을 유지했다. [패키지 검산](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/initial-package-verified.json) · [실제 실행 식별과 API 결과](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/a100-follow-up/cache-on-launch-verified.json)
+
+두 `cache-on`·`cache-off` 부하가 기존 운영 기준을 통과하면, 같은 이미지에서 기준 장문 144건과 홀드아웃 88건을 대조하도록 등록했다. 두 모드의 요청·RSS·지연·회수 영수증을 재검산해 실행 여부를 정한다. CPU 사전시험에서는 양쪽 통과, 한쪽 실패, 다른 바이너리와 달라진 GPU 7 예약의 처리 경로를 확인했다. [조건부 장문 검증 등록](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/accuracy-follow-up/registration.json) · [판정기](../../benchmarks/evidence/20261119-w5-mixed-soak/chat-delta-cpu/accuracy-follow-up/verify_chat_accuracy.py)
+
 
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
