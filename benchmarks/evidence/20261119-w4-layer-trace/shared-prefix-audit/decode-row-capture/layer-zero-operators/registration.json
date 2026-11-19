@@ -1,0 +1,31 @@
+{
+  "scope": "Locate the first differing measured layer-zero operation in the two pinned C1 decode steps.",
+  "stage": "w4-decode-layer0-ops-20261120.hYAOtc0n",
+  "controller_pid": 2205736,
+  "registered_utc": "2026-11-19T19:00:36Z",
+  "state_at_registration": "preparing_checkpoint",
+  "predecessor": "w4-decode-layer-trace-20261120.kl10bRNz",
+  "source_revision": "d3d8fe6e5b1c528bff51c0008cdc24544c99f862",
+  "physical_gpu": 7,
+  "reservation_pid": 2431237,
+  "target_positions": [
+    677,
+    1089
+  ],
+  "checked_against_prior_trace": [
+    "layer-zero attention residual",
+    "last residual",
+    "final norm",
+    "full logits"
+  ],
+  "hf_reconstructed_rows": [
+    "QKV before bias from actual norm",
+    "query after RoPE from actual projected query and rotary inputs"
+  ],
+  "preflight": {
+    "local_pinned_positions_and_ten_extents": "passed",
+    "local_rust_typecheck": "passed with the existing CUDA build-script stub",
+    "cached_bf16_hf_reconstruction_hooks": "passed in the pinned AWS Python environment with GPUs disabled"
+  },
+  "dispatch_tar_sha256": "83b6dbdf43dba4d7f315e75684961ae71e41c04c6f9580de994386708a824992"
+}

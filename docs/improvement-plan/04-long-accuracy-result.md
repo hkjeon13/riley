@@ -101,6 +101,8 @@ Riley ID가 단독 최대였던 두 decode 분기의 후속 진단을 등록했�
 
 A100 7번에서 두 엔진의 추적을 완료했다. 사례 12와 `numbers-1023` 모두 임베딩 3,584개 원소가 비트 단위로 같았고, 첫 관측 차이는 레이어 0의 attention residual이었다. 사례 12는 2,593개 원소가 달랐고 최대 절대차는 0.015625였다. `numbers-1023`은 2,099개 원소가 달랐고 최대 절대차는 0.00390625였다. 마지막 residual·최종 RMSNorm·전체 로짓은 두 엔진 모두 이전 실행과 해시가 일치했다. 실제 차이가 시작된 연산을 좁히려면 같은 두 decode 위치의 레이어 0에서 QKV와 RoPE, attention 계산 결과를 대조해야 한다. 종료 뒤 GPU 6·7은 같은 홀더의 20GiB 예약으로 복귀했다. [레이어별 독립 검산](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-progression/verified-result.json) · [실행과 예약 복구](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-progression/completion.json)
 
+레이어 0의 입력 norm, bias 전 QKV, RoPE 후 query, attention context와 출력 투영을 비교하는 진단을 시작했다. HF의 bias 전 QKV와 RoPE 후 query는 각각 실제 norm 행과 실제 query·rotary 입력으로 재계산한다. 두 엔진의 레이어 0 attention residual과 최종 residual·norm·로짓이 이전 추적과 일치해야 연산별 비교를 판정한다. 고정 좌표와 행 크기, Rust 타입 검사, AWS의 고정 Python 환경에서 BF16 캐시 decode 훅을 검증했다. [연산별 대조 등록](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/registration.json) · [수집·검산 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/trace_decode_layers.py)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.
