@@ -8,7 +8,7 @@
 |---|---|
 | W1 검증·릴리스 | Linux Production CPU, 고정 RC3 테스트 34건, CUDA 12.8 네이티브 빌드·Clippy와 CUDA 12.4 이미지 CPU 검증을 통과했다. 현재 배포 입력과 이미지 원본의 해시를 대조했다. [W1 결과](01-validation-result.md) |
 | W2 실행 중첩 | A100에서 이벤트 발행 두 모드를 명시해 비교했다. W3의 prefill 제한과 교차한 시험에서 즉시 발행의 짧은 요청 TPOT 회귀를 확인해 기존 `after-submit-v1`을 유지한다. [W2 결과](02-async-step-result.md) |
-| W3 장문·스케줄 | 14B `rag-c8`의 p95 이상 요청은 여러 prefill 스텝 사이에서 다른 요청의 prefill과 겹치는 대기를 기록했다. 두 prefill 우선 후보는 출력 일치를 확인했고 decode 지연 또는 RAG 꼬리 회귀로 미채택했다. 동시 유입 조건의 decode 지연을 후속 판정에도 적용한다. [W3 결과](03-long-context-result.md) |
+| W3 장문·스케줄 | 14B `rag-c8`의 p95 이상 요청은 prefill 조각 사이에서 다른 요청의 prefill과 겹치는 대기를 기록했다. 스케줄 후보 세 개는 지연 회귀로 미채택했다. 1,024행 QKV 후보는 출력·decode 기준을 통과했으나 RAG 첫 토큰 p95가 일관되게 줄지 않아 기본값 적용을 보류했다. [W3 결과](03-long-context-result.md) |
 | W4 정확성·스키마 | 고정 장문과 holdout에서 엔진별 첫 분기 지점을 좁혔고 네 모델의 GSM8K를 같은 입력으로 비교했다. 구조화 출력의 지원 범위는 GPU API에서 검증했다. [장문·품질 결과](04-long-accuracy-result.md) · [스키마 결과](04-structured-output-result.md) |
 | W5 문서·운영 | 두 cache 조건에서 각각 정상 완료 13,749건과 의도적 연결 종료 700건을 처리하고 종료 자원 회수를 확인했다. cache-off 후반 익명 RSS는 정밀 실행 두 건에서 700KiB와 812KiB 증가했다. 두 번째 증가분 전체가 익명 private 매핑이었다. RSS 증가 0 릴리스 조건은 미충족이다. A100 메모리 오류 주입 네 사례도 통과했다. [문서 근거](05-documentation-and-operations.md) · [A100 운영 결과](05-mixed-soak-result.md) |
 

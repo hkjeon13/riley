@@ -111,6 +111,7 @@ python3 benchmarks/live/compare.py \
 - [x] 14B에서 진행 중인 prefill을 우선한 후보의 배치 불변성과 회귀를 확인했다. Decode TPOT 기준을 넘긴 설정은 미채택으로 판정했다. [후보 결과](03-long-context-result.md#riley-14b의-요청별-대기와-prefill-계측)
 - [x] 14B에서 완료 가능한 prefill을 우선한 후보를 비교했다. 두 번째 RAG seed의 TTFT 꼬리와 두 동시 유입 조건의 decode 지연이 늘어 미채택했다. [후보 결과](03-long-context-result.md#완료-가능한-prefill-우선-후보)
 - [x] 14B에서 혼합 스텝의 512행 제한을 두 실행 순서로 비교했다. RAG 첫 토큰 p95와 50ms 유입의 decode TPOT 회귀로 미채택했다. [후보와 검증 결과](03-long-context-result.md#14b-혼합-스텝의-행-예산)
+- [x] Qwen2.5-14B의 1,024행 QKV 후보를 두 실행 순서로 비교했다. 출력과 decode·짧은 요청 기준을 충족했다. RAG 두 번째 seed의 첫 토큰 p95 방향이 뒤집히고 50ms 간격 유입의 p95가 두 번 모두 늘어 기본값 적용을 보류했다. [1,024행 스텝 결과](03-long-context-result.md#1024행-스텝의-계산-비용)
 - [x] 시험한 burst 후보의 득실과 decode·짧은 요청 비용을 함께 기록했다. [W3 결과](03-long-context-result.md)
 - [ ] W4 장문·chunk 경계·배치 불변성 검사를 통과한다.
 - [x] 같은 CUDA 후보와 Qwen2.5-0.5B에서 네 조합을 두 seed로 교차 측정했다. [조합 결과](03-long-context-result.md#w2-이벤트-발행과-묶음-정책의-상호작용)

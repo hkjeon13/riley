@@ -1,0 +1,29 @@
+{
+  "selection_scope": {
+    "variant_selection_policy": 1,
+    "compute_capability": 80,
+    "cublaslt_version": 120405,
+    "m": 1024,
+    "k": 5120,
+    "n": 7168,
+    "requires_runtime_byte_equivalence": true
+  },
+  "inspection": "Read project-cached model config files. These are potential merged QKV matches when the selection policy and other predicates apply.",
+  "geometry": {
+    "hidden_size": 5120,
+    "query_heads": 40,
+    "kv_heads": 8,
+    "head_dim": 128,
+    "merged_qkv_width_tp1": 7168,
+    "merged_qkv_width_per_rank_tp2": 3584
+  },
+  "cached_models": {
+    "Qwen2.5-14B-Instruct": "0f2085dbbe2ee251bd6a6a0797d84a6ce34436044d629aa3cba793b43d311a9e",
+    "Qwen2.5-Coder-14B-Instruct": "9051fe83840dcd3a0f7e9f5b3372fc3927419eb56983273eac2dc635a5da7eae",
+    "DeepSeek-R1-Distill-Qwen-14B": "fdb89460be9a6383451437cdf632a3e087522efa682265461f33507e7069f026",
+    "Qwen3-14B": "e73c3664ca09b10a673fef0c22e8a6b456201d49bd4713c9691f775720e8857a",
+    "Qwen2.5-32B-Instruct": "9c6772f138ef9e5b3d1c18f2c87e451bbc01f5f1a4eabb36f9bf4f53829b903e"
+  },
+  "hash_field": "config.json SHA-256",
+  "serving_comparison_model": "Qwen2.5-14B-Instruct"
+}

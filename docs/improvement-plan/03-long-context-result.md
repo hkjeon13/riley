@@ -261,12 +261,27 @@ TTFT가 p95 이상인 요청의 조각 사이 대기와 겹친 CUDA 시간을 �
 
 A100 7번의 합성 입력 두 개에서 기존 wide 후보표의 split-K 3 알고리즘은 128행 기준 알고리즘과 1,024행 BF16 결과가 달랐다. 두 입력 모두 기준과 같은 바이트를 만든 구성은 102개였다. 가장 일관되게 빠른 구성은 `{21, 20, 11, 1, 0}`이었다. 같은 입력과 GPU에서 세 차례 순서를 교대로 측정한 결과 QKV 시간 중앙값은 404.80µs에서 333.94µs로 줄었다. 두 실행 순서의 쌍별 비율 중앙값은 0.8251이었다. 이 수치는 단일 QKV GEMM의 합성 시험 결과다. 실제 서빙에서 같은 1,024행에만 적용해 응답 바이트·TTFT와 decode 지연을 대조할 후보로 선정했다. [구성별 바이트 판정과 시간](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/result/comparison.json)
 
-격리한 서빙 빌드에서는 cuBLASLt 12.4.5와 A100의 1,024행 QKV에만 후보를 적용한다. 기존 런타임 동등성 검사에 통과한 경우만 선택하고, 판정 로그가 기대와 다르면 실험 검산이 실패한다. A100 7번에 기준 → 후보 → 후보 → 기준 순서를 등록했다. 기존 C1·C8과 두 도착 조건, 짧은 C32의 요청별 응답을 비교하고 별도 장문 8개의 C1·C8 토큰 ID도 맞춘다. [서빙 대조 등록](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/registration.json) · [정확성·성능 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/compare_qkv_serving.py)
+격리한 서빙 빌드는 A100과 cuBLASLt 12.4.5에서 기존 기준에 결속된 `M=1024, K=5120, N=7168` GEMM을 검사한다. 런타임 BF16 바이트 동등성 검사에 통과한 경우 후보를 선택하고, 판정 로그가 기대와 다르면 실험 검산이 실패한다. A100 7번에 기준 → 후보 → 후보 → 기준 순서를 등록했다. 기존 C1·C8과 두 도착 조건, 짧은 C32의 요청별 응답을 비교하고 별도 장문 8개의 C1·C8 토큰 ID도 맞춘다. [서빙 대조 등록](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/registration.json) · [정확성·성능 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/compare_qkv_serving.py)
+
+선택 조건은 모델명과 관계없이 GEMM 형상에 적용된다. 프로젝트 캐시에 있는 Coder-14B, DeepSeek-R1-Distill-Qwen-14B, Qwen3-14B, Qwen2.5-32B-Instruct의 단일 GPU 병합 QKV도 같은 `K=5120, N=7168` 형상이다. TP=2에서는 모델의 query·KV head가 두 rank에 나뉘므로 rank당 병합 QKV의 `N`은 3,584다. 이 조사는 모델 설정과 실행 경로에 근거한 영향 범위다. 실제 서빙 대조에 사용한 모델은 Qwen2.5-14B-Instruct다. [설정 해시와 형상 계산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/shape-scope.json) · [TP rank 구성](../../crates/riley-model/src/ir.rs#L616) · [병합 QKV 준비](../../crates/riley-runtime/src/llama/forward.rs#L6806)
 
 
 첫 기준군은 오류·429 없이 320건을 완료했다. 이전 혼합 스텝 시험의 기준군과 입력·출력 텍스트 해시·생성 토큰 수·종료 사유가 일치했다. 장문 8개의 C1·C8 토큰 ID도 이전 기록과 같았고 같은 GPU 홀더의 20GiB 예약을 복구했다. [첫 기준군 검산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/first-control-verification.json)
 
 첫 후보 서버가 기준군과 같은 바이너리·cuBLASLt 12.4.5를 적재했다. 런타임 바이트 동등성 검사에 통과해 1,024행 QKV 후보를 실제로 선택했다. [후보 시작 시점의 검증](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/first-candidate-startup.json)
+
+두 실행 순서의 비교를 완료했다. 각 실행은 같은 바이너리, 체크포인트, KV 41,216토큰으로 320건을 처리했다. 4회 총 1,280건에 오류·429가 없었고 각 조건의 응답 텍스트 지문, 입력·생성 토큰 수, 종료 사유가 일치했다. 별도 장문 8개의 C1·C8 토큰 ID도 네 조건에서 모두 같았다. 후보군 두 번의 런타임 선택을 검증했고 각 실행 뒤 동일한 홀더의 20GiB 예약을 복구했다. [전체 지표·입력 식별 해시·원본 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/comparison.json)
+
+| 부하 | TTFT p95 변화, 기준 먼저 / 후보 먼저 | Decode TPOT p50 변화, 기준 먼저 / 후보 먼저 |
+|---|---:|---:|
+| `rag-c1` | −0.83% / −1.50% | +0.08% / +0.05% |
+| `rag-c8-s1` | −2.80% / −2.26% | −0.63% / −0.76% |
+| `rag-c8-s2` | −6.07% / +2.68% | +0.13% / −2.39% |
+| `wave-sync` | −2.49% / −3.32% | −2.93% / −0.29% |
+| `wave-50ms` | +1.64% / +1.76% | −5.34% / −3.04% |
+| `short-c32` | +0.28% / +0.01% | +0.23% / −0.15% |
+
+지연 변화는 각 순서에서 인접한 Riley 기준군 대비 후보군으로 계산했다. Decode TPOT 악화 1% 미만, 짧은 요청 TTFT p95와 처리량 악화 2% 미만 조건은 모두 통과했다. 첫 seed와 동시 유입의 p95는 두 번 모두 줄었다. 두 번째 seed에서는 기준군끼리도 p95가 8.51% 달랐고, 50ms 간격 유입에서는 p95가 두 번 모두 늘었다. RAG p95 개선의 일관성이 확인될 때까지 후보는 격리 시험에만 둔다. 이 비교의 판정 범위는 A100·cuBLASLt 12.4.5에서의 Qwen2.5-14B-Instruct 여섯 부하다. [지표별 기준군 변동과 가드레일](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/comparison.json)
 
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
