@@ -359,3 +359,16 @@ CUDA 12.4의 SM80 빌드에서 소스·패치 입력 체크섬 144개를 확인�
 A100 6번의 한 loopback 주소에서 파생 이미지 `1fc444b1840e`를 실행한 뒤 기준 이미지 `0a907408ec73`로 교체했다. 두 실행에 같은 Riley 실행 파일, Qwen2.5-7B-Instruct 체크포인트와 prefix cache 128블록을 사용했다. 새 요청 송신을 끝낸 뒤 활성·대기 요청과 요청 KV가 모두 0인 것을 확인했다. 파생 이미지 종료 요청 뒤 포트 연결이 거부되는 것을 확인하고, 같은 포트에서 기준 이미지의 `/readyz`가 성공했다. 종료 요청부터 기준 이미지 준비 상태까지 136.37초가 걸렸다. 이 값은 단일 격리 시험의 복구 시간이다. [실행 순서](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/recovery-drill/campaign.sh) · [이미지·포트·시각 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/recovery-drill/verified-summary.json)
 
 두 이미지가 각각 API 40건을 통과했다. 같은 접두사를 다시 보냈을 때 각각 112토큰을 재사용했다. 같은 스트리밍 요청의 텍스트 해시, 종료 사유와 입력·생성 토큰 수가 일치했다. 두 컨테이너는 코드 0으로 종료했고 device·pinned 할당과 KV가 0이었다. 각 실행 뒤 GPU 6·7의 동일 홀더와 20GiB 예약을 확인했다. 실제 운영 라우팅과 서비스 SLO는 별도 검증 범위에 남아 있다. [재현 검사기](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/recovery-drill/route_drill.py) · [스트리밍·캐시 검사기](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/recovery-drill/drill_client.py)
+
+## 초당 1회 메트릭 조회의 비용
+
+A100 6번의 파생 이미지 `1fc444b1840e`에서 하나의 Qwen2.5-7B-Instruct 프로세스를 유지했다. API 40건을 먼저 통과한 뒤 초당 평균 8건의 같은 90초 합성 혼합 부하를 기준 → 추가 조회 → 추가 조회 → 기준 순서로 실행했다. 기준에도 부하 검사기의 기본 메트릭 조회가 있었고 두 비교 구간에는 `/metrics`를 초당 한 번씩 추가했다. 각 구간에서 일반·스키마·도구·logprobs·장문 등 687건이 정상 완료됐고 30건을 의도적으로 연결 종료했다. 예상 외 오류는 0건이었다. 추가 조회는 구간당 95건씩 성공했고 응답 시간 중앙값은 7.47–7.78ms였다. [실행 순서](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/metrics-observer/campaign.sh) · [관측값과 체크섬](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/metrics-observer/verified-summary.json)
+
+| 지표 | 기준 먼저 | 추가 조회 먼저 |
+|---|---:|---:|
+| 프로세스 CPU 초 / 경과 초 변화 | +0.01% | +0.02% |
+| GPU 스텝 실행 시간 합 변화 | +0.40% | −0.01% |
+| 후반 TTFT p95 변화 | +0.35% | +1.31% |
+| 후반 전체 완료 시간 p95 변화 | +0.12% | +0.09% |
+
+정밀 RSS의 구간 시작 대비 drain 변화는 실행 순서대로 +34,784KiB, −16KiB, +60KiB, +88KiB였다. 가장 큰 변화가 첫 기준 구간에 있어 이 대조에서 추가 조회와 구간 순서의 RSS 영향을 분리하기 어렵다. 정밀 RSS를 구간 시작 전과 drain 뒤 동일 프로세스에서 읽었고, CPU 델타는 `/proc`의 user·system ticks로 계산했다. 종료 시 요청·KV·device·pinned 할당은 0이었고, GPU 6·7의 기존 20GiB 예약을 확인했다. 측정 범위는 이 이미지와 1Hz 추가 조회의 단일 교차 실행이다. [부하·관측 코드](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/metrics-observer/observer_client.py) · [이미지와 결과 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/metrics-observer/verify_observer.py)
