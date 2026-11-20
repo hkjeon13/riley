@@ -8,7 +8,7 @@
 |---|---|---|
 | A100 네이티브 빌드 | `f7c956d3c` | CUDA 12.4, SM80. API, 장문 정확성, Qwen2.5-14B 성능, Qwen2.5-7B 운영 검증 |
 | Linux AMD64 배포 이미지 | `d3d8fe6e5` | CUDA 12.4, SM80·SM86·SM89. 이미지 빌드, 비루트 사용자, CLI, 동적 링크, 런타임 파일 무결성 |
-| A100에서 재빌드한 배포 이미지 | `d3d8fe6e5` | 이미지 ID `0a907408ec73`. A100 6번의 CUDA 드라이버 주입, Qwen2.5-7B-Instruct API 40건, 장문 출력 대조 232건, GPU 자원 회수 |
+| A100에서 재빌드한 배포 이미지 | `d3d8fe6e5` | 이미지 ID `0a907408ec73`. A100 6번의 CUDA 드라이버 주입, Qwen2.5-7B-Instruct API 40건과 장문 출력 232건, Qwen2.5-32B-Instruct TP=2 API 40건과 C1·C8·C32 출력 대조, GPU 자원 회수. [32B TP=2 결과](05-mixed-soak-result.md#배포-이미지의-32b-tp2-장문-검증) |
 | jemalloc을 포함한 파생 시험 이미지 | `d3d8fe6e5`의 실행 파일 | 이미지 ID `1fc444b1840e`. CPU 패키지 무결성, Qwen2.5-7B-Instruct API 40건, 두 캐시 모드 30분 운영 기준, 장문 출력 232건, 사전 성능 회귀 기준 통과. RAG C8 seed 2 꼬리 지연 증가 |
 
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)

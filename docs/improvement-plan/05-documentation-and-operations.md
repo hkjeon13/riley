@@ -115,6 +115,18 @@ python3.12 -B ci/check_distribution_gpu.py "$CPU_REPORT" "$GPU_UUID" \
   "$MODEL_DIR" "$MODEL_MANIFEST_SHA256" "$RUN_OUTPUT" --tools --mixed-stage
 ```
 
+#### 32B 모델의 TP=2 장문 검증
+
+`--tp-holdout`에는 rank 1의 GPU UUID와 고정 입력 파일을 넘긴다. 일반 GPU UUID 인자는 rank 0이다. 두 GPU의 프로세스 사용 상태를 확인하고 컨테이너 안에서는 같은 순서의 CUDA ordinal `0,1`로 실행한다. 시험 설정은 `native-bf16-varlen-v1`, 8,192토큰 문맥, KV 2,048블록이다. API 검사 뒤 11개 장문·경계 입력을 C1, C8, C32에서 비교한다. C32는 짧은 일곱 입력을 반복해 요청 32건을 구성하며 실제로 관측한 활성 요청의 최댓값을 함께 기록한다. [32B 장문 검사기](../../benchmarks/live/tp_holdout_check.py) · [TP 장치 지정 계약](../tensor-parallel-design.md#cli)
+
+```bash
+python3.12 -B ci/check_distribution_gpu.py "$CPU_REPORT" "$GPU_UUID" \
+  "$MODEL_DIR" "$MODEL_MANIFEST_SHA256" "$RUN_OUTPUT" --tools \
+  --tp-holdout "$PEER_GPU_UUID" "$HOLDOUT_WORKLOAD"
+```
+
+배포 이미지의 Qwen2.5-32B-Instruct 기준 실행에서 API 40건을 통과했고 C8·C32 응답 43건이 C1 기준과 일치했다. [실행 결과와 검증 범위](05-mixed-soak-result.md#배포-이미지의-32b-tp2-장문-검증)
+
 ## 4. 관측을 통해 새 문제를 찾는 방법
 
 현재 `/metrics`는 JSON의 요청·KV·할당·batch shape·취소·과부하 관측을 제공한다. 다음은 추가 제안이며 현재 endpoint가 모두 제공하는 필드는 아니다.

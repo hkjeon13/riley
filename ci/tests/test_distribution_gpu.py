@@ -16,6 +16,7 @@ sys.path.pop(0)
 
 class DistributionGpuTest(unittest.TestCase):
     gpu = "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7"
+    peer = "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0"
     container = "c" * 64
     pid = 2345
 
@@ -45,6 +46,8 @@ class DistributionGpuTest(unittest.TestCase):
         self.model_hash = checker.digest(model)
         self.exit_code = 0
         self.device_pids = set()
+        self.tp_workload = None
+        self.peer_busy = False
         self.api_pass = True
         self.smoke_disconnected = True
         self.soak_growth_kib = 0
@@ -61,7 +64,8 @@ class DistributionGpuTest(unittest.TestCase):
                 return json.dumps([self.image_inspect])
             case ("create", *rest):
                 self.assertIn("--pull=never", rest)
-                self.assertIn(f"device={self.gpu}", rest)
+                requested = f'device={self.gpu}' if self.tp_workload is None else f'"device={self.gpu},{self.peer}"'
+                self.assertIn(requested, rest)
                 self.assertIn("127.0.0.1::8080", rest)
                 self.assertIn(self.image, rest)
                 self.name = rest[rest.index("--name") + 1]
@@ -80,7 +84,7 @@ class DistributionGpuTest(unittest.TestCase):
                 return json.dumps([{"Id": self.container, "Name": "/" + self.name,
                                     "Config": {"Labels": {"io.riley.gpu-check": self.name}}}])
             case ("exec", self.container, "nvidia-smi", *_):
-                return f"{self.gpu}, A100, 550\n"
+                return f"{self.gpu}, A100, 550\n" + (f"{self.peer}, A100, 550\n" if self.tp_workload else "")
             case ("exec", self.container, "/bin/sh", *_):
                 return f"{self.binary}  /proc/1/exe\n"
             case ("stop", "--time", "20", self.container):
@@ -102,6 +106,13 @@ class DistributionGpuTest(unittest.TestCase):
                 (out / "mixed-stage.json").write_text(json.dumps({
                     "status": "passed", "prefill_chunk_tokens": 256,
                     "trials": [{"matching_responses": 2, "witnesses": [{}]} for _ in range(3)],
+                }))
+            if file == "tp-holdout.log":
+                self.assertIn(str(self.tp_workload.resolve()), argv)
+                (out / "tp-holdout.json").write_text(json.dumps({
+                    "status": "passed", "workload_sha256": checker.digest(self.tp_workload),
+                    "modes": {"c1": {"requests": 11}, "c8": {"requests": 11, "exact_matches": 11},
+                              "c32": {"requests": 32, "exact_matches": 32}},
                 }))
             if file == "smoke.log":
                 self.client_commands[file] = argv
@@ -142,8 +153,13 @@ class DistributionGpuTest(unittest.TestCase):
             Path(argv[3]).write_text(json.dumps({"active_requests": 0, "waiting_requests": 0,
                                                 "kv_allocated_blocks": 0, "allocation": {"live_bytes": 0}}))
 
+        def visible_pids(uuid):
+            if uuid == self.peer and self.peer_busy:
+                return {9000}
+            return self.device_pids
+
         with (patch.object(checker, "docker", self.docker), patch.object(checker, "holder_pids", return_value=set()),
-              patch.object(checker, "gpu_pids", side_effect=lambda _: self.device_pids),
+              patch.object(checker, "gpu_pids", side_effect=visible_pids),
               patch.object(checker, "wait_ready", return_value={"ready": True, "accepting": True}),
               patch.object(checker, "log_command", log_command),
               patch.object(checker.subprocess, "run", copy_shutdown)):
@@ -234,6 +250,26 @@ class DistributionGpuTest(unittest.TestCase):
         self.assertEqual(create[-2], "--batch-shape-buckets")
         self.assertEqual(create[-1].split(",")[-1], "512")
         self.assertEqual(report["artifacts_sha256"]["mixed-stage.json"], checker.digest(self.out / "mixed-stage.json"))
+
+    def test_tp2_holdout_binds_both_devices_and_exact_responses(self):
+        self.tp_workload = self.root / "holdout.json.gz"
+        self.tp_workload.write_bytes(b"pinned workload")
+        self.assertEqual(self.check(tp_holdout=(self.peer, self.tp_workload)), 0)
+        report = json.loads((self.out / "report.json").read_bytes())["tensor_parallel"]
+        self.assertEqual(report["gpu_uuids"], [self.gpu, self.peer])
+        create = next(call for call in self.calls if call[0] == "create")
+        self.assertIn(f"CUDA_VISIBLE_DEVICES={self.gpu},{self.peer}", create)
+        self.assertEqual(list(create[-12:]), report["server_arguments"])
+        self.assertEqual(report["holdout"]["modes"]["c32"]["exact_matches"], 32)
+
+    def test_tp2_holdout_rejects_a_busy_peer_before_creating_the_container(self):
+        workload = self.root / "holdout.json.gz"
+        workload.write_bytes(b"pinned workload")
+        self.peer_busy = True
+        with self.assertRaisesRegex(ValueError, "unexpected process before startup"):
+            self.check(tp_holdout=(self.peer, workload))
+        self.assertFalse(self.out.exists())
+        self.assertFalse(any(call[0] == "create" for call in self.calls))
 
     def test_smoke_kv_pool_requires_smoke_and_positive_capacity(self):
         for options in ({"smoke_kv_blocks": 2576}, {"serving_smoke": True, "smoke_kv_blocks": 0}):

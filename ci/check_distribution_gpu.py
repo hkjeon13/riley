@@ -24,6 +24,7 @@ API_CHECK = Path(__file__).resolve().parents[1] / "benchmarks/live/api_check.py"
 ACCURACY_CHECK = API_CHECK.with_name("long_accuracy.py")
 SOAK_CHECK = API_CHECK.with_name("soak.py")
 MIXED_STAGE_CHECK = API_CHECK.with_name("mixed_stage_check.py")
+TP_HOLDOUT_CHECK = API_CHECK.with_name("tp_holdout_check.py")
 CACHE_BLOCKS = {"cache-off": None, "cache-on": 128}
 SMOKE_SECONDS = 45
 SMOKE_KV_BLOCKS = 4096
@@ -49,13 +50,15 @@ def inspect_container(container):
     return record
 
 
-def holder_pids(gpu):
-    pid = os.getenv("RILEY_GPU_HOLDER_PID")
-    ticks = os.getenv("RILEY_GPU_HOLDER_START_TICKS")
+def holder_pids(gpu, *, peer=False):
+    prefix = "RILEY_GPU_PEER_HOLDER" if peer else "RILEY_GPU_HOLDER"
+    pid = os.getenv(f"{prefix}_PID")
+    ticks = os.getenv(f"{prefix}_START_TICKS")
     if pid is None and ticks is None:
         return set()
     require(pid and pid.isdecimal() and ticks and ticks.isdecimal()
-            and os.getenv("CUDA_VISIBLE_DEVICES") == gpu, "GPU holder identity is inconsistent")
+            and os.getenv(f"{prefix}_GPU" if peer else "CUDA_VISIBLE_DEVICES") == gpu,
+            "GPU holder identity is inconsistent")
     proc = Path("/proc") / pid
     require(proc.stat().st_uid == os.getuid()
             and (proc / "stat").read_text().rsplit(")", 1)[1].split()[19] == ticks,
@@ -79,8 +82,8 @@ def wait_for_gpu_release(gpu, holders, riley_pid):
     raise TimeoutError("Riley CUDA context remained after shutdown")
 
 
-def wait_ready(container, port):
-    deadline = time.monotonic() + 480
+def wait_ready(container, port, *, timeout=480):
+    deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         connection = HTTPConnection("127.0.0.1", port, timeout=2)
         try:
@@ -174,7 +177,7 @@ def find_interrupted_container(name):
 
 def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_baseline=None, accuracy_holdout=None,
               mixed_soak=None, serving_smoke=False, smoke_kv_blocks=None, expect_tools_unsupported=False,
-              mixed_stage=False):
+              mixed_stage=False, tp_holdout=None):
     require(GPU_UUID.fullmatch(gpu) and SHA256.fullmatch(model_sha), "pass a GPU UUID and model SHA-256")
     require(mixed_soak is None or (mixed_soak in CACHE_BLOCKS and not (accuracy_baseline or accuracy_holdout)),
             "select mixed soak or long accuracy for each container")
@@ -182,6 +185,12 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
             "select serving smoke separately from mixed soak and long accuracy")
     require(not mixed_stage or not (accuracy_baseline or accuracy_holdout or mixed_soak or serving_smoke),
             "select the mixed-stage probe separately from other workloads")
+    if tp_holdout is not None:
+        peer, tp_workload = tp_holdout
+        require(gpu != peer and GPU_UUID.fullmatch(peer), "TP=2 needs a distinct peer GPU UUID")
+        require(not (accuracy_baseline or accuracy_holdout or mixed_soak or serving_smoke or mixed_stage),
+                "select the TP=2 holdout separately from other workloads")
+        tp_workload = Path(tp_workload).resolve(strict=True)
     require(not expect_tools_unsupported or serving_smoke and not tools,
             "--expect-tools-unsupported requires serving smoke and excludes --tools")
     if smoke_kv_blocks is not None:
@@ -204,15 +213,28 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
     manifest_bytes = manifest.read_bytes()
     require(sha256(manifest_bytes).hexdigest() == model_sha, "checkpoint manifest differs from the supplied SHA-256")
     checkpoint = json.loads(manifest_bytes)
-    holders = holder_pids(gpu)
-    require(gpu_pids(gpu) == holders, "target GPU has an unexpected process before startup")
+    holders = {gpu: holder_pids(gpu)}
+    if tp_holdout is not None:
+        holders[peer] = holder_pids(peer, peer=True)
+    require(all(gpu_pids(uuid) == pids for uuid, pids in holders.items()),
+            "target GPU has an unexpected process before startup")
     out.mkdir()
     accuracy = {}
     soak = None
     smoke = None
     stage = None
+    parallel = None
     server_args = ()
-    if accuracy_baseline or accuracy_holdout:
+    gpu_request = f"device={gpu}"
+    gpu_env = ()
+    if tp_holdout is not None:
+        ordered_devices = ",".join(holders)
+        gpu_request = f'"device={ordered_devices}"'
+        gpu_env = ("--env", f"CUDA_VISIBLE_DEVICES={ordered_devices}")
+        server_args = ("--inference-profile", "native-bf16-varlen-v1", "--tensor-parallel-devices", "0,1",
+                       "--max-active-sequences", "32", "--max-sequence-tokens", "8192",
+                       "--max-output-tokens", "256", "--kv-blocks", "2048")
+    elif accuracy_baseline or accuracy_holdout:
         server_args = ("--max-active-sequences", "32", "--max-sequence-tokens", "8192", "--max-output-tokens", "256")
     elif mixed_soak is not None:
         server_args = (*MIXED_SERVER_ARGS, "--kv-blocks", "16384")
@@ -233,7 +255,7 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
     try:
         created = docker(
             "create", "--pull=never", "--name", name, "--label", f"io.riley.gpu-check={name}",
-            "--gpus", f"device={gpu}", "--env", "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
+            "--gpus", gpu_request, "--env", "NVIDIA_DRIVER_CAPABILITIES=compute,utility", *gpu_env,
             "--env", f"RILEY_SHUTDOWN_METRICS_PATH={SHUTDOWN}", "--publish", "127.0.0.1::8080",
             "--mount", mount, image, "serve", "--model", "/models", "--model-id", "m", *server_args,
         ).strip()
@@ -245,22 +267,28 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
         (binding,) = runtime["NetworkSettings"]["Ports"]["8080/tcp"]
         port = int(binding["HostPort"])
         require(binding["HostIp"] == "127.0.0.1" and 0 < port <= 65535, "invalid loopback test binding")
-        ready = wait_ready(container, port)
+        ready = wait_ready(container, port, timeout=1200) if tp_holdout is not None else wait_ready(container, port)
         (out / "ready.json").write_text(json.dumps(ready, indent=2) + "\n")
 
         devices = docker("exec", container, "nvidia-smi", "--query-gpu=uuid,name,driver_version",
                          "--format=csv,noheader")
-        (device,) = list(csv.reader(devices.splitlines(), skipinitialspace=True))
-        require(len(device) == 3 and device[0] == gpu, "unexpected GPU visible in the container")
+        device_rows = list(csv.reader(devices.splitlines(), skipinitialspace=True))
+        require(len(device_rows) == len(holders) and all(len(row) == 3 for row in device_rows),
+                "unexpected GPU count visible in the container")
+        devices_by_uuid = {row[0]: row for row in device_rows}
+        require(devices_by_uuid.keys() == holders.keys(), "unexpected GPU visible in the container")
+        device = devices_by_uuid[gpu]
         riley_pid = runtime["State"]["Pid"]
-        require(type(riley_pid) is int and riley_pid > 0 and gpu_pids(gpu) == holders | {riley_pid},
+        require(type(riley_pid) is int and riley_pid > 0
+                and all(gpu_pids(uuid) == pids | {riley_pid} for uuid, pids in holders.items()),
                 "Riley does not own the expected CUDA context")
         observed, _ = docker("exec", container, "/bin/sh", "-ec",
                              'test "$(id -u):$(id -g)" = 65532:65532; '
                              f'test "$(readlink /proc/1/exe)" = {RILEY}; sha256sum /proc/1/exe').split()
         require(observed == binary, "running Riley differs from the reviewed distribution binary")
         log_command(out, "checkpoint-verify.log", ["docker", "exec", container, "/opt/riley/bin/riley-checkpoint",
-                                                   "verify", "--checkpoint", "/models"], 600)
+                                                   "verify", "--checkpoint", "/models"],
+                    1200 if tp_holdout is not None else 600)
 
         api = out / "api.json"
         address = f"127.0.0.1:{port}"
@@ -296,7 +324,20 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
                     "mixed-stage evidence does not cover three matched trials")
             stage = {"matching_responses": 6, "observed_mixed_iterations": sum(
                 len(trial["witnesses"]) for trial in stage["trials"]), "server_arguments": list(server_args)}
-        require(gpu_pids(gpu) == holders | {riley_pid}, "GPU process ownership changed during inference checks")
+        if tp_holdout is not None:
+            result_file = out / "tp-holdout.json"
+            log_command(out, "tp-holdout.log",
+                        [sys.executable, "-B", str(TP_HOLDOUT_CHECK), address, "m", str(tp_workload),
+                         "--out", str(result_file)], 900)
+            parity = json.loads(result_file.read_bytes())
+            require(parity["status"] == "passed" and parity["workload_sha256"] == digest(tp_workload)
+                    and {mode: data["requests"] for mode, data in parity["modes"].items()}
+                    == {"c1": 11, "c8": 11, "c32": 32}
+                    and all(parity["modes"][mode]["exact_matches"] == parity["modes"][mode]["requests"]
+                            for mode in ("c8", "c32")), "invalid TP=2 holdout receipt")
+            parallel = {"gpu_uuids": list(holders), "server_arguments": list(server_args), "holdout": parity}
+        require(all(gpu_pids(uuid) == pids | {riley_pid} for uuid, pids in holders.items()),
+                "GPU process ownership changed during inference checks")
         require(digest(manifest) == model_sha, "checkpoint manifest changed during inference checks")
 
         docker("stop", "--time", "20", container)
@@ -308,7 +349,8 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
         require(all(metrics[key] == 0 for key in ("active_requests", "waiting_requests", "kv_allocated_blocks"))
                 and metrics["allocation"] and all(value == 0 for value in metrics["allocation"].values()),
                 "Riley retained allocation or KV state at shutdown")
-        wait_for_gpu_release(gpu, holders, riley_pid)
+        for uuid, pids in holders.items():
+            wait_for_gpu_release(uuid, pids, riley_pid)
     finally:
         container = container or find_interrupted_container(name)
         if container is not None:
@@ -336,6 +378,8 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
         result["serving_smoke"] = smoke
     if stage is not None:
         result["mixed_stage"] = stage
+    if parallel is not None:
+        result["tensor_parallel"] = parallel
     with (out / "report.json").open("x") as handle:
         json.dump(result, handle, indent=2)
         handle.write("\n")
@@ -362,6 +406,8 @@ def main():
                         help="combine API checks with 45 seconds of mixed traffic and cancellation")
     parser.add_argument("--mixed-stage", action="store_true",
                         help="compare singleton streams and witness committed mixed prefill/decode iterations")
+    parser.add_argument("--tp-holdout", nargs=2, metavar=("PEER_GPU_UUID", "WORKLOAD"),
+                        help="verify the two-device distribution and compare C1, C8, and C32 holdout responses")
     parser.add_argument("--smoke-kv-blocks", type=int,
                         help=f"set the serving smoke KV pool (default: {SMOKE_KV_BLOCKS} blocks)")
     args = parser.parse_args()
@@ -373,7 +419,8 @@ def main():
     return check_gpu(args.cpu_report, args.gpu_uuid, args.model_dir, args.model_manifest_sha256, args.output, args.tools,
                      accuracy_baseline=args.accuracy_baseline, accuracy_holdout=args.accuracy_holdout,
                      mixed_soak=args.mixed_soak, serving_smoke=args.serving_smoke, smoke_kv_blocks=args.smoke_kv_blocks,
-                     expect_tools_unsupported=args.expect_tools_unsupported, mixed_stage=args.mixed_stage)
+                     expect_tools_unsupported=args.expect_tools_unsupported, mixed_stage=args.mixed_stage,
+                     tp_holdout=args.tp_holdout)
 
 
 if __name__ == "__main__":

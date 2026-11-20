@@ -1,0 +1,135 @@
+{
+  "status": "passed",
+  "remote_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-tp2-holdout-20261120.AFFbt3Is",
+  "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+  "riley_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+  "checkpoint_sha256": "c535a624b44249e514a8facd9c4cb7ccdfdf4a17f3b556e27c2c981fd16c9365",
+  "checkpoint_source_revision": "5ede1c97bbab6ce5cda5812749b4c0bdf79b18dd",
+  "api_checks": 40,
+  "tensor_parallel": {
+    "gpu_uuids": [
+      "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+      "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0"
+    ],
+    "server_arguments": [
+      "--inference-profile",
+      "native-bf16-varlen-v1",
+      "--tensor-parallel-devices",
+      "0,1",
+      "--max-active-sequences",
+      "32",
+      "--max-sequence-tokens",
+      "8192",
+      "--max-output-tokens",
+      "256",
+      "--kv-blocks",
+      "2048"
+    ],
+    "holdout": {
+      "status": "passed",
+      "workload_sha256": "220f13a7306518f996480c608733623475471ff3721ea3aeb895a2d5f91abd11",
+      "output_token_limit": 32,
+      "modes": {
+        "c1": {
+          "requests": 11,
+          "observed_peak_active": 1
+        },
+        "c8": {
+          "requests": 11,
+          "exact_matches": 11,
+          "observed_peak_active": 8
+        },
+        "c32": {
+          "requests": 32,
+          "exact_matches": 32,
+          "observed_peak_active": 31
+        }
+      },
+      "cases": [
+        {
+          "label": "korean-255",
+          "prompt_tokens": 255,
+          "generated_ids": 32,
+          "finish": "length",
+          "response_sha256": "f472e8af7e878bf96a938bd655a8bcd700f1a0690a158e8dcfb595cc0147b24c"
+        },
+        {
+          "label": "code-256",
+          "prompt_tokens": 256,
+          "generated_ids": 32,
+          "finish": "length",
+          "response_sha256": "5646026a3c39e933f96e868fda7c071a55e82047327accea1adad314fdf6f0f1"
+        },
+        {
+          "label": "numbers-257",
+          "prompt_tokens": 257,
+          "generated_ids": 32,
+          "finish": "length",
+          "response_sha256": "db8043e7f5db12f0bbbb73b40cb7e6964e1cfede6c003884955a57d6448010e3"
+        },
+        {
+          "label": "repeat-511",
+          "prompt_tokens": 511,
+          "generated_ids": 32,
+          "finish": "length",
+          "response_sha256": "719744a10d50dc718b628f5164149e88db92a7bac10c73cc3e3efc1e93a82eed"
+        },
+        {
+          "label": "japanese-512",
+          "prompt_tokens": 512,
+          "generated_ids": 28,
+          "finish": "stop",
+          "response_sha256": "bfd7424a354d925ac329148f1e1e945763ec8e0bc0f83a228e808bc327860385"
+        },
+        {
+          "label": "code-513",
+          "prompt_tokens": 513,
+          "generated_ids": 21,
+          "finish": "stop",
+          "response_sha256": "37ab39c2dd733bbf5bce6747936b8795ec6f7cedc7499f0c2259a7ce83fc5eff"
+        },
+        {
+          "label": "numbers-1023",
+          "prompt_tokens": 1023,
+          "generated_ids": 32,
+          "finish": "length",
+          "response_sha256": "2505bb3a1822c8bacab94fd67d291abaa660ba0ce5aafcda38a88a3ba388c63c"
+        },
+        {
+          "label": "korean-1024",
+          "prompt_tokens": 1024,
+          "generated_ids": 32,
+          "finish": "length",
+          "response_sha256": "907cd1acff62758fe050369f6650457abc2916e5bd2448cd815e3661a35c7387"
+        },
+        {
+          "label": "repeat-1025",
+          "prompt_tokens": 1025,
+          "generated_ids": 32,
+          "finish": "length",
+          "response_sha256": "1e3ee105d3156e13f56c0b124ac26a4ae1c046119c89708a6b4745f6e908cf62"
+        },
+        {
+          "label": "long-code-7836",
+          "prompt_tokens": 7836,
+          "generated_ids": 32,
+          "finish": "length",
+          "response_sha256": "9133b6327e81b0eb42b9297cf7e936bc5c7121b8ffbf063cb4294c2a485a4b20"
+        },
+        {
+          "label": "long-korean-7917",
+          "prompt_tokens": 7917,
+          "generated_ids": 32,
+          "finish": "length",
+          "response_sha256": "ee5ae4cb85cf1c41c46fb93b24794c9996664bc24b6b75bfced4c80898fb594b"
+        }
+      ]
+    }
+  },
+  "gpu_link": "NV12",
+  "gpu_idle_reservations_gib": {
+    "6": 20,
+    "7": 20
+  },
+  "original_report_sha256": "72421b89d630adbba15cbe135a7ecd09233ad07805f60f54b8fef82b1153d590"
+}

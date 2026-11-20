@@ -136,7 +136,7 @@ python3 benchmarks/live/compare.py \
 | 기각 | 같은 형상의 Coder-14B에서 동시 유입 decode TPOT이 1.99% 늘어 1% 회귀 한도를 넘었다. 1,024행 QKV 계획의 형상 공통 적용을 기각했다. | [Coder-14B 교차 대조](03-long-context-result.md#coder-14b의-1024행-후보-검증) |
 | 기존 구조 한계 | 0.1.0의 Coder-14B `closed-c32`와 일부 RAG의 최종 TTFT 목표 미달은 기존 판정과 측정값을 유지한다. | [구조 한계 근거](../goal.md#31-성능-a100-24개-모델-전부에-적용) |
 
-새 전역 기본값에는 영향 모델 전체와 TP=2의 회귀 검증이 필요하다. 현재 C32 장문 증거는 Qwen2.5-14B의 단일 GPU와 기록된 네 chunk·KV 조합에 해당한다. [검증 조건과 출력 대조](03-long-context-result.md#장문-chunk와-kv-한도의-교차-대조)
+단일 GPU Qwen2.5-14B의 네 chunk·KV 조합과 배포 이미지 Qwen2.5-32B의 TP=2 기준 설정에서 C32 장문 증거를 확보했다. 새 전역 기본값에는 후보 설정으로 영향 모델 전체와 TP=2의 회귀 검증이 필요하다. [14B 네 조합](03-long-context-result.md#장문-chunk와-kv-한도의-교차-대조) · [32B TP=2 기준](05-mixed-soak-result.md#배포-이미지의-32b-tp2-장문-검증)
 
 ## 8. 다른 작업에 넘길 결과
 

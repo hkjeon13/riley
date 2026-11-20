@@ -129,6 +129,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W5: 대상 GPU에서 배포 이미지의 실제 추론과 cache-on·off 30분 부하 증거를 확보했다. [운영 결과와 판정](05-mixed-soak-result.md#배포-이미지의-혼합-부하)
 - [x] W5: 배포 이미지의 45초 smoke에서 2-KV-head GQA·Qwen3·MHA·14B의 API 계약, 혼합 부하·취소·종료 회수를 검증했다. [MHA·14B 결과](05-mixed-soak-result.md#배포-이미지의-mha와-14b-smoke) [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)
 - [x] W5: 배포 이미지에서 prefill과 decode를 함께 포함한 커밋된 GPU iteration 36개를 관측하고, 단독·혼합 응답의 토큰 ID와 종료 계약을 대조했다. [혼합 iteration 결과](05-mixed-soak-result.md#배포-이미지의-커밋된-혼합-gpu-iteration)
+- [x] W5: 배포 이미지의 Qwen2.5-32B TP=2에서 API 40건을 통과하고 C8·C32 응답 43건이 C1 기준과 일치했다. [32B TP=2 결과](05-mixed-soak-result.md#배포-이미지의-32b-tp2-장문-검증)
 - [x] W5: 같은 이미지 두 개의 닫힌 RAG C8 3,072건에서 출력 일치와 seed별 꼬리 지연을 확인했다. Seed 2의 지연 증가가 반복됐다. [닫힌 RAG 확장 대조](05-mixed-soak-result.md#닫힌-rag-세-seed의-확장-교차-대조)
 - [ ] W5: 릴리스 대상 이미지에서 두 캐시 설정의 RSS 증가 0 운영 기준을 충족한다. 파생 시험 이미지 `1fc444b1840e`에서 두 설정이 통과했으며 최종 릴리스 판정이 남아 있다. [후보 판정](05-mixed-soak-result.md#즉시-반환-설정의-할당기-대조)
 - [ ] 문서의 버전·기본값·성능 주장은 같은 후보와 설정에 연결된다.
