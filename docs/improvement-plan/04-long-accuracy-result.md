@@ -139,6 +139,8 @@ Riley 계획과 PyTorch의 두 개별 투영 조건은 각각 원래 Riley와 HF
 
 재현할 때는 압축을 푼 진단 패치를 `qkv-row-replay.patch`로 두고 체크섬을 확인한다. 첫 시도는 CUDA 바이너리 빌드를 완료한 뒤 GPU 6번에서 다른 프로세스를 발견해 추론 전에 중단했다. 두 예약에 기존 홀더만 남은 것을 확인한 뒤 같은 바이너리 해시로 재실행했고, 정상 종료 후 GPU 6·7의 기존 20GiB 예약을 확인했다. BF16 행은 실행 호스트에 보존했다. [첫 실행과 소스 결속](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/campaign.sh) · [재실행 절차](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/retry/campaign.sh)
 
+같은 바이너리에서 HF가 Q·K·V를 개별 계산한 정확한 BF16 행으로도 교체했다. 사례 12의 추적 해시는 계획 31을 사용한 경우와 달랐고, `numbers-1023`은 계획 31의 추적을 비트 단위로 재현했다. 두 사례 모두 Riley의 생성 결과와 분기 위치의 선택 토큰이 유지됐다. HF 선택 ID는 두 사례에서 각각 0.125와 0.25 차이로 계속 2위였다. 따라서 두 사례의 토큰 차이에는 첫 레이어의 QKV 행 외에 다른 요인이 필요하다. 정상 종료 뒤 GPU 6·7의 기존 20GiB 예약을 확인했다. [HF 행 대조 실행](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/hf-separate/campaign.sh) · [토큰 순위와 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/hf-separate/verified-summary.json)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.

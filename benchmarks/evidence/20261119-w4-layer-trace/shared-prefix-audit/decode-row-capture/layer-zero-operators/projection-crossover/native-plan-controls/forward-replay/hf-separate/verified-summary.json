@@ -1,0 +1,85 @@
+{
+  "result": {
+    "mode_order": [
+      "baseline",
+      "hf-separate",
+      "baseline-repeat"
+    ],
+    "reference_sha256": "9bb140a4290330432613cd1a861bd629620b085be021a3fcfabd0e2e48fd9491",
+    "prior_forward_sha256": "9a8dddc773fc7718d4ba5f01980456b518ffdc126ad700acc7c6342097a623ef",
+    "cases": {
+      "669-9": {
+        "selected_token": {
+          "baseline": 34235,
+          "hf_replay": 34235,
+          "hf_reference": 13638
+        },
+        "same_full_completion": true,
+        "reference_projection_sha256": "e7d9952def87688721880d7a7c5f16ce3a7b8e612951017ae5362a269a5e6385",
+        "previous_plan_31_exact_trace": false,
+        "selected_minus_reference_logit": [
+          0.125,
+          0.125
+        ],
+        "hf_ranks": [
+          2,
+          2
+        ],
+        "trace_sha256": {
+          "baseline": "91cf2a7a49f43db8af08a486d0c439690e773683eb3cca33372b44a7a5b5a05b",
+          "hf-separate": "490ad397cfc7cf03361fd9b0c8e06cccff7e19583f6a4b0047369c9f1c96bb31",
+          "baseline-repeat": "91cf2a7a49f43db8af08a486d0c439690e773683eb3cca33372b44a7a5b5a05b"
+        }
+      },
+      "1023-67": {
+        "selected_token": {
+          "baseline": 510,
+          "hf_replay": 510,
+          "hf_reference": 311
+        },
+        "same_full_completion": true,
+        "reference_projection_sha256": "f1c134419f39eb316bc4484288c4cacea4a4d44072cc28835de10aaff811e40a",
+        "previous_plan_31_exact_trace": true,
+        "selected_minus_reference_logit": [
+          0.25,
+          0.25
+        ],
+        "hf_ranks": [
+          2,
+          2
+        ],
+        "trace_sha256": {
+          "baseline": "d3b081fcef19379c7cf8ae37e248e2b710b272b61ea54a43a51da6b8248f9568",
+          "hf-separate": "15658f5f15551dc317d8ccab48e8c65ac535d6adb3e1167e991997b949397de1",
+          "baseline-repeat": "d3b081fcef19379c7cf8ae37e248e2b710b272b61ea54a43a51da6b8248f9568"
+        }
+      }
+    }
+  },
+  "execution": {
+    "stage": "w4-hf-qkv-forward-20261120.Mdl8WXpE",
+    "physical_gpu": 7,
+    "campaign_exit": 0,
+    "remote_verified_json_sha256": "1bbecef77dc268f97d5b1fa3e938e28df8e1023e2b671efa9769ff1ac48a11cc",
+    "remote_dispatch_and_result_digests_verified": true,
+    "binary_sha256": "0dc6cc20cea592dad5aef5929017326a5e53009604ec6ccc00781995708f77f0",
+    "chronology": [
+      "START riley 2026-11-20T00:08:24Z",
+      "END riley 2026-11-20T00:10:47Z exit=0"
+    ],
+    "reservations": {
+      "6": {
+        "physical_index": 6,
+        "pid": 2431228,
+        "start_ticks": "6339570869",
+        "allocation_bytes": 21474836480
+      },
+      "7": {
+        "physical_index": 7,
+        "pid": 2431237,
+        "start_ticks": "6339570875",
+        "allocation_bytes": 21474836480
+      }
+    }
+  }
+}
