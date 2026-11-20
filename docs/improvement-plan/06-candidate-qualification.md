@@ -35,6 +35,8 @@ python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 
 기존 이벤트 발행 정책과 서빙 설정을 기준선으로 삼았다. 이전 빌드에서 관찰된 성능 실험은 입력·장비·바이너리에 연결하며, 새로운 수치 기준이나 기본값을 채택할 때는 종합 계획의 출력 불변성과 회귀 기준을 적용한다. [W2 결과](02-async-step-result.md) · [W3 결과](03-long-context-result.md) · [W4 정확성](04-long-accuracy-result.md) · [W5 운영 결과](05-mixed-soak-result.md)
 
+Qwen2.5-14B-Instruct의 CUDA 진단 바이너리에서 prefill chunk와 KV 한도 네 조합의 장문 308건이 입력·생성 토큰 ID까지 일치했다. 90초 입장 제한에서 완료한 정확성 실험이다. KV 768블록·chunk 512의 기본 30초 실행에서는 C32의 HTTP 408을 확인했다. 새 기본값의 회귀 검증과 실제 서비스 분포 확인은 남아 있다. [W3·W4 경계 부하 대조](03-long-context-result.md#장문-chunk와-kv-한도의-교차-대조)
+
 SmolLM2-1.7B의 같은 A100 바이너리에서 제출 후 발행의 32행 decode 커널 사이 공백 중앙값은 두 비교에서 51–72µs 줄었다. 네 일반 서빙 비교에서 처리량은 0.38–0.89% 늘었고 측정한 요청의 출력이 일치했다. `after-submit-v1`을 W2와 W3 후속 시험의 기준 정책으로 유지한다. [발행 정책별 계측](02-async-step-result.md#발행-정책과-32행-decode-커널-간격)
 
 커밋된 토큰 텍스트와 logprobs의 복사를 줄인 후보는 SmolLM2의 일반 서빙 512건과 C1·C8 생성 ID·스트리밍 logprobs를 재현했다. 네 성능 비교의 처리량 변화는 −0.35%에서 +0.24%였다. 정렬된 KV 테이블과 이번 후보의 미채택을 확정하고, 다중 스텝 중첩의 성능·자원 수명은 추가 검증 범위에 둔다. [이벤트 복사 제거](02-async-step-result.md#커밋된-이벤트-데이터의-복사-제거)

@@ -404,7 +404,20 @@ Qwen2.5-14B-Instruct와 위 KV 압력 시험에 쓴 CUDA 진단 바이너리로 
 
 기본 입장 제한 30초로 실행했을 때 chunk 1,024·KV 2,576의 C8과 C32는 각각 33/33건이 C1과 일치했다. chunk 512·KV 768에서는 C32의 한 요청이 HTTP 408을 받았다. 이 요청의 마지막 KV 부족 기록은 대기에 들어간 뒤 29,983.07ms였고, 655블록을 이미 예약한 상태에서 511블록이 더 필요했다. 시험 요청 76건 가운데 75건은 활성화 후 KV를 반환했고 해당 1건은 활성 단계에 들어가지 못했다. 검사가 전체 응답 대조를 마치기 전에 중단됐으며 두 GPU는 각각 20GiB 예약으로 돌아왔다. [중단 실행의 집계와 원본 해시](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/chunk-exact/default-timeout.json) · [집계 재현](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/chunk-exact/fetch-default-timeout.sh) · [입장 대기 만료 처리](../../crates/riley-scheduler/src/scheduler.rs#L1577)
 
-재실행에서는 네 조합 모두 입장 제한을 90초로 고정해 출력 대조에 사용할 예정이다. 이 한도는 격리 진단용이다. 기본 제한을 그대로 사용한 C32의 실패는 운영 범위 판단에 남긴다. 실행 파일을 재사용하려면 `dispatch.sha256`에 적힌 `benchmarks/live/long_accuracy.py`와 상위 `kv-pressure/verify_kv_pressure.py`를 실행기와 같은 경로에 둔다.
+재실행에서는 같은 GPU 7, 모델, 바이너리, 1,024 배치 토큰 예산과 활성 시퀀스 한도 32를 유지했다. 네 조합 모두 입장 제한을 90초로 고정하고 prefill chunk 상한과 KV 한도만 바꿨다. 조합당 C1 11건, C8 33건, C32 33건을 각각 완료했다. 각 조합의 C8·C32는 같은 조합의 C1과 일치했고, 같은 동시성의 실행 결과는 네 조합 사이에서도 모두 일치했다. 비교한 308건의 입력·생성 ID, 텍스트, 종료 사유와 usage를 확인했다. 네 원본 응답 파일의 SHA-256은 기본 30초 기준군의 원본과도 같았다. [전체 비교의 요청 수·해시](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/chunk-exact/extended-timeout/verified-summary.json)
+
+| Prefill chunk 상한 | KV 블록 | KV 부족 요청 C8 / C32 | C32 최대 입장 대기 | C32에서 입장 대기 30초 초과 |
+|---:|---:|---:|---:|---:|
+| 1,024 | 2,576 | 0 / 3 | 9.33초 | 0 |
+| 512 | 768 | 4 / 15 | 36.73초 | 1 |
+| 1,024 | 768 | 5 / 15 | 32.66초 | 6 |
+| 512 | 2,576 | 0 / 3 | 10.05초 | 0 |
+
+각 실행에서 설정한 길이의 prefill chunk를 실제로 처리했고 입력의 처음부터 끝까지 누락 없이 처리했음을 스케줄러 로그로 확인했다. 표는 서버가 시작하며 처리한 내부 warm-up 48건을 각 실행에서 제외했다. C1은 네 조합 모두 KV 대기 없이 완료했다. 네 서버가 활성·대기 요청과 실제 KV 할당을 0으로 회수한 뒤 코드 0으로 종료했고, GPU 6·7은 동일 홀더의 20GiB 예약으로 복귀했다. [검산기와 성공 기준](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/chunk-exact/extended-timeout/verify_exact_batch.py) · [대기 집계 재현](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/chunk-exact/extended-timeout/fetch-summary.sh)
+
+이 정확성 결과는 Qwen2.5-14B-Instruct, 고정 입력 11개와 시험한 CUDA 바이너리에 적용된다. 이 부하에서 KV 768블록은 두 chunk 크기 모두 기본 입장 제한을 넘는 대기가 관측됐다. 운영 용량은 입력·출력 길이와 동시에 예약할 요청 수를 함께 산정해야 한다. 90초는 격리 진단에 사용했다. 실제 서비스 분포와 SLO는 W5에서 확인할 항목이다. [W5 운영 검증 범위](05-documentation-and-operations.md#합성-부하의-확인-기준)
+
+재현 시 실행기와 같은 경로에 `dispatch.sha256`에 적힌 `benchmarks/live/long_accuracy.py`와 상위 `kv-pressure/verify_kv_pressure.py`를 둔다. 90초 대조는 같은 `campaign.sh`와 `exact_batch.py`에 `extended-timeout`의 어댑터·검산기·체크섬을 함께 사용한다.
 
 #### Coder-14B의 1,024행 후보 검증
 

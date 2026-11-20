@@ -2514,6 +2514,28 @@
         "sha256": "4c14eaae959177f796c06f0247742c5a5141d12cc0fde10fc2feea40bf052778"
       }
     ],
+    "qwen14_chunk_and_kv_exact_matrix": [
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/chunk-exact/extended-timeout/adapt_runner.py",
+        "sha256": "aa95e9dba8dbfd68b79c6738a4d0d8fca39e7f2badc77e5ab99ccd14833f78b0"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/chunk-exact/extended-timeout/dispatch.sha256",
+        "sha256": "e073c824d24b9ce5f9b4c3a960c98f71dc4def16d2fd323f43a3cad6e142684f"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/chunk-exact/extended-timeout/fetch-summary.sh",
+        "sha256": "1a716c01c100ede139ff86db9801236c190a2a21bc0bc460a8c53abb091b3bda"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/chunk-exact/extended-timeout/verified-summary.json",
+        "sha256": "d0af18044ba07b36a36c3054c728284f3ceddef3b006d91301f3935e67a27640"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/chunk-exact/extended-timeout/verify_exact_batch.py",
+        "sha256": "b472318460cf51c72be8c46ef160df8b5ea8e488c59e78f26cb2fb9df307456a"
+      }
+    ],
     "qwen14_request_and_nsys_joint_trace": [
       {
         "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/analysis.sha256",

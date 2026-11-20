@@ -119,7 +119,8 @@ python3 benchmarks/live/compare.py \
 - [x] 두 seed에서 얻은 네 도착 시각표를 기준군과 QKV 후보에 그대로 재생했다. 두 실행 순서에서 TTFT p95와 TPOT p50이 감소했고 측정 1,024건의 출력이 재현됐다. [고정 도착 대조](03-long-context-result.md#두-rag-seed의-고정-도착-재생)
 - [x] 형상이 같은 Coder-14B에서 1,024행 QKV 후보를 두 실행 순서로 대조했다. 출력은 일치했고 동시 유입의 decode TPOT이 1% 기준을 넘었으며 50ms 유입의 첫 토큰 p95가 두 번 모두 늘어 형상 공통 적용을 기각했다. [Coder-14B 결과](03-long-context-result.md#coder-14b의-1024행-후보-검증)
 - [x] 시험한 burst 후보의 득실과 decode·짧은 요청 비용을 함께 기록했다. [W3 결과](03-long-context-result.md)
-- [ ] W4 장문·chunk 경계·배치 불변성 검사를 통과한다.
+- [x] Qwen2.5-14B의 고정 입력 11개에서 chunk 512·1,024와 KV 768·2,576의 네 조합을 비교했다. 90초 진단으로 완료한 C1·C8·C32 308건에서 입력·생성 토큰 ID가 일치했다. [경계 정확성 결과](03-long-context-result.md#장문-chunk와-kv-한도의-교차-대조)
+- [ ] 새 기본값 후보의 영향 모델과 TP=2에서 W4 장문·chunk 경계·배치 불변성 검사를 통과한다.
 - [x] 같은 CUDA 후보와 Qwen2.5-0.5B에서 네 조합을 두 seed로 교차 측정했다. [조합 결과](03-long-context-result.md#w2-이벤트-발행과-묶음-정책의-상호작용)
 - [ ] 최종 목표 충족/부분 개선/opt-in/기각/구조 한계를 구분한다.
 
