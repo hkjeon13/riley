@@ -82,7 +82,7 @@ class AllocatorTrialTests(unittest.TestCase):
         self.distribution = manifest["current_distribution_candidate"]
 
     def test_linked_reports_pass(self):
-        self.assertEqual(checker.check_allocator_trial(ROOT, self.trial, self.distribution), 7)
+        self.assertEqual(checker.check_allocator_trial(ROOT, self.trial, self.distribution), 8)
 
     def test_rehashed_evidence_from_another_arm_or_run_fails(self):
         def change_prior_observation(report):
@@ -94,6 +94,10 @@ class AllocatorTrialTests(unittest.TestCase):
             ("accuracy", lambda report: report.update(combined_report_sha256="0" * 64), "combined GPU report"),
             ("performance", lambda report: report["arms"]["packaged-first"].update(image_id="sha256:" + "0" * 64),
              "different image"),
+            ("rag_confirmation", lambda report: report.update(prior_closed_loop_summary_sha256="0" * 64),
+             "different prior performance report"),
+            ("rag_confirmation", lambda report: report["cells"]["rag-c8-seed2"].update(aligned_samples_per_arm=64),
+             "three matched 256-request cells"),
             ("metrics_observer_warmed", change_prior_observation, "does not match the original run"),
         ):
             with self.subTest(report=kind), tempfile.TemporaryDirectory() as directory:
@@ -109,6 +113,6 @@ class AllocatorTrialTests(unittest.TestCase):
                         raw = json.dumps(report).encode("utf-8")
                         entry["sha256"] = sha256(raw).hexdigest()
                     destination.write_bytes(raw)
-                self.assertEqual(checker.check_evidence(root, trial), 7)
+                self.assertEqual(checker.check_evidence(root, trial), 8)
                 with self.assertRaisesRegex(ValueError, message):
                     checker.check_allocator_trial(root, trial, self.distribution)

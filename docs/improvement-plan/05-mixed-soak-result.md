@@ -326,6 +326,22 @@ GPU 7의 W4 진단이 끝난 뒤 GPU 6에서 기준 → 후보 → 후보 → �
 
 같은 이미지에서 첫 기준의 시각표를 첫 후보의 시각표로 바꾸면 TTFT p95 평균이 기준 이미지에서 31.00%, 후보 이미지에서 26.63% 늘었다. 두 시각표 모두에서 기존 닫힌 부하의 +12.69% 증가가 재현되지 않았다. 이 결과는 고정된 RAG C8 seed 2와 기록된 두 시각표에 적용한다. 기존 닫힌 부하의 지연 비용과 실제 운영 도착 분포를 릴리스 판정에 남긴다. 파생 설정의 기본값 적용은 보류한다.
 
+#### 닫힌 RAG 세 seed의 확장 교차 대조
+
+A100 6번에서 기준 이미지 `0a907408ec73`과 jemalloc 파생 이미지 `1fc444b1840e`를 기준 → 후보 → 후보 → 기준 순으로 실행했다. 두 이미지의 Riley 실행 파일, Qwen2.5-7B-Instruct 체크포인트와 서버 인자는 앞선 성능 비교와 같다. 닫힌 RAG C8의 프롬프트 길이와 최대 생성 128토큰을 유지했다. 기존 seed 1·2에 seed 3을 추가했으며 seed마다 워밍업 8건과 측정 요청 256건을 실행했다. 첫 쌍의 seed 순서는 1→2→3, 두 번째 쌍은 3→2→1이다. [실행 순서](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/campaign.sh) · [부하 도구](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/performance_client.py)
+
+네 실행의 API는 각각 40건을 통과했다. 측정 요청 3,072건은 모두 성공했고 세 seed의 대응 요청이 네 실행에서 입력·출력 해시, 토큰 수, 종료 사유까지 일치했다. 다음 변화율은 각 순서에서 기준 대비 후보를 비교한 값이다. 평균 열은 두 기준값의 평균과 두 후보값의 평균을 비교했다. [검산 결과와 원본 해시](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/verified-confirmation.json)
+
+| seed | TTFT p95, 기준 먼저 | TTFT p95, 후보 먼저 | TTFT p95, 평균 기준 | TPOT p50, 평균 기준 |
+|---|---:|---:|---:|---:|
+| 1 | −1.81% | +3.18% | +0.65% | −0.63% |
+| 2 | +9.14% | +7.27% | +8.30% | −0.69% |
+| 3 | −17.56% | −20.61% | −19.06% | +0.90% |
+
+64건에서 관측한 seed 2의 TTFT p95 증가 방향이 256건에서도 두 번 재현됐다. Seed 1은 순서에 따라 방향이 바뀌었고, seed 3은 두 순서에서 감소했다. 세 seed의 평균 비교는 decode TPOT 1% 회귀 한도를 충족했다. Seed 2에서 소켓 쓰기 전 구간의 p95 변화는 +0.107ms와 −0.010ms였고, 쓰기부터 첫 콘텐츠까지의 p95 변화는 +84.66ms와 +54.95ms였다. 쓰기 이후에는 서버 대기·GPU 처리·SSE 전달이 함께 포함된다. 현행 닫힌 부하에서 seed 2의 비용이 반복됐고, 실제 운영 도착 분포와 승인된 SLO를 확인하기 전까지 기본값 채택과 릴리스를 보류한다. [요청 타이밍 검산기](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/verify_confirmation.py)
+
+네 서버는 정상 종료했고 GPU 6·7은 각각 동일 홀더의 20GiB 예약 상태였다. 재현 시 기존 `audit_allocator_ttft.py`를 전송 파일에 포함하고 `dispatch.sha256`과 재사용 원본의 해시를 검증한다. [공유 검산 코드](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/audit_allocator_ttft.py) · [집계 재현](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/fetch-summary.sh)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)

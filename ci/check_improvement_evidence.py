@@ -117,6 +117,7 @@ def check_allocator_trial(root, trial, distribution):
     soak = reports["soak"]
     accuracy = reports["accuracy"]
     performance = reports["performance"]
+    confirmation = reports["rag_confirmation"]
     replay = reports["rag_replay"]
     image = trial["image_id"]
     parent = distribution["a100_rebuild_gpu_inference"]["image_id"]
@@ -157,25 +158,34 @@ def check_allocator_trial(root, trial, distribution):
         raise ValueError("allocator accuracy coverage differs from the recorded qualification scope")
 
     order = ["parent-first", "packaged-first", "packaged-second", "parent-second"]
-    if (performance["order"] != order or replay["order"] != order
-            or set(performance["arms"]) != set(order) or set(replay["arms"]) != set(order)):
-        raise ValueError("allocator performance and fixed replay comparison arms differ")
+    if any(run["order"] != order or set(run["arms"]) != set(order)
+           for run in (performance, confirmation, replay)):
+        raise ValueError("allocator timing comparison arms differ")
     server_args = performance["arms"][order[0]]["server"]["server_arguments"]
     for name in order:
-        closed = performance["arms"][name]
-        fixed = replay["arms"][name]
+        closed = [run["arms"][name] for run in (performance, confirmation)]
+        servers = [arm["server"] for arm in closed] + [replay["arms"][name]]
         expected = parent if name.startswith("parent-") else image
-        if (closed["api_checks"] != 40 or closed["image_id"] != expected or fixed["image_id"] != expected
-                or closed["server"]["image_id"] != expected
-                or closed["server"]["server_arguments"] != server_args or fixed["server_arguments"] != server_args):
+        if (any(arm["api_checks"] != 40 or arm["image_id"] != expected for arm in closed)
+                or any(server["image_id"] != expected or server["server_arguments"] != server_args
+                       for server in servers)):
             raise ValueError(f"allocator {name} timing reports use a different image or serving configuration")
-        for allocator in (closed["server"]["allocator"], fixed["allocator"]):
+        for server in servers:
+            allocator = server["allocator"]
             if expected == parent:
                 if allocator != "glibc":
                     raise ValueError(f"allocator {name} parent is not running glibc")
             elif (allocator["image_id"] != image or allocator["library_sha256"] != library
                   or allocator["malloc_conf"] != trial["malloc_conf"]):
                 raise ValueError(f"allocator {name} timing reports use different allocator settings")
+
+    if confirmation["prior_closed_loop_summary_sha256"] != records["performance"]["sha256"]:
+        raise ValueError("allocator RAG confirmation uses a different prior performance report")
+    rag_cells = confirmation["cells"]
+    if (set(rag_cells) != {f"rag-c8-seed{seed}" for seed in (1, 2, 3)}
+            or any(cell["aligned_samples_per_arm"] != 256 or cell["same_complete_streams"] is not True
+                   or set(cell["request_timing"]) != set(order) for cell in rag_cells.values())):
+        raise ValueError("allocator RAG confirmation does not cover the three matched 256-request cells")
 
     original = reports["metrics_observer"]
     warmed = reports["metrics_observer_warmed"]

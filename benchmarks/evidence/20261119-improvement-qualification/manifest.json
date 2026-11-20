@@ -2536,6 +2536,32 @@
         "sha256": "b472318460cf51c72be8c46ef160df8b5ea8e488c59e78f26cb2fb9df307456a"
       }
     ],
+    "packaged_allocator_rag_confirmation": [
+      {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/campaign.sh",
+        "sha256": "27badf7945697d959490a703ef827b80187833388ef1c51a64dae2f938b7d0d9"
+      },
+      {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/dispatch.sha256",
+        "sha256": "bf0018ae77170e4e4c6753bba3364e72017496563a1eb1494f1f2e1fe1d1d10c"
+      },
+      {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/fetch-summary.sh",
+        "sha256": "9506a865afd9be877086d8881716eb37bc1c459ad57ef4bc0924fccb110bf660"
+      },
+      {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/performance_client.py",
+        "sha256": "d9a28d4e3b592c8124b9f51d657ff1ffc4781e1cb4183c13c8517d56afb6800a"
+      },
+      {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/reuse.sha256",
+        "sha256": "80844ead4888d538d084a51cd909bf29949db248ba5b3a6a80bc957a493a77f0"
+      },
+      {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/verify_confirmation.py",
+        "sha256": "b838e228273a525a1e717eefa1d2d6b9d7585c3107d8b2a8bd4ac70ec9531489"
+      }
+    ],
     "qwen7_attention_plan_31_serving": [
       {
         "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/campaign.sh",
@@ -2942,6 +2968,10 @@
       "performance": {
         "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/verified-performance.json",
         "sha256": "318ddb75a3c2dacfabbecf44acb30a603b34bad433f3d302e5101a8e27c0916c"
+      },
+      "rag_confirmation": {
+        "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/verified-confirmation.json",
+        "sha256": "c54f8b0d996edf7bd3eafda400c2b095e46020e01e082739815d68a77c2e48a1"
       },
       "rag_replay": {
         "path": "benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-replay/verified-replay.json",

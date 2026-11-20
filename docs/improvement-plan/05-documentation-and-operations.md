@@ -65,7 +65,7 @@ README의 24개 성능 행을 A100 원본 요약과 대조하고 이번에 수�
 
 Production CPU의 Documentation 단계에서 개선 계획서의 상대 링크와 Markdown 제목, qualification manifest에 연결된 근거 파일의 SHA-256, 배포 입력을 대조한 두 Git 리비전의 객체를 검증한다. 로컬에서는 `python3.12 ci/check_improvement_evidence.py`를 실행한다. [검증 스크립트](../../ci/check_improvement_evidence.py) · [Production CPU 워크플로](../../.github/workflows/production-cpu.yml)
 
-파생 할당기 시험은 패키징, API, 두 캐시 모드의 30분 부하, 장문 정확성, 기본 성능, 고정 도착 대조와 메트릭 조회 두 시험을 `current_allocator_trial`의 이미지 ID에 연결한다. CI에서 패키징 증명의 소스와 실행 파일, GPU 부하·정확성의 공통 증명, 지연 시험의 이미지·실행 인자·할당기 설정을 대조한다. 워밍업 재시험은 첫 시험의 검산 해시, 체크포인트 및 부하별 완료 건수와 맞아야 한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [릴리스 판정](06-candidate-qualification.md)
+파생 할당기 시험은 패키징, API, 두 캐시 모드의 30분 부하, 장문 정확성, 기본 성능, 닫힌 RAG 확장 대조, 고정 도착 대조와 메트릭 조회 두 시험을 `current_allocator_trial`의 이미지 ID에 연결한다. CI에서 패키징 증명의 소스와 실행 파일, GPU 부하·정확성의 공통 증명, 지연 시험의 이미지·실행 인자·할당기 설정을 대조한다. 워밍업 재시험은 첫 시험의 검산 해시, 체크포인트 및 부하별 완료 건수와 맞아야 한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [릴리스 판정](06-candidate-qualification.md)
 
 같은 검사에서 README의 `Status` 버전을 Cargo 워크스페이스 버전과 맞추고, 10월 A100 동시성 32·고정 길이 표의 24개 모델을 보존된 표와 대조한다. 성능 요약은 동시성 8–32의 처리량·TPOT 각 144셀, TTFT 192셀, 단일 클라이언트 처리량 48셀에서 다시 계산한다. 당시 기록에 적힌 AWS 원본 경로는 이번 점검에서 확인되지 않아 성능 검사의 근거는 저장소에 보존된 모델별 측정 표다. [워크스페이스 버전](../../Cargo.toml) · [README 성능표](../../README.md#performance) · [보존된 측정값과 당시 실행 이름](../model-coverage-a100-perf-table.md#측정-출처)
 
@@ -188,6 +188,7 @@ Qwen2.5-7B-Instruct의 A100 네이티브 실행에서 각 30분 동안 초당 �
 - [x] 기준 A100 이미지와 파생 할당기 시험 이미지의 실행 근거를 하나의 매니페스트에 연결했다. 파생 시험의 correctness·API·performance·soak·패키징은 CI가 동일 이미지 및 설정인지 검사한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 - [x] prefix cache·취소·shutdown을 합성 부하에서 검증하고 1Hz 추가 조회의 CPU·GPU·지연·RSS 비용을 교차 대조했다. 큰 RSS 증가는 두 실행 모두 첫 부하에서 나타났고, 워밍업 뒤 추가 조회와 기준의 변화량 차이는 −280KiB와 +260KiB였다. [운영 결과](05-mixed-soak-result.md#워밍업-후-역순-교차-대조)
 - [x] 합성 부하의 분포와 확인 기준, 실패 분류 및 회수 절차를 기록했다. [합성 부하의 확인 기준](#합성-부하의-확인-기준) · [후보 회수와 복구 확인](#후보-회수와-복구-확인)
+- [x] 같은 이미지 두 개의 닫힌 RAG C8을 3개 seed에서 반복해 3,072건의 출력을 대조했다. Seed 2의 지연 증가는 두 순서에서 재현됐고 seed 3은 두 순서에서 줄었다. [닫힌 RAG 확장 대조](05-mixed-soak-result.md#닫힌-rag-세-seed의-확장-교차-대조)
 - [ ] 실제 운영 트래픽 분포와 서비스 SLO를 확인하고 해당 환경의 복구 절차를 검증한다.
 
 최종 산출물은 문서 주장 목록, GPU 검증 matrix, 운영 workload 정의, 관측 사양, soak 결과, known limitation과 릴리스 판정서다. 대형 nsys 원본은 관리 가능한 저장소에 두고 해시·위치·보존 정책을 기록한다. 임시 로그나 접근 불가능한 경로만 남기지 않는다.
