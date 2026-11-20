@@ -25,6 +25,7 @@ ACCURACY_CHECK = API_CHECK.with_name("long_accuracy.py")
 SOAK_CHECK = API_CHECK.with_name("soak.py")
 CACHE_BLOCKS = {"cache-off": None, "cache-on": 128}
 SMOKE_SECONDS = 45
+SMOKE_KV_BLOCKS = 4096
 MIXED_LOAD_RATE = 8
 MIXED_LOAD_CHECKS = {"no_unexpected_http_or_stream_error", "completed_schema_and_tool_covered",
                      "disconnects_observed", "idle_after_drain", "native_allocation_plateau", "workload_coverage"}
@@ -121,13 +122,15 @@ def check_accuracy(out, address, label, golden, workload=None):
             "verified_requests": sum(mode["matched"] for mode in result["modes"].values())}
 
 
-def check_mixed_load(out, address, container, pid, *, smoke):
+def check_mixed_load(out, address, container, pid, *, smoke, expect_tools_unsupported=False):
     label, seconds, option = ("smoke", SMOKE_SECONDS, "--smoke") if smoke else (
         "soak", 1800, "--require-zero-rss-growth")
     path = out / f"{label}.json"
     command = [sys.executable, "-B", str(SOAK_CHECK), address, "m", "--pid", str(pid),
                "--docker-container", container, "--seconds", str(seconds), "--rate", str(MIXED_LOAD_RATE),
                "--shared-prefix", option, "--out", str(path)]
+    if expect_tools_unsupported:
+        command.append("--expect-tools-unsupported")
     completed = log_command(out, f"{label}.log", command, seconds + 300, check=False)
     result = json.loads(path.read_bytes())
     checks = result["checks"]
@@ -139,6 +142,7 @@ def check_mixed_load(out, address, container, pid, *, smoke):
             and result["mode"] == ("smoke" if smoke else "mixed_soak")
             and result["seconds"] == seconds and result["rate"] == MIXED_LOAD_RATE
             and result["shared_prefixes"] == 8
+            and result.get("expect_tools_unsupported", False) is expect_tools_unsupported
             and result["rss_source"] == {"container_id": container, "host_pid": pid, "container_pid": 1},
             "mixed load evidence differs from the requested container, workload or exit status")
     return result, status, failed
@@ -168,12 +172,17 @@ def find_interrupted_container(name):
 
 
 def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_baseline=None, accuracy_holdout=None,
-              mixed_soak=None, serving_smoke=False):
+              mixed_soak=None, serving_smoke=False, smoke_kv_blocks=None, expect_tools_unsupported=False):
     require(GPU_UUID.fullmatch(gpu) and SHA256.fullmatch(model_sha), "pass a GPU UUID and model SHA-256")
     require(mixed_soak is None or (mixed_soak in CACHE_BLOCKS and not (accuracy_baseline or accuracy_holdout)),
             "select mixed soak or long accuracy for each container")
     require(not serving_smoke or not (accuracy_baseline or accuracy_holdout or mixed_soak),
             "select serving smoke separately from mixed soak and long accuracy")
+    require(not expect_tools_unsupported or serving_smoke and not tools,
+            "--expect-tools-unsupported requires serving smoke and excludes --tools")
+    if smoke_kv_blocks is not None:
+        require(serving_smoke and type(smoke_kv_blocks) is int and smoke_kv_blocks > 0,
+                "--smoke-kv-blocks requires serving smoke and a positive block count")
     cpu_report_bytes = cpu_report.read_bytes()
     report = json.loads(cpu_report_bytes)
     require(report["schema_version"] == "riley.distribution-image-check.v1" and report["status"] == "passed",
@@ -206,7 +215,8 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
         if cache_blocks is not None:
             server_args += ("--prefix-cache-blocks", str(cache_blocks))
     elif serving_smoke:
-        server_args = (*MIXED_SERVER_ARGS, "--kv-blocks", "4096", "--prefix-cache-blocks", "128")
+        blocks = SMOKE_KV_BLOCKS if smoke_kv_blocks is None else smoke_kv_blocks
+        server_args = (*MIXED_SERVER_ARGS, "--kv-blocks", str(blocks), "--prefix-cache-blocks", "128")
     mount = f"type=bind,source={model_dir},target=/models,readonly"
     name = f"riley-gpu-check-{uuid4().hex}"
     container = None
@@ -247,6 +257,8 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
         command = [sys.executable, str(API_CHECK), address, "m", "--out", str(api)]
         if tools:
             command.append("--tools")
+        if expect_tools_unsupported:
+            command.append("--expect-tools-unsupported")
         log_command(out, "api.log", command, 600)
         results = json.loads(api.read_bytes())["results"]
         require(results and all(record["passed"] is True for record in results), "the live API suite failed")
@@ -258,9 +270,12 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
         if mixed_soak is not None:
             soak = check_mixed_soak(out, address, mixed_soak, container, riley_pid)
         if serving_smoke:
-            observed_smoke, smoke_status, failed = check_mixed_load(out, address, container, riley_pid, smoke=True)
+            observed_smoke, smoke_status, failed = check_mixed_load(
+                out, address, container, riley_pid, smoke=True, expect_tools_unsupported=expect_tools_unsupported)
             smoke = {key: observed_smoke[key] for key in ("seconds", "rate", "counts", "counter_changes", "checks")}
             smoke.update(status=smoke_status, failed_checks=failed, server_arguments=list(server_args))
+            if expect_tools_unsupported:
+                smoke["expect_tools_unsupported"] = True
         require(gpu_pids(gpu) == holders | {riley_pid}, "GPU process ownership changed during inference checks")
         require(digest(manifest) == model_sha, "checkpoint manifest changed during inference checks")
 
@@ -312,7 +327,10 @@ def main():
     parser.add_argument("model_dir", type=Path)
     parser.add_argument("model_manifest_sha256")
     parser.add_argument("output", type=Path)
-    parser.add_argument("--tools", action="store_true", help="also validate tool calls for a compatible checkpoint")
+    tool_mode = parser.add_mutually_exclusive_group()
+    tool_mode.add_argument("--tools", action="store_true", help="also validate tool calls for a compatible checkpoint")
+    tool_mode.add_argument("--expect-tools-unsupported", action="store_true",
+                           help="validate the tool rejection contract for a checkpoint without tool support")
     parser.add_argument("--accuracy-baseline", type=Path, metavar="GOLDEN",
                         help="compare the historical long-context workload against a Riley capture")
     parser.add_argument("--accuracy-holdout", type=Path, nargs=2, metavar=("WORKLOAD", "GOLDEN"),
@@ -320,6 +338,8 @@ def main():
     parser.add_argument("--mixed-soak", choices=CACHE_BLOCKS, help="run the strict 30-minute W5 load in this cache mode")
     parser.add_argument("--serving-smoke", action="store_true",
                         help="combine API checks with 45 seconds of mixed traffic and cancellation")
+    parser.add_argument("--smoke-kv-blocks", type=int,
+                        help=f"set the serving smoke KV pool (default: {SMOKE_KV_BLOCKS} blocks)")
     args = parser.parse_args()
 
     def interrupted(_signal, _frame):
@@ -328,7 +348,8 @@ def main():
     signal.signal(signal.SIGTERM, interrupted)
     return check_gpu(args.cpu_report, args.gpu_uuid, args.model_dir, args.model_manifest_sha256, args.output, args.tools,
                      accuracy_baseline=args.accuracy_baseline, accuracy_holdout=args.accuracy_holdout,
-                     mixed_soak=args.mixed_soak, serving_smoke=args.serving_smoke)
+                     mixed_soak=args.mixed_soak, serving_smoke=args.serving_smoke, smoke_kv_blocks=args.smoke_kv_blocks,
+                     expect_tools_unsupported=args.expect_tools_unsupported)
 
 
 if __name__ == "__main__":

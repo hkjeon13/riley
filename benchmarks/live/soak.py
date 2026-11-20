@@ -90,6 +90,14 @@ async def read_completion(reader, kind, limit, started):
     while (await reader.readline()) != b"\r\n":
         if reader.at_eof():
             raise ValueError("incomplete HTTP headers")
+    if kind == "tools_unsupported":
+        if status == 400:
+            error = json.loads(await reader.read())["error"]
+            if (error.get("type"), error.get("code"), error.get("param"), error.get("message")) == (
+                "invalid_request_error", "unsupported_parameter", "tools", "this model's chat template does not support tools",
+            ):
+                return {"outcome": "unsupported"}
+        return {"outcome": "error", "http_status": status, "detail": "expected the template tool rejection"}
     if status != 200:
         return {"outcome": "rejected" if status == 429 else "error", "http_status": status}
 
@@ -287,9 +295,12 @@ async def soak(args, *, open_proc=open_host_proc):
     rows, tasks, next_sample = [], [], 0.0
     poll = None
     smaps_after_seconds = args.seconds / 2 if args.require_zero_rss_growth else None
+    expect_tools_unsupported = getattr(args, "expect_tools_unsupported", False)
     while scheduled < args.seconds:
         await asyncio.sleep(max(0, start + scheduled - time.perf_counter()))
         kind, body = request(args.model, rng, shared_prefixes)
+        if kind == "tools" and expect_tools_unsupported:
+            kind = "tools_unsupported"
         tasks.append(asyncio.create_task(run_request(host, int(port), kind, body, start + scheduled)))
         if scheduled >= next_sample:
             if poll is not None:
@@ -327,7 +338,8 @@ async def soak(args, *, open_proc=open_host_proc):
         record_smaps_rollup(final, args.pid, open_proc=open_proc)
         smaps_comparison = smaps_growth_second_half(samples, final, args.seconds)
 
-    counts = {kind: {} for kind in KINDS}
+    kinds = tuple("tools_unsupported" if kind == "tools" and expect_tools_unsupported else kind for kind in KINDS)
+    counts = {kind: {} for kind in kinds}
     problems = []
     for row in rows:
         outcomes = counts[row["kind"]]
@@ -342,14 +354,17 @@ async def soak(args, *, open_proc=open_host_proc):
     before, after = (item["metrics"]["counters"] for item in (initial, final))
     counter_changes = {key: after[key] - before[key] for key in before}
     windows, drift = latency_windows(rows, start, args.seconds)
+    tool_covered = (counts["tools_unsupported"].get("unsupported", 0) > 0 if expect_tools_unsupported
+                    else counts["tools"].get("tool_calls", 0) > 0)
     checks = {
         "no_unexpected_http_or_stream_error": not problems and counter_changes["overloads"] == 0,
-        "completed_schema_and_tool_covered": counts["schema"].get("stop", 0) > 0 and counts["tools"].get("tool_calls", 0) > 0,
+        "completed_schema_and_tool_covered": counts["schema"].get("stop", 0) > 0 and tool_covered,
         "disconnects_observed": counts["cancel"].get("disconnected", 0) > 0
         and counter_changes["disconnects"] > 0 and counter_changes["cancellations"] > 0,
         "idle_after_drain": idle(final["metrics"]),
         "native_allocation_plateau": initial["metrics"]["allocation"] == final["metrics"]["allocation"],
-        "workload_coverage": all(counts[kind].get("completed", 0) > 0 for kind in KINDS if kind != "cancel"),
+        "workload_coverage": all(counts[kind].get("unsupported" if kind == "tools_unsupported" else "completed", 0) > 0
+                                 for kind in kinds if kind != "cancel"),
     }
     if not args.smoke:
         checks["p95_drift_at_most_5_percent"] = all(value is not None and value <= 5 for value in drift.values())
@@ -367,6 +382,8 @@ async def soak(args, *, open_proc=open_host_proc):
               "rss_samples": samples, "initial": initial, "final": final, "counter_changes": counter_changes}
     if smaps_comparison is not None:
         result["smaps_rollup_second_half"] = smaps_comparison
+    if expect_tools_unsupported:
+        result["expect_tools_unsupported"] = True
     return result
 
 
@@ -381,11 +398,15 @@ def main():
     parser.add_argument("--out")
     parser.add_argument("--shared-prefix", action="store_true", help="reuse eight fixed prefixes in the long-prompt traffic")
     parser.add_argument("--smoke", action="store_true", help="short runtime check without a latency-drift verdict")
+    parser.add_argument("--expect-tools-unsupported", action="store_true",
+                        help="validate the explicit template tool rejection instead of generating tool calls in smoke")
     parser.add_argument("--require-zero-rss-growth", action="store_true",
                         help="fail if Linux smaps_rollup RSS grows from the first second-half sample to drain, or either reading is missing")
     args = parser.parse_args()
     if not math.isfinite(args.seconds) or args.seconds <= 0 or not math.isfinite(args.rate) or args.rate <= 0:
         parser.error("seconds and rate must be finite and positive")
+    if args.expect_tools_unsupported and not args.smoke:
+        parser.error("--expect-tools-unsupported requires --smoke")
     open_proc = open_host_proc
     if args.docker_container is not None:
         if not re.fullmatch(r"[0-9a-f]{64}", args.docker_container) or args.pid <= 0:

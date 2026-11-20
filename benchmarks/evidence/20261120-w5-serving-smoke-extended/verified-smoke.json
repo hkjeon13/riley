@@ -1,0 +1,99 @@
+{
+  "remote_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-serving-smoke-extended-20261120.BMmj7efv",
+  "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+  "binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+  "gpu_uuid": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+  "idle_reservations_gib": {
+    "6": 20,
+    "7": 20
+  },
+  "results": {
+    "SmolLM2-1.7B-Instruct": {
+      "status": "execution_failed",
+      "exit": 1,
+      "driver_log_sha256": "bac490102fe78518e12f38ec5124b35a8afc071b8858a6a78a583be10e91afba",
+      "api_checks_passed": 33,
+      "api_failed_check_names": [
+        "legacy logprobs shape",
+        "tool_choice required",
+        "named tool_choice",
+        "auto tool call (model's own choice)",
+        "streamed tool call",
+        "tool result round trip"
+      ],
+      "kv_blocks_requested": 4096,
+      "attention_heads": 32,
+      "kv_heads": 32
+    },
+    "Qwen2.5-14B-Instruct": {
+      "status": "passed",
+      "exit": 0,
+      "api_checks": 40,
+      "checkpoint_sha256": "8210d56941a9c3a257f8f20ab65b40a19479f292036b2add12e66484b42e9e4d",
+      "checkpoint_source_model": "Qwen/Qwen2.5-14B-Instruct",
+      "checkpoint_source_revision": "cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8",
+      "report_sha256": "9706b279177c5542be1c18e891e1dd135c3dca692360dcb888f744710bcb3856",
+      "smoke_sha256": "321347fbb8fdee02f6a51d60d99fe5c67c81d2fd8995d7166eacacf1ec437ec8",
+      "smoke": {
+        "seconds": 45.0,
+        "rate": 8.0,
+        "counts": {
+          "plain": {
+            "completed": 202
+          },
+          "schema": {
+            "completed": 42,
+            "stop": 42
+          },
+          "logprobs": {
+            "completed": 23
+          },
+          "tools": {
+            "completed": 23,
+            "tool_calls": 23
+          },
+          "long": {
+            "completed": 30
+          },
+          "reason": {
+            "completed": 18
+          },
+          "cancel": {
+            "disconnected": 21
+          }
+        },
+        "counter_changes": {
+          "cancellations": 21,
+          "disconnects": 21,
+          "overloads": 0,
+          "dropped_observations": 0
+        },
+        "checks": {
+          "no_unexpected_http_or_stream_error": true,
+          "completed_schema_and_tool_covered": true,
+          "disconnects_observed": true,
+          "idle_after_drain": true,
+          "native_allocation_plateau": true,
+          "workload_coverage": true
+        },
+        "status": "passed",
+        "failed_checks": [],
+        "server_arguments": [
+          "--max-active-sequences",
+          "32",
+          "--max-sequence-tokens",
+          "8192",
+          "--max-output-tokens",
+          "512",
+          "--kv-blocks",
+          "2576",
+          "--prefix-cache-blocks",
+          "128"
+        ]
+      },
+      "kv_blocks_requested": 2576,
+      "attention_heads": 40,
+      "kv_heads": 8
+    }
+  }
+}

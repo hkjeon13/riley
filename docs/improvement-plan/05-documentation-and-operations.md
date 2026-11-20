@@ -100,9 +100,11 @@ python3.12 -B ci/check_distribution_gpu.py "$CPU_REPORT" "$GPU_UUID" \
   "$MODEL_DIR" "$MODEL_MANIFEST_SHA256" "$RUN_OUTPUT" --tools --serving-smoke
 ```
 
-하나의 loopback 컨테이너에서 API 검사 뒤 초당 평균 8건의 45초 혼합 부하를 실행한다. KV는 4,096블록, prefix cache는 128블록이다. 스키마·도구·logprobs·장문 요청의 완료와 의도적 연결 종료를 관측한다. Drain 뒤 활성 요청·KV와 GPU 및 pinned 할당의 회수도 확인한다. 30분 지연 드리프트와 정밀 RSS는 별도 `--mixed-soak` 모드의 판정 조건이다. [혼합 부하 검사기](../../benchmarks/live/soak.py)
+채팅 템플릿이 도구를 지원하지 않는 체크포인트는 `--expect-tools-unsupported --serving-smoke`로 실행한다. 혼합 부하에도 동일한 도구 요청을 보내며 그 응답은 HTTP 400, `unsupported_parameter`, `param=tools`와 템플릿 오류 메시지를 대조한다. 구형 logprobs는 완료 토큰 사용량과 배열 길이를 맞추고, 자연 종료에서는 출력 상한 전에 멈춘 응답도 검사한다. [API 검사기](../../benchmarks/live/api_check.py)
 
-A100 7번의 검증 이미지에서 2-KV-head GQA와 Qwen3 모델이 각각 API 40건과 혼합 부하를 통과했다. 현재 실행은 전용 호스트 CLI로 재현한다. GitHub의 자동 GPU 실행은 runner와 체크포인트 경로가 확보된 뒤 설정한다. [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)
+하나의 loopback 컨테이너에서 API 검사 뒤 초당 평균 8건의 45초 혼합 부하를 실행한다. 기본 KV 풀은 4,096블록이며 `--smoke-kv-blocks`에 모델별 용량을 지정할 수 있다. 명시한 값은 실행 보고서의 서버 인자에 기록된다. Prefix cache는 128블록이다. 스키마·도구·logprobs·장문 요청의 완료와 의도적 연결 종료를 관측한다. Drain 뒤 활성 요청·KV와 GPU 및 pinned 할당의 회수도 확인한다. 30분 지연 드리프트와 정밀 RSS는 `--mixed-soak` 모드에서 판정한다. [혼합 부하 검사기](../../benchmarks/live/soak.py)
+
+A100 7번의 검증 이미지에서 2-KV-head GQA, Qwen3, MHA, 14B에 대해 체크포인트별 도구 지원 계약과 혼합 부하를 검증했다. 현재 실행은 전용 호스트 CLI로 재현한다. GitHub의 자동 GPU 실행은 runner와 체크포인트 경로가 확보된 뒤 설정한다. [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)
 
 ## 4. 관측을 통해 새 문제를 찾는 방법
 
@@ -199,6 +201,7 @@ Qwen2.5-7B-Instruct의 A100 네이티브 실행에서 각 30분 동안 초당 �
 - [x] W5-A: 점검한 사용자 문서의 버전·기본값·성능 주장을 소스나 해당 실행에 연결하고 과거 측정 시점을 표시했다. [주장별 확인 기록](#w5-a1-주장별-근거-목록-작성)
 - [x] W5-B: A100에서 네이티브 모델 추론을 실제로 실행했고, 통과·초기 실패·미검증 범위를 기록했다. [운영 결과](05-mixed-soak-result.md)
 - [x] 배포 이미지 smoke에서 Qwen2.5-3B와 Qwen3-4B의 API 각 40건, 정상 완료 각 338건, 의도적 연결 종료 각 21건과 GPU 자원 회수를 확인했다. [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)
+- [x] SmolLM2 MHA의 지원 범위에 맞춘 API 39건과 Qwen2.5-14B의 API 40건을 확인했다. 두 모델의 혼합 부하·취소·GPU 자원 회수도 통과했다. [MHA·14B 결과](05-mixed-soak-result.md#배포-이미지의-mha와-14b-smoke)
 - [x] 기준 A100 이미지와 파생 할당기 시험 이미지의 실행 근거를 하나의 매니페스트에 연결했다. 파생 시험의 correctness·API·performance·soak·패키징은 CI가 동일 이미지 및 설정인지 검사한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 - [x] prefix cache·취소·shutdown을 합성 부하에서 검증하고 1Hz 추가 조회의 CPU·GPU·지연·RSS 비용을 교차 대조했다. 큰 RSS 증가는 두 실행 모두 첫 부하에서 나타났고, 워밍업 뒤 추가 조회와 기준의 변화량 차이는 −280KiB와 +260KiB였다. [운영 결과](05-mixed-soak-result.md#워밍업-후-역순-교차-대조)
 - [x] 합성 부하의 분포와 확인 기준, 실패 분류 및 회수 절차를 기록했다. [합성 부하의 확인 기준](#합성-부하의-확인-기준) · [후보 회수와 복구 확인](#후보-회수와-복구-확인)

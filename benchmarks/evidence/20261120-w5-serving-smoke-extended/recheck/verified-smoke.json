@@ -1,0 +1,78 @@
+{
+  "remote_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-serving-smoke-recheck-20261120.PsNfm6KN",
+  "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+  "binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+  "gpu_uuid": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+  "checkpoint_sha256": "592dba98659d43036538251cd53b8f76e0cf6ea292564cf4b3c300f1f6f11753",
+  "model": "SmolLM2-1.7B-Instruct",
+  "gpu_idle_reservations_gib": {
+    "6": 20,
+    "7": 20
+  },
+  "prior_result_sha256": "25a81a0d1e244d0baeebcfabc0dbb09629587702b683c9805c83e1ee6b7bd9d3",
+  "exit": 0,
+  "api_checks": 39,
+  "api_checks_passed": 39,
+  "api_failed_check_names": [],
+  "status": "passed",
+  "smoke": {
+    "seconds": 45.0,
+    "rate": 8.0,
+    "counts": {
+      "plain": {
+        "completed": 202
+      },
+      "schema": {
+        "completed": 42,
+        "stop": 42
+      },
+      "logprobs": {
+        "completed": 23
+      },
+      "tools_unsupported": {
+        "unsupported": 23
+      },
+      "long": {
+        "completed": 30
+      },
+      "reason": {
+        "completed": 18
+      },
+      "cancel": {
+        "disconnected": 21
+      }
+    },
+    "counter_changes": {
+      "cancellations": 21,
+      "disconnects": 21,
+      "overloads": 0,
+      "dropped_observations": 0
+    },
+    "checks": {
+      "no_unexpected_http_or_stream_error": true,
+      "completed_schema_and_tool_covered": true,
+      "disconnects_observed": true,
+      "idle_after_drain": true,
+      "native_allocation_plateau": true,
+      "workload_coverage": true
+    },
+    "status": "passed",
+    "failed_checks": [],
+    "server_arguments": [
+      "--max-active-sequences",
+      "32",
+      "--max-sequence-tokens",
+      "8192",
+      "--max-output-tokens",
+      "512",
+      "--kv-blocks",
+      "4096",
+      "--prefix-cache-blocks",
+      "128"
+    ],
+    "expect_tools_unsupported": true
+  },
+  "report_sha256": "53e9ae317cc7da95a42f5474dfd824e718f6be77c161968efa2d459ee003d437",
+  "smoke_sha256": "93226076eb82f0aa7285902a915b62d26deeb19841bb3bd42fa3375d65d3881e",
+  "checkpoint_source_revision": "31b70e2e869a7173562077fd711b654946d38674"
+}

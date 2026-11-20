@@ -127,7 +127,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W4: 문서화한 스키마 부분집합을 독립 판정과 대조하고, 미지원 제약의 오류를 검증했다. [스키마 검증](04-structured-output-result.md)
 - [ ] W2·W3: 단독·결합 결과에서 기존 정확성·회귀 가드레일을 충족한다. W2의 단일 iteration 후보 두 개는 미채택했고, W3의 1,024행 QKV 형상 공통 적용은 Coder-14B decode 회귀로 기각했다. [W2 후보 결과](02-async-step-result.md#커밋된-이벤트-데이터의-복사-제거) · [W3 Coder-14B 결과](03-long-context-result.md#coder-14b의-1024행-후보-검증)
 - [x] W5: 대상 GPU에서 배포 이미지의 실제 추론과 cache-on·off 30분 부하 증거를 확보했다. [운영 결과와 판정](05-mixed-soak-result.md#배포-이미지의-혼합-부하)
-- [x] W5: 배포 이미지의 45초 smoke를 추가하고 두 대표 모델에서 API·혼합 부하·취소·종료 회수를 검증했다. [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)
+- [x] W5: 배포 이미지의 45초 smoke에서 2-KV-head GQA·Qwen3·MHA·14B의 API 계약, 혼합 부하·취소·종료 회수를 검증했다. [MHA·14B 결과](05-mixed-soak-result.md#배포-이미지의-mha와-14b-smoke) [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)
 - [x] W5: 같은 이미지 두 개의 닫힌 RAG C8 3,072건에서 출력 일치와 seed별 꼬리 지연을 확인했다. Seed 2의 지연 증가가 반복됐다. [닫힌 RAG 확장 대조](05-mixed-soak-result.md#닫힌-rag-세-seed의-확장-교차-대조)
 - [ ] W5: 릴리스 대상 이미지에서 두 캐시 설정의 RSS 증가 0 운영 기준을 충족한다. 파생 시험 이미지 `1fc444b1840e`에서 두 설정이 통과했으며 최종 릴리스 판정이 남아 있다. [후보 판정](05-mixed-soak-result.md#즉시-반환-설정의-할당기-대조)
 - [ ] 문서의 버전·기본값·성능 주장은 같은 후보와 설정에 연결된다.

@@ -14,9 +14,25 @@
 | 의도적 연결 종료 / 서버 취소 증가 | 21 / 21 | 21 / 21 |
 | 예상 밖 HTTP·SSE 오류 / 429 | 0 / 0 | 0 / 0 |
 
-두 실행은 drain 뒤 활성·대기 요청과 요청 KV가 0이었고 종료 코드 0과 device·pinned 할당 0을 기록했다. GPU 6·7은 기존 홀더의 20GiB 예약을 확인했다. 배치 정확성의 이번 범위는 API의 동시 요청에서 확인한 텍스트와 스키마 응답이다. CUDA iteration 단위의 prefill·decode 동시 실행 계측 및 MHA·14B 확대는 추가 검증 범위다. [검사기](../../benchmarks/evidence/20261120-w5-serving-smoke/verify_smoke.py)
+두 실행은 drain 뒤 활성·대기 요청과 요청 KV가 0이었고 종료 코드 0과 device·pinned 할당 0을 기록했다. GPU 6·7은 기존 홀더의 20GiB 예약을 확인했다. 배치 정확성의 이번 범위는 API의 동시 요청에서 확인한 텍스트와 스키마 응답이다. CUDA iteration 단위의 prefill·decode 동시 실행 계측은 추가 검증 범위다. [검사기](../../benchmarks/evidence/20261120-w5-serving-smoke/verify_smoke.py)
 
 초기 시작 시도에서는 Python 의존 모듈 누락으로 컨테이너 생성 전에 종료했다. 의존 모듈 보완 뒤 두 원본 모델 디렉터리의 권한이 `0700`, 파일은 `0600`이라 비루트 이미지 사용자의 기동이 실패했다. 검증 전용 경로에 manifest와 payload 사본을 만들고 비루트 계정의 읽기를 확인한 뒤 실제 실행했다. 체크포인트 해시는 같았고 공유 모델의 권한을 보존했다. [체크포인트 준비 코드](../../benchmarks/evidence/20261120-w5-serving-smoke/prepare_model.py) · [집계 재현](../../benchmarks/evidence/20261120-w5-serving-smoke/fetch-summary.sh)
+
+### 배포 이미지의 MHA와 14B smoke
+
+같은 이미지 `0a907408ec73`를 A100 7번에서 실행했다. SmolLM2-1.7B-Instruct는 attention head와 KV head가 모두 32개인 MHA 모델이다. 이 모델에는 기본 KV 4,096블록을 썼다. Qwen2.5-14B-Instruct에는 이전 장문 검증에서 쓴 2,576블록을 `--smoke-kv-blocks`로 넘겼다. 두 실행은 45초·평균 초당 8건·prefix cache 128블록을 유지했다. [최초 실행과 14B 판정](../../benchmarks/evidence/20261120-w5-serving-smoke-extended/verified-smoke.json) · [MHA 재검증](../../benchmarks/evidence/20261120-w5-serving-smoke-extended/recheck/verified-smoke.json)
+
+| 항목 | SmolLM2-1.7B-Instruct 재검증 | Qwen2.5-14B-Instruct |
+|---|---:|---:|
+| API 통과 | 39/39 | 40/40 |
+| 혼합 부하 정상 완료 | 315 | 338 |
+| 지원 범위에 맞는 도구 응답 | HTTP 400 거부 23 | 필수 호출 완료 23 |
+| 의도적 연결 종료와 서버 취소 증가 | 21 / 21 | 21 / 21 |
+| 예상 밖 HTTP·SSE 오류와 429 | 0 / 0 | 0 / 0 |
+
+SmolLM2 최초 실행은 39건 중 33건이 통과했다. 일반·동시성·스키마 검사는 통과했고 해당 채팅 템플릿의 도구 요청은 `unsupported_parameter`로 거부됐다. 구형 logprobs의 자연 종료에서 토큰 3개가 돌아왔고 기존 검사는 출력 상한인 5개를 요구했다. 재검증은 사용량과 네 logprobs 배열 길이·종료 사유를 맞추고, `--expect-tools-unsupported`에서 비스트리밍과 스트리밍 요청의 정확한 오류 응답을 각각 확인했다. [API 검사기](../../benchmarks/live/api_check.py) · [MHA 재검증 실행기](../../benchmarks/evidence/20261120-w5-serving-smoke-extended/recheck/campaign.sh)
+
+두 완료 실행은 drain 및 shutdown 검사를 통과하고 GPU 6·7의 기존 20GiB 예약으로 복귀했다. 14B는 최초 캠페인의 도구 지원 모드로 통과했고, MHA는 새 도구 미지원 검사 모드에서 통과했다. 두 모델의 45초 혼합 부하는 작업 종료와 API 계약을 검증한다. [14B 용량과 준비된 모델 해시](../../benchmarks/evidence/20261120-w5-serving-smoke-extended/models.tsv) · [원본 재검산](../../benchmarks/evidence/20261120-w5-serving-smoke-extended/recheck/fetch-summary.sh)
 
 ## 90초 사전 검증
 

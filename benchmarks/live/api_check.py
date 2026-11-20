@@ -14,7 +14,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("address")
 parser.add_argument("model")
 parser.add_argument("--key")
-parser.add_argument("--tools", action="store_true")
+tool_mode = parser.add_mutually_exclusive_group()
+tool_mode.add_argument("--tools", action="store_true")
+tool_mode.add_argument("--expect-tools-unsupported", action="store_true")
 parser.add_argument("--out")
 args = parser.parse_args()
 HOST, PORT = args.address.split(":")
@@ -130,9 +132,16 @@ if content:
           all(sum(2.718281828 ** t["logprob"] for t in entry["top_logprobs"]) <= 1.0001 for entry in content))
 status, body = post("/v1/completions", {"model": args.model, "prompt": "The capital of France is",
                                         "max_tokens": 5, "logprobs": 2, "temperature": 0})
-legacy = json.loads(body)["choices"][0].get("logprobs") or {}
+legacy_reply = json.loads(body)
+choice = (legacy_reply.get("choices") or [{}])[0]
+legacy = choice.get("logprobs") or {}
+generated = legacy_reply.get("usage", {}).get("completion_tokens")
+finish = choice.get("finish_reason")
 check("legacy logprobs shape",
-      status == 200 and len(legacy.get("tokens", [])) == 5 and len(legacy["token_logprobs"]) == 5
+      status == 200 and type(generated) is int and 0 < generated <= 5
+      and (finish == "stop" or finish == "length" and generated == 5)
+      and all(isinstance(legacy.get(key), list) and len(legacy[key]) == generated
+              for key in ("tokens", "token_logprobs", "top_logprobs", "text_offset"))
       and all(len(top) == 2 for top in legacy["top_logprobs"]) and legacy["text_offset"][0] == 0, body[:300])
 status, reply = chat(messages=user(PROMPTS[1]), logprobs=True, temperature=0.8, seed=7, max_tokens=16)
 check("sampled logprobs", status == 200 and len(reply["choices"][0]["logprobs"]["content"]) > 0
@@ -216,7 +225,7 @@ with futures.ThreadPoolExecutor(16) as pool:
     differing = [(p, f.result(), alone[p]) for p, f in jobs if f.result() != alone[p]]
 check("schema output is concurrency-invariant", not differing, differing[:1])
 
-if args.tools:
+if args.tools or args.expect_tools_unsupported:
     tools = [{"type": "function", "function": {
         "name": "get_weather", "description": "Current weather for a city",
         "parameters": {"type": "object", "properties": {
@@ -227,6 +236,7 @@ if args.tools:
             "parameters": {"type": "object", "properties": {
                 "a": {"type": "integer"}, "b": {"type": "integer"}}, "required": ["a", "b"]}}}]
     question = user("What is the weather in Seoul right now?")
+if args.tools:
     status, reply = chat(messages=question, tools=tools, tool_choice="required", max_tokens=96)
     choice = reply.get("choices", [{}])[0]
     calls = choice.get("message", {}).get("tool_calls") or []
@@ -260,6 +270,25 @@ if args.tools:
     status, reply = chat(messages=follow, tools=tools, max_tokens=64)
     answer = reply.get("choices", [{}])[0].get("message", {}).get("content") or ""
     check("tool result round trip", status == 200 and "21" in answer, reply)
+elif args.expect_tools_unsupported:
+    for label, options in (
+        ("required", {"tool_choice": "required"}),
+        ("named", {"tool_choice": {"type": "function", "function": {"name": "add"}}}),
+        ("auto", {}),
+        ("streamed", {"stream": True, "tool_choice": "required"}),
+        ("tool result", {"messages": question + [
+            {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "c", "type": "function", "function": {"name": "get_weather", "arguments": "{}"}}]},
+            {"role": "tool", "tool_call_id": "c", "content": "21"},
+        ]}),
+    ):
+        status, reply = chat(**{"messages": question, "tools": tools, **options})
+        error = reply.get("error", {})
+        check(f"unsupported tools: {label}", status == 400 and error.get("type") == "invalid_request_error"
+              and error.get("code") == "unsupported_parameter" and error.get("param") == "tools"
+              and error.get("message") == "this model's chat template does not support tools", reply)
+    status, reply = chat(messages=question, tools=tools, tool_choice="none", max_tokens=24)
+    check("tool_choice none", status == 200 and not reply["choices"][0]["message"].get("tool_calls"), reply)
 
 passed = sum(result["passed"] for result in RESULTS)
 print(f"{passed}/{len(RESULTS)} checks passed")

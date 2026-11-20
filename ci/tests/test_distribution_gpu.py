@@ -51,6 +51,7 @@ class DistributionGpuTest(unittest.TestCase):
         self.create_interrupted = False
         self.name = None
         self.calls = []
+        self.client_commands = {}
         self.out = self.root / "evidence"
 
     def docker(self, *args):
@@ -93,9 +94,11 @@ class DistributionGpuTest(unittest.TestCase):
         def log_command(out, file, argv, _seconds, **_kwargs):
             (out / file).write_text("fixture log\n")
             if file == "api.log":
+                self.client_commands[file] = argv
                 self.assertIn("127.0.0.1:44321", argv)
                 (out / "api.json").write_text(json.dumps({"results": [{"passed": self.api_pass}]}))
             if file == "smoke.log":
+                self.client_commands[file] = argv
                 self.assertIn("--smoke", argv)
                 self.assertNotIn("--require-zero-rss-growth", argv)
                 self.assertEqual(argv[argv.index("--docker-container") + 1], self.container)
@@ -107,6 +110,7 @@ class DistributionGpuTest(unittest.TestCase):
                     "status": "passed" if passed else "failed", "mode": "smoke",
                     "seconds": checker.SMOKE_SECONDS, "rate": 8, "shared_prefixes": 8,
                     "counts": {}, "counter_changes": {}, "checks": checks,
+                    "expect_tools_unsupported": "--expect-tools-unsupported" in argv,
                     "rss_source": {"container_id": self.container, "host_pid": self.pid, "container_pid": 1},
                 }))
                 return subprocess.CompletedProcess(argv, int(not passed))
@@ -204,6 +208,28 @@ class DistributionGpuTest(unittest.TestCase):
                 self.check(serving_smoke=True, **options)
         self.assertFalse(self.out.exists())
         self.assertFalse(self.calls)
+
+    def test_serving_smoke_can_use_a_reviewed_smaller_kv_pool(self):
+        self.assertEqual(self.check(serving_smoke=True, smoke_kv_blocks=2576), 0)
+        report = json.loads((self.out / "report.json").read_bytes())
+        create = next(call for call in self.calls if call[0] == "create")
+        self.assertEqual(list(create[-10:]), report["serving_smoke"]["server_arguments"])
+        self.assertEqual(list(create[-4:]), ["--kv-blocks", "2576", "--prefix-cache-blocks", "128"])
+
+    def test_smoke_kv_pool_requires_smoke_and_positive_capacity(self):
+        for options in ({"smoke_kv_blocks": 2576}, {"serving_smoke": True, "smoke_kv_blocks": 0}):
+            with self.subTest(options=options), self.assertRaisesRegex(ValueError, "requires serving smoke"):
+                self.check(**options)
+        self.assertFalse(self.calls)
+        self.assertFalse(self.out.exists())
+
+    def test_serving_smoke_checks_unsupported_tools_in_api_and_mixed_traffic(self):
+        self.assertEqual(self.check(serving_smoke=True, expect_tools_unsupported=True), 0)
+        for argv in self.client_commands.values():
+            self.assertIn("--expect-tools-unsupported", argv)
+            self.assertNotIn("--tools", argv)
+        report = json.loads((self.out / "report.json").read_bytes())
+        self.assertIs(report["serving_smoke"]["expect_tools_unsupported"], True)
 
     def test_checkpoint_drift_prevents_container_creation(self):
         with self.assertRaisesRegex(ValueError, "checkpoint manifest differs"):
