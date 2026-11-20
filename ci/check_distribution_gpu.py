@@ -23,6 +23,7 @@ SHUTDOWN = "/tmp/riley-distribution-shutdown.json"
 API_CHECK = Path(__file__).resolve().parents[1] / "benchmarks/live/api_check.py"
 ACCURACY_CHECK = API_CHECK.with_name("long_accuracy.py")
 SOAK_CHECK = API_CHECK.with_name("soak.py")
+MIXED_STAGE_CHECK = API_CHECK.with_name("mixed_stage_check.py")
 CACHE_BLOCKS = {"cache-off": None, "cache-on": 128}
 SMOKE_SECONDS = 45
 SMOKE_KV_BLOCKS = 4096
@@ -172,12 +173,15 @@ def find_interrupted_container(name):
 
 
 def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_baseline=None, accuracy_holdout=None,
-              mixed_soak=None, serving_smoke=False, smoke_kv_blocks=None, expect_tools_unsupported=False):
+              mixed_soak=None, serving_smoke=False, smoke_kv_blocks=None, expect_tools_unsupported=False,
+              mixed_stage=False):
     require(GPU_UUID.fullmatch(gpu) and SHA256.fullmatch(model_sha), "pass a GPU UUID and model SHA-256")
     require(mixed_soak is None or (mixed_soak in CACHE_BLOCKS and not (accuracy_baseline or accuracy_holdout)),
             "select mixed soak or long accuracy for each container")
     require(not serving_smoke or not (accuracy_baseline or accuracy_holdout or mixed_soak),
             "select serving smoke separately from mixed soak and long accuracy")
+    require(not mixed_stage or not (accuracy_baseline or accuracy_holdout or mixed_soak or serving_smoke),
+            "select the mixed-stage probe separately from other workloads")
     require(not expect_tools_unsupported or serving_smoke and not tools,
             "--expect-tools-unsupported requires serving smoke and excludes --tools")
     if smoke_kv_blocks is not None:
@@ -206,6 +210,7 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
     accuracy = {}
     soak = None
     smoke = None
+    stage = None
     server_args = ()
     if accuracy_baseline or accuracy_holdout:
         server_args = ("--max-active-sequences", "32", "--max-sequence-tokens", "8192", "--max-output-tokens", "256")
@@ -217,6 +222,11 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
     elif serving_smoke:
         blocks = SMOKE_KV_BLOCKS if smoke_kv_blocks is None else smoke_kv_blocks
         server_args = (*MIXED_SERVER_ARGS, "--kv-blocks", str(blocks), "--prefix-cache-blocks", "128")
+    elif mixed_stage:
+        server_args = ("--inference-profile", "native-bf16-varlen-v1", "--max-active-sequences", "2",
+                       "--max-sequence-tokens", "8192", "--max-output-tokens", "256", "--kv-blocks", "4096",
+                       "--batch-token-budget", "512", "--prefill-chunk-tokens", "256", "--batch-shape-buckets",
+                       "1,2,4,8,16,24,32,48,64,80,96,112,128,144,160,176,192,208,224,240,256,512")
     mount = f"type=bind,source={model_dir},target=/models,readonly"
     name = f"riley-gpu-check-{uuid4().hex}"
     container = None
@@ -276,6 +286,16 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
             smoke.update(status=smoke_status, failed_checks=failed, server_arguments=list(server_args))
             if expect_tools_unsupported:
                 smoke["expect_tools_unsupported"] = True
+        if mixed_stage:
+            path = out / "mixed-stage.json"
+            log_command(out, "mixed-stage.log",
+                        [sys.executable, "-B", str(MIXED_STAGE_CHECK), address, "m", "--out", str(path)], 600)
+            stage = json.loads(path.read_bytes())
+            require(stage["status"] == "passed" and stage["prefill_chunk_tokens"] == 256 and len(stage["trials"]) == 3
+                    and all(trial["matching_responses"] == 2 and trial["witnesses"] for trial in stage["trials"]),
+                    "mixed-stage evidence does not cover three matched trials")
+            stage = {"matching_responses": 6, "observed_mixed_iterations": sum(
+                len(trial["witnesses"]) for trial in stage["trials"]), "server_arguments": list(server_args)}
         require(gpu_pids(gpu) == holders | {riley_pid}, "GPU process ownership changed during inference checks")
         require(digest(manifest) == model_sha, "checkpoint manifest changed during inference checks")
 
@@ -314,6 +334,8 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
         result["soak_server_arguments"] = list(server_args)
     if smoke is not None:
         result["serving_smoke"] = smoke
+    if stage is not None:
+        result["mixed_stage"] = stage
     with (out / "report.json").open("x") as handle:
         json.dump(result, handle, indent=2)
         handle.write("\n")
@@ -338,6 +360,8 @@ def main():
     parser.add_argument("--mixed-soak", choices=CACHE_BLOCKS, help="run the strict 30-minute W5 load in this cache mode")
     parser.add_argument("--serving-smoke", action="store_true",
                         help="combine API checks with 45 seconds of mixed traffic and cancellation")
+    parser.add_argument("--mixed-stage", action="store_true",
+                        help="compare singleton streams and witness committed mixed prefill/decode iterations")
     parser.add_argument("--smoke-kv-blocks", type=int,
                         help=f"set the serving smoke KV pool (default: {SMOKE_KV_BLOCKS} blocks)")
     args = parser.parse_args()
@@ -349,7 +373,7 @@ def main():
     return check_gpu(args.cpu_report, args.gpu_uuid, args.model_dir, args.model_manifest_sha256, args.output, args.tools,
                      accuracy_baseline=args.accuracy_baseline, accuracy_holdout=args.accuracy_holdout,
                      mixed_soak=args.mixed_soak, serving_smoke=args.serving_smoke, smoke_kv_blocks=args.smoke_kv_blocks,
-                     expect_tools_unsupported=args.expect_tools_unsupported)
+                     expect_tools_unsupported=args.expect_tools_unsupported, mixed_stage=args.mixed_stage)
 
 
 if __name__ == "__main__":

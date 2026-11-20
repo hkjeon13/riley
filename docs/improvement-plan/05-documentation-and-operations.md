@@ -106,6 +106,15 @@ python3.12 -B ci/check_distribution_gpu.py "$CPU_REPORT" "$GPU_UUID" \
 
 A100 7번의 검증 이미지에서 2-KV-head GQA, Qwen3, MHA, 14B에 대해 체크포인트별 도구 지원 계약과 혼합 부하를 검증했다. 현재 실행은 전용 호스트 CLI로 재현한다. GitHub의 자동 GPU 실행은 runner와 체크포인트 경로가 확보된 뒤 설정한다. [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)
 
+#### 한 GPU iteration의 prefill·decode 대조
+
+`--mixed-stage`는 단독 실행 두 건과 동시 실행 세 쌍을 같은 배포 컨테이너에서 비교한다. 배치 예산 512, 요청별 prefill 한도 256, 활성 요청 한도 2를 명시한다. 첫 요청의 생성 토큰을 8개 이상 받은 뒤 두 번째 요청을 보낸다. 이 조건에서 커밋된 실제 행 257개를 관측하면 prefill 256행과 decode 1행이 한 GPU iteration에 포함된 것이다. 패딩 행 수와 GPU 실행 시간도 함께 기록한다. 스트림의 입력·생성 토큰 ID, 텍스트, 종료 사유와 사용량을 단독 실행 값과 대조한다. [검사기](../../benchmarks/live/mixed_stage_check.py) · [커밋된 shape 기록](../../crates/riley-server/src/engine.rs#L4362) · [prefill과 decode 행 제한](../../crates/riley-scheduler/src/scheduler.rs#L1827)
+
+```bash
+python3.12 -B ci/check_distribution_gpu.py "$CPU_REPORT" "$GPU_UUID" \
+  "$MODEL_DIR" "$MODEL_MANIFEST_SHA256" "$RUN_OUTPUT" --tools --mixed-stage
+```
+
 ## 4. 관측을 통해 새 문제를 찾는 방법
 
 현재 `/metrics`는 JSON의 요청·KV·할당·batch shape·취소·과부하 관측을 제공한다. 다음은 추가 제안이며 현재 endpoint가 모두 제공하는 필드는 아니다.
@@ -202,6 +211,7 @@ Qwen2.5-7B-Instruct의 A100 네이티브 실행에서 각 30분 동안 초당 �
 - [x] W5-B: A100에서 네이티브 모델 추론을 실제로 실행했고, 통과·초기 실패·미검증 범위를 기록했다. [운영 결과](05-mixed-soak-result.md)
 - [x] 배포 이미지 smoke에서 Qwen2.5-3B와 Qwen3-4B의 API 각 40건, 정상 완료 각 338건, 의도적 연결 종료 각 21건과 GPU 자원 회수를 확인했다. [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)
 - [x] SmolLM2 MHA의 지원 범위에 맞춘 API 39건과 Qwen2.5-14B의 API 40건을 확인했다. 두 모델의 혼합 부하·취소·GPU 자원 회수도 통과했다. [MHA·14B 결과](05-mixed-soak-result.md#배포-이미지의-mha와-14b-smoke)
+- [x] 배포 이미지에서 prefill 256행과 decode 1행을 함께 처리한 커밋된 GPU iteration 36개를 관측했다. 혼합 응답 6건은 단독 실행과 토큰 ID까지 일치했다. [혼합 iteration 결과](05-mixed-soak-result.md#배포-이미지의-커밋된-혼합-gpu-iteration)
 - [x] 기준 A100 이미지와 파생 할당기 시험 이미지의 실행 근거를 하나의 매니페스트에 연결했다. 파생 시험의 correctness·API·performance·soak·패키징은 CI가 동일 이미지 및 설정인지 검사한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 - [x] prefix cache·취소·shutdown을 합성 부하에서 검증하고 1Hz 추가 조회의 CPU·GPU·지연·RSS 비용을 교차 대조했다. 큰 RSS 증가는 두 실행 모두 첫 부하에서 나타났고, 워밍업 뒤 추가 조회와 기준의 변화량 차이는 −280KiB와 +260KiB였다. [운영 결과](05-mixed-soak-result.md#워밍업-후-역순-교차-대조)
 - [x] 합성 부하의 분포와 확인 기준, 실패 분류 및 회수 절차를 기록했다. [합성 부하의 확인 기준](#합성-부하의-확인-기준) · [후보 회수와 복구 확인](#후보-회수와-복구-확인)

@@ -97,6 +97,12 @@ class DistributionGpuTest(unittest.TestCase):
                 self.client_commands[file] = argv
                 self.assertIn("127.0.0.1:44321", argv)
                 (out / "api.json").write_text(json.dumps({"results": [{"passed": self.api_pass}]}))
+            if file == "mixed-stage.log":
+                self.assertIn("127.0.0.1:44321", argv)
+                (out / "mixed-stage.json").write_text(json.dumps({
+                    "status": "passed", "prefill_chunk_tokens": 256,
+                    "trials": [{"matching_responses": 2, "witnesses": [{}]} for _ in range(3)],
+                }))
             if file == "smoke.log":
                 self.client_commands[file] = argv
                 self.assertIn("--smoke", argv)
@@ -215,6 +221,19 @@ class DistributionGpuTest(unittest.TestCase):
         create = next(call for call in self.calls if call[0] == "create")
         self.assertEqual(list(create[-10:]), report["serving_smoke"]["server_arguments"])
         self.assertEqual(list(create[-4:]), ["--kv-blocks", "2576", "--prefix-cache-blocks", "128"])
+
+    def test_mixed_stage_binds_the_observation_to_the_server_capacity_and_receipt(self):
+        self.assertEqual(self.check(mixed_stage=True), 0)
+        report = json.loads((self.out / "report.json").read_bytes())
+        mixed = report["mixed_stage"]
+        self.assertEqual(mixed["matching_responses"], 6)
+        self.assertEqual(mixed["observed_mixed_iterations"], 3)
+        create = next(call for call in self.calls if call[0] == "create")
+        self.assertEqual(list(create[-16:]), mixed["server_arguments"])
+        self.assertEqual(list(create[-6:-2]), ["--batch-token-budget", "512", "--prefill-chunk-tokens", "256"])
+        self.assertEqual(create[-2], "--batch-shape-buckets")
+        self.assertEqual(create[-1].split(",")[-1], "512")
+        self.assertEqual(report["artifacts_sha256"]["mixed-stage.json"], checker.digest(self.out / "mixed-stage.json"))
 
     def test_smoke_kv_pool_requires_smoke_and_positive_capacity(self):
         for options in ({"smoke_kv_blocks": 2576}, {"serving_smoke": True, "smoke_kv_blocks": 0}):

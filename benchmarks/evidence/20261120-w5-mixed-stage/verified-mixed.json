@@ -1,0 +1,473 @@
+{
+  "remote_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-mixed-stage-20261120.GS92kEMU",
+  "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+  "riley_binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+  "gpu_uuid": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "api_checks": 40,
+  "original_report_sha256": "7d66e17226ced858eb2a91fbc153f50d112fc10a6dab0a5faa8603b02042bfd6",
+  "original_mixed_sha256": "82101deb0f2959c38e3ffef0977781c00a27c879c08ff9f5a86d65ba5bab2be8",
+  "server_arguments": [
+    "--inference-profile",
+    "native-bf16-varlen-v1",
+    "--max-active-sequences",
+    "2",
+    "--max-sequence-tokens",
+    "8192",
+    "--max-output-tokens",
+    "256",
+    "--kv-blocks",
+    "4096",
+    "--batch-token-budget",
+    "512",
+    "--prefill-chunk-tokens",
+    "256",
+    "--batch-shape-buckets",
+    "1,2,4,8,16,24,32,48,64,80,96,112,128,144,160,176,192,208,224,240,256,512"
+  ],
+  "gpu_idle_reservations_gib": {
+    "6": 20,
+    "7": 20
+  },
+  "mixed": {
+    "status": "passed",
+    "prefill_chunk_tokens": 256,
+    "serial_max_active_rows": {
+      "decode": 26,
+      "prefill": 256
+    },
+    "baselines": {
+      "decode": {
+        "body_sha256": "2320965c2f374f684f362176d6e24aca4b8c770a0d8ec12447f2d5f23656d1d1",
+        "response_sha256": "049433733b5dc86e8846564e19bb1507c339147b7a06d83d564a4f107e3f6f9d",
+        "prompt_tokens": 26,
+        "generated_ids": 256,
+        "finish": "length"
+      },
+      "prefill": {
+        "body_sha256": "b30123d85d4ad44c0f66ca3a72eca9f5932a49e8e9f9ba2c00494184b103b48b",
+        "response_sha256": "f4d7036e72fa30f09bc0ae6b9c22338ecdfb57d92204cf85cae74bc6f4a6ea72",
+        "prompt_tokens": 3312,
+        "generated_ids": 47,
+        "finish": "stop"
+      }
+    },
+    "trials": [
+      {
+        "prelaunch": {
+          "iteration": 4356,
+          "inflight": 1,
+          "waiting": 0,
+          "kv_blocks": 3,
+          "active_rows": 1,
+          "selected_dense_rows": 1,
+          "padding_rows": 0,
+          "gpu_ns": 11457664
+        },
+        "witnesses": [
+          {
+            "iteration": 4358,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 19,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 32815487
+          },
+          {
+            "iteration": 4359,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 35,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 33973858
+          },
+          {
+            "iteration": 4360,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 51,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35145409
+          },
+          {
+            "iteration": 4361,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 67,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35371681
+          },
+          {
+            "iteration": 4362,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 83,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35245632
+          },
+          {
+            "iteration": 4363,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 99,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35265858
+          },
+          {
+            "iteration": 4364,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 115,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35437504
+          },
+          {
+            "iteration": 4365,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 131,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35779167
+          },
+          {
+            "iteration": 4366,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 147,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 36082783
+          },
+          {
+            "iteration": 4367,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 163,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 36190018
+          },
+          {
+            "iteration": 4368,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 179,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 36443424
+          },
+          {
+            "iteration": 4369,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 195,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 36659489
+          }
+        ],
+        "matching_responses": 2
+      },
+      {
+        "prelaunch": {
+          "iteration": 4612,
+          "inflight": 1,
+          "waiting": 0,
+          "kv_blocks": 3,
+          "active_rows": 1,
+          "selected_dense_rows": 1,
+          "padding_rows": 0,
+          "gpu_ns": 11470144
+        },
+        "witnesses": [
+          {
+            "iteration": 4614,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 19,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 32691681
+          },
+          {
+            "iteration": 4615,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 35,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 33918846
+          },
+          {
+            "iteration": 4616,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 51,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 34683487
+          },
+          {
+            "iteration": 4617,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 67,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 34827518
+          },
+          {
+            "iteration": 4618,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 83,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35088062
+          },
+          {
+            "iteration": 4619,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 99,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35328255
+          },
+          {
+            "iteration": 4620,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 115,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35555008
+          },
+          {
+            "iteration": 4621,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 131,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35825535
+          },
+          {
+            "iteration": 4622,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 147,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 36076351
+          },
+          {
+            "iteration": 4623,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 163,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 36223328
+          },
+          {
+            "iteration": 4624,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 179,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 36452831
+          },
+          {
+            "iteration": 4625,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 195,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 36657665
+          }
+        ],
+        "matching_responses": 2
+      },
+      {
+        "prelaunch": {
+          "iteration": 4868,
+          "inflight": 1,
+          "waiting": 0,
+          "kv_blocks": 3,
+          "active_rows": 1,
+          "selected_dense_rows": 1,
+          "padding_rows": 0,
+          "gpu_ns": 11458176
+        },
+        "witnesses": [
+          {
+            "iteration": 4870,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 19,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 32688511
+          },
+          {
+            "iteration": 4871,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 35,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 33906178
+          },
+          {
+            "iteration": 4872,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 51,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35120510
+          },
+          {
+            "iteration": 4873,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 67,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35100224
+          },
+          {
+            "iteration": 4874,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 83,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35518818
+          },
+          {
+            "iteration": 4875,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 99,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35431934
+          },
+          {
+            "iteration": 4876,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 115,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35799774
+          },
+          {
+            "iteration": 4877,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 131,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35780384
+          },
+          {
+            "iteration": 4878,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 147,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 35999454
+          },
+          {
+            "iteration": 4879,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 163,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 36242146
+          },
+          {
+            "iteration": 4880,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 179,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 36473728
+          },
+          {
+            "iteration": 4881,
+            "inflight": 2,
+            "waiting": 0,
+            "kv_blocks": 195,
+            "active_rows": 257,
+            "selected_dense_rows": 512,
+            "padding_rows": 255,
+            "gpu_ns": 36720257
+          }
+        ],
+        "matching_responses": 2
+      }
+    ],
+    "drained": {
+      "iteration": 5115,
+      "inflight": 0,
+      "waiting": 0,
+      "kv_blocks": 0,
+      "active_rows": 1,
+      "selected_dense_rows": 1,
+      "padding_rows": 0,
+      "gpu_ns": 11662368
+    }
+  }
+}

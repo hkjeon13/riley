@@ -14,7 +14,7 @@
 | 의도적 연결 종료 / 서버 취소 증가 | 21 / 21 | 21 / 21 |
 | 예상 밖 HTTP·SSE 오류 / 429 | 0 / 0 | 0 / 0 |
 
-두 실행은 drain 뒤 활성·대기 요청과 요청 KV가 0이었고 종료 코드 0과 device·pinned 할당 0을 기록했다. GPU 6·7은 기존 홀더의 20GiB 예약을 확인했다. 배치 정확성의 이번 범위는 API의 동시 요청에서 확인한 텍스트와 스키마 응답이다. CUDA iteration 단위의 prefill·decode 동시 실행 계측은 추가 검증 범위다. [검사기](../../benchmarks/evidence/20261120-w5-serving-smoke/verify_smoke.py)
+두 실행은 drain 뒤 활성·대기 요청과 요청 KV가 0이었고 종료 코드 0과 device·pinned 할당 0을 기록했다. GPU 6·7은 기존 홀더의 20GiB 예약을 확인했다. 배치 정확성의 이번 범위는 API의 동시 요청에서 확인한 텍스트와 스키마 응답이다. 같은 배포 이미지의 혼합 iteration은 아래에서 별도 요청 두 건으로 대조했다. [검사기](../../benchmarks/evidence/20261120-w5-serving-smoke/verify_smoke.py)
 
 초기 시작 시도에서는 Python 의존 모듈 누락으로 컨테이너 생성 전에 종료했다. 의존 모듈 보완 뒤 두 원본 모델 디렉터리의 권한이 `0700`, 파일은 `0600`이라 비루트 이미지 사용자의 기동이 실패했다. 검증 전용 경로에 manifest와 payload 사본을 만들고 비루트 계정의 읽기를 확인한 뒤 실제 실행했다. 체크포인트 해시는 같았고 공유 모델의 권한을 보존했다. [체크포인트 준비 코드](../../benchmarks/evidence/20261120-w5-serving-smoke/prepare_model.py) · [집계 재현](../../benchmarks/evidence/20261120-w5-serving-smoke/fetch-summary.sh)
 
@@ -33,6 +33,14 @@
 SmolLM2 최초 실행은 39건 중 33건이 통과했다. 일반·동시성·스키마 검사는 통과했고 해당 채팅 템플릿의 도구 요청은 `unsupported_parameter`로 거부됐다. 구형 logprobs의 자연 종료에서 토큰 3개가 돌아왔고 기존 검사는 출력 상한인 5개를 요구했다. 재검증은 사용량과 네 logprobs 배열 길이·종료 사유를 맞추고, `--expect-tools-unsupported`에서 비스트리밍과 스트리밍 요청의 정확한 오류 응답을 각각 확인했다. [API 검사기](../../benchmarks/live/api_check.py) · [MHA 재검증 실행기](../../benchmarks/evidence/20261120-w5-serving-smoke-extended/recheck/campaign.sh)
 
 두 완료 실행은 drain 및 shutdown 검사를 통과하고 GPU 6·7의 기존 20GiB 예약으로 복귀했다. 14B는 최초 캠페인의 도구 지원 모드로 통과했고, MHA는 새 도구 미지원 검사 모드에서 통과했다. 두 모델의 45초 혼합 부하는 작업 종료와 API 계약을 검증한다. [14B 용량과 준비된 모델 해시](../../benchmarks/evidence/20261120-w5-serving-smoke-extended/models.tsv) · [원본 재검산](../../benchmarks/evidence/20261120-w5-serving-smoke-extended/recheck/fetch-summary.sh)
+
+## 배포 이미지의 커밋된 혼합 GPU iteration
+
+2026-11-20 KST에 A100 7번에서 배포 이미지 `0a907408ec73`과 Qwen2.5-7B-Instruct를 검증했다. `native-bf16-varlen-v1`에 배치 예산 512, 요청별 prefill 한도 256, 활성 요청 한도 2를 지정했다. API 40건을 통과한 뒤 제어 요청과 혼합 요청을 같은 컨테이너에서 실행했다. 첫 기동은 512의 예산과 256에서 끝나는 기본 shape 목록의 불일치로 중단됐으며, 명시적으로 512행 버킷을 추가한 뒤 검증했다. [실행 순서](../../benchmarks/evidence/20261120-w5-mixed-stage/campaign.sh) · [대조와 체크섬](../../benchmarks/evidence/20261120-w5-mixed-stage/verified-mixed.json)
+
+단독 제어군은 26토큰 입력에서 256개를 생성한 요청과 3,312토큰 입력에서 47개를 생성한 요청이다. 단독 실행에서 관측한 최대 실제 행 수는 각각 26과 256이었다. 혼합 실행에서는 첫 요청의 생성 토큰을 8개 이상 받은 뒤 활성 요청 하나와 1행짜리 커밋을 확인하고, 같은 긴 입력을 두 번째 요청으로 보냈다. 세 쌍에서 각각 12개, 합계 36개의 커밋된 iteration을 관측했다. 각 관측의 실제 행은 257, 준비된 dense shape는 512행, 패딩은 255행이었다. 같은 스냅샷의 GPU 실행 시간은 양수였다. 첫 요청은 decode 중이고 두 번째 요청의 prefill 한도는 256이므로 각 관측은 prefill 256행과 decode 1행을 같은 iteration에 포함한다. [스케줄러의 요청별 행 한도](../../crates/riley-scheduler/src/scheduler.rs#L1827) · [실행 행 기록](../../crates/riley-server/src/engine.rs#L4276) · [관측값 검산기](../../benchmarks/evidence/20261120-w5-mixed-stage/verify_mixed.py)
+
+혼합 응답 6건 모두 각각의 단독 실행과 입력·생성 토큰 ID, 텍스트, 종료 사유 및 사용량이 일치했다. Drain의 활성·대기 요청과 KV는 각각 0이었다. 정상 종료에서 device·pinned 할당이 0이었고 GPU 6·7의 기존 20GiB 예약을 확인했다. 이 결과는 지정한 512행 예산의 실험 설정과 두 고정 요청에 해당한다. [실행 명령](05-documentation-and-operations.md#한-gpu-iteration의-prefilldecode-대조) · [집계 재현](../../benchmarks/evidence/20261120-w5-mixed-stage/fetch-summary.sh)
 
 ## 90초 사전 검증
 
