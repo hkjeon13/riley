@@ -1,0 +1,32 @@
+{
+  "scoped_binary_sha256": "a73745bd007a7fe8d075af5b1823a365edead470088e1797af31b574cae908ae",
+  "excluded_attempts": {
+    "initial_instrumentation": {
+      "stage": "w3-kv-pressure-20261120.3kvYNUwX",
+      "exit": 1,
+      "dispatch_sha256": "5eb4e57a3e60a7e0f9497e81051a98313ed7bb9a45650691700a4f5b6f628866"
+    },
+    "cuda_build": {
+      "stage": "w3-kv-pressure-retry-20261120.FFahBvG8",
+      "exit": 1,
+      "dispatch_sha256": "90213a1591f90ed623c666fdd3bf7bec16f97fdaefde35da7d5798ffc99ed4a1"
+    },
+    "initial_launch_directory": {
+      "stage": "w3-kv-pressure-run-20261120.vnvn1Qig",
+      "exit": 1,
+      "dispatch_sha256": "c8599a8ed085b12a8b5413bdeeb4f2f9d0bd8f0b4ea8f57f07050c521e6690b0"
+    },
+    "early_launch": {
+      "stage": "w3-kv-pressure-run-20261120.D5aRBXx4",
+      "exit": 1,
+      "dispatch_sha256": "5747a8cc341e1655d5df0e09dc80ef9efe00073be550de20e29236220e9ddcca"
+    }
+  },
+  "build_reused_without_changes": true,
+  "accepted_run": "w3-kv-pressure-run-20261120.Rj2dDhDH",
+  "first_setup_error": "ambiguous patch context",
+  "build_stage_gate": "GPU 6 had another process",
+  "initial_launch_error": "missing parent directory",
+  "early_launch_error": "reservation check returned success under a shell condition",
+  "early_gpu6_other_processes": 1
+}

@@ -1,0 +1,645 @@
+{
+  "binary_sha256": "a73745bd007a7fe8d075af5b1823a365edead470088e1797af31b574cae908ae",
+  "physical_gpu": 7,
+  "arms": {
+    "riley-first": {
+      "capacity_blocks": 2576,
+      "cases": {
+        "rag-c8-s2": {
+          "requests": 64,
+          "queued": 0,
+          "observed_kv_blocked": 0,
+          "scheduler_queue_ms_p50_queued_only": null,
+          "first_kv_block_to_admitted_ms_p50": null,
+          "queued_requests": [],
+          "matched_outputs_vs_roomy": 64,
+          "output_mismatch_request_indices": [],
+          "ttft_p95_ms": 1766.195960342884,
+          "tpot_p50_ms": 38.4093033164505
+        },
+        "wave-50ms": {
+          "requests": 40,
+          "queued": 0,
+          "observed_kv_blocked": 0,
+          "scheduler_queue_ms_p50_queued_only": null,
+          "first_kv_block_to_admitted_ms_p50": null,
+          "queued_requests": [],
+          "matched_outputs_vs_roomy": 40,
+          "output_mismatch_request_indices": [],
+          "ttft_p95_ms": 3039.9472638964653,
+          "tpot_p50_ms": 30.41101528668967
+        }
+      },
+      "server_log_sha256": "bd2f178dffd7ef92a6c55c5bfd777baf4bcd9410c0010939568996ddb59ae350",
+      "peak_reserved_kv_blocks": 1604,
+      "scheduler_kv_blocks_after_last_release": 0,
+      "drain": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0
+      },
+      "native_allocation_at_start": {
+        "device_live_count": 471,
+        "device_live_bytes": 38625687680,
+        "pinned_live_count": 2,
+        "pinned_live_bytes": 4226840
+      },
+      "native_allocation_after_drain": {
+        "device_live_count": 471,
+        "device_live_bytes": 38625687680,
+        "pinned_live_count": 2,
+        "pinned_live_bytes": 4226840
+      }
+    },
+    "riley-second": {
+      "capacity_blocks": 768,
+      "cases": {
+        "rag-c8-s2": {
+          "requests": 64,
+          "queued": 64,
+          "observed_kv_blocked": 49,
+          "scheduler_queue_ms_p50_queued_only": 4306.7604035,
+          "first_kv_block_to_admitted_ms_p50": 530.132884,
+          "queued_requests": [
+            {
+              "request_index": 8,
+              "queue_ms": 4304.703027,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 9,
+              "queue_ms": 4483.77834,
+              "kv_blocked_attempts": 7,
+              "first_kv_block_to_admitted_ms": 530.132884
+            },
+            {
+              "request_index": 10,
+              "queue_ms": 4482.159393,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 11,
+              "queue_ms": 4482.264451,
+              "kv_blocked_attempts": 1,
+              "first_kv_block_to_admitted_ms": 124.643978
+            },
+            {
+              "request_index": 12,
+              "queue_ms": 4335.671426,
+              "kv_blocked_attempts": 125,
+              "first_kv_block_to_admitted_ms": 3804.494495
+            },
+            {
+              "request_index": 13,
+              "queue_ms": 4380.456248,
+              "kv_blocked_attempts": 8,
+              "first_kv_block_to_admitted_ms": 575.906442
+            },
+            {
+              "request_index": 14,
+              "queue_ms": 4245.508617,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 15,
+              "queue_ms": 4234.425437,
+              "kv_blocked_attempts": 123,
+              "first_kv_block_to_admitted_ms": 3608.730144
+            },
+            {
+              "request_index": 16,
+              "queue_ms": 4061.297777,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 17,
+              "queue_ms": 4419.616957,
+              "kv_blocked_attempts": 10,
+              "first_kv_block_to_admitted_ms": 810.826962
+            },
+            {
+              "request_index": 18,
+              "queue_ms": 7676.463174,
+              "kv_blocked_attempts": 121,
+              "first_kv_block_to_admitted_ms": 3381.382118
+            },
+            {
+              "request_index": 19,
+              "queue_ms": 7933.424685,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 257.05669
+            },
+            {
+              "request_index": 20,
+              "queue_ms": 4325.553456,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 21,
+              "queue_ms": 4380.629142,
+              "kv_blocked_attempts": 8,
+              "first_kv_block_to_admitted_ms": 742.133727
+            },
+            {
+              "request_index": 22,
+              "queue_ms": 7511.175685,
+              "kv_blocked_attempts": 123,
+              "first_kv_block_to_admitted_ms": 3254.823855
+            },
+            {
+              "request_index": 23,
+              "queue_ms": 4253.762102,
+              "kv_blocked_attempts": 1,
+              "first_kv_block_to_admitted_ms": 123.045418
+            },
+            {
+              "request_index": 24,
+              "queue_ms": 3978.306319,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 25,
+              "queue_ms": 7423.895864,
+              "kv_blocked_attempts": 133,
+              "first_kv_block_to_admitted_ms": 4170.13041
+            },
+            {
+              "request_index": 26,
+              "queue_ms": 4427.521917,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 257.337632
+            },
+            {
+              "request_index": 27,
+              "queue_ms": 4294.367883,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 28,
+              "queue_ms": 4294.268119,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 29,
+              "queue_ms": 7850.643043,
+              "kv_blocked_attempts": 132,
+              "first_kv_block_to_admitted_ms": 4220.237791
+            },
+            {
+              "request_index": 30,
+              "queue_ms": 4354.205739,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 31,
+              "queue_ms": 4718.503673,
+              "kv_blocked_attempts": 4,
+              "first_kv_block_to_admitted_ms": 514.721671
+            },
+            {
+              "request_index": 32,
+              "queue_ms": 4203.887825,
+              "kv_blocked_attempts": 1,
+              "first_kv_block_to_admitted_ms": 123.782938
+            },
+            {
+              "request_index": 33,
+              "queue_ms": 4057.672805,
+              "kv_blocked_attempts": 125,
+              "first_kv_block_to_admitted_ms": 3542.891169
+            },
+            {
+              "request_index": 34,
+              "queue_ms": 4056.984437,
+              "kv_blocked_attempts": 1,
+              "first_kv_block_to_admitted_ms": 123.843577
+            },
+            {
+              "request_index": 35,
+              "queue_ms": 4185.664802,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 258.754395
+            },
+            {
+              "request_index": 36,
+              "queue_ms": 4338.93798,
+              "kv_blocked_attempts": 4,
+              "first_kv_block_to_admitted_ms": 540.032722
+            },
+            {
+              "request_index": 37,
+              "queue_ms": 798.845536,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 38,
+              "queue_ms": 4202.49736,
+              "kv_blocked_attempts": 126,
+              "first_kv_block_to_admitted_ms": 3537.512416
+            },
+            {
+              "request_index": 39,
+              "queue_ms": 3935.83471,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 40,
+              "queue_ms": 3659.464326,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 248.694896
+            },
+            {
+              "request_index": 41,
+              "queue_ms": 529.971549,
+              "kv_blocked_attempts": 3,
+              "first_kv_block_to_admitted_ms": 404.440263
+            },
+            {
+              "request_index": 42,
+              "queue_ms": 657.425719,
+              "kv_blocked_attempts": 1,
+              "first_kv_block_to_admitted_ms": 127.545067
+            },
+            {
+              "request_index": 43,
+              "queue_ms": 4107.698004,
+              "kv_blocked_attempts": 128,
+              "first_kv_block_to_admitted_ms": 3709.003614
+            },
+            {
+              "request_index": 44,
+              "queue_ms": 3965.901627,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 256.836877
+            },
+            {
+              "request_index": 45,
+              "queue_ms": 4097.47748,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 266.402869
+            },
+            {
+              "request_index": 46,
+              "queue_ms": 662.532963,
+              "kv_blocked_attempts": 1,
+              "first_kv_block_to_admitted_ms": 139.235779
+            },
+            {
+              "request_index": 47,
+              "queue_ms": 4308.81778,
+              "kv_blocked_attempts": 127,
+              "first_kv_block_to_admitted_ms": 3769.78117
+            },
+            {
+              "request_index": 48,
+              "queue_ms": 4508.283374,
+              "kv_blocked_attempts": 4,
+              "first_kv_block_to_admitted_ms": 474.53733
+            },
+            {
+              "request_index": 49,
+              "queue_ms": 4498.868228,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 254.48231
+            },
+            {
+              "request_index": 50,
+              "queue_ms": 7849.656356,
+              "kv_blocked_attempts": 125,
+              "first_kv_block_to_admitted_ms": 3475.757354
+            },
+            {
+              "request_index": 51,
+              "queue_ms": 4081.432028,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 52,
+              "queue_ms": 4330.148636,
+              "kv_blocked_attempts": 7,
+              "first_kv_block_to_admitted_ms": 725.514743
+            },
+            {
+              "request_index": 53,
+              "queue_ms": 4201.327217,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 54,
+              "queue_ms": 7772.135997,
+              "kv_blocked_attempts": 125,
+              "first_kv_block_to_admitted_ms": 3695.959401
+            },
+            {
+              "request_index": 55,
+              "queue_ms": 4421.768834,
+              "kv_blocked_attempts": 1,
+              "first_kv_block_to_admitted_ms": 123.600793
+            },
+            {
+              "request_index": 56,
+              "queue_ms": 4743.552168,
+              "kv_blocked_attempts": 5,
+              "first_kv_block_to_admitted_ms": 579.799906
+            },
+            {
+              "request_index": 57,
+              "queue_ms": 4531.468165,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 255.929772
+            },
+            {
+              "request_index": 58,
+              "queue_ms": 4039.653947,
+              "kv_blocked_attempts": 121,
+              "first_kv_block_to_admitted_ms": 3203.86396
+            },
+            {
+              "request_index": 59,
+              "queue_ms": 4385.262434,
+              "kv_blocked_attempts": 4,
+              "first_kv_block_to_admitted_ms": 475.46058
+            },
+            {
+              "request_index": 60,
+              "queue_ms": 3810.117104,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 61,
+              "queue_ms": 4033.246208,
+              "kv_blocked_attempts": 5,
+              "first_kv_block_to_admitted_ms": 479.256875
+            },
+            {
+              "request_index": 62,
+              "queue_ms": 4301.676396,
+              "kv_blocked_attempts": 123,
+              "first_kv_block_to_admitted_ms": 3470.743903
+            },
+            {
+              "request_index": 63,
+              "queue_ms": 4082.372889,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 257.817343
+            },
+            {
+              "request_index": 64,
+              "queue_ms": 3967.31702,
+              "kv_blocked_attempts": 1,
+              "first_kv_block_to_admitted_ms": 141.887621
+            },
+            {
+              "request_index": 65,
+              "queue_ms": 4293.709457,
+              "kv_blocked_attempts": 5,
+              "first_kv_block_to_admitted_ms": 548.002202
+            },
+            {
+              "request_index": 66,
+              "queue_ms": 4311.510068,
+              "kv_blocked_attempts": 124,
+              "first_kv_block_to_admitted_ms": 3487.718286
+            },
+            {
+              "request_index": 67,
+              "queue_ms": 4292.289214,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 256.504602
+            },
+            {
+              "request_index": 68,
+              "queue_ms": 4855.2482,
+              "kv_blocked_attempts": 5,
+              "first_kv_block_to_admitted_ms": 687.966465
+            },
+            {
+              "request_index": 69,
+              "queue_ms": 7811.74266,
+              "kv_blocked_attempts": 125,
+              "first_kv_block_to_admitted_ms": 3504.30931
+            },
+            {
+              "request_index": 70,
+              "queue_ms": 4582.418591,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 256.842642
+            },
+            {
+              "request_index": 71,
+              "queue_ms": 4449.174399,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            }
+          ],
+          "matched_outputs_vs_roomy": 64,
+          "output_mismatch_request_indices": [],
+          "ttft_p95_ms": 8672.503300011158,
+          "tpot_p50_ms": 29.693457847974432
+        },
+        "wave-50ms": {
+          "requests": 40,
+          "queued": 22,
+          "observed_kv_blocked": 19,
+          "scheduler_queue_ms_p50_queued_only": 4467.424094,
+          "first_kv_block_to_admitted_ms_p50": 257.346437,
+          "queued_requests": [
+            {
+              "request_index": 12,
+              "queue_ms": 4101.347039,
+              "kv_blocked_attempts": 127,
+              "first_kv_block_to_admitted_ms": 4101.189457
+            },
+            {
+              "request_index": 13,
+              "queue_ms": 4453.836486,
+              "kv_blocked_attempts": 6,
+              "first_kv_block_to_admitted_ms": 352.579848
+            },
+            {
+              "request_index": 14,
+              "queue_ms": 4582.972224,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 253.71454
+            },
+            {
+              "request_index": 15,
+              "queue_ms": 4708.372369,
+              "kv_blocked_attempts": 1,
+              "first_kv_block_to_admitted_ms": 125.496048
+            },
+            {
+              "request_index": 20,
+              "queue_ms": 4251.826135,
+              "kv_blocked_attempts": 133,
+              "first_kv_block_to_admitted_ms": 4251.761039
+            },
+            {
+              "request_index": 21,
+              "queue_ms": 4384.447092,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 257.346437
+            },
+            {
+              "request_index": 22,
+              "queue_ms": 4384.353943,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 23,
+              "queue_ms": 4526.301266,
+              "kv_blocked_attempts": 1,
+              "first_kv_block_to_admitted_ms": 142.035705
+            },
+            {
+              "request_index": 28,
+              "queue_ms": 4267.863179,
+              "kv_blocked_attempts": 134,
+              "first_kv_block_to_admitted_ms": 4267.708141
+            },
+            {
+              "request_index": 29,
+              "queue_ms": 4391.800252,
+              "kv_blocked_attempts": 1,
+              "first_kv_block_to_admitted_ms": 124.031506
+            },
+            {
+              "request_index": 30,
+              "queue_ms": 4402.124513,
+              "kv_blocked_attempts": 1,
+              "first_kv_block_to_admitted_ms": 133.590429
+            },
+            {
+              "request_index": 31,
+              "queue_ms": 8639.277616,
+              "kv_blocked_attempts": 132,
+              "first_kv_block_to_admitted_ms": 4237.261564
+            },
+            {
+              "request_index": 35,
+              "queue_ms": 4231.886696,
+              "kv_blocked_attempts": 133,
+              "first_kv_block_to_admitted_ms": 4231.638921
+            },
+            {
+              "request_index": 36,
+              "queue_ms": 4231.791104,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            },
+            {
+              "request_index": 37,
+              "queue_ms": 4481.011702,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 249.310764
+            },
+            {
+              "request_index": 38,
+              "queue_ms": 4614.456651,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 256.740908
+            },
+            {
+              "request_index": 39,
+              "queue_ms": 8314.757157,
+              "kv_blocked_attempts": 127,
+              "first_kv_block_to_admitted_ms": 3700.412455
+            },
+            {
+              "request_index": 43,
+              "queue_ms": 4259.541699,
+              "kv_blocked_attempts": 133,
+              "first_kv_block_to_admitted_ms": 4259.272095
+            },
+            {
+              "request_index": 44,
+              "queue_ms": 4515.927724,
+              "kv_blocked_attempts": 2,
+              "first_kv_block_to_admitted_ms": 256.484896
+            },
+            {
+              "request_index": 45,
+              "queue_ms": 4657.492021,
+              "kv_blocked_attempts": 1,
+              "first_kv_block_to_admitted_ms": 141.664881
+            },
+            {
+              "request_index": 46,
+              "queue_ms": 8381.930408,
+              "kv_blocked_attempts": 129,
+              "first_kv_block_to_admitted_ms": 3847.728366
+            },
+            {
+              "request_index": 47,
+              "queue_ms": 8381.835276,
+              "kv_blocked_attempts": 0,
+              "first_kv_block_to_admitted_ms": null
+            }
+          ],
+          "matched_outputs_vs_roomy": 40,
+          "output_mismatch_request_indices": [],
+          "ttft_p95_ms": 9143.200784921646,
+          "tpot_p50_ms": 27.617597791153617
+        }
+      },
+      "server_log_sha256": "5503db1fcf63c3380959d6137f17028649f833756dceadb17452ee7c1794871b",
+      "peak_reserved_kv_blocks": 708,
+      "scheduler_kv_blocks_after_last_release": 0,
+      "drain": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0
+      },
+      "native_allocation_at_start": {
+        "device_live_count": 471,
+        "device_live_bytes": 32938200608,
+        "pinned_live_count": 2,
+        "pinned_live_bytes": 4215992
+      },
+      "native_allocation_after_drain": {
+        "device_live_count": 471,
+        "device_live_bytes": 32938200608,
+        "pinned_live_count": 2,
+        "pinned_live_bytes": 4215992
+      }
+    }
+  },
+  "reservations_restored_each_arm": {
+    "6": {
+      "pid": 2431228,
+      "start_ticks": "6339570869",
+      "allocation_bytes": 21474836480
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "allocation_bytes": 21474836480
+    }
+  },
+  "execution": {
+    "stage": "w3-kv-pressure-run-20261120.Rj2dDhDH",
+    "exit": 0,
+    "boundaries": [
+      "START riley-first 2026-11-20T01:32:33Z",
+      "END riley-first 2026-11-20T01:38:09Z exit=0",
+      "START riley-second 2026-11-20T01:38:09Z",
+      "END riley-second 2026-11-20T01:44:29Z exit=0"
+    ],
+    "result_sha256_file_digest": "2b054b0f7efada74152147be07df3b9409ce22da3586f4926ab00151a3bcbc74"
+  }
+}

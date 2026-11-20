@@ -383,6 +383,21 @@ A100 7번에서 Qwen2.5-14B-Instruct, KV 2,576블록과 기존 추적 바이너�
 
 같은 두 로그에서 실행별 120건의 워밍업·측정 입력 길이를 확인했다. 시작 시 shape를 준비한 48건은 실제 요청이 오기 전에 끝났다. 최대 입력 3,523토큰과 최대 출력 128토큰을 적용해 16토큰 블록으로 올림하면 요청당 229블록이다. 두 부하의 최대 동시성 8에서 예약 상한은 1,832블록으로 설정한 2,576블록보다 744블록 적었다. 활성 시퀀스 한도도 32였다. 이 실행의 대기는 KV 예약 상한이나 활성 수용량이 부족해서 생긴 것이 아니다. 블록 수용량을 낮춰 실제 압력을 가하는 비교가 남아 있다. [두 로그와 연결한 상한 검산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/kv-headroom.json) · [스케줄러 입장 조건](../../crates/riley-scheduler/src/scheduler.rs#L2737)
 
+#### 실제 KV 예약 압력과 회수
+
+A100 7번에서 Qwen2.5-14B-Instruct의 같은 진단 바이너리와 요청을 사용해 KV 한도만 2,576→768블록으로 바꿨다. 두 실행의 최대 활성 시퀀스는 32, 부하의 동시성은 8이었다. 앞선 RAG C8 seed 2와 50ms 유입의 요청 지문 및 입력 길이를 확인했다. 실행마다 측정 104건과 워밍업 16건이 오류·429 없이 완료됐으며 비교한 출력 텍스트 지문·생성 토큰 수·종료 사유가 104/104건 일치했다. [프로세스 및 요청별 검산](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/verified-summary.json)
+
+스케줄러의 제출, 대기열 선두의 입장 검사 실패, 입장, 반환을 요청별로 연결했다. 입장 검사 실패는 모든 경우에 `예약 중 블록 + 해당 요청의 예약량 > 설정 한도`였고 활성 시퀀스에는 여유가 있었다. 기준군의 측정 요청 중 대기는 0건이었다. 768블록 설정에서는 대기열에 들어갔다가 앞 요청의 반환 후 입장한 경우도 있어, 대기 건수와 선두에서 KV 부족이 직접 기록된 건수를 함께 집계했다.
+
+| 부하 | 768블록군 대기 / KV 부족 확인 / 전체 | 대기 요청의 입장 대기 중앙값 | 첫 KV 부족 표식부터 입장까지 중앙값 | 첫 토큰 p95, 2,576 → 768블록 |
+|---|---:|---:|---:|---:|
+| RAG C8 seed 2 | 64 / 49 / 64건 | 4.307초 | 0.530초 | 1.766 → 8.673초 |
+| 50ms 유입 | 22 / 19 / 40건 | 4.467초 | 0.257초 | 3.040 → 9.143초 |
+
+두 로그의 예약·반환을 순서대로 다시 계산했다. 최대 예약은 기준군 1,604블록, 제한군 708블록이었다. 각 실행의 종료 전 활성·대기 요청과 실제 할당 KV가 모두 0이었고 두 서버가 코드 0으로 종료했다. GPU 6·7은 기존 홀더의 20GiB 예약으로 복귀했다. 수치는 이 한 쌍의 계측 실행에 해당한다. 이 부하에서는 입장 후 GPU 스텝을 기다리는 상황에 KV 예약 부족에 따른 입장 전 대기가 추가됐다. [입장·회수 검산 코드](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/verify_kv_pressure.py) · [실행 순서](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/campaign.sh)
+
+초기 시도에서 소스 교체 위치가 중복되고, 후속 실행에서는 GPU 6의 외부 사용과 실행 스크립트의 예약 검사 오류를 발견했다. 이 기록은 비교에서 제외했고, 검증한 같은 CUDA 바이너리와 명시적으로 실패를 반환하는 예약 확인으로 두 실행을 완료했다. 빌드 재현 시 `joint-clock`의 `reused.sha256`과 `joint-clock/retry`의 `fix_terminal_observation.py`를 빌드 스크립트 옆에 두고 체크섬을 확인한다. [제외한 실행과 바이너리 해시](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/verified-setup.json) · [격리 빌드](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/build/campaign.sh)
+
 #### Coder-14B의 1,024행 후보 검증
 
 앞선 Qwen2.5-14B 시험과 같은 바이너리 및 A100 7번에서 `Qwen2.5-Coder-14B-Instruct`를 비교했다. 이 모델의 병합 QKV도 `K=5120, N=7168`이며 1,024행 후보가 적용되는 형상이다. 모델 revision `aedcc2d42b622764e023cf882b6652e646b95671`과 KV 2,576블록을 고정하고 기준 → 후보 → 후보 → 기준 순서로 실행했다. 후보 두 실행에서 cuBLASLt 12.4.5의 후보 선택을 확인했다. [고정 모델 입력](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/model.sha256) · [실행 및 런타임 검산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/verified-summary.json)

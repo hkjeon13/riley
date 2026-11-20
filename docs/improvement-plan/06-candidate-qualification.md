@@ -21,7 +21,7 @@
 python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 ```
 
-같은 명령은 `current_allocator_trial`의 일곱 검증 보고서를 대조한다. 파생 이미지의 패키징, 두 캐시 모드의 30분 부하, 장문 정확성, 성능 대조, 고정 도착 대조와 메트릭 조회 두 시험을 연결한다. 성능 시험은 실제 이미지·실행 인자·할당기 설정이 일치하고, 메트릭 조회 재시험은 첫 조회 시험의 검산 해시·체크포인트·요청 수에 맞아야 한다. 파생 이미지는 실제 운영 도착 분포와 서비스 SLO 검증까지 릴리스를 보류한다. [파생 후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
+같은 명령은 `current_allocator_trial`의 일곱 검증 보고서를 대조한다. 파생 이미지의 패키징, 두 캐시 모드의 30분 부하, 장문 정확성, 성능 대조, 고정 도착 대조와 메트릭 조회 두 시험을 연결한다. 성능 시험은 실제 이미지·실행 인자·할당기 설정이 일치하고, 메트릭 조회 재시험은 첫 조회 시험의 검산 해시·체크포인트·요청 수에 맞아야 한다. 닫힌 부하의 RAG 꼬리 지연과 실제 운영 도착 분포·서비스 SLO 확인이 남아 있어 파생 이미지 릴리스를 보류한다. [파생 후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 
 ## 현재 판정
 
@@ -54,6 +54,8 @@ W3의 QKV 추적 416건은 해당 비계측 요청·응답과 일치했다. 50ms
 Qwen2.5-14B에서 두 RAG seed와 기준·후보의 상대 도착 시각표 네 개를 교차 재생했다. 측정 1,024건의 입력·응답 지문과 종료 사유가 일치했고 두 실행 순서에서 TTFT p95는 3.54–12.88%, TPOT p50은 3.85–9.35% 감소했다. 실제 송신 시각 차이 p95의 최댓값은 1.51ms였다. 같은 바이너리의 Coder-14B 대조에서 decode 회귀가 발생해 이 후보의 형상 공통 적용을 기각했다. [두 RAG seed의 고정 도착 재생](03-long-context-result.md#두-rag-seed의-고정-도착-재생) · [Coder-14B 결과](03-long-context-result.md#coder-14b의-1024행-후보-검증)
 
 같은 실행에서 요청 단계와 CUDA 커널을 연결한 결과 50ms 유입의 41번 요청은 prefill 조각 사이 대기가 399ms 늘었다. 본인 요청이 대기하는 동안 GPU는 387ms 더 실행됐고 GEMM·attention이 그중 대부분을 차지했다. 시험의 KV 예약 상한은 1,832블록으로 설정 한도 2,576블록보다 낮았다. [요청–GPU 결합 계측과 KV 예약 상한](03-long-context-result.md#같은-실행의-요청-대기와-cuda-커널-대조)
+
+같은 두 부하에서 KV를 768블록으로 제한하면 68건에 실제 예약 부족이 기록됐다. 비교한 출력 104건은 일치했고 종료 전 할당 KV는 0이었다. 운영 후보의 도착 분포를 구할 때는 입력·출력 길이와 동시성에서 KV 예약량을 함께 산출해 입장 전 대기와 입장 후 스텝 대기를 구분한다. [KV 압력 대조](03-long-context-result.md#실제-kv-예약-압력과-회수)
 
 W5의 30분 실행에서 종료 뒤 GPU·pinned 메모리와 활성 KV는 0이었다. Cache-off 정밀 실행에서 일반 RSS의 변화는 0이었고 `smaps_rollup`은 익명 RSS +700KiB를 기록했다. 따라서 RSS 증가 0 조건은 미충족이다. 정밀 판정기를 적용한 다음 실행에서 +812KiB를 확인했고 매핑별 합계에서 전부 익명 private에 속했다. 요청·지연·종료 회수 검사는 통과했고 RSS 검사만 실패했다. GPU 메모리 오류 주입은 A100 6번의 CUDA 12.4 SM80 테스트 바이너리에서 네 독립 사례가 통과했다. [운영 품질 기준](../goal.md#33-운영-품질) · [정밀 RSS 결과](05-mixed-soak-result.md#정밀-rss-재실행-결과) · [오류 주입 원본](../../benchmarks/evidence/20261119-w5-mixed-soak/memory-faults/ffi-retry/result/verification.json)
 
