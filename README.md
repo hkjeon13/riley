@@ -445,6 +445,9 @@ status 0.
 | Hardware | One NVIDIA GPU (A100 and RTX 4090 measured); tensor parallelism over 2–8 peer-connected GPUs (2 × A100 measured) |
 | API | `POST /v1/chat/completions` and `POST /v1/completions` with streaming; models, health and metrics endpoints |
 
+See the [packaged serving checks](docs/model-support.md#packaged-serving-checks)
+for per-checkpoint API, mixed-load and two-GPU results from the tested CUDA image.
+
 Not supported yet: quantised weights, pipeline parallelism, multiple nodes.
 
 ## Documentation

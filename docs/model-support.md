@@ -15,6 +15,28 @@ the November candidate's verification are recorded in their own reports.
 | Mistral, full attention | New cold adapter and native Metaspace/byte-fallback BPE; shared dense runtime | Evidence below; full performance acceptance pending |
 | Sliding-window Mistral, Gemma, Phi, MoE and multimodal models | Not implemented by these adapters | Unsupported; do not reinterpret their metadata as Llama |
 
+## Packaged serving checks
+
+On 2026-11-20, the CUDA 12.4 distribution was exercised on 40 GiB A100s using
+A100 image `0a907408ec73` (source `d3d8fe6e5`). Each row gives the API checks
+and workload exercised with the indicated checkpoint. The earlier single-GPU
+performance comparison and TP=2 performance matrix have their own qualification
+criteria. [Single-GPU performance](model-coverage-a100-perf-table.md) · [TP=2 performance](tensor-parallel-design.md#status-2026-11-01)
+
+| Checkpoint | A100 GPUs | API checks | Serving exercise |
+|---|---:|---:|---|
+| Qwen2.5-3B-Instruct | 1 | 40 | 45 s mixed load, 338 completions, 21 disconnects |
+| Qwen3-4B | 1 | 40 | 45 s mixed load, 338 completions, 21 disconnects |
+| Qwen2.5-14B-Instruct | 1 | 40 | 45 s mixed load, 338 completions, 21 disconnects |
+| SmolLM2-1.7B-Instruct | 1 | 39 | 45 s mixed load, 315 completions, 21 disconnects, 23 expected tool rejections |
+| Qwen2.5-7B-Instruct | 1 | 40 | 36 committed mixed GPU iterations, 6 exact responses |
+| Qwen2.5-32B-Instruct | 2 | 40 | 43 exact concurrent responses, peak 31 active with 32 clients |
+
+The SmolLM2 checkpoint's chat template rejects tool requests with
+`unsupported_parameter`. The Qwen2.5-7B mixed iterations included both prefill
+and decode. The Qwen2.5-32B run used NVLink and compared concurrent responses
+with single-client responses across 11 fixed prompts. [Representative smoke runs](improvement-plan/05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke) · [MHA and 14B](improvement-plan/05-mixed-soak-result.md#배포-이미지의-mha와-14b-smoke) · [Mixed GPU iteration](improvement-plan/05-mixed-soak-result.md#배포-이미지의-커밋된-혼합-gpu-iteration) · [32B TP=2](improvement-plan/05-mixed-soak-result.md#배포-이미지의-32b-tp2-장문-검증)
+
 ## Mistral v0.3
 
 The pinned checkpoint is `mistralai/Mistral-7B-Instruct-v0.3` revision

@@ -69,6 +69,8 @@ Production CPU의 Documentation 단계에서 개선 계획서의 상대 링크�
 
 같은 검사에서 README의 `Status` 버전을 Cargo 워크스페이스 버전과 맞추고, 10월 A100 동시성 32·고정 길이 표의 24개 모델을 보존된 표와 대조한다. 성능 요약은 동시성 8–32의 처리량·TPOT 각 144셀, TTFT 192셀, 단일 클라이언트 처리량 48셀에서 다시 계산한다. 당시 기록에 적힌 AWS 원본 경로는 이번 점검에서 확인되지 않아 성능 검사의 근거는 저장소에 보존된 모델별 측정 표다. [워크스페이스 버전](../../Cargo.toml) · [README 성능표](../../README.md#performance) · [보존된 측정값과 당시 실행 이름](../model-coverage-a100-perf-table.md#측정-출처)
 
+모델 지원 문서에는 A100 배포 이미지에서 검증한 여섯 체크포인트와 모델별 API·부하 범위를 표시한다. CI는 다섯 검산 보고서가 같은 이미지와 Riley 바이너리를 가리키는지 확인하고, 보고서에서 모델별 실행 집계를 계산해 공개 표와 대조한다. 이 표의 검증 범위는 10월 성능표와 TP=2 상대 성능 매트릭스에 각각 연결한다. [배포 이미지 지원 표](../model-support.md#packaged-serving-checks) · [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
+
 Production CPU의 계약 테스트는 실제 Rust 프로파일 resolver에 `serve --inference-profile native-bf16-varlen-v1`을 전달한다. 반환된 attention 모드, 최대 문맥, 스텝 예산, prefill 조각, 이벤트 발행 값을 사용자 문서의 표와 맞춘다. 컨테이너가 선택하는 프로파일과 명시 옵션 우선순위는 entrypoint 계약 테스트에서 확인한다. [기본값 표](../configuration.md#execution-options) · [프로파일 검사](../../ci/tests/test_improvement_evidence.py) · [entrypoint 검사](../../ci/tests/test_distribution_entrypoint.py)
 
 성능표를 생성한다면 raw→검증된 집계→표의 입력·출력·버전이 명확한 작은 생성기를 둔다. 과거 결과와 새 후보를 섞거나 집계 중 실패 셀을 제거하지 않는다. 이 생성기는 제안이며 현재 구현되어 있지 않다.

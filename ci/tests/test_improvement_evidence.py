@@ -75,6 +75,38 @@ class ReadmeEvidenceTests(unittest.TestCase):
                         checker.check_readme(root)
 
 
+class DistributionServingTests(unittest.TestCase):
+    def test_rehashed_report_and_published_coverage_drift_are_rejected(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        candidate = manifest["current_distribution_candidate"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            records = candidate["serving_reports"]
+            for filename in ("docs/model-support.md", *(entry["path"] for entry in records.values())):
+                destination = root / filename
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes((ROOT / filename).read_bytes())
+            self.assertEqual(checker.check_distribution_serving(root, candidate), 6)
+
+            support = root / "docs/model-support.md"
+            original = support.read_text(encoding="utf-8")
+            support.write_text(original.replace("peak 31 active", "peak 32 active"), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "coverage differs for Qwen2.5-32B-Instruct"):
+                checker.check_distribution_serving(root, candidate)
+            support.write_text(original, encoding="utf-8")
+
+            record = records["tp2"]
+            path = root / record["path"]
+            report = json.loads(path.read_bytes())
+            report["riley_binary_sha256"] = "0" * 64
+            raw = json.dumps(report).encode("utf-8")
+            path.write_bytes(raw)
+            record["sha256"] = sha256(raw).hexdigest()
+            self.assertEqual(checker.check_evidence(root, records), 5)
+            with self.assertRaisesRegex(ValueError, "tp2 belongs to a different image or binary"):
+                checker.check_distribution_serving(root, candidate)
+
+
 class AllocatorTrialTests(unittest.TestCase):
     def setUp(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())

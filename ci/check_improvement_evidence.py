@@ -109,6 +109,81 @@ def check_distribution_revision(root, candidate, revision):
     return commit
 
 
+def check_distribution_serving(root, candidate):
+    records = candidate["serving_reports"]
+    reports = {role: json.loads((root / entry["path"]).read_bytes(), object_pairs_hook=unique_object)
+               for role, entry in records.items()}
+    image = candidate["a100_rebuild_gpu_inference"]["image_id"]
+    for role, report in reports.items():
+        binary_key = "riley_binary_sha256" if role in ("mixed_stage", "tp2") else "binary_sha256"
+        if report["image_id"] != image or report[binary_key] != candidate["binary_sha256"]:
+            raise ValueError(f"distribution serving report {role} belongs to a different image or binary")
+
+    recheck = reports["mha_recheck"]
+    mha = "SmolLM2-1.7B-Instruct"
+    if (recheck["model"] != mha or recheck["prior_result_sha256"] != records["extended"]["sha256"]
+            or recheck["api_checks_passed"] != recheck["api_checks"] or recheck["api_failed_check_names"]
+            or recheck["smoke"]["expect_tools_unsupported"] is not True
+            or recheck["smoke"]["counts"]["tools_unsupported"]["unsupported"] <= 0):
+        raise ValueError("distribution MHA report does not verify the template rejection and original run")
+
+    smoke_runs = {
+        **reports["representative"]["results"],
+        "Qwen2.5-14B-Instruct": reports["extended"]["results"]["Qwen2.5-14B-Instruct"],
+        mha: recheck,
+    }
+    if smoke_runs.keys() != {"Qwen2.5-3B-Instruct", "Qwen3-4B", "Qwen2.5-14B-Instruct", mha}:
+        raise ValueError("distribution smoke does not cover all four representative checkpoints")
+    expected = {}
+    for model, run in smoke_runs.items():
+        smoke = run["smoke"]
+        if (run["status"] != "passed" or run["exit"] != 0 or smoke["status"] != "passed"
+                or smoke["failed_checks"] or run["api_checks"] != (39 if model == mha else 40)):
+            raise ValueError(f"distribution smoke for {model} did not pass the API and mixed load")
+        counts = smoke["counts"]
+        completed = sum(category.get("completed", 0) for category in counts.values())
+        disconnects = counts["cancel"]["disconnected"]
+        detail = f'{smoke["seconds"]:g} s mixed load, {completed} completions, {disconnects} disconnects'
+        if model == mha:
+            detail += f', {counts["tools_unsupported"]["unsupported"]} expected tool rejections'
+        expected[model] = ("1", str(run["api_checks"]), detail)
+
+    mixed = reports["mixed_stage"]
+    trials = mixed["mixed"]["trials"]
+    if (mixed["api_checks"] != 40 or mixed["mixed"]["status"] != "passed"
+            or len(trials) != 3 or any(trial["matching_responses"] != 2 or not trial["witnesses"] for trial in trials)):
+        raise ValueError("distribution mixed-stage report lacks the matched mixed GPU iterations")
+    iterations = sum(len(trial["witnesses"]) for trial in trials)
+    matches = sum(trial["matching_responses"] for trial in trials)
+    expected["Qwen2.5-7B-Instruct"] = ("1", str(mixed["api_checks"]),
+                                       f"{iterations} committed mixed GPU iterations, {matches} exact responses")
+
+    tp = reports["tp2"]
+    holdout = tp["tensor_parallel"]["holdout"]
+    modes = holdout["modes"]
+    c8, c32 = modes["c8"], modes["c32"]
+    if (tp["status"] != "passed" or tp["api_checks"] != 40 or holdout["status"] != "passed"
+            or len(set(tp["tensor_parallel"]["gpu_uuids"])) != 2 or modes["c1"]["requests"] != 11
+            or c8["exact_matches"] != c8["requests"] or c8["requests"] != 11
+            or c32["exact_matches"] != c32["requests"] or c32["requests"] != 32
+            or not 1 < c8["observed_peak_active"] <= 8 or not 1 < c32["observed_peak_active"] <= 32):
+        raise ValueError("distribution TP=2 report lacks exact long-context matches")
+    expected["Qwen2.5-32B-Instruct"] = ("2", str(tp["api_checks"]),
+                                      f'{c8["exact_matches"] + c32["exact_matches"]} exact concurrent responses, '
+                                      f'peak {c32["observed_peak_active"]} active with 32 clients')
+
+    support = root / "docs/model-support.md"
+    image_label = f'A100 image `{image.removeprefix("sha256:")[:12]}` (source `{candidate["source_revision"][:9]}`)'
+    if image_label not in support.read_text(encoding="utf-8"):
+        raise ValueError("model-support.md: serving image and source differ from the recorded A100 candidate")
+    documented = markdown_table(support, ("Checkpoint", "A100 GPUs", "API checks", "Serving exercise"),
+                                "## Packaged serving checks")
+    if documented != expected:
+        rows = sorted(name for name in documented.keys() | expected.keys() if documented.get(name) != expected.get(name))
+        raise ValueError(f"model-support.md: packaged serving coverage differs for {', '.join(rows)}")
+    return len(expected)
+
+
 def check_allocator_trial(root, trial, distribution):
     records = trial["evidence"]
     reports = {kind: json.loads((root / entry["path"]).read_bytes(), object_pairs_hook=unique_object)
@@ -279,7 +354,7 @@ def markdown_table(path, header, section=None):
         if all(re.fullmatch(r":?-{3,}:?", field) for field in fields):
             continue
         if len(fields) != len(header) or not fields[0] or fields[0] in rows:
-            raise ValueError(f"{path.name}:{number}: malformed or duplicate performance row")
+            raise ValueError(f"{path.name}:{number}: malformed or duplicate table row")
         rows[fields[0]] = tuple(value.replace("**", "") for value in fields[1:])
     return rows
 
@@ -368,6 +443,7 @@ def main():
         inputs = check_distribution_inputs(root, manifest)
         allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],
                                                   manifest["current_distribution_candidate"])
+        serving_models = check_distribution_serving(root, manifest["current_distribution_candidate"])
         links = check_plan_links(root)
         models = check_readme(root)
         revision = None
@@ -378,7 +454,8 @@ def main():
         print(f"improvement evidence check failed: {error}", file=sys.stderr)
         return 1
     print(f"improvement evidence verified: {files} file hashes, {inputs} recorded Git inputs, "
-          f"{links} local links, {models} README performance rows and summary, {allocator_reports} linked allocator reports")
+          f"{links} local links, {models} README performance rows and summary, "
+          f"{allocator_reports} linked allocator reports, {serving_models} packaged serving rows")
     if revision is not None:
         print(f"distribution source inputs match at {revision} ({inputs} recorded paths)")
     return 0
