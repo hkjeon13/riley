@@ -1,0 +1,132 @@
+{
+  "cell": "wave-50ms",
+  "summary_scope": "Request timings and leave-one-wave-out sensitivity only.",
+  "cross_model_inputs": {
+    "models": [
+      "Qwen2.5-14B-Instruct",
+      "Qwen2.5-Coder-14B-Instruct"
+    ],
+    "matched_request_index_body_hash_and_prompt_tokens": 40,
+    "paired_requests": 40,
+    "previous_wave_sha256": "9d2b4595490afa2096b3f584bed8cc198f9104b3d792e8cdb532ec890663ed5c",
+    "coder_wave_sha256": "2be52eff1f7614fdee7e5a13a20f681533f0ec0aad1d73d10a74289fb35fd11d"
+  },
+  "pairs": {
+    "riley-first": {
+      "baseline": "riley-first",
+      "candidate": "qkv-first",
+      "matched_exact_outputs": 40,
+      "faster_requests": 33,
+      "ttft_p95_change_percent": 1.8511178060144795,
+      "p95_and_slower_count_by_wave": {
+        "riley-first": {
+          "3": 1,
+          "5": 1
+        },
+        "qkv-first": {
+          "5": 2
+        }
+      },
+      "request_41": {
+        "riley-first": {
+          "ttft_ms": 2583.096504211426,
+          "prompt_tokens": 3503,
+          "sent_ms_after_wave_start": 50.78238993883133
+        },
+        "qkv-first": {
+          "ttft_ms": 3117.927372455597,
+          "prompt_tokens": 3503,
+          "sent_ms_after_wave_start": 50.78694969415665
+        }
+      },
+      "largest_increase": {
+        "request_index": 41,
+        "ttft_increase_ms": 534.8308682441711
+      },
+      "leave_one_wave_out": [
+        {
+          "omitted_wave": 1,
+          "ttft_p95_change_percent": 1.8511178060144795
+        },
+        {
+          "omitted_wave": 2,
+          "ttft_p95_change_percent": 1.8511178060144795
+        },
+        {
+          "omitted_wave": 3,
+          "ttft_p95_change_percent": 2.4866029424438274
+        },
+        {
+          "omitted_wave": 4,
+          "ttft_p95_change_percent": 1.8511178060144795
+        },
+        {
+          "omitted_wave": 5,
+          "ttft_p95_change_percent": -2.6752753455010714
+        }
+      ],
+      "verified_result_sha256": {
+        "riley-first": "2be52eff1f7614fdee7e5a13a20f681533f0ec0aad1d73d10a74289fb35fd11d",
+        "qkv-first": "1337903ddd0ed8f6a49324755f5ec5f73205d2962a43a79b5e868ee70c0c469b"
+      }
+    },
+    "riley-second": {
+      "baseline": "riley-second",
+      "candidate": "qkv-second",
+      "matched_exact_outputs": 40,
+      "faster_requests": 34,
+      "ttft_p95_change_percent": 2.058350016803945,
+      "p95_and_slower_count_by_wave": {
+        "riley-second": {
+          "3": 1,
+          "5": 1
+        },
+        "qkv-second": {
+          "5": 2
+        }
+      },
+      "request_41": {
+        "riley-second": {
+          "ttft_ms": 2580.516003072262,
+          "prompt_tokens": 3503,
+          "sent_ms_after_wave_start": 50.00896006822586
+        },
+        "qkv-second": {
+          "ttft_ms": 3119.658276438713,
+          "prompt_tokens": 3503,
+          "sent_ms_after_wave_start": 50.12208968400955
+        }
+      },
+      "largest_increase": {
+        "request_index": 41,
+        "ttft_increase_ms": 539.1422733664513
+      },
+      "leave_one_wave_out": [
+        {
+          "omitted_wave": 1,
+          "ttft_p95_change_percent": 2.058350016803945
+        },
+        {
+          "omitted_wave": 2,
+          "ttft_p95_change_percent": 2.058350016803945
+        },
+        {
+          "omitted_wave": 3,
+          "ttft_p95_change_percent": 2.572219850797808
+        },
+        {
+          "omitted_wave": 4,
+          "ttft_p95_change_percent": 2.058350016803945
+        },
+        {
+          "omitted_wave": 5,
+          "ttft_p95_change_percent": -2.386649920796602
+        }
+      ],
+      "verified_result_sha256": {
+        "riley-second": "50d7e6f599dedc5cb756f47bd27400c3289ed1b7c2d2e06f3a6807ca4cce98b1",
+        "qkv-second": "0c0f3a6c7e060384082fec14029095869611d1e17628c7e88d4ef0b790c02712"
+      }
+    }
+  }
+}

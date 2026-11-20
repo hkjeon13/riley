@@ -114,6 +114,7 @@ python3 benchmarks/live/compare.py \
 - [x] Qwen2.5-14B의 1,024행 QKV 후보를 두 실행 순서로 비교했다. 출력과 decode·짧은 요청 기준을 충족했다. RAG 두 번째 seed의 첫 토큰 p95 방향이 뒤집히고 50ms 간격 유입의 p95가 두 번 모두 늘어 기본값 적용을 보류했다. [1,024행 스텝 결과](03-long-context-result.md#1024행-스텝의-계산-비용)
 - [x] 같은 A100 바이너리에서 45번 요청의 도착 시각을 바꿔 두 실행 순서로 입장 경계의 영향을 확인했다. 앞뒤 시각에서는 기준과 후보의 prefill 순서가 같았고 p95가 줄었다. 기존 시각에서는 순서가 갈리고 p95가 늘었다. [실제 요청의 도착 시각 대조](03-long-context-result.md#실제-요청의-도착-시각-대조)
 - [x] 두 seed에서 얻은 네 도착 시각표를 기준군과 QKV 후보에 그대로 재생했다. 두 실행 순서에서 TTFT p95와 TPOT p50이 감소했고 측정 1,024건의 출력이 재현됐다. [고정 도착 대조](03-long-context-result.md#두-rag-seed의-고정-도착-재생)
+- [x] 형상이 같은 Coder-14B에서 1,024행 QKV 후보를 두 실행 순서로 대조했다. 출력은 일치했고 동시 유입의 decode TPOT이 1% 기준을 넘었으며 50ms 유입의 첫 토큰 p95가 두 번 모두 늘어 형상 공통 적용을 기각했다. [Coder-14B 결과](03-long-context-result.md#coder-14b의-1024행-후보-검증)
 - [x] 시험한 burst 후보의 득실과 decode·짧은 요청 비용을 함께 기록했다. [W3 결과](03-long-context-result.md)
 - [ ] W4 장문·chunk 경계·배치 불변성 검사를 통과한다.
 - [x] 같은 CUDA 후보와 Qwen2.5-0.5B에서 네 조합을 두 seed로 교차 측정했다. [조합 결과](03-long-context-result.md#w2-이벤트-발행과-묶음-정책의-상호작용)

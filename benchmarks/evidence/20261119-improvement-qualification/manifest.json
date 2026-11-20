@@ -2382,6 +2382,86 @@
         "sha256": "cacd25d7ed69d05d5592982a552ec0e71c55a09743d554a1cf6fbfa3caec2bb3"
       }
     },
+    "w4_qkv_forward_replay": [
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/campaign.sh",
+        "sha256": "6685e9c215f39e0daa0d7dfa703b3af18c5ad66c6cf9ca3c55ce05598fb6c38a"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/capture_decode_rows.py",
+        "sha256": "d8373f0770a03672a1c88393ad15ba8bcceac022ef4bcda4f95ee11427cea6e2"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/dispatch.sha256",
+        "sha256": "ce4c91db49de92c46401cf25fe2f3f7faf3fa61e393c447b097f0710df8e798c"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/qkv-row-replay.patch.gz",
+        "sha256": "1b8ef228fdc390c64d77d608cbc3c46478660e46a26659bfdb322a2baa373c32"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/retry/campaign.sh",
+        "sha256": "7d293c6d38c1cc6e1c333f3e397f89a85deeb038e82b4da63c35f7c72e92314d"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/retry/dispatch.sha256",
+        "sha256": "7e5e5068c619250112917d53b416a66b10a5fd90d25da9d6d2a30a86a93add33"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/retry/fetch-summary.sh",
+        "sha256": "c3d7989eda7ab626f9c56f9b4ae93ec06247a2dda255d9f427fc8b7c53a1eeaa"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/retry/verified-rows.json",
+        "sha256": "3c38495efdc06499aa099422421e08549f217a4f3d445b143bf4eb58ad7f50a5"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/retry/verified-summary.json",
+        "sha256": "7f7b6dc5429167ea0a7ae885c4418de1db453fd1d1a1c80cf56eae8108859b46"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/retry/verify_forward_rows.py",
+        "sha256": "12a8d9c26db0a1725289cefa4a6137a6eed38e56df0a0d01fdd84b4049c5c3a2"
+      }
+    ],
+    "coder14_qkv_1024_serving_result": [
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/campaign.sh",
+        "sha256": "8871e72d68c44f838654ce9d78c3ebda4ea2cd640c15767a8062047f3cb9755b"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/compare_coder.py",
+        "sha256": "4de2fde61bfc1e0bddfbe355b54f297a2d740ba42d7262262ecfe18684abc984"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/dispatch.sha256",
+        "sha256": "2f45e9993b1c33c89d7c0da63ce785cbbbb2dddff8745d1b8f6cee8365ec9a8d"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/fetch-summary.sh",
+        "sha256": "904e8e5623b5bf7aa8b0c12b6a895ab9514be45f764cd5c87f451c35cb9d11d9"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/model.sha256",
+        "sha256": "b413c97f1fefcfb803a01f5e8af5c89aaa649cca5635d3f137e579ce80c08613"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/reused.sha256",
+        "sha256": "3e3ec942b40ca91b20f8623de866e097d2dd594915af0b83112bc70f7af25552"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/summarize_coder_wave.py",
+        "sha256": "d90e565416b141b6370d101f97db81a7d07c76c0f3cd88a9d64424484d524119"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/verified-summary.json",
+        "sha256": "a4dd98025f0a0fb5451fc70927ae78fa3eaa3a46ff2514a8b12374ce7240fd54"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/wave-summary.json",
+        "sha256": "e4cf9e4350e4d8358abea1d22a14e457bf396e35fcc97f9483172b14f651d0db"
+      }
+    ],
     "qwen14_qkv_1024_serving_result": {
       "decision": "keep_as_isolated_experiment_inconsistent_rag_tail_latency",
       "evidence": [

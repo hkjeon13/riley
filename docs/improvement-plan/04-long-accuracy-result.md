@@ -126,6 +126,19 @@ Riley 계획과 PyTorch의 두 개별 투영 조건은 각각 원래 Riley와 HF
 
 후속 대조에서 CUDA 12.4, `M=1, N=4608, K=3584`, BF16 입출력, FP32 연산, workspace 0을 고정했다. 기존 계획과 cuBLASLt가 반환한 8개 계획을 각 행에서 두 번 실행했고 각 반복은 비트 단위로 같았다. 기존 계획 21과 tile 15, stages 18, Split-K 1, reduction 0, CTA swizzle 0, custom option 0, numerical flags `131586`이 같은 계획 31을 비교했다. 계획 31에서 두 행의 4,608개 원소 모두 PyTorch 병합 결과와 비트 단위로 일치했다. 사례 12의 HF 개별 투영과는 V 두 값이 달랐고, `numbers-1023`은 전부 일치했다. 같은 라이브러리와 행렬 형상에서 알고리즘 ID 변경만으로 두 병합 결과의 차이를 재현했다. 이 결과는 두 저장 행에 해당하며, 내부 FP32 누산 순서와 계획 변경이 모델 최종 토큰에 미치는 영향은 추가 검증 범위다. GPU 6·7의 20GiB 예약을 확인했다. 재현 시 `native-plan-controls.patch.gz`를 같은 디렉터리의 `native-plan-controls.patch`로 풀고 검사한다. [아홉 계획의 결과·체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/verified-summary.json) · [실행 순서](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/campaign.sh) · [진단 패치](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/native-plan-controls.patch.gz)
 
+#### 대체 QKV 행이 최종 decode에 미친 영향
+
+이전 연산 시험에서 cuBLASLt 계획 31로 만든 BF16 행을 A100 7번의 Riley 순전파에 주입했다. 두 고정 C1 사례에서 0번 레이어의 QKV 투영을 실행한 직후, bias·RoPE 전에 출력 행 하나를 교체했다. 변경 없는 기준 → 기존 계획 21의 행을 넣는 대조 → 계획 31 행 주입 → 변경 없는 기준 재실행 순으로 비교했다. 기준과 계획 21 주입은 전체 연산 추적과 생성 결과를 그대로 재현했다. 계획 31 주입 전까지는 embedding과 첫 norm이 기준과 같았고 교체한 행은 이전 연산 시험의 해시와 일치했다. [진단 패치](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/qkv-row-replay.patch.gz) · [실행·대조 결과](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/retry/verified-summary.json)
+
+| 사례 | QKV BF16 차이 | 최종 로짓 BF16 차이 | Riley 선택 ID, 기준 → 교체 | HF 선택 ID와 점수 차이, 기준 → 교체 |
+|---|---:|---:|---:|---:|
+| 사례 12, `669-9` | 7 / 4,608 | 116,206 / 152,064 | 34235 → 34235 | 13638, 0.125 → 0.125 |
+| `numbers-1023`, `1023-67` | 1 / 4,608 | 148,503 / 152,064 | 510 → 510 | 311, 0.25 → 0.25 |
+
+서버에서 저장 행을 별도 코드로 검산했다. 선택 가능한 어휘 151,665개에서 기존 선택 ID가 두 사례 모두 유일한 최고점이었고, HF 선택 ID는 기준과 교체 모두 2위였다. 전체 생성 결과도 유지됐다. 이 시험에서는 첫 레이어의 QKV 출력 차이가 최종 로짓까지 전파됐고, 두 요청의 토큰 분기를 설명하려면 다른 레이어와 연산의 영향도 확인해야 한다. [로짓 순위 및 변경 원소 독립 검산](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/retry/verified-rows.json)
+
+재현할 때는 압축을 푼 진단 패치를 `qkv-row-replay.patch`로 두고 체크섬을 확인한다. 첫 시도는 CUDA 바이너리 빌드를 완료한 뒤 GPU 6번에서 다른 프로세스를 발견해 추론 전에 중단했다. 두 예약에 기존 홀더만 남은 것을 확인한 뒤 같은 바이너리 해시로 재실행했고, 정상 종료 후 GPU 6·7의 기존 20GiB 예약을 확인했다. BF16 행은 실행 호스트에 보존했다. [첫 실행과 소스 결속](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/campaign.sh) · [재실행 절차](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/retry/campaign.sh)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.

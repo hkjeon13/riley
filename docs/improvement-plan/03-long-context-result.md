@@ -366,6 +366,25 @@ Qwen2.5-14B-Instruct의 닫힌 부하에서 기록한 기준군과 QKV 후보의
 
 네 시각표와 두 실행 순서에서 TTFT p95 및 TPOT p50이 모두 줄었다. 이 결과의 대상은 두 seed에서 수집한 도착 시각표다. 기존 50ms 간격 시험에는 TTFT p95가 증가한 조건이 남아 있어, 대상 모델의 다른 도착 분포에서 재현성과 회귀 기준을 확인할 때까지 후보는 격리 시험에 둔다. [독립 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/fixed-rag-arrivals/verify_fixed.py) · [원격 집계 절차](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/fixed-rag-arrivals/fetch-summary.sh)
 
+#### Coder-14B의 1,024행 후보 검증
+
+앞선 Qwen2.5-14B 시험과 같은 바이너리 및 A100 7번에서 `Qwen2.5-Coder-14B-Instruct`를 비교했다. 이 모델의 병합 QKV도 `K=5120, N=7168`이며 1,024행 후보가 적용되는 형상이다. 모델 revision `aedcc2d42b622764e023cf882b6652e646b95671`과 KV 2,576블록을 고정하고 기준 → 후보 → 후보 → 기준 순서로 실행했다. 후보 두 실행에서 cuBLASLt 12.4.5의 후보 선택을 확인했다. [고정 모델 입력](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/model.sha256) · [실행 및 런타임 검산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/verified-summary.json)
+
+측정 1,280건을 오류·429 없이 완료했다. 입력 식별, 출력 텍스트 해시, 입력·생성 토큰 수, 종료 사유가 네 실행에서 일치했고, 별도의 장문 8개에서도 C1·C8 생성 토큰 ID가 일치했다. 매번 서버가 코드 0으로 종료했고 같은 GPU 7 홀더의 20GiB 예약으로 복귀했다. 표의 변화율은 각 순서에서 인접한 기준군 대비 후보군으로 계산했다.
+
+| 부하 | TTFT p95 변화, 기준 먼저 / 후보 먼저 | Decode TPOT p50 변화, 기준 먼저 / 후보 먼저 |
+|---|---:|---:|
+| `rag-c1` | −0.92% / −1.70% | +0.05% / +0.05% |
+| `rag-c8-s1` | −2.58% / −1.78% | −0.90% / −0.81% |
+| `rag-c8-s2` | −2.64% / +7.72% | −1.02% / −1.07% |
+| `wave-sync` | −2.50% / −1.41% | −0.86% / +1.99% |
+| `wave-50ms` | +1.85% / +2.06% | −2.93% / −5.46% |
+| `short-c32` | −0.07% / +0.20% | −0.04% / +0.09% |
+
+짧은 요청의 TTFT·처리량은 2% 회귀 기준을 충족했다. 후보 먼저 실행한 동시 유입의 decode TPOT은 1.99% 늘어 1% 기준을 넘었다. 50ms 유입에서는 40건 중 33건과 34건이 빨라졌고, 다섯 번째 묶음의 41번 요청은 각각 534.83ms와 539.14ms 느려졌다. 같은 40건의 요청 본문 지문과 입력 토큰 수를 앞선 Qwen2.5-14B 시험과 맞췄으며, 그 모델에서도 41번 요청에 같은 방향의 큰 지연이 있었다. 다섯 번째 묶음을 뺀 민감도 계산에서 p95의 변화 방향이 뒤집혔고, 채택 판단은 전체 40건을 기준으로 했다. [묶음별 꼬리 지연과 입력 교차 검산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/wave-summary.json)
+
+Coder-14B의 decode 회귀와 두 모델의 50ms 유입 결과에 따라 이 QKV 후보의 형상 공통 적용을 기각했다. Coder-14B에서 유입 시각·응답 지연은 검증했으며, 요청이 선택되는 내부 순서에 대한 GPU 계측 근거는 앞선 Qwen2.5-14B에서 얻었다. 재현할 때는 `tools`의 공유 검사기 두 파일을 실행 위치에 복사해 `dispatch.sha256`을 확인한다. [캠페인](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/campaign.sh) · [공유 교차 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/tools/compare_profile_arms.py) · [공유 설정 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/tools/summarize_profile_arm.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
