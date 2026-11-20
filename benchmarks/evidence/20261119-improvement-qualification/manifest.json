@@ -2536,6 +2536,32 @@
         "sha256": "b472318460cf51c72be8c46ef160df8b5ea8e488c59e78f26cb2fb9df307456a"
       }
     ],
+    "qwen7_decode_residual_boundary_replay": [
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/residual-boundaries/campaign.sh",
+        "sha256": "c8861c6993842418cf41b12dc8d4f27dd3179f0fd1bb22dfb7a0b7c0322085cf"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/residual-boundaries/dispatch.sha256",
+        "sha256": "60c9c942f92800f07f6dbedef4965747a2fde4d773bb537a3c5ac52d55d9593f"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/residual-boundaries/fetch-summary.sh",
+        "sha256": "34c4ca6c45a3181e1570f60af04c6e6895821c166f016ef71565a583f7d9884f"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/residual-boundaries/replay_decode_boundaries.py",
+        "sha256": "7d09d613cc1e7cd1fa6ca91cdedec472f97daffbe8ef4d0644e0324e8bb234ff"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/residual-boundaries/tools.sha256",
+        "sha256": "c19cce685516bbdd9cfb46c890c0e9b367756cd692745b6e4c86854191b1628b"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/residual-boundaries/verified-summary.json",
+        "sha256": "009b762414f411e88df04c982c43ef609ba4615924394ab12f7a405f33c77de7"
+      }
+    ],
     "qwen14_request_and_nsys_joint_trace": [
       {
         "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/analysis.sha256",

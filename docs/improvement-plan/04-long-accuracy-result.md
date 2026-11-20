@@ -143,6 +143,19 @@ Riley 계획과 PyTorch의 두 개별 투영 조건은 각각 원래 Riley와 HF
 
 같은 바이너리에서 HF가 Q·K·V를 개별 계산한 정확한 BF16 행으로도 교체했다. 사례 12의 추적 해시는 계획 31을 사용한 경우와 달랐고, `numbers-1023`은 계획 31의 추적을 비트 단위로 재현했다. 두 사례 모두 Riley의 생성 결과와 분기 위치의 선택 토큰이 유지됐다. HF 선택 ID는 두 사례에서 각각 0.125와 0.25 차이로 계속 2위였다. 따라서 두 사례의 토큰 차이에는 첫 레이어의 QKV 행 외에 다른 요인이 필요하다. 정상 종료 뒤 GPU 6·7의 기존 20GiB 예약을 확인했다. [HF 행 대조 실행](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/hf-separate/campaign.sh) · [토큰 순위와 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/layer-zero-operators/projection-crossover/native-plan-controls/forward-replay/hf-separate/verified-summary.json)
 
+#### residual 경계 교체로 decode 토큰 선택을 재현
+
+A100 7번에서 7B의 두 동일한 C1 decode 위치를 HF SDPA로 다시 실행했다. 28개 레이어 각각의 attention 직후와 MLP 이후 residual을 한 곳씩 Riley의 실제 BF16 추적값으로 교체하고 해당 경계 이후의 순전파를 다시 계산했다. 매번 지정한 경계에 도달했을 때 기존 HF 행을 확인하고 교체한 행의 바이트도 검증했다. attention 직후에는 같은 텐서를 읽는 정규화와 이후 residual 덧셈에 교체값이 반영되도록 적용했다. [실행기](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/residual-boundaries/campaign.sh) · [재계산 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/residual-boundaries/replay_decode_boundaries.py)
+
+두 사례의 112개 자기 교체 대조군과 교체 전후의 일반 실행은 기존 HF 전체 로짓 해시를 재현했다. 각 재계산 뒤에 추가된 마지막 KV 한 토큰을 제거했고, 두 사례 모두 접두부 K·V의 시작과 종료 해시가 같았다. 표의 점수 순서는 Riley가 선택한 ID, HF가 선택한 ID다. 선택 토큰은 주소 가능한 151,665개 어휘에서 최고점 중 가장 작은 ID로 계산했다. [검산 결과와 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/residual-boundaries/verified-summary.json)
+
+| 사례 | HF 기본 두 점수 | Riley ID 선택을 재현한 첫 경계 | 교체 후 두 점수 | 56개 교체 중 Riley ID 선택 |
+|---|---:|---|---:|---:|
+| 사례 12, 생성 위치 9 | 18.875 / 18.875 | 레이어 0 MLP 이후 residual | 19.0 / 18.875 | 28 |
+| `numbers-1023`, 생성 위치 67 | 35.5 / 35.5 | 레이어 0 attention 직후 residual | 35.5 / 35.25 | 33 |
+
+사례 12는 레이어 0의 attention 직후 residual을 바꿔도 두 토큰이 동점이었다. `numbers-1023`은 attention 직후 교체에서 Riley 토큰이 단독 최고점이었고, 같은 레이어의 MLP 이후 residual 교체에서는 다시 동점이었다. 최종 레이어의 residual을 교체하면 두 사례에서 Riley의 두 토큰 점수와 선택을 모두 재현했으며 전체 어휘 로짓 해시는 Riley와 달랐다. 이 결과는 같은 HF 접두부를 사용한 지정된 두 decode 스텝의 민감도를 보여 준다. 다음 연산 비교의 범위는 사례 12의 레이어 0 MLP와 `numbers-1023`의 레이어 0 attention으로 좁혔다. 종료 후 GPU 6·7은 각각 20GiB 예약으로 복귀했다. [집계 재현](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/residual-boundaries/fetch-summary.sh)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.
