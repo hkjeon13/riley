@@ -2536,6 +2536,52 @@
         "sha256": "b472318460cf51c72be8c46ef160df8b5ea8e488c59e78f26cb2fb9df307456a"
       }
     ],
+    "qwen7_native_decode_projection_plans": [
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/baseline-capture.sha256",
+        "sha256": "65b0771dd5a7c75525fe8d2ceade7ed3855ceb21d8b599ed71394e71c44f6ef1"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/campaign-replay.sh",
+        "sha256": "d9041ba121b6b39454e28c742a59490f6a8b8be3120bad20cf8ed68befacbec0"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/campaign.sh",
+        "sha256": "67f6546dae54816491efc993a2f322ed80d13231fce1627e648c56c30ccb3652"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/collect_plans.py",
+        "sha256": "2b0c77f7a63b283b8a807d4c2912085ec638371607a9649f4192655867feffd6"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/dispatch.sha256",
+        "sha256": "14dd47b0d42106ce92e6ebab315f858ebbcf7c3e0690a638176104789ef6aba2"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/fetch-summary.sh",
+        "sha256": "38aa87a6e72ffffb0766e3b53e08d3d4960bb7e9e2b5445e82c94ca34b04fb8f"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/instrument_plan_receipt.py",
+        "sha256": "89cc9015c25250ff1970d8961c916ef17383c572f21b2924203c2a9340de55c9"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/replay-dispatch.sha256",
+        "sha256": "80327a497f30b1eb6d56d4d2e42e752d0d13d7ed9e105ee5a6732581baaa0394"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/replay_projection_plans.cu",
+        "sha256": "41493927378b92e7eba2e592cc79a9a41ea33eb95be87978fe3a9f94d877561b"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/replay_table.py",
+        "sha256": "c49181bd4216e7b9b2ec5b484cc0a467377faaf2f046a3601c42cb386a8cdb8b"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/verified-summary.json",
+        "sha256": "5e771444dbd7bfcaa5aeee241ec0f612b0764b2a736f6b6653c38be11fdd3bdb"
+      }
+    ],
     "qwen7_decode_projection_precision": [
       {
         "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/campaign.sh",

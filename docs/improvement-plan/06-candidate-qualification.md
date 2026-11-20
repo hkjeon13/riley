@@ -41,7 +41,9 @@ Qwen2.5-7B-Instruct의 두 decode 분기에서 28개 레이어의 residual 교�
 
 동일 입력의 레이어 0 비교에서 사례 12는 down projection 출력 1,536개가 달랐고, `numbers-1023`은 attention 출력 투영의 세 값이 달랐다. 각 사례의 해당 출력 행을 사용한 재실행에서 Riley 토큰 선택을 재현했다. [연산별 대조](04-long-accuracy-result.md#같은-입력으로-레이어-0의-mlp와-attention-출력-투영-대조)
 
-두 down projection을 FP64 내적으로 검산했다. BF16 최근접 기준과 다른 값은 Riley에서 1,248개·1,263개였다. HF는 축소 정밀도 reduction을 끈 독립 투영의 차이가 4개·3개로 줄었다. Riley의 실제 계획과 수치 변경 후보의 품질·성능을 검증하는 작업이 남았다. [투영 정밀도 대조](04-long-accuracy-result.md#투영의-bf16-반올림과-축소-정밀도-대조)
+두 down projection을 FP64 내적으로 검산했다. BF16 최근접 기준과 다른 값은 Riley에서 1,248개·1,263개였다. HF는 축소 정밀도 reduction을 끈 독립 투영의 차이가 4개·3개로 줄었다. [투영 정밀도 대조](04-long-accuracy-result.md#투영의-bf16-반올림과-축소-정밀도-대조)
+
+Riley 서버가 선택한 down 계획 21은 Split-K 3의 BF16 출력형 reduction을 사용했다. 같은 알고리즘의 부분합을 FP32로 합치자 독립 투영의 BF16 차이가 15개·21개로 줄었으며 별도 대안 계획 13은 1개·1개였다. 실제 서빙에서 대안의 토큰·배치 불변성·품질·성능 검증이 남아 있다. [실제 계획과 대안 재생](04-long-accuracy-result.md#실제-riley-계획과-split-k-부분합-정밀도)
 
 SmolLM2-1.7B의 같은 A100 바이너리에서 제출 후 발행의 32행 decode 커널 사이 공백 중앙값은 두 비교에서 51–72µs 줄었다. 네 일반 서빙 비교에서 처리량은 0.38–0.89% 늘었고 측정한 요청의 출력이 일치했다. `after-submit-v1`을 W2와 W3 후속 시험의 기준 정책으로 유지한다. [발행 정책별 계측](02-async-step-result.md#발행-정책과-32행-decode-커널-간격)
 

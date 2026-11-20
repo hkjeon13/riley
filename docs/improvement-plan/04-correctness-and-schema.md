@@ -133,6 +133,7 @@ CPU에서 과거 세 Riley 결과의 1,319문항별 정오를 각각 재계산�
 - [x] W4-A: 같은 두 decode 위치에서 28개 레이어의 residual 경계를 하나씩 교체해 전체 남은 순전파를 실행했다. 두 사례에서 Riley 선택을 재현한 첫 경계는 각각 레이어 0의 MLP 이후와 attention 직후였다. [경계별 토큰 대조](04-long-accuracy-result.md#residual-경계-교체로-decode-토큰-선택을-재현)
 - [x] W4-A: 레이어 0의 동일 피연산자 대조에서 사례 12의 게이트 곱·down projection과 `numbers-1023`의 attention 출력 투영 차이를 확인했다. 두 사례에서 출력 행을 교체해 Riley ID가 선택되는 조건을 검증했다. [같은 피연산자의 연산별 대조](04-long-accuracy-result.md#같은-입력으로-레이어-0의-mlp와-attention-출력-투영-대조)
 - [x] W4-A: FP64 내적과 BF16 최근접 기준으로 두 사례의 투영을 검산했다. HF down의 축소 정밀도 reduction 설정을 끄면 최근접 기준과 다른 값이 두 행에서 각각 4개와 3개로 줄었다. [독립 투영 정밀도 대조](04-long-accuracy-result.md#투영의-bf16-반올림과-축소-정밀도-대조)
+- [x] W4-A: 실제 Riley down 계획의 Split-K 3과 BF16 출력형 reduction을 재현했다. 동일한 계획에서 부분합만 FP32 계산형으로 바꾸자 BF16 최근접 기준과 다른 값이 1,248→15개, 1,263→21개로 줄었다. [Riley 계획과 reduction 대조](04-long-accuracy-result.md#실제-riley-계획과-split-k-부분합-정밀도)
 - [ ] W4-A: 결함 수정 또는 수치 기준 변경의 영향 모델·품질 결과가 명확하다. 모든 HF 문자열을 무조건 같게 만들었다고 과장하지 않는다.
 - [x] W4-B: 지원 제약의 독립 판정, 미지원 응답, `oneOf`·형제 제약 반례를 검증했다. [구조화 출력 계약 결과](04-structured-output-result.md)
 - [ ] 공통: 배치 불변성·기존 품질 범위·W2/W3 성능 회귀 제한을 함께 만족한다.

@@ -186,7 +186,25 @@ CPU에서 저장된 BF16 피연산자의 내적을 FP64로 계산하고 가장 �
 | 사례 12 MLP down | 1,248 | 1,268 | 4 | 3 |
 | `numbers-1023` MLP down | 1,263 | 1,364 | 3 | 2 |
 
-Riley의 MLP down에서는 최근접 결과와 BF16 값의 순서에서 두 단계 이상 떨어진 원소가 각각 239개와 304개였다. HF는 축소 정밀도 reduction을 끄자 해당 수가 304→2개, 381→0개로 줄었다. 이 설정은 두 attention 출력에는 영향을 주지 않았다. 이 결과는 HF down projection의 차이에 축소 정밀도 reduction이 영향을 준다는 근거다. Riley의 계획 ID, Split-K 및 reduction 방식과 수치 변경 시 서버 출력·모델 품질·성능은 확인이 남았다. GPU 6·7은 기존 20GiB 예약으로 복귀했고 CPU 검산은 그 뒤에 실행됐다. [원본 체크섬과 수치](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/verified-summary.json) · [집계 재현](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/fetch-summary.sh)
+Riley의 MLP down에서는 최근접 결과와 BF16 값의 순서에서 두 단계 이상 떨어진 원소가 각각 239개와 304개였다. HF는 축소 정밀도 reduction을 끄자 해당 수가 304→2개, 381→0개로 줄었다. 이 설정은 두 attention 출력에는 영향을 주지 않았다. 이 결과는 HF down projection의 차이에 축소 정밀도 reduction이 영향을 준다는 근거다. GPU 6·7은 기존 20GiB 예약으로 복귀했고 CPU 검산은 그 뒤에 실행됐다. [원본 체크섬과 수치](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/verified-summary.json) · [집계 재현](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/fetch-summary.sh)
+
+#### 실제 Riley 계획과 Split-K 부분합 정밀도
+
+A100 7번의 `native-bf16-varlen-v1` 격리 서버에서 두 C1 decode 위치의 실제 cuBLASLt 12.4.5 계획을 호출 직전에 기록했다. 진단을 추가한 서버의 응답과 저장한 BF16 trace는 앞의 기준 실행과 같았다. 두 위치에서 attention 출력은 계획 21, tile 15, stages 18의 비분할 경로였다. MLP down은 계획 21, tile 18, stages 18, Split-K 3의 출력형 reduction이었다. 두 투영의 출력 형식은 BF16이다. [실제 호출의 기록 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/instrument_plan_receipt.py) · [입력·계획·출력 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/verified-summary.json)
+
+같은 GPU·라이브러리·입력·가중치에서 기록 계획을 별도로 재생했다. 두 투영의 출력은 실제 서버와 비트 단위로 같았고 모든 대안은 각 입력에서 두 번 같은 값이 나왔다. down에서 알고리즘 ID, tile, stages, Split-K와 나머지 속성을 고정하고 부분합만 FP32 계산형으로 합쳤다. workspace는 21,504B에서 43,008B로 늘었다. BF16 최근접 기준과 다른 값은 1,248→15개와 1,263→21개였고, 기준에서 두 단계 이상 떨어진 값은 239→3개와 304→0개였다. 이 대조에서 출력형 reduction이 두 down 출력의 큰 차이를 만든다는 점을 확인했다. [계획 재생 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/replay_projection_plans.cu)
+
+| Down projection 계획 | Split-K / reduction | Workspace | BF16 최근접 기준과 다른 값, 사례 12 / `numbers-1023` |
+|---|---|---:|---:|
+| 서버 기준 21 | 3 / BF16 출력형 | 21,504B | 1,248 / 1,263 |
+| 같은 계획 21 | 3 / FP32 계산형 | 43,008B | 15 / 21 |
+| 계획 13, custom option 75 | 1 / 분할 없음 | 0B | 3 / 2 |
+| 계획 13, custom option 47 | 64 / FP32 계산형 | 917,520B | 1 / 1 |
+| 계획 13, custom option 111 | 108 / FP32 계산형 | 1,548,304B | 1 / 1 |
+
+기준을 포함해 attention 3개, down 7개 계획을 비교했다. Attention 대안 중 계획 31에서는 기준과 다른 값이 10→7개와 5→2개였다. Down 대안은 workspace 요구량과 함께 기록했다. 실제 서빙에서 대안이 생성 토큰, 배치 불변성, 모델 품질과 지연에 미치는 영향은 다음 검증 범위다. 두 실험이 끝난 뒤 GPU 6·7은 기존 20GiB 예약으로 돌아왔다. [전체 계획별 결과](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/verified-summary.json) · [집계 재현](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/native-projection-plans/fetch-summary.sh)
+
+재현 시 기준 캠페인의 `dispatch.sha256`에 적힌 기존 계측 패치와 체크섬은 `layer-zero-operators`에서, `enable_mlp_capture.py`는 `matched-layer0-operands`에서 복사한다. 독립 재생은 `projection-precision`의 `projection_oracle.py`를 복사하고 `replay-dispatch.sha256`을 실행 경로의 `dispatch.sha256`으로 사용한다.
 
 ## 첫 prefill 분기 추적
 
