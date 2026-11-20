@@ -2536,6 +2536,40 @@
         "sha256": "b472318460cf51c72be8c46ef160df8b5ea8e488c59e78f26cb2fb9df307456a"
       }
     ],
+    "qwen7_attention_plan_31_serving": [
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/campaign.sh",
+        "sha256": "7ff81e6703f36a017781707e5d7aa04fcd2af865bcbe2aa674f55bcad3566cf2"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/capture_decode_rows.py",
+        "sha256": "ecee099b8f3b0fef754ed40f1c43e69542e15da90f1164295bd4600fba48c036"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/dispatch.sha256",
+        "sha256": "5886813b49d2557002d718b143819a9f53f69a16de6a12dc9fd4cff992bd8b39"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/fetch-summary.sh",
+        "sha256": "d872483e0588df3017c9550bb770cbb8ff6d0e63d67a08f3691ec3d92c9d1a7f"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/prepare_candidate.py",
+        "sha256": "5e8d24e985035bc8cfa20c163a35f812e5702c2624af7b45834674b3040eb90e"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/source-inputs.sha256",
+        "sha256": "d8d703c59aa24ee13254e3941514f4f0059d8063676b714febb68063ef8cf6f1"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/verified-summary.json",
+        "sha256": "76fc3c0bd28ec062099b537fb48e313e3cde74e68b7706cc58a68f567e5339c7"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/verify_candidate.py",
+        "sha256": "d06ff8093c8cbc678793f7a56d6a4c73e6708a19df88df378af1fb5a3a1c0eac"
+      }
+    ],
     "qwen7_decode_projection_serving_replay": [
       {
         "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/buckets/bucket-dispatch.sha256",

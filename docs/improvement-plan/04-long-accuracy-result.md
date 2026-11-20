@@ -233,6 +233,20 @@ A100 7번의 `native-bf16-varlen-v1` 격리 서버에서 두 C1 decode 위치의
 
 계획 13의 두 설정은 M=1만 실행했다. M=2~256의 나머지 20개 크기는 cuBLASLt 계획 검사에서 상태 코드 15로 거부됐다. 해당 두 설정을 같은 계획으로 전체 배치 크기에 적용하는 경로는 여기서 기각했다. Attention 계획 31과 FP32 계산형 down 계획 21은 각각 4,430개 행에서 두 고정 입력의 M=1 출력을 재현했다. 실제 서빙 배치의 C1·C8·C32 정확성 및 품질 검증은 남아 있다. 종료 후 GPU 6·7은 기존 20GiB 예약으로 돌아왔다. [실행기](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/buckets/campaign-buckets.sh) · [행 수 비교 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/buckets/bucket-probe-main.cpp)
 
+#### 계획 31 전체 서빙 대조와 판정
+
+A100 7번에서 같은 Qwen2.5-7B-Instruct 체크포인트, 격리 바이너리, `native-bf16-varlen-v1` 옵션을 고정했다. 후보 실행은 W4 진단 스위치로 3,584×3,584 BF16 계획에 ID 31을 사용했다. 이 설정의 서빙 경로는 QKV를 병합하고 해당 형상을 attention 출력에 사용한다. 후보 서버는 21개 행 수에서 모두 ID 31, tile 15, stages 18, Split-K 1, workspace 0의 계획을 기록했다. 기준 서버가 저장된 232건을 재현했고 후보도 같은 29개 입력과 C1·진단·C8·C32 조건에서 232건을 완료했다. 두 서버 모두 코드 0으로 종료했다. [격리 후보 준비](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/prepare_candidate.py) · [전체 대조 집계](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/verified-summary.json)
+
+| 입력 | 후보 C8에서 후보 C1과 일치 | 후보 C32에서 후보 C1과 일치 | HF 전체 생성 ID 일치, 기준 → 후보 |
+|---|---:|---:|---:|
+| 기존 장문 18개 | 54/54 | 54/54 | 13/18 → 9/18 |
+| 경계 입력 11개 | 33/33 | 33/33 | 9/11 → 9/11 |
+| 전체 29개 | 87/87 | 87/87 | 22/29 → 18/29 |
+
+후보의 진단 응답도 같은 후보 C1의 29건과 일치했다. 각 실행의 요청은 입력 ID와 usage를 대조했고, 배치 비교에는 생성 ID·텍스트·종료 사유·usage를 사용했다. 후보와 기준의 응답은 전체 232건 중 136건에서 같았다. HF와 전체 생성 ID가 새로 일치한 입력은 3개, 기존 일치를 잃은 입력은 7개였다. HF 비교에서는 실제 종료 EOS만 정규화했고 종료 사유는 두 군 모두 29개에서 HF와 같았다. [입력과 응답 검산기](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/verify_candidate.py)
+
+한 위치만 교체했을 때 HF의 128개 토큰과 같았던 `numbers-1023`은 전체 적용에서 기준과 후보 모두 67개 뒤에 갈라졌다. `korean-1024`는 77개에서 128개 전부로 늘었고 `long-code-7836`은 전부 일치하던 상태에서 일곱 번째 토큰 뒤에 갈라졌다. 따라서 시험한 계획 31의 전체 적용은 이 모델의 후보에서 기각했다. 정밀도 후보의 다음 검증은 별도의 수치 변경과 동일한 품질·배치 기준을 요구한다. GPU 6·7은 각각 기존 20GiB 예약으로 복귀했다. [실행 순서](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/campaign.sh) · [집계 재현](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/fetch-summary.sh)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.
