@@ -1,0 +1,749 @@
+{
+  "remote_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-projection-buckets-20261120.XtBOXT4w",
+  "m_buckets": [
+    1,
+    2,
+    4,
+    8,
+    16,
+    24,
+    32,
+    48,
+    64,
+    80,
+    96,
+    112,
+    128,
+    144,
+    160,
+    176,
+    192,
+    208,
+    224,
+    240,
+    256
+  ],
+  "m1_outputs_per_candidate": 2,
+  "row_orderings_per_bucket": 2,
+  "workspace_limit_bytes": 16777216,
+  "source_replay_manifest_sha256": "bec6273c272a0af78e9b8e04cbe53b54b6d945c0abb38085ef035bf5f3599457",
+  "result_manifest_sha256": "fe422f3592e2087e9291143803f8c4097a69d9df964428ada93a273b52a8e8a2",
+  "gpu_idle_reservation_gib": {
+    "6": 20,
+    "7": 20
+  },
+  "candidates": {
+    "attention-31": {
+      "rows": [
+        {
+          "m": 1,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 2,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 4,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 8,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 16,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 24,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 32,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 48,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 64,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 80,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 96,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 112,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 128,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 144,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 160,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 176,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 192,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 208,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 224,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 240,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 256,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        }
+      ],
+      "source_log_sha256": "0222ea2f453bf6532c84cdc2459210ff92cb5930d5cbbfcddb87af83827ae08c",
+      "executed_buckets": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        48,
+        64,
+        80,
+        96,
+        112,
+        128,
+        144,
+        160,
+        176,
+        192,
+        208,
+        224,
+        240,
+        256
+      ],
+      "bit_exact_buckets": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        48,
+        64,
+        80,
+        96,
+        112,
+        128,
+        144,
+        160,
+        176,
+        192,
+        208,
+        224,
+        240,
+        256
+      ]
+    },
+    "down-13-unsplit": {
+      "rows": [
+        {
+          "m": 1,
+          "executed": true,
+          "workspace_bytes": 0,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 2,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 4,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 8,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 16,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 24,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 32,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 48,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 64,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 80,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 96,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 112,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 128,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 144,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 160,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 176,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 192,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 208,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 224,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 240,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 256,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        }
+      ],
+      "source_log_sha256": "3334cdfe0557f4e46523973b7d89733388eeb92d6e58ac99e8d5a006df8aecb3",
+      "executed_buckets": [
+        1
+      ],
+      "bit_exact_buckets": [
+        1
+      ]
+    },
+    "down-13-split64": {
+      "rows": [
+        {
+          "m": 1,
+          "executed": true,
+          "workspace_bytes": 917520,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 2,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 4,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 8,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 16,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 24,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 32,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 48,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 64,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 80,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 96,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 112,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 128,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 144,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 160,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 176,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 192,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 208,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 224,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 240,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        },
+        {
+          "m": 256,
+          "executed": false,
+          "lt_status": 15,
+          "plan_state": 15,
+          "workspace_bytes": 0
+        }
+      ],
+      "source_log_sha256": "8d16c6924ddf49696819f9c2c77fb33ca2043725198d6d61dc98432fe9d4317b",
+      "executed_buckets": [
+        1
+      ],
+      "bit_exact_buckets": [
+        1
+      ]
+    },
+    "fp32-reduction": {
+      "rows": [
+        {
+          "m": 1,
+          "executed": true,
+          "workspace_bytes": 43008,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 2,
+          "executed": true,
+          "workspace_bytes": 86016,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 4,
+          "executed": true,
+          "workspace_bytes": 172032,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 8,
+          "executed": true,
+          "workspace_bytes": 344064,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 16,
+          "executed": true,
+          "workspace_bytes": 688128,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 24,
+          "executed": true,
+          "workspace_bytes": 1032192,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 32,
+          "executed": true,
+          "workspace_bytes": 1376256,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 48,
+          "executed": true,
+          "workspace_bytes": 2064384,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 64,
+          "executed": true,
+          "workspace_bytes": 2752512,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 80,
+          "executed": true,
+          "workspace_bytes": 3440640,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 96,
+          "executed": true,
+          "workspace_bytes": 4128768,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 112,
+          "executed": true,
+          "workspace_bytes": 4816896,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 128,
+          "executed": true,
+          "workspace_bytes": 5505024,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 144,
+          "executed": true,
+          "workspace_bytes": 6193152,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 160,
+          "executed": true,
+          "workspace_bytes": 6881280,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 176,
+          "executed": true,
+          "workspace_bytes": 7569408,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 192,
+          "executed": true,
+          "workspace_bytes": 8257536,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 208,
+          "executed": true,
+          "workspace_bytes": 8945664,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 224,
+          "executed": true,
+          "workspace_bytes": 9633792,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 240,
+          "executed": true,
+          "workspace_bytes": 10321920,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        },
+        {
+          "m": 256,
+          "executed": true,
+          "workspace_bytes": 11010048,
+          "different_rows": 0,
+          "different_bf16_words": 0
+        }
+      ],
+      "source_log_sha256": "a26810dc63242fb2f074a6c09e54901604dd18361d425b15fc35b89f132848b4",
+      "executed_buckets": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        48,
+        64,
+        80,
+        96,
+        112,
+        128,
+        144,
+        160,
+        176,
+        192,
+        208,
+        224,
+        240,
+        256
+      ],
+      "bit_exact_buckets": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        48,
+        64,
+        80,
+        96,
+        112,
+        128,
+        144,
+        160,
+        176,
+        192,
+        208,
+        224,
+        240,
+        256
+      ]
+    }
+  }
+}

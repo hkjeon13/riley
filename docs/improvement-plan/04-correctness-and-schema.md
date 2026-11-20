@@ -134,6 +134,8 @@ CPU에서 과거 세 Riley 결과의 1,319문항별 정오를 각각 재계산�
 - [x] W4-A: 레이어 0의 동일 피연산자 대조에서 사례 12의 게이트 곱·down projection과 `numbers-1023`의 attention 출력 투영 차이를 확인했다. 두 사례에서 출력 행을 교체해 Riley ID가 선택되는 조건을 검증했다. [같은 피연산자의 연산별 대조](04-long-accuracy-result.md#같은-입력으로-레이어-0의-mlp와-attention-출력-투영-대조)
 - [x] W4-A: FP64 내적과 BF16 최근접 기준으로 두 사례의 투영을 검산했다. HF down의 축소 정밀도 reduction 설정을 끄면 최근접 기준과 다른 값이 두 행에서 각각 4개와 3개로 줄었다. [독립 투영 정밀도 대조](04-long-accuracy-result.md#투영의-bf16-반올림과-축소-정밀도-대조)
 - [x] W4-A: 실제 Riley down 계획의 Split-K 3과 BF16 출력형 reduction을 재현했다. 동일한 계획에서 부분합만 FP32 계산형으로 바꾸자 BF16 최근접 기준과 다른 값이 1,248→15개, 1,263→21개로 줄었다. [Riley 계획과 reduction 대조](04-long-accuracy-result.md#실제-riley-계획과-split-k-부분합-정밀도)
+- [x] W4-A: 두 C1 요청의 한 decode 위치에서 대안 투영 행을 재생했다. 사례 12는 기존 전체 생성 결과를 유지했고, `numbers-1023`은 세 계획에서 HF의 생성 128개 토큰을 재현했다. [서빙 재생 검증](04-long-accuracy-result.md#투영-대안을-실제-decode-응답에서-재생)
+- [x] W4-A: 같은 두 행의 독립 투영에서 attention 계획 31과 FP32 계산형 down 계획 21의 21개 크기는 M=1과 같았다. Down 계획 13 두 설정은 M=1에서만 실행됐다. [후보별 행 수 대조](04-long-accuracy-result.md#후보별-21개-배치-행-수-대조)
 - [ ] W4-A: 결함 수정 또는 수치 기준 변경의 영향 모델·품질 결과가 명확하다. 모든 HF 문자열을 무조건 같게 만들었다고 과장하지 않는다.
 - [x] W4-B: 지원 제약의 독립 판정, 미지원 응답, `oneOf`·형제 제약 반례를 검증했다. [구조화 출력 계약 결과](04-structured-output-result.md)
 - [ ] 공통: 배치 불변성·기존 품질 범위·W2/W3 성능 회귀 제한을 함께 만족한다.

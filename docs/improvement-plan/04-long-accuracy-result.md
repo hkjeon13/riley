@@ -206,6 +206,33 @@ A100 7번의 `native-bf16-varlen-v1` 격리 서버에서 두 C1 decode 위치의
 
 재현 시 기준 캠페인의 `dispatch.sha256`에 적힌 기존 계측 패치와 체크섬은 `layer-zero-operators`에서, `enable_mlp_capture.py`는 `matched-layer0-operands`에서 복사한다. 독립 재생은 `projection-precision`의 `projection_oracle.py`를 복사하고 `replay-dispatch.sha256`을 실행 경로의 `dispatch.sha256`으로 사용한다.
 
+#### 투영 대안을 실제 decode 응답에서 재생
+
+같은 CUDA 진단 바이너리로 A100 7번의 격리 Riley 서버를 실행했다. 두 C1 요청에서 고정된 한 decode 위치의 레이어 0 출력 행만 교체했다. 모든 응답에서 해당 위치 전까지의 토큰과 교체 직전까지 기록한 연산 행이 기준과 같았다. 교체 없음, 원래 down 값을 다시 넣은 대조군, 종료 전 기준 재실행은 두 사례 모두 기존 전체 응답과 BF16 추적을 재현했다. 각 조건에서 호환되는 실제 후보 출력 해시와 교체 후 저장된 행을 맞췄다. [서빙 재생 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/capture_decode_rows.py) · [응답과 로그릿 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/verified-summary.json)
+
+| 교체한 레이어 0 투영 | 사례 12 선택 ID | `numbers-1023` 선택 ID | `numbers-1023`에서 HF와 같은 생성 접두부 |
+|---|---:|---:|---:|
+| 서버 기준 | 34235 | 510 | 67 |
+| Down 계획 21, FP32 계산형 reduction | 34235 | 510 | 67 |
+| Down 계획 13, 분할 없음 | 34235 | 311 | 128 |
+| Down 계획 13, Split-K 64와 FP32 계산형 reduction | 34235 | 311 | 128 |
+| Attention 출력 계획 31 | 34235 | 311 | 128 |
+
+사례 12는 네 후보에서 출력 텍스트·토큰 ID·종료 사유가 기준과 같았다. `numbers-1023`은 down 계획 13 두 조건과 attention 계획 31에서 HF가 선택한 311이 Riley의 최고점 공동 순위에 들어갔고 실제로 선택됐다. 세 조건의 생성 128개 토큰이 HF의 같은 구간과 일치했다. Down 계획 21은 FP32로 부분합을 바꿨을 때도 두 사례의 전체 생성 결과가 기준과 같았다. 이 범위는 두 C1 요청의 고정된 한 위치이며, 다른 레이어·토큰에 같은 변경을 적용한 결과는 별도 품질·배치 검증 범위다. 서버는 코드 0으로 종료했고 GPU 6·7은 기존 20GiB 예약으로 돌아왔다. [실행 절차](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/campaign.sh) · [원본 확인 절차](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/fetch-summary.sh)
+
+#### 후보별 21개 배치 행 수 대조
+
+같은 cuBLASLt 12.4.5와 A100 7번에서 `native-bf16-varlen-v1`의 21개 배치 행 수를 사용했다. 각 크기에서 두 고정 BF16 입력을 번갈아 넣은 뒤 순서를 뒤집어 한 번 더 계산했다. 같은 후보의 M=1 원본과 각 행의 BF16 출력을 비교했다. workspace 한도는 해당 서버의 16MiB와 같았다. [프로파일의 배치 행 설정](../../crates/riley-server/src/inference_profile.rs) · [행 수별 원본 체크섬과 집계](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/buckets/buckets-summary.json)
+
+| 후보 | 실행한 배치 행 수 | M=1과 비트 일치한 배치 행 수 |
+|---|---:|---:|
+| Attention 출력 계획 31 | 21 / 21 | 21 / 21 |
+| Down 계획 21, FP32 계산형 reduction | 21 / 21 | 21 / 21 |
+| Down 계획 13, 분할 없음 | 1 / 21 | 1 / 21 |
+| Down 계획 13, Split-K 64와 FP32 계산형 reduction | 1 / 21 | 1 / 21 |
+
+계획 13의 두 설정은 M=1만 실행했다. M=2~256의 나머지 20개 크기는 cuBLASLt 계획 검사에서 상태 코드 15로 거부됐다. 해당 두 설정을 같은 계획으로 전체 배치 크기에 적용하는 경로는 여기서 기각했다. Attention 계획 31과 FP32 계산형 down 계획 21은 각각 4,430개 행에서 두 고정 입력의 M=1 출력을 재현했다. 실제 서빙 배치의 C1·C8·C32 정확성 및 품질 검증은 남아 있다. 종료 후 GPU 6·7은 기존 20GiB 예약으로 돌아왔다. [실행기](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/buckets/campaign-buckets.sh) · [행 수 비교 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/buckets/bucket-probe-main.cpp)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.
