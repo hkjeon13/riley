@@ -107,7 +107,8 @@ python3 benchmarks/live/compare.py \
 최종 p95는 사전 지정한 다중 seed·반복과 충분한 표본으로 판정한다. 셀당 완료 1,000건 이상·3회 반복을 신규 제안으로 검토하되 실행 시간·분산을 확인해 사전 확정한다. 기존 qualification 표본을 소급 변경하는 기준은 아니다.
 
 - [x] Qwen2.5-14B의 RAG C8 seed 2와 50ms 유입에서 요청 대기와 호스트·GEMM·attention·KV 쓰기 trace를 같은 실행에 결속했다. [동시 계측](03-long-context-result.md#같은-실행의-요청-대기와-cuda-커널-대조)
-- [ ] KV 블록 수용량에 막힌 대기와 실행 가능한 요청이 다른 GPU 스텝을 기다린 시간을 구분해 검증한다.
+- [x] 동시 계측의 두 부하에서 워밍업을 포함한 실제 입력으로 계산한 최대 KV 예약과 활성 요청 수가 설정 한도보다 작았다. [예약 상한 대조](03-long-context-result.md#같은-실행의-요청-대기와-cuda-커널-대조)
+- [ ] KV 블록 수용량을 제한해 실제 압력이 생겼을 때의 대기와 회수 경계를 확인한다.
 - [x] Qwen2.5-14B의 요청별 prefill 대기와 다른 요청의 prefill 구간이 겹치는 시간을 실측했다. [요청별 계측](03-long-context-result.md#riley-14b의-요청별-대기와-prefill-계측)
 - [x] 14B에서 진행 중인 prefill을 우선한 후보의 배치 불변성과 회귀를 확인했다. Decode TPOT 기준을 넘긴 설정은 미채택으로 판정했다. [후보 결과](03-long-context-result.md#riley-14b의-요청별-대기와-prefill-계측)
 - [x] 14B에서 완료 가능한 prefill을 우선한 후보를 비교했다. 두 번째 RAG seed의 TTFT 꼬리와 두 동시 유입 조건의 decode 지연이 늘어 미채택했다. [후보 결과](03-long-context-result.md#완료-가능한-prefill-우선-후보)

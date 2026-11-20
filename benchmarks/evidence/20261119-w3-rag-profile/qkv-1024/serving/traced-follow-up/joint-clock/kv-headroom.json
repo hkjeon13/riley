@@ -1,0 +1,26 @@
+{
+  "riley-first": {
+    "phase_requests_with_warmup": 120,
+    "prior_startup_requests": 48,
+    "maximum_prompt_tokens": 3523,
+    "client_concurrency_upper_bound": 8,
+    "configured_active_sequence_limit": 32,
+    "max_output_tokens_per_request": 128,
+    "max_promised_blocks_all_live_requests": 1832,
+    "physical_kv_blocks": 2576,
+    "guaranteed_kv_block_headroom": 744,
+    "server_log_sha256": "92a83147f75e387d54991462313608e0b821f4f9ecdbffa6726fd777f7ed5466"
+  },
+  "qkv-first": {
+    "phase_requests_with_warmup": 120,
+    "prior_startup_requests": 48,
+    "maximum_prompt_tokens": 3523,
+    "client_concurrency_upper_bound": 8,
+    "configured_active_sequence_limit": 32,
+    "max_output_tokens_per_request": 128,
+    "max_promised_blocks_all_live_requests": 1832,
+    "physical_kv_blocks": 2576,
+    "guaranteed_kv_block_headroom": 744,
+    "server_log_sha256": "88f80cf9a362313b8554a1b80087d3773e329912507b35ade123f8e8a0e95f7a"
+  }
+}
