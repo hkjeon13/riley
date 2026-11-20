@@ -156,6 +156,23 @@ A100 7번에서 7B의 두 동일한 C1 decode 위치를 HF SDPA로 다시 실행
 
 사례 12는 레이어 0의 attention 직후 residual을 바꿔도 두 토큰이 동점이었다. `numbers-1023`은 attention 직후 교체에서 Riley 토큰이 단독 최고점이었고, 같은 레이어의 MLP 이후 residual 교체에서는 다시 동점이었다. 최종 레이어의 residual을 교체하면 두 사례에서 Riley의 두 토큰 점수와 선택을 모두 재현했으며 전체 어휘 로짓 해시는 Riley와 달랐다. 이 결과는 같은 HF 접두부를 사용한 지정된 두 decode 스텝의 민감도를 보여 준다. 다음 연산 비교의 범위는 사례 12의 레이어 0 MLP와 `numbers-1023`의 레이어 0 attention으로 좁혔다. 종료 후 GPU 6·7은 각각 20GiB 예약으로 복귀했다. [집계 재현](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/residual-boundaries/fetch-summary.sh)
 
+#### 같은 입력으로 레이어 0의 MLP와 attention 출력 투영 대조
+
+A100 7번의 새 진단 빌드에서 두 C1 사례의 기존 Riley 응답·로짓과 이미 기록한 레이어 0 연산의 BF16 행을 재현했다. 첫 블록의 post-attention norm, 게이트 곱, down projection을 추가로 기록했다. 두 사례 모두 실제 attention 출력과 MLP 출력을 각각 원래 residual에 BF16으로 더해 저장한 결과를 재현했다. 같은 HF 접두부에서 지정한 입력 행만 교체해 남은 순전파를 실행했다. 기준·자기 교체·훅 제거 뒤 실행은 기존 HF 전체 로짓 해시와 일치했다. 접두부 K·V 해시도 유지됐다. [기존 진단에 추가한 캡처](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/matched-layer0-operands/enable_mlp_capture.py) · [실행과 체크섬](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/matched-layer0-operands/verified-summary.json)
+
+| 사례 | 같은 피연산자로 실행 | Riley와 다른 HF BF16 값 | 최종 선택 |
+|---|---|---:|---:|
+| 사례 12 | attention residual을 맞춘 뒤 정규화 | 0 / 3,584 | 13638 |
+| 사례 12 | 동일한 정규화 입력에서 게이트 곱 | 10,606 / 18,944 | 13638 |
+| 사례 12 | 동일한 게이트 곱에서 down projection | 1,536 / 3,584 | 13638 |
+| 사례 12 | 실제 Riley down projection 출력도 적용 | 최종 블록 residual 0 / 3,584 | 34235 |
+| `numbers-1023` | 동일한 attention context에서 출력 투영 | 3 / 3,584 | 311 |
+| `numbers-1023` | 실제 Riley attention 출력 투영도 적용 | attention residual 0 / 3,584 | 510 |
+
+사례 12는 down projection 출력까지 맞췄을 때 두 후보 점수가 18.875/18.875에서 19.0/18.875로 갈렸다. `numbers-1023`은 같은 context에서 투영의 최대 절대차가 0.000244140625였고, 이후 residual에는 두 원소 차이가 남았다. 실제 Riley 투영값을 사용하면 두 점수가 35.5/35.5에서 35.5/35.25로 갈렸다. 같은 실행에서 MLP 출력까지 Riley로 바꾼 경우에는 `numbers-1023`의 최종 선택이 다시 311이었다. 따라서 이 두 위치에서는 특정 입력을 고정해도 투영 출력이 달랐으며, 한 연산의 차이가 이후 블록을 거치면서 유지될지는 사례와 교체 범위에 따라 달랐다. [교체 조건과 토큰 순위](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/matched-layer0-operands/replay_mlp.py)
+
+게이트 투영과 SiLU 및 곱셈 사이의 차이, down·attention 출력 투영의 GEMM 알고리즘은 다음 판정 범위다. 결과는 두 Qwen2.5-7B-Instruct decode 위치에 적용된다. 양쪽 GPU 단계는 코드 0으로 종료했고 GPU 6·7은 같은 20GiB 예약으로 돌아왔다. 재현 시 `dispatch.sha256`에 적힌 기존 패치와 세 체크섬 파일을 상위 `layer-zero-operators`에서 실행기 옆으로 복사한다. [집계 재현](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/matched-layer0-operands/fetch-summary.sh)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.
