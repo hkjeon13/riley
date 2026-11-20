@@ -1,0 +1,146 @@
+{
+  "remote_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-serving-smoke-20261120.FC0FSAk6",
+  "image_id": "sha256:0a907408ec73fc8b9b00f440037305ce1bfb00e05bd8d3ef3096fcee59849ea1",
+  "binary_sha256": "91a2de79577e54ab7fc15de78d8cacb6915f9aacfafae19b66215e015567a0ec",
+  "gpu_uuid": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+  "idle_reservations_gib": {
+    "6": 20,
+    "7": 20
+  },
+  "results": {
+    "Qwen2.5-3B-Instruct": {
+      "status": "passed",
+      "exit": 0,
+      "api_checks": 40,
+      "checkpoint_sha256": "97102e92530d42bf421c26e64d4907043d167d989832887a06eeaf3a19841f11",
+      "checkpoint_source_model": "Qwen/Qwen2.5-3B-Instruct",
+      "checkpoint_source_revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+      "report_sha256": "8c81f1c36f80fcac97707baa1019d2a24e711e3d6fd9b196cc6d671562d5b93d",
+      "smoke_sha256": "fdf764a4c2f954989648a37b4ddc82c0483c56ca8c9c9130cdd1511c37a3b38b",
+      "smoke": {
+        "seconds": 45.0,
+        "rate": 8.0,
+        "counts": {
+          "plain": {
+            "completed": 202
+          },
+          "schema": {
+            "completed": 42,
+            "stop": 42
+          },
+          "logprobs": {
+            "completed": 23
+          },
+          "tools": {
+            "completed": 23,
+            "tool_calls": 23
+          },
+          "long": {
+            "completed": 30
+          },
+          "reason": {
+            "completed": 18
+          },
+          "cancel": {
+            "disconnected": 21
+          }
+        },
+        "counter_changes": {
+          "cancellations": 21,
+          "disconnects": 21,
+          "overloads": 0,
+          "dropped_observations": 0
+        },
+        "checks": {
+          "no_unexpected_http_or_stream_error": true,
+          "completed_schema_and_tool_covered": true,
+          "disconnects_observed": true,
+          "idle_after_drain": true,
+          "native_allocation_plateau": true,
+          "workload_coverage": true
+        },
+        "status": "passed",
+        "failed_checks": [],
+        "server_arguments": [
+          "--max-active-sequences",
+          "32",
+          "--max-sequence-tokens",
+          "8192",
+          "--max-output-tokens",
+          "512",
+          "--kv-blocks",
+          "4096",
+          "--prefix-cache-blocks",
+          "128"
+        ]
+      }
+    },
+    "Qwen3-4B": {
+      "status": "passed",
+      "exit": 0,
+      "api_checks": 40,
+      "checkpoint_sha256": "adcb05caaf1d0fb5fd581fad3ba5a6b1a338ed2edb9357d0a7b4a763d9a2a574",
+      "checkpoint_source_model": "Qwen/Qwen3-4B",
+      "checkpoint_source_revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+      "report_sha256": "9c86baa5a43733ff3419ef5fbbd9c24847cb77e64b51fac3450a5e6ec12f5f90",
+      "smoke_sha256": "5b8e96a19f52f4d0ece51612540611739a555dc3b814423f139f5079230a8487",
+      "smoke": {
+        "seconds": 45.0,
+        "rate": 8.0,
+        "counts": {
+          "plain": {
+            "completed": 202
+          },
+          "schema": {
+            "completed": 42,
+            "stop": 42
+          },
+          "logprobs": {
+            "completed": 23
+          },
+          "tools": {
+            "completed": 23,
+            "tool_calls": 23
+          },
+          "long": {
+            "completed": 30
+          },
+          "reason": {
+            "completed": 18
+          },
+          "cancel": {
+            "disconnected": 21
+          }
+        },
+        "counter_changes": {
+          "cancellations": 21,
+          "disconnects": 21,
+          "overloads": 0,
+          "dropped_observations": 0
+        },
+        "checks": {
+          "no_unexpected_http_or_stream_error": true,
+          "completed_schema_and_tool_covered": true,
+          "disconnects_observed": true,
+          "idle_after_drain": true,
+          "native_allocation_plateau": true,
+          "workload_coverage": true
+        },
+        "status": "passed",
+        "failed_checks": [],
+        "server_arguments": [
+          "--max-active-sequences",
+          "32",
+          "--max-sequence-tokens",
+          "8192",
+          "--max-output-tokens",
+          "512",
+          "--kv-blocks",
+          "4096",
+          "--prefix-cache-blocks",
+          "128"
+        ]
+      }
+    }
+  }
+}

@@ -91,6 +91,19 @@ runner 동시성은 GPU별로 제한하고 각 실행에 별도 포트·디렉�
 
 대표 모델은 2-KV-head GQA, Qwen3 norm, MHA, 큰 14B를 단계적으로 포함한다. 작은 모델 하나의 통과를 전 모델 통과로 확대하지 않는다. runner가 없으면 설정 파일만 만든 상태와 실제 GPU 성공을 구분한다.
 
+#### 배포 이미지의 짧은 GPU smoke
+
+승인된 이미지의 CPU 검사 보고서, GPU UUID, 준비된 체크포인트와 manifest SHA-256을 넘긴다. 출력 경로는 해당 실행의 새 디렉터리다. `--tools`를 사용하면 호환 체크포인트의 전체 API 도구 호출 계약도 검사한다. [배포 이미지 검사기](../../ci/check_distribution_gpu.py)
+
+```bash
+python3.12 -B ci/check_distribution_gpu.py "$CPU_REPORT" "$GPU_UUID" \
+  "$MODEL_DIR" "$MODEL_MANIFEST_SHA256" "$RUN_OUTPUT" --tools --serving-smoke
+```
+
+하나의 loopback 컨테이너에서 API 검사 뒤 초당 평균 8건의 45초 혼합 부하를 실행한다. KV는 4,096블록, prefix cache는 128블록이다. 스키마·도구·logprobs·장문 요청의 완료와 의도적 연결 종료를 관측한다. Drain 뒤 활성 요청·KV와 GPU 및 pinned 할당의 회수도 확인한다. 30분 지연 드리프트와 정밀 RSS는 별도 `--mixed-soak` 모드의 판정 조건이다. [혼합 부하 검사기](../../benchmarks/live/soak.py)
+
+A100 7번의 검증 이미지에서 2-KV-head GQA와 Qwen3 모델이 각각 API 40건과 혼합 부하를 통과했다. 현재 실행은 전용 호스트 CLI로 재현한다. GitHub의 자동 GPU 실행은 runner와 체크포인트 경로가 확보된 뒤 설정한다. [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)
+
 ## 4. 관측을 통해 새 문제를 찾는 방법
 
 현재 `/metrics`는 JSON의 요청·KV·할당·batch shape·취소·과부하 관측을 제공한다. 다음은 추가 제안이며 현재 endpoint가 모두 제공하는 필드는 아니다.
@@ -185,6 +198,7 @@ Qwen2.5-7B-Instruct의 A100 네이티브 실행에서 각 30분 동안 초당 �
 
 - [x] W5-A: 점검한 사용자 문서의 버전·기본값·성능 주장을 소스나 해당 실행에 연결하고 과거 측정 시점을 표시했다. [주장별 확인 기록](#w5-a1-주장별-근거-목록-작성)
 - [x] W5-B: A100에서 네이티브 모델 추론을 실제로 실행했고, 통과·초기 실패·미검증 범위를 기록했다. [운영 결과](05-mixed-soak-result.md)
+- [x] 배포 이미지 smoke에서 Qwen2.5-3B와 Qwen3-4B의 API 각 40건, 정상 완료 각 338건, 의도적 연결 종료 각 21건과 GPU 자원 회수를 확인했다. [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)
 - [x] 기준 A100 이미지와 파생 할당기 시험 이미지의 실행 근거를 하나의 매니페스트에 연결했다. 파생 시험의 correctness·API·performance·soak·패키징은 CI가 동일 이미지 및 설정인지 검사한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 - [x] prefix cache·취소·shutdown을 합성 부하에서 검증하고 1Hz 추가 조회의 CPU·GPU·지연·RSS 비용을 교차 대조했다. 큰 RSS 증가는 두 실행 모두 첫 부하에서 나타났고, 워밍업 뒤 추가 조회와 기준의 변화량 차이는 −280KiB와 +260KiB였다. [운영 결과](05-mixed-soak-result.md#워밍업-후-역순-교차-대조)
 - [x] 합성 부하의 분포와 확인 기준, 실패 분류 및 회수 절차를 기록했다. [합성 부하의 확인 기준](#합성-부하의-확인-기준) · [후보 회수와 복구 확인](#후보-회수와-복구-확인)

@@ -46,6 +46,7 @@ class DistributionGpuTest(unittest.TestCase):
         self.exit_code = 0
         self.device_pids = set()
         self.api_pass = True
+        self.smoke_disconnected = True
         self.soak_growth_kib = 0
         self.create_interrupted = False
         self.name = None
@@ -94,6 +95,21 @@ class DistributionGpuTest(unittest.TestCase):
             if file == "api.log":
                 self.assertIn("127.0.0.1:44321", argv)
                 (out / "api.json").write_text(json.dumps({"results": [{"passed": self.api_pass}]}))
+            if file == "smoke.log":
+                self.assertIn("--smoke", argv)
+                self.assertNotIn("--require-zero-rss-growth", argv)
+                self.assertEqual(argv[argv.index("--docker-container") + 1], self.container)
+                self.assertEqual(argv[argv.index("--pid") + 1], str(self.pid))
+                checks = dict.fromkeys(checker.MIXED_LOAD_CHECKS, True)
+                checks["disconnects_observed"] = self.smoke_disconnected
+                passed = all(checks.values())
+                (out / "smoke.json").write_text(json.dumps({
+                    "status": "passed" if passed else "failed", "mode": "smoke",
+                    "seconds": checker.SMOKE_SECONDS, "rate": 8, "shared_prefixes": 8,
+                    "counts": {}, "counter_changes": {}, "checks": checks,
+                    "rss_source": {"container_id": self.container, "host_pid": self.pid, "container_pid": 1},
+                }))
+                return subprocess.CompletedProcess(argv, int(not passed))
             if file == "soak.log":
                 self.assertIn("--require-zero-rss-growth", argv)
                 self.assertEqual(argv[argv.index("--docker-container") + 1], self.container)
@@ -168,6 +184,26 @@ class DistributionGpuTest(unittest.TestCase):
         self.assertNotIn("--prefix-cache-blocks", create)
         self.assertEqual(report["soak_server_arguments"][-2:], ["--kv-blocks", "16384"])
         self.assertEqual(report["mixed_soak"]["mode"], "cache-off")
+
+    def test_serving_smoke_reports_disconnect_failure_after_graceful_shutdown(self):
+        self.smoke_disconnected = False
+        self.assertEqual(self.check(serving_smoke=True), 1)
+        report = json.loads((self.out / "report.json").read_bytes())
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["shutdown_exit"], 0)
+        self.assertEqual(report["serving_smoke"]["failed_checks"], ["disconnects_observed"])
+        self.assertEqual(report["serving_smoke"]["server_arguments"][-4:],
+                         ["--kv-blocks", "4096", "--prefix-cache-blocks", "128"])
+        self.assertEqual(report["artifacts_sha256"]["smoke.json"], checker.digest(self.out / "smoke.json"))
+        create = next(call for call in self.calls if call[0] == "create")
+        self.assertEqual(list(create[-10:]), report["serving_smoke"]["server_arguments"])
+
+    def test_serving_smoke_cannot_be_confused_with_strict_soak_or_long_accuracy(self):
+        for options in ({"mixed_soak": "cache-off"}, {"accuracy_baseline": self.root / "golden"}):
+            with self.subTest(options=options), self.assertRaisesRegex(ValueError, "select serving smoke separately"):
+                self.check(serving_smoke=True, **options)
+        self.assertFalse(self.out.exists())
+        self.assertFalse(self.calls)
 
     def test_checkpoint_drift_prevents_container_creation(self):
         with self.assertRaisesRegex(ValueError, "checkpoint manifest differs"):

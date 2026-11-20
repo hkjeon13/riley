@@ -2,6 +2,22 @@
 
 2026-11-19 KST에 `aws-a100`의 물리 GPU 7에서 Qwen2.5-7B-Instruct와 `native-bf16-varlen-v1`을 실행했다. 모델의 문맥 상한은 8,192, 출력 상한은 512토큰이다. CUDA 바이너리는 W4의 `f7c956d3c` 빌드와 SHA-256이 같다. [W5 계획](05-documentation-and-operations.md) · [W4 CUDA 빌드](04-structured-output-result.md) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-mixed-soak/smoke/receipt.json)
 
+## 배포 이미지의 대표 모델 45초 smoke
+
+2026-11-20 KST에 A100 7번에서 배포 이미지 `0a907408ec73`의 `--serving-smoke`를 실행했다. 2-KV-head GQA의 Qwen2.5-3B-Instruct와 Q·K 정규화를 쓰는 Qwen3-4B의 체크포인트 SHA-256을 고정했다. 각 컨테이너에서 같은 이미지의 CPU 보고서와 실행 중 바이너리 해시를 대조하고 API 검사 뒤 초당 평균 8건으로 45초 동안 혼합 요청을 보냈다. [실행 순서](../../benchmarks/evidence/20261120-w5-serving-smoke/campaign.sh) · [판정과 원본 해시](../../benchmarks/evidence/20261120-w5-serving-smoke/verified-smoke.json)
+
+| 항목 | Qwen2.5-3B-Instruct | Qwen3-4B |
+|---|---:|---:|
+| 일반·동시성·스키마·도구·logprobs API | 40/40 | 40/40 |
+| 혼합 부하 정상 완료 | 338 | 338 |
+| 스키마의 정상 종료 / 필수 도구 종료 | 42 / 23 | 42 / 23 |
+| 의도적 연결 종료 / 서버 취소 증가 | 21 / 21 | 21 / 21 |
+| 예상 밖 HTTP·SSE 오류 / 429 | 0 / 0 | 0 / 0 |
+
+두 실행은 drain 뒤 활성·대기 요청과 요청 KV가 0이었고 종료 코드 0과 device·pinned 할당 0을 기록했다. GPU 6·7은 기존 홀더의 20GiB 예약을 확인했다. 배치 정확성의 이번 범위는 API의 동시 요청에서 확인한 텍스트와 스키마 응답이다. CUDA iteration 단위의 prefill·decode 동시 실행 계측 및 MHA·14B 확대는 추가 검증 범위다. [검사기](../../benchmarks/evidence/20261120-w5-serving-smoke/verify_smoke.py)
+
+초기 시작 시도에서는 Python 의존 모듈 누락으로 컨테이너 생성 전에 종료했다. 의존 모듈 보완 뒤 두 원본 모델 디렉터리의 권한이 `0700`, 파일은 `0600`이라 비루트 이미지 사용자의 기동이 실패했다. 검증 전용 경로에 manifest와 payload 사본을 만들고 비루트 계정의 읽기를 확인한 뒤 실제 실행했다. 체크포인트 해시는 같았고 공유 모델의 권한을 보존했다. [체크포인트 준비 코드](../../benchmarks/evidence/20261120-w5-serving-smoke/prepare_model.py) · [집계 재현](../../benchmarks/evidence/20261120-w5-serving-smoke/fetch-summary.sh)
+
 ## 90초 사전 검증
 
 프롬프트 KV 캐시에 128블록을 할당했다. 초당 평균 8건의 합성 요청으로 일반·스키마·logprobs·필수 도구·장문·긴 출력·클라이언트 연결 종료를 섞었다. 장문 요청은 여덟 개의 프롬프트 앞부분을 반복 사용했다.
