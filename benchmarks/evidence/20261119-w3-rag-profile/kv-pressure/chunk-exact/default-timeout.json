@@ -1,0 +1,35 @@
+{
+  "remote_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-chunk-exact-20261120.5YnpNRMF",
+  "campaign_exit": 1,
+  "baseline": {
+    "chunk_limit": 1024,
+    "kv_blocks": 2576,
+    "c1_completed": 11,
+    "within_arm_exact": {
+      "c8": 33,
+      "c32": 33
+    },
+    "probe_sha256": "3c409b1015624a2906f6a320c6f6ed71a2d46afebd598cb78d7bbda9dd626dd1"
+  },
+  "failed_arm": {
+    "chunk_limit": 512,
+    "kv_blocks": 768,
+    "default_admission_timeout_ms": 30000,
+    "http_status_observed_in_client_error": 408,
+    "client_reported_error_count": 1,
+    "user_requests_submitted": 76,
+    "released_after_active": 75,
+    "unadmitted_requests": 1,
+    "client_group": "c32",
+    "time_from_queue_to_last_insufficient_capacity_ms": 29983.072111,
+    "last_blocked_required_blocks": 511,
+    "last_blocked_already_reserved_blocks": 655,
+    "server_log_sha256": "441b3d3bb5331e04e4dfb8f5bf21b6f79b51c2f645d86c3e033ce8bf4b7e450f",
+    "client_log_sha256": "db26d32c338e2ff15dd462db799575b3cf4cd572ed679ceacbfb359c7f0a55c0",
+    "receipt_sha256": "486686b17037f54bb9a1d13c5d4f194a49db428b820fd44d11e8a75569595ade"
+  },
+  "gpu_reservation_restored_gib": {
+    "6": 20,
+    "7": 20
+  }
+}

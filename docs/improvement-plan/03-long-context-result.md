@@ -398,6 +398,14 @@ A100 7번에서 Qwen2.5-14B-Instruct의 같은 진단 바이너리와 요청을 
 
 초기 시도에서 소스 교체 위치가 중복되고, 후속 실행에서는 GPU 6의 외부 사용과 실행 스크립트의 예약 검사 오류를 발견했다. 이 기록은 비교에서 제외했고, 검증한 같은 CUDA 바이너리와 명시적으로 실패를 반환하는 예약 확인으로 두 실행을 완료했다. 빌드 재현 시 `joint-clock`의 `reused.sha256`과 `joint-clock/retry`의 `fix_terminal_observation.py`를 빌드 스크립트 옆에 두고 체크섬을 확인한다. [제외한 실행과 바이너리 해시](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/verified-setup.json) · [격리 빌드](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/build/campaign.sh)
 
+#### 장문 chunk와 KV 한도의 교차 대조
+
+Qwen2.5-14B-Instruct와 위 KV 압력 시험에 쓴 CUDA 진단 바이너리로 W4의 고정 경계 입력 11개를 실행했다. 입력은 255–7,917토큰, 생성 상한은 64–256토큰이다. 각 설정에서 C1은 입력마다 한 번, C8·C32는 각각 세 번 실행하도록 했다. 응답의 입력·생성 ID, 텍스트, 종료 사유와 usage를 비교하며, 이 실험은 출력 정확성과 예약 동작을 확인한다. [고정 입력](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [실행기](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/chunk-exact/campaign.sh) · [입력·응답 대조 코드](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/chunk-exact/exact_batch.py)
+
+기본 입장 제한 30초로 실행했을 때 chunk 1,024·KV 2,576의 C8과 C32는 각각 33/33건이 C1과 일치했다. chunk 512·KV 768에서는 C32의 한 요청이 HTTP 408을 받았다. 이 요청의 마지막 KV 부족 기록은 대기에 들어간 뒤 29,983.07ms였고, 655블록을 이미 예약한 상태에서 511블록이 더 필요했다. 시험 요청 76건 가운데 75건은 활성화 후 KV를 반환했고 해당 1건은 활성 단계에 들어가지 못했다. 검사가 전체 응답 대조를 마치기 전에 중단됐으며 두 GPU는 각각 20GiB 예약으로 돌아왔다. [중단 실행의 집계와 원본 해시](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/chunk-exact/default-timeout.json) · [집계 재현](../../benchmarks/evidence/20261119-w3-rag-profile/kv-pressure/chunk-exact/fetch-default-timeout.sh) · [입장 대기 만료 처리](../../crates/riley-scheduler/src/scheduler.rs#L1577)
+
+재실행에서는 네 조합 모두 입장 제한을 90초로 고정해 출력 대조에 사용할 예정이다. 이 한도는 격리 진단용이다. 기본 제한을 그대로 사용한 C32의 실패는 운영 범위 판단에 남긴다. 실행 파일을 재사용하려면 `dispatch.sha256`에 적힌 `benchmarks/live/long_accuracy.py`와 상위 `kv-pressure/verify_kv_pressure.py`를 실행기와 같은 경로에 둔다.
+
 #### Coder-14B의 1,024행 후보 검증
 
 앞선 Qwen2.5-14B 시험과 같은 바이너리 및 A100 7번에서 `Qwen2.5-Coder-14B-Instruct`를 비교했다. 이 모델의 병합 QKV도 `K=5120, N=7168`이며 1,024행 후보가 적용되는 형상이다. 모델 revision `aedcc2d42b622764e023cf882b6652e646b95671`과 KV 2,576블록을 고정하고 기준 → 후보 → 후보 → 기준 순서로 실행했다. 후보 두 실행에서 cuBLASLt 12.4.5의 후보 선택을 확인했다. [고정 모델 입력](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/model.sha256) · [실행 및 런타임 검산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/verified-summary.json)
