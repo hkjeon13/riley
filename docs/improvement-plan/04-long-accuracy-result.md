@@ -173,6 +173,21 @@ A100 7번의 새 진단 빌드에서 두 C1 사례의 기존 Riley 응답·로�
 
 게이트 투영과 SiLU 및 곱셈 사이의 차이, down·attention 출력 투영의 GEMM 알고리즘은 다음 판정 범위다. 결과는 두 Qwen2.5-7B-Instruct decode 위치에 적용된다. 양쪽 GPU 단계는 코드 0으로 종료했고 GPU 6·7은 같은 20GiB 예약으로 돌아왔다. 재현 시 `dispatch.sha256`에 적힌 기존 패치와 세 체크섬 파일을 상위 `layer-zero-operators`에서 실행기 옆으로 복사한다. [집계 재현](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/matched-layer0-operands/fetch-summary.sh)
 
+#### 투영의 BF16 반올림과 축소 정밀도 대조
+
+같은 두 decode 위치에서 attention 출력 투영과 MLP down projection에 들어간 Riley BF16 행을 사용했다. 두 가중치가 속한 체크포인트 shard의 SHA-256을 매니페스트와 맞췄다. A100 7번의 독립 PyTorch 실행에서 같은 입력, 가중치와 `M=1`을 사용해 기존 HF 출력 행의 SHA-256을 네 조건 모두 재현했다. GPU에서 BF16 축소 정밀도 reduction 허용 설정을 끈 실행과 TF32를 끈 FP32 투영을 추가했다. [실행 절차](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/campaign.sh) · [가중치와 출력 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/verified-summary.json)
+
+CPU에서 저장된 BF16 피연산자의 내적을 FP64로 계산하고 가장 가까운 BF16 값을 골랐다. FP64의 가능한 오차 구간이 두 BF16 값의 중간점에 닿으면 정수 누산으로 재계산하도록 했으며, 실제 네 행에서는 이 보완이 필요한 원소가 없었다. 기준에 맞지 않는 숫자 개수를 표에 기록했다. 각 투영 출력은 3,584개 값이다. [내적 검산과 BF16 반올림 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/projection_oracle.py)
+
+| 사례·투영 | Riley | HF 기본 | HF BF16 축소 정밀도 reduction 끔 | FP32·TF32 끔 |
+|---|---:|---:|---:|---:|
+| 사례 12 attention 출력 | 10 | 7 | 7 | 1 |
+| `numbers-1023` attention 출력 | 5 | 2 | 2 | 1 |
+| 사례 12 MLP down | 1,248 | 1,268 | 4 | 3 |
+| `numbers-1023` MLP down | 1,263 | 1,364 | 3 | 2 |
+
+Riley의 MLP down에서는 최근접 결과와 BF16 값의 순서에서 두 단계 이상 떨어진 원소가 각각 239개와 304개였다. HF는 축소 정밀도 reduction을 끄자 해당 수가 304→2개, 381→0개로 줄었다. 이 설정은 두 attention 출력에는 영향을 주지 않았다. 이 결과는 HF down projection의 차이에 축소 정밀도 reduction이 영향을 준다는 근거다. Riley의 계획 ID, Split-K 및 reduction 방식과 수치 변경 시 서버 출력·모델 품질·성능은 확인이 남았다. GPU 6·7은 기존 20GiB 예약으로 복귀했고 CPU 검산은 그 뒤에 실행됐다. [원본 체크섬과 수치](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/verified-summary.json) · [집계 재현](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/fetch-summary.sh)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.

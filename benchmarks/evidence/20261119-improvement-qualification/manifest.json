@@ -2536,6 +2536,28 @@
         "sha256": "b472318460cf51c72be8c46ef160df8b5ea8e488c59e78f26cb2fb9df307456a"
       }
     ],
+    "qwen7_decode_projection_precision": [
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/campaign.sh",
+        "sha256": "0434c5dbe155e31c7e48f9154f933ae03fdf59040489759104f39f6499885235"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/dispatch.sha256",
+        "sha256": "9b0a778f464f2666bb4e46269c0039add052760bff3ae636d6c4aeedd380ed05"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/fetch-summary.sh",
+        "sha256": "a790eda8582fd2e84647df31d7277f99de35fde45789c4f3c880434a34427de9"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/projection_oracle.py",
+        "sha256": "707885d0125b18836f9dfa9077eb0c72e9a09d07e974c583f9820cd28ccd81f5"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/verified-summary.json",
+        "sha256": "c0c95bddeed28b991ed56d66dd32bcfa50e048bebf283424325daf20e642a1d0"
+      }
+    ],
     "qwen7_decode_matched_layer_zero_operands": [
       {
         "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/matched-layer0-operands/campaign.sh",
