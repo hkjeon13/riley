@@ -2570,6 +2570,36 @@
         "sha256": "d06ff8093c8cbc678793f7a56d6a4c73e6708a19df88df378af1fb5a3a1c0eac"
       }
     ],
+    "qwen7_fp32_down_projection_serving": [
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/campaign.sh",
+        "sha256": "accbcd31db4a88295574d68d58ad1465c1119e17759f228358b2627e48600843"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/dispatch.sha256",
+        "sha256": "4d9f925f55634e269c53b50580a07edb93f29c6d2e8d6e7440b83fcd2210d95c"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/fetch-summary.sh",
+        "sha256": "03a8ed9cf7bb78d26f9a3793e6f17ff8c066cc37fc87dc0086007713ba7e27da"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/prepare_candidate.py",
+        "sha256": "8a38cbadaccaee6cfb220a3cddc29409463a765a631b1cf8a2a6241dbc15fbee"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/source-inputs.sha256",
+        "sha256": "1c427f597a74c3599c1a218bf34f09506b50854d828d4bfa2e01605996bc1f81"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/verified-summary.json",
+        "sha256": "f220a756b1ca100a399deaf30542b4e9ac9ac6d76e2e39cfe497ab3236db46c9"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/verify_candidate.py",
+        "sha256": "8cbe32d3f9dd39d193aaa57539af87c3cfe7b282647f22dd15b47c14f42924f8"
+      }
+    ],
     "qwen7_decode_projection_serving_replay": [
       {
         "path": "benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/buckets/bucket-dispatch.sha256",

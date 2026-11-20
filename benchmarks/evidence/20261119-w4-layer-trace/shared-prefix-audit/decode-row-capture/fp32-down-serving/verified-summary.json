@@ -1,0 +1,1579 @@
+{
+  "remote_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-fp32-down-serving-20261120.Saj3XXSY",
+  "binary_sha256": "80f27df32e58d0f8f9d9b5fd8a51daf70dad0e9ac6a9702eb9184259e6cf8d1a",
+  "server_options": [
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-fp32-down-serving-20261120.Saj3XXSY/target/release/riley",
+    "serve",
+    "--model",
+    "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-7B-Instruct",
+    "--model-id",
+    "m",
+    "--bind",
+    "loopback",
+    "--max-active-sequences",
+    "32",
+    "--max-weight-bytes",
+    "68719476736",
+    "--inference-profile",
+    "native-bf16-varlen-v1",
+    "--max-sequence-tokens",
+    "8192",
+    "--max-output-tokens",
+    "256"
+  ],
+  "prepared_m": [
+    1,
+    2,
+    4,
+    8,
+    16,
+    24,
+    32,
+    48,
+    64,
+    80,
+    96,
+    112,
+    128,
+    144,
+    160,
+    176,
+    192,
+    208,
+    224,
+    240,
+    256
+  ],
+  "result_manifest_sha256": "aef67c10dd8a1a3921efbb9760c3be746f06dbe2c7f49f39bf3abdc89f6d3aef",
+  "gpu_idle_reservation_gib": {
+    "6": 20,
+    "7": 20
+  },
+  "suites": {
+    "long": {
+      "historical_to_baseline": {
+        "c1": {
+          "requests": 18,
+          "equal": 18,
+          "differences": []
+        },
+        "diagnostic": {
+          "requests": 18,
+          "equal": 18,
+          "differences": []
+        },
+        "c8": {
+          "requests": 54,
+          "equal": 54,
+          "differences": []
+        },
+        "c32": {
+          "requests": 54,
+          "equal": 54,
+          "differences": []
+        }
+      },
+      "baseline_to_candidate": {
+        "c1": {
+          "requests": 18,
+          "equal": 12,
+          "differences": [
+            {
+              "ordinal": 0,
+              "case": "0",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 2,
+              "case": "2",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 3,
+              "case": "3",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 11,
+              "case": "11",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 15
+            },
+            {
+              "ordinal": 14,
+              "case": "14",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 9
+            },
+            {
+              "ordinal": 16,
+              "case": "16",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 1
+            }
+          ]
+        },
+        "diagnostic": {
+          "requests": 18,
+          "equal": 12,
+          "differences": [
+            {
+              "ordinal": 0,
+              "case": "0",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 2,
+              "case": "2",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 3,
+              "case": "3",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 11,
+              "case": "11",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 15
+            },
+            {
+              "ordinal": 14,
+              "case": "14",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 9
+            },
+            {
+              "ordinal": 16,
+              "case": "16",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 1
+            }
+          ]
+        },
+        "c8": {
+          "requests": 54,
+          "equal": 36,
+          "differences": [
+            {
+              "ordinal": 0,
+              "case": "0",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 2,
+              "case": "2",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 3,
+              "case": "3",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 11,
+              "case": "11",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 15
+            },
+            {
+              "ordinal": 14,
+              "case": "14",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 9
+            },
+            {
+              "ordinal": 16,
+              "case": "16",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 1
+            },
+            {
+              "ordinal": 18,
+              "case": "0",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 20,
+              "case": "2",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 21,
+              "case": "3",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 29,
+              "case": "11",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 15
+            },
+            {
+              "ordinal": 32,
+              "case": "14",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 9
+            },
+            {
+              "ordinal": 34,
+              "case": "16",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 1
+            },
+            {
+              "ordinal": 36,
+              "case": "0",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 38,
+              "case": "2",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 39,
+              "case": "3",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 47,
+              "case": "11",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 15
+            },
+            {
+              "ordinal": 50,
+              "case": "14",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 9
+            },
+            {
+              "ordinal": 52,
+              "case": "16",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 1
+            }
+          ]
+        },
+        "c32": {
+          "requests": 54,
+          "equal": 36,
+          "differences": [
+            {
+              "ordinal": 0,
+              "case": "0",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 2,
+              "case": "2",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 3,
+              "case": "3",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 11,
+              "case": "11",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 15
+            },
+            {
+              "ordinal": 14,
+              "case": "14",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 9
+            },
+            {
+              "ordinal": 16,
+              "case": "16",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 1
+            },
+            {
+              "ordinal": 18,
+              "case": "0",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 20,
+              "case": "2",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 21,
+              "case": "3",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 29,
+              "case": "11",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 15
+            },
+            {
+              "ordinal": 32,
+              "case": "14",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 9
+            },
+            {
+              "ordinal": 34,
+              "case": "16",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 1
+            },
+            {
+              "ordinal": 36,
+              "case": "0",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 38,
+              "case": "2",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 39,
+              "case": "3",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 0
+            },
+            {
+              "ordinal": 47,
+              "case": "11",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 15
+            },
+            {
+              "ordinal": 50,
+              "case": "14",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 9
+            },
+            {
+              "ordinal": 52,
+              "case": "16",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 1
+            }
+          ]
+        }
+      },
+      "within_arm": {
+        "baseline": {
+          "diagnostic": {
+            "requests": 18,
+            "equal": 18,
+            "differences": []
+          },
+          "c8": {
+            "requests": 54,
+            "equal": 54,
+            "differences": []
+          },
+          "c32": {
+            "requests": 54,
+            "equal": 54,
+            "differences": []
+          }
+        },
+        "candidate": {
+          "diagnostic": {
+            "requests": 18,
+            "equal": 18,
+            "differences": []
+          },
+          "c8": {
+            "requests": 54,
+            "equal": 54,
+            "differences": []
+          },
+          "c32": {
+            "requests": 54,
+            "equal": 54,
+            "differences": []
+          }
+        }
+      },
+      "hf": {
+        "cases": [
+          {
+            "case": "0",
+            "input_tokens": 681,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 2
+            },
+            "baseline": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 2
+            },
+            "candidate": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 0
+            }
+          },
+          {
+            "case": "1",
+            "input_tokens": 1301,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "baseline": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "candidate": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            }
+          },
+          {
+            "case": "2",
+            "input_tokens": 2199,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "baseline": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "candidate": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 0
+            }
+          },
+          {
+            "case": "3",
+            "input_tokens": 3301,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 0
+            },
+            "baseline": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 0
+            },
+            "candidate": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            }
+          },
+          {
+            "case": "4",
+            "input_tokens": 4426,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "baseline": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "candidate": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            }
+          },
+          {
+            "case": "5",
+            "input_tokens": 6042,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "baseline": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "candidate": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            }
+          },
+          {
+            "case": "6",
+            "input_tokens": 667,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 14
+            },
+            "baseline": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 14
+            },
+            "candidate": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 14
+            }
+          },
+          {
+            "case": "7",
+            "input_tokens": 1331,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "baseline": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "candidate": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            }
+          },
+          {
+            "case": "8",
+            "input_tokens": 2203,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "baseline": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "candidate": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            }
+          },
+          {
+            "case": "9",
+            "input_tokens": 3330,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "baseline": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "candidate": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            }
+          },
+          {
+            "case": "10",
+            "input_tokens": 4420,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "baseline": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "candidate": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            }
+          },
+          {
+            "case": "11",
+            "input_tokens": 6082,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "baseline": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "candidate": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 15
+            }
+          },
+          {
+            "case": "12",
+            "input_tokens": 669,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 9
+            },
+            "baseline": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 9
+            },
+            "candidate": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 9
+            }
+          },
+          {
+            "case": "13",
+            "input_tokens": 1330,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "baseline": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "candidate": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            }
+          },
+          {
+            "case": "14",
+            "input_tokens": 2196,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 9
+            },
+            "baseline": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 9
+            },
+            "candidate": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            }
+          },
+          {
+            "case": "15",
+            "input_tokens": 3292,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "baseline": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "candidate": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            }
+          },
+          {
+            "case": "16",
+            "input_tokens": 4397,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "baseline": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "candidate": {
+              "length": 32,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 1
+            }
+          },
+          {
+            "case": "17",
+            "input_tokens": 6030,
+            "hf_tokens": 32,
+            "historical": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "baseline": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            },
+            "candidate": {
+              "length": 32,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 32
+            }
+          }
+        ],
+        "exact_matches": {
+          "baseline": 13,
+          "candidate": 12
+        },
+        "gained": [
+          "3",
+          "14"
+        ],
+        "lost": [
+          "2",
+          "11",
+          "16"
+        ]
+      },
+      "capture_sha256": {
+        "baseline": "8a00c5c439fb7ef7867c8242c15f74ce5bb2b91a059b0cfde2c7e5adb29bd4ce",
+        "candidate": "ca4a557101008345806c7a4ec9e9fd01771569b6094773e189dd32fad9f8f8bc"
+      }
+    },
+    "holdout": {
+      "historical_to_baseline": {
+        "c1": {
+          "requests": 11,
+          "equal": 11,
+          "differences": []
+        },
+        "diagnostic": {
+          "requests": 11,
+          "equal": 11,
+          "differences": []
+        },
+        "c8": {
+          "requests": 33,
+          "equal": 33,
+          "differences": []
+        },
+        "c32": {
+          "requests": 33,
+          "equal": 33,
+          "differences": []
+        }
+      },
+      "baseline_to_candidate": {
+        "c1": {
+          "requests": 11,
+          "equal": 8,
+          "differences": [
+            {
+              "ordinal": 2,
+              "case": "numbers-257",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 57
+            },
+            {
+              "ordinal": 7,
+              "case": "korean-1024",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 77
+            },
+            {
+              "ordinal": 9,
+              "case": "long-code-7836",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 7
+            }
+          ]
+        },
+        "diagnostic": {
+          "requests": 11,
+          "equal": 8,
+          "differences": [
+            {
+              "ordinal": 2,
+              "case": "numbers-257",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 57
+            },
+            {
+              "ordinal": 7,
+              "case": "korean-1024",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 77
+            },
+            {
+              "ordinal": 9,
+              "case": "long-code-7836",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 7
+            }
+          ]
+        },
+        "c8": {
+          "requests": 33,
+          "equal": 24,
+          "differences": [
+            {
+              "ordinal": 2,
+              "case": "numbers-257",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 57
+            },
+            {
+              "ordinal": 7,
+              "case": "korean-1024",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 77
+            },
+            {
+              "ordinal": 9,
+              "case": "long-code-7836",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 7
+            },
+            {
+              "ordinal": 13,
+              "case": "numbers-257",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 57
+            },
+            {
+              "ordinal": 18,
+              "case": "korean-1024",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 77
+            },
+            {
+              "ordinal": 20,
+              "case": "long-code-7836",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 7
+            },
+            {
+              "ordinal": 24,
+              "case": "numbers-257",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 57
+            },
+            {
+              "ordinal": 29,
+              "case": "korean-1024",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 77
+            },
+            {
+              "ordinal": 31,
+              "case": "long-code-7836",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 7
+            }
+          ]
+        },
+        "c32": {
+          "requests": 33,
+          "equal": 24,
+          "differences": [
+            {
+              "ordinal": 2,
+              "case": "numbers-257",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 57
+            },
+            {
+              "ordinal": 7,
+              "case": "korean-1024",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 77
+            },
+            {
+              "ordinal": 9,
+              "case": "long-code-7836",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 7
+            },
+            {
+              "ordinal": 13,
+              "case": "numbers-257",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 57
+            },
+            {
+              "ordinal": 18,
+              "case": "korean-1024",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 77
+            },
+            {
+              "ordinal": 20,
+              "case": "long-code-7836",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 7
+            },
+            {
+              "ordinal": 24,
+              "case": "numbers-257",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 57
+            },
+            {
+              "ordinal": 29,
+              "case": "korean-1024",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 77
+            },
+            {
+              "ordinal": 31,
+              "case": "long-code-7836",
+              "changed": [
+                "tokens",
+                "text"
+              ],
+              "token_common_prefix": 7
+            }
+          ]
+        }
+      },
+      "within_arm": {
+        "baseline": {
+          "diagnostic": {
+            "requests": 11,
+            "equal": 11,
+            "differences": []
+          },
+          "c8": {
+            "requests": 33,
+            "equal": 33,
+            "differences": []
+          },
+          "c32": {
+            "requests": 33,
+            "equal": 33,
+            "differences": []
+          }
+        },
+        "candidate": {
+          "diagnostic": {
+            "requests": 11,
+            "equal": 11,
+            "differences": []
+          },
+          "c8": {
+            "requests": 33,
+            "equal": 33,
+            "differences": []
+          },
+          "c32": {
+            "requests": 33,
+            "equal": 33,
+            "differences": []
+          }
+        }
+      },
+      "hf": {
+        "cases": [
+          {
+            "case": "korean-255",
+            "input_tokens": 255,
+            "hf_tokens": 19,
+            "historical": {
+              "length": 19,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 19
+            },
+            "baseline": {
+              "length": 19,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 19
+            },
+            "candidate": {
+              "length": 19,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 19
+            }
+          },
+          {
+            "case": "code-256",
+            "input_tokens": 256,
+            "hf_tokens": 25,
+            "historical": {
+              "length": 25,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 25
+            },
+            "baseline": {
+              "length": 25,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 25
+            },
+            "candidate": {
+              "length": 25,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 25
+            }
+          },
+          {
+            "case": "numbers-257",
+            "input_tokens": 257,
+            "hf_tokens": 64,
+            "historical": {
+              "length": 64,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 64
+            },
+            "baseline": {
+              "length": 64,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 64
+            },
+            "candidate": {
+              "length": 64,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 57
+            }
+          },
+          {
+            "case": "repeat-511",
+            "input_tokens": 511,
+            "hf_tokens": 7,
+            "historical": {
+              "length": 7,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 7
+            },
+            "baseline": {
+              "length": 7,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 7
+            },
+            "candidate": {
+              "length": 7,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 7
+            }
+          },
+          {
+            "case": "japanese-512",
+            "input_tokens": 512,
+            "hf_tokens": 23,
+            "historical": {
+              "length": 23,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 23
+            },
+            "baseline": {
+              "length": 23,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 23
+            },
+            "candidate": {
+              "length": 23,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 23
+            }
+          },
+          {
+            "case": "code-513",
+            "input_tokens": 513,
+            "hf_tokens": 6,
+            "historical": {
+              "length": 6,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 6
+            },
+            "baseline": {
+              "length": 6,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 6
+            },
+            "candidate": {
+              "length": 6,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 6
+            }
+          },
+          {
+            "case": "numbers-1023",
+            "input_tokens": 1023,
+            "hf_tokens": 128,
+            "historical": {
+              "length": 128,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 67
+            },
+            "baseline": {
+              "length": 128,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 67
+            },
+            "candidate": {
+              "length": 128,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 67
+            }
+          },
+          {
+            "case": "korean-1024",
+            "input_tokens": 1024,
+            "hf_tokens": 128,
+            "historical": {
+              "length": 128,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 77
+            },
+            "baseline": {
+              "length": 128,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 77
+            },
+            "candidate": {
+              "length": 128,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 126
+            }
+          },
+          {
+            "case": "repeat-1025",
+            "input_tokens": 1025,
+            "hf_tokens": 56,
+            "historical": {
+              "length": 56,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 56
+            },
+            "baseline": {
+              "length": 56,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 56
+            },
+            "candidate": {
+              "length": 56,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 56
+            }
+          },
+          {
+            "case": "long-code-7836",
+            "input_tokens": 7836,
+            "hf_tokens": 256,
+            "historical": {
+              "length": 256,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 256
+            },
+            "baseline": {
+              "length": 256,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 256
+            },
+            "candidate": {
+              "length": 256,
+              "exact": false,
+              "finish_matches": true,
+              "common_prefix": 7
+            }
+          },
+          {
+            "case": "long-korean-7917",
+            "input_tokens": 7917,
+            "hf_tokens": 256,
+            "historical": {
+              "length": 256,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 256
+            },
+            "baseline": {
+              "length": 256,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 256
+            },
+            "candidate": {
+              "length": 256,
+              "exact": true,
+              "finish_matches": true,
+              "common_prefix": 256
+            }
+          }
+        ],
+        "exact_matches": {
+          "baseline": 9,
+          "candidate": 7
+        },
+        "gained": [],
+        "lost": [
+          "numbers-257",
+          "long-code-7836"
+        ]
+      },
+      "capture_sha256": {
+        "baseline": "2b28ec348efd0048cacec7e61ab2a3ffdbfc09787c7d40bcb0241982d87f8b36",
+        "candidate": "effd3acf172baf2f6d8a9b509250f522b37303f1a2ef140c439d9aa86fadefbf"
+      }
+    }
+  }
+}

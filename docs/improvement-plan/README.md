@@ -123,6 +123,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W1 CI: Linux hosted workflow의 본 검사와 Linux 전용 항목을 통과했다. [실행 결과](01-validation-result.md)
 - [x] W1 CI: 과거 RC3의 고정 Python·경로를 재현한 Linux 컨테이너에서 34건을 통과했다. [실행 결과](01-validation-result.md#과거-rc3-고정-테스트의-실제-실행)
 - [x] W4: 장문 차이의 입력·최초 분기 토큰·첫 BF16 불일치와 남은 불확실성을 기록했다. [장문 검증](04-long-accuracy-result.md#첫-prefill-분기-추적)
+- [x] W4: 투영 대안 두 개를 장문 29개의 실제 서빙에서 대조했다. 둘 다 배치 불변성을 유지했고 HF 전체 생성 일치가 기준 22/29에서 각각 18/29와 19/29로 줄어 기각했다. [Attention 출력](04-long-accuracy-result.md#계획-31-전체-서빙-대조와-판정) · [FP32 부분합 down projection](04-long-accuracy-result.md#fp32-부분합을-적용한-down-projection-전체-서빙-판정)
 - [x] W4: 문서화한 스키마 부분집합을 독립 판정과 대조하고, 미지원 제약의 오류를 검증했다. [스키마 검증](04-structured-output-result.md)
 - [ ] W2·W3: 단독·결합 결과에서 기존 정확성·회귀 가드레일을 충족한다. W2의 단일 iteration 후보 두 개는 미채택했고, W3의 1,024행 QKV 형상 공통 적용은 Coder-14B decode 회귀로 기각했다. [W2 후보 결과](02-async-step-result.md#커밋된-이벤트-데이터의-복사-제거) · [W3 Coder-14B 결과](03-long-context-result.md#coder-14b의-1024행-후보-검증)
 - [x] W5: 대상 GPU에서 배포 이미지의 실제 추론과 cache-on·off 30분 부하 증거를 확보했다. [운영 결과와 판정](05-mixed-soak-result.md#배포-이미지의-혼합-부하)

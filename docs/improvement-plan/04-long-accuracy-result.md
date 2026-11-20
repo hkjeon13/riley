@@ -231,7 +231,7 @@ A100 7번의 `native-bf16-varlen-v1` 격리 서버에서 두 C1 decode 위치의
 | Down 계획 13, 분할 없음 | 1 / 21 | 1 / 21 |
 | Down 계획 13, Split-K 64와 FP32 계산형 reduction | 1 / 21 | 1 / 21 |
 
-계획 13의 두 설정은 M=1만 실행했다. M=2~256의 나머지 20개 크기는 cuBLASLt 계획 검사에서 상태 코드 15로 거부됐다. 해당 두 설정을 같은 계획으로 전체 배치 크기에 적용하는 경로는 여기서 기각했다. Attention 계획 31과 FP32 계산형 down 계획 21은 각각 4,430개 행에서 두 고정 입력의 M=1 출력을 재현했다. 실제 서빙 배치의 C1·C8·C32 정확성 및 품질 검증은 남아 있다. 종료 후 GPU 6·7은 기존 20GiB 예약으로 돌아왔다. [실행기](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/buckets/campaign-buckets.sh) · [행 수 비교 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/buckets/bucket-probe-main.cpp)
+계획 13의 두 설정은 M=1만 실행했다. M=2~256의 나머지 20개 크기는 cuBLASLt 계획 검사에서 상태 코드 15로 거부됐다. 해당 두 설정을 같은 계획으로 전체 배치 크기에 적용하는 경로는 여기서 기각했다. Attention 계획 31과 FP32 계산형 down 계획 21은 각각 4,430개 행에서 두 고정 입력의 M=1 출력을 재현했다. 두 계획은 아래 전체 서빙 대조에서 각각 검증했다. 종료 후 GPU 6·7은 기존 20GiB 예약으로 돌아왔다. [실행기](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/buckets/campaign-buckets.sh) · [행 수 비교 코드](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-forward/buckets/bucket-probe-main.cpp)
 
 #### 계획 31 전체 서빙 대조와 판정
 
@@ -246,6 +246,20 @@ A100 7번에서 같은 Qwen2.5-7B-Instruct 체크포인트, 격리 바이너리,
 후보의 진단 응답도 같은 후보 C1의 29건과 일치했다. 각 실행의 요청은 입력 ID와 usage를 대조했고, 배치 비교에는 생성 ID·텍스트·종료 사유·usage를 사용했다. 후보와 기준의 응답은 전체 232건 중 136건에서 같았다. HF와 전체 생성 ID가 새로 일치한 입력은 3개, 기존 일치를 잃은 입력은 7개였다. HF 비교에서는 실제 종료 EOS만 정규화했고 종료 사유는 두 군 모두 29개에서 HF와 같았다. [입력과 응답 검산기](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/verify_candidate.py)
 
 한 위치만 교체했을 때 HF의 128개 토큰과 같았던 `numbers-1023`은 전체 적용에서 기준과 후보 모두 67개 뒤에 갈라졌다. `korean-1024`는 77개에서 128개 전부로 늘었고 `long-code-7836`은 전부 일치하던 상태에서 일곱 번째 토큰 뒤에 갈라졌다. 따라서 시험한 계획 31의 전체 적용은 이 모델의 후보에서 기각했다. 정밀도 후보의 다음 검증은 별도의 수치 변경과 동일한 품질·배치 기준을 요구한다. GPU 6·7은 각각 기존 20GiB 예약으로 복귀했다. [실행 순서](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/campaign.sh) · [집계 재현](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/fetch-summary.sh)
+
+#### FP32 부분합을 적용한 down projection 전체 서빙 판정
+
+A100 7번에서 같은 Qwen2.5-7B-Instruct 체크포인트, 격리 바이너리, `native-bf16-varlen-v1`을 고정했다. 후보는 18,944→3,584 BF16 down projection의 알고리즘 21, tile 18, stages 18, Split-K 3을 유지하고 부분합을 FP32 계산형으로 합쳤다. 나머지 투영에는 기존 계획을 사용했다. cuBLASLt 12.4.5에서 확인된 21개 행 수를 모두 준비했고, 후보 workspace는 행당 43,008B로 최대 11,010,048B였다. 기준군은 과거 요청 232건을 재현했고 후보군도 같은 232건을 완료했다. 두 서버 모두 코드 0으로 종료했다. [격리 후보 준비](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/prepare_candidate.py) · [대조 집계와 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/verified-summary.json)
+
+| 입력 | 후보 C8에서 후보 C1과 일치 | 후보 C32에서 후보 C1과 일치 | HF 전체 생성 ID 일치, 기준 → 후보 |
+|---|---:|---:|---:|
+| 기존 장문 18개 | 54/54 | 54/54 | 13/18 → 12/18 |
+| 경계 입력 11개 | 33/33 | 33/33 | 9/11 → 7/11 |
+| 전체 29개 | 87/87 | 87/87 | 22/29 → 19/29 |
+
+진단 응답도 후보 C1의 29건과 일치했다. 기준군과 후보군의 응답 232건 중 160건이 같았다. HF와 새로 일치한 입력은 2개, 기존 일치를 잃은 입력은 5개였다. 두 군의 HF 종료 사유 일치는 각각 29/29였다. `numbers-1023`은 양쪽 모두 HF와 67개 토큰 뒤에 갈라졌다. `korean-1024`의 일치 접두부는 77개에서 126개로 늘었고 `long-code-7836`은 256개에서 7개로 줄었다. 독립 투영의 최근접 BF16 오차를 줄인 방법이 전체 서빙의 HF 일치율을 떨어뜨려 채택하지 않았다. 이 후보의 GSM8K·지연은 측정하지 않았다. [응답 검산기](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/verify_candidate.py)
+
+두 실행 전후 GPU 6·7은 기존 홀더의 20GiB 예약 상태였다. 재현 시 이전 실험의 `capture_decode_rows.py`를 같은 디렉터리에 복사하고 `dispatch.sha256`을 검사한다. [공유 입력 실행기](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/capture_decode_rows.py) · [전송 파일 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/dispatch.sha256) · [실행 순서](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/campaign.sh) · [집계 재현](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/fetch-summary.sh)
 
 ## 첫 prefill 분기 추적
 
