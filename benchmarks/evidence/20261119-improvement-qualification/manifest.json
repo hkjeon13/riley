@@ -2446,6 +2446,52 @@
         "sha256": "12a8d9c26db0a1725289cefa4a6137a6eed38e56df0a0d01fdd84b4049c5c3a2"
       }
     ],
+    "qwen14_request_and_nsys_joint_trace": [
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/analysis.sha256",
+        "sha256": "115fd3ab34b71014876bf60408e54726c4fac2234bbf9245e5ba8e0e1cb7b734"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/campaign.sh",
+        "sha256": "4373d9b3498f25bcf31b0a9c8eae0360c5819620b769ce9f6f718bc1a5e3bb37"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/dispatch.sha256",
+        "sha256": "b1a3b9a7f1735eb1c138943b9079b2c05d8ebb7fb4adfebd1b5690bf133d5bd2"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/enable_joint_trace.py",
+        "sha256": "9717903281b819b4292d04960902931bb22e6aac0cc00f20cbcfba2fded342b2"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/fetch-summary.sh",
+        "sha256": "4dba21600be85fa030c5ecf201bfc7d4fba214cb6ab21f93f5b15686534ee75e"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/retry/campaign.sh",
+        "sha256": "64e818cbeab8482a5d864fe8cf8a3109081d4655304fb970ffedac3bd8963a88"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/retry/dispatch.sha256",
+        "sha256": "795b6857cba06fe7ee08565337106ba9afc9bf45087072d71a1baa71080284a3"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/retry/fix_terminal_observation.py",
+        "sha256": "6d668e7a55156bdb16f74e829a278d777e1d8a402207784c8def1633cfe1fc1d"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/reused.sha256",
+        "sha256": "ec5a0e924b4477111bb72669edba0ed3a7fcdb7fcec35001950b36cc1e729ff4"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/verified-summary.json",
+        "sha256": "8ec95267c8062f82b6988432b259e876feefc8123e5f78dca96a1e091dc5202c"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/verify_joint.py",
+        "sha256": "3fa6ec9fd6dec0575d10d2d6f090f68d155d582be90941ee4cd3c86014056fa3"
+      }
+    ],
     "coder14_qkv_1024_serving_result": [
       {
         "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/campaign.sh",

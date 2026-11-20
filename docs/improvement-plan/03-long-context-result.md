@@ -366,6 +366,21 @@ Qwen2.5-14B-Instruct의 닫힌 부하에서 기록한 기준군과 QKV 후보의
 
 네 시각표와 두 실행 순서에서 TTFT p95 및 TPOT p50이 모두 줄었다. 이 결과의 대상은 두 seed에서 수집한 도착 시각표다. 기존 50ms 간격 시험에는 TTFT p95가 증가한 조건이 남아 있어, 대상 모델의 다른 도착 분포에서 재현성과 회귀 기준을 확인할 때까지 후보는 격리 시험에 둔다. [독립 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/fixed-rag-arrivals/verify_fixed.py) · [원격 집계 절차](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/fixed-rag-arrivals/fetch-summary.sh)
 
+#### 같은 실행의 요청 대기와 CUDA 커널 대조
+
+A100 7번에서 Qwen2.5-14B-Instruct, KV 2,576블록과 기존 추적 바이너리를 고정해 기준과 1,024행 QKV 후보의 요청 단계·호스트 단계·Nsight 커널을 함께 기록했다. RAG C8 seed 2와 50ms 유입에서 측정 208건의 요청 지문·출력·토큰 수·종료 사유가 앞선 요청 단계 단독 계측과 일치했다. 초기 후보군은 종료 중 감시기가 실험 서버의 PID를 외부 프로세스로 판정해 정상 종료 영수증이 없었다. 시작 시각을 확인한 동일 PID가 종료되는 구간만 처리하도록 감시기를 보완해 후보군만 재실행했다. 두 유효 실행은 정상 종료했고 GPU 6·7은 각각 기존 20GiB 예약으로 복귀했다. [실행 영수증과 원본 체크섬](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/verified-summary.json) · [재실행](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/retry/campaign.sh)
+
+클라이언트 요청 시작·첫 콘텐츠 수신의 하한과 상한을 서버 요청 단계와 맞췄다. 클라이언트의 NVTX 표식 두 개로 Nsight 시간축을 연결했다. 결합한 오차 구간 폭은 네 측정에서 0.50–0.56ms였고, 여러 대기 구간의 경계에 이를 적용한 시간 범위는 p95 이상 표본에서 최대 3.45ms였다. 표는 p95 이상 요청이 자신의 prefill을 실행하지 않고 기다린 시간 중 GPU 커널과 겹친 시간의 중앙값이다. GEMM과 attention은 같은 GPU를 공유하는 모든 요청의 연산을 포함한다. KV 열은 커널 이름으로 확인한 RoPE·KV 쓰기 융합 커널 시간이다. [시간축과 커널 분류 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/verify_joint.py)
+
+| 부하·실행 | 대기 중 GPU 전체 (ms) | GEMM (ms) | Attention (ms) | RoPE·KV 쓰기 (ms) |
+|---|---:|---:|---:|---:|
+| RAG C8 seed 2 기준 | 1,008 | 832 | 122 | 13.1 |
+| RAG C8 seed 2 후보 | 1,232 | 1,001 | 162 | 16.4 |
+| 50ms 유입 기준 | 2,364 | 1,923 | 313 | 30.7 |
+| 50ms 유입 후보 | 2,387 | 1,931 | 323 | 31.8 |
+
+50ms 유입의 동일한 41번 요청에서 첫 토큰 지연은 551.14ms, prefill 조각 사이 대기는 399.48ms, 자기 prefill 실행 구간은 160.98ms 늘었다. 이 요청이 대기하는 동안 실행된 GPU 시간은 386.70ms 늘었고, GEMM과 attention에 각각 270.01ms와 94.79ms가 더 겹쳤다. 같은 서버의 호스트 스텝 평균을 128스텝 단위로 17개씩 집계한 중앙값은 plan 55.3→55.5µs, pack 29.7→29.6µs, submit 1.50→1.41ms였다. 호스트 표본은 각 프로세스 전체의 측정이다. 이 비교는 요청 선택과 다른 스텝의 GPU 실행이 만드는 대기를 우선 조사할 근거다. KV 블록 예약이 부족해서 대기한 시간은 이 실행에서 별도로 분리되지 않았다. 요청 단계 단독 계측 대비 p95는 부하별로 0.40–3.61% 변해 이 수치는 병목 진단에 적용했다. [41번 요청과 호스트 단계 원본 집계](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/joint-clock/verified-summary.json)
+
 #### Coder-14B의 1,024행 후보 검증
 
 앞선 Qwen2.5-14B 시험과 같은 바이너리 및 A100 7번에서 `Qwen2.5-Coder-14B-Instruct`를 비교했다. 이 모델의 병합 QKV도 `K=5120, N=7168`이며 1,024행 후보가 적용되는 형상이다. 모델 revision `aedcc2d42b622764e023cf882b6652e646b95671`과 KV 2,576블록을 고정하고 기준 → 후보 → 후보 → 기준 순서로 실행했다. 후보 두 실행에서 cuBLASLt 12.4.5의 후보 선택을 확인했다. [고정 모델 입력](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/model.sha256) · [실행 및 런타임 검산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/verified-summary.json)
