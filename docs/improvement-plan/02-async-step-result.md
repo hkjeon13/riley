@@ -127,6 +127,21 @@ A100 7번에서 승인 소스 `d3d8fe6e5` 기반의 같은 CUDA 바이너리와 
 
 두 부하에서 회귀 기준을 충족했다. SmolLM2 `reason-c32`에서 정렬된 KV 테이블과 이번 복사 제거는 각각 출력이 일치했고 처리량 개선 폭이 2% 미만이었다. 기존 단일 iteration 구조의 이 부하에 대한 두 후보를 미채택으로 확정한다. 여러 스텝의 동시 실행과 KV 수명 검증은 별도 범위다. 종료 뒤 GPU 6·7의 기존 20GiB 예약을 확인했다. 재현할 때는 같은 디렉터리에 `move-committed-payload.patch.gz`를 `move-committed-payload.patch`로 푼 뒤 `dispatch.sha256`으로 검사한다. [실행 순서](../../benchmarks/evidence/20261119-w2-submit-prepare/event-payload-follow-up/campaign.sh) · [측정별 결과](../../benchmarks/evidence/20261119-w2-submit-prepare/event-payload-follow-up/verified-summary.json)
 
+### 결과 다운로드의 CUDA 완료 확인 통합
+
+`d3d8fe6e5`의 CUDA 계측 경로에서 결과 복사 뒤 종료 이벤트를 기록하고, 스트림 동기화 한 번이 성공한 후 이벤트 시간을 읽도록 바꿨다. 기존 경로는 같은 스트림에서 이벤트를 기다린 뒤 스트림을 다시 동기화했다. 후보는 스케줄러에서 다운로드 완료를 확인하는 부분만 변경했다. CUDA 12.4 SM80 빌드와 SmolLM2-1.7B-Instruct를 A100 7번에서 실행했다. 이번 `main`과 이 빌드 기준의 프로그램 소스는 일치했다. [진단 패치](../../benchmarks/evidence/20261120-w2-single-download-fence/single-download-fence.patch.gz) · [실행 순서](../../benchmarks/evidence/20261120-w2-single-download-fence/campaign.sh)
+
+두 C32 부하를 기준 → 후보 → 후보 → 기준 순으로 대조했다. `after-submit-v1`을 고정했고, 부하마다 워밍업 32건과 측정 64건을 수행했다. 네 실행의 측정 요청 512건에서 오류와 429는 0건이었다. 대응하는 입력·출력 해시, 종료 사유와 토큰 사용량이 일치했다. 별도 C1·C8 검사에서 생성 토큰 ID와 스트리밍 logprobs도 기준과 일치했다. [실행별 집계와 바이너리 해시](../../benchmarks/evidence/20261120-w2-single-download-fence/verified-summary.json)
+
+| 부하·순서 | TTFT p95 변화 | TPOT p50 변화 | 출력 처리량 변화 |
+|---|---:|---:|---:|
+| `reason-c32` 기준 먼저 | −0.94% | −0.43% | +0.39% |
+| `reason-c32` 후보 먼저 | −0.04% | +0.31% | −0.05% |
+| `long-c32` 기준 먼저 | −0.10% | −0.01% | +0.15% |
+| `long-c32` 후보 먼저 | −0.13% | −0.24% | −0.004% |
+
+두 부하에서 기존 회귀 기준을 충족했다. 출력 처리량은 실행 순서에 따라 방향이 바뀌었고, 최대 이득은 0.39%였다. 이 후보는 미채택이다. 후보의 GPU 유휴 구간과 CUDA 오류 주입은 이번 교차 측정에서 계측하지 않았다. 종료 뒤 GPU 6·7 모두 기존 홀더의 20GiB 예약을 확인했다. 재현할 때는 `single-download-fence.patch.gz`를 `single-download-fence.patch`로 풀어 `dispatch.sha256`을 확인한다. [교차 검산](../../benchmarks/evidence/20261120-w2-single-download-fence/verify_fence.py)
+
 ## GPU 예약 방식
 
 시작 전에 GPU 6·7에서 활성 compute process가 없고 각 메모리 사용이 4MiB인 것을 확인했다. 기존 `gpu_hold` 도구로 각 장치에 20GiB 대기 예약을 시작했다. 7번 실험마다 예약을 64MiB로 낮췄다가 자식 프로세스 종료 후 20GiB로 되돌렸다. 동일 홀더의 PID와 시작 시각을 확인하며 전환했다. [기존 예약 도구](../../benchmarks/tools/gpu_hold/README.md)
