@@ -152,6 +152,12 @@ a decoding row at long context more parallel work. Rows that fit in one part kee
 bytes, and a server whose context is no longer than `N` skips the split
 ([measurements](serving-validation.md#long-context)).
 
+On the native CUDA serving path, `--startup-warmup step-shapes-v1` runs internal
+greedy requests before the server accepts connections. The default is
+`disabled`. Warmup adds to startup time, and the exercised shapes depend on the
+model and scheduler configuration. The `batch_shapes` counters in `/metrics`
+show which buckets have run.
+
 ## Prefix cache
 
 `--prefix-cache-blocks N` keeps up to N prompt KV blocks for requests that

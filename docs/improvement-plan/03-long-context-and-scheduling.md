@@ -138,6 +138,7 @@ python3 benchmarks/live/compare.py \
 | 부분 개선 | Coder-14B에서 반복 문서 네 개를 미리 적재한 prefix cache는 고정 도착 RAG의 TTFT p95를 96.01–96.17% 줄였다. 역순의 짧은 C32 TTFT p50은 3.03% 늘어 혼합 서비스 채택 기준을 넘었다. | [반복 문서 대조](03-long-context-result.md#coder-14b-반복-문서의-prefix-cache) |
 | 미채택 | Coder-14B에서 128토큰 미만 요청을 캐시 조회·등록에서 제외해도 짧은 C32의 decode TPOT p50이 1.11–1.41% 늘었다. 반복 문서 RAG의 TTFT p95는 96.16–96.19% 줄었다. | [요청 길이 기준 대조](03-long-context-result.md#128토큰-미만-요청의-캐시-제외) |
 | 워밍업 뒤 통과 | 같은 C32 요청을 한 번 더 실행하면 두 GPU에서 짧은 요청의 지연·처리량 기준을 충족했다. 첫 실행은 GPU 7번에서 TTFT p50이 8.80% 늘어 기본값 채택을 보류한다. | [첫 실행과 반복 실행](03-long-context-result.md#짧은-c32의-첫-실행과-반복-실행) |
+| 시작 워밍업 미채택 | `step-shapes-v1`을 켠 Coder-14B 필터 실행은 준비 상태 전에 192행을 실행하지 않았고, 같은 워밍업의 캐시 비활성 실행보다 첫 C32 TTFT p50이 9.62–9.97% 늘었다. | [시작 워밍업 대조](03-long-context-result.md#시작-워밍업과-첫-c32-지연) |
 | 기존 구조 한계 | 0.1.0의 Coder-14B `closed-c32`와 일부 RAG의 최종 TTFT 목표 미달은 기존 판정과 측정값을 유지한다. | [구조 한계 근거](../goal.md#31-성능-a100-24개-모델-전부에-적용) |
 
 단일 GPU Qwen2.5-14B의 네 chunk·KV 조합과 배포 이미지 Qwen2.5-32B의 TP=2 기준 설정에서 C32 장문 증거를 확보했다. 새 전역 기본값에는 후보 설정으로 영향 모델 전체와 TP=2의 회귀 검증이 필요하다. [14B 네 조합](03-long-context-result.md#장문-chunk와-kv-한도의-교차-대조) · [32B TP=2 기준](05-mixed-soak-result.md#배포-이미지의-32b-tp2-장문-검증)
