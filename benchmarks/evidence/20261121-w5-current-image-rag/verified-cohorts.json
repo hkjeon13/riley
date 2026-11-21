@@ -1,0 +1,349 @@
+{
+  "scope": "Paired prompt-length cohorts from the same closed-loop RAG captures.",
+  "source_receipt_sha256": "80b3e7545c58a13293924b2d9bf4a707d45231bab90b60ff513e0ffd65b358bf",
+  "longer_prompt_threshold_tokens": 2500,
+  "cells": {
+    "rag-c8-seed1": {
+      "first": {
+        "cohorts": {
+          "shorter": {
+            "requests": 128,
+            "prompt_tokens": [
+              1755,
+              1806
+            ],
+            "p95_ms": {
+              "parent": {
+                "ttft_ms": 651.7317667603493,
+                "start_to_write_ms": 0.41950494050979614,
+                "write_to_first_visible_text_ms": 651.4437720179558
+              },
+              "packaged": {
+                "ttft_ms": 651.566781103611,
+                "start_to_write_ms": 0.45853108167648315,
+                "write_to_first_visible_text_ms": 651.2542515993118
+              }
+            },
+            "paired_ttft_delta_p50_ms": -0.05389004945755005,
+            "paired_ttft_delta_p95_ms": 1.5237852931022644
+          },
+          "longer": {
+            "requests": 128,
+            "prompt_tokens": [
+              3471,
+              3536
+            ],
+            "p95_ms": {
+              "parent": {
+                "ttft_ms": 1108.6380779743195,
+                "start_to_write_ms": 0.5523934960365295,
+                "write_to_first_visible_text_ms": 1108.2154884934425
+              },
+              "packaged": {
+                "ttft_ms": 1109.0822741389275,
+                "start_to_write_ms": 0.6137043237686157,
+                "write_to_first_visible_text_ms": 1108.6677759885788
+              }
+            },
+            "paired_ttft_delta_p50_ms": 0.014290213584899902,
+            "paired_ttft_delta_p95_ms": 1.789681613445282
+          }
+        },
+        "ttft_tail": {
+          "parent": {
+            "requests": 13,
+            "longer_prompts": 13
+          },
+          "packaged": {
+            "requests": 13,
+            "longer_prompts": 13
+          }
+        }
+      },
+      "second": {
+        "cohorts": {
+          "shorter": {
+            "requests": 128,
+            "prompt_tokens": [
+              1755,
+              1806
+            ],
+            "p95_ms": {
+              "parent": {
+                "ttft_ms": 756.8363025784492,
+                "start_to_write_ms": 0.4464760422706604,
+                "write_to_first_visible_text_ms": 756.5187141299248
+              },
+              "packaged": {
+                "ttft_ms": 651.6498997807503,
+                "start_to_write_ms": 0.5034953355789185,
+                "write_to_first_visible_text_ms": 651.2397080659866
+              }
+            },
+            "paired_ttft_delta_p50_ms": -6.88549131155014,
+            "paired_ttft_delta_p95_ms": 226.81228071451187
+          },
+          "longer": {
+            "requests": 128,
+            "prompt_tokens": [
+              3471,
+              3536
+            ],
+            "p95_ms": {
+              "parent": {
+                "ttft_ms": 1093.2170674204826,
+                "start_to_write_ms": 0.5799680948257446,
+                "write_to_first_visible_text_ms": 1092.8385332226753
+              },
+              "packaged": {
+                "ttft_ms": 1107.2673425078392,
+                "start_to_write_ms": 0.6297826766967773,
+                "write_to_first_visible_text_ms": 1106.819175183773
+              }
+            },
+            "paired_ttft_delta_p50_ms": -21.716006100177765,
+            "paired_ttft_delta_p95_ms": 408.0730304121971
+          }
+        },
+        "ttft_tail": {
+          "parent": {
+            "requests": 13,
+            "longer_prompts": 13
+          },
+          "packaged": {
+            "requests": 13,
+            "longer_prompts": 13
+          }
+        }
+      }
+    },
+    "rag-c8-seed2": {
+      "first": {
+        "cohorts": {
+          "shorter": {
+            "requests": 127,
+            "prompt_tokens": [
+              1755,
+              1798
+            ],
+            "p95_ms": {
+              "parent": {
+                "ttft_ms": 520.9158733487129,
+                "start_to_write_ms": 0.48257410526275635,
+                "write_to_first_visible_text_ms": 520.6102430820465
+              },
+              "packaged": {
+                "ttft_ms": 583.6460515856743,
+                "start_to_write_ms": 0.4347488284111023,
+                "write_to_first_visible_text_ms": 583.3780989050865
+              }
+            },
+            "paired_ttft_delta_p50_ms": 31.27150982618332,
+            "paired_ttft_delta_p95_ms": 339.827798306942
+          },
+          "longer": {
+            "requests": 129,
+            "prompt_tokens": [
+              3477,
+              3542
+            ],
+            "p95_ms": {
+              "parent": {
+                "ttft_ms": 884.7960829734802,
+                "start_to_write_ms": 0.5071908235549927,
+                "write_to_first_visible_text_ms": 884.4671472907066
+              },
+              "packaged": {
+                "ttft_ms": 1080.3868547081947,
+                "start_to_write_ms": 0.5309656262397766,
+                "write_to_first_visible_text_ms": 1080.0032019615173
+              }
+            },
+            "paired_ttft_delta_p50_ms": 30.127406120300293,
+            "paired_ttft_delta_p95_ms": 598.45831990242
+          }
+        },
+        "ttft_tail": {
+          "parent": {
+            "requests": 13,
+            "longer_prompts": 13
+          },
+          "packaged": {
+            "requests": 13,
+            "longer_prompts": 13
+          }
+        }
+      },
+      "second": {
+        "cohorts": {
+          "shorter": {
+            "requests": 127,
+            "prompt_tokens": [
+              1755,
+              1798
+            ],
+            "p95_ms": {
+              "parent": {
+                "ttft_ms": 581.276185810566,
+                "start_to_write_ms": 0.5609020590782166,
+                "write_to_first_visible_text_ms": 580.9585899114609
+              },
+              "packaged": {
+                "ttft_ms": 551.9551113247871,
+                "start_to_write_ms": 0.41516125202178955,
+                "write_to_first_visible_text_ms": 551.6429543495178
+              }
+            },
+            "paired_ttft_delta_p50_ms": -8.340038359165192,
+            "paired_ttft_delta_p95_ms": 147.45210111141205
+          },
+          "longer": {
+            "requests": 129,
+            "prompt_tokens": [
+              3477,
+              3542
+            ],
+            "p95_ms": {
+              "parent": {
+                "ttft_ms": 1080.258309841156,
+                "start_to_write_ms": 0.7132366299629211,
+                "write_to_first_visible_text_ms": 1079.8585042357445
+              },
+              "packaged": {
+                "ttft_ms": 1005.344033241272,
+                "start_to_write_ms": 0.4948452115058899,
+                "write_to_first_visible_text_ms": 1004.9369558691978
+              }
+            },
+            "paired_ttft_delta_p50_ms": -15.121117234230042,
+            "paired_ttft_delta_p95_ms": 243.45208704471588
+          }
+        },
+        "ttft_tail": {
+          "parent": {
+            "requests": 13,
+            "longer_prompts": 13
+          },
+          "packaged": {
+            "requests": 13,
+            "longer_prompts": 13
+          }
+        }
+      }
+    },
+    "rag-c8-seed3": {
+      "first": {
+        "cohorts": {
+          "shorter": {
+            "requests": 140,
+            "prompt_tokens": [
+              1752,
+              1807
+            ],
+            "p95_ms": {
+              "parent": {
+                "ttft_ms": 507.79103487730026,
+                "start_to_write_ms": 0.4243701696395874,
+                "write_to_first_visible_text_ms": 507.513627409935
+              },
+              "packaged": {
+                "ttft_ms": 522.0480188727379,
+                "start_to_write_ms": 0.559002161026001,
+                "write_to_first_visible_text_ms": 521.7005684971809
+              }
+            },
+            "paired_ttft_delta_p50_ms": 0.18616020679473877,
+            "paired_ttft_delta_p95_ms": 129.18446958065033
+          },
+          "longer": {
+            "requests": 116,
+            "prompt_tokens": [
+              3470,
+              3533
+            ],
+            "p95_ms": {
+              "parent": {
+                "ttft_ms": 827.7957737445831,
+                "start_to_write_ms": 0.4956051707267761,
+                "write_to_first_visible_text_ms": 827.4155259132385
+              },
+              "packaged": {
+                "ttft_ms": 880.9466063976288,
+                "start_to_write_ms": 0.5231723189353943,
+                "write_to_first_visible_text_ms": 880.4304376244545
+              }
+            },
+            "paired_ttft_delta_p50_ms": 0.3666803240776062,
+            "paired_ttft_delta_p95_ms": 233.8009774684906
+          }
+        },
+        "ttft_tail": {
+          "parent": {
+            "requests": 13,
+            "longer_prompts": 12
+          },
+          "packaged": {
+            "requests": 13,
+            "longer_prompts": 13
+          }
+        }
+      },
+      "second": {
+        "cohorts": {
+          "shorter": {
+            "requests": 140,
+            "prompt_tokens": [
+              1752,
+              1807
+            ],
+            "p95_ms": {
+              "parent": {
+                "ttft_ms": 523.3155339956284,
+                "start_to_write_ms": 0.5471259355545044,
+                "write_to_first_visible_text_ms": 522.9807943105698
+              },
+              "packaged": {
+                "ttft_ms": 510.99933683872223,
+                "start_to_write_ms": 0.47381967306137085,
+                "write_to_first_visible_text_ms": 510.64565032720566
+              }
+            },
+            "paired_ttft_delta_p50_ms": 0.33673644065856934,
+            "paired_ttft_delta_p95_ms": 169.5518121123314
+          },
+          "longer": {
+            "requests": 116,
+            "prompt_tokens": [
+              3470,
+              3533
+            ],
+            "p95_ms": {
+              "parent": {
+                "ttft_ms": 775.4734978079796,
+                "start_to_write_ms": 0.7136538624763489,
+                "write_to_first_visible_text_ms": 775.0529795885086
+              },
+              "packaged": {
+                "ttft_ms": 830.1362469792366,
+                "start_to_write_ms": 0.5467385053634644,
+                "write_to_first_visible_text_ms": 829.7401592135429
+              }
+            },
+            "paired_ttft_delta_p50_ms": 0.5100816488265991,
+            "paired_ttft_delta_p95_ms": 206.51596039533615
+          }
+        },
+        "ttft_tail": {
+          "parent": {
+            "requests": 13,
+            "longer_prompts": 12
+          },
+          "packaged": {
+            "requests": 13,
+            "longer_prompts": 12
+          }
+        }
+      }
+    }
+  }
+}

@@ -6,9 +6,10 @@ from decimal import Decimal
 import gzip
 from hashlib import file_digest, sha256
 import json
-from math import isfinite
+from math import isclose, isfinite
 from pathlib import Path
 import re
+from statistics import fmean
 import subprocess
 import sys
 import tomllib
@@ -221,6 +222,61 @@ def check_latest_allocator(root, trial, parent_entry, parent, serving):
                 or accuracy["riley_binary_sha256"] != package["binaries"]["/opt/riley/bin/riley"]
                 or counts != {"baseline": 144, "holdout": 88}):
             raise ValueError("latest allocator accuracy does not cover the passing soak image")
+    check_latest_allocator_rag(reports["rag"], parent["image_id"], image, library, trial["malloc_conf"])
+    cohorts = reports["rag_cohorts"]
+    if (cohorts["source_receipt_sha256"] != records["rag"]["sha256"]
+            or cohorts["cells"].keys() != reports["rag"]["cells"].keys()):
+        raise ValueError("latest RAG cohort audit is not bound to the matched captures")
+
+
+def check_latest_allocator_rag(report, parent, image, library, settings):
+    order = ["parent-first", "packaged-first", "packaged-second", "parent-second"]
+    arms = report["arms"]
+    if report["order"] != order or set(arms) != set(order):
+        raise ValueError("latest RAG comparison needs both image orders")
+    arguments = arms[order[0]]["server"]["server_arguments"]
+    for name, arm in arms.items():
+        expected = parent if name.startswith("parent-") else image
+        server = arm["server"]
+        if (arm["api_checks"] != 40 or arm["image_id"] != expected or server["image_id"] != expected
+                or server["server_arguments"] != arguments):
+            raise ValueError(f"{name} RAG used different image evidence or server settings")
+        allocator = server["allocator"]
+        if expected == parent:
+            if allocator != "glibc":
+                raise ValueError(f"{name} RAG baseline allocator differs")
+        elif (allocator["image_id"] != image or allocator["library_sha256"] != library
+              or allocator["malloc_conf"] != settings):
+            raise ValueError(f"{name} RAG used different allocator settings")
+
+    cells = report["cells"]
+    if set(cells) != {f"rag-c8-seed{seed}" for seed in (1, 2, 3)}:
+        raise ValueError("latest RAG comparison needs all three seed workloads")
+    for label, cell in cells.items():
+        metrics = cell["metrics"]
+        if (cell["aligned_samples_per_arm"] != 256 or set(metrics) != set(order)
+                or set(cell["request_timing"]) != set(order)):
+            raise ValueError(f"{label} RAG evidence is incomplete")
+        if any(not isfinite(metrics[name][key]) or metrics[name][key] <= 0
+               for name in order for key in ("ttft_p95_ms", "tpot_p50_ms")):
+            raise ValueError(f"{label} RAG latency samples must be positive and finite")
+        for pair in ("first", "second"):
+            ttft = [metrics[f"{kind}-{pair}"]["ttft_p95_ms"] for kind in ("parent", "packaged")]
+            change = (ttft[1] / ttft[0] - 1) * 100
+            if not isclose(change, cell["change_percent_by_order"][pair]["ttft_p95_ms"], abs_tol=1e-9):
+                raise ValueError(f"{label} RAG TTFT change differs from the paired measurements")
+        tpot = [fmean(metrics[f"{kind}-{pair}"]["tpot_p50_ms"] for pair in ("first", "second"))
+                for kind in ("parent", "packaged")]
+        expected = (tpot[1] / tpot[0] - 1) * 100 < 1
+        if cell["measured_regression_guards"]["decode_tpot_below_one_percent_regression"] is not expected:
+            raise ValueError(f"{label} RAG decode guard differs from the measured regression")
+    updates = {
+        "all_tested_streams_match": all(cell["same_complete_streams"] for cell in cells.values()),
+        "all_measured_regression_guards_pass": all(
+            all(cell["measured_regression_guards"].values()) for cell in cells.values()),
+    }
+    if any(report[key] is not value for key, value in updates.items()):
+        raise ValueError("latest RAG aggregate verdict differs from its cells")
 
 
 def check_distribution_serving(root, candidate):

@@ -88,7 +88,23 @@ A100 7번에서 이미지 `b731f48cc6ec`와 Qwen2.5-7B-Instruct를 사용했다.
 
 RSS는 15분 이후 첫 정밀 표본부터 요청을 모두 처리한 직후까지의 변화다. 마지막 두 열은 파생 이미지 각 실행의 초기 구간 대비 후반 변화다.
 
-두 부하를 통과한 뒤 같은 파생 이미지로 A100 6번에서 장문 기준 응답 144건과 홀드아웃 88건을 대조했다. 입력·생성 토큰 ID와 응답이 모두 일치했다. 종료 후 활성·대기 요청, KV와 device·pinned 할당은 0이었고 GPU 6·7의 기존 20GiB 예약을 확인했다. 릴리스 결정을 위해 최신 파생 이미지의 RAG 상대 성능과 실제 운영 트래픽·SLO 검증을 마쳐야 한다. [장문 검증 결과](../../benchmarks/evidence/20261121-w5-current-image-allocator/verified-accuracy.json) · [릴리스 판정](06-candidate-qualification.md)
+두 부하를 통과한 뒤 같은 파생 이미지로 A100 6번에서 장문 기준 응답 144건과 홀드아웃 88건을 대조했다. 입력·생성 토큰 ID와 응답이 모두 일치했다. 종료 후 활성·대기 요청, KV와 device·pinned 할당은 0이었고 GPU 6·7의 기존 20GiB 예약을 확인했다. [장문 검증 결과](../../benchmarks/evidence/20261121-w5-current-image-allocator/verified-accuracy.json)
+
+### 최신 파생 이미지의 RAG 교차 측정
+
+A100 6번에서 기준 `b731f48cc6ec`와 파생 `c3fae872c532`를 기준→파생→파생→기준 순서로 실행했다. Qwen2.5-7B-Instruct, 8,192토큰 문맥, KV 16,384블록, prefix cache 128블록을 고정했다. 각 실행은 closed-loop RAG C8의 세 seed에서 워밍업 8건과 측정 256건씩 처리했고, 두 번째 쌍에서는 seed 순서도 뒤집었다. API 40건이 네 번 모두 통과했고 측정 3,072건에서 오류와 429가 없었다. 대응 요청의 입력·응답 해시, 토큰 사용량과 종료 사유가 모두 일치했다. 종료 자원 회수와 GPU 6·7의 기존 20GiB 예약을 확인했다. [교차 측정 검산](../../benchmarks/evidence/20261121-w5-current-image-rag/verified-summary.json)
+
+| Seed | 기준 먼저 TTFT p95 | 파생 먼저 TTFT p95 | 두 실행 평균 decode TPOT p50 |
+|---|---:|---:|---:|
+| 1 | +0.09% | −1.67% | −0.09% |
+| 2 | +21.14% | −6.87% | −0.23% |
+| 3 | +1.93% | −2.87% | −0.10% |
+
+변화율은 각 쌍의 기준 대비 파생 이미지로 계산했다. 세 seed의 평균 decode TPOT은 1% 회귀 기준을 충족했다. Seed 2의 TTFT p95는 기준 먼저 실행한 쌍에서 810.58→981.91ms였고, 파생 먼저 실행한 쌍은 기준 968.73ms·파생 902.13ms였다. 이전 이미지에서 두 순서에 걸쳐 증가했던 seed 2의 결과는 최신 이미지에서 순서별 방향이 갈렸다. [이전 세 seed 대조](#닫힌-rag-세-seed의-확장-교차-대조)
+
+Seed 2의 256건은 2,500토큰을 경계로 짧은 입력 127건(1,755–1,798토큰)과 긴 입력 129건(3,477–3,542토큰)으로 나뉜다. 네 실행 모두 TTFT 상위 13건이 전부 긴 입력이었다. 소켓 쓰기 전 p95 변화는 두 쌍에서 +0.02ms와 −0.22ms였고, 쓰기부터 첫 콘텐츠까지의 p95는 +171.31ms와 −66.51ms였다. 이 구간에는 서버 대기·GPU 처리·전송이 함께 포함된다. 같은 도착 시각표의 대조와 실제 운영 분포·SLO 확인이 남아 있다. [프롬프트 길이별 검산](../../benchmarks/evidence/20261121-w5-current-image-rag/verified-cohorts.json) · [릴리스 판정](06-candidate-qualification.md)
+
+재현 디렉터리에는 이전 측정의 `audit_allocator_ttft.py`, `scenario-inputs.sha256`, [부하 실행기](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/performance_client.py), [공통 GPU 검산기](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/verify_a100_candidate.py)를 복사하고 `dispatch.sha256`을 확인한다. [실행 순서](../../benchmarks/evidence/20261121-w5-current-image-rag/campaign.sh) · [독립 검산](../../benchmarks/evidence/20261121-w5-current-image-rag/fetch-summary.sh)
 
 ## 90초 사전 검증
 

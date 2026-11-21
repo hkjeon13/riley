@@ -161,6 +161,20 @@ class PackageFollowUpTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "allocator soaks used different package evidence or settings"):
                 checker.check_package_follow_up(ROOT, candidate)
 
+    def test_rag_tail_change_matches_both_image_orders(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        entry = manifest["current_allocator_trial"]["evidence"]["rag_confirmation"]
+        report = json.loads((ROOT / entry["path"]).read_bytes())
+        parent = report["arms"]["parent-first"]["image_id"]
+        variant = report["arms"]["packaged-first"]["image_id"]
+        allocator = report["arms"]["packaged-first"]["server"]["allocator"]
+        args = (report, parent, variant, allocator["library_sha256"], allocator["malloc_conf"])
+        checker.check_latest_allocator_rag(*args)
+
+        report["cells"]["rag-c8-seed2"]["change_percent_by_order"]["second"]["ttft_p95_ms"] = 0
+        with self.assertRaisesRegex(ValueError, "seed2 RAG TTFT change differs"):
+            checker.check_latest_allocator_rag(*args)
+
 
 class AllocatorTrialTests(unittest.TestCase):
     def setUp(self):

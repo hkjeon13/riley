@@ -3321,6 +3321,14 @@
         "accuracy": {
           "path": "benchmarks/evidence/20261121-w5-current-image-allocator/verified-accuracy.json",
           "sha256": "62e0829d61a8270d662be6dc4bd60d3889a867dcf249b23f716d86ca09fbcd3d"
+        },
+        "rag": {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag/verified-summary.json",
+          "sha256": "80b3e7545c58a13293924b2d9bf4a707d45231bab90b60ff513e0ffd65b358bf"
+        },
+        "rag_cohorts": {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag/verified-cohorts.json",
+          "sha256": "5bc8f6c51ca0068272786fa91f331227824644291540c7e138a22579935f25e2"
         }
       },
       "replay_inputs": [
@@ -3351,6 +3359,38 @@
         {
           "path": "benchmarks/evidence/20261121-w5-current-image-allocator/verify_allocator_image.py",
           "sha256": "5e506712f4f1be0b955874179a40f4af490b07847630fd756472ad7e29376a33"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag/audit_cohorts.py",
+          "sha256": "f4ba9aa115de9fcc47893ea14945ffba288a132189a85a590b3fdeba8e5037b6"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag/campaign.sh",
+          "sha256": "80b1f6bf54c68148610859071269fa7b9fa45145859316b6287453a5dc4a4f58"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag/compare_allocator_performance.py",
+          "sha256": "d8af4d0e9d47eebb661d994a636e026888c84d9809d00f4320990c61ffba7c60"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag/current_binding.py",
+          "sha256": "9de1bfa12945e3948516f7a5991fef7245b11426eea7553ca356afd806216f83"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag/dispatch.sha256",
+          "sha256": "20d90d63ae50dfb4dba0474eabfa01fba830d08408c70dbb5ea50aeb0eb3b36e"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag/fetch-summary.sh",
+          "sha256": "e42b48542a4cba2f81fd737324cddfb73d76e5b2328b50f75b7140715ecf524d"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag/run_allocator_performance.py",
+          "sha256": "7b96b3d48f3cdc5901927601668581d0721deeed56cb987b212e570c2746254f"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag/verify_confirmation.py",
+          "sha256": "20d383d0b0c634c4e2f9ffdbef265123bcda5af60377350b96c1f32ce865f4c8"
         }
       ]
     }
