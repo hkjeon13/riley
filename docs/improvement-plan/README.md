@@ -133,7 +133,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W5: 배포 이미지에서 prefill과 decode를 함께 포함한 커밋된 GPU iteration 36개를 관측하고, 단독·혼합 응답의 토큰 ID와 종료 계약을 대조했다. [혼합 iteration 결과](05-mixed-soak-result.md#배포-이미지의-커밋된-혼합-gpu-iteration)
 - [x] W5: 배포 이미지의 Qwen2.5-32B TP=2에서 API 40건을 통과하고 C8·C32 응답 43건이 C1 기준과 일치했다. [32B TP=2 결과](05-mixed-soak-result.md#배포-이미지의-32b-tp2-장문-검증)
 - [x] W5: 같은 이미지 두 개의 닫힌 RAG C8 3,072건에서 출력 일치와 seed별 꼬리 지연을 확인했다. Seed 2의 지연 증가가 반복됐다. [닫힌 RAG 확장 대조](05-mixed-soak-result.md#닫힌-rag-세-seed의-확장-교차-대조)
-- [ ] W5: 릴리스 대상 이미지에서 두 캐시 설정의 RSS 증가 0 운영 기준을 충족한다. 최신 이미지 `b731f48cc6ec`의 두 조건은 정밀 RSS가 각각 572KiB와 636KiB 증가했다. 이전 파생 시험 이미지 `1fc444b1840e`의 두 조건은 통과했다. [최신 이미지 30분 부하](05-mixed-soak-result.md#새-이미지의-30분-혼합-부하) · [파생 시험 판정](05-mixed-soak-result.md#즉시-반환-설정의-할당기-대조)
+- [ ] W5: 릴리스 대상 이미지에서 두 캐시 설정의 RSS 증가 0 운영 기준을 충족한다. 기준 이미지 `b731f48cc6ec`는 미달했고, 최신 jemalloc 파생 시험 이미지 `c3fae872c532`는 두 조건을 통과했다. 최신 파생 이미지의 성능과 운영 검증이 남아 있다. [기준 이미지 30분 부하](05-mixed-soak-result.md#새-이미지의-30분-혼합-부하) · [최신 파생 시험](05-mixed-soak-result.md#새-이미지의-jemalloc-파생-검증)
 - [x] 문서에서 버전·기본값·성능 주장을 해당 버전과 실행 설정에 연결했다. CI는 배포 이미지의 여섯 모델 검증을 같은 이미지·바이너리와 공개 지원 표에 연결한다. [문서 대조](05-documentation-and-operations.md#w5-a3-반복-가능한-문서-검증) · [배포 이미지 지원 표](../model-support.md#packaged-serving-checks)
 - [ ] 목표 미달을 숫자상 해결과 구분해 명시하고, 기본값·opt-in·미지원 범위를 확정했다.
 

@@ -11,6 +11,7 @@
 | A100에서 재빌드한 배포 이미지 | `d3d8fe6e5` | 이미지 ID `0a907408ec73`. A100 6번의 CUDA 드라이버 주입, Qwen2.5-7B-Instruct API 40건과 장문 출력 232건, Qwen2.5-32B-Instruct TP=2 API 40건과 C1·C8·C32 출력 대조, GPU 자원 회수. [32B TP=2 결과](05-mixed-soak-result.md#배포-이미지의-32b-tp2-장문-검증) |
 | 취소 순서 수정이 포함된 배포 이미지 | `36aa18805` | GitHub 이미지 `f87ebb07768c`, A100 이미지 `b731f48cc6ec`. 런타임 파일 21개 일치. Qwen2.5-7B-Instruct API 40건과 취소·자원 회수 통과. 두 캐시 모드의 30분 정밀 RSS 기준 미충족. [배포 이미지 재검증](05-mixed-soak-result.md#새-이미지의-30분-혼합-부하) |
 | jemalloc을 포함한 파생 시험 이미지 | `d3d8fe6e5`의 실행 파일 | 이미지 ID `1fc444b1840e`. CPU 패키지 무결성, Qwen2.5-7B-Instruct API 40건, 두 캐시 모드 30분 운영 기준, 장문 출력 232건, 사전 성능 회귀 기준 통과. RAG C8 seed 2 꼬리 지연 증가 |
+| 최신 배포 이미지의 jemalloc 파생 시험 | `36aa18805`의 실행 파일 | 이미지 ID `c3fae872c532`. Qwen2.5-7B-Instruct API와 두 캐시 모드의 30분 운영 기준을 통과했고, 장문 응답 232건이 일치했다. [파생 이미지 검증](05-mixed-soak-result.md#새-이미지의-jemalloc-파생-검증) |
 
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)
 
@@ -24,7 +25,7 @@
 python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 ```
 
-이 명령은 `distribution_after_terminal_fix`에서 새 이미지의 호스팅 CPU·A100 CPU·A100 추론 보고서, 런타임 파일 목록과 Git 빌드 입력을 대조한다. 같은 이미지로 실행한 두 30분 부하의 지연 변화와 정밀 RSS 증가량을 기준에 대조해 실패 판정을 유지한다. 기준 이미지의 대표 모델·장문·TP=2와 파생 할당기 성능·장기 안정성은 각각의 실행 이미지에 연결된다. 새 이미지의 RSS 기준 충족과 실제 운영 트래픽·SLO 검증이 남아 있어 릴리스 판정은 보류다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
+이 명령은 `distribution_after_terminal_fix`에서 호스팅 CPU·A100 CPU·A100 추론 보고서, 런타임 파일 목록과 Git 빌드 입력을 대조한다. 기준 배포 이미지의 두 30분 부하는 정밀 RSS 기준에 미달했다. 최신 jemalloc 파생 시험은 두 캐시 모드의 기준과 장문 232건의 출력 대조를 통과했다. CI는 장문·부하 검증이 같은 파생 이미지에 연결됐는지와 두 부하의 할당기 설정을 확인한다. 최신 파생 이미지의 RAG 상대 성능과 실제 운영 트래픽·SLO 검증이 남아 있어 릴리스 판정은 보류다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 
 같은 명령은 `current_allocator_trial`의 여덟 검증 보고서를 대조한다. 파생 이미지의 패키징, 두 캐시 모드의 30분 부하, 장문 정확성, 성능 대조, 닫힌 RAG 확장 대조, 고정 도착 대조와 메트릭 조회 두 시험을 연결한다. 성능 시험은 실제 이미지·실행 인자·할당기 설정이 일치하고, 메트릭 조회 재시험은 첫 조회 시험의 검산 해시·체크포인트·요청 수에 맞아야 한다. 닫힌 부하의 RAG 꼬리 지연과 실제 운영 도착 분포·서비스 SLO 확인이 남아 있어 파생 이미지 릴리스를 보류한다. [파생 후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 

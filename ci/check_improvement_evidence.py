@@ -158,6 +158,7 @@ def check_package_follow_up(root, candidate):
         raise ValueError("follow-up package lacks passing A100 inference, cancellation and shutdown evidence")
     soaks = json.loads((root / evidence["a100_soaks"]["path"]).read_bytes(), object_pairs_hook=unique_object)
     check_package_soaks(soaks, serving)
+    check_latest_allocator(root, candidate["allocator_follow_up"], evidence["a100_cpu"], a100, serving)
 
 
 def check_package_soaks(soaks, serving):
@@ -187,6 +188,39 @@ def check_package_soaks(soaks, serving):
     expected_gate = "passed" if all(result["status"] == "passed" for result in modes.values()) else "failed"
     if soaks["release_gate"] != expected_gate:
         raise ValueError("30-minute soak gate differs from the two cache outcomes")
+
+
+def check_latest_allocator(root, trial, parent_entry, parent, serving):
+    records = trial["evidence"]
+    reports = {kind: json.loads((root / entry["path"]).read_bytes(), object_pairs_hook=unique_object)
+               for kind, entry in records.items()}
+    package = reports["package"]
+    soaks = reports["soaks"]
+    if (package["status"] != "passed" or package["parent_image_id"] != parent["image_id"]
+            or package["parent_cpu_report_sha256"] != parent_entry["sha256"]
+            or package["same_parent_runtime_files"] != 21
+            or any(package[key] != parent[key] for key in ("source_revision", "source_archive_sha256", "binaries"))):
+        raise ValueError("latest allocator package does not match its verified parent")
+    image = package["image_id"]
+    library = package["added_files_sha256"]["/opt/riley/lib/libjemalloc.so.2"]
+    if (soaks["parent_image_id"] != parent["image_id"] or soaks["allocator_cpu_sha256"] != records["package"]["sha256"]
+            or soaks["allocator_library_sha256"] != library or soaks["allocator_settings"] != trial["malloc_conf"]):
+        raise ValueError("latest allocator soaks used different package evidence or settings")
+    check_package_soaks(soaks, {**serving, "image_id": image})
+
+    for mode, result in soaks["modes"].items():
+        if not re.fullmatch(r"[0-9a-f]{64}", result["allocator_process_proof_sha256"]):
+            raise ValueError(f"{mode} lacks live allocator evidence")
+    if (soaks["release_gate"] == "passed") != ("accuracy" in reports):
+        raise ValueError("latest allocator accuracy must accompany passing soaks")
+    if "accuracy" in reports:
+        accuracy = reports["accuracy"]
+        counts = {name: suite["verified_requests"] for name, suite in accuracy["accuracy_suites"].items()}
+        if (accuracy["status"] != "passed" or accuracy["image_id"] != image
+                or accuracy["source_revision"] != package["source_revision"]
+                or accuracy["riley_binary_sha256"] != package["binaries"]["/opt/riley/bin/riley"]
+                or counts != {"baseline": 144, "holdout": 88}):
+            raise ValueError("latest allocator accuracy does not cover the passing soak image")
 
 
 def check_distribution_serving(root, candidate):

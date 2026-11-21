@@ -75,6 +75,21 @@ A100 7번에서 이미지 `b731f48cc6ec`와 Qwen2.5-7B-Instruct를 사용했다.
 
 각 조건에서 서버 연결 종료·취소 카운터가 각각 700 증가했고 HTTP·SSE 오류와 과부하는 0건이었다. 지연은 허용 범위 안이었다. 두 조건의 `smaps_rollup`에서 RSS 증가량과 익명 RSS 증가량이 같았고, RSS 증가 0 기준만 실패했다. 서버는 각각 코드 0으로 종료했고 활성·대기 요청, 요청 KV와 device·pinned 할당은 모두 0이었다. 시험 뒤 두 GPU의 기존 20GiB 예약을 확인했다. [정밀 RSS 및 종료 검산](../../benchmarks/evidence/20261121-w5-current-image-soaks/verify_soaks.py)
 
+### 새 이미지의 jemalloc 파생 검증
+
+이전 파생 시험에서 사용한 jemalloc 라이브러리와 즉시 반환 설정을 `b731f48cc6ec`에 적용해 시험 이미지 `c3fae872c532`를 만들었다. 두 이미지의 기존 런타임 파일 21개와 Riley 바이너리가 일치했다. CPU 검사에서 Riley의 `malloc`·`calloc`·`realloc`·`free` 호출이 패키지의 jemalloc에 연결됐고, GPU 부하 전후에 같은 비루트 Riley PID의 라이브러리 매핑·환경값을 확인했다. [CPU 패키지 보고서](../../benchmarks/evidence/20261121-w5-current-image-allocator/verified-image.json) · [GPU 검증 절차](../../benchmarks/evidence/20261121-w5-current-image-allocator/campaign.sh)
+
+기준 이미지에서 사용한 두 GPU, 체크포인트, 캐시 배치와 합성 도착을 재사용했다. 각 30분 시험에서 API 40건, 정상 완료 13,749건과 의도적 연결 종료 700건을 기록했다. 서버의 disconnect·cancel 카운터도 각각 700 증가했고 오류·과부하는 0건이었다. 두 조건 모두 지연·정밀 RSS·종료 자원 회수 기준을 통과했다. [정밀 측정과 결과 검산](../../benchmarks/evidence/20261121-w5-current-image-allocator/verified-soaks.json)
+
+| 조건 | 기준 이미지 RSS | jemalloc 파생 이미지 RSS | 후반 TTFT p95 변화 | 후반 전체 완료 p95 변화 |
+|---|---:|---:|---:|---:|
+| 캐시 비활성 · A100 6번 | +572KiB | −548KiB | +0.60% | −13.56% |
+| 캐시 활성 · A100 7번 | +636KiB | −884KiB | +1.23% | −13.45% |
+
+RSS는 15분 이후 첫 정밀 표본부터 요청을 모두 처리한 직후까지의 변화다. 마지막 두 열은 파생 이미지 각 실행의 초기 구간 대비 후반 변화다.
+
+두 부하를 통과한 뒤 같은 파생 이미지로 A100 6번에서 장문 기준 응답 144건과 홀드아웃 88건을 대조했다. 입력·생성 토큰 ID와 응답이 모두 일치했다. 종료 후 활성·대기 요청, KV와 device·pinned 할당은 0이었고 GPU 6·7의 기존 20GiB 예약을 확인했다. 릴리스 결정을 위해 최신 파생 이미지의 RAG 상대 성능과 실제 운영 트래픽·SLO 검증을 마쳐야 한다. [장문 검증 결과](../../benchmarks/evidence/20261121-w5-current-image-allocator/verified-accuracy.json) · [릴리스 판정](06-candidate-qualification.md)
+
 ## 90초 사전 검증
 
 프롬프트 KV 캐시에 128블록을 할당했다. 초당 평균 8건의 합성 요청으로 일반·스키마·logprobs·필수 도구·장문·긴 출력·클라이언트 연결 종료를 섞었다. 장문 요청은 여덟 개의 프롬프트 앞부분을 반복 사용했다.

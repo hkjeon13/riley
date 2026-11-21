@@ -3306,7 +3306,54 @@
         "path": "benchmarks/evidence/20261121-w5-current-image-soaks/verify_soaks.py",
         "sha256": "f35ef0db484b8ea1b60b2c3d97af422280a3831660c0801a17233e014df0650e"
       }
-    ]
+    ],
+    "allocator_follow_up": {
+      "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+      "evidence": {
+        "package": {
+          "path": "benchmarks/evidence/20261121-w5-current-image-allocator/verified-image.json",
+          "sha256": "b8e047495e70ceb24bd0bd65dc83b6410aa18cebdcabbf1fb88f304ce38612ed"
+        },
+        "soaks": {
+          "path": "benchmarks/evidence/20261121-w5-current-image-allocator/verified-soaks.json",
+          "sha256": "d7c45a682ec1f0eaa3f24ad51085668c0126331d44077cc68ca23a215b87c842"
+        },
+        "accuracy": {
+          "path": "benchmarks/evidence/20261121-w5-current-image-allocator/verified-accuracy.json",
+          "sha256": "62e0829d61a8270d662be6dc4bd60d3889a867dcf249b23f716d86ca09fbcd3d"
+        }
+      },
+      "replay_inputs": [
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-allocator/Dockerfile",
+          "sha256": "d26902444623328b9278905c677a926be78ecd559ff53292ede4cde1e5278a20"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-allocator/campaign.sh",
+          "sha256": "0168b9bfa8a44840a47894a6b6ed00f53eb5f5de9a7c9b16f0dd45d962aec3dd"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-allocator/dispatch.sha256",
+          "sha256": "c854f87f2076f770e5f2c1748ca59d09aff111649fd0ba38171e625c7365ed06"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-allocator/fetch-summary.sh",
+          "sha256": "2e158bcad03e69673407704f7a3d61cbe2d3225d0149e090241132ac3a7c33ed"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-allocator/qualify.py",
+          "sha256": "e40367d1b57723c8453101790a1f8df7e9f89c4124f996ffa68d6356b3cc6188"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-allocator/riley-with-allocator",
+          "sha256": "2113c1e03c5d22209d9af117a8882c8e9d8b58551912b2e9ea5774952fc2de33"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-allocator/verify_allocator_image.py",
+          "sha256": "5e506712f4f1be0b955874179a40f4af490b07847630fd756472ad7e29376a33"
+        }
+      ]
+    }
   },
   "current_distribution_candidate": {
     "serving_reports": {

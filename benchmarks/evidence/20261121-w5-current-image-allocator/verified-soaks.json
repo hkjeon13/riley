@@ -1,0 +1,125 @@
+{
+  "remote_stage": "w5-current-allocator-20261121.ZVgY3v8o",
+  "source_revision": "36aa1880509941ad169be6cc327d6d89231f8b81",
+  "image_id": "sha256:c3fae872c5325cffbf02e4c41004514cc6b38bb364bb33d805f090beed1d5058",
+  "binary_sha256": "56112a5b9bd72e77106f45497af277038308af357a5c5ee129af74ce3cc85a0f",
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "duration_seconds_per_mode": 1800,
+  "requests_per_second_per_mode": 8,
+  "parallel_arms": true,
+  "idle_reservations": {
+    "6": {
+      "pid": 2680326,
+      "start_ticks": "6365879881",
+      "gib": 20
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "gib": 20
+    }
+  },
+  "release_gate": "passed",
+  "modes": {
+    "cache-off": {
+      "physical_gpu": 6,
+      "status": "passed",
+      "api_checks": 40,
+      "completed": 13749,
+      "client_disconnects": 700,
+      "problem_count": 0,
+      "counter_changes": {
+        "cancellations": 700,
+        "disconnects": 700,
+        "overloads": 0,
+        "dropped_observations": 13568
+      },
+      "p95_change_percent": {
+        "ttft_ms": 0.5985167273804715,
+        "e2e_ms": -13.559567040123998
+      },
+      "rss": {
+        "baseline": {
+          "rss_kib": 15486916,
+          "anonymous_kib": 15299576,
+          "read_ms": 300.49070715904236
+        },
+        "drain": {
+          "rss_kib": 15486368,
+          "anonymous_kib": 15299028,
+          "read_ms": 298.2582300901413
+        },
+        "rss_growth_kib": -548,
+        "anonymous_growth_kib": -548
+      },
+      "failed_checks": [],
+      "server_arguments": [
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "512",
+        "--kv-blocks",
+        "16384"
+      ],
+      "report_sha256": "48c99e192ddcb44a6c7572c97737ef01ccbdccd0694e87e1e55bbb816a163e42",
+      "soak_sha256": "70a06821e0150a73ee0579b5c848fa3a19d0ce8d8f80777ce8ac21d110c32214",
+      "shutdown_sha256": "c4b531c57c47f9265050afa540e9cc735ce02f0abd776dc8d94ec8216e46e105",
+      "allocator_process_proof_sha256": "30c59f3a414e10999b5a5540cf3d62572f16c6ae97606491ff5b29aa563c15f8"
+    },
+    "cache-on": {
+      "physical_gpu": 7,
+      "status": "passed",
+      "api_checks": 40,
+      "completed": 13749,
+      "client_disconnects": 700,
+      "problem_count": 0,
+      "counter_changes": {
+        "cancellations": 700,
+        "disconnects": 700,
+        "overloads": 0,
+        "dropped_observations": 13568
+      },
+      "p95_change_percent": {
+        "ttft_ms": 1.2283382730183812,
+        "e2e_ms": -13.449206266254155
+      },
+      "rss": {
+        "baseline": {
+          "rss_kib": 15487220,
+          "anonymous_kib": 15299988,
+          "read_ms": 292.1374663710594
+        },
+        "drain": {
+          "rss_kib": 15486336,
+          "anonymous_kib": 15299104,
+          "read_ms": 287.67257183790207
+        },
+        "rss_growth_kib": -884,
+        "anonymous_growth_kib": -884
+      },
+      "failed_checks": [],
+      "server_arguments": [
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "512",
+        "--kv-blocks",
+        "16384",
+        "--prefix-cache-blocks",
+        "128"
+      ],
+      "report_sha256": "47e5dd8a034be7a844b0996935da2fb549539cb792f6720241caf84e9e2d5257",
+      "soak_sha256": "eafb314311cd4c47d3ee7b056dde2b5f3168689e6a4a350b7fefb2d3baabbd81",
+      "shutdown_sha256": "6e2f70152a18607a5f9ad328c1a5ca0e99807eda0f50e97885fb90272fc801b0",
+      "allocator_process_proof_sha256": "ea952edfc0fecccabd5c825a50b40d1a56f007ebc71a36ae4385e73b9462ba4a"
+    }
+  },
+  "parent_image_id": "sha256:b731f48cc6ec0820197ec484e98c673e2de592f12ab8448e3fa9f38ca7217c9b",
+  "allocator_cpu_sha256": "b8e047495e70ceb24bd0bd65dc83b6410aa18cebdcabbf1fb88f304ce38612ed",
+  "allocator_library_sha256": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9",
+  "allocator_settings": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0"
+}

@@ -147,6 +147,20 @@ class PackageFollowUpTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cache-on soak verdict differs"):
             checker.check_package_soaks(soaks, serving)
 
+    def test_allocator_soaks_match_the_attested_runtime_settings(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        candidate = manifest["distribution_after_terminal_fix"]
+        entry = candidate["allocator_follow_up"]["evidence"]["soaks"]
+        changed = json.loads((ROOT / entry["path"]).read_bytes())
+        changed["allocator_settings"] = "dirty_decay_ms:1000"
+        raw = json.dumps(changed).encode("utf-8")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "soaks.json"
+            path.write_bytes(raw)
+            entry.update(path=str(path), sha256=sha256(raw).hexdigest())
+            with self.assertRaisesRegex(ValueError, "allocator soaks used different package evidence or settings"):
+                checker.check_package_follow_up(ROOT, candidate)
+
 
 class AllocatorTrialTests(unittest.TestCase):
     def setUp(self):
