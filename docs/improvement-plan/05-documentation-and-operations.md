@@ -160,6 +160,8 @@ trace가 없으면 "production 검증" 대신 "관측 분포를 가정한 합성
 
 2026-11-20에 저장소의 운영 문서와 Riley GitHub 이슈를 확인했다. 같은 날 GitHub API의 공개 조회에서 배포 기록과 환경 목록은 각각 0건이었다. 현재 연결된 운영 근거는 A100 격리 실행과 합성 요청 집계다. 실제 서비스의 요청 분포와 승인된 SLO는 근거 출처 확인부터 남아 있다. 기존 합성 부하와 격리 복구 결과는 릴리스 검토의 재현 근거로 사용한다. [GitHub 배포 목록](https://api.github.com/repos/hkjeon13/riley/deployments) · [GitHub 환경 목록](https://api.github.com/repos/hkjeon13/riley/environments) · [격리 부하와 복구 결과](05-mixed-soak-result.md) · [릴리스 판정](06-candidate-qualification.md)
 
+2026-11-22에 Riley 이슈에서 `Grafana`, `Prometheus`, `service level objective`, `운영 트래픽`을 다시 조회했다. 네 검색의 결과는 각각 0건이었다. 운영 자료의 위치는 미확인 상태다.
+
 운영 자료가 확인되면 아래 항목으로 부하를 구성하고 릴리스 판정에 사용한 출처와 측정 기간을 남긴다.
 
 | 운영 자료 | 재현과 판정에 사용하는 값 |
