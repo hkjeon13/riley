@@ -138,6 +138,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W3 같은 C32 96건을 반복하면 두 GPU에서 필터의 짧은 요청 기준을 통과했다. 첫 실행의 GPU 7번 TTFT p50은 8.80% 늘어 기본값 채택을 보류했다. [첫 실행과 반복 실행](03-long-context-result.md#짧은-c32의-첫-실행과-반복-실행)
 - [x] W3 내장 시작 워밍업과 캐시 필터를 교차 비교했다. 필터 실행에서 준비 상태의 192행 사용이 없었고 두 GPU 모두 첫 C32 TTFT p50이 2% 한도를 넘었다. [시작 워밍업 대조](03-long-context-result.md#시작-워밍업과-첫-c32-지연)
 - [x] W3 시작 워밍업만 캐시에서 격리해 192행 실행을 복원했다. 일반 RAG 재사용과 출력은 유지됐고 첫 C32 TTFT p95는 두 GPU에서 한도를 넘었다. [캐시 격리 대조](03-long-context-result.md#시작-워밍업의-prefix-cache-격리)
+- [x] W3 첫 C32를 두 시각표로 재생했다. 캐시 비활성·워밍업 켬을 기준으로 격리 워밍업의 p95 증가는 0.4% 미만이었고 p50은 두 GPU에서 한도를 넘었다. [고정 도착 재생](03-long-context-result.md#첫-c32의-고정-도착-재생)
 - [ ] W3: 1,024행 QKV 형상 공통 적용은 Coder-14B decode 회귀로 기각했다. 일부 RAG의 TTFT 목표와 Coder-14B의 C32 목표는 현재 기본 경로에서 미달이다. [Coder-14B 결과](03-long-context-result.md#coder-14b의-1024행-후보-검증) · [현재 적용 판정](03-long-context-and-scheduling.md#현재-적용-판정)
 - [x] W5: 대상 GPU에서 배포 이미지의 실제 추론과 cache-on·off 30분 부하 증거를 확보했다. [운영 결과와 판정](05-mixed-soak-result.md#배포-이미지의-혼합-부하)
 - [x] W5: 배포 이미지의 45초 smoke에서 2-KV-head GQA·Qwen3·MHA·14B의 API 계약, 혼합 부하·취소·종료 회수를 검증했다. [MHA·14B 결과](05-mixed-soak-result.md#배포-이미지의-mha와-14b-smoke) [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)

@@ -15,7 +15,8 @@ SPEC.loader.exec_module(loader)
 
 
 class StreamingLoadTests(unittest.IsolatedAsyncioTestCase):
-    async def request(self, *, done=True, finish="stop", usage=None, content=("a",), capture_hashes=False):
+    async def request(self, *, done=True, finish="stop", usage=None, content=("a",), capture_hashes=False,
+                      preconnected=False):
         reader = asyncio.StreamReader()
         chunks = [{"choices": [{"delta": {"content": text}, "finish_reason": None}]} for text in content]
         chunks.append({"choices": [{"delta": {}, "finish_reason": finish}],
@@ -30,13 +31,22 @@ class StreamingLoadTests(unittest.IsolatedAsyncioTestCase):
         writer.drain = mock.AsyncMock()
         writer.wait_closed = mock.AsyncMock()
         row = {}
-        with mock.patch.object(loader.asyncio, "open_connection", new=mock.AsyncMock(return_value=(reader, writer))):
-            await loader.one("localhost", 1, {}, time.perf_counter(), row, capture_hashes=capture_hashes)
+        dial = mock.AsyncMock(return_value=(reader, writer))
+        with mock.patch.object(loader.asyncio, "open_connection", new=dial):
+            await loader.one("localhost", 1, {}, time.perf_counter(), row, capture_hashes=capture_hashes,
+                             connection=(reader, writer) if preconnected else None)
+        if preconnected:
+            dial.assert_not_awaited()
         writer.wait_closed.assert_awaited_once()
         return row
 
     async def test_complete_stream_is_measured(self):
         self.assertIs((await self.request())["error"], False)
+
+    async def test_preconnected_stream_is_measured_and_closed_without_dialing(self):
+        result = await self.request(preconnected=True, capture_hashes=True)
+        self.assertIs(result["error"], False)
+        self.assertGreaterEqual(result["sent_at"], result["start"])
 
     async def test_measured_output_digest_preserves_utf8_content_across_sse_chunks(self):
         intact = await self.request(content=("한글",), capture_hashes=True)

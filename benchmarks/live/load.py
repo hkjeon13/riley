@@ -41,7 +41,8 @@ def prompt(rng, words):
             f"Using only the document above as inspiration, write a detailed story about {topic}.")
 
 
-async def one(host, port, body, started_at, record, *, capture_hashes=False, capture_token_ids=False):
+async def one(host, port, body, started_at, record, *, capture_hashes=False, capture_token_ids=False, connection=None):
+    """Measure one request and close its connection, including a supplied stream pair."""
     request = json.dumps(body).encode()
     output_hash = hashlib.sha256() if capture_hashes else None
     if capture_hashes:
@@ -56,7 +57,9 @@ async def one(host, port, body, started_at, record, *, capture_hashes=False, cap
     done = False
     writer = None
     try:
-        reader, writer = await asyncio.open_connection(host, port, limit=1 << 22)
+        if connection is None:
+            connection = await asyncio.open_connection(host, port, limit=1 << 22)
+        reader, writer = connection
         writer.write(head + request)
         if capture_hashes:
             record["sent_at"] = time.perf_counter()
