@@ -21,7 +21,8 @@ use riley_runtime::host_trace;
 use riley_scheduler::SchedulerMetricsSnapshot;
 
 use crate::domain::{
-    GenerationEvent, GenerationRequest, ModelMetadata, RequestMetadata, ServiceErrorClass,
+    FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestMetadata,
+    ServiceErrorClass,
 };
 
 // Complete prompt prefill preserves this profile's request GEMM geometry.
@@ -383,6 +384,28 @@ struct RequestControl {
     cancellation: Arc<AtomicU8>,
     events: SyncSender<GenerationEvent>,
     stats: Arc<EngineStats>,
+}
+
+impl RequestControl {
+    fn publish_terminal(&self, event: GenerationEvent) {
+        // A cancellation can suppress committed tokens before they reach the
+        // consumer. Decide which terminal result wins before sending it.
+        let state = self.cancellation.swap(REQUEST_TERMINAL, Ordering::AcqRel);
+        let event = match (state, event) {
+            (
+                REQUEST_CANCELLED | REQUEST_CANCELLING,
+                GenerationEvent::Finished {
+                    reason: FinishReason::Stop | FinishReason::Length,
+                    usage,
+                },
+            ) => GenerationEvent::Finished {
+                reason: FinishReason::Cancelled,
+                usage,
+            },
+            (_, event) => event,
+        };
+        let _ = self.events.try_send(event);
+    }
 }
 
 impl Drop for RequestControl {
@@ -1697,18 +1720,17 @@ fn deliver_staged_events() {
                 cancellation,
                 terminal,
             } = item;
-            if terminal.is_none()
-                && matches!(
-                    cancellation.load(Ordering::Acquire),
-                    REQUEST_CANCELLED | REQUEST_CANCELLING | REQUEST_TERMINAL
-                )
-            {
+            if let Some(control) = terminal {
+                control.publish_terminal(event);
                 continue;
             }
-            let sent = events.try_send(event).is_ok();
-            if terminal.is_some() {
-                cancellation.store(REQUEST_TERMINAL, Ordering::Release);
-            } else if !sent
+            if matches!(
+                cancellation.load(Ordering::Acquire),
+                REQUEST_CANCELLED | REQUEST_CANCELLING | REQUEST_TERMINAL
+            ) {
+                continue;
+            }
+            if events.try_send(event).is_err()
                 && cancellation
                     .compare_exchange(
                         REQUEST_LIVE,
@@ -2026,14 +2048,19 @@ fn publish_events<B: EngineBackend>(
             event,
             GenerationEvent::Finished { .. } | GenerationEvent::Failed { .. }
         );
+        if terminal {
+            if let Some(control) = requests.remove(&request_id) {
+                control.publish_terminal(event);
+            }
+            continue;
+        }
         let Some(control) = requests.get(&request_id) else {
             continue;
         };
         if matches!(
             control.cancellation.load(Ordering::Acquire),
             REQUEST_CANCELLED | REQUEST_CANCELLING
-        ) && !terminal
-        {
+        ) {
             continue;
         }
         let sent = if matches!(&event, GenerationEvent::TokenDelta { text } if text.is_empty()) {
@@ -2044,13 +2071,7 @@ fn publish_events<B: EngineBackend>(
                 Err(TrySendError::Full(_) | TrySendError::Disconnected(_)) => false,
             }
         };
-        if terminal {
-            if let Some(control) = requests.remove(&request_id) {
-                control
-                    .cancellation
-                    .store(REQUEST_TERMINAL, Ordering::Release);
-            }
-        } else if !sent
+        if !sent
             && control
                 .cancellation
                 .compare_exchange(
@@ -5296,6 +5317,72 @@ mod tests {
             Ok(GenerationEvent::TokenDelta { .. })
         ));
         engine.shutdown(Duration::from_secs(1)).expect("shutdown");
+    }
+
+    #[test]
+    fn cancellation_before_final_output_delivery_cannot_report_success() {
+        for publish_after_submit in [true, false] {
+            let request_id = EngineRequestId(1);
+            let state = Arc::new(std::sync::atomic::AtomicU8::new(super::REQUEST_LIVE));
+            let (wake, _commands) = std::sync::mpsc::sync_channel(1);
+            let cancellation = super::EngineCancellation {
+                state: Arc::clone(&state),
+                wake,
+            };
+            let (events, receiver) = std::sync::mpsc::sync_channel(2);
+            let engine_stats = Arc::new(super::EngineStats::default());
+            engine_stats.active_requests.store(1, Ordering::Release);
+            let mut requests = BTreeMap::from([(
+                request_id,
+                super::RequestControl {
+                    cancellation: Arc::clone(&state),
+                    events,
+                    stats: Arc::clone(&engine_stats),
+                },
+            )]);
+            let usage = TokenUsage::new(5, 1).expect("usage");
+            let final_events = vec![
+                BackendEvent::new(
+                    request_id,
+                    GenerationEvent::TokenDelta {
+                        text: "last".to_owned(),
+                    },
+                ),
+                BackendEvent::new(
+                    request_id,
+                    GenerationEvent::Finished {
+                        reason: FinishReason::Length,
+                        usage,
+                    },
+                ),
+            ];
+            let counters = Arc::new(MockCounters::default());
+            let mut backend = MockBackend::new(Arc::clone(&counters), Duration::ZERO);
+            if publish_after_submit {
+                super::stage_events(&mut requests, final_events);
+                cancellation.cancel();
+                super::flush_staged_events(&mut backend, &mut requests);
+            } else {
+                cancellation.cancel();
+                super::publish_events(&mut backend, &mut requests, final_events);
+            }
+            assert_eq!(
+                receiver.try_recv(),
+                Ok(GenerationEvent::Finished {
+                    reason: FinishReason::Cancelled,
+                    usage,
+                }),
+                "publish after submit: {publish_after_submit}"
+            );
+            assert_eq!(
+                receiver.try_recv(),
+                Err(std::sync::mpsc::TryRecvError::Disconnected)
+            );
+            assert!(requests.is_empty());
+            assert_eq!(engine_stats.active_requests.load(Ordering::Acquire), 0);
+            assert_eq!(state.load(Ordering::Acquire), super::REQUEST_TERMINAL);
+            assert_eq!(counters.cancelled.load(Ordering::Acquire), 0);
+        }
     }
 
     #[test]

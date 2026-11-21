@@ -142,6 +142,16 @@ A100 7번에서 승인 소스 `d3d8fe6e5` 기반의 같은 CUDA 바이너리와 
 
 두 부하에서 기존 회귀 기준을 충족했다. 출력 처리량은 실행 순서에 따라 방향이 바뀌었고, 최대 이득은 0.39%였다. 이 후보는 미채택이다. 후보의 GPU 유휴 구간과 CUDA 오류 주입은 이번 교차 측정에서 계측하지 않았다. 종료 뒤 GPU 6·7 모두 기존 홀더의 20GiB 예약을 확인했다. 재현할 때는 `single-download-fence.patch.gz`를 `single-download-fence.patch`로 풀어 `dispatch.sha256`을 확인한다. [교차 검산](../../benchmarks/evidence/20261120-w2-single-download-fence/verify_fence.py)
 
+### 마지막 토큰 전달과 취소의 순서
+
+마지막 토큰과 `Finished(Length)`가 같은 스텝에서 만들어진 뒤 요청을 취소하는 경우를 재현했다. 기존 제출 후 발행 경로는 마지막 토큰을 건너뛰고도 완료 이유를 `length`로 전달했다. 이 순서에서는 클라이언트가 받은 토큰 수와 성공 응답의 사용량이 달라질 수 있었다. [회귀 검사](../../crates/riley-server/src/engine.rs)
+
+즉시 발행과 제출 후 발행이 같은 종료 처리 함수를 사용한다. 종료 이벤트를 큐에 넣기 전에 상태를 원자적으로 확정하고, 취소가 먼저 반영된 경우 `stop` 또는 `length`를 `cancelled`로 바꾼다. 종료 판정은 이벤트 전달 단계에서 적용되며 GPU 스텝과 KV 회수는 기존 경계에서 처리한다. CPU 회귀 검사는 두 발행 모드의 토큰 억제, 취소 종료, 한 번의 슬롯 회수를 확인했다. 루프백 포트 차단을 해제한 전체 서버 테스트에서 102건이 통과했고 성능 계측 전용 1건은 실행 대상에서 제외됐다.
+
+2026-11-20 KST에 수정한 CUDA 12.4 SM80 네이티브 바이너리와 Qwen2.5-7B-Instruct를 A100 7번에서 검증했다. 두 발행 모드 모두 API 40건을 통과했다. 45초씩 초당 8건의 합성 요청을 보낸 두 실행에서 각각 정상 완료 338건, 의도적 연결 종료 21건, 서버 취소 증가 21건, 오류·과부하 0건을 기록했다. 두 실행 모두 정상 종료했고 활성·대기 요청, 요청 KV 및 device·pinned 할당이 0이었다. 각 시험 직후 기존 GPU 6·7 홀더에 20GiB가 예약된 상태를 확인했다. [실제 실행 검산](../../benchmarks/evidence/20261120-w2-terminal-publication/verified-summary.json) · [GPU 실행 절차](../../benchmarks/evidence/20261120-w2-terminal-publication/campaign.sh)
+
+A100에서 빌드한 `engine.rs`와 커밋한 파일의 차이는 테스트 변수명뿐이다. 두 파일의 테스트 모듈 앞 운영 코드 SHA-256은 `eae4be8ab478bde84e9ba381402ed2e91531e0e72fb6afb7fc04cc4cf7e9966b`로 일치했다. GPU에서 사용한 패치를 재현하려면 `terminal-order.patch.gz`를 `terminal-order.patch`로 풀고 `dispatch.sha256`으로 확인한다. [재현 패치](../../benchmarks/evidence/20261120-w2-terminal-publication/terminal-order.patch.gz)
+
 ## GPU 예약 방식
 
 시작 전에 GPU 6·7에서 활성 compute process가 없고 각 메모리 사용이 4MiB인 것을 확인했다. 기존 `gpu_hold` 도구로 각 장치에 20GiB 대기 예약을 시작했다. 7번 실험마다 예약을 64MiB로 낮췄다가 자식 프로세스 종료 후 20GiB로 되돌렸다. 동일 홀더의 PID와 시작 시각을 확인하며 전환했다. [기존 예약 도구](../../benchmarks/tools/gpu_hold/README.md)

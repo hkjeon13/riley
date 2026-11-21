@@ -15,6 +15,8 @@
 
 현행 배포 검증 이미지 `d3d8fe6e5`의 이미지 ID·Riley 실행 파일 해시를 보존했다. 이 이미지와 첫 감사 시점 `68788bee9`, 후속 감사 시점 `838103b02`의 배포 입력 Git 객체 14개가 모두 일치한다. 동일 Rust·CUDA 프로그램 입력인 `77c367003`에서는 CUDA 12.8 네이티브 빌드·C ABI·Clippy도 통과했다. [CUDA 12.4 이미지 원본](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/receipt.json) · [CUDA 12.8 네이티브 CI](https://github.com/hkjeon13/riley/actions/runs/44410425140)
 
+후속 W2 취소 순서 수정으로 `main`의 `crates/riley-server` 배포 입력이 달라졌다. 수정한 네이티브 바이너리는 A100에서 두 발행 모드의 API·취소·자원 회수를 통과했다. 기존 배포 이미지의 결과는 `d3d8fe6e5`에 연결하며, 새 소스의 이미지 빌드와 GPU 검증은 남아 있다. [취소 경계의 네이티브 검증](02-async-step-result.md#마지막-토큰-전달과-취소의-순서)
+
 릴리스 검토에서는 아래 명령으로 원격 `main`의 배포 입력을 검증 이미지에 연결한다. 기록된 입력이 달라지면 변경된 경로를 출력하고 실패한다. 이미지·바이너리·모델의 실행 근거는 아래 표의 검증 시점과 장비에 연결된다. [검사 코드](../../ci/check_improvement_evidence.py)
 
 ```bash
