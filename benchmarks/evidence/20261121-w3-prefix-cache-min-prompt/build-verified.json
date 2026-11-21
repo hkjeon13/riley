@@ -1,0 +1,21 @@
+{
+  "remote_build": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-prefix-min-build-20261121.vdX2vOQA",
+  "status": "passed",
+  "source_revision": "36aa1880509941ad169be6cc327d6d89231f8b81",
+  "source_archive_sha256": "429f0132fed714f5af133f756e4374f21733ed4f27074b05f69b3b9930f5b6b6",
+  "cuda_architecture": 80,
+  "rustc": "1.85.0 (4d91de4e4 2025-02-17)",
+  "nvcc": "12.4.131",
+  "build_input_sha256": "81a09d45e364e47625c3a6023543fbccfa087001383978822a1dcb7a8b131256",
+  "build_result": {
+    "target/release/riley": "c5282eac85acea3aae49192bf46b18752dd708de7dea176a1ccd55f47bbf6f6f",
+    "toolchain.txt": "ea0f59f4ef75db260c21045076d1493ea933790a0de624480fe41f54aa136a4e",
+    "dependencies.txt": "51b130acb9ea82954796a72b2652935ef22638639da61d5b3f11d90c1ea68261",
+    "patched-source.sha256": "2afbe24dc54e379f5ccf26bc85aefa363eaca819d8c7eb67a05ac935dcfd3b03",
+    "switch.txt": "63605411274157952fcb4f0f3c45367593d89cb122a4b12d253e7c71fa9b2bd8"
+  },
+  "patched_source": {
+    "crates/riley-scheduler/src/scheduler.rs": "dd9907e2feb63e309edba60f5f1df6065f18d5f6fcfa0bececab80e0213d2c59",
+    "crates/riley-scheduler/tests/simulation.rs": "017fd1dd7bedf1b7cedaa7000fb3957f10f6fde38962ccf99c2147c077353f7c"
+  }
+}

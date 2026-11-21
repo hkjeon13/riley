@@ -281,6 +281,56 @@
     "gpu_inference": "pending"
   },
   "other_evidence": {
+    "coder14_prefix_cache_minimum_prompt_trial": [
+      {
+        "path": "benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/baseline-source.sha256",
+        "sha256": "14c6f7cf6b360efb250d665c494aff558e0f865cc1385bf9b73165c13daeda78"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/build-inputs.sha256",
+        "sha256": "81a09d45e364e47625c3a6023543fbccfa087001383978822a1dcb7a8b131256"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/build-verified.json",
+        "sha256": "550384573ee0afa21426a88ddad314a87f01782a9e38b982266398eff1066b68"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/build.sh",
+        "sha256": "f1dd235426884d57450d986ff949a92b15207a18e5955f17424bbca993582633"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/campaign.sh",
+        "sha256": "8ab2869a29e544c2ee1f7e7487ae3db72bfe06e74b2a37203c04e9acb81f5ea9"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/cpu.json",
+        "sha256": "8084abbb325f39779ed499404bd959b6f787c4a24ee0450d8b3812364942d8fa"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/fetch-summary.sh",
+        "sha256": "9b10e1a1472f89030e8772d070d79cf5d073826b700c0aed1b1285d5185de420"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/gpu-inputs.sha256",
+        "sha256": "6223b319dac7b26a83a8f7a8395a1e0fc991a1b67666da57a0a70761f54afa43"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/min-prompt.patch.gz",
+        "sha256": "b2c5bd8282a06e30041d2d7f385692718c31671a7d4fa5702d9e89bc13159a20"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/run_probe.py",
+        "sha256": "95f31fe0ffa1e6e9ad651b49816fdaa6e325c6c2dc58eaec4b5914261ea55361"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/verified.json",
+        "sha256": "20f68bb8ed02a5c22deef4387f17b6e4034180759e9fdbb4a39dde2bbd5f99d3"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/verify_probe.py",
+        "sha256": "f3227c561724fd7d3acc71f842f9800f26226c72419e02b96d73fa5c7e7a757e"
+      }
+    ],
     "coder14_repeated_rag_cache": [
       {
         "path": "benchmarks/evidence/20261121-w3-coder-rag-cache/campaign.sh",

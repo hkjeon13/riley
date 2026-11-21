@@ -527,6 +527,28 @@ A100 7번에서 기준 이미지 `b731f48cc6ec`로 유효한 실행 네 개를 �
 
 유효한 네 실행의 전송 오차 p95는 0.50–4.99ms였다. 모두 종료 코드 0과 활성·대기 요청, 요청 KV, device·pinned 할당 0을 기록했다. A100 6·7번의 기존 홀더와 20GiB 예약을 각 실행 전후에 확인했다. [독립 검산](../../benchmarks/evidence/20261121-w3-coder-rag-cache/fetch-summary.sh)
 
+### 128토큰 미만 요청의 캐시 제외
+
+앞선 짧은 C32 입력은 70–77토큰이었고 반복 문서 RAG 입력은 2,158–2,175토큰이었다. 격리한 진단 바이너리에서만 `RILEY_W3_PREFIX_CACHE_MIN_128=1`로 128토큰 미만의 요청을 prefix cache 조회와 등록에서 제외했다. 경계 CPU 검사에서 127토큰 요청의 재사용은 112→0토큰이 됐고, 두 조건에서 128토큰 요청은 계속 112토큰을 재사용했다. 요청이 끝났을 때 짧은 요청이 남긴 캐시 블록도 없어졌다. [스케줄러 진단 패치 (gzip)](../../benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/min-prompt.patch.gz) · [CPU 검사](../../benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/cpu.json)
+
+기준 이미지의 소스 리비전 `36aa1880`과 같은 Rust 1.85.0·CUDA 12.4를 사용했다. A100 SM80으로 빌드한 실행 파일을 기준 이미지에 읽기 전용으로 연결했다. 실행 파일 하나에서 캐시 비활성, 기존 캐시 640블록, 128토큰 미만 제외를 비교했다. KV 풀 2,576블록과 이전 반복 문서의 입력·도착 시각표, 짧은 C32 96개 요청을 고정했다. [격리 빌드](../../benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/build-verified.json) · [실행 순서](../../benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/campaign.sh)
+
+재빌드 경로에서 `gzip -dc min-prompt.patch.gz > min-prompt.patch`로 압축을 풀면 체크섬 목록과 동일한 입력을 얻는다. [빌드 입력 체크섬](../../benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/build-inputs.sha256)
+
+비활성 → 기존 캐시 → 128토큰 기준 → 128토큰 기준 → 기존 캐시 → 비활성 순으로 실행했다. 총 984건에서 기존 배포 이미지의 입력·생성 토큰 ID와 개수, 출력 텍스트, 종료 사유를 재현했다. 전송 오차 p95는 0.50–0.59ms였다. 128토큰 기준의 장문 128건은 기존 캐시와 요청별로 같은 2,032–2,048토큰을 재사용했다. 기존 캐시에서 짧은 요청은 각 순서 92/96건이 적중했고, 128토큰 기준에서는 각 0/96건이었다. [요청 단위 검산](../../benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/verified.json)
+
+| 지표 | 캐시 비활성 대비 기존 캐시, 정순 / 역순 | 캐시 비활성 대비 128토큰 기준, 정순 / 역순 |
+|---|---:|---:|
+| 반복 문서 RAG TTFT p95 | −96.23% / −96.20% | −96.19% / −96.16% |
+| 짧은 C32 TTFT p50 | +10.80% / +16.59% | +1.20% / +12.19% |
+| 짧은 C32 TTFT p95 | −24.34% / −29.41% | −1.57% / +1.03% |
+| 짧은 C32 decode TPOT p50 | −2.40% / −2.61% | +1.41% / +1.11% |
+| 짧은 C32 출력 처리량 | +3.72% / +3.45% | −1.71% / −0.91% |
+
+128토큰 기준은 짧은 C32의 decode TPOT 1% 한도를 양쪽 순서에서 넘었고 역순의 TTFT p50도 2% 한도를 넘었다. 혼합 서비스 후보로 채택하지 않았다. 비활성과 128토큰 기준에서 짧은 C32는 각각 204개 스텝을 실행했고 32행 버킷은 모두 163개였다. 이 버킷의 평균 GPU 시간 변화는 약 +0.11%와 −0.11%였다. 전체 GPU 스텝 시간 증가 94.84ms와 49.46ms의 대부분이 다른 행 버킷에서 관측됐다. 이 집계에는 prefill과 decode가 섞인 스텝이 포함된다.
+
+여섯 실행에서 종료 코드 0과 활성·대기 요청, KV, device·pinned 할당 0을 확인했다. A100 6·7번의 기존 홀더와 20GiB 예약도 복구됐다. [독립 검산](../../benchmarks/evidence/20261121-w3-prefix-cache-min-prompt/fetch-summary.sh)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
