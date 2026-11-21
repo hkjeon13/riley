@@ -119,6 +119,17 @@ Seed 2의 256건은 2,500토큰을 경계로 짧은 입력 127건(1,755–1,798�
 
 실행 스크립트는 앞선 닫힌 부하의 런타임 결속과 요청 기록을 재사용한다. 독립 검산은 AWS에서 원본 해시를 검증하고 각 쌍의 TTFT와 소켓 쓰기 오차를 다시 계산한다. [실행 순서](../../benchmarks/evidence/20261121-w5-current-image-rag-replay/campaign.sh) · [독립 검산](../../benchmarks/evidence/20261121-w5-current-image-rag-replay/fetch-summary.sh)
 
+### 현행 배포 이미지의 배치 메트릭 검사
+
+A100 6번의 같은 Qwen2.5-7B 체크포인트에서 기준 이미지 `b731f48cc6ec`와 jemalloc 파생 이미지 `c3fae872c532`를 새 배포 검사기로 실행했다. 두 이미지에서 API 40건과 45초 혼합 부하가 각각 통과했다. 첫 표본, 주기 표본, drain 표본의 배치 메트릭 24개 슬롯 중 21개가 구성됐고, 검사기는 각 슬롯의 GPU 시간과 카운터를 대조했다. [서빙과 원본 지문](../../benchmarks/evidence/20261121-w5-current-batch-shapes/verified-shapes.json)
+
+| 이미지 | 최초 표본에서 drain까지 커밋된 스텝 |
+|---|---:|
+| 기준 | 3,875 |
+| jemalloc | 3,882 |
+
+두 실행의 종료 후 활성·대기 요청, 할당 KV 블록과 device·pinned 할당은 모두 0이었다. A100 6·7번의 기존 20GiB 예약을 확인했다. 앞서 보존한 같은 이미지의 cache-off·cache-on 30분 부하 네 건에도 추가 검사를 적용했다. 실행당 32개 표본을 대조해 네 건 모두 배치 메트릭 기준을 통과했다. 각 부하의 기존 RSS 판정은 기준 이미지 두 모드 실패, 파생 이미지 두 모드 통과다. [실행 순서](../../benchmarks/evidence/20261121-w5-current-batch-shapes/campaign.sh) · [원본 재검산](../../benchmarks/evidence/20261121-w5-current-batch-shapes/fetch-summary.sh)
+
 ## 90초 사전 검증
 
 프롬프트 KV 캐시에 128블록을 할당했다. 초당 평균 8건의 합성 요청으로 일반·스키마·logprobs·필수 도구·장문·긴 출력·클라이언트 연결 종료를 섞었다. 장문 요청은 여덟 개의 프롬프트 앞부분을 반복 사용했다.

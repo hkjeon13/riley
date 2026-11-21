@@ -281,6 +281,32 @@
     "gpu_inference": "pending"
   },
   "other_evidence": {
+    "current_distribution_batch_shapes": [
+      {
+        "path": "benchmarks/evidence/20261121-w5-current-batch-shapes/campaign.sh",
+        "sha256": "3dabc3b209471a41c77c9c688504ab4b485a5830d41c7eab32aaade983182980"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w5-current-batch-shapes/dispatch.sha256",
+        "sha256": "d2eec4a092e32bde7e6b7655ed4b4a4bbabaad9a850ee2c1658eecdf970cf100"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w5-current-batch-shapes/fetch-summary.sh",
+        "sha256": "0b0ace1a74cf915efa6cb6cc3ff4ee08100f13400100f9be4850137de32581d6"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w5-current-batch-shapes/run_shapes.py",
+        "sha256": "e294cf35782e04c153a2204cbae44d0fa6a3d0daf0cd60394088949cb894bde4"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w5-current-batch-shapes/verified-shapes.json",
+        "sha256": "11d9040524ba9fef379f00ad8271c3f44c86aeb7aaafa6f906ceef855f3b7a4d"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w5-current-batch-shapes/verify_shapes.py",
+        "sha256": "0f8d7f649515c067a61bfc3cf934e2628eff2aebdb7086eaf4958247bdff80a4"
+      }
+    ],
     "historical_rc3_linux_fixture_suite": {
       "path": "benchmarks/evidence/20261119-rc3-host-contracts/receipt.json",
       "sha256": "70c9512d68829bf1410cab82d79b285a8ea016c82e651b90e35b72695a45c93a"

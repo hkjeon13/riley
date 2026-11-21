@@ -1,0 +1,353 @@
+{
+  "stage": "w5-batch-shape-20261121.o8yeLCXK",
+  "checker_sha256": "9de96ef6927e2cae371df410595ed7747cf59d4859ea6f244220e68f018249f9",
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "binary_sha256": "56112a5b9bd72e77106f45497af277038308af357a5c5ee129af74ce3cc85a0f",
+  "run_order": [
+    [
+      "START",
+      "stock",
+      "2026-11-21T08:31:58Z"
+    ],
+    [
+      "END",
+      "stock",
+      "2026-11-21T08:36:59Z",
+      "exit=0"
+    ],
+    [
+      "START",
+      "jemalloc",
+      "2026-11-21T08:37:00Z"
+    ],
+    [
+      "END",
+      "jemalloc",
+      "2026-11-21T08:42:00Z",
+      "exit=0"
+    ]
+  ],
+  "measured_smoke": {
+    "stock": {
+      "image_id": "sha256:b731f48cc6ec0820197ec484e98c673e2de592f12ab8448e3fa9f38ca7217c9b",
+      "status": "passed",
+      "api_checks": 40,
+      "shutdown": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0,
+        "allocation": {
+          "device_live_count": 0,
+          "device_live_bytes": 0,
+          "pinned_live_count": 0,
+          "pinned_live_bytes": 0
+        }
+      },
+      "gate": {
+        "status": "passed",
+        "snapshots": 3,
+        "slot_capacity": 24,
+        "configured_dense_rows": [
+          1,
+          2,
+          4,
+          8,
+          16,
+          24,
+          32,
+          48,
+          64,
+          80,
+          96,
+          112,
+          128,
+          144,
+          160,
+          176,
+          192,
+          208,
+          224,
+          240,
+          256
+        ],
+        "committed_steps": 3875,
+        "gpu_execution_ns": 49436374387
+      },
+      "process": {
+        "image_id": "sha256:b731f48cc6ec0820197ec484e98c673e2de592f12ab8448e3fa9f38ca7217c9b",
+        "container_id": "5e7ff7261dc53a8394db274e55cdcfaadc849b234b6b1db8c935f0371739f139",
+        "host_pid": 91429,
+        "args": [
+          "serve",
+          "--model",
+          "/models",
+          "--model-id",
+          "m",
+          "--max-active-sequences",
+          "32",
+          "--max-sequence-tokens",
+          "8192",
+          "--max-output-tokens",
+          "512",
+          "--kv-blocks",
+          "4096",
+          "--prefix-cache-blocks",
+          "128"
+        ],
+        "allocator": "glibc"
+      },
+      "reservations": {
+        "6": {
+          "pid": 2680326,
+          "start_ticks": "6365879881",
+          "gib": 20
+        },
+        "7": {
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "gib": 20
+        }
+      },
+      "report_sha256": "bd7817db82453fff77e7a03f32637dfa1e95422f720f1f27f2cfe0581f3f8680",
+      "smoke_sha256": "0d5d671f35ba2aca174bc732da425eb7f83670cd14e3055b8fac2e91e2a1726e"
+    },
+    "jemalloc": {
+      "image_id": "sha256:c3fae872c5325cffbf02e4c41004514cc6b38bb364bb33d805f090beed1d5058",
+      "status": "passed",
+      "api_checks": 40,
+      "shutdown": {
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "kv_allocated_blocks": 0,
+        "allocation": {
+          "device_live_count": 0,
+          "device_live_bytes": 0,
+          "pinned_live_count": 0,
+          "pinned_live_bytes": 0
+        }
+      },
+      "gate": {
+        "status": "passed",
+        "snapshots": 3,
+        "slot_capacity": 24,
+        "configured_dense_rows": [
+          1,
+          2,
+          4,
+          8,
+          16,
+          24,
+          32,
+          48,
+          64,
+          80,
+          96,
+          112,
+          128,
+          144,
+          160,
+          176,
+          192,
+          208,
+          224,
+          240,
+          256
+        ],
+        "committed_steps": 3882,
+        "gpu_execution_ns": 49484276349
+      },
+      "process": {
+        "image_id": "sha256:c3fae872c5325cffbf02e4c41004514cc6b38bb364bb33d805f090beed1d5058",
+        "container_id": "055f4e757504416ad12297c44dd0b8f35e591e7720c4086bced3e5aecf1d95fd",
+        "host_pid": 117430,
+        "args": [
+          "serve",
+          "--model",
+          "/models",
+          "--model-id",
+          "m",
+          "--max-active-sequences",
+          "32",
+          "--max-sequence-tokens",
+          "8192",
+          "--max-output-tokens",
+          "512",
+          "--kv-blocks",
+          "4096",
+          "--prefix-cache-blocks",
+          "128"
+        ],
+        "allocator": {
+          "container_id": "055f4e757504416ad12297c44dd0b8f35e591e7720c4086bced3e5aecf1d95fd",
+          "host_pid": 117430,
+          "image_id": "sha256:c3fae872c5325cffbf02e4c41004514cc6b38bb364bb33d805f090beed1d5058",
+          "library_sha256": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9",
+          "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+          "mounts": [
+            "/models"
+          ]
+        }
+      },
+      "reservations": {
+        "6": {
+          "pid": 2680326,
+          "start_ticks": "6365879881",
+          "gib": 20
+        },
+        "7": {
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "gib": 20
+        }
+      },
+      "report_sha256": "b9b9ff0d3ebc6b685cc50414cda889236024e32f98fda6d9e96bcf67dc0e030d",
+      "smoke_sha256": "051d98fba53b21150d057d4d09ae14088c6051983dd3ad146fa06eda0d27831a"
+    }
+  },
+  "archived_thirty_minute_soaks": {
+    "stock": {
+      "cache-off": {
+        "original_soak_status": "failed",
+        "soak_sha256": "a3de2d77a11bb67a96d29112c5b158fdb094fff55bbf2be8c3fabbe096443b67",
+        "original_summary_sha256": "5453a6c0bc14d3d4b228373bd329c0f6eb4c69d40408153df2d2d9d9046c2279",
+        "gate": {
+          "status": "passed",
+          "snapshots": 32,
+          "slot_capacity": 24,
+          "configured_dense_rows": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            24,
+            32,
+            48,
+            64,
+            80,
+            96,
+            112,
+            128,
+            144,
+            160,
+            176,
+            192,
+            208,
+            224,
+            240,
+            256
+          ],
+          "committed_steps": 133169,
+          "gpu_execution_ns": 1757607111583
+        }
+      },
+      "cache-on": {
+        "original_soak_status": "failed",
+        "soak_sha256": "bd1305cd2b8dbcd8590413e1b7b08ea26d44c436626853d1c67db2141ab2d188",
+        "original_summary_sha256": "5453a6c0bc14d3d4b228373bd329c0f6eb4c69d40408153df2d2d9d9046c2279",
+        "gate": {
+          "status": "passed",
+          "snapshots": 32,
+          "slot_capacity": 24,
+          "configured_dense_rows": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            24,
+            32,
+            48,
+            64,
+            80,
+            96,
+            112,
+            128,
+            144,
+            160,
+            176,
+            192,
+            208,
+            224,
+            240,
+            256
+          ],
+          "committed_steps": 134319,
+          "gpu_execution_ns": 1757639892072
+        }
+      }
+    },
+    "jemalloc": {
+      "cache-off": {
+        "original_soak_status": "passed",
+        "soak_sha256": "70a06821e0150a73ee0579b5c848fa3a19d0ce8d8f80777ce8ac21d110c32214",
+        "original_summary_sha256": "d7c45a682ec1f0eaa3f24ad51085668c0126331d44077cc68ca23a215b87c842",
+        "gate": {
+          "status": "passed",
+          "snapshots": 32,
+          "slot_capacity": 24,
+          "configured_dense_rows": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            24,
+            32,
+            48,
+            64,
+            80,
+            96,
+            112,
+            128,
+            144,
+            160,
+            176,
+            192,
+            208,
+            224,
+            240,
+            256
+          ],
+          "committed_steps": 133208,
+          "gpu_execution_ns": 1758785919730
+        }
+      },
+      "cache-on": {
+        "original_soak_status": "passed",
+        "soak_sha256": "eafb314311cd4c47d3ee7b056dde2b5f3168689e6a4a350b7fefb2d3baabbd81",
+        "original_summary_sha256": "d7c45a682ec1f0eaa3f24ad51085668c0126331d44077cc68ca23a215b87c842",
+        "gate": {
+          "status": "passed",
+          "snapshots": 32,
+          "slot_capacity": 24,
+          "configured_dense_rows": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            24,
+            32,
+            48,
+            64,
+            80,
+            96,
+            112,
+            128,
+            144,
+            160,
+            176,
+            192,
+            208,
+            224,
+            240,
+            256
+          ],
+          "committed_steps": 134404,
+          "gpu_execution_ns": 1758894323526
+        }
+      }
+    }
+  }
+}

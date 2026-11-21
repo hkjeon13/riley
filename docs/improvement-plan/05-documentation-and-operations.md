@@ -198,7 +198,9 @@ python3 benchmarks/live/soak.py "$TEST_ADDRESS" "$MODEL_ID" \
 
 현재 공개 `/metrics`의 KV 사용량은 요청이 쓰는 블록을 보여 준다. 요청별 재사용 토큰은 응답 `usage`에서 확인했다. 스케줄러 내부의 전체 prefix hit 토큰 및 eviction 블록 카운터를 운영 응답에서 조회하려면 별도 계측 계약이 필요하다. [스케줄러 메트릭](../../crates/riley-scheduler/src/metrics.rs)
 
-[고정 RC 릴리스 soak 드라이버와 검사기](../../benchmarks/soak/README.md)는 SmolLM2 workload·정식 golden·이미지 계보와 10개 bucket 슬롯을 요구한다. 현행 서버 응답의 24개 슬롯을 검사하려면 현행 바이너리로 별도 계약을 검증해야 한다.
+[고정 RC 릴리스 soak 드라이버와 검사기](../../benchmarks/soak/README.md)는 SmolLM2 workload·정식 golden·이미지 계보와 10개 bucket 슬롯을 요구한다.
+
+현행 배포 이미지의 `--serving-smoke`와 `--mixed-soak`는 기존 부하의 최초·주기·drain 표본에서 `batch_shapes`를 검사한다. 24개 슬롯과 오름차순의 구성된 행, 미사용 슬롯의 0값, 마지막 shape의 패딩, 누적 GPU 시간과 커밋 카운터를 확인한다. 표본 간 구성이 바뀌거나 카운터가 되돌아가거나 부하에서 새 GPU 타이밍이 관측되지 않으면 종료 자원을 회수한 뒤 배포 검사 영수증에 실패를 남긴다. [현행 배포 검사기](../../ci/check_distribution_gpu.py) · [A100 이미지 및 보존된 30분 부하 검증](05-mixed-soak-result.md#현행-배포-이미지의-배치-메트릭-검사)
 
 ### W5-B5. 실패 분류와 회수
 

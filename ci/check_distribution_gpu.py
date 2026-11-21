@@ -31,6 +31,9 @@ SMOKE_KV_BLOCKS = 4096
 MIXED_LOAD_RATE = 8
 MIXED_LOAD_CHECKS = {"no_unexpected_http_or_stream_error", "completed_schema_and_tool_covered",
                      "disconnects_observed", "idle_after_drain", "native_allocation_plateau", "workload_coverage"}
+BATCH_SHAPE_CAPACITY = 24
+BATCH_SHAPE_FIELDS = ("dense_rows", "hit_count", "latency_sample_count", "gpu_execution_ns_total",
+                      "gpu_execution_ns_average", "gpu_execution_ns_maximum", "gpu_execution_ns_last")
 MIXED_SERVER_ARGS = ("--max-active-sequences", "32", "--max-sequence-tokens", "8192", "--max-output-tokens", "512")
 GPU_UUID = re.compile(r"GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -126,6 +129,62 @@ def check_accuracy(out, address, label, golden, workload=None):
             "verified_requests": sum(mode["matched"] for mode in result["modes"].values())}
 
 
+def current_batch_shapes(sample):
+    require(isinstance(sample, dict) and isinstance(sample.get("metrics"), dict), "missing metrics sample")
+    shape = sample["metrics"].get("batch_shapes")
+    require(isinstance(shape, dict) and shape.get("metrics_degraded") is False, "missing or degraded batch shapes")
+    count, entries = shape.get("bucket_count"), shape.get("buckets")
+    require(type(count) is int and 0 < count <= BATCH_SHAPE_CAPACITY
+            and isinstance(entries, list) and len(entries) == BATCH_SHAPE_CAPACITY,
+            "expected 24 batch-shape slots with a nonempty configured prefix")
+    rows = {}
+    previous = 0
+    for index, bucket in enumerate(entries):
+        require(isinstance(bucket, dict)
+                and all(type(bucket.get(key)) is int and bucket[key] >= 0 for key in BATCH_SHAPE_FIELDS),
+                f"invalid fields in batch-shape slot {index}")
+        dense, hits, samples, total, average, maximum, last = (bucket[key] for key in BATCH_SHAPE_FIELDS)
+        if index >= count:
+            require(not any((dense, hits, samples, total, average, maximum, last)), "unused batch-shape slot is nonzero")
+            continue
+        require(dense > previous, "configured batch-shape rows must increase")
+        require(samples == hits and last <= maximum <= total <= maximum * samples
+                and average == (total // samples if samples else 0), f"inconsistent timing for {dense} dense rows")
+        rows[dense] = (hits, total, maximum)
+        previous = dense
+
+    observed = shape.get("last")
+    if any(hits for hits, _, _ in rows.values()):
+        require(isinstance(observed, dict) and all(type(observed.get(key)) is int
+                for key in ("active_rows", "selected_dense_rows", "padding_rows")), "missing last batch shape")
+        dense, active = observed["selected_dense_rows"], observed["active_rows"]
+        require(dense in rows and rows[dense][0] > 0 and 0 < active <= dense
+                and dense - active == observed["padding_rows"], "invalid last batch shape or padding")
+    else:
+        require("last" in shape and observed is None, "batch shape observed before the first hit")
+    return rows
+
+
+def batch_shape_evidence(result):
+    try:
+        samples = result.get("rss_samples")
+        require(isinstance(samples, list), "missing periodic metrics samples")
+        first = previous = current_batch_shapes(result.get("initial"))
+        for sample in [*samples, result.get("final")]:
+            current = current_batch_shapes(sample)
+            require(current.keys() == previous.keys(), "configured batch-shape rows changed")
+            require(all(all(a <= b for a, b in zip(previous[rows], counters, strict=True))
+                        for rows, counters in current.items()), "batch-shape counters went backwards")
+            previous = current
+        hits = sum(current[rows][0] - start[0] for rows, start in first.items())
+        gpu_ns = sum(current[rows][1] - start[1] for rows, start in first.items())
+        require(hits > 0 and gpu_ns > 0, "mixed load produced no new committed GPU timing")
+    except ValueError as error:
+        return {"status": "failed", "detail": str(error)}
+    return {"status": "passed", "snapshots": len(samples) + 2, "slot_capacity": BATCH_SHAPE_CAPACITY,
+            "configured_dense_rows": list(first), "committed_steps": hits, "gpu_execution_ns": gpu_ns}
+
+
 def check_mixed_load(out, address, container, pid, *, smoke, expect_tools_unsupported=False):
     label, seconds, option = ("smoke", SMOKE_SECONDS, "--smoke") if smoke else (
         "soak", 1800, "--require-zero-rss-growth")
@@ -149,7 +208,12 @@ def check_mixed_load(out, address, container, pid, *, smoke, expect_tools_unsupp
             and result.get("expect_tools_unsupported", False) is expect_tools_unsupported
             and result["rss_source"] == {"container_id": container, "host_pid": pid, "container_pid": 1},
             "mixed load evidence differs from the requested container, workload or exit status")
-    return result, status, failed
+    batch_shapes = batch_shape_evidence(result)
+    if batch_shapes["status"] != "passed":
+        failed = sorted([*failed, "current_batch_shape_metrics"])
+    return {**result, "batch_shape_metrics": batch_shapes, "checks": {
+        **checks, "current_batch_shape_metrics": batch_shapes["status"] == "passed",
+    }}, "failed" if failed else "passed", failed
 
 
 def check_mixed_soak(out, address, mode, container, pid):
@@ -161,7 +225,7 @@ def check_mixed_soak(out, address, mode, container, pid):
     delta = rss["rss_growth_kib"]
     require(checks[rss_gate] == (type(delta) is int and delta <= 0), "strict RSS verdict differs from the measurements")
     return {"mode": mode, "status": status, "failed_checks": failed,
-            "rss": rss, "counts": result["counts"]}
+            "rss": rss, "counts": result["counts"], "batch_shape_metrics": result["batch_shape_metrics"]}
 
 
 def find_interrupted_container(name):
@@ -310,7 +374,8 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
         if serving_smoke:
             observed_smoke, smoke_status, failed = check_mixed_load(
                 out, address, container, riley_pid, smoke=True, expect_tools_unsupported=expect_tools_unsupported)
-            smoke = {key: observed_smoke[key] for key in ("seconds", "rate", "counts", "counter_changes", "checks")}
+            smoke = {key: observed_smoke[key] for key in ("seconds", "rate", "counts", "counter_changes", "checks",
+                                                        "batch_shape_metrics")}
             smoke.update(status=smoke_status, failed_checks=failed, server_arguments=list(server_args))
             if expect_tools_unsupported:
                 smoke["expect_tools_unsupported"] = True

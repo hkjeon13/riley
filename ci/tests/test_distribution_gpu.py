@@ -14,6 +14,45 @@ import check_distribution_gpu as checker
 sys.path.pop(0)
 
 
+def shape_fixture(capacity=checker.BATCH_SHAPE_CAPACITY):
+    def sample(hits):
+        empty = dict.fromkeys(checker.BATCH_SHAPE_FIELDS, 0)
+        timing = 100 if hits else 0
+        bucket = {**empty, "dense_rows": 4, "hit_count": hits, "latency_sample_count": hits,
+                  "gpu_execution_ns_total": hits * timing, "gpu_execution_ns_average": timing,
+                  "gpu_execution_ns_maximum": timing, "gpu_execution_ns_last": timing}
+        last = {"active_rows": 3, "selected_dense_rows": 4, "padding_rows": 1} if hits else None
+        return {"metrics": {"batch_shapes": {"metrics_degraded": False, "bucket_count": 1, "last": last,
+                                            "buckets": [bucket, *(empty.copy() for _ in range(capacity - 1))]}}}
+
+    return {"initial": sample(0), "rss_samples": [sample(1)], "final": sample(2)}
+
+
+class BatchShapeMetricsTest(unittest.TestCase):
+    def test_current_batch_shapes_reject_missing_progress_and_counter_reset(self):
+        result = shape_fixture()
+        self.assertEqual(checker.batch_shape_evidence(result), {
+            "status": "passed", "snapshots": 3, "slot_capacity": 24, "configured_dense_rows": [4],
+            "committed_steps": 2, "gpu_execution_ns": 200,
+        })
+        result["final"] = result["initial"]
+        self.assertIn("went backwards", checker.batch_shape_evidence(result)["detail"])
+        result["rss_samples"] = [result["initial"]]
+        self.assertIn("no new committed", checker.batch_shape_evidence(result)["detail"])
+
+    def test_current_batch_shapes_reject_forged_slots_and_padding(self):
+        result = shape_fixture()
+        shape = result["final"]["metrics"]["batch_shapes"]
+        shape["buckets"][-1]["hit_count"] = 1
+        self.assertIn("unused", checker.batch_shape_evidence(result)["detail"])
+        shape["buckets"][-1]["hit_count"] = 0
+        shape["last"]["padding_rows"] = 0
+        self.assertIn("padding", checker.batch_shape_evidence(result)["detail"])
+        shape["last"]["padding_rows"] = 1
+        shape["buckets"][0]["gpu_execution_ns_average"] = 99
+        self.assertIn("inconsistent timing", checker.batch_shape_evidence(result)["detail"])
+
+
 class DistributionGpuTest(unittest.TestCase):
     gpu = "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7"
     peer = "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0"
@@ -51,6 +90,7 @@ class DistributionGpuTest(unittest.TestCase):
         self.api_pass = True
         self.smoke_disconnected = True
         self.soak_growth_kib = 0
+        self.smoke_shape_slots = checker.BATCH_SHAPE_CAPACITY
         self.create_interrupted = False
         self.name = None
         self.calls = []
@@ -129,6 +169,7 @@ class DistributionGpuTest(unittest.TestCase):
                     "counts": {}, "counter_changes": {}, "checks": checks,
                     "expect_tools_unsupported": "--expect-tools-unsupported" in argv,
                     "rss_source": {"container_id": self.container, "host_pid": self.pid, "container_pid": 1},
+                    **shape_fixture(self.smoke_shape_slots),
                 }))
                 return subprocess.CompletedProcess(argv, int(not passed))
             if file == "soak.log":
@@ -145,6 +186,7 @@ class DistributionGpuTest(unittest.TestCase):
                                "idle_after_drain": True, "native_allocation_plateau": True, "workload_coverage": True,
                                "p95_drift_at_most_5_percent": True},
                     "smaps_rollup_second_half": {"rss_growth_kib": self.soak_growth_kib},
+                    **shape_fixture(),
                 }))
                 return subprocess.CompletedProcess(argv, int(not passed))
 
@@ -223,6 +265,15 @@ class DistributionGpuTest(unittest.TestCase):
         self.assertEqual(report["artifacts_sha256"]["smoke.json"], checker.digest(self.out / "smoke.json"))
         create = next(call for call in self.calls if call[0] == "create")
         self.assertEqual(list(create[-10:]), report["serving_smoke"]["server_arguments"])
+
+    def test_serving_smoke_rejects_legacy_shape_slots_after_graceful_shutdown(self):
+        self.smoke_shape_slots = 10
+        self.assertEqual(self.check(serving_smoke=True), 1)
+        self.assertEqual(json.loads((self.out / "smoke.json").read_bytes())["status"], "passed")
+        report = json.loads((self.out / "report.json").read_bytes())
+        self.assertEqual(report["shutdown_exit"], 0)
+        self.assertEqual(report["serving_smoke"]["failed_checks"], ["current_batch_shape_metrics"])
+        self.assertFalse(report["serving_smoke"]["checks"]["current_batch_shape_metrics"])
 
     def test_serving_smoke_cannot_be_confused_with_strict_soak_or_long_accuracy(self):
         for options in ({"mixed_soak": "cache-off"}, {"accuracy_baseline": self.root / "golden"}):
