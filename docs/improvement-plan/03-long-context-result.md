@@ -438,6 +438,12 @@ Qwen2.5-14B-Instruct와 위 KV 압력 시험에 쓴 CUDA 진단 바이너리로 
 
 Coder-14B의 decode 회귀와 두 모델의 50ms 유입 결과에 따라 이 QKV 후보의 형상 공통 적용을 기각했다. Coder-14B에서 유입 시각·응답 지연은 검증했으며, 요청이 선택되는 내부 순서에 대한 GPU 계측 근거는 앞선 Qwen2.5-14B에서 얻었다. 재현할 때는 `tools`의 공유 검사기 두 파일을 실행 위치에 복사해 `dispatch.sha256`을 확인한다. [캠페인](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/campaign.sh) · [공유 교차 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/tools/compare_profile_arms.py) · [공유 설정 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/tools/summarize_profile_arm.py)
 
+##### 동시 유입의 decode 회귀 구간
+
+기존 네 실행의 원본에서 첫 콘텐츠부터 마지막 콘텐츠까지 걸린 시간을 생성 토큰 간격 수로 나눠 요청별 TPOT을 계산했다. 두 시각 간격과 두 실행 순서에서 각각 40건의 출력·토큰 수·종료 사유를 대조했고, 요청별 계산으로 기록된 TPOT p50을 재현했다. 동시 유입의 후보 먼저 비교에서 전체 p50은 28.783→29.356ms로 증가했고, p50을 결정한 요청은 9번에서 41번으로 바뀌었다. 대응 요청끼리 뺀 TPOT 차이의 중앙값은 −0.032ms였으며 40건 중 17건이 느려졌다. [요청별 상대 변화와 원본 해시](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/wave-decode-summary.json)
+
+같은 비교의 두 번째 8건 묶음에서는 TPOT p50이 27.674→31.205ms로 증가했다. 대응 요청의 지연 차이 중앙값은 +1.116ms였고 소켓 쓰기 간격 범위는 기준 0.211ms, 후보 0.175ms였다. 두 번째 묶음을 제외한 민감도 계산의 전체 p50 변화는 −0.17%였고, 세 번째·다섯 번째 묶음을 각각 제외해도 +0.12%와 +0.03%로 작아졌다. 회귀 판정은 전체 40건의 +1.99%를 적용한다. 후속 GPU 계측에서 두 번째 묶음의 decode 진행 구간과 동시 prefill 행을 우선 대조할 근거로 사용한다. [독립 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/analyze_coder_wave_decode.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

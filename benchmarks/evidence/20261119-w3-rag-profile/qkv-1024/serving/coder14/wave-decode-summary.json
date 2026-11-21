@@ -1,0 +1,498 @@
+{
+  "source_receipt_sha256": "712390666d906f9df399f95870037cb4b5112eb6b8607bd3834f661e579c442f",
+  "remote_stage": "",
+  "cells": {
+    "wave-sync": {
+      "first": {
+        "matched_requests": 40,
+        "overall": {
+          "p50_ms": {
+            "control": 28.80198273837097,
+            "candidate": 28.55427727455229
+          },
+          "p50_request": {
+            "control": 22,
+            "candidate": 23
+          },
+          "p50_change_percent": -0.8600292072555082,
+          "paired_change_median_ms": -0.03916564888841556,
+          "slower_requests": 11
+        },
+        "waves": [
+          {
+            "wave": 1,
+            "first_request": 8,
+            "control_send_span_ms": 0.16129761934280396,
+            "candidate_send_span_ms": 0.15742331743240356,
+            "decode": {
+              "p50_ms": {
+                "control": 31.492611847993896,
+                "candidate": 31.174075122423996
+              },
+              "p50_request": {
+                "control": 10,
+                "candidate": 10
+              },
+              "p50_change_percent": -1.011464933767281,
+              "paired_change_median_ms": -0.16090942649390705,
+              "slower_requests": 1
+            },
+            "overall_p50_change_without_wave_percent": 0.04688643690544669
+          },
+          {
+            "wave": 2,
+            "first_request": 16,
+            "control_send_span_ms": 0.16297399997711182,
+            "candidate_send_span_ms": 0.22839754819869995,
+            "decode": {
+              "p50_ms": {
+                "control": 31.7110071384062,
+                "candidate": 30.293131203163327
+              },
+              "p50_request": {
+                "control": 18,
+                "candidate": 16
+              },
+              "p50_change_percent": -4.471242206387183,
+              "paired_change_median_ms": -0.02517155188275133,
+              "slower_requests": 3
+            },
+            "overall_p50_change_without_wave_percent": -0.08782675079176405
+          },
+          {
+            "wave": 3,
+            "first_request": 24,
+            "control_send_span_ms": 0.1888573169708252,
+            "candidate_send_span_ms": 0.1807957887649536,
+            "decode": {
+              "p50_ms": {
+                "control": 28.41636274508604,
+                "candidate": 28.39357869362268
+              },
+              "p50_request": {
+                "control": 29,
+                "candidate": 29
+              },
+              "p50_change_percent": -0.08017933775602559,
+              "paired_change_median_ms": -0.0027003368054785426,
+              "slower_requests": 3
+            },
+            "overall_p50_change_without_wave_percent": -2.919130523680591
+          },
+          {
+            "wave": 4,
+            "first_request": 32,
+            "control_send_span_ms": 0.16406923532485962,
+            "candidate_send_span_ms": 0.17545372247695923,
+            "decode": {
+              "p50_ms": {
+                "control": 28.540563747638792,
+                "candidate": 28.525671327677298
+              },
+              "p50_request": {
+                "control": 32,
+                "candidate": 33
+              },
+              "p50_change_percent": -0.05217983811803828,
+              "paired_change_median_ms": -0.7730052461774317,
+              "slower_requests": 3
+            },
+            "overall_p50_change_without_wave_percent": 0.2512651011380651
+          },
+          {
+            "wave": 5,
+            "first_request": 40,
+            "control_send_span_ms": 0.16690045595169067,
+            "candidate_send_span_ms": 0.16936659812927246,
+            "decode": {
+              "p50_ms": {
+                "control": 30.321538272335772,
+                "candidate": 30.234467208854795
+              },
+              "p50_request": {
+                "control": 41,
+                "candidate": 42
+              },
+              "p50_change_percent": -0.2871591233232995,
+              "paired_change_median_ms": -0.06140290400174564,
+              "slower_requests": 1
+            },
+            "overall_p50_change_without_wave_percent": -0.8600292072555082
+          }
+        ],
+        "raw_sha256": {
+          "riley-first": "22e610cc08807ce1eb8088f6cef255c5e00163e7845a78b360fa59bd5b087e8f",
+          "qkv-first": "63f239eaab21c18722904b36e859bb164e3de1906aa724be2f931ab52738f4ef"
+        }
+      },
+      "second": {
+        "matched_requests": 40,
+        "overall": {
+          "p50_ms": {
+            "control": 28.782637628513996,
+            "candidate": 29.356262815280225
+          },
+          "p50_request": {
+            "control": 9,
+            "candidate": 41
+          },
+          "p50_change_percent": 1.992955594166812,
+          "paired_change_median_ms": -0.03153308639376107,
+          "slower_requests": 17
+        },
+        "waves": [
+          {
+            "wave": 1,
+            "first_request": 8,
+            "control_send_span_ms": 0.16566365957260132,
+            "candidate_send_span_ms": 0.19784271717071533,
+            "decode": {
+              "p50_ms": {
+                "control": 31.71395979763016,
+                "candidate": 31.36081641583931
+              },
+              "p50_request": {
+                "control": 10,
+                "candidate": 10
+              },
+              "p50_change_percent": -1.1135266111336861,
+              "paired_change_median_ms": -0.31080894817517546,
+              "slower_requests": 0
+            },
+            "overall_p50_change_without_wave_percent": 3.1597486181388135
+          },
+          {
+            "wave": 2,
+            "first_request": 16,
+            "control_send_span_ms": 0.21129101514816284,
+            "candidate_send_span_ms": 0.17473846673965454,
+            "decode": {
+              "p50_ms": {
+                "control": 27.673633607823078,
+                "candidate": 31.205360931674328
+              },
+              "p50_request": {
+                "control": 18,
+                "candidate": 18
+              },
+              "p50_change_percent": 12.76206577676473,
+              "paired_change_median_ms": 1.115922295437084,
+              "slower_requests": 5
+            },
+            "overall_p50_change_without_wave_percent": -0.16927195168982
+          },
+          {
+            "wave": 3,
+            "first_request": 24,
+            "control_send_span_ms": 0.16488879919052124,
+            "candidate_send_span_ms": 0.17089396715164185,
+            "decode": {
+              "p50_ms": {
+                "control": 28.391590972585004,
+                "candidate": 28.395235479816677
+              },
+              "p50_request": {
+                "control": 29,
+                "candidate": 30
+              },
+              "p50_change_percent": 0.012836572755614561,
+              "paired_change_median_ms": 0.0034967569384978248,
+              "slower_requests": 5
+            },
+            "overall_p50_change_without_wave_percent": 0.12252844862226109
+          },
+          {
+            "wave": 4,
+            "first_request": 32,
+            "control_send_span_ms": 0.18590688705444336,
+            "candidate_send_span_ms": 0.17049163579940796,
+            "decode": {
+              "p50_ms": {
+                "control": 29.476217338888663,
+                "candidate": 29.441502443918093
+              },
+              "p50_request": {
+                "control": 34,
+                "candidate": 34
+              },
+              "p50_change_percent": -0.11777255735174741,
+              "paired_change_median_ms": 0.47713204279659216,
+              "slower_requests": 5
+            },
+            "overall_p50_change_without_wave_percent": 3.1617364122500824
+          },
+          {
+            "wave": 5,
+            "first_request": 40,
+            "control_send_span_ms": 0.16845017671585083,
+            "candidate_send_span_ms": 0.23922324180603027,
+            "decode": {
+              "p50_ms": {
+                "control": 28.45654196626558,
+                "candidate": 29.355697157814745
+              },
+              "p50_request": {
+                "control": 45,
+                "candidate": 42
+              },
+              "p50_change_percent": 3.1597486181388135,
+              "paired_change_median_ms": -0.04511801745947963,
+              "slower_requests": 2
+            },
+            "overall_p50_change_without_wave_percent": 0.02789480704425973
+          }
+        ],
+        "raw_sha256": {
+          "riley-second": "23c0958a83b1cbb799dcea899aee27e05badade51e269c2519f01b1ec4c2fb07",
+          "qkv-second": "5f83d74e54fe693264ac0f385f40fd7ec35df195bdaa48e3a8fc3ec5ced3253c"
+        }
+      }
+    },
+    "wave-50ms": {
+      "first": {
+        "matched_requests": 40,
+        "overall": {
+          "p50_ms": {
+            "control": 29.54884419056374,
+            "candidate": 28.684023855708716
+          },
+          "p50_request": {
+            "control": 43,
+            "candidate": 33
+          },
+          "p50_change_percent": -2.9267484348210138,
+          "paired_change_median_ms": -0.031373162907879504,
+          "slower_requests": 15
+        },
+        "waves": [
+          {
+            "wave": 1,
+            "first_request": 8,
+            "control_send_span_ms": 349.945105612278,
+            "candidate_send_span_ms": 350.61828047037125,
+            "decode": {
+              "p50_ms": {
+                "control": 28.57947789543257,
+                "candidate": 32.35545261638371
+              },
+              "p50_request": {
+                "control": 14,
+                "candidate": 14
+              },
+              "p50_change_percent": 13.212189301591803,
+              "paired_change_median_ms": -0.031373162907879504,
+              "slower_requests": 3
+            },
+            "overall_p50_change_without_wave_percent": -5.534616685429439
+          },
+          {
+            "wave": 2,
+            "first_request": 16,
+            "control_send_span_ms": 350.8467599749565,
+            "candidate_send_span_ms": 350.06917268037796,
+            "decode": {
+              "p50_ms": {
+                "control": 27.675722293027743,
+                "candidate": 27.64391371114986
+              },
+              "p50_request": {
+                "control": 21,
+                "candidate": 23
+              },
+              "p50_change_percent": -0.11493315889318234,
+              "paired_change_median_ms": -0.033123286690299736,
+              "slower_requests": 3
+            },
+            "overall_p50_change_without_wave_percent": -5.532367775859326
+          },
+          {
+            "wave": 3,
+            "first_request": 24,
+            "control_send_span_ms": 350.65213590860367,
+            "candidate_send_span_ms": 350.1816615462303,
+            "decode": {
+              "p50_ms": {
+                "control": 31.390633287392262,
+                "candidate": 32.170719225106275
+              },
+              "p50_request": {
+                "control": 25,
+                "candidate": 25
+              },
+              "p50_change_percent": 2.485091430211206,
+              "paired_change_median_ms": -0.012593182522479651,
+              "slower_requests": 2
+            },
+            "overall_p50_change_without_wave_percent": -2.9267484348210138
+          },
+          {
+            "wave": 4,
+            "first_request": 32,
+            "control_send_span_ms": 350.1298204064369,
+            "candidate_send_span_ms": 349.91107136011124,
+            "decode": {
+              "p50_ms": {
+                "control": 31.279276323130752,
+                "candidate": 31.5492613109078
+              },
+              "p50_request": {
+                "control": 35,
+                "candidate": 35
+              },
+              "p50_change_percent": 0.8631433316677928,
+              "paired_change_median_ms": -0.09617620096431878,
+              "slower_requests": 4
+            },
+            "overall_p50_change_without_wave_percent": -0.8265421208038304
+          },
+          {
+            "wave": 5,
+            "first_request": 40,
+            "control_send_span_ms": 350.12994706630707,
+            "candidate_send_span_ms": 350.7182002067566,
+            "decode": {
+              "p50_ms": {
+                "control": 31.44079816388333,
+                "candidate": 28.415353455412106
+              },
+              "p50_request": {
+                "control": 41,
+                "candidate": 43
+              },
+              "p50_change_percent": -9.6226714496918,
+              "paired_change_median_ms": -0.19642537621062317,
+              "slower_requests": 3
+            },
+            "overall_p50_change_without_wave_percent": -2.5570931503780203
+          }
+        ],
+        "raw_sha256": {
+          "riley-first": "2be52eff1f7614fdee7e5a13a20f681533f0ec0aad1d73d10a74289fb35fd11d",
+          "qkv-first": "1337903ddd0ed8f6a49324755f5ec5f73205d2962a43a79b5e868ee70c0c469b"
+        }
+      },
+      "second": {
+        "matched_requests": 40,
+        "overall": {
+          "p50_ms": {
+            "control": 30.37526616899986,
+            "candidate": 28.716596855422644
+          },
+          "p50_request": {
+            "control": 33,
+            "candidate": 33
+          },
+          "p50_change_percent": -5.460591865594933,
+          "paired_change_median_ms": -0.02131966038013111,
+          "slower_requests": 12
+        },
+        "waves": [
+          {
+            "wave": 1,
+            "first_request": 8,
+            "control_send_span_ms": 350.16045719385147,
+            "candidate_send_span_ms": 349.9210849404335,
+            "decode": {
+              "p50_ms": {
+                "control": 32.50536258061101,
+                "candidate": 32.37654133809833
+              },
+              "p50_request": {
+                "control": 14,
+                "candidate": 14
+              },
+              "p50_change_percent": -0.3963076621379624,
+              "paired_change_median_ms": -0.0706381039825974,
+              "slower_requests": 1
+            },
+            "overall_p50_change_without_wave_percent": -5.460591865594933
+          },
+          {
+            "wave": 2,
+            "first_request": 16,
+            "control_send_span_ms": 350.17528384923935,
+            "candidate_send_span_ms": 350.66094249486923,
+            "decode": {
+              "p50_ms": {
+                "control": 27.69045713614291,
+                "candidate": 27.675989105945497
+              },
+              "p50_request": {
+                "control": 23,
+                "candidate": 23
+              },
+              "p50_change_percent": -0.05224915618503578,
+              "paired_change_median_ms": -0.014019440712891296,
+              "slower_requests": 3
+            },
+            "overall_p50_change_without_wave_percent": -8.150674614278797
+          },
+          {
+            "wave": 3,
+            "first_request": 24,
+            "control_send_span_ms": 350.15327483415604,
+            "candidate_send_span_ms": 351.0748967528343,
+            "decode": {
+              "p50_ms": {
+                "control": 31.401485322028634,
+                "candidate": 32.18455489460877
+              },
+              "p50_request": {
+                "control": 25,
+                "candidate": 25
+              },
+              "p50_change_percent": 2.4937341802452995,
+              "paired_change_median_ms": -0.01896240227804391,
+              "slower_requests": 1
+            },
+            "overall_p50_change_without_wave_percent": -5.460591865594933
+          },
+          {
+            "wave": 4,
+            "first_request": 32,
+            "control_send_span_ms": 350.7255017757416,
+            "candidate_send_span_ms": 350.042924284935,
+            "decode": {
+              "p50_ms": {
+                "control": 31.279641460245987,
+                "candidate": 31.58947426503099
+              },
+              "p50_request": {
+                "control": 35,
+                "candidate": 35
+              },
+              "p50_change_percent": 0.9905254354618309,
+              "paired_change_median_ms": -0.08482365744320397,
+              "slower_requests": 4
+            },
+            "overall_p50_change_without_wave_percent": -4.055660368928937
+          },
+          {
+            "wave": 5,
+            "first_request": 40,
+            "control_send_span_ms": 349.8570919036865,
+            "candidate_send_span_ms": 350.2125218510628,
+            "decode": {
+              "p50_ms": {
+                "control": 31.463373129762065,
+                "candidate": 28.420169111781235
+              },
+              "p50_request": {
+                "control": 41,
+                "candidate": 43
+              },
+              "p50_change_percent": -9.67221157575816,
+              "paired_change_median_ms": -0.17869762900307506,
+              "slower_requests": 3
+            },
+            "overall_p50_change_without_wave_percent": -5.416006877235324
+          }
+        ],
+        "raw_sha256": {
+          "riley-second": "50d7e6f599dedc5cb756f47bd27400c3289ed1b7c2d2e06f3a6807ca4cce98b1",
+          "qkv-second": "0c0f3a6c7e060384082fec14029095869611d1e17628c7e88d4ef0b790c02712"
+        }
+      }
+    }
+  }
+}
