@@ -134,6 +134,7 @@ python3 benchmarks/live/compare.py \
 | 기존 opt-in | `--prefill-burst-steady-budget`으로 기존 burst를 켤 수 있다. 이번 비교에서 `after-submit-v1`과 기존 32행 burst 설정을 기준으로 사용했다. | [서버 설정](../configuration.md#execution-options) · [W2·W3 네 조합](03-long-context-result.md#w2-이벤트-발행과-묶음-정책의-상호작용) |
 | 부분 개선 | Qwen2.5-14B의 1,024행 QKV 후보는 두 seed의 고정 도착 재생에서 지연을 줄였다. 일반 유입에서는 첫 토큰 꼬리 지연이 도착 순서에 따라 달라졌다. | [고정 도착 재생](03-long-context-result.md#두-rag-seed의-고정-도착-재생) |
 | 기각 | 같은 형상의 Coder-14B에서 동시 유입 decode TPOT이 1.99% 늘어 1% 회귀 한도를 넘었다. 1,024행 QKV 계획의 형상 공통 적용을 기각했다. | [Coder-14B 교차 대조](03-long-context-result.md#coder-14b의-1024행-후보-검증) |
+| 미채택 | 1,024행 QKV를 켠 Coder-14B의 첫 prefill 우선순위 후보는 50ms 유입의 두 실행 순서에서 decode TPOT p50을 5.57–5.68% 늘렸다. | [우선순위 교차 대조](03-long-context-result.md#coder-14b-서빙의-우선순위-교차-대조) |
 | 기존 구조 한계 | 0.1.0의 Coder-14B `closed-c32`와 일부 RAG의 최종 TTFT 목표 미달은 기존 판정과 측정값을 유지한다. | [구조 한계 근거](../goal.md#31-성능-a100-24개-모델-전부에-적용) |
 
 단일 GPU Qwen2.5-14B의 네 chunk·KV 조합과 배포 이미지 Qwen2.5-32B의 TP=2 기준 설정에서 C32 장문 증거를 확보했다. 새 전역 기본값에는 후보 설정으로 영향 모델 전체와 TP=2의 회귀 검증이 필요하다. [14B 네 조합](03-long-context-result.md#장문-chunk와-kv-한도의-교차-대조) · [32B TP=2 기준](05-mixed-soak-result.md#배포-이미지의-32b-tp2-장문-검증)

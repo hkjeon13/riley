@@ -3268,6 +3268,36 @@
         "sha256": "c9d004100b741916435e4b44f126617764c1b584c1550117f6d8513bda055363"
       }
     ],
+    "prefill_dispatch_priority_coder14_gpu": [
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/coder14-gpu/campaign.sh",
+        "sha256": "4ce96ab7bedf9ad7fe40d7898240053e964c7d43a38319d80741188f0c80a04a"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/coder14-gpu/dispatch.sha256",
+        "sha256": "36fa75775bd172cb6283e106d1fa5dd2b3551ed7370cb2b937a67a7baac0dcbe"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/coder14-gpu/fetch-summary.sh",
+        "sha256": "ea5b0c6b11ed619344661e2d404b06c33c2dba5561e05f977833fcf4b4514f3e"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/coder14-gpu/prepare_driver.py",
+        "sha256": "8729dd6998d97b7fc2e2cb1d3c8ddfab3f5fa24b5810fea9b127ce1dcb70b899"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/coder14-gpu/reused.sha256",
+        "sha256": "fcd5d89ed848dad2f12c271c93c40011faaae495b19d3ca9b2d6ec8f94812536"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/coder14-gpu/verified-abba.json",
+        "sha256": "2fb709ea8211c0daf3d8557bde62c9ae8edf73ecf987c3d0ef1c5e64a8eef514"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/coder14-gpu/verify_priority_abba.py",
+        "sha256": "6487567e1feba12628869147c40ed8c7bed3bd30652a4bb1bf8e07db30a7f409"
+      }
+    ],
     "qwen14_qkv_1024_serving_result": {
       "decision": "keep_as_isolated_experiment_inconsistent_rag_tail_latency",
       "evidence": [

@@ -484,7 +484,26 @@ A100 7번에서 앞선 Qwen2.5-14B 요청 계측용 CUDA 바이너리를 그대�
 
 CPU 재생은 기존 GPU 스텝의 시간을 고정했다. [재현 실행기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/run_replay.sh) · [공용 컴파일 도구](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/compile_replay.py) · [공용 기준 재생기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/replay_wave.rs) · [Qwen2.5-14B 재생 입력](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/cpu-ready-inputs.json)
 
-같은 규칙에 서버의 명령 송신·스텝 시각을 전달하는 진단 바이너리를 빌드했다. 이전 요청 계측과 같은 `d3d8fe6e5` 기반 CUDA 12.4 SM80 격리 빌드다. 소스 두 파일과 바이너리의 SHA-256, Linux AMD64 동적 링크, `RILEY_W3_EARLY_PREFILL_PRIORITY` 옵션 문자열을 대조했다. 이 빌드에는 GPU를 할당하지 않았다. 실제 TTFT·TPOT, 출력 토큰 일치와 혼합 부하 회귀는 A100 서빙 검증 범위에 남아 있다. 재현할 때는 우선순위 패치와 서버 연결 패치의 압축을 풀어 `dispatch.sha256`을 확인한다. [빌드 실행기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/cuda-build/build-priority-cuda.sh) · [빌드 영수증](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/cuda-build/verified-build.json)
+같은 규칙에 서버의 명령 송신·스텝 시각을 전달하는 진단 바이너리를 빌드했다. 이전 요청 계측과 같은 `d3d8fe6e5` 기반 CUDA 12.4 SM80 격리 빌드다. 소스 두 파일과 바이너리의 SHA-256, Linux AMD64 동적 링크, `RILEY_W3_EARLY_PREFILL_PRIORITY` 옵션 문자열을 대조했다. 이 빌드에는 GPU를 할당하지 않았다. 재현할 때는 우선순위 패치와 서버 연결 패치의 압축을 풀어 `dispatch.sha256`을 확인한다. [빌드 실행기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/cuda-build/build-priority-cuda.sh) · [빌드 영수증](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/cuda-build/verified-build.json)
+
+##### Coder-14B 서빙의 우선순위 교차 대조
+
+CUDA 12.4 SM80 진단 바이너리와 A100 7번에서 Coder-14B의 모델·서버 인자·KV 2,576블록을 고정했다. 네 실행 모두 1,024행 QKV와 요청 추적을 켰고, prefill 우선순위만 끔→켬→켬→끔으로 바꿨다. 실행 중인 서버의 옵션을 확인했고, 이전 검증과 같은 RAG C1, RAG C8 두 seed, 동시 유입, 50ms 유입, 짧은 C32를 사용했다.
+
+측정 1,280건 전체의 입력·출력 지문, 토큰 사용량과 종료 사유가 이전 Coder-14B 결과와 일치했다. 별도 장문 입력 8개의 C1·C8 토큰 ID도 네 환경에서 같았다. 오류·429는 0건이었고 모든 서버가 정상 종료했다. A100 6·7번의 기존 20GiB 예약 복귀를 확인했다. [교차 대조 영수증](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/coder14-gpu/verified-abba.json)
+
+| 부하 | TTFT p95 변화, 끔 먼저 / 켬 먼저 | Decode TPOT p50 변화, 끔 먼저 / 켬 먼저 |
+|---|---:|---:|
+| RAG C1 | −1.34% / −0.36% | +0.00% / +0.04% |
+| RAG C8 seed 1 | −15.08% / +8.86% | +2.75% / −0.85% |
+| RAG C8 seed 2 | +9.70% / +22.07% | −0.56% / −2.04% |
+| 동시 유입 | +0.12% / −1.02% | +2.62% / +0.59% |
+| 50ms 유입 | −4.45% / −4.23% | +5.57% / +5.68% |
+| 짧은 C32 | +0.15% / +0.03% | −0.08% / +0.18% |
+
+50ms 유입에서 8·9번째 prefill은 두 비교 모두 41→45에서 45→41로 바뀌었다. 41번의 prefill 조각 사이 대기는 433–435ms 줄었고 첫 콘텐츠는 602–603ms 빨리 도착했다. 이후 decode 구간이 다른 요청의 prefill과 약 599ms 겹쳤으며 마지막 콘텐츠까지의 시간은 101–106ms 줄었다. 두 시계의 정렬 불확실성 폭은 실행별 0.5ms 이하였다. [구간 대조 계산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/coder14-gpu/verify_priority_abba.py)
+
+50ms 유입의 decode TPOT p50이 두 순서 모두 1% 회귀 기준을 넘었고 RAG C8 seed 2의 TTFT p95도 두 번 증가해 후보를 미채택했다. 50ms 유입에서 같은 요청끼리 계산한 TPOT 차이 중앙값은 −0.017ms와 +0.037ms였고 느려진 요청 수는 40개 중 8개와 32개였다. 서로 다른 요청이 전체 p50을 결정하는 두 실행을 포함하며, 판정에는 기존의 부하별 TPOT p50을 적용했다. 검증 범위는 1,024행 QKV를 활성화한 Coder-14B다. [실행 순서](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/coder14-gpu/campaign.sh) · [독립 검산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/coder14-gpu/fetch-summary.sh)
 
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
