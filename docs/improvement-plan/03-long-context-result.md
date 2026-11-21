@@ -444,6 +444,20 @@ Coder-14B의 decode 회귀와 두 모델의 50ms 유입 결과에 따라 이 QKV
 
 같은 비교의 두 번째 8건 묶음에서는 TPOT p50이 27.674→31.205ms로 증가했다. 대응 요청의 지연 차이 중앙값은 +1.116ms였고 소켓 쓰기 간격 범위는 기준 0.211ms, 후보 0.175ms였다. 두 번째 묶음을 제외한 민감도 계산의 전체 p50 변화는 −0.17%였고, 세 번째·다섯 번째 묶음을 각각 제외해도 +0.12%와 +0.03%로 작아졌다. 회귀 판정은 전체 40건의 +1.99%를 적용한다. 후속 GPU 계측에서 두 번째 묶음의 decode 진행 구간과 동시 prefill 행을 우선 대조할 근거로 사용한다. [독립 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/analyze_coder_wave_decode.py)
 
+##### Coder-14B 실측의 prefill 대기 구간
+
+A100 7번에서 앞선 Qwen2.5-14B 요청 계측용 CUDA 바이너리를 그대로 사용했다. Coder-14B의 기존 모델·KV·서버 설정을 유지하고 동시 유입과 50ms 유입을 기준→후보→후보→기준 순서로 다시 실행했다. 두 부하의 측정 320건에서 입력·응답 해시, 종료 사유, 토큰 사용량이 해당 비계측 실행과 일치했고 오류·429는 0건이었다. 서버 요청 로그와 클라이언트의 시간축 오차 범위는 실행별로 0.446–0.459ms였다. 네 실행 모두 정상 종료했고, A100 6·7번의 기존 20GiB 예약을 확인했다. [원본 지문과 집계](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/traced-waves/verified-trace.json)
+
+| 50ms 유입, 41번 요청 | 기준 먼저 | 후보 먼저 |
+|---|---:|---:|
+| 요청의 TTFT 증가 | 539.74ms | 528.05ms |
+| 요청의 prefill 조각 사이 대기 증가 | 390.70ms | 381.63ms |
+| 전체 40건의 TTFT p95 변화 | +1.96% | +1.48% |
+
+동시 유입의 전체 TPOT p50은 기준 먼저 −0.24%, 후보 먼저 +2.73%였다. 두 번째 묶음의 TPOT p50은 두 비교에서 각각 +6.03%, +14.24%였다. 같은 요청끼리 비교한 decode 구간과 prefill 로그 구간의 겹침 시간 차이는 첫 비교에서 중앙값 −41.03~−40.13ms, 역순에서 +25.55~+26.01ms였다. 구간 겹침의 방향이 두 순서에서 갈렸다. 50ms 유입의 41번 요청은 Qwen2.5-14B와 Coder-14B 모두 prefill 조각 사이 대기가 주요 증가 구간으로 확인됐다. 기존 비계측의 1% decode 가드레일과 형상 공통 적용 기각을 유지한다. [Qwen2.5-14B 계측](#같은-실행의-요청-대기와-cuda-커널-대조) · [구간 겹침 검산기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/traced-waves/verify_trace.py)
+
+재현 시 분석 디렉터리에 상위 디렉터리의 `analyze_coder_wave_decode.py`와 [공유 요청 단계 검사기](../../benchmarks/evidence/20261119-w3-rag-profile/tools/summarize_request_stages.py)를 복사해 `analysis.sha256`을 확인한다. [실행 순서](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/traced-waves/campaign.sh) · [독립 검산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/traced-waves/fetch-summary.sh)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

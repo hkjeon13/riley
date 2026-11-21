@@ -1,0 +1,414 @@
+{
+  "remote_stage": "w3-coder-wave-trace-20261121.Z0ZQ8NvS",
+  "archived_report_sha256": "712390666d906f9df399f95870037cb4b5112eb6b8607bd3834f661e579c442f",
+  "binary_sha256": "917caae4ff7467c58650ff5cf67004c17893aa862fd38371d2a940952c2ca398",
+  "physical_gpu": 7,
+  "order": [
+    "riley-first",
+    "qkv-first",
+    "qkv-second",
+    "riley-second"
+  ],
+  "chronology": [
+    [
+      "START",
+      "riley-first",
+      "2026-11-21T06:21:00Z"
+    ],
+    [
+      "END",
+      "riley-first",
+      "2026-11-21T06:26:08Z",
+      "exit=0"
+    ],
+    [
+      "START",
+      "qkv-first",
+      "2026-11-21T06:26:08Z"
+    ],
+    [
+      "END",
+      "qkv-first",
+      "2026-11-21T06:31:20Z",
+      "exit=0"
+    ],
+    [
+      "START",
+      "qkv-second",
+      "2026-11-21T06:31:20Z"
+    ],
+    [
+      "END",
+      "qkv-second",
+      "2026-11-21T06:36:30Z",
+      "exit=0"
+    ],
+    [
+      "START",
+      "riley-second",
+      "2026-11-21T06:36:31Z"
+    ],
+    [
+      "END",
+      "riley-second",
+      "2026-11-21T06:41:39Z",
+      "exit=0"
+    ]
+  ],
+  "arms": {
+    "riley-first": {
+      "server_log_sha256": "72c96b9d7b4b64fc2748ec18ab6d3d527d7b9bd2c74ca1f88af76f674e56d506",
+      "clock_interval_ns": 445602,
+      "reservations": {
+        "6": {
+          "pid": 2680326,
+          "start_ticks": "6365879881",
+          "gib": 20
+        },
+        "7": {
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "gib": 20
+        }
+      },
+      "cells": {
+        "wave-sync": {
+          "tpot_p50_ms": 29.36802781003667,
+          "ttft_p95_ms": 3271.1761221289635,
+          "tpot_p50_change_vs_archived_percent": 1.9652989754472383,
+          "trace_source_sha256": "c9f68d664b194c9880693bdba92deef078d099f2d8d2d9afc0bbdd6425596459",
+          "archived_source_sha256": "22e610cc08807ce1eb8088f6cef255c5e00163e7845a78b360fa59bd5b087e8f"
+        },
+        "wave-50ms": {
+          "tpot_p50_ms": 30.42392978283364,
+          "ttft_p95_ms": 3021.6894075274467,
+          "tpot_p50_change_vs_archived_percent": 2.9614883974018458,
+          "trace_source_sha256": "6aa6830480d77d0cb81e1bb5d903dbaf77933b6d29763c72ac440dfce42d00b8",
+          "archived_source_sha256": "2be52eff1f7614fdee7e5a13a20f681533f0ec0aad1d73d10a74289fb35fd11d"
+        }
+      }
+    },
+    "qkv-first": {
+      "server_log_sha256": "ece1dccfcf01658acf2335792949c634892101a9215b36400aa6c5fad89c96fe",
+      "clock_interval_ns": 459395,
+      "reservations": {
+        "6": {
+          "pid": 2680326,
+          "start_ticks": "6365879881",
+          "gib": 20
+        },
+        "7": {
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "gib": 20
+        }
+      },
+      "cells": {
+        "wave-sync": {
+          "tpot_p50_ms": 29.298623011806818,
+          "ttft_p95_ms": 3173.6849918961525,
+          "tpot_p50_change_vs_archived_percent": 2.606774915357035,
+          "trace_source_sha256": "5083471dbc50950cded5f120c261c8997d587163e51196ab1928bcb540c10f03",
+          "archived_source_sha256": "63f239eaab21c18722904b36e859bb164e3de1906aa724be2f931ab52738f4ef"
+        },
+        "wave-50ms": {
+          "tpot_p50_ms": 28.686939203363703,
+          "ttft_p95_ms": 3081.0254961252213,
+          "tpot_p50_change_vs_archived_percent": 0.010163663472217976,
+          "trace_source_sha256": "916681b7d0608982053125946058f18f57641c3e622d09406ac4037863ed68c1",
+          "archived_source_sha256": "1337903ddd0ed8f6a49324755f5ec5f73205d2962a43a79b5e868ee70c0c469b"
+        }
+      }
+    },
+    "qkv-second": {
+      "server_log_sha256": "05438c8d29d0f2aa2d01c5fe279e7004bcb2b1d28a2a6daffb28cbcf51ffdc79",
+      "clock_interval_ns": 451301,
+      "reservations": {
+        "6": {
+          "pid": 2680326,
+          "start_ticks": "6365879881",
+          "gib": 20
+        },
+        "7": {
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "gib": 20
+        }
+      },
+      "cells": {
+        "wave-sync": {
+          "tpot_p50_ms": 29.2912902911817,
+          "ttft_p95_ms": 3157.8139439225197,
+          "tpot_p50_change_vs_archived_percent": -0.2213242349932365,
+          "trace_source_sha256": "a7f1e575f1596ed14d30d977329f9c74d70a838df96bd90aae42d0419ef8f00a",
+          "archived_source_sha256": "5f83d74e54fe693264ac0f385f40fd7ec35df195bdaa48e3a8fc3ec5ced3253c"
+        },
+        "wave-50ms": {
+          "tpot_p50_ms": 28.686211745100696,
+          "ttft_p95_ms": 3068.6816424131393,
+          "tpot_p50_change_vs_archived_percent": -0.10581027576117563,
+          "trace_source_sha256": "4c0c4c94d69aa3c916e3eb15622122c60f57e852c73949dd1e307f7635d0b288",
+          "archived_source_sha256": "0c0f3a6c7e060384082fec14029095869611d1e17628c7e88d4ef0b790c02712"
+        }
+      }
+    },
+    "riley-second": {
+      "server_log_sha256": "6e8310a3e9605997a02bee35d66ea67e645b8a1ac971ef04274de7404dc62b75",
+      "clock_interval_ns": 446646,
+      "reservations": {
+        "6": {
+          "pid": 2680326,
+          "start_ticks": "6365879881",
+          "gib": 20
+        },
+        "7": {
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "gib": 20
+        }
+      },
+      "cells": {
+        "wave-sync": {
+          "tpot_p50_ms": 28.51308624106129,
+          "ttft_p95_ms": 3244.5514872670174,
+          "tpot_p50_change_vs_archived_percent": -0.9365069002073456,
+          "trace_source_sha256": "70ef9d5faf5f093e08e65401c917a179e60a8fa92190b3dd6d992892a2baa3d6",
+          "archived_source_sha256": "23c0958a83b1cbb799dcea899aee27e05badade51e269c2519f01b1ec4c2fb07"
+        },
+        "wave-50ms": {
+          "tpot_p50_ms": 30.396632556840192,
+          "ttft_p95_ms": 3023.9768847823143,
+          "tpot_p50_change_vs_archived_percent": 0.07034140119612786,
+          "trace_source_sha256": "307d694aceeae713304ebd82ff4f4857c8fb050f5228b70c6c25e7611d870622",
+          "archived_source_sha256": "50d7e6f599dedc5cb756f47bd27400c3289ed1b7c2d2e06f3a6807ca4cce98b1"
+        }
+      }
+    }
+  },
+  "cells": {
+    "wave-sync": {
+      "first": {
+        "matched_responses": 40,
+        "overall_decode": {
+          "p50_ms": {
+            "control": 29.36802781003667,
+            "candidate": 29.298623011806818
+          },
+          "p50_request": {
+            "control": 24,
+            "candidate": 30
+          },
+          "p50_change_percent": -0.23632774621021868,
+          "paired_change_median_ms": -0.022260310846988318,
+          "slower_requests": 18
+        },
+        "second_wave_decode": {
+          "p50_ms": {
+            "control": 31.570366048437403,
+            "candidate": 33.474508995615594
+          },
+          "p50_request": {
+            "control": 18,
+            "candidate": 21
+          },
+          "p50_change_percent": 6.031424989677747,
+          "paired_change_median_ms": -0.17618798599468377,
+          "slower_requests": 4,
+          "paired_overlap_change_median_ms_interval": [
+            -41.03140399999995,
+            -40.12640700000003
+          ],
+          "socket_write_span_ms": [
+            0.1656264066696167,
+            0.1694709062576294
+          ]
+        },
+        "request_41": {
+          "control": {
+            "overlap_ms": [
+              324.623512,
+              325.069114
+            ],
+            "prefill_between_steps_ms": 2265.820684
+          },
+          "candidate": {
+            "overlap_ms": [
+              28.102926,
+              28.562321
+            ],
+            "prefill_between_steps_ms": 2239.151593
+          },
+          "ttft_change_ms": 214.63917940855026
+        },
+        "ttft_p95_change_percent": -2.980308200873061
+      },
+      "second": {
+        "matched_responses": 40,
+        "overall_decode": {
+          "p50_ms": {
+            "control": 28.513086241061295,
+            "candidate": 29.2912902911817
+          },
+          "p50_request": {
+            "control": 39,
+            "candidate": 31
+          },
+          "p50_change_percent": 2.729287329828667,
+          "paired_change_median_ms": -0.01937010156826524,
+          "slower_requests": 18
+        },
+        "second_wave_decode": {
+          "p50_ms": {
+            "control": 27.66664959783629,
+            "candidate": 31.605694178990493
+          },
+          "p50_request": {
+            "control": 21,
+            "candidate": 18
+          },
+          "p50_change_percent": 14.237519318068292,
+          "paired_change_median_ms": -0.010012934996387557,
+          "slower_requests": 3,
+          "paired_overlap_change_median_ms_interval": [
+            25.554387,
+            26.005688
+          ],
+          "socket_write_span_ms": [
+            0.16260892152786255,
+            0.16910582780838013
+          ]
+        },
+        "request_41": {
+          "control": {
+            "overlap_ms": [
+              0.0,
+              0.0
+            ],
+            "prefill_between_steps_ms": 1656.02405
+          },
+          "candidate": {
+            "overlap_ms": [
+              314.717739,
+              315.16904
+            ],
+            "prefill_between_steps_ms": 2308.781065
+          },
+          "ttft_change_ms": -409.0917855501175
+        },
+        "ttft_p95_change_percent": -2.673329231633159
+      }
+    },
+    "wave-50ms": {
+      "first": {
+        "matched_responses": 40,
+        "overall_decode": {
+          "p50_ms": {
+            "control": 30.42392978283364,
+            "candidate": 28.686939203363703
+          },
+          "p50_request": {
+            "control": 33,
+            "candidate": 34
+          },
+          "p50_change_percent": -5.709290653339638,
+          "paired_change_median_ms": -0.02931545334538299,
+          "slower_requests": 16
+        },
+        "second_wave_decode": {
+          "p50_ms": {
+            "control": 31.672962068572758,
+            "candidate": 27.640420972831606
+          },
+          "p50_request": {
+            "control": 23,
+            "candidate": 21
+          },
+          "p50_change_percent": -12.731809191103128,
+          "paired_change_median_ms": -0.21463837914579464,
+          "slower_requests": 4,
+          "paired_overlap_change_median_ms_interval": [
+            -28.06107100000001,
+            -27.15607399999996
+          ],
+          "socket_write_span_ms": [
+            350.23604333400726,
+            349.9085009098053
+          ]
+        },
+        "request_41": {
+          "control": {
+            "overlap_ms": [
+              610.952939,
+              611.398541
+            ],
+            "prefill_between_steps_ms": 1839.598375
+          },
+          "candidate": {
+            "overlap_ms": [
+              0.0,
+              0.0
+            ],
+            "prefill_between_steps_ms": 2230.302577
+          },
+          "ttft_change_ms": 539.7367775440216
+        },
+        "ttft_p95_change_percent": 1.963672654441595
+      },
+      "second": {
+        "matched_responses": 40,
+        "overall_decode": {
+          "p50_ms": {
+            "control": 30.396632556840192,
+            "candidate": 28.686211745100696
+          },
+          "p50_request": {
+            "control": 33,
+            "candidate": 34
+          },
+          "p50_change_percent": -5.6270075592784625,
+          "paired_change_median_ms": -0.03832121064343674,
+          "slower_requests": 10
+        },
+        "second_wave_decode": {
+          "p50_ms": {
+            "control": 27.6628336685849,
+            "candidate": 27.628933702866863
+          },
+          "p50_request": {
+            "control": 21,
+            "candidate": 23
+          },
+          "p50_change_percent": -0.12254697448632612,
+          "paired_change_median_ms": -0.032491776652221915,
+          "slower_requests": 1,
+          "paired_overlap_change_median_ms_interval": [
+            -4.257901000000004,
+            -3.359954000000016
+          ],
+          "socket_write_span_ms": [
+            350.81958770751953,
+            350.5226746201515
+          ]
+        },
+        "request_41": {
+          "control": {
+            "overlap_ms": [
+              613.204844,
+              613.65149
+            ],
+            "prefill_between_steps_ms": 1840.012405
+          },
+          "candidate": {
+            "overlap_ms": [
+              0.0,
+              0.0
+            ],
+            "prefill_between_steps_ms": 2221.647338
+          },
+          "ttft_change_ms": 528.0486792325974
+        },
+        "ttft_p95_change_percent": 1.478343232575452
+      }
+    }
+  }
+}
