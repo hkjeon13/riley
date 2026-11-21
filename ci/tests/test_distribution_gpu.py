@@ -28,6 +28,32 @@ def shape_fixture(capacity=checker.BATCH_SHAPE_CAPACITY):
     return {"initial": sample(0), "rss_samples": [sample(1)], "final": sample(2)}
 
 
+class PrefixCacheMetricsTest(unittest.TestCase):
+    def test_enabled_observes_reuse_and_preserves_counters_at_shutdown(self):
+        def cache(retained, hits, evictions):
+            return {"prefix_cache": {"retained_blocks": retained, "hit_tokens": hits, "evicted_blocks": evictions,
+                                     "metrics_degraded": False}}
+
+        result = {"initial": {"metrics": cache(6, 16, 0)}, "rss_samples": [{"metrics": cache(8, 32, 1)}],
+                  "final": {"metrics": cache(8, 64, 2)}}
+        self.assertEqual(checker.prefix_cache_evidence(result, cache(0, 64, 2), 8), {
+            "status": "passed", "snapshots": 3, "capacity_blocks": 8, "peak_sampled_retained_blocks": 8,
+            "hit_tokens_delta": 48, "evicted_blocks_delta": 2, "shutdown_hit_tokens": 64,
+            "shutdown_evicted_blocks": 2,
+        })
+        self.assertIn("shutdown lost", checker.prefix_cache_evidence(result, cache(0, 0, 0), 8)["detail"])
+        result["rss_samples"].append({"metrics": cache(8, 16, 2)})
+        self.assertIn("went backwards", checker.prefix_cache_evidence(result, cache(0, 64, 2), 8)["detail"])
+
+    def test_disabled_cache_rejects_nonzero_counts_even_if_constant(self):
+        metrics = {"prefix_cache": {"retained_blocks": 0, "hit_tokens": 16, "evicted_blocks": 0,
+                                    "metrics_degraded": False}}
+        sequence = {"initial": {"metrics": metrics}, "rss_samples": [], "final": {"metrics": metrics}}
+        self.assertIn("disabled", checker.prefix_cache_evidence(sequence, metrics, 0)["detail"])
+        metrics["prefix_cache"]["hit_tokens"] = 0
+        self.assertEqual(checker.prefix_cache_evidence(sequence, metrics, 0)["status"], "passed")
+
+
 class BatchShapeMetricsTest(unittest.TestCase):
     def test_current_batch_shapes_reject_missing_progress_and_counter_reset(self):
         result = shape_fixture()
@@ -287,6 +313,14 @@ class DistributionGpuTest(unittest.TestCase):
         self.assertEqual(report["shutdown_exit"], 0)
         self.assertEqual(report["serving_smoke"]["failed_checks"], ["current_batch_shape_metrics"])
         self.assertFalse(report["serving_smoke"]["checks"]["current_batch_shape_metrics"])
+
+    def test_serving_smoke_can_require_prefix_cache_metrics_even_with_healthy_load(self):
+        self.assertEqual(self.check(serving_smoke=True, require_prefix_cache_metrics=True), 1)
+        report = json.loads((self.out / "report.json").read_bytes())
+        self.assertEqual(report["shutdown_exit"], 0)
+        self.assertEqual(report["serving_smoke"]["failed_checks"], ["current_prefix_cache_metrics"])
+        self.assertEqual(report["prefix_cache_metrics"]["status"], "failed")
+        self.assertFalse(report["serving_smoke"]["checks"]["current_prefix_cache_metrics"])
 
     def test_serving_smoke_cannot_be_confused_with_strict_soak_or_long_accuracy(self):
         for options in ({"mixed_soak": "cache-off"}, {"accuracy_baseline": self.root / "golden"}):

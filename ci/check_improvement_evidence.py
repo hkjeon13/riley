@@ -93,7 +93,7 @@ def check_distribution_inputs(root, candidate):
     return len(inputs)
 
 
-def check_distribution_revision(root, candidate, revision):
+def check_distribution_revision(root, candidate, revision, historical=None):
     current = subprocess.run(
         ["git", "rev-parse", "--verify", "--end-of-options", f"{revision}^{{commit}}"],
         cwd=root, capture_output=True, text=True,
@@ -101,6 +101,8 @@ def check_distribution_revision(root, candidate, revision):
     if current.returncode:
         raise ValueError(f"unable to resolve distribution comparison revision: {revision}")
     commit = current.stdout.strip()
+    if historical is not None and commit == historical["source_revision"]:
+        candidate = historical
     paths = candidate["matching_distribution_input_git_objects"]
     diff = subprocess.run(
         ["git", "diff", "--no-ext-diff", "--name-only", candidate["source_revision"], commit, "--", *paths],
@@ -113,7 +115,7 @@ def check_distribution_revision(root, candidate, revision):
     return commit
 
 
-def check_package_follow_up(root, candidate):
+def check_package_records(root, candidate):
     evidence = candidate["evidence"]
     hosted, a100, serving = (
         json.loads((root / evidence[name]["path"]).read_bytes(), object_pairs_hook=unique_object)
@@ -150,7 +152,12 @@ def check_package_follow_up(root, candidate):
     differences = sorted(path for path, digest in a100_files.items() if digest != hosted_files[path])
     if differences != candidate["differing_runtime_files"]:
         raise ValueError("follow-up runtime file comparison drifted")
+    return a100, serving, len(a100_files)
 
+
+def check_package_follow_up(root, candidate):
+    evidence = candidate["evidence"]
+    a100, serving, _ = check_package_records(root, candidate)
     smoke = serving["smoke"]
     if (serving["api_checks"] != 40 or serving["shutdown"] != "passed"
             or smoke["seconds"] != 45 or smoke["rate"] != 8 or smoke["problems"] != 0
@@ -160,6 +167,43 @@ def check_package_follow_up(root, candidate):
     soaks = json.loads((root / evidence["a100_soaks"]["path"]).read_bytes(), object_pairs_hook=unique_object)
     check_package_soaks(soaks, serving)
     check_latest_allocator(root, candidate["allocator_follow_up"], evidence["a100_cpu"], a100, serving)
+
+
+def check_prefix_metrics_package(root, candidate):
+    _, serving, runtime_files = check_package_records(root, candidate)
+    if serving["matching_runtime_files"] != runtime_files or runtime_files != 21 or candidate["differing_runtime_files"]:
+        raise ValueError("prefix metrics package must reproduce all 21 hosted runtime files")
+    check_prefix_metrics_serving(serving)
+
+
+def check_prefix_metrics_serving(serving):
+    accuracy = serving["accuracy"]
+    suites = accuracy["suites"]
+    structured = suites["structured_holdout"]
+    counts = {"c1": 16, "c8": 16, "c32": 32}
+    if (accuracy["api_checks"] != 40 or accuracy["shutdown_exit"] != 0
+            or suites["baseline"]["verified_requests"] != 144 or suites["holdout"]["verified_requests"] != 88
+            or structured["status"] != "passed" or structured["c1_transport_pairs"] != 8
+            or {name: row["requests"] for name, row in structured["modes"].items()} != counts
+            or any(structured["modes"][name]["exact_matches"] != counts[name] for name in ("c8", "c32"))
+            or structured["context_rejection"]["http_status"] != 400):
+        raise ValueError("prefix metrics package lacks exact long and structured output evidence")
+    check_package_soaks(serving["soaks"], serving)
+    for mode, soak in serving["soaks"]["modes"].items():
+        prefix = soak["prefix_cache_metrics"]
+        capacity = 128 if mode == "cache-on" else 0
+        passed = prefix["status"] == "passed"
+        if (prefix["status"] not in ("passed", "failed")
+                or passed != ("current_prefix_cache_metrics" not in soak["failed_checks"])):
+            raise ValueError(f"{mode} cache metric verdict differs from the soak verdict")
+        if passed and (prefix["capacity_blocks"] != capacity or prefix["snapshots"] < 3
+                       or not 0 <= prefix["peak_sampled_retained_blocks"] <= capacity
+                       or not 0 <= prefix["hit_tokens_delta"] <= prefix["shutdown_hit_tokens"]
+                       or not 0 <= prefix["evicted_blocks_delta"] <= prefix["shutdown_evicted_blocks"]
+                       or prefix["hit_tokens_delta"] % 16 != 0 or prefix["shutdown_hit_tokens"] % 16 != 0
+                       or (capacity and prefix["hit_tokens_delta"] == 0)
+                       or (not capacity and (prefix["shutdown_hit_tokens"] or prefix["shutdown_evicted_blocks"]))):
+            raise ValueError(f"{mode} cache metric evidence exceeds its capacity or workload")
 
 
 def check_package_soaks(soaks, serving):
@@ -671,9 +715,14 @@ def main():
         manifest = json.loads((root / MANIFEST).read_bytes(), object_pairs_hook=unique_object)
         files = check_evidence(root, manifest)
         inputs = check_distribution_inputs(root, manifest["current_distribution_candidate"])
-        latest = manifest["distribution_after_terminal_fix"]
-        latest_inputs = check_distribution_inputs(root, latest)
-        check_package_follow_up(root, latest)
+        historical = manifest["distribution_after_terminal_fix"]
+        latest = manifest.get("distribution_with_prefix_metrics", historical)
+        historical_inputs = check_distribution_inputs(root, historical)
+        check_package_follow_up(root, historical)
+        latest_inputs = historical_inputs
+        if latest is not historical:
+            latest_inputs = check_distribution_inputs(root, latest)
+            check_prefix_metrics_package(root, latest)
         allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],
                                                   manifest["current_distribution_candidate"])
         serving_models = check_distribution_serving(root, manifest["current_distribution_candidate"])
@@ -681,7 +730,7 @@ def main():
         models = check_readme(root)
         revision = None
         if args.distribution_revision is not None:
-            revision = check_distribution_revision(root, latest, args.distribution_revision)
+            revision = check_distribution_revision(root, latest, args.distribution_revision, historical=historical)
     except (OSError, EOFError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as error:
         print(f"improvement evidence check failed: {error}", file=sys.stderr)
         return 1

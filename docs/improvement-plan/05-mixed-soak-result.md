@@ -146,6 +146,29 @@ A100 6번의 Qwen2.5-7B-Instruct에서 캐시 켬·끔을 재실행하고 같은
 
 각 순차 요청과 포화 뒤 회복 요청의 적중 증가량이 응답 `cached_tokens`와 일치했다. 캐시 비활성 실행은 모든 표본에서 캐시 보관·적중·퇴출이 0이었다. 두 재실행에서 정상 종료와 활성·대기 요청, 요청 KV, device·pinned 할당 0을 확인했다. A100 6·7번 모두 기존 홀더의 20GiB 예약으로 복귀했다. [독립 검산](../../benchmarks/evidence/20261121-w5-prefix-cache-metrics/fetch-summary.sh)
 
+### Prefix cache 메트릭을 포함한 배포 패키지
+
+`3951d90c8`의 배포 입력 1,037개를 보존된 A100 스테이징 소스에서 다시 구성했다. 모든 파일의 Git blob ID와 실행 권한을 검사한 뒤 CUDA 12.4 배포 이미지를 빌드했다. GitHub 이미지 `c03d417076d8`과 A100 이미지 `b7825698510f`의 CPU 검사가 통과했고, Riley 실행 파일 `74cbba42a518`을 포함한 런타임 파일 21개의 경로와 SHA-256이 모두 일치했다. [GitHub 배포 아티팩트](https://github.com/hkjeon13/riley/actions/runs/44897983005) · [A100 패키지 검사](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/a100-report.json) · [빌드 입력 재구성](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/build_inputs.py)
+
+A100 6번에 캐시 비활성, 7번에 캐시 128블록을 설정했다. 같은 Qwen2.5-7B-Instruct와 초당 평균 8건의 30분 합성 혼합 부하를 사용했다. 각 모드에서 API 40건, 정상 완료 13,749건, 의도한 연결 종료 700건을 기록했다. 예상 외 오류와 과부하는 0건이었고 서버의 취소·disconnect가 클라이언트의 연결 종료 수와 일치했다. 최초·주기·drain의 표본 32개씩에서 배치와 prefix cache 메트릭이 통과했다. [실행 순서](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/campaign.sh)
+
+| 30분 부하 결과 | Cache off | Cache on |
+|---|---:|---:|
+| 후반 정밀 RSS 변화 | +504KiB | +584KiB |
+| 후반 TTFT p95 변화 | +0.74% | +0.93% |
+| 후반 전체 완료 지연 p95 변화 | −13.47% | −13.67% |
+| 표본의 최대 보관 블록 | 0 | 128 |
+| 부하 중 추가 적중 토큰 | 0 | 385,344 |
+| 부하 중 추가 퇴출 블록 | 0 | 89,482 |
+| 종료 뒤 보관 블록 | 0 | 0 |
+| 종료 뒤 누적 적중 토큰·퇴출 블록 | 0 / 0 | 391,712 / 89,482 |
+
+두 실행에서 요청과 할당을 회수했다. 두 부하의 유일한 실패 항목은 정밀 RSS 증가 0 조건이었다. 익명 RSS 증가량도 각각 504KiB와 584KiB였다. 이 기준 이미지의 W5 운영 부하 판정은 실패다. [부하 요약 및 원본 지문](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/verified.json)
+
+같은 이미지의 정확성 실행에서 API 40건과 장문 기준 144건·holdout 88건의 입력 및 생성 토큰, 텍스트, 종료 사유가 기준과 일치했다. 장문 스키마·지정 도구 호출 64건을 검증했다. C1의 스트리밍·비스트리밍 8쌍이 일치했고 C8의 16건과 C32의 32건도 각 C1 대응 결과와 일치했다. 8,192토큰 한도를 넘긴 요청은 HTTP 400으로 처리했다. 종료 뒤 모든 자원이 회수됐고 GPU 6·7의 기존 홀더에서 20GiB씩을 다시 확인했다. [정확성 및 예약 근거](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/verified.json)
+
+측정에 사용한 첫 스크립트에서 holdout 체크섬 한 줄이 잘려 경고가 발생했다. 정확성 실행 전에 같은 파일의 완전한 SHA-256을 엄격히 대조했고, 장문·스키마 보고서의 입력 지문도 그 값과 일치했다. 결과 수집기는 C1의 결과를 전송 방식 8쌍으로 집계하도록 교정했다. 측정 원본과 실행 체크섬을 보존했다. [holdout 확인 기록](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/holdout-preflight.txt) · [결과 재검산](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/fetch-summary.sh)
+
 ## 90초 사전 검증
 
 프롬프트 KV 캐시에 128블록을 할당했다. 초당 평균 8건의 합성 요청으로 일반·스키마·logprobs·필수 도구·장문·긴 출력·클라이언트 연결 종료를 섞었다. 장문 요청은 여덟 개의 프롬프트 앞부분을 반복 사용했다.

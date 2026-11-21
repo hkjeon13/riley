@@ -206,6 +206,37 @@ def batch_shape_evidence(result):
             "configured_dense_rows": list(first), "committed_steps": hits, "gpu_execution_ns": gpu_ns}
 
 
+def prefix_cache_evidence(result, shutdown, capacity):
+    def read_snapshot(metrics, retained_limit):
+        require(isinstance(metrics, dict), "missing metrics snapshot")
+        cache = metrics.get("prefix_cache")
+        require(isinstance(cache, dict) and cache.get("metrics_degraded") is False,
+                "missing or degraded prefix cache metrics")
+        values = tuple(cache.get(key) for key in ("retained_blocks", "hit_tokens", "evicted_blocks"))
+        require(all(type(value) is int and value >= 0 for value in values), "invalid prefix cache counters")
+        retained, hits, _ = values
+        require(retained <= retained_limit and hits % 16 == 0, "invalid retention or cache hit alignment")
+        require(capacity > 0 or not any(values), "disabled prefix cache reported nonzero metrics")
+        return values
+
+    try:
+        samples = result.get("rss_samples")
+        require(isinstance(samples, list), "missing periodic prefix cache samples")
+        snapshots = [read_snapshot(sample["metrics"], capacity)
+                     for sample in (result["initial"], *samples, result["final"])]
+        require(all(before[1] <= after[1] and before[2] <= after[2]
+                    for before, after in zip(snapshots, snapshots[1:])), "prefix cache counters went backwards")
+        initial, final = snapshots[0], snapshots[-1]
+        require(read_snapshot(shutdown, 0) == (0, *final[1:]), "shutdown lost or changed prefix cache counters")
+        require(capacity == 0 or final[1] > initial[1], "mixed load produced no new prefix cache hits")
+    except (KeyError, TypeError, ValueError) as error:
+        return {"status": "failed", "detail": str(error)}
+    return {"status": "passed", "snapshots": len(snapshots), "capacity_blocks": capacity,
+            "peak_sampled_retained_blocks": max(snapshot[0] for snapshot in snapshots),
+            "hit_tokens_delta": final[1] - initial[1], "evicted_blocks_delta": final[2] - initial[2],
+            "shutdown_hit_tokens": final[1], "shutdown_evicted_blocks": final[2]}
+
+
 def check_mixed_load(out, address, container, pid, *, smoke, expect_tools_unsupported=False):
     label, seconds, option = ("smoke", SMOKE_SECONDS, "--smoke") if smoke else (
         "soak", 1800, "--require-zero-rss-growth")
@@ -262,7 +293,7 @@ def find_interrupted_container(name):
 
 def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_baseline=None, accuracy_holdout=None,
               mixed_soak=None, serving_smoke=False, smoke_kv_blocks=None, expect_tools_unsupported=False,
-              mixed_stage=False, tp_holdout=None, structured_holdout=None):
+              mixed_stage=False, tp_holdout=None, structured_holdout=None, require_prefix_cache_metrics=False):
     require(GPU_UUID.fullmatch(gpu) and SHA256.fullmatch(model_sha), "pass a GPU UUID and model SHA-256")
     long_accuracy = accuracy_baseline or accuracy_holdout or structured_holdout
     require(mixed_soak is None or (mixed_soak in CACHE_BLOCKS and not long_accuracy),
@@ -271,6 +302,8 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
             "select serving smoke separately from mixed soak and long accuracy")
     require(not mixed_stage or not (long_accuracy or mixed_soak or serving_smoke),
             "select the mixed-stage probe separately from other workloads")
+    require(not require_prefix_cache_metrics or serving_smoke or mixed_soak is not None,
+            "prefix cache metrics require a mixed soak or serving smoke")
     require(structured_holdout is None or tools, "structured holdout requires a tool-compatible checkpoint and --tools")
     if tp_holdout is not None:
         peer, tp_workload = tp_holdout
@@ -311,6 +344,7 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
     smoke = None
     stage = None
     parallel = None
+    cache_blocks = None
     server_args = ()
     gpu_request = f"device={gpu}"
     gpu_env = ()
@@ -330,7 +364,8 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
             server_args += ("--prefix-cache-blocks", str(cache_blocks))
     elif serving_smoke:
         blocks = SMOKE_KV_BLOCKS if smoke_kv_blocks is None else smoke_kv_blocks
-        server_args = (*MIXED_SERVER_ARGS, "--kv-blocks", str(blocks), "--prefix-cache-blocks", "128")
+        cache_blocks = CACHE_BLOCKS["cache-on"]
+        server_args = (*MIXED_SERVER_ARGS, "--kv-blocks", str(blocks), "--prefix-cache-blocks", str(cache_blocks))
     elif mixed_stage:
         server_args = ("--inference-profile", "native-bf16-varlen-v1", "--max-active-sequences", "2",
                        "--max-sequence-tokens", "8192", "--max-output-tokens", "256", "--kv-blocks", "4096",
@@ -450,6 +485,16 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
                 docker("rm", "--force", "--volumes", container)
 
     measured_load = smoke if serving_smoke else soak
+    cache_observation = None
+    if require_prefix_cache_metrics:
+        probe_path = out / ("smoke.json" if serving_smoke else "soak.json")
+        cache_observation = prefix_cache_evidence(json.loads(probe_path.read_bytes()), metrics, cache_blocks or 0)
+        cache_ok = cache_observation["status"] == "passed"
+        if smoke is not None:
+            smoke["checks"]["current_prefix_cache_metrics"] = cache_ok
+        if not cache_ok:
+            measured_load["status"] = "failed"
+            measured_load["failed_checks"] = sorted([*measured_load["failed_checks"], "current_prefix_cache_metrics"])
     status = measured_load["status"] if measured_load is not None else "passed"
     result = {"schema_version": "riley.distribution-gpu-check.v1", "status": status, "image_id": image,
               "source_revision": revision, "source_archive_sha256": archive, "riley_binary_sha256": observed,
@@ -466,6 +511,8 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
         result["soak_server_arguments"] = list(server_args)
     if smoke is not None:
         result["serving_smoke"] = smoke
+    if cache_observation is not None:
+        result["prefix_cache_metrics"] = cache_observation
     if stage is not None:
         result["mixed_stage"] = stage
     if parallel is not None:
@@ -496,6 +543,8 @@ def main():
     parser.add_argument("--mixed-soak", choices=CACHE_BLOCKS, help="run the strict 30-minute W5 load in this cache mode")
     parser.add_argument("--serving-smoke", action="store_true",
                         help="combine API checks with 45 seconds of mixed traffic and cancellation")
+    parser.add_argument("--require-prefix-cache-metrics", action="store_true",
+                        help="validate prefix-cache counters and release after mixed soak or serving smoke")
     parser.add_argument("--mixed-stage", action="store_true",
                         help="compare singleton streams and witness committed mixed prefill/decode iterations")
     parser.add_argument("--tp-holdout", nargs=2, metavar=("PEER_GPU_UUID", "WORKLOAD"),
@@ -512,7 +561,8 @@ def main():
                      accuracy_baseline=args.accuracy_baseline, accuracy_holdout=args.accuracy_holdout,
                      mixed_soak=args.mixed_soak, serving_smoke=args.serving_smoke, smoke_kv_blocks=args.smoke_kv_blocks,
                      expect_tools_unsupported=args.expect_tools_unsupported, mixed_stage=args.mixed_stage,
-                     tp_holdout=args.tp_holdout, structured_holdout=args.structured_holdout)
+                     tp_holdout=args.tp_holdout, structured_holdout=args.structured_holdout,
+                     require_prefix_cache_metrics=args.require_prefix_cache_metrics)
 
 
 if __name__ == "__main__":

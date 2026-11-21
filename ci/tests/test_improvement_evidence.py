@@ -108,6 +108,18 @@ class DistributionServingTests(unittest.TestCase):
 
 
 class PackageFollowUpTests(unittest.TestCase):
+    def test_prefix_metrics_uses_transport_pairs_for_c1_and_exact_matches_for_concurrency(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        candidate = manifest["distribution_with_prefix_metrics"]
+        report_path = ROOT / candidate["evidence"]["a100_serving"]["path"]
+        serving = json.loads(report_path.read_bytes())
+        checker.check_prefix_metrics_serving(serving)
+
+        suites = serving["accuracy"]["suites"]["structured_holdout"]
+        suites["modes"]["c8"]["exact_matches"] -= 1
+        with self.assertRaisesRegex(ValueError, "lacks exact long and structured output evidence"):
+            checker.check_prefix_metrics_serving(serving)
+
     def test_gpu_receipt_is_bound_to_the_reconstructed_package(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
         candidate = manifest["distribution_after_terminal_fix"]

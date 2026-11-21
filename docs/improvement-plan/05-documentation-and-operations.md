@@ -202,6 +202,8 @@ python3 benchmarks/live/soak.py "$TEST_ADDRESS" "$MODEL_ID" \
 
 현행 배포 이미지의 `--serving-smoke`와 `--mixed-soak`는 기존 부하의 최초·주기·drain 표본에서 `batch_shapes`를 검사한다. 24개 슬롯과 오름차순의 구성된 행, 미사용 슬롯의 0값, 마지막 shape의 패딩, 누적 GPU 시간과 커밋 카운터를 확인한다. 표본 간 구성이 바뀌거나 카운터가 되돌아가거나 부하에서 새 GPU 타이밍이 관측되지 않으면 종료 자원을 회수한 뒤 배포 검사 영수증에 실패를 남긴다. [현행 배포 검사기](../../ci/check_distribution_gpu.py) · [A100 이미지 및 보존된 30분 부하 검증](05-mixed-soak-result.md#현행-배포-이미지의-배치-메트릭-검사)
 
+배포 검사기에 `--require-prefix-cache-metrics`를 추가하면 `--serving-smoke` 또는 `--mixed-soak`의 같은 표본과 종료 영수증을 검증한다. 캐시를 켜면 구성 용량 안에서 보관 블록과 새 적중을 관측하고 누적 적중·퇴출이 감소하지 않는지 확인한다. 캐시를 끄면 두 카운터와 보관량은 0이어야 한다. 정상 종료에서는 보관 블록이 0이고 두 누적 카운터는 drain 값과 일치해야 한다. [배포 검사기](../../ci/check_distribution_gpu.py)
+
 ### W5-B5. 실패 분류와 회수
 
 - 의도적 overload의 429, 클라이언트 취소, 내부 5xx, malformed output을 별도 집계한다. 기대한 429만 숨기고 완료율을 높여 보이지 않는다.
