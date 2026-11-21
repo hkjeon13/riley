@@ -124,6 +124,29 @@ class PackageFollowUpTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "GPU serving is not bound to the A100 package"):
                 checker.check_package_follow_up(ROOT, candidate)
 
+    def test_soak_keeps_a_measured_rss_failure_in_the_release_gate(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        entry = manifest["distribution_after_terminal_fix"]["evidence"]["a100_serving"]
+        serving = json.loads((ROOT / entry["path"]).read_bytes())
+        cache_off = {"failed_checks": [], "status": "passed",
+                     "rss": {"baseline": {"rss_kib": 50}, "drain": {"rss_kib": 50}, "rss_growth_kib": 0},
+                     "p95_change_percent": {"ttft_ms": 1.0, "e2e_ms": -0.5}}
+        cache_on = deepcopy(cache_off)
+        cache_on.update(status="failed", failed_checks=["rss_growth_second_half_at_most_zero"])
+        cache_on["rss"].update(drain={"rss_kib": 51}, rss_growth_kib=1)
+        soaks = {key: serving[key] for key in ("source_revision", "image_id", "checkpoint_sha256")}
+        soaks.update(binary_sha256=serving["riley_binary_sha256"], duration_seconds_per_mode=1800,
+                     requests_per_second_per_mode=8, release_gate="failed",
+                     modes={"cache-off": cache_off, "cache-on": cache_on})
+        checker.check_package_soaks(soaks, serving)
+
+        soaks["release_gate"] = "passed"
+        with self.assertRaisesRegex(ValueError, "gate differs from the two cache outcomes"):
+            checker.check_package_soaks(soaks, serving)
+        cache_on.update(status="passed", failed_checks=[])
+        with self.assertRaisesRegex(ValueError, "cache-on soak verdict differs"):
+            checker.check_package_soaks(soaks, serving)
+
 
 class AllocatorTrialTests(unittest.TestCase):
     def setUp(self):

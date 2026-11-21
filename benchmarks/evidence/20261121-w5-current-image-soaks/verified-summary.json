@@ -1,0 +1,123 @@
+{
+  "remote_stage": "w5-current-soaks-20261121.OyGugR0K",
+  "source_revision": "36aa1880509941ad169be6cc327d6d89231f8b81",
+  "image_id": "sha256:b731f48cc6ec0820197ec484e98c673e2de592f12ab8448e3fa9f38ca7217c9b",
+  "binary_sha256": "56112a5b9bd72e77106f45497af277038308af357a5c5ee129af74ce3cc85a0f",
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "duration_seconds_per_mode": 1800,
+  "requests_per_second_per_mode": 8,
+  "parallel_arms": true,
+  "idle_reservations": {
+    "6": {
+      "pid": 2680326,
+      "start_ticks": "6365879881",
+      "gib": 20
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "gib": 20
+    }
+  },
+  "release_gate": "failed",
+  "modes": {
+    "cache-off": {
+      "physical_gpu": 6,
+      "status": "failed",
+      "api_checks": 40,
+      "completed": 13749,
+      "client_disconnects": 700,
+      "problem_count": 0,
+      "counter_changes": {
+        "cancellations": 700,
+        "disconnects": 700,
+        "overloads": 0,
+        "dropped_observations": 13568
+      },
+      "p95_change_percent": {
+        "ttft_ms": 1.4131386641051291,
+        "e2e_ms": -13.563819956452006
+      },
+      "rss": {
+        "baseline": {
+          "rss_kib": 15553472,
+          "anonymous_kib": 15366840,
+          "read_ms": 293.9588949084282
+        },
+        "drain": {
+          "rss_kib": 15554044,
+          "anonymous_kib": 15367412,
+          "read_ms": 323.16044718027115
+        },
+        "rss_growth_kib": 572,
+        "anonymous_growth_kib": 572
+      },
+      "failed_checks": [
+        "rss_growth_second_half_at_most_zero"
+      ],
+      "server_arguments": [
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "512",
+        "--kv-blocks",
+        "16384"
+      ],
+      "report_sha256": "81393718e832cff416325d0adec23226d32e8c7fa294438eb821c3dc4d90a399",
+      "soak_sha256": "a3de2d77a11bb67a96d29112c5b158fdb094fff55bbf2be8c3fabbe096443b67",
+      "shutdown_sha256": "dd97bfe4f833383a566bdae105c4729525c4334d4e2e52ae9ccc98b43cb605ab"
+    },
+    "cache-on": {
+      "physical_gpu": 7,
+      "status": "failed",
+      "api_checks": 40,
+      "completed": 13749,
+      "client_disconnects": 700,
+      "problem_count": 0,
+      "counter_changes": {
+        "cancellations": 700,
+        "disconnects": 700,
+        "overloads": 0,
+        "dropped_observations": 13568
+      },
+      "p95_change_percent": {
+        "ttft_ms": 1.160496740280359,
+        "e2e_ms": -13.568789790108148
+      },
+      "rss": {
+        "baseline": {
+          "rss_kib": 15553032,
+          "anonymous_kib": 15366332,
+          "read_ms": 261.3328918814659
+        },
+        "drain": {
+          "rss_kib": 15553668,
+          "anonymous_kib": 15366968,
+          "read_ms": 247.00310081243515
+        },
+        "rss_growth_kib": 636,
+        "anonymous_growth_kib": 636
+      },
+      "failed_checks": [
+        "rss_growth_second_half_at_most_zero"
+      ],
+      "server_arguments": [
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "512",
+        "--kv-blocks",
+        "16384",
+        "--prefix-cache-blocks",
+        "128"
+      ],
+      "report_sha256": "1ba88a78c6037a75989fe9ebc1be3fc7c369d0d5cc177f75743420593a53db09",
+      "soak_sha256": "bd1305cd2b8dbcd8590413e1b7b08ea26d44c436626853d1c67db2141ab2d188",
+      "shutdown_sha256": "2d90401a4a6a09326e6f782d00ddf70c7d6a89bce6f09fd124f2a352d5b0cc66"
+    }
+  }
+}

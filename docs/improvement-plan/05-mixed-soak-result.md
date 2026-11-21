@@ -62,7 +62,18 @@ SmolLM2 최초 실행은 39건 중 33건이 통과했다. 일반·동시성·스
 
 A100 7번에서 이미지 `b731f48cc6ec`와 Qwen2.5-7B-Instruct를 사용했다. API 40건이 통과했다. 활성 요청 한도 32, 문맥 8,192토큰, KV 16,384블록, prefix cache 128블록으로 45초간 초당 8건을 보냈다. 정상 완료 338건, 의도적 연결 종료와 서버 취소 각각 21건, HTTP·SSE 오류 및 과부하 0건을 확인했다. 서버는 코드 0으로 종료했고 이후 활성·대기 요청, 요청 KV, device·pinned 할당은 모두 0이었다. GPU 6·7번은 같은 홀더의 20GiB 예약을 확인했다. [실행 검산](../../benchmarks/evidence/20261121-w5-current-package/verified-summary.json)
 
-이번 부하는 새 배포 이미지의 API와 취소·종료 회수를 확인한다. 같은 이미지의 두 캐시 모드 장기 부하, 상대 성능 및 실제 운영 SLO는 후속 검증 범위다. A100 빌드를 재현할 때는 `engine.patch.gz`와 `source-objects.tsv.gz`를 원래 이름으로 풀고 `dispatch.sha256`을 확인한다. [릴리스 판정](06-candidate-qualification.md) · [원본 검산과 요약 가져오기](../../benchmarks/evidence/20261121-w5-current-package/fetch-summary.sh)
+이 45초 부하에서는 새 배포 이미지의 API와 취소·종료 회수를 확인했다. A100 빌드를 재현할 때는 `engine.patch.gz`와 `source-objects.tsv.gz`를 원래 이름으로 풀고 `dispatch.sha256`을 확인한다. [릴리스 판정](06-candidate-qualification.md) · [원본 검산과 요약 가져오기](../../benchmarks/evidence/20261121-w5-current-package/fetch-summary.sh)
+
+### 새 이미지의 30분 혼합 부하
+
+같은 이미지 `b731f48cc6ec`와 Qwen2.5-7B-Instruct에서 캐시 비활성은 A100 6번, 캐시 활성은 A100 7번으로 동시에 실행했다. 두 조건에 같은 합성 요청과 seed를 적용했고 각 GPU에서 초기와 후반 지연을 대조했다. API 40건이 각 조건에서 통과했다. 서버 실행 인자는 prefix cache 128블록 지정의 유무만 달랐다. [실행 절차](../../benchmarks/evidence/20261121-w5-current-image-soaks/campaign.sh) · [검산 요약](../../benchmarks/evidence/20261121-w5-current-image-soaks/verified-summary.json)
+
+| 30분 조건 | 정상 완료 / 의도적 연결 종료 | TTFT p95 변화 | 전체 완료 p95 변화 | 정밀 RSS 증가 |
+|---|---:|---:|---:|---:|
+| 캐시 비활성 | 13,749 / 700 | +1.41% | −13.56% | +572KiB |
+| 캐시 활성 | 13,749 / 700 | +1.16% | −13.57% | +636KiB |
+
+각 조건에서 서버 연결 종료·취소 카운터가 각각 700 증가했고 HTTP·SSE 오류와 과부하는 0건이었다. 지연은 허용 범위 안이었다. 두 조건의 `smaps_rollup`에서 RSS 증가량과 익명 RSS 증가량이 같았고, RSS 증가 0 기준만 실패했다. 서버는 각각 코드 0으로 종료했고 활성·대기 요청, 요청 KV와 device·pinned 할당은 모두 0이었다. 시험 뒤 두 GPU의 기존 20GiB 예약을 확인했다. [정밀 RSS 및 종료 검산](../../benchmarks/evidence/20261121-w5-current-image-soaks/verify_soaks.py)
 
 ## 90초 사전 검증
 

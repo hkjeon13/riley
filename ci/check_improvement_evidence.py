@@ -6,6 +6,7 @@ from decimal import Decimal
 import gzip
 from hashlib import file_digest, sha256
 import json
+from math import isfinite
 from pathlib import Path
 import re
 import subprocess
@@ -155,6 +156,37 @@ def check_package_follow_up(root, candidate):
             or smoke["completed"] <= 0 or smoke["client_disconnects"] <= 0
             or smoke["client_disconnects"] != smoke["server_cancellations"]):
         raise ValueError("follow-up package lacks passing A100 inference, cancellation and shutdown evidence")
+    soaks = json.loads((root / evidence["a100_soaks"]["path"]).read_bytes(), object_pairs_hook=unique_object)
+    check_package_soaks(soaks, serving)
+
+
+def check_package_soaks(soaks, serving):
+    if (any(soaks[key] != serving[key] for key in ("source_revision", "image_id", "checkpoint_sha256"))
+            or soaks["binary_sha256"] != serving["riley_binary_sha256"]
+            or (soaks["duration_seconds_per_mode"], soaks["requests_per_second_per_mode"]) != (1800, 8)):
+        raise ValueError("30-minute soaks do not match the verified follow-up package and workload")
+    modes = soaks["modes"]
+    if set(modes) != {"cache-off", "cache-on"}:
+        raise ValueError("30-minute soaks must cover both cache settings")
+    for mode, result in modes.items():
+        failures = result["failed_checks"]
+        rss = result["rss"]
+        growth = rss["rss_growth_kib"]
+        baseline, drain = rss["baseline"], rss["drain"]
+        measured_growth = drain["rss_kib"] - baseline["rss_kib"] if baseline is not None and drain is not None else None
+        windows = result["p95_change_percent"]
+        if windows.keys() != {"ttft_ms", "e2e_ms"}:
+            raise ValueError(f"{mode} TTFT and end-to-end measurements are required")
+        rss_failed = growth is None or growth > 0
+        latency_failed = any(value is None or not isfinite(value) or value > 5 for value in windows.values())
+        if (growth != measured_growth
+                or rss_failed != ("rss_growth_second_half_at_most_zero" in failures)
+                or latency_failed != ("p95_drift_at_most_5_percent" in failures)
+                or result["status"] != ("failed" if failures else "passed")):
+            raise ValueError(f"{mode} soak verdict differs from its measurements")
+    expected_gate = "passed" if all(result["status"] == "passed" for result in modes.values()) else "failed"
+    if soaks["release_gate"] != expected_gate:
+        raise ValueError("30-minute soak gate differs from the two cache outcomes")
 
 
 def check_distribution_serving(root, candidate):
