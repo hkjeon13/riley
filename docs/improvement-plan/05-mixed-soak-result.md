@@ -188,6 +188,14 @@ A100 6번에 캐시 비활성, 7번에 캐시 128블록을 설정했다. 같은 
 
 재빌드에는 이전 시험의 Dockerfile, 진입점, CPU 검증기를 재사용한다. 이 파일들과 후속 검사기의 체크섬을 각각 확인한 뒤 EFS에서 패키지와 부하 원본을 다시 검산할 수 있다. [이전 파생 이미지의 빌드 입력](../../benchmarks/evidence/20261121-w5-current-image-allocator/Dockerfile) · [현행 파생 이미지 빌드](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/build.sh) · [결과 재검산](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/fetch-summary.sh)
 
+### 현행 패키지의 요청 차단과 격리 복구
+
+A100 GPU 6번에서 jemalloc 시험 이미지 `a2f0d91fc749`를 종료한 뒤 같은 loopback 서버·게이트웨이 주소에 기본 이미지 `b7825698510f`를 띄웠다. 두 실행은 `3951d90c8`의 동일한 Riley 바이너리, Qwen2.5-7B-Instruct 체크포인트와 prefix cache 128블록 설정을 사용했다. 각 실행의 API 검사 40건이 통과했다. [측정과 이미지 지문](../../benchmarks/evidence/20261121-w5-prefix-package-recovery/verified.json)
+
+게이트웨이가 신규 요청을 HTTP 503으로 차단한 뒤에도 백엔드에는 기존 활성 요청이 1건 있었다. 그 스트림은 두 이미지에서 모두 192토큰과 종료 사유 `length`, SSE `[DONE]`을 반환했다. 두 응답의 텍스트 해시와 입력·생성 토큰 수가 일치했다. 차단부터 요청·대기·요청 KV가 모두 0이 되기까지 파생 이미지 2.204초, 기본 이미지 2.197초가 걸렸다. [차단·드레인 검사기](../../benchmarks/evidence/20261121-w5-prefix-package-recovery/drain_probe.py)
+
+두 주소에서 새 TCP 연결이 거부되는 구간을 확인한 뒤 기본 이미지의 `/readyz`를 확인했다. 파생 이미지 종료 요청부터 기본 이미지의 준비 상태까지 138.60초가 걸렸다. 같은 프롬프트 재요청에서 두 이미지 모두 응답과 서버 메트릭의 적중 증가량이 112토큰이었다. 서버 종료 때 보관 캐시 블록과 GPU device·pinned 할당은 0이었고 캐시 누적 카운터는 보존됐다. GPU 6·7의 기존 홀더에서 20GiB씩 다시 확인했다. 실제 운영 라우팅과 승인된 서비스 SLO에 대한 검증이 남아 있다. [원본 검산](../../benchmarks/evidence/20261121-w5-prefix-package-recovery/fetch-summary.sh)
+
 ## 90초 사전 검증
 
 프롬프트 KV 캐시에 128블록을 할당했다. 초당 평균 8건의 합성 요청으로 일반·스키마·logprobs·필수 도구·장문·긴 출력·클라이언트 연결 종료를 섞었다. 장문 요청은 여덟 개의 프롬프트 앞부분을 반복 사용했다.

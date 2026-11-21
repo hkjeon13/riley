@@ -175,7 +175,13 @@ def check_prefix_metrics_package(root, candidate):
         raise ValueError("prefix metrics package must reproduce all 21 hosted runtime files")
     check_prefix_metrics_serving(serving)
     if "allocator_experiment" in candidate:
-        check_prefix_metrics_allocator(root, candidate, a100, serving)
+        allocator = check_prefix_metrics_allocator(root, candidate, a100, serving)
+        if "recovery_drill" in candidate:
+            entry = candidate["recovery_drill"]["report"]
+            drill = json.loads((root / entry["path"]).read_bytes(), object_pairs_hook=unique_object)
+            check_prefix_metrics_recovery(drill, serving, allocator)
+    elif "recovery_drill" in candidate:
+        raise ValueError("the recovery drill requires a verified allocator experiment")
 
 
 def check_prefix_metrics_serving(serving):
@@ -270,6 +276,51 @@ def check_prefix_metrics_allocator(root, candidate, parent, stock):
     matches = sum(observed.get(name) == case for name, case in original.items())
     if len(original) != 16 or observed.keys() != original.keys() or trial["matched_structured_cases"] != matches:
         raise ValueError("allocator output comparison differs from its structured response receipts")
+    return serving
+
+
+def check_prefix_metrics_recovery(drill, stock, allocator):
+    bindings = ("source_revision", "riley_binary_sha256", "checkpoint_sha256")
+    if (drill["status"] != "passed" or drill["scope"] != "isolated loopback recovery"
+            or drill["arms"].keys() != {"allocator", "stock"}
+            or any(drill[key] != stock[key] or drill[key] != allocator[key] for key in bindings)
+            or drill["reservations"].keys() != {"6", "7"}
+            or any(row["gib"] != 20 for row in drill["reservations"].values())):
+        raise ValueError("recovery drill does not match the qualified candidates or GPU reservations")
+    routes, streams = [], []
+    for label, candidate in (("allocator", allocator), ("stock", stock)):
+        arm = drill["arms"][label]
+        route, probe, process = (arm[key] for key in ("route", "admission", "process"))
+        shutdown, cache = arm["shutdown"], arm["prefix_cache"]
+        if (arm["image_id"] != candidate["image_id"] or arm["image_id"] != process["image_id"] or arm["api_checks"] != 40
+                or not re.fullmatch(r"[0-9a-f]{64}", arm["gpu_report_sha256"])
+                or (label == "allocator" and (process["library_sha256"] != allocator["allocator_library_sha256"]
+                                              or process["malloc_conf"] != allocator["allocator_settings"]))):
+            raise ValueError(f"{label} recovery arm ran a different image or allocator")
+        if (probe["rejected_http_status"] != 503 or probe["active_after_gate"]["active_requests"] != 1
+                or probe["active_after_gate"]["waiting_requests"] != 0 or probe["active_after_gate"]["kv_allocated_blocks"] <= 0
+                or probe["cached_prompt_tokens"] != probe["cache_hit_delta"] or probe["cache_hit_delta"] <= 0
+                or probe["stream"]["completion_tokens"] <= 0
+                or not route["closed_before_start_ns"] < route["ready_ns"] < probe["gate_closed_ns"]
+                <= probe["active_after_gate_ns"] < probe["sse_completed_ns"] <= probe["drained_ns"]
+                < route["stop_requested_ns"] < route["closed_after_cleanup_ns"]):
+            raise ValueError(f"{label} recovery arm lacks an active drain after admission was blocked")
+        gauges = ("active_requests", "waiting_requests", "kv_allocated_blocks")
+        if (probe["drained"] != dict.fromkeys(gauges, 0) or any(shutdown[key] for key in gauges)
+                or not shutdown["allocation"] or any(shutdown["allocation"].values())
+                or cache["status"] != "passed" or cache["capacity_blocks"] != 128
+                or shutdown["prefix_cache"]["retained_blocks"] != 0
+                or any(shutdown["prefix_cache"][key] != cache[f"shutdown_{key}"] for key in ("hit_tokens", "evicted_blocks"))):
+            raise ValueError(f"{label} recovery arm did not drain cache and allocations")
+        routes.append(route)
+        streams.append(probe["stream"])
+    first, second = routes
+    if (streams[0] != streams[1] or first["gateway"] == first["server"]
+            or any(not re.fullmatch(r"127\.0\.0\.1:[1-9][0-9]{0,4}", first[key]) for key in ("gateway", "server"))
+            or any(first[key] != second[key] for key in ("gateway", "server", "server_arguments"))
+            or first["closed_after_cleanup_ns"] >= second["closed_before_start_ns"]
+            or drill["stop_to_stock_ready_ms"] != (second["ready_ns"] - first["stop_requested_ns"]) / 1e6):
+        raise ValueError("recovery did not restore the same stream and loopback addresses in order")
 
 
 def check_latest_allocator(root, trial, parent_entry, parent, serving):
