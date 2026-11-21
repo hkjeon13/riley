@@ -56,6 +56,14 @@ SmolLM2 최초 실행은 39건 중 33건이 통과했다. 일반·동시성·스
 
 동시 요청 43건의 입력·생성 토큰 ID, 텍스트, 종료 사유와 사용량이 각각의 C1 응답과 일치했다. 서버는 종료 코드 0을 기록했고 활성·대기 요청, 요청 KV 및 device·pinned 할당은 모두 0이었다. GPU 6·7은 각각 기존 홀더의 20GiB 예약으로 복귀했다. 이 시험의 판정 범위는 해당 배포 이미지와 고정 입력에서 동시성에 따른 응답 재현성 및 종료 자원 회수다. [실행 명령](05-documentation-and-operations.md#32b-모델의-tp2-장문-검증) · [집계 검산](../../benchmarks/evidence/20261120-w5-tp2-holdout/verify_tp2.py)
 
+## 취소 순서 수정 이후의 배포 이미지
+
+2026-11-21 KST에 `36aa18805`의 CUDA 12.4 배포 이미지를 검증했다. 호스팅 CI는 전체 커밋 아카이브를 사용했다. A100의 재빌드는 기승인 `d3d8fe6e5` 사본에 변경 패치를 적용하고, 배포 입력 1,037개를 `36aa18805`의 Git 객체 ID와 대조한 뒤 별도 입력 아카이브를 만들었다. CPU 패키지 검사에서 비루트 사용자·오프라인 CLI·동적 링크를 확인했고, 두 이미지의 런타임 파일 21개가 모두 같은 SHA-256을 기록했다. [호스팅 CPU 보고서](../../benchmarks/evidence/20261121-w5-current-package/hosted-report.json) · [A100 CPU 보고서](../../benchmarks/evidence/20261121-w5-current-package/a100-report.json) · [빌드 재현](../../benchmarks/evidence/20261121-w5-current-package/campaign.sh)
+
+A100 7번에서 이미지 `b731f48cc6ec`와 Qwen2.5-7B-Instruct를 사용했다. API 40건이 통과했다. 활성 요청 한도 32, 문맥 8,192토큰, KV 16,384블록, prefix cache 128블록으로 45초간 초당 8건을 보냈다. 정상 완료 338건, 의도적 연결 종료와 서버 취소 각각 21건, HTTP·SSE 오류 및 과부하 0건을 확인했다. 서버는 코드 0으로 종료했고 이후 활성·대기 요청, 요청 KV, device·pinned 할당은 모두 0이었다. GPU 6·7번은 같은 홀더의 20GiB 예약을 확인했다. [실행 검산](../../benchmarks/evidence/20261121-w5-current-package/verified-summary.json)
+
+이번 부하는 새 배포 이미지의 API와 취소·종료 회수를 확인한다. 같은 이미지의 두 캐시 모드 장기 부하, 상대 성능 및 실제 운영 SLO는 후속 검증 범위다. A100 빌드를 재현할 때는 `engine.patch.gz`와 `source-objects.tsv.gz`를 원래 이름으로 풀고 `dispatch.sha256`을 확인한다. [릴리스 판정](06-candidate-qualification.md) · [원본 검산과 요약 가져오기](../../benchmarks/evidence/20261121-w5-current-package/fetch-summary.sh)
+
 ## 90초 사전 검증
 
 프롬프트 KV 캐시에 128블록을 할당했다. 초당 평균 8건의 합성 요청으로 일반·스키마·logprobs·필수 도구·장문·긴 출력·클라이언트 연결 종료를 섞었다. 장문 요청은 여덟 개의 프롬프트 앞부분을 반복 사용했다.

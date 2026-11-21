@@ -3,6 +3,7 @@
 
 import argparse
 from decimal import Decimal
+import gzip
 from hashlib import file_digest, sha256
 import json
 from pathlib import Path
@@ -62,9 +63,10 @@ def check_evidence(root, manifest):
     return count
 
 
-def check_distribution_inputs(root, manifest):
-    candidate = manifest["current_distribution_candidate"]
-    revisions = (candidate["audited_main"], candidate["source_revision"], *candidate.get("follow_up_audited_revisions", []))
+def check_distribution_inputs(root, candidate):
+    revisions = (candidate["source_revision"], *candidate.get("follow_up_audited_revisions", []))
+    if "audited_main" in candidate:
+        revisions += (candidate["audited_main"],)
     if any(not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision)
            for revision in revisions):
         raise ValueError("expected full Git revisions for the recorded distribution comparison")
@@ -107,6 +109,52 @@ def check_distribution_revision(root, candidate, revision):
     if diff.stdout:
         raise ValueError(f"distribution inputs changed at {commit}: {', '.join(diff.stdout.splitlines())}")
     return commit
+
+
+def check_package_follow_up(root, candidate):
+    evidence = candidate["evidence"]
+    hosted, a100, serving = (
+        json.loads((root / evidence[name]["path"]).read_bytes(), object_pairs_hook=unique_object)
+        for name in ("hosted_cpu", "a100_cpu", "a100_serving")
+    )
+    revision = candidate["source_revision"]
+    if any(report["status"] != "passed" or report["source_revision"] != revision
+           for report in (hosted, a100, serving)):
+        raise ValueError("follow-up package reports must pass for the same committed source revision")
+    binary = "/opt/riley/bin/riley"
+    if (serving["image_id"] != a100["image_id"] or serving["riley_binary_sha256"] != a100["binaries"][binary]
+            or serving["source_archive_sha256"] != a100["source_archive_sha256"]
+            or serving["cpu_report_sha256"] != evidence["a100_cpu"]["sha256"]):
+        raise ValueError("follow-up GPU serving is not bound to the A100 package")
+    scope_paths = candidate["matching_distribution_input_git_objects"].keys() - {".github/workflows/distribution-image.yml"}
+    objects = gzip.decompress((root / evidence["a100_source_objects"]["path"]).read_bytes())
+    actual = subprocess.run(["git", "ls-tree", "-r", revision, "--", *sorted(scope_paths)],
+                            cwd=root, capture_output=True, check=True).stdout
+    if (objects != actual or sha256(objects).hexdigest() != serving["source_objects_sha256"]
+            or len(objects.splitlines()) != serving["source_object_count"]):
+        raise ValueError("follow-up A100 build inputs differ from the committed Git objects")
+
+    runtime = {}
+    for report, name in ((hosted, "hosted_runtime"), (a100, "a100_runtime")):
+        lines = (root / evidence[name]["path"]).read_text(encoding="utf-8").splitlines()
+        files = {path: digest for digest, path in (line.split("  ", 1) for line in lines)}
+        if len(files) != len(lines) or any(files.get(path) != digest for path, digest in report["binaries"].items()):
+            raise ValueError(f"follow-up runtime file digests differ from {name}")
+        runtime[name] = files
+    hosted_files = runtime["hosted_runtime"]
+    a100_files = runtime["a100_runtime"]
+    if hosted_files.keys() != a100_files.keys():
+        raise ValueError("follow-up runtime file inventories differ")
+    differences = sorted(path for path, digest in a100_files.items() if digest != hosted_files[path])
+    if differences != candidate["differing_runtime_files"]:
+        raise ValueError("follow-up runtime file comparison drifted")
+
+    smoke = serving["smoke"]
+    if (serving["api_checks"] != 40 or serving["shutdown"] != "passed"
+            or smoke["seconds"] != 45 or smoke["rate"] != 8 or smoke["problems"] != 0
+            or smoke["completed"] <= 0 or smoke["client_disconnects"] <= 0
+            or smoke["client_disconnects"] != smoke["server_cancellations"]):
+        raise ValueError("follow-up package lacks passing A100 inference, cancellation and shutdown evidence")
 
 
 def check_distribution_serving(root, candidate):
@@ -440,7 +488,10 @@ def main():
     try:
         manifest = json.loads((root / MANIFEST).read_bytes(), object_pairs_hook=unique_object)
         files = check_evidence(root, manifest)
-        inputs = check_distribution_inputs(root, manifest)
+        inputs = check_distribution_inputs(root, manifest["current_distribution_candidate"])
+        latest = manifest["distribution_after_terminal_fix"]
+        latest_inputs = check_distribution_inputs(root, latest)
+        check_package_follow_up(root, latest)
         allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],
                                                   manifest["current_distribution_candidate"])
         serving_models = check_distribution_serving(root, manifest["current_distribution_candidate"])
@@ -448,16 +499,15 @@ def main():
         models = check_readme(root)
         revision = None
         if args.distribution_revision is not None:
-            revision = check_distribution_revision(root, manifest["current_distribution_candidate"],
-                                                   args.distribution_revision)
-    except (OSError, ValueError, KeyError, TypeError) as error:
+            revision = check_distribution_revision(root, latest, args.distribution_revision)
+    except (OSError, EOFError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as error:
         print(f"improvement evidence check failed: {error}", file=sys.stderr)
         return 1
-    print(f"improvement evidence verified: {files} file hashes, {inputs} recorded Git inputs, "
+    print(f"improvement evidence verified: {files} file hashes, {inputs} baseline and {latest_inputs} latest Git inputs, "
           f"{links} local links, {models} README performance rows and summary, "
           f"{allocator_reports} linked allocator reports, {serving_models} packaged serving rows")
     if revision is not None:
-        print(f"distribution source inputs match at {revision} ({inputs} recorded paths)")
+        print(f"distribution source inputs match at {revision} ({latest_inputs} recorded paths)")
     return 0
 
 

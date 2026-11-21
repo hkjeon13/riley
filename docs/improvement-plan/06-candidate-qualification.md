@@ -9,19 +9,22 @@
 | A100 네이티브 빌드 | `f7c956d3c` | CUDA 12.4, SM80. API, 장문 정확성, Qwen2.5-14B 성능, Qwen2.5-7B 운영 검증 |
 | Linux AMD64 배포 이미지 | `d3d8fe6e5` | CUDA 12.4, SM80·SM86·SM89. 이미지 빌드, 비루트 사용자, CLI, 동적 링크, 런타임 파일 무결성 |
 | A100에서 재빌드한 배포 이미지 | `d3d8fe6e5` | 이미지 ID `0a907408ec73`. A100 6번의 CUDA 드라이버 주입, Qwen2.5-7B-Instruct API 40건과 장문 출력 232건, Qwen2.5-32B-Instruct TP=2 API 40건과 C1·C8·C32 출력 대조, GPU 자원 회수. [32B TP=2 결과](05-mixed-soak-result.md#배포-이미지의-32b-tp2-장문-검증) |
+| 취소 순서 수정이 포함된 배포 이미지 | `36aa18805` | GitHub 이미지 `f87ebb07768c`, A100 이미지 `b731f48cc6ec`. 런타임 파일 21개 일치. Qwen2.5-7B-Instruct API 40건, 45초 혼합 부하·취소·자원 회수. [배포 이미지 재검증](05-mixed-soak-result.md#취소-순서-수정-이후의-배포-이미지) |
 | jemalloc을 포함한 파생 시험 이미지 | `d3d8fe6e5`의 실행 파일 | 이미지 ID `1fc444b1840e`. CPU 패키지 무결성, Qwen2.5-7B-Instruct API 40건, 두 캐시 모드 30분 운영 기준, 장문 출력 232건, 사전 성능 회귀 기준 통과. RAG C8 seed 2 꼬리 지연 증가 |
 
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)
 
-현행 배포 검증 이미지 `d3d8fe6e5`의 이미지 ID·Riley 실행 파일 해시를 보존했다. 이 이미지와 첫 감사 시점 `68788bee9`, 후속 감사 시점 `838103b02`의 배포 입력 Git 객체 14개가 모두 일치한다. 동일 Rust·CUDA 프로그램 입력인 `77c367003`에서는 CUDA 12.8 네이티브 빌드·C ABI·Clippy도 통과했다. [CUDA 12.4 이미지 원본](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/receipt.json) · [CUDA 12.8 네이티브 CI](https://github.com/hkjeon13/riley/actions/runs/44410425140)
+기준 배포 검증 이미지 `d3d8fe6e5`의 이미지 ID·Riley 실행 파일 해시를 보존했다. 이 이미지와 첫 감사 시점 `68788bee9`, 후속 감사 시점 `838103b02`의 배포 입력 Git 객체 14개가 모두 일치한다. 동일 Rust·CUDA 프로그램 입력인 `77c367003`에서는 CUDA 12.8 네이티브 빌드·C ABI·Clippy도 통과했다. [CUDA 12.4 이미지 원본](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/receipt.json) · [CUDA 12.8 네이티브 CI](https://github.com/hkjeon13/riley/actions/runs/44410425140)
 
-후속 W2 취소 순서 수정으로 `main`의 `crates/riley-server` 배포 입력이 달라졌다. 수정한 네이티브 바이너리는 A100에서 두 발행 모드의 API·취소·자원 회수를 통과했다. 기존 배포 이미지의 결과는 `d3d8fe6e5`에 연결하며, 새 소스의 이미지 빌드와 GPU 검증은 남아 있다. [취소 경계의 네이티브 검증](02-async-step-result.md#마지막-토큰-전달과-취소의-순서)
+후속 W2 취소 순서 수정 `36aa18805`의 네이티브 바이너리는 A100에서 두 발행 모드의 API·취소·자원 회수를 통과했다. GitHub는 전체 커밋 아카이브로 이미지 `f87ebb07768c`를, A100 호스트는 검증된 빌드 입력 Git 객체 1,037개로 이미지 `b731f48cc6ec`를 빌드했다. 두 이미지의 CPU 패키지 검사가 통과했고 Riley 바이너리를 포함한 런타임 파일 21개의 SHA-256이 일치했다. [취소 경계의 네이티브 검증](02-async-step-result.md#마지막-토큰-전달과-취소의-순서) · [GitHub 이미지 검사](https://github.com/hkjeon13/riley/actions/runs/44858195400) · [A100 이미지 검사](../../benchmarks/evidence/20261121-w5-current-package/a100-report.json)
 
 릴리스 검토에서는 아래 명령으로 원격 `main`의 배포 입력을 검증 이미지에 연결한다. 기록된 입력이 달라지면 변경된 경로를 출력하고 실패한다. 이미지·바이너리·모델의 실행 근거는 아래 표의 검증 시점과 장비에 연결된다. [검사 코드](../../ci/check_improvement_evidence.py)
 
 ```bash
 python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 ```
+
+이 명령은 `distribution_after_terminal_fix`에서 새 이미지의 호스팅 CPU·A100 CPU·A100 추론 보고서, 런타임 파일 목록과 Git 빌드 입력을 대조한다. 기준 이미지의 대표 모델·장문·TP=2와 파생 할당기 성능·장기 안정성은 각각의 실행 이미지에 연결된다. 새 이미지의 장기 운영 조건과 실제 트래픽·SLO 검증이 남아 있어 릴리스 판정은 보류다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 
 같은 명령은 `current_allocator_trial`의 여덟 검증 보고서를 대조한다. 파생 이미지의 패키징, 두 캐시 모드의 30분 부하, 장문 정확성, 성능 대조, 닫힌 RAG 확장 대조, 고정 도착 대조와 메트릭 조회 두 시험을 연결한다. 성능 시험은 실제 이미지·실행 인자·할당기 설정이 일치하고, 메트릭 조회 재시험은 첫 조회 시험의 검산 해시·체크포인트·요청 수에 맞아야 한다. 닫힌 부하의 RAG 꼬리 지연과 실제 운영 도착 분포·서비스 SLO 확인이 남아 있어 파생 이미지 릴리스를 보류한다. [파생 후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 

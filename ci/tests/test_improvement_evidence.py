@@ -107,6 +107,24 @@ class DistributionServingTests(unittest.TestCase):
                 checker.check_distribution_serving(root, candidate)
 
 
+class PackageFollowUpTests(unittest.TestCase):
+    def test_gpu_receipt_is_bound_to_the_reconstructed_package(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        candidate = manifest["distribution_after_terminal_fix"]
+        checker.check_package_follow_up(ROOT, candidate)
+
+        entry = candidate["evidence"]["a100_serving"]
+        changed = json.loads((ROOT / entry["path"]).read_bytes())
+        changed["image_id"] = "sha256:" + "0" * 64
+        raw = json.dumps(changed).encode("utf-8")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "a100-serving.json"
+            path.write_bytes(raw)
+            entry.update(path=str(path), sha256=sha256(raw).hexdigest())
+            with self.assertRaisesRegex(ValueError, "GPU serving is not bound to the A100 package"):
+                checker.check_package_follow_up(ROOT, candidate)
+
+
 class AllocatorTrialTests(unittest.TestCase):
     def setUp(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())

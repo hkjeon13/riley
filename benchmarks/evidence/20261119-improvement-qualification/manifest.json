@@ -3203,6 +3203,91 @@
       }
     }
   },
+  "distribution_after_terminal_fix": {
+    "source_revision": "36aa1880509941ad169be6cc327d6d89231f8b81",
+    "matching_distribution_input_git_objects": {
+      "Cargo.toml": "e75f6ce3a2ad13911f1a91fc2b982a410f9d32f2",
+      "Cargo.lock": "afa446f5b2f1ad1ba2070de2d16343cf7a7a0a70",
+      "rust-toolchain.toml": "67c827cf973f78b64274b37b54c5a99cff5ca055",
+      "crates": "140f1c87818c1e2baa78eca989b063d9f768680e",
+      "kernels": "7c3c0dfd2d7d04b694c8bd77c4e323081199f46f",
+      "third_party": "fcda977aec23d650259a7d1104d339f815d30e07",
+      "tools/riley-checkpoint": "375dc077ae7d32ba759b339d28f1ef8c370642b5",
+      ".dockerignore": "032839f0b4e1ab479f5a1069d69937ade5e44f7e",
+      ".github/workflows/distribution-image.yml": "8a4587aa0fccb0304fdc1c06333b4f138a503dab",
+      "deploy/docker": "4a585fa6e013d816c743760807ad422d270b404e",
+      "ci/check_distribution_image.py": "536a00bedb0675f19bf038395bf46e1996b82053",
+      "ci/check_serving_source_contract.py": "26abce96ca8eb573299613464e26bae94529a8ce",
+      "ci/serving-source-contract.json": "205b02603ad57d850071cb212c88fce965edd148",
+      "LICENSE": "1b4cfd2f88277e627300ec3a92f5c310807d125e"
+    },
+    "hosted_actions": {
+      "run_id": 44858195400,
+      "artifact_id": 14688920672,
+      "artifact_zip_sha256": "3c1f86fd37d45089a67c08a226f14e302c15db63bdfba8b09e10a4536bd90cd2"
+    },
+    "differing_runtime_files": [],
+    "evidence": {
+      "hosted_cpu": {
+        "path": "benchmarks/evidence/20261121-w5-current-package/hosted-report.json",
+        "sha256": "c65faf70d092db497022fc8b8118137adf645048e0cf8b40751fcdcbe074b0b5"
+      },
+      "hosted_runtime": {
+        "path": "benchmarks/evidence/20261121-w5-current-package/hosted-runtime.sha256",
+        "sha256": "d656545ca393322051c620df1213a5a5901aa42b7d739cd6522f51bd4ff7003b"
+      },
+      "a100_cpu": {
+        "path": "benchmarks/evidence/20261121-w5-current-package/a100-report.json",
+        "sha256": "9aba66838fb889e749e9a9235e0d633408d79917bc71a5924abb4cdc5396ddf3"
+      },
+      "a100_runtime": {
+        "path": "benchmarks/evidence/20261121-w5-current-package/a100-runtime.sha256",
+        "sha256": "b47b1aca6999a6f4c90a66cfeed6a9fb2b64c65c348163d4937630519f14eb9a"
+      },
+      "a100_serving": {
+        "path": "benchmarks/evidence/20261121-w5-current-package/verified-summary.json",
+        "sha256": "5be5512a75ea0a20cd121a4833f4b2a10f27e54a4508a869b1d76c09e3f4646e"
+      },
+      "a100_source_objects": {
+        "path": "benchmarks/evidence/20261121-w5-current-package/source-objects.tsv.gz",
+        "sha256": "1e78051429c3b2167cf81b850a477e42b000d47a39a85913a093683f1fd6d9bf"
+      }
+    },
+    "replay_inputs": [
+      {
+        "path": "benchmarks/evidence/20261121-w5-current-package/build_inputs.py",
+        "sha256": "d77a4f379d6bd425e2fef991c37126b0dda16bb40199d0de8b27797d14b4fb84"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w5-current-package/campaign.sh",
+        "sha256": "13fccdb0a1ff3c341f6fe325b5c8640f80d5af10845a72cc12652a7ac9a21437"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w5-current-package/dispatch.sha256",
+        "sha256": "ea5fefe530a104a691fa9a291339a17649a9952e4c461f4d2c01db0775e05056"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w5-current-package/engine.patch.gz",
+        "sha256": "6dc166d4832e68f3d9894dc8f6264e70720506f6fa4810a58e284291cb653916"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w5-current-package/fetch-summary.sh",
+        "sha256": "e2c2d4f4526a3f86cb307788ba424e8022988d20b92d281840e1fdce766ee17e"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w5-current-package/runtime-tools.sha256",
+        "sha256": "902144a0e14b8581d258e8c31ddebc54fd358bc39d28d3b56d990c318494bc7b"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w5-current-package/source-revision.txt",
+        "sha256": "b799cfa1261c231369d8458f2e00e319b5187fba6a085f64b9af4d8913a6c1d3"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w5-current-package/verify_package.py",
+        "sha256": "19de5dfb79868db14b8eea5179bca940b578642a8bf6508176eeeb8fdfca0d55"
+      }
+    ]
+  },
   "current_distribution_candidate": {
     "serving_reports": {
       "representative": {

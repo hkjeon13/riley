@@ -1,0 +1,49 @@
+{
+  "status": "passed",
+  "remote_stage": "w5-current-package-20261121.f6SEbjvA",
+  "source_revision": "36aa1880509941ad169be6cc327d6d89231f8b81",
+  "archive_kind": "verified committed build inputs",
+  "source_archive_sha256": "429f0132fed714f5af133f756e4374f21733ed4f27074b05f69b3b9930f5b6b6",
+  "source_objects_sha256": "b7f79f088eadba4399e2cd7024314ef9de65a137b3380d63ea8d249cd792b4ad",
+  "source_object_count": 1037,
+  "image_id": "sha256:b731f48cc6ec0820197ec484e98c673e2de592f12ab8448e3fa9f38ca7217c9b",
+  "riley_binary_sha256": "56112a5b9bd72e77106f45497af277038308af357a5c5ee129af74ce3cc85a0f",
+  "cpu_report_sha256": "9aba66838fb889e749e9a9235e0d633408d79917bc71a5924abb4cdc5396ddf3",
+  "gpu_report_sha256": "c54237e3243ea99b7afa6e012d57bf387ed72c5c6c3a88570fb808dcf35375ee",
+  "gpu_uuid": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "api_checks": 40,
+  "smoke": {
+    "seconds": 45.0,
+    "rate": 8.0,
+    "completed": 338,
+    "client_disconnects": 21,
+    "server_cancellations": 21,
+    "problems": 0,
+    "effective_server_args": [
+      "--max-active-sequences",
+      "32",
+      "--max-sequence-tokens",
+      "8192",
+      "--max-output-tokens",
+      "512",
+      "--kv-blocks",
+      "16384",
+      "--prefix-cache-blocks",
+      "128"
+    ]
+  },
+  "shutdown": "passed",
+  "idle_reservations": {
+    "6": {
+      "pid": 2680326,
+      "start_ticks": "6365879881",
+      "gib": 20
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "gib": 20
+    }
+  }
+}

@@ -126,6 +126,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W4: 투영 대안 두 개를 장문 29개의 실제 서빙에서 대조했다. 둘 다 배치 불변성을 유지했고 HF 전체 생성 일치가 기준 22/29에서 각각 18/29와 19/29로 줄어 기각했다. [Attention 출력](04-long-accuracy-result.md#계획-31-전체-서빙-대조와-판정) · [FP32 부분합 down projection](04-long-accuracy-result.md#fp32-부분합을-적용한-down-projection-전체-서빙-판정)
 - [x] W4: 문서화한 스키마 부분집합을 독립 판정과 대조하고, 미지원 제약의 오류를 검증했다. [스키마 검증](04-structured-output-result.md)
 - [x] W2: 마지막 출력 전달 전에 취소됐을 때 정상 완료가 전달되는 결함을 수정했다. 두 발행 모드의 CPU 회귀 검사와 A100 API·취소·종료 부하를 통과했다. [취소·종료 검증](02-async-step-result.md#마지막-토큰-전달과-취소의-순서)
+- [x] W1·W5: 취소 순서 수정이 포함된 최신 배포 이미지의 GitHub·A100 런타임 파일 21개를 대조하고 A100 API 40건과 45초 혼합 부하를 통과했다. [수정 이후 배포 이미지](05-mixed-soak-result.md#취소-순서-수정-이후의-배포-이미지)
 - [ ] W2·W3: 단독·결합 결과에서 기존 정확성·회귀 가드레일을 충족한다. W2의 단일 iteration 후보들은 처리량 이득이 재현되지 않아 미채택했고, W3의 1,024행 QKV 형상 공통 적용은 Coder-14B decode 회귀로 기각했다. [W2 다운로드 완료 확인 대조](02-async-step-result.md#결과-다운로드의-cuda-완료-확인-통합) · [W3 Coder-14B 결과](03-long-context-result.md#coder-14b의-1024행-후보-검증)
 - [x] W5: 대상 GPU에서 배포 이미지의 실제 추론과 cache-on·off 30분 부하 증거를 확보했다. [운영 결과와 판정](05-mixed-soak-result.md#배포-이미지의-혼합-부하)
 - [x] W5: 배포 이미지의 45초 smoke에서 2-KV-head GQA·Qwen3·MHA·14B의 API 계약, 혼합 부하·취소·종료 회수를 검증했다. [MHA·14B 결과](05-mixed-soak-result.md#배포-이미지의-mha와-14b-smoke) [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)
