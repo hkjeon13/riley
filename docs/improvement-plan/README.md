@@ -133,6 +133,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W3: Coder-14B에서 입장 경계의 스케줄러 계획을 CPU로 재현하고 45번의 송신 시각만 바꾼 A100 실행 480건을 대조했다. 기준과 후보의 prefill 순서가 같았던 네 비교에서 TTFT p95가 2.02–4.11% 줄었다. [입장 경계 검증](03-long-context-result.md#coder-14b의-입장-경계-재현)
 - [x] W3: 두 14B 모델의 32개 조건을 CPU에서 재생했다. 기록한 288개 계획을 기준에서 재현했고, 첫 prefill 우선순위 후보는 기존 시각 8개 조건의 8·9번째 선택만 바꿨다. [우선순위 CPU 검증](03-long-context-result.md#prefill-스텝-초반에-송신된-요청의-우선순위)
 - [x] W3: Coder-14B A100 시험 1,280건의 출력이 일치했다. 우선순위 후보는 50ms 유입의 TTFT p95를 4.23–4.45% 줄였고 decode TPOT p50이 5.57–5.68% 늘어 미채택했다. [우선순위 GPU 검증](03-long-context-result.md#coder-14b-서빙의-우선순위-교차-대조)
+- [x] W3: Coder-14B의 반복 문서 RAG에서 prefix cache로 TTFT p95가 약 96% 줄었다. 두 순서에서 328쌍의 출력이 일치했다. 짧은 C32의 역순 TTFT p50은 3.03% 늘어 혼합 서비스 기준을 넘었다. [반복 문서 대조](03-long-context-result.md#coder-14b-반복-문서의-prefix-cache)
 - [ ] W3: 1,024행 QKV 형상 공통 적용은 Coder-14B decode 회귀로 기각했다. 일부 RAG의 TTFT 목표와 Coder-14B의 C32 목표는 현재 기본 경로에서 미달이다. [Coder-14B 결과](03-long-context-result.md#coder-14b의-1024행-후보-검증) · [현재 적용 판정](03-long-context-and-scheduling.md#현재-적용-판정)
 - [x] W5: 대상 GPU에서 배포 이미지의 실제 추론과 cache-on·off 30분 부하 증거를 확보했다. [운영 결과와 판정](05-mixed-soak-result.md#배포-이미지의-혼합-부하)
 - [x] W5: 배포 이미지의 45초 smoke에서 2-KV-head GQA·Qwen3·MHA·14B의 API 계약, 혼합 부하·취소·종료 회수를 검증했다. [MHA·14B 결과](05-mixed-soak-result.md#배포-이미지의-mha와-14b-smoke) [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)

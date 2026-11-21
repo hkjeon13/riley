@@ -41,7 +41,7 @@ def prompt(rng, words):
             f"Using only the document above as inspiration, write a detailed story about {topic}.")
 
 
-async def one(host, port, body, started_at, record, *, capture_hashes=False):
+async def one(host, port, body, started_at, record, *, capture_hashes=False, capture_token_ids=False):
     request = json.dumps(body).encode()
     output_hash = hashlib.sha256() if capture_hashes else None
     if capture_hashes:
@@ -51,6 +51,8 @@ async def one(host, port, body, started_at, record, *, capture_hashes=False):
     times = []
     usage = {}
     finish = None
+    prompt_ids = None
+    token_ids = []
     done = False
     writer = None
     try:
@@ -82,6 +84,12 @@ async def one(host, port, body, started_at, record, *, capture_hashes=False):
             if chunk.get("usage"):
                 usage = chunk["usage"]
             for choice in chunk.get("choices") or []:
+                if capture_token_ids:
+                    if "prompt_token_ids" in choice:
+                        if prompt_ids is not None:
+                            raise ValueError("duplicate streamed prompt IDs")
+                        prompt_ids = choice["prompt_token_ids"]
+                    token_ids.extend(choice.get("token_ids", []))
                 content = choice.get("delta", {}).get("content")
                 if content:
                     times.append(time.perf_counter())
@@ -108,6 +116,17 @@ async def one(host, port, body, started_at, record, *, capture_hashes=False):
         record.update(status=200, error=True, detail="missing/invalid token usage")
         return
     completion = usage["completion_tokens"]
+    if capture_token_ids:
+        cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)
+        if (not isinstance(prompt_ids, list) or len(prompt_ids) != usage["prompt_tokens"]
+                or len(token_ids) not in (completion, completion - int(finish == "stop"))
+                or any(type(token) is not int or not 0 <= token < 2**32 for token in (*prompt_ids, *token_ids))
+                or type(cached) is not int or not 0 <= cached < len(prompt_ids) or cached % 16 != 0):
+            record.update(status=200, error=True, detail="inconsistent streamed token IDs or cached usage")
+            return
+        record["prompt_ids_sha256"] = hashlib.sha256(json.dumps(prompt_ids).encode()).hexdigest()
+        record["token_ids_sha256"] = hashlib.sha256(json.dumps(token_ids).encode()).hexdigest()
+        record["cached_tokens"] = cached
     record.update(
         status=200, error=False, finish=finish, start=started_at,
         prompt_tokens=usage["prompt_tokens"], completion_tokens=completion,

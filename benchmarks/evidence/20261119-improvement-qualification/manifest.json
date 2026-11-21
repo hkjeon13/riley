@@ -281,6 +281,40 @@
     "gpu_inference": "pending"
   },
   "other_evidence": {
+    "coder14_repeated_rag_cache": [
+      {
+        "path": "benchmarks/evidence/20261121-w3-coder-rag-cache/campaign.sh",
+        "sha256": "0296f0a2c5e386305bbd7c900568447b35ef77255f77e2f0f81441b8c6fcc7c2"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-coder-rag-cache/dispatch.sha256",
+        "sha256": "d29b95288e15da639bf21b5591c655cc0215546b721e1dc7d17799d2d9a60f81"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-coder-rag-cache/fetch-summary.sh",
+        "sha256": "786c98fb5562a3a785397f79b8ab7f9f0f899a768176cf10f581d3952160e15d"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-coder-rag-cache/first-pair-dispatch.sha256",
+        "sha256": "4c66e9809fe3ba98afb53a8233fa0d01f05781da6ea7d155307effe153740f95"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-coder-rag-cache/run_arm.py",
+        "sha256": "30d8d55788c97bdc1729db5cccfcc0386dc4d319a5a35c32bbeca640c6a15c25"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-coder-rag-cache/verified.json",
+        "sha256": "fea3d14f0646012ce6de7aa8b757d52ced112d9864b8f32275c41af179f38471"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-coder-rag-cache/verify.py",
+        "sha256": "8076f9cc1130e18db60d137bb7dd01e2d8fc10a3ae0e1620163aa36b53296a48"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w3-coder-rag-cache/workload.py",
+        "sha256": "39b9e50eae9e2b42541cb02fe7d6981cc2e07a76a4a475b40091862347b6e6bc"
+      }
+    ],
     "current_distribution_structured_holdout": [
       {
         "path": "benchmarks/evidence/20261121-w4-structured-holdout/campaign.sh",
