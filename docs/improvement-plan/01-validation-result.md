@@ -151,6 +151,8 @@ CPU에서는 이미지·실행 파일 식별, 체크포인트 해시 오류, API
 
 같은 컨테이너에서 기존 장문 18개를 대조하려면 `--accuracy-baseline GOLDEN`을 추가한다. 11개 검증 입력은 `--accuracy-holdout WORKLOAD GOLDEN`으로 검사한다. 두 옵션을 함께 사용하면 기존 정확도 검증의 활성 요청 32개, 문맥 8,192토큰, 생성 상한 256토큰을 적용한다. C1 일반·진단 요청과 C8·C32에서 세 번씩 수집한 후보의 결과를 고정 Riley 캡처와 대조하고, 이미지 보고서에 기준 캡처 및 새 원본의 SHA-256을 남긴다. [장문 기준 캡처](../../benchmarks/evidence/20261119-w4-long/riley/capture.json.gz) · [별도 검증 입력](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [별도 기준 캡처](../../benchmarks/evidence/20261119-w4-holdout/riley/capture.json.gz)
 
+장문 채팅의 구조화 출력은 `--tools --structured-holdout WORKLOAD`로 검사한다. `WORKLOAD`는 같은 Qwen2.5-7B 입력 fixture이며 검사 호스트의 Python에 `jsonschema`가 필요하다. JSON 응답과 강제 도구 호출을 스트리밍과 비스트리밍으로 실행해 Draft 2020-12 판정, 종료 사유, 토큰 ID, 사용량을 대조한다. `--accuracy-baseline`이나 `--accuracy-holdout`과 같은 컨테이너에서 실행할 수 있다. [입력 fixture](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz)
+
 배포 이미지에서 운영 부하를 검사하려면 `--mixed-soak cache-off` 또는 `--mixed-soak cache-on`을 새 출력 경로와 함께 지정한다. 각 실행은 기존 W5 구성의 30분 혼합 부하를 사용하고 컨테이너의 실제 Riley 프로세스에서 정밀 RSS를 읽는다. RSS 판정이 실패해도 서버를 정상 종료하고 자원 회수와 원본 체크섬을 보고서에 남긴다. 장문과 혼합 부하는 각자의 출력 상한을 적용하는 별도 실행이다. [운영 시험 절차](05-mixed-soak-result.md#배포-이미지의-혼합-부하)
 
 W2·W3는 이 runner의 새 label·실패 판정·실행 argv/해시를 사용한다. W4는 정확성 판정 결과를 같은 후보에 결속한다. W5는 현행 이미지와 네이티브 GPU 실행 근거를 릴리스 문서에 연결한다. M5 판정에는 동일 후보의 패키징·GPU 실행·품질 근거가 필요하다.

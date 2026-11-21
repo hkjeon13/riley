@@ -281,6 +281,36 @@
     "gpu_inference": "pending"
   },
   "other_evidence": {
+    "current_distribution_structured_holdout": [
+      {
+        "path": "benchmarks/evidence/20261121-w4-structured-holdout/campaign.sh",
+        "sha256": "73df6c102a09b92465745015c5dda28c056fb0850d4e5b3ca3758862b1d9c325"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w4-structured-holdout/dispatch.sha256",
+        "sha256": "4104d6a88242f7be33f31cecdeb9bd3d12c6c8b8880db179a8f46c3827c037b6"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w4-structured-holdout/fetch-summary.sh",
+        "sha256": "3225cc742911bfb7b1b69da1543710219587d7e92a37d0fdd4e27677c2d04275"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w4-structured-holdout/run_holdout.py",
+        "sha256": "697c2d8993b9f5460cf89b18db9f0a474cae088d4a9f8442edd46a12e4976a1f"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w4-structured-holdout/verified-holdout.json",
+        "sha256": "76be8f06913edcbf2c702877901be71816da288333ac27c56f0ee054ad20f0c9"
+      },
+      {
+        "path": "benchmarks/evidence/20261121-w4-structured-holdout/verify_holdout.py",
+        "sha256": "c3cde74ac0dd520da6413f6b5796a4c650f787c90cbadbfb9f56e58fed028d98"
+      },
+      {
+        "path": "benchmarks/live/structured_holdout_check.py",
+        "sha256": "40281f5d0a51e998d2a253197e94f32dcd344c3ba9b30d71933eba9076a878b5"
+      }
+    ],
     "current_distribution_batch_shapes": [
       {
         "path": "benchmarks/evidence/20261121-w5-current-batch-shapes/campaign.sh",

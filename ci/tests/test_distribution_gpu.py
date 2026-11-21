@@ -134,7 +134,7 @@ class DistributionGpuTest(unittest.TestCase):
             case _:
                 self.fail(f"unexpected Docker command {args!r}")
 
-    def check(self, model_hash=None, **kwargs):
+    def check(self, model_hash=None, *, tools=False, **kwargs):
         def log_command(out, file, argv, _seconds, **_kwargs):
             (out / file).write_text("fixture log\n")
             if file == "api.log":
@@ -205,7 +205,7 @@ class DistributionGpuTest(unittest.TestCase):
               patch.object(checker, "wait_ready", return_value={"ready": True, "accepting": True}),
               patch.object(checker, "log_command", log_command),
               patch.object(checker.subprocess, "run", copy_shutdown)):
-            return checker.check_gpu(self.cpu_report, self.gpu, self.root, model_hash or self.model_hash, self.out, False,
+            return checker.check_gpu(self.cpu_report, self.gpu, self.root, model_hash or self.model_hash, self.out, tools,
                                      **kwargs)
 
     def test_report_binds_the_image_process_and_api(self):
@@ -232,6 +232,19 @@ class DistributionGpuTest(unittest.TestCase):
         self.assertEqual(report["accuracy_server_arguments"][:2], ["--max-active-sequences", "32"])
         create = next(call for call in self.calls if call[0] == "create")
         self.assertEqual(list(create[-6:]), report["accuracy_server_arguments"])
+
+    def test_structured_holdout_binds_the_live_report_and_requires_tools(self):
+        workload = self.root / "workload.json.gz"
+        with self.assertRaisesRegex(ValueError, "requires a tool-compatible checkpoint"):
+            self.check(structured_holdout=workload)
+        result = {"workload_sha256": "a" * 64, "c1_transport_pairs": 8}
+        with patch.object(checker, "check_structured_holdout", return_value=result) as holdout:
+            self.check(structured_holdout=workload, tools=True)
+        holdout.assert_called_once_with(self.out, "127.0.0.1:44321", workload)
+        report = json.loads((self.out / "report.json").read_bytes())
+        self.assertEqual(report["accuracy_suites"]["structured_holdout"], result)
+        self.assertEqual(report["accuracy_server_arguments"], ["--max-active-sequences", "32",
+                         "--max-sequence-tokens", "8192", "--max-output-tokens", "256"])
 
     def test_positive_soak_growth_fails_after_graceful_shutdown(self):
         self.soak_growth_kib = 512

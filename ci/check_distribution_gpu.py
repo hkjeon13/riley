@@ -22,6 +22,7 @@ CHECKPOINT = "riley-checkpoint.json"
 SHUTDOWN = "/tmp/riley-distribution-shutdown.json"
 API_CHECK = Path(__file__).resolve().parents[1] / "benchmarks/live/api_check.py"
 ACCURACY_CHECK = API_CHECK.with_name("long_accuracy.py")
+STRUCTURED_HOLDOUT_CHECK = API_CHECK.with_name("structured_holdout_check.py")
 SOAK_CHECK = API_CHECK.with_name("soak.py")
 MIXED_STAGE_CHECK = API_CHECK.with_name("mixed_stage_check.py")
 TP_HOLDOUT_CHECK = API_CHECK.with_name("tp_holdout_check.py")
@@ -127,6 +128,26 @@ def check_accuracy(out, address, label, golden, workload=None):
             f"{label} accuracy evidence failed or changed")
     return {"golden_sha256": result["golden_sha256"], "workload_sha256": result["workload_sha256"],
             "verified_requests": sum(mode["matched"] for mode in result["modes"].values())}
+
+
+def check_structured_holdout(out, address, workload):
+    result_file = out / "structured-holdout.json"
+    workload_sha256 = digest(workload)
+    log_command(out, "structured-holdout.log", [sys.executable, "-B", str(STRUCTURED_HOLDOUT_CHECK), address,
+                                               "m", str(workload), "--out", str(result_file)], 900)
+    result = json.loads(result_file.read_bytes())
+    modes = result["modes"]
+    rejection = result["context_rejection"]
+    require(result["status"] == "passed" and result["workload_sha256"] == workload_sha256 == digest(workload)
+            and result["c1_transport_pairs"] == 8 and len(result["cases"]) == 16
+            and rejection["http_status"] == 400 and rejection["error_code"] == "invalid_request"
+            and rejection["sequence_tokens_requested"] > rejection["max_sequence_tokens"] == 8192
+            and {mode: row["requests"] for mode, row in modes.items()} == {"c1": 16, "c8": 16, "c32": 32}
+            and modes["c1"]["observed_peak_active"] == 1
+            and all(modes[mode]["requests"] == modes[mode]["exact_matches"]
+                    and 2 <= modes[mode]["observed_peak_active"] <= concurrency
+                    for mode, concurrency in (("c8", 8), ("c32", 32))), "invalid structured holdout receipt")
+    return result
 
 
 def current_batch_shapes(sample):
@@ -241,18 +262,20 @@ def find_interrupted_container(name):
 
 def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_baseline=None, accuracy_holdout=None,
               mixed_soak=None, serving_smoke=False, smoke_kv_blocks=None, expect_tools_unsupported=False,
-              mixed_stage=False, tp_holdout=None):
+              mixed_stage=False, tp_holdout=None, structured_holdout=None):
     require(GPU_UUID.fullmatch(gpu) and SHA256.fullmatch(model_sha), "pass a GPU UUID and model SHA-256")
-    require(mixed_soak is None or (mixed_soak in CACHE_BLOCKS and not (accuracy_baseline or accuracy_holdout)),
+    long_accuracy = accuracy_baseline or accuracy_holdout or structured_holdout
+    require(mixed_soak is None or (mixed_soak in CACHE_BLOCKS and not long_accuracy),
             "select mixed soak or long accuracy for each container")
-    require(not serving_smoke or not (accuracy_baseline or accuracy_holdout or mixed_soak),
+    require(not serving_smoke or not (long_accuracy or mixed_soak),
             "select serving smoke separately from mixed soak and long accuracy")
-    require(not mixed_stage or not (accuracy_baseline or accuracy_holdout or mixed_soak or serving_smoke),
+    require(not mixed_stage or not (long_accuracy or mixed_soak or serving_smoke),
             "select the mixed-stage probe separately from other workloads")
+    require(structured_holdout is None or tools, "structured holdout requires a tool-compatible checkpoint and --tools")
     if tp_holdout is not None:
         peer, tp_workload = tp_holdout
         require(gpu != peer and GPU_UUID.fullmatch(peer), "TP=2 needs a distinct peer GPU UUID")
-        require(not (accuracy_baseline or accuracy_holdout or mixed_soak or serving_smoke or mixed_stage),
+        require(not (long_accuracy or mixed_soak or serving_smoke or mixed_stage),
                 "select the TP=2 holdout separately from other workloads")
         tp_workload = Path(tp_workload).resolve(strict=True)
     require(not expect_tools_unsupported or serving_smoke and not tools,
@@ -298,7 +321,7 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
         server_args = ("--inference-profile", "native-bf16-varlen-v1", "--tensor-parallel-devices", "0,1",
                        "--max-active-sequences", "32", "--max-sequence-tokens", "8192",
                        "--max-output-tokens", "256", "--kv-blocks", "2048")
-    elif accuracy_baseline or accuracy_holdout:
+    elif long_accuracy:
         server_args = ("--max-active-sequences", "32", "--max-sequence-tokens", "8192", "--max-output-tokens", "256")
     elif mixed_soak is not None:
         server_args = (*MIXED_SERVER_ARGS, "--kv-blocks", "16384")
@@ -369,6 +392,8 @@ def check_gpu(cpu_report, gpu, model_dir, model_sha, out, tools, *, accuracy_bas
         if accuracy_holdout is not None:
             workload, golden = accuracy_holdout
             accuracy["holdout"] = check_accuracy(out, address, "holdout", golden, workload)
+        if structured_holdout is not None:
+            accuracy["structured_holdout"] = check_structured_holdout(out, address, structured_holdout)
         if mixed_soak is not None:
             soak = check_mixed_soak(out, address, mixed_soak, container, riley_pid)
         if serving_smoke:
@@ -466,6 +491,8 @@ def main():
                         help="compare the historical long-context workload against a Riley capture")
     parser.add_argument("--accuracy-holdout", type=Path, nargs=2, metavar=("WORKLOAD", "GOLDEN"),
                         help="compare the pinned holdout against a Riley capture")
+    parser.add_argument("--structured-holdout", type=Path, metavar="WORKLOAD",
+                        help="validate long-context JSON and forced tools with a pinned holdout; requires --tools and jsonschema")
     parser.add_argument("--mixed-soak", choices=CACHE_BLOCKS, help="run the strict 30-minute W5 load in this cache mode")
     parser.add_argument("--serving-smoke", action="store_true",
                         help="combine API checks with 45 seconds of mixed traffic and cancellation")
@@ -485,7 +512,7 @@ def main():
                      accuracy_baseline=args.accuracy_baseline, accuracy_holdout=args.accuracy_holdout,
                      mixed_soak=args.mixed_soak, serving_smoke=args.serving_smoke, smoke_kv_blocks=args.smoke_kv_blocks,
                      expect_tools_unsupported=args.expect_tools_unsupported, mixed_stage=args.mixed_stage,
-                     tp_holdout=args.tp_holdout)
+                     tp_holdout=args.tp_holdout, structured_holdout=args.structured_holdout)
 
 
 if __name__ == "__main__":

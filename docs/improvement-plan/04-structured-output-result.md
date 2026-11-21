@@ -13,3 +13,13 @@
 - 전용 서버 종료 이후 `aws-a100` GPU 6·7의 동일 홀더가 각각 20GiB 대기 예약을 유지했고 별도 compute process는 없었다. [예약 기록](../../benchmarks/evidence/20261119-w4-schema/gpu-reservation.json)
 
 이번 검증 범위는 문서화한 스키마 부분집합과 한 모델의 GPU API다. W4-A의 HF 장문 분기 추적과 다른 모델군, 운영 soak는 이후 단계에서 확인한다.
+
+## 현행 배포 이미지의 장문 채팅 검증
+
+Qwen2.5-7B-Instruct의 고정 입력에서 255·1,024·7,836·7,917토큰 사례를 선택했다. 각 입력을 채팅 메시지로 보내 `type`과 `enum`의 교집합 및 정수 `const`를 포함한 JSON 스키마를 검사했다. 같은 스키마를 이름이 지정된 도구의 인자로도 적용했다. 서버가 붙인 채팅 템플릿까지 포함한 입력 ID와 생성 ID·텍스트·도구 인자·종료 사유·사용량을 대조했다. 스키마와 도구 인자는 독립 Draft 2020-12 검증기로 검사했다. [고정 입력](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [검사기](../../benchmarks/live/structured_holdout_check.py)
+
+가장 긴 도구 요청의 렌더링 입력은 8,116토큰이었다. 출력 상한 64토큰은 정상 완료했고, 같은 요청에 96토큰을 지정하면 HTTP 400 `invalid_request`를 반환했다. 요청 예산 합계는 8,212토큰이다. 스케줄러의 최대 KV 길이는 마지막 생성 토큰을 제외한 8,211토큰으로, 설정 상한 8,192를 초과했다. [스케줄러의 길이 계산](../../crates/riley-scheduler/src/scheduler.rs)
+
+2026-11-21 KST에 `aws-a100`의 A100 6번에서 기준 이미지 `b731f48cc6ec`와 jemalloc 파생 이미지 `c3fae872c532`를 실행했다. 같은 코드 리비전 `36aa1880`, 실행 파일, 체크포인트를 확인했다. 각 이미지의 단독 요청 16건에서 스트리밍과 비스트리밍 여덟 쌍이 일치했다. C8 16건과 C32 32건은 해당 단독 응답과 같았다. 두 이미지에서 관측한 최대 활성 요청은 C8에서 8건, C32에서 31건이었다. 이미지 간 단독 응답 해시도 16/16건 일치했다. [검산 결과와 원본 보고서 해시](../../benchmarks/evidence/20261121-w4-structured-holdout/verified-holdout.json)
+
+각 이미지의 일반 API 40건도 통과했다. 종료 코드 0과 활성·대기 요청, KV, device·pinned 할당 0을 확인했다. 각 실행 전후 A100 6·7번의 동일 홀더와 20GiB 예약을 검증했다. 장문 결과의 적용 범위는 이 체크포인트의 고정 입력과 지정 도구 호출이다. [실행 순서](../../benchmarks/evidence/20261121-w4-structured-holdout/campaign.sh) · [독립 검산](../../benchmarks/evidence/20261121-w4-structured-holdout/fetch-summary.sh)

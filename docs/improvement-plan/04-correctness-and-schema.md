@@ -62,7 +62,7 @@ CUDA·cuBLAS·PyTorch·Transformers와 attention backend를 기록한다. GPU �
 
 Qwen2.5-7B의 검증된 tokenizer로 별도 greedy holdout 11개를 고정했다. 입력은 255/256/257, 511/512/513, 1,023/1,024/1,025, 7,836, 7,917토큰이다. 한국어·일본어·코드·숫자·반복 작업을 포함하며, 출력 상한은 64·128·256토큰이다. 입력과 출력 상한의 합은 최대 8,173토큰이다. 도구는 Riley가 반환하는 입력 ID와 Hugging Face tokenizer가 만드는 ID를 각각 fixture에 맞춰 검사한다. 같은 raw ID를 vLLM에도 보내고 응답에서 입력 ID를 대조한다. Riley는 C1을 기준으로 C8·C32에서 각 입력을 세 번 반복한다. [고정 입력과 토큰 ID (gzip)](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [GPU 실행 명령](../../benchmarks/evidence/20261119-w4-holdout/tools/run_accuracy.py)
 
-이번 fixture는 greedy 생성과 배치에 따른 출력 차이를 확인한다. 실행은 W5-B의 두 혼합 부하 조건이 종료된 뒤 같은 GPU 7에서 순서대로 시작한다. 장문 schema/tool과 GSM8K 전수 비교는 별도의 실행 항목이다. [GPU 예약 및 실행 순서](../../benchmarks/evidence/20261119-w4-holdout/campaign.sh)
+이 fixture는 greedy 생성과 배치에 따른 출력 차이를 확인한다. 첫 실행은 W5-B의 두 혼합 부하 뒤 같은 GPU 7에서 진행했다. 장문 스키마와 도구 호출 검사는 같은 fixture 중 네 입력을 채팅으로 보내며 서버가 템플릿을 적용한 뒤의 토큰 수를 확인한다. [기존 GPU 실행 순서](../../benchmarks/evidence/20261119-w4-holdout/campaign.sh) · [배포 이미지 검증 방법](01-validation-result.md#배포-이미지-gpu-검사)
 
 GSM8K는 기존 train 7,473행과 test 1,319행의 파일 해시를 고정했다. 기존 세 모델인 Qwen2.5-7B, Llama-3.2-3B, Qwen3-4B와 두 KV-head 모델 Qwen2.5-3B를 Riley·vLLM에서 전수 비교한다. 두 엔진에서 4-shot, greedy, 최대 256토큰, `Question:` 종료 문자열, 문맥 4,096과 클라이언트 동시성 32를 사용한다. 요청 본문과 서버가 받은 토큰 ID를 모두 대조하고, 응답 오류가 하나라도 있으면 점수 비교는 무효다. [고정 데이터](../../benchmarks/evidence/20261119-w4-gsm8k/dataset.json) · [비교 검사기](../../benchmarks/evidence/20261119-w4-gsm8k/tools/compare_gsm8k.py)
 
@@ -140,6 +140,7 @@ CPU에서 과거 세 Riley 결과의 1,319문항별 정오를 각각 재계산�
 - [x] W4-A: FP32 부분합 down 계획 21을 전체 서빙에 적용해 장문 29개를 대조했다. C8·C32 각각 87건은 후보 C1과 일치했고 HF 전체 생성 일치는 22→19개로 줄어 후보를 기각했다. [전체 서빙 판정](04-long-accuracy-result.md#fp32-부분합을-적용한-down-projection-전체-서빙-판정)
 - [ ] W4-A: 결함 수정 또는 수치 기준 변경의 영향 모델·품질 결과가 명확하다. 모든 HF 문자열을 무조건 같게 만들었다고 과장하지 않는다.
 - [x] W4-B: 지원 제약의 독립 판정, 미지원 응답, `oneOf`·형제 제약 반례를 검증했다. [구조화 출력 계약 결과](04-structured-output-result.md)
+- [x] W4-B: 현행 이미지 두 개에서 고정 장문 스키마와 지정 도구 호출을 각각 64건 확인했다. 동시 요청 48건은 단독 응답과 일치했고 상한 초과 요청은 400으로 거부됐다. [장문 채팅 결과](04-structured-output-result.md#현행-배포-이미지의-장문-채팅-검증)
 - [ ] 공통: 배치 불변성·기존 품질 범위·W2/W3 성능 회귀 제한을 함께 만족한다.
 
 W1은 이 검사를 필수 후보 판정에 연결한다. W2·W3는 같은 corpus·raw token·oracle을 사용하고 수치 변경 여부를 선언한다. W5는 API 지원표·known limitation·모델별 품질 주장을 갱신한다. 스키마 수정의 회수 시에도 약한 의미를 숨겨 성공시키지 말고 이전 계약·문서·버전을 함께 복구한다.
