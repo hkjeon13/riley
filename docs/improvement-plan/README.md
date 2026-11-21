@@ -130,6 +130,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W2: SmolLM2 `reason-c32`에서 정렬된 KV 테이블과 이벤트 데이터 복사 제거는 가드레일을 충족했고 두 후보의 처리량 이득은 각각 2% 미만이었다. 계획의 종료 기준에 따라 이 범위의 후보 평가는 마쳤다. [종료 기준](02-async-step.md#6-성능완료-판정) · [후보 판정](02-async-step-result.md#커밋된-이벤트-데이터의-복사-제거)
 - [x] W2·W3: 발행 정책과 wide prefill 행 상한의 네 조합에서 출력 정확성과 TTFT·TPOT·ITL 비용을 대조했다. 이 결과를 근거로 Qwen2.5-0.5B에서 기본 발행 정책과 wide 기준을 유지한다. [네 조합 검증](03-long-context-result.md#w2-이벤트-발행과-묶음-정책의-상호작용)
 - [x] W3: Coder-14B의 50ms 유입에서 동일 요청의 TTFT 증가 528–540ms를 재현했다. 두 실행 순서에서 prefill 조각 사이 대기가 382–391ms 늘었다. [Coder-14B 계측](03-long-context-result.md#coder-14b-실측의-prefill-대기-구간)
+- [x] W3: Coder-14B에서 입장 경계의 스케줄러 계획을 CPU로 재현하고 45번의 송신 시각만 바꾼 A100 실행 480건을 대조했다. 기준과 후보의 prefill 순서가 같았던 네 비교에서 TTFT p95가 2.02–4.11% 줄었다. [입장 경계 검증](03-long-context-result.md#coder-14b의-입장-경계-재현)
 - [ ] W3: 1,024행 QKV 형상 공통 적용은 Coder-14B decode 회귀로 기각했다. 일부 RAG의 TTFT 목표와 Coder-14B의 C32 목표는 현재 기본 경로에서 미달이다. [Coder-14B 결과](03-long-context-result.md#coder-14b의-1024행-후보-검증) · [현재 적용 판정](03-long-context-and-scheduling.md#현재-적용-판정)
 - [x] W5: 대상 GPU에서 배포 이미지의 실제 추론과 cache-on·off 30분 부하 증거를 확보했다. [운영 결과와 판정](05-mixed-soak-result.md#배포-이미지의-혼합-부하)
 - [x] W5: 배포 이미지의 45초 smoke에서 2-KV-head GQA·Qwen3·MHA·14B의 API 계약, 혼합 부하·취소·종료 회수를 검증했다. [MHA·14B 결과](05-mixed-soak-result.md#배포-이미지의-mha와-14b-smoke) [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)
