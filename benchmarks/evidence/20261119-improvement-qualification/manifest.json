@@ -3208,6 +3208,40 @@
         "sha256": "87a98a374330806ad8821e602b0abe1d3256d572513853d06db86aa15643eb79"
       }
     ],
+    "prefill_dispatch_priority_cpu": [
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/check_early_priority.py",
+        "sha256": "e96d3b977dbd76b2bebe956e7443360019b04d5bf7f8342a9ea6ee2e93c8fd7a"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/coder-phase-inputs.json",
+        "sha256": "b2cc3aa6d985edd357e1d5146c033cd322906f56209e10e60238a79a05ec22e3"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/confirmation-inputs.json",
+        "sha256": "f425fdc6abcb386568f8de918fd9e0fd8f86dd776c27cdaa78ca14d74565e319"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/early-prefill-priority.patch.gz",
+        "sha256": "b76f5e9303577b43e9fbc30757ac8f26f443327cd857eb55c73b68ce92ee105a"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/extract_priority_inputs.py",
+        "sha256": "16747b06ae0a49537c8fe0cc58ebd5cbd600d13495c31c0a97a374392503f244"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/replay_early_priority.rs",
+        "sha256": "4eb011686e9b7d87b78561ba683c0abe79d9ec8dbf8ce2270068476be3bbc305"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/run_replay.sh",
+        "sha256": "462ae2a67643c12ab3c8db965ccb60f5ca637a4815135862d92283c57d62b393"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/verified-replay.json",
+        "sha256": "1c71f1aea03f177c7eb0a99846cda7cbb1c96262b8eca9dcca1f1e76d9949bd1"
+      }
+    ],
     "qwen14_qkv_1024_serving_result": {
       "decision": "keep_as_isolated_experiment_inconsistent_rag_tail_latency",
       "evidence": [

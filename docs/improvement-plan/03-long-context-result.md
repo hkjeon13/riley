@@ -476,6 +476,14 @@ A100 7번에서 앞선 Qwen2.5-14B 요청 계측용 CUDA 바이너리를 그대�
 
 재현 시 공용 실행기 `prepare_phase_probe.py`를 복사해 `dispatch.sha256`을 확인한다. 분석에는 `analysis.sha256`에 기록한 공용 분석기와 앞선 Coder-14B의 `traced-waves/verified-trace.json`을 `source-trace-report.json`으로 사용한다. [공용 Rust 재생기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/replay_wave.rs) · [공용 실행기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/phase-gpu/prepare_phase_probe.py) · [A100 실행 순서](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/admission-boundary/campaign.sh) · [독립 검산](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/coder14/admission-boundary/fetch-summary.sh)
 
+##### prefill 스텝 초반에 송신된 요청의 우선순위
+
+입장 시각 자체는 유지하고 첫 prefill의 정렬에만 적용하는 규칙을 격리 스케줄러에서 시험했다. 직전 prefill 스텝의 처음 5% 이내에 송신되고 스텝 종료 후 250µs 이내에 즉시 입장한 요청에 해당 스텝 종료 시각보다 1ns 앞선 정렬 키를 준다. 기존 대기·aging 시각과 KV 입장 조건을 사용하며, decode가 준비된 스텝은 기존 정렬을 쓴다. 5%와 250µs는 관측한 입장 경계를 검증하기 위한 진단값이다. [격리 스케줄러 패치](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/early-prefill-priority.patch.gz)
+
+두 모델의 송신 시각 교차 실험 24개 조건과 별도로 기록한 기존 시각 8개 조건을 재생했다. 원본 스케줄러와 규칙을 끈 진단 스케줄러는 기록된 첫 9스텝 전부, 총 288개 계획과 일치했다. 규칙을 켜면 기존 시각의 후보군 8개 조건에서 8·9번째 선택만 41→45에서 45→41로 바뀌었다. 두 모델의 앞·뒤 오프셋 조건과 나머지 기준군은 기존 계획을 재현했다. 경계값과 decode 우선순위를 확인하는 두 테스트를 포함해 진단 스케줄러의 단위 테스트 38개가 통과했다. [CPU 대조 결과](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/verified-replay.json) · [별도 계측 입력](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/confirmation-inputs.json)
+
+CPU 재생은 기존 GPU 스텝의 시간을 고정했다. 후보의 실제 TTFT·TPOT, 출력 토큰 일치와 혼합 부하 회귀는 GPU 검증 범위에 남아 있다. [재현 실행기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/run_replay.sh) · [공용 컴파일 도구](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/compile_replay.py) · [공용 기준 재생기](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/replay_wave.rs) · [Qwen2.5-14B 재생 입력](../../benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/traced-follow-up/command-clock-cpu/cpu-ready-inputs.json)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

@@ -1,0 +1,465 @@
+{
+  "scope": "Recorded first nine prefill-only plans with fixed admission and completion times.",
+  "input_sha256": {
+    "coder14": "b2cc3aa6d985edd357e1d5146c033cd322906f56209e10e60238a79a05ec22e3",
+    "qwen14": "0a536a62f699f48cf8997156b0f37c81cd8dbeb01b33c60456d6d343081ddffb",
+    "confirmation": "f425fdc6abcb386568f8de918fd9e0fd8f86dd776c27cdaa78ca14d74565e319"
+  },
+  "diagnostic_patch_sha256": "fe7ea83da6e43d6c03243521da7b603ed8f2c99413c4265bad356cc32c6d23d4",
+  "binary_sha256": {
+    "stock": "eb309e2ab725c25ea639b7bc6c7a7e9d9aa4355f5660b81007d951aed70038b1",
+    "diagnostic": "8b9ba7b6595fff320d02838c51b71797857cbf6581d2fb0507f9b5f825eb1bfb"
+  },
+  "verified_control_plans": 288,
+  "changed_plans": 16,
+  "models": {
+    "coder14": {
+      "riley-first": {
+        "wave-early": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        },
+        "wave-nominal": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        },
+        "wave-late": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            41,
+            45
+          ]
+        }
+      },
+      "qkv-first": {
+        "wave-early": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        },
+        "wave-nominal": {
+          "changed_steps": [
+            8,
+            9
+          ],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        },
+        "wave-late": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            41,
+            45
+          ]
+        }
+      },
+      "qkv-second": {
+        "wave-late": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            41,
+            45
+          ]
+        },
+        "wave-nominal": {
+          "changed_steps": [
+            8,
+            9
+          ],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        },
+        "wave-early": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        }
+      },
+      "riley-second": {
+        "wave-late": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            41,
+            45
+          ]
+        },
+        "wave-nominal": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        },
+        "wave-early": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        }
+      }
+    },
+    "qwen14": {
+      "riley-first": {
+        "wave-early": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        },
+        "wave-nominal": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        },
+        "wave-late": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            41,
+            45
+          ]
+        }
+      },
+      "qkv-first": {
+        "wave-early": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        },
+        "wave-nominal": {
+          "changed_steps": [
+            8,
+            9
+          ],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        },
+        "wave-late": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            41,
+            45
+          ]
+        }
+      },
+      "qkv-second": {
+        "wave-early": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        },
+        "wave-nominal": {
+          "changed_steps": [
+            8,
+            9
+          ],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        },
+        "wave-late": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            41,
+            45
+          ]
+        }
+      },
+      "riley-second": {
+        "wave-early": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        },
+        "wave-nominal": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        },
+        "wave-late": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            41,
+            45
+          ]
+        }
+      }
+    },
+    "coder-trace": {
+      "riley-first": {
+        "wave-nominal": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        }
+      },
+      "qkv-first": {
+        "wave-nominal": {
+          "changed_steps": [
+            8,
+            9
+          ],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        }
+      },
+      "qkv-second": {
+        "wave-nominal": {
+          "changed_steps": [
+            8,
+            9
+          ],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        }
+      },
+      "riley-second": {
+        "wave-nominal": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        }
+      }
+    },
+    "qwen-trace": {
+      "riley-first": {
+        "wave-nominal": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        }
+      },
+      "qkv-first": {
+        "wave-nominal": {
+          "changed_steps": [
+            8,
+            9
+          ],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        }
+      },
+      "qkv-second": {
+        "wave-nominal": {
+          "changed_steps": [
+            8,
+            9
+          ],
+          "plans": 9,
+          "before_tail": [
+            41,
+            45
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        }
+      },
+      "riley-second": {
+        "wave-nominal": {
+          "changed_steps": [],
+          "plans": 9,
+          "before_tail": [
+            45,
+            41
+          ],
+          "after_tail": [
+            45,
+            41
+          ]
+        }
+      }
+    }
+  }
+}
