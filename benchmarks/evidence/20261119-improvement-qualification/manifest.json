@@ -3657,7 +3657,55 @@
         "path": "benchmarks/evidence/20261121-w5-prefix-metrics-package/verify.py",
         "sha256": "4e2b6d74bd401b6e2a33cff39c174a1dbc5e1b33fb7b1094fd20f68e60a972cc"
       }
-    ]
+    ],
+    "allocator_experiment": {
+      "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+      "matched_structured_cases": 16,
+      "evidence": {
+        "package": {
+          "path": "benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/verified-image.json",
+          "sha256": "a82831ea46963971b500f790ee42ebd40757d28f3c5948e19ff0b1e408991345"
+        },
+        "serving": {
+          "path": "benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/verified.json",
+          "sha256": "f6147907c17a696c2e12cc5371d84ccdb5ad1513c111f303ddd23e76077eca28"
+        }
+      },
+      "reproduction": [
+        {
+          "path": "benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/allocator-dispatch.sha256",
+          "sha256": "8bd1d7c49a56060cd2f2cb45eaeb375b1311260fa367c5b9d23fb5847b132c21"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/allocator.py",
+          "sha256": "6cbece97b900d4d60c512d87355f01672bd549c455621e75986f7697b52f8369"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/build.sh",
+          "sha256": "0fde49730752afdb65bf8488c2880bf94daef87a937225c823505d6b1901f1c6"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/context.sha256",
+          "sha256": "c9da29e9f6e085bab55563eb6c4b2e61335af422137f5979f3956884f9e9de6a"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/fetch-summary.sh",
+          "sha256": "15111214739497db8b0fd6a279164a4d94319e042bb2081040f2885ee1b60756"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/result.sha256",
+          "sha256": "fb0035d5df0ea483b705d858de750f267f167098f7c3f26965cf0ac5a7bc6e58"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/run.sh",
+          "sha256": "bfb98c5743de79737a64a642551d51167860ef644cb55131b59e73e41071ddb2"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/wrapper-source.sha256",
+          "sha256": "112ff6856febb31402b136cd4f86780928810157dcfe664d4914fa68d972d25b"
+        }
+      ]
+    }
   },
   "distribution_after_terminal_fix": {
     "source_revision": "36aa1880509941ad169be6cc327d6d89231f8b81",

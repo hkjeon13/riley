@@ -170,10 +170,12 @@ def check_package_follow_up(root, candidate):
 
 
 def check_prefix_metrics_package(root, candidate):
-    _, serving, runtime_files = check_package_records(root, candidate)
+    a100, serving, runtime_files = check_package_records(root, candidate)
     if serving["matching_runtime_files"] != runtime_files or runtime_files != 21 or candidate["differing_runtime_files"]:
         raise ValueError("prefix metrics package must reproduce all 21 hosted runtime files")
     check_prefix_metrics_serving(serving)
+    if "allocator_experiment" in candidate:
+        check_prefix_metrics_allocator(root, candidate, a100, serving)
 
 
 def check_prefix_metrics_serving(serving):
@@ -235,17 +237,48 @@ def check_package_soaks(soaks, serving):
         raise ValueError("30-minute soak gate differs from the two cache outcomes")
 
 
+def check_allocator_parent(package, parent, parent_report_sha256):
+    if (package["status"] != "passed" or package["parent_image_id"] != parent["image_id"]
+            or package["parent_cpu_report_sha256"] != parent_report_sha256
+            or package["same_parent_runtime_files"] != 21
+            or any(package[key] != parent[key] for key in ("source_revision", "source_archive_sha256", "binaries"))):
+        raise ValueError("latest allocator package does not match its verified parent")
+
+
+def check_prefix_metrics_allocator(root, candidate, parent, stock):
+    trial = candidate["allocator_experiment"]
+    records = trial["evidence"]
+    package, serving = (json.loads((root / records[key]["path"]).read_bytes(), object_pairs_hook=unique_object)
+                        for key in ("package", "serving"))
+    parent_sha = candidate["evidence"]["a100_cpu"]["sha256"]
+    check_allocator_parent(package, parent, parent_sha)
+    library = package["added_files_sha256"]["/opt/riley/lib/libjemalloc.so.2"]
+    if (serving["status"] != "passed" or serving["image_id"] != package["image_id"]
+            or serving["parent_cpu_report_sha256"] != parent_sha
+            or serving["allocator_cpu_report_sha256"] != records["package"]["sha256"]
+            or serving["allocator_library_sha256"] != library or serving["allocator_settings"] != trial["malloc_conf"]
+            or serving["parent_image_id"] != parent["image_id"]
+            or any(serving[key] != stock[key] for key in ("source_revision", "riley_binary_sha256", "checkpoint_sha256", "reservations"))):
+        raise ValueError("prefix metrics allocator experiment used a different parent, settings, or runtime")
+    proofs = serving["allocator_process_proof_sha256"]
+    if proofs.keys() != {"cache-off", "cache-on", "accuracy"} or any(
+            not re.fullmatch(r"[0-9a-f]{64}", value) for value in proofs.values()):
+        raise ValueError("prefix metrics allocator experiment lacks live process evidence")
+    check_prefix_metrics_serving(serving)
+    original = stock["accuracy"]["suites"]["structured_holdout"]["cases"]
+    observed = serving["accuracy"]["suites"]["structured_holdout"]["cases"]
+    matches = sum(observed.get(name) == case for name, case in original.items())
+    if len(original) != 16 or observed.keys() != original.keys() or trial["matched_structured_cases"] != matches:
+        raise ValueError("allocator output comparison differs from its structured response receipts")
+
+
 def check_latest_allocator(root, trial, parent_entry, parent, serving):
     records = trial["evidence"]
     reports = {kind: json.loads((root / entry["path"]).read_bytes(), object_pairs_hook=unique_object)
                for kind, entry in records.items()}
     package = reports["package"]
     soaks = reports["soaks"]
-    if (package["status"] != "passed" or package["parent_image_id"] != parent["image_id"]
-            or package["parent_cpu_report_sha256"] != parent_entry["sha256"]
-            or package["same_parent_runtime_files"] != 21
-            or any(package[key] != parent[key] for key in ("source_revision", "source_archive_sha256", "binaries"))):
-        raise ValueError("latest allocator package does not match its verified parent")
+    check_allocator_parent(package, parent, parent_entry["sha256"])
     image = package["image_id"]
     library = package["added_files_sha256"]["/opt/riley/lib/libjemalloc.so.2"]
     if (soaks["parent_image_id"] != parent["image_id"] or soaks["allocator_cpu_sha256"] != records["package"]["sha256"]

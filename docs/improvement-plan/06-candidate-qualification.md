@@ -11,9 +11,10 @@
 | A100에서 재빌드한 배포 이미지 | `d3d8fe6e5` | 이미지 ID `0a907408ec73`. A100 6번의 CUDA 드라이버 주입, Qwen2.5-7B-Instruct API 40건과 장문 출력 232건, Qwen2.5-32B-Instruct TP=2 API 40건과 C1·C8·C32 출력 대조, GPU 자원 회수. [32B TP=2 결과](05-mixed-soak-result.md#배포-이미지의-32b-tp2-장문-검증) |
 | 취소 순서 수정이 포함된 배포 이미지 | `36aa18805` | GitHub 이미지 `f87ebb07768c`, A100 이미지 `b731f48cc6ec`. 런타임 파일 21개 일치. Qwen2.5-7B-Instruct API 40건과 취소·자원 회수 통과. 두 캐시 모드의 30분 정밀 RSS 기준 미충족. [배포 이미지 재검증](05-mixed-soak-result.md#새-이미지의-30분-혼합-부하) |
 | jemalloc을 포함한 파생 시험 이미지 | `d3d8fe6e5`의 실행 파일 | 이미지 ID `1fc444b1840e`. CPU 패키지 무결성, Qwen2.5-7B-Instruct API 40건, 두 캐시 모드 30분 운영 기준, 장문 출력 232건, 사전 성능 회귀 기준 통과. RAG C8 seed 2 꼬리 지연 증가 |
-| 최신 배포 이미지의 jemalloc 파생 시험 | `36aa18805`의 실행 파일 | 이미지 ID `c3fae872c532`. API와 두 캐시 모드의 30분 운영 기준 통과, 장문 232건 일치. 고정 도착 재생 2,048건에서 응답 일치, RAG C8 seed 2 TTFT p95 변화 −0.87%~+0.25%. [최신 RAG 결과](05-mixed-soak-result.md#최신-rag-seed-2의-고정-도착-재생) |
+| 취소 순서 수정 이미지의 jemalloc 파생 시험 | `36aa18805`의 실행 파일 | 이미지 ID `c3fae872c532`. API와 두 캐시 모드의 30분 운영 기준 통과, 장문 232건 일치. 고정 도착 재생 2,048건에서 응답 일치, RAG C8 seed 2 TTFT p95 변화 −0.87%~+0.25%. [RAG 결과](05-mixed-soak-result.md#최신-rag-seed-2의-고정-도착-재생) |
 | Prefix cache 메트릭의 A100 검증 | `36aa18805`에 엔진·서빙 메트릭 패치 | 실행 파일 `9303315fdf5a`를 기준 이미지에 읽기 전용으로 연결했다. Qwen2.5-7B-Instruct의 캐시 켬·끔에서 응답·퇴출·종료 카운터와 GPU 자원 회수를 검증했다. [캐시 메트릭 결과](05-mixed-soak-result.md#prefix-cache-보관량과-카운터) |
 | Prefix cache 메트릭을 포함한 배포 이미지 | `3951d90c8` | GitHub와 A100 런타임 파일 21개 일치. A100 이미지 `b7825698510f`의 장문 출력 232건, 스키마·지정 도구 64건, 두 30분 부하의 캐시·배치 지표 및 지연 기준 통과. 정밀 RSS 변화는 캐시 끔 +504KiB, 켬 +584KiB였다. [패키지 부하 결과](05-mixed-soak-result.md#prefix-cache-메트릭을-포함한-배포-패키지) |
+| Prefix cache 메트릭 이미지의 jemalloc 파생 시험 | `3951d90c8`의 실행 파일 | 이미지 ID `a2f0d91fc749`. 두 30분 합성 부하의 정밀 RSS 변화는 캐시 끔 −924KiB, 켬 −820KiB였다. 지연·메트릭·자원 회수와 장문 232건·스키마 및 도구 64건의 출력 대조 통과. 기준 이미지와 스키마·도구 기준 응답 16개 일치. [현행 파생 이미지 대조](05-mixed-soak-result.md#같은-배포-패키지의-jemalloc-대조) |
 
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)
 
@@ -29,6 +30,8 @@ python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 
 `distribution_with_prefix_metrics`의 Git 입력·CPU 보고서·런타임 파일·GPU 검증을 `origin/main`에 연결한다. 캐시와 배치 메트릭의 검산은 30분 부하의 정밀 RSS·지연 판정과 함께 확인한다. 이전 버전 `36aa18805`의 입력은 `--distribution-revision 36aa18805`로 조회한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 
+같은 항목의 `allocator_experiment`는 현행 파생 이미지의 라이브러리와 부모 패키지, 실제 프로세스 영수증, 캐시 두 설정의 30분 부하 및 기본 이미지와 일치한 응답 16개를 연결한다. [현행 파생 이미지 검산](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/verified.json)
+
 `distribution_after_terminal_fix`는 이전 `36aa18805`의 패키지와 파생 시험 근거를 보존한다. 기준 이미지의 두 30분 부하는 정밀 RSS 기준에 미달했고, 파생 이미지 `c3fae872c532`는 두 설정의 운영 기준과 장문 232건의 출력 대조를 통과했다. CI는 같은 파생 이미지의 닫힌 RAG와 고정 도착 보고서를 원본 지문으로 연결해 두 실행 순서의 지연 변화율과 쓰기 오차 판정을 대조한다. 닫힌 부하에서 관측한 TTFT p95 +21.14%는 고정 도착의 두 시각표에서 재현되지 않았다. 실제 운영 트래픽·승인된 SLO·서비스 복구 검증을 확보할 때까지 릴리스를 보류한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [고정 도착 결과](05-mixed-soak-result.md#최신-rag-seed-2의-고정-도착-재생)
 
 같은 명령은 `current_allocator_trial`의 여덟 검증 보고서를 대조한다. 파생 이미지의 패키징, 두 캐시 모드의 30분 부하, 장문 정확성, 성능 대조, 닫힌 RAG 확장 대조, 고정 도착 대조와 메트릭 조회 두 시험을 연결한다. 성능 시험은 실제 이미지·실행 인자·할당기 설정이 일치하고, 메트릭 조회 재시험은 첫 조회 시험의 검산 해시·체크포인트·요청 수에 맞아야 한다. 닫힌 부하의 RAG 꼬리 지연과 실제 운영 도착 분포·서비스 SLO 확인이 남아 있어 파생 이미지 릴리스를 보류한다. [파생 후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
@@ -41,7 +44,7 @@ python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 | W2·W3 성능 | 이벤트 발행·스케줄 네 조합과 두 14B 모델의 실측을 완료했다. W2의 정렬된 KV 테이블과 이벤트 복사 제거는 SmolLM2의 단일 iteration에서 채택 이득을 충족하지 못했다. W3의 1,024행 QKV 후보는 Coder-14B 출력 1,280건을 재현했지만 역순 동시 유입의 decode TPOT이 1.99% 늘어 1% 기준을 넘었다. 형상 공통 적용을 기각했다. | 기존 설정으로 기준을 유지하며 새 후보의 단독·결합 회귀와 영향 모델을 검증 |
 | W4 장문·정확성 | 고정 입력 18개와 holdout 11개의 엔진 비교, 두 사례의 첫 BF16 차이와 28개 레이어의 residual·최종 norm 재계산, 네 모델의 동일 입력 GSM8K 품질 기준 통과. A100 재빌드 이미지의 장문 출력 232건 일치. 두 decode 사례에서 첫 레이어 QKV를 정확한 HF 투영값으로 교체해도 선택 토큰과 전체 생성 결과가 같았다. | 다른 위치와 레이어의 영향, 향후 수치 변경의 영향 모델·품질 대조 |
 | W4 스키마 | GPU 계약 11건을 통과했다. 현행 기준·jemalloc 이미지에서 각각 API 40건과 장문 스키마·지정 도구 64건을 검증했다. [장문 채팅 결과](04-structured-output-result.md#현행-배포-이미지의-장문-채팅-검증) | W5의 최종 운영 기준 충족 |
-| W5 운영 | 기준 배포 이미지의 익명 RSS는 cache-on +616KiB, cache-off +700KiB였다. jemalloc 파생 이미지에서 각각 −440KiB와 −640KiB로 두 설정의 30분 운영 기준을 통과했다. 장문 232건이 일치했다. 사전 성능 기준은 통과했고 RAG C8 seed 2 닫힌 부하의 TTFT p95는 +12.69%였다. 고정 시각 대조에서는 +1.08%와 −2.29%였다. 같은 이미지의 닫힌 RAG 확장 대조에서는 seed 2의 p95가 두 순서에서 +9.14%·+7.27%였다. | 닫힌 부하의 지연 비용, 실제 운영 도착 분포와 승인된 서비스 SLO를 확인한 뒤 기본값 판정 |
+| W5 운영 | `3951d90c8`의 두 캐시 모드에서 기준 이미지가 정밀 RSS 증가 0 조건에 미달했고 jemalloc 시험 이미지는 해당 조건을 통과했다. 두 이미지의 같은 합성 부하에서 API·지연·카운터·자원 회수 기준을 통과했다. [현행 파생 이미지 대조](05-mixed-soak-result.md#같은-배포-패키지의-jemalloc-대조) | 실제 운영 도착 분포, 승인된 서비스 SLO 및 서비스 복구를 확인한 뒤 기본값 판정 |
 
 기존 이벤트 발행 정책과 서빙 설정을 기준선으로 삼았다. 이전 빌드에서 관찰된 성능 실험은 입력·장비·바이너리에 연결하며, 새로운 수치 기준이나 기본값을 채택할 때는 종합 계획의 출력 불변성과 회귀 기준을 적용한다. [W2 결과](02-async-step-result.md) · [W3 결과](03-long-context-result.md) · [W4 정확성](04-long-accuracy-result.md) · [W5 운영 결과](05-mixed-soak-result.md)
 

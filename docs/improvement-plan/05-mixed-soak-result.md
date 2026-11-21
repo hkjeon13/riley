@@ -169,6 +169,25 @@ A100 6번에 캐시 비활성, 7번에 캐시 128블록을 설정했다. 같은 
 
 측정에 사용한 첫 스크립트에서 holdout 체크섬 한 줄이 잘려 경고가 발생했다. 정확성 실행 전에 같은 파일의 완전한 SHA-256을 엄격히 대조했고, 장문·스키마 보고서의 입력 지문도 그 값과 일치했다. 결과 수집기는 C1의 결과를 전송 방식 8쌍으로 집계하도록 교정했다. 측정 원본과 실행 체크섬을 보존했다. [holdout 확인 기록](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/holdout-preflight.txt) · [결과 재검산](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/fetch-summary.sh)
 
+### 같은 배포 패키지의 jemalloc 대조
+
+기준 이미지 `b7825698510f`의 런타임 파일 21개를 그대로 포함한 파생 시험 이미지 `a2f0d91fc749`를 빌드했다. 이전에 검증한 jemalloc 라이브러리와 진입점, 라이선스 파일을 추가했다. CPU 검사에서 같은 CLI 출력과 Riley의 `malloc`, `calloc`, `realloc`, `free` 바인딩을 확인했다. 부하 시작·종료 전에 같은 컨테이너 프로세스에 라이브러리가 로드됐는지 확인했고 그 프로세스에서 정밀 RSS를 읽었다. [CPU 패키지 근거](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/verified-image.json) · [부하 실행 순서](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/run.sh)
+
+기준 이미지와 같은 체크포인트, GPU 배치와 30분 합성 도착 시각표를 사용했다. 각 모드의 API 40건, 정상 완료 13,749건, 의도한 연결 종료 700건이 기준 실행과 일치했다. 예상 외 오류나 과부하는 0건이었다. 두 모드 모두 정밀 RSS, 지연, 배치·캐시 지표, 취소·종료 회수 기준을 통과했다. [부하 검산과 원본 지문](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/verified.json)
+
+| 30분 부하 결과 | Cache off | Cache on |
+|---|---:|---:|
+| 후반 정밀 RSS 변화 | −924KiB | −820KiB |
+| 후반 TTFT p95 변화 | +0.80% | +1.49% |
+| 후반 전체 완료 지연 p95 변화 | −13.68% | −13.47% |
+| 부하 중 추가 적중 토큰 | 0 | 385,504 |
+| 부하 중 추가 퇴출 블록 | 0 | 89,673 |
+| 종료 뒤 누적 적중 토큰·퇴출 블록 | 0 / 0 | 391,872 / 89,673 |
+
+별도 정확성 실행에서 API 40건, 장문 기준 144건·holdout 88건, 장문 스키마·도구 호출 64건을 통과했다. 두 이미지의 스키마·도구 기준 응답 16개도 응답 해시·텍스트·usage·종료 사유가 모두 같았다. 종료 뒤 요청·KV·device·pinned 할당은 0이었고 GPU 6·7의 기존 20GiB 예약이 복귀했다. 현재 파생 시험은 Qwen2.5-7B-Instruct의 합성 부하 결과이며 실제 운영 트래픽, 승인된 서비스 SLO, 서비스 환경 복구 검증은 남아 있다. [정확성·예약·원본 지문](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/verified.json)
+
+재빌드에는 이전 시험의 Dockerfile, 진입점, CPU 검증기를 재사용한다. 이 파일들과 후속 검사기의 체크섬을 각각 확인한 뒤 EFS에서 패키지와 부하 원본을 다시 검산할 수 있다. [이전 파생 이미지의 빌드 입력](../../benchmarks/evidence/20261121-w5-current-image-allocator/Dockerfile) · [현행 파생 이미지 빌드](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/build.sh) · [결과 재검산](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/fetch-summary.sh)
+
 ## 90초 사전 검증
 
 프롬프트 KV 캐시에 128블록을 할당했다. 초당 평균 8건의 합성 요청으로 일반·스키마·logprobs·필수 도구·장문·긴 출력·클라이언트 연결 종료를 섞었다. 장문 요청은 여덟 개의 프롬프트 앞부분을 반복 사용했다.
