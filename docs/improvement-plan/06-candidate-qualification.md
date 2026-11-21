@@ -12,6 +12,7 @@
 | 취소 순서 수정이 포함된 배포 이미지 | `36aa18805` | GitHub 이미지 `f87ebb07768c`, A100 이미지 `b731f48cc6ec`. 런타임 파일 21개 일치. Qwen2.5-7B-Instruct API 40건과 취소·자원 회수 통과. 두 캐시 모드의 30분 정밀 RSS 기준 미충족. [배포 이미지 재검증](05-mixed-soak-result.md#새-이미지의-30분-혼합-부하) |
 | jemalloc을 포함한 파생 시험 이미지 | `d3d8fe6e5`의 실행 파일 | 이미지 ID `1fc444b1840e`. CPU 패키지 무결성, Qwen2.5-7B-Instruct API 40건, 두 캐시 모드 30분 운영 기준, 장문 출력 232건, 사전 성능 회귀 기준 통과. RAG C8 seed 2 꼬리 지연 증가 |
 | 최신 배포 이미지의 jemalloc 파생 시험 | `36aa18805`의 실행 파일 | 이미지 ID `c3fae872c532`. API와 두 캐시 모드의 30분 운영 기준 통과, 장문 232건 일치. 고정 도착 재생 2,048건에서 응답 일치, RAG C8 seed 2 TTFT p95 변화 −0.87%~+0.25%. [최신 RAG 결과](05-mixed-soak-result.md#최신-rag-seed-2의-고정-도착-재생) |
+| Prefix cache 메트릭의 A100 검증 | `36aa18805`에 엔진·서빙 메트릭 패치 | 실행 파일 `9303315fdf5a`를 기준 이미지에 읽기 전용으로 연결했다. Qwen2.5-7B-Instruct의 캐시 켬·끔에서 응답·퇴출·종료 카운터와 GPU 자원 회수를 검증했다. [캐시 메트릭 결과](05-mixed-soak-result.md#prefix-cache-보관량과-카운터) |
 
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)
 
@@ -24,6 +25,8 @@
 ```bash
 python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 ```
+
+Prefix cache 지표 추가 이후에는 `origin/main`의 세 서버 소스가 보존된 `36aa18805` 배포 이미지 입력과 달라진다. 보존 이미지를 조회할 때는 `--distribution-revision 36aa18805`를 사용한다. 새 소스의 메트릭은 위 A100 검증에 연결되며 동일 변경으로 패키징한 이미지의 A100 릴리스 검증은 별도로 수행한다. [새 바이너리와 소스 체크섬](../../benchmarks/evidence/20261121-w5-prefix-cache-metrics/verified.json)
 
 이 명령은 `distribution_after_terminal_fix`에서 호스팅 CPU·A100 CPU·A100 추론 보고서, 런타임 파일 목록과 Git 빌드 입력을 대조한다. 기준 배포 이미지의 두 30분 부하는 정밀 RSS 기준에 미달했다. 최신 jemalloc 파생 시험은 두 캐시 모드의 기준과 장문 232건의 출력 대조를 통과했다. CI는 같은 파생 이미지의 닫힌 RAG와 고정 도착 보고서를 원본 지문으로 연결해 두 실행 순서의 지연 변화율과 쓰기 오차 판정을 대조한다. 닫힌 부하에서 관측한 TTFT p95 +21.14%는 고정 도착의 두 시각표에서 재현되지 않았다. 실제 운영 트래픽·승인된 SLO·서비스 복구 검증을 확보할 때까지 릴리스 판정은 보류다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [고정 도착 결과](05-mixed-soak-result.md#최신-rag-seed-2의-고정-도착-재생)
 

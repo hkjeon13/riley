@@ -131,7 +131,7 @@ python3.12 -B ci/check_distribution_gpu.py "$CPU_REPORT" "$GPU_UUID" \
 
 ## 4. 관측을 통해 새 문제를 찾는 방법
 
-현재 `/metrics`는 JSON의 요청·KV·할당·batch shape·취소·과부하 관측을 제공한다. 다음은 추가 제안이며 현재 endpoint가 모두 제공하는 필드는 아니다.
+현행 소스의 `/metrics`는 JSON의 요청·KV·할당·batch shape·캐시 보관·적중·퇴출·취소·과부하 관측을 제공한다. 아래는 이 지표와 추가 관측이 대응하는 문제다.
 
 | 지표 | 찾을 문제 | 연계 |
 |---|---|---|
@@ -196,7 +196,7 @@ python3 benchmarks/live/soak.py "$TEST_ADDRESS" "$MODEL_ID" \
 
 느린 스트리밍은 loopback 클라이언트의 읽기를 멈추고 소켓의 실제 송신 큐가 수신 버퍼보다 큰 상태가 이어지는지 확인한다. A100 GPU 6의 실제 Qwen2.5-7B 실행에서 느린 읽기 도중 정상 요청 완료, 읽기 재개 뒤 SSE 종료와 토큰 usage, 활성 스트림 연결 종료 뒤 취소·disconnect와 자원 회수를 확인했다. [느린 스트리밍 검사기](../../benchmarks/live/slow_stream_check.py) · [A100 실행 순서](../../benchmarks/evidence/20261119-w5-slow-stream/campaign.sh) · [검증 결과](05-mixed-soak-result.md#느린-스트리밍-소비자와-연결-취소)
 
-현재 공개 `/metrics`의 KV 사용량은 요청이 쓰는 블록을 보여 준다. 요청별 재사용 토큰은 응답 `usage`에서 확인했다. 스케줄러 내부의 전체 prefix hit 토큰 및 eviction 블록 카운터를 운영 응답에서 조회하려면 별도 계측 계약이 필요하다. [스케줄러 메트릭](../../crates/riley-scheduler/src/metrics.rs)
+공개 `/metrics`의 `kv_allocated_blocks`는 요청이 쓰는 블록을 보여 주고 `prefix_cache.retained_blocks`는 캐시에 보관한 블록을 보여 준다. `--require-prefix-cache-metrics`로 운영 검사기를 실행하면 순차 요청의 `usage`와 `hit_tokens` 증가량을 대조하고, 용량 압력으로 `evicted_blocks`가 늘어나는지 확인한다. 이전 이미지의 호환 실행은 이 옵션을 생략한다. `--prefix-cache-blocks 0`은 캐시 비활성 서버를 대상으로 한다. [메트릭 계약](../api.md#get-metrics) · [운영 검사기](../../benchmarks/live/operational_check.py)
 
 [고정 RC 릴리스 soak 드라이버와 검사기](../../benchmarks/soak/README.md)는 SmolLM2 workload·정식 golden·이미지 계보와 10개 bucket 슬롯을 요구한다.
 

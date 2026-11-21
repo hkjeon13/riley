@@ -33,7 +33,10 @@ use crate::domain::{
     FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestLimits,
     RequestMetadata, ServiceErrorClass,
 };
-use crate::engine::{C02CaptureMetrics, ENGINE_BATCH_SHAPE_BUCKET_CAPACITY, EngineMetricsSnapshot};
+use crate::engine::{
+    C02CaptureMetrics, ENGINE_BATCH_SHAPE_BUCKET_CAPACITY, EngineMetricsSnapshot,
+    EnginePrefixCacheMetrics,
+};
 use crate::http::{
     HttpLimits, HttpMethod, HttpReadError, HttpRequest, read_request, write_response,
     write_sse_head,
@@ -1535,6 +1538,8 @@ pub struct OperationalMetricsSnapshot {
     pub allocation: OperationalAllocationMetrics,
     /// Committed batch-shape counters and CUDA-event latency.
     pub batch_shapes: OperationalBatchShapeMetrics,
+    /// Retained shared prompt KV and cache counters.
+    pub prefix_cache: EnginePrefixCacheMetrics,
     /// Monotonic service counters.
     pub counters: OperationalCounters,
 }
@@ -1579,6 +1584,7 @@ fn operational_metrics_from_snapshot(
             pinned_live_bytes: allocation.pinned_host_live_bytes,
         },
         batch_shapes,
+        prefix_cache: backend_metrics.prefix_cache,
         counters: OperationalCounters {
             cancellations: scheduler_cancellations
                 .max(metrics.cancellations.load(Ordering::Acquire)),
@@ -2786,6 +2792,7 @@ mod tests {
     use std::thread;
     use std::time::{Duration, Instant};
 
+    use riley_scheduler::{SchedulerGauges, metrics::SchedulerMetrics};
     use serde_json::{Value, json};
 
     use super::{
@@ -3723,6 +3730,7 @@ mod tests {
                 "batch_shapes",
                 "counters",
                 "kv_allocated_blocks",
+                "prefix_cache",
                 "waiting_requests",
             ]
             .into_iter()
@@ -3731,6 +3739,10 @@ mod tests {
         assert_eq!(metrics_json["active_requests"], 0);
         assert_eq!(metrics_json["waiting_requests"], 0);
         assert_eq!(metrics_json["kv_allocated_blocks"], 0);
+        assert_eq!(
+            metrics_json["prefix_cache"],
+            json!({"retained_blocks": 0, "hit_tokens": 0, "evicted_blocks": 0, "metrics_degraded": false})
+        );
         assert_eq!(metrics_json["allocation"]["device_live_count"], 0);
         assert_eq!(metrics_json["allocation"]["device_live_bytes"], 0);
         assert_eq!(metrics_json["allocation"]["pinned_live_count"], 0);
@@ -3948,6 +3960,57 @@ mod tests {
             .expect("shutdown metrics retain shape evidence");
         assert_eq!(final_metrics.batch_shapes.bucket_count, 1);
         assert_eq!(final_metrics.batch_shapes.buckets[0].hit_count, 2);
+    }
+
+    #[test]
+    fn metrics_and_shutdown_publish_prefix_cache_without_mixing_kv_gauges() {
+        let backend = TestBackend::new([]);
+        let mut scheduler = SchedulerMetrics::new(1).expect("scheduler metrics");
+        scheduler.record_prefix_cache_hit(48).expect("cache hit");
+        scheduler.record_prefix_cache_eviction().expect("eviction");
+        scheduler
+            .set_gauges(SchedulerGauges {
+                allocated_kv_blocks: 3,
+                promised_kv_blocks: 4,
+                physical_kv_blocks: 16,
+                prefix_cache_blocks: 5,
+                ..SchedulerGauges::default()
+            })
+            .expect("running scheduler gauges");
+        let mut running = scheduler.snapshot().expect("running scheduler metrics");
+        running.metrics_degraded = true;
+        backend.set_engine_metrics(&EngineMetricsSnapshot {
+            scheduler: Some(running),
+            prefix_cache: (&running).into(),
+            ..EngineMetricsSnapshot::default()
+        });
+        let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
+        let server = start_server(test_config(), backend_trait).expect("start server");
+        let response = send_request(
+            server.local_address(),
+            b"GET /metrics HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        );
+        assert_eq!(response_status(&response), 200);
+        let metrics: Value =
+            serde_json::from_slice(response_body(&response)).expect("metrics JSON");
+        assert_eq!(metrics["kv_allocated_blocks"], 3);
+        assert_eq!(
+            metrics["prefix_cache"],
+            json!({"retained_blocks": 5, "hit_tokens": 48, "evicted_blocks": 1, "metrics_degraded": true})
+        );
+
+        let mut closed = running;
+        closed.gauges = SchedulerGauges::default();
+        backend.set_engine_metrics(&EngineMetricsSnapshot {
+            prefix_cache: (&closed).into(),
+            ..EngineMetricsSnapshot::default()
+        });
+        let final_metrics = server.shutdown_with_metrics().expect("shutdown metrics");
+        assert_eq!(final_metrics.kv_allocated_blocks, 0);
+        assert_eq!(final_metrics.prefix_cache.retained_blocks, 0);
+        assert_eq!(final_metrics.prefix_cache.hit_tokens, 48);
+        assert_eq!(final_metrics.prefix_cache.evicted_blocks, 1);
+        assert!(final_metrics.prefix_cache.metrics_degraded);
     }
 
     #[test]

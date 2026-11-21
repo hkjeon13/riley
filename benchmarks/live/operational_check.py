@@ -61,6 +61,41 @@ async def wait_idle(address):
         await asyncio.sleep(.1)
 
 
+def check_prefix_cache_metrics(samples, rows, recovered, capacity):
+    """Reconcile idle aggregate snapshots with the serial requests' usage."""
+    cache = {}
+    counters = ("hit_tokens", "evicted_blocks")
+    for label, metrics in samples.items():
+        snapshot = metrics.get("prefix_cache")
+        if (not idle(metrics) or not isinstance(snapshot, dict)
+                or snapshot.get("metrics_degraded") is not False
+                or any(type(snapshot.get(key)) is not int or snapshot[key] < 0
+                       for key in ("retained_blocks", *counters))
+                or snapshot["retained_blocks"] > capacity or snapshot["hit_tokens"] % 16):
+            return {"status": "failed", "detail": f"invalid idle prefix-cache snapshot: {label}", "samples": cache}
+        cache[label] = snapshot
+
+    ordered = list(cache.values())
+    monotonic = all(a[key] <= b[key] for a, b in zip(ordered, ordered[1:]) for key in counters)
+    previous = cache["before"]
+    deltas = {}
+    for label in rows:
+        current = cache[label]
+        deltas[label] = current["hit_tokens"] - previous["hit_tokens"]
+        previous = current
+    deltas["recovery"] = cache["final"]["hit_tokens"] - cache["drained"]["hit_tokens"]
+    expected = {label: row["cached_tokens"] for label, row in rows.items()}
+    expected["recovery"] = recovered["cached_tokens"]
+    checks = {"counters_monotonic": monotonic, "serial_hit_tokens_match_usage": deltas == expected}
+    if capacity:
+        checks["retained_blocks_at_idle"] = cache["cold"]["retained_blocks"] > 0
+        checks["pressure_evicted_blocks"] = cache["pressure"]["evicted_blocks"] > cache["warm"]["evicted_blocks"]
+    else:
+        checks["disabled_cache_metrics_are_zero"] = not any(sample[key] for sample in ordered for key in counters)
+    return {"status": "passed" if all(checks.values()) else "failed", "checks": checks,
+            "samples": cache, "hit_token_deltas": deltas}
+
+
 async def check(args):
     before = await wait_idle(args.address)
     if not idle(before):
@@ -68,12 +103,15 @@ async def check(args):
     a = request(args.model, "Harbor notes\n" + document(random.Random(29), 1200))
     b = request(args.model, "Glacier report\n" + document(random.Random(31), 2400))
     rows = {}
+    samples = {"before": before}
     for name, body in (("cold", a), ("warm", a), ("pressure", b), ("after_pressure", a), ("rewarmed", a)):
         rows[name] = await asyncio.to_thread(complete, args.address, body)
+        if args.require_prefix_cache_metrics:
+            samples[name] = await wait_idle(args.address)
 
     cold, warm, pressure, after, rewarmed = rows.values()
     cache_tokens = args.prefix_cache_blocks * 16
-    matched = await wait_idle(args.address)
+    matched = samples.get("rewarmed") or await wait_idle(args.address)
     arrivals = await burst(args.address, args.model)
     drained = await wait_idle(args.address)
     recovered = await asyncio.to_thread(complete, args.address, a)
@@ -82,15 +120,6 @@ async def check(args):
     rejected = sum(row.get("http_status") == 429 for row in arrivals)
     completed = sum(row["outcome"] == "completed" for row in arrivals)
     checks = {
-        "cache_pressure_exceeds_capacity": cold["prompt_tokens"] <= cache_tokens < pressure["prompt_tokens"] - 16,
-        "cold_prefix_miss": cold["cached_tokens"] == 0,
-        # The pressure request can reuse chat-template blocks common to both
-        # prompts. Only the blocks unique to the first prompt must be evicted.
-        "pressure_evicts_prompt_specific_blocks": (
-            after["cached_tokens"] == pressure["cached_tokens"] < warm["cached_tokens"]
-        ),
-        "warm_prefix_hit": warm["cached_tokens"] == rewarmed["cached_tokens"]
-        == ((warm["prompt_tokens"] - 1) // 16) * 16 > 0,
         "output_stable": all((row["visible_output_sha256"], row["finish"], row["prompt_tokens"])
                              == (cold["visible_output_sha256"], cold["finish"], cold["prompt_tokens"])
                              for row in (warm, after, rewarmed, recovered)),
@@ -100,22 +129,42 @@ async def check(args):
         and final["counters"]["overloads"] == drained["counters"]["overloads"]
         and final["allocation"] == before["allocation"],
     }
+    if args.prefix_cache_blocks:
+        checks.update(
+            cache_pressure_exceeds_capacity=cold["prompt_tokens"] <= cache_tokens < pressure["prompt_tokens"] - 16,
+            cold_prefix_miss=cold["cached_tokens"] == 0,
+            # The pressure request can still reuse chat-template blocks.
+            pressure_evicts_prompt_specific_blocks=after["cached_tokens"] == pressure["cached_tokens"] < warm["cached_tokens"],
+            warm_prefix_hit=warm["cached_tokens"] == rewarmed["cached_tokens"]
+            == ((warm["prompt_tokens"] - 1) // 16) * 16 > 0,
+        )
+    else:
+        checks["disabled_cache_usage_is_zero"] = not any(row["cached_tokens"] for row in (*rows.values(), recovered))
+    cache_evidence = {}
+    if args.require_prefix_cache_metrics:
+        samples.update(drained=drained, final=final)
+        cache = check_prefix_cache_metrics(samples, rows, recovered, args.prefix_cache_blocks)
+        checks["prefix_cache_metrics"] = cache["status"] == "passed"
+        cache_evidence["prefix_cache_metrics"] = cache
     return {"status": "passed" if all(checks.values()) else "failed", "checks": checks,
             "prefix_cache_blocks": args.prefix_cache_blocks, "prefix_requests": rows,
             "overload": {"arrivals": arrivals, "completed": completed, "rejected": rejected,
                          "counter_delta": overloads, "recovery": recovered},
-            "metrics": {"before": before, "before_burst": matched, "drained": drained, "final": final}}
+            "metrics": {"before": before, "before_burst": matched, "drained": drained, "final": final},
+            **cache_evidence}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("address")
     parser.add_argument("model")
-    parser.add_argument("--prefix-cache-blocks", type=int, default=128)
+    parser.add_argument("--prefix-cache-blocks", type=int, default=128, help="server cache budget; use 0 for cache-off")
+    parser.add_argument("--require-prefix-cache-metrics", action="store_true",
+                        help="check cache occupancy, eviction counters and serial request usage against /metrics")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
-    if args.prefix_cache_blocks <= 0:
-        parser.error("--prefix-cache-blocks must be positive")
+    if args.prefix_cache_blocks < 0:
+        parser.error("--prefix-cache-blocks cannot be negative")
     result = asyncio.run(check(args))
     with open(args.out, "x", encoding="utf-8") as output:
         json.dump(result, output, indent=2, allow_nan=False)

@@ -77,9 +77,11 @@ Shared blocks are read-only. The block alias checks in the plan, the batch
 builder and the CUDA layer now forbid a written block from aliasing anything,
 while read-only blocks may repeat across rows.
 
-The JSON `/metrics` gauge `kv_allocated_blocks` excludes cached blocks, so an
-idle server can report zero. The scheduler tracks retained blocks internally as
-`prefix_cache_blocks`. Use the response's `cached_tokens` to observe cache hits.
+The JSON `/metrics` gauge `kv_allocated_blocks` excludes cached blocks.
+`prefix_cache.retained_blocks` reports those blocks even after requests drain.
+Use `prefix_cache.hit_tokens` and `prefix_cache.evicted_blocks` deltas to track
+aggregate reuse and capacity pressure, and response `cached_tokens` to
+attribute reuse to one request. See the [metrics contract](api.md#get-metrics).
 
 ## Limits
 

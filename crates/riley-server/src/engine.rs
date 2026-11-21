@@ -953,6 +953,30 @@ fn record_committed_batch_shape(
     });
 }
 
+/// Cache occupancy and lifetime counters sampled by the backend worker.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
+pub struct EnginePrefixCacheMetrics {
+    /// Full KV blocks listed in the prefix cache.
+    pub retained_blocks: u64,
+    /// Prompt tokens adopted from cached blocks since scheduler startup.
+    pub hit_tokens: u64,
+    /// Blocks removed to make room in the cache or KV pool since startup.
+    pub evicted_blocks: u64,
+    /// Sticky signal that a non-authoritative scheduler metric update failed.
+    pub metrics_degraded: bool,
+}
+
+impl From<&SchedulerMetricsSnapshot> for EnginePrefixCacheMetrics {
+    fn from(snapshot: &SchedulerMetricsSnapshot) -> Self {
+        Self {
+            retained_blocks: u64::try_from(snapshot.gauges.prefix_cache_blocks).unwrap_or(u64::MAX),
+            hit_tokens: snapshot.prefix_cache_hit_tokens,
+            evicted_blocks: snapshot.prefix_cache_evicted_blocks,
+            metrics_degraded: snapshot.metrics_degraded,
+        }
+    }
+}
+
 /// Bounded operational snapshot produced on the exclusive backend worker.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct EngineMetricsSnapshot {
@@ -960,6 +984,8 @@ pub struct EngineMetricsSnapshot {
     pub scheduler: Option<SchedulerMetricsSnapshot>,
     /// Committed CUDA batch-shape counters and latency when available.
     pub batch_shapes: Option<EngineBatchShapeMetricsSnapshot>,
+    /// Prefix-cache metrics retained independently of the full scheduler snapshot.
+    pub prefix_cache: EnginePrefixCacheMetrics,
     /// CUDA allocation gauges when a native context is active.
     pub allocation: Option<EngineAllocationMetrics>,
 }
@@ -2236,9 +2262,9 @@ mod cuda_backend {
         C02GenerationAuditSink, C02GenerationAuditToken, C02SamplingBackend,
         ENGINE_BATCH_SHAPE_BUCKET_CAPACITY, EngineAllocationMetrics, EngineBackend,
         EngineBatchShapeMetricsSnapshot, EngineConfig, EngineError, EngineMetricsSnapshot,
-        EngineRequestId, InferenceEngine, gpu_greedy_ineligibility, prepare_batch_shape_metrics,
-        private_request_error, record_committed_batch_shape, selection_after_scheduler_commit,
-        visible_utf8_prefix,
+        EnginePrefixCacheMetrics, EngineRequestId, InferenceEngine, gpu_greedy_ineligibility,
+        prepare_batch_shape_metrics, private_request_error, record_committed_batch_shape,
+        selection_after_scheduler_commit, visible_utf8_prefix,
     };
 
     const _: () = assert!(ENGINE_BATCH_SHAPE_BUCKET_CAPACITY == MAX_LLAMA_BATCH_SHAPE_BUCKETS);
@@ -4000,6 +4026,10 @@ mod cuda_backend {
                 // C02 consumes the typed scheduler close snapshot below.
                 scheduler: None,
                 batch_shapes: Some(self.batch_shapes),
+                prefix_cache: final_scheduler
+                    .as_ref()
+                    .map(EnginePrefixCacheMetrics::from)
+                    .unwrap_or_default(),
                 allocation: Some(allocation),
             };
             self.final_c02_metrics = final_scheduler.and_then(|scheduler| {
@@ -4461,6 +4491,7 @@ mod cuda_backend {
             Ok(EngineMetricsSnapshot {
                 scheduler: Some(scheduler),
                 batch_shapes: Some(self.batch_shapes),
+                prefix_cache: EnginePrefixCacheMetrics::from(&scheduler),
                 allocation: Some(EngineAllocationMetrics {
                     device_live_bytes: allocation.device_live_bytes(),
                     device_live_allocations: allocation.device_live_allocations(),

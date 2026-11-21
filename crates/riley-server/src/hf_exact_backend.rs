@@ -40,8 +40,8 @@ use crate::domain::{
 
 use super::{
     BackendError, BackendEvent, EngineAllocationMetrics, EngineBackend, EngineConfig, EngineError,
-    EngineMetricsSnapshot, EngineRequestId, InferenceEngine, LogitObservationSink,
-    private_request_error,
+    EngineMetricsSnapshot, EnginePrefixCacheMetrics, EngineRequestId, InferenceEngine,
+    LogitObservationSink, private_request_error,
 };
 
 /// Stable identifier reported for this numerics profile.
@@ -843,6 +843,7 @@ impl EngineBackend for HfExactBackend {
         Ok(EngineMetricsSnapshot {
             scheduler: Some(scheduler),
             batch_shapes: None,
+            prefix_cache: EnginePrefixCacheMetrics::from(&scheduler),
             allocation: Some(self.allocation()?),
         })
     }
@@ -916,6 +917,10 @@ impl EngineBackend for HfExactBackend {
                 self.final_metrics = EngineMetricsSnapshot {
                     scheduler: final_scheduler,
                     batch_shapes: None,
+                    prefix_cache: final_scheduler
+                        .as_ref()
+                        .map(EnginePrefixCacheMetrics::from)
+                        .unwrap_or_default(),
                     allocation: final_allocation,
                 };
                 Ok(events)

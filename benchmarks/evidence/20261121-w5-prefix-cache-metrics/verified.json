@@ -1,0 +1,254 @@
+{
+  "status": "passed",
+  "remote_evidence": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-prefix-metrics-gpu-20261121.D0Jb5MtZ",
+  "remote_build": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-prefix-metrics-build-20261121.5MLLtayu",
+  "initial_attempt": {
+    "remote_evidence": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-prefix-metrics-gpu-20261121.8DIRyrNl",
+    "live": {
+      "retained_blocks": 128,
+      "hit_tokens": 5952,
+      "evicted_blocks": 188,
+      "metrics_degraded": false
+    },
+    "shutdown": {
+      "retained_blocks": 0,
+      "hit_tokens": 0,
+      "evicted_blocks": 0,
+      "metrics_degraded": false
+    }
+  },
+  "source_archive_sha256": "429f0132fed714f5af133f756e4374f21733ed4f27074b05f69b3b9930f5b6b6",
+  "image_id": "sha256:b731f48cc6ec0820197ec484e98c673e2de592f12ab8448e3fa9f38ca7217c9b",
+  "model_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "runtime_sources": {
+    "crates/riley-server/src/engine.rs": "b923e98c6d968bd2de9ce5f6229c331042322b7f11988a5c80993f5a3a8eacdc",
+    "crates/riley-server/src/hf_exact_backend.rs": "2b3e8717a914fd46582bc302c007a820f3f880dfbb11fb7a0ba4da74051ada35",
+    "crates/riley-server/src/service.rs": "ddb5a1880e1f8067d50a864cf75db86ff3d001a76c53b8f0dfbcbc741ad5083a"
+  },
+  "build_result_sha256": "d016e78f27ddb18bc2a6fd6a2705016a39c301e8a4fc56ca91241892b324695f",
+  "patched_binary_sha256": "9303315fdf5aa188ef61e63519e0349545d3a04a44b9a0461ff3f5a345211cdd",
+  "unchanged_metrics_fields": [
+    "active_requests",
+    "allocation",
+    "batch_shapes",
+    "counters",
+    "kv_allocated_blocks",
+    "waiting_requests"
+  ],
+  "match_to_stock_per_candidate": 6,
+  "runs": {
+    "stock": {
+      "operational_sha256": "06cab99d858d3e58e76000038f81463278f7bc6dd888005819aecf4e3931d7a8",
+      "receipt_sha256": "5992980770d585888870669154fe6586408e77054dbae8278c1d0b9f67bdb5c1",
+      "binary_sha256": "56112a5b9bd72e77106f45497af277038308af357a5c5ee129af74ce3cc85a0f",
+      "reservation": {
+        "6": {
+          "pid": 2680326,
+          "start_ticks": "6365879881",
+          "gib": 20
+        },
+        "7": {
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "gib": 20
+        }
+      },
+      "cache": null,
+      "shutdown_prefix_cache": null,
+      "overload": {
+        "completed": 3,
+        "rejected": 13,
+        "counter_delta": 13
+      }
+    },
+    "cache-off": {
+      "operational_sha256": "14265daf4e03274e3081a32d545842ca127035b29ad744d96ccc302b23f6a07b",
+      "receipt_sha256": "05d8d55515dd16aa98dc501c052bf8b6df349f2616f284b1b4204bec70f57107",
+      "binary_sha256": "9303315fdf5aa188ef61e63519e0349545d3a04a44b9a0461ff3f5a345211cdd",
+      "reservation": {
+        "6": {
+          "pid": 2680326,
+          "start_ticks": "6365879881",
+          "gib": 20
+        },
+        "7": {
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "gib": 20
+        }
+      },
+      "cache": {
+        "status": "passed",
+        "checks": {
+          "counters_monotonic": true,
+          "serial_hit_tokens_match_usage": true,
+          "disabled_cache_metrics_are_zero": true
+        },
+        "samples": {
+          "before": {
+            "retained_blocks": 0,
+            "hit_tokens": 0,
+            "evicted_blocks": 0,
+            "metrics_degraded": false
+          },
+          "cold": {
+            "retained_blocks": 0,
+            "hit_tokens": 0,
+            "evicted_blocks": 0,
+            "metrics_degraded": false
+          },
+          "warm": {
+            "retained_blocks": 0,
+            "hit_tokens": 0,
+            "evicted_blocks": 0,
+            "metrics_degraded": false
+          },
+          "pressure": {
+            "retained_blocks": 0,
+            "hit_tokens": 0,
+            "evicted_blocks": 0,
+            "metrics_degraded": false
+          },
+          "after_pressure": {
+            "retained_blocks": 0,
+            "hit_tokens": 0,
+            "evicted_blocks": 0,
+            "metrics_degraded": false
+          },
+          "rewarmed": {
+            "retained_blocks": 0,
+            "hit_tokens": 0,
+            "evicted_blocks": 0,
+            "metrics_degraded": false
+          },
+          "drained": {
+            "retained_blocks": 0,
+            "hit_tokens": 0,
+            "evicted_blocks": 0,
+            "metrics_degraded": false
+          },
+          "final": {
+            "retained_blocks": 0,
+            "hit_tokens": 0,
+            "evicted_blocks": 0,
+            "metrics_degraded": false
+          }
+        },
+        "hit_token_deltas": {
+          "cold": 0,
+          "warm": 0,
+          "pressure": 0,
+          "after_pressure": 0,
+          "rewarmed": 0,
+          "recovery": 0
+        }
+      },
+      "shutdown_prefix_cache": {
+        "retained_blocks": 0,
+        "hit_tokens": 0,
+        "evicted_blocks": 0,
+        "metrics_degraded": false
+      },
+      "overload": {
+        "completed": 3,
+        "rejected": 13,
+        "counter_delta": 13
+      }
+    },
+    "cache-on": {
+      "operational_sha256": "1abe0810bd2455ea9631ce5d3de05c4d0bef9ec374f3f733d7b4140f81d7a01e",
+      "receipt_sha256": "8d327ab806cf296e96988f621f1b4c34cd4ff6aaab20d8212ccd82624684780c",
+      "binary_sha256": "9303315fdf5aa188ef61e63519e0349545d3a04a44b9a0461ff3f5a345211cdd",
+      "reservation": {
+        "6": {
+          "pid": 2680326,
+          "start_ticks": "6365879881",
+          "gib": 20
+        },
+        "7": {
+          "pid": 2431237,
+          "start_ticks": "6339570875",
+          "gib": 20
+        }
+      },
+      "cache": {
+        "status": "passed",
+        "checks": {
+          "counters_monotonic": true,
+          "serial_hit_tokens_match_usage": true,
+          "retained_blocks_at_idle": true,
+          "pressure_evicted_blocks": true
+        },
+        "samples": {
+          "before": {
+            "retained_blocks": 15,
+            "hit_tokens": 1680,
+            "evicted_blocks": 0,
+            "metrics_degraded": false
+          },
+          "cold": {
+            "retained_blocks": 102,
+            "hit_tokens": 1680,
+            "evicted_blocks": 0,
+            "metrics_degraded": false
+          },
+          "warm": {
+            "retained_blocks": 102,
+            "hit_tokens": 3072,
+            "evicted_blocks": 0,
+            "metrics_degraded": false
+          },
+          "pressure": {
+            "retained_blocks": 128,
+            "hit_tokens": 3088,
+            "evicted_blocks": 101,
+            "metrics_degraded": false
+          },
+          "after_pressure": {
+            "retained_blocks": 128,
+            "hit_tokens": 3104,
+            "evicted_blocks": 187,
+            "metrics_degraded": false
+          },
+          "rewarmed": {
+            "retained_blocks": 128,
+            "hit_tokens": 4496,
+            "evicted_blocks": 187,
+            "metrics_degraded": false
+          },
+          "drained": {
+            "retained_blocks": 128,
+            "hit_tokens": 4560,
+            "evicted_blocks": 188,
+            "metrics_degraded": false
+          },
+          "final": {
+            "retained_blocks": 128,
+            "hit_tokens": 5952,
+            "evicted_blocks": 188,
+            "metrics_degraded": false
+          }
+        },
+        "hit_token_deltas": {
+          "cold": 0,
+          "warm": 1392,
+          "pressure": 16,
+          "after_pressure": 16,
+          "rewarmed": 1392,
+          "recovery": 1392
+        }
+      },
+      "shutdown_prefix_cache": {
+        "retained_blocks": 0,
+        "hit_tokens": 5952,
+        "evicted_blocks": 188,
+        "metrics_degraded": false
+      },
+      "overload": {
+        "completed": 3,
+        "rejected": 13,
+        "counter_delta": 13
+      }
+    }
+  }
+}

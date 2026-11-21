@@ -228,7 +228,18 @@ A JSON object, free of prompt text:
 - `batch_shapes`: committed steps and GPU time by batch shape. `bucket_count`
   gives the number of configured entries in the 24-slot `buckets` array.
   Unused entries are zeroed.
+- `prefix_cache`: `retained_blocks`, `hit_tokens`, `evicted_blocks`,
+  `metrics_degraded`
 - `counters`: `cancellations`, `disconnects`, `overloads`, `dropped_observations`
+
+`prefix_cache.retained_blocks` counts cache entries in 16-token KV blocks
+and is excluded from `kv_allocated_blocks`. It can be positive after requests
+drain. `hit_tokens` counts tokens when the scheduler adopts cached blocks,
+including adoption for a request that later cancels. `evicted_blocks` counts
+capacity evictions. Both counters are cumulative since scheduler startup.
+`metrics_degraded` is the scheduler's sticky indicator of a metric update
+failure. With caching disabled, the cache counts are zero. The graceful
+shutdown snapshot reports zero retained blocks and preserves the counters.
 
 `dropped_observations` counts terminal request records evicted from the
 bounded observation buffer. The default buffer retains the latest 1,024
