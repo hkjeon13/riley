@@ -3242,6 +3242,32 @@
         "sha256": "1c71f1aea03f177c7eb0a99846cda7cbb1c96262b8eca9dcca1f1e76d9949bd1"
       }
     ],
+    "prefill_dispatch_priority_cuda_build": [
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/cuda-build/build-priority-cuda.sh",
+        "sha256": "085c5f1adc6a6a52d270904fdf9fbe4249ee697d43dc47d8fa4d08980612ac77"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/cuda-build/dispatch.sha256",
+        "sha256": "d579f01b5eb295107ecf6c64670d333ee14618d67826562e527033c0563bda0a"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/cuda-build/fetch-build-summary.sh",
+        "sha256": "ddaecafc4312b4f939fa74b32969475481151d605d6169a1a113fec70e18838b"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/cuda-build/runtime-source.sha256",
+        "sha256": "d9602b6d98bdb323ea79e5e268daae80821f9ec4e3c043cee871049304922ffd"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/cuda-build/verified-build.json",
+        "sha256": "6791573cd473759015dcc7f11299464979a4f916d9bda38717910596feedf252"
+      },
+      {
+        "path": "benchmarks/evidence/20261119-w3-rag-profile/qkv-1024/serving/prefill-dispatch-priority/cuda-build/wire-early-priority.patch.gz",
+        "sha256": "c9d004100b741916435e4b44f126617764c1b584c1550117f6d8513bda055363"
+      }
+    ],
     "qwen14_qkv_1024_serving_result": {
       "decision": "keep_as_isolated_experiment_inconsistent_rag_tail_latency",
       "evidence": [
