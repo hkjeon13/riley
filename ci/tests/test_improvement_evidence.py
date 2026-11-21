@@ -163,7 +163,7 @@ class PackageFollowUpTests(unittest.TestCase):
 
     def test_rag_tail_change_matches_both_image_orders(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
-        entry = manifest["current_allocator_trial"]["evidence"]["rag_confirmation"]
+        entry = manifest["distribution_after_terminal_fix"]["allocator_follow_up"]["evidence"]["rag"]
         report = json.loads((ROOT / entry["path"]).read_bytes())
         parent = report["arms"]["parent-first"]["image_id"]
         variant = report["arms"]["packaged-first"]["image_id"]
@@ -174,6 +174,24 @@ class PackageFollowUpTests(unittest.TestCase):
         report["cells"]["rag-c8-seed2"]["change_percent_by_order"]["second"]["ttft_p95_ms"] = 0
         with self.assertRaisesRegex(ValueError, "seed2 RAG TTFT change differs"):
             checker.check_latest_allocator_rag(*args)
+
+    def test_fixed_arrival_rag_binds_capture_and_write_precision(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        records = manifest["distribution_after_terminal_fix"]["allocator_follow_up"]["evidence"]
+        closed = json.loads((ROOT / records["rag"]["path"]).read_bytes())
+        replay = json.loads((ROOT / records["rag_replay"]["path"]).read_bytes())
+        checksum = records["rag"]["sha256"]
+        checker.check_latest_allocator_rag_replay(replay, closed, checksum)
+
+        schedule = replay["schedules"]["parent-first"]
+        precision = "all_p95_relative_write_errors_at_most_5ms"
+        schedule[precision] = not schedule[precision]
+        with self.assertRaisesRegex(ValueError, "write precision differs"):
+            checker.check_latest_allocator_rag_replay(replay, closed, checksum)
+        schedule[precision] = not schedule[precision]
+        schedule["source_sha256"] = replay["schedules"]["packaged-first"]["source_sha256"]
+        with self.assertRaisesRegex(ValueError, "missing a matched schedule"):
+            checker.check_latest_allocator_rag_replay(replay, closed, checksum)
 
 
 class AllocatorTrialTests(unittest.TestCase):

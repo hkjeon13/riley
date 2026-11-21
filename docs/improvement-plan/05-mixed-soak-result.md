@@ -102,9 +102,22 @@ A100 6번에서 기준 `b731f48cc6ec`와 파생 `c3fae872c532`를 기준→파�
 
 변화율은 각 쌍의 기준 대비 파생 이미지로 계산했다. 세 seed의 평균 decode TPOT은 1% 회귀 기준을 충족했다. Seed 2의 TTFT p95는 기준 먼저 실행한 쌍에서 810.58→981.91ms였고, 파생 먼저 실행한 쌍은 기준 968.73ms·파생 902.13ms였다. 이전 이미지에서 두 순서에 걸쳐 증가했던 seed 2의 결과는 최신 이미지에서 순서별 방향이 갈렸다. [이전 세 seed 대조](#닫힌-rag-세-seed의-확장-교차-대조)
 
-Seed 2의 256건은 2,500토큰을 경계로 짧은 입력 127건(1,755–1,798토큰)과 긴 입력 129건(3,477–3,542토큰)으로 나뉜다. 네 실행 모두 TTFT 상위 13건이 전부 긴 입력이었다. 소켓 쓰기 전 p95 변화는 두 쌍에서 +0.02ms와 −0.22ms였고, 쓰기부터 첫 콘텐츠까지의 p95는 +171.31ms와 −66.51ms였다. 이 구간에는 서버 대기·GPU 처리·전송이 함께 포함된다. 같은 도착 시각표의 대조와 실제 운영 분포·SLO 확인이 남아 있다. [프롬프트 길이별 검산](../../benchmarks/evidence/20261121-w5-current-image-rag/verified-cohorts.json) · [릴리스 판정](06-candidate-qualification.md)
+Seed 2의 256건은 2,500토큰을 경계로 짧은 입력 127건(1,755–1,798토큰)과 긴 입력 129건(3,477–3,542토큰)으로 나뉜다. 네 실행 모두 TTFT 상위 13건이 전부 긴 입력이었다. 소켓 쓰기 전 p95 변화는 두 쌍에서 +0.02ms와 −0.22ms였고, 쓰기부터 첫 콘텐츠까지의 p95는 +171.31ms와 −66.51ms였다. 이 구간에는 서버 대기·GPU 처리·전송이 함께 포함된다. [프롬프트 길이별 검산](../../benchmarks/evidence/20261121-w5-current-image-rag/verified-cohorts.json) · [고정 도착 재생](#최신-rag-seed-2의-고정-도착-재생)
 
 재현 디렉터리에는 이전 측정의 `audit_allocator_ttft.py`, `scenario-inputs.sha256`, [부하 실행기](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/performance_client.py), [공통 GPU 검산기](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/verify_a100_candidate.py)를 복사하고 `dispatch.sha256`을 확인한다. [실행 순서](../../benchmarks/evidence/20261121-w5-current-image-rag/campaign.sh) · [독립 검산](../../benchmarks/evidence/20261121-w5-current-image-rag/fetch-summary.sh)
+
+### 최신 RAG seed 2의 고정 도착 재생
+
+최신 기준 및 jemalloc 이미지의 첫 실행에서 seed 2 요청을 소켓에 쓴 상대 시각표를 각각 추출했다. 같은 A100 6번에서 기준→파생→파생→기준 순으로 두 시각표를 모두 재생했고, 두 번째 실행 쌍에서는 시각표 순서를 뒤집었다. 시각표마다 워밍업 8건 후 측정 256건을 처리했다. 네 실행의 API 40건이 각각 통과했고, 재생 2,048건의 입력·응답 해시, 종료 사유, 토큰 사용량이 원본과 모두 일치했다. 오류·429는 0건이었다. 종료 자원 회수와 A100 6·7의 기존 20GiB 예약을 확인했다. [고정 도착 검산 결과](../../benchmarks/evidence/20261121-w5-current-image-rag-replay/verified-replay.json)
+
+| 도착 시각표 출처 | 구간 | TTFT p95 변화, 기준 먼저 | TTFT p95 변화, jemalloc 먼저 | 평균 p95 기준 변화 |
+|---|---:|---:|---:|---:|
+| 기준 이미지의 첫 실행 | 80.41초 | +0.25% | −0.14% | +0.06% |
+| jemalloc 이미지의 첫 실행 | 82.13초 | −0.87% | −0.29% | −0.58% |
+
+같은 시각표에서 기준과 jemalloc을 비교한 변화율이다. 소켓 쓰기 시각 오차의 실행별 p95는 최대 1.83ms로 5ms 기준을 충족했다. 같은 요청의 이미지 간 쓰기 오차 차이 p95는 최대 1.34ms였다. 긴 입력 129건의 TTFT p95 변화는 네 비교에서 −9.25ms에서 +3.72ms였다. 닫힌 부하에서의 +21.14% 증가는 고정 도착 조건에서 재현되지 않았다. 재생은 두 합성 시각표를 대상으로 했으며, 실제 서비스의 도착 분포·SLO와 복구 검증을 확보할 때까지 릴리스는 보류한다. [릴리스 판정](06-candidate-qualification.md) · [운영 자료](05-documentation-and-operations.md#w5-b3-재현용-workload-구성)
+
+실행 스크립트는 앞선 닫힌 부하의 런타임 결속과 요청 기록을 재사용한다. 독립 검산은 AWS에서 원본 해시를 검증하고 각 쌍의 TTFT와 소켓 쓰기 오차를 다시 계산한다. [실행 순서](../../benchmarks/evidence/20261121-w5-current-image-rag-replay/campaign.sh) · [독립 검산](../../benchmarks/evidence/20261121-w5-current-image-rag-replay/fetch-summary.sh)
 
 ## 90초 사전 검증
 

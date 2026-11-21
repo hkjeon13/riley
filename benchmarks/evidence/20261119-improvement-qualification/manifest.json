@@ -3329,6 +3329,10 @@
         "rag_cohorts": {
           "path": "benchmarks/evidence/20261121-w5-current-image-rag/verified-cohorts.json",
           "sha256": "5bc8f6c51ca0068272786fa91f331227824644291540c7e138a22579935f25e2"
+        },
+        "rag_replay": {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag-replay/verified-replay.json",
+          "sha256": "ee9595b4cd321b611a7aa95d7dbe9d49cdd0dd3c29c369a0085b76cc41a96d61"
         }
       },
       "replay_inputs": [
@@ -3391,6 +3395,34 @@
         {
           "path": "benchmarks/evidence/20261121-w5-current-image-rag/verify_confirmation.py",
           "sha256": "20d383d0b0c634c4e2f9ffdbef265123bcda5af60377350b96c1f32ce865f4c8"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag-replay/campaign.sh",
+          "sha256": "15ec1b215ae6ea081b2c6c1add60584ac30bd9ee0f02992f5de635bfb9ca7055"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag-replay/dispatch.sha256",
+          "sha256": "eb842039c6b4fca846ad1b91b99f6bc53ac81f246383d16d3d2bf0b209b62205"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag-replay/fetch-summary.sh",
+          "sha256": "6db05cfdc30b29f081ab5e76fa0ebb0b0a2e613f7ef6166ee3a566b65f40a627"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag-replay/fixed_arrival.py",
+          "sha256": "e8db769ea1e31f85594a25a6d68bcdb18254314fc7288212bdf6628af4121b78"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag-replay/replay_client.py",
+          "sha256": "9f20382fd79160de8750b338e7704a44eb2728e02711aee3ac615815d17a893c"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag-replay/run_replay.py",
+          "sha256": "8c16d0c8d3fab3248e504894975c47bc1dea27c4c697956cbfe3f657f894a1d6"
+        },
+        {
+          "path": "benchmarks/evidence/20261121-w5-current-image-rag-replay/verify_replay.py",
+          "sha256": "057e1b49c90bb39194aade0a73642158992ab5f6ee46eb479805f7fa3feb16bb"
         }
       ]
     }

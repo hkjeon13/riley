@@ -1,0 +1,345 @@
+{
+  "reference_receipt_sha256": "80b3e7545c58a13293924b2d9bf4a707d45231bab90b60ff513e0ffd65b358bf",
+  "remote_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-current-fixed-rag-20261121.jTMTYtJC",
+  "scope": "Qwen2.5-7B-Instruct A100 6 RAG C8 seed 2, two observed write schedules; diagnostic comparison.",
+  "order": [
+    "parent-first",
+    "packaged-first",
+    "packaged-second",
+    "parent-second"
+  ],
+  "arms": {
+    "parent-first": {
+      "image_id": "sha256:b731f48cc6ec0820197ec484e98c673e2de592f12ab8448e3fa9f38ca7217c9b",
+      "api_checks": 40,
+      "allocator": "glibc",
+      "server_arguments": [
+        "serve",
+        "--model",
+        "/models",
+        "--model-id",
+        "m",
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "1024",
+        "--kv-blocks",
+        "16384",
+        "--prefix-cache-blocks",
+        "128"
+      ],
+      "report_sha256": "a0a500d523f654549d8f570398b3ffba81f0dddc11667cb5ea0aa5b060e53502",
+      "artifacts_sha256": {
+        "api.json": "5b0c6fe4327e02644c9533ee7ac00b4dc0b5c67196a960cd1517f54ec7115d2b",
+        "api.log": "07f394bc200dfafdf5a41ea7eaf60fe092b14876e3651aac32ce900ea0724fba",
+        "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+        "packaged-first.records.json": "6e00b8a004280ba2d67fecb315968fea6fed9ec08e9281d659a6c956bab506e2",
+        "packaged-first.summary.json": "173d643a669af2fdcc83f7d2920e71213a69444f41d699741cb29f45eb27f540",
+        "parent-first.records.json": "8d028d77abb1f17d8e331da9d2c54dada5f091b5c36feeaf50017ced12bd60fd",
+        "parent-first.summary.json": "ace0260dc785e7f439454a5702ef7a186a05a8a7664d37ba53a27a1b054f09d6",
+        "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+        "server.log": "c67146d1ad81fa38d451635ab111ee02cf6f25ecede759d15f3ca05b643a2330",
+        "shutdown.json": "844bf7b03b8bd4f84593359faa279fd2e81ef073bb49862182e17225e1962ce0"
+      },
+      "reservations_after": {
+        "pid": 2680326,
+        "start_ticks": "6365879881",
+        "gib": 20
+      }
+    },
+    "packaged-first": {
+      "image_id": "sha256:c3fae872c5325cffbf02e4c41004514cc6b38bb364bb33d805f090beed1d5058",
+      "api_checks": 40,
+      "allocator": {
+        "container_id": "cbb6e6e4922d2833b2fa52ae50abe34c7cdec6aacbe57a3eede35778fb2c995f",
+        "host_pid": 3501024,
+        "image_id": "sha256:c3fae872c5325cffbf02e4c41004514cc6b38bb364bb33d805f090beed1d5058",
+        "library_sha256": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9",
+        "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+        "mounts": [
+          "/models"
+        ]
+      },
+      "server_arguments": [
+        "serve",
+        "--model",
+        "/models",
+        "--model-id",
+        "m",
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "1024",
+        "--kv-blocks",
+        "16384",
+        "--prefix-cache-blocks",
+        "128"
+      ],
+      "report_sha256": "55ea357425e7d7b61747de5ccae3b331280deb9cb652079068000491505e89ea",
+      "artifacts_sha256": {
+        "api.json": "0d96101b3ec4b36d4c388baa08273580c3111e328a2ffe3a50791b6d57a5f7a9",
+        "api.log": "07f394bc200dfafdf5a41ea7eaf60fe092b14876e3651aac32ce900ea0724fba",
+        "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+        "packaged-first.records.json": "f4f5a5b02d67e3fc7c68a4e648f39596c7e233c877176d11a715f988d8a49a7a",
+        "packaged-first.summary.json": "d046e5214748d9f69f12ac209428cc8f83549cefcbad0940aaecc988a6508c16",
+        "parent-first.records.json": "ee3073d487bd3015c3ca5b290674c8a56061e869997be57b45c23ce3c2e5f36a",
+        "parent-first.summary.json": "78e3187b70f4a597bbbfb46852f76998555088cf1b23bacb39afd89548a2e516",
+        "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+        "server.log": "506d79d89e96c0653203a63cec722f409f2f665c9fd9c594abb3aed1077cbd4b",
+        "shutdown.json": "0a6c4c2df94c219d6c549fa25a2819969b974c6f4fd0b1cb26c1599b2e92a32a"
+      },
+      "reservations_after": {
+        "pid": 2680326,
+        "start_ticks": "6365879881",
+        "gib": 20
+      }
+    },
+    "packaged-second": {
+      "image_id": "sha256:c3fae872c5325cffbf02e4c41004514cc6b38bb364bb33d805f090beed1d5058",
+      "api_checks": 40,
+      "allocator": {
+        "container_id": "97ab31704b2b60b51f843d32b2f516ac5c470fa6b72705722b069a320e45a93b",
+        "host_pid": 3535561,
+        "image_id": "sha256:c3fae872c5325cffbf02e4c41004514cc6b38bb364bb33d805f090beed1d5058",
+        "library_sha256": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9",
+        "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+        "mounts": [
+          "/models"
+        ]
+      },
+      "server_arguments": [
+        "serve",
+        "--model",
+        "/models",
+        "--model-id",
+        "m",
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "1024",
+        "--kv-blocks",
+        "16384",
+        "--prefix-cache-blocks",
+        "128"
+      ],
+      "report_sha256": "e3252ce150e9f9298642b121846b84440be6820b1188a8a95d2caabcccfc8844",
+      "artifacts_sha256": {
+        "api.json": "50a2ca636736296030d6fdd8b24ea8b2ca4dea7ccf5b29c01b77001d9d11e445",
+        "api.log": "1251ad5af193d442c515f79e46447f938818e9a38c1d13843ad0c1cb9587c7d6",
+        "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+        "packaged-first.records.json": "b013e856afcfabc240e6875752462f1e4e26746de1ef722432ef6404c639b570",
+        "packaged-first.summary.json": "77fa060c83836c4b1914279a86b63c50e03ad9f98920ec58a18ecb1ab33b325b",
+        "parent-first.records.json": "4cfa51b2a5cc9a80a0a085282bfb1b0500c06e1cb0397cb69905be9b3c6737a6",
+        "parent-first.summary.json": "8459ae214d6de99d0b452088fe4fda4476d7e6e59f2bbe969b6356a5f2fc964b",
+        "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+        "server.log": "18a0332abae74ad1e4df2e81147b8c413e5f95e725c7d9e1cb09f5ef1686ca39",
+        "shutdown.json": "e84265b9e57618a8b0c4d6203b090055eef598a170147782889a32f231bacd38"
+      },
+      "reservations_after": {
+        "pid": 2680326,
+        "start_ticks": "6365879881",
+        "gib": 20
+      }
+    },
+    "parent-second": {
+      "image_id": "sha256:b731f48cc6ec0820197ec484e98c673e2de592f12ab8448e3fa9f38ca7217c9b",
+      "api_checks": 40,
+      "allocator": "glibc",
+      "server_arguments": [
+        "serve",
+        "--model",
+        "/models",
+        "--model-id",
+        "m",
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "1024",
+        "--kv-blocks",
+        "16384",
+        "--prefix-cache-blocks",
+        "128"
+      ],
+      "report_sha256": "36a6e0e82996a0cbee1bbfcaf869324c9e17d144977a8cb52a35c117fca7b0a9",
+      "artifacts_sha256": {
+        "api.json": "a14f7a24af51a6c6c04a24a7a17385573564de7043a7a59eafa4d08df6c02a16",
+        "api.log": "1251ad5af193d442c515f79e46447f938818e9a38c1d13843ad0c1cb9587c7d6",
+        "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+        "packaged-first.records.json": "7e0284d26000ec4eeb10ab2fae5d3e2ae6ad6d85d79a404fd8a05dfa3ae90e11",
+        "packaged-first.summary.json": "e6388e3a43aac2021ed6ebd349aaac37f3bb9a7eeab03624d26379343d76b81b",
+        "parent-first.records.json": "28563c941e81c1d36d3d26c0e2b36300ca7c42ff83a28258344bddd633b0410a",
+        "parent-first.summary.json": "504d914d8edfb207c0882fc4c9103acc5a77755cdd355ba113eaa21b1a982a5c",
+        "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+        "server.log": "c69a3bf8ed608bd28de9eafa349c86972dccf785f48c420d0a2c859476b7ff10",
+        "shutdown.json": "c327b8b12c7ece3650284e070771dced63c2388aea3b0618dc624b21cd9b91d9"
+      },
+      "reservations_after": {
+        "pid": 2680326,
+        "start_ticks": "6365879881",
+        "gib": 20
+      }
+    }
+  },
+  "schedules": {
+    "parent-first": {
+      "source_sha256": "73e0f15699226570e72736f3df405b20717d871e7e2a35fb7084a0a16698212d",
+      "requests_per_arm": 256,
+      "scheduled_span_seconds": 80.41260600090027,
+      "streams_match_original": true,
+      "all_p95_relative_write_errors_at_most_5ms": true,
+      "metrics": {
+        "parent-first": {
+          "ttft_p95_ms": 794.5470437407494,
+          "tpot_p50_ms": 16.93271270652456,
+          "itl_p99_ms": 22.099509835243225,
+          "output_tok_s": 398.2016445538789,
+          "pre_write_p95_ms": 0.6895735859870911,
+          "write_to_first_text_p95_ms": 794.1324263811111,
+          "long_prompt_ttft_p95_ms": 878.8571953773499,
+          "write_error_abs_p95_ms": 1.324474811553955,
+          "write_error_abs_max_ms": 2.1596699953079224,
+          "summary_sha256": "ace0260dc785e7f439454a5702ef7a186a05a8a7664d37ba53a27a1b054f09d6",
+          "records_sha256": "8d028d77abb1f17d8e331da9d2c54dada5f091b5c36feeaf50017ced12bd60fd"
+        },
+        "packaged-first": {
+          "ttft_p95_ms": 796.5642288327217,
+          "tpot_p50_ms": 16.930305934327794,
+          "itl_p99_ms": 22.088535130023956,
+          "output_tok_s": 398.2108115953688,
+          "pre_write_p95_ms": 0.7240176200866699,
+          "write_to_first_text_p95_ms": 796.0896864533424,
+          "long_prompt_ttft_p95_ms": 882.5796395540237,
+          "write_error_abs_p95_ms": 1.709170639514923,
+          "write_error_abs_max_ms": 2.104714512825012,
+          "summary_sha256": "78e3187b70f4a597bbbfb46852f76998555088cf1b23bacb39afd89548a2e516",
+          "records_sha256": "ee3073d487bd3015c3ca5b290674c8a56061e869997be57b45c23ce3c2e5f36a"
+        },
+        "packaged-second": {
+          "ttft_p95_ms": 796.9479858875275,
+          "tpot_p50_ms": 16.897852085237428,
+          "itl_p99_ms": 22.078149020671844,
+          "output_tok_s": 398.22931869078025,
+          "pre_write_p95_ms": 0.6932392716407776,
+          "write_to_first_text_p95_ms": 796.1966469883919,
+          "long_prompt_ttft_p95_ms": 875.553660094738,
+          "write_error_abs_p95_ms": 1.5409737825393677,
+          "write_error_abs_max_ms": 2.2647902369499207,
+          "summary_sha256": "8459ae214d6de99d0b452088fe4fda4476d7e6e59f2bbe969b6356a5f2fc964b",
+          "records_sha256": "4cfa51b2a5cc9a80a0a085282bfb1b0500c06e1cb0397cb69905be9b3c6737a6"
+        },
+        "parent-second": {
+          "ttft_p95_ms": 798.0261072516441,
+          "tpot_p50_ms": 16.931917723708263,
+          "itl_p99_ms": 22.08629995584488,
+          "output_tok_s": 398.2331308230018,
+          "pre_write_p95_ms": 0.6451234221458435,
+          "write_to_first_text_p95_ms": 797.5434362888336,
+          "long_prompt_ttft_p95_ms": 884.802483022213,
+          "write_error_abs_p95_ms": 1.3088062405586243,
+          "write_error_abs_max_ms": 2.0762309432029724,
+          "summary_sha256": "504d914d8edfb207c0882fc4c9103acc5a77755cdd355ba113eaa21b1a982a5c",
+          "records_sha256": "28563c941e81c1d36d3d26c0e2b36300ca7c42ff83a28258344bddd633b0410a"
+        }
+      },
+      "paired_deltas": {
+        "first": {
+          "ttft_p95_change_percent": 0.2538786227779921,
+          "write_to_first_text_p95_difference_ms": 1.9572600722312927,
+          "long_prompt_ttft_p95_difference_ms": 3.722444176673889,
+          "paired_relative_write_difference_abs_p95_ms": 1.3406574726104736
+        },
+        "second": {
+          "ttft_p95_change_percent": -0.13509850797107648,
+          "write_to_first_text_p95_difference_ms": -1.346789300441742,
+          "long_prompt_ttft_p95_difference_ms": -9.248822927474976,
+          "paired_relative_write_difference_abs_p95_ms": 1.1534541845321655
+        }
+      },
+      "ttft_p95_change_percent_by_arm_means": 0.05896518645127635
+    },
+    "packaged-first": {
+      "source_sha256": "6f48bb4b48bc73d70bd9faeda312b50f75f1e2760aa1d5b1a0ee4df0bc726a5d",
+      "requests_per_arm": 256,
+      "scheduled_span_seconds": 82.1290548145771,
+      "streams_match_original": true,
+      "all_p95_relative_write_errors_at_most_5ms": true,
+      "metrics": {
+        "parent-first": {
+          "ttft_p95_ms": 988.2387816905975,
+          "tpot_p50_ms": 16.629999958154723,
+          "itl_p99_ms": 22.078827023506165,
+          "output_tok_s": 390.11417250722405,
+          "pre_write_p95_ms": 0.6963014602661133,
+          "write_to_first_text_p95_ms": 987.706758081913,
+          "long_prompt_ttft_p95_ms": 1082.292452454567,
+          "write_error_abs_p95_ms": 1.4203265309333801,
+          "write_error_abs_max_ms": 2.035774290561676,
+          "summary_sha256": "173d643a669af2fdcc83f7d2920e71213a69444f41d699741cb29f45eb27f540",
+          "records_sha256": "6e00b8a004280ba2d67fecb315968fea6fed9ec08e9281d659a6c956bab506e2"
+        },
+        "packaged-first": {
+          "ttft_p95_ms": 979.5996025204659,
+          "tpot_p50_ms": 16.666177572227838,
+          "itl_p99_ms": 22.08397537469864,
+          "output_tok_s": 390.15611036946285,
+          "pre_write_p95_ms": 0.617295503616333,
+          "write_to_first_text_p95_ms": 979.0964424610138,
+          "long_prompt_ttft_p95_ms": 1082.1991860866547,
+          "write_error_abs_p95_ms": 1.8306076526641846,
+          "write_error_abs_max_ms": 2.181045711040497,
+          "summary_sha256": "d046e5214748d9f69f12ac209428cc8f83549cefcbad0940aaecc988a6508c16",
+          "records_sha256": "f4f5a5b02d67e3fc7c68a4e648f39596c7e233c877176d11a715f988d8a49a7a"
+        },
+        "packaged-second": {
+          "ttft_p95_ms": 983.4860637784004,
+          "tpot_p50_ms": 16.645609100503247,
+          "itl_p99_ms": 22.112734615802765,
+          "output_tok_s": 390.116134482644,
+          "pre_write_p95_ms": 0.5372688174247742,
+          "write_to_first_text_p95_ms": 982.9960241913795,
+          "long_prompt_ttft_p95_ms": 1075.887456536293,
+          "write_error_abs_p95_ms": 1.7088353633880615,
+          "write_error_abs_max_ms": 2.307415008544922,
+          "summary_sha256": "77fa060c83836c4b1914279a86b63c50e03ad9f98920ec58a18ecb1ab33b325b",
+          "records_sha256": "b013e856afcfabc240e6875752462f1e4e26746de1ef722432ef6404c639b570"
+        },
+        "parent-second": {
+          "ttft_p95_ms": 986.332543194294,
+          "tpot_p50_ms": 16.658705167883024,
+          "itl_p99_ms": 22.076450288295746,
+          "output_tok_s": 390.12856156967354,
+          "pre_write_p95_ms": 0.7339641451835632,
+          "write_to_first_text_p95_ms": 985.5196252465248,
+          "long_prompt_ttft_p95_ms": 1075.3431022167206,
+          "write_error_abs_p95_ms": 1.117512583732605,
+          "write_error_abs_max_ms": 1.9306913018226624,
+          "summary_sha256": "e6388e3a43aac2021ed6ebd349aaac37f3bb9a7eeab03624d26379343d76b81b",
+          "records_sha256": "7e0284d26000ec4eeb10ab2fae5d3e2ae6ad6d85d79a404fd8a05dfa3ae90e11"
+        }
+      },
+      "paired_deltas": {
+        "first": {
+          "ttft_p95_change_percent": -0.8741995689900417,
+          "write_to_first_text_p95_difference_ms": -8.6103156208992,
+          "long_prompt_ttft_p95_difference_ms": -0.09326636791229248,
+          "paired_relative_write_difference_abs_p95_ms": 1.2078210711479187
+        },
+        "second": {
+          "ttft_p95_change_percent": -0.2885922638905414,
+          "write_to_first_text_p95_difference_ms": -2.5236010551452637,
+          "long_prompt_ttft_p95_difference_ms": 0.5443543195724487,
+          "paired_relative_write_difference_abs_p95_ms": 1.005113124847412
+        }
+      },
+      "ttft_p95_change_percent_by_arm_means": -0.5816785872090335
+    }
+  }
+}

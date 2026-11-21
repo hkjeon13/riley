@@ -227,6 +227,7 @@ def check_latest_allocator(root, trial, parent_entry, parent, serving):
     if (cohorts["source_receipt_sha256"] != records["rag"]["sha256"]
             or cohorts["cells"].keys() != reports["rag"]["cells"].keys()):
         raise ValueError("latest RAG cohort audit is not bound to the matched captures")
+    check_latest_allocator_rag_replay(reports["rag_replay"], reports["rag"], records["rag"]["sha256"])
 
 
 def check_latest_allocator_rag(report, parent, image, library, settings):
@@ -277,6 +278,65 @@ def check_latest_allocator_rag(report, parent, image, library, settings):
     }
     if any(report[key] is not value for key, value in updates.items()):
         raise ValueError("latest RAG aggregate verdict differs from its cells")
+
+
+def check_latest_allocator_rag_replay(report, closed_loop, closed_sha256):
+    captures = closed_loop["cells"]["rag-c8-seed2"]["request_timing"]
+    order = closed_loop["order"]
+    if (report["reference_receipt_sha256"] != closed_sha256 or report["order"] != order
+            or set(report["arms"]) != set(order) or set(report["schedules"]) != {"parent-first", "packaged-first"}):
+        raise ValueError("fixed-arrival RAG does not match the closed-loop reference and image order")
+    for name in order:
+        arm = report["arms"][name]
+        baseline = closed_loop["arms"][name]
+        server = baseline["server"]
+        holder = arm["reservations_after"]
+        if (arm["image_id"] != baseline["image_id"] or arm["api_checks"] != 40
+                or arm["server_arguments"] != server["server_arguments"]
+                or holder["gib"] != 20 or holder != report["arms"][order[0]]["reservations_after"]):
+            raise ValueError(f"{name} fixed-arrival RAG used different image, workload settings or reservation")
+        allocator = arm["allocator"]
+        expected = server["allocator"]
+        if expected == "glibc":
+            allocator_matches = allocator == "glibc"
+        else:
+            fields = ("image_id", "library_sha256", "malloc_conf", "mounts")
+            allocator_matches = all(allocator[key] == expected[key] for key in fields)
+        if not allocator_matches:
+            raise ValueError(f"{name} fixed-arrival RAG used different allocator settings")
+
+    for origin, schedule in report["schedules"].items():
+        metrics = schedule["metrics"]
+        if (schedule["source_sha256"] != captures[origin]["records_sha256"]
+                or schedule["requests_per_arm"] != 256 or schedule["streams_match_original"] is not True
+                or not isfinite(schedule["scheduled_span_seconds"]) or schedule["scheduled_span_seconds"] <= 0
+                or set(metrics) != set(order) or set(schedule["paired_deltas"]) != {"first", "second"}):
+            raise ValueError(f"{origin} fixed-arrival RAG is missing a matched schedule or response")
+        write_errors = [metrics[name]["write_error_abs_p95_ms"] for name in order]
+        for name, error in zip(order, write_errors, strict=True):
+            values = metrics[name]
+            if (not all(isfinite(values[key]) and values[key] > 0 for key in (
+                    "ttft_p95_ms", "tpot_p50_ms", "long_prompt_ttft_p95_ms", "write_to_first_text_p95_ms"))
+                    or not 0 <= error <= values["write_error_abs_max_ms"] < float("inf")):
+                raise ValueError(f"{origin} {name} fixed-arrival RAG timing is invalid")
+        if schedule["all_p95_relative_write_errors_at_most_5ms"] is not all(error <= 5 for error in write_errors):
+            raise ValueError(f"{origin} fixed-arrival RAG write precision differs from the measurements")
+        for pair, changes in schedule["paired_deltas"].items():
+            left, right = (metrics[f"{kind}-{pair}"] for kind in ("parent", "packaged"))
+            expected = {
+                "ttft_p95_change_percent": (right["ttft_p95_ms"] / left["ttft_p95_ms"] - 1) * 100,
+                "write_to_first_text_p95_difference_ms":
+                    right["write_to_first_text_p95_ms"] - left["write_to_first_text_p95_ms"],
+                "long_prompt_ttft_p95_difference_ms":
+                    right["long_prompt_ttft_p95_ms"] - left["long_prompt_ttft_p95_ms"],
+            }
+            if any(not isclose(changes[key], value, abs_tol=1e-9) for key, value in expected.items()):
+                raise ValueError(f"{origin} {pair} fixed-arrival RAG latency differs from the paired measurements")
+        averages = [fmean(metrics[f"{kind}-{pair}"]["ttft_p95_ms"] for pair in ("first", "second"))
+                    for kind in ("parent", "packaged")]
+        if not isclose(schedule["ttft_p95_change_percent_by_arm_means"],
+                       (averages[1] / averages[0] - 1) * 100, abs_tol=1e-9):
+            raise ValueError(f"{origin} fixed-arrival RAG mean TTFT differs from the measurements")
 
 
 def check_distribution_serving(root, candidate):
