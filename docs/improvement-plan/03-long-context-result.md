@@ -650,6 +650,31 @@ SSE 응답의 요청 ID로 클라이언트 write와 서버 HTTP 파싱, 엔진 �
 
 계측을 켠 네 실행의 C32 384건을 누락 없이 연결했다. 여덟 실행의 1,312건은 기존 이미지와 입력·생성 토큰 ID, 텍스트, 종료 사유가 일치했다. 필터·격리 워밍업의 일반 RAG는 네 실행 모두 64건이 적중했고 짧은 요청 적중은 0건이었다. 종료 자원을 회수했고 GPU 6·7은 동일 홀더의 기존 20GiB 예약으로 복귀했다. 재현용 `dispatch.sha256`의 `replay-timing.patch`는 저장소의 `replay-timing.patch.gz`를 풀어 준비한다. [원본 지문](../../benchmarks/evidence/20261122-w3-c32-stage-timing/result.sha256) · [독립 재검산](../../benchmarks/evidence/20261122-w3-c32-stage-timing/fetch-summary.sh)
 
+### 기존 요청 관측값으로 대조한 C32 입장 지연
+
+앞선 상세 계측을 끈 실행에서 전체 C32의 첫 토큰 중앙값 증가가 반복됐다. 같은 `3951d90c8` 배포 소스와 캐시 진단 설정에서, Riley가 원래 기록하는 요청별 관측값을 서버 종료 후 출력하는 코드만 추가했다. 요청을 처리하는 동안 새 타임스탬프나 잠금을 추가하지 않았다. 각 GPU에서 캐시 비활성·워밍업 켬과 128토큰 필터·격리 워밍업을 두 번 대조했다. 각 GPU의 두 번째 대조와 다른 GPU의 실행 순서를 뒤집었으며, 매 실행에서 새 서버를 띄우고 이전과 같은 합성 RAG 및 C32 도착 시각표를 재생했다. [종료 시 추출 패치](../../benchmarks/evidence/20261122-w3-c32-admission-observations/export-observations.patch.gz) · [실행 순서](../../benchmarks/evidence/20261122-w3-c32-admission-observations/campaign.sh)
+
+SSE 요청 ID로 서버의 `queue_wait`, `time_to_first_token`을 클라이언트 측 TTFT에 연결했다. `queue_wait`는 HTTP 처리에서 백엔드 제출을 시작한 시점부터 입장이 반환되기까지의 시간이다. 이 구간에는 제출 스레드의 토큰화, 엔진 큐 대기, 스케줄러 입장이 모두 들어간다. `time_to_first_token`은 입장 뒤 요청 추적기를 만든 시점부터 서버가 첫 텍스트를 보낼 때까지다. 클라이언트 TTFT에서 두 서버 구간과 클라이언트 write 이전 시간을 빼면 HTTP 처리와 전송 등을 포함한 나머지 시간이 남는다. [관측값 연결과 계산](../../benchmarks/evidence/20261122-w3-c32-admission-observations/verify.py)
+
+| 캐시 비활성·워밍업 켬 대비 필터·격리 워밍업 | GPU 6번 1차 | GPU 6번 2차 | GPU 7번 1차 | GPU 7번 2차 |
+|---|---:|---:|---:|---:|
+| 전체 C32 TTFT p50 | −6.73% | +7.18% | −22.79% | +13.17% |
+| 전체 C32 TTFT p95 | −0.28% | +1.89% | −5.24% | −0.07% |
+| 전체 C32 decode TPOT p50 | −0.07% | −0.10% | −0.57% | +0.44% |
+| 반복 문서 RAG TTFT p95 | −96.15% | −96.16% | −96.19% | −96.15% |
+
+두 GPU의 2차에서 전체 C32 TTFT p50이 2% 한도를 넘었고 후속 64건은 모두 느려졌다. 후속 64건을 입력별로 짝지은 차이의 중앙값은 아래와 같다. 네 대조에서 백엔드 제출부터 입장까지의 변화는 클라이언트 TTFT 변화와 같은 방향이었다. 입장 뒤 첫 텍스트 구간의 변화는 절댓값 0.27ms 이하였다.
+
+| 후속 64건의 요청별 차이 중앙값 | GPU 6번 1차 | GPU 6번 2차 | GPU 7번 1차 | GPU 7번 2차 |
+|---|---:|---:|---:|---:|
+| 클라이언트 TTFT | −3.66ms | +5.36ms | −1.53ms | +8.09ms |
+| 백엔드 제출부터 입장까지 | −3.34ms | +2.37ms | −1.28ms | +6.89ms |
+| 입장 뒤 첫 텍스트까지 | +0.03ms | −0.03ms | −0.27ms | +0.10ms |
+
+GPU 6번의 2차는 후속 64건의 write 뒤 나머지 구간도 약 3.04ms 늘었다. GPU 7번의 2차 첫 32건에서는 해당 구간의 p50이 80.73ms에서 0.43ms로 줄었고 write 이전 p50은 두 조건 모두 0.04ms였다. 첫 32건의 입장 뒤 첫 텍스트 중앙값은 같은 대조에서 148.89ms에서 184.06ms로 늘었다. 따라서 첫 유입과 후속 유입의 구간별 변화는 따로 확인해야 한다. 현재 관측으로는 write 뒤 나머지 구간을 HTTP 입구와 SSE 전달 시간으로 나눌 수 없다. [요청 집단별 지연](../../benchmarks/evidence/20261122-w3-c32-admission-observations/verified.json)
+
+여덟 실행에서 첫 32건의 write는 1.37–1.79ms에 마쳤고, 대조군 간 전송 오차 차이 p95는 최대 1.09ms였다. 서버 관측값 1,312건을 누락 없이 응답과 연결했고, 기존 배포 이미지 기준의 입력·생성 토큰 ID, 텍스트, 종료 사유와 일치했다. 캐시 후보의 RAG는 실행마다 64건이 적중했으며 짧은 C32는 적중이 0건이었다. 종료 뒤 활성·대기 요청과 GPU 자원은 0으로 돌아왔고 GPU 6·7은 동일 홀더의 20GiB 예약으로 복귀했다. 후보의 기본값 적용은 보류한다. [반복별 검산](../../benchmarks/evidence/20261122-w3-c32-admission-observations/verified.json) · [원본 지문](../../benchmarks/evidence/20261122-w3-c32-admission-observations/result.sha256) · [독립 재검산](../../benchmarks/evidence/20261122-w3-c32-admission-observations/fetch-summary.sh)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
