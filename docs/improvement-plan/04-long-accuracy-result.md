@@ -286,6 +286,27 @@ A100 7번의 동일 HF 체크포인트와 BF16 환경에서 프롬프트 prefill
 
 `long-code-7836`에서 SDPA는 기존 ID 262를 단독 최고점으로 재현했다. Eager는 두 ID 모두보다 높은 다른 ID에 공동 최고점을 줬다. 이 결과는 두 투영 후보가 일부 입력의 첫 선택을 개선하면서 다른 입력에서 기존 참조 일치를 깨는 양상을 보여 준다. 점수의 비교 범위는 분기 전까지 이력이 같은 위치다. 두 후보의 전체 적용은 기각 상태다. 새 품질 기준이나 전체 모델의 수치 변경은 별도 검증 범위다. GPU 7번은 시험 뒤 기존 홀더의 20GiB 예약으로 복귀했다. 원본 검산 경로는 `/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-projection-divergence-replay-20261122.BUXTmL5R`이다. [GPU 복귀와 판정](../../benchmarks/evidence/20261122-w4-projection-divergence-replay/verified.json) · [원본 재검산](../../benchmarks/evidence/20261122-w4-projection-divergence-replay/fetch-result.sh)
 
+#### 장문 코드의 마지막 prefill과 여덟 번째 생성 토큰
+
+`long-code-7836`의 입력 7,836개와 앞선 생성 ID 일곱 개를 고정했다. 두 투영 후보와 기준을 한 CUDA 진단 바이너리의 스위치로 실행했다. 각 조건의 생성 ID 전체, 텍스트, 종료 사유와 usage를 이미 보존한 해당 조건의 서빙 결과에 맞췄다. 마지막 프롬프트 행과 일곱 번째 생성 ID를 소비하는 decode 행에서 embedding, 28개 레이어의 attention 직후 및 MLP 이후 residual, 마지막 norm과 전체 BF16 로그릿을 기록했다. [진단 구성](../../benchmarks/evidence/20261122-w4-long-code-boundaries/prepare.py) · [실제 서빙 대조](../../benchmarks/evidence/20261122-w4-long-code-boundaries/run_case.py) · [행과 로그릿 검산](../../benchmarks/evidence/20261122-w4-long-code-boundaries/verify.py)
+
+두 시점의 첫 차이는 기록한 경계 중에서 찾았다. Decode 시점까지 생성 토큰 ID가 같아도 각 조건의 앞선 prefill·decode에서 만들어진 KV는 달라질 수 있다. [캠페인](../../benchmarks/evidence/20261122-w4-long-code-boundaries/campaign.sh)
+
+| 기준 대비 첫 BF16 차이 | 마지막 프롬프트 행 | 여덟 번째 토큰을 결정한 decode 행 |
+|---|---|---|
+| Attention 계획 31 | 레이어 0 attention 직후, 3/3,584개 | 레이어 0 attention 직후, 1/3,584개 |
+| FP32 부분합 down 계획 21 | 레이어 0 MLP 이후, 757/3,584개 | 레이어 0 MLP 이후, 766/3,584개 |
+
+세 조건의 마지막 프롬프트 스텝은 실제 156행·실행 형상 160행이었고, 선택 ID는 모두 576이었다. 여덟 번째 토큰을 결정하는 스텝은 각 조건에서 단일 행이었다. Attention 계획 31의 첫 차이에서 최대 절대차는 마지막 프롬프트 행 0.00048828125, decode 행 0.000030517578125였다. FP32 부분합 down 계획 21에서는 각각 0.015625, 0.00390625였다. 각 경계 이전의 기록값은 기준과 같았다. [경계별 수치](../../benchmarks/evidence/20261122-w4-long-code-boundaries/verified.json)
+
+| 여덟 번째 생성 토큰의 BF16 로그릿 | ID 262 | ID 16019 | 선택 ID | 전체 최고 두 점수의 차이 |
+|---|---:|---:|---:|---:|
+| Riley 기준 | 10.6875 | 10.0625 | 262 | 0.3125 |
+| Attention 계획 31 | 10.1250 | 11.0625 | 16019 | 0.6875 |
+| FP32 부분합 down 계획 21 | 9.9375 | 11.3750 | 16019 | 0.7500 |
+
+두 후보는 처음 달라진 경계가 달랐으며 동일한 토큰을 각각 단독 최고점으로 골랐다. 앞선 7개 ID와 전체 256개 생성 ID를 각 조건의 보존 원본과 대조했다. 차이를 처음 관측한 행의 일부 값만 바꿔도 동일한 선택이 재현되는지는 미확인이다. 전체 후보 적용의 기각 판정은 앞선 29개 대조에서 확인했다. 세 서버는 정상 종료 후 활성·대기 요청과 KV·GPU 할당을 회수했고, A100 7번은 같은 홀더의 20GiB 예약으로 복귀했다. [런타임과 출력 검산](../../benchmarks/evidence/20261122-w4-long-code-boundaries/verified.json) · [원본 체크섬](../../benchmarks/evidence/20261122-w4-long-code-boundaries/result.sha256) · [독립 재검산](../../benchmarks/evidence/20261122-w4-long-code-boundaries/fetch-summary.sh)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.
