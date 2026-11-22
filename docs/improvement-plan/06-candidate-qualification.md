@@ -54,6 +54,8 @@ Qwen2.5-14B-Instruct의 CUDA 진단 바이너리에서 prefill chunk와 KV 한�
 
 Qwen2.5-7B-Instruct의 두 decode 분기에서 28개 레이어의 residual 교체를 모두 대조했다. HF 접두부를 고정한 상태에서 Riley 선택을 재현하는 첫 경계가 사례별로 레이어 0의 MLP 이후와 attention 직후로 달랐다. 수치 변경 후보의 채택과 영향 모델의 재검증은 남아 있다. [W4 residual 경계 검증](04-long-accuracy-result.md#residual-경계-교체로-decode-토큰-선택을-재현)
 
+같은 모델의 `long-code-7836`에서 두 투영 후보와 기준의 레이어 0 residual·정규화 행을 교체해 여덟 번째 토큰을 확인했다. Attention 후보의 두 행은 각각 BF16 값 한 개가 달랐고, 여덟 번째 선택을 양방향으로 바꿨다. FP32 부분합 down은 기준에서 후보 선택을 재현했고 역방향은 후보 선택을 유지했다. 적용 판정은 장문 29개의 기존 대조를 따른다. [W4 장문 코드 행 교체](04-long-accuracy-result.md#장문-코드의-레이어-0-bf16-행-교체)
+
 동일 입력의 레이어 0 비교에서 사례 12는 down projection 출력 1,536개가 달랐고, `numbers-1023`은 attention 출력 투영의 세 값이 달랐다. 각 사례의 해당 출력 행을 사용한 재실행에서 Riley 토큰 선택을 재현했다. [연산별 대조](04-long-accuracy-result.md#같은-입력으로-레이어-0의-mlp와-attention-출력-투영-대조)
 
 두 down projection을 FP64 내적으로 검산했다. BF16 최근접 기준과 다른 값은 Riley에서 1,248개·1,263개였다. HF는 축소 정밀도 reduction을 끈 독립 투영의 차이가 4개·3개로 줄었다. [투영 정밀도 대조](04-long-accuracy-result.md#투영의-bf16-반올림과-축소-정밀도-대조)

@@ -1,0 +1,577 @@
+{
+  "status": "passed",
+  "remote_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-boundary-swap-gpu-20261123.OhUoSQsC",
+  "remote_build": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-boundary-swap-build-20261123.38gkkvxa",
+  "model_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "binary_sha256": "268e6efab808da7ed99787e1f7e2d972075ba5137239e25611a17a3b6835dc56",
+  "reservations": {
+    "6": {
+      "pid": 2680326,
+      "start_ticks": "6365879881",
+      "gib": 20
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "gib": 20
+    }
+  },
+  "comparisons": {
+    "attention31": {
+      "baseline": {
+        "boundary": [
+          "attention_residual",
+          "post_attention_norm"
+        ],
+        "row_differences": {
+          "attention_residual": {
+            "changed_words": 1,
+            "words": 3584
+          },
+          "post_attention_norm": {
+            "changed_words": 1,
+            "words": 3584
+          }
+        },
+        "trials": {
+          "calibration": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              262
+            ],
+            "response_sha256": "0dced11ccd664ade7ad27102b451901c67c6f39589f0ff7e9bc673aba7e4fbac",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.016360320150852,
+            "scores": {
+              "262": 10.6875,
+              "16019": 10.0625,
+              "top_two_gap": 0.3125
+            },
+            "logits_vs_recipient": {
+              "changed_words": 0,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 151205,
+              "words": 152064
+            },
+            "trace_sha256": "9d247e434f68f7839d186e71ac98debea7d40430c7a5fd4b739ec1075d156b76"
+          },
+          "self": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              262
+            ],
+            "response_sha256": "0dced11ccd664ade7ad27102b451901c67c6f39589f0ff7e9bc673aba7e4fbac",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.036618433892727,
+            "scores": {
+              "262": 10.6875,
+              "16019": 10.0625,
+              "top_two_gap": 0.3125
+            },
+            "logits_vs_recipient": {
+              "changed_words": 0,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 151205,
+              "words": 152064
+            },
+            "trace_sha256": "cdb194f16efdaffa74f4e9972d29ac62e4474304dbfd1e75b644162e776a1a1d"
+          },
+          "cross": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              16019
+            ],
+            "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.002649158239365,
+            "scores": {
+              "262": 10.0625,
+              "16019": 10.875,
+              "top_two_gap": 0.8125
+            },
+            "logits_vs_recipient": {
+              "changed_words": 151755,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 151288,
+              "words": 152064
+            },
+            "trace_sha256": "41a2c22b034c1aff4bab84d508b40182161e9ff44d020d71de87618d9751bfc1"
+          },
+          "final": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              16019
+            ],
+            "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.010346807539463,
+            "scores": {
+              "262": 10.125,
+              "16019": 11.0625,
+              "top_two_gap": 0.6875
+            },
+            "logits_vs_recipient": {
+              "changed_words": 151205,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 0,
+              "words": 152064
+            },
+            "trace_sha256": "33ab865dc06e39d57beb6baf3a268eb89856d52e0b79c77d8f152f9b24a00d4e"
+          }
+        }
+      },
+      "candidate": {
+        "boundary": [
+          "attention_residual",
+          "post_attention_norm"
+        ],
+        "row_differences": {
+          "attention_residual": {
+            "changed_words": 1,
+            "words": 3584
+          },
+          "post_attention_norm": {
+            "changed_words": 1,
+            "words": 3584
+          }
+        },
+        "trials": {
+          "calibration": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              16019
+            ],
+            "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.02338857203722,
+            "scores": {
+              "262": 10.125,
+              "16019": 11.0625,
+              "top_two_gap": 0.6875
+            },
+            "logits_vs_recipient": {
+              "changed_words": 0,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 151205,
+              "words": 152064
+            },
+            "trace_sha256": "25b55a492a77826312c6df53284e27d0d6c82ea969b9d203ffa3534a9c02d64b"
+          },
+          "self": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              16019
+            ],
+            "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.01154237985611,
+            "scores": {
+              "262": 10.125,
+              "16019": 11.0625,
+              "top_two_gap": 0.6875
+            },
+            "logits_vs_recipient": {
+              "changed_words": 0,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 151205,
+              "words": 152064
+            },
+            "trace_sha256": "10df2ff14822e2e884a4bb544b990d29e7da2a894ce5ab5db94bb6167e965737"
+          },
+          "cross": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              262
+            ],
+            "response_sha256": "0dced11ccd664ade7ad27102b451901c67c6f39589f0ff7e9bc673aba7e4fbac",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.012682065367699,
+            "scores": {
+              "262": 10.625,
+              "16019": 10.4375,
+              "top_two_gap": 0.1875
+            },
+            "logits_vs_recipient": {
+              "changed_words": 151333,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 144197,
+              "words": 152064
+            },
+            "trace_sha256": "e10c7546f8afc5a0547ec70a38ef7a0d15ec25415854ab00d8187cd6979a015d"
+          },
+          "final": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              262
+            ],
+            "response_sha256": "0dced11ccd664ade7ad27102b451901c67c6f39589f0ff7e9bc673aba7e4fbac",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.018214754760265,
+            "scores": {
+              "262": 10.6875,
+              "16019": 10.0625,
+              "top_two_gap": 0.3125
+            },
+            "logits_vs_recipient": {
+              "changed_words": 151205,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 0,
+              "words": 152064
+            },
+            "trace_sha256": "baf4e06eb055d6433117333b23253c819d0218b02fed12c0c17141882e9524ee"
+          }
+        }
+      }
+    },
+    "fp32_down21": {
+      "baseline": {
+        "boundary": [
+          "layer_residual",
+          "next_input_norm"
+        ],
+        "row_differences": {
+          "layer_residual": {
+            "changed_words": 766,
+            "words": 3584
+          },
+          "next_input_norm": {
+            "changed_words": 705,
+            "words": 3584
+          }
+        },
+        "trials": {
+          "calibration": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              262
+            ],
+            "response_sha256": "0dced11ccd664ade7ad27102b451901c67c6f39589f0ff7e9bc673aba7e4fbac",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.02119617164135,
+            "scores": {
+              "262": 10.6875,
+              "16019": 10.0625,
+              "top_two_gap": 0.3125
+            },
+            "logits_vs_recipient": {
+              "changed_words": 0,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 151540,
+              "words": 152064
+            },
+            "trace_sha256": "9d247e434f68f7839d186e71ac98debea7d40430c7a5fd4b739ec1075d156b76"
+          },
+          "self": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              262
+            ],
+            "response_sha256": "0dced11ccd664ade7ad27102b451901c67c6f39589f0ff7e9bc673aba7e4fbac",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.0356819704174995,
+            "scores": {
+              "262": 10.6875,
+              "16019": 10.0625,
+              "top_two_gap": 0.3125
+            },
+            "logits_vs_recipient": {
+              "changed_words": 0,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 151540,
+              "words": 152064
+            },
+            "trace_sha256": "0d9b29e8acc2216db2520f5c33aea499c7c7ad10e3205ee18608e95e1063bb54"
+          },
+          "cross": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              16019
+            ],
+            "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.003408044576645,
+            "scores": {
+              "262": 10.25,
+              "16019": 11.0625,
+              "top_two_gap": 0.6875
+            },
+            "logits_vs_recipient": {
+              "changed_words": 151271,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 149913,
+              "words": 152064
+            },
+            "trace_sha256": "61cec72d2873b8b44dd3c1d530a08c2e54559fef01557a9c09033d86ba6f07fd"
+          },
+          "final": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              16019
+            ],
+            "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.015703849494457,
+            "scores": {
+              "262": 9.9375,
+              "16019": 11.375,
+              "top_two_gap": 0.75
+            },
+            "logits_vs_recipient": {
+              "changed_words": 151540,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 0,
+              "words": 152064
+            },
+            "trace_sha256": "4307deccb36378e0a01fb1e7c26ab0dfba02fd8a072b3911ae82e2a20b8db215"
+          }
+        }
+      },
+      "candidate": {
+        "boundary": [
+          "layer_residual",
+          "next_input_norm"
+        ],
+        "row_differences": {
+          "layer_residual": {
+            "changed_words": 766,
+            "words": 3584
+          },
+          "next_input_norm": {
+            "changed_words": 705,
+            "words": 3584
+          }
+        },
+        "trials": {
+          "calibration": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              16019
+            ],
+            "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.064679734408855,
+            "scores": {
+              "262": 9.9375,
+              "16019": 11.375,
+              "top_two_gap": 0.75
+            },
+            "logits_vs_recipient": {
+              "changed_words": 0,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 151540,
+              "words": 152064
+            },
+            "trace_sha256": "1f27704fadd848202950a0455dd1c3b5800f18392c45ff2d40aa09f9855d676b"
+          },
+          "self": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              16019
+            ],
+            "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.044890657067299,
+            "scores": {
+              "262": 9.9375,
+              "16019": 11.375,
+              "top_two_gap": 0.75
+            },
+            "logits_vs_recipient": {
+              "changed_words": 0,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 151540,
+              "words": 152064
+            },
+            "trace_sha256": "433379000633bab2a4576ff8a946a80c323f297a2c6174a358e110721888b450"
+          },
+          "cross": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              16019
+            ],
+            "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.034941874444485,
+            "scores": {
+              "262": 10.25,
+              "16019": 11.1875,
+              "top_two_gap": 0.5
+            },
+            "logits_vs_recipient": {
+              "changed_words": 151276,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 150061,
+              "words": 152064
+            },
+            "trace_sha256": "5a5dd0307fa83bde2d6e259f30050085480247a729ed6b9c01a3356c75cfbbdb"
+          },
+          "final": {
+            "first_eight": [
+              576,
+              2701,
+              2038,
+              1447,
+              73594,
+              12669,
+              198,
+              262
+            ],
+            "response_sha256": "0dced11ccd664ade7ad27102b451901c67c6f39589f0ff7e9bc673aba7e4fbac",
+            "generated_tokens": 256,
+            "finish": "length",
+            "seconds": 4.036032922565937,
+            "scores": {
+              "262": 10.6875,
+              "16019": 10.0625,
+              "top_two_gap": 0.3125
+            },
+            "logits_vs_recipient": {
+              "changed_words": 151540,
+              "words": 152064
+            },
+            "logits_vs_donor": {
+              "changed_words": 0,
+              "words": 152064
+            },
+            "trace_sha256": "5a56db8ef72c25cda78eb5be6681370b9e5080310736ac5cae6e9aa227c63e81"
+          }
+        }
+      }
+    }
+  }
+}

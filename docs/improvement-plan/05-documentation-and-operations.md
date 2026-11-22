@@ -164,6 +164,8 @@ trace가 없으면 "production 검증" 대신 "관측 분포를 가정한 합성
 
 같은 날 연결된 Google Drive에서 Riley 관련 파일명과 운영·SLO·runbook 문서 메타데이터를 검색했고, 연결된 Notion에서는 `Riley` 키워드를 검색했다. 조회 범위에서 두 서비스 모두 일치 자료가 없었다.
 
+2026-11-23에 GitHub 공개 API를 다시 조회했다. 배포 목록과 환경 목록 모두 HTTP 200으로 응답했고 등록 수는 각각 0건이었다. `aws-a100`에 현재 실행 중인 컨테이너의 이름과 이미지명에서도 Riley를 식별하지 못했다. 연결된 Atlassian은 인증 단계에서 조회가 완료되지 않았다. 이 범위에서 운영 대상과 SLO 승인 문서의 위치는 미확인이다. 실제 트래픽 확인과 운영 환경의 복구 검증은 보류한다. [GitHub 배포 목록](https://api.github.com/repos/hkjeon13/riley/deployments) · [GitHub 환경 목록](https://api.github.com/repos/hkjeon13/riley/environments)
+
 운영 자료가 확인되면 아래 항목으로 부하를 구성하고 릴리스 판정에 사용한 출처와 측정 기간을 남긴다.
 
 | 운영 자료 | 재현과 판정에 사용하는 값 |

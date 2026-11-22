@@ -305,7 +305,22 @@ A100 7번의 동일 HF 체크포인트와 BF16 환경에서 프롬프트 prefill
 | Attention 계획 31 | 10.1250 | 11.0625 | 16019 | 0.6875 |
 | FP32 부분합 down 계획 21 | 9.9375 | 11.3750 | 16019 | 0.7500 |
 
-두 후보는 처음 달라진 경계가 달랐으며 동일한 토큰을 각각 단독 최고점으로 골랐다. 앞선 7개 ID와 전체 256개 생성 ID를 각 조건의 보존 원본과 대조했다. 차이를 처음 관측한 행의 일부 값만 바꿔도 동일한 선택이 재현되는지는 미확인이다. 전체 후보 적용의 기각 판정은 앞선 29개 대조에서 확인했다. 세 서버는 정상 종료 후 활성·대기 요청과 KV·GPU 할당을 회수했고, A100 7번은 같은 홀더의 20GiB 예약으로 복귀했다. [런타임과 출력 검산](../../benchmarks/evidence/20261122-w4-long-code-boundaries/verified.json) · [원본 체크섬](../../benchmarks/evidence/20261122-w4-long-code-boundaries/result.sha256) · [독립 재검산](../../benchmarks/evidence/20261122-w4-long-code-boundaries/fetch-summary.sh)
+두 후보는 처음 달라진 경계가 달랐으며 동일한 토큰을 각각 단독 최고점으로 골랐다. 앞선 7개 ID와 전체 256개 생성 ID를 각 조건의 보존 원본과 대조했다. 전체 후보 적용의 기각 판정은 앞선 29개 대조에서 확인했다. 세 서버는 정상 종료 후 활성·대기 요청과 KV·GPU 할당을 회수했고, A100 7번은 같은 홀더의 20GiB 예약으로 복귀했다. [런타임과 출력 검산](../../benchmarks/evidence/20261122-w4-long-code-boundaries/verified.json) · [원본 체크섬](../../benchmarks/evidence/20261122-w4-long-code-boundaries/result.sha256) · [독립 재검산](../../benchmarks/evidence/20261122-w4-long-code-boundaries/fetch-summary.sh)
+
+#### 장문 코드의 레이어 0 BF16 행 교체
+
+같은 체크포인트와 `long-code-7836`을 사용했다. 일곱 번째 생성 ID 198을 읽는 위치 7,842의 단일 decode 행에서 레이어 0의 residual과 그때 계산된 정규화 행을 함께 교체했다. Attention 경계의 정규화 행은 MLP 입력이며 down 경계의 정규화 행은 레이어 1 입력이다. 교체를 받는 서버는 앞선 prefill과 decode에서 스스로 만든 KV와 기존 연산 경로를 사용했다. 기본 실행과 자체 행을 다시 넣은 실행은 모두 보존된 BF16 행과 생성 ID 256개·텍스트·usage·종료 사유를 재현했다. 교체 직전에는 받는 쪽의 원본 값, 교체 직후에는 제공한 두 행과 바이트 단위로 대조했다. [진단 패치 생성기](../../benchmarks/evidence/20261123-w4-boundary-swap/prepare.py) · [실행 및 판정](../../benchmarks/evidence/20261123-w4-boundary-swap/trial.py)
+
+| 받는 실행에 제공한 행 | 두 행의 차이 | 원래 선택 ID → 교체 후 ID | 교체 후 ID 262 / 16019 점수 |
+|---|---:|---:|---:|
+| 기준에 attention 계획 31의 행 | 1 / 1개 | 262 → 16019 | 10.0625 / 10.8750 |
+| attention 계획 31에 기준의 행 | 1 / 1개 | 16019 → 262 | 10.6250 / 10.4375 |
+| 기준에 FP32 부분합 down 계획 21의 행 | 766 / 705개 | 262 → 16019 | 10.2500 / 11.0625 |
+| FP32 부분합 down 계획 21에 기준의 행 | 766 / 705개 | 16019 → 16019 | 10.2500 / 11.1875 |
+
+차이 개수는 각각 3,584개 BF16 성분을 가진 residual과 정규화 행의 순서다. 이 입력에서 attention 쌍은 두 성분의 차이로 선택을 양방향으로 바꿨다. Down 쌍은 기준에서 후보의 선택을 재현했으며 역방향에서는 후보 선택이 유지됐다. 네 교체 모두 제공한 실행의 전체 로그릿과 차이가 있었다. 별도의 양성 대조에서 마지막 정규화 행을 바꾸자 네 방향 모두 제공한 쪽의 전체 로그릿 152,064개와 선택 ID를 재현했다. 앞선 KV와 후속 연산이 각각 어느 정도 영향을 주는지와 두 행을 개별로 교체했을 때의 효과는 남은 진단 범위다. 두 투영 후보의 기본 경로 적용은 기존 29개 대조의 기각 판정을 따른다. [점수와 행 지문](../../benchmarks/evidence/20261123-w4-boundary-swap/verified.json)
+
+A100 6번에서 기준, 7번에서 후보를 실행했다. 두 후보의 기본·자체 행·교차·마지막 norm 대조 16건에서 앞선 일곱 출력 ID가 일치했다. 네 서버는 정상 종료하고 활성·대기 요청, KV, device·pinned 할당을 회수했다. 각 실행 전후로 GPU 6·7의 기존 홀더와 20GiB 예약을 확인했다. [캠페인](../../benchmarks/evidence/20261123-w4-boundary-swap/campaign.sh) · [원본 체크섬](../../benchmarks/evidence/20261123-w4-boundary-swap/result.sha256) · [원본 재검산](../../benchmarks/evidence/20261123-w4-boundary-swap/fetch-summary.sh)
 
 ## 첫 prefill 분기 추적
 
