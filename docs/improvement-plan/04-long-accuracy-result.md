@@ -261,6 +261,31 @@ A100 7번에서 같은 Qwen2.5-7B-Instruct 체크포인트, 격리 바이너리,
 
 두 실행 전후 GPU 6·7은 기존 홀더의 20GiB 예약 상태였다. 재현 시 이전 실험의 `capture_decode_rows.py`를 같은 디렉터리에 복사하고 `dispatch.sha256`을 검사한다. [공유 입력 실행기](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/o31-serving/capture_decode_rows.py) · [전송 파일 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/dispatch.sha256) · [실행 순서](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/campaign.sh) · [집계 재현](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/fp32-down-serving/fetch-summary.sh)
 
+#### 투영 후보가 바꾼 첫 토큰의 공통 이력 재생
+
+Attention 계획 31과 FP32 부분합 down 계획 21의 서빙 원본을 공통 기준과 다시 연결했다. 장문 18개와 경계 11개에서 저장된 입력 ID·응답 진단·종료 규칙을 확인하고, 후보마다 기준과 처음 다른 생성 위치를 찾았다. 각 위치 직전까지 공통인 토큰 ID를 사용했다. 두 후보의 첫 분기가 겹치는 위치는 한 번만 재생했다. 저장된 vLLM 응답도 입력 ID를 맞춰 전체 생성 ID를 대조했다. [원본 지문](../../benchmarks/evidence/20261122-w4-projection-divergence-replay/captures.sha256) · [재생 코드](../../benchmarks/evidence/20261122-w4-projection-divergence-replay/replay.py)
+
+A100 7번의 동일 HF 체크포인트와 BF16 환경에서 프롬프트 prefill 뒤 공통 접두부를 한 토큰씩 캐시를 사용해 입력했다. SDPA·eager를 각각 실행해 동일 이력의 기준 토큰과 후보 토큰 점수, 전체 어휘의 최고점 ID, 최고 두 점수의 차이를 기록했다. 앞서 저장한 세 위치의 HF 점수도 재현했다. [실행 및 모델 검증](../../benchmarks/evidence/20261122-w4-projection-divergence-replay/campaign.sh) · [집계 검산](../../benchmarks/evidence/20261122-w4-projection-divergence-replay/verify.py)
+
+| 참조의 전체 생성 ID와 일치 | Riley 기준 | Attention 계획 31 | FP32 부분합 down 계획 21 |
+|---|---:|---:|---:|
+| HF, 장문·경계 합계 | 22/29 | 18/29 | 19/29 |
+| 보존된 vLLM, 장문·경계 합계 | 21/29 | 15/29 | 19/29 |
+
+두 후보 모두 장문 사례 3·14를 두 참조와 새로 일치시켰고, 사례 11·16과 `long-code-7836`의 두 참조 일치를 잃었다. 장문 사례 2에서는 기존 HF 일치를 잃었으며 vLLM은 기준과 두 후보 모두와 전체 생성 ID가 달랐다. `korean-1024`의 78번째 토큰은 두 후보가 같은 ID로 바꿨다. 전체 생성을 끝까지 비교하자 Attention 계획 31만 HF와 일치했다. [입력별 일치·분기 목록](../../benchmarks/evidence/20261122-w4-projection-divergence-replay/verified.json)
+
+| 공통 이력에서 관측한 위치 | 생성 위치 | 기존 → 두 후보의 선택 ID | 후보 점수 − 기존 점수, SDPA | eager |
+|---|---:|---|---:|---:|
+| 장문 사례 2 | 1번째 | 5257 → 264 | −0.125 | −0.125 |
+| 장문 사례 3 | 1번째 | 264 → 5257 | +0.125 | +0.125 |
+| 장문 사례 14 | 10번째 | 11931 → 38973 | +0.125 | +1.000 |
+| `korean-1024` | 78번째 | 12802 → 42039 | +0.125 | −0.500 |
+| `long-code-7836` | 8번째 | 262 → 16019 | −1.3125 | −0.5625 |
+
+두 후보가 바꾼 14개 입력의 첫 분기는 15개 위치였다. 보존 점수를 재현하기 위한 위치 하나를 더해 16개를 재생했다. 같은 위치를 두 후보가 바꾼 경우를 각각 세면 토큰 쌍은 21개다. SDPA와 eager가 모두 기존 토큰에 더 높은 점수를 준 쌍이 8개, 모두 후보 토큰에 더 높은 점수를 준 쌍이 4개였다. 5개는 경로에 따라 순위가 뒤집혔고, 4개는 한 경로 이상에서 동점이었다. 저장된 HF 생성과 같은 이력의 15개 위치에서는 저장된 HF ID가 재생 SDPA에서도 최고점에 속했다. [전체 점수 행 집계](../../benchmarks/evidence/20261122-w4-projection-divergence-replay/replay.json)
+
+`long-code-7836`에서 SDPA는 기존 ID 262를 단독 최고점으로 재현했다. Eager는 두 ID 모두보다 높은 다른 ID에 공동 최고점을 줬다. 이 결과는 두 투영 후보가 일부 입력의 첫 선택을 개선하면서 다른 입력에서 기존 참조 일치를 깨는 양상을 보여 준다. 점수의 비교 범위는 분기 전까지 이력이 같은 위치다. 두 후보의 전체 적용은 기각 상태다. 새 품질 기준이나 전체 모델의 수치 변경은 별도 검증 범위다. GPU 7번은 시험 뒤 기존 홀더의 20GiB 예약으로 복귀했다. 원본 검산 경로는 `/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-projection-divergence-replay-20261122.BUXTmL5R`이다. [GPU 복귀와 판정](../../benchmarks/evidence/20261122-w4-projection-divergence-replay/verified.json) · [원본 재검산](../../benchmarks/evidence/20261122-w4-projection-divergence-replay/fetch-result.sh)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.
