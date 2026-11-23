@@ -36,7 +36,7 @@ CI는 `distribution_with_schema_reference_fix`에서 같은 커밋의 Git 입력
 python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 ```
 
-샤드 검증 병렬화를 반영한 `0511b9280`의 GitHub·A100 패키지는 런타임 파일 21개가 일치한다. A100에서 Qwen2.5-7B의 API 40건씩, 장문 스키마·도구 64건, 45초 혼합 부하와 종료 자원 회수를 확인했다. CI의 `distribution_with_parallel_shard_verification`은 이 결과를 같은 커밋의 배포 입력에 연결한다. 30분 부하와 운영 복구 판정은 남아 있다. 이전 패키지는 `--distribution-revision c5ec7b391`로 조회할 수 있다. [샤드 검증과 A100 기동 결과](05-documentation-and-operations.md#샤드-체크포인트-검증-병렬화) · [새 패키지 검산](../../benchmarks/evidence/20261124-w5-shard-package/verified.json)
+샤드 검증 병렬화를 반영한 `0511b9280`의 GitHub·A100 패키지는 런타임 파일 21개가 일치한다. A100에서 Qwen2.5-7B의 API 40건씩, 장문 스키마·도구 64건, 45초 혼합 부하와 종료 자원 회수를 확인했다. CI의 `distribution_with_parallel_shard_verification`은 이 결과를 같은 커밋의 배포 입력에 연결한다. 30분 부하와 격리 복구 보고서도 같은 패키지·체크포인트와 GPU 예약 프로세스의 PID·시작 시각에 연결해 검산한다. 후속 검증은 진행 중이다. 이전 패키지는 `--distribution-revision c5ec7b391`로 조회할 수 있다. [샤드 검증과 A100 기동 결과](05-documentation-and-operations.md#샤드-체크포인트-검증-병렬화) · [새 패키지 검산](../../benchmarks/evidence/20261124-w5-shard-package/verified.json)
 
 `distribution_with_pattern_fix`는 `9373ea412`의 CPU 빌드, A100 구조화 출력과 두 이미지의 30분 부하를 연결한다. 당시 격리 복구에서는 입장 차단 뒤 스트림이 완료됐고 기준 이미지가 139.78초 후 같은 주소에서 준비 상태에 도달했다. [기준·jemalloc 대조](../../benchmarks/evidence/20261123-w5-dot-stock-soak/verified.json) · [격리 복구](05-mixed-soak-result.md#pattern-수정-이미지의-격리-복구)
 

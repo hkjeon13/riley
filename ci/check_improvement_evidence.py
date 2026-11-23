@@ -432,6 +432,7 @@ def check_prefix_metrics_recovery(drill, stock, allocator):
     if (drill["status"] != "passed" or drill["scope"] != "isolated loopback recovery"
             or drill["arms"].keys() != {"allocator", "stock"}
             or any(drill[key] != stock[key] or drill[key] != allocator[key] for key in bindings)
+            or drill["reservations"] != allocator["reservations"]
             or drill["reservations"].keys() != {"6", "7"}
             or any(row["gib"] != 20 for row in drill["reservations"].values())):
         raise ValueError("recovery drill does not match the qualified candidates or GPU reservations")
@@ -995,7 +996,12 @@ def main():
             earlier.append(latest)
             latest = parallel_shards
             latest_inputs = check_distribution_inputs(root, latest)
-            check_structured_serving_package(root, latest)
+            if "allocator_experiment" in latest:
+                check_pattern_fix_package(root, latest)
+            else:
+                if "stock_soak_comparison" in latest or "recovery_drill" in latest:
+                    raise ValueError("parallel-shard comparison or recovery requires an allocator experiment")
+                check_structured_serving_package(root, latest)
         allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],
                                                   manifest["current_distribution_candidate"])
         serving_models = check_distribution_serving(root, manifest["current_distribution_candidate"])

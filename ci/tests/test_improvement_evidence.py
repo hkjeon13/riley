@@ -1,14 +1,17 @@
 """Check that linked reports and published claims match their evidence."""
 
+from contextlib import redirect_stderr
 from copy import deepcopy
 from hashlib import sha256
 import importlib.util
+from io import StringIO
 import json
 from pathlib import Path
 import re
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -108,6 +111,23 @@ class DistributionServingTests(unittest.TestCase):
 
 
 class PackageFollowUpTests(unittest.TestCase):
+    def test_parallel_shard_follow_up_cannot_reuse_the_older_allocator_reports(self):
+        path = ROOT / checker.MANIFEST
+        read_bytes = Path.read_bytes
+        manifest = json.loads(read_bytes(path))
+        latest = manifest["distribution_with_parallel_shard_verification"]
+        historical = manifest["distribution_with_schema_reference_fix"]
+        for field in ("allocator_experiment", "stock_soak_comparison", "recovery_drill"):
+            latest[field] = historical[field]
+
+        def read_with_substitution(file):
+            return json.dumps(manifest).encode() if file == path else read_bytes(file)
+
+        with patch.object(Path, "read_bytes", read_with_substitution), patch("sys.argv", ["check_improvement_evidence.py"]):
+            with redirect_stderr(StringIO()) as error:
+                self.assertEqual(checker.main(), 1)
+        self.assertIn("latest allocator package does not match its verified parent", error.getvalue())
+
     def test_schema_reference_probes_require_the_exact_output_and_error_field(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
         candidate = manifest["distribution_with_schema_reference_fix"]
@@ -201,6 +221,19 @@ class PackageFollowUpTests(unittest.TestCase):
                 drill["arms"]["allocator"]["admission"]["active_after_gate"]["active_requests"] = 0
                 with self.assertRaisesRegex(ValueError, "lacks an active drain"):
                     checker.check_prefix_metrics_recovery(drill, stock, allocator)
+
+    def test_recovery_matches_the_qualified_gpu_reservations(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        candidate = manifest["distribution_with_schema_reference_fix"]
+        records = (candidate["recovery_drill"]["report"], candidate["evidence"]["a100_serving"],
+                   candidate["allocator_experiment"]["evidence"]["serving"])
+        drill, stock, allocator = (json.loads((ROOT / entry["path"]).read_bytes()) for entry in records)
+        checker.check_prefix_metrics_recovery(drill, stock, allocator)
+
+        changed = deepcopy(drill)
+        changed["reservations"]["7"]["start_ticks"] = str(int(changed["reservations"]["7"]["start_ticks"]) + 1)
+        with self.assertRaisesRegex(ValueError, "does not match the qualified candidates or GPU reservations"):
+            checker.check_prefix_metrics_recovery(changed, stock, allocator)
 
     def test_prefix_metrics_uses_transport_pairs_for_c1_and_exact_matches_for_concurrency(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
