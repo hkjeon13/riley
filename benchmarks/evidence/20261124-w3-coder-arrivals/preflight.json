@@ -1,0 +1,101 @@
+{
+  "source_request_archive_sha256": "5c9ee54d9a39b48e75a483116b64b099ac180a0dbe0ad18215c57cca5d05671e",
+  "schedule_sha256": "9b4db373c4b9b7307dd92e63460d37674986873cf391438b7bfb850bf17b8572",
+  "source_comparisons": {
+    "6": {
+      "rag-c8-s1": {
+        "origin_statistics": {
+          "riley": {
+            "span_s": 44.324097939,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 1785.4173704981804
+          },
+          "vllm": {
+            "span_s": 43.239917956,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 1245.133526623249
+          }
+        },
+        "riley_minus_vllm_write_ms_p50": 659.6991085,
+        "absolute_write_ms_p95": 1254.037261
+      },
+      "rag-c8-s2": {
+        "origin_statistics": {
+          "riley": {
+            "span_s": 42.450947568,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 1743.9628168940544
+          },
+          "vllm": {
+            "span_s": 41.650870793,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 1097.9807674884796
+          }
+        },
+        "riley_minus_vllm_write_ms_p50": 548.88916,
+        "absolute_write_ms_p95": 1140.230485
+      }
+    },
+    "7": {
+      "rag-c8-s1": {
+        "origin_statistics": {
+          "riley": {
+            "span_s": 43.954640329,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 2046.6578751802444
+          },
+          "vllm": {
+            "span_s": 42.961940259,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 1224.2455780506134
+          }
+        },
+        "riley_minus_vllm_write_ms_p50": 534.5316265,
+        "absolute_write_ms_p95": 1224.973232
+      },
+      "rag-c8-s2": {
+        "origin_statistics": {
+          "riley": {
+            "span_s": 42.3617016,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 1615.845873951912
+          },
+          "vllm": {
+            "span_s": 41.409645811,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 1088.7259393930435
+          }
+        },
+        "riley_minus_vllm_write_ms_p50": 576.047063,
+        "absolute_write_ms_p95": 1078.118332
+      }
+    }
+  },
+  "cpu_preflight": {
+    "cohorts_with_verified_request_body_hashes": 8,
+    "requests_per_cohort": 64,
+    "simulated_replay_requests": 64,
+    "simulated_replay_warmup_requests": 8
+  },
+  "a100_registration": {
+    "registered_utc": "2026-11-23T17:23:48Z",
+    "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-coder-arrivals-20261124.ac0dqlbz",
+    "pid": 1072173,
+    "gpu_assignment": [
+      6,
+      7
+    ],
+    "waits_for": {
+      "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-shard-soak-20261124.ZP737OQY",
+      "pid": 1037299
+    }
+  }
+}
