@@ -608,6 +608,23 @@ jemalloc 이미지의 종료 요청부터 기준 이미지가 준비 상태를 �
 
 A100 6번에서 jemalloc 이미지의 신규 요청을 차단하고 기준 이미지를 같은 loopback 주소에 기동했다. 차단 후 새 요청은 HTTP 503을 받았고, 진행 중인 SSE 응답은 192토큰과 `length` 종료 사유를 받았다. 두 이미지에서 API 40건씩, 같은 스트림의 출력과 캐시 재사용 112토큰을 확인했다. jemalloc 이미지 종료 요청부터 기준 이미지 준비 상태까지 **139.01초**가 걸렸다. 종료 시 GPU·pinned 할당, 활성·대기 요청과 KV 블록은 모두 0이었으며 A100 6·7번은 기존 홀더의 20GiB 예약으로 복귀했다. 실제 서비스 트래픽·승인된 SLO 및 운영 라우팅 복구 검증은 남아 있다. [복구 검산](../../benchmarks/evidence/20261123-w5-schema-ids/recovery/verified.json) · [원본 체크섬](../../benchmarks/evidence/20261123-w5-schema-ids/recovery/result.sha256)
 
+### 샤드 검증 병렬화 이미지의 30분 교차 대조
+
+`0511b9280`의 기준 이미지 `1729f15a6774`와 같은 Riley 바이너리를 포함한 jemalloc 시험 이미지 `500909ff0e83`에서 Qwen2.5-7B-Instruct를 시험했다. 캐시 끔은 A100 6번에서 기준부터, 캐시 켬은 7번에서 jemalloc부터 실행했다. 같은 캐시 조건에서 GPU, 드라이버, 체크포인트, 서버 인자와 초당 8건의 30분 합성 부하를 맞췄다. 두 회차 사이에 두 GPU의 동일 예약 프로세스가 각각 20GiB를 복구했다. 네 실행은 각각 13,749건을 정상 완료했고 의도적 연결 종료 700건, 예상 외 오류 0건을 기록했다. [교차 실행 기록](../../benchmarks/evidence/20261124-w5-shard-soak/campaign.log) · [비교 검산](../../benchmarks/evidence/20261124-w5-shard-soak/verified.json)
+
+| 지표 | 캐시 끔 기준 → jemalloc | 캐시 켬 기준 → jemalloc |
+|---|---:|---:|
+| 후반 정밀 RSS 변화 | +544 → −836 KiB | +504 → −784 KiB |
+| RSS 변화량의 차이 | −1,380 KiB | −1,288 KiB |
+| 후반 TTFT p95 | 335.69 → 335.93 ms | 324.90 → 324.54 ms |
+| 후반 전체 완료 p95 | 4,160.55 → 4,164.96 ms | 4,130.27 → 4,131.28 ms |
+
+기준 이미지의 두 실행은 후반 RSS 증가 0 조건에서만 미달했다. jemalloc 이미지의 두 실행은 합성 부하 기준을 모두 통과했다. 이 이미지에서 장문 출력 232건과 스키마·도구 64건을 검증했고, 기준 이미지의 스키마·도구 응답 16개가 모두 일치했다. [정확성 및 부하 검산](../../benchmarks/evidence/20261124-w5-shard-soak/allocator/verified.json) · [원본 체크섬](../../benchmarks/evidence/20261124-w5-shard-soak/result.sha256)
+
+### 샤드 검증 병렬화 이미지의 격리 복구
+
+A100 6번에서 jemalloc 이미지의 신규 요청을 차단하고 기준 이미지를 같은 loopback 주소에 기동했다. 새 요청에는 HTTP 503을 반환했고 진행 중인 SSE는 192토큰과 `length` 종료 사유를 받았다. 두 이미지에서 각각 API 40건, 동일한 스트림 출력과 캐시 재사용 112토큰을 확인했다. jemalloc 이미지 종료 요청부터 기준 이미지 준비 상태까지 **106.67초**가 걸렸다. 종료 시 활성·대기 요청, KV 블록과 native 할당은 모두 0이었으며 GPU 6·7번의 두 기존 홀더가 각각 20GiB를 다시 점유했다. 운영 트래픽·승인된 SLO·실제 서비스 복구 검증은 남아 있다. [복구 검산](../../benchmarks/evidence/20261124-w5-shard-soak/recovery/verified.json) · [부하·복구 원본](../../benchmarks/evidence/20261124-w5-shard-soak/raw-results.tar.gz)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)

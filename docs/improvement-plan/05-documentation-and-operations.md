@@ -283,7 +283,7 @@ python3 -B benchmarks/live/build_jemalloc_trial_image.py \
 
 네 실행의 API 검사는 각각 33건이 통과했고, 별도 입력 8개의 스트리밍 응답은 입력·생성 토큰 ID와 텍스트까지 일치했다. 네 서버는 코드 0으로 종료했고 활성·대기 요청, KV·native 할당은 모두 0이었다. 두 GPU의 기존 20GiB 예약을 복구했다. [서버 대조 검산](../../benchmarks/evidence/20261124-w5-shard-readiness/verified-serving.json)
 
-병렬 검증을 반영한 `0511b9280`을 GitHub와 A100에서 CUDA 12.4 이미지로 빌드해 런타임 파일 21개의 SHA-256이 일치함을 확인했다. A100에서 Qwen2.5-7B-Instruct의 API 40건씩과 장문 스키마·도구 요청 64건을 검증했다. 45초 혼합 부하의 정상 완료는 338건, 의도적 연결 종료는 21건이었다. 두 서버가 종료 자원을 모두 회수했고 기존 20GiB 예약이 복구됐다. 이 이미지의 30분 혼합 부하, 실제 운영 트래픽·승인 SLO 및 운영 복구 판정은 남아 있다. [배포 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/45221711566) · [A100 이미지 검산](../../benchmarks/evidence/20261124-w5-shard-package/verified.json)
+병렬 검증을 반영한 `0511b9280`을 GitHub와 A100에서 CUDA 12.4 이미지로 빌드해 런타임 파일 21개의 SHA-256이 일치함을 확인했다. A100에서 Qwen2.5-7B-Instruct의 API 40건씩과 장문 스키마·도구 요청 64건을 검증했다. 45초 혼합 부하의 정상 완료는 338건, 의도적 연결 종료는 21건이었다. 두 서버가 종료 자원을 모두 회수했고 기존 20GiB 예약이 복구됐다. 같은 패키지의 30분 교차 부하에서 기준 이미지는 RSS 항목에서 미달했고, jemalloc 시험 이미지는 두 캐시 조건을 통과했다. 격리 복구를 검증했으며 실제 운영 트래픽·승인 SLO 및 운영 복구 판정은 남아 있다. [배포 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/45221711566) · [A100 이미지 검산](../../benchmarks/evidence/20261124-w5-shard-package/verified.json) · [30분 교차 대조](05-mixed-soak-result.md#샤드-검증-병렬화-이미지의-30분-교차-대조)
 
 ## 6. 완료 조건과 최종 산출물
 

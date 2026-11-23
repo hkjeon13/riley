@@ -1,0 +1,400 @@
+{
+  "status": "passed",
+  "source_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+  "remote_evidence": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-shard-soak-20261124.ZP737OQY/allocator",
+  "image_id": "sha256:500909ff0e83dd269899842b7528e239b7871628b3c5acb981357e6b38186393",
+  "parent_image_id": "sha256:1729f15a677422d552b9a3fd2352dfeb08dd4cccd3558680a016058d27191098",
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "riley_binary_sha256": "8d4f8455bc0b9cccf8df3ee2feb2c606ffe2cf02dbf4bcdae6dcc2b033577e4b",
+  "parent_cpu_report_sha256": "bc10cbc7ffdc0164690f1e7ab1401cf26c50476f556ee7286b69b0e4dc382ae7",
+  "allocator_cpu_report_sha256": "1b64bc9ef56a99fa95eef6d918c980d44b9e6382fcfa66f976a9d24e4a474efe",
+  "allocator_library_sha256": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9",
+  "allocator_settings": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+  "allocator_process_proof_sha256": {
+    "cache-off": "53811ce6ff9d2109cf671f349d1f34099f6c14c25999442d4ed2a85bacbdc0d9",
+    "cache-on": "dc31d4c9423cad2d6b86ffe5a6a3a8e9ada86c8506dd49e8f26dc336d84db63d",
+    "accuracy": "43d54470eddbfe62f65c69320e0a7bf8cc3070c7ed27a53c6964446cb96762c3"
+  },
+  "soaks": {
+    "source_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+    "image_id": "sha256:500909ff0e83dd269899842b7528e239b7871628b3c5acb981357e6b38186393",
+    "binary_sha256": "8d4f8455bc0b9cccf8df3ee2feb2c606ffe2cf02dbf4bcdae6dcc2b033577e4b",
+    "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+    "duration_seconds_per_mode": 1800,
+    "requests_per_second_per_mode": 8,
+    "release_gate": "passed",
+    "modes": {
+      "cache-off": {
+        "status": "passed",
+        "failed_checks": [],
+        "rss": {
+          "baseline": {
+            "rss_kib": 15487128,
+            "anonymous_kib": 15299616,
+            "read_ms": 420.4721003770828
+          },
+          "drain": {
+            "rss_kib": 15486292,
+            "anonymous_kib": 15298780,
+            "read_ms": 468.1134298443794
+          },
+          "rss_growth_kib": -836,
+          "anonymous_growth_kib": -836
+        },
+        "p95_change_percent": {
+          "ttft_ms": 1.0201977817464014,
+          "e2e_ms": -13.540923998272348
+        },
+        "api_checks": 40,
+        "problem_count": 0,
+        "completed": 13749,
+        "client_disconnects": 700,
+        "counter_changes": {
+          "cancellations": 700,
+          "disconnects": 700,
+          "overloads": 0,
+          "dropped_observations": 13568
+        },
+        "prefix_cache_metrics": {
+          "status": "passed",
+          "snapshots": 32,
+          "capacity_blocks": 0,
+          "peak_sampled_retained_blocks": 0,
+          "hit_tokens_delta": 0,
+          "evicted_blocks_delta": 0,
+          "shutdown_hit_tokens": 0,
+          "shutdown_evicted_blocks": 0
+        },
+        "batch_shape_metrics": {
+          "status": "passed",
+          "snapshots": 32,
+          "slot_capacity": 24,
+          "configured_dense_rows": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            24,
+            32,
+            48,
+            64,
+            80,
+            96,
+            112,
+            128,
+            144,
+            160,
+            176,
+            192,
+            208,
+            224,
+            240,
+            256
+          ],
+          "committed_steps": 133242,
+          "gpu_execution_ns": 1758463311502
+        },
+        "soak_sha256": "970c9df1fb4eedd352a8874387532d9f72fabdb50b92795c86abe2aee2665abc",
+        "report_sha256": "292316db52521f996b5f0ebce9801727e5a9634d8b98f8b720124ba7ad72e2e8",
+        "shutdown_sha256": "882c9beca0f47ccfb18e2d05d3936e4b6ba19686ee225f2780e52c8b452fde20"
+      },
+      "cache-on": {
+        "status": "passed",
+        "failed_checks": [],
+        "rss": {
+          "baseline": {
+            "rss_kib": 15487432,
+            "anonymous_kib": 15299904,
+            "read_ms": 321.9558000564575
+          },
+          "drain": {
+            "rss_kib": 15486648,
+            "anonymous_kib": 15299120,
+            "read_ms": 387.890562415123
+          },
+          "rss_growth_kib": -784,
+          "anonymous_growth_kib": -784
+        },
+        "p95_change_percent": {
+          "ttft_ms": 0.9722391763497651,
+          "e2e_ms": -13.50603938928272
+        },
+        "api_checks": 40,
+        "problem_count": 0,
+        "completed": 13749,
+        "client_disconnects": 700,
+        "counter_changes": {
+          "cancellations": 700,
+          "disconnects": 700,
+          "overloads": 0,
+          "dropped_observations": 13568
+        },
+        "prefix_cache_metrics": {
+          "status": "passed",
+          "snapshots": 32,
+          "capacity_blocks": 128,
+          "peak_sampled_retained_blocks": 128,
+          "hit_tokens_delta": 385600,
+          "evicted_blocks_delta": 89527,
+          "shutdown_hit_tokens": 391968,
+          "shutdown_evicted_blocks": 89527
+        },
+        "batch_shape_metrics": {
+          "status": "passed",
+          "snapshots": 32,
+          "slot_capacity": 24,
+          "configured_dense_rows": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            24,
+            32,
+            48,
+            64,
+            80,
+            96,
+            112,
+            128,
+            144,
+            160,
+            176,
+            192,
+            208,
+            224,
+            240,
+            256
+          ],
+          "committed_steps": 134364,
+          "gpu_execution_ns": 1758322022460
+        },
+        "soak_sha256": "2c410bc64b83542440d6e07a0a48cd95ee6ee640a23f3f147d2051fcf5d0bf2b",
+        "report_sha256": "d3de595a1c2cfdd0e6e3e8875c12ae3462c7f84d75a9945a64afc6c524021489",
+        "shutdown_sha256": "be1238a32dfbad055035cff1d70150b6941f9533e2521b8f44db1d20f78d89b5"
+      }
+    }
+  },
+  "accuracy": {
+    "api_checks": 40,
+    "shutdown_exit": 0,
+    "report_sha256": "49434f264f681ef6accb8789ebc50041bf02f06cb49e40cab9d9baf862bb0eca",
+    "suites": {
+      "baseline": {
+        "golden_sha256": "b32bd641dab4e9516a8d3b45de2d77fbde91ad64acad893153f4b6c2090b72a6",
+        "workload_sha256": null,
+        "verified_requests": 144
+      },
+      "holdout": {
+        "golden_sha256": "12d508ed51f03509432e6302b8d10855f56125f4f6b7f31a559cff03eb10b611",
+        "workload_sha256": "220f13a7306518f996480c608733623475471ff3721ea3aeb895a2d5f91abd11",
+        "verified_requests": 88
+      },
+      "structured_holdout": {
+        "status": "passed",
+        "workload_sha256": "220f13a7306518f996480c608733623475471ff3721ea3aeb895a2d5f91abd11",
+        "jsonschema_version": "4.26.0",
+        "modes": {
+          "c1": {
+            "requests": 16,
+            "observed_peak_active": 1
+          },
+          "c8": {
+            "requests": 16,
+            "exact_matches": 16,
+            "observed_peak_active": 8
+          },
+          "c32": {
+            "requests": 32,
+            "exact_matches": 32,
+            "observed_peak_active": 31
+          }
+        },
+        "c1_transport_pairs": 8,
+        "context_rejection": {
+          "case": "long-korean-7917",
+          "sequence_tokens_requested": 8212,
+          "max_sequence_tokens": 8192,
+          "max_output_tokens": 96,
+          "http_status": 400,
+          "error_code": "invalid_request"
+        },
+        "cases": {
+          "korean-255/schema/json": {
+            "usage": {
+              "prompt_tokens": 299,
+              "completion_tokens": 13,
+              "total_tokens": 312
+            },
+            "finish": "stop",
+            "value": "{\"mode\": \"ready\", \"count\": 7}",
+            "response_sha256": "bb8bbf15f9317ddb58fdf403a747b6af4ff66cb1e48cd4f7482e652a15924cdb"
+          },
+          "korean-255/schema/sse": {
+            "usage": {
+              "prompt_tokens": 299,
+              "completion_tokens": 13,
+              "total_tokens": 312
+            },
+            "finish": "stop",
+            "value": "{\"mode\": \"ready\", \"count\": 7}",
+            "response_sha256": "bb8bbf15f9317ddb58fdf403a747b6af4ff66cb1e48cd4f7482e652a15924cdb"
+          },
+          "korean-255/tool/json": {
+            "usage": {
+              "prompt_tokens": 454,
+              "completion_tokens": 26,
+              "total_tokens": 480
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "a5522299fa74f930d0e59624b623058a0b09b7b5f3ee3cd18c85b2bc1a21dd5d"
+          },
+          "korean-255/tool/sse": {
+            "usage": {
+              "prompt_tokens": 454,
+              "completion_tokens": 26,
+              "total_tokens": 480
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "a5522299fa74f930d0e59624b623058a0b09b7b5f3ee3cd18c85b2bc1a21dd5d"
+          },
+          "korean-1024/schema/json": {
+            "usage": {
+              "prompt_tokens": 1068,
+              "completion_tokens": 10,
+              "total_tokens": 1078
+            },
+            "finish": "stop",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "ccdd9e0340da553746da7a70bcf68e783dbae9ef15de136a163156b90974274e"
+          },
+          "korean-1024/schema/sse": {
+            "usage": {
+              "prompt_tokens": 1068,
+              "completion_tokens": 10,
+              "total_tokens": 1078
+            },
+            "finish": "stop",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "ccdd9e0340da553746da7a70bcf68e783dbae9ef15de136a163156b90974274e"
+          },
+          "korean-1024/tool/json": {
+            "usage": {
+              "prompt_tokens": 1223,
+              "completion_tokens": 26,
+              "total_tokens": 1249
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "4887c156b959759eec0a52891899f6ebbdf00e1b143a83cada9cff8a067e0401"
+          },
+          "korean-1024/tool/sse": {
+            "usage": {
+              "prompt_tokens": 1223,
+              "completion_tokens": 26,
+              "total_tokens": 1249
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "4887c156b959759eec0a52891899f6ebbdf00e1b143a83cada9cff8a067e0401"
+          },
+          "long-code-7836/schema/json": {
+            "usage": {
+              "prompt_tokens": 7880,
+              "completion_tokens": 14,
+              "total_tokens": 7894
+            },
+            "finish": "stop",
+            "value": "{\"mode\": \"ready\", \"count\": 7}",
+            "response_sha256": "3b53535aaa65df39d6a2853bf52053bb58ba7bd1d99d2c0b6bf647dc91da058c"
+          },
+          "long-code-7836/schema/sse": {
+            "usage": {
+              "prompt_tokens": 7880,
+              "completion_tokens": 14,
+              "total_tokens": 7894
+            },
+            "finish": "stop",
+            "value": "{\"mode\": \"ready\", \"count\": 7}",
+            "response_sha256": "3b53535aaa65df39d6a2853bf52053bb58ba7bd1d99d2c0b6bf647dc91da058c"
+          },
+          "long-code-7836/tool/json": {
+            "usage": {
+              "prompt_tokens": 8035,
+              "completion_tokens": 27,
+              "total_tokens": 8062
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "c22bdf71c0899c58462a9cdd7ed738e3d96c29fd4baa9aead82b347d0b0d9e1c"
+          },
+          "long-code-7836/tool/sse": {
+            "usage": {
+              "prompt_tokens": 8035,
+              "completion_tokens": 27,
+              "total_tokens": 8062
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "c22bdf71c0899c58462a9cdd7ed738e3d96c29fd4baa9aead82b347d0b0d9e1c"
+          },
+          "long-korean-7917/schema/json": {
+            "usage": {
+              "prompt_tokens": 7961,
+              "completion_tokens": 13,
+              "total_tokens": 7974
+            },
+            "finish": "stop",
+            "value": "{\"mode\": \"ready\", \"count\": 7}",
+            "response_sha256": "baf12badb8c2c349ea9a05e1d7c26fc2b91c887ad38fce9b615f06a2813002a8"
+          },
+          "long-korean-7917/schema/sse": {
+            "usage": {
+              "prompt_tokens": 7961,
+              "completion_tokens": 13,
+              "total_tokens": 7974
+            },
+            "finish": "stop",
+            "value": "{\"mode\": \"ready\", \"count\": 7}",
+            "response_sha256": "baf12badb8c2c349ea9a05e1d7c26fc2b91c887ad38fce9b615f06a2813002a8"
+          },
+          "long-korean-7917/tool/json": {
+            "usage": {
+              "prompt_tokens": 8116,
+              "completion_tokens": 28,
+              "total_tokens": 8144
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "130b10b0b4fde49f29ec6e30cb88c283e64ec8e4629c3f4cee286eeba02e4cb0"
+          },
+          "long-korean-7917/tool/sse": {
+            "usage": {
+              "prompt_tokens": 8116,
+              "completion_tokens": 28,
+              "total_tokens": 8144
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "130b10b0b4fde49f29ec6e30cb88c283e64ec8e4629c3f4cee286eeba02e4cb0"
+          }
+        }
+      }
+    }
+  },
+  "reservations": {
+    "6": {
+      "pid": 2680326,
+      "start_ticks": "6365879881",
+      "gib": 20
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "gib": 20
+    }
+  }
+}
