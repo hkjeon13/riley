@@ -281,6 +281,98 @@
     "gpu_inference": "pending"
   },
   "other_evidence": {
+    "coder14_parallel_shard_readiness": [
+      {
+        "path": "benchmarks/evidence/20261124-w5-shard-readiness/affinity.txt",
+        "sha256": "e5aa321d0369a68a49f33df5fb205b22b968fab72930497b2dd949076bf1f25e"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-shard-readiness/campaign.log",
+        "sha256": "16072a11df5d3b87108ce475a1c821d6b73540d259f8ec830ccb4b73e9d93a9c"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-shard-readiness/campaign.sh",
+        "sha256": "df05cf2e7d2a3a387e8af73ec6e46c73d9394fb9284890f9f7568ec944e574b8"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-shard-readiness/dispatch.sha256",
+        "sha256": "3144b8fe114479bd8f3d8f0c84f2fbbef4be3de451d8b0db3e3a05949d040b40"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-shard-readiness/fetch-serving.sh",
+        "sha256": "556501b58146043166393c321734b06eb659bd7a1174a368b38f15c50ddd7fbe"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-shard-readiness/result.sha256",
+        "sha256": "26cb153003cbd9d7412a70f986b5d06cd48b20e7a4c9209f8a6795cd45b152ae"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-shard-readiness/serve.py",
+        "sha256": "294929820fc4d74f6449fd66a7c16d2fa2572921e0d1a48ecd4e14d52f1b5228"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-shard-readiness/server-binaries.sha256",
+        "sha256": "624c8edd78b2f1fe1572d41761391e3bb62d75c0a7bad9b0b74a3a4dd05eeb15"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-shard-readiness/serving-results.tar.gz",
+        "sha256": "c04db522e31d3c56d6be3508e8bcc80016b0b126c945e88fc34c1413aa1f4f8b"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-shard-readiness/verified-serving.json",
+        "sha256": "2b20770c07cd3bcd86f24369318e19d7a405f69cca6fd42bf2f201a506aa3207"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-shard-readiness/verify-serving.py",
+        "sha256": "ec810e21acd28039740710b2583d9b52df96226e0100885f38ca604b2db179e8"
+      }
+    ],
+    "coder14_parallel_shard_validation": [
+      {
+        "path": "benchmarks/evidence/20261124-w5-parallel-shards/baseline-inputs.sha256",
+        "sha256": "0b413770a4015e46158a8d0d5988d3715df83559cf439bd54f6d3d1605dbdcc7"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-parallel-shards/campaign.log",
+        "sha256": "fc126a3fa87b7ed8be15a535f4155e57ab4194cded1d0b446aeae56d1cd3cdaa"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-parallel-shards/campaign.sh",
+        "sha256": "f56c847eaf9c756a6abbd28f43986d2b2cc0f16ffe7d8080cf0d9e9d4a8f79d5"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-parallel-shards/candidate-inputs.sha256",
+        "sha256": "0fed8ffca94ffd59bb642a7c5624be70883e0e474826e19866b9138b27e826a8"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-parallel-shards/dispatch.sha256",
+        "sha256": "1489dc8ade59d18073746f364f531616f17e88f1e3ca366cc1733b8951ead785"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-parallel-shards/fetch-results.sh",
+        "sha256": "ec02ca235e011931887e0297d5f24c75778d9d621823b2ef15b99f8d5569adf8"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-parallel-shards/overlap.patch.gz",
+        "sha256": "ebe3deae5f52b7633a4583d16b94d4dcb62a79ed4bf83a87d4f3139c3b59f50d"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-parallel-shards/raw-results.tar.gz",
+        "sha256": "11150d0445847ad9d4b8ccbbac7df9303d0fa8657e8741d29c5077c14b9c2458"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-parallel-shards/result.sha256",
+        "sha256": "5ca94cf5b9900b0b3fce0bc24f8d913c0951ae8ce8d5b35f9fe306af07706352"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-parallel-shards/verified.json",
+        "sha256": "b491cdda08fd709394ff4aa91c3f5300b20926ecb4f99210fe67b5ecbbe77d32"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w5-parallel-shards/verify.py",
+        "sha256": "557dcca93b70da16bfdc885adb6a717285775d4fc3044dbcde09af70ea264d0c"
+      }
+    ],
     "coder14_prefill_chunk_crossover": [
       {
         "path": "benchmarks/evidence/20261124-w3-chunk-pair/arm.sha256",

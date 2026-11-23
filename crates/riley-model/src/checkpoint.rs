@@ -65,36 +65,12 @@ impl PhysicalCheckpoint {
         let index = ShardIndex::from_json_slice(index_artifact.bytes(), limits)?;
         let mut observed_paths = BTreeSet::from([index_path]);
         let mut shards = Vec::with_capacity(index.shards().len());
-        let mut total_file_bytes = 0_u64;
-        for path in index.shards() {
-            let remaining = limits
-                .total_weight_bytes()
-                .checked_sub(total_file_bytes)
-                .ok_or_else(|| ModelError::LimitExceeded {
-                    resource: "checkpoint shard bytes",
-                    limit: limits.total_weight_bytes(),
-                    actual: Some(total_file_bytes),
-                })?;
-            let artifact = session.read_once(
-                path,
-                limits.shard_bytes().min(remaining),
-                "safetensors shard",
-            )?;
-            total_file_bytes = total_file_bytes
-                .checked_add(artifact.byte_len())
-                .ok_or_else(|| ModelError::NumericOverflow {
-                    field: "total checkpoint shard bytes".to_owned(),
-                })?;
-            if total_file_bytes > limits.total_weight_bytes() {
-                return Err(ModelError::LimitExceeded {
-                    resource: "checkpoint shard bytes",
-                    limit: limits.total_weight_bytes(),
-                    actual: Some(total_file_bytes),
-                });
-            }
+        session.read_shards(index.shards().iter(), limits, |artifact| {
+            let path = artifact.relative_path().to_owned();
             observed_paths.insert(path.clone());
-            shards.push(owned_shard(path.clone(), artifact, limits)?);
-        }
+            shards.push(owned_shard(path, artifact, limits)?);
+            Ok(())
+        })?;
         let (inventory, data_bytes) = build_inventory(&shards, Some(&index))?;
         enforce_total_weight_limit(data_bytes, limits)?;
         if let Some(expected) = index.total_size() {

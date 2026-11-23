@@ -1,0 +1,40 @@
+{
+  "native_binary_sha256": {
+    "baseline": "f9e75b71ee048ca6a3b32fc3afd96d30e627d8d3601ba36ab8ce109807f154b9",
+    "candidate": "e6112712011c7fe31ff710b5929e3895e8b0dc743e6347bdc332880c46b43455"
+  },
+  "run_order": {
+    "6": [
+      "baseline",
+      "candidate"
+    ],
+    "7": [
+      "candidate",
+      "baseline"
+    ]
+  },
+  "gpu_results": {
+    "6": {
+      "cpu_affinity": [
+        24,
+        25
+      ],
+      "baseline_seconds": 229.31762319803238,
+      "candidate_seconds": 163.99773389846087,
+      "elapsed_reduction_pct": 28.48446115419706,
+      "api_checks_per_arm": 33,
+      "matching_token_id_responses": 8
+    },
+    "7": {
+      "cpu_affinity": [
+        26,
+        27
+      ],
+      "baseline_seconds": 227.7659521922469,
+      "candidate_seconds": 165.48481972515583,
+      "elapsed_reduction_pct": 27.34435584758621,
+      "api_checks_per_arm": 33,
+      "matching_token_id_responses": 8
+    }
+  }
+}

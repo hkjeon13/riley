@@ -1,0 +1,71 @@
+{
+  "source_archive_sha256": "7dc88437ba28ea18ca1c0c11b9b3cd85324110da913ce1b10c521da60ce54dcb",
+  "model": {
+    "checkpoint_sha256": "82a56cdab6e16e31478b7449be768dce15992b448d543fea4b2f2ed163237d00",
+    "source_model": "Qwen/Qwen2.5-Coder-14B-Instruct",
+    "source_revision": "aedcc2d42b622764e023cf882b6652e646b95671",
+    "weight_shards": 6,
+    "weight_bytes": 29540133960
+  },
+  "binary_sha256": {
+    "baseline": "e9b6ba707450a2cc31d135a42e3fa4cff67020459f5863f78cfe5df6b9b924da",
+    "candidate": "ca1ea73ea59c2b4fb7a3dc3cf063ae0eb1664055e5157022f8877eef784676ea"
+  },
+  "affinity": [
+    0,
+    1
+  ],
+  "linux_checkpoint_tests_passed": 14,
+  "runs": {
+    "01-baseline": {
+      "elapsed_s": 159.22,
+      "user_s": 135.42,
+      "system_s": 23.71,
+      "average_cores": 0.9994347443788468,
+      "rss_kib": 28905520,
+      "major_faults": 0,
+      "minor_faults": 7229007
+    },
+    "02-candidate": {
+      "elapsed_s": 93.03,
+      "user_s": 135.65,
+      "system_s": 22.8,
+      "average_cores": 1.7032140169837688,
+      "rss_kib": 28905524,
+      "major_faults": 0,
+      "minor_faults": 8448856
+    },
+    "03-candidate": {
+      "elapsed_s": 91.51,
+      "user_s": 135.57,
+      "system_s": 22.25,
+      "average_cores": 1.7246202600808653,
+      "rss_kib": 28905524,
+      "major_faults": 0,
+      "minor_faults": 7905721
+    },
+    "04-baseline": {
+      "elapsed_s": 158.42,
+      "user_s": 135.22,
+      "system_s": 23.12,
+      "average_cores": 0.9994950132559022,
+      "rss_kib": 28905520,
+      "major_faults": 0,
+      "minor_faults": 7229006
+    }
+  },
+  "median_elapsed_s": {
+    "baseline": 158.82,
+    "candidate": 92.27000000000001
+  },
+  "speedup": 1.721252844911672,
+  "elapsed_reduction_pct": 41.90278302480795,
+  "median_rss_kib": {
+    "baseline": 28905520.0,
+    "candidate": 28905524.0
+  },
+  "paired_wall_ratios": [
+    0.5842858937319433,
+    0.5776417119050625
+  ]
+}

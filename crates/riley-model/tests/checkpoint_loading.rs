@@ -291,6 +291,50 @@ fn shuffled_two_shard_index_has_deterministic_bindings() {
 }
 
 #[test]
+fn both_shards_share_the_same_weight_byte_limit() {
+    let checkpoint = TempCheckpoint::new("sharded-total-limit");
+    write_sharded_checkpoint(checkpoint.root(), &canonical_tensors(false, true));
+    let shard_length = |name| fs::metadata(checkpoint.root().join(name)).unwrap().len();
+    let first = shard_length("model-00001-of-00002.safetensors");
+    let second = shard_length("model-00002-of-00002.safetensors");
+    let limits = LoadLimits::default()
+        .with_weight_byte_limits(first.max(second), first + second - 1)
+        .unwrap();
+    let provenance = CheckpointProvenance::load(checkpoint.root(), limits).unwrap();
+    assert!(matches!(
+        LoadedWeights::load_weight_only(checkpoint.root(), &model_spec(false), provenance, limits),
+        Err(ModelError::LimitExceeded {
+            resource: "safetensors shard",
+            limit,
+            actual: Some(actual),
+        }) if limit == second - 1 && actual == second
+    ));
+}
+
+#[test]
+fn paired_shards_report_failed_checksums_in_path_order() {
+    let checkpoint = TempCheckpoint::new("sharded-checksum-order");
+    write_sharded_checkpoint(checkpoint.root(), &canonical_tensors(false, true));
+    let limits = LoadLimits::default();
+    let provenance = CheckpointProvenance::load(checkpoint.root(), limits).unwrap();
+    for shard in [
+        "model-00002-of-00002.safetensors",
+        "model-00001-of-00002.safetensors",
+    ] {
+        let file = checkpoint.root().join(shard);
+        let mut bytes = fs::read(&file).unwrap();
+        bytes[0] ^= 1;
+        fs::write(&file, bytes).unwrap();
+        assert!(matches!(
+            LoadedWeights::load_weight_only(
+                checkpoint.root(), &model_spec(false), provenance.clone(), limits
+            ),
+            Err(ModelError::ChecksumMismatch { path, .. }) if path == Path::new(shard)
+        ));
+    }
+}
+
+#[test]
 fn shard_index_must_match_the_physical_inventory() {
     let checkpoint = TempCheckpoint::new("index-mismatch");
     write_sharded_checkpoint(checkpoint.root(), &canonical_tensors(false, true));

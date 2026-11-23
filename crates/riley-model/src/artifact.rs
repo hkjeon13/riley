@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{ErrorKind, Read};
 use std::path::{Component, Path, PathBuf};
+use std::thread;
 
 use sha2::{Digest, Sha256};
 
@@ -53,6 +54,77 @@ impl VerifiedArtifactSession {
         limit: u64,
         resource: &'static str,
     ) -> ModelResult<ArtifactBytes> {
+        let bytes = self.read_unverified(relative_path, limit, resource)?;
+        let sha256 = sha256_hex(&bytes);
+        self.record_verified(relative_path, bytes, sha256)
+    }
+
+    /// Reads the shards in path order, overlapping two checksums at most.
+    /// Both reads spend the same remaining byte budget before allocation.
+    pub(crate) fn read_shards<'a>(
+        &mut self,
+        mut paths: impl Iterator<Item = &'a PathBuf>,
+        limits: LoadLimits,
+        mut consume: impl FnMut(ArtifactBytes) -> ModelResult<()>,
+    ) -> ModelResult<()> {
+        let mut remaining = limits.total_weight_bytes();
+        while let Some(first) = paths.next() {
+            let bytes = self.read_shard_bytes(first, limits, &mut remaining)?;
+            let Some(second) = paths.next() else {
+                let sha256 = sha256_hex(&bytes);
+                return consume(self.record_verified(first, bytes, sha256)?);
+            };
+            let (sha256, next) = thread::scope(|scope| {
+                let first_checksum =
+                    thread::Builder::new().spawn_scoped(scope, || sha256_hex(&bytes));
+                let next = self
+                    .read_shard_bytes(second, limits, &mut remaining)
+                    .map(|bytes| {
+                        let sha256 = sha256_hex(&bytes);
+                        (bytes, sha256)
+                    });
+                let sha256 = first_checksum.map_or_else(
+                    |_| sha256_hex(&bytes),
+                    |job| {
+                        job.join()
+                            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+                    },
+                );
+                (sha256, next)
+            });
+            // Preserve path-ordered verification and parse errors if both
+            // of the in-flight shards fail.
+            consume(self.record_verified(first, bytes, sha256)?)?;
+            let (bytes, sha256) = next?;
+            consume(self.record_verified(second, bytes, sha256)?)?;
+        }
+        Ok(())
+    }
+
+    fn read_shard_bytes(
+        &self,
+        relative_path: &Path,
+        limits: LoadLimits,
+        remaining: &mut u64,
+    ) -> ModelResult<Box<[u8]>> {
+        let bytes = self.read_unverified(
+            relative_path,
+            limits.shard_bytes().min(*remaining),
+            "safetensors shard",
+        )?;
+        let byte_len = u64::try_from(bytes.len()).map_err(|_| ModelError::NumericOverflow {
+            field: "checkpoint shard byte length".to_owned(),
+        })?;
+        *remaining -= byte_len;
+        Ok(bytes)
+    }
+
+    fn read_unverified(
+        &self,
+        relative_path: &Path,
+        limit: u64,
+        resource: &'static str,
+    ) -> ModelResult<Box<[u8]>> {
         if self.observed.contains(relative_path) {
             return Err(ModelError::InvalidArtifact {
                 artifact: relative_path.display().to_string(),
@@ -65,7 +137,20 @@ impl VerifiedArtifactSession {
                 reason: "file is absent from provenance manifest".to_owned(),
             });
         }
-        let artifact = read_bounded_file(&self.root, relative_path, limit, resource)?;
+        read_file_bytes(&self.root, relative_path, limit, resource)
+    }
+
+    fn record_verified(
+        &mut self,
+        relative_path: &Path,
+        bytes: Box<[u8]>,
+        sha256: String,
+    ) -> ModelResult<ArtifactBytes> {
+        let artifact = ArtifactBytes {
+            relative_path: relative_path.to_owned(),
+            bytes,
+            sha256,
+        };
         self.provenance.verify_artifact(&artifact)?;
         self.observed.insert(relative_path.to_owned());
         Ok(artifact)
@@ -125,6 +210,21 @@ pub(crate) fn read_bounded_file(
     limit: u64,
     resource: &'static str,
 ) -> ModelResult<ArtifactBytes> {
+    let bytes = read_file_bytes(root, relative_path, limit, resource)?;
+    let sha256 = sha256_hex(&bytes);
+    Ok(ArtifactBytes {
+        relative_path: relative_path.to_owned(),
+        bytes,
+        sha256,
+    })
+}
+
+fn read_file_bytes(
+    root: &Path,
+    relative_path: &Path,
+    limit: u64,
+    resource: &'static str,
+) -> ModelResult<Box<[u8]>> {
     validate_relative_file(relative_path)?;
     let canonical_root = canonicalize_artifact_root(root)?;
     let requested = canonical_root.join(relative_path);
@@ -209,12 +309,7 @@ pub(crate) fn read_bounded_file(
         });
     }
 
-    let sha256 = sha256_hex(&bytes);
-    Ok(ArtifactBytes {
-        relative_path: relative_path.to_owned(),
-        bytes: bytes.into_boxed_slice(),
-        sha256,
-    })
+    Ok(bytes.into_boxed_slice())
 }
 
 fn canonicalize_artifact_root(root: &Path) -> ModelResult<PathBuf> {

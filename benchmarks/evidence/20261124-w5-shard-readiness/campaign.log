@@ -1,0 +1,26 @@
+campaign.sh: OK
+serve.py: OK
+campaign.sh: OK
+overlap.patch: OK
+baseline-inputs.sha256: OK
+candidate-inputs.sha256: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-schema-ids-20261123.ZsUYnqkm/source.tar: OK
+load.py: OK
+crates/riley-model/src/artifact.rs: OK
+crates/riley-model/src/checkpoint.rs: OK
+crates/riley-model/tests/checkpoint_loading.rs: OK
+BUILD_START baseline 2026-11-23T16:38:29Z
+BUILD_END baseline 2026-11-23T16:40:27Z
+crates/riley-model/src/artifact.rs: OK
+crates/riley-model/src/checkpoint.rs: OK
+crates/riley-model/tests/checkpoint_loading.rs: OK
+BUILD_START candidate 2026-11-23T16:40:27Z
+BUILD_END candidate 2026-11-23T16:41:26Z
+START gpu6 baseline 2026-11-23T16:41:27Z
+START gpu7 candidate 2026-11-23T16:41:27Z
+END gpu7 candidate 2026-11-23T16:45:13Z exit=0
+END gpu6 baseline 2026-11-23T16:46:17Z exit=0
+START gpu6 candidate 2026-11-23T16:46:17Z
+START gpu7 baseline 2026-11-23T16:46:17Z
+END gpu6 candidate 2026-11-23T16:50:01Z exit=0
+END gpu7 baseline 2026-11-23T16:51:05Z exit=0

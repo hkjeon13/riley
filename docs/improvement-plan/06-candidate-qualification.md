@@ -36,6 +36,8 @@ CI는 `distribution_with_schema_reference_fix`에서 같은 커밋의 Git 입력
 python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 ```
 
+샤드 검증 병렬화가 들어간 `main`은 `c5ec7b391` 패키지 이후 `crates/riley-model`의 배포 입력이 바뀌었다. 네이티브 A100 서버에서 Coder-14B의 API, 출력 및 준비 시간을 대조했다. 최신 패키지의 A100 검증은 남아 있으며, 이전 패키지의 근거는 `--distribution-revision c5ec7b391`로 확인할 수 있다. [샤드 검증과 A100 기동 결과](05-documentation-and-operations.md#샤드-체크포인트-검증-병렬화)
+
 `distribution_with_pattern_fix`는 `9373ea412`의 CPU 빌드, A100 구조화 출력과 두 이미지의 30분 부하를 연결한다. 당시 격리 복구에서는 입장 차단 뒤 스트림이 완료됐고 기준 이미지가 139.78초 후 같은 주소에서 준비 상태에 도달했다. [기준·jemalloc 대조](../../benchmarks/evidence/20261123-w5-dot-stock-soak/verified.json) · [격리 복구](05-mixed-soak-result.md#pattern-수정-이미지의-격리-복구)
 
 `distribution_with_prefix_metrics`는 `3951d90c8`의 Git 입력과 CPU·GPU 기록을 보존한다. 이 버전과 `36aa18805`의 입력은 각각 `--distribution-revision 3951d90c8`와 `--distribution-revision 36aa18805`로 조회한다. [이전 파생 이미지 검산](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/verified.json)

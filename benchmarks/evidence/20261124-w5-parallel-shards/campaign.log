@@ -1,0 +1,23 @@
+campaign.sh: OK
+overlap.patch: OK
+baseline-inputs.sha256: OK
+candidate-inputs.sha256: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-schema-ids-20261123.ZsUYnqkm/source.tar: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-Coder-14B-Instruct/riley-checkpoint.json: OK
+crates/riley-model/src/artifact.rs: OK
+crates/riley-model/src/checkpoint.rs: OK
+crates/riley-model/tests/checkpoint_loading.rs: OK
+BUILD baseline 2026-11-23T16:30:03Z
+crates/riley-model/src/artifact.rs: OK
+crates/riley-model/src/checkpoint.rs: OK
+crates/riley-model/tests/checkpoint_loading.rs: OK
+BUILD candidate 2026-11-23T16:30:33Z
+START 01-baseline baseline 2026-11-23T16:31:06Z
+END 01-baseline baseline 2026-11-23T16:33:46Z
+START 02-candidate candidate 2026-11-23T16:33:46Z
+END 02-candidate candidate 2026-11-23T16:35:19Z
+START 03-candidate candidate 2026-11-23T16:35:19Z
+END 03-candidate candidate 2026-11-23T16:36:50Z
+START 04-baseline baseline 2026-11-23T16:36:50Z
+END 04-baseline baseline 2026-11-23T16:39:29Z
+/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-Coder-14B-Instruct/riley-checkpoint.json: OK

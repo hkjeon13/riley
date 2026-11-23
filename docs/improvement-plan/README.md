@@ -4,13 +4,15 @@
 
 스키마의 중첩 `$id` 처리를 수정한 `c5ec7b391` 패키지의 A100 교차 비교에서 30분 합성 부하 4회 동안 정상 완료 54,996건, 예상 외 오류 0건을 기록했다. 후반 RSS 변화는 기준 이미지에서 캐시 끔 +528KiB, 켬 +592KiB였고 jemalloc 시험 이미지에서는 각각 −776KiB, −820KiB였다. 격리 복구는 139.01초에 완료됐다. 실제 운영 트래픽·승인 SLO·서비스 복구 확인이 남아 있다. [구조화 출력 검증](04-structured-output-result.md) · [30분 교차 대조](05-mixed-soak-result.md#스키마-참조-수정-이미지의-30분-교차-대조) · [후보별 릴리스 판정](06-candidate-qualification.md)
 
-같은 패키지에서 1,024행 옵션으로 Coder-14B를 실행해 vLLM과 비교했다. 짧은 C32 TPOT p50은 vLLM의 1.043–1.047배, 두 RAG C8 seed의 첫 토큰 p95는 1.434–1.672배로 두 GPU에서 각각 목표를 넘었다. [W3 패키지 교차 비교](03-long-context-result.md#배포-이미지의-coder-14b-교차-비교)
+샤드 체크포인트의 SHA-256을 최대 두 개씩 겹쳐 계산하도록 수정했다. Coder-14B 검증 시간은 158.82초에서 92.27초로 41.90% 줄었고, 네이티브 A100 서버의 준비 시간은 27.34–28.48% 줄었다. 동일한 API와 생성 토큰 ID를 확인했다. 새 배포 이미지의 A100 재검증이 남아 있다. [W5 기동 시간 검증](05-documentation-and-operations.md#샤드-체크포인트-검증-병렬화)
+
+`c5ec7b391` 패키지에서 1,024행 옵션으로 Coder-14B를 실행해 vLLM과 비교했다. 짧은 C32 TPOT p50은 vLLM의 1.043–1.047배, 두 RAG C8 seed의 첫 토큰 p95는 1.434–1.672배로 두 GPU에서 각각 목표를 넘었다. [W3 패키지 교차 비교](03-long-context-result.md#배포-이미지의-coder-14b-교차-비교)
 
 요청별 prefill 조각을 512행으로 낮춘 후보는 832쌍의 출력을 보존했으나 네 RAG C8 비교에서 첫 토큰 p95가 2.74–14.39% 늘어 미채택했다. [W3 조각 크기 대조](03-long-context-result.md#coder-14b-요청별-prefill-조각-크기)
 
 | 작업 | 현재 근거와 다음 검증 |
 |---|---|
-| W1 검증·릴리스 | Linux Production CPU, 고정 RC3 테스트 34건, CUDA 12.8 네이티브 빌드·Clippy와 CUDA 12.4 이미지 CPU 검증을 통과했다. 현재 배포 입력과 이미지 원본의 해시를 대조했다. [W1 결과](01-validation-result.md) |
+| W1 검증·릴리스 | Linux Production CPU, 고정 RC3 테스트 34건, CUDA 12.8 네이티브 빌드·Clippy와 CUDA 12.4 이미지 CPU 검증을 통과했다. `c5ec7b391` 패키지의 배포 입력과 이미지 원본 해시를 대조했다. [W1 결과](01-validation-result.md) |
 | W2 실행 중첩 | `after-submit-v1`은 A100 32행 decode의 커널 공백 중앙값을 51–72µs 줄였고 네 일반 서빙 비교에서 처리량을 0.38–0.89% 높였다. `native-bf16-varlen-v1`의 기존 발행 정책을 유지한다. 정렬된 KV 테이블과 이벤트 복사 제거는 SmolLM2의 단일 iteration에서 채택 이득을 충족하지 못했다. [발행 정책 계측](02-async-step-result.md#발행-정책과-32행-decode-커널-간격) · [두 번째 후보 결과](02-async-step-result.md#커밋된-이벤트-데이터의-복사-제거) |
 | W3 장문·스케줄 | Qwen2.5-14B에서 1,024행 QKV 후보는 고정 도착 대조의 첫 토큰 p95를 3.54–12.88% 줄였으나, 같은 형상의 Coder-14B에서는 역순 동시 유입의 decode TPOT이 1.99% 늘어 공통 적용을 기각했다. Qwen2.5-14B의 50ms 유입에서 41번 요청의 prefill 조각 사이 대기는 399ms 늘었고 KV 예약은 한도보다 744블록 여유가 있었다. 장문 경계 11개는 네 chunk·KV 조합의 진단에서 308건의 응답이 토큰 ID까지 일치했다. KV 768블록의 기본 30초 실행은 C32에서 408이 발생했다. [고정 도착 결과](03-long-context-result.md#두-rag-seed의-고정-도착-재생) · [Coder-14B 결과](03-long-context-result.md#coder-14b의-1024행-후보-검증) · [같은 실행의 동시 계측](03-long-context-result.md#같은-실행의-요청-대기와-cuda-커널-대조) · [경계·KV 검증](03-long-context-result.md#장문-chunk와-kv-한도의-교차-대조) |
 | W4 정확성·스키마 | 장문 29건의 Riley·HF 첫 분기 7건 중 6건은 decode였다. Riley ID가 단독 최대인 두 사례에서 첫 레이어 QKV를 정확한 HF 행으로 교체해도 선택 토큰과 전체 생성 결과가 같았다. 같은 두 사례의 residual 교체에서 토큰 선택에 영향을 준 첫 경계를 레이어 0의 MLP 이후와 attention 직후로 각각 좁혔다. 첫 prefill 분기의 레이어와 네 모델의 GSM8K를 검증했다. 현행 이미지 두 개에서 장문 스키마·도구 호출 128건을 확인했다. [장문·품질 결과](04-long-accuracy-result.md#실제-bf16-점수-행의-분기-검산) · [순전파 대조](04-long-accuracy-result.md#대체-qkv-행이-최종-decode에-미친-영향) · [스키마 결과](04-structured-output-result.md) · [residual 경계 검증](04-long-accuracy-result.md#residual-경계-교체로-decode-토큰-선택을-재현) · [동일 입력 투영 대조](04-long-accuracy-result.md#같은-입력으로-레이어-0의-mlp와-attention-출력-투영-대조) · [투영 정밀도 검산](04-long-accuracy-result.md#투영의-bf16-반올림과-축소-정밀도-대조) · [실제 GEMM 계획](04-long-accuracy-result.md#실제-riley-계획과-split-k-부분합-정밀도) · [대안의 서빙 재생](04-long-accuracy-result.md#투영-대안을-실제-decode-응답에서-재생) · [행 수 검증](04-long-accuracy-result.md#후보별-21개-배치-행-수-대조) · [계획 31 전체 적용 기각](04-long-accuracy-result.md#계획-31-전체-서빙-대조와-판정) |
