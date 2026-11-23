@@ -1,0 +1,316 @@
+{
+  "status": "passed",
+  "remote_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-kv-history-gpu-20261123.G8mePjYa",
+  "remote_build": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-kv-history-build-20261123.YVRg3ZXO",
+  "model_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "binary_sha256": "b4ecc8138d8401092905dcf30cd4c6815a7ec55676fa97e4872a42e3be850335",
+  "comparison": "fp32_down21",
+  "reservations": {
+    "6": {
+      "pid": 2680326,
+      "start_ticks": "6365879881",
+      "gib": 20
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "gib": 20
+    }
+  },
+  "roles": {
+    "baseline": {
+      "input_ids_sha256": "3f4a18aad6b33f9589813b6ad8a13449bf697d0f01a4f2c062ef991d6e6b10d7",
+      "trials": {
+        "calibration": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            262
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "0dced11ccd664ade7ad27102b451901c67c6f39589f0ff7e9bc673aba7e4fbac",
+          "finish": "length",
+          "seconds": 4.135596290230751,
+          "scores": {
+            "262": 10.6875,
+            "16019": 10.0625,
+            "top_two_gap": 0.3125
+          },
+          "capture_sha256": "ba197798b4646cba1ce3ac31e2c56b658b06cffc884e9c5aa1965449f93695cf"
+        },
+        "self": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            262
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "0dced11ccd664ade7ad27102b451901c67c6f39589f0ff7e9bc673aba7e4fbac",
+          "finish": "length",
+          "seconds": 4.2918034344911575,
+          "scores": {
+            "262": 10.6875,
+            "16019": 10.0625,
+            "top_two_gap": 0.3125
+          },
+          "capture_sha256": "e1f93b96e2c264c8c901203d0bf2547002c8961f85a8281e441cfd0aa728507a"
+        },
+        "boundary": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            16019
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+          "finish": "length",
+          "seconds": 4.1275064796209335,
+          "scores": {
+            "262": 10.25,
+            "16019": 11.0625,
+            "top_two_gap": 0.6875
+          },
+          "capture_sha256": "c2671de66c2901062dc8eb39c85978d1acd45ae74acbd72b8d7bd085e3736db8"
+        },
+        "history": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            16019
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+          "finish": "length",
+          "seconds": 4.270966812968254,
+          "scores": {
+            "262": 10.1875,
+            "16019": 10.75,
+            "top_two_gap": 0.5625
+          },
+          "capture_sha256": "6cae15a46f6cad2cbff9642441f4a7fc7499e7be40425d00218c73a2ab9b6ede"
+        }
+      },
+      "boundary_vs_donor": {
+        "past_key": {
+          "changed_words": 755969,
+          "words": 4015104
+        },
+        "past_value": {
+          "changed_words": 1739312,
+          "words": 4015104
+        },
+        "query": {
+          "changed_words": 0,
+          "words": 3584
+        },
+        "current_key": {
+          "changed_words": 0,
+          "words": 512
+        },
+        "current_value": {
+          "changed_words": 0,
+          "words": 512
+        },
+        "context": {
+          "changed_words": 808,
+          "words": 3584
+        }
+      },
+      "history_vs_donor": {
+        "context": {
+          "changed_words": 0,
+          "words": 3584
+        },
+        "attention_residual": {
+          "changed_words": 0,
+          "words": 3584
+        }
+      },
+      "history_vs_boundary": {
+        "context": {
+          "changed_words": 808,
+          "words": 3584
+        },
+        "attention_residual": {
+          "changed_words": 704,
+          "words": 3584
+        }
+      },
+      "logits_vs_donor_after_history": {
+        "changed_words": 149271,
+        "words": 152064
+      },
+      "logits_vs_boundary_after_history": {
+        "changed_words": 150740,
+        "words": 152064
+      }
+    },
+    "candidate": {
+      "input_ids_sha256": "3f4a18aad6b33f9589813b6ad8a13449bf697d0f01a4f2c062ef991d6e6b10d7",
+      "trials": {
+        "calibration": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            16019
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+          "finish": "length",
+          "seconds": 4.229880876839161,
+          "scores": {
+            "262": 9.9375,
+            "16019": 11.375,
+            "top_two_gap": 0.75
+          },
+          "capture_sha256": "33ee85d25fa8d907a869c54363246f44b877f65bc979c5b7cde0c69f812f924b"
+        },
+        "self": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            16019
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+          "finish": "length",
+          "seconds": 4.347355514764786,
+          "scores": {
+            "262": 9.9375,
+            "16019": 11.375,
+            "top_two_gap": 0.75
+          },
+          "capture_sha256": "0e8ab621b2d2f206c30e6540d870e90d0eece1c9f910a0ad4e1181b9f8d26a33"
+        },
+        "boundary": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            16019
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+          "finish": "length",
+          "seconds": 4.154433190822601,
+          "scores": {
+            "262": 10.25,
+            "16019": 11.1875,
+            "top_two_gap": 0.5
+          },
+          "capture_sha256": "3cb7352b519e39a0e85904f6025579d22aeb27bececf66dcb8cc56825e63d16f"
+        },
+        "history": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            16019
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+          "finish": "length",
+          "seconds": 4.315827243030071,
+          "scores": {
+            "262": 9.8125,
+            "16019": 11.0,
+            "top_two_gap": 1.1875
+          },
+          "capture_sha256": "61ebc7cc791192bc5e6a19a46d032b2558d4926fe499950efdd0e05f06c91edf"
+        }
+      },
+      "boundary_vs_donor": {
+        "past_key": {
+          "changed_words": 755969,
+          "words": 4015104
+        },
+        "past_value": {
+          "changed_words": 1739312,
+          "words": 4015104
+        },
+        "query": {
+          "changed_words": 0,
+          "words": 3584
+        },
+        "current_key": {
+          "changed_words": 0,
+          "words": 512
+        },
+        "current_value": {
+          "changed_words": 0,
+          "words": 512
+        },
+        "context": {
+          "changed_words": 856,
+          "words": 3584
+        }
+      },
+      "history_vs_donor": {
+        "context": {
+          "changed_words": 0,
+          "words": 3584
+        },
+        "attention_residual": {
+          "changed_words": 0,
+          "words": 3584
+        }
+      },
+      "history_vs_boundary": {
+        "context": {
+          "changed_words": 856,
+          "words": 3584
+        },
+        "attention_residual": {
+          "changed_words": 718,
+          "words": 3584
+        }
+      },
+      "logits_vs_donor_after_history": {
+        "changed_words": 151807,
+        "words": 152064
+      },
+      "logits_vs_boundary_after_history": {
+        "changed_words": 151653,
+        "words": 152064
+      }
+    }
+  }
+}

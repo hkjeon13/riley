@@ -322,7 +322,22 @@ A100 7번의 동일 HF 체크포인트와 BF16 환경에서 프롬프트 prefill
 
 A100 6번에서 기준, 7번에서 후보를 실행했다. 두 후보의 기본·자체 행·교차·마지막 norm 대조 16건에서 앞선 일곱 출력 ID가 일치했다. 네 서버는 정상 종료하고 활성·대기 요청, KV, device·pinned 할당을 회수했다. 각 실행 전후로 GPU 6·7의 기존 홀더와 20GiB 예약을 확인했다. [캠페인](../../benchmarks/evidence/20261123-w4-boundary-swap/campaign.sh) · [원본 체크섬](../../benchmarks/evidence/20261123-w4-boundary-swap/result.sha256) · [원본 재검산](../../benchmarks/evidence/20261123-w4-boundary-swap/fetch-summary.sh)
 
-보존한 행을 같은 체크섬으로 다시 읽어 교체 이후 순전파를 대조했다. Attention 후보의 residual과 정규화 행은 모두 같은 채널인 인덱스 2,416에서만 달랐다. 두 방향에서 교체 뒤 레이어 0 MLP의 residual과 레이어 1 입력 정규화는 제공한 쪽과 모두 일치했다. 다음 차이는 레이어 1 attention 직후의 525개·527개 BF16 성분이었다. Down 교체도 레이어 1 attention 직후에 처음 다시 갈라졌다. 기준이 받은 방향은 704개, 후보가 받은 방향은 718개가 달랐다. 이 위치는 같은 decode의 다음 down 투영보다 앞선다. 앞선 스텝에서 만들어진 KV가 이 차이에 기여한 양은 별도 교체 시험이 필요하다. [채널과 순전파 차이](../../benchmarks/evidence/20261123-w4-boundary-swap/propagation.json) · [검산 명령](../../benchmarks/evidence/20261123-w4-boundary-swap/check-propagation.sh)
+보존한 행을 같은 체크섬으로 다시 읽어 교체 이후 순전파를 대조했다. Attention 후보의 residual과 정규화 행은 모두 같은 채널인 인덱스 2,416에서만 달랐다. 두 방향에서 교체 뒤 레이어 0 MLP의 residual과 레이어 1 입력 정규화는 제공한 쪽과 모두 일치했다. 다음 차이는 레이어 1 attention 직후의 525개·527개 BF16 성분이었다. Down 교체도 레이어 1 attention 직후에 처음 다시 갈라졌다. 기준이 받은 방향은 704개, 후보가 받은 방향은 718개가 달랐다. 이 위치는 같은 decode의 다음 down 투영보다 앞선다. FP32 부분합 down의 과거 KV는 아래에서 직접 교체했다. [채널과 순전파 차이](../../benchmarks/evidence/20261123-w4-boundary-swap/propagation.json) · [검산 명령](../../benchmarks/evidence/20261123-w4-boundary-swap/check-propagation.sh)
+
+#### 장문 코드의 레이어 1 과거 KV 교체
+
+FP32 부분합 down 계획 21과 기준으로 같은 입력 7,836개 ID와 7개 생성 ID를 재현했다. 위치 7,842에서 레이어 0 residual·정규화 행을 제공한 실행에 맞춘 뒤 레이어 1의 query, 현재 K·V, 과거 K·V와 attention 결과를 기록했다. 과거 K·V의 위치 0–7,841을 양방향으로 교체하고 attention이 끝나면 받는 쪽의 원본을 복원했다. 블록 테이블에 따라 교체 범위를 계산했고, 현재 위치의 K·V는 범위에서 제외했다. 교체·복원 바이트와 자체 행·KV를 넣은 대조의 전체 256개 생성 ID·텍스트·usage·종료 사유를 검증했다. [KV 진단 코드](../../benchmarks/evidence/20261123-w4-kv-history/kv-trace.rs) · [실행과 대조](../../benchmarks/evidence/20261123-w4-kv-history/trial.py)
+
+레이어 0 행을 맞춘 두 방향에서 현재 query 3,584개 성분과 현재 K·V 각각 512개 성분이 모두 일치했다. 과거 K는 4,015,104개 중 755,969개, 과거 V는 같은 수 중 1,739,312개 성분이 서로 달랐다.
+
+| KV를 받는 실행 | Attention context 차이, 교체 전 → 후 | Attention residual 차이, 교체 전 → 후 | 교체 후 첫 차이 | ID 262 / 16019 점수, 교체 전 → 후 |
+|---|---:|---:|---|---|
+| 기준이 후보 KV를 받음 | 808 → 0 | 704 → 0 | 레이어 1 MLP 이후 residual 606개 | 10.25 / 11.0625 → 10.1875 / 10.75 |
+| 후보가 기준 KV를 받음 | 856 → 0 | 718 → 0 | 레이어 1 MLP 이후 residual 628개 | 10.25 / 11.1875 → 9.8125 / 11.0 |
+
+차이 개수는 제공한 실행의 기본 행과 비교한 값이며, context와 residual은 각각 3,584개 BF16 성분이다. 과거 KV를 맞추자 레이어 1 attention context와 residual을 양방향에서 완전히 재현했다. 이어 레이어 1 MLP를 지난 행에서 다시 달라졌고, 두 방향의 여덟 번째 ID는 16019를 유지했다. 레이어 0 행만 교체한 응답과 비교해 두 방향 모두 전체 256개 생성 ID·텍스트·usage·종료 사유가 같았다. 다음 대조 지점은 레이어 1 MLP의 정규화 입력과 gate/up 출력, down 투영이다. 이 결과는 FP32 부분합 down 후보의 장문 코드 한 사례에 해당하며 기존 서빙 기각 판정을 유지한다. [점수와 검증 요약](../../benchmarks/evidence/20261123-w4-kv-history/verified.json) · [첫 차이 검산](../../benchmarks/evidence/20261123-w4-kv-history/propagation.json)
+
+A100 6번에서 기준, 7번에서 후보를 실행했다. 두 서버는 정상 종료했고 활성·대기 요청, KV, device·pinned 할당을 회수한 뒤 기존 20GiB 예약으로 복귀했다. 최초 집계는 예약 검사에서 GPU 번호 자료형을 잘못 비교해 종료 코드 1을 남겼다. GPU 번호를 정수로 변환한 검산기로 같은 원본을 재검증했고 두 작업의 종료 코드 0과 예약 복귀를 확인했다. 원본과 검산기의 지문을 함께 보존했다. [캡처 지문](../../benchmarks/evidence/20261123-w4-kv-history/result.sha256) · [정정 내역과 재검산](../../benchmarks/evidence/20261123-w4-kv-history/verify-capture.sh) · [요약 재생](../../benchmarks/evidence/20261123-w4-kv-history/fetch-summary.sh)
 
 ## 첫 prefill 분기 추적
 

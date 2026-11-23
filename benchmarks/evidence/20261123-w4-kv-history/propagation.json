@@ -1,0 +1,35 @@
+{
+  "capture_checksums_sha256": "21b4b78833ed1abe2408f9eea26748ba545d03736717ceceffb3fdf97cc6861a",
+  "directions": {
+    "baseline": {
+      "donor": "candidate",
+      "equal_rows": [
+        {
+          "stage": "attention_residual",
+          "layer": 1
+        }
+      ],
+      "first_difference": {
+        "stage": "layer_residual",
+        "layer": 1,
+        "changed_words": 606,
+        "words": 3584
+      }
+    },
+    "candidate": {
+      "donor": "baseline",
+      "equal_rows": [
+        {
+          "stage": "attention_residual",
+          "layer": 1
+        }
+      ],
+      "first_difference": {
+        "stage": "layer_residual",
+        "layer": 1,
+        "changed_words": 628,
+        "words": 3584
+      }
+    }
+  }
+}
