@@ -1074,6 +1074,21 @@ GPU 7번에서 1단계 목표를 넘긴 두 시각표의 Riley TTFT 상위 4건�
 
 두 요청 모두 TTFT의 약 **94%**가 입장 뒤였다. 이 구간만으로도 저장한 vLLM 요청의 전체 TTFT보다 각각 **350.89ms**, **561.28ms** 길었다. 진단 실행에서 seed 1의 p95를 결정한 요청은 20번으로 이동했고 이 요청도 1,881.49ms 중 1,841.30ms가 입장 후에 발생했다. 다음 계측에서는 입장 뒤 첫 prefill을 기다린 시간, prefill 조각 사이의 대기와 CUDA 스텝, 첫 콘텐츠 발행까지의 시간을 나눈다. 진단 서버는 정상 종료했고 GPU 7번은 기존 홀더의 20GiB 대기 예약으로 돌아왔다. [종료 로그와 판정](../../benchmarks/evidence/20261124-w3-rag-admission/campaign.log) · [독립 검산기](../../benchmarks/evidence/20261124-w3-rag-admission/verify.py)
 
+### RAG prefill 스텝과 요청별 대기
+
+기존 두 시각표와 서버 옵션을 유지하고 각 스텝의 실행 시작·반환·commit 시각, CUDA 측정 시간, prefill 조각의 요청 ID와 행 수를 남긴다. 이전 실행에서 지연이 컸던 세 요청의 서비스 입장부터 첫 콘텐츠까지를 동일 시계에 연결한다. CUDA 시간은 decode나 다른 prefill을 포함할 수 있는 스텝 전체에 해당한다. 타임라인은 메모리에 모아 서버 종료 후 출력한다. [등록](../../benchmarks/evidence/20261124-w3-rag-prefill-steps/registration.json) · [계측 코드](../../benchmarks/evidence/20261124-w3-rag-prefill-steps/rag_steps.rs) · [독립 검산기](../../benchmarks/evidence/20261124-w3-rag-prefill-steps/verify.py)
+
+A100 7번에서 HTTP 워밍업 16건과 측정 128건을 완료했고, 측정 128건의 요청·출력 해시, 토큰 수, 종료 사유가 기존 Riley와 모두 일치했다. 총 2,505개 committed 스텝의 시작·반환 순서를 확인했다. 서버 내부 워밍업 48건에 해당하는 초기 69스텝은 첫 HTTP 요청의 입장 전에 끝났다. 이전 vLLM 시각표와 전송 오차 차이의 p95는 0.88ms·1.02ms였고 입장 구간만 수집한 직전 Riley 실행과는 1.44ms·1.24ms였다. [원본 요청·스텝·체크섬](../../benchmarks/evidence/20261124-w3-rag-prefill-steps/raw-results.tar.gz) · [대조 결과](../../benchmarks/evidence/20261124-w3-rag-prefill-steps/verified.json)
+
+| 요청 | 입장→첫 콘텐츠 | 자신의 prefill 포함 실행 | 다른 prefill 포함 실행 | 그 밖의 시간 |
+|---|---:|---:|---:|---:|
+| Seed 1 · 30번 | 1,762.09ms | 545.84ms | 1,214.78ms | 1.47ms |
+| Seed 2 · 43번 | 1,326.20ms | 545.26ms | 779.79ms | 1.15ms |
+
+30번의 첫 prefill 전 대기는 257.95ms, 조각 사이 대기는 957.70ms였다. 43번에서는 각각 130.60ms와 646.68ms였다. 두 요청 모두 자기 prefill이 4개 스텝에 걸쳐 실행됐고, 각 스텝은 총 1,024행을 사용하면서 decode도 처리했다. 다른 prefill 실행 중 prefill을 받은 요청이 모두 더 늦게 입장한 스텝은 30번에서 397.15ms, 43번에서 391.56ms를 차지했다. 이 시간은 실제 스텝 배정의 관측값이다. 배정 순서를 바꿨을 때 전체 지연과 동시 decode가 어떻게 변하는지는 별도 비교가 필요하다. [요청별 행·시간 기록](../../benchmarks/evidence/20261124-w3-rag-prefill-steps/verified.json)
+
+스텝을 기록한 이번 실행의 TTFT p95는 1,804.55ms·1,536.84ms였다. 입장 구간만 기록한 직전 실행은 1,881.49ms·1,572.92ms였다. 두 번 모두 각 시각표의 vLLM 대비 1단계 한도를 넘었다. 관측한 대기에 맞춰 다른 요청의 연속 prefill 스텝 사이에서 오래 기다린 요청의 다음 prefill을 앞당기는 후보를 먼저 대조한다. 두 seed와 C32·동시 유입에서 정답 출력 및 기존 decode TPOT 기준도 함께 확인한다. 서버 정상 종료 뒤 GPU 7번은 같은 홀더의 20GiB 예약으로 복귀했다. [스텝 실행 로그](../../benchmarks/evidence/20261124-w3-rag-prefill-steps/campaign.log) · [정확성·성능 기준](03-long-context-and-scheduling.md#2-기존-목표와-범위)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

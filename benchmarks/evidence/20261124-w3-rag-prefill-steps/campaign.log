@@ -1,0 +1,29 @@
+build.sh: OK
+instrument.py: OK
+rag_steps.rs: OK
+campaign.sh: OK
+runtime.sha256: OK
+result.sha256: OK
+WAIT_FOR_BUILD pid=2060003 2026-11-23T20:25:14Z
+riley-diagnostic: OK
+dependencies.txt: OK
+toolchain.txt: OK
+patched-source.sha256: OK
+arm.py: OK
+client.py: OK
+holder.py: OK
+replay.py: OK
+tools/compare_runner.py: OK
+tools/load.py: OK
+tools/profile_summary.py: OK
+tools/profile_workload.py: OK
+tools/run_profile.py: OK
+schedules.json: OK
+cpu-placement.json: OK
+server-cpus.txt: OK
+crates/riley-server/src/engine.rs: OK
+crates/riley-server/src/service.rs: OK
+crates/riley-server/src/lib.rs: OK
+crates/riley-server/src/rag_steps.rs: OK
+START gpu7 riley 2026-11-23T20:26:28Z
+END gpu7 riley 2026-11-23T20:31:21Z exit=0

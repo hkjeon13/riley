@@ -171,7 +171,7 @@ python3 benchmarks/live/compare.py \
 
 Coder-14B RAG의 첫 고정 도착 재생에서 유효한 GPU 6번의 두 비교는 첫 토큰 p95가 vLLM의 1.441배·1.450배였고 나머지 여섯 비교는 3ms 전송 오차 기준을 넘었다. GPU 상태 조회와 CPU 배치를 분리하자 GPU 7번은 RAG와 짧은 C32 6개 비교 모두 전송 오차를 통과했다. RAG 첫 토큰 p95는 0.991–1.529배였고 4개 중 1개에서 최종 1.15배 목표를 충족했다. [첫 고정 도착 결과](03-long-context-result.md#coder-14b-rag-고정-도착-재생-결과) · [CPU 분리 재생](03-long-context-result.md#gpu-상태-확인을-분리한-재생)
 
-동일한 두 RAG 시각표에 서버 관측값을 연결했다. 추적한 두 요청의 첫 토큰 대기 중 약 94%가 입장 뒤에 발생했다. 첫 prefill 선택까지의 대기, 조각 사이 대기와 CUDA 스텝을 이어서 비교한다. [입장 구간 검증](03-long-context-result.md#같은-rag-요청의-입장과-첫-콘텐츠)
+동일한 두 RAG 시각표에 서버 관측값을 연결했다. 추적한 두 요청의 첫 토큰 대기 중 약 94%가 입장 뒤에 발생했다. 별도의 스텝 계측에서는 두 요청이 다른 prefill 실행을 기다린 시간이 각각 1,215ms·780ms였다. 두 요청의 자체 prefill은 각각 4스텝 약 546ms·545ms였다. 기존 decode 선택을 보존하면서 오래 기다린 prefill의 진행 간격을 줄이는 후보를 우선 비교한다. [입장 구간 검증](03-long-context-result.md#같은-rag-요청의-입장과-첫-콘텐츠) · [prefill 스텝 대조](03-long-context-result.md#rag-prefill-스텝과-요청별-대기)
 
 ## 8. 다른 작업에 넘길 결과
 
