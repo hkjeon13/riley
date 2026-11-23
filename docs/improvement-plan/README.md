@@ -140,6 +140,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W4: 레이어 0의 residual과 정규화 행을 맞바꿨을 때 attention은 양방향에서, FP32 부분합 down은 기준에 후보 행을 넣은 방향에서 여덟 번째 토큰이 바뀌었다. [장문 코드 BF16 행 교체](04-long-accuracy-result.md#장문-코드의-레이어-0-bf16-행-교체)
 - [x] W4에서 FP32 부분합 down과 기준의 레이어 1 과거 KV를 교체해 attention 차이를 없앴다. 다음 차이는 레이어 1 MLP 이후였고, 여덟 번째 토큰은 16019를 유지했다. [과거 KV 교체](04-long-accuracy-result.md#장문-코드의-레이어-1-과거-kv-교체)
 - [x] W4에서 레이어 1 MLP의 차이를 down projection에 좁혔다. FP32 부분합의 투영 오차는 줄었고, 한 행을 교체한 두 방향에서 최종 생성 응답은 유지됐다. 장문 29개 서빙 대조의 기각 판정을 유지한다. [레이어 1 down projection](04-long-accuracy-result.md#장문-코드의-레이어-1-down-projection)
+- [x] W4에서 같은 정규화 행으로 공동 최대 토큰의 점수를 FP64로 재계산했다. 여덟 위치의 BF16 점수가 재현됐고 동점인 첫 분기 다섯 곳 중 네 곳에서 HF SDPA의 선택과 일치했다. [동점 재계산](04-long-accuracy-result.md#bf16-동점-토큰의-fp64-재계산)
 - [x] W4: 문서화한 스키마 부분집합을 독립 판정과 대조하고, 미지원 제약의 오류를 검증했다. [스키마 검증](04-structured-output-result.md)
 - [x] W4에서 `pattern`의 점 연산자가 줄바꿈을 허용하던 결함을 수정했다. CPU의 전체 Unicode 스칼라 대조와 새 패키지의 장문 스키마·도구 64건 및 45초 혼합 부하가 통과했다. [패턴 수정과 새 이미지 검증](04-structured-output-result.md#pattern-점-연산자의-줄바꿈-처리)
 - [x] W2: 마지막 출력 전달 전에 취소됐을 때 정상 완료가 전달되는 결함을 수정했다. 두 발행 모드의 CPU 회귀 검사와 A100 API·취소·종료 부하를 통과했다. [취소·종료 검증](02-async-step-result.md#마지막-토큰-전달과-취소의-순서)
