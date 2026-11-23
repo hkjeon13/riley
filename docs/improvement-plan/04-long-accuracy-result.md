@@ -322,6 +322,8 @@ A100 7번의 동일 HF 체크포인트와 BF16 환경에서 프롬프트 prefill
 
 A100 6번에서 기준, 7번에서 후보를 실행했다. 두 후보의 기본·자체 행·교차·마지막 norm 대조 16건에서 앞선 일곱 출력 ID가 일치했다. 네 서버는 정상 종료하고 활성·대기 요청, KV, device·pinned 할당을 회수했다. 각 실행 전후로 GPU 6·7의 기존 홀더와 20GiB 예약을 확인했다. [캠페인](../../benchmarks/evidence/20261123-w4-boundary-swap/campaign.sh) · [원본 체크섬](../../benchmarks/evidence/20261123-w4-boundary-swap/result.sha256) · [원본 재검산](../../benchmarks/evidence/20261123-w4-boundary-swap/fetch-summary.sh)
 
+보존한 행을 같은 체크섬으로 다시 읽어 교체 이후 순전파를 대조했다. Attention 후보의 residual과 정규화 행은 모두 같은 채널인 인덱스 2,416에서만 달랐다. 두 방향에서 교체 뒤 레이어 0 MLP의 residual과 레이어 1 입력 정규화는 제공한 쪽과 모두 일치했다. 다음 차이는 레이어 1 attention 직후의 525개·527개 BF16 성분이었다. Down 교체도 레이어 1 attention 직후에 처음 다시 갈라졌다. 기준이 받은 방향은 704개, 후보가 받은 방향은 718개가 달랐다. 이 위치는 같은 decode의 다음 down 투영보다 앞선다. 앞선 스텝에서 만들어진 KV가 이 차이에 기여한 양은 별도 교체 시험이 필요하다. [채널과 순전파 차이](../../benchmarks/evidence/20261123-w4-boundary-swap/propagation.json) · [검산 명령](../../benchmarks/evidence/20261123-w4-boundary-swap/check-propagation.sh)
+
 ## 첫 prefill 분기 추적
 
 생성 첫 토큰부터 갈라진 사례 3(3,301토큰)과 같은 근방 길이에서 출력이 같았던 사례 9(3,330토큰)를 사용한다. 진단용 빌드는 서빙과 같은 packed prefill 연산에서 선택한 마지막 입력 행의 embedding, 28개 레이어 중간값, 최종 norm 및 전체 logits를 BF16으로 복사한다. 해당 iteration만 CUDA Graph 재생을 우회한다. GPU 커맨드 배치가 완료된 뒤 복사본을 읽으며 진단 빌드의 출력 ID·텍스트·종료 사유가 기존 실행과 같아야 비교를 진행한다.

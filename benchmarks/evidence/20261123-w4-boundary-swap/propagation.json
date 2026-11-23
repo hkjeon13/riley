@@ -1,0 +1,87 @@
+{
+  "archive_checksums_sha256": "fae78c9bdd21da81d1d58683a43178013a40ff58116ecacca6ba6a4e32b5f54c",
+  "attention_words": {
+    "attention_residual": [
+      {
+        "index_zero_based": 2416,
+        "baseline_bits": "0xbbda",
+        "candidate_bits": "0xbbd9",
+        "baseline_value": -0.00665283203125,
+        "candidate_value": -0.006622314453125
+      }
+    ],
+    "post_attention_norm": [
+      {
+        "index_zero_based": 2416,
+        "baseline_bits": "0xbc2e",
+        "candidate_bits": "0xbc2d",
+        "baseline_value": -0.0106201171875,
+        "candidate_value": -0.01055908203125
+      }
+    ]
+  },
+  "directions": {
+    "attention31": {
+      "baseline": {
+        "donor": "candidate",
+        "equal_before_next_difference": [
+          {
+            "stage": "next_input_norm",
+            "layer": "0"
+          },
+          {
+            "stage": "layer_residual",
+            "layer": "0"
+          }
+        ],
+        "first_difference_from_donor": {
+          "stage": "attention_residual",
+          "layer": 1,
+          "changed_words": 525,
+          "words": 3584
+        }
+      },
+      "candidate": {
+        "donor": "baseline",
+        "equal_before_next_difference": [
+          {
+            "stage": "next_input_norm",
+            "layer": "0"
+          },
+          {
+            "stage": "layer_residual",
+            "layer": "0"
+          }
+        ],
+        "first_difference_from_donor": {
+          "stage": "attention_residual",
+          "layer": 1,
+          "changed_words": 527,
+          "words": 3584
+        }
+      }
+    },
+    "fp32_down21": {
+      "baseline": {
+        "donor": "candidate",
+        "equal_before_next_difference": [],
+        "first_difference_from_donor": {
+          "stage": "attention_residual",
+          "layer": 1,
+          "changed_words": 704,
+          "words": 3584
+        }
+      },
+      "candidate": {
+        "donor": "baseline",
+        "equal_before_next_difference": [],
+        "first_difference_from_donor": {
+          "stage": "attention_residual",
+          "layer": 1,
+          "changed_words": 718,
+          "words": 3584
+        }
+      }
+    }
+  }
+}
