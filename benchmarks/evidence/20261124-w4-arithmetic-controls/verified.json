@@ -1,0 +1,753 @@
+{
+  "inputs_sha256": "a7b2dbca08cdbc50477665cd930d4e21c2b8f0bd0f32df4e904599c18a2557de",
+  "engines": {
+    "riley": {
+      "capture_sha256": "22286edcdda3c75fe31bb0d0fa45eb24bf3a2b7bf0786714bba6d8259007d36b",
+      "cases": {
+        "fact-only": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "250",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "250",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "expression-only": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "246",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "246",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "facts-last/arithmetic-ko-255": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "273",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "273",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-255": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-256": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "273",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "273",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-256": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-257": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "273",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "273",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-257": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-511": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "275",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "275",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-511": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-512": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "275",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "275",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-512": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-513": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "234",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "234",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-513": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-1023": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "123",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "123",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-1023": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-1024": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "123",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "123",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-1024": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-1025": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "123",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "123",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-1025": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-7836": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "30",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "30",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-7836": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-7917": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "275",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "275",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-7917": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        }
+      },
+      "counts": {
+        "fact-only": {
+          "c1": {
+            "requests": 1,
+            "exact_and_stop": 0
+          },
+          "c8": {
+            "requests": 1,
+            "exact_and_stop": 0
+          }
+        },
+        "expression-only": {
+          "c1": {
+            "requests": 1,
+            "exact_and_stop": 0
+          },
+          "c8": {
+            "requests": 1,
+            "exact_and_stop": 0
+          }
+        },
+        "facts-last": {
+          "c1": {
+            "requests": 11,
+            "exact_and_stop": 0
+          },
+          "c8": {
+            "requests": 11,
+            "exact_and_stop": 0
+          }
+        },
+        "extract-operands": {
+          "c1": {
+            "requests": 11,
+            "exact_and_stop": 11
+          },
+          "c8": {
+            "requests": 11,
+            "exact_and_stop": 11
+          }
+        }
+      }
+    },
+    "vllm": {
+      "capture_sha256": "53e9fefa5aec245cf7f32b16bfac79397835a7942fd3dde82d3321cacabea1e0",
+      "cases": {
+        "fact-only": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "250",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "250",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "expression-only": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "246",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "246",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "facts-last/arithmetic-ko-255": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "273",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "273",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-255": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-256": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "273",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "273",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-256": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-257": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "273",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "273",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-257": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-511": {
+          "batch_invariant": false,
+          "c1": {
+            "output": "275",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "270",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-511": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-512": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "234",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "234",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-512": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-513": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "234",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "234",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-513": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-1023": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "123",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "123",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-1023": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-1024": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "123",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "123",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-1024": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-1025": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "123",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "123",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-1025": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-7836": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "30",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "30",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-7836": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        },
+        "facts-last/arithmetic-ko-7917": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "275",
+            "finish": "stop",
+            "exact_and_stop": false
+          },
+          "c8": {
+            "output": "275",
+            "finish": "stop",
+            "exact_and_stop": false
+          }
+        },
+        "extract-operands/arithmetic-ko-7917": {
+          "batch_invariant": true,
+          "c1": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          },
+          "c8": {
+            "output": "318, 27, 4",
+            "finish": "stop",
+            "exact_and_stop": true
+          }
+        }
+      },
+      "counts": {
+        "fact-only": {
+          "c1": {
+            "requests": 1,
+            "exact_and_stop": 0
+          },
+          "c8": {
+            "requests": 1,
+            "exact_and_stop": 0
+          }
+        },
+        "expression-only": {
+          "c1": {
+            "requests": 1,
+            "exact_and_stop": 0
+          },
+          "c8": {
+            "requests": 1,
+            "exact_and_stop": 0
+          }
+        },
+        "facts-last": {
+          "c1": {
+            "requests": 11,
+            "exact_and_stop": 0
+          },
+          "c8": {
+            "requests": 11,
+            "exact_and_stop": 0
+          }
+        },
+        "extract-operands": {
+          "c1": {
+            "requests": 11,
+            "exact_and_stop": 11
+          },
+          "c8": {
+            "requests": 11,
+            "exact_and_stop": 11
+          }
+        }
+      }
+    }
+  },
+  "computed_from_captured_operands": {
+    "riley": {
+      "c1": {
+        "requests": 11,
+        "parsed": 11,
+        "correct": 11
+      },
+      "c8": {
+        "requests": 11,
+        "parsed": 11,
+        "correct": 11
+      }
+    },
+    "vllm": {
+      "c1": {
+        "requests": 11,
+        "parsed": 11,
+        "correct": 11
+      },
+      "c8": {
+        "requests": 11,
+        "parsed": 11,
+        "correct": 11
+      }
+    }
+  },
+  "source_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+  "riley_image_id": "sha256:1729f15a677422d552b9a3fd2352dfeb08dd4cccd3558680a016058d27191098",
+  "vllm": "0.27.1+cu129",
+  "gpu": 7
+}

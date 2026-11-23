@@ -1,0 +1,438 @@
+{
+  "inputs_sha256": "cd2322696895ba59166a2a3c41e38e9299a776a90dc58cd4c8da9afd5ce6c25e",
+  "capture_sha256": "2987d11a77ab7a28605e292470ad26908bf63b9ea080e221432153fd88013a8d",
+  "modes": {
+    "direct": {
+      "counts": {
+        "c1": {
+          "exact_and_stop": 0,
+          "length": 0
+        },
+        "c8": {
+          "exact_and_stop": 0,
+          "length": 0
+        }
+      },
+      "rows": [
+        {
+          "label": "arithmetic-ko-255",
+          "expected_operands": {
+            "initial": 287,
+            "per_tray": 19,
+            "trays": 6
+          },
+          "expected_answer": 173,
+          "batch_invariant": true,
+          "c1": {
+            "text": "28",
+            "finish": "stop"
+          },
+          "c8": {
+            "text": "28",
+            "finish": "stop"
+          }
+        },
+        {
+          "label": "arithmetic-ko-257",
+          "expected_operands": {
+            "initial": 451,
+            "per_tray": 38,
+            "trays": 7
+          },
+          "expected_answer": 185,
+          "batch_invariant": true,
+          "c1": {
+            "text": "8",
+            "finish": "stop"
+          },
+          "c8": {
+            "text": "8",
+            "finish": "stop"
+          }
+        },
+        {
+          "label": "arithmetic-ko-512",
+          "expected_operands": {
+            "initial": 627,
+            "per_tray": 22,
+            "trays": 5
+          },
+          "expected_answer": 517,
+          "batch_invariant": true,
+          "c1": {
+            "text": "49",
+            "finish": "stop"
+          },
+          "c8": {
+            "text": "49",
+            "finish": "stop"
+          }
+        },
+        {
+          "label": "arithmetic-ko-513",
+          "expected_operands": {
+            "initial": 394,
+            "per_tray": 56,
+            "trays": 4
+          },
+          "expected_answer": 170,
+          "batch_invariant": true,
+          "c1": {
+            "text": "134",
+            "finish": "stop"
+          },
+          "c8": {
+            "text": "134",
+            "finish": "stop"
+          }
+        },
+        {
+          "label": "arithmetic-ko-1024",
+          "expected_operands": {
+            "initial": 548,
+            "per_tray": 37,
+            "trays": 6
+          },
+          "expected_answer": 326,
+          "batch_invariant": true,
+          "c1": {
+            "text": "187",
+            "finish": "stop"
+          },
+          "c8": {
+            "text": "187",
+            "finish": "stop"
+          }
+        },
+        {
+          "label": "arithmetic-ko-1025",
+          "expected_operands": {
+            "initial": 639,
+            "per_tray": 24,
+            "trays": 3
+          },
+          "expected_answer": 567,
+          "batch_invariant": true,
+          "c1": {
+            "text": "395",
+            "finish": "stop"
+          },
+          "c8": {
+            "text": "395",
+            "finish": "stop"
+          }
+        },
+        {
+          "label": "arithmetic-ko-7836",
+          "expected_operands": {
+            "initial": 728,
+            "per_tray": 53,
+            "trays": 6
+          },
+          "expected_answer": 410,
+          "batch_invariant": true,
+          "c1": {
+            "text": "728",
+            "finish": "stop"
+          },
+          "c8": {
+            "text": "728",
+            "finish": "stop"
+          }
+        },
+        {
+          "label": "arithmetic-ko-7917",
+          "expected_operands": {
+            "initial": 915,
+            "per_tray": 46,
+            "trays": 7
+          },
+          "expected_answer": 593,
+          "batch_invariant": true,
+          "c1": {
+            "text": "915",
+            "finish": "stop"
+          },
+          "c8": {
+            "text": "915",
+            "finish": "stop"
+          }
+        }
+      ]
+    },
+    "structured": {
+      "counts": {
+        "c1": {
+          "valid_schema_and_stop": 8,
+          "exact_operands": 8,
+          "correct_after_integer_math": 8,
+          "length": 0
+        },
+        "c8": {
+          "valid_schema_and_stop": 8,
+          "exact_operands": 8,
+          "correct_after_integer_math": 8,
+          "length": 0
+        }
+      },
+      "rows": [
+        {
+          "label": "arithmetic-ko-255",
+          "expected_operands": {
+            "initial": 287,
+            "per_tray": 19,
+            "trays": 6
+          },
+          "expected_answer": 173,
+          "batch_invariant": true,
+          "c1": {
+            "text": "{\"initial\":287, \"per_tray\":19, \"trays\":6}",
+            "finish": "stop",
+            "operands": {
+              "initial": 287,
+              "per_tray": 19,
+              "trays": 6
+            },
+            "calculated_answer": 173
+          },
+          "c8": {
+            "text": "{\"initial\":287, \"per_tray\":19, \"trays\":6}",
+            "finish": "stop",
+            "operands": {
+              "initial": 287,
+              "per_tray": 19,
+              "trays": 6
+            },
+            "calculated_answer": 173
+          }
+        },
+        {
+          "label": "arithmetic-ko-257",
+          "expected_operands": {
+            "initial": 451,
+            "per_tray": 38,
+            "trays": 7
+          },
+          "expected_answer": 185,
+          "batch_invariant": true,
+          "c1": {
+            "text": "{\"initial\":451,\"per_tray\":38,\"trays\":7}",
+            "finish": "stop",
+            "operands": {
+              "initial": 451,
+              "per_tray": 38,
+              "trays": 7
+            },
+            "calculated_answer": 185
+          },
+          "c8": {
+            "text": "{\"initial\":451,\"per_tray\":38,\"trays\":7}",
+            "finish": "stop",
+            "operands": {
+              "initial": 451,
+              "per_tray": 38,
+              "trays": 7
+            },
+            "calculated_answer": 185
+          }
+        },
+        {
+          "label": "arithmetic-ko-512",
+          "expected_operands": {
+            "initial": 627,
+            "per_tray": 22,
+            "trays": 5
+          },
+          "expected_answer": 517,
+          "batch_invariant": true,
+          "c1": {
+            "text": "{\"initial\":627,\"per_tray\":22,\"trays\":5}",
+            "finish": "stop",
+            "operands": {
+              "initial": 627,
+              "per_tray": 22,
+              "trays": 5
+            },
+            "calculated_answer": 517
+          },
+          "c8": {
+            "text": "{\"initial\":627,\"per_tray\":22,\"trays\":5}",
+            "finish": "stop",
+            "operands": {
+              "initial": 627,
+              "per_tray": 22,
+              "trays": 5
+            },
+            "calculated_answer": 517
+          }
+        },
+        {
+          "label": "arithmetic-ko-513",
+          "expected_operands": {
+            "initial": 394,
+            "per_tray": 56,
+            "trays": 4
+          },
+          "expected_answer": 170,
+          "batch_invariant": true,
+          "c1": {
+            "text": "{\"initial\":394,\"per_tray\":56,\"trays\":4}",
+            "finish": "stop",
+            "operands": {
+              "initial": 394,
+              "per_tray": 56,
+              "trays": 4
+            },
+            "calculated_answer": 170
+          },
+          "c8": {
+            "text": "{\"initial\":394,\"per_tray\":56,\"trays\":4}",
+            "finish": "stop",
+            "operands": {
+              "initial": 394,
+              "per_tray": 56,
+              "trays": 4
+            },
+            "calculated_answer": 170
+          }
+        },
+        {
+          "label": "arithmetic-ko-1024",
+          "expected_operands": {
+            "initial": 548,
+            "per_tray": 37,
+            "trays": 6
+          },
+          "expected_answer": 326,
+          "batch_invariant": true,
+          "c1": {
+            "text": "{\"initial\": 548, \"per_tray\": 37, \"trays\": 6}",
+            "finish": "stop",
+            "operands": {
+              "initial": 548,
+              "per_tray": 37,
+              "trays": 6
+            },
+            "calculated_answer": 326
+          },
+          "c8": {
+            "text": "{\"initial\": 548, \"per_tray\": 37, \"trays\": 6}",
+            "finish": "stop",
+            "operands": {
+              "initial": 548,
+              "per_tray": 37,
+              "trays": 6
+            },
+            "calculated_answer": 326
+          }
+        },
+        {
+          "label": "arithmetic-ko-1025",
+          "expected_operands": {
+            "initial": 639,
+            "per_tray": 24,
+            "trays": 3
+          },
+          "expected_answer": 567,
+          "batch_invariant": true,
+          "c1": {
+            "text": "{\"initial\": 639, \"per_tray\": 24, \"trays\": 3}",
+            "finish": "stop",
+            "operands": {
+              "initial": 639,
+              "per_tray": 24,
+              "trays": 3
+            },
+            "calculated_answer": 567
+          },
+          "c8": {
+            "text": "{\"initial\": 639, \"per_tray\": 24, \"trays\": 3}",
+            "finish": "stop",
+            "operands": {
+              "initial": 639,
+              "per_tray": 24,
+              "trays": 3
+            },
+            "calculated_answer": 567
+          }
+        },
+        {
+          "label": "arithmetic-ko-7836",
+          "expected_operands": {
+            "initial": 728,
+            "per_tray": 53,
+            "trays": 6
+          },
+          "expected_answer": 410,
+          "batch_invariant": true,
+          "c1": {
+            "text": "{\"initial\": 728, \"per_tray\": 53, \"trays\": 6}",
+            "finish": "stop",
+            "operands": {
+              "initial": 728,
+              "per_tray": 53,
+              "trays": 6
+            },
+            "calculated_answer": 410
+          },
+          "c8": {
+            "text": "{\"initial\": 728, \"per_tray\": 53, \"trays\": 6}",
+            "finish": "stop",
+            "operands": {
+              "initial": 728,
+              "per_tray": 53,
+              "trays": 6
+            },
+            "calculated_answer": 410
+          }
+        },
+        {
+          "label": "arithmetic-ko-7917",
+          "expected_operands": {
+            "initial": 915,
+            "per_tray": 46,
+            "trays": 7
+          },
+          "expected_answer": 593,
+          "batch_invariant": true,
+          "c1": {
+            "text": "{\"initial\": 915, \"per_tray\": 46, \"trays\": 7}",
+            "finish": "stop",
+            "operands": {
+              "initial": 915,
+              "per_tray": 46,
+              "trays": 7
+            },
+            "calculated_answer": 593
+          },
+          "c8": {
+            "text": "{\"initial\": 915, \"per_tray\": 46, \"trays\": 7}",
+            "finish": "stop",
+            "operands": {
+              "initial": 915,
+              "per_tray": 46,
+              "trays": 7
+            },
+            "calculated_answer": 593
+          }
+        }
+      ]
+    }
+  },
+  "source_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+  "image_id": "sha256:1729f15a677422d552b9a3fd2352dfeb08dd4cccd3558680a016058d27191098",
+  "gpu": 7,
+  "preflight": {
+    "input_sha256": "cd2322696895ba59166a2a3c41e38e9299a776a90dc58cd4c8da9afd5ce6c25e",
+    "token_ranges": {
+      "direct": [
+        282,
+        7944
+      ],
+      "structured": [
+        309,
+        7971
+      ]
+    }
+  }
+}

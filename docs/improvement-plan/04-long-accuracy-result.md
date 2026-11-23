@@ -124,6 +124,32 @@ vLLM은 요청을 받기 전에 FlashInfer 워밍업에서 `ninja`를 찾지 못
 
 채팅의 산술 응답 11건은 각 조건에서 모두 정수 한 개를 내고 정상 종료했으며 정답 210을 맞힌 경우는 없었다. 원문을 감싼 C1에서는 같은 입력에서 양쪽 엔진의 생성 ID·텍스트·종료·기본 토큰 사용량이 33/33 일치했다. 나머지 세 조건에서는 각각 32/33 일치했다. Riley의 C1·C8 결과는 두 형식에서 각각 33/33 같았고, vLLM은 원문을 감싼 경우 32/33, `Answer:`를 뺀 경우 33/33 같았다. 이 산술 문항을 길이별로 변형한 범위에서 채팅으로 바꾸면 출력 형식은 개선됐고 계산 오류는 남았다. 시험 직후 GPU 6·7의 기존 홀더가 각각 20GiB를 예약한 상태를 확인했다. [완료 로그](../../benchmarks/evidence/20261124-w4-chat-answers/campaign.log) · [독립 검산기](../../benchmarks/evidence/20261124-w4-chat-answers/verify.py)
 
+### 한국어 산술의 피연산자 추출과 계산 대조
+
+같은 모델과 채팅 템플릿에서 한 문제의 기록 위치·방해 기록·산술 표현을 바꾼 입력 24개를 준비했다. 두 엔진의 C1·C8 응답 96건에서 실제 입력 토큰 ID와 종료 사유를 확인했다. 정답은 `318 - (27 × 4) = 210`이다. 아래 결과는 Riley와 vLLM 각각의 C1과 C8에 동일하다. [실행 등록](../../benchmarks/evidence/20261124-w4-arithmetic-controls/registration.json) · [응답과 영수증](../../benchmarks/evidence/20261124-w4-arithmetic-controls/raw-results.tar.gz) · [검산](../../benchmarks/evidence/20261124-w4-arithmetic-controls/verified.json)
+
+| 대조 조건 | 입력 토큰 | 정답·정상 종료 | 출력 |
+|---|---:|---:|---|
+| 사실만 남긴 원래 질문 | 114 | 0/1 | 두 엔진 모두 `250` |
+| 짧은 식부터 제시 | 58 | 0/1 | 두 엔진 모두 `246` |
+| 사실을 방해 기록 뒤로 이동 | 282–7,944 | 0/11 | 정답 `210`을 낸 응답 0건 |
+| 같은 기록에서 세 피연산자만 추출 | 303–7,965 | 11/11 | `318, 27, 4` |
+
+추출 응답을 정수 세 개로 읽고 `초기 수량 - 쟁반당 수량 × 쟁반 수`를 적용하자 두 엔진의 C1·C8에서 모두 **11/11건**이 정답을 냈다. 이 실험에서는 기록 위치를 바꾸거나 길이를 줄여도 직접 계산 오류가 두 엔진에서 재현됐다. 정수 연산으로 복구한 결과는 같은 한 문제를 11개 문맥 길이로 바꾼 범위에 해당한다. Riley의 C1·C8은 24/24건, vLLM은 23/24건에서 생성 ID·텍스트·종료 사유·usage가 일치했다. [독립 검산기](../../benchmarks/evidence/20261124-w4-arithmetic-controls/verify.py)
+
+### 다른 수량의 장문 산술에서 구조화 추출 검증
+
+문서·질문 구조는 유지하고 피연산자와 정답이 서로 다른 사례 8개를 별도로 만들었다. 같은 Riley 배포 이미지 `0511b9280`에서 C1·C8로 직접 답변과 JSON 추출을 각각 보냈다. 직접 답변의 입력은 282–7,944토큰, 구조화 추출은 309–7,971토큰이었다. 총 32개 응답에서 사전에 계산한 입력 토큰 ID가 서버의 응답과 일치했다. [입력과 실행 등록](../../benchmarks/evidence/20261124-w4-structured-arithmetic/registration.json) · [API 요청과 정수 연산](../../benchmarks/evidence/20261124-w4-structured-arithmetic/structured_arithmetic.py)
+
+| 채점 항목 | C1 | C8 |
+|---|---:|---:|
+| 모델의 직접 산술 정답·정상 종료 | 0/8 | 0/8 |
+| 스키마를 만족하는 JSON·정상 종료 | 8/8 | 8/8 |
+| 세 피연산자 모두 정확 | 8/8 | 8/8 |
+| 추출값에서 호출자가 정수 연산으로 얻은 정답 | 8/8 | 8/8 |
+
+호출자는 기존 `response_format`으로 `initial`, `per_tray`, `trays` 정수 필드를 요구하고, 유효한 `stop` 응답에서 세 필드를 검증한 뒤 `initial - per_tray * trays`를 계산했다. 두 경로 각각 8/8건에서 C1·C8의 생성 ID·텍스트·종료 사유·usage가 일치했다. 두 GPU는 종료 후 기존 홀더의 20GiB 대기 예약으로 돌아왔다. 검증 범위는 같은 계산 유형의 여덟 합성 기록이다. [원본 응답·영수증과 체크섬](../../benchmarks/evidence/20261124-w4-structured-arithmetic/raw-results.tar.gz) · [독립 채점](../../benchmarks/evidence/20261124-w4-structured-arithmetic/verified.json)
+
 ## 공통 접두부의 근소한 점수 차이
 
 두 입력군 29건의 원본 해시와 프롬프트 ID를 확인하고, Riley와 HF SDPA가 같은 접두부를 유지하는 동안 선택한 토큰을 다시 대조했다. 전체 생성 ID가 같은 요청은 22건이다. 첫 분기 7건 중 prefill 직후가 1건, decode가 6건이었다. 첫 분기에서 Riley가 보고한 상위 두 logprob 차이는 모두 0.25 이내였고, HF SDPA에서 두 엔진이 각각 선택한 ID의 점수 차이는 최대 0.125였다. [요청별 집계와 원본 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/result.json)
