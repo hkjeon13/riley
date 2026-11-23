@@ -33,20 +33,26 @@ class MixedStepTraceTests(unittest.TestCase):
             Step(3, 6_000_000, 9_000_000, 9_000_000, 3_000_000, 1024, 1, [(pick, 1023, target)]),
         ]
         choices, decodes = VERIFY["read_events"](logs, TIMELINE["put_unique"])
-        return VERIFY["check_steps"](steps, choices, decodes, {1: 0, 2: 0, 3: 0},
-                                     {1: {"request_index": 4, "prompt_tokens": 1, "completion_tokens": 3}},
-                                     {2: "rag", 3: "rag"}, enabled)
+        request = {"request_index": 4, "prompt_tokens": 1, "completion_tokens": 3,
+                   "finish": "length", "ttft": .010, "e2e": .017, "content_gaps_s": [.003, .004]}
+        rows, focused = VERIFY["check_steps"](steps, choices, decodes, {1: 0, 2: 0, 3: 0},
+                                             {1: request}, {2: "rag", 3: "rag"}, enabled, (1,))
+        follow = VERIFY["summarize_focus"](focused, {1: "rag"}, {1: request}, {"rag": {4}})
+        return rows, follow["rag"][4]
 
     def test_shadow_and_applied_choice_match_committed_contexts(self):
         for enabled in (False, True):
             with self.subTest(enabled=enabled):
-                row, = self.audit(enabled)
+                (row,), focus = self.audit(enabled)
                 self.assertEqual(row["selected_prefix_tokens"], 1023 if enabled else 0)
                 self.assertEqual(row["gpu_ms"], 3)
                 self.assertEqual(row["logical_pair_delta"], 1023 * 1023)
                 self.assertEqual(row["decode"], [
                     {"scheduler_request": 1, "kv_tokens": 3, "request_index": 4, "commit_gap_ms": 4}
                 ])
+                self.assertAlmostEqual(focus["client_decode_span_ms"], 7)
+                self.assertEqual(focus["server_decode_commit_span_ms"], 7)
+                self.assertEqual(focus["decode"][-1]["prefill_choice_applied"], enabled)
 
     def test_rejects_decoding_or_choice_with_discontinuous_context(self):
         with self.assertRaisesRegex(ValueError, "discontinuous decode cursor"):

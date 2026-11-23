@@ -15,6 +15,7 @@ HERE = Path(__file__).resolve().parent
 PRIOR = HERE.parent / "20261124-w3-rag-prefill-order"
 TIMELINE = HERE.parent / "20261124-w3-rag-prefill-steps"
 UNTRACED = HERE.parent / "20261124-w3-wide-prefill-order"
+REPEATED = HERE.parent / "20261124-w3-prefill-repeat"
 
 
 class Choice(NamedTuple):
@@ -68,24 +69,33 @@ def validate_choice(choice, step, cursor, requested, admitted, enabled):
     return picked, prefix
 
 
-def check_steps(steps, choices, decodes, admitted, requested, labels, enabled):
+def check_steps(steps, choices, decodes, admitted, requested, labels, enabled, focus=()):
     """Check all committed contexts before computing statistics for mixed choices."""
     cursor = defaultdict(int)
     last = {}
     seen_decode = set()
     observed = []
+    focused = {req: {"prefill": [], "decode": []} for req in focus}
     for step in steps:
         dec = decodes.pop(step.id, [])
         if (len(dec) != step.decode or len({req for req, _ in dec}) != step.decode
                 or {req for req, _ in dec} & {req for req, _, _ in step.prefill}):
             raise ValueError(f"decode context coverage differs at {step.id}")
+        choice = choices.pop(step.id, None)
         gaps = []
         for req, target in dec:
             if (req not in last or target != cursor[req] + 1 or admitted[req] > step.start
                     or (req in requested and cursor[req] < requested[req]["prompt_tokens"])):
                 raise ValueError(f"discontinuous decode cursor at {step.id} for request {req}")
-            gaps.append(step.commit - last[req])
-        choice = choices.pop(step.id, None)
+            gap = step.commit - last[req]
+            gaps.append(gap)
+            if req in focused:
+                focused[req]["decode"].append({
+                    "step": step.id, "kv_tokens": target, "decode_rows": step.decode,
+                    "prefill_rows": step.rows - step.decode, "gpu_ms": step.gpu / 1e6,
+                    "commit_gap_ms": gap / 1e6, "prefill_choice_available": choice is not None,
+                    "prefill_choice_applied": choice is not None and enabled,
+                })
         if choice is not None:
             picked, prefix = validate_choice(choice, step, cursor, requested, admitted, enabled)
             measured = requested.get(picked)
@@ -111,6 +121,12 @@ def check_steps(steps, choices, decodes, admitted, requested, labels, enabled):
                 raise ValueError(f"discontinuous prefill cursor at {step.id} for request {req}")
             if req in requested and target > requested[req]["prompt_tokens"]:
                 raise ValueError(f"prefill cursor beyond input at {step.id} for request {req}")
+            if req in focused:
+                focused[req]["prefill"].append({
+                    "step": step.id, "rows": rows, "prefix_tokens": cursor[req], "gpu_ms": step.gpu / 1e6,
+                    "prefill_choice_available": choice is not None,
+                    "prefill_choice_applied": choice is not None and enabled,
+                })
             cursor[req], last[req] = target, step.commit
         for req, target in dec:
             cursor[req], last[req] = target, step.commit
@@ -120,10 +136,35 @@ def check_steps(steps, choices, decodes, admitted, requested, labels, enabled):
     for req, row in requested.items():
         if cursor[req] < row["prompt_tokens"] or req not in seen_decode and row["completion_tokens"] > 1:
             raise ValueError(f"truncated scheduler trace for measured request {req}")
-    return observed
+    return observed, focused
 
 
-def verify_trace(arm, cells, holdout, enabled, timeline):
+def summarize_focus(focus, labels, requested, expected):
+    records = {}
+    for req, trace in focus.items():
+        row = requested[req]
+        label, index = labels[req], row["request_index"]
+        entries = records.setdefault(label, {})
+        if index in entries:
+            raise ValueError(f"duplicate focus index for {label}/{index}")
+        if row["finish"] == "length" and len(trace["decode"]) != row["completion_tokens"] - 1:
+            raise ValueError(f"focus request has incomplete committed decode steps: {label}/{index}")
+        entries[index] = {
+            "prompt_tokens": row["prompt_tokens"],
+            "completion_tokens": row["completion_tokens"],
+            "client_ttft_ms": row["ttft"] * 1000,
+            "client_decode_span_ms": (row["e2e"] - row["ttft"]) * 1000,
+            "server_decode_commit_span_ms": sum(item["commit_gap_ms"] for item in trace["decode"]),
+            "client_gaps_at_least_120ms": sum(gap >= .120 for gap in row["content_gaps_s"]),
+            "server_gaps_at_least_120ms": sum(item["commit_gap_ms"] >= 120 for item in trace["decode"]),
+            **trace,
+        }
+    if {label: set(rows) for label, rows in records.items()} != expected:
+        raise ValueError("focus request is missing from the committed trace")
+    return records
+
+
+def verify_trace(arm, cells, holdout, enabled, timeline, focus_indexes):
     read = timeline["read"]
     plan = read(arm / "plan.json")
     if [arg for arg in plan["docker"] if arg.startswith("RILEY_W3_RAG_STEPS=")] != ["RILEY_W3_RAG_STEPS=1"]:
@@ -154,7 +195,8 @@ def verify_trace(arm, cells, holdout, enabled, timeline):
             or not choices
             or any(choice.applied != int(enabled) for choice in choices.values())):
         raise ValueError("trace disagrees with the measured reorder count")
-    rows = check_steps(steps, choices, decodes, admitted, requested, labels, enabled)
+    focus = {req for req, row in requested.items() if row["request_index"] in focus_indexes.get(labels[req], ())}
+    rows, focused = check_steps(steps, choices, decodes, admitted, requested, labels, enabled, focus)
     by_label = defaultdict(list)
     for row in rows:
         by_label[row["label"] or "outside_measured_schedules"].append(row)
@@ -165,7 +207,7 @@ def verify_trace(arm, cells, holdout, enabled, timeline):
                     "decode_commit_gap_ms_median": median(item["commit_gap_ms"] for row in group for item in row["decode"])}
             for label, group in by_label.items()
         },
-        "choices": rows,
+        "choices": rows, "focus": summarize_focus(focused, labels, requested, focus_indexes),
     }
 
 
@@ -174,13 +216,23 @@ def verify(root, registration):
     timeline = runpy.run_path(str(TIMELINE / "verify.py"))
     reg = prior["read"](registration)
     paired = prior["verify"](root, registration)
+    audit = prior["read"](REPEATED / "gap-audit.json")
+    focus_indexes = {
+        gpu: {label: set(entry["focus_request_indexes"]) for label, entry in cases.items()}
+        for gpu, cases in audit["decode_regressions_against_both_controls"].items()
+    }
+    existing = prior["read"](TIMELINE / "registration.json")["focus_requests_by_seed"]
+    for seed, indexes in existing.items():
+        label = f"rag-c8-s{seed}-vllm-arrivals"
+        focus_indexes.setdefault("7", {}).setdefault(label, set()).update(indexes)
     with tarfile.open(UNTRACED / "raw-results.tar.gz", "r:gz") as reference:
         for gpu, row in paired["gpus"].items():
             row["trace"] = {}
             for mode in row["order"]:
                 relative = f"gpu{gpu}/{mode}"
                 arm = root / relative
-                result = verify_trace(arm, row["cells"], reg["holdout_requests_per_arm"], mode == "fifo", timeline)
+                result = verify_trace(arm, row["cells"], reg["holdout_requests_per_arm"], mode == "fifo", timeline,
+                                      focus_indexes.get(gpu, {}))
                 result["untraced_comparison"] = {}
                 if json.load(reference.extractfile(f"{relative}/token-id-holdout.json")) != prior["read"](
                         arm / "token-id-holdout.json"):
