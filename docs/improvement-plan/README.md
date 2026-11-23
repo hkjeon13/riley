@@ -152,6 +152,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W3: Coder-14B 짧은 입력도 낮은 decode 부하에서 burst에 포함하면 128행의 첫 토큰 p95가 줄었다. 256행 기준 대비 중앙값과 처리량이 회귀해 기본값 채택을 보류했다. [짧은 입력 문턱 대조](03-long-context-result.md#고정-c32에서-짧은-입력의-burst-문턱-조정)
 - [x] W3: GPU 7번의 192행 page 경로에서 실제 활성 48개를 확인했다. 같은 예산의 고정 타일 대비 출력 일치와 첫 토큰 지연 기준을 충족하지 못했다. [Page 활성 슬롯 검증](03-long-context-result.md#page-attention의-활성-슬롯-32개와-48개)
 - [x] W3에서 고정 타일의 32·48슬롯을 128·256행 예산에서 교차 검증했다. 1,312개 응답은 일치했고 128행에서 실제 활성 수는 43–45개에 도달했다. C32 TTFT p50 회귀로 48슬롯 후보를 미채택했다. [고정 타일 슬롯 검증](03-long-context-result.md#고정-타일의-활성-슬롯-32개와-48개)
+- [x] W3에서 256행 예산을 고정해 짧은 입력의 버스트 조건을 대조했다. 984개 응답은 기준과 일치했고, 16행 후보는 C32 TTFT p95를 6.84–21.84% 줄였다. 두 후보 모두 TTFT p50 회귀 한도를 넘어 미채택했다. [256행 버스트 검증](03-long-context-result.md#256행-예산을-고정한-짧은-입력-burst)
 - [ ] W3: 1,024행 QKV 형상 공통 적용은 Coder-14B decode 회귀로 기각했다. 일부 RAG의 TTFT 목표와 Coder-14B의 C32 목표는 현재 기본 경로에서 미달이다. [Coder-14B 결과](03-long-context-result.md#coder-14b의-1024행-후보-검증) · [현재 적용 판정](03-long-context-and-scheduling.md#현재-적용-판정)
 - [x] W5: 대상 GPU에서 배포 이미지의 실제 추론과 cache-on·off 30분 부하 증거를 확보했다. [운영 결과와 판정](05-mixed-soak-result.md#배포-이미지의-혼합-부하)
 - [x] W5: 배포 이미지의 45초 smoke에서 2-KV-head GQA·Qwen3·MHA·14B의 API 계약, 혼합 부하·취소·종료 회수를 검증했다. [MHA·14B 결과](05-mixed-soak-result.md#배포-이미지의-mha와-14b-smoke) [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)
