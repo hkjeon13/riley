@@ -516,6 +516,194 @@
       ]
     }
   },
+  "distribution_with_uri_reference_fix": {
+    "source_revision": "8a7c618c1882effcacd49107a0b41ea3fc29d22d",
+    "matching_distribution_input_git_objects": {
+      "Cargo.toml": "e75f6ce3a2ad13911f1a91fc2b982a410f9d32f2",
+      "Cargo.lock": "afa446f5b2f1ad1ba2070de2d16343cf7a7a0a70",
+      "rust-toolchain.toml": "67c827cf973f78b64274b37b54c5a99cff5ca055",
+      "crates": "ec2bb407d3f0c278da50cd59784942a72992fadd",
+      "kernels": "7c3c0dfd2d7d04b694c8bd77c4e323081199f46f",
+      "third_party": "fcda977aec23d650259a7d1104d339f815d30e07",
+      "tools/riley-checkpoint": "375dc077ae7d32ba759b339d28f1ef8c370642b5",
+      ".dockerignore": "032839f0b4e1ab479f5a1069d69937ade5e44f7e",
+      ".github/workflows/distribution-image.yml": "8a4587aa0fccb0304fdc1c06333b4f138a503dab",
+      "deploy/docker": "4a585fa6e013d816c743760807ad422d270b404e",
+      "ci/check_distribution_image.py": "536a00bedb0675f19bf038395bf46e1996b82053",
+      "ci/check_serving_source_contract.py": "26abce96ca8eb573299613464e26bae94529a8ce",
+      "ci/serving-source-contract.json": "205b02603ad57d850071cb212c88fce965edd148",
+      "LICENSE": "1b4cfd2f88277e627300ec3a92f5c310807d125e"
+    },
+    "differing_runtime_files": [],
+    "a100_source_inventory": {
+      "source_objects_sha256": "1c9ef232161e080286ffe55a6b3c167057d0a4a43e26c27ed998c9136199b1db",
+      "source_object_count": 1037
+    },
+    "evidence": {
+      "hosted_cpu": {
+        "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/hosted/report.json",
+        "sha256": "c5e255d6bf03de2ace93c9b165316ca2325e3b8f9ac94a5d0ff52f16203df64a"
+      },
+      "hosted_runtime": {
+        "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/hosted/runtime.sha256",
+        "sha256": "9b6f57b0cddabe50f621942a00bb52aea89d51e32b397e0172a80c675b623870"
+      },
+      "a100_cpu": {
+        "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/cpu-evidence/report.json",
+        "sha256": "90cdff932840009027aad73e0e54dcbb8e98bd7ae7b652d1cc3882e2957b1e1b"
+      },
+      "a100_runtime": {
+        "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/cpu-evidence/runtime.sha256",
+        "sha256": "88bbaf626d8d172a2fd483f0d7ea6565b38878bf5cb18d6d2011efe6be29aa96"
+      },
+      "a100_source_objects": {
+        "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/source-objects.tsv.gz",
+        "sha256": "0f3b9c558c221a17df06344c92e2d3d7cf22a68bf3e061ad76fd0623e30a5e0b"
+      },
+      "a100_structured": {
+        "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/structured/report.json",
+        "sha256": "3a0bb74a061ccd440ea606361e26269d962921358458202d36f97c97430231fe"
+      },
+      "a100_serving": {
+        "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/smoke/report.json",
+        "sha256": "f588767f4becb554dd9575eaf9322c8c6b60b9aef970f396899fe8540cc0d92f"
+      },
+      "a100_pattern_classes": {
+        "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/structured/pattern-classes.json",
+        "sha256": "2408ab72d3f3cc62f8820d704479fcf5cd6f73a775974746a5c6584c43f5be1d"
+      },
+      "a100_schema_references": {
+        "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/structured/schema-references.json",
+        "sha256": "0c0e9e3a2903d2d2ef2d75acfa353a7ee099f46aa20a322a48d0dc7339d3e6c2"
+      },
+      "a100_verified": {
+        "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/verified.json",
+        "sha256": "71cf597a81a2a1e1b3c132ffc528cd07507143a5abb1137c6277ae5573c1edac"
+      },
+      "reproduction": [
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/campaign.exit",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/campaign.log",
+          "sha256": "b915c705c52c9bac6931ab21b4954aa4020a519334f5e4eca37e32dd259cfacb"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/campaign.pid",
+          "sha256": "dc6fe7034ac4ef93153670275088b66f8c861b1d08e53ff6c3abde29276d8837"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/campaign.started",
+          "sha256": "3c03d97a73f5c1376cebb2d05f8901a67f28af06dd0cbd5ff1e2ab228ee06897"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/gpu6-after.json",
+          "sha256": "2a65240c0b87b91a03241c1565875f1928f80ae1a964fc0720cb58a91add4acc"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/gpu6-before.json",
+          "sha256": "82ac92fb535d40bde83d789438fbd6bbd35afa2d0dc050ba55169eb92cc51ff9"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/gpu7-after.json",
+          "sha256": "f8cbd728f107b94b8cdd7b3c8e128645543698cdde75ccf625fbc40df1ddb470"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/gpu7-before.json",
+          "sha256": "40c61fc9e95a080a8397892094e4faf6f97a1763ec6ab2e8adb79baeb4a56bd8"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/image.id",
+          "sha256": "2f02e82118afb6b190a2d74bf172a93f49f4490f32f487ab5a2a34845a84b268"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/result.sha256",
+          "sha256": "5faa76a89feac6293a6375b935852c58a64af855d036785bad9f95076668adf3"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/smoke/api.json",
+          "sha256": "2d74bd4498cc5c5afcbb12caf6f636a1d4560d56cae1867d779900342fc80ac2"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/smoke/shutdown.json",
+          "sha256": "3e9eb65fd168a6d6e04df3e9a63804208f4e323fe8c9f398eadf8ef24a2ef2e4"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/smoke/smoke.json",
+          "sha256": "2a2e726624668e22ebbbeb930d2ff80a2c1e6bea91a71f0e124d81345fc2d172"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/source-revision.txt",
+          "sha256": "e202caf57b9ea87209b22515086560e5886065a7767868bce495b1e2d10e4363"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/structured/api.json",
+          "sha256": "b1be8b3e097a4bb12fe02b4ffbe00ada84c7e400ad8b1439d681bf88acf5485f"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/a100/structured/shutdown.json",
+          "sha256": "4dcd91b1cea37eeacd13b1b6381449b15677b4e087e6d5e90a6bf93242070b1d"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/build_inputs.py",
+          "sha256": "3a5326d0f283fd3dde516dcf380a5ecd4707ab00f7f67cc796f73f384902682b"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/campaign.sh",
+          "sha256": "cc21d07203dd0d2d35b1c56f45c725194ab93e301bc2a2570c42f56a30e2e5d8"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/dispatch.sha256",
+          "sha256": "e3a322d9c39c1634b9afab6b67bae3137e9630f7eb64cd9a67c7ce9dbba43b3b"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/fetch-a100.sh",
+          "sha256": "9c30464d12b189947ec8e96fb5394700fdc78e45598c48d4f95d6b666cd1557d"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/hosted/image.id",
+          "sha256": "83e8ccfdb2db4f5fa1af4ecb27988affb8fcbb6426fb47e3d54178c0df0081b5"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/hosted/source-archive.sha256",
+          "sha256": "6042c246774b7b28c11a3d7d9f46fdfea1e35e0c0351f26227f7e4566d0001c8"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/pattern_probe.py",
+          "sha256": "be139e79f43ce0a369c6ca2042e4a1890a8308ba2db8ab7cdcca3bcb8cd40b42"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/reference_probe.py",
+          "sha256": "a91fb1077314237de51747f3a88240fc39bb3f3fc688e6e190d3bc76aaa7858a"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/registration.json",
+          "sha256": "dce8760a4d6afc4b5371c40910dc955bbd17d74339c767b1e3a1f3989ce90ec4"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/run_checker.py",
+          "sha256": "76e6633c54ee33d361fed171397b595cd016505bdad70b164987f585d01825e7"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/schema.patch.gz",
+          "sha256": "843e0784194eac19e1e31e16c8c05ba3c65b716d540d4f6bf7866aeeed155e8e"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/source-revision.txt",
+          "sha256": "e202caf57b9ea87209b22515086560e5886065a7767868bce495b1e2d10e4363"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/verify-a100.py",
+          "sha256": "52f54c381f68934fea39f7499867e3cbc28f08dd3868273676954eb574d5a635"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-uri-reference-fix/verify-package.py",
+          "sha256": "f496ac4b9bd968e914a4e620838c15051d93bb96430c6db6d0f36fa060cc4377"
+        }
+      ]
+    }
+  },
   "other_evidence": {
     "coder14_prefill_same_binary_repeat": [
       {

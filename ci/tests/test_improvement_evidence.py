@@ -155,6 +155,34 @@ class PackageFollowUpTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "must preserve root-local output"):
                         checker.check_schema_reference_probes(ROOT, candidate)
 
+    def test_uri_reference_package_rejects_incorrect_outputs_and_malformed_encoding_claims(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        candidate = manifest["distribution_with_uri_reference_fix"]
+        checker.check_structured_serving_package(ROOT, candidate)
+        checker.check_schema_reference_probes(ROOT, candidate, uri_fragments=True)
+
+        entries = candidate["evidence"]
+        probe = json.loads((ROOT / entries["a100_schema_references"]["path"]).read_bytes())
+        summary = json.loads((ROOT / entries["a100_verified"]["path"]).read_bytes())
+        changes = (("encoded-space", "output", "value", 2),
+                   ("invalid-percent-encoded-utf8", "error", "message", "unresolved $ref"),
+                   ("encoded-cross-resource-pointer", "error", "param", "tools"))
+        with tempfile.TemporaryDirectory() as directory:
+            raw_path = Path(directory) / "probes.json"
+            summary_path = Path(directory) / "verified.json"
+            entries["a100_schema_references"]["path"] = str(raw_path)
+            entries["a100_verified"]["path"] = str(summary_path)
+            for case, field, key, replacement in changes:
+                with self.subTest(case=case):
+                    changed = deepcopy(probe)
+                    row = next(row for row in changed["checks"]
+                               if row["case"] == case and row["parameter"] == "response_format")
+                    row[field][key] = replacement
+                    raw_path.write_text(json.dumps(changed))
+                    summary_path.write_text(json.dumps({**summary, "schema_reference_checks": changed["checks"]}))
+                    with self.assertRaisesRegex(ValueError, "must prove URI fragment decoding"):
+                        checker.check_schema_reference_probes(ROOT, candidate, uri_fragments=True)
+
     def test_character_class_http_probes_require_an_escaped_value(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
         candidate = manifest["distribution_with_character_class_fix"]

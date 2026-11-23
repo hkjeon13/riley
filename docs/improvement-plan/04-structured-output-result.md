@@ -42,7 +42,11 @@ Unicode 스칼라 1,112,064개를 각각 JSON 직렬화와 UTF-16 이스케이�
 
 로컬 `$ref`의 URI fragment를 UTF-8로 디코딩한 뒤 JSON Pointer를 해석한다. 예를 들어 `#/$defs/part%20name`은 공백이 든 `part name` 정의를 가리킨다. 수정 전 컴파일러는 이 사례에서 `part%20name`이라는 별도 정의를 선택했다. 잘못된 percent escape와 유효하지 않은 UTF-8은 `invalid_schema`로 거부하고, 디코딩한 포인터에도 기존 하위 `$id` 검사를 적용한다. [URI fragment 규칙](https://www.rfc-editor.org/rfc/rfc6901.html#section-6) · [컴파일러](../../crates/riley-server/src/structured.rs)
 
-응답 스키마와 이름을 지정한 도구 호출 양쪽의 요청 정규화와 생성 문법을 확인했다. 독립 Draft 2020-12 검증기 `jsonschema 4.23.0`과 Riley가 같은 fixture 15개, 인스턴스 32개를 통과했다. CPU 서버 라이브러리 검사는 111건 통과, 기존 비활성 검사 1건이었다. 새 빌드의 CUDA 서빙 검증은 남아 있다. [응답·도구 경로 회귀 검사](../../crates/riley-server/src/chat.rs) · [공통 fixture](../../crates/riley-server/tests/fixtures/structured_schema_oracle.json)
+응답 스키마와 이름을 지정한 도구 호출 양쪽의 요청 정규화와 생성 문법을 확인했다. 독립 Draft 2020-12 검증기 `jsonschema 4.23.0`과 Riley가 같은 fixture 15개, 인스턴스 32개를 통과했다. CPU 서버 라이브러리 검사는 111건 통과, 기존 비활성 검사 1건이었다. [응답·도구 경로 회귀 검사](../../crates/riley-server/src/chat.rs) · [공통 fixture](../../crates/riley-server/tests/fixtures/structured_schema_oracle.json)
+
+`8a7c618c1`의 CUDA 12.4 배포 이미지는 GitHub와 A100의 Riley 바이너리를 포함한 런타임 파일 21개의 SHA-256이 일치했다. Qwen2.5-7B-Instruct에서 로컬 참조 HTTP 16건을 두 경로로 확인했다. 조건을 충족한 6건은 공백·Unicode·JSON Pointer 이스케이프를 올바르게 해석한 값을 포함해 HTTP 200을 반환했다. 10건은 인코딩 오류와 하위 `$id` 참조에 해당하며, 각 요청 필드에서 HTTP 400 `invalid_schema`를 반환했다. [GitHub 이미지 검증](https://github.com/hkjeon13/riley/actions/runs/45274813611) · [HTTP 원본](../../benchmarks/evidence/20261124-w4-uri-reference-fix/a100/structured/schema-references.json)
+
+GPU 6·7번의 기본 API 검사는 각각 40건을 통과했다. 장문 스키마·도구 64건에서 C8·C32의 출력이 C1과 일치했다. 45초 혼합 부하는 정상 완료 338건과 의도적 연결 종료 21건을 기록했다. 두 서버가 모든 자원을 회수하고 각 GPU가 기존 홀더의 20GiB 예약으로 돌아왔다. 재현 시 `schema.patch.gz`를 `schema.patch`로 풀어 `dispatch.sha256`으로 확인한다. [같은 이미지의 대조와 종료](../../benchmarks/evidence/20261124-w4-uri-reference-fix/verified.json)
 
 ## 현행 배포 이미지의 장문 채팅 검증
 

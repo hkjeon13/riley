@@ -1,6 +1,6 @@
 # Riley 0.1.0 후보 검증 근거와 릴리스 판정
 
-2026-11-24 KST에 `0511b9280` 패키지의 A100 교차 부하·격리 복구를 검증했다. 실제 운영 검증이 남아 현재 판정은 **릴리스 보류**다. A100에서 확인한 네이티브 실행 파일과 배포 이미지의 실행 파일은 각자의 SHA-256으로 추적한다. [후보별 원본 목록과 해시](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
+2026-11-24 KST에 `8a7c618c1` 패키지의 A100 API, 장문 구조화 출력과 45초 혼합 부하를 검증했다. `0511b9280` 패키지에는 30분 교차 부하와 격리 복구 근거가 있다. 실제 운영 검증이 남아 현재 판정은 **릴리스 보류**다. [후보별 원본 목록과 해시](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 
 ## 실행 파일과 소스 연결
 
@@ -21,6 +21,7 @@
 | 문자 클래스 수정 이미지의 jemalloc 파생 시험 | `6d618f64e`의 실행 파일 | 이미지 `d64bb1d79564`에서 캐시 끔·켬 30분 기준과 장문 232건, 스키마·도구 64건을 통과했다. 후반 RSS는 캐시 끔 680KiB, 켬 804KiB 줄었다. 실제 서비스의 운영 판정은 보류한다. [최신 30분 대조](05-mixed-soak-result.md#문자-클래스-수정-이미지의-30분-대조) |
 | 중첩 스키마 ID 수정의 배포 이미지 | `c5ec7b391` | GitHub와 A100 런타임 파일 21개 일치. A100 이미지 `3278fe2fced2`에서 로컬 참조 HTTP 6건, 문자 클래스 HTTP 10건, API 검사 40건씩, 장문 스키마·도구 64건 및 45초 혼합 부하를 통과했다. 두 30분 부하의 후반 RSS는 캐시 끔 528KiB, 켬 592KiB 늘었다. [스키마 참조 결과](04-structured-output-result.md#중첩-스키마-id와-로컬-참조) · [30분 대조](05-mixed-soak-result.md#스키마-참조-수정-이미지의-30분-교차-대조) |
 | 스키마 참조 수정 이미지의 jemalloc 파생 시험 | `c5ec7b391`의 실행 파일 | 이미지 `f70e21330f64`에서 장문 232건, 스키마·도구 64건과 캐시 끔·켬 30분 기준 통과. 후반 RSS는 776KiB와 820KiB 줄었다. 기준 이미지의 격리 복구는 139.01초에 완료됐다. [30분 대조](05-mixed-soak-result.md#스키마-참조-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#스키마-참조-수정-이미지의-격리-복구) |
+| 로컬 참조 URI 인코딩 수정의 배포 이미지 | `8a7c618c1` | A100 이미지 `01b5c9d4bedf`와 GitHub의 런타임 파일 21개 일치. 로컬 참조 HTTP 16건, 두 GPU의 API 40건씩, 장문 스키마·도구 64건, 45초 혼합 부하와 종료 자원 회수 통과. [URI 인코딩 검증](04-structured-output-result.md#로컬-참조의-uri-인코딩) |
 
 CI는 `distribution_with_schema_reference_fix`에서 같은 커밋의 Git 입력·패키지·A100 보고서를 연결하고, 로컬 참조 HTTP 검사와 30분 부하 대조, 격리 복구를 함께 검사한다. `--distribution-revision origin/main`으로 현재 배포 입력을 이 근거와 대조한다. 문자 클래스 수정 이미지의 이전 검증은 `distribution_with_character_class_fix`에서 확인한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [CI 검증기](../../ci/check_improvement_evidence.py)
 
@@ -37,6 +38,8 @@ python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 ```
 
 샤드 검증 병렬화를 반영한 `0511b9280`의 GitHub·A100 패키지는 런타임 파일 21개가 일치한다. A100에서 Qwen2.5-7B의 API 40건씩, 장문 스키마·도구 64건, 45초 혼합 부하와 종료 자원 회수를 확인했다. CI의 `distribution_with_parallel_shard_verification`은 이 결과를 같은 커밋의 배포 입력에 연결한다. 두 이미지의 30분 부하와 격리 복구는 패키지·체크포인트와 GPU 예약 프로세스의 PID·시작 시각을 대조해 검산했다. 이전 패키지는 `--distribution-revision c5ec7b391`로 조회할 수 있다. [샤드 검증과 A100 기동 결과](05-documentation-and-operations.md#샤드-체크포인트-검증-병렬화) · [30분 교차 대조](05-mixed-soak-result.md#샤드-검증-병렬화-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#샤드-검증-병렬화-이미지의-격리-복구)
+
+`distribution_with_uri_reference_fix`는 `8a7c618c1`의 Git 입력과 GitHub·A100의 동일 런타임, 문자 클래스와 URI 인코딩의 정확한 HTTP 응답을 검사한다. 이 이미지에서 45초 혼합 부하를 검증했다. 30분 대조와 격리 복구 기록은 앞선 `0511b9280`에 결속돼 있다. [검증기](../../ci/check_improvement_evidence.py) · [이미지 대조](../../benchmarks/evidence/20261124-w4-uri-reference-fix/verified.json)
 
 `distribution_with_pattern_fix`는 `9373ea412`의 CPU 빌드, A100 구조화 출력과 두 이미지의 30분 부하를 연결한다. 당시 격리 복구에서는 입장 차단 뒤 스트림이 완료됐고 기준 이미지가 139.78초 후 같은 주소에서 준비 상태에 도달했다. [기준·jemalloc 대조](../../benchmarks/evidence/20261123-w5-dot-stock-soak/verified.json) · [격리 복구](05-mixed-soak-result.md#pattern-수정-이미지의-격리-복구)
 
