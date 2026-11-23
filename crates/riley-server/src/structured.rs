@@ -717,6 +717,17 @@ impl SchemaCompiler {
         let pointer = target
             .strip_prefix('#')
             .ok_or_else(|| unsupported(format!("non-local $ref {target}")))?;
+        // Resolving against the document root is only sound within that resource.
+        // A string-valued `$id` on an ancestor marks an embedded schema, while a
+        // definition or property named `$id` has a schema as its value.
+        if pointer.match_indices('/').skip(1).any(|(end, _)| {
+            self.root
+                .pointer(&pointer[..end])
+                .and_then(|node| node.get("$id"))
+                .is_some_and(Value::is_string)
+        }) {
+            return Err(unsupported("$ref crossing an embedded $id"));
+        }
         let schema = self
             .root
             .pointer(pointer)
@@ -724,17 +735,21 @@ impl SchemaCompiler {
             .ok_or_else(|| SchemaError(format!("unresolved $ref {target}")))?;
         let id = self.builder.rule();
         self.references.insert(target.to_owned(), id);
-        let body = self.schema(&schema)?;
+        let body = self.compile_node(&schema, pointer.is_empty())?;
         self.builder.alternative(id, vec![rule(body)]);
         Ok(id)
     }
 
-    /// Compiles one schema node into a rule.
+    /// Compiles the document root into a rule.
     ///
     /// # Errors
     ///
     /// Returns [`SchemaError`] for a keyword the grammar cannot enforce.
     pub fn schema(&mut self, schema: &Value) -> Result<u32, SchemaError> {
+        self.compile_node(schema, true)
+    }
+
+    fn compile_node(&mut self, schema: &Value, document_root: bool) -> Result<u32, SchemaError> {
         self.check_size()?;
         let object = match schema {
             Value::Bool(true) => return Ok(self.value()),
@@ -742,6 +757,9 @@ impl SchemaCompiler {
             Value::Object(object) => object,
             _ => return Err(SchemaError("a schema must be an object".to_owned())),
         };
+        if !document_root && object.contains_key("$id") {
+            return Err(unsupported("embedded $id"));
+        }
         if object.contains_key("oneOf") {
             return Err(unsupported("oneOf requires exactly one matching branch"));
         }
@@ -770,7 +788,7 @@ impl SchemaCompiler {
                 .ok_or_else(|| SchemaError("anyOf must be a non-empty array".to_owned()))?;
             let id = self.builder.rule();
             for branch in branches {
-                let branch = self.schema(branch)?;
+                let branch = self.compile_node(branch, false)?;
                 self.builder.alternative(id, vec![rule(branch)]);
             }
             return Ok(id);
@@ -778,7 +796,7 @@ impl SchemaCompiler {
         if let Some(branches) = object.get("allOf") {
             reject_siblings(object, "allOf", false)?;
             return match branches.as_array().map(Vec::as_slice) {
-                Some([only]) => self.schema(only),
+                Some([only]) => self.compile_node(only, false),
                 _ => Err(unsupported("allOf requires exactly one schema")),
             };
         }
@@ -1182,7 +1200,7 @@ impl SchemaCompiler {
 
     fn array_schema(&mut self, object: &Map<String, Value>) -> Result<u32, SchemaError> {
         let item = match object.get("items") {
-            Some(schema) => self.schema(schema)?,
+            Some(schema) => self.compile_node(schema, false)?,
             None => self.value(),
         };
         let separator = self.separator();
@@ -1226,7 +1244,7 @@ impl SchemaCompiler {
                 ));
             }
             let value = match additional {
-                Some(schema @ Value::Object(_)) => self.schema(schema)?,
+                Some(schema @ Value::Object(_)) => self.compile_node(schema, false)?,
                 Some(Value::Bool(false)) => {
                     if minimum != 0 {
                         return Err(unsupported(
@@ -1275,7 +1293,7 @@ impl SchemaCompiler {
         for (name, schema) in properties.iter().rev() {
             let key =
                 serde_json::to_string(name).map_err(|error| SchemaError(error.to_string()))?;
-            let value = self.schema(schema)?;
+            let value = self.compile_node(schema, false)?;
             let member = concat(vec![
                 bytes(&key),
                 bytes(":"),
@@ -1704,6 +1722,53 @@ mod tests {
         assert!(rejected(json!({"$ref": "#/nope"})).contains("unresolved"));
         assert!(rejected(json!({"type": "string", "format": "email"})).contains("email"));
         assert!(rejected(json!({"type": "wat"})).contains("wat"));
+    }
+
+    #[test]
+    fn local_references_cannot_cross_an_embedded_schema_id() {
+        let root = json!({
+            "$id": "urn:riley:root",
+            "$defs": {"id_value": {"const": 1}},
+            "type": "object",
+            "required": ["id"],
+            "properties": {"id": {
+                "$id": "urn:riley:child",
+                "$defs": {"id_value": {"const": 2}},
+                "$ref": "#/$defs/id_value"
+            }},
+            "additionalProperties": false
+        });
+        assert!(rejected(root).contains("$id"));
+
+        let pointer = json!({
+            "$defs": {"child": {
+                "$id": "urn:riley:child",
+                "$defs": {"value": {"const": 2}}
+            }},
+            "$ref": "#/$defs/child/$defs/value"
+        });
+        assert!(rejected(pointer).contains("$id"));
+
+        let root_id_and_property_name = json!({
+            "$id": "urn:riley:root",
+            "$defs": {"$id": {"const": 3}},
+            "type": "object",
+            "required": ["$id"],
+            "properties": {"$id": {"$ref": "#/$defs/$id"}},
+            "additionalProperties": false
+        });
+        assert!(accepts(&root_id_and_property_name, r#"{"$id":3}"#));
+        assert!(!accepts(&root_id_and_property_name, r#"{"$id":2}"#));
+
+        let recursive_root = json!({
+            "$id": "urn:riley:root",
+            "anyOf": [
+                {"type": "null"},
+                {"type": "array", "items": {"$ref": "#"}, "minItems": 1, "maxItems": 1}
+            ]
+        });
+        assert!(accepts(&recursive_root, "[[null]]"));
+        assert!(!accepts(&recursive_root, "[[3]]"));
     }
 
     #[test]

@@ -1107,6 +1107,30 @@ mod tests {
     }
 
     #[test]
+    fn embedded_schema_ids_are_rejected_in_responses_and_named_tools() {
+        let schema = json!({
+            "type": "object", "required": ["value"], "properties": {
+                "value": {"$id": "urn:riley:child", "$ref": "#/$defs/value",
+                    "$defs": {"value": {"const": 2}}}
+            }, "$defs": {"value": {"const": 1}}
+        });
+        let messages = json!([{"role": "user", "content": "x"}]);
+        let format = json!({"model": "m", "messages": messages, "response_format": {
+            "type": "json_schema", "json_schema": {"name": "result", "schema": schema}
+        }});
+        let tools = json!({"model": "m", "messages": messages, "tools": [
+            {"type": "function", "function": {"name": "weather", "parameters": schema}}
+        ], "tool_choice": {"type": "function", "function": {"name": "weather"}}});
+        for (body, expected) in [(format, "response_format"), (tools, "tools")] {
+            assert!(matches!(
+                normalize_chat_request(request(body), &template(TOOLS), limits()),
+                Err(ChatRequestError::Schema { parameter, message })
+                    if parameter == expected && message.contains("embedded $id")
+            ));
+        }
+    }
+
+    #[test]
     fn response_schema_and_forced_tools_enforce_the_dot_pattern() {
         use riley_runtime::grammar::GrammarAutomaton;
 

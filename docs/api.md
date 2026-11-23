@@ -157,6 +157,10 @@ tools whose parameters are constrained by `tool_choice`. Unsupported keywords
 such as `uniqueItems`, `not` and `multipleOf`, as well as repetition bounds above
 1,024, are refused with a named error.
 
+Local `$ref` pointers resolve within the schema document. An embedded schema
+with its own `$id`, or a pointer that crosses into one, returns 400
+`invalid_schema`. A document-level `$id` is permitted with local pointers.
+
 `pattern` supports literals, `.`, classes with ranges and `^` negation, `\\d`,
 `\\w`, `\\s` (a space), groups, `|`, and the greedy quantifiers `*`, `+`, `?` and
 `{m,n}`. As in JSON Schema an unanchored pattern may match anywhere in the

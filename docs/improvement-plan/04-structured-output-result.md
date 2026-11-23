@@ -30,6 +30,12 @@ Unicode 스칼라 1,112,064개를 각각 JSON 직렬화와 UTF-16 이스케이�
 
 `6d618f64e`의 CUDA 12.4 이미지는 GitHub와 A100 빌드에서 런타임 파일 21개가 일치했다. A100의 새 HTTP 검사 10건에서 응답 스키마와 지정 도구가 따옴표·역슬래시를 유효한 JSON으로 반환한 4건과, 지원하지 않는 패턴에 `400 invalid_schema`를 반환한 6건을 확인했다. GPU 6·7번에서 기본 API를 각각 40건씩 검증했다. GPU 6번의 장문 스키마·도구 호출 64건에서 C8·C32 결과는 C1과 일치했다. GPU 7번의 45초 혼합 부하는 정상 완료 338건, 의도적 연결 종료 21건이었다. 양쪽 종료 자원은 모두 회수됐고 각 GPU의 기존 20GiB 예약이 복귀했다. [A100 검산](../../benchmarks/evidence/20261123-w4-pattern-classes/verified.json) · [CUDA 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/45148470780)
 
+## 중첩 스키마 ID와 로컬 참조
+
+문서 최상위와 하위 `$id`에 같은 이름의 정의를 각각 1과 2로 지정했다. Draft 2020-12 독립 검증기 `jsonschema 4.23.0`은 하위 스키마의 `$ref`를 해당 리소스에서 해석해 `{"id":2}`만 허용했다. 수정 전 컴파일러는 최상위 정의를 읽었고 이 스키마를 그대로 받아들였다. [JSON Schema 참조 규칙](https://json-schema.org/draft/2020-12/json-schema-core#section-8.2)
+
+컴파일하는 하위 스키마에 `$id`가 있거나 로컬 `$ref` 포인터가 그런 리소스를 가로지르면 `invalid_schema`로 거부한다. 최상위 `$id`, `#` 재귀, `$id`라는 속성·정의 이름을 사용하는 같은 문서 내 참조는 회귀 검사에서 통과했다. 응답 스키마와 지정 도구 요청이 각각 해당 요청 필드의 스키마 오류를 반환했고 전체 CPU 서버 테스트는 109건 통과했다. [스키마 회귀 검사](../../crates/riley-server/src/structured.rs) · [응답·도구 진입점 검사](../../crates/riley-server/src/chat.rs)
+
 ## 현행 배포 이미지의 장문 채팅 검증
 
 Qwen2.5-7B-Instruct의 고정 입력에서 255·1,024·7,836·7,917토큰 사례를 선택했다. 각 입력을 채팅 메시지로 보내 `type`과 `enum`의 교집합 및 정수 `const`를 포함한 JSON 스키마를 검사했다. 같은 스키마를 이름이 지정된 도구의 인자로도 적용했다. 서버가 붙인 채팅 템플릿까지 포함한 입력 ID와 생성 ID·텍스트·도구 인자·종료 사유·사용량을 대조했다. 스키마와 도구 인자는 독립 Draft 2020-12 검증기로 검사했다. [고정 입력](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [검사기](../../benchmarks/live/structured_holdout_check.py)
