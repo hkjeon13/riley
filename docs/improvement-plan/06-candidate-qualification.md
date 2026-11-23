@@ -30,11 +30,11 @@
 python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 ```
 
-`distribution_with_pattern_fix`는 `origin/main`의 배포 입력과 두 CPU 빌드, A100 기준 이미지의 45초 부하와 구조화 출력, jemalloc 파생 이미지의 두 30분 부하를 함께 확인한다. 실제 운영 트래픽·승인 SLO·서비스 복구 판정은 보류 상태다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [최신 파생 이미지 검산](../../benchmarks/evidence/20261123-w5-dot-allocator/verified.json)
+`distribution_with_pattern_fix`는 `origin/main`의 배포 입력과 두 CPU 빌드, A100 기준 이미지의 45초 부하와 구조화 출력, jemalloc 파생 이미지의 두 30분 부하를 함께 확인한다. 두 최신 이미지의 격리 복구에서는 입장 차단 뒤 스트림이 완료됐고 기준 이미지가 139.78초 후 같은 주소에서 준비 상태에 도달했다. 실제 운영 트래픽·승인 SLO·서비스 복구 판정은 보류 상태다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [최신 파생 이미지 검산](../../benchmarks/evidence/20261123-w5-dot-allocator/verified.json) · [최신 격리 복구](05-mixed-soak-result.md#pattern-수정-이미지의-격리-복구)
 
 `distribution_with_prefix_metrics`는 `3951d90c8`의 Git 입력과 CPU·GPU 기록을 보존한다. 이 버전과 `36aa18805`의 입력은 각각 `--distribution-revision 3951d90c8`와 `--distribution-revision 36aa18805`로 조회한다. [이전 파생 이미지 검산](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/verified.json)
 
-`recovery_drill`은 같은 두 이미지의 체크포인트·바이너리와 요청 차단·활성 SSE 드레인·준비 상태 복구 영수증을 연결한다. 같은 격리 주소에서 두 스트림의 내용·사용량이 같았고 파생 이미지 종료 요청부터 기본 이미지 준비 상태까지 138.60초가 걸렸다. [격리 복구 결과](05-mixed-soak-result.md#현행-패키지의-요청-차단과-격리-복구)
+`3951d90c8`의 `recovery_drill`은 당시 두 이미지의 체크포인트·바이너리와 요청 차단·활성 SSE 드레인·준비 상태 복구 영수증을 연결한다. 같은 격리 주소에서 두 스트림의 내용·사용량이 같았고 파생 이미지 종료 요청부터 기본 이미지 준비 상태까지 138.60초가 걸렸다. [이전 격리 복구](05-mixed-soak-result.md#현행-패키지의-요청-차단과-격리-복구)
 
 `distribution_after_terminal_fix`는 이전 `36aa18805`의 패키지와 파생 시험 근거를 보존한다. 기준 이미지의 두 30분 부하는 정밀 RSS 기준에 미달했고, 파생 이미지 `c3fae872c532`는 두 설정의 운영 기준과 장문 232건의 출력 대조를 통과했다. CI는 같은 파생 이미지의 닫힌 RAG와 고정 도착 보고서를 원본 지문으로 연결해 두 실행 순서의 지연 변화율과 쓰기 오차 판정을 대조한다. 닫힌 부하에서 관측한 TTFT p95 +21.14%는 고정 도착의 두 시각표에서 재현되지 않았다. 실제 운영 트래픽·승인된 SLO·서비스 복구 검증을 확보할 때까지 릴리스를 보류한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [고정 도착 결과](05-mixed-soak-result.md#최신-rag-seed-2의-고정-도착-재생)
 

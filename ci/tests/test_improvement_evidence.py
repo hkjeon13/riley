@@ -139,15 +139,17 @@ class PackageFollowUpTests(unittest.TestCase):
 
     def test_recovery_requires_a_live_stream_after_the_cutoff(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
-        candidate = manifest["distribution_with_prefix_metrics"]
-        records = (candidate["recovery_drill"]["report"], candidate["evidence"]["a100_serving"],
-                   candidate["allocator_experiment"]["evidence"]["serving"])
-        drill, stock, allocator = (json.loads((ROOT / entry["path"]).read_bytes()) for entry in records)
-        checker.check_prefix_metrics_recovery(drill, stock, allocator)
+        for name in ("distribution_with_prefix_metrics", "distribution_with_pattern_fix"):
+            with self.subTest(candidate=name):
+                candidate = manifest[name]
+                records = (candidate["recovery_drill"]["report"], candidate["evidence"]["a100_serving"],
+                           candidate["allocator_experiment"]["evidence"]["serving"])
+                drill, stock, allocator = (json.loads((ROOT / entry["path"]).read_bytes()) for entry in records)
+                checker.check_prefix_metrics_recovery(drill, stock, allocator)
 
-        drill["arms"]["allocator"]["admission"]["active_after_gate"]["active_requests"] = 0
-        with self.assertRaisesRegex(ValueError, "lacks an active drain"):
-            checker.check_prefix_metrics_recovery(drill, stock, allocator)
+                drill["arms"]["allocator"]["admission"]["active_after_gate"]["active_requests"] = 0
+                with self.assertRaisesRegex(ValueError, "lacks an active drain"):
+                    checker.check_prefix_metrics_recovery(drill, stock, allocator)
 
     def test_prefix_metrics_uses_transport_pairs_for_c1_and_exact_matches_for_concurrency(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())

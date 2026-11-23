@@ -232,7 +232,11 @@ def check_pattern_fix_package(root, candidate):
                          for gpu, row in reservations.items()},
         "accuracy": {"suites": suites},
     }
-    check_prefix_metrics_allocator(root, candidate, parent, stock)
+    allocator = check_prefix_metrics_allocator(root, candidate, parent, stock)
+    if "recovery_drill" in candidate:
+        entry = candidate["recovery_drill"]["report"]
+        drill = json.loads((root / entry["path"]).read_bytes(), object_pairs_hook=unique_object)
+        check_prefix_metrics_recovery(drill, smoke, allocator)
 
 
 def check_prefix_metrics_serving(serving):

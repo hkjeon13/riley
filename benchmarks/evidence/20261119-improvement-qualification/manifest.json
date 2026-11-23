@@ -5159,6 +5159,42 @@
           "sha256": "c0af16e2c614fffd56401d758411ba64d0c4c724354270066b29b306214d933a"
         }
       ]
+    },
+    "recovery_drill": {
+      "report": {
+        "path": "benchmarks/evidence/20261123-w5-dot-recovery/verified.json",
+        "sha256": "a776ee5e8d30c41cc57615d290c3884af4a2cb51ac81e374400e6a2af215376f"
+      },
+      "reproduction": [
+        {
+          "path": "benchmarks/evidence/20261123-w5-dot-recovery/campaign.sh",
+          "sha256": "6903956be6323c7687f3cda538742dba27080aa1bf369b9531cd52b5296740be"
+        },
+        {
+          "path": "benchmarks/evidence/20261123-w5-dot-recovery/campaign.log",
+          "sha256": "dbe72c0fb851f41d46eaa8a518978c421e32d62abd29e8de2fd6bc5ab948a38d"
+        },
+        {
+          "path": "benchmarks/evidence/20261123-w5-dot-recovery/campaign.exit",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+        },
+        {
+          "path": "benchmarks/evidence/20261123-w5-dot-recovery/candidate-inputs.sha256",
+          "sha256": "c4c6668dff943c00eb02beb5da5b25350c22f97353e6ca084cfb9ccfbe5a66bb"
+        },
+        {
+          "path": "benchmarks/evidence/20261123-w5-dot-recovery/dispatch.sha256",
+          "sha256": "2e0b1f6da603ca15dafc5faad618fb2cca64017ccb95537ae0bbdbd4213072bd"
+        },
+        {
+          "path": "benchmarks/evidence/20261123-w5-dot-recovery/fetch-summary.sh",
+          "sha256": "89e346cf2cfd2896a9ed063b231b79b5a14806a24d35c91fcf368f33253220e5"
+        },
+        {
+          "path": "benchmarks/evidence/20261123-w5-dot-recovery/result.sha256",
+          "sha256": "758481aafc7492ffbb552e77c41fbd0e943c5d6af28179eb7795ef14b6155bb5"
+        }
+      ]
     }
   },
   "distribution_with_prefix_metrics": {

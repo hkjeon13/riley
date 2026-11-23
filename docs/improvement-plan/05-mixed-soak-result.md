@@ -553,6 +553,12 @@ A100 6번에서 기준 이미지 `0a907408ec73`과 jemalloc 파생 이미지 `1f
 
 파생 이미지의 장문 생성 232건이 기존 golden과 일치했다. 구조화 출력·도구 호출은 C1 16건과 C8·C32 48건에서 통과했고, C1 기준 응답 16개는 같은 소스의 기준 이미지와 일치했다. 검사 종료 후 두 GPU가 기존 20GiB 예약으로 복귀했다. [구조화 출력 기준](04-structured-output-result.md#pattern-점-연산자의-줄바꿈-처리) · [장문과 예약 검산](../../benchmarks/evidence/20261123-w5-dot-allocator/verified.json)
 
+### Pattern 수정 이미지의 격리 복구
+
+A100 6번에서 파생 이미지 `c7fcb8e274ec`를 종료하고 같은 loopback 주소에 기준 이미지 `76767e33ce49`를 기동했다. 두 이미지에서 API 40건씩 통과했다. 입장 차단 뒤 새 요청에는 HTTP 503을 반환했고, 당시 활성 요청 1건은 생성 토큰 192개와 `length` 종료 사유를 받고 완료됐다. 두 이미지의 출력 해시와 캐시 재사용량 112토큰이 일치했다. [실행 순서](../../benchmarks/evidence/20261123-w5-dot-recovery/campaign.sh) · [복구 영수증](../../benchmarks/evidence/20261123-w5-dot-recovery/verified.json)
+
+파생 이미지의 종료 요청부터 기준 이미지의 준비 상태까지 139.78초가 걸렸다. 두 컨테이너의 종료 시 GPU·pinned 할당, 활성·대기 요청과 KV 블록은 모두 0이었다. GPU 6·7번은 기존 20GiB 예약으로 복귀했다. 실제 서비스의 복구 기준과 도달 시간은 승인된 SLO를 확보한 뒤 해당 운영 환경에서 판정한다. [복구 시각과 자원 영수증](../../benchmarks/evidence/20261123-w5-dot-recovery/verified.json) · [원본 체크섬](../../benchmarks/evidence/20261123-w5-dot-recovery/result.sha256)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)
