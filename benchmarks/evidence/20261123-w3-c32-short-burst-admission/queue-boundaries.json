@@ -1,0 +1,651 @@
+{
+  "capture_checksums_sha256": "37587b937e8e46cd64b0b7b739f0a668b437377ed1f73287e36a694cb2dbf36a",
+  "paired_trace_queue_boundaries": {
+    "6": {
+      "all": {
+        "baseline": {
+          "requests": 96,
+          "sent_during_execution": 87,
+          "with_later_execution": 0,
+          "queue_wait_ms": {
+            "p50": 29.769209,
+            "p95": 35.541471,
+            "mean": 27.045486260416666
+          },
+          "incumbent_remaining_ms": {
+            "p50": 29.509444,
+            "p95": 35.387907,
+            "mean": 26.90059104166667
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.0
+          },
+          "outside_execution_ms": {
+            "p50": 0.124688,
+            "p95": 0.374242,
+            "mean": 0.14489521875
+          }
+        },
+        "candidate": {
+          "requests": 96,
+          "sent_during_execution": 80,
+          "with_later_execution": 1,
+          "queue_wait_ms": {
+            "p50": 35.246996,
+            "p95": 61.006303,
+            "mean": 32.51951653125
+          },
+          "incumbent_remaining_ms": {
+            "p50": 34.928827,
+            "p95": 60.9158,
+            "mean": 31.977253833333332
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.3919968333333333
+          },
+          "outside_execution_ms": {
+            "p50": 0.120814,
+            "p95": 0.364774,
+            "mean": 0.15026586458333333
+          }
+        },
+        "paired_delta_ms": {
+          "queue_wait_ms": {
+            "p50": 6.427940000000003,
+            "p95": 31.235256000000003,
+            "mean": 5.474030270833333
+          },
+          "incumbent_remaining_ms": {
+            "p50": 6.436652999999996,
+            "p95": 31.296753999999996,
+            "mean": 5.076662791666666
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.3919968333333333
+          },
+          "outside_execution_ms": {
+            "p50": -0.008140999999999995,
+            "p95": 0.21139300000000003,
+            "mean": 0.005370645833333333
+          }
+        },
+        "incumbent_pairs": {
+          "both_during_execution": {
+            "requests": 80,
+            "incumbent_remaining_ms": {
+              "p50": 7.069419,
+              "p95": 31.297235999999998,
+              "mean": 9.034857062499999
+            },
+            "incumbent_duration_ms": {
+              "p50": 0.0480360000000033,
+              "p95": 24.771304,
+              "mean": 5.549686625
+            },
+            "incumbent_elapsed_ms": {
+              "p50": -6.203611,
+              "p95": 26.48738,
+              "mean": -3.4851704375
+            }
+          },
+          "same_incumbent_shape": {
+            "requests": 14,
+            "incumbent_remaining_ms": {
+              "p50": 2.2251130000000003,
+              "p95": 2.782795,
+              "mean": 2.3050922857142857
+            },
+            "incumbent_duration_ms": {
+              "p50": -0.02110900000000271,
+              "p95": 0.18902099999999677,
+              "mean": 0.03106964285714093
+            },
+            "incumbent_elapsed_ms": {
+              "p50": -2.218444,
+              "p95": -1.9377950000000002,
+              "mean": -2.274022642857143
+            }
+          }
+        }
+      },
+      "first_32": {
+        "baseline": {
+          "requests": 32,
+          "sent_during_execution": 23,
+          "with_later_execution": 0,
+          "queue_wait_ms": {
+            "p50": 29.790484,
+            "p95": 36.391054,
+            "mean": 22.07445825
+          },
+          "incumbent_remaining_ms": {
+            "p50": 29.554181,
+            "p95": 36.340795,
+            "mean": 21.88908678125
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.0
+          },
+          "outside_execution_ms": {
+            "p50": 0.152001,
+            "p95": 0.441108,
+            "mean": 0.18537146875
+          }
+        },
+        "candidate": {
+          "requests": 32,
+          "sent_during_execution": 19,
+          "with_later_execution": 0,
+          "queue_wait_ms": {
+            "p50": 60.647098,
+            "p95": 61.205046,
+            "mean": 36.232957875
+          },
+          "incumbent_remaining_ms": {
+            "p50": 60.319027,
+            "p95": 61.147732,
+            "mean": 36.01205471875
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.0
+          },
+          "outside_execution_ms": {
+            "p50": 0.23036,
+            "p95": 0.416995,
+            "mean": 0.22090315625
+          }
+        },
+        "paired_delta_ms": {
+          "queue_wait_ms": {
+            "p50": 30.740136999999997,
+            "p95": 31.449035000000002,
+            "mean": 14.158499625
+          },
+          "incumbent_remaining_ms": {
+            "p50": 30.85363,
+            "p95": 31.481855999999997,
+            "mean": 14.1229679375
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.0
+          },
+          "outside_execution_ms": {
+            "p50": -0.014361000000000013,
+            "p95": 0.312315,
+            "mean": 0.0355316875
+          }
+        },
+        "incumbent_pairs": {
+          "both_during_execution": {
+            "requests": 19,
+            "incumbent_remaining_ms": {
+              "p50": 31.041812,
+              "p95": 31.558234000000002,
+              "mean": 31.085753210526317
+            },
+            "incumbent_duration_ms": {
+              "p50": 24.771304,
+              "p95": 24.771304,
+              "mean": 24.771304
+            },
+            "incumbent_elapsed_ms": {
+              "p50": -6.2705079999999995,
+              "p95": -5.925221,
+              "mean": -6.314449210526316
+            }
+          },
+          "same_incumbent_shape": {
+            "requests": 0
+          }
+        }
+      },
+      "later_64": {
+        "baseline": {
+          "requests": 64,
+          "sent_during_execution": 64,
+          "with_later_execution": 0,
+          "queue_wait_ms": {
+            "p50": 27.585071,
+            "p95": 35.386674,
+            "mean": 29.531000265625
+          },
+          "incumbent_remaining_ms": {
+            "p50": 27.491234,
+            "p95": 35.264258,
+            "mean": 29.406343171875
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.0
+          },
+          "outside_execution_ms": {
+            "p50": 0.12338,
+            "p95": 0.156143,
+            "mean": 0.12465709375
+          }
+        },
+        "candidate": {
+          "requests": 64,
+          "sent_during_execution": 61,
+          "with_later_execution": 1,
+          "queue_wait_ms": {
+            "p50": 34.602084,
+            "p95": 37.663329,
+            "mean": 30.662795859375
+          },
+          "incumbent_remaining_ms": {
+            "p50": 34.481361,
+            "p95": 37.461593,
+            "mean": 29.959853390625
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.58799525
+          },
+          "outside_execution_ms": {
+            "p50": 0.114086,
+            "p95": 0.157859,
+            "mean": 0.11494721875
+          }
+        },
+        "paired_delta_ms": {
+          "queue_wait_ms": {
+            "p50": 2.8306049999999985,
+            "p95": 10.471420000000002,
+            "mean": 1.1317955937500002
+          },
+          "incumbent_remaining_ms": {
+            "p50": 2.8578250000000054,
+            "p95": 10.419340000000002,
+            "mean": 0.5535102187500001
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.58799525
+          },
+          "outside_execution_ms": {
+            "p50": -0.007988999999999996,
+            "p95": 0.061709,
+            "mean": -0.009709875
+          }
+        },
+        "incumbent_pairs": {
+          "both_during_execution": {
+            "requests": 61,
+            "incumbent_remaining_ms": {
+              "p50": 2.8885179999999977,
+              "p95": 10.419340000000002,
+              "mean": 2.1665451475409836
+            },
+            "incumbent_duration_ms": {
+              "p50": -0.04959399999999903,
+              "p95": 0.26020000000000465,
+              "mean": -0.43737452459016496
+            },
+            "incumbent_elapsed_ms": {
+              "p50": -2.852658,
+              "p95": 26.48738,
+              "mean": -2.6039196721311475
+            }
+          },
+          "same_incumbent_shape": {
+            "requests": 14,
+            "incumbent_remaining_ms": {
+              "p50": 2.2251130000000003,
+              "p95": 2.782795,
+              "mean": 2.3050922857142857
+            },
+            "incumbent_duration_ms": {
+              "p50": -0.02110900000000271,
+              "p95": 0.18902099999999677,
+              "mean": 0.03106964285714093
+            },
+            "incumbent_elapsed_ms": {
+              "p50": -2.218444,
+              "p95": -1.9377950000000002,
+              "mean": -2.274022642857143
+            }
+          }
+        }
+      }
+    },
+    "7": {
+      "all": {
+        "baseline": {
+          "requests": 96,
+          "sent_during_execution": 86,
+          "with_later_execution": 0,
+          "queue_wait_ms": {
+            "p50": 33.423348,
+            "p95": 35.864255,
+            "mean": 24.579088541666668
+          },
+          "incumbent_remaining_ms": {
+            "p50": 33.254007,
+            "p95": 35.618978,
+            "mean": 24.388506072916666
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.0
+          },
+          "outside_execution_ms": {
+            "p50": 0.147338,
+            "p95": 0.460349,
+            "mean": 0.19058246874999998
+          }
+        },
+        "candidate": {
+          "requests": 96,
+          "sent_during_execution": 87,
+          "with_later_execution": 0,
+          "queue_wait_ms": {
+            "p50": 24.377711,
+            "p95": 29.320333,
+            "mean": 22.861514239583332
+          },
+          "incumbent_remaining_ms": {
+            "p50": 24.279377,
+            "p95": 29.207454,
+            "mean": 22.736314145833333
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.0
+          },
+          "outside_execution_ms": {
+            "p50": 0.103698,
+            "p95": 0.300867,
+            "mean": 0.12520009375
+          }
+        },
+        "paired_delta_ms": {
+          "queue_wait_ms": {
+            "p50": -6.493820000000003,
+            "p95": 7.693738,
+            "mean": -1.7175743020833336
+          },
+          "incumbent_remaining_ms": {
+            "p50": -6.352905,
+            "p95": 7.730492,
+            "mean": -1.6521919270833336
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.0
+          },
+          "outside_execution_ms": {
+            "p50": -0.044653999999999985,
+            "p95": 0.014626,
+            "mean": -0.065382375
+          }
+        },
+        "incumbent_pairs": {
+          "both_during_execution": {
+            "requests": 86,
+            "incumbent_remaining_ms": {
+              "p50": -6.385004000000002,
+              "p95": 7.536755999999999,
+              "mean": -2.5384118372093027
+            },
+            "incumbent_duration_ms": {
+              "p50": -0.33425900000000297,
+              "p95": -0.030515999999998655,
+              "mean": -2.4297656279069746
+            },
+            "incumbent_elapsed_ms": {
+              "p50": -2.312852000000003,
+              "p95": 11.505832,
+              "mean": 0.10864620930232546
+            }
+          },
+          "same_incumbent_shape": {
+            "requests": 4,
+            "incumbent_remaining_ms": {
+              "p50": -6.464847999999998,
+              "p95": -6.415649,
+              "mean": -7.85677425
+            },
+            "incumbent_duration_ms": {
+              "p50": -0.038235999999997716,
+              "p95": -0.038235999999997716,
+              "mean": -0.10449599999999926
+            },
+            "incumbent_elapsed_ms": {
+              "p50": 6.625031,
+              "p95": 11.580057,
+              "mean": 7.75227825
+            }
+          }
+        }
+      },
+      "first_32": {
+        "baseline": {
+          "requests": 32,
+          "sent_during_execution": 22,
+          "with_later_execution": 0,
+          "queue_wait_ms": {
+            "p50": 35.780401,
+            "p95": 68.690012,
+            "mean": 26.74910275
+          },
+          "incumbent_remaining_ms": {
+            "p50": 35.429742,
+            "p95": 68.601025,
+            "mean": 26.45606246875
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.0
+          },
+          "outside_execution_ms": {
+            "p50": 0.300023,
+            "p95": 0.566968,
+            "mean": 0.29304028125
+          }
+        },
+        "candidate": {
+          "requests": 32,
+          "sent_during_execution": 23,
+          "with_later_execution": 0,
+          "queue_wait_ms": {
+            "p50": 29.279971,
+            "p95": 59.91879,
+            "mean": 23.969463625
+          },
+          "incumbent_remaining_ms": {
+            "p50": 29.048268,
+            "p95": 59.88189,
+            "mean": 23.7904441875
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.0
+          },
+          "outside_execution_ms": {
+            "p50": 0.18141,
+            "p95": 0.338683,
+            "mean": 0.1790194375
+          }
+        },
+        "paired_delta_ms": {
+          "queue_wait_ms": {
+            "p50": -6.493820000000003,
+            "p95": 0.14435099999999998,
+            "mean": -2.779639125
+          },
+          "incumbent_remaining_ms": {
+            "p50": -6.352905,
+            "p95": 0.0,
+            "mean": -2.66561828125
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.0
+          },
+          "outside_execution_ms": {
+            "p50": -0.10740999999999998,
+            "p95": 0.030149999999999982,
+            "mean": -0.11402084375
+          }
+        },
+        "incumbent_pairs": {
+          "both_during_execution": {
+            "requests": 22,
+            "incumbent_remaining_ms": {
+              "p50": -6.385004000000002,
+              "p95": -6.299909000000003,
+              "mean": -6.5905808181818175
+            },
+            "incumbent_duration_ms": {
+              "p50": -8.698640999999995,
+              "p95": -8.698640999999995,
+              "mean": -8.698640999999995
+            },
+            "incumbent_elapsed_ms": {
+              "p50": -2.312852000000003,
+              "p95": 0.020494000000000012,
+              "mean": -2.1080601818181823
+            }
+          },
+          "same_incumbent_shape": {
+            "requests": 0
+          }
+        }
+      },
+      "later_64": {
+        "baseline": {
+          "requests": 64,
+          "sent_during_execution": 64,
+          "with_later_execution": 0,
+          "queue_wait_ms": {
+            "p50": 21.986447,
+            "p95": 35.077272,
+            "mean": 23.4940814375
+          },
+          "incumbent_remaining_ms": {
+            "p50": 21.838503,
+            "p95": 34.973229,
+            "mean": 23.354727875000002
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.0
+          },
+          "outside_execution_ms": {
+            "p50": 0.137143,
+            "p95": 0.193299,
+            "mean": 0.1393535625
+          }
+        },
+        "candidate": {
+          "requests": 64,
+          "sent_during_execution": 64,
+          "with_later_execution": 0,
+          "queue_wait_ms": {
+            "p50": 24.003278,
+            "p95": 27.463732,
+            "mean": 22.307539546875
+          },
+          "incumbent_remaining_ms": {
+            "p50": 23.904428,
+            "p95": 27.371153,
+            "mean": 22.209249125
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.0
+          },
+          "outside_execution_ms": {
+            "p50": 0.099917,
+            "p95": 0.12594,
+            "mean": 0.098290421875
+          }
+        },
+        "paired_delta_ms": {
+          "queue_wait_ms": {
+            "p50": 5.822869000000001,
+            "p95": 7.693738,
+            "mean": -1.1865418906250003
+          },
+          "incumbent_remaining_ms": {
+            "p50": 5.803939999999997,
+            "p95": 7.730492,
+            "mean": -1.1454787500000003
+          },
+          "later_execution_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "mean": 0.0
+          },
+          "outside_execution_ms": {
+            "p50": -0.037024,
+            "p95": 0.0011489999999999972,
+            "mean": -0.041063140625
+          }
+        },
+        "incumbent_pairs": {
+          "both_during_execution": {
+            "requests": 64,
+            "incumbent_remaining_ms": {
+              "p50": 5.803939999999997,
+              "p95": 7.730492,
+              "mean": -1.1454787500000003
+            },
+            "incumbent_duration_ms": {
+              "p50": -0.22348699999999866,
+              "p95": -0.030515999999998655,
+              "mean": -0.27483971874999924
+            },
+            "incumbent_elapsed_ms": {
+              "p50": 6.306298,
+              "p95": 11.549391,
+              "mean": 0.87063903125
+            }
+          },
+          "same_incumbent_shape": {
+            "requests": 4,
+            "incumbent_remaining_ms": {
+              "p50": -6.464847999999998,
+              "p95": -6.415649,
+              "mean": -7.85677425
+            },
+            "incumbent_duration_ms": {
+              "p50": -0.038235999999997716,
+              "p95": -0.038235999999997716,
+              "mean": -0.10449599999999926
+            },
+            "incumbent_elapsed_ms": {
+              "p50": 6.625031,
+              "p95": 11.580057,
+              "mean": 7.75227825
+            }
+          }
+        }
+      }
+    }
+  }
+}
