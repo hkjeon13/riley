@@ -470,6 +470,14 @@ A100 6번에서 두 사례, 두 prefill 형상의 4개 대조군과 16개 교체
 
 두 사례의 마지막 입력 행에 대해 bias 이전의 BF16 투영값과 체크포인트의 K/V bias를 사용해 캐시 저장값을 독립 계산했다. 레이어 0, KV head 0에서 K의 RoPE 적용과 V의 bias 적용 결과가 기록된 페이지의 마지막 입력 슬롯과 각각 128/128개 일치했다. 두 사례 모두 직전 슬롯에서는 K 5/128개, V 0/128개만 일치했다. 이 대조는 추적된 두 마지막 입력 슬롯의 저장값을 확인한다. [KV 저장값 대조](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/final-slot-replay.json) · [재계산 도구](../../benchmarks/evidence/20261119-w4-layer-trace/tools/replay_final_kv_slot.py)
 
+#### 8K 고정 타일의 첫 KV 페이지와 미래 토큰
+
+앞서 기록한 두 실제 입력의 네 행에서 첫 페이지를 뺀 FP64 재계산의 변화는 RMS 0.000012–0.000029였다. 전체 페이지를 사용한 재계산과 관측 GPU 출력의 차이보다 약 5–16배 작았다. 네 행의 관측값만으로 첫 페이지 읽기 여부를 판정하기 어려워, Qwen2.5-7B와 같은 28 query head·4 KV head·128차원에서 페이지 읽기 여부가 출력에 크게 나타나는 입력을 만들었다. [실제 입력의 페이지별 오차](../../benchmarks/evidence/20261119-w4-layer-trace/kv-mask-audit/page-omission-sweep.json.gz)
+
+고정 타일의 KV 조각 크기를 512토큰으로 설정했다. 물리 블록을 섞고 K를 0으로 채워 정답을 causal 범위의 V 평균으로 계산했다. V의 한 차원에는 첫 페이지 전체를, 다른 차원에는 위치 512와 8,191을 표시했다. 각 표시값은 KV head마다 달라 잘못된 head 연결도 판정할 수 있다. 페이지 경계와 네 실제 관측 위치에서 고른 **prefill 10행·decode 10행**을 한 스텝에 넣었다. 다시 실행하려면 진단 패치를 `witness.patch`로 풀어 `dispatch.sha256`으로 확인한다. [진단 패치](../../benchmarks/evidence/20261123-w4-long-kv-visibility/witness.patch.gz)
+
+CUDA 12.4·SM80 빌드의 A100 6번 실측에서 **1,120개 원소**가 독립 평균 기준을 통과했다. 기댓값이 0인 미래 위치는 0이었고, 값이 있는 위치는 상대 오차 0.5% 이내였다. 같은 실행에서 기존 고정 타일 GPU 검사도 통과했다. 검증 소스 경로 712개의 해시를 대조한 뒤 시험용 패치를 전용 복사본에 적용했다. 종료 후 GPU 6·7번은 각각 기존 홀더의 20GiB 예약을 확인했다. 합성 입력으로 확인한 범위는 해당 고정 타일 설정의 가시성이다. 실제 장문 입력의 전체 레이어와 Hugging Face 토큰 차이의 원인은 계속 열려 있다. [시험 결과](../../benchmarks/evidence/20261123-w4-long-kv-visibility/test.log.gz) · [실행 절차](../../benchmarks/evidence/20261123-w4-long-kv-visibility/campaign.sh) · [원본 체크섬](../../benchmarks/evidence/20261123-w4-long-kv-visibility/result.sha256)
+
 ## GSM8K 전수 품질 대조
 
 네 모델에서 Riley와 vLLM이 각각 1,319문제를 오류 없이 완료했다. 같은 train·test 데이터 해시, 4-shot 입력, 온도 0, 출력 상한 256토큰, 동시 요청 32개, 마지막 숫자 채점 방식을 사용했다. 같은 모델의 두 엔진에서 모든 문제의 요청과 입력 토큰 ID 해시가 일치했다. 점수 차이는 원본 정답 수에서 계산했다. [데이터셋 매니페스트](../../benchmarks/evidence/20261119-w4-gsm8k/dataset.json) · [전체 실행 기록](../../benchmarks/evidence/20261119-w4-gsm8k/campaign-result.log)

@@ -1,0 +1,28 @@
+rustc 1.85.0 (4d91de4e4 2025-02-17)
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2024 NVIDIA Corporation
+Built on Thu_Mar_28_02:18:24_PDT_2024
+Cuda compilation tools, release 12.4, V12.4.131
+Build cuda_12.4.r12.4/compiler.34097967_0
+   Compiling typenum v1.20.1
+   Compiling serde_core v1.0.228
+   Compiling serde_json v1.0.145
+   Compiling riley-cuda v0.1.0 (/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-long-kv-20261123.lwY0nt2Y/src/crates/riley-cuda)
+   Compiling riley-core v0.1.0 (/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-long-kv-20261123.lwY0nt2Y/src/crates/riley-core)
+   Compiling cfg-if v1.0.4
+   Compiling hybrid-array v0.4.14
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+   Compiling block-buffer v0.12.1
+   Compiling crypto-common v0.2.2
+   Compiling cpufeatures v0.3.0
+   Compiling ryu v1.0.23
+   Compiling digest v0.11.3
+   Compiling sha2 v0.11.0
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/usr/local/cuda-12.4 nvcc=/usr/local/cuda-12.4/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=80 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/usr/local/cuda-12.4/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/usr/local/cuda-12.4/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/usr/local/cuda-12.4/targets/x86_64-linux/lib/stubs/libcuda.so
+    Finished `release` profile [optimized + debuginfo] target(s) in 40.24s
+  Executable tests/flashinfer_attention_gpu.rs (/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-long-kv-20261123.lwY0nt2Y/target/release/deps/flashinfer_attention_gpu-b62ce977c6fc5087)
