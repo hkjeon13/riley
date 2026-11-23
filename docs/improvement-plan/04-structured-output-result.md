@@ -28,6 +28,8 @@ Unicode 스칼라 1,112,064개를 각각 JSON 직렬화와 UTF-16 이스케이�
 
 지원 범위는 디코딩한 문자에 적용한다. 범위에 든 따옴표·역슬래시는 올바른 JSON 이스케이프로 생성한다. 지원하지 않는 제어·Unicode 패턴 이스케이프와 내림차순 범위·클래스 집합이 들어간 범위 끝점은 이름이 있는 오류로 거부한다. `\s`는 API의 단일 공백 범위를 유지한다. 부정 클래스의 `[^\s]`는 ECMAScript 공백 전체를 제외해야 하므로 거부한다. 응답 스키마와 지정 도구 인자 경로의 오류를 포함해 CPU 서버 테스트 107건을 통과했다. [API 계약](../api.md#structured-output) · [문법 회귀 검사](../../crates/riley-server/src/structured.rs) · [요청 경로 회귀 검사](../../crates/riley-server/src/chat.rs)
 
+`6d618f64e`의 CUDA 12.4 이미지는 GitHub와 A100 빌드에서 런타임 파일 21개가 일치했다. A100의 새 HTTP 검사 10건에서 응답 스키마와 지정 도구가 따옴표·역슬래시를 유효한 JSON으로 반환한 4건과, 지원하지 않는 패턴에 `400 invalid_schema`를 반환한 6건을 확인했다. GPU 6·7번에서 기본 API를 각각 40건씩 검증했다. GPU 6번의 장문 스키마·도구 호출 64건에서 C8·C32 결과는 C1과 일치했다. GPU 7번의 45초 혼합 부하는 정상 완료 338건, 의도적 연결 종료 21건이었다. 양쪽 종료 자원은 모두 회수됐고 각 GPU의 기존 20GiB 예약이 복귀했다. [A100 검산](../../benchmarks/evidence/20261123-w4-pattern-classes/verified.json) · [CUDA 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/45148470780)
+
 ## 현행 배포 이미지의 장문 채팅 검증
 
 Qwen2.5-7B-Instruct의 고정 입력에서 255·1,024·7,836·7,917토큰 사례를 선택했다. 각 입력을 채팅 메시지로 보내 `type`과 `enum`의 교집합 및 정수 `const`를 포함한 JSON 스키마를 검사했다. 같은 스키마를 이름이 지정된 도구의 인자로도 적용했다. 서버가 붙인 채팅 템플릿까지 포함한 입력 ID와 생성 ID·텍스트·도구 인자·종료 사유·사용량을 대조했다. 스키마와 도구 인자는 독립 Draft 2020-12 검증기로 검사했다. [고정 입력](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [검사기](../../benchmarks/live/structured_holdout_check.py)

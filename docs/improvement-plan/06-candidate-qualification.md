@@ -17,6 +17,7 @@
 | Prefix cache 메트릭 이미지의 jemalloc 파생 시험 | `3951d90c8`의 실행 파일 | 이미지 ID `a2f0d91fc749`. 두 30분 합성 부하의 정밀 RSS 변화는 캐시 끔 −924KiB, 켬 −820KiB였다. 지연·메트릭·자원 회수와 장문 232건·스키마 및 도구 64건의 출력 대조 통과. 기준 이미지와 스키마·도구 기준 응답 16개 일치. [현행 파생 이미지 대조](05-mixed-soak-result.md#같은-배포-패키지의-jemalloc-대조) |
 | Pattern 점 연산자 수정의 배포 이미지 | `9373ea412` | GitHub와 A100 런타임 파일 21개 일치. A100 이미지 `76767e33ce49`의 API 40건씩, 장문 스키마·도구 64건, 45초 혼합 부하와 자원 회수 검증. 두 30분 부하에서 정밀 RSS는 캐시 끔 +576KiB, 켬 +584KiB로 증가해 RSS 기준에 미달했다. [수정과 검증](04-structured-output-result.md#pattern-점-연산자의-줄바꿈-처리) · [같은 바이너리 30분 대조](05-mixed-soak-result.md#pattern-수정-이미지의-기준과-jemalloc-30분-대조) |
 | Pattern 수정 이미지의 jemalloc 파생 시험 | `9373ea412`의 실행 파일 | 파생 이미지 `c7fcb8e274ec`의 두 30분 합성 부하에서 정밀 RSS 변화는 캐시 끔 −780KiB, 켬 −676KiB였다. 지연·메트릭·자원 회수와 장문 232건, 스키마·도구 64건의 검사를 통과했다. [두 캐시 모드 결과](05-mixed-soak-result.md#pattern-수정-이미지의-jemalloc-30분-재검증) |
+| Pattern 문자 클래스 수정의 배포 이미지 | `6d618f64e` | GitHub와 A100 런타임 파일 21개 일치. A100 이미지 `03bbabfb19ca`의 문자 클래스 HTTP 10건, 두 GPU의 API 40건씩, 장문 스키마·도구 64건 및 45초 혼합 부하를 통과했다. 이 바이너리의 W5 30분 대조와 운영 판정은 남아 있다. [문자 클래스 검증](04-structured-output-result.md#pattern-문자-클래스의-json-인코딩) |
 
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)
 
