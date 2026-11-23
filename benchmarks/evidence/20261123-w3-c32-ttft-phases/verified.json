@@ -1,0 +1,397 @@
+{
+  "source": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-c32-arrival-phase-gpu-20261123.0e8z12cJ",
+  "result_manifest_sha256": {
+    "original": "81a874d787c117ce20eb93baf0e0fb9f61ab9c0027d0ea0135b37d8a011b78be",
+    "late12": "9109f0f65df21c37d5ca1b1fadfacb6058ccf5d6c95abcb491d3c228ac0e9c23"
+  },
+  "comparisons": {
+    "original": {
+      "6": {
+        "control": {
+          "matched_requests": 96,
+          "p50": {
+            "baseline_ms": 73.16736876964569,
+            "candidate_ms": 73.70330393314362,
+            "difference_ms": 0.5359351634979248,
+            "baseline_rank_request": 92,
+            "candidate_rank_request": 76,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": -0.002212822437286377,
+              "backend_submit": 1.2061240000000026,
+              "admitted_to_first_visible": 0.040334000000001424,
+              "other_after_write": 0.11174558991622519
+            },
+            "baseline_rank_shift_ms": -0.8200556039810181,
+            "paired_request_http_queue_ms": [
+              0.019657,
+              0.01125
+            ],
+            "paired_request_other_after_write_ms": [
+              0.7986092099266031,
+              0.9103547998428283
+            ]
+          },
+          "p95": {
+            "baseline_ms": 342.44177490472794,
+            "candidate_ms": 321.2631046772003,
+            "difference_ms": -21.17867022752762,
+            "baseline_rank_request": 7,
+            "candidate_rank_request": 30,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": 0.00038743019104003906,
+              "backend_submit": 15.138511999999999,
+              "admitted_to_first_visible": -8.790706,
+              "other_after_write": 10.674304521793374
+            },
+            "baseline_rank_shift_ms": -38.201168179512024,
+            "paired_request_http_queue_ms": [
+              0.146702,
+              0.09639
+            ],
+            "paired_request_other_after_write_ms": [
+              0.17591160206603718,
+              10.850216123859411
+            ]
+          }
+        },
+        "admission": {
+          "matched_requests": 96,
+          "p50": {
+            "baseline_ms": 66.00528955459595,
+            "candidate_ms": 74.42627847194672,
+            "difference_ms": 8.420988917350769,
+            "baseline_rank_request": 79,
+            "candidate_rank_request": 86,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": -0.02004951238632202,
+              "backend_submit": 8.629797999999997,
+              "admitted_to_first_visible": 0.10366399999999487,
+              "other_after_write": -0.01702775965880221
+            },
+            "baseline_rank_shift_ms": -0.27539581060409546,
+            "paired_request_http_queue_ms": [
+              0.013066,
+              0.018261
+            ],
+            "paired_request_other_after_write_ms": [
+              0.662816519718163,
+              0.6457887600593608
+            ]
+          },
+          "p95": {
+            "baseline_ms": 353.5439595580101,
+            "candidate_ms": 321.4517831802368,
+            "difference_ms": -32.092176377773285,
+            "baseline_rank_request": 8,
+            "candidate_rank_request": 20,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": -0.0012442469596862793,
+              "backend_submit": -0.33684500000000006,
+              "admitted_to_first_visible": -64.946575,
+              "other_after_write": -0.07522621400835305
+            },
+            "baseline_rank_shift_ms": 33.26771408319473,
+            "paired_request_http_queue_ms": [
+              0.108439,
+              0.155632
+            ],
+            "paired_request_other_after_write_ms": [
+              0.6089908087158733,
+              0.5337645947075202
+            ]
+          }
+        }
+      },
+      "7": {
+        "control": {
+          "matched_requests": 96,
+          "p50": {
+            "baseline_ms": 75.7388025522232,
+            "candidate_ms": 83.79354327917099,
+            "difference_ms": 8.054740726947784,
+            "baseline_rank_request": 71,
+            "candidate_rank_request": 93,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": -0.01385807991027832,
+              "backend_submit": 5.315704,
+              "admitted_to_first_visible": 0.19604899999998793,
+              "other_after_write": 0.20680602671815507
+            },
+            "baseline_rank_shift_ms": 2.350039780139923,
+            "paired_request_http_queue_ms": [
+              0.010231,
+              0.013117
+            ],
+            "paired_request_other_after_write_ms": [
+              0.6953525748519809,
+              0.9021586015701359
+            ]
+          },
+          "p95": {
+            "baseline_ms": 343.4174209833145,
+            "candidate_ms": 453.9814442396164,
+            "difference_ms": 110.56402325630188,
+            "baseline_rank_request": 7,
+            "candidate_rank_request": 28,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": -0.0027641654014587402,
+              "backend_submit": -34.543758,
+              "admitted_to_first_visible": -22.90078900000003,
+              "other_after_write": 206.7589281821938
+            },
+            "baseline_rank_shift_ms": -38.74759376049042,
+            "paired_request_http_queue_ms": [
+              0.185655,
+              0.203887
+            ],
+            "paired_request_other_after_write_ms": [
+              0.48745072653196075,
+              207.24637890872577
+            ]
+          }
+        },
+        "admission": {
+          "matched_requests": 96,
+          "p50": {
+            "baseline_ms": 70.33264636993408,
+            "candidate_ms": 66.78357720375061,
+            "difference_ms": -3.5490691661834717,
+            "baseline_rank_request": 60,
+            "candidate_rank_request": 88,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": -0.004462897777557373,
+              "backend_submit": 14.168923999999999,
+              "admitted_to_first_visible": -1.1026140000000026,
+              "other_after_write": -0.4871818538284316
+            },
+            "baseline_rank_shift_ms": -16.123734414577484,
+            "paired_request_http_queue_ms": [
+              0.007054,
+              0.007673
+            ],
+            "paired_request_other_after_write_ms": [
+              1.070700507434843,
+              0.5835186536064114
+            ]
+          },
+          "p95": {
+            "baseline_ms": 343.3860316872597,
+            "candidate_ms": 318.1495815515518,
+            "difference_ms": -25.236450135707855,
+            "baseline_rank_request": 19,
+            "candidate_rank_request": 19,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": -0.010751187801361084,
+              "backend_submit": 16.453964999999997,
+              "admitted_to_first_visible": -42.165317000000016,
+              "other_after_write": 0.48565305209348253
+            },
+            "baseline_rank_shift_ms": 0.0,
+            "paired_request_http_queue_ms": [
+              0.177172,
+              0.064835
+            ],
+            "paired_request_other_after_write_ms": [
+              0.17270220505145062,
+              0.6583552571449331
+            ]
+          }
+        }
+      }
+    },
+    "late12": {
+      "6": {
+        "control": {
+          "matched_requests": 96,
+          "p50": {
+            "baseline_ms": 73.55303317308426,
+            "candidate_ms": 66.41757488250732,
+            "difference_ms": -7.135458290576935,
+            "baseline_rank_request": 90,
+            "candidate_rank_request": 79,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": -0.046506524085998535,
+              "backend_submit": -6.585235000000001,
+              "admitted_to_first_visible": -3.399999999942338e-05,
+              "other_after_write": -1.2078669410285912
+            },
+            "baseline_rank_shift_ms": 0.7041841745376587,
+            "paired_request_http_queue_ms": [
+              0.013604,
+              0.018698
+            ],
+            "paired_request_other_after_write_ms": [
+              2.0247519830932603,
+              0.8168850420646692
+            ]
+          },
+          "p95": {
+            "baseline_ms": 344.9086472392082,
+            "candidate_ms": 322.9760602116585,
+            "difference_ms": -21.932587027549744,
+            "baseline_rank_request": 15,
+            "candidate_rank_request": 20,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": -0.007659196853637695,
+              "backend_submit": -34.152614,
+              "admitted_to_first_visible": 126.47528700000001,
+              "other_after_write": -0.19665370096973334
+            },
+            "baseline_rank_shift_ms": -114.05094712972641,
+            "paired_request_http_queue_ms": [
+              0.089884,
+              0.080534
+            ],
+            "paired_request_other_after_write_ms": [
+              0.913113141857167,
+              0.7164594408874336
+            ]
+          }
+        },
+        "admission": {
+          "matched_requests": 96,
+          "p50": {
+            "baseline_ms": 74.31436330080032,
+            "candidate_ms": 71.7175304889679,
+            "difference_ms": -2.596832811832428,
+            "baseline_rank_request": 85,
+            "candidate_rank_request": 85,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": -0.0029355287551879883,
+              "backend_submit": -2.8669830000000047,
+              "admitted_to_first_visible": 0.11766000000000076,
+              "other_after_write": 0.15542571692276397
+            },
+            "baseline_rank_shift_ms": 0.0,
+            "paired_request_http_queue_ms": [
+              0.011778,
+              0.010734
+            ],
+            "paired_request_other_after_write_ms": [
+              0.8663975940322857,
+              1.0218233109550496
+            ]
+          },
+          "p95": {
+            "baseline_ms": 355.7722344994545,
+            "candidate_ms": 328.90647649765015,
+            "difference_ms": -26.865758001804352,
+            "baseline_rank_request": 8,
+            "candidate_rank_request": 19,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": 0.05605071783065796,
+              "backend_submit": 5.6429390000000055,
+              "admitted_to_first_visible": -31.918858,
+              "other_after_write": -0.04118569722743359
+            },
+            "baseline_rank_shift_ms": -0.6047040224075317,
+            "paired_request_http_queue_ms": [
+              0.083673,
+              0.058922
+            ],
+            "paired_request_other_after_write_ms": [
+              0.7794053653220772,
+              0.7382196680946436
+            ]
+          }
+        }
+      },
+      "7": {
+        "control": {
+          "matched_requests": 96,
+          "p50": {
+            "baseline_ms": 57.229556143283844,
+            "candidate_ms": 72.5419819355011,
+            "difference_ms": 15.312425792217255,
+            "baseline_rank_request": 82,
+            "candidate_rank_request": 51,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": -0.019513070583343506,
+              "backend_submit": 19.366655,
+              "admitted_to_first_visible": -0.26484299999999905,
+              "other_after_write": 0.0021695545082067724
+            },
+            "baseline_rank_shift_ms": -3.772042691707611,
+            "paired_request_http_queue_ms": [
+              0.020798,
+              0.016604
+            ],
+            "paired_request_other_after_write_ms": [
+              0.49471305796814136,
+              0.49688261247634813
+            ]
+          },
+          "p95": {
+            "baseline_ms": 343.1325927376747,
+            "candidate_ms": 315.76476991176605,
+            "difference_ms": -27.36782282590866,
+            "baseline_rank_request": 14,
+            "candidate_rank_request": 20,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": 0.0013262033462524414,
+              "backend_submit": 14.522311000000002,
+              "admitted_to_first_visible": -41.23196299999998,
+              "other_after_write": -0.26576364702989963
+            },
+            "baseline_rank_shift_ms": -0.3937333822250366,
+            "paired_request_http_queue_ms": [
+              0.105742,
+              0.084629
+            ],
+            "paired_request_other_after_write_ms": [
+              0.956157943275457,
+              0.6903942962455574
+            ]
+          }
+        },
+        "admission": {
+          "matched_requests": 96,
+          "p50": {
+            "baseline_ms": 73.8639160990715,
+            "candidate_ms": 53.20431292057037,
+            "difference_ms": -20.65960317850113,
+            "baseline_rank_request": 58,
+            "candidate_rank_request": 81,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": 0.0030174851417541504,
+              "backend_submit": -3.716973000000001,
+              "admitted_to_first_visible": 0.2267529999999951,
+              "other_after_write": 0.19432156250000787
+            },
+            "baseline_rank_shift_ms": -17.366722226142883,
+            "paired_request_http_queue_ms": [
+              0.011307,
+              0.01524
+            ],
+            "paired_request_other_after_write_ms": [
+              0.9566344136695832,
+              1.150955976169591
+            ]
+          },
+          "p95": {
+            "baseline_ms": 364.0872463583946,
+            "candidate_ms": 317.25413352251053,
+            "difference_ms": -46.833112835884094,
+            "baseline_rank_request": 20,
+            "candidate_rank_request": 17,
+            "paired_request_phase_deltas_ms": {
+              "client_before_write": -0.002123415470123291,
+              "backend_submit": -30.832086,
+              "admitted_to_first_visible": 64.30734100000001,
+              "other_after_write": -108.79948489606858
+            },
+            "baseline_rank_shift_ms": 28.493240475654602,
+            "paired_request_http_queue_ms": [
+              0.064145,
+              0.106675
+            ],
+            "paired_request_other_after_write_ms": [
+              109.3727462680855,
+              0.5732613720169297
+            ]
+          }
+        }
+      }
+    }
+  }
+}
