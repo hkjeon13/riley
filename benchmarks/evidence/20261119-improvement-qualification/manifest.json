@@ -280,6 +280,154 @@
     },
     "gpu_inference": "pending"
   },
+  "distribution_with_parallel_shard_verification": {
+    "source_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+    "matching_distribution_input_git_objects": {
+      "Cargo.toml": "e75f6ce3a2ad13911f1a91fc2b982a410f9d32f2",
+      "Cargo.lock": "afa446f5b2f1ad1ba2070de2d16343cf7a7a0a70",
+      "rust-toolchain.toml": "67c827cf973f78b64274b37b54c5a99cff5ca055",
+      "crates": "4ab72c1a08422cb0446e3cca8732ace264c0b1c6",
+      "kernels": "7c3c0dfd2d7d04b694c8bd77c4e323081199f46f",
+      "third_party": "fcda977aec23d650259a7d1104d339f815d30e07",
+      "tools/riley-checkpoint": "375dc077ae7d32ba759b339d28f1ef8c370642b5",
+      ".dockerignore": "032839f0b4e1ab479f5a1069d69937ade5e44f7e",
+      ".github/workflows/distribution-image.yml": "8a4587aa0fccb0304fdc1c06333b4f138a503dab",
+      "deploy/docker": "4a585fa6e013d816c743760807ad422d270b404e",
+      "ci/check_distribution_image.py": "536a00bedb0675f19bf038395bf46e1996b82053",
+      "ci/check_serving_source_contract.py": "26abce96ca8eb573299613464e26bae94529a8ce",
+      "ci/serving-source-contract.json": "205b02603ad57d850071cb212c88fce965edd148",
+      "LICENSE": "1b4cfd2f88277e627300ec3a92f5c310807d125e"
+    },
+    "differing_runtime_files": [],
+    "a100_source_inventory": {
+      "source_objects_sha256": "9ffcd84d03a9bbead99bc983ef632f5c2497ab222d4eb79785e4b5251919ff65",
+      "source_object_count": 1037
+    },
+    "evidence": {
+      "hosted_cpu": {
+        "path": "benchmarks/evidence/20261124-w5-shard-package/hosted/report.json",
+        "sha256": "97f8fa3f36f5f6e77527ec2b95678fcd4ecd8de25204b31562acab85a2799a05"
+      },
+      "hosted_runtime": {
+        "path": "benchmarks/evidence/20261124-w5-shard-package/hosted/runtime.sha256",
+        "sha256": "a260a7af397840f782497aed1423b0fa7088c0437836fe3f83cb44a31692ef9f"
+      },
+      "a100_cpu": {
+        "path": "benchmarks/evidence/20261124-w5-shard-package/a100/cpu-evidence/report.json",
+        "sha256": "bc10cbc7ffdc0164690f1e7ab1401cf26c50476f556ee7286b69b0e4dc382ae7"
+      },
+      "a100_runtime": {
+        "path": "benchmarks/evidence/20261124-w5-shard-package/a100/cpu-evidence/runtime.sha256",
+        "sha256": "8d569b7e68706236b1c4852a7a969ece9f7d508f482d43e30783c8f696c1a6b9"
+      },
+      "a100_source_objects": {
+        "path": "benchmarks/evidence/20261124-w5-shard-package/source-objects.tsv.gz",
+        "sha256": "9e8a8a57bb75f10c1e3c1d71f732a253251bb51176c8082371c29c6ebc087a56"
+      },
+      "a100_structured": {
+        "path": "benchmarks/evidence/20261124-w5-shard-package/a100/structured/report.json",
+        "sha256": "e11f53da2b42021a8d7221757e3c4d56457150e47a4d121bf370be8580745bd0"
+      },
+      "a100_serving": {
+        "path": "benchmarks/evidence/20261124-w5-shard-package/a100/smoke/report.json",
+        "sha256": "b014ee6252900029be7817279c0ff1a87e417973de4ed1b01bec5941b525d525"
+      },
+      "a100_verified": {
+        "path": "benchmarks/evidence/20261124-w5-shard-package/verified.json",
+        "sha256": "c894a2f5621ddfb52e3a287e7194d8424ad88e638c6d826363dbe52efc5e50a3"
+      },
+      "reproduction": [
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/a100/campaign.exit",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/a100/campaign.log",
+          "sha256": "f0f10684ca71d044e36235ef8c1dd82f2e2eb1d2e18cede766428d43c88333fa"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/a100/gpu6-after.json",
+          "sha256": "4e7efe8669b4dd559483439daef01a716af28a1df4b17f4ac87016e81bd092ca"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/a100/gpu6-before.json",
+          "sha256": "e83cdea1eb175e2fb10f0510deb3121b1c4fe9e847d05aab289ce3e663d49dc6"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/a100/gpu7-after.json",
+          "sha256": "63e94a5d78d97949046debb4aafe36e27a5f70367d32becde005a9249909c1a8"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/a100/gpu7-before.json",
+          "sha256": "4b72e4ced63596ef4d62f9781a218c81708ea6a762ce57f3ea367908d3256b41"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/a100/image.id",
+          "sha256": "b35d51e0fb522eda517ac84dde241a92b02eba1e500d8b6af5d1b50e9856b00a"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/a100/result.sha256",
+          "sha256": "e0817176330af2fd0de977fc82d54d976adf1348650ef17dc0cc78afa390d841"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/a100/smoke/api.json",
+          "sha256": "a93bd799be1787ab7e2530f14b5980d73ae729dac0f8602ba146b6ebf2b175d8"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/a100/smoke/shutdown.json",
+          "sha256": "165c3563d7594cc5557c6bb060d9f61a048ceae559eaa5b44b2ea64cf4ccba61"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/a100/smoke/smoke.json",
+          "sha256": "118af7563a3f1d8565fef571877629bd829e398545dbeeb736dc94eb06a624c4"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/a100/source-revision.txt",
+          "sha256": "3212b190e0e5c5f9b1466daa771dcd0757429b08a1871a7f4b9251cfb919c51d"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/a100/structured/api.json",
+          "sha256": "88925084108b10e91ed6f2044373ea8a87a9dd77bbc9659a5bc42fe94122eeac"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/a100/structured/shutdown.json",
+          "sha256": "a8b0e460531f3a7e98c1c81031b9e99eaf7def5c726adfd6a0f0888bcb4e0d3b"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/build_inputs.py",
+          "sha256": "3a5326d0f283fd3dde516dcf380a5ecd4707ab00f7f67cc796f73f384902682b"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/campaign.sh",
+          "sha256": "a08b5f5e7c6466113e7c0559a7822d7a9cb72c045adeb518e0711914cb6de986"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/dispatch.sha256",
+          "sha256": "2191472d1263e1f323eaa5998e621b085b00a62a6c304a369c07eb55e5979a9f"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/fetch-a100.sh",
+          "sha256": "abc1227815481c87cc5da016104c551f94da8023544425b45a1261226d4d6a4f"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/hosted/archive-receipt.json",
+          "sha256": "aa6ed3842b0e6432b10ee579281a26ee018a26f6e8c134a41457ba6b43c19fed"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/hosted/source-archive.sha256",
+          "sha256": "2c63786886ef6dda21c63a85cbff4d31332ca5df952dc608a10dafcca405eeee"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/source-revision.txt",
+          "sha256": "3212b190e0e5c5f9b1466daa771dcd0757429b08a1871a7f4b9251cfb919c51d"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-shard-package/verify-package.py",
+          "sha256": "a319afacc76f8b328ccb25892dc8c42ca6aa54324066e5caa1e1d296d191192f"
+        }
+      ]
+    }
+  },
   "other_evidence": {
     "coder14_parallel_shard_readiness": [
       {

@@ -1,0 +1,22 @@
+campaign.sh: OK
+build_inputs.py: OK
+source-objects.tsv.gz: OK
+source-revision.txt: OK
+campaign.sh: OK
+overlap.patch: OK
+baseline-inputs.sha256: OK
+candidate-inputs.sha256: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-schema-ids-20261123.ZsUYnqkm/source.tar: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w1-dist-d3d8fe6e5.YnZWdh5l/src/benchmarks/evidence/20261119-w4-holdout/holdout.json.gz: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w1-dist-d3d8fe6e5.YnZWdh5l/model/riley-checkpoint.json: OK
+crates/riley-model/src/artifact.rs: OK
+crates/riley-model/src/checkpoint.rs: OK
+crates/riley-model/tests/checkpoint_loading.rs: OK
+Verified 1037 committed input blobs at 0511b9280f62c3ee87c7a1344444423d8b4623c4
+serving source contract passed (source pins only; no GPU qualification)
+BUILD 2026-11-23T16:56:42Z
+CPU_CHECK 2026-11-23T17:02:07Z
+START structured gpu6 2026-11-23T17:02:10Z
+START smoke gpu7 2026-11-23T17:02:10Z
+END structured gpu6 2026-11-23T17:05:47Z exit=0
+END smoke gpu7 2026-11-23T17:06:07Z exit=0

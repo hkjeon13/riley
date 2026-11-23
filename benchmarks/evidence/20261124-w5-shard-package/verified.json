@@ -1,0 +1,65 @@
+{
+  "status": "verified",
+  "source_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+  "matching_runtime_files": 21,
+  "hosted_image": "sha256:68803a6dd8e0845ba30e4295f255d51d5d6bfed15f66e32f0c80b8e7442079c9",
+  "a100_image": "sha256:1729f15a677422d552b9a3fd2352dfeb08dd4cccd3558680a016058d27191098",
+  "riley_binary_sha256": "8d4f8455bc0b9cccf8df3ee2feb2c606ffe2cf02dbf4bcdae6dcc2b033577e4b",
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "a100_source_archive_sha256": "e6b5b72d03baada23554c0a08d32b7183742b2fc6484e640006c88127a0e0da6",
+  "hosted_source_archive_sha256": "36c3f113281fcb68a1ddb82ccab96d9f1ca81d302be4304d81686c4e4fbd5137",
+  "api_checks_per_gpu": 40,
+  "structured_modes": {
+    "c1": {
+      "requests": 16,
+      "observed_peak_active": 1
+    },
+    "c8": {
+      "requests": 16,
+      "exact_matches": 16,
+      "observed_peak_active": 8
+    },
+    "c32": {
+      "requests": 32,
+      "exact_matches": 32,
+      "observed_peak_active": 31
+    }
+  },
+  "smoke_counts": {
+    "plain": {
+      "completed": 202
+    },
+    "schema": {
+      "completed": 42,
+      "stop": 42
+    },
+    "logprobs": {
+      "completed": 23
+    },
+    "tools": {
+      "completed": 23,
+      "tool_calls": 23
+    },
+    "long": {
+      "completed": 30
+    },
+    "reason": {
+      "completed": 18
+    },
+    "cancel": {
+      "disconnected": 21
+    }
+  },
+  "reservations": {
+    "6": {
+      "pid": 2680326,
+      "start_ticks": "6365879881",
+      "allocation_bytes": 21474836480
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "allocation_bytes": 21474836480
+    }
+  }
+}

@@ -186,7 +186,7 @@ def check_prefix_metrics_package(root, candidate):
         raise ValueError("the recovery drill requires a verified allocator experiment")
 
 
-def check_pattern_fix_stock(root, candidate):
+def check_structured_serving_package(root, candidate):
     parent, smoke, runtime_files = check_package_records(root, candidate)
     evidence = candidate["evidence"]
     structured, verified = (
@@ -202,16 +202,16 @@ def check_pattern_fix_stock(root, candidate):
             or any(structured[key] != smoke[key] for key in scopes)
             or verified["source_revision"] != smoke["source_revision"]
             or verified["riley_binary_sha256"] != smoke["riley_binary_sha256"]):
-        raise ValueError("pattern-fix GPU checks must use the reproduced package and checkpoint")
+        raise ValueError("structured serving checks must use the reproduced package and checkpoint")
     if any(row["status"] != "passed" or row["api_checks"] != 40 or row["shutdown_exit"] != 0
            or row["tool_checks_enabled"] is not True
            for row in (structured, smoke)):
-        raise ValueError("pattern-fix package must pass the two GPU API and shutdown checks")
+        raise ValueError("structured serving package must pass the two GPU API and shutdown checks")
     mixed = smoke["serving_smoke"]
     if (mixed["status"] != "passed" or (mixed["seconds"], mixed["rate"]) != (45, 8)
             or mixed["failed_checks"] or not mixed["checks"] or not all(mixed["checks"].values())
             or smoke["prefix_cache_metrics"]["status"] != "passed"):
-        raise ValueError("pattern-fix package must pass the 45-second GPU mixed load")
+        raise ValueError("structured serving package must pass the 45-second GPU mixed load")
     suites = structured["accuracy_suites"]
     holdout = suites["structured_holdout"]
     counts = {"c1": 16, "c8": 16, "c32": 32}
@@ -219,13 +219,13 @@ def check_pattern_fix_stock(root, candidate):
             or holdout["context_rejection"]["http_status"] != 400
             or {name: row["requests"] for name, row in holdout["modes"].items()} != counts
             or any(holdout["modes"][name]["exact_matches"] != counts[name] for name in ("c8", "c32"))):
-        raise ValueError("pattern-fix package lacks the 64-request structured holdout")
+        raise ValueError("structured serving package lacks the 64-request holdout")
     if len(holdout["cases"]) != 16:
-        raise ValueError("pattern-fix package lacks the 16 structured reference responses")
+        raise ValueError("structured serving package lacks the 16 structured reference responses")
     reservations = verified["reservations"]
     if set(reservations) != {"6", "7"} or any(row["allocation_bytes"] != 20 * 2**30
                                               for row in reservations.values()):
-        raise ValueError("pattern-fix package lacks the two 20 GiB reservation receipts")
+        raise ValueError("structured serving package lacks the two 20 GiB reservation receipts")
     stock = {
         **{key: smoke[key] for key in ("source_revision", "riley_binary_sha256", "checkpoint_sha256")},
         "reservations": {gpu: {"pid": row["pid"], "start_ticks": row["start_ticks"], "gib": 20}
@@ -236,7 +236,7 @@ def check_pattern_fix_stock(root, candidate):
 
 
 def check_pattern_fix_package(root, candidate):
-    parent, smoke, stock = check_pattern_fix_stock(root, candidate)
+    parent, smoke, stock = check_structured_serving_package(root, candidate)
     if candidate["allocator_experiment"]["matched_structured_cases"] != 16:
         raise ValueError("pattern-fix allocator must preserve all 16 structured reference responses")
     allocator = check_prefix_metrics_allocator(root, candidate, parent, stock)
@@ -974,7 +974,7 @@ def main():
             else:
                 if "stock_soak_comparison" in character_classes or "recovery_drill" in character_classes:
                     raise ValueError("character-class comparison or recovery requires an allocator experiment")
-                check_pattern_fix_stock(root, character_classes)
+                check_structured_serving_package(root, character_classes)
         schema_references = manifest.get("distribution_with_schema_reference_fix")
         if schema_references is not None:
             schema_inputs = check_distribution_inputs(root, schema_references)
@@ -989,7 +989,13 @@ def main():
             else:
                 if "stock_soak_comparison" in schema_references or "recovery_drill" in schema_references:
                     raise ValueError("schema reference comparison or recovery requires an allocator experiment")
-                check_pattern_fix_stock(root, schema_references)
+                check_structured_serving_package(root, schema_references)
+        parallel_shards = manifest.get("distribution_with_parallel_shard_verification")
+        if parallel_shards is not None:
+            earlier.append(latest)
+            latest = parallel_shards
+            latest_inputs = check_distribution_inputs(root, latest)
+            check_structured_serving_package(root, latest)
         allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],
                                                   manifest["current_distribution_candidate"])
         serving_models = check_distribution_serving(root, manifest["current_distribution_candidate"])

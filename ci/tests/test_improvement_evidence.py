@@ -138,7 +138,7 @@ class PackageFollowUpTests(unittest.TestCase):
     def test_character_class_http_probes_require_an_escaped_value(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
         candidate = manifest["distribution_with_character_class_fix"]
-        checker.check_pattern_fix_stock(ROOT, candidate)
+        checker.check_structured_serving_package(ROOT, candidate)
         checker.check_pattern_class_probes(ROOT, candidate)
 
         entries = candidate["evidence"]
