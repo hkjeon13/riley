@@ -6,6 +6,8 @@
 
 같은 패키지에서 1,024행 옵션으로 Coder-14B를 실행해 vLLM과 비교했다. 짧은 C32 TPOT p50은 vLLM의 1.043–1.047배, 두 RAG C8 seed의 첫 토큰 p95는 1.434–1.672배로 두 GPU에서 각각 목표를 넘었다. [W3 패키지 교차 비교](03-long-context-result.md#배포-이미지의-coder-14b-교차-비교)
 
+요청별 prefill 조각을 512행으로 낮춘 후보는 832쌍의 출력을 보존했으나 네 RAG C8 비교에서 첫 토큰 p95가 2.74–14.39% 늘어 미채택했다. [W3 조각 크기 대조](03-long-context-result.md#coder-14b-요청별-prefill-조각-크기)
+
 | 작업 | 현재 근거와 다음 검증 |
 |---|---|
 | W1 검증·릴리스 | Linux Production CPU, 고정 RC3 테스트 34건, CUDA 12.8 네이티브 빌드·Clippy와 CUDA 12.4 이미지 CPU 검증을 통과했다. 현재 배포 입력과 이미지 원본의 해시를 대조했다. [W1 결과](01-validation-result.md) |

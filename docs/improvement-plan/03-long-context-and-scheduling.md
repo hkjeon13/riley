@@ -165,6 +165,8 @@ python3 benchmarks/live/compare.py \
 
 `c5ec7b391` 배포 이미지에서 앞선 1,024행 옵션을 다시 적용해 A100 6·7번에서 vLLM과 교차 비교했다. Coder-14B 짧은 C32의 TPOT p50은 vLLM의 1.043–1.047배, RAG C8 TTFT p95는 1.434–1.672배였다. RAG C8 첫 토큰 지연의 추가 개선을 두 seed에서 확인하고, 짧은 C32 TPOT과 처리량을 함께 대조한다. [패키지 교차 비교](03-long-context-result.md#배포-이미지의-coder-14b-교차-비교)
 
+같은 패키지에서 배치 한도는 고정하고 요청당 prefill 조각을 512행으로 낮췄다. 832쌍의 출력은 일치했으나 두 GPU와 두 RAG C8 seed 모두에서 첫 토큰 p95가 2.74–14.39% 늘었다. 네 비교 모두 커밋된 GPU 시간도 증가해 이 설정을 미채택했다. [요청당 prefill 조각 대조](03-long-context-result.md#coder-14b-요청별-prefill-조각-크기)
+
 ## 8. 다른 작업에 넘길 결과
 
 W1에는 새 측정·판정 필드를, W4에는 chunk·schedule의 정확성 경계를, W5에는 권장 프로파일·지원 범위·트래픽 시나리오를 넘긴다. 최종 설명은 모델·prompt 길이·동시성·부하·설정·기준 후보를 연결한다.

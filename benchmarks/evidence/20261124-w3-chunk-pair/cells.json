@@ -1,0 +1,69 @@
+{
+  "closed-c32": {
+    "prompt_words": [
+      30
+    ],
+    "max_tokens": 64,
+    "concurrency": 32,
+    "requests": 192,
+    "warmup": 32,
+    "seed": 1
+  },
+  "rag-c1": {
+    "prompt_words": [
+      1500,
+      3000
+    ],
+    "max_tokens": 128,
+    "concurrency": 1,
+    "requests": 16,
+    "warmup": 4,
+    "seed": 1
+  },
+  "rag-c8-s1": {
+    "prompt_words": [
+      1500,
+      3000
+    ],
+    "max_tokens": 128,
+    "concurrency": 8,
+    "requests": 64,
+    "warmup": 8,
+    "seed": 1
+  },
+  "rag-c8-s2": {
+    "prompt_words": [
+      1500,
+      3000
+    ],
+    "max_tokens": 128,
+    "concurrency": 8,
+    "requests": 64,
+    "warmup": 8,
+    "seed": 2
+  },
+  "wave-sync": {
+    "prompt_words": [
+      1500,
+      3000
+    ],
+    "max_tokens": 128,
+    "concurrency": 8,
+    "requests": 40,
+    "warmup": 8,
+    "seed": 1,
+    "stagger_ms": 0
+  },
+  "wave-50ms": {
+    "prompt_words": [
+      1500,
+      3000
+    ],
+    "max_tokens": 128,
+    "concurrency": 8,
+    "requests": 40,
+    "warmup": 8,
+    "seed": 1,
+    "stagger_ms": 50
+  }
+}
