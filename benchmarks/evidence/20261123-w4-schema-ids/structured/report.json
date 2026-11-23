@@ -1,0 +1,232 @@
+{
+  "schema_version": "riley.distribution-gpu-check.v1",
+  "status": "passed",
+  "image_id": "sha256:3278fe2fced2c3edadb2a9348c46a135fdcfd81da5f72ebfc9a55dede0ccfa42",
+  "source_revision": "c5ec7b3918e18428b0c5704b010aa4ee51972a86",
+  "source_archive_sha256": "7dc88437ba28ea18ca1c0c11b9b3cd85324110da913ce1b10c521da60ce54dcb",
+  "riley_binary_sha256": "c5edc27544706cdb5baf988920e3cb838ff98a3c1a6520285539628cbdc88f0c",
+  "cpu_report_sha256": "753ae255fb829f54979b95f5f734a96113a76152bc505e2819ca2460e584eb9b",
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "checkpoint_source_model": "Qwen/Qwen2.5-7B-Instruct",
+  "checkpoint_source_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+  "gpu_uuid": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+  "gpu_name": "NVIDIA A100-SXM4-40GB",
+  "driver_version": "550.127.05",
+  "api_checks": 40,
+  "tool_checks_enabled": true,
+  "shutdown_exit": 0,
+  "artifacts_sha256": {
+    "api.json": "d483ef6a83db1a0f87dfb601954bfc6587a1773fc2fe3d0706e8658d68794c05",
+    "api.log": "2a4c2ffde4d255d0d9d561afea2d00445730d3e3c6252055c95e620b8a78af00",
+    "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+    "pattern-classes.json": "2408ab72d3f3cc62f8820d704479fcf5cd6f73a775974746a5c6584c43f5be1d",
+    "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+    "schema-references.json": "f4304e2e7ee3e4bb3e33adf591d026d615e83cf20c6859d63916f0a671c0b159",
+    "server.log": "8e7c86e4885e6aa6d996907bfcc5b6d99ad072de400fa8b35648f1f6a99662ab",
+    "shutdown.json": "2977ccd6f229cab9d675e25bf66b6d277fbd6e45caa7d33464233b9b0e8caf2a",
+    "structured-holdout.json": "85968cb0441f56389bb22470bb106d1b7b1a536472a3c71b2998368ee88d0255",
+    "structured-holdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "accuracy_suites": {
+    "structured_holdout": {
+      "status": "passed",
+      "workload_sha256": "220f13a7306518f996480c608733623475471ff3721ea3aeb895a2d5f91abd11",
+      "jsonschema_version": "4.26.0",
+      "modes": {
+        "c1": {
+          "requests": 16,
+          "observed_peak_active": 1
+        },
+        "c8": {
+          "requests": 16,
+          "exact_matches": 16,
+          "observed_peak_active": 8
+        },
+        "c32": {
+          "requests": 32,
+          "exact_matches": 32,
+          "observed_peak_active": 31
+        }
+      },
+      "c1_transport_pairs": 8,
+      "context_rejection": {
+        "case": "long-korean-7917",
+        "sequence_tokens_requested": 8212,
+        "max_sequence_tokens": 8192,
+        "max_output_tokens": 96,
+        "http_status": 400,
+        "error_code": "invalid_request"
+      },
+      "cases": {
+        "korean-255/schema/json": {
+          "usage": {
+            "prompt_tokens": 299,
+            "completion_tokens": 13,
+            "total_tokens": 312
+          },
+          "finish": "stop",
+          "value": "{\"mode\": \"ready\", \"count\": 7}",
+          "response_sha256": "bb8bbf15f9317ddb58fdf403a747b6af4ff66cb1e48cd4f7482e652a15924cdb"
+        },
+        "korean-255/schema/sse": {
+          "usage": {
+            "prompt_tokens": 299,
+            "completion_tokens": 13,
+            "total_tokens": 312
+          },
+          "finish": "stop",
+          "value": "{\"mode\": \"ready\", \"count\": 7}",
+          "response_sha256": "bb8bbf15f9317ddb58fdf403a747b6af4ff66cb1e48cd4f7482e652a15924cdb"
+        },
+        "korean-255/tool/json": {
+          "usage": {
+            "prompt_tokens": 454,
+            "completion_tokens": 26,
+            "total_tokens": 480
+          },
+          "finish": "tool_calls",
+          "value": "{\"mode\":\"ready\",\"count\":7}",
+          "response_sha256": "a5522299fa74f930d0e59624b623058a0b09b7b5f3ee3cd18c85b2bc1a21dd5d"
+        },
+        "korean-255/tool/sse": {
+          "usage": {
+            "prompt_tokens": 454,
+            "completion_tokens": 26,
+            "total_tokens": 480
+          },
+          "finish": "tool_calls",
+          "value": "{\"mode\":\"ready\",\"count\":7}",
+          "response_sha256": "a5522299fa74f930d0e59624b623058a0b09b7b5f3ee3cd18c85b2bc1a21dd5d"
+        },
+        "korean-1024/schema/json": {
+          "usage": {
+            "prompt_tokens": 1068,
+            "completion_tokens": 10,
+            "total_tokens": 1078
+          },
+          "finish": "stop",
+          "value": "{\"mode\":\"ready\",\"count\":7}",
+          "response_sha256": "ccdd9e0340da553746da7a70bcf68e783dbae9ef15de136a163156b90974274e"
+        },
+        "korean-1024/schema/sse": {
+          "usage": {
+            "prompt_tokens": 1068,
+            "completion_tokens": 10,
+            "total_tokens": 1078
+          },
+          "finish": "stop",
+          "value": "{\"mode\":\"ready\",\"count\":7}",
+          "response_sha256": "ccdd9e0340da553746da7a70bcf68e783dbae9ef15de136a163156b90974274e"
+        },
+        "korean-1024/tool/json": {
+          "usage": {
+            "prompt_tokens": 1223,
+            "completion_tokens": 26,
+            "total_tokens": 1249
+          },
+          "finish": "tool_calls",
+          "value": "{\"mode\":\"ready\",\"count\":7}",
+          "response_sha256": "4887c156b959759eec0a52891899f6ebbdf00e1b143a83cada9cff8a067e0401"
+        },
+        "korean-1024/tool/sse": {
+          "usage": {
+            "prompt_tokens": 1223,
+            "completion_tokens": 26,
+            "total_tokens": 1249
+          },
+          "finish": "tool_calls",
+          "value": "{\"mode\":\"ready\",\"count\":7}",
+          "response_sha256": "4887c156b959759eec0a52891899f6ebbdf00e1b143a83cada9cff8a067e0401"
+        },
+        "long-code-7836/schema/json": {
+          "usage": {
+            "prompt_tokens": 7880,
+            "completion_tokens": 14,
+            "total_tokens": 7894
+          },
+          "finish": "stop",
+          "value": "{\"mode\": \"ready\", \"count\": 7}",
+          "response_sha256": "3b53535aaa65df39d6a2853bf52053bb58ba7bd1d99d2c0b6bf647dc91da058c"
+        },
+        "long-code-7836/schema/sse": {
+          "usage": {
+            "prompt_tokens": 7880,
+            "completion_tokens": 14,
+            "total_tokens": 7894
+          },
+          "finish": "stop",
+          "value": "{\"mode\": \"ready\", \"count\": 7}",
+          "response_sha256": "3b53535aaa65df39d6a2853bf52053bb58ba7bd1d99d2c0b6bf647dc91da058c"
+        },
+        "long-code-7836/tool/json": {
+          "usage": {
+            "prompt_tokens": 8035,
+            "completion_tokens": 27,
+            "total_tokens": 8062
+          },
+          "finish": "tool_calls",
+          "value": "{\"mode\":\"ready\",\"count\":7}",
+          "response_sha256": "c22bdf71c0899c58462a9cdd7ed738e3d96c29fd4baa9aead82b347d0b0d9e1c"
+        },
+        "long-code-7836/tool/sse": {
+          "usage": {
+            "prompt_tokens": 8035,
+            "completion_tokens": 27,
+            "total_tokens": 8062
+          },
+          "finish": "tool_calls",
+          "value": "{\"mode\":\"ready\",\"count\":7}",
+          "response_sha256": "c22bdf71c0899c58462a9cdd7ed738e3d96c29fd4baa9aead82b347d0b0d9e1c"
+        },
+        "long-korean-7917/schema/json": {
+          "usage": {
+            "prompt_tokens": 7961,
+            "completion_tokens": 13,
+            "total_tokens": 7974
+          },
+          "finish": "stop",
+          "value": "{\"mode\": \"ready\", \"count\": 7}",
+          "response_sha256": "baf12badb8c2c349ea9a05e1d7c26fc2b91c887ad38fce9b615f06a2813002a8"
+        },
+        "long-korean-7917/schema/sse": {
+          "usage": {
+            "prompt_tokens": 7961,
+            "completion_tokens": 13,
+            "total_tokens": 7974
+          },
+          "finish": "stop",
+          "value": "{\"mode\": \"ready\", \"count\": 7}",
+          "response_sha256": "baf12badb8c2c349ea9a05e1d7c26fc2b91c887ad38fce9b615f06a2813002a8"
+        },
+        "long-korean-7917/tool/json": {
+          "usage": {
+            "prompt_tokens": 8116,
+            "completion_tokens": 28,
+            "total_tokens": 8144
+          },
+          "finish": "tool_calls",
+          "value": "{\"mode\":\"ready\",\"count\":7}",
+          "response_sha256": "130b10b0b4fde49f29ec6e30cb88c283e64ec8e4629c3f4cee286eeba02e4cb0"
+        },
+        "long-korean-7917/tool/sse": {
+          "usage": {
+            "prompt_tokens": 8116,
+            "completion_tokens": 28,
+            "total_tokens": 8144
+          },
+          "finish": "tool_calls",
+          "value": "{\"mode\":\"ready\",\"count\":7}",
+          "response_sha256": "130b10b0b4fde49f29ec6e30cb88c283e64ec8e4629c3f4cee286eeba02e4cb0"
+        }
+      }
+    }
+  },
+  "accuracy_server_arguments": [
+    "--max-active-sequences",
+    "32",
+    "--max-sequence-tokens",
+    "8192",
+    "--max-output-tokens",
+    "256"
+  ]
+}

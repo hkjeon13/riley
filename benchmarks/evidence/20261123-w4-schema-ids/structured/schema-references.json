@@ -1,0 +1,65 @@
+{
+  "status": "passed",
+  "checks": [
+    {
+      "case": "nested-id",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: embedded $id",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "nested-id",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: embedded $id",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "cross-resource-pointer",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: $ref crossing an embedded $id",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "cross-resource-pointer",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: $ref crossing an embedded $id",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "root-id-local-pointer",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "$id": 3
+      }
+    },
+    {
+      "case": "root-id-local-pointer",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "$id": 3
+      }
+    }
+  ]
+}

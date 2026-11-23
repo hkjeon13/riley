@@ -1,0 +1,77 @@
+{
+  "status": "passed",
+  "checks": [
+    {
+      "case": "quote-range",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "value": "\""
+      },
+      "finish_reason": "stop"
+    },
+    {
+      "case": "quote-range",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "value": "\""
+      },
+      "finish_reason": "tool_calls"
+    },
+    {
+      "case": "backslash-range",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "value": "\\"
+      },
+      "finish_reason": "stop"
+    },
+    {
+      "case": "backslash-range",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "value": "\\"
+      },
+      "finish_reason": "tool_calls"
+    },
+    {
+      "case": "unsupported-class-escape",
+      "parameter": "response_format",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-class-escape",
+      "parameter": "tools",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-unicode-escape",
+      "parameter": "response_format",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-unicode-escape",
+      "parameter": "tools",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-negated-space",
+      "parameter": "response_format",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-negated-space",
+      "parameter": "tools",
+      "status": 400,
+      "code": "invalid_schema"
+    }
+  ]
+}

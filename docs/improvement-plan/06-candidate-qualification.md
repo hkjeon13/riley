@@ -19,6 +19,7 @@
 | Pattern 수정 이미지의 jemalloc 파생 시험 | `9373ea412`의 실행 파일 | 파생 이미지 `c7fcb8e274ec`의 두 30분 합성 부하에서 정밀 RSS 변화는 캐시 끔 −780KiB, 켬 −676KiB였다. 지연·메트릭·자원 회수와 장문 232건, 스키마·도구 64건의 검사를 통과했다. [두 캐시 모드 결과](05-mixed-soak-result.md#pattern-수정-이미지의-jemalloc-30분-재검증) |
 | Pattern 문자 클래스 수정의 배포 이미지 | `6d618f64e` | GitHub와 A100 런타임 파일 21개 일치. A100 이미지 `03bbabfb19ca`에서 문자 클래스 HTTP 10건, 두 GPU의 API 40건씩, 장문 스키마·도구 64건 및 45초 혼합 부하를 확인했다. 두 30분 합성 부하에서 후반 RSS는 캐시 끔 732KiB, 켬 584KiB 늘었다. [문자 클래스 검증](04-structured-output-result.md#pattern-문자-클래스의-json-인코딩) · [30분 대조](05-mixed-soak-result.md#문자-클래스-수정-이미지의-30분-대조) |
 | 문자 클래스 수정 이미지의 jemalloc 파생 시험 | `6d618f64e`의 실행 파일 | 이미지 `d64bb1d79564`에서 캐시 끔·켬 30분 기준과 장문 232건, 스키마·도구 64건을 통과했다. 후반 RSS는 캐시 끔 680KiB, 켬 804KiB 줄었다. 실제 서비스의 운영 판정은 보류한다. [최신 30분 대조](05-mixed-soak-result.md#문자-클래스-수정-이미지의-30분-대조) |
+| 중첩 스키마 ID 수정의 배포 이미지 | `c5ec7b391` | GitHub와 A100 런타임 파일 21개 일치. A100 이미지 `3278fe2fced2`에서 로컬 참조 HTTP 6건, 문자 클래스 HTTP 10건, API 검사 40건씩, 장문 스키마·도구 64건 및 45초 혼합 부하를 통과했다. 새 이미지의 30분 대조와 격리 복구는 남아 있다. [스키마 참조 결과](04-structured-output-result.md#중첩-스키마-id와-로컬-참조) |
 
 CI는 문자 클래스 수정 이미지의 빌드 입력, HTTP 검증, 두 이미지의 30분 대조와 격리 복구를 `distribution_with_character_class_fix`에 연결한다. 최근 격리 복구는 136.26초에 완료됐다. `--distribution-revision origin/main`으로 현재 배포 입력을 이 패키지의 검증 근거와 대조한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [격리 복구](05-mixed-soak-result.md#문자-클래스-수정-이미지의-격리-복구) · [CI 검증기](../../ci/check_improvement_evidence.py)
 

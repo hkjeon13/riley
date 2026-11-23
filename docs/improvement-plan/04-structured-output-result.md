@@ -36,6 +36,8 @@ Unicode 스칼라 1,112,064개를 각각 JSON 직렬화와 UTF-16 이스케이�
 
 컴파일하는 하위 스키마에 `$id`가 있거나 로컬 `$ref` 포인터가 그런 리소스를 가로지르면 `invalid_schema`로 거부한다. 최상위 `$id`, `#` 재귀, `$id`라는 속성·정의 이름을 사용하는 같은 문서 내 참조는 회귀 검사에서 통과했다. 응답 스키마와 지정 도구 요청이 각각 해당 요청 필드의 스키마 오류를 반환했고 전체 CPU 서버 테스트는 109건 통과했다. [스키마 회귀 검사](../../crates/riley-server/src/structured.rs) · [응답·도구 진입점 검사](../../crates/riley-server/src/chat.rs)
 
+`c5ec7b391`의 CUDA 12.4 배포 이미지를 A100에서 재빌드했다. GitHub와 A100의 런타임 파일 21개는 경로와 SHA-256이 일치했다. Qwen2.5-7B-Instruct의 HTTP 요청 6건에서 응답 스키마와 지정 도구 모두 중첩 `$id` 및 리소스를 가로지르는 포인터에 `400 invalid_schema`를 반환했고, 문서 최상위 `$id`와 내부 포인터는 `200`과 `{"$id":3}`을 반환했다. 기존 문자 클래스 요청 10건, API 검사 40건씩, 장문 스키마·도구 64건과 45초 혼합 부하를 함께 검증했다. GPU 6·7번의 기존 20GiB 예약을 확인했다. 재현할 때 `schema.patch.gz`를 `schema.patch`로 풀어 `dispatch.sha256`으로 확인한다. [HTTP 및 이미지 증거](../../benchmarks/evidence/20261123-w4-schema-ids/verified.json) · [GitHub 배포 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/45177901703)
+
 ## 현행 배포 이미지의 장문 채팅 검증
 
 Qwen2.5-7B-Instruct의 고정 입력에서 255·1,024·7,836·7,917토큰 사례를 선택했다. 각 입력을 채팅 메시지로 보내 `type`과 `enum`의 교집합 및 정수 `const`를 포함한 JSON 스키마를 검사했다. 같은 스키마를 이름이 지정된 도구의 인자로도 적용했다. 서버가 붙인 채팅 템플릿까지 포함한 입력 ID와 생성 ID·텍스트·도구 인자·종료 사유·사용량을 대조했다. 스키마와 도구 인자는 독립 Draft 2020-12 검증기로 검사했다. [고정 입력](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [검사기](../../benchmarks/live/structured_holdout_check.py)

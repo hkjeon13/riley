@@ -1,0 +1,110 @@
+{
+  "status": "verified",
+  "source_revision": "c5ec7b3918e18428b0c5704b010aa4ee51972a86",
+  "image_id": "sha256:3278fe2fced2c3edadb2a9348c46a135fdcfd81da5f72ebfc9a55dede0ccfa42",
+  "binary_sha256": "c5edc27544706cdb5baf988920e3cb838ff98a3c1a6520285539628cbdc88f0c",
+  "api_checks_per_gpu": 40,
+  "structured_modes": {
+    "c1": {
+      "requests": 16,
+      "observed_peak_active": 1
+    },
+    "c8": {
+      "requests": 16,
+      "exact_matches": 16,
+      "observed_peak_active": 8
+    },
+    "c32": {
+      "requests": 32,
+      "exact_matches": 32,
+      "observed_peak_active": 31
+    }
+  },
+  "smoke_counts": {
+    "plain": {
+      "completed": 202
+    },
+    "schema": {
+      "completed": 42,
+      "stop": 42
+    },
+    "logprobs": {
+      "completed": 23
+    },
+    "tools": {
+      "completed": 23,
+      "tool_calls": 23
+    },
+    "long": {
+      "completed": 30
+    },
+    "reason": {
+      "completed": 18
+    },
+    "cancel": {
+      "disconnected": 21
+    }
+  },
+  "schema_reference_checks": [
+    {
+      "case": "nested-id",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: embedded $id",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "nested-id",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: embedded $id",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "cross-resource-pointer",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: $ref crossing an embedded $id",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "cross-resource-pointer",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: $ref crossing an embedded $id",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "root-id-local-pointer",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "$id": 3
+      }
+    },
+    {
+      "case": "root-id-local-pointer",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "$id": 3
+      }
+    }
+  ]
+}
