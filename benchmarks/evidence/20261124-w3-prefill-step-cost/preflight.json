@@ -1,0 +1,19 @@
+{
+  "status": "cpu_verified",
+  "base_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+  "build_dispatch_sha256": "e86e57108cc6512918b7cac38d1871658a19d154d5a5f25786e75c4f7863322f",
+  "schedules_sha256": "7921e63069ddd4b58736558af62590b5f340083ee129d25aa54eeefbdf78c116",
+  "physical_gpus": [6, 7],
+  "orders": {
+    "6": ["fifo", "control"],
+    "7": ["control", "fifo"]
+  },
+  "capture_fixture_switch_combinations": 4,
+  "trace_and_configuration_tests": 4,
+  "measured_requests_per_arm": 592,
+  "holdout_requests_per_arm": 16,
+  "write_error_p95_limit_ms": 3,
+  "decode_tpot_p50_max_regression_pct_exclusive": 1,
+  "short_ttft_p50_max_regression_pct_exclusive": 2,
+  "short_throughput_max_drop_pct_exclusive": 2
+}

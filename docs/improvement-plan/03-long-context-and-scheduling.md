@@ -177,7 +177,7 @@ Coder-14B RAG의 첫 고정 도착 재생에서 유효한 GPU 6번의 두 비교
 
 같은 1,024행을 채울 장문 두 요청의 순서만 바꾼 후속 후보는 두 seed의 RAG TTFT p95를 두 GPU에서 1.93–4.07% 줄였다. GPU 7번의 vLLM 대비 비율은 1.367–1.399배로 1단계를 충족했다. GPU 6번의 유효한 두 비교에서 decode TPOT p50이 1% 한도를 넘고 짧은 C32 한 비교의 TTFT p50이 2% 한도를 넘어 미채택했다. [장문 prefill 순서 후보](03-long-context-result.md#같은-행-수를-유지하는-장문-prefill-순서-후보)
 
-이전 스텝 기록을 재계산하니 행 수를 그대로 채우는 교체 가능 스텝 37개 중 33개에서 causal attention 쌍이 증가했다. 같은 바이너리의 기준 반복에서 짧은 C32 TTFT 중앙값이 두 GPU에서 11–12% 달랐고, GPU 7번의 RAG seed 1과 동시 유입은 후보가 두 기준 모두에 대해 decode 회귀 한도를 넘었다. 실제 교체 스텝의 실행 시간과 동시 decode 요청 ID를 연결해야 비용을 판정할 수 있다. [attention 계산량](03-long-context-result.md#같은-행-수에서의-attention-계산량과-기준-실행-차이) · [동일 바이너리 반복](03-long-context-result.md#동일-바이너리의-기준-반복과-prefill-후보)
+이전 스텝 기록을 재계산하니 행 수를 그대로 채우는 교체 가능 스텝 37개 중 33개에서 causal attention 쌍이 증가했다. 같은 바이너리의 기준 반복에서 짧은 C32 TTFT 중앙값이 두 GPU에서 11–12% 달랐고, GPU 7번의 RAG seed 1과 동시 유입은 후보가 두 기준 모두에 대해 decode 회귀 한도를 넘었다. 교체 스텝의 실행 시간과 동시 decode 요청 ID를 연결하는 계측을 작성해 CPU에서 검증했다. [attention 계산량](03-long-context-result.md#같은-행-수에서의-attention-계산량과-기준-실행-차이) · [동일 바이너리 반복](03-long-context-result.md#동일-바이너리의-기준-반복과-prefill-후보) · [계측 준비](03-long-context-result.md#prefill-교체-스텝과-동시-decode의-계측-준비)
 
 ## 8. 다른 작업에 넘길 결과
 

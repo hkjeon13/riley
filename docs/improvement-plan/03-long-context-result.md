@@ -1170,6 +1170,12 @@ GPU 7번의 동시 유입은 전송 오차 p95가 3.83ms로 판정 한도를 넘
 
 C32 Riley 시각표의 첫 토큰 중앙값은 비교 기준에 따라 두 GPU 모두 변화 방향이 뒤집혔다. GPU 7번의 RAG seed 1과 동시 유입은 기준끼리의 decode 차이가 0.16% 이내였고 후보는 각 기준 대비 1% 한도를 넘었다. 이 대조에서 후보는 미채택이다. 두 GPU는 회차 사이와 종료 후 동일 홀더의 20GiB 예약으로 복귀했다. [독립 검산기](../../benchmarks/evidence/20261124-w3-prefill-repeat/verify.py) · [회차별 종료 기록](../../benchmarks/evidence/20261124-w3-prefill-repeat/campaign.log)
 
+### Prefill 교체 스텝과 동시 decode의 계측 준비
+
+이전 스케줄러 후보의 순서와 회귀 기준을 그대로 사용한다. 진단 빌드는 각 교체 가능 스텝에서 기준과 후보의 요청 ID, prefill 진행 위치와 할당 행을 기록한다. 같은 iteration ID에 실제 GPU 실행 시간과 모든 decode 요청의 KV 길이를 연결한다. 기준 실행에서도 교체 가능했던 선택을 기록한다. 로그는 요청을 처리하는 동안 메모리에 모아 종료 뒤 출력한다. 검산기는 각 스텝의 이전 커서를 재구성해 선택한 prefill과 실제 커밋을 대조하고, 동시 decode의 연속 커밋 사이 시간과 HTTP 측정값을 요청 ID에 연결한다. [계측 코드](../../benchmarks/evidence/20261124-w3-prefill-step-cost/instrument.py) · [검산기](../../benchmarks/evidence/20261124-w3-prefill-step-cost/verify.py)
+
+CPU에서 계측·후보 스위치의 네 조합을 통과했다. 검산기와 설정 검증 네 건에서 중복·누락·커서 불일치를 검사하고 기존 도착 시각표와 CPU 배치가 바이트 단위로 일치함을 확인했다. GPU 결과에는 계측을 켠 두 설정의 출력 일치와 앞선 계측 비활성 실행과의 비교를 함께 기록한다. A100 진단 실행은 대기 중이다. [CPU 결과](../../benchmarks/evidence/20261124-w3-prefill-step-cost/cpu-tests.log) · [CPU 검산 코드](../../benchmarks/evidence/20261124-w3-prefill-step-cost/check-trace.py) · [고정 실행 조건](../../benchmarks/evidence/20261124-w3-prefill-step-cost/preflight.json)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
