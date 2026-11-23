@@ -146,12 +146,13 @@ class PackageFollowUpTests(unittest.TestCase):
 
     def test_new_distribution_record_keeps_compatible_historical_revisions(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
-        latest = manifest["distribution_with_pattern_fix"]
-        historical = [manifest["distribution_with_prefix_metrics"], manifest["distribution_after_terminal_fix"]]
+        latest = manifest["distribution_with_character_class_fix"]
+        historical = [manifest[name] for name in ("distribution_with_pattern_fix", "distribution_with_prefix_metrics",
+                                                   "distribution_after_terminal_fix")]
         revisions = [
             latest["source_revision"],
             "8d6b531bd30c349d3fa9817fd287d6a867c299be",
-            historical[1]["source_revision"],
+            historical[-1]["source_revision"],
         ]
         for revision in revisions:
             with self.subTest(revision=revision):
@@ -159,7 +160,8 @@ class PackageFollowUpTests(unittest.TestCase):
 
     def test_recovery_requires_a_live_stream_after_the_cutoff(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
-        for name in ("distribution_with_prefix_metrics", "distribution_with_pattern_fix"):
+        for name in ("distribution_with_prefix_metrics", "distribution_with_pattern_fix",
+                     "distribution_with_character_class_fix"):
             with self.subTest(candidate=name):
                 candidate = manifest[name]
                 records = (candidate["recovery_drill"]["report"], candidate["evidence"]["a100_serving"],
@@ -224,7 +226,7 @@ class PackageFollowUpTests(unittest.TestCase):
 
     def test_current_stock_soaks_recompute_the_allocator_rss_difference(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
-        candidate = manifest["distribution_with_pattern_fix"]
+        candidate = manifest["distribution_with_character_class_fix"]
         entry = candidate["stock_soak_comparison"]["report"]
         smoke = json.loads((ROOT / candidate["evidence"]["a100_serving"]["path"]).read_bytes())
         allocator_entry = candidate["allocator_experiment"]["evidence"]["serving"]

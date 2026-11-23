@@ -572,6 +572,25 @@ A100 6번에서 파생 이미지 `c7fcb8e274ec`를 종료하고 같은 loopback 
 
 파생 이미지의 종료 요청부터 기준 이미지의 준비 상태까지 139.78초가 걸렸다. 두 컨테이너의 종료 시 GPU·pinned 할당, 활성·대기 요청과 KV 블록은 모두 0이었다. GPU 6·7번은 기존 20GiB 예약으로 복귀했다. 실제 서비스의 복구 기준과 도달 시간은 승인된 SLO를 확보한 뒤 해당 운영 환경에서 판정한다. [복구 시각과 자원 영수증](../../benchmarks/evidence/20261123-w5-dot-recovery/verified.json) · [원본 체크섬](../../benchmarks/evidence/20261123-w5-dot-recovery/result.sha256)
 
+### 문자 클래스 수정 이미지의 30분 대조
+
+`6d618f64e`의 기준 이미지 `03bbabfb19ca`와 같은 바이너리를 포함한 jemalloc 이미지 `d64bb1d79564`를 사용했다. allocator를 먼저 시험했고 같은 캐시 모드끼리 A100 물리 GPU, 드라이버, 체크포인트와 서버 인자를 맞췄다. 두 이미지의 두 모드에서 각각 30분간 초당 8건의 합성 요청을 보냈다. 네 실행은 각각 정상 완료 13,749건, 의도적 연결 종료 700건, 예상 외 오류 0건이었다. 각 GPU의 20GiB 예약이 복귀했다. [실행 순서](../../benchmarks/evidence/20261123-w5-pattern-classes/campaign.log) · [두 이미지 검산](../../benchmarks/evidence/20261123-w5-pattern-classes/verified.json)
+
+| 지표 | 캐시 끔 기준 → jemalloc | 캐시 켬 기준 → jemalloc |
+|---|---:|---:|
+| 후반 정밀 RSS 변화 | +732 → −680 KiB | +584 → −804 KiB |
+| RSS 변화량의 차이 | −1,412 KiB | −1,388 KiB |
+| 후반 TTFT p95 | 334.71 → 334.26 ms | 322.90 → 325.85 ms |
+| 후반 전체 완료 p95 | 4,157.42 → 4,162.75 ms | 4,131.37 → 4,130.93 ms |
+
+기준 이미지의 두 실행은 정밀 RSS 증가 0 조건만 미달했고, jemalloc의 두 실행은 모든 합성 부하 검사를 통과했다. jemalloc 패키지는 기준 런타임 파일 21개의 해시를 유지했다. 별도의 정확성 시험에서 장문 232건과 스키마·도구 호출 64건을 통과했고, 기준 이미지의 스키마·도구 응답 16개와 일치했다. [패키지 검산](../../benchmarks/evidence/20261123-w5-pattern-classes/allocator/verified-image.json) · [정확성과 부하 결과](../../benchmarks/evidence/20261123-w5-pattern-classes/allocator/verified.json) · [원본 체크섬](../../benchmarks/evidence/20261123-w5-pattern-classes/result.sha256)
+
+### 문자 클래스 수정 이미지의 격리 복구
+
+A100 6번에서 jemalloc 이미지 `d64bb1d79564`를 종료하고 기준 이미지 `03bbabfb19ca`를 같은 loopback 주소에 기동했다. 두 이미지의 API 40건씩을 확인했다. 입장을 차단한 뒤 새 요청은 HTTP 503으로 거절됐고, 진행 중이던 요청은 생성 토큰 192개와 `length` 종료 사유를 받고 완료됐다. 출력 해시와 prefix 재사용량 112토큰은 두 이미지에서 일치했다. [복구 시각과 요청 검산](../../benchmarks/evidence/20261123-w5-pattern-class-recovery/verified.json)
+
+jemalloc 이미지의 종료 요청부터 기준 이미지가 준비 상태를 반환하기까지 **136.26초**가 걸렸다. 종료 후 GPU·pinned 할당, 활성·대기 요청과 KV 블록은 0이었고 GPU 6·7번의 기존 20GiB 예약을 확인했다. 서비스 라우팅과 복구 목표는 승인된 운영 환경과 SLO에 따라 판정한다. [실행 로그](../../benchmarks/evidence/20261123-w5-pattern-class-recovery/campaign.log) · [원본 체크섬](../../benchmarks/evidence/20261123-w5-pattern-class-recovery/result.sha256)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)
