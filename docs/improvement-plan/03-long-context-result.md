@@ -831,6 +831,8 @@ CPU의 실제 스케줄러 계획에서 기준과 각 문턱, decode 9·17행, 6
 
 8행 후보는 두 GPU에서 C32 TTFT p95를 줄였고, RAG TTFT p95도 각각 1.08%, 0.95% 줄였다. 첫 32건의 p95는 GPU 6에서 407.03 → 373.00ms, GPU 7에서 396.49 → 378.44ms였다. 후속 64건의 p95는 각각 99.22 → 109.44ms와 71.38 → 72.60ms로 늘었다. GPU 7에서는 기존 비교 기준을 모두 충족했고, GPU 6에서는 C32 TTFT p50만 2% 회귀 한도를 넘었다. 16행 후보의 중앙값은 양쪽에서 회귀했다. 이 범위에서 8행·16행 후보의 기본 적용을 보류한다. [지연·출력·회귀 검산](../../benchmarks/evidence/20261123-w3-c32-short-burst/verified.json)
 
+8행 후보의 후속 64건을 같은 요청끼리 짝지었다. GPU 6·7의 TTFT 차이 중앙값은 각각 +7.69ms·+1.26ms였다. 백엔드 제출부터 입장까지의 차이는 +10.05ms·+3.38ms였고, 입장 뒤 서버의 첫 텍스트까지는 −0.41ms·−0.25ms였다. 제출 구간의 측정값에는 토큰화, 엔진 큐 대기와 스케줄러 입장이 함께 들어간다. [요청별 구간 집계](../../benchmarks/evidence/20261123-w3-c32-short-burst/admission.json) · [원본 재검산](../../benchmarks/evidence/20261123-w3-c32-short-burst/check-admission.sh)
+
 6개 실행의 응답 984건은 기존 이미지와 입력·생성 ID, 텍스트 및 종료 사유까지 일치했다. 기준 대비 두 후보의 클라이언트 write 오차 차이 p95는 최대 1.090ms였다. 정상 종료 뒤 서버 자원이 회수됐고 GPU 6·7은 기존 20GiB 예약으로 복귀했다. GPU 측정과 별도로 진단 빌드에서 짧고 긴 입력의 CPU 스케줄러 테스트를 통과했다. [CPU 테스트 결과](../../benchmarks/evidence/20261123-w3-c32-short-burst/scheduler-test.log.gz) · [원본 체크섬](../../benchmarks/evidence/20261123-w3-c32-short-burst/result.sha256) · [재검산](../../benchmarks/evidence/20261123-w3-c32-short-burst/fetch-summary.sh)
 
 ## W2 이벤트 발행과 묶음 정책의 상호작용
