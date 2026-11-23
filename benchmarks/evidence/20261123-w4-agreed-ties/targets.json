@@ -1,0 +1,239 @@
+{
+  "input_content_sha256": {
+    "20261119-w4-long/riley/capture.json.gz": "699f1efd9cb26ccc5b848e641c5c9dc1ebc294904d005837ec3584ecf40e1de9",
+    "20261119-w4-long/hf/reference.json": "c9927fa7a3650a13cbb37bc5cf4d72ee3e5683e793b49f79cf832d3da4a34a04",
+    "20261119-w4-holdout/riley/capture.json.gz": "2b28ec348efd0048cacec7e61ab2a3ffdbfc09787c7d40bcb0241982d87f8b36",
+    "20261119-w4-holdout/hf/reference.json": "f3c8abd676dbd6d5765ea15f16d1b1263d815adf9bda2d1fd220c8872ffb61a9",
+    "20261119-w4-holdout/holdout.json.gz": "3456930a1ad600eb1c91f7e7333c02cf7502f878a94abfc04161272875569aee"
+  },
+  "requests": [
+    {
+      "suite": "long",
+      "case": "0",
+      "prompt_len": 681,
+      "full_generation_matches": false,
+      "positions": [
+        {
+          "offset": 0,
+          "agreed_id": 264
+        }
+      ]
+    },
+    {
+      "suite": "long",
+      "case": "1",
+      "prompt_len": 1301,
+      "full_generation_matches": true,
+      "positions": [
+        {
+          "offset": 7,
+          "agreed_id": 2670
+        },
+        {
+          "offset": 26,
+          "agreed_id": 23501
+        }
+      ]
+    },
+    {
+      "suite": "long",
+      "case": "2",
+      "prompt_len": 2199,
+      "full_generation_matches": true,
+      "positions": [
+        {
+          "offset": 1,
+          "agreed_id": 5424
+        },
+        {
+          "offset": 4,
+          "agreed_id": 18414
+        }
+      ]
+    },
+    {
+      "suite": "long",
+      "case": "4",
+      "prompt_len": 4426,
+      "full_generation_matches": true,
+      "positions": [
+        {
+          "offset": 2,
+          "agreed_id": 11
+        }
+      ]
+    },
+    {
+      "suite": "long",
+      "case": "5",
+      "prompt_len": 6042,
+      "full_generation_matches": true,
+      "positions": [
+        {
+          "offset": 9,
+          "agreed_id": 15662
+        },
+        {
+          "offset": 21,
+          "agreed_id": 17337
+        }
+      ]
+    },
+    {
+      "suite": "long",
+      "case": "8",
+      "prompt_len": 2203,
+      "full_generation_matches": true,
+      "positions": [
+        {
+          "offset": 6,
+          "agreed_id": 11
+        }
+      ]
+    },
+    {
+      "suite": "long",
+      "case": "9",
+      "prompt_len": 3330,
+      "full_generation_matches": true,
+      "positions": [
+        {
+          "offset": 0,
+          "agreed_id": 264
+        },
+        {
+          "offset": 16,
+          "agreed_id": 323
+        }
+      ]
+    },
+    {
+      "suite": "long",
+      "case": "10",
+      "prompt_len": 4420,
+      "full_generation_matches": true,
+      "positions": [
+        {
+          "offset": 1,
+          "agreed_id": 4013
+        },
+        {
+          "offset": 21,
+          "agreed_id": 576
+        },
+        {
+          "offset": 31,
+          "agreed_id": 11
+        }
+      ]
+    },
+    {
+      "suite": "long",
+      "case": "11",
+      "prompt_len": 6082,
+      "full_generation_matches": true,
+      "positions": [
+        {
+          "offset": 2,
+          "agreed_id": 3922
+        },
+        {
+          "offset": 24,
+          "agreed_id": 320
+        }
+      ]
+    },
+    {
+      "suite": "long",
+      "case": "13",
+      "prompt_len": 1330,
+      "full_generation_matches": true,
+      "positions": [
+        {
+          "offset": 10,
+          "agreed_id": 5257
+        }
+      ]
+    },
+    {
+      "suite": "long",
+      "case": "15",
+      "prompt_len": 3292,
+      "full_generation_matches": true,
+      "positions": [
+        {
+          "offset": 14,
+          "agreed_id": 13
+        },
+        {
+          "offset": 19,
+          "agreed_id": 10468
+        }
+      ]
+    },
+    {
+      "suite": "long",
+      "case": "17",
+      "prompt_len": 6030,
+      "full_generation_matches": true,
+      "positions": [
+        {
+          "offset": 6,
+          "agreed_id": 11
+        },
+        {
+          "offset": 16,
+          "agreed_id": 12455
+        }
+      ]
+    },
+    {
+      "suite": "holdout",
+      "case": "numbers-257",
+      "prompt_len": 257,
+      "full_generation_matches": true,
+      "positions": [
+        {
+          "offset": 57,
+          "agreed_id": 6291
+        }
+      ]
+    },
+    {
+      "suite": "holdout",
+      "case": "numbers-1023",
+      "prompt_len": 1023,
+      "full_generation_matches": false,
+      "positions": [
+        {
+          "offset": 58,
+          "agreed_id": 16
+        }
+      ]
+    },
+    {
+      "suite": "holdout",
+      "case": "repeat-1025",
+      "prompt_len": 1025,
+      "full_generation_matches": true,
+      "positions": [
+        {
+          "offset": 5,
+          "agreed_id": 21765
+        }
+      ]
+    },
+    {
+      "suite": "holdout",
+      "case": "long-korean-7917",
+      "prompt_len": 7917,
+      "full_generation_matches": true,
+      "positions": [
+        {
+          "offset": 7,
+          "agreed_id": 16
+        }
+      ]
+    }
+  ]
+}
