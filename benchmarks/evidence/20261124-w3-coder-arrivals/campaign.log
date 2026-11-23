@@ -1,0 +1,30 @@
+campaign.sh: OK
+freeze-arrivals.py: OK
+replay.py: OK
+schedule.sha256: OK
+dispatch.sha256: OK
+result.sha256: OK
+evidence/w3-rag-profile-20261119.FE1ZUFeE/holder.py: OK
+evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/run_profile.py: OK
+evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/profile_workload.py: OK
+evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/profile_summary.py: OK
+evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/load.py: OK
+evidence/w3-rag-profile-20261119.FE1ZUFeE/tools/compare_runner.py: OK
+evidence/w4-schema-ids-20261123.ZsUYnqkm/cpu-evidence/report.json: OK
+tools/vllm-venv/bin/vllm: OK
+models/Qwen2.5-Coder-14B-Instruct/riley-checkpoint.json: OK
+models/Qwen2.5-Coder-14B-Instruct/config.json: OK
+models/Qwen2.5-Coder-14B-Instruct/tokenizer.json: OK
+result.sha256: OK
+cpu-evidence/report.json: OK
+schedules.json: OK
+WAIT_FOR_W5 /mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-shard-soak-20261124.ZP737OQY pid=1037299 2026-11-23T17:23:48Z
+W5_TERMINAL exit=0 2026-11-23T18:36:26Z
+START gpu6 riley 2026-11-23T18:36:26Z
+START gpu7 vllm 2026-11-23T18:36:26Z
+END gpu6 riley 2026-11-23T18:42:55Z exit=0
+END gpu7 vllm 2026-11-23T18:43:22Z exit=0
+START gpu6 vllm 2026-11-23T18:43:23Z
+START gpu7 riley 2026-11-23T18:43:23Z
+END gpu6 vllm 2026-11-23T18:49:29Z exit=0
+END gpu7 riley 2026-11-23T18:49:56Z exit=0

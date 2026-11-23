@@ -1,0 +1,514 @@
+{
+  "source_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+  "image_id": "sha256:1729f15a677422d552b9a3fd2352dfeb08dd4cccd3558680a016058d27191098",
+  "vllm_version": "0.27.1+cu129",
+  "max_write_error_p95_ms": 3.0,
+  "by_gpu": {
+    "6": {
+      "rag-c8-s1-riley-arrivals": {
+        "requests_per_engine": 64,
+        "valid_matched_comparison": true,
+        "length_mismatches": {
+          "riley": [],
+          "vllm": []
+        },
+        "abs_write_error_p95_ms": {
+          "riley": 2.395696605738351,
+          "vllm": 1.8436683560736356,
+          "between_engines": 1.9281357526779175
+        },
+        "riley": {
+          "ttft_p50_ms": 942.0718774199486,
+          "ttft_p95_ms": 1776.7922654747963,
+          "tpot_p50_ms": 39.73407515390652,
+          "tpot_p95_ms": 45.237909503809114,
+          "output_tok_s": 167.72096203492725
+        },
+        "vllm": {
+          "ttft_p50_ms": 759.8065063357353,
+          "ttft_p95_ms": 1232.840359210968,
+          "tpot_p50_ms": 36.76621451621919,
+          "tpot_p95_ms": 44.90224582942452,
+          "output_tok_s": 168.27228252436186
+        },
+        "riley_over_vllm": {
+          "ttft_p50_ms": 1.2398839304011906,
+          "ttft_p95_ms": 1.4412184450320589,
+          "tpot_p50_ms": 1.0807224969102562,
+          "tpot_p95_ms": 1.0074754317559018,
+          "output_tok_s": 0.9967236405118901
+        },
+        "ttft_p95_stage_met": false,
+        "ttft_p95_final_met": false,
+        "identical_output_text": 11,
+        "write_components": {
+          "riley": {
+            "before_request_start_abs_p95_ms": 1.9158271048054303,
+            "start_to_write_relative_abs_p95_ms": 0.47172605991363525,
+            "start_to_write_abs_p95_ms": 0.8345618844032288,
+            "requests_beyond_3ms": 1,
+            "beyond_3ms_dominated_by_request_start": 1
+          },
+          "vllm": {
+            "before_request_start_abs_p95_ms": 1.6927866484038532,
+            "start_to_write_relative_abs_p95_ms": 0.4089251160621643,
+            "start_to_write_abs_p95_ms": 0.8362382650375366,
+            "requests_beyond_3ms": 0,
+            "beyond_3ms_dominated_by_request_start": 0
+          }
+        }
+      },
+      "rag-c8-s1-vllm-arrivals": {
+        "requests_per_engine": 64,
+        "valid_matched_comparison": false,
+        "length_mismatches": {
+          "riley": [],
+          "vllm": []
+        },
+        "abs_write_error_p95_ms": {
+          "riley": 76.5122022220126,
+          "vllm": 1.855104750934089,
+          "between_engines": 76.1818215250969
+        },
+        "riley": {
+          "ttft_p50_ms": 941.553458571434,
+          "ttft_p95_ms": 1790.187031030655,
+          "tpot_p50_ms": 45.634229645485014,
+          "tpot_p95_ms": 53.37015991135845,
+          "output_tok_s": 171.83961442387732
+        },
+        "vllm": {
+          "ttft_p50_ms": 727.3068726062775,
+          "ttft_p95_ms": 1233.9134365320206,
+          "tpot_p50_ms": 40.055127770412625,
+          "tpot_p95_ms": 44.09430639480981,
+          "output_tok_s": 172.42063070111283
+        },
+        "riley_over_vllm": {
+          "ttft_p50_ms": 1.2945752254442637,
+          "ttft_p95_ms": 1.4508205989409362,
+          "tpot_p50_ms": 1.1392855842840048,
+          "tpot_p95_ms": 1.210363973831335,
+          "output_tok_s": 0.9966302392302306
+        },
+        "ttft_p95_stage_met": null,
+        "ttft_p95_final_met": null,
+        "identical_output_text": 14,
+        "write_components": {
+          "riley": {
+            "before_request_start_abs_p95_ms": 76.40331198658532,
+            "start_to_write_relative_abs_p95_ms": 0.30943751335144043,
+            "start_to_write_abs_p95_ms": 0.7130950689315796,
+            "requests_beyond_3ms": 5,
+            "beyond_3ms_dominated_by_request_start": 5
+          },
+          "vllm": {
+            "before_request_start_abs_p95_ms": 1.740753239933838,
+            "start_to_write_relative_abs_p95_ms": 0.28949230909347534,
+            "start_to_write_abs_p95_ms": 0.7071197032928467,
+            "requests_beyond_3ms": 0,
+            "beyond_3ms_dominated_by_request_start": 0
+          }
+        }
+      },
+      "rag-c8-s2-riley-arrivals": {
+        "requests_per_engine": 64,
+        "valid_matched_comparison": false,
+        "length_mismatches": {
+          "riley": [],
+          "vllm": []
+        },
+        "abs_write_error_p95_ms": {
+          "riley": 75.39514496208355,
+          "vllm": 1.7480550402027006,
+          "between_engines": 74.69797879457474
+        },
+        "riley": {
+          "ttft_p50_ms": 907.5380340218544,
+          "ttft_p95_ms": 1801.1705949902534,
+          "tpot_p50_ms": 39.88831507878041,
+          "tpot_p95_ms": 45.233954946825826,
+          "output_tok_s": 173.2358693067095
+        },
+        "vllm": {
+          "ttft_p50_ms": 668.4551164507866,
+          "ttft_p95_ms": 1228.107638657093,
+          "tpot_p50_ms": 35.6715621910696,
+          "tpot_p95_ms": 42.90413692241579,
+          "output_tok_s": 174.0397465620219
+        },
+        "riley_over_vllm": {
+          "ttft_p50_ms": 1.3576648778462446,
+          "ttft_p95_ms": 1.466622744045295,
+          "tpot_p50_ms": 1.1182104911785018,
+          "tpot_p95_ms": 1.0543028759353226,
+          "output_tok_s": 0.9953810708691999
+        },
+        "ttft_p95_stage_met": null,
+        "ttft_p95_final_met": null,
+        "identical_output_text": 22,
+        "write_components": {
+          "riley": {
+            "before_request_start_abs_p95_ms": 75.19903077961135,
+            "start_to_write_relative_abs_p95_ms": 0.32798200845718384,
+            "start_to_write_abs_p95_ms": 0.7342621684074402,
+            "requests_beyond_3ms": 5,
+            "beyond_3ms_dominated_by_request_start": 5
+          },
+          "vllm": {
+            "before_request_start_abs_p95_ms": 1.6824377768789418,
+            "start_to_write_relative_abs_p95_ms": 0.3141537308692932,
+            "start_to_write_abs_p95_ms": 0.7388070225715637,
+            "requests_beyond_3ms": 0,
+            "beyond_3ms_dominated_by_request_start": 0
+          }
+        }
+      },
+      "rag-c8-s2-vllm-arrivals": {
+        "requests_per_engine": 64,
+        "valid_matched_comparison": true,
+        "length_mismatches": {
+          "riley": [],
+          "vllm": []
+        },
+        "abs_write_error_p95_ms": {
+          "riley": 1.9856391231680703,
+          "vllm": 1.6031858398664056,
+          "between_engines": 1.2826472520828247
+        },
+        "riley": {
+          "ttft_p50_ms": 837.6877829432487,
+          "ttft_p95_ms": 1585.3549167513847,
+          "tpot_p50_ms": 44.4187422788988,
+          "tpot_p95_ms": 49.19705768739145,
+          "output_tok_s": 177.28373086174523
+        },
+        "vllm": {
+          "ttft_p50_ms": 696.1213871836662,
+          "ttft_p95_ms": 1093.3972895145416,
+          "tpot_p50_ms": 38.742348023756286,
+          "tpot_p95_ms": 43.218434795619935,
+          "output_tok_s": 178.28386252626123
+        },
+        "riley_over_vllm": {
+          "ttft_p50_ms": 1.2033645257364163,
+          "ttft_p95_ms": 1.4499349248023725,
+          "tpot_p50_ms": 1.1465165263515216,
+          "tpot_p95_ms": 1.138335016528119,
+          "output_tok_s": 0.9943902288724046
+        },
+        "ttft_p95_stage_met": false,
+        "ttft_p95_final_met": false,
+        "identical_output_text": 22,
+        "write_components": {
+          "riley": {
+            "before_request_start_abs_p95_ms": 1.9704999149034848,
+            "start_to_write_relative_abs_p95_ms": 0.10305643081665039,
+            "start_to_write_abs_p95_ms": 0.5175173282623291,
+            "requests_beyond_3ms": 1,
+            "beyond_3ms_dominated_by_request_start": 1
+          },
+          "vllm": {
+            "before_request_start_abs_p95_ms": 1.5450340583074649,
+            "start_to_write_relative_abs_p95_ms": 0.11108815670013428,
+            "start_to_write_abs_p95_ms": 0.5203112959861755,
+            "requests_beyond_3ms": 0,
+            "beyond_3ms_dominated_by_request_start": 0
+          }
+        }
+      }
+    },
+    "7": {
+      "rag-c8-s1-riley-arrivals": {
+        "requests_per_engine": 64,
+        "valid_matched_comparison": false,
+        "length_mismatches": {
+          "riley": [],
+          "vllm": []
+        },
+        "abs_write_error_p95_ms": {
+          "riley": 100.2668961797184,
+          "vllm": 1.2912225895234108,
+          "between_engines": 100.12802481651306
+        },
+        "riley": {
+          "ttft_p50_ms": 811.5959390997887,
+          "ttft_p95_ms": 2136.565215885639,
+          "tpot_p50_ms": 38.96012943326019,
+          "tpot_p95_ms": 45.11271569672532,
+          "output_tok_s": 168.50324690606718
+        },
+        "vllm": {
+          "ttft_p50_ms": 630.4116174578667,
+          "ttft_p95_ms": 1500.628836452961,
+          "tpot_p50_ms": 37.369624484242415,
+          "tpot_p95_ms": 43.54008334124182,
+          "output_tok_s": 169.38386468587322
+        },
+        "riley_over_vllm": {
+          "ttft_p50_ms": 1.287406381203042,
+          "ttft_p95_ms": 1.4237799274441787,
+          "tpot_p50_ms": 1.0425614378246815,
+          "tpot_p95_ms": 1.036119185697421,
+          "output_tok_s": 0.9948010527364034
+        },
+        "ttft_p95_stage_met": null,
+        "ttft_p95_final_met": null,
+        "identical_output_text": 8,
+        "write_components": {
+          "vllm": {
+            "before_request_start_abs_p95_ms": 1.1520754764896992,
+            "start_to_write_relative_abs_p95_ms": 0.3720894455909729,
+            "start_to_write_abs_p95_ms": 0.7741227746009827,
+            "requests_beyond_3ms": 0,
+            "beyond_3ms_dominated_by_request_start": 0
+          },
+          "riley": {
+            "before_request_start_abs_p95_ms": 100.23419558148453,
+            "start_to_write_relative_abs_p95_ms": 0.46638399362564087,
+            "start_to_write_abs_p95_ms": 0.9166896343231201,
+            "requests_beyond_3ms": 9,
+            "beyond_3ms_dominated_by_request_start": 9
+          }
+        }
+      },
+      "rag-c8-s1-vllm-arrivals": {
+        "requests_per_engine": 64,
+        "valid_matched_comparison": false,
+        "length_mismatches": {
+          "riley": [],
+          "vllm": []
+        },
+        "abs_write_error_p95_ms": {
+          "riley": 36.370277702062026,
+          "vllm": 2.016648946504773,
+          "between_engines": 35.558395087718964
+        },
+        "riley": {
+          "ttft_p50_ms": 926.4478236436844,
+          "ttft_p95_ms": 1769.0013945102692,
+          "tpot_p50_ms": 45.404631791152354,
+          "tpot_p95_ms": 53.679383352516204,
+          "output_tok_s": 172.90575032746568
+        },
+        "vllm": {
+          "ttft_p50_ms": 716.7692855000496,
+          "ttft_p95_ms": 1211.1608237028122,
+          "tpot_p50_ms": 39.85218175752895,
+          "tpot_p95_ms": 43.913373738292634,
+          "output_tok_s": 173.41056501619556
+        },
+        "riley_over_vllm": {
+          "ttft_p50_ms": 1.2925328168845207,
+          "ttft_p95_ms": 1.4605834005611271,
+          "tpot_p50_ms": 1.1393261244116057,
+          "tpot_p95_ms": 1.2223926057794,
+          "output_tok_s": 0.9970889046542076
+        },
+        "ttft_p95_stage_met": null,
+        "ttft_p95_final_met": null,
+        "identical_output_text": 13,
+        "write_components": {
+          "vllm": {
+            "before_request_start_abs_p95_ms": 1.8864048568866565,
+            "start_to_write_relative_abs_p95_ms": 0.29566138982772827,
+            "start_to_write_abs_p95_ms": 0.6955116987228394,
+            "requests_beyond_3ms": 0,
+            "beyond_3ms_dominated_by_request_start": 0
+          },
+          "riley": {
+            "before_request_start_abs_p95_ms": 36.279671191419766,
+            "start_to_write_relative_abs_p95_ms": 0.18789619207382202,
+            "start_to_write_abs_p95_ms": 0.611230731010437,
+            "requests_beyond_3ms": 5,
+            "beyond_3ms_dominated_by_request_start": 5
+          }
+        }
+      },
+      "rag-c8-s2-riley-arrivals": {
+        "requests_per_engine": 64,
+        "valid_matched_comparison": false,
+        "length_mismatches": {
+          "riley": [],
+          "vllm": []
+        },
+        "abs_write_error_p95_ms": {
+          "riley": 52.604376941646436,
+          "vllm": 1.6058239428389243,
+          "between_engines": 51.48738622665405
+        },
+        "riley": {
+          "ttft_p50_ms": 696.4674890041351,
+          "ttft_p95_ms": 1569.8487013578415,
+          "tpot_p50_ms": 38.69160464194816,
+          "tpot_p95_ms": 42.923899382118165,
+          "output_tok_s": 174.80774248433391
+        },
+        "vllm": {
+          "ttft_p50_ms": 577.4414539337158,
+          "ttft_p95_ms": 1230.897143483162,
+          "tpot_p50_ms": 36.860261493780484,
+          "tpot_p95_ms": 42.88088741499608,
+          "output_tok_s": 175.94410042592813
+        },
+        "riley_over_vllm": {
+          "ttft_p50_ms": 1.2061265852314134,
+          "ttft_p95_ms": 1.27536952187209,
+          "tpot_p50_ms": 1.049683400875403,
+          "tpot_p95_ms": 1.001003056832892,
+          "output_tok_s": 0.9935413694528927
+        },
+        "ttft_p95_stage_met": null,
+        "ttft_p95_final_met": null,
+        "identical_output_text": 19,
+        "write_components": {
+          "vllm": {
+            "before_request_start_abs_p95_ms": 1.5673044411523733,
+            "start_to_write_relative_abs_p95_ms": 0.2945363521575928,
+            "start_to_write_abs_p95_ms": 0.6820559501647949,
+            "requests_beyond_3ms": 0,
+            "beyond_3ms_dominated_by_request_start": 0
+          },
+          "riley": {
+            "before_request_start_abs_p95_ms": 52.52522942396536,
+            "start_to_write_relative_abs_p95_ms": 0.319160521030426,
+            "start_to_write_abs_p95_ms": 0.7354244589805603,
+            "requests_beyond_3ms": 4,
+            "beyond_3ms_dominated_by_request_start": 4
+          }
+        }
+      },
+      "rag-c8-s2-vllm-arrivals": {
+        "requests_per_engine": 64,
+        "valid_matched_comparison": false,
+        "length_mismatches": {
+          "riley": [],
+          "vllm": []
+        },
+        "abs_write_error_p95_ms": {
+          "riley": 63.678481077033666,
+          "vllm": 1.861363992592402,
+          "between_engines": 63.203468918800354
+        },
+        "riley": {
+          "ttft_p50_ms": 843.0547416210175,
+          "ttft_p95_ms": 1595.4708606004715,
+          "tpot_p50_ms": 44.05475290506843,
+          "tpot_p95_ms": 47.81154285031041,
+          "output_tok_s": 178.25887999516996
+        },
+        "vllm": {
+          "ttft_p50_ms": 692.4749240279198,
+          "ttft_p95_ms": 1083.9005187153816,
+          "tpot_p50_ms": 38.81813040164512,
+          "tpot_p95_ms": 43.05223651289001,
+          "output_tok_s": 179.23126220548423
+        },
+        "riley_over_vllm": {
+          "ttft_p50_ms": 1.2174516540140108,
+          "ttft_p95_ms": 1.4719716736471289,
+          "tpot_p50_ms": 1.1349014609730248,
+          "tpot_p95_ms": 1.110547249641617,
+          "output_tok_s": 0.99457470645272
+        },
+        "ttft_p95_stage_met": null,
+        "ttft_p95_final_met": null,
+        "identical_output_text": 20,
+        "write_components": {
+          "vllm": {
+            "before_request_start_abs_p95_ms": 1.7335345297688036,
+            "start_to_write_relative_abs_p95_ms": 0.31125545501708984,
+            "start_to_write_abs_p95_ms": 0.7047578692436218,
+            "requests_beyond_3ms": 0,
+            "beyond_3ms_dominated_by_request_start": 0
+          },
+          "riley": {
+            "before_request_start_abs_p95_ms": 63.67652157433622,
+            "start_to_write_relative_abs_p95_ms": 0.14976412057876587,
+            "start_to_write_abs_p95_ms": 0.559680163860321,
+            "requests_beyond_3ms": 5,
+            "beyond_3ms_dominated_by_request_start": 5
+          }
+        }
+      }
+    }
+  },
+  "origin_differences": {
+    "6": {
+      "rag-c8-s1": {
+        "origin_statistics": {
+          "riley": {
+            "span_s": 44.324097939,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 1785.4173704981804
+          },
+          "vllm": {
+            "span_s": 43.239917956,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 1245.133526623249
+          }
+        },
+        "riley_minus_vllm_write_ms_p50": 659.6991085,
+        "absolute_write_ms_p95": 1254.037261
+      },
+      "rag-c8-s2": {
+        "origin_statistics": {
+          "riley": {
+            "span_s": 42.450947568,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 1743.9628168940544
+          },
+          "vllm": {
+            "span_s": 41.650870793,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 1097.9807674884796
+          }
+        },
+        "riley_minus_vllm_write_ms_p50": 548.88916,
+        "absolute_write_ms_p95": 1140.230485
+      }
+    },
+    "7": {
+      "rag-c8-s1": {
+        "origin_statistics": {
+          "riley": {
+            "span_s": 43.954640329,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 2046.6578751802444
+          },
+          "vllm": {
+            "span_s": 42.961940259,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 1224.2455780506134
+          }
+        },
+        "riley_minus_vllm_write_ms_p50": 534.5316265,
+        "absolute_write_ms_p95": 1224.973232
+      },
+      "rag-c8-s2": {
+        "origin_statistics": {
+          "riley": {
+            "span_s": 42.3617016,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 1615.845873951912
+          },
+          "vllm": {
+            "span_s": 41.409645811,
+            "pending_measured_at_write_p50": 7.0,
+            "pending_measured_at_write_peak": 7,
+            "ttft_p95_ms": 1088.7259393930435
+          }
+        },
+        "riley_minus_vllm_write_ms_p50": 576.047063,
+        "absolute_write_ms_p95": 1078.118332
+      }
+    }
+  }
+}

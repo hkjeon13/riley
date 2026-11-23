@@ -90,6 +90,28 @@ def pair(riley, vllm):
     }
 
 
+def write_components(rows):
+    first_write = min(rows, key=lambda row: row["sent_at"])
+    initial_connect_s = first_write["sent_at"] - first_write["start"]
+    before_start, after_start = [], []
+    above_limit = before_start_dominates = 0
+    for row in rows:
+        scheduled_ms = row["scheduled_write_ns"] / 1e6
+        before = 1e3 * (row["start"] - first_write["start"]) - scheduled_ms
+        after = 1e3 * (row["sent_at"] - row["start"] - initial_connect_s)
+        error = row["write_error_ms"]
+        require(math.isclose(before + after, error, abs_tol=1e-8), "write timing components do not add up")
+        before_start.append(abs(before))
+        after_start.append(abs(after))
+        if abs(error) > MAX_WRITE_ERROR_P95_MS:
+            above_limit += 1
+            before_start_dominates += int(abs(before) > abs(after))
+    return {"before_request_start_abs_p95_ms": p95(before_start),
+            "start_to_write_relative_abs_p95_ms": p95(after_start),
+            "start_to_write_abs_p95_ms": p95([1e3 * (row["sent_at"] - row["start"]) for row in rows]),
+            "requests_beyond_3ms": above_limit, "beyond_3ms_dominated_by_request_start": before_start_dominates}
+
+
 def verify(stage):
     require((stage / "campaign.exit").read_text().strip() == "0" and
             (stage / "vllm-version.txt").read_text().strip() == "0.27.1+cu129", "RAG replay did not complete")
@@ -104,7 +126,11 @@ def verify(stage):
         expected = {f"rag-c8-s{seed}-{origin}-arrivals" for seed in (1, 2) for origin in ("riley", "vllm")}
         require(set(plans) == expected, "both seed and timeline origins are required")
         runs = {engine: arm(stage, index, engine, plans, holders[index]) for engine in engines}
-        results[index] = {label: pair(runs["riley"][label], runs["vllm"][label]) for label in plans}
+        results[index] = {
+            label: {**pair(runs["riley"][label], runs["vllm"][label]),
+                    "write_components": {engine: write_components(runs[engine][label]["rows"]) for engine in engines}}
+            for label in plans
+        }
     return {"source_revision": REVISION, "image_id": IMAGE, "vllm_version": "0.27.1+cu129",
             "max_write_error_p95_ms": MAX_WRITE_ERROR_P95_MS, "by_gpu": results,
             "origin_differences": frozen["paired_origin_differences"]}
