@@ -83,8 +83,8 @@ def batch_summary(path):
             "wide_1024_gpu_time_ms": wide_ns / 1e6}
 
 
-def verify(root):
-    reg = read(HERE / "registration.json")
+def verify(root, registration=HERE / "registration.json"):
+    reg = read(registration)
     for marker in ("build.exit", "campaign.exit"):
         if (root / marker).read_text().strip() != "0":
             raise ValueError(f"incomplete campaign: {marker}")
@@ -174,4 +174,6 @@ def verify(root):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", type=Path)
-    print(json.dumps(verify(parser.parse_args().stage), indent=2, allow_nan=False))
+    parser.add_argument("--registration", type=Path, default=HERE / "registration.json")
+    args = parser.parse_args()
+    print(json.dumps(verify(args.stage, args.registration), indent=2, allow_nan=False))

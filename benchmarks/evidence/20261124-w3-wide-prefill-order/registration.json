@@ -1,0 +1,28 @@
+{
+  "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-wide-prefill-order-20261124.cy7XlWYP",
+  "build_pid": 2377737,
+  "build_started_at": "2026-11-23T21:22:31Z",
+  "build_dispatch_sha256": "2c4bcbb4136bd68efcfaef4aa4c7b2a88fdbcd916d935299ec676020d92ecbd2",
+  "build_result_sha256": "92f3c2dbe20a2819ca2b9390300bab755ade2ddfa36d0e2fb51d96d639bc19bb",
+  "campaign_pid": 2377743,
+  "campaign_started_at": "2026-11-23T21:22:31Z",
+  "campaign_dispatch_sha256": "363b6b74595a877213c081c1e04e0f2f4636544c95074d091632fe98f6139856",
+  "schedules_sha256": "7921e63069ddd4b58736558af62590b5f340083ee129d25aa54eeefbdf78c116",
+  "base_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+  "physical_gpus": [
+    6,
+    7
+  ],
+  "measured_requests_per_arm": 592,
+  "holdout_requests_per_arm": 16,
+  "write_error_p95_limit_ms": 3,
+  "decode_tpot_p50_max_regression_pct_exclusive": 1,
+  "short_ttft_p50_max_regression_pct_exclusive": 2,
+  "short_throughput_max_drop_pct_exclusive": 2,
+  "activation": {
+    "prefill_budget_min": 1016,
+    "decode_rows_min": 1,
+    "decode_rows_max": 8,
+    "long_prompt_tokens_min": 3072
+  }
+}
