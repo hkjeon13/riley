@@ -5,6 +5,7 @@ import json
 from math import isclose
 from pathlib import Path
 import runpy
+from statistics import median
 import tarfile
 import tempfile
 
@@ -16,6 +17,33 @@ BROAD = HERE.parent / "20261124-w3-rag-prefill-order"
 METRICS = ("ttft_p50_ms", "ttft_p95_ms", "tpot_p50_ms")
 REQUEST_FIELDS = ("request_index", "input_sha256", "prompt_tokens", "completion_tokens",
                   "finish", "output_sha256", "scheduled_write_ns")
+
+
+def measured_step_times(steps, prompt_lengths):
+    """Group committed GPU times by decode rows and the prefill cursor."""
+    widths = (1, 8)
+    intervals = ((0, 512), (512, 1536), (1536, 2560))
+    groups = {width: {lower: [] for lower, _ in intervals} for width in widths}
+    for step in steps:
+        if step.rows != 1024 or step.decode not in groups or len(step.prefill) != 1:
+            continue
+        request, rows, target = step.prefill[0]
+        if request not in prompt_lengths:
+            continue
+        cursor = target - rows
+        for lower, upper in intervals:
+            if lower <= cursor < upper:
+                groups[step.decode][lower].append(step.gpu / 1e6)
+                break
+    return {
+        width: [
+            {"prefix_tokens_min": lower, "prefix_tokens_max": upper - 1, "steps": len(values),
+             "gpu_ms_min": min(values), "gpu_ms_median": median(values), "gpu_ms_max": max(values)}
+            for lower, upper in intervals
+            if (values := group[lower])
+        ]
+        for width, group in groups.items()
+    }
 
 
 def estimate_pairs(steps, submitted, prompt_lengths, activation):
@@ -39,6 +67,7 @@ def estimate_pairs(steps, submitted, prompt_lengths, activation):
         "same_pairs": sum(row["causal_pairs_delta"] == 0 for row in details),
         "decreased_pairs": sum(row["causal_pairs_delta"] < 0 for row in details),
         "any_eligible_nonincreasing": sum(row["any_eligible_nonincreasing"] for row in details),
+        "measured_1024_row_steps_by_decode_and_prefix": measured_step_times(steps, prompt_lengths),
         "details": details,
     }
 
