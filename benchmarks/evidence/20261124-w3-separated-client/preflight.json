@@ -1,0 +1,23 @@
+{
+  "status": "gpu-run-started",
+  "scheduled_requests_per_engine": 1280,
+  "source_schedules": ["rag-c8", "closed-c32"],
+  "write_error_p95_limit_ms": 3,
+  "gpu_query_elapsed_ms": [
+    {"gpu": 6, "elapsed_ms": 57.5},
+    {"gpu": 7, "elapsed_ms": 52.9},
+    {"gpu": 6, "elapsed_ms": 44.7},
+    {"gpu": 7, "elapsed_ms": 45.9}
+  ],
+  "client_cpu_by_gpu": {"6": 44, "7": 45},
+  "server_excluded_cpus": [44, 45, 92, 93],
+  "remote": {
+    "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-separated-client-20261124.QAxR7GdV",
+    "dispatch_sha256": "7f9e075263be24f99ea1a37174abefba5253361181303bbc7aca4a5e0c74e727",
+    "schedules_sha256": "3f7ea800889776e91cc0fe79dd910f0a005ebae371277417457a1e68a3469b66",
+    "cpu_placement_sha256": "e8f6587cfa7115a7f6d09da49961f440f5920d12d55d8d1efab66205b69e03ad",
+    "verified_at": "2026-11-23T19:16:14Z",
+    "campaign_pid": 1686374,
+    "gpu_indexes": [6, 7]
+  }
+}

@@ -1,0 +1,16 @@
+campaign.sh: OK
+client.py: OK
+configure.py: OK
+runtime.sha256: OK
+dispatch.sha256: OK
+schedules.json: OK
+result.sha256: OK
+cpu-evidence/report.json: OK
+START gpu6 riley 2026-11-23T19:14:57Z
+START gpu7 vllm 2026-11-23T19:14:57Z
+END gpu6 riley 2026-11-23T19:21:56Z exit=0
+END gpu7 vllm 2026-11-23T19:22:39Z exit=0
+START gpu6 vllm 2026-11-23T19:22:45Z
+START gpu7 riley 2026-11-23T19:22:45Z
+END gpu7 riley 2026-11-23T19:30:26Z exit=0
+END gpu6 vllm 2026-11-23T19:32:44Z exit=1

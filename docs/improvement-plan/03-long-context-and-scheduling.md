@@ -169,7 +169,7 @@ python3 benchmarks/live/compare.py \
 
 같은 패키지에서 배치 한도는 고정하고 요청당 prefill 조각을 512행으로 낮췄다. 832쌍의 출력은 일치했으나 두 GPU와 두 RAG C8 seed 모두에서 첫 토큰 p95가 2.74–14.39% 늘었다. 네 비교 모두 커밋된 GPU 시간도 증가해 이 설정을 미채택했다. [요청당 prefill 조각 대조](03-long-context-result.md#coder-14b-요청별-prefill-조각-크기)
 
-Coder-14B RAG의 고정 도착 재생에서 유효한 GPU 6번의 두 비교는 첫 토큰 p95가 vLLM의 1.441배·1.450배였다. 나머지 여섯 비교는 실제 전송 오차가 p95 기준 3ms를 넘었다. 다음 재현에서는 부하 생성기의 요청 시작 지연과 CPU 실행 상태를 계측하고, 두 GPU에서 기존 전송 오차 조건을 충족하는지 확인한다. [고정 도착 결과](03-long-context-result.md#coder-14b-rag-고정-도착-재생-결과)
+Coder-14B RAG의 첫 고정 도착 재생에서 유효한 GPU 6번의 두 비교는 첫 토큰 p95가 vLLM의 1.441배·1.450배였고 나머지 여섯 비교는 3ms 전송 오차 기준을 넘었다. GPU 상태 조회와 CPU 배치를 분리하자 GPU 7번은 RAG와 짧은 C32 6개 비교 모두 전송 오차를 통과했다. RAG 첫 토큰 p95는 0.991–1.529배였고 4개 중 1개에서 최종 1.15배 목표를 충족했다. [첫 고정 도착 결과](03-long-context-result.md#coder-14b-rag-고정-도착-재생-결과) · [CPU 분리 재생](03-long-context-result.md#gpu-상태-확인을-분리한-재생)
 
 ## 8. 다른 작업에 넘길 결과
 

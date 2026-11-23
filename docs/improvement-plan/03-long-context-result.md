@@ -1038,6 +1038,27 @@ Riley 시각표를 사용한 두 비교에서 Riley 쪽 전송 오차가 3ms를 
 
 전송 오차를 클라이언트의 요청 시작 지연과 시작부터 소켓 쓰기까지의 상대 지연으로 분해했다. Riley의 재생 중 절대 오차가 3ms를 넘은 요청은 35건이었고, 모두 요청 시작 지연 항이 더 컸다. 판정에서 빠진 여섯 비교에서 Riley의 두 항은 각각 p95 **36.28–100.23ms**, **0.15–0.47ms**였다. 현재 기록은 지연 구간을 알려준다. CPU에서 실행을 기다린 시간과 이벤트 루프 내부의 지연을 확인하려면 추가 계측이 필요하다. [시각 분해 계산](../../benchmarks/evidence/20261124-w3-coder-arrivals/verify-replay.py)
 
+### GPU 상태 확인을 분리한 재생
+
+이전 Riley 실행기는 부하 생성기의 이벤트 루프 안에서 `nvidia-smi`를 동기 호출했다. 별도 확인에서 이 호출의 경과 시간은 네 번 **44.7–57.5ms**였다. 같은 이미지와 시각표를 재사용해 Riley의 GPU 상태 확인은 부하 생성기와 별도 프로세스에서 실행한다. 두 엔진의 부하 생성기는 GPU 6번에서 CPU 44, 7번에서 CPU 45에 배치하고, 두 엔진의 서버에는 해당 코어와 SMT 형제 CPU를 제외한다. 호스트 CPU는 공유된다. [등록 및 CPU 확인](../../benchmarks/evidence/20261124-w3-separated-client/preflight.json) · [실행기](../../benchmarks/evidence/20261124-w3-separated-client/campaign.sh) · [계측 변경](../../benchmarks/evidence/20261124-w3-separated-client/configure.py)
+
+RAG와 짧은 C32의 기존 12개 시각표에서 요청 본문 해시 1,280개를 재검산하고 동일 입력을 양쪽 엔진에 보냈다. 기존 3ms 전송 오차 조건과 타이머가 깨어난 시점, 요청 코루틴 시작, 실제 소켓 쓰기를 기록했다. GPU 7번 Riley·vLLM과 GPU 6번 Riley의 측정 요청은 총 1,920건이었다. GPU 6번의 첫 vLLM은 준비 상태 제한 시간에 종료돼 측정 요청이 없었다. 두 GPU의 기존 홀더가 각각 20GiB 예약으로 돌아온 뒤 GPU 6번 vLLM만 같은 설정으로 재시작했다. [첫 실행 로그](../../benchmarks/evidence/20261124-w3-separated-client/campaign.log) · [원본 요청·로그·체크섬](../../benchmarks/evidence/20261124-w3-separated-client/initial-results.tar.gz) · [판정 코드](../../benchmarks/evidence/20261124-w3-separated-client/verify.py)
+
+GPU 7번에서 엔진당 640건을 완료했다. 6개 비교 모두 전송 오차 기준을 충족했고 엔진 간 전송 오차 p95는 1.11–1.93ms였다. 이전에 판정할 수 있었던 RAG 비교는 0/4건이었고 이번에는 4/4건이었다.
+
+| GPU 7번 시각표 | Riley/vLLM TTFT p95 | Riley/vLLM TPOT p50 | Riley / vLLM 콘텐츠 간격 p99 |
+|---|---:|---:|---:|
+| RAG seed 1 · Riley | 1.316배 | 1.074배 | 265.91 / 244.99ms |
+| RAG seed 1 · vLLM | 1.529배 | 1.164배 | 276.28 / 248.31ms |
+| RAG seed 2 · Riley | 0.991배 | 1.064배 | 258.82 / 247.14ms |
+| RAG seed 2 · vLLM | 1.441배 | 1.136배 | 274.55 / 248.07ms |
+| C32 · Riley | 0.204배 | 0.970배 | 37.93 / 75.48ms |
+| C32 · vLLM | 1.038배 | 0.996배 | 37.92 / 43.53ms |
+
+GPU 7번에서 RAG는 1단계 1.40배 기준을 2/4건, 최종 1.15배 기준을 1/4건 충족했다. 짧은 C32의 TPOT p50은 두 시각표에서 1.03배 기준을 충족했다. vLLM 시각표의 Riley 콘텐츠 간격 p99는 같은 GPU와 서빙 이미지에서 125.45ms에서 37.92ms로 줄었다. 이 비교에서는 클라이언트와 서버의 CPU 배치, GPU 상태 확인 위치가 함께 바뀌었다. [GPU 7 결과 검산](../../benchmarks/evidence/20261124-w3-separated-client/gpu7-verified.json)
+
+GPU 6번 vLLM 재시험도 550초 준비 제한을 지나 종료했다. vLLM 서버 로그는 비어 있었고 측정 요청은 시작되지 않았다. 재시험 뒤 GPU 6번은 기존 홀더의 20GiB 대기 예약으로 돌아왔고 다른 연산 프로세스는 없었다. CPU를 분리한 GPU 6번 비교값과 기동 지연 원인 확인이 남아 있다. [재시험 등록](../../benchmarks/evidence/20261124-w3-separated-client/retry-registration.json) · [재시험 원본](../../benchmarks/evidence/20261124-w3-separated-client/retry-results.tar.gz) · [첫 실행과 재시험 검산](../../benchmarks/evidence/20261124-w3-separated-client/verified.json)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
