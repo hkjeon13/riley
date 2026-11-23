@@ -889,6 +889,8 @@ GPU 6번의 계측에서 후속 64건의 요청별 큐 대기 차이 중앙값�
 
 16회 실행의 2,624개 응답은 기준 이미지와 입력·생성 토큰 ID, 텍스트 및 종료 사유가 모두 일치했다. 종료 자원을 회수하고 GPU 6·7번에서 기존 20GiB 예약의 복귀를 확인했다. [실행 로그](../../benchmarks/evidence/20261123-w3-c32-arrival-phase/campaign.log) · [원본 체크섬](../../benchmarks/evidence/20261123-w3-c32-arrival-phase/variant-results.sha256) · [CPU 재검산](../../benchmarks/evidence/20261123-w3-c32-arrival-phase/fetch-summary.sh)
 
+후보의 계측 네 번을 다시 확인했다. 각 실행의 짧은 C32 구간에서 256행을 넘긴 스텝은 정확히 두 개였고, 원본 메트릭의 커밋 스텝 수와 일치했다. 첫 스텝은 512행 중 decode 0행, 두 번째 스텝은 512행 중 decode 7행이었다. 첫 스텝은 첫 32건 가운데 0–22건의 큐 대기와 겹쳤다. 두 번째 스텝과 큐 대기가 겹친 요청은 0건이었다. 두 번째 스텝은 첫 후속 요청의 큐 전송보다 1.60–1.61초 먼저 끝났다. 후속 요청의 지연을 줄이는 후보를 고를 때에는 후속 도착 당시 진행 중인 일반 스텝의 길이와 시작 시각을 검증한다. [스텝 경계·커밋 수 대조](../../benchmarks/evidence/20261123-w3-c32-arrival-phase/verified.json)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

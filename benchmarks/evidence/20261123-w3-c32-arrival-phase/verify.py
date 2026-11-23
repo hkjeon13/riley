@@ -57,6 +57,49 @@ def phase_effect(stage, verified):
     return differences
 
 
+def wide_step_timing(folder, report):
+    timings = {}
+    for gpu in ORDERS:
+        name = f"private-short-d8-admission-gpu{gpu}"
+        arm = folder / name
+        rows = read(arm / "workload.json")["short"]["rows"]
+        request_ids = [int(row["response_id"].removeprefix("cmpl-"), 16) for row in rows]
+        windows = {request: {} for request in request_ids}
+        spans = []
+        for line in (arm / "server.log").read_text().splitlines():
+            if line.startswith("W3-REQUEST-PHASE "):
+                _, request, phase, stamp = line.split()
+                request = int(request)
+                if request in windows:
+                    windows[request][phase] = int(stamp)
+            elif line.startswith("W3-ENGINE-SPAN "):
+                spans.append(tuple(map(int, line.split()[1:])))
+        ordered = [windows[request] for request in request_ids]
+        first = min(window["submit"] for window in ordered)
+        first_later_send = min(window["send"] for window in ordered[32:])
+        # The fixed C32 replay is the final request group in each container.
+        wide = [(a, b, n, d) for a, b, n, d in spans if a >= first and n > 256]
+        count = report["runs"][name]["short_gpu_steps_over_steady"]
+        require(len(wide) == count, f"trace and committed wide-step counters differ: {name}")
+        steps = []
+        for start, end, total, decode in wide:
+            overlaps = [max(start, item["send"]) < min(end, item["worker"]) for item in ordered]
+            steps.append({
+                "total_rows": total,
+                "decode_rows": decode,
+                "start_after_first_submit_ms": (start - first) / 1_000_000,
+                "end_after_first_submit_ms": (end - first) / 1_000_000,
+                "early_requests_waiting": sum(overlaps[:32]),
+                "later_requests_waiting": sum(overlaps[32:]),
+            })
+        timings[gpu] = {
+            "first_later_send_after_first_submit_ms": (first_later_send - first) / 1_000_000,
+            "last_wide_end_to_first_later_send_ms": (first_later_send - wide[-1][1]) / 1_000_000 if wide else None,
+            "steps": steps,
+        }
+    return timings
+
+
 def arrival_phase_report(stage):
     reference = stage.parent / "w3-c32-short-burst-admission-gpu-20261123.TA5Cmib0/schedules.json"
     require(digest(reference) == REFERENCE_SCHEDULE_SHA256, "the original schedule changed")
@@ -68,6 +111,7 @@ def arrival_phase_report(stage):
         report["queue_boundaries"] = queue_boundary_report(
             folder, report["result_sha256"]
         )["paired_trace_queue_boundaries"]
+        report["wide_step_timing"] = wide_step_timing(folder, report)
         report["runs"] = {name: compact_run(run) for name, run in report["runs"].items()}
         variants[variant] = report
     baseline, delayed = variants.values()

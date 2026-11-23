@@ -2591,6 +2591,52 @@
             }
           }
         }
+      },
+      "wide_step_timing": {
+        "6": {
+          "first_later_send_after_first_submit_ms": 1723.360226,
+          "last_wide_end_to_first_later_send_ms": 1598.449585,
+          "steps": [
+            {
+              "total_rows": 512,
+              "decode_rows": 0,
+              "start_after_first_submit_ms": 1.059656,
+              "end_after_first_submit_ms": 61.350943,
+              "early_requests_waiting": 12,
+              "later_requests_waiting": 0
+            },
+            {
+              "total_rows": 512,
+              "decode_rows": 7,
+              "start_after_first_submit_ms": 61.639808,
+              "end_after_first_submit_ms": 124.910641,
+              "early_requests_waiting": 0,
+              "later_requests_waiting": 0
+            }
+          ]
+        },
+        "7": {
+          "first_later_send_after_first_submit_ms": 1726.287305,
+          "last_wide_end_to_first_later_send_ms": 1602.815333,
+          "steps": [
+            {
+              "total_rows": 512,
+              "decode_rows": 0,
+              "start_after_first_submit_ms": 0.549878,
+              "end_after_first_submit_ms": 60.830449,
+              "early_requests_waiting": 22,
+              "later_requests_waiting": 0
+            },
+            {
+              "total_rows": 512,
+              "decode_rows": 7,
+              "start_after_first_submit_ms": 61.294627,
+              "end_after_first_submit_ms": 123.471972,
+              "early_requests_waiting": 0,
+              "later_requests_waiting": 0
+            }
+          ]
+        }
       }
     },
     "late12": {
@@ -5129,6 +5175,52 @@
               }
             }
           }
+        }
+      },
+      "wide_step_timing": {
+        "6": {
+          "first_later_send_after_first_submit_ms": 1735.723793,
+          "last_wide_end_to_first_later_send_ms": 1609.557006,
+          "steps": [
+            {
+              "total_rows": 512,
+              "decode_rows": 0,
+              "start_after_first_submit_ms": 1.349317,
+              "end_after_first_submit_ms": 62.142317,
+              "early_requests_waiting": 17,
+              "later_requests_waiting": 0
+            },
+            {
+              "total_rows": 512,
+              "decode_rows": 7,
+              "start_after_first_submit_ms": 62.530746,
+              "end_after_first_submit_ms": 126.166787,
+              "early_requests_waiting": 0,
+              "later_requests_waiting": 0
+            }
+          ]
+        },
+        "7": {
+          "first_later_send_after_first_submit_ms": 1738.103352,
+          "last_wide_end_to_first_later_send_ms": 1613.697587,
+          "steps": [
+            {
+              "total_rows": 512,
+              "decode_rows": 0,
+              "start_after_first_submit_ms": 1.876049,
+              "end_after_first_submit_ms": 62.134483,
+              "early_requests_waiting": 0,
+              "later_requests_waiting": 0
+            },
+            {
+              "total_rows": 512,
+              "decode_rows": 7,
+              "start_after_first_submit_ms": 62.220226,
+              "end_after_first_submit_ms": 124.405765,
+              "early_requests_waiting": 0,
+              "later_requests_waiting": 0
+            }
+          ]
         }
       }
     }

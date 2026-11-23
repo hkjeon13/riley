@@ -16,7 +16,11 @@
 
 Riley 0.1.0의 기본 서빙 기능을 유지하면서, 변경을 신뢰할 수 있는 검증 체계를 먼저 복구하고 남은 성능·정확성 한계를 단계적으로 줄인다. 범위는 앞서 확인한 다섯 개선 항목이다.
 
-초기 조사 당시 로컬 main은 원격보다 9커밋 앞섰고 차이는 재측정 근거와 `docs/goal.md`였다. 이후 W1과 W2를 `main`에 반영했다. 새 측정은 실제 기준 커밋과 바이너리에 각각 결속한다.
+초기 조사 당시 로컬 main은 원격보다 9커밋 앞섰고 차이는 재측정 근거와 `docs/goal.md`였다. 새 측정은 실제 기준 커밋과 바이너리에 각각 결속한다.
+
+`main`에 반영한 변경은 W1의 CPU·CUDA·배포 이미지 검증 복구, W2의 스트리밍 취소와 정상 완료 처리 수정, W4의 JSON 스키마 오류·종료 처리 수정, W5의 prefix cache 메트릭이다. [W1 검증](01-validation-result.md) · [취소 순서 검증](02-async-step-result.md#마지막-토큰-전달과-취소의-순서) · [스키마 검증](04-structured-output-result.md) · [메트릭을 포함한 패키지](05-mixed-soak-result.md#prefix-cache-메트릭을-포함한-배포-패키지)
+
+기존 `native-bf16-varlen-v1` 프로파일은 `after-submit-v1`을 사용한다. Prefix cache와 기존 prefill burst는 명시적 설정으로 사용한다. Coder-14B의 새 512행 버스트와 jemalloc은 아래 회귀·운영 판정에 연결한 시험 후보다. [프로파일 설정](../configuration.md#execution-options) · [512행 버스트 판정](03-long-context-result.md#후속-64건의-도착을-12ms-늦춘-교차-실행) · [jemalloc 판정](06-candidate-qualification.md#현재-판정)
 
 현재 구현은 연속 배칭, Paged KV, CUDA Graph, 스트리밍·취소, structured output·tools·logprobs, 8K 문맥, prefix cache, 정적 LoRA 병합, 32B TP=2를 포함한다. 단일 GPU 24개 모델의 qualification과 광범위한 측정 기록이 있다. 이것이 모든 워크로드·모델·장비의 목표 충족을 뜻하지는 않는다.
 
