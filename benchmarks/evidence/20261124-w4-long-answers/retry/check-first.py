@@ -17,6 +17,22 @@ FIXTURE_SHA = "e68ed38a73caad88ae8de0a0000a439f732331a9b118849de28d92d4366efda3"
 ERROR = "No such file or directory: 'ninja'"
 
 
+def summarize_modes(cases, capture):
+    modes = {}
+    for mode, rows in capture["modes"].items():
+        totals = defaultdict(lambda: dict.fromkeys(("requests", "complete_exact_answers", "first_line_matches", "length"), 0))
+        for case, row in zip(cases, rows, strict=True):
+            result = score(case, row)
+            first_line = next((line.strip() for line in row["text"].splitlines() if line.strip()), "")
+            reached = totals[case["task"]]
+            reached["requests"] += 1
+            reached["complete_exact_answers"] += result["complete_exact_answer"]
+            reached["first_line_matches"] += first_line == case["answer"]
+            reached["length"] += result["finish"] == "length"
+        modes[mode] = dict(totals)
+    return modes
+
+
 def verify(root):
     capture_bytes = (root / "riley/capture.json").read_bytes()
     receipt_bytes = (root / "riley/receipt.json").read_bytes()
@@ -35,23 +51,12 @@ def verify(root):
     if ((root / "campaign.exit").read_text().strip() != "1"
             or ERROR not in (root / "vllm/server.log").read_text()):
         raise ValueError("The recorded vLLM startup failure differs")
-    modes = {}
-    for mode, rows in capture["modes"].items():
-        totals = defaultdict(lambda: dict.fromkeys(("requests", "complete_exact_answers", "first_line_matches", "length"), 0))
-        for case, row in zip(cases, rows, strict=True):
-            result = score(case, row)
-            first_line = next((line.strip() for line in row["text"].splitlines() if line.strip()), "")
-            reached = totals[case["task"]]
-            reached["requests"] += 1
-            reached["complete_exact_answers"] += result["complete_exact_answer"]
-            reached["first_line_matches"] += first_line == case["answer"]
-            reached["length"] += result["finish"] == "length"
-        modes[mode] = dict(totals)
     c1, c8 = (capture["modes"][mode] for mode in ("c1", "c8"))
     preserved = sum(same_completion(a, b) and a["usage"] == b["usage"] for a, b in zip(c1, c8, strict=True))
     return {"riley_capture_sha256": CAPTURE_SHA, "riley_receipt_sha256": RECEIPT_SHA, "fixture_sha256": FIXTURE_SHA,
             "riley_image_id": receipt["image_id"], "source_revision": receipt["source_revision"],
-            "gpu": receipt["gpu"], "riley_batch_invariant": preserved, "riley_by_mode": modes, "vllm_startup_error": ERROR}
+            "gpu": receipt["gpu"], "riley_batch_invariant": preserved, "riley_by_mode": summarize_modes(cases, capture),
+            "vllm_startup_error": ERROR}
 
 
 if __name__ == "__main__":

@@ -1,0 +1,17 @@
+campaign.sh: OK
+schedules.json.gz: OK
+runtime.sha256: OK
+dispatch.sha256: OK
+schedules.json: OK
+result.sha256: OK
+cpu-evidence/report.json: OK
+WAIT_FOR_W4 /mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-long-answers-20261124.WemA5qyy pid=1222650 2026-11-23T18:01:23Z
+W4_TERMINAL exit=1 2026-11-23T18:55:36Z
+START gpu6 riley 2026-11-23T18:55:37Z
+START gpu7 vllm 2026-11-23T18:55:37Z
+END gpu7 vllm 2026-11-23T18:58:43Z exit=0
+END gpu6 riley 2026-11-23T18:59:03Z exit=0
+START gpu6 vllm 2026-11-23T18:59:03Z
+START gpu7 riley 2026-11-23T18:59:03Z
+END gpu6 vllm 2026-11-23T19:02:03Z exit=0
+END gpu7 riley 2026-11-23T19:02:28Z exit=0

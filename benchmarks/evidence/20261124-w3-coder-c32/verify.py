@@ -23,7 +23,7 @@ def content_gaps(run):
     combined.sort()
     require(bool(combined), "no measured inter-content gap")
     quantiles = {f"p{int(q*100)}_ms": combined[int(q * len(combined))] * 1000 for q in (.5, .95, .99)}
-    require(quantiles["p99_ms"] == run["statistics"]["itl_p99_ms"], "archived inter-content p99 differs")
+    require(quantiles["p99_ms"] == run["reported_itl_p99_ms"], "archived inter-content p99 differs")
     stalls = [value for value in combined if value >= .050]
     return {"samples": len(combined), **quantiles, "gaps_at_least_50ms": len(stalls),
             "share_of_decode_interval_in_50ms_gaps": sum(stalls) / sum(combined)}
@@ -49,6 +49,9 @@ def verify(stage):
             result["tpot_p50_goal_met"] = (result["riley_over_vllm"]["tpot_p50_ms"] <= 1.03
                                            if result["valid_matched_comparison"] else None)
             result["content_gaps"] = {"riley": content_gaps(riley), "vllm": content_gaps(vllm)}
+            result["write_components"] = {
+                engine: RAG["write_components"](cells[label]["rows"]) for engine, cells in arms.items()
+            }
             comparisons[label] = result
         by_gpu[index] = comparisons
     return {"image_id": RAG["IMAGE"], "source_revision": RAG["REVISION"], "target_tpot_p50_ratio": 1.03,

@@ -41,7 +41,8 @@ def replay_cell(out, label, plan, receipt):
     require(mismatches == result["length_mismatches"]
             and p95([abs(error) for error in errors]) ==
             result["statistics"]["relative_write_error_abs_p95_ms"], "invalid replay receipt")
-    return {"rows": rows, "statistics": stats, "write_errors_ms": errors, "length_mismatches": mismatches}
+    return {"rows": rows, "statistics": stats, "write_errors_ms": errors, "length_mismatches": mismatches,
+            "reported_itl_p99_ms": result["statistics"]["itl_p99_ms"]}
 
 
 def arm(stage, index, engine, plans, holder):

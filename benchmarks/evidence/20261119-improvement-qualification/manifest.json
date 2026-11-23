@@ -519,12 +519,24 @@
   "other_evidence": {
     "coder14_c32_arrival_preflight": [
       {
+        "path": "benchmarks/evidence/20261124-w3-coder-c32/campaign.exit",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w3-coder-c32/campaign.log",
+        "sha256": "539cc72cc414b6ebdbfc6a797214385a98ebd59c84af9279f862a4ebb96292ac"
+      },
+      {
         "path": "benchmarks/evidence/20261124-w3-coder-c32/campaign.sh",
         "sha256": "7280a19c3389ac7ef322497c744b4a6727efe59fd9208fb6acc986e8c3e3a374"
       },
       {
         "path": "benchmarks/evidence/20261124-w3-coder-c32/dispatch.sha256",
         "sha256": "4f98597aa8931e1f835287a6aab64c8db2e5297ee2629c82d6511a2efd3de3c0"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w3-coder-c32/fetch-c32.sh",
+        "sha256": "79255e9ea4619f4da19164f5d645112353ee26308a4be32e92c6f2e6bca5403e"
       },
       {
         "path": "benchmarks/evidence/20261124-w3-coder-c32/preflight.json",
@@ -535,12 +547,24 @@
         "sha256": "cb4806790866782438d006bdb734212d55231ce5478438a3a9d56a80bec18b2f"
       },
       {
+        "path": "benchmarks/evidence/20261124-w3-coder-c32/raw-results.tar.gz",
+        "sha256": "29362c5135681bc49d9f531b48eaba57caa639ab0be86e09ac952972fa0a06b2"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w3-coder-c32/result.sha256",
+        "sha256": "65ca76d534c4d38506728445991ffc171f13550050e0678ece7103a427774503"
+      },
+      {
         "path": "benchmarks/evidence/20261124-w3-coder-c32/schedules.json.gz",
         "sha256": "93e17e890458fc80a35aee652754b6ba095bdfb08e71aa7f1b563b24aab1f34b"
       },
       {
+        "path": "benchmarks/evidence/20261124-w3-coder-c32/verified.json",
+        "sha256": "493276f96925e56281454d7d6f042c143b10b771749325cc7527a78c9a0941ee"
+      },
+      {
         "path": "benchmarks/evidence/20261124-w3-coder-c32/verify.py",
-        "sha256": "90e2bfbd2981e135e3a14499755b2b7bb9727aebdfe77a8048510a04404e8152"
+        "sha256": "dd26afaa51045b907172671d14cb3f728ff5f4f5265e5894ec358a47bcddb0c2"
       }
     ],
     "long_answer_preflight": [
@@ -569,16 +593,28 @@
         "sha256": "d922b8d2ffb473807a19c918c8d2a3e534ee3fd6374e0e1c77cc66f0573f89e7"
       },
       {
+        "path": "benchmarks/evidence/20261124-w4-long-answers/retry/campaign.exit",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w4-long-answers/retry/campaign.log",
+        "sha256": "8c88f9f6066c929bbfa3172de027bb10083fcc128e9b10d8836ffdcdf8e3232b"
+      },
+      {
         "path": "benchmarks/evidence/20261124-w4-long-answers/retry/campaign.sh",
         "sha256": "dc23571ee45a4a4d102f86e715e72fedefbb8eb00027761f1c060c91d6119b33"
       },
       {
         "path": "benchmarks/evidence/20261124-w4-long-answers/retry/check-first.py",
-        "sha256": "e6b3ea5219c38739d58d50217c84ffc681adc1447e438c051ce93afd68f9d96b"
+        "sha256": "d8115b5baae48b1e182c32e631c4c5e9c74f16451e98efe243e13db470defef2"
       },
       {
         "path": "benchmarks/evidence/20261124-w4-long-answers/retry/dispatch.sha256",
         "sha256": "b391dca31724af297eef01cae351fb2bb76dd10c679a99768b9694eedf783ad0"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w4-long-answers/retry/fetch.sh",
+        "sha256": "517f79bb89e6b90fa3086c96e6723d31a024fbda6213931a804ccb876a747f98"
       },
       {
         "path": "benchmarks/evidence/20261124-w4-long-answers/retry/first-attempt.json",
@@ -589,8 +625,28 @@
         "sha256": "a32385f31cbbd2a49845b4e1d5940b92543128206fca011ff7007aeffe779d63"
       },
       {
+        "path": "benchmarks/evidence/20261124-w4-long-answers/retry/raw-results.tar.gz",
+        "sha256": "a791e6c915cfcc8eb92172686392ec2add9569cfe44f85db7083925b1dd33c2c"
+      },
+      {
         "path": "benchmarks/evidence/20261124-w4-long-answers/retry/registration.json",
         "sha256": "0d4c67d9a0b2457b135ed732bfc9b69c76b45b44c2bf3220f0c0bc7c02bb563c"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w4-long-answers/retry/report.json",
+        "sha256": "7be033988223a022bd50ad3d1a8c2085fea8c73db68d1fe786c2521e5bc0aee7"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w4-long-answers/retry/result.sha256",
+        "sha256": "98079692ffb65c4aa7496b9b9afd0806d672264d0fc927cb4ec06a08779b4216"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w4-long-answers/retry/verified.json",
+        "sha256": "4391934ffb667adeafe55eed55ca6fd56fc4690836ff0d010e5e26b05356f1ef"
+      },
+      {
+        "path": "benchmarks/evidence/20261124-w4-long-answers/retry/verify-results.py",
+        "sha256": "2988b473da75efd35922241a7f6e635d78a5d5547a01d2518fa331c421cbe3d0"
       }
     ],
     "long_holdout_answer_audit": [
@@ -666,7 +722,7 @@
       },
       {
         "path": "benchmarks/evidence/20261124-w3-coder-arrivals/verify-replay.py",
-        "sha256": "415812231d09ab87dce1713f50174a43c09d9ce14b3ac2a423420f9434c619f2"
+        "sha256": "9183fcb1607515efce28b11d27b7b4fdf0066fe3d866ad0309fdedc9717c3da1"
       }
     ],
     "coder14_parallel_shard_readiness": [

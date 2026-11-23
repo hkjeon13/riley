@@ -95,6 +95,20 @@ A100 7번에서 `0511b9280` 배포 이미지의 Qwen2.5-7B에 고정 원문 33�
 
 vLLM은 요청을 받기 전에 FlashInfer 워밍업에서 `ninja`를 찾지 못해 종료했다. GPU 7의 기존 예약이 20GiB로 복귀했다. 같은 가상환경의 `ninja`를 실행 경로에 포함하고 버전을 확인했다. Riley 캡처는 해시를 고정하고, C32 종료 후 같은 GPU 7번에서 vLLM만 재실행하도록 등록했다. [재실행 기록](../../benchmarks/evidence/20261124-w4-long-answers/retry/registration.json) · [재실행 절차](../../benchmarks/evidence/20261124-w4-long-answers/retry/campaign.sh)
 
+### 정답을 고정한 장문 시험의 엔진 비교
+
+기존 가상환경을 실행 경로에 포함한 뒤 vLLM이 시작됐고, 고정 입력의 C1·C8 응답 66건을 완료했다. 앞선 Riley 응답 66건을 해시로 다시 확인했다. 두 엔진이 받은 33개 입력의 토큰 ID와 요청별 32토큰 출력 상한이 같았다. [양쪽 원본과 실행 기록](../../benchmarks/evidence/20261124-w4-long-answers/retry/raw-results.tar.gz) · [검산](../../benchmarks/evidence/20261124-w4-long-answers/retry/verified.json)
+
+| 확인 항목 | Riley | vLLM |
+|---|---:|---:|
+| 각 동시성에서 정답만 출력하고 정상 종료 | 0/33 | 0/33 |
+| 각 동시성의 32토큰 상한 도달 | 33/33 | 33/33 |
+| 코드 조회·기록 연결의 첫 줄 정답 | 22/22 | 22/22 |
+| 한국어 산술의 첫 줄 정답 | 0/11 | 0/11 |
+| C1과 C8에서 토큰 ID·텍스트·종료·usage 일치 | 33/33 | 24/33 |
+
+원문 completion의 두 모델은 조회·기록 연결의 정답을 첫 줄에 쓰고 설명을 계속했다. 이 결과는 해당 요청 형식과 출력 상한의 범위에 적용된다. vLLM 종료 때 Python의 semaphore 정리 경고가 1건 있었고, 종료 직후 두 GPU는 기존 프로세스의 20GiB 예약으로 복귀했다. [원본 체크섬](../../benchmarks/evidence/20261124-w4-long-answers/retry/result.sha256) · [동일 입력 검산 코드](../../benchmarks/evidence/20261124-w4-long-answers/retry/verify-results.py)
+
 ## 공통 접두부의 근소한 점수 차이
 
 두 입력군 29건의 원본 해시와 프롬프트 ID를 확인하고, Riley와 HF SDPA가 같은 접두부를 유지하는 동안 선택한 토큰을 다시 대조했다. 전체 생성 ID가 같은 요청은 22건이다. 첫 분기 7건 중 prefill 직후가 1건, decode가 6건이었다. 첫 분기에서 Riley가 보고한 상위 두 logprob 차이는 모두 0.25 이내였고, HF SDPA에서 두 엔진이 각각 선택한 ID의 점수 차이는 최대 0.125였다. [요청별 집계와 원본 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/result.json)
