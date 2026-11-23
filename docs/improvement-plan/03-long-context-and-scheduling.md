@@ -161,6 +161,8 @@ python3 benchmarks/live/compare.py \
 
 `benchmarks/live/load.py`의 `--records`와 `--transport-timing`으로 요청 write, 상태 줄 수신, 헤더 끝, 첫 SSE `data:` 줄, 첫 텍스트 사이의 시간을 기록한다. 고정 시각표 실행기에 기존 연결을 넘길 때에는 `one(..., capture_transport_timing=True)`를 쓴다. CPU 루프백에서 네 구간의 합을 확인한 뒤, A100의 같은 요청에서 서버 파싱·입장·소켓 쓰기 시각을 대조했다. 512행 후보의 p95는 네 비교에서 6.13–11.21% 줄었고 서버 전송 계측을 끈 두 비교에서 p50이 2% 한도를 넘어 기본값 적용을 보류했다. [부하 실행기](../../benchmarks/live/load.py) · [실제 시간 대조](03-long-context-result.md#c32의-httpsse-전송-시각-대조)
 
+512행 버스트를 decode가 없는 스텝으로 제한한 비교에서도 한 GPU에서 C32 TTFT p50·p95와 decode TPOT이 회귀 한도를 넘었다. 두 GPU의 출력은 기준과 일치했다. 현행 256행 기본값을 유지한다. [decode 0행 대조](03-long-context-result.md#decode가-없는-짧은-prefill의-512행-버스트)
+
 ## 8. 다른 작업에 넘길 결과
 
 W1에는 새 측정·판정 필드를, W4에는 chunk·schedule의 정확성 경계를, W5에는 권장 프로파일·지원 범위·트래픽 시나리오를 넘긴다. 최종 설명은 모델·prompt 길이·동시성·부하·설정·기준 후보를 연결한다.
