@@ -111,22 +111,28 @@ class DistributionServingTests(unittest.TestCase):
 
 
 class PackageFollowUpTests(unittest.TestCase):
-    def test_parallel_shard_follow_up_cannot_reuse_the_older_allocator_reports(self):
+    def test_package_follow_up_cannot_reuse_the_older_allocator_reports(self):
         path = ROOT / checker.MANIFEST
         read_bytes = Path.read_bytes
-        manifest = json.loads(read_bytes(path))
-        latest = manifest["distribution_with_parallel_shard_verification"]
-        historical = manifest["distribution_with_schema_reference_fix"]
-        for field in ("allocator_experiment", "stock_soak_comparison", "recovery_drill"):
-            latest[field] = historical[field]
+        pairs = (
+            ("distribution_with_parallel_shard_verification", "distribution_with_schema_reference_fix"),
+            ("distribution_with_uri_reference_fix", "distribution_with_parallel_shard_verification"),
+        )
 
-        def read_with_substitution(file):
-            return json.dumps(manifest).encode() if file == path else read_bytes(file)
+        for candidate, previous in pairs:
+            with self.subTest(candidate=candidate):
+                manifest = json.loads(read_bytes(path))
+                for field in ("allocator_experiment", "stock_soak_comparison", "recovery_drill"):
+                    manifest[candidate][field] = manifest[previous][field]
+                substituted = json.dumps(manifest).encode()
 
-        with patch.object(Path, "read_bytes", read_with_substitution), patch("sys.argv", ["check_improvement_evidence.py"]):
-            with redirect_stderr(StringIO()) as error:
-                self.assertEqual(checker.main(), 1)
-        self.assertIn("latest allocator package does not match its verified parent", error.getvalue())
+                def read_with_substitution(file):
+                    return substituted if file == path else read_bytes(file)
+
+                with patch.object(Path, "read_bytes", read_with_substitution), patch("sys.argv", ["check_improvement_evidence.py"]):
+                    with redirect_stderr(StringIO()) as error:
+                        self.assertEqual(checker.main(), 1)
+                self.assertIn("latest allocator package does not match its verified parent", error.getvalue())
 
     def test_schema_reference_probes_require_the_exact_output_and_error_field(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())

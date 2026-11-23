@@ -1017,7 +1017,12 @@ def main():
             earlier.append(latest)
             latest = uri_references
             latest_inputs = check_distribution_inputs(root, latest)
-            check_structured_serving_package(root, latest)
+            if "allocator_experiment" in latest:
+                check_pattern_fix_package(root, latest)
+            else:
+                if "stock_soak_comparison" in latest or "recovery_drill" in latest:
+                    raise ValueError("URI reference comparison or recovery requires an allocator experiment")
+                check_structured_serving_package(root, latest)
             check_pattern_class_probes(root, latest)
             check_schema_reference_probes(root, latest, uri_fragments=True)
         allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],

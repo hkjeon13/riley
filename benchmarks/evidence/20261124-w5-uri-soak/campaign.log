@@ -1,0 +1,27 @@
+campaign.sh: OK
+compare-soaks.py: OK
+recovery.sh: OK
+result.sha256: OK
+cpu-evidence/report.json: OK
+allocator.py: OK
+verify.py: OK
+verify_allocator_image.py: OK
+benchmarks/live/build_jemalloc_trial_image.py: OK
+context/Dockerfile: OK
+context/jemalloc-copyright: OK
+context/libjemalloc.so.2: OK
+context/riley-with-allocator: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-uri-soak-20261124.OMP7iFrk/allocator/verified-image.json
+IMAGE_VERIFIED sha256:99cb3f14a6d263ace12a93a7e8ce0f46383713fe537f06c8beaec063819a0ee1 2026-11-23T22:26:27Z
+START stock cache-off 6 2026-11-23T22:26:28Z
+START allocator cache-on 7 2026-11-23T22:26:28Z
+END stock cache-off 6 2026-11-23T22:59:42Z exit=1
+END allocator cache-on 7 2026-11-23T22:59:44Z exit=0
+START allocator cache-off 6 2026-11-23T22:59:44Z
+START stock cache-on 7 2026-11-23T22:59:44Z
+END stock cache-on 7 2026-11-23T23:32:56Z exit=1
+END allocator cache-off 6 2026-11-23T23:33:02Z exit=0
+START allocator accuracy 6 2026-11-23T23:33:03Z
+END allocator accuracy 6 2026-11-23T23:38:17Z exit=0
+SOAKS_VERIFIED 2026-11-23T23:38:27Z
+RECOVERY_VERIFIED 2026-11-23T23:45:02Z

@@ -1,0 +1,18 @@
+{
+  "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-uri-soak-20261124.OMP7iFrk",
+  "campaign_started_at": "2026-11-23T22:26:20Z",
+  "campaign_pid": 2734844,
+  "dispatch_sha256": "ea3bd307ff17a4396acd4da7ddb184222aaaf1573f2544bda818a177b4b3eb33",
+  "source_revision": "8a7c618c1882effcacd49107a0b41ea3fc29d22d",
+  "parent_image_id": "sha256:01b5c9d4bedfc93284af6dfc9fbe747002327d2818f7164f8d4e77565eaa1a8c",
+  "parent_result_sha256": "5faa76a89feac6293a6375b935852c58a64af855d036785bad9f95076668adf3",
+  "parent_cpu_sha256": "90cdff932840009027aad73e0e54dcbb8e98bd7ae7b652d1cc3882e2957b1e1b",
+  "client_rate_per_second": 8,
+  "duration_seconds": 1800,
+  "physical_gpus": [6, 7],
+  "rounds": [
+    {"6": "stock/cache-off", "7": "allocator/cache-on"},
+    {"6": "allocator/cache-off", "7": "stock/cache-on"}
+  ],
+  "recovery_gpu": 6
+}

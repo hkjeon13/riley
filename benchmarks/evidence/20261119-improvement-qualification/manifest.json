@@ -702,6 +702,106 @@
           "sha256": "f496ac4b9bd968e914a4e620838c15051d93bb96430c6db6d0f36fa060cc4377"
         }
       ]
+    },
+    "allocator_experiment": {
+      "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+      "matched_structured_cases": 16,
+      "evidence": {
+        "package": {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/allocator/verified-image.json",
+          "sha256": "7be69d4bab5a35f1f661115b6c80b56b4a900978b02c4e93cc12b725537e4b24"
+        },
+        "serving": {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/allocator/verified.json",
+          "sha256": "d192f58a01a34dee355c36d4bd2c5f1fbb18635330225ee32a46c874c133336d"
+        }
+      },
+      "reproduction": [
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/allocator/context.sha256",
+          "sha256": "c9da29e9f6e085bab55563eb6c4b2e61335af422137f5979f3956884f9e9de6a"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/allocator/gpu-checker-input.json",
+          "sha256": "36343755c77a8a7b651f3b5d186d3666ceb609e42dea8afd0c9ba26057fbe540"
+        }
+      ]
+    },
+    "stock_soak_comparison": {
+      "report": {
+        "path": "benchmarks/evidence/20261124-w5-uri-soak/verified.json",
+        "sha256": "99bd1f45f46a0f2609be18a507dbae30179570034f8719ec3f80b3297a500ef1"
+      },
+      "reproduction": [
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/campaign.sh",
+          "sha256": "25c907a58b5038c7f4edadfaee68ae5638424027d06136334664c3329b19fd92"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/campaign.log",
+          "sha256": "6392e7ba3c3f1e00bc9dd5b876f4c7c71dadebe0d0fb54bd80d48211f945ff1f"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/campaign.exit",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/compare-soaks.py",
+          "sha256": "c3a2d7f8fbc1127bd4cbc0faa1106a28c3ae9b631eb8cae67320af2c8c6aea7f"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/dispatch.sha256",
+          "sha256": "ea3bd307ff17a4396acd4da7ddb184222aaaf1573f2544bda818a177b4b3eb33"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/fetch-results.sh",
+          "sha256": "e008613f9df46277eb501ad2bbf964e301a2ab10bf12a2ec8f340c27f7523fba"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/result.sha256",
+          "sha256": "2d3ffee524d32ec5e87e5045612e4062ef00ebb7e39bb873ac3adacaa8fc74b2"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/raw-results.tar.gz",
+          "sha256": "4d5974adc5c67b9c52227f94c7960cc93d0d0600c438922dceb456c86a948230"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/registration.json",
+          "sha256": "516269ce90287f6012b1a4afae217946619093c5c8e760d112e0a1cbffb81822"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/verify-raw.py",
+          "sha256": "c79078418a872c56be0b503e8c994da3401d0ee1fd60d2ae88ac96cf1369efcf"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/verified-raw.json",
+          "sha256": "214ebf7cc9417174dd70291a24b05e616841d2169d483474b623791a48895d80"
+        }
+      ]
+    },
+    "recovery_drill": {
+      "report": {
+        "path": "benchmarks/evidence/20261124-w5-uri-soak/recovery/verified.json",
+        "sha256": "7596a947cb92d887db6b14ac1410e78c25810be6ac6349e1a8f6d0dd666f6fa9"
+      },
+      "reproduction": [
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/recovery.sh",
+          "sha256": "6c5dec04cfaaf0a4c25d202429d11b504a8332b96c57d14e09d5c79021adeaad"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/recovery/campaign.exit",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/recovery/campaign.log",
+          "sha256": "7e5c13e401a903b84f789c735419f953c10bb958d59704e800466a0eeebe06bb"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-uri-soak/recovery/result.sha256",
+          "sha256": "a246b45a44deaa22a2d266904cc02b21e9c3478769e7322707a7b00bd7495497"
+        }
+      ]
     }
   },
   "other_evidence": {
