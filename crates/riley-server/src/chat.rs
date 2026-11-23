@@ -1137,6 +1137,26 @@ mod tests {
     }
 
     #[test]
+    fn response_schema_and_forced_tools_reject_unsupported_pattern_class_escapes() {
+        let messages = json!([{"role": "user", "content": "x"}]);
+        let schema = json!({"type": "string", "pattern": r"^[\n]$"});
+        let format = json!({"model": "m", "messages": messages, "response_format": {
+            "type": "json_schema", "json_schema": {"name": "character", "schema": schema}
+        }});
+        let mut tools = weather();
+        tools[0]["function"]["parameters"]["properties"]["city"] = schema;
+        let forced = json!({"model": "m", "messages": messages, "tools": tools,
+            "tool_choice": {"type": "function", "function": {"name": "weather"}}});
+        for (body, expected_parameter) in [(format, "response_format"), (forced, "tools")] {
+            assert!(matches!(
+                normalize_chat_request(request(body), &template(TOOLS), limits()),
+                Err(ChatRequestError::Schema { parameter, message })
+                    if parameter == expected_parameter && message.contains(r"pattern class escape \n")
+            ));
+        }
+    }
+
+    #[test]
     fn stop_strings_cannot_cut_off_a_compiled_schema_or_tool_call() {
         let messages = json!([{"role": "user", "content": "x"}]);
         for payload in [

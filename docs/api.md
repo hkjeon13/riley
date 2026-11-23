@@ -165,6 +165,13 @@ including when a scalar is encoded as a JSON escape. Lookaround, backreferences,
 lazy quantifiers and `\\b` are refused, and `pattern` cannot be combined with
 `format` or length bounds.
 
+Character ranges use ASCII endpoints. If a range includes a quote or a
+backslash, the grammar emits the corresponding JSON escape. Class escapes
+support `\\d`, `\\w`, `\\s` in positive classes, and escaped regex punctuation.
+Control and Unicode pattern escapes such as `\\n` and `\\u0061`, descending
+ranges, sets as range endpoints, and `\\s` inside negated classes return 400
+`invalid_schema`.
+
 ### Tools
 
 `tools` and `tool_choice` follow the OpenAI shape. The tools go to the chat

@@ -22,6 +22,12 @@ Unicode 스칼라 1,112,064개를 각각 JSON 직렬화와 UTF-16 이스케이�
 
 `9373ea412`의 CUDA 12.4 배포 이미지를 A100에서 재빌드해 GitHub 빌드와 런타임 파일 21개의 해시를 대조했다. GPU 6·7번에서 Qwen2.5-7B-Instruct의 API 40건씩 통과했다. GPU 6번의 장문 스키마·지정 도구는 C1 16건을 기준으로 C8 16건과 C32 32건이 모두 일치했다. GPU 7번의 45초 혼합 부하는 정상 완료 338건, 의도적 연결 종료 21건을 기록했고 캐시·배치 메트릭 및 종료 검사를 통과했다. 두 GPU에서 종료 자원을 회수하고 기존 20GiB 예약을 확인했다. [배포 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/45126944223) · [A100 검산](../../benchmarks/evidence/20261123-w4-dot-package/verified.json)
 
+## Pattern 문자 클래스의 JSON 인코딩
+
+기존 `^[!-#]$` 문법은 따옴표가 범위 안에 있을 때 `"""`를 완성된 출력으로 받아들였다. `^[A-z]$`에서는 범위에 포함된 역슬래시가 원시 바이트로 들어갔고, `[\n]`과 `[\u0061]`처럼 지원하지 않는 클래스 이스케이프는 일반 문자로 해석됐다. JavaScript `RegExp`의 Unicode 모드에서 클래스가 매치하는 값을 확인하고, JSON의 따옴표·역슬래시 이스케이프와 대조했다.
+
+지원 범위는 디코딩한 문자에 적용한다. 범위에 든 따옴표·역슬래시는 올바른 JSON 이스케이프로 생성한다. 지원하지 않는 제어·Unicode 패턴 이스케이프와 내림차순 범위·클래스 집합이 들어간 범위 끝점은 이름이 있는 오류로 거부한다. `\s`는 API의 단일 공백 범위를 유지한다. 부정 클래스의 `[^\s]`는 ECMAScript 공백 전체를 제외해야 하므로 거부한다. 응답 스키마와 지정 도구 인자 경로의 오류를 포함해 CPU 서버 테스트 107건을 통과했다. [API 계약](../api.md#structured-output) · [문법 회귀 검사](../../crates/riley-server/src/structured.rs) · [요청 경로 회귀 검사](../../crates/riley-server/src/chat.rs)
+
 ## 현행 배포 이미지의 장문 채팅 검증
 
 Qwen2.5-7B-Instruct의 고정 입력에서 255·1,024·7,836·7,917토큰 사례를 선택했다. 각 입력을 채팅 메시지로 보내 `type`과 `enum`의 교집합 및 정수 `const`를 포함한 JSON 스키마를 검사했다. 같은 스키마를 이름이 지정된 도구의 인자로도 적용했다. 서버가 붙인 채팅 템플릿까지 포함한 입력 ID와 생성 ID·텍스트·도구 인자·종료 사유·사용량을 대조했다. 스키마와 도구 인자는 독립 Draft 2020-12 검증기로 검사했다. [고정 입력](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [검사기](../../benchmarks/live/structured_holdout_check.py)

@@ -1047,56 +1047,84 @@ impl SchemaCompiler {
             *position += 1;
         }
         let mut set = ByteClass::default();
-        let mut first = true;
         loop {
-            let next = *characters
-                .get(*position)
-                .ok_or_else(|| unsupported("pattern with an unclosed class"))?;
-            *position += 1;
-            if next == ']' && !first {
+            if characters.get(*position) == Some(&']') {
+                *position += 1;
                 break;
             }
-            first = false;
-            let low = if next == '\\' {
-                let escape = *characters
-                    .get(*position)
-                    .ok_or_else(|| unsupported("pattern ending in a backslash"))?;
-                *position += 1;
-                if let Some(escaped) = escape_class(escape) {
-                    set = set.union(escaped);
-                    continue;
-                }
-                escape
-            } else {
-                next
-            };
-            let low = plain_ascii(low)?;
+            let (next, escaped) = pattern_class_character(characters, position)?;
             let range = characters.get(*position) == Some(&'-')
                 && characters.get(*position + 1).is_some_and(|end| *end != ']');
+            if let Some(members) = escaped.then(|| escape_class(next)).flatten() {
+                if range {
+                    return Err(unsupported("pattern range with a character class endpoint"));
+                }
+                if negated && next == 's' {
+                    return Err(unsupported("pattern \\s inside a negated class"));
+                }
+                set = set.union(members);
+                continue;
+            }
+            let low = pattern_class_ascii(next, escaped)?;
             let high = if range {
-                let high = plain_ascii(characters[*position + 1])?;
-                *position += 2;
-                high
+                *position += 1;
+                let (end, escaped) = pattern_class_character(characters, position)?;
+                pattern_class_ascii(end, escaped)?
             } else {
                 low
             };
+            if high < low {
+                return Err(unsupported("pattern range in descending order"));
+            }
             set = set.union(ByteClass::range(low, high));
         }
-        if !negated {
+        if set == ByteClass::default() {
+            return Err(unsupported("empty pattern character class"));
+        }
+        if !negated
+            && ![b'"', b'\\', b'/']
+                .into_iter()
+                .any(|value| set.contains(value))
+        {
             return Ok(vec![GrammarElement::Bytes(set)]);
         }
-        let mut complement = ByteClass::default();
-        for value in 0x20..=0x7e_u8 {
-            if !set.contains(value) && value != b'"' && value != b'\\' {
-                complement = complement.union(ByteClass::byte(value));
+        Ok(vec![rule(self.pattern_class_rule(set, negated))])
+    }
+
+    fn pattern_class_rule(&mut self, set: ByteClass, negated: bool) -> u32 {
+        // Class membership applies to the decoded character. Only use raw
+        // bytes for characters that can appear unescaped in a JSON string.
+        let matches = |byte| set.contains(byte) != negated;
+        let id = self.builder.rule();
+        let mut plain = ByteClass::default();
+        for value in 0x20..=0x7f {
+            if matches(value) && !matches!(value, b'"' | b'\\') {
+                plain = plain.union(ByteClass::byte(value));
             }
         }
-        let id = self.builder.rule();
-        let multibyte = self.multibyte_char(true);
-        self.builder
-            .alternative(id, vec![GrammarElement::Bytes(complement)]);
-        self.builder.alternative(id, vec![rule(multibyte)]);
-        Ok(vec![rule(id)])
+        if plain != ByteClass::default() {
+            self.builder
+                .alternative(id, vec![GrammarElement::Bytes(plain)]);
+        }
+        for (value, escape) in [
+            (b'"', "\\\""),
+            (b'\\', "\\\\"),
+            (b'/', "\\/"),
+            (b'\x08', "\\b"),
+            (b'\x0c', "\\f"),
+            (b'\n', "\\n"),
+            (b'\r', "\\r"),
+            (b'\t', "\\t"),
+        ] {
+            if matches(value) {
+                self.builder.alternative(id, bytes(escape));
+            }
+        }
+        if negated {
+            let multibyte = self.multibyte_char(true);
+            self.builder.alternative(id, vec![rule(multibyte)]);
+        }
+        id
     }
 
     fn string_format(&mut self, format: &str) -> Result<u32, SchemaError> {
@@ -1278,10 +1306,31 @@ impl SchemaCompiler {
 }
 
 /// ASCII that appears as itself inside a JSON string.
-fn plain_ascii(character: char) -> Result<u8, SchemaError> {
+fn pattern_class_character(
+    characters: &[char],
+    position: &mut usize,
+) -> Result<(char, bool), SchemaError> {
+    let character = *characters
+        .get(*position)
+        .ok_or_else(|| unsupported("pattern with an unclosed class"))?;
+    *position += 1;
+    if character != '\\' {
+        return Ok((character, false));
+    }
+    let escape = *characters
+        .get(*position)
+        .ok_or_else(|| unsupported("pattern class ending in a backslash"))?;
+    *position += 1;
+    Ok((escape, true))
+}
+
+fn pattern_class_ascii(character: char, escaped: bool) -> Result<u8, SchemaError> {
+    if escaped && !r"^$\.*+?()[]{}|/-".contains(character) {
+        return Err(unsupported(format!("pattern class escape \\{character}")));
+    }
     u8::try_from(character)
         .ok()
-        .filter(|byte| (0x20..0x7f).contains(byte) && !matches!(byte, b'"' | b'\\'))
+        .filter(|byte| (0x20..=0x7f).contains(byte))
         .ok_or_else(|| unsupported(format!("pattern character {character:?} in a class")))
 }
 
@@ -1609,6 +1658,25 @@ mod tests {
         assert!(!accepts(&open, "\"ac\""));
         assert!(accepts(&anchored(r"^a\.b$"), "\"a.b\""));
         assert!(!accepts(&anchored(r"^a\.b$"), "\"axb\""));
+    }
+
+    #[test]
+    fn pattern_classes_do_not_admit_invalid_json_or_misread_escapes() {
+        let pattern = |pattern: &str| json!({"type": "string", "pattern": pattern});
+        let punctuation = pattern("^[!-#]$");
+        assert!(!accepts(&punctuation, "\"\"\""));
+        assert!(accepts(&punctuation, r#""\"""#));
+        let letters = pattern("^[A-z]$");
+        assert!(!accepts(&letters, "\"\\\""));
+        assert!(accepts(&letters, r#""\\""#));
+        assert!(!accepts(&pattern("^[^A-z]$"), r#""\\""#));
+        assert!(accepts(&pattern("^[^a]$"), r#""\"""#));
+        for unsupported in [r"^[\n]$", r"^[\u0061]$", r"^[^\s]$", r"^[\d-a]$", "^[z-a]$"] {
+            assert!(
+                rejected(pattern(unsupported)).contains("pattern"),
+                "{unsupported}"
+            );
+        }
     }
 
     #[test]
