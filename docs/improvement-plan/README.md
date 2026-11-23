@@ -175,6 +175,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W5 같은 배포 패키지의 jemalloc 시험 이미지가 두 30분 부하의 정밀 RSS 증가 0 조건을 통과했다. [현행 파생 이미지 대조](05-mixed-soak-result.md#같은-배포-패키지의-jemalloc-대조)
 - [x] W5 현행 패키지의 격리 복구에서 신규 요청 차단, 진행 중 스트림의 정상 종료, 같은 주소의 기본 이미지 준비 상태를 확인했다. [현행 패키지 격리 복구](05-mixed-soak-result.md#현행-패키지의-요청-차단과-격리-복구)
 - [x] W5 Pattern 수정 바이너리의 jemalloc 파생 이미지에서 캐시 켬·끔 30분 부하, 장문 232건, 스키마·도구 64건을 검증했다. 최신 `main`의 배포 입력과 GPU 판정의 연결을 CI에서 확인한다. [최신 30분 부하](05-mixed-soak-result.md#pattern-수정-이미지의-jemalloc-30분-재검증)
+- [x] W5의 같은 바이너리와 부하에서 기준 이미지의 후반 RSS는 +576·+584KiB, jemalloc 파생 이미지는 −780·−676KiB였다. 기준 이미지는 두 모드에서 RSS 기준만 미달했다. [최신 이미지 30분 대조](05-mixed-soak-result.md#pattern-수정-이미지의-기준과-jemalloc-30분-대조)
 - [x] W5의 같은 최신 이미지 두 개에서 요청 차단, 활성 스트림 종료 및 격리 주소 복구를 검증했다. 파생 이미지의 종료 요청부터 기준 이미지 준비 상태까지 139.78초가 걸렸다. [최신 격리 복구](05-mixed-soak-result.md#pattern-수정-이미지의-격리-복구)
 - [ ] W5 릴리스 대상으로 채택할 이미지가 실제 운영 검증을 충족한다. 합성 부하를 통과한 최신 jemalloc 시험 이미지 `c7fcb8e274ec`의 실제 운영 트래픽과 승인된 SLO, 서비스 복구 확인이 남아 있다. [운영 근거](05-documentation-and-operations.md#w5-b3-재현용-workload-구성)
 - [x] 문서에서 버전·기본값·성능 주장을 해당 버전과 실행 설정에 연결했다. CI는 배포 이미지의 여섯 모델 검증을 같은 이미지·바이너리와 공개 지원 표에 연결한다. [문서 대조](05-documentation-and-operations.md#w5-a3-반복-가능한-문서-검증) · [배포 이미지 지원 표](../model-support.md#packaged-serving-checks)

@@ -553,6 +553,19 @@ A100 6번에서 기준 이미지 `0a907408ec73`과 jemalloc 파생 이미지 `1f
 
 파생 이미지의 장문 생성 232건이 기존 golden과 일치했다. 구조화 출력·도구 호출은 C1 16건과 C8·C32 48건에서 통과했고, C1 기준 응답 16개는 같은 소스의 기준 이미지와 일치했다. 검사 종료 후 두 GPU가 기존 20GiB 예약으로 복귀했다. [구조화 출력 기준](04-structured-output-result.md#pattern-점-연산자의-줄바꿈-처리) · [장문과 예약 검산](../../benchmarks/evidence/20261123-w5-dot-allocator/verified.json)
 
+### Pattern 수정 이미지의 기준과 jemalloc 30분 대조
+
+기준 이미지 `76767e33ce49`에서도 파생 이미지 `c7fcb8e274ec`에 사용한 30분 합성 부하를 실행했다. 같은 모드끼리 바이너리, 체크포인트, 물리 GPU, 드라이버, 서버 인자와 요청 종류별 완료·취소 집계가 일치했다. 파생 이미지를 먼저 측정하고 기준 이미지를 후속 실행했다. 각 모드에서 두 이미지 모두 13,749건을 정상 완료했고 700건을 의도적으로 연결 종료했으며 예상 외 오류는 0건이었다. [실행 스크립트](../../benchmarks/evidence/20261123-w5-dot-stock-soak/campaign.sh) · [기준·파생 원본 대조](../../benchmarks/evidence/20261123-w5-dot-stock-soak/verified.json)
+
+| 지표 | 캐시 끔 기준 → jemalloc | 캐시 켬 기준 → jemalloc |
+|---|---:|---:|
+| 후반 정밀 RSS 변화 | +576 → −780KiB | +584 → −676KiB |
+| RSS 변화량의 차이 | −1,356KiB | −1,260KiB |
+| 후반 TTFT p95 | 334.23 → 334.57ms | 324.44 → 324.69ms |
+| 후반 전체 완료 p95 | 4,161.50 → 4,171.22ms | 4,129.22 → 4,132.61ms |
+
+기준 이미지의 두 모드는 정밀 RSS 증가 0 조건만 미달했다. jemalloc 이미지의 두 모드는 모든 합성 부하 기준을 통과했다. 서비스 릴리스 판정에는 실제 트래픽·승인된 SLO·서비스 복구 확인이 남아 있다. [원본 체크섬](../../benchmarks/evidence/20261123-w5-dot-stock-soak/result.sha256) · [운영 검증 기준](05-documentation-and-operations.md#w5-b3-재현용-workload-구성)
+
 ### Pattern 수정 이미지의 격리 복구
 
 A100 6번에서 파생 이미지 `c7fcb8e274ec`를 종료하고 같은 loopback 주소에 기준 이미지 `76767e33ce49`를 기동했다. 두 이미지에서 API 40건씩 통과했다. 입장 차단 뒤 새 요청에는 HTTP 503을 반환했고, 당시 활성 요청 1건은 생성 토큰 192개와 `length` 종료 사유를 받고 완료됐다. 두 이미지의 출력 해시와 캐시 재사용량 112토큰이 일치했다. [실행 순서](../../benchmarks/evidence/20261123-w5-dot-recovery/campaign.sh) · [복구 영수증](../../benchmarks/evidence/20261123-w5-dot-recovery/verified.json)

@@ -202,6 +202,26 @@ class PackageFollowUpTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cache-on soak verdict differs"):
             checker.check_package_soaks(soaks, serving)
 
+    def test_current_stock_soaks_recompute_the_allocator_rss_difference(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        candidate = manifest["distribution_with_pattern_fix"]
+        entry = candidate["stock_soak_comparison"]["report"]
+        smoke = json.loads((ROOT / candidate["evidence"]["a100_serving"]["path"]).read_bytes())
+        allocator_entry = candidate["allocator_experiment"]["evidence"]["serving"]
+        allocator = json.loads((ROOT / allocator_entry["path"]).read_bytes())
+        checker.check_stock_soak_comparison(ROOT, candidate, smoke, allocator)
+
+        changed = json.loads((ROOT / entry["path"]).read_bytes())
+        current = changed["comparisons"]["cache-on"]["stock_to_allocator_rss_change_kib"]
+        changed["comparisons"]["cache-on"]["stock_to_allocator_rss_change_kib"] = 1 if current is None else current + 1
+        raw = json.dumps(changed).encode("utf-8")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "soak-comparison.json"
+            path.write_bytes(raw)
+            entry.update(path=str(path), sha256=sha256(raw).hexdigest())
+            with self.assertRaisesRegex(ValueError, "cache-on allocator RSS difference changed"):
+                checker.check_stock_soak_comparison(ROOT, candidate, smoke, allocator)
+
     def test_allocator_soaks_match_the_attested_runtime_settings(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
         candidate = manifest["distribution_after_terminal_fix"]

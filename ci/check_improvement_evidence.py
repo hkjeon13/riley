@@ -237,6 +237,42 @@ def check_pattern_fix_package(root, candidate):
         entry = candidate["recovery_drill"]["report"]
         drill = json.loads((root / entry["path"]).read_bytes(), object_pairs_hook=unique_object)
         check_prefix_metrics_recovery(drill, smoke, allocator)
+    if "stock_soak_comparison" in candidate:
+        check_stock_soak_comparison(root, candidate, smoke, allocator)
+
+
+def check_stock_soak_comparison(root, candidate, smoke, allocator):
+    entry = candidate["stock_soak_comparison"]["report"]
+    report = json.loads((root / entry["path"]).read_bytes(), object_pairs_hook=unique_object)
+    parent_sha = candidate["evidence"]["a100_cpu"]["sha256"]
+    allocator_sha = candidate["allocator_experiment"]["evidence"]["serving"]["sha256"]
+    if (report["status"] != "verified" or report["parent_cpu_report_sha256"] != parent_sha
+            or report["allocator_report_sha256"] != allocator_sha
+            or report["reservations"] != allocator["reservations"]):
+        raise ValueError("stock soak comparison is not bound to the current package and allocator run")
+    stock = report["stock_soaks"]
+    check_package_soaks(stock, smoke)
+    comparisons = report["comparisons"]
+    if comparisons.keys() != stock["modes"].keys():
+        raise ValueError("stock soak comparison must cover both cache settings")
+    for mode, comparison in comparisons.items():
+        baseline = stock["modes"][mode]
+        trial = allocator["soaks"]["modes"][mode]
+        before, after = (arm["rss"]["rss_growth_kib"] for arm in (baseline, trial))
+        delta = after - before if before is not None and after is not None else None
+        if comparison["stock_to_allocator_rss_change_kib"] != delta:
+            raise ValueError(f"{mode} allocator RSS difference changed")
+        for label, arm in (("stock", baseline), ("allocator", trial)):
+            counts = comparison[f"{label}_counts"]
+            windows = comparison[f"{label}_latency_windows"]
+            if (sum(row.get("completed", 0) for row in counts.values()) != arm["completed"]
+                    or counts["cancel"].get("disconnected", 0) != arm["client_disconnects"]):
+                raise ValueError(f"{mode} {label} comparison outcome counts changed")
+            for metric, measured in arm["p95_change_percent"].items():
+                early, late = (windows[period][f"{metric}_p95"] for period in ("early", "late"))
+                change = (late / early - 1) * 100 if early and late else None
+                if change != measured:
+                    raise ValueError(f"{mode} {label} comparison latency windows changed")
 
 
 def check_prefix_metrics_serving(serving):
