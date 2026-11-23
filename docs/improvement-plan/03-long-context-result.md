@@ -1149,6 +1149,15 @@ GPU 7번의 동시 유입은 전송 오차 p95가 3.83ms로 판정 한도를 넘
 
 이 값은 전체 GPU 스텝 시간이다. 집계에 포함한 실제 스텝마다 decode 요청의 KV 길이와 다른 실행 조건도 달라질 수 있다. 이후 교체 후보를 계측할 때 같은 prefill·decode 행 수에 더해 양쪽 prefill 진행 위치와 동시 decode의 KV 길이를 기록한다.
 
+같은 기록에서 prefill 예산의 일부만 앞선 장문 요청에 넘길 수 있는 상한도 계산했다. 기존 요청의 진행 위치가 `P`, 앞선 요청의 위치가 `A`, 남은 prefill 예산이 `Q`일 때 `k`행을 넘기면 논리적 query–key 쌍의 변화는 `k × (A − P − Q + k)`다. 앞선 요청이 예산 전체를 채우기 힘든 경우를 포함하고, 요청의 남은 길이와 쌍 수가 증가하지 않는 범위에서 최대 `k`를 독립 검산했다. [분할 상한 검산기](../../benchmarks/evidence/20261124-w3-wide-prefill-order/audit-split.py)
+
+| 기존 RAG 기록 | 쌍 수 증가 없이 분할할 수 있는 스텝 | 측정 요청을 앞당길 수 있는 스텝 | 해당 스텝에서 측정 요청의 prefill을 끝낼 수 있는 경우 |
+|---|---:|---:|---:|
+| seed 1 | 9 | 5 | 0 |
+| seed 2 | 5 | 0 | 0 |
+
+Seed 1의 긴 대기 요청 30번에는 세 개의 관측 스텝에서 각각 최대 8행을 앞당길 수 있었다. Seed 2에서 가능한 분할은 모두 HTTP 워밍업 요청을 향했다. 이 상한은 기록된 각 스텝의 진행 위치에서 독립적으로 계산한 것이며, 다음 스텝의 일정과 실제 CUDA 실행 시간에 미치는 영향은 별도 계측 범위다. 두 seed의 지연을 줄일 정책을 고르는 데는 실제 교체 스텝의 GPU 시간과 decode 커밋을 먼저 대조한다. [상한 집계와 스텝별 근거](../../benchmarks/evidence/20261124-w3-wide-prefill-order/split-audit.json)
+
 두 진단 바이너리에서 순서 변경을 모두 끈 기준 실행끼리도 대조했다. 같은 소스 기준, GPU, 서버 인자, CPU 배치와 도착 시각표를 사용했다. 12개 비교의 대응 출력 1,184쌍이 일치했고 전송 오차 p95는 최대 2.52ms였다. 기준 실행끼리 C32 Riley 시각표의 TTFT p50은 GPU 6에서 10.53%, GPU 7에서 6.12% 늘었다. RAG seed 1의 기준 decode TPOT p50은 각각 1.83%·3.33% 늘었다. 같은 GPU의 후속 후보와 기준을 비교하면 seed 1에서 요청별 decode 시간이 늘어난 경우가 GPU 6은 62/64건, GPU 7은 2/64건이었다. 두 진단 바이너리는 서로 다르므로 기준 대조에는 빌드 차이와 실행 간 편차가 함께 포함된다. [원본 검증과 요청별 집계](../../benchmarks/evidence/20261124-w3-wide-prefill-order/cost-audit.json)
 
 같은 진단 바이너리로 기준을 다시 반복했다. 실제 순서 변경 스텝의 두 prefill 위치와 동시 decode 요청 ID를 실행 시간에 연결하는 계측은 남아 있다. [동일 바이너리 기준 반복](#동일-바이너리의-기준-반복과-prefill-후보)
@@ -1183,7 +1192,7 @@ RAG seed 1에서는 후보의 긴 간격 합계가 183.26초로 두 기준의 17
 
 이전 스케줄러 후보의 순서와 회귀 기준을 그대로 사용한다. 진단 빌드는 각 교체 가능 스텝에서 기준과 후보의 요청 ID, prefill 진행 위치와 할당 행을 기록한다. 같은 iteration ID에 실제 GPU 실행 시간과 모든 decode 요청의 KV 길이를 연결한다. 기준 실행에서도 교체 가능했던 선택을 기록한다. 로그는 요청을 처리하는 동안 메모리에 모아 종료 뒤 출력한다. 검산기는 각 스텝의 이전 커서를 재구성해 선택한 prefill과 실제 커밋을 대조하고, 동시 decode의 연속 커밋 사이 시간과 HTTP 측정값을 요청 ID에 연결한다. [계측 코드](../../benchmarks/evidence/20261124-w3-prefill-step-cost/instrument.py) · [검산기](../../benchmarks/evidence/20261124-w3-prefill-step-cost/verify.py)
 
-CPU에서 계측·후보 스위치의 네 조합을 통과했다. 검산기와 설정 검증 네 건에서 중복·누락·커서 불일치를 검사하고 기존 도착 시각표와 CPU 배치가 바이트 단위로 일치함을 확인했다. GPU 결과에는 계측을 켠 두 설정의 출력 일치와 앞선 계측 비활성 실행과의 비교를 함께 기록한다. A100 진단 실행은 대기 중이다. [CPU 결과](../../benchmarks/evidence/20261124-w3-prefill-step-cost/cpu-tests.log) · [CPU 검산 코드](../../benchmarks/evidence/20261124-w3-prefill-step-cost/check-trace.py) · [고정 실행 조건](../../benchmarks/evidence/20261124-w3-prefill-step-cost/preflight.json)
+CPU에서 계측·후보 스위치의 네 조합을 통과했다. 검산기와 설정 검증 네 건에서 중복·누락·커서 불일치를 검사하고 기존 도착 시각표와 CPU 배치가 바이트 단위로 일치함을 확인했다. A100 전용 경로에서 빌드 스크립트와 재사용할 계측 입력의 체크섬을 확인했다. GPU 결과에는 계측을 켠 두 설정의 출력 일치와 앞선 계측 비활성 실행과의 비교를 함께 기록한다. A100 진단 실행은 W5 작업이 끝난 뒤 시작한다. [CPU 결과](../../benchmarks/evidence/20261124-w3-prefill-step-cost/cpu-tests.log) · [CPU 검산 코드](../../benchmarks/evidence/20261124-w3-prefill-step-cost/check-trace.py) · [고정 실행 조건](../../benchmarks/evidence/20261124-w3-prefill-step-cost/preflight.json)
 
 검산기는 선정한 GPU 7번 요청의 prefill 스텝과 모든 decode 커밋 간격을 클라이언트의 첫 토큰 지연 및 콘텐츠 수신 구간에 연결한다. 후보를 켠 상태와 기준 상태에서 각 스텝에 교체가 가능했는지, 실제로 교체했는지, 동시 prefill·decode 행 수가 각각 얼마였는지 기록한다. 앞서 첫 토큰을 추적했던 RAG seed 1의 20·30번과 seed 2의 43번도 같은 보고서에 포함한다. [선정한 요청 ID](../../benchmarks/evidence/20261124-w3-prefill-repeat/gap-audit.json) · [커밋과 HTTP 기록의 연결](../../benchmarks/evidence/20261124-w3-prefill-step-cost/verify.py)
 

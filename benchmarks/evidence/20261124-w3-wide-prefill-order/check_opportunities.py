@@ -35,12 +35,11 @@ def count_placements(steps, submitted, prompt_lengths, activation):
     return dict(sorted(counts.items()))
 
 
-def summarize(summarize_placements):
-    activation = json.loads((HERE / "registration.json").read_bytes())["activation"]
+def read_workloads():
     reader = runpy.run_path(str(SOURCE / "verify.py"))
     prior = reader["PRIOR"]
     arm = reader["ARM"]
-    counts = {}
+    workloads = {}
     with tarfile.open(SOURCE / "raw-results.tar.gz", "r:gz") as archive, tempfile.TemporaryDirectory() as scratch:
         log = Path(scratch) / "server.log"
         log.write_bytes(archive.extractfile(f"{arm}/server.log").read())
@@ -48,17 +47,27 @@ def summarize(summarize_placements):
         admits, _, steps, by_scheduler, submitted, *_ = reader["read_trace"](log, observations.keys())
         for label in prior["LABELS"]:
             data = json.load(archive.extractfile(f"{arm}/{label}.json"))
-            ids = data["warmup_response_ids"] + [row["response_id"] for row in data["measured"]]
-            schedulers = [admits[int(request[5:], 16)][0] for request in ids]
+            measured = {admits[int(row["response_id"][5:], 16)][0]: row["request_index"]
+                        for row in data["measured"]}
+            warmup = [admits[int(request[5:], 16)][0] for request in data["warmup_response_ids"]]
             # These completed requests committed the full input by their final prefill step.
-            prompt_lengths = {request: by_scheduler[request][-1][2] for request in schedulers}
-            counts[label] = summarize_placements(steps, submitted, prompt_lengths, activation)
+            prompt_lengths = {request: by_scheduler[request][-1][2] for request in (*warmup, *measured)}
+            workloads[label] = prompt_lengths, measured
+    return steps, submitted, workloads
+
+
+def summarize(summarize_placements):
+    activation = json.loads((HERE / "registration.json").read_bytes())["activation"]
+    steps, submitted, workloads = read_workloads()
     return {
         "gpu": 7,
         "source_committed_steps": len(steps),
         "includes_http_warmup": True,
         "accounts_for_aging_override": False,
-        "placements_by_decode_rows": counts,
+        "placements_by_decode_rows": {
+            label: summarize_placements(steps, submitted, prompt_lengths, activation)
+            for label, (prompt_lengths, _) in workloads.items()
+        },
     }
 
 

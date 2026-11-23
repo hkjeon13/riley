@@ -1,0 +1,322 @@
+{
+  "gpu": 7,
+  "source_committed_steps": 2505,
+  "scope": "independent arithmetic bound at observed baseline cursors",
+  "includes_http_warmup": true,
+  "accounts_for_aging_override": false,
+  "schedules": {
+    "rag-c8-s1-vllm-arrivals": {
+      "steps_with_a_nonincreasing_split": 9,
+      "steps_that_could_advance_a_measured_request": 5,
+      "steps_that_could_finish_a_measured_prefill": 0,
+      "measured_request_indexes": [
+        29,
+        30,
+        33
+      ],
+      "steps": [
+        {
+          "step": 81,
+          "decode_rows": 1,
+          "prefill_rows": 1023,
+          "original_scheduler_request": 55,
+          "original_request_index": null,
+          "original_prefix_tokens": 1024,
+          "alternatives": [
+            {
+              "scheduler_request": 54,
+              "request_index": null,
+              "prefix_tokens": 1278,
+              "remaining_tokens": 2204,
+              "rows_at_bound": 769,
+              "logical_pair_delta_at_bound": 0,
+              "would_finish_prefill": false
+            }
+          ]
+        },
+        {
+          "step": 82,
+          "decode_rows": 3,
+          "prefill_rows": 1021,
+          "original_scheduler_request": 56,
+          "original_request_index": null,
+          "original_prefix_tokens": 1024,
+          "alternatives": [
+            {
+              "scheduler_request": 54,
+              "request_index": null,
+              "prefix_tokens": 1278,
+              "remaining_tokens": 2204,
+              "rows_at_bound": 767,
+              "logical_pair_delta_at_bound": 0,
+              "would_finish_prefill": false
+            }
+          ]
+        },
+        {
+          "step": 84,
+          "decode_rows": 5,
+          "prefill_rows": 1019,
+          "original_scheduler_request": 55,
+          "original_request_index": null,
+          "original_prefix_tokens": 2047,
+          "alternatives": [
+            {
+              "scheduler_request": 54,
+              "request_index": null,
+              "prefix_tokens": 1350,
+              "remaining_tokens": 2132,
+              "rows_at_bound": 1019,
+              "logical_pair_delta_at_bound": -710243,
+              "would_finish_prefill": false
+            }
+          ]
+        },
+        {
+          "step": 85,
+          "decode_rows": 1,
+          "prefill_rows": 1023,
+          "original_scheduler_request": 56,
+          "original_request_index": null,
+          "original_prefix_tokens": 2045,
+          "alternatives": [
+            {
+              "scheduler_request": 54,
+              "request_index": null,
+              "prefix_tokens": 1350,
+              "remaining_tokens": 2132,
+              "rows_at_bound": 1023,
+              "logical_pair_delta_at_bound": -710985,
+              "would_finish_prefill": false
+            },
+            {
+              "scheduler_request": 55,
+              "request_index": null,
+              "prefix_tokens": 3066,
+              "remaining_tokens": 438,
+              "rows_at_bound": 2,
+              "logical_pair_delta_at_bound": 0,
+              "would_finish_prefill": false
+            }
+          ]
+        },
+        {
+          "step": 496,
+          "decode_rows": 1,
+          "prefill_rows": 1023,
+          "original_scheduler_request": 80,
+          "original_request_index": 31,
+          "original_prefix_tokens": 0,
+          "alternatives": [
+            {
+              "scheduler_request": 79,
+              "request_index": 30,
+              "prefix_tokens": 1015,
+              "remaining_tokens": 2487,
+              "rows_at_bound": 8,
+              "logical_pair_delta_at_bound": 0,
+              "would_finish_prefill": false
+            }
+          ]
+        },
+        {
+          "step": 499,
+          "decode_rows": 7,
+          "prefill_rows": 1017,
+          "original_scheduler_request": 80,
+          "original_request_index": 31,
+          "original_prefix_tokens": 1023,
+          "alternatives": [
+            {
+              "scheduler_request": 79,
+              "request_index": 30,
+              "prefix_tokens": 2032,
+              "remaining_tokens": 1470,
+              "rows_at_bound": 8,
+              "logical_pair_delta_at_bound": 0,
+              "would_finish_prefill": false
+            }
+          ]
+        },
+        {
+          "step": 500,
+          "decode_rows": 1,
+          "prefill_rows": 1023,
+          "original_scheduler_request": 79,
+          "original_request_index": 30,
+          "original_prefix_tokens": 2032,
+          "alternatives": [
+            {
+              "scheduler_request": 78,
+              "request_index": 29,
+              "prefix_tokens": 2285,
+              "remaining_tokens": 1232,
+              "rows_at_bound": 770,
+              "logical_pair_delta_at_bound": 0,
+              "would_finish_prefill": false
+            }
+          ]
+        },
+        {
+          "step": 502,
+          "decode_rows": 1,
+          "prefill_rows": 1023,
+          "original_scheduler_request": 80,
+          "original_request_index": 31,
+          "original_prefix_tokens": 2040,
+          "alternatives": [
+            {
+              "scheduler_request": 79,
+              "request_index": 30,
+              "prefix_tokens": 3055,
+              "remaining_tokens": 447,
+              "rows_at_bound": 8,
+              "logical_pair_delta_at_bound": 0,
+              "would_finish_prefill": false
+            }
+          ]
+        },
+        {
+          "step": 623,
+          "decode_rows": 7,
+          "prefill_rows": 1017,
+          "original_scheduler_request": 83,
+          "original_request_index": 34,
+          "original_prefix_tokens": 2039,
+          "alternatives": [
+            {
+              "scheduler_request": 82,
+              "request_index": 33,
+              "prefix_tokens": 2876,
+              "remaining_tokens": 625,
+              "rows_at_bound": 180,
+              "logical_pair_delta_at_bound": 0,
+              "would_finish_prefill": false
+            }
+          ]
+        }
+      ]
+    },
+    "rag-c8-s2-vllm-arrivals": {
+      "steps_with_a_nonincreasing_split": 5,
+      "steps_that_could_advance_a_measured_request": 0,
+      "steps_that_could_finish_a_measured_prefill": 0,
+      "measured_request_indexes": [],
+      "steps": [
+        {
+          "step": 1300,
+          "decode_rows": 2,
+          "prefill_rows": 1022,
+          "original_scheduler_request": 125,
+          "original_request_index": null,
+          "original_prefix_tokens": 1024,
+          "alternatives": [
+            {
+              "scheduler_request": 124,
+              "request_index": null,
+              "prefix_tokens": 1284,
+              "remaining_tokens": 2195,
+              "rows_at_bound": 762,
+              "logical_pair_delta_at_bound": 0,
+              "would_finish_prefill": false
+            }
+          ]
+        },
+        {
+          "step": 1301,
+          "decode_rows": 1,
+          "prefill_rows": 1023,
+          "original_scheduler_request": 126,
+          "original_request_index": null,
+          "original_prefix_tokens": 1024,
+          "alternatives": [
+            {
+              "scheduler_request": 124,
+              "request_index": null,
+              "prefix_tokens": 1284,
+              "remaining_tokens": 2195,
+              "rows_at_bound": 763,
+              "logical_pair_delta_at_bound": 0,
+              "would_finish_prefill": false
+            },
+            {
+              "scheduler_request": 125,
+              "request_index": null,
+              "prefix_tokens": 2046,
+              "remaining_tokens": 1433,
+              "rows_at_bound": 1,
+              "logical_pair_delta_at_bound": 0,
+              "would_finish_prefill": false
+            }
+          ]
+        },
+        {
+          "step": 1304,
+          "decode_rows": 4,
+          "prefill_rows": 1020,
+          "original_scheduler_request": 125,
+          "original_request_index": null,
+          "original_prefix_tokens": 2046,
+          "alternatives": [
+            {
+              "scheduler_request": 124,
+              "request_index": null,
+              "prefix_tokens": 1840,
+              "remaining_tokens": 1639,
+              "rows_at_bound": 1020,
+              "logical_pair_delta_at_bound": -210120,
+              "would_finish_prefill": false
+            }
+          ]
+        },
+        {
+          "step": 1305,
+          "decode_rows": 1,
+          "prefill_rows": 1023,
+          "original_scheduler_request": 126,
+          "original_request_index": null,
+          "original_prefix_tokens": 2047,
+          "alternatives": [
+            {
+              "scheduler_request": 124,
+              "request_index": null,
+              "prefix_tokens": 1840,
+              "remaining_tokens": 1639,
+              "rows_at_bound": 1023,
+              "logical_pair_delta_at_bound": -211761,
+              "would_finish_prefill": false
+            },
+            {
+              "scheduler_request": 125,
+              "request_index": null,
+              "prefix_tokens": 3066,
+              "remaining_tokens": 413,
+              "rows_at_bound": 4,
+              "logical_pair_delta_at_bound": 0,
+              "would_finish_prefill": false
+            }
+          ]
+        },
+        {
+          "step": 1306,
+          "decode_rows": 4,
+          "prefill_rows": 1020,
+          "original_scheduler_request": 128,
+          "original_request_index": null,
+          "original_prefix_tokens": 1298,
+          "alternatives": [
+            {
+              "scheduler_request": 124,
+              "request_index": null,
+              "prefix_tokens": 1840,
+              "remaining_tokens": 1639,
+              "rows_at_bound": 478,
+              "logical_pair_delta_at_bound": 0,
+              "would_finish_prefill": false
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
