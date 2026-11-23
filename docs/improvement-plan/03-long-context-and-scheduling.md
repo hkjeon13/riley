@@ -159,7 +159,7 @@ python3 benchmarks/live/compare.py \
 
 고정 C32의 두 도착 시각표와 두 GPU에서 p95는 처음 32건으로 결정됐다. 512행 후보의 가장 큰 p95 악화에서는 엔진 입장 및 입장 뒤 첫 텍스트 구간이 짧아졌고, 같은 요청의 write 이후 나머지 시간이 206.76ms 늘었다. 이 차이를 조사하는 데에는 본문 처리와 응답 전송 구간의 추가 관측이 필요하다. [C32 p95의 요청별 구간 확인](03-long-context-result.md#c32-첫-토큰-p95를-결정한-요청)
 
-다음 재생에서는 `benchmarks/live/load.py`에 `--records`와 `--transport-timing`을 넘겨 클라이언트의 요청 write, 상태 줄 수신, 헤더 끝, 첫 SSE `data:` 줄, 첫 텍스트 사이의 시간을 기록할 수 있다. 고정 시각표 실행기가 기존 연결을 넘길 때에는 `one(..., capture_transport_timing=True)`를 쓴다. CPU 루프백에서 헤더와 SSE의 각 구간을 따로 지연시켜 네 구간의 합이 write부터 첫 텍스트까지의 시간과 일치하는지 개방형·폐쇄형 부하에서 확인했다. 서버 본문 처리·응답 전송의 시각은 별도 계측이 필요하다. [부하 실행기](../../benchmarks/live/load.py) · [구간 검증](../../benchmarks/scripts/tests/test_serving_load.py)
+`benchmarks/live/load.py`의 `--records`와 `--transport-timing`으로 요청 write, 상태 줄 수신, 헤더 끝, 첫 SSE `data:` 줄, 첫 텍스트 사이의 시간을 기록한다. 고정 시각표 실행기에 기존 연결을 넘길 때에는 `one(..., capture_transport_timing=True)`를 쓴다. CPU 루프백에서 네 구간의 합을 확인한 뒤, A100의 같은 요청에서 서버 파싱·입장·소켓 쓰기 시각을 대조했다. 512행 후보의 p95는 네 비교에서 6.13–11.21% 줄었고 서버 전송 계측을 끈 두 비교에서 p50이 2% 한도를 넘어 기본값 적용을 보류했다. [부하 실행기](../../benchmarks/live/load.py) · [실제 시간 대조](03-long-context-result.md#c32의-httpsse-전송-시각-대조)
 
 ## 8. 다른 작업에 넘길 결과
 

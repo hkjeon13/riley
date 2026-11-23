@@ -1,0 +1,31 @@
+prepare.py: OK
+verify_transport.py: OK
+report.py: OK
+campaign.sh: OK
+load-transport.patch: OK
+build-result.sha256: OK
+schedules.json: OK
+BUILD_START 2026-11-23T11:21:15Z
+patching file load.py
+Hunk #4 succeeded at 149 (offset 2 lines).
+Hunk #5 succeeded at 204 (offset 2 lines).
+Hunk #6 succeeded at 248 (offset 2 lines).
+Hunk #7 succeeded at 257 (offset 2 lines).
+Hunk #8 succeeded at 280 (offset 2 lines).
+BUILD_END 2026-11-23T11:22:59Z
+START transport 6 2026-11-23T11:22:59Z
+START control 7 2026-11-23T11:22:59Z
+END control 7 2026-11-23T11:28:06Z exit=0
+START control 7 2026-11-23T11:28:06Z
+END transport 6 2026-11-23T11:28:09Z exit=0
+START transport 6 2026-11-23T11:28:09Z
+END transport 6 2026-11-23T11:33:03Z exit=0
+START control 6 2026-11-23T11:33:03Z
+END control 7 2026-11-23T11:33:03Z exit=0
+START transport 7 2026-11-23T11:33:03Z
+END transport 7 2026-11-23T11:38:00Z exit=0
+START transport 7 2026-11-23T11:38:00Z
+END control 6 2026-11-23T11:38:05Z exit=0
+START control 6 2026-11-23T11:38:05Z
+END transport 7 2026-11-23T11:43:07Z exit=0
+END control 6 2026-11-23T11:43:10Z exit=0

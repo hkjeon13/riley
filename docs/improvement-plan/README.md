@@ -20,7 +20,14 @@ Riley 0.1.0의 기본 서빙 기능을 유지하면서, 변경을 신뢰할 수 
 
 `main`에 반영한 변경은 W1의 CPU·CUDA·배포 이미지 검증 복구, W2의 스트리밍 취소와 정상 완료 처리 수정, W4의 JSON 스키마 오류·종료 처리 수정, W5의 prefix cache 메트릭이다. [W1 검증](01-validation-result.md) · [취소 순서 검증](02-async-step-result.md#마지막-토큰-전달과-취소의-순서) · [스키마 검증](04-structured-output-result.md) · [메트릭을 포함한 패키지](05-mixed-soak-result.md#prefix-cache-메트릭을-포함한-배포-패키지)
 
-기존 `native-bf16-varlen-v1` 프로파일은 `after-submit-v1`을 사용한다. Prefix cache와 기존 prefill burst는 명시적 설정으로 사용한다. Coder-14B의 새 512행 버스트와 jemalloc은 아래 회귀·운영 판정에 연결한 시험 후보다. [프로파일 설정](../configuration.md#execution-options) · [512행 버스트 판정](03-long-context-result.md#후속-64건의-도착을-12ms-늦춘-교차-실행) · [jemalloc 판정](06-candidate-qualification.md#현재-판정)
+### 현재 기본값과 지원 범위
+
+| 구분 | 현행 `main`의 적용 범위 |
+|---|---|
+| 배포 이미지 기본값 | `native-bf16-varlen-v1` 프로파일은 `after-submit-v1`, 배치·prefill 256행을 사용한다. 직접 CLI에서 프로파일을 지정하지 않으면 이벤트 발행 기본값은 `immediate-v1`이다. [프로파일 설정](../configuration.md#execution-options) |
+| 명시적 설정 | `--prefix-cache-blocks`와 `--prefill-burst-steady-budget`으로 기존 캐시·버스트 정책을 사용한다. 모델별 예산과 비용은 설정 문서에 따른다. [캐시 설정](../configuration.md#prefix-cache) · [스텝 예산](../configuration.md#step-size) |
+| 시험 후보와 미달 지표 | 일부 RAG의 TTFT와 Coder-14B의 C32 목표는 미달이다. 512행 후보는 C32 p95를 줄였지만 p50 회귀 한도를 넘었다. jemalloc은 30분 합성 부하와 격리 복구를 통과했고 운영 릴리스는 보류한다. [성능 판정](03-long-context-and-scheduling.md#현재-적용-판정) · [512행 전송 대조](03-long-context-result.md#c32의-httpsse-전송-시각-대조) · [릴리스 판정](06-candidate-qualification.md#현재-판정) |
+| 미지원 범위 | 지원 모델은 모델 표에 따른다. 구조화 출력은 문서에 명시한 스키마 부분집합을 적용하며 `oneOf` 등 강제할 수 없는 제약에는 `400 invalid_schema`를 반환한다. [모델 지원 표](../model-support.md) · [스키마 계약](../api.md#structured-output) |
 
 현재 구현은 연속 배칭, Paged KV, CUDA Graph, 스트리밍·취소, structured output·tools·logprobs, 8K 문맥, prefix cache, 정적 LoRA 병합, 32B TP=2를 포함한다. 단일 GPU 24개 모델의 qualification과 광범위한 측정 기록이 있다. 이것이 모든 워크로드·모델·장비의 목표 충족을 뜻하지는 않는다.
 
@@ -179,7 +186,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W5에서 `6d618f64e`의 두 이미지로 신규 요청 차단, 활성 스트림 종료 및 같은 격리 주소 복구를 검증했다. 파생 이미지 종료 요청부터 기준 이미지의 준비 상태까지 136.26초가 걸렸다. [문자 클래스 수정의 격리 복구](05-mixed-soak-result.md#문자-클래스-수정-이미지의-격리-복구)
 - [ ] W5 릴리스 대상으로 채택할 이미지가 실제 운영 검증을 충족한다. `6d618f64e`의 실제 운영 트래픽과 승인된 SLO, 서비스 복구 확인이 남아 있다. [운영 근거](05-documentation-and-operations.md#w5-b3-재현용-workload-구성)
 - [x] 문서에서 버전·기본값·성능 주장을 해당 버전과 실행 설정에 연결했다. CI는 배포 이미지의 여섯 모델 검증을 같은 이미지·바이너리와 공개 지원 표에 연결한다. [문서 대조](05-documentation-and-operations.md#w5-a3-반복-가능한-문서-검증) · [배포 이미지 지원 표](../model-support.md#packaged-serving-checks)
-- [ ] 목표 미달을 숫자상 해결과 구분해 명시하고, 기본값·opt-in·미지원 범위를 확정했다.
+- [x] 목표 미달과 수치 개선을 구분해 기록하고, 현재 `main`의 기본값·명시적 설정·미지원 범위를 확정했다. [현재 적용 범위](#현재-기본값과-지원-범위)
 
 본 계획에서 MoE·양자화·비전·다중 호스트·런타임 LoRA 전환을 새로 구현하지 않는다. 현재 범위의 신뢰성과 병목을 해결한 뒤 별도 로드맵으로 평가한다.
 
