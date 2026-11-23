@@ -1,0 +1,98 @@
+{
+  "original": {
+    "6": {
+      "stock": {
+        "committed_steps": 204,
+        "committed_gpu_ms": 5437.775489,
+        "wide_buckets": {},
+        "pending_at_later_write_p50": 30.0,
+        "later_writes_with_at_least_32_pending": 0,
+        "workload_sha256": "97e0f75ad1d818f6f0e603256ee5a200f88c3ac56dd51f493f8bf009dde91894"
+      },
+      "prefill_only": {
+        "committed_steps": 202,
+        "committed_gpu_ms": 5435.473277,
+        "wide_buckets": {
+          "512": {
+            "steps": 1,
+            "gpu_ns": 59585632
+          }
+        },
+        "pending_at_later_write_p50": 34.0,
+        "later_writes_with_at_least_32_pending": 60,
+        "workload_sha256": "35002ce440c4c2ec374c5c5bb7e4e4326c731850377fbd5ca7b5c9a7a68e3157"
+      }
+    },
+    "7": {
+      "stock": {
+        "committed_steps": 204,
+        "committed_gpu_ms": 5432.264989,
+        "wide_buckets": {},
+        "pending_at_later_write_p50": 32.0,
+        "later_writes_with_at_least_32_pending": 33,
+        "workload_sha256": "ced63fcf6a8f8826e12f48a83d756ee9c3d660e5a5d99fea889483795ea53027"
+      },
+      "prefill_only": {
+        "committed_steps": 204,
+        "committed_gpu_ms": 5447.028066,
+        "wide_buckets": {
+          "512": {
+            "steps": 1,
+            "gpu_ns": 60084896
+          }
+        },
+        "pending_at_later_write_p50": 29.0,
+        "later_writes_with_at_least_32_pending": 3,
+        "workload_sha256": "b2b4b8331ca3db46b2cf4c011425ec9c12a73260b9bbca36971f7f11eb573b18"
+      }
+    }
+  },
+  "reverse": {
+    "6": {
+      "stock": {
+        "committed_steps": 204,
+        "committed_gpu_ms": 5440.725545,
+        "wide_buckets": {},
+        "pending_at_later_write_p50": 30.0,
+        "later_writes_with_at_least_32_pending": 0,
+        "workload_sha256": "654e1fbb2ce8d21ffae860f25aa21c8a4d1a9d22d1b9f18493685ab133fa4aea"
+      },
+      "prefill_only": {
+        "committed_steps": 203,
+        "committed_gpu_ms": 5419.256371,
+        "wide_buckets": {
+          "512": {
+            "steps": 1,
+            "gpu_ns": 60808159
+          }
+        },
+        "pending_at_later_write_p50": 32.5,
+        "later_writes_with_at_least_32_pending": 55,
+        "workload_sha256": "d94a6b945c1f0e1b7845087a687c1f50633fd3e5043decf794b626d878d8167c"
+      }
+    },
+    "7": {
+      "stock": {
+        "committed_steps": 205,
+        "committed_gpu_ms": 5459.014385,
+        "wide_buckets": {},
+        "pending_at_later_write_p50": 29.0,
+        "later_writes_with_at_least_32_pending": 0,
+        "workload_sha256": "cbe9a406c19f5a98341a08d9ebb5f731bdd03b10c2369a317669723ad33af8c6"
+      },
+      "prefill_only": {
+        "committed_steps": 204,
+        "committed_gpu_ms": 5443.353323,
+        "wide_buckets": {
+          "512": {
+            "steps": 1,
+            "gpu_ns": 60106945
+          }
+        },
+        "pending_at_later_write_p50": 29.0,
+        "later_writes_with_at_least_32_pending": 3,
+        "workload_sha256": "b60ba5a3779e49e3d20418ef5d7cf6b94ca66fa77daaebb020c68c1517ff93dc"
+      }
+    }
+  }
+}
