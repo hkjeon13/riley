@@ -64,6 +64,8 @@ Qwen2.5-7B의 검증된 tokenizer로 별도 greedy holdout 11개를 고정했다
 
 이 fixture는 greedy 생성과 배치에 따른 출력 차이를 확인한다. 첫 실행은 W5-B의 두 혼합 부하 뒤 같은 GPU 7에서 진행했다. 장문 스키마와 도구 호출 검사는 같은 fixture 중 네 입력을 채팅으로 보내며 서버가 템플릿을 적용한 뒤의 토큰 수를 확인한다. [기존 GPU 실행 순서](../../benchmarks/evidence/20261119-w4-holdout/campaign.sh) · [배포 이미지 검증 방법](01-validation-result.md#배포-이미지-gpu-검사)
 
+저장 응답을 검산한 결과, 기준 세 엔진이 같은 텍스트를 생성한 7,836토큰 코드 사례에서도 요청한 코드가 빠졌다. 장문 품질을 재평가할 때는 같은 입력으로 토큰 ID·종료 사유·텍스트를 대조하고, 정답이 정해진 사례에서는 필수 답변 항목과 출력 상한에서의 답변 완결 여부를 기록한다. 합성 입력의 반복 채움은 길이 경계 검증에 활용한다. [홀드아웃 답변 대조](04-long-accuracy-result.md#홀드아웃의-실제-답변-대조)
+
 GSM8K는 기존 train 7,473행과 test 1,319행의 파일 해시를 고정했다. 기존 세 모델인 Qwen2.5-7B, Llama-3.2-3B, Qwen3-4B와 두 KV-head 모델 Qwen2.5-3B를 Riley·vLLM에서 전수 비교한다. 두 엔진에서 4-shot, greedy, 최대 256토큰, `Question:` 종료 문자열, 문맥 4,096과 클라이언트 동시성 32를 사용한다. 요청 본문과 서버가 받은 토큰 ID를 모두 대조하고, 응답 오류가 하나라도 있으면 점수 비교는 무효다. [고정 데이터](../../benchmarks/evidence/20261119-w4-gsm8k/dataset.json) · [비교 검사기](../../benchmarks/evidence/20261119-w4-gsm8k/tools/compare_gsm8k.py)
 
 CPU에서 과거 세 Riley 결과의 1,319문항별 정오를 각각 재계산해 원래 결과와 일치함을 확인했다. 현재 네이티브 GPU 후보는 네 모델 모두에서 vLLM과 1,319개 동일 입력으로 검증해 −1.2%p 품질 기준을 통과했다. [과거 결과 재채점](../../benchmarks/evidence/20261119-w4-gsm8k/preflight.json) · [GPU 실행 순서](../../benchmarks/evidence/20261119-w4-gsm8k/campaign.sh) · [전수 비교 결과](04-long-accuracy-result.md#gsm8k-전수-품질-대조)

@@ -68,6 +68,25 @@ Riley의 C8·C32 반복에서는 각각 33/33의 생성 ID·텍스트·종료 �
 
 jemalloc을 포함한 파생 이미지 `1fc444b1840e`에서도 같은 A100과 체크포인트에서 기존 144건과 홀드아웃 88건이 모두 일치했다. 이미지 내부 라이브러리를 실제 Riley 프로세스가 적재했고, 같은 이미지의 두 30분 부하와 동일한 실행 파일 해시를 확인했다. API 40건과 정상 종료·자원 회수도 통과했다. [파생 이미지 장문 독립 검산](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/gpu-qualification/accuracy-verified.json)
 
+### 홀드아웃의 실제 답변 대조
+
+보관된 경계 입력 11개에서 기준 Riley·HF SDPA·vLLM과 두 Riley 투영 후보의 일반 C1 응답을 대조했다. 기존 체크섬으로 원본을 확인하고 프롬프트 ID, 생성 ID, 종료 사유와 응답 텍스트를 대조했다. HF와 생성 ID·종료 사유가 모두 같은 응답은 Riley 기준 9/11, attention 계획 31 9/11, FP32 부분합 down 계획 21 7/11이었다. 텍스트 일치는 각각 9/11, 8/11, 7/11이었다. [요청별 비교와 원본 지문](../../benchmarks/evidence/20261124-w4-holdout-answers/report.json) · [재계산 코드](../../benchmarks/evidence/20261124-w4-holdout-answers/audit.py)
+
+아래 평가는 고정 프롬프트에서 읽을 수 있는 요구 사항을 응답과 수동 대조한 결과다. 각 행은 다섯 실행의 저장 응답에서 공통으로 확인한 동작이다. [입력 원본](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [Attention 후보 원본](../../benchmarks/evidence/20261124-w4-holdout-answers/attention-plan-31.json.gz) · [FP32 down 후보 원본](../../benchmarks/evidence/20261124-w4-holdout-answers/fp32-down-plan-21.json.gz)
+
+| 입력 | 확인한 답변 |
+|---|---|
+| `korean-255` | 다섯 응답이 같은 문장이었다. 모두 화요일과 3번 부두는 맞혔고, 10시를 오후 3시로 바꿨다. |
+| `numbers-257` | 정답은 121개다. 다섯 응답이 첫 문장에서 123개를 답한 뒤 계산 과정에서 121개를 적었다. 모두 64토큰 상한에서 끝났다. |
+| `numbers-1023` | 다섯 응답이 이송량 104L를 적었다. 128토큰 상한에서 끝나 잔량 208L를 제시하지 못했다. |
+| `korean-1024` | 모든 답변의 첫 두 문장이 −18도·4도·차이 22도를 담고 있었다. 이후 산술 설명은 달랐다. |
+| `long-code-7836` | 기준 세 엔진의 생성과 텍스트가 같았다. 두 후보는 여덟 번째 생성 토큰부터 달라졌고, 다섯 응답 모두 `archive`가 반복된 채 256토큰 상한에서 끝나 날짜별 중앙값을 계산하는 코드가 없었다. |
+| `long-korean-7917` | vLLM과 나머지 네 응답은 서로 다른 날짜를 반복했다. 모두 256토큰 상한에서 끝났고 세 지역의 관측 일지를 제공하지 못했다. |
+
+`korean-1024`에서 attention 계획 31과 HF는 생성 ID 128개와 종료 사유가 일치했다. 마지막 토큰의 끝 바이트 `eb90`은 완성되지 않은 UTF-8이다. 고정 토크나이저의 어휘로 해당 바이트를 재현했다. HF 텍스트는 마지막에 U+FFFD를 표시했고 Riley는 유효한 UTF-8까지만 내보냈다. [고정 어휘 일부](../../benchmarks/evidence/20261124-w4-holdout-answers/tokenizer-tail.json) · [Riley 종료 처리](../../crates/riley-runtime/src/generation.rs)
+
+이 입력들은 배치 불변성과 길이 경계 재현에 계속 사용한다. 전체 생성 일치 개수로 장문 답변 품질을 판정하는 근거는 부족하다. 새 정확성 후보의 장문 품질은 정답이 정해진 입력에서 필수 답변 항목과 상한 도달 시 답변 완결 여부를 확인한다. 기존 GSM8K 품질 기준과 두 투영 후보의 기각 판정을 유지한다. [장문 품질 재검증 절차](04-correctness-and-schema.md#w4-a4-수정과-재평가)
+
 ## 공통 접두부의 근소한 점수 차이
 
 두 입력군 29건의 원본 해시와 프롬프트 ID를 확인하고, Riley와 HF SDPA가 같은 접두부를 유지하는 동안 선택한 토큰을 다시 대조했다. 전체 생성 ID가 같은 요청은 22건이다. 첫 분기 7건 중 prefill 직후가 1건, decode가 6건이었다. 첫 분기에서 Riley가 보고한 상위 두 logprob 차이는 모두 0.25 이내였고, HF SDPA에서 두 엔진이 각각 선택한 ID의 점수 차이는 최대 0.125였다. [요청별 집계와 원본 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/result.json)
