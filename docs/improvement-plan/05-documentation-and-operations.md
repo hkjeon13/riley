@@ -237,6 +237,22 @@ Qwen2.5-7B-Instruct의 A100 네이티브 실행에서 각 30분 동안 초당 �
 
 혼합 부하에서 예상 밖 429·5xx·잘못된 SSE 종료는 실패로 기록한다. 의도적 연결 종료는 클라이언트와 서버 카운터를 대조한다. 별도 포화 시험의 429는 기대한 과부하 거절과 이후 추론 회복을 확인하는 근거다. TTFT·전체 완료 지연 p95의 허용 드리프트는 각각 5%이며, RSS 증가 허용량은 0이다. [운영 품질 목표](../goal.md#33-운영-품질) · [포화와 회복 시험](05-mixed-soak-result.md#캐시-재사용퇴거와-큐-포화-후-회복)
 
+#### jemalloc 시험 이미지 다시 빌드하기
+
+Linux AMD64 Docker 호스트에서 기준 이미지를 로컬에 준비한다. 기준 이미지의 CPU 검증 산출물 `report.json`과 `runtime.sha256`을 같은 디렉터리에 두고, CPU 검사에 사용한 `libcuda.so.1` 스텁과 고정 패키지 `libjemalloc2_5.2.1-4ubuntu1_amd64.deb`를 준비한다. Python 3.11 이상과 `dpkg-deb`, `sha256sum`으로 저장소 루트에서 실행한다. [기준 이미지 CPU 보고서](../../benchmarks/evidence/20261123-w4-dot-package/cpu-evidence/report.json) · [CUDA 스텁 추출 절차](../../.github/workflows/distribution-image.yml) · [빌드 스크립트](../../benchmarks/live/build_jemalloc_trial_image.py)
+
+```bash
+python3 -B benchmarks/live/build_jemalloc_trial_image.py \
+  "$stock_cpu_dir/report.json" \
+  "$package_dir/libjemalloc2_5.2.1-4ubuntu1_amd64.deb" \
+  "$driver_dir/libcuda.so.1" \
+  "$output_dir"
+```
+
+`output_dir`는 기존 상위 디렉터리 아래의 새 경로다. 스크립트는 실험에 사용한 패키지·빌드 컨텍스트·스텁 해시를 확인하고, 로컬 기준 이미지로 파생 이미지를 빌드한 뒤 네트워크와 GPU 연결을 끈 컨테이너에서 검사한다. 빌드 로그와 새 이미지 ID를 남긴다. `verified-image.json`은 런타임 파일, CLI 출력, Riley 프로세스의 jemalloc 심볼 바인딩이 확인된 경우에만 생성된다. [고정 컨텍스트 해시](../../benchmarks/evidence/20261123-w5-dot-allocator/context.sha256)
+
+`aws-a100`에서 재빌드한 `1b7a7ffdfb89`는 기준 런타임 파일 21개, 파생 파일 3개, CLI 출력 6개와 할당기 심볼 4개가 기존 A100 시험 이미지 `c7fcb8e274ec`의 검증 기록과 일치했다. 패키지와 CUDA 스텁을 바꾼 두 입력은 빌드 전에 거부됐다. 30분 GPU 부하 및 격리 복구 판정은 당시 실행한 `c7fcb8e274ec`에 귀속한다. [CPU 재현 보고서](../../benchmarks/evidence/20261123-w5-dot-allocator/cpu-rebuild.json) · [기존 시험 이미지 검증](../../benchmarks/evidence/20261123-w5-dot-allocator/verified-image.json)
+
 #### 후보 회수와 복구 확인
 
 1. 검증 실패 시 해당 이미지 ID, Riley와 모델 manifest의 SHA-256, 실행 옵션과 API·soak 영수증을 보존한다. 기동 실패와 요청·지연·RSS·종료 자원 실패를 기록해 해당 후보의 릴리스 판단에 연결한다.
