@@ -741,7 +741,7 @@ Riley의 HTTP 워커는 스트리밍이 끝날 때까지 연결을 맡는다. �
 
 직전 시험에서 128행의 꼬리 지연은 활성 슬롯 대기에 집중됐다. 같은 `fixed-tile-unsplit-v1` 경로는 최대 활성 시퀀스 32개를 요구한다. 이 경로에서는 낮은 decode 부하에서 짧은 prefill을 한 스텝에 더 많이 처리하면 슬롯 대기가 줄어드는지 확인했다. Coder-14B, 활성 32개, HTTP 워커 64개, 입력 길이 128토큰 이상에서만 캐시 조회, 격리 워밍업과 기존 고정 도착 시각표를 사용했다. 계측용 prefill 추적은 끄고 기존 HTTP 관측만 종료 후 읽었다. [프로파일의 실행 제한](../../crates/riley-server/src/main.rs#L1614) · [실행 순서](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/campaign.sh)
 
-같은 바이너리에 GPU를 노출하지 않고 활성 48개를 지정했다. `fixed-tile-unsplit-v1`은 32개 상한 오류를 반환했다. `page-v1`은 CLI 검사를 통과했고, 시험에서 일부러 제공하지 않은 체크포인트 경로를 여는 단계까지 진행했다. `page-v1` 48개의 추론·정확성·성능은 미검증이다. [CLI 대조 결과](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/active-cli.json) · [재현 명령](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/check-active-cli.sh)
+같은 바이너리에 GPU를 노출하지 않고 활성 48개를 지정했다. `fixed-tile-unsplit-v1`은 32개 상한 오류를 반환했다. `page-v1`은 CLI 검사를 통과했고, 시험에서 일부러 제공하지 않은 체크포인트 경로를 여는 단계까지 진행했다. [CLI 대조 결과](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/active-cli.json) · [재현 명령](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/check-active-cli.sh) · [이후 GPU 대조](#page-attention의-활성-슬롯-32개와-48개)
 
 기준 두 개는 일반 예산 128·256행에 512토큰 burst 문턱을 뒀다. 후보 두 개는 128행과 64토큰 문턱을 사용하며 decode가 각각 8행·16행 이하일 때 1,024행까지 허용했다. 그보다 decode가 많으면 128행을 사용했다. C32 입력은 70–77토큰이다. 실제로 128행을 넘는 스텝을 집계하고, 동일 GPU에서 각 후보를 128행 기준과 256행 기준 모두에 대조했다. [요청과 형상 검산](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/verify.py)
 
@@ -755,6 +755,30 @@ Riley의 HTTP 워커는 스트리밍이 끝날 때까지 연결을 맡는다. �
 두 후보는 128행 기준 대비 TTFT p95를 14.54–36.99% 줄였다. 256행 기준 대비 16행 후보는 GPU 6번에서 TTFT p95가 9.51% 늘고 GPU 7번에서 2.09% 줄었다. 256행 기준과 대조한 네 비교에서 TTFT p50은 191.35–241.19% 늘었고 출력 처리량은 3.77–4.69% 줄었다. Decode TPOT p50은 2.49–2.87% 줄었으며 반복 문서 RAG의 TTFT p95 변화는 −0.38%~+1.43%였다. 짧은 요청 중앙값과 처리량 기준을 충족하지 못해 두 후보를 기본값으로 채택하지 않았다. [조건별 수치와 회귀 기준](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/verified.json)
 
 8회 실행의 1,312건은 기존 배포 이미지와 입력·생성 토큰 ID, 텍스트, 종료 사유가 일치했다. 조건 간 실제 write 오차 차이 p95는 최대 0.346ms였다. 모든 서버가 종료 자원을 회수했고 A100 6·7번의 기존 20GiB 예약이 복귀했다. [실행 로그](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/campaign.log) · [원본 체크섬](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/result.sha256) · [원본 재검산](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/fetch-summary.sh)
+
+### Page attention의 활성 슬롯 32개와 48개
+
+`page-v1`이 48개 설정을 받아들인 CLI 대조에 이어 실제 Coder-14B 출력을 검증했다. 두 GPU에서 `page-v1`의 활성 슬롯 32·48개를 각각 128행으로 실행했다. `fixed-tile-unsplit-v1` 32개도 128·256행에서 실행해 같은 예산의 attention 모드 차이와 256행 기준 대비 지연을 확인했다. 두 GPU의 실행 순서를 뒤집고 HTTP 워커 64개, KV 2,576블록, 캐시 필터와 격리 워밍업 모드, 도착 시각표를 맞췄다. [실행 순서](../../benchmarks/evidence/20261123-w3-c32-page-slots/campaign.sh)
+
+워밍업이 끝난 뒤 HTTP 서비스를 시작하기 직전에 스케줄러 점유량 집계를 켰다. 실제로 커밋된 스텝에서 활성 수와 decode 행 수의 최댓값, 활성 요청이 32개를 넘은 스텝 수를 집계하고 종료 뒤 읽었다. 요청별 prefill 추적은 끈 상태로 기존 HTTP 관측, 스텝 형상, 입출력 지문을 대조했다. 활성 한도에 따라 내부 워밍업 요청 구성은 달라질 수 있어 기동 시간과 워밍업 건수를 실행별로 기록했다. [점유량 진단](../../benchmarks/evidence/20261123-w3-c32-page-slots/prepare-peak.py) · [응답과 스케줄러 점유량 검산](../../benchmarks/evidence/20261123-w3-c32-page-slots/verify.py)
+
+8,192토큰 문맥과 최대 1,024행의 조합에서 `page-v1`은 attention 준비 시 행·페이지·head별 F32 부분 상태를 확보한다. Coder-14B의 40개 query head와 16토큰 페이지, head당 130개 F32 값으로 계산한 부분 상태 버퍼는 10.16GiB다. 같은 입력의 출력 상한까지 합친 최대 요청 길이는 2,239토큰이었다. 문맥 상한을 2,304토큰으로 낮춘 대조는 입력과 도착 시각표를 유지하고 해당 버퍼를 계산상 2.86GiB로 줄인다. 두 문맥 설정의 결과를 각각 판정한다. [작업 공간 준비 코드](../../crates/riley-runtime/src/llama/executor/owner.rs#L534) · [부분 상태 크기](../../crates/riley-cuda/src/batch.rs#L793) · [2,304토큰 대조 실행](../../benchmarks/evidence/20261123-w3-c32-page-slots/bounded-campaign.sh)
+
+**8,192토큰 문맥.** 두 A100 40GiB 장비에서 `page-v1`의 32개·48개 조건 네 건 모두 readiness 전에 `ragged_paged_attention` CUDA 버퍼 할당에서 OOM으로 종료됐다. 같은 바이너리의 고정 타일 32개 기준 네 건은 기동했고, 준비 상태의 서버 관리 장치 할당은 각각 38,625,687,680바이트였다. 기준의 656건은 기존 이미지의 입력·생성 토큰 ID, 텍스트 및 종료 사유와 일치했다. 실패한 네 건을 포함해 각 실행 뒤 기존 GPU 예약으로 복귀했다. [8,192토큰 재검산](../../benchmarks/evidence/20261123-w3-c32-page-slots/initial-verified.json) · [8,192토큰 로그 지문](../../benchmarks/evidence/20261123-w3-c32-page-slots/initial-result.sha256)
+
+**2,304토큰 문맥.** 최대 스텝 1,024행을 유지하면 `page-v1` 32개·48개 네 조건은 계속 같은 CUDA 버퍼 할당에서 실패했다. GPU 7번 고정 타일 기준 두 건은 328개 출력이 기존 이미지와 일치했다. GPU 6번은 고정 타일 시험 중 다른 프로세스가 관측된 실행 한 건을 제외했고, 후속 기준 한 건은 예약 검사에서 실행 전에 차단했다. [OOM 및 제외된 조건](../../benchmarks/evidence/20261123-w3-c32-page-slots/rejected-row-verified.json)
+
+**스텝 상한 192행 대조.** 문맥 상한을 8,192토큰으로 유지하고 최대 스텝·prefill 조각·버킷을 192행으로 맞추면 같은 부분 상태 버퍼는 계산상 1.90GiB다. 첫 시도의 GPU 7번 세 조건은 프로파일에서 상속한 192행 plateau 경계가 예산과 같아 CLI에서 거부됐다. GPU 6번 세 조건은 예약 검사에서 차단됐다. 이후 고정 타일 32개와 `page-v1` 32·48개에 128행 plateau 경계만 명시해 CPU에서 CLI 검사를 통과했다. 수정한 비교는 일반 예산 128행과 입력·출력 한도, 도착 시각표를 유지했다. [CLI 거부 실행](../../benchmarks/evidence/20261123-w3-c32-page-slots/rejected-row-verified.json) · [수정한 CLI 검사](../../benchmarks/evidence/20261123-w3-c32-page-slots/row-cli-verified.json) · [수정한 실행 순서](../../benchmarks/evidence/20261123-w3-c32-page-slots/workspace-live-campaign.sh)
+
+| GPU 7번, 최대 스텝 192행 | 실제 활성 / decode 최댓값 | C32 TTFT p95 | C32 TPOT p50 | 기존 이미지와 같은 출력 |
+|---|---:|---:|---:|---:|
+| 고정 타일 32개 | 32 / 32 | 532.37ms | 26.34ms | 164/164 |
+| Page 32개 | 32 / 32 | 1,341.98ms | 32.16ms | 80/164 |
+| Page 48개 | 48 / 48 | 858.99ms | 36.42ms | 80/164 |
+
+Page 48개에서 활성 요청이 32개를 넘은 커밋 스텝은 77개였다. Page 32개 대비 TTFT p95는 35.99% 줄고 출력 처리량은 5.97% 늘었다. Decode TPOT p50은 13.22% 증가했다. 두 page 실행은 서로 164/164건의 입력·생성 토큰 ID, 텍스트와 종료 사유가 일치했다. 고정 타일과는 두 page 실행 모두 짧은 C32 42/96건, RAG 35/64건, 캐시를 채우는 요청 3/4건이 일치했다. Page 48개는 고정 타일 대비 TTFT p95가 61.35%, decode TPOT p50이 38.25% 늘어 정확성과 성능 기준을 모두 충족하지 못했다. [출력 지문과 지연](../../benchmarks/evidence/20261123-w3-c32-page-slots/verified.json)
+
+수정한 비교는 다른 프로세스를 감지한 GPU 6번의 세 조건을 시작 전에 제외했다. GPU 7번의 세 실행 492건은 정상 완료하고 종료 자원을 회수했다. 쌍별 클라이언트 write 오차 차이 p95는 최대 0.549ms였다. 최종 스냅샷에서 GPU 6·7번의 동일 홀더가 20GiB씩 예약했고, 다른 GPU 프로세스는 관측되지 않았다. 문맥 상한은 8,192토큰이었으며 실제 요청에서 시험한 최대 길이는 출력 상한을 포함해 2,239토큰이었다. [원본 체크섬](../../benchmarks/evidence/20261123-w3-c32-page-slots/result.sha256) · [로그](../../benchmarks/evidence/20261123-w3-c32-page-slots/campaign.log) · [독립 재검산](../../benchmarks/evidence/20261123-w3-c32-page-slots/fetch-summary.sh)
 
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 

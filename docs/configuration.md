@@ -142,6 +142,9 @@ For long prompts, the fixed-tile route supports up to 8,192 context tokens and
 1,024 rows per step in the measured configuration. To expand the context, pass
 `--max-sequence-tokens 8192` within the checkpoint's supported range. Set the
 step and prefill budgets and the bucket list together when using a wider step.
+The profile sets prefill plateau boundaries at 128 and 192 rows. Each boundary
+must be below the step budget. For a 192-row step budget, set
+`--prefill-plateau-rows 128` and end the batch shape bucket list at 192.
 [Profile source](../crates/riley-server/src/inference_profile.rs) · [Long-prompt measurements](serving-validation.md#prompt-steps-of-1024-rows)
 
 `--attention-kv-chunk-tokens N`, a multiple of 16 with default 512 (1,024 before

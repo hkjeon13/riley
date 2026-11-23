@@ -1,0 +1,21 @@
+{
+  "binary_sha256": "cf223fe96c74ac822e4d20eccbf811c871286dbe0269521a585da184a4834402",
+  "max_batch_rows": 192,
+  "prefill_plateau_rows": [
+    128
+  ],
+  "outcomes": {
+    "fixed-tile-unsplit-v1:32": {
+      "exit": 1,
+      "diagnostic": "riley: model load failed: cannot canonicalize checkpoint root /unmounted-riley-row-workspace-probe: No such file or directory (os error 2)"
+    },
+    "page-v1:32": {
+      "exit": 1,
+      "diagnostic": "riley: model load failed: cannot canonicalize checkpoint root /unmounted-riley-row-workspace-probe: No such file or directory (os error 2)"
+    },
+    "page-v1:48": {
+      "exit": 1,
+      "diagnostic": "riley: model load failed: cannot canonicalize checkpoint root /unmounted-riley-row-workspace-probe: No such file or directory (os error 2)"
+    }
+  }
+}

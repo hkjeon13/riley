@@ -1,0 +1,33 @@
+workspace-live-campaign.sh: OK
+prepare-rows-live.py: OK
+build.sh: OK
+prepare.py: OK
+prepare-peak.py: OK
+stage-trace.patch.gz: OK
+target/release/riley: OK
+toolchain.txt: OK
+dependencies.txt: OK
+patched-source.sha256: OK
+fixed-inputs.sha256: OK
+runtime-inputs.sha256: OK
+w3-c32-arrival-replay-20261121.knwCy7jZ/schedules.json: OK
+w3-c32-arrival-replay-20261121.knwCy7jZ/replay.py: OK
+w3-c32-arrival-replay-20261121.knwCy7jZ/load.py: OK
+w3-coder-startup-warmup-20261121.db8Pexwl/workload_startup.py: OK
+w3-coder-rag-cache-20261121.Ngz53FnV/run_arm.py: OK
+w3-coder-rag-cache-20261121.Ngz53FnV/workload.py: OK
+w5-prefix-metrics-package-20261121.nEFyze5I/cpu-evidence/report.json: OK
+w3-private-warm-gpu-20261121.Zdv0ggSI/run_case.py: OK
+w3-private-warm-gpu-20261121.Zdv0ggSI/result.sha256: OK
+START private-s128-fixed-a32-gpu7 2026-11-23T02:08:07Z
+START private-s128-page-a48-gpu6 2026-11-23T02:08:07Z
+END private-s128-page-a48-gpu6 2026-11-23T02:08:07Z exit=1
+START private-s128-page-a32-gpu6 2026-11-23T02:08:07Z
+END private-s128-page-a32-gpu6 2026-11-23T02:08:08Z exit=1
+START private-s128-fixed-a32-gpu6 2026-11-23T02:08:08Z
+END private-s128-fixed-a32-gpu6 2026-11-23T02:08:08Z exit=1
+END private-s128-fixed-a32-gpu7 2026-11-23T02:12:59Z exit=0
+START private-s128-page-a32-gpu7 2026-11-23T02:12:59Z
+END private-s128-page-a32-gpu7 2026-11-23T02:17:54Z exit=0
+START private-s128-page-a48-gpu7 2026-11-23T02:17:54Z
+END private-s128-page-a48-gpu7 2026-11-23T02:22:48Z exit=0
