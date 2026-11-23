@@ -107,6 +107,94 @@
       }
     }
   ],
+  "a100_image": "sha256:3278fe2fced2c3edadb2a9348c46a135fdcfd81da5f72ebfc9a55dede0ccfa42",
+  "riley_binary_sha256": "c5edc27544706cdb5baf988920e3cb838ff98a3c1a6520285539628cbdc88f0c",
+  "pattern_class_checks": [
+    {
+      "case": "quote-range",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "value": "\""
+      },
+      "finish_reason": "stop"
+    },
+    {
+      "case": "quote-range",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "value": "\""
+      },
+      "finish_reason": "tool_calls"
+    },
+    {
+      "case": "backslash-range",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "value": "\\"
+      },
+      "finish_reason": "stop"
+    },
+    {
+      "case": "backslash-range",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "value": "\\"
+      },
+      "finish_reason": "tool_calls"
+    },
+    {
+      "case": "unsupported-class-escape",
+      "parameter": "response_format",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-class-escape",
+      "parameter": "tools",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-unicode-escape",
+      "parameter": "response_format",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-unicode-escape",
+      "parameter": "tools",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-negated-space",
+      "parameter": "response_format",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-negated-space",
+      "parameter": "tools",
+      "status": 400,
+      "code": "invalid_schema"
+    }
+  ],
+  "reservations": {
+    "6": {
+      "pid": 2680326,
+      "start_ticks": "6365879881",
+      "allocation_bytes": 21474836480
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "allocation_bytes": 21474836480
+    }
+  },
   "hosted_image": "sha256:3defe8ee10b4dd3612db682499163c272b6db567f109b4ae48accd80bc7242a9",
   "matching_runtime_files": 21,
   "hosted_artifact_id": 14819017867,

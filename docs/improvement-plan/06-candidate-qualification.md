@@ -21,6 +21,8 @@
 | 문자 클래스 수정 이미지의 jemalloc 파생 시험 | `6d618f64e`의 실행 파일 | 이미지 `d64bb1d79564`에서 캐시 끔·켬 30분 기준과 장문 232건, 스키마·도구 64건을 통과했다. 후반 RSS는 캐시 끔 680KiB, 켬 804KiB 줄었다. 실제 서비스의 운영 판정은 보류한다. [최신 30분 대조](05-mixed-soak-result.md#문자-클래스-수정-이미지의-30분-대조) |
 | 중첩 스키마 ID 수정의 배포 이미지 | `c5ec7b391` | GitHub와 A100 런타임 파일 21개 일치. A100 이미지 `3278fe2fced2`에서 로컬 참조 HTTP 6건, 문자 클래스 HTTP 10건, API 검사 40건씩, 장문 스키마·도구 64건 및 45초 혼합 부하를 통과했다. 새 이미지의 30분 대조와 격리 복구는 남아 있다. [스키마 참조 결과](04-structured-output-result.md#중첩-스키마-id와-로컬-참조) |
 
+CI는 `distribution_with_schema_reference_fix`에서 같은 커밋의 Git 입력·패키지·A100 보고서를 연결하고, 로컬 참조의 정상 값과 중첩 ID 오류를 검사한다. `--distribution-revision`의 검증 기준은 30분 부하 대조까지 완료한 패키지에 적용한다. [증거 검사기](../../ci/check_improvement_evidence.py)
+
 CI는 문자 클래스 수정 이미지의 빌드 입력, HTTP 검증, 두 이미지의 30분 대조와 격리 복구를 `distribution_with_character_class_fix`에 연결한다. 최근 격리 복구는 136.26초에 완료됐다. `--distribution-revision origin/main`으로 현재 배포 입력을 이 패키지의 검증 근거와 대조한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [격리 복구](05-mixed-soak-result.md#문자-클래스-수정-이미지의-격리-복구) · [CI 검증기](../../ci/check_improvement_evidence.py)
 
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)

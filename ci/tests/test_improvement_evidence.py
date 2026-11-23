@@ -108,6 +108,33 @@ class DistributionServingTests(unittest.TestCase):
 
 
 class PackageFollowUpTests(unittest.TestCase):
+    def test_schema_reference_probes_require_the_exact_output_and_error_field(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        candidate = manifest["distribution_with_schema_reference_fix"]
+        checker.check_pattern_fix_stock(ROOT, candidate)
+        checker.check_schema_reference_probes(ROOT, candidate)
+
+        entries = candidate["evidence"]
+        probe = json.loads((ROOT / entries["a100_schema_references"]["path"]).read_bytes())
+        summary = json.loads((ROOT / entries["a100_verified"]["path"]).read_bytes())
+        changes = (("root-id-local-pointer", "output", "$id", 2),
+                   ("nested-id", "error", "param", "tools"))
+        with tempfile.TemporaryDirectory() as directory:
+            raw_path = Path(directory) / "probes.json"
+            summary_path = Path(directory) / "verified.json"
+            entries["a100_schema_references"]["path"] = str(raw_path)
+            entries["a100_verified"]["path"] = str(summary_path)
+            for case, field, key, replacement in changes:
+                with self.subTest(case=case):
+                    changed = deepcopy(probe)
+                    row = next(row for row in changed["checks"]
+                               if row["case"] == case and row["parameter"] == "response_format")
+                    row[field][key] = replacement
+                    raw_path.write_text(json.dumps(changed))
+                    summary_path.write_text(json.dumps({**summary, "schema_reference_checks": changed["checks"]}))
+                    with self.assertRaisesRegex(ValueError, "must preserve root-local output"):
+                        checker.check_schema_reference_probes(ROOT, candidate)
+
     def test_character_class_http_probes_require_an_escaped_value(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
         candidate = manifest["distribution_with_character_class_fix"]

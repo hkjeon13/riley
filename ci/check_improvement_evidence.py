@@ -274,6 +274,30 @@ def check_pattern_class_probes(root, candidate):
         raise ValueError("character class HTTP probes must prove escaped values and named schema rejections")
 
 
+def check_schema_reference_probes(root, candidate):
+    evidence = candidate["evidence"]
+    report, summary = (
+        json.loads((root / evidence[name]["path"]).read_bytes(), object_pairs_hook=unique_object)
+        for name in ("a100_schema_references", "a100_verified")
+    )
+    checks = report["checks"]
+    if report["status"] != "passed" or checks != summary["schema_reference_checks"]:
+        raise ValueError("schema reference HTTP probes differ from the A100 package summary")
+    expected = {}
+    for parameter in ("response_format", "tools"):
+        expected["root-id-local-pointer", parameter] = (200, {"$id": 3}, None)
+        for case, reason in (("nested-id", "embedded $id"),
+                             ("cross-resource-pointer", "$ref crossing an embedded $id")):
+            expected[case, parameter] = (400, None, {
+                "type": "invalid_request_error", "param": parameter, "code": "invalid_schema",
+                "message": f"unsupported JSON Schema: {reason}",
+            })
+    observed = {(row["case"], row["parameter"]): (row["status"], row.get("output"), row.get("error"))
+                for row in checks}
+    if len(checks) != len(expected) or observed != expected:
+        raise ValueError("schema reference probes must preserve root-local output and reject embedded IDs")
+
+
 def check_stock_soak_comparison(root, candidate, smoke, allocator):
     entry = candidate["stock_soak_comparison"]["report"]
     report = json.loads((root / entry["path"]).read_bytes(), object_pairs_hook=unique_object)
@@ -951,6 +975,12 @@ def main():
                 if "stock_soak_comparison" in character_classes or "recovery_drill" in character_classes:
                     raise ValueError("character-class comparison or recovery requires an allocator experiment")
                 check_pattern_fix_stock(root, character_classes)
+        schema_references = manifest.get("distribution_with_schema_reference_fix")
+        if schema_references is not None:
+            check_distribution_inputs(root, schema_references)
+            check_pattern_fix_stock(root, schema_references)
+            check_pattern_class_probes(root, schema_references)
+            check_schema_reference_probes(root, schema_references)
         allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],
                                                   manifest["current_distribution_candidate"])
         serving_models = check_distribution_serving(root, manifest["current_distribution_candidate"])

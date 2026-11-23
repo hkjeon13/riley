@@ -24,6 +24,7 @@ def verify(root):
     cpu_hash = sha256(cpu_path.read_bytes()).hexdigest()
     binary = cpu["binaries"]["/opt/riley/bin/riley"]
     reports = {}
+    reservations = {}
     for index, mode in ((6, "structured"), (7, "smoke")):
         report = read(root / mode / "report.json")
         require(report["status"] == "passed" and report["api_checks"] == 40
@@ -44,6 +45,7 @@ def verify(root):
                     for holder in (before, after))
                 and all(before[key] == after[key] for key in ("pid", "start_ticks")),
                 f"GPU {index} did not restore the same reservation")
+        reservations[str(index)] = {key: after[key] for key in ("pid", "start_ticks", "allocation_bytes")}
         reports[mode] = report
     holdout = reports["structured"]["accuracy_suites"]["structured_holdout"]
     modes = holdout["modes"]
@@ -70,7 +72,9 @@ def verify(root):
                     for row in checks), "unexpected schema-reference responses")
     return {"status": "verified", "source_revision": revision, "image_id": cpu["image_id"],
             "binary_sha256": binary, "api_checks_per_gpu": 40, "structured_modes": modes,
-            "smoke_counts": smoke["counts"], "schema_reference_checks": checks}
+            "smoke_counts": smoke["counts"], "schema_reference_checks": checks,
+            "a100_image": cpu["image_id"], "riley_binary_sha256": binary,
+            "pattern_class_checks": pattern["checks"], "reservations": reservations}
 
 
 if __name__ == "__main__":
