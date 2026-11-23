@@ -1,0 +1,50 @@
+campaign.sh: OK
+check-cli.py: OK
+prepare-runner.py: OK
+result.sha256: OK
+runner.sha256: OK
+schedules.json: OK
+build.sh: OK
+prepare.py: OK
+target/release/riley: OK
+toolchain.txt: OK
+dependencies.txt: OK
+patched-source.sha256: OK
+crates/riley-server/src/lib.rs: OK
+crates/riley-server/src/main.rs: OK
+crates/riley-server/src/service.rs: OK
+crates/riley-server/src/engine.rs: OK
+crates/riley-server/src/w3_trace.rs: OK
+crates/riley-scheduler/src/scheduler.rs: OK
+build-result.sha256: OK
+target/release/riley: OK
+toolchain.txt: OK
+dependencies.txt: OK
+patched-source.sha256: OK
+fixed-inputs.sha256: OK
+runtime-inputs.sha256: OK
+w3-c32-arrival-replay-20261121.knwCy7jZ/schedules.json: OK
+w3-c32-arrival-replay-20261121.knwCy7jZ/replay.py: OK
+w3-c32-arrival-replay-20261121.knwCy7jZ/load.py: OK
+w3-coder-startup-warmup-20261121.db8Pexwl/workload_startup.py: OK
+w3-coder-rag-cache-20261121.Ngz53FnV/run_arm.py: OK
+w3-coder-rag-cache-20261121.Ngz53FnV/workload.py: OK
+w5-prefix-metrics-package-20261121.nEFyze5I/cpu-evidence/report.json: OK
+w3-private-warm-gpu-20261121.Zdv0ggSI/run_case.py: OK
+w3-private-warm-gpu-20261121.Zdv0ggSI/result.sha256: OK
+START private-s256-fixed-a32-gpu7 2026-11-23T03:21:06Z
+START private-s128-fixed-a32-gpu6 2026-11-23T03:21:06Z
+END private-s128-fixed-a32-gpu6 2026-11-23T03:26:04Z exit=0
+START private-s128-fixed-a48-gpu6 2026-11-23T03:26:04Z
+END private-s256-fixed-a32-gpu7 2026-11-23T03:26:06Z exit=0
+START private-s256-fixed-a48-gpu7 2026-11-23T03:26:07Z
+END private-s256-fixed-a48-gpu7 2026-11-23T03:31:14Z exit=0
+START private-s128-fixed-a48-gpu7 2026-11-23T03:31:14Z
+END private-s128-fixed-a48-gpu6 2026-11-23T03:31:14Z exit=0
+START private-s256-fixed-a48-gpu6 2026-11-23T03:31:14Z
+END private-s128-fixed-a48-gpu7 2026-11-23T03:36:15Z exit=0
+START private-s128-fixed-a32-gpu7 2026-11-23T03:36:15Z
+END private-s256-fixed-a48-gpu6 2026-11-23T03:36:18Z exit=0
+START private-s256-fixed-a32-gpu6 2026-11-23T03:36:19Z
+END private-s128-fixed-a32-gpu7 2026-11-23T03:41:17Z exit=0
+END private-s256-fixed-a32-gpu6 2026-11-23T03:41:17Z exit=0

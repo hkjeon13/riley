@@ -1,0 +1,44 @@
+{
+  "baseline-32": {
+    "binary_sha256": "cf223fe96c74ac822e4d20eccbf811c871286dbe0269521a585da184a4834402",
+    "slots": 32,
+    "max_sequence_tokens": 8192,
+    "exit": 1,
+    "diagnostic": "riley: model load failed: cannot canonicalize checkpoint root /mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-c32-fixed-slots-gpu-20261123.rjdGALnh/absent-checkpoint: No such file or directory (os error 2)"
+  },
+  "baseline-48": {
+    "binary_sha256": "cf223fe96c74ac822e4d20eccbf811c871286dbe0269521a585da184a4834402",
+    "slots": 48,
+    "max_sequence_tokens": 8192,
+    "exit": 2,
+    "diagnostic": "riley: fixed-tile-unsplit-v1 requires an explicit context bound <=8192, batch budget <=1024 and at most 32 active sequences"
+  },
+  "diagnostic-32": {
+    "binary_sha256": "ddce3e5cc4d5a6060f115a4cc7ec4ee760b5180134cfb86fed30a4d3aed8298b",
+    "slots": 32,
+    "max_sequence_tokens": 8192,
+    "exit": 1,
+    "diagnostic": "riley: model load failed: cannot canonicalize checkpoint root /mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-c32-fixed-slots-gpu-20261123.rjdGALnh/absent-checkpoint: No such file or directory (os error 2)"
+  },
+  "diagnostic-48": {
+    "binary_sha256": "ddce3e5cc4d5a6060f115a4cc7ec4ee760b5180134cfb86fed30a4d3aed8298b",
+    "slots": 48,
+    "max_sequence_tokens": 8192,
+    "exit": 1,
+    "diagnostic": "riley: model load failed: cannot canonicalize checkpoint root /mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-c32-fixed-slots-gpu-20261123.rjdGALnh/absent-checkpoint: No such file or directory (os error 2)"
+  },
+  "diagnostic-49": {
+    "binary_sha256": "ddce3e5cc4d5a6060f115a4cc7ec4ee760b5180134cfb86fed30a4d3aed8298b",
+    "slots": 49,
+    "max_sequence_tokens": 8192,
+    "exit": 2,
+    "diagnostic": "riley: fixed-tile-unsplit-v1 requires an explicit context bound <=8192, batch budget <=1024 and at most 48 active sequences"
+  },
+  "diagnostic-8193": {
+    "binary_sha256": "ddce3e5cc4d5a6060f115a4cc7ec4ee760b5180134cfb86fed30a4d3aed8298b",
+    "slots": 48,
+    "max_sequence_tokens": 8193,
+    "exit": 2,
+    "diagnostic": "riley: fixed-tile-unsplit-v1 requires an explicit context bound <=8192, batch budget <=1024 and at most 48 active sequences"
+  }
+}
