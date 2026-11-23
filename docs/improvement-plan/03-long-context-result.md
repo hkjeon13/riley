@@ -1059,6 +1059,8 @@ GPU 7번에서 RAG는 1단계 1.40배 기준을 2/4건, 최종 1.15배 기준을
 
 GPU 6번 vLLM 재시험도 550초 준비 제한을 지나 종료했다. vLLM 서버 로그는 비어 있었고 측정 요청은 시작되지 않았다. 재시험 뒤 GPU 6번은 기존 홀더의 20GiB 대기 예약으로 돌아왔고 다른 연산 프로세스는 없었다. CPU를 분리한 GPU 6번 비교값과 기동 지연 원인 확인이 남아 있다. [재시험 등록](../../benchmarks/evidence/20261124-w3-separated-client/retry-registration.json) · [재시험 원본](../../benchmarks/evidence/20261124-w3-separated-client/retry-results.tar.gz) · [첫 실행과 재시험 검산](../../benchmarks/evidence/20261124-w3-separated-client/verified.json)
 
+GPU 7번에서 1단계 목표를 넘긴 두 시각표의 Riley TTFT 상위 4건씩을 같은 요청 ID로 대조했다. 8건 모두 입력이 3,485–3,519토큰이었고 Riley 자체 TTFT는 같은 요청의 vLLM보다 180–1,117ms 길었다. Riley의 p95를 결정한 seed 1의 30번과 seed 2의 43번은 각각 377ms와 643ms 차이가 났다. 두 요청을 보낼 때 아직 끝나지 않은 앞선 측정 요청은 Riley가 각각 11건·10건, vLLM은 각각 7건이었다. 다음 계측은 이 두 요청의 HTTP 입장과 prefill 구간을 추적해야 한다. 앞선 HTTP 요청 수만으로 엔진의 대기 큐나 커널 지연을 판정할 수 없다. 현행 고정 타일 경로는 스텝당 최대 1,024행으로 위 두 재생도 그 상한을 사용했다. [꼬리 요청 검산](../../benchmarks/evidence/20261124-w3-separated-client/rag-tail-requests.json) · [검산기](../../benchmarks/evidence/20261124-w3-separated-client/audit-rag-tail.py) · [스텝 한도](../configuration.md#step-size)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

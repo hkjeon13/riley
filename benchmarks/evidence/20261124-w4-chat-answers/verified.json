@@ -1,0 +1,2452 @@
+{
+  "fixture_sha256": "e68ed38a73caad88ae8de0a0000a439f732331a9b118849de28d92d4366efda3",
+  "inputs_sha256": "e61926f47138ac81af8df165afbc2d374d8ffc63727365d27e7dddbc3cfd13a1",
+  "engines": {
+    "riley": {
+      "capture_sha256": "3e3c0ce6cb10afc76258869f4400d3b4a1e252afffd5fa39544bfe91b65794ba",
+      "variants": {
+        "wrapped": {
+          "batch_invariant": 33,
+          "c1": {
+            "lookup": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            },
+            "arithmetic-ko": {
+              "requests": 11,
+              "exact": 0,
+              "exact_stop": 0,
+              "first_line": 0,
+              "length": 0
+            },
+            "join": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            }
+          },
+          "c8": {
+            "lookup": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            },
+            "arithmetic-ko": {
+              "requests": 11,
+              "exact": 0,
+              "exact_stop": 0,
+              "first_line": 0,
+              "length": 0
+            },
+            "join": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            }
+          }
+        },
+        "without_answer_cue": {
+          "batch_invariant": 33,
+          "c1": {
+            "lookup": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            },
+            "arithmetic-ko": {
+              "requests": 11,
+              "exact": 0,
+              "exact_stop": 0,
+              "first_line": 0,
+              "length": 0
+            },
+            "join": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            }
+          },
+          "c8": {
+            "lookup": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            },
+            "arithmetic-ko": {
+              "requests": 11,
+              "exact": 0,
+              "exact_stop": 0,
+              "first_line": 0,
+              "length": 0
+            },
+            "join": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            }
+          }
+        }
+      }
+    },
+    "vllm": {
+      "capture_sha256": "55819096ec01dbddfd5769d14c32108f55a9fd199799a4e305b0b49aa07f198a",
+      "variants": {
+        "wrapped": {
+          "batch_invariant": 32,
+          "c1": {
+            "lookup": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            },
+            "arithmetic-ko": {
+              "requests": 11,
+              "exact": 0,
+              "exact_stop": 0,
+              "first_line": 0,
+              "length": 0
+            },
+            "join": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            }
+          },
+          "c8": {
+            "lookup": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            },
+            "arithmetic-ko": {
+              "requests": 11,
+              "exact": 0,
+              "exact_stop": 0,
+              "first_line": 0,
+              "length": 0
+            },
+            "join": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            }
+          }
+        },
+        "without_answer_cue": {
+          "batch_invariant": 33,
+          "c1": {
+            "lookup": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            },
+            "arithmetic-ko": {
+              "requests": 11,
+              "exact": 0,
+              "exact_stop": 0,
+              "first_line": 0,
+              "length": 0
+            },
+            "join": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            }
+          },
+          "c8": {
+            "lookup": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            },
+            "arithmetic-ko": {
+              "requests": 11,
+              "exact": 0,
+              "exact_stop": 0,
+              "first_line": 0,
+              "length": 0
+            },
+            "join": {
+              "requests": 11,
+              "exact": 11,
+              "exact_stop": 11,
+              "first_line": 11,
+              "length": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  "cases": {
+    "lookup-255": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "lookup-256": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "lookup-257": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "lookup-511": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "lookup-512": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "lookup-513": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "lookup-1023": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "lookup-1024": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "lookup-1025": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "lookup-7836": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "lookup-7917": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "arithmetic-ko-255": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": false
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "arithmetic-ko-256": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "arithmetic-ko-257": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "arithmetic-ko-511": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "arithmetic-ko-512": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "arithmetic-ko-513": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "arithmetic-ko-1023": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "arithmetic-ko-1024": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "arithmetic-ko-1025": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "arithmetic-ko-7836": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "arithmetic-ko-7917": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "c8": {
+            "exact": false,
+            "exact_stop": false,
+            "first_line": false,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "join-255": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "join-256": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "join-257": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "join-511": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "join-512": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "join-513": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "join-1023": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "join-1024": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "join-1025": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "join-7836": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    },
+    "join-7917": {
+      "wrapped": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      },
+      "without_answer_cue": {
+        "riley": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        },
+        "vllm": {
+          "c1": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "c8": {
+            "exact": true,
+            "exact_stop": true,
+            "first_line": true,
+            "length": false
+          },
+          "batch_invariant": true
+        }
+      }
+    }
+  },
+  "paired_engines": {
+    "wrapped": {
+      "c1": {
+        "same_text": 33,
+        "same_completion_and_usage_counts": 33,
+        "arithmetic_integer_outputs": {
+          "riley": 11,
+          "vllm": 11
+        }
+      },
+      "c8": {
+        "same_text": 32,
+        "same_completion_and_usage_counts": 32,
+        "arithmetic_integer_outputs": {
+          "riley": 11,
+          "vllm": 11
+        }
+      }
+    },
+    "without_answer_cue": {
+      "c1": {
+        "same_text": 32,
+        "same_completion_and_usage_counts": 32,
+        "arithmetic_integer_outputs": {
+          "riley": 11,
+          "vllm": 11
+        }
+      },
+      "c8": {
+        "same_text": 32,
+        "same_completion_and_usage_counts": 32,
+        "arithmetic_integer_outputs": {
+          "riley": 11,
+          "vllm": 11
+        }
+      }
+    }
+  },
+  "source_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+  "riley_image_id": "sha256:1729f15a677422d552b9a3fd2352dfeb08dd4cccd3558680a016058d27191098",
+  "vllm": "0.27.1+cu129",
+  "gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+  "preflight": {
+    "inputs_sha256": "e61926f47138ac81af8df165afbc2d374d8ffc63727365d27e7dddbc3cfd13a1",
+    "fixture_sha256": "e68ed38a73caad88ae8de0a0000a439f732331a9b118849de28d92d4366efda3",
+    "tokenizer_config_sha256": "5b5d4f65d0acd3b2d56a35b56d374a36cbc1c8fa5cf3b3febbbfabf22f359583",
+    "chat_template_sha256": "cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+    "transformers": "5.22.1",
+    "tokenizers": "0.23.3",
+    "tokens_by_variant": {
+      "wrapped": [
+        284,
+        7946
+      ],
+      "without_answer_cue": [
+        282,
+        7944
+      ]
+    }
+  }
+}

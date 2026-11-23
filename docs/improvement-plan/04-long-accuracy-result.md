@@ -109,6 +109,21 @@ vLLM은 요청을 받기 전에 FlashInfer 워밍업에서 `ninja`를 찾지 못
 
 원문 completion의 두 모델은 조회·기록 연결의 정답을 첫 줄에 쓰고 설명을 계속했다. 이 결과는 해당 요청 형식과 출력 상한의 범위에 적용된다. vLLM 종료 때 Python의 semaphore 정리 경고가 1건 있었고, 종료 직후 두 GPU는 기존 프로세스의 20GiB 예약으로 복귀했다. [원본 체크섬](../../benchmarks/evidence/20261124-w4-long-answers/retry/result.sha256) · [동일 입력 검산 코드](../../benchmarks/evidence/20261124-w4-long-answers/retry/verify-results.py)
 
+### 같은 장문 문제를 채팅 형식으로 재생
+
+원문의 문서·질문을 보존해 두 채팅 입력을 등록했다. 한 입력은 원문 전체를 사용자 메시지로 감싸고, 다른 입력은 그 메시지의 마지막 `Answer:` 줄만 제거한다. 고정된 Qwen 체크포인트 템플릿과 Transformers로 두 형식의 실제 토큰 ID 66개 시퀀스를 계산했다. 사용자는 하나의 메시지를 보내며 양쪽 엔진에 `add_generation_prompt=true`, temperature 0과 최대 32토큰을 적용한다. A100 7번에서 두 엔진의 `/v1/chat/completions`를 C1·C8로 실행하고 응답의 입력 ID가 사전 계산과 같을 때만 정답·종료·배치 불변성을 집계한다. [입력 및 실행 등록](../../benchmarks/evidence/20261124-w4-chat-answers/registration.json) · [요청과 채점 코드](../../benchmarks/evidence/20261124-w4-chat-answers/chat_answers.py)
+
+`0511b9280`의 Riley와 vLLM `0.27.1+cu129`가 각각 132건을 완료했다. 264건 모두 응답의 입력 ID가 사전 계산과 일치했다. 원문 전체를 감싼 입력은 284–7,946토큰, `Answer:`를 뺀 입력은 282–7,944토큰이었다. 두 엔진 모두 두 형식과 동시성에서 다음과 같은 점수를 냈다. [원본 응답·영수증·체크섬](../../benchmarks/evidence/20261124-w4-chat-answers/raw-results.tar.gz) · [채점과 엔진 간 대조](../../benchmarks/evidence/20261124-w4-chat-answers/verified.json)
+
+| 동시성별 33개 문제 | 원문 completion | 원문을 감싼 채팅 | `Answer:`를 뺀 채팅 |
+|---|---:|---:|---:|
+| 정답만 출력하고 `stop` | 0/33 | 22/33 | 22/33 |
+| 32토큰 상한에 도달 | 33/33 | 0/33 | 0/33 |
+| 코드 조회·기록 연결의 정답만 출력하고 `stop` | 0/22 | 22/22 | 22/22 |
+| 한국어 산술의 정답만 출력하고 `stop` | 0/11 | 0/11 | 0/11 |
+
+채팅의 산술 응답 11건은 각 조건에서 모두 정수 한 개를 내고 정상 종료했으며 정답 210을 맞힌 경우는 없었다. 원문을 감싼 C1에서는 같은 입력에서 양쪽 엔진의 생성 ID·텍스트·종료·기본 토큰 사용량이 33/33 일치했다. 나머지 세 조건에서는 각각 32/33 일치했다. Riley의 C1·C8 결과는 두 형식에서 각각 33/33 같았고, vLLM은 원문을 감싼 경우 32/33, `Answer:`를 뺀 경우 33/33 같았다. 이 산술 문항을 길이별로 변형한 범위에서 채팅으로 바꾸면 출력 형식은 개선됐고 계산 오류는 남았다. 시험 직후 GPU 6·7의 기존 홀더가 각각 20GiB를 예약한 상태를 확인했다. [완료 로그](../../benchmarks/evidence/20261124-w4-chat-answers/campaign.log) · [독립 검산기](../../benchmarks/evidence/20261124-w4-chat-answers/verify.py)
+
 ## 공통 접두부의 근소한 점수 차이
 
 두 입력군 29건의 원본 해시와 프롬프트 ID를 확인하고, Riley와 HF SDPA가 같은 접두부를 유지하는 동안 선택한 토큰을 다시 대조했다. 전체 생성 ID가 같은 요청은 22건이다. 첫 분기 7건 중 prefill 직후가 1건, decode가 6건이었다. 첫 분기에서 Riley가 보고한 상위 두 logprob 차이는 모두 0.25 이내였고, HF SDPA에서 두 엔진이 각각 선택한 ID의 점수 차이는 최대 0.125였다. [요청별 집계와 원본 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/result.json)
