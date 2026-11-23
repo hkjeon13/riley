@@ -108,6 +108,26 @@ class DistributionServingTests(unittest.TestCase):
 
 
 class PackageFollowUpTests(unittest.TestCase):
+    def test_character_class_http_probes_require_an_escaped_value(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        candidate = manifest["distribution_with_character_class_fix"]
+        checker.check_pattern_fix_stock(ROOT, candidate)
+        checker.check_pattern_class_probes(ROOT, candidate)
+
+        entries = candidate["evidence"]
+        probe = json.loads((ROOT / entries["a100_pattern_classes"]["path"]).read_bytes())
+        summary = json.loads((ROOT / entries["a100_verified"]["path"]).read_bytes())
+        changed = next(row for row in probe["checks"] if row["case"] == "quote-range")
+        changed["output"]["value"] = "#"
+        summary["pattern_class_checks"] = probe["checks"]
+        with tempfile.TemporaryDirectory() as directory:
+            for key, report in (("a100_pattern_classes", probe), ("a100_verified", summary)):
+                path = Path(directory) / f"{key}.json"
+                path.write_text(json.dumps(report))
+                entries[key]["path"] = str(path)
+            with self.assertRaisesRegex(ValueError, "must prove escaped values"):
+                checker.check_pattern_class_probes(ROOT, candidate)
+
     def test_pattern_fix_structured_receipt_is_bound_to_the_same_image(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
         candidate = manifest["distribution_with_pattern_fix"]

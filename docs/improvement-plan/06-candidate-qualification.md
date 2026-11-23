@@ -19,6 +19,8 @@
 | Pattern 수정 이미지의 jemalloc 파생 시험 | `9373ea412`의 실행 파일 | 파생 이미지 `c7fcb8e274ec`의 두 30분 합성 부하에서 정밀 RSS 변화는 캐시 끔 −780KiB, 켬 −676KiB였다. 지연·메트릭·자원 회수와 장문 232건, 스키마·도구 64건의 검사를 통과했다. [두 캐시 모드 결과](05-mixed-soak-result.md#pattern-수정-이미지의-jemalloc-30분-재검증) |
 | Pattern 문자 클래스 수정의 배포 이미지 | `6d618f64e` | GitHub와 A100 런타임 파일 21개 일치. A100 이미지 `03bbabfb19ca`의 문자 클래스 HTTP 10건, 두 GPU의 API 40건씩, 장문 스키마·도구 64건 및 45초 혼합 부하를 통과했다. 이 바이너리의 W5 30분 대조와 운영 판정은 남아 있다. [문자 클래스 검증](04-structured-output-result.md#pattern-문자-클래스의-json-인코딩) |
 
+CI는 문자 클래스 수정 이미지의 빌드 입력과 HTTP 검증을 `distribution_with_character_class_fix`에서 검사한다. `--distribution-revision`의 비교 대상은 같은 바이너리의 30분 대조를 연결하기 전까지 `9373ea412`에 근거한 패키지다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [CI 검증기](../../ci/check_improvement_evidence.py)
+
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)
 
 기준 배포 검증 이미지 `d3d8fe6e5`의 이미지 ID·Riley 실행 파일 해시를 보존했다. 이 이미지와 첫 감사 시점 `68788bee9`, 후속 감사 시점 `838103b02`의 배포 입력 Git 객체 14개가 모두 일치한다. 동일 Rust·CUDA 프로그램 입력인 `77c367003`에서는 CUDA 12.8 네이티브 빌드·C ABI·Clippy도 통과했다. [CUDA 12.4 이미지 원본](../../benchmarks/evidence/20261119-cu124-distribution-image/serving-lint-fix/receipt.json) · [CUDA 12.8 네이티브 CI](https://github.com/hkjeon13/riley/actions/runs/44410425140)

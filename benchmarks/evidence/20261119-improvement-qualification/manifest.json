@@ -5055,6 +5055,68 @@
       }
     }
   },
+  "distribution_with_character_class_fix": {
+    "source_revision": "6d618f64e9f3f235eb6aa651943391907f0ce52a",
+    "matching_distribution_input_git_objects": {
+      "Cargo.toml": "e75f6ce3a2ad13911f1a91fc2b982a410f9d32f2",
+      "Cargo.lock": "afa446f5b2f1ad1ba2070de2d16343cf7a7a0a70",
+      "rust-toolchain.toml": "67c827cf973f78b64274b37b54c5a99cff5ca055",
+      "crates": "556aa72f560ee6e2f9f1b3f02c6f7b8d190cd28c",
+      "kernels": "7c3c0dfd2d7d04b694c8bd77c4e323081199f46f",
+      "third_party": "fcda977aec23d650259a7d1104d339f815d30e07",
+      "tools/riley-checkpoint": "375dc077ae7d32ba759b339d28f1ef8c370642b5",
+      ".dockerignore": "032839f0b4e1ab479f5a1069d69937ade5e44f7e",
+      ".github/workflows/distribution-image.yml": "8a4587aa0fccb0304fdc1c06333b4f138a503dab",
+      "deploy/docker": "4a585fa6e013d816c743760807ad422d270b404e",
+      "ci/check_distribution_image.py": "536a00bedb0675f19bf038395bf46e1996b82053",
+      "ci/check_serving_source_contract.py": "26abce96ca8eb573299613464e26bae94529a8ce",
+      "ci/serving-source-contract.json": "205b02603ad57d850071cb212c88fce965edd148",
+      "LICENSE": "1b4cfd2f88277e627300ec3a92f5c310807d125e"
+    },
+    "differing_runtime_files": [],
+    "a100_source_inventory": {
+      "source_objects_sha256": "5468b8e5f9f2878316fbac7c144c7d96eeb6cb93c1afaae3e891d10b0ee45658",
+      "source_object_count": 1037
+    },
+    "evidence": {
+      "hosted_cpu": {
+        "path": "benchmarks/evidence/20261123-w4-pattern-classes/hosted/report.json",
+        "sha256": "878b1efec782c4d24a0a2c0c724d584bb4203f1bea2e3bdcba90d2d9e2fd49c7"
+      },
+      "a100_cpu": {
+        "path": "benchmarks/evidence/20261123-w4-pattern-classes/cpu-evidence/report.json",
+        "sha256": "52331eeedf49d4159acb42554440fa0fc9324df05c8886e0223e360935dd011d"
+      },
+      "a100_serving": {
+        "path": "benchmarks/evidence/20261123-w4-pattern-classes/smoke/report.json",
+        "sha256": "fc385ea8a76dc16dc778f3973d73101e2d8a0793855c5ea432a96a8a4c214eb6"
+      },
+      "a100_structured": {
+        "path": "benchmarks/evidence/20261123-w4-pattern-classes/structured/report.json",
+        "sha256": "ec17dc2791d436f1605334552b5215ce47fa881fdccab5f1b81bc208e5e2b581"
+      },
+      "a100_verified": {
+        "path": "benchmarks/evidence/20261123-w4-pattern-classes/verified.json",
+        "sha256": "a5d08613dfdf54e69a28252c6db5424e12a275421635f0bfe2f20c8acfed102b"
+      },
+      "a100_pattern_classes": {
+        "path": "benchmarks/evidence/20261123-w4-pattern-classes/structured/pattern-classes.json",
+        "sha256": "2408ab72d3f3cc62f8820d704479fcf5cd6f73a775974746a5c6584c43f5be1d"
+      },
+      "a100_source_objects": {
+        "path": "benchmarks/evidence/20261123-w4-pattern-classes/source-objects.tsv.gz",
+        "sha256": "f5459ffa9c14139fb40e9fc77763feabfc0d11dcea3001f3a15f93382b602f90"
+      },
+      "hosted_runtime": {
+        "path": "benchmarks/evidence/20261123-w4-pattern-classes/hosted/runtime.sha256",
+        "sha256": "15bfa1473146815a66955f96e5f79872381513ced2c2fe9c91458e5d39ce8239"
+      },
+      "a100_runtime": {
+        "path": "benchmarks/evidence/20261123-w4-pattern-classes/cpu-evidence/runtime.sha256",
+        "sha256": "07ed9a237427c337e8471d04e33b1f0edc699926f699d53a6311202de73c830e"
+      }
+    }
+  },
   "distribution_with_pattern_fix": {
     "source_revision": "9373ea412a4ce1353a309c69ccf2de62d76d3318",
     "matching_distribution_input_git_objects": {

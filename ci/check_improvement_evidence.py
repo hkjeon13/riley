@@ -186,7 +186,7 @@ def check_prefix_metrics_package(root, candidate):
         raise ValueError("the recovery drill requires a verified allocator experiment")
 
 
-def check_pattern_fix_package(root, candidate):
+def check_pattern_fix_stock(root, candidate):
     parent, smoke, runtime_files = check_package_records(root, candidate)
     evidence = candidate["evidence"]
     structured, verified = (
@@ -220,8 +220,8 @@ def check_pattern_fix_package(root, candidate):
             or {name: row["requests"] for name, row in holdout["modes"].items()} != counts
             or any(holdout["modes"][name]["exact_matches"] != counts[name] for name in ("c8", "c32"))):
         raise ValueError("pattern-fix package lacks the 64-request structured holdout")
-    if len(holdout["cases"]) != 16 or candidate["allocator_experiment"]["matched_structured_cases"] != 16:
-        raise ValueError("pattern-fix allocator must preserve all 16 structured reference responses")
+    if len(holdout["cases"]) != 16:
+        raise ValueError("pattern-fix package lacks the 16 structured reference responses")
     reservations = verified["reservations"]
     if set(reservations) != {"6", "7"} or any(row["allocation_bytes"] != 20 * 2**30
                                               for row in reservations.values()):
@@ -232,6 +232,13 @@ def check_pattern_fix_package(root, candidate):
                          for gpu, row in reservations.items()},
         "accuracy": {"suites": suites},
     }
+    return parent, smoke, stock
+
+
+def check_pattern_fix_package(root, candidate):
+    parent, smoke, stock = check_pattern_fix_stock(root, candidate)
+    if candidate["allocator_experiment"]["matched_structured_cases"] != 16:
+        raise ValueError("pattern-fix allocator must preserve all 16 structured reference responses")
     allocator = check_prefix_metrics_allocator(root, candidate, parent, stock)
     if "recovery_drill" in candidate:
         entry = candidate["recovery_drill"]["report"]
@@ -239,6 +246,32 @@ def check_pattern_fix_package(root, candidate):
         check_prefix_metrics_recovery(drill, smoke, allocator)
     if "stock_soak_comparison" in candidate:
         check_stock_soak_comparison(root, candidate, smoke, allocator)
+
+
+def check_pattern_class_probes(root, candidate):
+    evidence = candidate["evidence"]
+    report, summary = (
+        json.loads((root / evidence[name]["path"]).read_bytes(), object_pairs_hook=unique_object)
+        for name in ("a100_pattern_classes", "a100_verified")
+    )
+    if report["status"] != "passed" or report["checks"] != summary["pattern_class_checks"]:
+        raise ValueError("character class HTTP probes differ from the A100 package summary")
+
+    success = {"quote-range": '"', "backslash-range": "\\"}
+    rejected = ("unsupported-class-escape", "unsupported-unicode-escape", "unsupported-negated-space")
+    expected = {}
+    for parameter, finish in (("response_format", "stop"), ("tools", "tool_calls")):
+        for case, value in success.items():
+            expected[case, parameter] = (200, {"value": value}, finish, None)
+        for case in rejected:
+            expected[case, parameter] = (400, None, None, "invalid_schema")
+    checks = report["checks"]
+    observed = {
+        (row["case"], row["parameter"]): (row["status"], row.get("output"), row.get("finish_reason"), row.get("code"))
+        for row in checks
+    }
+    if len(checks) != len(expected) or observed != expected:
+        raise ValueError("character class HTTP probes must prove escaped values and named schema rejections")
 
 
 def check_stock_soak_comparison(root, candidate, smoke, allocator):
@@ -904,6 +937,20 @@ def main():
             latest = manifest["distribution_with_pattern_fix"]
             latest_inputs = check_distribution_inputs(root, latest)
             check_pattern_fix_package(root, latest)
+        character_classes = manifest.get("distribution_with_character_class_fix")
+        if character_classes is not None:
+            inputs_character_classes = check_distribution_inputs(root, character_classes)
+            check_pattern_class_probes(root, character_classes)
+            if "allocator_experiment" in character_classes:
+                check_pattern_fix_package(root, character_classes)
+                if "stock_soak_comparison" in character_classes:
+                    earlier.append(latest)
+                    latest = character_classes
+                    latest_inputs = inputs_character_classes
+            else:
+                if "stock_soak_comparison" in character_classes or "recovery_drill" in character_classes:
+                    raise ValueError("character-class comparison or recovery requires an allocator experiment")
+                check_pattern_fix_stock(root, character_classes)
         allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],
                                                   manifest["current_distribution_candidate"])
         serving_models = check_distribution_serving(root, manifest["current_distribution_candidate"])
