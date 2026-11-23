@@ -1,0 +1,16 @@
+campaign.sh: OK
+build-result.sha256: OK
+runtime.sha256: OK
+result.sha256: OK
+START gpu6 control-first 2026-11-23T21:49:42Z
+START gpu7 fifo 2026-11-23T21:49:42Z
+END gpu6 control-first 2026-11-23T21:56:27Z exit=0
+END gpu7 fifo 2026-11-23T21:56:27Z exit=0
+START gpu6 fifo 2026-11-23T21:56:28Z
+START gpu7 control-first 2026-11-23T21:56:28Z
+END gpu7 control-first 2026-11-23T22:03:12Z exit=0
+END gpu6 fifo 2026-11-23T22:03:15Z exit=0
+START gpu6 control-second 2026-11-23T22:03:15Z
+START gpu7 control-second 2026-11-23T22:03:15Z
+END gpu7 control-second 2026-11-23T22:10:01Z exit=0
+END gpu6 control-second 2026-11-23T22:10:01Z exit=0
