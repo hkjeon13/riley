@@ -87,6 +87,14 @@ jemalloc을 포함한 파생 이미지 `1fc444b1840e`에서도 같은 A100과 �
 
 이 입력들은 배치 불변성과 길이 경계 재현에 계속 사용한다. 전체 생성 일치 개수로 장문 답변 품질을 판정하는 근거는 부족하다. 새 정확성 후보의 장문 품질은 정답이 정해진 입력에서 필수 답변 항목과 상한 도달 시 답변 완결 여부를 확인한다. 기존 GSM8K 품질 기준과 두 투영 후보의 기각 판정을 유지한다. [장문 품질 재검증 절차](04-correctness-and-schema.md#w4-a4-수정과-재평가)
 
+### 정답을 고정한 장문 시험의 첫 실행
+
+A100 7번에서 `0511b9280` 배포 이미지의 Qwen2.5-7B에 고정 원문 33개를 `/v1/completions`로 보냈다. C1과 C8에서 입력 토큰 ID가 일치했고, 생성 ID·텍스트·종료 사유·usage가 33/33쌍에서 같았다. 두 모드 모두 33건 전부 32토큰 상한으로 종료했고, 사전에 정한 정답만 출력해 정상 종료한 건은 0건이었다. [첫 실행 검산](../../benchmarks/evidence/20261124-w4-long-answers/retry/first-attempt.json) · [원본 응답과 로그](../../benchmarks/evidence/20261124-w4-long-answers/retry/first-attempt.tar.gz)
+
+첫 번째 비어 있지 않은 줄을 추가로 확인했다. 코드 조회와 기록 연결은 각 11/11건에서 첫 줄이 정답이었고 뒤에 설명이 이어졌다. 한국어 산술은 두 모드 모두 첫 줄 정답이 0/11건이었다. 첫 줄 비교는 원인을 나누기 위한 사후 진단이며, 위의 전체 응답 판정을 유지한다. [검산 코드](../../benchmarks/evidence/20261124-w4-long-answers/retry/check-first.py)
+
+vLLM은 요청을 받기 전에 FlashInfer 워밍업에서 `ninja`를 찾지 못해 종료했다. GPU 7의 기존 예약이 20GiB로 복귀했다. 같은 가상환경의 `ninja`를 실행 경로에 포함하고 버전을 확인했다. Riley 캡처는 해시를 고정하고, C32 종료 후 같은 GPU 7번에서 vLLM만 재실행하도록 등록했다. [재실행 기록](../../benchmarks/evidence/20261124-w4-long-answers/retry/registration.json) · [재실행 절차](../../benchmarks/evidence/20261124-w4-long-answers/retry/campaign.sh)
+
 ## 공통 접두부의 근소한 점수 차이
 
 두 입력군 29건의 원본 해시와 프롬프트 ID를 확인하고, Riley와 HF SDPA가 같은 접두부를 유지하는 동안 선택한 토큰을 다시 대조했다. 전체 생성 ID가 같은 요청은 22건이다. 첫 분기 7건 중 prefill 직후가 1건, decode가 6건이었다. 첫 분기에서 Riley가 보고한 상위 두 logprob 차이는 모두 0.25 이내였고, HF SDPA에서 두 엔진이 각각 선택한 ID의 점수 차이는 최대 0.125였다. [요청별 집계와 원본 해시](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/result.json)

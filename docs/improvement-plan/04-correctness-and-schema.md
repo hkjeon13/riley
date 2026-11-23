@@ -68,6 +68,8 @@ Qwen2.5-7B의 검증된 tokenizer로 별도 greedy holdout 11개를 고정했다
 
 Qwen2.5-7B의 후속 비교를 위해 코드 조회, 한국어 산술, 두 기록 연결을 각각 11개 입력 길이로 고정했다. 서로 다른 합성 기록 사이에서 필요한 사실을 찾고 지정한 값 하나를 출력해야 한다. 각 과제의 사실을 문서 처음·중간·끝 중 한 곳에 두고 같은 정답으로 길이를 바꾼다. 기준 패키지와 vLLM에 동일한 프롬프트 ID·32토큰 출력 상한을 적용하고, 요청 동시성 1·8에서 정답·정상 종료·길이 제한과 배치 불변성을 기록한다. A100 7번의 검증은 W3 재생 종료와 기존 20GiB 예약 복귀 확인 뒤 시작한다. [고정 입력](../../benchmarks/evidence/20261124-w4-long-answers/facts.json.gz) · [판정 도구](../../benchmarks/live/long_answer_check.py) · [등록 및 CPU 확인](../../benchmarks/evidence/20261124-w4-long-answers/preflight.json)
 
+첫 실행에서 Riley의 두 동시성 결과가 모두 일치했다. 코드 조회·기록 연결의 22개 입력은 첫 줄에 정답을 냈고, 이후 설명이 이어져 정답만 출력하는 조건을 충족하지 못했다. vLLM은 워밍업용 `ninja` 실행 경로를 보완해 별도로 재실행한다. [첫 실행 결과](04-long-accuracy-result.md#정답을-고정한-장문-시험의-첫-실행)
+
 GSM8K는 기존 train 7,473행과 test 1,319행의 파일 해시를 고정했다. 기존 세 모델인 Qwen2.5-7B, Llama-3.2-3B, Qwen3-4B와 두 KV-head 모델 Qwen2.5-3B를 Riley·vLLM에서 전수 비교한다. 두 엔진에서 4-shot, greedy, 최대 256토큰, `Question:` 종료 문자열, 문맥 4,096과 클라이언트 동시성 32를 사용한다. 요청 본문과 서버가 받은 토큰 ID를 모두 대조하고, 응답 오류가 하나라도 있으면 점수 비교는 무효다. [고정 데이터](../../benchmarks/evidence/20261119-w4-gsm8k/dataset.json) · [비교 검사기](../../benchmarks/evidence/20261119-w4-gsm8k/tools/compare_gsm8k.py)
 
 CPU에서 과거 세 Riley 결과의 1,319문항별 정오를 각각 재계산해 원래 결과와 일치함을 확인했다. 현재 네이티브 GPU 후보는 네 모델 모두에서 vLLM과 1,319개 동일 입력으로 검증해 −1.2%p 품질 기준을 통과했다. [과거 결과 재채점](../../benchmarks/evidence/20261119-w4-gsm8k/preflight.json) · [GPU 실행 순서](../../benchmarks/evidence/20261119-w4-gsm8k/campaign.sh) · [전수 비교 결과](04-long-accuracy-result.md#gsm8k-전수-품질-대조)
