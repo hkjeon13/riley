@@ -977,10 +977,19 @@ def main():
                 check_pattern_fix_stock(root, character_classes)
         schema_references = manifest.get("distribution_with_schema_reference_fix")
         if schema_references is not None:
-            check_distribution_inputs(root, schema_references)
-            check_pattern_fix_stock(root, schema_references)
+            schema_inputs = check_distribution_inputs(root, schema_references)
             check_pattern_class_probes(root, schema_references)
             check_schema_reference_probes(root, schema_references)
+            if "allocator_experiment" in schema_references:
+                check_pattern_fix_package(root, schema_references)
+                if {"stock_soak_comparison", "recovery_drill"} <= schema_references.keys():
+                    earlier.append(latest)
+                    latest = schema_references
+                    latest_inputs = schema_inputs
+            else:
+                if "stock_soak_comparison" in schema_references or "recovery_drill" in schema_references:
+                    raise ValueError("schema reference comparison or recovery requires an allocator experiment")
+                check_pattern_fix_stock(root, schema_references)
         allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],
                                                   manifest["current_distribution_candidate"])
         serving_models = check_distribution_serving(root, manifest["current_distribution_candidate"])

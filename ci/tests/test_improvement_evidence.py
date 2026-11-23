@@ -111,7 +111,7 @@ class PackageFollowUpTests(unittest.TestCase):
     def test_schema_reference_probes_require_the_exact_output_and_error_field(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
         candidate = manifest["distribution_with_schema_reference_fix"]
-        checker.check_pattern_fix_stock(ROOT, candidate)
+        checker.check_pattern_fix_package(ROOT, candidate)
         checker.check_schema_reference_probes(ROOT, candidate)
 
         entries = candidate["evidence"]
@@ -173,11 +173,13 @@ class PackageFollowUpTests(unittest.TestCase):
 
     def test_new_distribution_record_keeps_compatible_historical_revisions(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
-        latest = manifest["distribution_with_character_class_fix"]
-        historical = [manifest[name] for name in ("distribution_with_pattern_fix", "distribution_with_prefix_metrics",
+        latest = manifest["distribution_with_schema_reference_fix"]
+        historical = [manifest[name] for name in ("distribution_with_character_class_fix",
+                                                   "distribution_with_pattern_fix", "distribution_with_prefix_metrics",
                                                    "distribution_after_terminal_fix")]
         revisions = [
             latest["source_revision"],
+            historical[0]["source_revision"],
             "8d6b531bd30c349d3fa9817fd287d6a867c299be",
             historical[-1]["source_revision"],
         ]

@@ -1,0 +1,385 @@
+{
+  "status": "verified",
+  "remote_evidence": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-schema-ids-20261123.Lpz800c7/stock",
+  "parent_cpu_report_sha256": "753ae255fb829f54979b95f5f734a96113a76152bc505e2819ca2460e584eb9b",
+  "allocator_report_sha256": "d8ae2422bba824c55007859ddd7a4e6b157c5ac5abc9b969ea80f470a53fd944",
+  "reservations": {
+    "6": {
+      "pid": 2680326,
+      "start_ticks": "6365879881",
+      "gib": 20
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "gib": 20
+    }
+  },
+  "stock_soaks": {
+    "source_revision": "c5ec7b3918e18428b0c5704b010aa4ee51972a86",
+    "image_id": "sha256:3278fe2fced2c3edadb2a9348c46a135fdcfd81da5f72ebfc9a55dede0ccfa42",
+    "binary_sha256": "c5edc27544706cdb5baf988920e3cb838ff98a3c1a6520285539628cbdc88f0c",
+    "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+    "duration_seconds_per_mode": 1800,
+    "requests_per_second_per_mode": 8,
+    "release_gate": "failed",
+    "modes": {
+      "cache-off": {
+        "status": "failed",
+        "failed_checks": [
+          "rss_growth_second_half_at_most_zero"
+        ],
+        "rss": {
+          "baseline": {
+            "rss_kib": 15553640,
+            "anonymous_kib": 15367004,
+            "read_ms": 403.8880243897438
+          },
+          "drain": {
+            "rss_kib": 15554168,
+            "anonymous_kib": 15367532,
+            "read_ms": 352.1096482872963
+          },
+          "rss_growth_kib": 528,
+          "anonymous_growth_kib": 528
+        },
+        "p95_change_percent": {
+          "ttft_ms": 1.2131786431228253,
+          "e2e_ms": -13.355019142401048
+        },
+        "api_checks": 40,
+        "problem_count": 0,
+        "completed": 13749,
+        "client_disconnects": 700,
+        "counter_changes": {
+          "cancellations": 700,
+          "disconnects": 700,
+          "overloads": 0,
+          "dropped_observations": 13568
+        },
+        "prefix_cache_metrics": {
+          "status": "passed",
+          "snapshots": 32,
+          "capacity_blocks": 0,
+          "peak_sampled_retained_blocks": 0,
+          "hit_tokens_delta": 0,
+          "evicted_blocks_delta": 0,
+          "shutdown_hit_tokens": 0,
+          "shutdown_evicted_blocks": 0
+        },
+        "batch_shape_metrics": {
+          "status": "passed",
+          "snapshots": 32,
+          "slot_capacity": 24,
+          "configured_dense_rows": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            24,
+            32,
+            48,
+            64,
+            80,
+            96,
+            112,
+            128,
+            144,
+            160,
+            176,
+            192,
+            208,
+            224,
+            240,
+            256
+          ],
+          "committed_steps": 133464,
+          "gpu_execution_ns": 1759757823651
+        },
+        "soak_sha256": "7a7f5339e433bca5429c5d1e8cbbaebaff6d355ffd506949018dbfbf3d1f65bf",
+        "report_sha256": "98508caeae418c933eebef4caddbe4ec123f919cd7ee8b180c7343b1585c6bab",
+        "shutdown_sha256": "4d27049bed46ee7f27aecfec7e192e96f300b380924e4ae34e2643ac30c78f6b"
+      },
+      "cache-on": {
+        "status": "failed",
+        "failed_checks": [
+          "rss_growth_second_half_at_most_zero"
+        ],
+        "rss": {
+          "baseline": {
+            "rss_kib": 15553200,
+            "anonymous_kib": 15366504,
+            "read_ms": 271.1237147450447
+          },
+          "drain": {
+            "rss_kib": 15553792,
+            "anonymous_kib": 15367096,
+            "read_ms": 357.96060413122177
+          },
+          "rss_growth_kib": 592,
+          "anonymous_growth_kib": 592
+        },
+        "p95_change_percent": {
+          "ttft_ms": 1.2304457632386079,
+          "e2e_ms": -13.43788636591815
+        },
+        "api_checks": 40,
+        "problem_count": 0,
+        "completed": 13749,
+        "client_disconnects": 700,
+        "counter_changes": {
+          "cancellations": 700,
+          "disconnects": 700,
+          "overloads": 0,
+          "dropped_observations": 13568
+        },
+        "prefix_cache_metrics": {
+          "status": "passed",
+          "snapshots": 32,
+          "capacity_blocks": 128,
+          "peak_sampled_retained_blocks": 128,
+          "hit_tokens_delta": 384528,
+          "evicted_blocks_delta": 89548,
+          "shutdown_hit_tokens": 390896,
+          "shutdown_evicted_blocks": 89548
+        },
+        "batch_shape_metrics": {
+          "status": "passed",
+          "snapshots": 32,
+          "slot_capacity": 24,
+          "configured_dense_rows": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            24,
+            32,
+            48,
+            64,
+            80,
+            96,
+            112,
+            128,
+            144,
+            160,
+            176,
+            192,
+            208,
+            224,
+            240,
+            256
+          ],
+          "committed_steps": 134585,
+          "gpu_execution_ns": 1759818609126
+        },
+        "soak_sha256": "f53a25cd309e090ef75286ec94e98e74a6ee789098b87c117208d5c8bdbf054b",
+        "report_sha256": "13cb345d9767454742d7eaed592a734bcaeb2bb425983d61ad28c7e9f68bd03b",
+        "shutdown_sha256": "9ea29aeb41c1619ad1327915621bd99fca72106ce76d6e4239ca9b9e1179d7a6"
+      }
+    }
+  },
+  "comparisons": {
+    "cache-off": {
+      "gpu_uuid": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+      "driver_version": "550.127.05",
+      "server_arguments": [
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "512",
+        "--kv-blocks",
+        "16384"
+      ],
+      "stock_to_allocator_rss_change_kib": -1304,
+      "stock_counts": {
+        "plain": {
+          "completed": 7984
+        },
+        "schema": {
+          "completed": 1739,
+          "stop": 1739
+        },
+        "logprobs": {
+          "completed": 1160
+        },
+        "tools": {
+          "completed": 708,
+          "tool_calls": 708
+        },
+        "long": {
+          "completed": 1415
+        },
+        "reason": {
+          "completed": 743
+        },
+        "cancel": {
+          "disconnected": 700
+        }
+      },
+      "allocator_counts": {
+        "plain": {
+          "completed": 7984
+        },
+        "schema": {
+          "completed": 1739,
+          "stop": 1739
+        },
+        "logprobs": {
+          "completed": 1160
+        },
+        "tools": {
+          "completed": 708,
+          "tool_calls": 708
+        },
+        "long": {
+          "completed": 1415
+        },
+        "reason": {
+          "completed": 743
+        },
+        "cancel": {
+          "disconnected": 700
+        }
+      },
+      "stock_latency_windows": {
+        "early": {
+          "completed": 4109,
+          "ttft_ms_count": 4109,
+          "ttft_ms_p95": 330.58203756809235,
+          "e2e_ms_count": 4109,
+          "e2e_ms_p95": 4802.016943693161
+        },
+        "late": {
+          "completed": 4163,
+          "ttft_ms_count": 4163,
+          "ttft_ms_p95": 334.5925882458687,
+          "e2e_ms_count": 4163,
+          "e2e_ms_p95": 4160.706661641598
+        }
+      },
+      "allocator_latency_windows": {
+        "early": {
+          "completed": 4109,
+          "ttft_ms_count": 4109,
+          "ttft_ms_p95": 329.6765089035034,
+          "e2e_ms_count": 4109,
+          "e2e_ms_p95": 4800.408087670803
+        },
+        "late": {
+          "completed": 4163,
+          "ttft_ms_count": 4163,
+          "ttft_ms_p95": 334.27873253822327,
+          "e2e_ms_count": 4163,
+          "e2e_ms_p95": 4164.733372628689
+        }
+      },
+      "stock_client_dispatch_p95_ms": 1.7890557646751404,
+      "allocator_client_dispatch_p95_ms": 1.7778649926185608
+    },
+    "cache-on": {
+      "gpu_uuid": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+      "driver_version": "550.127.05",
+      "server_arguments": [
+        "--max-active-sequences",
+        "32",
+        "--max-sequence-tokens",
+        "8192",
+        "--max-output-tokens",
+        "512",
+        "--kv-blocks",
+        "16384",
+        "--prefix-cache-blocks",
+        "128"
+      ],
+      "stock_to_allocator_rss_change_kib": -1412,
+      "stock_counts": {
+        "plain": {
+          "completed": 7984
+        },
+        "schema": {
+          "completed": 1739,
+          "stop": 1739
+        },
+        "logprobs": {
+          "completed": 1160
+        },
+        "tools": {
+          "completed": 708,
+          "tool_calls": 708
+        },
+        "long": {
+          "completed": 1415
+        },
+        "reason": {
+          "completed": 743
+        },
+        "cancel": {
+          "disconnected": 700
+        }
+      },
+      "allocator_counts": {
+        "plain": {
+          "completed": 7984
+        },
+        "schema": {
+          "completed": 1739,
+          "stop": 1739
+        },
+        "logprobs": {
+          "completed": 1160
+        },
+        "tools": {
+          "completed": 708,
+          "tool_calls": 708
+        },
+        "long": {
+          "completed": 1415
+        },
+        "reason": {
+          "completed": 743
+        },
+        "cancel": {
+          "disconnected": 700
+        }
+      },
+      "stock_latency_windows": {
+        "early": {
+          "completed": 4109,
+          "ttft_ms_count": 4109,
+          "ttft_ms_p95": 319.71877813339233,
+          "e2e_ms_count": 4109,
+          "e2e_ms_p95": 4773.262418806553
+        },
+        "late": {
+          "completed": 4163,
+          "ttft_ms_count": 4163,
+          "ttft_ms_p95": 323.6527442932129,
+          "e2e_ms_count": 4163,
+          "e2e_ms_p95": 4131.836839020252
+        }
+      },
+      "allocator_latency_windows": {
+        "early": {
+          "completed": 4109,
+          "ttft_ms_count": 4109,
+          "ttft_ms_p95": 318.28875094652176,
+          "e2e_ms_count": 4109,
+          "e2e_ms_p95": 4770.10627835989
+        },
+        "late": {
+          "completed": 4163,
+          "ttft_ms_count": 4163,
+          "ttft_ms_p95": 324.22707974910736,
+          "e2e_ms_count": 4163,
+          "e2e_ms_p95": 4119.487047195435
+        }
+      },
+      "stock_client_dispatch_p95_ms": 1.7502233386039734,
+      "allocator_client_dispatch_p95_ms": 1.7818957567214966
+    }
+  }
+}
