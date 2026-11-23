@@ -816,6 +816,23 @@ Page 48개에서 활성 요청이 32개를 넘은 커밋 스텝은 77개였다. 
 
 6개 실행에서 응답 984건이 기존 이미지와 입력·생성 ID, 텍스트, 종료 사유까지 일치했다. 쌍별 클라이언트 write 오차 차이 p95는 최대 0.727ms였다. 정상 종료 뒤 활성·대기 요청과 장치 자원이 회수됐고 GPU 6·7은 각각 기존 20GiB 예약으로 복귀했다. [실행 로그](../../benchmarks/evidence/20261123-w3-c32-steady256-burst/campaign.log) · [원본 체크섬](../../benchmarks/evidence/20261123-w3-c32-steady256-burst/result.sha256) · [독립 재검산](../../benchmarks/evidence/20261123-w3-c32-steady256-burst/fetch-summary.sh)
 
+### 짧은 입력 전용 512행 버스트
+
+앞선 256행 대조에서 1,024행 버스트로 첫 요청 묶음의 TTFT p95가 줄고, 후속 요청의 TTFT p95가 늘었다. 이번 진단 빌드는 기준의 일반 예산 256행과 최대 1,024행을 사용한다. 실행 가능한 prefill의 원래 프롬프트가 모두 512토큰 미만이고, 그중 하나 이상에 64토큰 이상이 남았으며, decode 행 수가 설정한 8행 또는 16행 이하면 스텝 전체 예산을 512행까지 허용한다. 512토큰 이상의 프롬프트가 prefill에 포함된 스텝은 기준의 긴 입력 규칙을 따른다. [진단 패치](../../benchmarks/evidence/20261123-w3-c32-short-burst/prepare.py)
+
+CPU의 실제 스케줄러 계획에서 기준과 각 문턱, decode 9·17행, 64토큰 미만 입력과 짧고 긴 입력이 섞인 경우를 확인했다. 같은 진단 바이너리에서 정책 끔·8행·16행을 두 A100에 교차 배치했다. 각 GPU의 보존 도착 시각표를 재생했고, 고정 타일과 활성 슬롯 32개, HTTP 워커 64개, prefix 필터, 격리 워밍업과 서버 인자를 맞췄다. [스케줄러 검사](../../benchmarks/evidence/20261123-w3-c32-short-burst/short-burst-test.rs) · [실행 순서](../../benchmarks/evidence/20261123-w3-c32-short-burst/campaign.sh)
+
+| GPU | decode 문턱 | C32 TTFT p95, 기준 → 후보 | C32 TTFT p50 변화 | C32 TPOT p50 변화 | 512행 스텝 |
+|---:|---:|---:|---:|---:|---:|
+| 6 | 8행 | 353.92 → 319.29ms (−9.78%) | +9.45% | −0.54% | 2 |
+| 7 | 8행 | 343.62 → 325.94ms (−5.15%) | +0.59% | +0.11% | 2 |
+| 6 | 16행 | 353.92 → 346.91ms (−1.98%) | +70.97% | +0.24% | 3 |
+| 7 | 16행 | 343.62 → 350.64ms (+2.04%) | +43.17% | +1.24% | 3 |
+
+8행 후보는 두 GPU에서 C32 TTFT p95를 줄였고, RAG TTFT p95도 각각 1.08%, 0.95% 줄였다. 첫 32건의 p95는 GPU 6에서 407.03 → 373.00ms, GPU 7에서 396.49 → 378.44ms였다. 후속 64건의 p95는 각각 99.22 → 109.44ms와 71.38 → 72.60ms로 늘었다. GPU 7에서는 기존 비교 기준을 모두 충족했고, GPU 6에서는 C32 TTFT p50만 2% 회귀 한도를 넘었다. 16행 후보의 중앙값은 양쪽에서 회귀했다. 이 범위에서 8행·16행 후보의 기본 적용을 보류한다. [지연·출력·회귀 검산](../../benchmarks/evidence/20261123-w3-c32-short-burst/verified.json)
+
+6개 실행의 응답 984건은 기존 이미지와 입력·생성 ID, 텍스트 및 종료 사유까지 일치했다. 기준 대비 두 후보의 클라이언트 write 오차 차이 p95는 최대 1.090ms였다. 정상 종료 뒤 서버 자원이 회수됐고 GPU 6·7은 기존 20GiB 예약으로 복귀했다. GPU 측정과 별도로 진단 빌드에서 짧고 긴 입력의 CPU 스케줄러 테스트를 통과했다. [CPU 테스트 결과](../../benchmarks/evidence/20261123-w3-c32-short-burst/scheduler-test.log.gz) · [원본 체크섬](../../benchmarks/evidence/20261123-w3-c32-short-burst/result.sha256) · [재검산](../../benchmarks/evidence/20261123-w3-c32-short-burst/fetch-summary.sh)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

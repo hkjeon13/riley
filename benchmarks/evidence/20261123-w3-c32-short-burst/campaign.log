@@ -1,0 +1,37 @@
+campaign.sh: OK
+prepare-runner.py: OK
+result.sha256: OK
+runner.sha256: OK
+schedules.json: OK
+build.sh: OK
+prepare.py: OK
+short-burst-test.rs: OK
+target/release/riley: OK
+toolchain.txt: OK
+dependencies.txt: OK
+patched-source.sha256: OK
+scheduler-test.log: OK
+crates/riley-scheduler/src/scheduler.rs: OK
+fixed-inputs.sha256: OK
+runtime-inputs.sha256: OK
+w3-c32-arrival-replay-20261121.knwCy7jZ/schedules.json: OK
+w3-c32-arrival-replay-20261121.knwCy7jZ/replay.py: OK
+w3-c32-arrival-replay-20261121.knwCy7jZ/load.py: OK
+w3-coder-startup-warmup-20261121.db8Pexwl/workload_startup.py: OK
+w3-coder-rag-cache-20261121.Ngz53FnV/run_arm.py: OK
+w3-coder-rag-cache-20261121.Ngz53FnV/workload.py: OK
+w5-prefix-metrics-package-20261121.nEFyze5I/cpu-evidence/report.json: OK
+w3-private-warm-gpu-20261121.Zdv0ggSI/run_case.py: OK
+w3-private-warm-gpu-20261121.Zdv0ggSI/result.sha256: OK
+START private-short-d0-gpu7 2026-11-23T04:22:16Z
+START private-short-d16-gpu6 2026-11-23T04:22:16Z
+END private-short-d16-gpu6 2026-11-23T04:27:12Z exit=0
+START private-short-d8-gpu6 2026-11-23T04:27:12Z
+END private-short-d0-gpu7 2026-11-23T04:27:15Z exit=0
+START private-short-d8-gpu7 2026-11-23T04:27:15Z
+END private-short-d8-gpu7 2026-11-23T04:32:11Z exit=0
+START private-short-d16-gpu7 2026-11-23T04:32:11Z
+END private-short-d8-gpu6 2026-11-23T04:32:16Z exit=0
+START private-short-d0-gpu6 2026-11-23T04:32:17Z
+END private-short-d16-gpu7 2026-11-23T04:37:09Z exit=0
+END private-short-d0-gpu6 2026-11-23T04:37:15Z exit=0
