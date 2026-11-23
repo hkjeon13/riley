@@ -335,9 +335,29 @@ FP32 부분합 down 계획 21과 기준으로 같은 입력 7,836개 ID와 7개 
 | 기준이 후보 KV를 받음 | 808 → 0 | 704 → 0 | 레이어 1 MLP 이후 residual 606개 | 10.25 / 11.0625 → 10.1875 / 10.75 |
 | 후보가 기준 KV를 받음 | 856 → 0 | 718 → 0 | 레이어 1 MLP 이후 residual 628개 | 10.25 / 11.1875 → 9.8125 / 11.0 |
 
-차이 개수는 제공한 실행의 기본 행과 비교한 값이며, context와 residual은 각각 3,584개 BF16 성분이다. 과거 KV를 맞추자 레이어 1 attention context와 residual을 양방향에서 완전히 재현했다. 이어 레이어 1 MLP를 지난 행에서 다시 달라졌고, 두 방향의 여덟 번째 ID는 16019를 유지했다. 레이어 0 행만 교체한 응답과 비교해 두 방향 모두 전체 256개 생성 ID·텍스트·usage·종료 사유가 같았다. 다음 대조 지점은 레이어 1 MLP의 정규화 입력과 gate/up 출력, down 투영이다. 이 결과는 FP32 부분합 down 후보의 장문 코드 한 사례에 해당하며 기존 서빙 기각 판정을 유지한다. [점수와 검증 요약](../../benchmarks/evidence/20261123-w4-kv-history/verified.json) · [첫 차이 검산](../../benchmarks/evidence/20261123-w4-kv-history/propagation.json)
+차이 개수는 제공한 실행의 기본 행과 비교한 값이며, context와 residual은 각각 3,584개 BF16 성분이다. 과거 KV를 맞추자 레이어 1 attention context와 residual을 양방향에서 완전히 재현했다. 이어 레이어 1 MLP를 지난 행에서 다시 달라졌고, 두 방향의 여덟 번째 ID는 16019를 유지했다. 레이어 0 행만 교체한 응답과 비교해 두 방향 모두 전체 256개 생성 ID·텍스트·usage·종료 사유가 같았다. 레이어 1 MLP의 정규화 입력, gate·up을 결합한 행과 down 출력을 아래에서 대조했다. [점수와 검증 요약](../../benchmarks/evidence/20261123-w4-kv-history/verified.json) · [첫 차이 검산](../../benchmarks/evidence/20261123-w4-kv-history/propagation.json)
 
 A100 6번에서 기준, 7번에서 후보를 실행했다. 두 서버는 정상 종료했고 활성·대기 요청, KV, device·pinned 할당을 회수한 뒤 기존 20GiB 예약으로 복귀했다. 최초 집계는 예약 검사에서 GPU 번호 자료형을 잘못 비교해 종료 코드 1을 남겼다. GPU 번호를 정수로 변환한 검산기로 같은 원본을 재검증했고 두 작업의 종료 코드 0과 예약 복귀를 확인했다. 원본과 검산기의 지문을 함께 보존했다. [캡처 지문](../../benchmarks/evidence/20261123-w4-kv-history/result.sha256) · [정정 내역과 재검산](../../benchmarks/evidence/20261123-w4-kv-history/verify-capture.sh) · [요약 재생](../../benchmarks/evidence/20261123-w4-kv-history/fetch-summary.sh)
+
+#### 장문 코드의 레이어 1 down projection
+
+같은 A100 6·7에서 `long-code-7836`의 레이어 0 행과 레이어 1 과거 KV를 맞춘 대조를 재현했다. 앞선 기본·자체 교체·과거 KV 교체의 기록된 행과 응답 지문이 모두 같았다. 양방향에서 레이어 1 MLP에 들어가는 정규화 행 3,584개와 down projection 피연산자인 gate·up 결합 행 18,944개가 같았다. 첫 차이는 down projection의 BF16 출력에서 생겼다. [진단 소스 생성](../../benchmarks/evidence/20261123-w4-layer1-down/prepare.py) · [실행 통제와 행 대조](../../benchmarks/evidence/20261123-w4-layer1-down/verify.py)
+
+| down 출력을 받는 실행 | 기존 down 출력 차이 | 레이어 1 MLP 이후 residual 차이, 교체 전 → 후 | 레이어 2 입력 norm 차이, 교체 전 → 후 | 교체 후 처음 관측한 차이 |
+|---|---:|---:|---:|---|
+| 기준이 후보 행을 받음 | 1,259 / 3,584 | 606 → 0 | 520 → 0 | 레이어 2 attention residual 633개 |
+| 후보가 기준 행을 받음 | 1,255 / 3,584 | 628 → 0 | 555 → 0 | 레이어 2 attention residual 624개 |
+
+동일한 입력에서 down 출력만 교체해 레이어 1 MLP 이후의 residual과 다음 레이어 입력 정규화 행을 양방향에서 모두 재현했다. 레이어 2부터는 기존 KV를 사용했다. 여덟 번째 ID는 양방향에서 16019를 유지했고, 레이어 0 행과 과거 KV만 교체한 응답과 전체 생성 ID 256개·텍스트·usage·종료 사유가 일치했다. 두 방향의 어휘 점수는 바뀌었으며, 후보가 기준 행을 받은 방향에서 ID 262와 16019의 점수는 각각 9.8125 → 10.0625, 11.0 → 10.75였다. [응답 지문과 전체 로그릿 차이](../../benchmarks/evidence/20261123-w4-layer1-down/verified.json)
+
+두 입력 각각에 대해 동일한 체크포인트의 레이어 1 BF16 가중치로 CPU에서 FP64 내적을 계산했다. 가장 가까운 BF16 값으로 반올림하고 동률이면 짝수를 선택했으며, 오차 구간이 BF16 중간점에 닿으면 정수 내적으로 재계산하는 기존 검산기를 사용했다. 두 입력 모두 정수 재계산이 필요한 행은 0개였다. [독립 내적과 비교 기준](../../benchmarks/evidence/20261119-w4-layer-trace/shared-prefix-audit/decode-row-capture/projection-precision/projection_oracle.py)
+
+| 동일 down 입력의 출처 | BF16 참조와 다른 값, 기준 / 후보 | 한 BF16 단계보다 큰 차이, 기준 / 후보 | FP64 대비 RMSE, 기준 / 후보 |
+|---|---:|---:|---:|
+| 기준 실행 | 1,254 / 40 | 255 / 3 | 0.00032634 / 0.00026918 |
+| 후보 실행 | 1,256 / 46 | 270 / 1 | 0.00030904 / 0.00024771 |
+
+두 입력에서 FP32 부분합 계획 21의 내적 오차가 작았다. 이 연산의 개선은 장문 코드의 토큰 선택을 복구하지 못했고, 전체 서빙의 HF 일치도는 앞선 29개 대조에서 22개에서 19개로 줄었다. 기본 경로 적용은 기존 기각 판정을 유지한다. 두 서버는 정상 종료했고 활성·대기 요청, KV, device·pinned 할당을 회수했다. GPU 6·7의 20GiB 예약이 복귀했으며 독립 CPU 검산은 GPU를 숨긴 상태로 실행했다. [캠페인](../../benchmarks/evidence/20261123-w4-layer1-down/campaign.sh) · [원본 지문](../../benchmarks/evidence/20261123-w4-layer1-down/result.sha256) · [재검산](../../benchmarks/evidence/20261123-w4-layer1-down/fetch-summary.sh)
 
 ## 첫 prefill 분기 추적
 

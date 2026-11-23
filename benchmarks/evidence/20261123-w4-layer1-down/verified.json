@@ -1,0 +1,484 @@
+{
+  "status": "passed",
+  "comparison": "fp32_down21",
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "remote_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-layer1-down-gpu-20261123.GoGgLMth",
+  "remote_build": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-layer1-down-build-20261123.zzHnliSA",
+  "binary_sha256": "7d5775d697157482861c246aba4ed287e0d7a941e9bdf682e015d448e3eaf3cd",
+  "reservations": {
+    "6": {
+      "pid": 2680326,
+      "start_ticks": "6365879881",
+      "gib": 20
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "gib": 20
+    }
+  },
+  "roles": {
+    "baseline": {
+      "input_ids_sha256": "3f4a18aad6b33f9589813b6ad8a13449bf697d0f01a4f2c062ef991d6e6b10d7",
+      "down_plan_log": [],
+      "trials": {
+        "calibration": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            262
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "0dced11ccd664ade7ad27102b451901c67c6f39589f0ff7e9bc673aba7e4fbac",
+          "finish": "length",
+          "seconds": 4.16013203561306,
+          "scores": {
+            "262": 10.6875,
+            "16019": 10.0625,
+            "top_two_gap": 0.3125
+          },
+          "trace_sha256": "6d615894d9627644c0e8b749c312eb88eba8cfebf31c95db00853d1400a7525d"
+        },
+        "self": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            262
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "0dced11ccd664ade7ad27102b451901c67c6f39589f0ff7e9bc673aba7e4fbac",
+          "finish": "length",
+          "seconds": 4.344832241535187,
+          "scores": {
+            "262": 10.6875,
+            "16019": 10.0625,
+            "top_two_gap": 0.3125
+          },
+          "trace_sha256": "69184a63f53ec96ea1c6f7d58bb81d7004fa6958c33785b985dcbad4360e5bb0"
+        },
+        "history": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            16019
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+          "finish": "length",
+          "seconds": 4.3282996490597725,
+          "scores": {
+            "262": 10.1875,
+            "16019": 10.75,
+            "top_two_gap": 0.5625
+          },
+          "trace_sha256": "568f579c6865a3cfe4c78105a4f3006ded3d073e07b785c403fcdd5c6e15bd19"
+        },
+        "down": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            16019
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+          "finish": "length",
+          "seconds": 4.331350848078728,
+          "scores": {
+            "262": 10.125,
+            "16019": 10.6875,
+            "top_two_gap": 0.5625
+          },
+          "trace_sha256": "cf5529172e54fab5984403b61649dac3b781511aa7b00b8e19bec854ac8c9b1f"
+        }
+      },
+      "difference_from_donor": {
+        "history": {
+          "context": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "attention_residual": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "mlp_input": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "mlp_gated": {
+            "changed_words": 0,
+            "words": 18944
+          },
+          "down_native": {
+            "changed_words": 1259,
+            "words": 3584
+          },
+          "down_effective": {
+            "changed_words": 1259,
+            "words": 3584
+          },
+          "layer_residual": {
+            "changed_words": 606,
+            "words": 3584
+          },
+          "layer2_input": {
+            "changed_words": 520,
+            "words": 3584
+          }
+        },
+        "down": {
+          "context": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "attention_residual": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "mlp_input": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "mlp_gated": {
+            "changed_words": 0,
+            "words": 18944
+          },
+          "down_native": {
+            "changed_words": 1259,
+            "words": 3584
+          },
+          "down_effective": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "layer_residual": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "layer2_input": {
+            "changed_words": 0,
+            "words": 3584
+          }
+        }
+      },
+      "first_recorded_difference": {
+        "history": {
+          "stage": "layer_residual",
+          "layer": "1",
+          "changed_words": 606,
+          "words": 3584
+        },
+        "down": {
+          "stage": "attention_residual",
+          "layer": "2",
+          "changed_words": 633,
+          "words": 3584
+        }
+      },
+      "logits_vs_donor_after_down": {
+        "changed_words": 150023,
+        "words": 152064
+      },
+      "logits_vs_history_after_down": {
+        "changed_words": 147400,
+        "words": 152064
+      }
+    },
+    "candidate": {
+      "input_ids_sha256": "3f4a18aad6b33f9589813b6ad8a13449bf697d0f01a4f2c062ef991d6e6b10d7",
+      "down_plan_log": [
+        "W4_DOWN_FP32_PLAN m=128 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=5505024 flags=131586",
+        "W4_DOWN_FP32_PLAN m=256 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=11010048 flags=131586",
+        "W4_DOWN_FP32_PLAN m=1 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=43008 flags=131586",
+        "W4_DOWN_FP32_PLAN m=2 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=86016 flags=131586",
+        "W4_DOWN_FP32_PLAN m=4 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=172032 flags=131586",
+        "W4_DOWN_FP32_PLAN m=8 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=344064 flags=131586",
+        "W4_DOWN_FP32_PLAN m=16 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=688128 flags=131586",
+        "W4_DOWN_FP32_PLAN m=24 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=1032192 flags=131586",
+        "W4_DOWN_FP32_PLAN m=32 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=1376256 flags=131586",
+        "W4_DOWN_FP32_PLAN m=48 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=2064384 flags=131586",
+        "W4_DOWN_FP32_PLAN m=64 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=2752512 flags=131586",
+        "W4_DOWN_FP32_PLAN m=80 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=3440640 flags=131586",
+        "W4_DOWN_FP32_PLAN m=96 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=4128768 flags=131586",
+        "W4_DOWN_FP32_PLAN m=112 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=4816896 flags=131586",
+        "W4_DOWN_FP32_PLAN m=128 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=5505024 flags=131586",
+        "W4_DOWN_FP32_PLAN m=144 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=6193152 flags=131586",
+        "W4_DOWN_FP32_PLAN m=160 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=6881280 flags=131586",
+        "W4_DOWN_FP32_PLAN m=176 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=7569408 flags=131586",
+        "W4_DOWN_FP32_PLAN m=192 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=8257536 flags=131586",
+        "W4_DOWN_FP32_PLAN m=208 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=8945664 flags=131586",
+        "W4_DOWN_FP32_PLAN m=224 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=9633792 flags=131586",
+        "W4_DOWN_FP32_PLAN m=240 id=21 tile=18 stages=18 split_k=3 reduction=2 workspace=10321920 flags=131586"
+      ],
+      "trials": {
+        "calibration": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            16019
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+          "finish": "length",
+          "seconds": 4.234622001647949,
+          "scores": {
+            "262": 9.9375,
+            "16019": 11.375,
+            "top_two_gap": 0.75
+          },
+          "trace_sha256": "c770af2f6a8715a65aafc1972d868ce8aaf3dbb857358687e25273aedc88295c"
+        },
+        "self": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            16019
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+          "finish": "length",
+          "seconds": 4.373865678906441,
+          "scores": {
+            "262": 9.9375,
+            "16019": 11.375,
+            "top_two_gap": 0.75
+          },
+          "trace_sha256": "8309334da4fce02e712a268725f51fdbbfe9e3e5e7bbf08bbf73f7be140ee72d"
+        },
+        "history": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            16019
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+          "finish": "length",
+          "seconds": 4.3368522226810455,
+          "scores": {
+            "262": 9.8125,
+            "16019": 11.0,
+            "top_two_gap": 1.1875
+          },
+          "trace_sha256": "81cc48b2f60798feb96fc0b11505e175f59a8050703170841072367343a37891"
+        },
+        "down": {
+          "first_eight": [
+            576,
+            2701,
+            2038,
+            1447,
+            73594,
+            12669,
+            198,
+            16019
+          ],
+          "generated_tokens": 256,
+          "response_sha256": "d7eb86519f631fdeedabf55539bb2229795f677e701e73a0cb4a40912db990a5",
+          "finish": "length",
+          "seconds": 4.379525154829025,
+          "scores": {
+            "262": 10.0625,
+            "16019": 10.75,
+            "top_two_gap": 0.6875
+          },
+          "trace_sha256": "50e9921d97b80276d26faf0d30530837c388648f57bf9fce4fc03176b2fdb2d5"
+        }
+      },
+      "difference_from_donor": {
+        "history": {
+          "context": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "attention_residual": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "mlp_input": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "mlp_gated": {
+            "changed_words": 0,
+            "words": 18944
+          },
+          "down_native": {
+            "changed_words": 1255,
+            "words": 3584
+          },
+          "down_effective": {
+            "changed_words": 1255,
+            "words": 3584
+          },
+          "layer_residual": {
+            "changed_words": 628,
+            "words": 3584
+          },
+          "layer2_input": {
+            "changed_words": 555,
+            "words": 3584
+          }
+        },
+        "down": {
+          "context": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "attention_residual": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "mlp_input": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "mlp_gated": {
+            "changed_words": 0,
+            "words": 18944
+          },
+          "down_native": {
+            "changed_words": 1255,
+            "words": 3584
+          },
+          "down_effective": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "layer_residual": {
+            "changed_words": 0,
+            "words": 3584
+          },
+          "layer2_input": {
+            "changed_words": 0,
+            "words": 3584
+          }
+        }
+      },
+      "first_recorded_difference": {
+        "history": {
+          "stage": "layer_residual",
+          "layer": "1",
+          "changed_words": 628,
+          "words": 3584
+        },
+        "down": {
+          "stage": "attention_residual",
+          "layer": "2",
+          "changed_words": 624,
+          "words": 3584
+        }
+      },
+      "logits_vs_donor_after_down": {
+        "changed_words": 151687,
+        "words": 152064
+      },
+      "logits_vs_history_after_down": {
+        "changed_words": 150871,
+        "words": 152064
+      }
+    }
+  },
+  "oracle": {
+    "weight_key": "model.layers.1.mlp.down_proj.weight",
+    "weight_shard_sha256": "a1333e6293854747c481288ea83b348226af178dd565c49b6f9495ba1966aba7",
+    "shape_m_n_k": [
+      1,
+      3584,
+      18944
+    ],
+    "input_owners": {
+      "baseline": {
+        "operand_sha256": "031925a8dec7879f0c47487a76a018dc822024ac00a33c298147bd533de9bfef",
+        "nearest_even_bf16_sha256": "fc6c617145c45c0833c3e2d92ce70b5f745dd4cf75f43d357cf7162f7bb20b8d",
+        "integer_fallback_rows": 0,
+        "midpoint_ties": 0,
+        "output_comparisons": {
+          "baseline": {
+            "different_words_including_zero_sign": 1254,
+            "different_numeric_values": 1254,
+            "more_than_one_bf16_step": 255,
+            "max_bf16_steps": 14393,
+            "rmse_to_fp64": 0.00032633993742188776,
+            "max_abs_error_to_fp64": 0.010292398348210163,
+            "mismatches_within_0p001_local_bf16_step_of_midpoint": 3,
+            "max_mismatch_midpoint_distance_in_local_bf16_steps": 0.49995082948044
+          },
+          "candidate": {
+            "different_words_including_zero_sign": 40,
+            "different_numeric_values": 40,
+            "more_than_one_bf16_step": 3,
+            "max_bf16_steps": 4,
+            "rmse_to_fp64": 0.00026917655707419145,
+            "max_abs_error_to_fp64": 0.010292398348210163,
+            "mismatches_within_0p001_local_bf16_step_of_midpoint": 2,
+            "max_mismatch_midpoint_distance_in_local_bf16_steps": 0.33243705284621683
+          }
+        }
+      },
+      "candidate": {
+        "operand_sha256": "550bd9b87b902e89389d6d5c3c3d27206f7e96f15077e13f1ad527ef2aadd8a2",
+        "nearest_even_bf16_sha256": "05040b0cc801bdbcb4112cb06eb13b7f4ba13f18e641e0d104310dc0e625a6a6",
+        "integer_fallback_rows": 0,
+        "midpoint_ties": 0,
+        "output_comparisons": {
+          "baseline": {
+            "different_words_including_zero_sign": 1256,
+            "different_numeric_values": 1256,
+            "more_than_one_bf16_step": 270,
+            "max_bf16_steps": 28341,
+            "rmse_to_fp64": 0.00030903808968161655,
+            "max_abs_error_to_fp64": 0.006131311290266339,
+            "mismatches_within_0p001_local_bf16_step_of_midpoint": 5,
+            "max_mismatch_midpoint_distance_in_local_bf16_steps": 0.49982425249618245
+          },
+          "candidate": {
+            "different_words_including_zero_sign": 46,
+            "different_numeric_values": 46,
+            "more_than_one_bf16_step": 1,
+            "max_bf16_steps": 5,
+            "rmse_to_fp64": 0.00024771338464358114,
+            "max_abs_error_to_fp64": 0.006131311290266339,
+            "mismatches_within_0p001_local_bf16_step_of_midpoint": 6,
+            "max_mismatch_midpoint_distance_in_local_bf16_steps": 0.347579637542367
+          }
+        }
+      }
+    }
+  }
+}
