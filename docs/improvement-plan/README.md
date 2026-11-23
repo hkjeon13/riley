@@ -2,7 +2,9 @@
 
 작성일 2026-11-13 KST. 초기 기준은 로컬 `main` `37ede4445`와 원격 `origin/main` `9f039de78`이다.
 
-2026-11-23 KST 기준으로 스키마 문자 클래스를 수정한 `6d618f64e`의 CUDA 패키지에서 A100 API, 장문 스키마·도구 호출과 혼합 부하를 검증했다. 30분 합성 부하의 후반 RSS는 기준 이미지에서 캐시 끔 732KiB, 켬 584KiB 증가했고 jemalloc 시험 이미지에서는 각각 680KiB, 804KiB 감소했다. 실제 운영 트래픽·승인 SLO·서비스 복구 확인이 남아 있다. [최신 구조화 출력 검증](04-structured-output-result.md#pattern-문자-클래스의-json-인코딩) · [최신 30분 대조](05-mixed-soak-result.md#문자-클래스-수정-이미지의-30분-대조) · [후보별 릴리스 판정](06-candidate-qualification.md)
+스키마의 중첩 `$id` 처리를 수정한 `c5ec7b391` 패키지의 A100 교차 비교에서 30분 합성 부하 4회 동안 정상 완료 54,996건, 예상 외 오류 0건을 기록했다. 후반 RSS 변화는 기준 이미지에서 캐시 끔 +528KiB, 켬 +592KiB였고 jemalloc 시험 이미지에서는 각각 −776KiB, −820KiB였다. 격리 복구는 139.01초에 완료됐다. 실제 운영 트래픽·승인 SLO·서비스 복구 확인이 남아 있다. [구조화 출력 검증](04-structured-output-result.md) · [30분 교차 대조](05-mixed-soak-result.md#스키마-참조-수정-이미지의-30분-교차-대조) · [후보별 릴리스 판정](06-candidate-qualification.md)
+
+같은 패키지에서 1,024행 옵션으로 Coder-14B를 실행해 vLLM과 비교했다. 짧은 C32 TPOT p50은 vLLM의 1.043–1.047배, 두 RAG C8 seed의 첫 토큰 p95는 1.434–1.672배로 두 GPU에서 각각 목표를 넘었다. [W3 패키지 교차 비교](03-long-context-result.md#배포-이미지의-coder-14b-교차-비교)
 
 | 작업 | 현재 근거와 다음 검증 |
 |---|---|
