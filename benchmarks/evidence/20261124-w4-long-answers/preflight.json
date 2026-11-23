@@ -1,0 +1,25 @@
+{
+  "status": "gpu-run-queued",
+  "fixture_sha256": "e68ed38a73caad88ae8de0a0000a439f732331a9b118849de28d92d4366efda3",
+  "tokenizer_sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+  "tokenizers_version": "0.21.0",
+  "prompt_lengths": [255, 256, 257, 511, 512, 513, 1023, 1024, 1025, 7836, 7917],
+  "generation_limit": 32,
+  "requests_per_engine_per_mode": 33,
+  "cpu_checks": {
+    "byte_identical_rebuild": true,
+    "retokenized_exact_prompts": 33,
+    "mock_requests_total": 132,
+    "mock_exact_answers_per_engine_per_mode": 32,
+    "mock_length_completions_per_engine_per_mode": 1,
+    "altered_prompt_ids_rejected": true
+  },
+  "remote": {
+    "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-long-answers-20261124.WemA5qyy",
+    "dispatch_sha256": "3c5a1572108ed2e74e6500e6083cd1b2085e9b9bbb4c3a7c656c3434cbbcc58b",
+    "verified_at": "2026-11-23T17:52:34Z",
+    "campaign_pid": 1222650,
+    "waited_for_campaign_pid": 1072173,
+    "gpu_index": 7
+  }
+}
