@@ -1,0 +1,27 @@
+{
+  "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-admission-retry-20261124.OaUPAucl",
+  "build_pid": 1991302,
+  "build_started_at": "2026-11-23T20:11:12Z",
+  "build_dispatch_sha256": "430ba293b4b9ee713c04c4b5c6e50239259a2aa318f9ee2cef793acfb0adccd8",
+  "campaign_pid": 1991308,
+  "campaign_started_at": "2026-11-23T20:11:12Z",
+  "campaign_dispatch_sha256": "4deade39fe1cc359448d765015597b360ca2c6ac32eaea44b022b6b7498d1441",
+  "source_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+  "physical_gpu": 7,
+  "client_cpu": 45,
+  "measured_requests": 128,
+  "warmup_requests": 16,
+  "write_error_p95_limit_ms": 3,
+  "focus_requests_by_seed": {"1": 30, "2": 43},
+  "initial_attempt": {
+    "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-admission-20261124.83JGG3YC",
+    "build_pid": 1969131,
+    "build_started_at": "2026-11-23T20:06:48Z",
+    "build_dispatch_sha256": "15c328a16e5485324d1efcfa53cbdeb3896849560c5acad4a0a4c9be8464684c",
+    "compiler_log_sha256": "9bfae3683c2cd3f3326d7f15af01b2d6f4b29a87c4f0a9699b4708fa26916ef9",
+    "build_exit": 101,
+    "campaign_pid": 1978513,
+    "campaign_exit": 1,
+    "reason": "copied CMake cache stored the earlier checkout's absolute paths"
+  }
+}
