@@ -1127,6 +1127,21 @@ A100 6·7번에서 앞선 후보와 같은 두 RAG seed, 짧은 C32의 두 시�
 
 GPU 7번의 동시 유입은 전송 오차 p95가 3.83ms로 판정 한도를 넘었다. 같은 GPU의 유효한 두 RAG 비교에서 저장된 vLLM 대비 TTFT p95는 각각 1.425→1.367배, 1.449→1.399배였다. 두 seed에서 1단계 1.40배를 충족했고 최종 1.15배에는 미달했다. GPU 6번의 RAG seed 1과 동시 유입에서 decode 회귀 기준을 초과했고, 짧은 C32 vLLM 시각표에서 TTFT p50이 3.42% 늘었다. 해당 C32의 측정 입력은 70–77토큰으로 후보의 발동 범위 밖이었다. 두 시험 실행에 걸쳐 관측한 차이의 원인은 확정하지 않았다. 짧은 C32의 처리량은 네 비교 모두 한도를 통과했다. 후보는 미채택이며 두 GPU는 종료 뒤 기존 홀더의 20GiB 예약으로 복귀했다. [지표·회귀 판정](../../benchmarks/evidence/20261124-w3-wide-prefill-order/verified.json) · [실행 종료](../../benchmarks/evidence/20261124-w3-wide-prefill-order/campaign.log)
 
+#### 같은 행 수에서의 attention 계산량과 기준 실행 차이
+
+기존 RAG 스텝 기록에서 원래 prefill 요청과 후보 요청이 이미 처리한 토큰 수를 재구성했다. 새 prefill 행이 `Q`개이고 앞서 처리한 토큰이 `P`개이면 causal attention의 논리적 query–key 쌍은 `Q × P + Q × (Q + 1) / 2`다. 같은 `Q`에서도 후보 요청의 진행 위치가 더 깊으면 이 쌍 수가 늘어난다. 기존 aging 적용 전 교체 가능 스텝의 검산 결과는 다음과 같다. [스텝별 진행 위치와 쌍 수](../../benchmarks/evidence/20261124-w3-wide-prefill-order/cost-audit.json)
+
+| 이전 RAG 기록 | 교체 가능 | 쌍 증가 | 쌍 감소 | 최대 증가 |
+|---|---:|---:|---:|---:|
+| Seed 1 | 22 | 20 | 2 | 2,340,624 |
+| Seed 2 | 15 | 13 | 2 | 2,352,900 |
+
+쌍 수를 늘리지 않는 다른 앞선 요청까지 찾아도 두 seed에서 각각 2개 스텝만 조건을 충족했다. 이 수치는 이전 고정 스텝의 논리적 계산량 추정이다. 실제 커널 실행 시간과 후속 스텝 배정은 계측해야 한다. [재현 검산기](../../benchmarks/evidence/20261124-w3-wide-prefill-order/audit_cost.py)
+
+두 진단 바이너리에서 순서 변경을 모두 끈 기준 실행끼리도 대조했다. 같은 소스 기준, GPU, 서버 인자, CPU 배치와 도착 시각표를 사용했다. 12개 비교의 대응 출력 1,184쌍이 일치했고 전송 오차 p95는 최대 2.52ms였다. 기준 실행끼리 C32 Riley 시각표의 TTFT p50은 GPU 6에서 10.53%, GPU 7에서 6.12% 늘었다. RAG seed 1의 기준 decode TPOT p50은 각각 1.83%·3.33% 늘었다. 같은 GPU의 후속 후보와 기준을 비교하면 seed 1에서 요청별 decode 시간이 늘어난 경우가 GPU 6은 62/64건, GPU 7은 2/64건이었다. 두 진단 바이너리는 서로 다르므로 기준 대조에는 빌드 차이와 실행 간 편차가 함께 포함된다. [원본 검증과 요청별 집계](../../benchmarks/evidence/20261124-w3-wide-prefill-order/cost-audit.json)
+
+다음 검증에서는 같은 진단 바이너리로 기준을 반복하고, 실제 순서 변경 스텝의 두 prefill 위치와 동시 decode 요청 ID를 실행 시간에 연결한다. 현재 판정은 GPU 6번의 decode와 C32 회귀 한도 초과에 따른 미채택이다.
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

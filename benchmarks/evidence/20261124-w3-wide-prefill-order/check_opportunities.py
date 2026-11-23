@@ -12,25 +12,30 @@ HERE = Path(__file__).resolve().parent
 SOURCE = HERE.parent / "20261124-w3-rag-prefill-steps"
 
 
-def count_placements(steps, submitted, prompt_lengths, activation):
+def placements(steps, submitted, prompt_lengths, activation):
     consumed = Counter()
-    counts = Counter()
+    minimum = activation["long_prompt_tokens_min"]
     for step in steps:
         if (step.rows == 1024 and len(step.prefill) == 1
                 and activation["decode_rows_min"] <= step.decode <= activation["decode_rows_max"]):
             head, budget, _ = step.prefill[0]
-            minimum = activation["long_prompt_tokens_min"]
             if (prompt_lengths.get(head, 0) >= minimum and budget == 1024 - step.decode
-                    and budget >= activation["prefill_budget_min"]
-                    and any(req < head and submitted[req] <= step.start and length >= minimum
-                            and 0 < consumed[req] <= length - budget for req, length in prompt_lengths.items())):
-                counts[step.decode] += 1
+                    and budget >= activation["prefill_budget_min"]):
+                eligible = sorted(req for req, length in prompt_lengths.items()
+                                  if req < head and submitted[req] <= step.start and length >= minimum
+                                  and 0 < consumed[req] <= length - budget)
+                if eligible:
+                    yield step, head, budget, consumed[head], [(req, consumed[req]) for req in eligible]
         for req, count, _ in step.prefill:
             consumed[req] += count
+
+
+def count_placements(steps, submitted, prompt_lengths, activation):
+    counts = Counter(step.decode for step, *_ in placements(steps, submitted, prompt_lengths, activation))
     return dict(sorted(counts.items()))
 
 
-def main():
+def summarize(summarize_placements):
     activation = json.loads((HERE / "registration.json").read_bytes())["activation"]
     reader = runpy.run_path(str(SOURCE / "verify.py"))
     prior = reader["PRIOR"]
@@ -47,7 +52,7 @@ def main():
             schedulers = [admits[int(request[5:], 16)][0] for request in ids]
             # These completed requests committed the full input by their final prefill step.
             prompt_lengths = {request: by_scheduler[request][-1][2] for request in schedulers}
-            counts[label] = count_placements(steps, submitted, prompt_lengths, activation)
+            counts[label] = summarize_placements(steps, submitted, prompt_lengths, activation)
     return {
         "gpu": 7,
         "source_committed_steps": len(steps),
@@ -58,4 +63,4 @@ def main():
 
 
 if __name__ == "__main__":
-    print(json.dumps(main(), indent=2))
+    print(json.dumps(summarize(count_placements), indent=2))

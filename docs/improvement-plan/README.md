@@ -20,7 +20,7 @@
 
 혼합 스텝의 prefill을 접수 순서로 배정한 후보는 RAG seed 1의 첫 토큰 p95를 11.84–15.31% 줄였다. 두 GPU에서 출력 1,184쌍이 일치했고 12개 중 7개 비교에서 decode 지연 한도를 넘어 미채택했다. [prefill 순서 후보 결과](03-long-context-result.md#혼합-스텝의-prefill-접수-순서-후보)
 
-행 수를 유지하면서 장문 prefill 순서만 좁혀 바꾼 후속 후보는 RAG의 첫 토큰 p95를 1.93–4.07% 줄였다. GPU 7번의 두 seed는 1단계 목표를 충족했다. GPU 6번에서 decode와 짧은 C32 지연 한도를 넘어 미채택했다. [행 수를 유지한 순서 비교](03-long-context-result.md#같은-행-수를-유지하는-장문-prefill-순서-후보)
+행 수를 유지하면서 장문 prefill 순서만 좁혀 바꾼 후속 후보는 RAG의 첫 토큰 p95를 1.93–4.07% 줄였다. GPU 7번의 두 seed는 1단계 목표를 충족했다. GPU 6번에서 decode와 짧은 C32 지연 한도를 넘어 미채택했다. 기존 스텝의 교체 가능 37개 중 33개에서 causal attention 쌍이 증가했고 순서 변경을 끈 두 기준 실행 사이에도 지연 편차가 있었다. [행 수를 유지한 순서 비교](03-long-context-result.md#같은-행-수를-유지하는-장문-prefill-순서-후보) · [계산량과 기준 실행 검산](03-long-context-result.md#같은-행-수에서의-attention-계산량과-기준-실행-차이)
 
 요청별 prefill 조각을 512행으로 낮춘 후보는 832쌍의 출력을 보존했으나 네 RAG C8 비교에서 첫 토큰 p95가 2.74–14.39% 늘어 미채택했다. [W3 조각 크기 대조](03-long-context-result.md#coder-14b-요청별-prefill-조각-크기)
 

@@ -1,0 +1,675 @@
+{
+  "base_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+  "broad_binary_sha256": "9ea34a015dfa38465816cee8798881b6febcb4022ab149401307b902c9b724a0",
+  "narrow_binary_sha256": "d7d73cb614f322713c164c082ffda43776b8c8a1516084c8f49f51eb67535be7",
+  "same_binary_control_repeat": false,
+  "control_and_candidate_timings": {
+    "6": {
+      "rag-c8-s1-vllm-arrivals": {
+        "matched": 64,
+        "control_to_control_write_error_p95_ms": 1.9841488597869272,
+        "control_to_control_valid": true,
+        "control_to_control_delta_pct": {
+          "ttft_p50_ms": -1.1750495165481878,
+          "ttft_p95_ms": 0.4001317844315899,
+          "tpot_p50_ms": 1.8283348042736458
+        },
+        "candidate_comparison_timing_valid": true,
+        "candidate_decode_slower_requests": 62,
+        "candidate_decode_slower_by_more_than_1ms_per_token": 44
+      },
+      "rag-c8-s2-vllm-arrivals": {
+        "matched": 64,
+        "control_to_control_write_error_p95_ms": 1.7427873426001383,
+        "control_to_control_valid": true,
+        "control_to_control_delta_pct": {
+          "ttft_p50_ms": 0.10106192783960743,
+          "ttft_p95_ms": 1.6900140916155104,
+          "tpot_p50_ms": 0.8800331630316904
+        },
+        "candidate_comparison_timing_valid": true,
+        "candidate_decode_slower_requests": 51,
+        "candidate_decode_slower_by_more_than_1ms_per_token": 15
+      },
+      "c32-riley-arrivals": {
+        "matched": 192,
+        "control_to_control_write_error_p95_ms": 2.518988893978502,
+        "control_to_control_valid": true,
+        "control_to_control_delta_pct": {
+          "ttft_p50_ms": 10.534042912268848,
+          "ttft_p95_ms": -0.8844416346825978,
+          "tpot_p50_ms": 0.09662965535901513
+        },
+        "candidate_comparison_timing_valid": true,
+        "candidate_decode_slower_requests": 140,
+        "candidate_decode_slower_by_more_than_1ms_per_token": 0
+      },
+      "c32-vllm-arrivals": {
+        "matched": 192,
+        "control_to_control_write_error_p95_ms": 2.127438535720394,
+        "control_to_control_valid": true,
+        "control_to_control_delta_pct": {
+          "ttft_p50_ms": 0.17765621872525283,
+          "ttft_p95_ms": -0.22079520911904016,
+          "tpot_p50_ms": 0.1068290205001654
+        },
+        "candidate_comparison_timing_valid": true,
+        "candidate_decode_slower_requests": 106,
+        "candidate_decode_slower_by_more_than_1ms_per_token": 2
+      },
+      "wave-sync": {
+        "matched": 40,
+        "control_to_control_write_error_p95_ms": 2.364151105449963,
+        "control_to_control_valid": true,
+        "control_to_control_delta_pct": {
+          "ttft_p50_ms": 0.3677803084359166,
+          "ttft_p95_ms": 0.2628518992766615,
+          "tpot_p50_ms": -0.3167400256674391
+        },
+        "candidate_comparison_timing_valid": true,
+        "candidate_decode_slower_requests": 23,
+        "candidate_decode_slower_by_more_than_1ms_per_token": 8
+      },
+      "wave-50ms": {
+        "matched": 40,
+        "control_to_control_write_error_p95_ms": 1.406975151287071,
+        "control_to_control_valid": true,
+        "control_to_control_delta_pct": {
+          "ttft_p50_ms": 0.10477112708020542,
+          "ttft_p95_ms": -0.003158325112273541,
+          "tpot_p50_ms": 0.046222062150680365
+        },
+        "candidate_comparison_timing_valid": true,
+        "candidate_decode_slower_requests": 15,
+        "candidate_decode_slower_by_more_than_1ms_per_token": 2
+      }
+    },
+    "7": {
+      "rag-c8-s1-vllm-arrivals": {
+        "matched": 64,
+        "control_to_control_write_error_p95_ms": 1.6863944249454477,
+        "control_to_control_valid": true,
+        "control_to_control_delta_pct": {
+          "ttft_p50_ms": 0.22736194904668938,
+          "ttft_p95_ms": -6.742293441840419,
+          "tpot_p50_ms": 3.3304025699468998
+        },
+        "candidate_comparison_timing_valid": true,
+        "candidate_decode_slower_requests": 2,
+        "candidate_decode_slower_by_more_than_1ms_per_token": 1
+      },
+      "rag-c8-s2-vllm-arrivals": {
+        "matched": 64,
+        "control_to_control_write_error_p95_ms": 1.6230714983294092,
+        "control_to_control_valid": true,
+        "control_to_control_delta_pct": {
+          "ttft_p50_ms": -0.2931924354765747,
+          "ttft_p95_ms": 1.9367888131761601,
+          "tpot_p50_ms": 1.0478905727724142
+        },
+        "candidate_comparison_timing_valid": true,
+        "candidate_decode_slower_requests": 4,
+        "candidate_decode_slower_by_more_than_1ms_per_token": 1
+      },
+      "c32-riley-arrivals": {
+        "matched": 192,
+        "control_to_control_write_error_p95_ms": 1.7771945287474722,
+        "control_to_control_valid": true,
+        "control_to_control_delta_pct": {
+          "ttft_p50_ms": 6.124614714739041,
+          "ttft_p95_ms": 12.970717750099059,
+          "tpot_p50_ms": 0.052796842576063874
+        },
+        "candidate_comparison_timing_valid": true,
+        "candidate_decode_slower_requests": 25,
+        "candidate_decode_slower_by_more_than_1ms_per_token": 0
+      },
+      "c32-vllm-arrivals": {
+        "matched": 192,
+        "control_to_control_write_error_p95_ms": 2.155259732917969,
+        "control_to_control_valid": true,
+        "control_to_control_delta_pct": {
+          "ttft_p50_ms": 3.236584788466157,
+          "ttft_p95_ms": 1.071930847281366,
+          "tpot_p50_ms": 0.06144701062174018
+        },
+        "candidate_comparison_timing_valid": true,
+        "candidate_decode_slower_requests": 91,
+        "candidate_decode_slower_by_more_than_1ms_per_token": 5
+      },
+      "wave-sync": {
+        "matched": 40,
+        "control_to_control_write_error_p95_ms": 2.344712844696062,
+        "control_to_control_valid": true,
+        "control_to_control_delta_pct": {
+          "ttft_p50_ms": 0.8545032008428599,
+          "ttft_p95_ms": 0.5340673246481575,
+          "tpot_p50_ms": 0.09286165042332595
+        },
+        "candidate_comparison_timing_valid": false,
+        "candidate_decode_slower_requests": 13,
+        "candidate_decode_slower_by_more_than_1ms_per_token": 5
+      },
+      "wave-50ms": {
+        "matched": 40,
+        "control_to_control_write_error_p95_ms": 2.143167433532711,
+        "control_to_control_valid": true,
+        "control_to_control_delta_pct": {
+          "ttft_p50_ms": 1.2677990117681004,
+          "ttft_p95_ms": 0.41799701533673517,
+          "tpot_p50_ms": 3.036463736091388
+        },
+        "candidate_comparison_timing_valid": true,
+        "candidate_decode_slower_requests": 6,
+        "candidate_decode_slower_by_more_than_1ms_per_token": 2
+      }
+    }
+  },
+  "frozen_trace": {
+    "gpu": 7,
+    "source_committed_steps": 2505,
+    "includes_http_warmup": true,
+    "accounts_for_aging_override": false,
+    "causal_pair_estimate_by_schedule": {
+      "rag-c8-s1-vllm-arrivals": {
+        "opportunities": 22,
+        "increased_pairs": 20,
+        "same_pairs": 0,
+        "decreased_pairs": 2,
+        "any_eligible_nonincreasing": 2,
+        "details": [
+          {
+            "step_id": 81,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 55,
+            "candidate_request": 54,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 1024,
+            "candidate_prefix_tokens": 1278,
+            "causal_pairs_delta": 259842,
+            "causal_pairs_delta_pct": 16.536458333333325,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 82,
+            "decode_rows": 3,
+            "prefill_rows": 1021,
+            "original_request": 56,
+            "candidate_request": 54,
+            "eligible_requests": 2,
+            "original_prefix_tokens": 1024,
+            "candidate_prefix_tokens": 1278,
+            "causal_pairs_delta": 259334,
+            "causal_pairs_delta_pct": 16.54723127035831,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 84,
+            "decode_rows": 5,
+            "prefill_rows": 1019,
+            "original_request": 55,
+            "candidate_request": 54,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 2047,
+            "candidate_prefix_tokens": 1350,
+            "causal_pairs_delta": -710243,
+            "causal_pairs_delta_pct": -27.258506061791167,
+            "any_eligible_nonincreasing": true
+          },
+          {
+            "step_id": 85,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 56,
+            "candidate_request": 54,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 2045,
+            "candidate_prefix_tokens": 1350,
+            "causal_pairs_delta": -710985,
+            "causal_pairs_delta_pct": -27.180289401642554,
+            "any_eligible_nonincreasing": true
+          },
+          {
+            "step_id": 222,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 60,
+            "candidate_request": 58,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 276,
+            "candidate_prefix_tokens": 2306,
+            "causal_pairs_delta": 2076690,
+            "causal_pairs_delta_pct": 257.61421319796955,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 359,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 69,
+            "candidate_request": 68,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 66,
+            "candidate_prefix_tokens": 2034,
+            "causal_pairs_delta": 2013264,
+            "causal_pairs_delta_pct": 340.48442906574394,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 492,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 78,
+            "candidate_request": 77,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 1702,
+            "causal_pairs_delta": 1741146,
+            "causal_pairs_delta_pct": 332.421875,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 496,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 80,
+            "candidate_request": 78,
+            "eligible_requests": 2,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 2039,
+            "causal_pairs_delta": 2085897,
+            "causal_pairs_delta_pct": 398.2421875,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 497,
+            "decode_rows": 7,
+            "prefill_rows": 1017,
+            "original_request": 79,
+            "candidate_request": 78,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 1015,
+            "candidate_prefix_tokens": 2039,
+            "causal_pairs_delta": 1041408,
+            "causal_pairs_delta_pct": 67.19160104986877,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 499,
+            "decode_rows": 7,
+            "prefill_rows": 1017,
+            "original_request": 80,
+            "candidate_request": 78,
+            "eligible_requests": 2,
+            "original_prefix_tokens": 1023,
+            "candidate_prefix_tokens": 2285,
+            "causal_pairs_delta": 1283454,
+            "causal_pairs_delta_pct": 82.37597911227155,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 500,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 79,
+            "candidate_request": 78,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 2032,
+            "candidate_prefix_tokens": 2285,
+            "causal_pairs_delta": 258819,
+            "causal_pairs_delta_pct": 9.944968553459121,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 618,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 83,
+            "candidate_request": 82,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 1593,
+            "causal_pairs_delta": 1629639,
+            "causal_pairs_delta_pct": 311.1328125,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 751,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 91,
+            "candidate_request": 90,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 1572,
+            "causal_pairs_delta": 1608156,
+            "causal_pairs_delta_pct": 307.03125,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 754,
+            "decode_rows": 8,
+            "prefill_rows": 1016,
+            "original_request": 92,
+            "candidate_request": 91,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 2046,
+            "causal_pairs_delta": 2078736,
+            "causal_pairs_delta_pct": 402.35988200589975,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 757,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 92,
+            "candidate_request": 91,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 1016,
+            "candidate_prefix_tokens": 2149,
+            "causal_pairs_delta": 1159059,
+            "causal_pairs_delta_pct": 74.14921465968587,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 763,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 95,
+            "candidate_request": 94,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 1693,
+            "causal_pairs_delta": 1731939,
+            "causal_pairs_delta_pct": 330.6640625,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 892,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 104,
+            "candidate_request": 103,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 2288,
+            "causal_pairs_delta": 2340624,
+            "causal_pairs_delta_pct": 446.875,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 1016,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 109,
+            "candidate_request": 108,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 2081,
+            "causal_pairs_delta": 2128863,
+            "causal_pairs_delta_pct": 406.4453125,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 1024,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 112,
+            "candidate_request": 111,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 1451,
+            "causal_pairs_delta": 1484373,
+            "causal_pairs_delta_pct": 283.3984375,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 1026,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 112,
+            "candidate_request": 111,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 1023,
+            "candidate_prefix_tokens": 2467,
+            "causal_pairs_delta": 1477212,
+            "causal_pairs_delta_pct": 94.07166123778501,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 1142,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 114,
+            "candidate_request": 113,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 2032,
+            "causal_pairs_delta": 2078736,
+            "causal_pairs_delta_pct": 396.875,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 1158,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 120,
+            "candidate_request": 119,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 2067,
+            "causal_pairs_delta": 2114541,
+            "causal_pairs_delta_pct": 403.7109375,
+            "any_eligible_nonincreasing": false
+          }
+        ]
+      },
+      "rag-c8-s2-vllm-arrivals": {
+        "opportunities": 15,
+        "increased_pairs": 13,
+        "same_pairs": 0,
+        "decreased_pairs": 2,
+        "any_eligible_nonincreasing": 2,
+        "details": [
+          {
+            "step_id": 1300,
+            "decode_rows": 2,
+            "prefill_rows": 1022,
+            "original_request": 125,
+            "candidate_request": 124,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 1024,
+            "candidate_prefix_tokens": 1284,
+            "causal_pairs_delta": 265720,
+            "causal_pairs_delta_pct": 16.932595245848248,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 1301,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 126,
+            "candidate_request": 124,
+            "eligible_requests": 2,
+            "original_prefix_tokens": 1024,
+            "candidate_prefix_tokens": 1284,
+            "causal_pairs_delta": 265980,
+            "causal_pairs_delta_pct": 16.927083333333325,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 1304,
+            "decode_rows": 4,
+            "prefill_rows": 1020,
+            "original_request": 125,
+            "candidate_request": 124,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 2046,
+            "candidate_prefix_tokens": 1840,
+            "causal_pairs_delta": -210120,
+            "causal_pairs_delta_pct": -8.057891648738513,
+            "any_eligible_nonincreasing": true
+          },
+          {
+            "step_id": 1305,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 126,
+            "candidate_request": 124,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 2047,
+            "candidate_prefix_tokens": 1840,
+            "causal_pairs_delta": -211761,
+            "causal_pairs_delta_pct": -8.08909730363423,
+            "any_eligible_nonincreasing": true
+          },
+          {
+            "step_id": 1306,
+            "decode_rows": 4,
+            "prefill_rows": 1020,
+            "original_request": 128,
+            "candidate_request": 124,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 1298,
+            "candidate_prefix_tokens": 1840,
+            "causal_pairs_delta": 552840,
+            "causal_pairs_delta_pct": 29.969588056400333,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 1448,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 134,
+            "candidate_request": 133,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 1375,
+            "causal_pairs_delta": 1406625,
+            "causal_pairs_delta_pct": 268.5546875,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 1450,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 134,
+            "candidate_request": 133,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 1023,
+            "candidate_prefix_tokens": 2395,
+            "causal_pairs_delta": 1403556,
+            "causal_pairs_delta_pct": 89.38110749185668,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 1573,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 139,
+            "candidate_request": 138,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 2300,
+            "causal_pairs_delta": 2352900,
+            "causal_pairs_delta_pct": 449.21875,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 1970,
+            "decode_rows": 7,
+            "prefill_rows": 1017,
+            "original_request": 165,
+            "candidate_request": 164,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 2046,
+            "causal_pairs_delta": 2080782,
+            "causal_pairs_delta_pct": 401.9646365422397,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 2099,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 171,
+            "candidate_request": 170,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 2034,
+            "causal_pairs_delta": 2080782,
+            "causal_pairs_delta_pct": 397.265625,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 2238,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 183,
+            "candidate_request": 182,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 1844,
+            "causal_pairs_delta": 1886412,
+            "causal_pairs_delta_pct": 360.15625,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 2240,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 183,
+            "candidate_request": 182,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 1023,
+            "candidate_prefix_tokens": 2382,
+            "causal_pairs_delta": 1390257,
+            "causal_pairs_delta_pct": 88.53420195439739,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 2363,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 188,
+            "candidate_request": 187,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 1589,
+            "causal_pairs_delta": 1625547,
+            "causal_pairs_delta_pct": 310.3515625,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 2364,
+            "decode_rows": 8,
+            "prefill_rows": 1016,
+            "original_request": 189,
+            "candidate_request": 187,
+            "eligible_requests": 2,
+            "original_prefix_tokens": 0,
+            "candidate_prefix_tokens": 1589,
+            "causal_pairs_delta": 1614424,
+            "causal_pairs_delta_pct": 312.48770894788595,
+            "any_eligible_nonincreasing": false
+          },
+          {
+            "step_id": 2367,
+            "decode_rows": 1,
+            "prefill_rows": 1023,
+            "original_request": 189,
+            "candidate_request": 188,
+            "eligible_requests": 1,
+            "original_prefix_tokens": 1016,
+            "candidate_prefix_tokens": 2039,
+            "causal_pairs_delta": 1046529,
+            "causal_pairs_delta_pct": 66.9502617801047,
+            "any_eligible_nonincreasing": false
+          }
+        ]
+      }
+    }
+  }
+}
