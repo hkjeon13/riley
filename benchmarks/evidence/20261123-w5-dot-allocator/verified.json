@@ -1,0 +1,400 @@
+{
+  "status": "passed",
+  "source_revision": "9373ea412a4ce1353a309c69ccf2de62d76d3318",
+  "remote_evidence": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-dot-allocator-20261123.uoCr9cHQ",
+  "image_id": "sha256:c7fcb8e274ecbdde12510a83ba4779a8045e4ec771bfbe4a2e45db277002ed00",
+  "parent_image_id": "sha256:76767e33ce49f83a1b7bef20874a2aeb2b0a062ab556194d26b9d38c64df4ed8",
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "riley_binary_sha256": "cad533fc4c5d9cce572bb6904614b8866b5747b87ccf36a53681b9bce6d5ec49",
+  "parent_cpu_report_sha256": "2afdff8eaf7b5b5cdfc1e11abe241af19888beece6758db7920fe6465cfaf408",
+  "allocator_cpu_report_sha256": "732ab6f067d305401f8ef4655ad59fd73b2999222f468ea4b16c0c9d98fc2510",
+  "allocator_library_sha256": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9",
+  "allocator_settings": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+  "allocator_process_proof_sha256": {
+    "cache-off": "c3c96b70599f0d100e0f1ca3b2ee7a07e84454fc295fea323f74320f42e63531",
+    "cache-on": "218e31b2db137113a6ff50b86b9853a18914124af1d0202c34a9f121c149e4e1",
+    "accuracy": "7aa9a2cf666e695f45e625b6d1828b85c71bec8ee11b10e9e4415b09a230ae6f"
+  },
+  "soaks": {
+    "source_revision": "9373ea412a4ce1353a309c69ccf2de62d76d3318",
+    "image_id": "sha256:c7fcb8e274ecbdde12510a83ba4779a8045e4ec771bfbe4a2e45db277002ed00",
+    "binary_sha256": "cad533fc4c5d9cce572bb6904614b8866b5747b87ccf36a53681b9bce6d5ec49",
+    "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+    "duration_seconds_per_mode": 1800,
+    "requests_per_second_per_mode": 8,
+    "release_gate": "passed",
+    "modes": {
+      "cache-off": {
+        "status": "passed",
+        "failed_checks": [],
+        "rss": {
+          "baseline": {
+            "rss_kib": 15486900,
+            "anonymous_kib": 15299612,
+            "read_ms": 334.6763700246811
+          },
+          "drain": {
+            "rss_kib": 15486120,
+            "anonymous_kib": 15298832,
+            "read_ms": 336.04737371206284
+          },
+          "rss_growth_kib": -780,
+          "anonymous_growth_kib": -780
+        },
+        "p95_change_percent": {
+          "ttft_ms": 1.1117973432211992,
+          "e2e_ms": -13.142707478096472
+        },
+        "api_checks": 40,
+        "problem_count": 0,
+        "completed": 13749,
+        "client_disconnects": 700,
+        "counter_changes": {
+          "cancellations": 700,
+          "disconnects": 700,
+          "overloads": 0,
+          "dropped_observations": 13568
+        },
+        "prefix_cache_metrics": {
+          "status": "passed",
+          "snapshots": 32,
+          "capacity_blocks": 0,
+          "peak_sampled_retained_blocks": 0,
+          "hit_tokens_delta": 0,
+          "evicted_blocks_delta": 0,
+          "shutdown_hit_tokens": 0,
+          "shutdown_evicted_blocks": 0
+        },
+        "batch_shape_metrics": {
+          "status": "passed",
+          "snapshots": 32,
+          "slot_capacity": 24,
+          "configured_dense_rows": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            24,
+            32,
+            48,
+            64,
+            80,
+            96,
+            112,
+            128,
+            144,
+            160,
+            176,
+            192,
+            208,
+            224,
+            240,
+            256
+          ],
+          "committed_steps": 133381,
+          "gpu_execution_ns": 1759425612103
+        },
+        "soak_sha256": "cd9f2d102bff26d245e807982b1d1350804a601bfebc64b054f3c4bad8a06bf7",
+        "report_sha256": "390347d41939d9e78e6f92d9934a1d6c0185f630ec5d04f9845b89e4858faede",
+        "shutdown_sha256": "9f864f29c963916e66a69ca03f16ddca722972899a01500fd548004feb12a3b3"
+      },
+      "cache-on": {
+        "status": "passed",
+        "failed_checks": [],
+        "rss": {
+          "baseline": {
+            "rss_kib": 15487524,
+            "anonymous_kib": 15299984,
+            "read_ms": 244.32198703289032
+          },
+          "drain": {
+            "rss_kib": 15486848,
+            "anonymous_kib": 15299308,
+            "read_ms": 223.07221591472626
+          },
+          "rss_growth_kib": -676,
+          "anonymous_growth_kib": -676
+        },
+        "p95_change_percent": {
+          "ttft_ms": 1.556216972522817,
+          "e2e_ms": -13.54701490532253
+        },
+        "api_checks": 40,
+        "problem_count": 0,
+        "completed": 13749,
+        "client_disconnects": 700,
+        "counter_changes": {
+          "cancellations": 700,
+          "disconnects": 700,
+          "overloads": 0,
+          "dropped_observations": 13568
+        },
+        "prefix_cache_metrics": {
+          "status": "passed",
+          "snapshots": 32,
+          "capacity_blocks": 128,
+          "peak_sampled_retained_blocks": 128,
+          "hit_tokens_delta": 385728,
+          "evicted_blocks_delta": 89641,
+          "shutdown_hit_tokens": 392096,
+          "shutdown_evicted_blocks": 89641
+        },
+        "batch_shape_metrics": {
+          "status": "passed",
+          "snapshots": 32,
+          "slot_capacity": 24,
+          "configured_dense_rows": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            24,
+            32,
+            48,
+            64,
+            80,
+            96,
+            112,
+            128,
+            144,
+            160,
+            176,
+            192,
+            208,
+            224,
+            240,
+            256
+          ],
+          "committed_steps": 134594,
+          "gpu_execution_ns": 1760067786640
+        },
+        "soak_sha256": "2c101bf446726ea385fdd242567a0b809a7e0f1bc41a1e8970cad62bc79cb416",
+        "report_sha256": "56f3df660cd571fd6c4063d4964c408a7196b97164b47f8a1116484f2d50626c",
+        "shutdown_sha256": "6d34270fe527b7893df0f676a4f73f1d042c97b7ee6d7d1d47b93ace837e67d2"
+      }
+    }
+  },
+  "accuracy": {
+    "api_checks": 40,
+    "shutdown_exit": 0,
+    "report_sha256": "0abd51a05bd6d879d13e2ef3059cb7deead05b79613b3cf69bebaaf81225519b",
+    "suites": {
+      "baseline": {
+        "golden_sha256": "b32bd641dab4e9516a8d3b45de2d77fbde91ad64acad893153f4b6c2090b72a6",
+        "workload_sha256": null,
+        "verified_requests": 144
+      },
+      "holdout": {
+        "golden_sha256": "12d508ed51f03509432e6302b8d10855f56125f4f6b7f31a559cff03eb10b611",
+        "workload_sha256": "220f13a7306518f996480c608733623475471ff3721ea3aeb895a2d5f91abd11",
+        "verified_requests": 88
+      },
+      "structured_holdout": {
+        "status": "passed",
+        "workload_sha256": "220f13a7306518f996480c608733623475471ff3721ea3aeb895a2d5f91abd11",
+        "jsonschema_version": "4.26.0",
+        "modes": {
+          "c1": {
+            "requests": 16,
+            "observed_peak_active": 1
+          },
+          "c8": {
+            "requests": 16,
+            "exact_matches": 16,
+            "observed_peak_active": 8
+          },
+          "c32": {
+            "requests": 32,
+            "exact_matches": 32,
+            "observed_peak_active": 31
+          }
+        },
+        "c1_transport_pairs": 8,
+        "context_rejection": {
+          "case": "long-korean-7917",
+          "sequence_tokens_requested": 8212,
+          "max_sequence_tokens": 8192,
+          "max_output_tokens": 96,
+          "http_status": 400,
+          "error_code": "invalid_request"
+        },
+        "cases": {
+          "korean-255/schema/json": {
+            "usage": {
+              "prompt_tokens": 299,
+              "completion_tokens": 13,
+              "total_tokens": 312
+            },
+            "finish": "stop",
+            "value": "{\"mode\": \"ready\", \"count\": 7}",
+            "response_sha256": "bb8bbf15f9317ddb58fdf403a747b6af4ff66cb1e48cd4f7482e652a15924cdb"
+          },
+          "korean-255/schema/sse": {
+            "usage": {
+              "prompt_tokens": 299,
+              "completion_tokens": 13,
+              "total_tokens": 312
+            },
+            "finish": "stop",
+            "value": "{\"mode\": \"ready\", \"count\": 7}",
+            "response_sha256": "bb8bbf15f9317ddb58fdf403a747b6af4ff66cb1e48cd4f7482e652a15924cdb"
+          },
+          "korean-255/tool/json": {
+            "usage": {
+              "prompt_tokens": 454,
+              "completion_tokens": 26,
+              "total_tokens": 480
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "a5522299fa74f930d0e59624b623058a0b09b7b5f3ee3cd18c85b2bc1a21dd5d"
+          },
+          "korean-255/tool/sse": {
+            "usage": {
+              "prompt_tokens": 454,
+              "completion_tokens": 26,
+              "total_tokens": 480
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "a5522299fa74f930d0e59624b623058a0b09b7b5f3ee3cd18c85b2bc1a21dd5d"
+          },
+          "korean-1024/schema/json": {
+            "usage": {
+              "prompt_tokens": 1068,
+              "completion_tokens": 10,
+              "total_tokens": 1078
+            },
+            "finish": "stop",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "ccdd9e0340da553746da7a70bcf68e783dbae9ef15de136a163156b90974274e"
+          },
+          "korean-1024/schema/sse": {
+            "usage": {
+              "prompt_tokens": 1068,
+              "completion_tokens": 10,
+              "total_tokens": 1078
+            },
+            "finish": "stop",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "ccdd9e0340da553746da7a70bcf68e783dbae9ef15de136a163156b90974274e"
+          },
+          "korean-1024/tool/json": {
+            "usage": {
+              "prompt_tokens": 1223,
+              "completion_tokens": 26,
+              "total_tokens": 1249
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "4887c156b959759eec0a52891899f6ebbdf00e1b143a83cada9cff8a067e0401"
+          },
+          "korean-1024/tool/sse": {
+            "usage": {
+              "prompt_tokens": 1223,
+              "completion_tokens": 26,
+              "total_tokens": 1249
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "4887c156b959759eec0a52891899f6ebbdf00e1b143a83cada9cff8a067e0401"
+          },
+          "long-code-7836/schema/json": {
+            "usage": {
+              "prompt_tokens": 7880,
+              "completion_tokens": 14,
+              "total_tokens": 7894
+            },
+            "finish": "stop",
+            "value": "{\"mode\": \"ready\", \"count\": 7}",
+            "response_sha256": "3b53535aaa65df39d6a2853bf52053bb58ba7bd1d99d2c0b6bf647dc91da058c"
+          },
+          "long-code-7836/schema/sse": {
+            "usage": {
+              "prompt_tokens": 7880,
+              "completion_tokens": 14,
+              "total_tokens": 7894
+            },
+            "finish": "stop",
+            "value": "{\"mode\": \"ready\", \"count\": 7}",
+            "response_sha256": "3b53535aaa65df39d6a2853bf52053bb58ba7bd1d99d2c0b6bf647dc91da058c"
+          },
+          "long-code-7836/tool/json": {
+            "usage": {
+              "prompt_tokens": 8035,
+              "completion_tokens": 27,
+              "total_tokens": 8062
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "c22bdf71c0899c58462a9cdd7ed738e3d96c29fd4baa9aead82b347d0b0d9e1c"
+          },
+          "long-code-7836/tool/sse": {
+            "usage": {
+              "prompt_tokens": 8035,
+              "completion_tokens": 27,
+              "total_tokens": 8062
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "c22bdf71c0899c58462a9cdd7ed738e3d96c29fd4baa9aead82b347d0b0d9e1c"
+          },
+          "long-korean-7917/schema/json": {
+            "usage": {
+              "prompt_tokens": 7961,
+              "completion_tokens": 13,
+              "total_tokens": 7974
+            },
+            "finish": "stop",
+            "value": "{\"mode\": \"ready\", \"count\": 7}",
+            "response_sha256": "baf12badb8c2c349ea9a05e1d7c26fc2b91c887ad38fce9b615f06a2813002a8"
+          },
+          "long-korean-7917/schema/sse": {
+            "usage": {
+              "prompt_tokens": 7961,
+              "completion_tokens": 13,
+              "total_tokens": 7974
+            },
+            "finish": "stop",
+            "value": "{\"mode\": \"ready\", \"count\": 7}",
+            "response_sha256": "baf12badb8c2c349ea9a05e1d7c26fc2b91c887ad38fce9b615f06a2813002a8"
+          },
+          "long-korean-7917/tool/json": {
+            "usage": {
+              "prompt_tokens": 8116,
+              "completion_tokens": 28,
+              "total_tokens": 8144
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "130b10b0b4fde49f29ec6e30cb88c283e64ec8e4629c3f4cee286eeba02e4cb0"
+          },
+          "long-korean-7917/tool/sse": {
+            "usage": {
+              "prompt_tokens": 8116,
+              "completion_tokens": 28,
+              "total_tokens": 8144
+            },
+            "finish": "tool_calls",
+            "value": "{\"mode\":\"ready\",\"count\":7}",
+            "response_sha256": "130b10b0b4fde49f29ec6e30cb88c283e64ec8e4629c3f4cee286eeba02e4cb0"
+          }
+        }
+      }
+    }
+  },
+  "reservations": {
+    "6": {
+      "pid": 2680326,
+      "start_ticks": "6365879881",
+      "gib": 20
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "gib": 20
+    }
+  }
+}

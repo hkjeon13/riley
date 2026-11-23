@@ -93,7 +93,7 @@ def check_distribution_inputs(root, candidate):
     return len(inputs)
 
 
-def check_distribution_revision(root, candidate, revision, historical=None):
+def check_distribution_revision(root, candidate, revision, historical=()):
     current = subprocess.run(
         ["git", "rev-parse", "--verify", "--end-of-options", f"{revision}^{{commit}}"],
         cwd=root, capture_output=True, text=True,
@@ -101,18 +101,19 @@ def check_distribution_revision(root, candidate, revision, historical=None):
     if current.returncode:
         raise ValueError(f"unable to resolve distribution comparison revision: {revision}")
     commit = current.stdout.strip()
-    if historical is not None and commit == historical["source_revision"]:
-        candidate = historical
-    paths = candidate["matching_distribution_input_git_objects"]
-    diff = subprocess.run(
-        ["git", "diff", "--no-ext-diff", "--name-only", candidate["source_revision"], commit, "--", *paths],
-        cwd=root, capture_output=True, text=True,
-    )
-    if diff.returncode:
-        raise ValueError(f"unable to compare distribution inputs at {commit}: {diff.stderr.strip()}")
-    if diff.stdout:
-        raise ValueError(f"distribution inputs changed at {commit}: {', '.join(diff.stdout.splitlines())}")
-    return commit
+    mismatches = []
+    for record in (candidate, *historical):
+        paths = record["matching_distribution_input_git_objects"]
+        diff = subprocess.run(
+            ["git", "diff", "--no-ext-diff", "--name-only", record["source_revision"], commit, "--", *paths],
+            cwd=root, capture_output=True, text=True,
+        )
+        if diff.returncode:
+            raise ValueError(f"unable to compare distribution inputs at {commit}: {diff.stderr.strip()}")
+        if not diff.stdout:
+            return commit
+        mismatches.append(diff.stdout.splitlines())
+    raise ValueError(f"distribution inputs changed at {commit}: {', '.join(mismatches[0])}")
 
 
 def check_package_records(root, candidate):
@@ -134,8 +135,9 @@ def check_package_records(root, candidate):
     objects = gzip.decompress((root / evidence["a100_source_objects"]["path"]).read_bytes())
     actual = subprocess.run(["git", "ls-tree", "-r", revision, "--", *sorted(scope_paths)],
                             cwd=root, capture_output=True, check=True).stdout
-    if (objects != actual or sha256(objects).hexdigest() != serving["source_objects_sha256"]
-            or len(objects.splitlines()) != serving["source_object_count"]):
+    inventory = candidate.get("a100_source_inventory", serving)
+    if (objects != actual or sha256(objects).hexdigest() != inventory["source_objects_sha256"]
+            or len(objects.splitlines()) != inventory["source_object_count"]):
         raise ValueError("follow-up A100 build inputs differ from the committed Git objects")
 
     runtime = {}
@@ -182,6 +184,55 @@ def check_prefix_metrics_package(root, candidate):
             check_prefix_metrics_recovery(drill, serving, allocator)
     elif "recovery_drill" in candidate:
         raise ValueError("the recovery drill requires a verified allocator experiment")
+
+
+def check_pattern_fix_package(root, candidate):
+    parent, smoke, runtime_files = check_package_records(root, candidate)
+    evidence = candidate["evidence"]
+    structured, verified = (
+        json.loads((root / evidence[name]["path"]).read_bytes(), object_pairs_hook=unique_object)
+        for name in ("a100_structured", "a100_verified")
+    )
+    scopes = ("source_revision", "image_id", "source_archive_sha256", "riley_binary_sha256",
+              "cpu_report_sha256", "checkpoint_sha256")
+    if (runtime_files != 21 or candidate["differing_runtime_files"]
+            or verified["status"] != "verified"
+            or verified["matching_runtime_files"] != runtime_files
+            or verified["a100_image"] != smoke["image_id"]
+            or any(structured[key] != smoke[key] for key in scopes)
+            or verified["source_revision"] != smoke["source_revision"]
+            or verified["riley_binary_sha256"] != smoke["riley_binary_sha256"]):
+        raise ValueError("pattern-fix GPU checks must use the reproduced package and checkpoint")
+    if any(row["status"] != "passed" or row["api_checks"] != 40 or row["shutdown_exit"] != 0
+           or row["tool_checks_enabled"] is not True
+           for row in (structured, smoke)):
+        raise ValueError("pattern-fix package must pass the two GPU API and shutdown checks")
+    mixed = smoke["serving_smoke"]
+    if (mixed["status"] != "passed" or (mixed["seconds"], mixed["rate"]) != (45, 8)
+            or mixed["failed_checks"] or not mixed["checks"] or not all(mixed["checks"].values())
+            or smoke["prefix_cache_metrics"]["status"] != "passed"):
+        raise ValueError("pattern-fix package must pass the 45-second GPU mixed load")
+    suites = structured["accuracy_suites"]
+    holdout = suites["structured_holdout"]
+    counts = {"c1": 16, "c8": 16, "c32": 32}
+    if (holdout["status"] != "passed" or holdout["c1_transport_pairs"] != 8
+            or holdout["context_rejection"]["http_status"] != 400
+            or {name: row["requests"] for name, row in holdout["modes"].items()} != counts
+            or any(holdout["modes"][name]["exact_matches"] != counts[name] for name in ("c8", "c32"))):
+        raise ValueError("pattern-fix package lacks the 64-request structured holdout")
+    if len(holdout["cases"]) != 16 or candidate["allocator_experiment"]["matched_structured_cases"] != 16:
+        raise ValueError("pattern-fix allocator must preserve all 16 structured reference responses")
+    reservations = verified["reservations"]
+    if set(reservations) != {"6", "7"} or any(row["allocation_bytes"] != 20 * 2**30
+                                              for row in reservations.values()):
+        raise ValueError("pattern-fix package lacks the two 20 GiB reservation receipts")
+    stock = {
+        **{key: smoke[key] for key in ("source_revision", "riley_binary_sha256", "checkpoint_sha256")},
+        "reservations": {gpu: {"pid": row["pid"], "start_ticks": row["start_ticks"], "gib": 20}
+                         for gpu, row in reservations.items()},
+        "accuracy": {"suites": suites},
+    }
+    check_prefix_metrics_allocator(root, candidate, parent, stock)
 
 
 def check_prefix_metrics_serving(serving):
@@ -801,12 +852,18 @@ def main():
         inputs = check_distribution_inputs(root, manifest["current_distribution_candidate"])
         historical = manifest["distribution_after_terminal_fix"]
         latest = manifest.get("distribution_with_prefix_metrics", historical)
+        earlier = [historical]
         historical_inputs = check_distribution_inputs(root, historical)
         check_package_follow_up(root, historical)
         latest_inputs = historical_inputs
         if latest is not historical:
             latest_inputs = check_distribution_inputs(root, latest)
             check_prefix_metrics_package(root, latest)
+        if "distribution_with_pattern_fix" in manifest:
+            earlier.append(latest)
+            latest = manifest["distribution_with_pattern_fix"]
+            latest_inputs = check_distribution_inputs(root, latest)
+            check_pattern_fix_package(root, latest)
         allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],
                                                   manifest["current_distribution_candidate"])
         serving_models = check_distribution_serving(root, manifest["current_distribution_candidate"])
@@ -814,7 +871,7 @@ def main():
         models = check_readme(root)
         revision = None
         if args.distribution_revision is not None:
-            revision = check_distribution_revision(root, latest, args.distribution_revision, historical=historical)
+            revision = check_distribution_revision(root, latest, args.distribution_revision, historical=earlier)
     except (OSError, EOFError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as error:
         print(f"improvement evidence check failed: {error}", file=sys.stderr)
         return 1

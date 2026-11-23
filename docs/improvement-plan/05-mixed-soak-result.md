@@ -536,6 +536,23 @@ A100 6번에서 기준 이미지 `0a907408ec73`과 jemalloc 파생 이미지 `1f
 
 네 서버는 정상 종료했고 GPU 6·7은 각각 동일 홀더의 20GiB 예약 상태였다. 재현 시 기존 `audit_allocator_ttft.py`를 전송 파일에 포함하고 `dispatch.sha256`과 재사용 원본의 해시를 검증한다. [공유 검산 코드](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/audit_allocator_ttft.py) · [집계 재현](../../benchmarks/evidence/20261120-w5-jemalloc/image-follow-up/performance/rag-confirmation/fetch-summary.sh)
 
+## Pattern 수정 이미지의 jemalloc 30분 재검증
+
+`9373ea412`에서 빌드한 A100 기준 이미지 `76767e33ce49`에 이전의 검증된 jemalloc 라이브러리와 설정을 적용해 파생 이미지 `c7fcb8e274ec`를 만들었다. 두 이미지의 기존 런타임 파일 21개와 Riley 바이너리의 SHA-256은 일치했다. Qwen2.5-7B-Instruct로 A100 6번에서 캐시 끔, 7번에서 128블록 캐시 켬을 실행했다. 같은 합성 부하를 초당 평균 8건씩 30분 재생했다. [파생 이미지와 라이브러리 지문](../../benchmarks/evidence/20261123-w5-dot-allocator/verified-image.json) · [실행 스크립트](../../benchmarks/evidence/20261123-w5-dot-allocator/campaign.sh)
+
+| 지표 | 캐시 끔 | 캐시 켬 |
+|---|---:|---:|
+| 정상 완료 | 13,749 | 13,749 |
+| 의도적 연결 종료 | 700 | 700 |
+| 예상 외 오류 | 0 | 0 |
+| 후반 정밀 RSS 변화 | −780KiB | −676KiB |
+| 후반 TTFT p95 변화 | +1.11% | +1.56% |
+| 후반 전체 완료 p95 변화 | −13.14% | −13.55% |
+
+두 모드 모두 API 40건, 정밀 RSS 증가 0, 지연 드리프트 5% 이내, 캐시·배치 메트릭 및 종료 자원 회수 기준을 통과했다. 30분 판정에는 동일 프로세스의 `smaps_rollup` 표본과 종료 영수증을 사용했다. [부하 원본 체크섬](../../benchmarks/evidence/20261123-w5-dot-allocator/result.sha256) · [정밀 RSS와 지연 검산](../../benchmarks/evidence/20261123-w5-dot-allocator/verified.json)
+
+파생 이미지의 장문 생성 232건이 기존 golden과 일치했다. 구조화 출력·도구 호출은 C1 16건과 C8·C32 48건에서 통과했고, C1 기준 응답 16개는 같은 소스의 기준 이미지와 일치했다. 검사 종료 후 두 GPU가 기존 20GiB 예약으로 복귀했다. [구조화 출력 기준](04-structured-output-result.md#pattern-점-연산자의-줄바꿈-처리) · [장문과 예약 검산](../../benchmarks/evidence/20261123-w5-dot-allocator/verified.json)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)

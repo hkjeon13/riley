@@ -108,6 +108,35 @@ class DistributionServingTests(unittest.TestCase):
 
 
 class PackageFollowUpTests(unittest.TestCase):
+    def test_pattern_fix_structured_receipt_is_bound_to_the_same_image(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        candidate = manifest["distribution_with_pattern_fix"]
+        checker.check_pattern_fix_package(ROOT, candidate)
+
+        entry = candidate["evidence"]["a100_structured"]
+        changed = json.loads((ROOT / entry["path"]).read_bytes())
+        changed["image_id"] = "sha256:" + "0" * 64
+        raw = json.dumps(changed).encode("utf-8")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "structured.json"
+            path.write_bytes(raw)
+            entry.update(path=str(path), sha256=sha256(raw).hexdigest())
+            with self.assertRaisesRegex(ValueError, "must use the reproduced package and checkpoint"):
+                checker.check_pattern_fix_package(ROOT, candidate)
+
+    def test_new_distribution_record_keeps_compatible_historical_revisions(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        latest = manifest["distribution_with_pattern_fix"]
+        historical = [manifest["distribution_with_prefix_metrics"], manifest["distribution_after_terminal_fix"]]
+        revisions = [
+            latest["source_revision"],
+            "8d6b531bd30c349d3fa9817fd287d6a867c299be",
+            historical[1]["source_revision"],
+        ]
+        for revision in revisions:
+            with self.subTest(revision=revision):
+                self.assertEqual(checker.check_distribution_revision(ROOT, latest, revision, historical), revision)
+
     def test_recovery_requires_a_live_stream_after_the_cutoff(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
         candidate = manifest["distribution_with_prefix_metrics"]
