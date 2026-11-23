@@ -15,6 +15,7 @@
 | Prefix cache 메트릭의 A100 검증 | `36aa18805`에 엔진·서빙 메트릭 패치 | 실행 파일 `9303315fdf5a`를 기준 이미지에 읽기 전용으로 연결했다. Qwen2.5-7B-Instruct의 캐시 켬·끔에서 응답·퇴출·종료 카운터와 GPU 자원 회수를 검증했다. [캐시 메트릭 결과](05-mixed-soak-result.md#prefix-cache-보관량과-카운터) |
 | Prefix cache 메트릭을 포함한 배포 이미지 | `3951d90c8` | GitHub와 A100 런타임 파일 21개 일치. A100 이미지 `b7825698510f`의 장문 출력 232건, 스키마·지정 도구 64건, 두 30분 부하의 캐시·배치 지표 및 지연 기준 통과. 정밀 RSS 변화는 캐시 끔 +504KiB, 켬 +584KiB였다. [패키지 부하 결과](05-mixed-soak-result.md#prefix-cache-메트릭을-포함한-배포-패키지) |
 | Prefix cache 메트릭 이미지의 jemalloc 파생 시험 | `3951d90c8`의 실행 파일 | 이미지 ID `a2f0d91fc749`. 두 30분 합성 부하의 정밀 RSS 변화는 캐시 끔 −924KiB, 켬 −820KiB였다. 지연·메트릭·자원 회수와 장문 232건·스키마 및 도구 64건의 출력 대조 통과. 기준 이미지와 스키마·도구 기준 응답 16개 일치. [현행 파생 이미지 대조](05-mixed-soak-result.md#같은-배포-패키지의-jemalloc-대조) |
+| Pattern 점 연산자 수정의 배포 이미지 | `9373ea412` | GitHub와 A100 런타임 파일 21개 일치. A100 이미지 `76767e33ce49`의 API 40건씩, 장문 스키마·도구 64건, 45초 혼합 부하와 자원 회수 검증. 이 이미지의 30분 부하와 실제 운영 검증이 남아 있다. [수정과 검증](04-structured-output-result.md#pattern-점-연산자의-줄바꿈-처리) · [A100 검산](../../benchmarks/evidence/20261123-w4-dot-package/verified.json) |
 
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)
 
@@ -29,6 +30,8 @@ python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 ```
 
 `distribution_with_prefix_metrics`의 Git 입력·CPU 보고서·런타임 파일·GPU 검증을 `origin/main`에 연결한다. 캐시와 배치 메트릭의 검산은 30분 부하의 정밀 RSS·지연 판정과 함께 확인한다. 이전 버전 `36aa18805`의 입력은 `--distribution-revision 36aa18805`로 조회한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
+
+`9373ea412`는 30분 부하를 실행한 `3951d90c8`의 두 서빙 소스 파일을 변경한다. `--distribution-revision origin/main`은 이 두 경로에서의 차이를 검출한다. 최신 소스에는 위 표의 새 CPU·GPU 회귀 증거를 연결하고, 30분 판정은 검증된 이전 이미지에 연결한다. [정확한 두 빌드와 A100 회귀](../../benchmarks/evidence/20261123-w4-dot-package/verified.json)
 
 같은 항목의 `allocator_experiment`는 현행 파생 이미지의 라이브러리와 부모 패키지, 실제 프로세스 영수증, 캐시 두 설정의 30분 부하 및 기본 이미지와 일치한 응답 16개를 연결한다. [현행 파생 이미지 검산](../../benchmarks/evidence/20261121-w5-prefix-metrics-package/allocator/verified.json)
 

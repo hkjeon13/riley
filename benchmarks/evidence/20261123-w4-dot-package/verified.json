@@ -1,0 +1,62 @@
+{
+  "status": "verified",
+  "source_revision": "9373ea412a4ce1353a309c69ccf2de62d76d3318",
+  "hosted_image": "sha256:22ba3ea06b85a4de2af06e3c4469d1bfe902955a7d9696a96754aacfb435eba6",
+  "a100_image": "sha256:76767e33ce49f83a1b7bef20874a2aeb2b0a062ab556194d26b9d38c64df4ed8",
+  "matching_runtime_files": 21,
+  "riley_binary_sha256": "cad533fc4c5d9cce572bb6904614b8866b5747b87ccf36a53681b9bce6d5ec49",
+  "reservations": {
+    "6": {
+      "pid": 2680326,
+      "start_ticks": "6365879881",
+      "allocation_bytes": 21474836480
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "allocation_bytes": 21474836480
+    }
+  },
+  "structured_modes": {
+    "c1": {
+      "requests": 16,
+      "observed_peak_active": 1
+    },
+    "c8": {
+      "requests": 16,
+      "exact_matches": 16,
+      "observed_peak_active": 8
+    },
+    "c32": {
+      "requests": 32,
+      "exact_matches": 32,
+      "observed_peak_active": 31
+    }
+  },
+  "smoke_counts": {
+    "plain": {
+      "completed": 202
+    },
+    "schema": {
+      "completed": 42,
+      "stop": 42
+    },
+    "logprobs": {
+      "completed": 23
+    },
+    "tools": {
+      "completed": 23,
+      "tool_calls": 23
+    },
+    "long": {
+      "completed": 30
+    },
+    "reason": {
+      "completed": 18
+    },
+    "cancel": {
+      "disconnected": 21
+    }
+  },
+  "api_checks_per_gpu": 40
+}

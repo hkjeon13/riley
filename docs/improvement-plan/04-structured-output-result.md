@@ -20,6 +20,8 @@
 
 Unicode 스칼라 1,112,064개를 각각 JSON 직렬화와 UTF-16 이스케이프로 검사했다. 표현 2,224,128건 중 네 줄바꿈 코드 포인트에 해당하는 8건만 거부됐다. 서버 라이브러리 테스트 105건이 통과했다. 테스트에는 두 가지 요청 경로와 짧은 이스케이프, 대소문자 16진수, UTF-8, 서로게이트 쌍이 포함된다. [컴파일러 회귀 검사](../../crates/riley-server/src/structured.rs) · [요청 경로 회귀 검사](../../crates/riley-server/src/chat.rs)
 
+`9373ea412`의 CUDA 12.4 배포 이미지를 A100에서 재빌드해 GitHub 빌드와 런타임 파일 21개의 해시를 대조했다. GPU 6·7번에서 Qwen2.5-7B-Instruct의 API 40건씩 통과했다. GPU 6번의 장문 스키마·지정 도구는 C1 16건을 기준으로 C8 16건과 C32 32건이 모두 일치했다. GPU 7번의 45초 혼합 부하는 정상 완료 338건, 의도적 연결 종료 21건을 기록했고 캐시·배치 메트릭 및 종료 검사를 통과했다. 두 GPU에서 종료 자원을 회수하고 기존 20GiB 예약을 확인했다. [배포 이미지 CI](https://github.com/hkjeon13/riley/actions/runs/45126944223) · [A100 검산](../../benchmarks/evidence/20261123-w4-dot-package/verified.json)
+
 ## 현행 배포 이미지의 장문 채팅 검증
 
 Qwen2.5-7B-Instruct의 고정 입력에서 255·1,024·7,836·7,917토큰 사례를 선택했다. 각 입력을 채팅 메시지로 보내 `type`과 `enum`의 교집합 및 정수 `const`를 포함한 JSON 스키마를 검사했다. 같은 스키마를 이름이 지정된 도구의 인자로도 적용했다. 서버가 붙인 채팅 템플릿까지 포함한 입력 ID와 생성 ID·텍스트·도구 인자·종료 사유·사용량을 대조했다. 스키마와 도구 인자는 독립 Draft 2020-12 검증기로 검사했다. [고정 입력](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [검사기](../../benchmarks/live/structured_holdout_check.py)

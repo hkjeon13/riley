@@ -1,0 +1,24 @@
+campaign.sh: OK
+build_inputs.py: OK
+schema.patch: OK
+source-revision.txt: OK
+source-objects.tsv.gz: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-prefix-metrics-package-20261121.nEFyze5I/source.tar: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w1-dist-d3d8fe6e5.YnZWdh5l/src/benchmarks/evidence/20261119-w4-holdout/holdout.json.gz: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w1-dist-d3d8fe6e5.YnZWdh5l/model/riley-checkpoint.json: OK
+patching file crates/riley-server/src/chat.rs
+patching file crates/riley-server/src/structured.rs
+Verified 1037 committed input blobs at 9373ea412a4ce1353a309c69ccf2de62d76d3318
+serving source contract passed (source pins only; no GPU qualification)
+BUILD 2026-11-23T06:57:26Z
+CPU_CHECK 2026-11-23T07:03:02Z
+harness/ci/check_distribution_gpu.py: OK
+harness/benchmarks/live/api_check.py: OK
+harness/benchmarks/live/load.py: OK
+harness/benchmarks/live/soak.py: OK
+harness/benchmarks/live/long_accuracy.py: OK
+harness/benchmarks/live/structured_holdout_check.py: OK
+START smoke 7 2026-11-23T07:03:05Z
+START structured 6 2026-11-23T07:03:05Z
+END structured 6 2026-11-23T07:08:04Z exit=0
+END smoke 7 2026-11-23T07:08:26Z exit=0
