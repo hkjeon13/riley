@@ -16,7 +16,7 @@ SPEC.loader.exec_module(loader)
 
 class StreamingLoadTests(unittest.IsolatedAsyncioTestCase):
     async def request(self, *, done=True, finish="stop", usage=None, content=("a",), capture_hashes=False,
-                      preconnected=False):
+                      capture_transport_timing=False, preconnected=False):
         reader = asyncio.StreamReader()
         chunks = [{"choices": [{"delta": {"content": text}, "finish_reason": None}]} for text in content]
         chunks.append({"choices": [{"delta": {}, "finish_reason": finish}],
@@ -34,6 +34,7 @@ class StreamingLoadTests(unittest.IsolatedAsyncioTestCase):
         dial = mock.AsyncMock(return_value=(reader, writer))
         with mock.patch.object(loader.asyncio, "open_connection", new=dial):
             await loader.one("localhost", 1, {}, time.perf_counter(), row, capture_hashes=capture_hashes,
+                             capture_transport_timing=capture_transport_timing,
                              connection=(reader, writer) if preconnected else None)
         if preconnected:
             dial.assert_not_awaited()
@@ -47,6 +48,18 @@ class StreamingLoadTests(unittest.IsolatedAsyncioTestCase):
         result = await self.request(preconnected=True, capture_hashes=True)
         self.assertIs(result["error"], False)
         self.assertGreaterEqual(result["sent_at"], result["start"])
+
+    async def test_transport_timing_sums_to_the_first_visible_text(self):
+        row = await self.request(content=("", "a"), capture_transport_timing=True, preconnected=True)
+        phases = row["transport_ms"]
+        self.assertEqual(set(phases), {
+            "write_to_status_line", "status_line_to_headers_end", "headers_end_to_first_data_line",
+            "first_data_line_to_first_text",
+        })
+        self.assertTrue(all(value >= 0 for value in phases.values()))
+        self.assertAlmostEqual(sum(phases.values()) / 1000 + row["sent_at"] - row["start"], row["ttft"])
+        self.assertNotIn("transport_ms", await self.request())
+        self.assertNotIn("transport_ms", await self.request(done=False, capture_transport_timing=True))
 
     async def test_measured_output_digest_preserves_utf8_content_across_sse_chunks(self):
         intact = await self.request(content=("한글",), capture_hashes=True)

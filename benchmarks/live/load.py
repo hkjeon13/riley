@@ -41,7 +41,8 @@ def prompt(rng, words):
             f"Using only the document above as inspiration, write a detailed story about {topic}.")
 
 
-async def one(host, port, body, started_at, record, *, capture_hashes=False, capture_token_ids=False, connection=None):
+async def one(host, port, body, started_at, record, *, capture_hashes=False, capture_token_ids=False,
+              capture_transport_timing=False, connection=None):
     """Measure one request and close its connection, including a supplied stream pair."""
     request = json.dumps(body).encode()
     output_hash = hashlib.sha256() if capture_hashes else None
@@ -55,19 +56,24 @@ async def one(host, port, body, started_at, record, *, capture_hashes=False, cap
     prompt_ids = None
     token_ids = []
     done = False
+    first_data_at = None
     writer = None
     try:
         if connection is None:
             connection = await asyncio.open_connection(host, port, limit=1 << 22)
         reader, writer = connection
         writer.write(head + request)
-        if capture_hashes:
+        if capture_hashes or capture_transport_timing:
             record["sent_at"] = time.perf_counter()
         await writer.drain()
         status_line = await reader.readline()
+        if capture_transport_timing:
+            status_read_at = time.perf_counter()
         status = int(status_line.split()[1])
         while (await reader.readline()) not in (b"\r\n", b""):
             pass
+        if capture_transport_timing:
+            headers_read_at = time.perf_counter()
         if status != 200:
             await reader.read()
             record.update(status=status, error=True)
@@ -79,6 +85,8 @@ async def one(host, port, body, started_at, record, *, capture_hashes=False, cap
                 break
             if not line.startswith(b"data: "):
                 continue
+            if capture_transport_timing and first_data_at is None:
+                first_data_at = time.perf_counter()
             payload = line[6:].strip()
             if payload == b"[DONE]":
                 done = True
@@ -139,6 +147,15 @@ async def one(host, port, body, started_at, record, *, capture_hashes=False, cap
     )
     if output_hash is not None:
         record["output_sha256"] = output_hash.hexdigest()
+    if capture_transport_timing:
+        assert first_data_at is not None
+        sent_at = record["sent_at"]
+        record["transport_ms"] = {
+            "write_to_status_line": (status_read_at - sent_at) * 1000,
+            "status_line_to_headers_end": (headers_read_at - status_read_at) * 1000,
+            "headers_end_to_first_data_line": (first_data_at - headers_read_at) * 1000,
+            "first_data_line_to_first_text": (times[0] - first_data_at) * 1000,
+        }
 
 
 def percentile(values, q):
@@ -185,9 +202,14 @@ async def main():
     parser.add_argument("--out")
     parser.add_argument("--extra", default="{}")
     parser.add_argument("--records", help="write per-request timings, usage and text digests for measured requests")
+    parser.add_argument("--transport-timing", action="store_true", default=argparse.SUPPRESS,
+                        help="include client-observed HTTP and SSE timing in --records")
     parser.add_argument("--shared-prefix-words", type=int, default=0,
                         help="start every request with the same system document of N words")
     args = parser.parse_args()
+    transport_timing = getattr(args, "transport_timing", False)
+    if transport_timing and not args.records:
+        parser.error("--transport-timing requires --records")
     host, port = args.address.split(":")
     rng = random.Random(args.seed)
     lengths = [int(value) for value in args.prompt_words.split(",")]
@@ -224,7 +246,8 @@ async def main():
             if args.records:
                 records[index]["scheduled_start"] = arrival
             tasks.append(asyncio.create_task(one(host, int(port), bodies[index], at, records[index],
-                                                 capture_hashes=bool(args.records))))
+                                                 capture_hashes=bool(args.records),
+                                                 capture_transport_timing=transport_timing)))
         await asyncio.gather(*tasks)
     else:
         queue = iter(range(total))
@@ -232,7 +255,7 @@ async def main():
         async def worker():
             for index in queue:
                 await one(host, int(port), bodies[index], time.perf_counter(), records[index],
-                          capture_hashes=bool(args.records))
+                          capture_hashes=bool(args.records), capture_transport_timing=transport_timing)
 
         await asyncio.gather(*(worker() for _ in range(args.concurrency)))
     wall = time.perf_counter() - start
@@ -255,7 +278,8 @@ async def main():
                  "e2e": row["e2e"], "tpot": row["tpot"], "prompt_tokens": row["prompt_tokens"],
                  "completion_tokens": row["completion_tokens"], "finish": row["finish"],
                  "scheduled_start": row.get("scheduled_start"), "input_sha256": row["input_sha256"],
-                 "output_sha256": row["output_sha256"]}
+                 "output_sha256": row["output_sha256"],
+                 **({"transport_ms": row["transport_ms"]} if transport_timing else {})}
                 for index, row in enumerate(measured, start=args.warmup) if row.get("error") is False
             ], output)
 
