@@ -1089,6 +1089,25 @@ A100 7번에서 HTTP 워밍업 16건과 측정 128건을 완료했고, 측정 12
 
 스텝을 기록한 이번 실행의 TTFT p95는 1,804.55ms·1,536.84ms였다. 입장 구간만 기록한 직전 실행은 1,881.49ms·1,572.92ms였다. 두 번 모두 각 시각표의 vLLM 대비 1단계 한도를 넘었다. 관측한 대기에 맞춰 다른 요청의 연속 prefill 스텝 사이에서 오래 기다린 요청의 다음 prefill을 앞당기는 후보를 먼저 대조한다. 두 seed와 C32·동시 유입에서 정답 출력 및 기존 decode TPOT 기준도 함께 확인한다. 서버 정상 종료 뒤 GPU 7번은 같은 홀더의 20GiB 예약으로 복귀했다. [스텝 실행 로그](../../benchmarks/evidence/20261124-w3-rag-prefill-steps/campaign.log) · [정확성·성능 기준](03-long-context-and-scheduling.md#2-기존-목표와-범위)
 
+### 혼합 스텝의 prefill 접수 순서 후보
+
+같은 진단 바이너리에서 스위치로 prefill 순서만 바꾼다. 기존 aging 우선 처리와 decode 행 배정 이후 prefill이 남은 예산을 다투는 혼합 스텝에서 접수 순서를 적용한다. 두 설정을 A100 6·7번에서 서로 반대 순서로 실행한다. 같은 GPU 내 시각표에는 두 RAG seed, 짧은 C32 두 시각표, 동시·50ms 간격 유입이 들어 있다. 실행당 측정 요청 592건과 별도 C1·C8 생성 토큰 ID 검사 16건을 등록했다. 바이트와 decode 지연의 판정 기준은 기존 목표를 사용한다. [후보 코드](../../benchmarks/evidence/20261124-w3-rag-prefill-order/instrument.py) · [등록과 판정 한도](../../benchmarks/evidence/20261124-w3-rag-prefill-order/registration.json) · [교차 실행기](../../benchmarks/evidence/20261124-w3-rag-prefill-order/campaign.sh)
+
+CPU에서 기존 스케줄러 테스트 36건과 새 혼합 스텝 검사 1건을 스위치의 두 값으로 각각 실행해 통과했다. 새 검사는 decode 행 보존과 기존 aging 우선 선택을 검증했다. 첫 GPU 실행에서는 두 팔이 측정 요청을 완료한 뒤 동시 유입 시각표에 빠진 요청 수 필드 때문에 후처리가 종료됐다. 시각표 생성 시 요청 수와 재생 행을 대조하도록 고쳤고 같은 바이너리로 교차 시험 전체를 다시 실행했다. [CPU 검사](../../benchmarks/evidence/20261124-w3-rag-prefill-order/cpu-tests.log) · [첫 실행의 종료 기록](../../benchmarks/evidence/20261124-w3-rag-prefill-order/first-attempt.json)
+
+교차 시험의 측정 요청은 **2,368건**이었다. 기준–후보 **1,184쌍**의 입력·출력 해시, 토큰 수와 종료 사유가 모두 일치했다. 별도 생성 토큰 ID 검사 64건에서도 각 GPU의 C1·C8과 두 설정이 일치했다. 두 설정과 설정 간 전송 오차 p95는 12개 비교에서 모두 3ms 이내였으며 최댓값은 2.45ms였다. 후보가 순서를 바꾼 혼합 스텝은 GPU 6번 180개, 7번 169개였다. 스위치가 꺼진 두 실행의 변경 수는 0개였고 전체 실행의 1,024행 스텝 수는 네 팔 모두 660개였다. [원본과 체크섬](../../benchmarks/evidence/20261124-w3-rag-prefill-order/raw-results.tar.gz) · [정확성·성능 검산](../../benchmarks/evidence/20261124-w3-rag-prefill-order/verified.json)
+
+| 시각표 | TTFT p95 변화 6번 / 7번 | Decode TPOT p50 변화 6번 / 7번 |
+|---|---:|---:|
+| RAG seed 1 | −11.84% / −15.31% | +4.21% / −1.57% |
+| RAG seed 2 | −0.51% / −0.64% | +2.39% / +1.11% |
+| C32 · Riley | −4.75% / +5.53% | +0.02% / +0.03% |
+| C32 · vLLM | −3.82% / −1.04% | +0.09% / +0.10% |
+| 동시 유입 | +0.29% / −0.10% | +3.71% / +6.52% |
+| 50ms 간격 유입 | −1.78% / −1.55% | +1.22% / +4.21% |
+
+GPU 7번 RAG seed 1의 TTFT p95는 저장된 vLLM 대비 1.528배에서 **1.294배**로 줄어 1단계 한도를 통과했다. Seed 2는 1.421배에서 **1.412배**로 줄었다. Decode TPOT p50은 12개 비교 중 7개에서 1% 한도를 넘었고, C32 Riley 시각표의 TTFT p50도 GPU 6·7번에서 각각 **6.22%·2.88%** 늘었다. 이 후보는 미채택이다. 두 GPU는 재시험 종료 후 기존 프로세스의 20GiB 예약을 복구했다. [교차 실행 로그](../../benchmarks/evidence/20261124-w3-rag-prefill-order/campaign.log) · [독립 판정 코드](../../benchmarks/evidence/20261124-w3-rag-prefill-order/verify.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

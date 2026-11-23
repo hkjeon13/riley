@@ -1,0 +1,28 @@
+{
+  "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-prefill-order-retry-20261124.cWPk8nNQ",
+  "build_pid": 2132527,
+  "build_started_at": "2026-11-23T20:37:51Z",
+  "build_dispatch_sha256": "b1155d555c934ec563b00544c080dc9da7ef42442cdf44ba34edc9917c2b33a1",
+  "build_result_sha256": "1d573337167e8df0c3017fc065207ada2df5a97b4df9d07fddafdb6139655b6a",
+  "campaign_pid": 2193249,
+  "campaign_started_at": "2026-11-23T20:49:02Z",
+  "campaign_dispatch_sha256": "363b6b74595a877213c081c1e04e0f2f4636544c95074d091632fe98f6139856",
+  "schedules_sha256": "7921e63069ddd4b58736558af62590b5f340083ee129d25aa54eeefbdf78c116",
+  "base_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+  "physical_gpus": [6, 7],
+  "measured_requests_per_arm": 592,
+  "holdout_requests_per_arm": 16,
+  "write_error_p95_limit_ms": 3,
+  "decode_tpot_p50_max_regression_pct_exclusive": 1,
+  "short_ttft_p50_max_regression_pct_exclusive": 2,
+  "short_throughput_max_drop_pct_exclusive": 2,
+  "initial_attempt": {
+    "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-prefill-order-20261124.4GmArkrG",
+    "campaign_pid": 2148203,
+    "campaign_started_at": "2026-11-23T20:40:53Z",
+    "campaign_dispatch_sha256": "925d92833dcefe606d7badf6b1891cac1b78d66fe166af5ff255495cbee999e8",
+    "result_sha256": "43c4efb1b50201880065ad33e4c7e5140d0f332c4bde75685e29936525266302",
+    "exit": 1,
+    "reason": "the new wave replay did not expose the top-level request count consumed after measurement"
+  }
+}
