@@ -160,8 +160,10 @@ such as `uniqueItems`, `not` and `multipleOf`, as well as repetition bounds abov
 `pattern` supports literals, `.`, classes with ranges and `^` negation, `\\d`,
 `\\w`, `\\s` (a space), groups, `|`, and the greedy quantifiers `*`, `+`, `?` and
 `{m,n}`. As in JSON Schema an unanchored pattern may match anywhere in the
-string. Lookaround, backreferences, lazy quantifiers and `\\b` are refused, and
-`pattern` cannot be combined with `format` or length bounds.
+string. The dot matches a Unicode scalar other than LF, CR, U+2028 and U+2029,
+including when a scalar is encoded as a JSON escape. Lookaround, backreferences,
+lazy quantifiers and `\\b` are refused, and `pattern` cannot be combined with
+`format` or length bounds.
 
 ### Tools
 

@@ -14,6 +14,12 @@
 
 이번 검증 범위는 문서화한 스키마 부분집합과 한 모델의 GPU API다. W4-A의 HF 장문 분기 추적과 다른 모델군, 운영 soak는 이후 단계에서 확인한다.
 
+## Pattern 점 연산자의 줄바꿈 처리
+
+`^.$`가 JSON 이스케이프로 전달된 줄바꿈을 한 글자로 받아들이던 결함을 수정했다. 점 연산자는 LF, CR, U+2028, U+2029를 거부한다. 일반 문자열과 unanchored 패턴에서 매치 앞뒤의 문자열은 기존 JSON 문자열 규칙을 사용한다. 응답 스키마와 강제 도구 호출이 같은 제약을 적용하는지 CPU에서 확인했다. [API 계약](../api.md#structured-output) · [ECMAScript Atom](https://tc39.es/ecma262/multipage/text-processing.html#sec-compileatom) · [줄바꿈 코드 포인트](https://tc39.es/ecma262/multipage/ecmascript-language-lexical-grammar.html#sec-line-terminators)
+
+Unicode 스칼라 1,112,064개를 각각 JSON 직렬화와 UTF-16 이스케이프로 검사했다. 표현 2,224,128건 중 네 줄바꿈 코드 포인트에 해당하는 8건만 거부됐다. 서버 라이브러리 테스트 105건이 통과했다. 테스트에는 두 가지 요청 경로와 짧은 이스케이프, 대소문자 16진수, UTF-8, 서로게이트 쌍이 포함된다. [컴파일러 회귀 검사](../../crates/riley-server/src/structured.rs) · [요청 경로 회귀 검사](../../crates/riley-server/src/chat.rs)
+
 ## 현행 배포 이미지의 장문 채팅 검증
 
 Qwen2.5-7B-Instruct의 고정 입력에서 255·1,024·7,836·7,917토큰 사례를 선택했다. 각 입력을 채팅 메시지로 보내 `type`과 `enum`의 교집합 및 정수 `const`를 포함한 JSON 스키마를 검사했다. 같은 스키마를 이름이 지정된 도구의 인자로도 적용했다. 서버가 붙인 채팅 템플릿까지 포함한 입력 ID와 생성 ID·텍스트·도구 인자·종료 사유·사용량을 대조했다. 스키마와 도구 인자는 독립 Draft 2020-12 검증기로 검사했다. [고정 입력](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [검사기](../../benchmarks/live/structured_holdout_check.py)

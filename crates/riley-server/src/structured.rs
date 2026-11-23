@@ -122,6 +122,16 @@ fn class(first: u8, last: u8) -> GrammarElement {
     GrammarElement::Bytes(ByteClass::range(first, last))
 }
 
+fn hex_except(excluded: &[u8]) -> GrammarElement {
+    let mut allowed = ByteClass::default();
+    for &digit in b"0123456789abcdefABCDEF" {
+        if !excluded.contains(&digit.to_ascii_lowercase()) {
+            allowed = allowed.union(ByteClass::byte(digit));
+        }
+    }
+    GrammarElement::Bytes(allowed)
+}
+
 const fn rule(id: u32) -> GrammarElement {
     GrammarElement::Rule(id)
 }
@@ -133,8 +143,8 @@ fn concat(parts: Vec<Vec<GrammarElement>>) -> Vec<GrammarElement> {
 /// Rules shared by every schema, built on first use.
 #[derive(Default)]
 struct Common {
-    string_char: Option<u32>,
-    multibyte_char: Option<u32>,
+    string_char: [Option<u32>; 2],
+    multibyte_char: [Option<u32>; 2],
     string: Option<u32>,
     value: Option<u32>,
     separator: Option<u32>,
@@ -210,7 +220,12 @@ impl SchemaCompiler {
     }
 
     fn string_char(&mut self) -> u32 {
-        if let Some(id) = self.common.string_char {
+        self.string_character(true)
+    }
+
+    fn string_character(&mut self, include_line_terminators: bool) -> u32 {
+        let variant = usize::from(include_line_terminators);
+        if let Some(id) = self.common.string_char[variant] {
             return id;
         }
         let id = self.builder.rule();
@@ -219,40 +234,48 @@ impl SchemaCompiler {
             .union(ByteClass::range(0x5d, 0x7f));
         self.builder
             .alternative(id, vec![GrammarElement::Bytes(plain)]);
-        let simple_escape = GrammarElement::Bytes(
-            ByteClass::byte(b'"')
-                .union(ByteClass::byte(b'\\'))
-                .union(ByteClass::byte(b'/'))
-                .union(ByteClass::byte(b'b'))
-                .union(ByteClass::byte(b'f'))
+        let mut simple_escape = ByteClass::byte(b'"')
+            .union(ByteClass::byte(b'\\'))
+            .union(ByteClass::byte(b'/'))
+            .union(ByteClass::byte(b'b'))
+            .union(ByteClass::byte(b'f'))
+            .union(ByteClass::byte(b't'));
+        if include_line_terminators {
+            simple_escape = simple_escape
                 .union(ByteClass::byte(b'n'))
-                .union(ByteClass::byte(b'r'))
-                .union(ByteClass::byte(b't')),
-        );
-        self.builder
-            .alternative(id, concat(vec![bytes("\\"), vec![simple_escape]]));
-        let hex = GrammarElement::Bytes(
-            ByteClass::range(b'0', b'9')
-                .union(ByteClass::range(b'a', b'f'))
-                .union(ByteClass::range(b'A', b'F')),
-        );
-        let not_d = ByteClass::range(b'0', b'9')
-            .union(ByteClass::range(b'a', b'c'))
-            .union(ByteClass::range(b'A', b'C'))
-            .union(ByteClass::range(b'e', b'f'))
-            .union(ByteClass::range(b'E', b'F'));
-        let d = GrammarElement::Bytes(ByteClass::byte(b'd').union(ByteClass::byte(b'D')));
+                .union(ByteClass::byte(b'r'));
+        }
         self.builder.alternative(
             id,
             concat(vec![
-                bytes("\\u"),
-                vec![GrammarElement::Bytes(not_d), hex, hex, hex],
+                bytes("\\"),
+                vec![GrammarElement::Bytes(simple_escape)],
             ]),
         );
-        self.builder.alternative(
-            id,
-            concat(vec![bytes("\\u"), vec![d, class(b'0', b'7'), hex, hex]]),
-        );
+        let hex = hex_except(b"");
+        let d = GrammarElement::Bytes(ByteClass::byte(b'd').union(ByteClass::byte(b'D')));
+        let mut add_bmp_escape = |digits: [GrammarElement; 4]| {
+            let mut sequence = bytes("\\u");
+            sequence.extend(digits);
+            self.builder.alternative(id, sequence);
+        };
+        if include_line_terminators {
+            add_bmp_escape([hex_except(b"d"), hex, hex, hex]);
+        } else {
+            // Match escapes for BMP scalars outside 000A, 000D, 2028, and 2029.
+            // Split the 0xxx and 2xxx prefixes at their first differing digit.
+            let zero = class(b'0', b'0');
+            let two = class(b'2', b'2');
+            let nonzero = hex_except(b"0");
+            add_bmp_escape([hex_except(b"02d"), hex, hex, hex]);
+            add_bmp_escape([zero, nonzero, hex, hex]);
+            add_bmp_escape([zero, zero, nonzero, hex]);
+            add_bmp_escape([zero, zero, zero, hex_except(b"ad")]);
+            add_bmp_escape([two, nonzero, hex, hex]);
+            add_bmp_escape([two, zero, hex_except(b"2"), hex]);
+            add_bmp_escape([two, zero, two, hex_except(b"89")]);
+        }
+        add_bmp_escape([d, class(b'0', b'7'), hex, hex]);
         // A paired surrogate escape is one decoded character. Standalone
         // surrogates do not represent a Unicode scalar value.
         let high = GrammarElement::Bytes(
@@ -271,14 +294,15 @@ impl SchemaCompiler {
                 vec![d, low, hex, hex],
             ]),
         );
-        let multibyte = self.multibyte_char();
+        let multibyte = self.multibyte_char(include_line_terminators);
         self.builder.alternative(id, vec![rule(multibyte)]);
-        self.common.string_char = Some(id);
+        self.common.string_char[variant] = Some(id);
         id
     }
 
-    fn multibyte_char(&mut self) -> u32 {
-        if let Some(id) = self.common.multibyte_char {
+    fn multibyte_char(&mut self, include_line_terminators: bool) -> u32 {
+        let variant = usize::from(include_line_terminators);
+        if let Some(id) = self.common.multibyte_char[variant] {
             return id;
         }
         let id = self.builder.rule();
@@ -288,8 +312,24 @@ impl SchemaCompiler {
             .alternative(id, vec![class(0xc2, 0xdf), continuation]);
         self.builder
             .alternative(id, vec![class(0xe0, 0xe0), class(0xa0, 0xbf), continuation]);
-        self.builder
-            .alternative(id, vec![class(0xe1, 0xec), continuation, continuation]);
+        if include_line_terminators {
+            self.builder
+                .alternative(id, vec![class(0xe1, 0xec), continuation, continuation]);
+        } else {
+            let outside_e2 =
+                GrammarElement::Bytes(ByteClass::byte(0xe1).union(ByteClass::range(0xe3, 0xec)));
+            self.builder
+                .alternative(id, vec![outside_e2, continuation, continuation]);
+            let e2 = class(0xe2, 0xe2);
+            self.builder
+                .alternative(id, vec![e2, class(0x81, 0xbf), continuation]);
+            // U+2028 and U+2029 are E2 80 A8 and E2 80 A9 in UTF-8.
+            let outside_separators = GrammarElement::Bytes(
+                ByteClass::range(0x80, 0xa7).union(ByteClass::range(0xaa, 0xbf)),
+            );
+            self.builder
+                .alternative(id, vec![e2, class(0x80, 0x80), outside_separators]);
+        }
         self.builder
             .alternative(id, vec![class(0xed, 0xed), class(0x80, 0x9f), continuation]);
         self.builder
@@ -316,7 +356,7 @@ impl SchemaCompiler {
                 continuation,
             ],
         );
-        self.common.multibyte_char = Some(id);
+        self.common.multibyte_char[variant] = Some(id);
         id
     }
 
@@ -963,7 +1003,7 @@ impl SchemaCompiler {
         let next = characters[*position];
         *position += 1;
         match next {
-            '.' => Ok(vec![rule(self.string_char())]),
+            '.' => Ok(vec![rule(self.string_character(false))]),
             '(' => {
                 if characters.get(*position) == Some(&'?') {
                     if characters.get(*position + 1) != Some(&':') {
@@ -1052,7 +1092,7 @@ impl SchemaCompiler {
             }
         }
         let id = self.builder.rule();
-        let multibyte = self.multibyte_char();
+        let multibyte = self.multibyte_char(true);
         self.builder
             .alternative(id, vec![GrammarElement::Bytes(complement)]);
         self.builder.alternative(id, vec![rule(multibyte)]);
@@ -1431,6 +1471,48 @@ mod tests {
             &json!({"type": "string", "format": "uuid"}),
             "\"123e4567-e89b-42d3-a456-426614174000\""
         ));
+    }
+
+    #[test]
+    fn pattern_dot_excludes_line_terminators_in_every_json_encoding() {
+        let single = json!({"type": "string", "pattern": "^.$"});
+        let any = json!({"type": "string"});
+        for source in [
+            r#""\n""#,
+            r#""\r""#,
+            r#""\u000a""#,
+            r#""\u000A""#,
+            r#""\u000d""#,
+            r#""\u000D""#,
+            r#""\u2028""#,
+            r#""\u2029""#,
+            "\"\u{2028}\"",
+            "\"\u{2029}\"",
+        ] {
+            assert!(!accepts(&single, source), "{source:?}");
+            assert!(accepts(&any, source), "{source:?}");
+        }
+        for source in [
+            r#""\t""#,
+            r#""\u000B""#,
+            r#""\u000c""#,
+            r#""\u00A0""#,
+            r#""\u10D0""#,
+            r#""\u201A""#,
+            r#""\u202a""#,
+            r#""\u2109""#,
+            r#""\ud83d\ude00""#,
+            "\"한\"",
+            "\"😀\"",
+            "\"\u{2027}\"",
+            "\"\u{202a}\"",
+            "\"\u{2040}\"",
+        ] {
+            assert!(accepts(&single, source), "{source:?}");
+        }
+        let unanchored = json!({"type": "string", "pattern": "."});
+        assert!(!accepts(&unanchored, r#""\r\n""#));
+        assert!(accepts(&unanchored, r#""\ra\n""#));
     }
 
     #[test]
