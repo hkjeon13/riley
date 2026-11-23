@@ -1,0 +1,36 @@
+campaign.sh: OK
+prepare-runner.py: OK
+result.sha256: OK
+runner.sha256: OK
+build-result.sha256: OK
+target/release/riley: OK
+toolchain.txt: OK
+dependencies.txt: OK
+patched-source.sha256: OK
+fixed-inputs.sha256: OK
+runtime-inputs.sha256: OK
+w3-c32-arrival-replay-20261121.knwCy7jZ/schedules.json: OK
+w3-c32-arrival-replay-20261121.knwCy7jZ/replay.py: OK
+w3-c32-arrival-replay-20261121.knwCy7jZ/load.py: OK
+w3-coder-startup-warmup-20261121.db8Pexwl/workload_startup.py: OK
+w3-coder-rag-cache-20261121.Ngz53FnV/run_arm.py: OK
+w3-coder-rag-cache-20261121.Ngz53FnV/workload.py: OK
+w5-prefix-metrics-package-20261121.nEFyze5I/cpu-evidence/report.json: OK
+w3-private-warm-gpu-20261121.Zdv0ggSI/run_case.py: OK
+w3-private-warm-gpu-20261121.Zdv0ggSI/result.sha256: OK
+START private-s128-d16-p64-gpu6 2026-11-23T00:45:17Z
+START private-s256-d32-p512-gpu7 2026-11-23T00:45:17Z
+END private-s256-d32-p512-gpu7 2026-11-23T00:50:44Z exit=0
+START private-s128-d32-p512-gpu7 2026-11-23T00:50:45Z
+END private-s128-d16-p64-gpu6 2026-11-23T00:50:50Z exit=0
+START private-s128-d8-p64-gpu6 2026-11-23T00:50:50Z
+END private-s128-d32-p512-gpu7 2026-11-23T00:56:20Z exit=0
+START private-s128-d8-p64-gpu7 2026-11-23T00:56:21Z
+END private-s128-d8-p64-gpu6 2026-11-23T00:56:28Z exit=0
+START private-s128-d32-p512-gpu6 2026-11-23T00:56:28Z
+END private-s128-d8-p64-gpu7 2026-11-23T01:01:58Z exit=0
+START private-s128-d16-p64-gpu7 2026-11-23T01:01:58Z
+END private-s128-d32-p512-gpu6 2026-11-23T01:02:04Z exit=0
+START private-s256-d32-p512-gpu6 2026-11-23T01:02:05Z
+END private-s128-d16-p64-gpu7 2026-11-23T01:07:38Z exit=0
+END private-s256-d32-p512-gpu6 2026-11-23T01:07:45Z exit=0

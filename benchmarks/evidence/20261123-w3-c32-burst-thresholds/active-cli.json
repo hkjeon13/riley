@@ -1,0 +1,14 @@
+{
+  "binary_sha256": "d9f7e375c4d2434e95e0a3b8ac9412919f777f5f4bd295548590620c2c8e809c",
+  "max_active_sequences": 48,
+  "outcomes": {
+    "fixed-tile-unsplit-v1": {
+      "exit": 2,
+      "diagnostic": "riley: fixed-tile-unsplit-v1 requires an explicit context bound <=8192, batch budget <=1024 and at most 32 active sequences"
+    },
+    "page-v1": {
+      "exit": 1,
+      "diagnostic": "riley: model load failed: cannot canonicalize checkpoint root /unmounted-riley-c32-cli-probe: No such file or directory (os error 2)"
+    }
+  }
+}

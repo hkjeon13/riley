@@ -147,6 +147,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W3 일반 prefill 예산을 192·128행으로 줄이면 개별 GPU 스텝은 짧아졌고 전체 C32의 스텝 수와 첫 토큰 p95는 늘었다. 두 예산은 회귀 기준에 미달했다. [행 예산 대조](03-long-context-result.md#고정-c32의-일반-prefill-행-예산)
 - [x] W3 HTTP 워커 32·64개를 교차 대조했다. 128행에서 연결 큐를 줄여도 전체 C32 p95는 비슷했고 256행의 64워커 대조에서 GPU 7번의 캐시 후보 p95가 회귀 한도를 넘었다. [연결 큐 대조](03-long-context-result.md#고정-c32에서-http-워커-수와-연결-큐-대기)
 - [x] W3: Coder-14B 128행의 워커를 32개에서 64개로 늘리자 두 GPU 모두 연결 큐 대기가 줄고 요청 등록 뒤 활성화 대기가 늘었다. [활성화와 첫 prefill 대조](03-long-context-result.md#고정-c32의-활성-슬롯-대기와-첫-prefill)
+- [x] W3: Coder-14B 짧은 입력도 낮은 decode 부하에서 burst에 포함하면 128행의 첫 토큰 p95가 줄었다. 256행 기준 대비 중앙값과 처리량이 회귀해 기본값 채택을 보류했다. [짧은 입력 문턱 대조](03-long-context-result.md#고정-c32에서-짧은-입력의-burst-문턱-조정)
 - [ ] W3: 1,024행 QKV 형상 공통 적용은 Coder-14B decode 회귀로 기각했다. 일부 RAG의 TTFT 목표와 Coder-14B의 C32 목표는 현재 기본 경로에서 미달이다. [Coder-14B 결과](03-long-context-result.md#coder-14b의-1024행-후보-검증) · [현재 적용 판정](03-long-context-and-scheduling.md#현재-적용-판정)
 - [x] W5: 대상 GPU에서 배포 이미지의 실제 추론과 cache-on·off 30분 부하 증거를 확보했다. [운영 결과와 판정](05-mixed-soak-result.md#배포-이미지의-혼합-부하)
 - [x] W5: 배포 이미지의 45초 smoke에서 2-KV-head GQA·Qwen3·MHA·14B의 API 계약, 혼합 부하·취소·종료 회수를 검증했다. [MHA·14B 결과](05-mixed-soak-result.md#배포-이미지의-mha와-14b-smoke) [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)

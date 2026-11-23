@@ -737,6 +737,25 @@ Riley의 HTTP 워커는 스트리밍이 끝날 때까지 연결을 맡는다. �
 
 12회 실행의 1,968건이 기존 배포 이미지와 입력·생성 토큰 ID, 텍스트, 종료 사유까지 일치했다. 조건 간 실제 write 오차 차이 p95는 최대 0.875ms였다. 모든 실행에서 종료 자원을 회수하고 A100 6·7번의 기존 20GiB 예약을 복구했다. [실행 로그](../../benchmarks/evidence/20261123-w3-c32-first-prefill/campaign.log) · [원본 체크섬](../../benchmarks/evidence/20261123-w3-c32-first-prefill/result.sha256) · [원본 재검산](../../benchmarks/evidence/20261123-w3-c32-first-prefill/fetch-summary.sh)
 
+### 고정 C32에서 짧은 입력의 burst 문턱 조정
+
+직전 시험에서 128행의 꼬리 지연은 활성 슬롯 대기에 집중됐다. 같은 `fixed-tile-unsplit-v1` 경로는 최대 활성 시퀀스 32개를 요구한다. 이 경로에서는 낮은 decode 부하에서 짧은 prefill을 한 스텝에 더 많이 처리하면 슬롯 대기가 줄어드는지 확인했다. Coder-14B, 활성 32개, HTTP 워커 64개, 입력 길이 128토큰 이상에서만 캐시 조회, 격리 워밍업과 기존 고정 도착 시각표를 사용했다. 계측용 prefill 추적은 끄고 기존 HTTP 관측만 종료 후 읽었다. [프로파일의 실행 제한](../../crates/riley-server/src/main.rs#L1614) · [실행 순서](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/campaign.sh)
+
+같은 바이너리에 GPU를 노출하지 않고 활성 48개를 지정했다. `fixed-tile-unsplit-v1`은 32개 상한 오류를 반환했다. `page-v1`은 CLI 검사를 통과했고, 시험에서 일부러 제공하지 않은 체크포인트 경로를 여는 단계까지 진행했다. `page-v1` 48개의 추론·정확성·성능은 미검증이다. [CLI 대조 결과](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/active-cli.json) · [재현 명령](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/check-active-cli.sh)
+
+기준 두 개는 일반 예산 128·256행에 512토큰 burst 문턱을 뒀다. 후보 두 개는 128행과 64토큰 문턱을 사용하며 decode가 각각 8행·16행 이하일 때 1,024행까지 허용했다. 그보다 decode가 많으면 128행을 사용했다. C32 입력은 70–77토큰이다. 실제로 128행을 넘는 스텝을 집계하고, 동일 GPU에서 각 후보를 128행 기준과 256행 기준 모두에 대조했다. [요청과 형상 검산](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/verify.py)
+
+| C32 실행 | TTFT p95, GPU 6번 | TTFT p95, GPU 7번 | 128행 초과 GPU 스텝, 6번 / 7번 |
+|---|---:|---:|---:|
+| 256행 기준 | 347.35ms | 341.81ms | 31 / 31 |
+| 128행 기준 | 532.87ms | 531.15ms | 0 / 0 |
+| 128행 + decode 8행 이하에서 burst | 455.39ms | 425.64ms | 1 / 1 |
+| 128행 + decode 16행 이하에서 burst | 380.40ms | 334.66ms | 3 / 5 |
+
+두 후보는 128행 기준 대비 TTFT p95를 14.54–36.99% 줄였다. 256행 기준 대비 16행 후보는 GPU 6번에서 TTFT p95가 9.51% 늘고 GPU 7번에서 2.09% 줄었다. 256행 기준과 대조한 네 비교에서 TTFT p50은 191.35–241.19% 늘었고 출력 처리량은 3.77–4.69% 줄었다. Decode TPOT p50은 2.49–2.87% 줄었으며 반복 문서 RAG의 TTFT p95 변화는 −0.38%~+1.43%였다. 짧은 요청 중앙값과 처리량 기준을 충족하지 못해 두 후보를 기본값으로 채택하지 않았다. [조건별 수치와 회귀 기준](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/verified.json)
+
+8회 실행의 1,312건은 기존 배포 이미지와 입력·생성 토큰 ID, 텍스트, 종료 사유가 일치했다. 조건 간 실제 write 오차 차이 p95는 최대 0.346ms였다. 모든 서버가 종료 자원을 회수했고 A100 6·7번의 기존 20GiB 예약이 복귀했다. [실행 로그](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/campaign.log) · [원본 체크섬](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/result.sha256) · [원본 재검산](../../benchmarks/evidence/20261123-w3-c32-burst-thresholds/fetch-summary.sh)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
