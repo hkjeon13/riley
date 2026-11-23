@@ -1131,6 +1131,43 @@ mod tests {
     }
 
     #[test]
+    fn response_schema_and_named_tools_decode_local_reference_fragments() {
+        use riley_runtime::grammar::GrammarAutomaton;
+
+        let schema = json!({
+            "type": "object", "required": ["value"], "properties": {
+                "value": {"$ref": "#/$defs/part%20name"}
+            }, "$defs": {"part name": {"const": 1}, "part%20name": {"const": 2}}
+        });
+        let messages = json!([{"role": "user", "content": "x"}]);
+        let format = json!({"model": "m", "messages": messages, "response_format": {
+            "type": "json_schema", "json_schema": {"name": "result", "schema": schema}
+        }});
+        let tools = json!({"model": "m", "messages": messages, "tools": [
+            {"type": "function", "function": {"name": "weather", "parameters": schema}}
+        ], "tool_choice": {"type": "function", "function": {"name": "weather"}}});
+        let wrap = |arguments| {
+            format!(
+                "<tool_call>\n{{\"name\": \"weather\", \"arguments\": {arguments}}}\n</tool_call>"
+            )
+        };
+        let valid = r#"{"value":1}"#;
+        let invalid = r#"{"value":2}"#;
+        for (body, valid, invalid) in [
+            (format, valid.to_owned(), invalid.to_owned()),
+            (tools, wrap(valid), wrap(invalid)),
+        ] {
+            let normalized =
+                normalize_chat_request(request(body), &template(TOOLS), limits()).unwrap();
+            let mut automaton = GrammarAutomaton::new(normalized.grammar.unwrap());
+            let mut cursor = automaton.start();
+            assert!(!automaton.advance(&mut cursor, invalid.as_bytes()));
+            assert!(automaton.advance(&mut cursor, valid.as_bytes()));
+            assert!(automaton.is_accepting(&mut cursor));
+        }
+    }
+
+    #[test]
     fn response_schema_and_forced_tools_enforce_the_dot_pattern() {
         use riley_runtime::grammar::GrammarAutomaton;
 

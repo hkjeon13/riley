@@ -6,6 +6,7 @@
 //! object properties in schema order, which keeps a model from filling its
 //! token budget with whitespace.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -47,6 +48,27 @@ impl std::error::Error for SchemaError {}
 
 fn unsupported(what: impl std::fmt::Display) -> SchemaError {
     SchemaError(format!("unsupported JSON Schema: {what}"))
+}
+
+fn decode_pointer_fragment(fragment: &str) -> Result<Cow<'_, str>, SchemaError> {
+    if !fragment.contains('%') {
+        return Ok(Cow::Borrowed(fragment));
+    }
+    let invalid = || SchemaError("invalid percent encoding in local $ref".to_owned());
+    let mut segments = fragment.as_bytes().split(|&byte| byte == b'%');
+    let mut decoded = segments.next().unwrap_or_default().to_vec();
+    for segment in segments {
+        let (pair, rest) = segment.split_first_chunk::<2>().ok_or_else(invalid)?;
+        if !pair.iter().all(u8::is_ascii_hexdigit) {
+            return Err(invalid());
+        }
+        let hex = std::str::from_utf8(pair).map_err(|_| invalid())?;
+        decoded.push(u8::from_str_radix(hex, 16).map_err(|_| invalid())?);
+        decoded.extend_from_slice(rest);
+    }
+    String::from_utf8(decoded)
+        .map(Cow::Owned)
+        .map_err(|_| invalid())
 }
 
 fn reject_siblings(
@@ -711,12 +733,13 @@ impl SchemaCompiler {
     }
 
     fn reference(&mut self, target: &str) -> Result<u32, SchemaError> {
-        if let Some(&id) = self.references.get(target) {
-            return Ok(id);
-        }
-        let pointer = target
+        let fragment = target
             .strip_prefix('#')
             .ok_or_else(|| unsupported(format!("non-local $ref {target}")))?;
+        let pointer = decode_pointer_fragment(fragment)?;
+        if let Some(&id) = self.references.get(pointer.as_ref()) {
+            return Ok(id);
+        }
         // Resolving against the document root is only sound within that resource.
         // A string-valued `$id` on an ancestor marks an embedded schema, while a
         // definition or property named `$id` has a schema as its value.
@@ -730,12 +753,13 @@ impl SchemaCompiler {
         }
         let schema = self
             .root
-            .pointer(pointer)
+            .pointer(&pointer)
             .cloned()
             .ok_or_else(|| SchemaError(format!("unresolved $ref {target}")))?;
         let id = self.builder.rule();
-        self.references.insert(target.to_owned(), id);
-        let body = self.compile_node(&schema, pointer.is_empty())?;
+        let document_root = pointer.is_empty();
+        self.references.insert(pointer.into_owned(), id);
+        let body = self.compile_node(&schema, document_root)?;
         self.builder.alternative(id, vec![rule(body)]);
         Ok(id)
     }
@@ -1740,13 +1764,15 @@ mod tests {
         });
         assert!(rejected(root).contains("$id"));
 
-        let pointer = json!({
+        let mut pointer = json!({
             "$defs": {"child": {
                 "$id": "urn:riley:child",
                 "$defs": {"value": {"const": 2}}
             }},
             "$ref": "#/$defs/child/$defs/value"
         });
+        assert!(rejected(pointer.clone()).contains("$id"));
+        pointer["$ref"] = json!("#/$defs/child%2F$defs/value");
         assert!(rejected(pointer).contains("$id"));
 
         let root_id_and_property_name = json!({
@@ -1769,6 +1795,15 @@ mod tests {
         });
         assert!(accepts(&recursive_root, "[[null]]"));
         assert!(!accepts(&recursive_root, "[[3]]"));
+    }
+
+    #[test]
+    fn malformed_reference_fragments_are_rejected() {
+        for encoded in ["bad%", "bad%2", "bad%+A", "bad%GG", "bad%FF"] {
+            let schema =
+                json!({"$ref": format!("#/$defs/{encoded}"), "$defs": {(encoded): {"const": 1}}});
+            assert!(rejected(schema).contains("invalid percent encoding in local $ref"));
+        }
     }
 
     #[test]

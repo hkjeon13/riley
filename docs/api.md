@@ -160,6 +160,8 @@ such as `uniqueItems`, `not` and `multipleOf`, as well as repetition bounds abov
 Local `$ref` pointers resolve within the schema document. An embedded schema
 with its own `$id`, or a pointer that crosses into one, returns 400
 `invalid_schema`. A document-level `$id` is permitted with local pointers.
+Percent-encoded URI fragments are decoded as UTF-8 before JSON Pointer
+resolution. Malformed escapes and invalid UTF-8 return 400 `invalid_schema`.
 
 `pattern` supports literals, `.`, classes with ranges and `^` negation, `\\d`,
 `\\w`, `\\s` (a space), groups, `|`, and the greedy quantifiers `*`, `+`, `?` and
