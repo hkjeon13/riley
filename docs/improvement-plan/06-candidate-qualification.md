@@ -1,6 +1,6 @@
 # Riley 0.1.0 후보 검증 근거와 릴리스 판정
 
-2026-11-24 KST에 `2b58655f3` 패키지의 A100 API, 장문 구조화 출력과 45초 혼합 부하를 검증했다. 30분 교차 부하와 격리 복구까지 확인한 이미지는 `8a7c618c1`이다. 최신 이미지의 30분 부하·격리 복구 및 실제 운영 검증이 남아 현재 판정은 **릴리스 보류**다. [후보별 원본 목록과 해시](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
+2026-11-24 KST에 `2b58655f3` 패키지의 A100 API, 장문 구조화 출력, 30분 교차 부하와 격리 복구를 검증했다. jemalloc 시험 이미지는 두 캐시 모드의 합성 부하 기준을 충족했다. 실제 운영 트래픽, 승인된 SLO 및 서비스 복구 검증이 남아 현재 판정은 **릴리스 보류**다. [30분 교차 대조](05-mixed-soak-result.md#정규식-분기-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#정규식-분기-수정-이미지의-격리-복구) · [후보별 원본 목록과 해시](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 
 ## 실행 파일과 소스 연결
 
@@ -24,8 +24,9 @@
 | 로컬 참조 URI 인코딩 수정의 배포 이미지 | `8a7c618c1` | A100 이미지 `01b5c9d4bedf`와 GitHub의 런타임 파일 21개 일치. 로컬 참조 HTTP 16건, 두 GPU의 API 40건씩, 장문 스키마·도구 64건, 45초 혼합 부하와 종료 자원 회수 통과. [URI 인코딩 검증](04-structured-output-result.md#로컬-참조의-uri-인코딩) |
 | 로컬 참조 수정 이미지의 jemalloc 파생 시험 | `8a7c618c1`의 실행 파일 | 이미지 `99cb3f14a6d2`에서 두 캐시 모드의 30분 기준과 장문 232건·스키마 및 도구 64건을 통과했다. 후반 RSS는 각각 1,016KiB와 312KiB 줄었고, 격리 복구는 110.26초에 완료됐다. [30분 교차 대조](05-mixed-soak-result.md#로컬-참조-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#로컬-참조-수정-이미지의-격리-복구) |
 | 정규식 분기 앵커 수정의 배포 이미지 | `2b58655f3` | GitHub와 A100 런타임 파일 21개 일치. 정규식 HTTP 10건, 두 GPU의 API 40건씩, 장문 스키마·도구 64건, 45초 혼합 부하와 종료 자원 회수 통과. [분기 앵커 검증](04-structured-output-result.md#pattern-선택-분기의-시작과-끝-조건) |
+| 정규식 분기 수정 이미지의 jemalloc 파생 시험 | `2b58655f3`의 실행 파일 | 이미지 `8a451f5b3875`의 두 30분 합성 부하, 장문 232건 및 스키마·도구 64건을 확인했다. 후반 RSS는 900KiB와 612KiB 줄었다. 격리 복구는 105.47초에 완료됐다. [30분 교차 대조](05-mixed-soak-result.md#정규식-분기-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#정규식-분기-수정-이미지의-격리-복구) |
 
-CI는 `distribution_with_pattern_anchor_fix`에서 같은 커밋의 Git 입력·패키지·A100 보고서와 정규식 HTTP 결과를 연결한다. `--distribution-revision origin/main`으로 현재 배포 입력을 이 근거와 대조한다. 앞서 30분 부하와 격리 복구까지 검증한 이미지의 기록은 `distribution_with_uri_reference_fix`에서 확인한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [CI 검증기](../../ci/check_improvement_evidence.py)
+CI는 `distribution_with_pattern_anchor_fix`에서 같은 커밋의 Git 입력·패키지·A100 보고서, 정규식 HTTP 검사, 두 캐시 모드의 부하와 격리 복구를 연결한다. `--distribution-revision origin/main`으로 현재 배포 입력과 검증 근거를 대조한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [CI 검증기](../../ci/check_improvement_evidence.py)
 
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)
 
@@ -61,7 +62,7 @@ python3 -B ci/check_improvement_evidence.py --distribution-revision origin/main
 | W2·W3 성능 | 이벤트 발행·스케줄 네 조합과 두 14B 모델의 실측을 완료했다. W2의 정렬된 KV 테이블과 이벤트 복사 제거는 SmolLM2의 단일 iteration에서 채택 이득을 충족하지 못했다. W3의 1,024행 QKV 후보는 Coder-14B 출력 1,280건을 재현했지만 역순 동시 유입의 decode TPOT이 1.99% 늘어 1% 기준을 넘었다. 형상 공통 적용을 기각했다. | 기존 설정으로 기준을 유지하며 새 후보의 단독·결합 회귀와 영향 모델을 검증 |
 | W4 장문·정확성 | 고정 입력 18개와 holdout 11개의 엔진 비교, 두 사례의 첫 BF16 차이와 28개 레이어의 residual·최종 norm 재계산, 네 모델의 동일 입력 GSM8K 품질 기준 통과. A100 재빌드 이미지의 장문 출력 232건 일치. 두 decode 사례에서 첫 레이어 QKV를 정확한 HF 투영값으로 교체해도 선택 토큰과 전체 생성 결과가 같았다. | 다른 위치와 레이어의 영향, 향후 수치 변경의 영향 모델·품질 대조 |
 | W4 스키마 | GPU 계약 11건을 통과했다. 현행 기준·jemalloc 이미지에서 각각 API 40건과 장문 스키마·지정 도구 64건을 검증했다. [장문 채팅 결과](04-structured-output-result.md#현행-배포-이미지의-장문-채팅-검증) | W5의 최종 운영 기준 충족 |
-| W5 운영 | `8a7c618c1`의 두 30분 캐시 모드에서 기준 이미지의 후반 정밀 RSS는 648KiB와 452KiB 늘었다. jemalloc 이미지에서는 1,016KiB와 312KiB 줄었고 두 모드의 합성 부하 기준을 충족했다. 격리 복구는 110.26초에 완료됐다. [30분 교차 대조](05-mixed-soak-result.md#로컬-참조-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#로컬-참조-수정-이미지의-격리-복구) | 실제 운영 도착 분포, 승인된 서비스 SLO 및 서비스 복구를 확인한 뒤 기본값 판정 |
+| W5 운영 | `2b58655f3`의 기본 이미지에서 후반 정밀 RSS가 캐시 끔·켬에서 484KiB와 596KiB 늘었다. jemalloc 이미지에서는 각각 900KiB와 612KiB 줄었고 두 모드의 합성 부하 기준을 충족했다. 격리 복구는 105.47초에 완료됐다. [30분 교차 대조](05-mixed-soak-result.md#정규식-분기-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#정규식-분기-수정-이미지의-격리-복구) | 실제 운영 도착 분포, 승인된 서비스 SLO 및 서비스 복구를 확인한 뒤 기본값 판정 |
 
 기존 이벤트 발행 정책과 서빙 설정을 기준선으로 삼았다. 이전 빌드에서 관찰된 성능 실험은 입력·장비·바이너리에 연결하며, 새로운 수치 기준이나 기본값을 채택할 때는 종합 계획의 출력 불변성과 회귀 기준을 적용한다. [W2 결과](02-async-step-result.md) · [W3 결과](03-long-context-result.md) · [W4 정확성](04-long-accuracy-result.md) · [W5 운영 결과](05-mixed-soak-result.md)
 

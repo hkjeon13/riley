@@ -1,0 +1,27 @@
+{
+  "source_revision": "2b58655f358ff80a885a4c97f9b6f5a0afd058b0",
+  "parent_image_id": "sha256:052056955ecb930c93d938f79a80272583e1e6ec5fe7eadc60bc2885a61689c6",
+  "parent_result_sha256": "2ffc76754c55a9bc1840a5d228b186b9f876a0c78df74a0683a48a1e80b71790",
+  "parent_cpu_sha256": "a4084f0ecae2ff820600df09061a75c7d653c49b5baf89634b63c1c1040f6e58",
+  "client_rate_per_second": 8,
+  "duration_seconds": 1800,
+  "physical_gpus": [
+    6,
+    7
+  ],
+  "rounds": [
+    {
+      "6": "stock/cache-off",
+      "7": "allocator/cache-on"
+    },
+    {
+      "6": "allocator/cache-off",
+      "7": "stock/cache-on"
+    }
+  ],
+  "recovery_gpu": 6,
+  "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-pattern-anchors-soak-20261124.e2aJbKyG",
+  "dispatch_sha256": "facd83177e31b6fbf2b94f98959d7602130aa91774349c32fd74bbf6e5d6da89",
+  "campaign_pid": 4108655,
+  "campaign_started_at": "2026-11-24T02:27:27Z"
+}

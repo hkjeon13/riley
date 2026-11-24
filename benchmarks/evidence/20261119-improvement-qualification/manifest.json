@@ -1006,6 +1006,106 @@
           "sha256": "8ecb4f40a3d26f84cf5d673a74134945c0643383bf00cea6f3fd44a335b561fb"
         }
       ]
+    },
+    "allocator_experiment": {
+      "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+      "matched_structured_cases": 16,
+      "evidence": {
+        "package": {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/allocator/verified-image.json",
+          "sha256": "e651475941ebcd998be0e052fa1413242210667925ae9e904ecedecb67fed4bf"
+        },
+        "serving": {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/allocator/verified.json",
+          "sha256": "64568b60a1665f46148431d23cbb439a5253dc21847cbd42ab0a83873d9f9c4b"
+        }
+      },
+      "reproduction": [
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/allocator/context.sha256",
+          "sha256": "c9da29e9f6e085bab55563eb6c4b2e61335af422137f5979f3956884f9e9de6a"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/allocator/gpu-checker-input.json",
+          "sha256": "df7c5aefc97f5e093541756227f048a4c71b632f78be70ad526be7a7b83d39e8"
+        }
+      ]
+    },
+    "stock_soak_comparison": {
+      "report": {
+        "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/verified.json",
+        "sha256": "aca1d7349ad81d6b5045355144772329734ac6671f6d6e28d9a911841f4624df"
+      },
+      "reproduction": [
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/campaign.sh",
+          "sha256": "2f6afe1b369e7a73939363b023c767d374545e4b80807f36a031527c2f5cde8b"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/campaign.log",
+          "sha256": "1b865eca1e78c1b6cb235307644b93b086bca01ee3b8716d72263ee820730dc2"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/campaign.exit",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/compare-soaks.py",
+          "sha256": "c3a2d7f8fbc1127bd4cbc0faa1106a28c3ae9b631eb8cae67320af2c8c6aea7f"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/dispatch.sha256",
+          "sha256": "facd83177e31b6fbf2b94f98959d7602130aa91774349c32fd74bbf6e5d6da89"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/fetch-results.sh",
+          "sha256": "eee390bf262ef3d0245195acc983a8d26696adc7d598d61d98621be35ecc3dc5"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/result.sha256",
+          "sha256": "92a1eff4a7c0c4959a62b4f43ecc86b55ef50e09d6843109d0cc1dfbf7cb5601"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/raw-results.tar.gz",
+          "sha256": "d039c72d36d91c78621828797beed92f8d9fe3f7c8734f92dfad3aa6b2b6fa3a"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/registration.json",
+          "sha256": "cebcce47c0fae20e6bfcdcc877f46524a74009d979b5f509c4bb89122dae78a8"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/verify-raw.py",
+          "sha256": "2ebf8e312406a55aaeb6624449fbc9780f516a35ad732b16bb07f56b190cf87c"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/verified-raw.json",
+          "sha256": "f353c05348fba8cc7ec36cb24528b60d3851ec6f924150e968b83b39efdd2938"
+        }
+      ]
+    },
+    "recovery_drill": {
+      "report": {
+        "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/recovery/verified.json",
+        "sha256": "104783e53ddffda58be3938371f9a26621274124e5f077a2418807a25ef11a22"
+      },
+      "reproduction": [
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/recovery.sh",
+          "sha256": "b61b8b86a90f03229ca5f9f16cb438ee9dc344f61330d821bbb6c83106d71793"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/recovery/campaign.exit",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/recovery/campaign.log",
+          "sha256": "5e8883caaaef196d834bdf12385c8614085d5f7b4342521ae92bd697c0a4d39e"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pattern-anchors-soak/recovery/result.sha256",
+          "sha256": "79fb2a11efc1335ebc777ad6df7794d31b25df19079ddc8b124d6152e88bd9ba"
+        }
+      ]
     }
   },
   "other_evidence": {
