@@ -308,6 +308,37 @@ def check_schema_reference_probes(root, candidate, *, uri_fragments=False):
         raise ValueError("schema reference probes must preserve root-local output and reject embedded IDs")
 
 
+def check_pattern_anchor_probes(root, candidate):
+    evidence = candidate["evidence"]
+    report, summary = (
+        json.loads((root / evidence[name]["path"]).read_bytes(), object_pairs_hook=unique_object)
+        for name in ("a100_pattern_anchors", "a100_verified")
+    )
+    checks = report["checks"]
+    if report["status"] != "passed" or checks != summary["pattern_anchor_checks"]:
+        raise ValueError("pattern anchor HTTP probes differ from the A100 package summary")
+    outputs = {
+        "start-branch": ("^cat|dog$", "catfish"),
+        "end-branch": ("^cat|dog$", "sheepdog"),
+        "unanchored-middle-branch": ("^cat$|dog|^eel$", "hotdogs"),
+        "escaped-dollar-and-class": (r"^(cat|dog)$|\$[|]", "a$|b"),
+    }
+    expected = {}
+    for parameter in ("response_format", "tools"):
+        for case, (pattern, value) in outputs.items():
+            expected[case, parameter] = (pattern, 200, {"value": value}, None)
+        expected["unsupported-interior-anchor", parameter] = ("ca$t|dog", 400, None, {
+            "type": "invalid_request_error", "param": parameter, "code": "invalid_schema",
+            "message": "unsupported JSON Schema: pattern operator $ in this position",
+        })
+    observed = {
+        (row["case"], row["parameter"]): (row["pattern"], row["status"], row.get("output"), row.get("error"))
+        for row in checks
+    }
+    if len(checks) != len(expected) or observed != expected:
+        raise ValueError("pattern anchor probes must prove matches and named schema rejections")
+
+
 def check_stock_soak_comparison(root, candidate, smoke, allocator):
     entry = candidate["stock_soak_comparison"]["report"]
     report = json.loads((root / entry["path"]).read_bytes(), object_pairs_hook=unique_object)
@@ -1025,6 +1056,20 @@ def main():
                 check_structured_serving_package(root, latest)
             check_pattern_class_probes(root, latest)
             check_schema_reference_probes(root, latest, uri_fragments=True)
+        pattern_anchors = manifest.get("distribution_with_pattern_anchor_fix")
+        if pattern_anchors is not None:
+            earlier.append(latest)
+            latest = pattern_anchors
+            latest_inputs = check_distribution_inputs(root, latest)
+            if "allocator_experiment" in latest:
+                check_pattern_fix_package(root, latest)
+            else:
+                if "stock_soak_comparison" in latest or "recovery_drill" in latest:
+                    raise ValueError("pattern anchor comparison or recovery requires an allocator experiment")
+                check_structured_serving_package(root, latest)
+            check_pattern_class_probes(root, latest)
+            check_schema_reference_probes(root, latest, uri_fragments=True)
+            check_pattern_anchor_probes(root, latest)
         allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],
                                                   manifest["current_distribution_candidate"])
         serving_models = check_distribution_serving(root, manifest["current_distribution_candidate"])

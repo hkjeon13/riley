@@ -1,0 +1,111 @@
+{
+  "status": "passed",
+  "checks": [
+    {
+      "case": "start-branch",
+      "pattern": "^cat|dog$",
+      "parameter": "response_format",
+      "status": 200,
+      "expected": "catfish",
+      "output": {
+        "value": "catfish"
+      }
+    },
+    {
+      "case": "start-branch",
+      "pattern": "^cat|dog$",
+      "parameter": "tools",
+      "status": 200,
+      "expected": "catfish",
+      "output": {
+        "value": "catfish"
+      }
+    },
+    {
+      "case": "end-branch",
+      "pattern": "^cat|dog$",
+      "parameter": "response_format",
+      "status": 200,
+      "expected": "sheepdog",
+      "output": {
+        "value": "sheepdog"
+      }
+    },
+    {
+      "case": "end-branch",
+      "pattern": "^cat|dog$",
+      "parameter": "tools",
+      "status": 200,
+      "expected": "sheepdog",
+      "output": {
+        "value": "sheepdog"
+      }
+    },
+    {
+      "case": "unanchored-middle-branch",
+      "pattern": "^cat$|dog|^eel$",
+      "parameter": "response_format",
+      "status": 200,
+      "expected": "hotdogs",
+      "output": {
+        "value": "hotdogs"
+      }
+    },
+    {
+      "case": "unanchored-middle-branch",
+      "pattern": "^cat$|dog|^eel$",
+      "parameter": "tools",
+      "status": 200,
+      "expected": "hotdogs",
+      "output": {
+        "value": "hotdogs"
+      }
+    },
+    {
+      "case": "escaped-dollar-and-class",
+      "pattern": "^(cat|dog)$|\\$[|]",
+      "parameter": "response_format",
+      "status": 200,
+      "expected": "a$|b",
+      "output": {
+        "value": "a$|b"
+      }
+    },
+    {
+      "case": "escaped-dollar-and-class",
+      "pattern": "^(cat|dog)$|\\$[|]",
+      "parameter": "tools",
+      "status": 200,
+      "expected": "a$|b",
+      "output": {
+        "value": "a$|b"
+      }
+    },
+    {
+      "case": "unsupported-interior-anchor",
+      "pattern": "ca$t|dog",
+      "parameter": "response_format",
+      "status": 400,
+      "expected": null,
+      "error": {
+        "message": "unsupported JSON Schema: pattern operator $ in this position",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "unsupported-interior-anchor",
+      "pattern": "ca$t|dog",
+      "parameter": "tools",
+      "status": 400,
+      "expected": null,
+      "error": {
+        "message": "unsupported JSON Schema: pattern operator $ in this position",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    }
+  ]
+}

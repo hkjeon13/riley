@@ -1,0 +1,407 @@
+{
+  "status": "verified",
+  "source_revision": "2b58655f358ff80a885a4c97f9b6f5a0afd058b0",
+  "matching_runtime_files": 21,
+  "schema_reference_checks": [
+    {
+      "case": "nested-id",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: embedded $id",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "nested-id",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: embedded $id",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "cross-resource-pointer",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: $ref crossing an embedded $id",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "cross-resource-pointer",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: $ref crossing an embedded $id",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "root-id-local-pointer",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "$id": 3
+      }
+    },
+    {
+      "case": "root-id-local-pointer",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "$id": 3
+      }
+    },
+    {
+      "case": "encoded-space",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "value": 1
+      }
+    },
+    {
+      "case": "encoded-space",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "value": 1
+      }
+    },
+    {
+      "case": "encoded-unicode-and-pointer-escapes",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "value": 3
+      }
+    },
+    {
+      "case": "encoded-unicode-and-pointer-escapes",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "value": 3
+      }
+    },
+    {
+      "case": "malformed-percent-escape",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "invalid percent encoding in local $ref",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "malformed-percent-escape",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "invalid percent encoding in local $ref",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "invalid-percent-encoded-utf8",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "invalid percent encoding in local $ref",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "invalid-percent-encoded-utf8",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "invalid percent encoding in local $ref",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "encoded-cross-resource-pointer",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: $ref crossing an embedded $id",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "encoded-cross-resource-pointer",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: $ref crossing an embedded $id",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    }
+  ],
+  "pattern_class_checks": [
+    {
+      "case": "quote-range",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "value": "\""
+      },
+      "finish_reason": "stop"
+    },
+    {
+      "case": "quote-range",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "value": "\""
+      },
+      "finish_reason": "tool_calls"
+    },
+    {
+      "case": "backslash-range",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "value": "\\"
+      },
+      "finish_reason": "stop"
+    },
+    {
+      "case": "backslash-range",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "value": "\\"
+      },
+      "finish_reason": "tool_calls"
+    },
+    {
+      "case": "unsupported-class-escape",
+      "parameter": "response_format",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-class-escape",
+      "parameter": "tools",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-unicode-escape",
+      "parameter": "response_format",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-unicode-escape",
+      "parameter": "tools",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-negated-space",
+      "parameter": "response_format",
+      "status": 400,
+      "code": "invalid_schema"
+    },
+    {
+      "case": "unsupported-negated-space",
+      "parameter": "tools",
+      "status": 400,
+      "code": "invalid_schema"
+    }
+  ],
+  "pattern_anchor_checks": [
+    {
+      "case": "start-branch",
+      "pattern": "^cat|dog$",
+      "parameter": "response_format",
+      "status": 200,
+      "expected": "catfish",
+      "output": {
+        "value": "catfish"
+      }
+    },
+    {
+      "case": "start-branch",
+      "pattern": "^cat|dog$",
+      "parameter": "tools",
+      "status": 200,
+      "expected": "catfish",
+      "output": {
+        "value": "catfish"
+      }
+    },
+    {
+      "case": "end-branch",
+      "pattern": "^cat|dog$",
+      "parameter": "response_format",
+      "status": 200,
+      "expected": "sheepdog",
+      "output": {
+        "value": "sheepdog"
+      }
+    },
+    {
+      "case": "end-branch",
+      "pattern": "^cat|dog$",
+      "parameter": "tools",
+      "status": 200,
+      "expected": "sheepdog",
+      "output": {
+        "value": "sheepdog"
+      }
+    },
+    {
+      "case": "unanchored-middle-branch",
+      "pattern": "^cat$|dog|^eel$",
+      "parameter": "response_format",
+      "status": 200,
+      "expected": "hotdogs",
+      "output": {
+        "value": "hotdogs"
+      }
+    },
+    {
+      "case": "unanchored-middle-branch",
+      "pattern": "^cat$|dog|^eel$",
+      "parameter": "tools",
+      "status": 200,
+      "expected": "hotdogs",
+      "output": {
+        "value": "hotdogs"
+      }
+    },
+    {
+      "case": "escaped-dollar-and-class",
+      "pattern": "^(cat|dog)$|\\$[|]",
+      "parameter": "response_format",
+      "status": 200,
+      "expected": "a$|b",
+      "output": {
+        "value": "a$|b"
+      }
+    },
+    {
+      "case": "escaped-dollar-and-class",
+      "pattern": "^(cat|dog)$|\\$[|]",
+      "parameter": "tools",
+      "status": 200,
+      "expected": "a$|b",
+      "output": {
+        "value": "a$|b"
+      }
+    },
+    {
+      "case": "unsupported-interior-anchor",
+      "pattern": "ca$t|dog",
+      "parameter": "response_format",
+      "status": 400,
+      "expected": null,
+      "error": {
+        "message": "unsupported JSON Schema: pattern operator $ in this position",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "unsupported-interior-anchor",
+      "pattern": "ca$t|dog",
+      "parameter": "tools",
+      "status": 400,
+      "expected": null,
+      "error": {
+        "message": "unsupported JSON Schema: pattern operator $ in this position",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    }
+  ],
+  "hosted_image": "sha256:81f83f3d14521e8cd5974e310ff2196395e1415b65edda56fe632e29cfa4fd0d",
+  "a100_image": "sha256:052056955ecb930c93d938f79a80272583e1e6ec5fe7eadc60bc2885a61689c6",
+  "riley_binary_sha256": "8f3d957e7acf67b1a52e070e30d710e696242bb1df5525bc5175ab544f34b762",
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "a100_source_archive_sha256": "5776274be2c9359490596ad7ab294fb8e53c749a667377b855c907a124e8ba2f",
+  "hosted_source_archive_sha256": "a2551c5c81e63bedcdbdbfac9c1beaf8daafac05446e442dbb879e44029a2053",
+  "api_checks_per_gpu": 40,
+  "structured_modes": {
+    "c1": {
+      "requests": 16,
+      "observed_peak_active": 1
+    },
+    "c8": {
+      "requests": 16,
+      "exact_matches": 16,
+      "observed_peak_active": 8
+    },
+    "c32": {
+      "requests": 32,
+      "exact_matches": 32,
+      "observed_peak_active": 31
+    }
+  },
+  "smoke_counts": {
+    "plain": {
+      "completed": 202
+    },
+    "schema": {
+      "completed": 42,
+      "stop": 42
+    },
+    "logprobs": {
+      "completed": 23
+    },
+    "tools": {
+      "completed": 23,
+      "tool_calls": 23
+    },
+    "long": {
+      "completed": 30
+    },
+    "reason": {
+      "completed": 18
+    },
+    "cancel": {
+      "disconnected": 21
+    }
+  },
+  "reservations": {
+    "6": {
+      "pid": 2680326,
+      "start_ticks": "6365879881",
+      "allocation_bytes": 21474836480
+    },
+    "7": {
+      "pid": 2431237,
+      "start_ticks": "6339570875",
+      "allocation_bytes": 21474836480
+    }
+  }
+}

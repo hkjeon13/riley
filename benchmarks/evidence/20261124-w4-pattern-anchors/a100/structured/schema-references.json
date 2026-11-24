@@ -1,0 +1,163 @@
+{
+  "status": "passed",
+  "checks": [
+    {
+      "case": "nested-id",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: embedded $id",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "nested-id",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: embedded $id",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "cross-resource-pointer",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: $ref crossing an embedded $id",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "cross-resource-pointer",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: $ref crossing an embedded $id",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "root-id-local-pointer",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "$id": 3
+      }
+    },
+    {
+      "case": "root-id-local-pointer",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "$id": 3
+      }
+    },
+    {
+      "case": "encoded-space",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "value": 1
+      }
+    },
+    {
+      "case": "encoded-space",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "value": 1
+      }
+    },
+    {
+      "case": "encoded-unicode-and-pointer-escapes",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "value": 3
+      }
+    },
+    {
+      "case": "encoded-unicode-and-pointer-escapes",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "value": 3
+      }
+    },
+    {
+      "case": "malformed-percent-escape",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "invalid percent encoding in local $ref",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "malformed-percent-escape",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "invalid percent encoding in local $ref",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "invalid-percent-encoded-utf8",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "invalid percent encoding in local $ref",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "invalid-percent-encoded-utf8",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "invalid percent encoding in local $ref",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "encoded-cross-resource-pointer",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: $ref crossing an embedded $id",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "encoded-cross-resource-pointer",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "unsupported JSON Schema: $ref crossing an embedded $id",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    }
+  ]
+}

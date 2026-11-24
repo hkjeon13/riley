@@ -2,7 +2,7 @@
 
 작성일 2026-11-13 KST. 초기 기준은 로컬 `main` `37ede4445`와 원격 `origin/main` `9f039de78`이다.
 
-`8a7c618c1`의 GitHub·A100 CUDA 이미지에서 런타임 파일 21개가 일치했다. 로컬 참조 HTTP 16건, 두 GPU의 API 40건씩, 장문 스키마·도구 64건과 45초 혼합 부하를 검증했다. [현재 패키지](04-structured-output-result.md#로컬-참조의-uri-인코딩) · [릴리스 판정](06-candidate-qualification.md)
+`2b58655f3`의 GitHub·A100 CUDA 이미지에서 런타임 파일 21개가 일치했다. 정규식 분기의 HTTP 검사 10건, 두 GPU의 API 40건씩, 장문 스키마·도구 64건과 45초 혼합 부하를 검증했다. [현재 패키지](04-structured-output-result.md#pattern-선택-분기의-시작과-끝-조건) · [릴리스 판정](06-candidate-qualification.md)
 
 `8a7c618c1` 이미지의 A100 교차 비교에서 30분 합성 부하 4회 동안 54,996건을 정상 완료했고 예상 외 오류는 0건이었다. 후반 RSS는 기준 이미지에서 캐시 끔 +648KiB, 켬 +452KiB였고 jemalloc 시험 이미지에서는 각각 −1,016KiB, −312KiB였다. 격리 복구는 110.26초에 완료됐다. 실제 운영 트래픽·승인 SLO·서비스 복구 확인이 남아 있다. [30분 교차 대조](05-mixed-soak-result.md#로컬-참조-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#로컬-참조-수정-이미지의-격리-복구)
 

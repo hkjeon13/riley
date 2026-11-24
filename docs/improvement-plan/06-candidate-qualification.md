@@ -1,6 +1,6 @@
 # Riley 0.1.0 후보 검증 근거와 릴리스 판정
 
-2026-11-24 KST에 `8a7c618c1` 패키지의 A100 API, 장문 구조화 출력, 30분 교차 부하와 격리 복구를 검증했다. 실제 운영 검증이 남아 현재 판정은 **릴리스 보류**다. [후보별 원본 목록과 해시](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
+2026-11-24 KST에 `2b58655f3` 패키지의 A100 API, 장문 구조화 출력과 45초 혼합 부하를 검증했다. 30분 교차 부하와 격리 복구까지 확인한 이미지는 `8a7c618c1`이다. 최신 이미지의 30분 부하·격리 복구 및 실제 운영 검증이 남아 현재 판정은 **릴리스 보류**다. [후보별 원본 목록과 해시](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 
 ## 실행 파일과 소스 연결
 
@@ -23,8 +23,9 @@
 | 스키마 참조 수정 이미지의 jemalloc 파생 시험 | `c5ec7b391`의 실행 파일 | 이미지 `f70e21330f64`에서 장문 232건, 스키마·도구 64건과 캐시 끔·켬 30분 기준 통과. 후반 RSS는 776KiB와 820KiB 줄었다. 기준 이미지의 격리 복구는 139.01초에 완료됐다. [30분 대조](05-mixed-soak-result.md#스키마-참조-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#스키마-참조-수정-이미지의-격리-복구) |
 | 로컬 참조 URI 인코딩 수정의 배포 이미지 | `8a7c618c1` | A100 이미지 `01b5c9d4bedf`와 GitHub의 런타임 파일 21개 일치. 로컬 참조 HTTP 16건, 두 GPU의 API 40건씩, 장문 스키마·도구 64건, 45초 혼합 부하와 종료 자원 회수 통과. [URI 인코딩 검증](04-structured-output-result.md#로컬-참조의-uri-인코딩) |
 | 로컬 참조 수정 이미지의 jemalloc 파생 시험 | `8a7c618c1`의 실행 파일 | 이미지 `99cb3f14a6d2`에서 두 캐시 모드의 30분 기준과 장문 232건·스키마 및 도구 64건을 통과했다. 후반 RSS는 각각 1,016KiB와 312KiB 줄었고, 격리 복구는 110.26초에 완료됐다. [30분 교차 대조](05-mixed-soak-result.md#로컬-참조-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#로컬-참조-수정-이미지의-격리-복구) |
+| 정규식 분기 앵커 수정의 배포 이미지 | `2b58655f3` | GitHub와 A100 런타임 파일 21개 일치. 정규식 HTTP 10건, 두 GPU의 API 40건씩, 장문 스키마·도구 64건, 45초 혼합 부하와 종료 자원 회수 통과. [분기 앵커 검증](04-structured-output-result.md#pattern-선택-분기의-시작과-끝-조건) |
 
-CI는 `distribution_with_schema_reference_fix`에서 같은 커밋의 Git 입력·패키지·A100 보고서를 연결하고, 로컬 참조 HTTP 검사와 30분 부하 대조, 격리 복구를 함께 검사한다. `--distribution-revision origin/main`으로 현재 배포 입력을 이 근거와 대조한다. 문자 클래스 수정 이미지의 이전 검증은 `distribution_with_character_class_fix`에서 확인한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [CI 검증기](../../ci/check_improvement_evidence.py)
+CI는 `distribution_with_pattern_anchor_fix`에서 같은 커밋의 Git 입력·패키지·A100 보고서와 정규식 HTTP 결과를 연결한다. `--distribution-revision origin/main`으로 현재 배포 입력을 이 근거와 대조한다. 앞서 30분 부하와 격리 복구까지 검증한 이미지의 기록은 `distribution_with_uri_reference_fix`에서 확인한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [CI 검증기](../../ci/check_improvement_evidence.py)
 
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)
 
