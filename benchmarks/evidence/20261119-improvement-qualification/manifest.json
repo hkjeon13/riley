@@ -1318,6 +1318,106 @@
         "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/structured/pointer-syntax.json",
         "sha256": "3d478b19c7a036e85302220ad34e8298b28018db74cf544775971fd6d625df1b"
       }
+    },
+    "allocator_experiment": {
+      "malloc_conf": "abort_conf:true,dirty_decay_ms:0,muzzy_decay_ms:0,oversize_threshold:0",
+      "matched_structured_cases": 16,
+      "evidence": {
+        "package": {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/allocator/verified-image.json",
+          "sha256": "24ba601181fb0b7ddab1359459e633cbfecd18e90d86f72007a048d09227a616"
+        },
+        "serving": {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/allocator/verified.json",
+          "sha256": "1ed2159e81d52cd84687c4c0e77e708980884a8c8b9c8c4c6c9db39621cf437f"
+        }
+      },
+      "reproduction": [
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/allocator/context.sha256",
+          "sha256": "c9da29e9f6e085bab55563eb6c4b2e61335af422137f5979f3956884f9e9de6a"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/allocator/gpu-checker-input.json",
+          "sha256": "f7e4d204bd5800e8e95f1caf1088fddb455da90f42e9ab326e3ddc5c97be774e"
+        }
+      ]
+    },
+    "stock_soak_comparison": {
+      "report": {
+        "path": "benchmarks/evidence/20261124-w5-pointer-soak/verified.json",
+        "sha256": "5066148d4a9924208147ccc66e698fdd02ecc189071994d63b96985ce66b1ac5"
+      },
+      "reproduction": [
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/campaign.sh",
+          "sha256": "2821d0f629336c7698bc5f696474bc7d579ff43b992468bfcdf66cf54ee90cc0"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/campaign.log",
+          "sha256": "2475ac270f99548966c77fb430ddd854c2789fe32e48a32a675a1f197298aebe"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/campaign.exit",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/compare-soaks.py",
+          "sha256": "c3a2d7f8fbc1127bd4cbc0faa1106a28c3ae9b631eb8cae67320af2c8c6aea7f"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/dispatch.sha256",
+          "sha256": "5a93a20dd4bf706fc79b2019d6afc31c1d4f8077198db43ac2f0dc73bf0d585e"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/fetch-results.sh",
+          "sha256": "66c4aa1c0dc8db7dee6392f0e5502777966e158547f509c3d7006384a299d56b"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/result.sha256",
+          "sha256": "81f56f5cf837889ca4814dc060500e8717ed62dcf0633720a29f13afc194e01b"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/raw-results.tar.gz",
+          "sha256": "62635de946aa4cd63bce211c1b970ebd2eed7fe370d7bee3893102e299ed0016"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/registration.json",
+          "sha256": "1fb139c20efa3089cf8d9c1633e690274a0a3e4cde6db85b12946f278a5bcdc5"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/verify-raw.py",
+          "sha256": "2ebf8e312406a55aaeb6624449fbc9780f516a35ad732b16bb07f56b190cf87c"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/verified-raw.json",
+          "sha256": "44bb3834f70c00776872306f4b768efe3c20afda834ad5025f4cfac0a14bbf10"
+        }
+      ]
+    },
+    "recovery_drill": {
+      "report": {
+        "path": "benchmarks/evidence/20261124-w5-pointer-soak/recovery/verified.json",
+        "sha256": "c960d55cbfa2b77d92b2d196cf3d3c71f71bfa10d33df978516693a6d6f89267"
+      },
+      "reproduction": [
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/recovery.sh",
+          "sha256": "fa08cab2d1a7af78a5299f14cf0f43028157c543ce6b096b2c5abfb27773ed7e"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/recovery/campaign.exit",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/recovery/campaign.log",
+          "sha256": "e30f2cc472b2bcce105d08697751b54a158de2332b4d9cfe4a6ded1c00ffc1b1"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w5-pointer-soak/recovery/result.sha256",
+          "sha256": "7ca7fd4eaed24434533b13c5658f688231916bde54d014e5ddcf62ba44b39fdf"
+        }
+      ]
     }
   },
   "other_evidence": {

@@ -659,6 +659,23 @@ A100 6번에서 jemalloc 이미지의 신규 요청을 차단했다. 새 요청�
 
 A100 6번에서 jemalloc 이미지의 신규 요청을 차단했다. 새 요청은 HTTP 503을 받았고 진행 중이던 SSE는 192토큰과 `length` 종료 사유를 받은 뒤 완료됐다. 같은 loopback 주소에서 기준 이미지를 기동했고 종료 요청부터 기준 이미지의 준비 상태까지 **105.47초**가 걸렸다. 두 이미지의 API 40건씩, 동일한 스트림 출력과 캐시 재사용 112토큰을 확인했다. 종료 뒤 활성·대기 요청, KV 블록과 native 할당은 모두 0이었다. GPU 6·7번의 기존 예약 프로세스가 각각 20GiB를 복구했다. 실제 운영 트래픽, 승인된 SLO 및 서비스 복구 검증은 남아 있다. [복구 검산](../../benchmarks/evidence/20261124-w5-pattern-anchors-soak/recovery/verified.json) · [부하·복구 원본](../../benchmarks/evidence/20261124-w5-pattern-anchors-soak/raw-results.tar.gz)
 
+### JSON Pointer 수정 이미지의 30분 교차 대조
+
+`b7ca110fc`의 기준 이미지 `67efe6fbdaeb`와 같은 Riley 바이너리를 포함한 jemalloc 시험 이미지 `924db48d5cdc`에서 Qwen2.5-7B-Instruct를 실행했다. A100 6번에서는 캐시를 끄고 기준부터, 7번에서는 캐시를 켜고 jemalloc부터 실행했다. 각 캐시 모드에서 GPU·체크포인트·서버 인자와 초당 8건의 30분 합성 부하를 맞췄다. 네 실행에서 요청 54,996건이 정상 완료됐고 의도적 연결 종료 2,800건, 예상 외 오류 0건을 기록했다. [교차 실행](../../benchmarks/evidence/20261124-w5-pointer-soak/campaign.log) · [원본 검산](../../benchmarks/evidence/20261124-w5-pointer-soak/verified-raw.json)
+
+| 지표 | 캐시 끔 기준 → jemalloc | 캐시 켬 기준 → jemalloc |
+|---|---:|---:|
+| 후반 정밀 RSS 변화 | +576 → −768 KiB | +500 → −752 KiB |
+| RSS 변화량의 차이 | −1,344 KiB | −1,252 KiB |
+| 후반 TTFT p95 | 334.73 → 333.58 ms | 323.94 → 324.44 ms |
+| 후반 전체 완료 p95 | 4,159.51 → 4,160.83 ms | 4,135.50 → 4,129.89 ms |
+
+기본 이미지는 0/2, jemalloc 시험 이미지는 2/2 캐시 조건에서 합성 부하 기준을 충족했다. 기본 이미지에서 미달한 검사 항목은 `rss_growth_second_half_at_most_zero`다. 장문 출력 232건과 스키마·도구 64건을 검증했고, 기준 이미지의 스키마·도구 응답 16개 중 16개가 일치했다. [할당기 시험 검산](../../benchmarks/evidence/20261124-w5-pointer-soak/allocator/verified.json) · [부하 비교 검산](../../benchmarks/evidence/20261124-w5-pointer-soak/verified.json)
+
+### JSON Pointer 수정 이미지의 격리 복구
+
+A100 6번에서 신규 요청을 차단하자 HTTP 503이 반환됐다. 진행 중인 스트림은 192토큰을 생성한 뒤 `length`로 끝났다. jemalloc 이미지의 종료 요청부터 같은 격리 주소에서 기준 이미지가 준비되기까지 **105.25초**가 걸렸다. 두 이미지에서 각각 API 40건과 캐시 재사용 112토큰을 확인했다. 종료 뒤 활성·대기 요청과 KV·GPU 할당은 0이었고 A100 6·7번의 기존 20GiB 예약이 복구됐다. 실제 운영 라우팅과 승인된 SLO 확인이 남아 있다. [복구 검산](../../benchmarks/evidence/20261124-w5-pointer-soak/recovery/verified.json) · [원본](../../benchmarks/evidence/20261124-w5-pointer-soak/raw-results.tar.gz)
+
 ## 캐시 재사용·퇴거와 큐 포화 후 회복
 
 같은 Qwen2.5-7B 바이너리를 A100 물리 GPU 6에서 cache 128블록, 활성 요청 2개, 대기 요청 1개로 실행했다. 토큰 재사용은 응답의 `usage.prompt_tokens_details.cached_tokens`에서 관측했다. [운영 검사기](../../benchmarks/live/operational_check.py) · [실행 인자와 해시](../../benchmarks/evidence/20261119-w5-operational/rerun/receipt.json)

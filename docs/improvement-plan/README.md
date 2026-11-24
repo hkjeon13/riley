@@ -4,6 +4,8 @@
 
 `b7ca110fc`의 GitHub·A100 CUDA 이미지에서 런타임 파일 21개가 일치했다. 새 JSON Pointer HTTP 검사 8건, 두 GPU의 API 각 40건, 장문 스키마·도구 64건과 45초 혼합 부하를 검증했다. [현재 패키지](04-structured-output-result.md#로컬-참조의-json-pointer-이스케이프-검증) · [릴리스 판정](06-candidate-qualification.md)
 
+같은 `b7ca110fc` 바이너리의 30분 교차 부하 네 번에서 54,996건이 정상 완료됐고 예상 외 오류는 0건이었다. 후반 RSS 변화는 기본 이미지 캐시 끔 +576KiB, 켬 +500KiB, jemalloc 시험 이미지 캐시 끔 −768KiB, 켬 −752KiB였다. 격리 복구는 105.25초에 완료됐다. [30분 교차 대조](05-mixed-soak-result.md#json-pointer-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#json-pointer-수정-이미지의-격리-복구)
+
 `2b58655f3`의 GitHub·A100 CUDA 이미지에서 런타임 파일 21개가 일치했다. 정규식 분기의 HTTP 검사 10건, 두 GPU의 API 40건씩, 장문 스키마·도구 64건과 45초 혼합 부하를 검증했다. [현재 패키지](04-structured-output-result.md#pattern-선택-분기의-시작과-끝-조건) · [릴리스 판정](06-candidate-qualification.md)
 
 같은 바이너리의 30분 교차 부하 네 번에서 54,996건을 정상 완료했고 예상 외 오류는 0건이었다. 후반 RSS는 기본 이미지에서 캐시 끔 +484KiB, 켬 +596KiB였고 jemalloc 이미지에서 각각 −900KiB, −612KiB였다. 격리 복구는 105.47초에 완료됐다. [30분 교차 대조](05-mixed-soak-result.md#정규식-분기-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#정규식-분기-수정-이미지의-격리-복구)
@@ -245,6 +247,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W5에서 `0511b9280`의 네 30분 교차 부하와 격리 복구를 검증했다. jemalloc 시험 이미지는 두 캐시 조건의 합성 부하 기준을 통과했다. jemalloc 이미지 종료 요청부터 같은 격리 주소의 기준 이미지 준비까지 106.67초가 걸렸다. [30분 교차 대조](05-mixed-soak-result.md#샤드-검증-병렬화-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#샤드-검증-병렬화-이미지의-격리-복구)
 - [x] W5에서 `8a7c618c1`의 네 30분 교차 부하, jemalloc 이미지의 장문·구조화 출력과 110.26초 격리 복구를 검증했다. [30분 교차 대조](05-mixed-soak-result.md#로컬-참조-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#로컬-참조-수정-이미지의-격리-복구)
 - [x] W5에서 `2b58655f3`의 네 30분 교차 부하, jemalloc 이미지의 장문·구조화 출력과 105.47초 격리 복구를 검증했다. [30분 교차 대조](05-mixed-soak-result.md#정규식-분기-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#정규식-분기-수정-이미지의-격리-복구)
+- [x] W5에서 `b7ca110fc`의 네 30분 교차 부하, jemalloc 이미지의 장문·구조화 출력과 105.25초 격리 복구를 검증했다. [30분 교차 대조](05-mixed-soak-result.md#json-pointer-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#json-pointer-수정-이미지의-격리-복구)
 - [ ] W5 릴리스 대상으로 채택할 이미지가 실제 운영 검증을 충족한다. 최신 패키지의 실제 운영 트래픽·승인된 SLO·서비스 복구 확인이 남아 있다. [이미지 검증](06-candidate-qualification.md#실행-파일과-소스-연결) · [운영 근거](05-documentation-and-operations.md#w5-b3-재현용-workload-구성)
 - [x] 문서에서 버전·기본값·성능 주장을 해당 버전과 실행 설정에 연결했다. CI는 배포 이미지의 여섯 모델 검증을 같은 이미지·바이너리와 공개 지원 표에 연결한다. [문서 대조](05-documentation-and-operations.md#w5-a3-반복-가능한-문서-검증) · [배포 이미지 지원 표](../model-support.md#packaged-serving-checks)
 - [x] 목표 미달과 수치 개선을 구분해 기록하고, 현재 `main`의 기본값·명시적 설정·미지원 범위를 확정했다. [현재 적용 범위](#현재-기본값과-지원-범위)

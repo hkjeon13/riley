@@ -1,0 +1,27 @@
+{
+  "source_revision": "b7ca110fc36ff30a606c254eb87d3a898faa79ea",
+  "parent_image_id": "sha256:67efe6fbdaebcc8a088eaa9626f1adb43cf1af3e673ccae2d9af076fa99bdd24",
+  "parent_result_sha256": "ecb3f7b5293406f6e94eab0a107aecd24f156958dd2d364e66164463b78185a8",
+  "parent_cpu_sha256": "8436c243060357615f9ac5499edd98ba404a079e44d55a8df0f76bcf9ce0b6d8",
+  "client_rate_per_second": 8,
+  "duration_seconds": 1800,
+  "physical_gpus": [
+    6,
+    7
+  ],
+  "rounds": [
+    {
+      "6": "stock/cache-off",
+      "7": "allocator/cache-on"
+    },
+    {
+      "6": "allocator/cache-off",
+      "7": "stock/cache-on"
+    }
+  ],
+  "recovery_gpu": 6,
+  "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-pointer-soak-20261124.wa1UJ2ZB",
+  "dispatch_sha256": "5a93a20dd4bf706fc79b2019d6afc31c1d4f8077198db43ac2f0dc73bf0d585e",
+  "campaign_pid": 787131,
+  "campaign_started_at": "2026-11-24T05:05:53Z"
+}

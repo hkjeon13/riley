@@ -1,0 +1,34 @@
+{
+  "schema_version": "riley.experimental-allocator-image.v1",
+  "status": "passed",
+  "parent_image_id": "sha256:67efe6fbdaebcc8a088eaa9626f1adb43cf1af3e673ccae2d9af076fa99bdd24",
+  "image_id": "sha256:924db48d5cdcc46a1a8897d8bdefcf4086317ed89dfac272b93a6e930d8dbfac",
+  "source_revision": "b7ca110fc36ff30a606c254eb87d3a898faa79ea",
+  "source_archive_sha256": "4398f3e068a79f043270bc0ec2df638719f43e8834e5c2d290c52b6d2101384b",
+  "parent_cpu_report_sha256": "8436c243060357615f9ac5499edd98ba404a079e44d55a8df0f76bcf9ce0b6d8",
+  "binaries": {
+    "/opt/riley/bin/riley": "a90085fa7f911380df2cf2f20d9304664c314484aa1a19970b8b677798a3265d",
+    "/opt/riley/bin/riley-checkpoint": "97fa1e0cfad9872695a9580a9de9bc87538d73e89f451de04eedc9a746bd01b3"
+  },
+  "same_parent_runtime_files": 21,
+  "added_files_sha256": {
+    "/opt/riley/bin/riley-with-allocator": "2113c1e03c5d22209d9af117a8882c8e9d8b58551912b2e9ea5774952fc2de33",
+    "/opt/riley/lib/libjemalloc.so.2": "c769f7591006b37ac8893a69a82fc40d5ac831e8e109670878c4e4d44c8a6ba9",
+    "/opt/riley/licenses/jemalloc/copyright": "dc8672c45de55270ce4336f81808a4a62f2e7e5c470b3c4604d4f64007f35bc3"
+  },
+  "packaged_riley_allocator_symbols": [
+    "calloc",
+    "free",
+    "malloc",
+    "realloc"
+  ],
+  "cli_output_sha256": {
+    "version": "52a4f33bbf6dff5b9b7785eff24cad514bc8d05c2c9bc579015d6048df367070",
+    "serve-help": "83a0afda40d8cdb1c459cc9510cd34a6dec86d51753a41696f6fc367c80b84c5",
+    "serve-short-help": "83a0afda40d8cdb1c459cc9510cd34a6dec86d51753a41696f6fc367c80b84c5",
+    "default-command": "83f9706bf76650b98d79c3c7e3fc85dafe0bea92683aed808e1c4da6879b3b34",
+    "presets": "23d9cd0f5a7a8a84d9813fbcb6f19a1a5cfc748d92c73c33d91941c5fccfbeed",
+    "checkpoint-help": "4eee551daefa6a57c19e2f1604b36d626153e4251491c2357a919718f95a05cb"
+  },
+  "binding_log_sha256": "5e424770dc2af039ba716c750c3931f5855052ea8e4e4b4d37673cf8d844f628"
+}
