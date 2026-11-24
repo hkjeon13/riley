@@ -737,6 +737,14 @@ impl SchemaCompiler {
             .strip_prefix('#')
             .ok_or_else(|| unsupported(format!("non-local $ref {target}")))?;
         let pointer = decode_pointer_fragment(fragment)?;
+        if pointer
+            .match_indices('~')
+            .any(|(index, _)| !matches!(pointer.as_bytes().get(index + 1), Some(b'0' | b'1')))
+        {
+            return Err(SchemaError(
+                "invalid JSON Pointer escape in local $ref".to_owned(),
+            ));
+        }
         if let Some(&id) = self.references.get(pointer.as_ref()) {
             return Ok(id);
         }
@@ -1811,6 +1819,31 @@ mod tests {
             let schema =
                 json!({"$ref": format!("#/$defs/{encoded}"), "$defs": {(encoded): {"const": 1}}});
             assert!(rejected(schema).contains("invalid percent encoding in local $ref"));
+        }
+    }
+
+    #[test]
+    fn local_references_require_valid_json_pointer_tildes() {
+        for (encoded, literal) in [
+            ("key~2", "key~2"),
+            ("key%7E2", "key~2"),
+            ("key~", "key~"),
+            ("key~~0", "key~~"),
+        ] {
+            let schema =
+                json!({"$ref": format!("#/$defs/{encoded}"), "$defs": {(literal): {"const": 1}}});
+            assert!(rejected(schema).contains("invalid JSON Pointer escape in local $ref"));
+        }
+        for (encoded, literal) in [
+            ("key~01", "key~1"),
+            ("key%7E01", "key~1"),
+            ("key~1tail", "key/tail"),
+            ("key~0tail", "key~tail"),
+        ] {
+            let schema =
+                json!({"$ref": format!("#/$defs/{encoded}"), "$defs": {(literal): {"const": 1}}});
+            assert!(accepts(&schema, "1"));
+            assert!(!accepts(&schema, "2"));
         }
     }
 

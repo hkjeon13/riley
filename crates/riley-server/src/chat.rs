@@ -1168,6 +1168,29 @@ mod tests {
     }
 
     #[test]
+    fn malformed_json_pointer_escapes_fail_for_responses_and_named_tools() {
+        let schema = json!({
+            "type": "object", "required": ["value"], "properties": {
+                "value": {"$ref": "#/$defs/part%7E2"}
+            }, "$defs": {"part~2": {"const": 1}}
+        });
+        let messages = json!([{"role": "user", "content": "x"}]);
+        let format = json!({"model": "m", "messages": messages, "response_format": {
+            "type": "json_schema", "json_schema": {"name": "result", "schema": schema}
+        }});
+        let tools = json!({"model": "m", "messages": messages, "tools": [
+            {"type": "function", "function": {"name": "weather", "parameters": schema}}
+        ], "tool_choice": {"type": "function", "function": {"name": "weather"}}});
+        for (body, expected) in [(format, "response_format"), (tools, "tools")] {
+            assert!(matches!(
+                normalize_chat_request(request(body), &template(TOOLS), limits()),
+                Err(ChatRequestError::Schema { parameter, message })
+                    if parameter == expected && message.contains("invalid JSON Pointer escape")
+            ));
+        }
+    }
+
+    #[test]
     fn response_schema_and_forced_tools_enforce_string_patterns() {
         use riley_runtime::grammar::GrammarAutomaton;
 
