@@ -1,0 +1,65 @@
+{
+  "trace_sha256": "e7fdf13a5d246dd3c154ba0d12cde6550cdfb6a0c2804cb6f5dd27415de6ebd3",
+  "gpus": {
+    "6": {
+      "rag-c8-s1-vllm-arrivals": {
+        "eligible_mixed_steps": 171,
+        "steps_with_multiple_ready_in_one_cohort": 32,
+        "steps_with_three_ready_in_one_cohort": 0,
+        "steps_with_four_ready_across_three_adjacent_cohorts": 0,
+        "steps_with_four_long_live_across_two_adjacent_cohorts": 0
+      },
+      "rag-c8-s2-vllm-arrivals": {
+        "eligible_mixed_steps": 162,
+        "steps_with_multiple_ready_in_one_cohort": 25,
+        "steps_with_three_ready_in_one_cohort": 0,
+        "steps_with_four_ready_across_three_adjacent_cohorts": 0,
+        "steps_with_four_long_live_across_two_adjacent_cohorts": 0
+      },
+      "wave-sync": {
+        "eligible_mixed_steps": 56,
+        "steps_with_multiple_ready_in_one_cohort": 55,
+        "steps_with_three_ready_in_one_cohort": 52,
+        "steps_with_four_ready_across_three_adjacent_cohorts": 44,
+        "steps_with_four_long_live_across_two_adjacent_cohorts": 56
+      },
+      "wave-50ms": {
+        "eligible_mixed_steps": 67,
+        "steps_with_multiple_ready_in_one_cohort": 58,
+        "steps_with_three_ready_in_one_cohort": 24,
+        "steps_with_four_ready_across_three_adjacent_cohorts": 54,
+        "steps_with_four_long_live_across_two_adjacent_cohorts": 67
+      }
+    },
+    "7": {
+      "rag-c8-s1-vllm-arrivals": {
+        "eligible_mixed_steps": 171,
+        "steps_with_multiple_ready_in_one_cohort": 29,
+        "steps_with_three_ready_in_one_cohort": 0,
+        "steps_with_four_ready_across_three_adjacent_cohorts": 0,
+        "steps_with_four_long_live_across_two_adjacent_cohorts": 0
+      },
+      "rag-c8-s2-vllm-arrivals": {
+        "eligible_mixed_steps": 162,
+        "steps_with_multiple_ready_in_one_cohort": 25,
+        "steps_with_three_ready_in_one_cohort": 0,
+        "steps_with_four_ready_across_three_adjacent_cohorts": 0,
+        "steps_with_four_long_live_across_two_adjacent_cohorts": 0
+      },
+      "wave-sync": {
+        "eligible_mixed_steps": 55,
+        "steps_with_multiple_ready_in_one_cohort": 54,
+        "steps_with_three_ready_in_one_cohort": 50,
+        "steps_with_four_ready_across_three_adjacent_cohorts": 43,
+        "steps_with_four_long_live_across_two_adjacent_cohorts": 55
+      },
+      "wave-50ms": {
+        "eligible_mixed_steps": 67,
+        "steps_with_multiple_ready_in_one_cohort": 56,
+        "steps_with_three_ready_in_one_cohort": 14,
+        "steps_with_four_ready_across_three_adjacent_cohorts": 54,
+        "steps_with_four_long_live_across_two_adjacent_cohorts": 67
+      }
+    }
+  }
+}

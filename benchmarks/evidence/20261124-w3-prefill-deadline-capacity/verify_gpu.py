@@ -82,6 +82,9 @@ def paired_latency(control, candidate, percentile):
 
 def summary(stage, registration=HERE / "registration.json"):
     reg = read(registration)
+    if "previous_candidate_registration_sha256" in reg:
+        expect(reg["previous_candidate_registration_sha256"] == digest(HERE / "registration.json"),
+               "the admission-order reference registration changed")
     package = read(PACKAGE)
     expect(package["status"] == "passed" and package["image_id"] == reg["package_image_id"]
            and package["source_revision"] == reg["source_revision"]
@@ -170,5 +173,6 @@ def summary(stage, registration=HERE / "registration.json"):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", type=Path)
+    parser.add_argument("--registration", type=Path, default=HERE / "registration.json")
     args = parser.parse_args()
-    print(json.dumps(summary(args.stage), indent=2, allow_nan=False))
+    print(json.dumps(summary(args.stage, args.registration), indent=2, allow_nan=False))
