@@ -204,6 +204,8 @@ python3 benchmarks/live/soak.py "$TEST_ADDRESS" "$MODEL_ID" \
 
 최종 후보의 [메모리 증가 0 조건](../goal.md#33-운영-품질)은 `--require-zero-rss-growth`로 적용한다. Linux에서 후반 첫 표본과 drain의 `/proc/PID/smaps_rollup` RSS를 비교한다. 증가량이 양수이거나 두 정밀 표본 중 하나를 읽을 수 없으면 종료 코드 1을 반환하며, 읽기 실패 상세는 해당 표본에 남긴다. `rss_growth_second_half_mib`에는 기존 `/proc/PID/status` 진단 값을 계속 기록한다. 일반 RSS가 평평하게 보이는 경우에도 정밀 판정 결과가 적용된다. [혼합 부하 검사기](../../benchmarks/live/soak.py) · [A100 정밀 대조](05-mixed-soak-result.md#정밀-rss-재실행-결과)
 
+원본 검산기는 후반 첫 정밀 표본과 drain 표본에서 전체·익명 RSS 변화량을 각각 다시 계산하고, 보고서의 수치와 증가 0 조건을 대조한다. 원본 표본과 어긋나는 요약 또는 판정은 거부한다. 두 표본 사이의 RSS 변동 시점은 추가 계측 범위다. [원본 검산기](../../benchmarks/evidence/20261124-w5-uri-soak/verify-raw.py)
+
 캐시를 켠 전용 서버에서 [운영 검사기](../../benchmarks/live/operational_check.py)로 요청의 재사용 토큰, 공통 prefix 보존, 용량 압력 뒤 A 전용 블록 퇴거, 포화의 HTTP 429와 추론 회복을 확인했다. 검사는 활성 2개·대기 1개·캐시 128블록으로 구성하고 loopback에서 수행했다. [A100 운영 결과](05-mixed-soak-result.md#캐시-재사용퇴거와-큐-포화-후-회복)
 
 느린 스트리밍은 loopback 클라이언트의 읽기를 멈추고 소켓의 실제 송신 큐가 수신 버퍼보다 큰 상태가 이어지는지 확인한다. A100 GPU 6의 실제 Qwen2.5-7B 실행에서 느린 읽기 도중 정상 요청 완료, 읽기 재개 뒤 SSE 종료와 토큰 usage, 활성 스트림 연결 종료 뒤 취소·disconnect와 자원 회수를 확인했다. [느린 스트리밍 검사기](../../benchmarks/live/slow_stream_check.py) · [A100 실행 순서](../../benchmarks/evidence/20261119-w5-slow-stream/campaign.sh) · [검증 결과](05-mixed-soak-result.md#느린-스트리밍-소비자와-연결-취소)

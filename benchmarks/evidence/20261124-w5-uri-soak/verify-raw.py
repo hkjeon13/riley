@@ -77,6 +77,25 @@ def check_recovery(archive, allocator, parent):
     return elapsed
 
 
+def check_precise_rss(load, expected, name):
+    first = next((row for row in load["rss_samples"] if row["at_seconds"] >= load["seconds"] / 2), {})
+    baseline = first.get("smaps_rollup")
+    drain = load["final"].get("smaps_rollup")
+    for sample in (baseline, drain):
+        if sample is not None:
+            require(type(sample["rss_kib"]) is int and type(sample["anonymous_kib"]) is int
+                    and 0 <= sample["anonymous_kib"] <= sample["rss_kib"], f"invalid precise RSS sample: {name}")
+    delta = anonymous_delta = None
+    if baseline is not None and drain is not None:
+        delta = drain["rss_kib"] - baseline["rss_kib"]
+        anonymous_delta = drain["anonymous_kib"] - baseline["anonymous_kib"]
+    precise = {"baseline": baseline, "drain": drain, "rss_growth_kib": delta, "anonymous_growth_kib": anonymous_delta}
+    passed = delta is not None and delta <= 0
+    require(load["smaps_rollup_second_half"] == precise == expected
+            and load["checks"]["rss_growth_second_half_at_most_zero"] is passed,
+            f"W5 RSS verdict differs from the first second-half and drain samples: {name}")
+
+
 def verify(archive, registration, parent_path):
     names = set()
     for entry in archive.getmembers():
@@ -134,6 +153,7 @@ def verify(archive, registration, parent_path):
                     and report["mixed_soak"]["failed_checks"] == expected["failed_checks"]
                     and report["mixed_soak"]["rss"] == expected["rss"],
                     f"W5 metrics differ from the retained summary: {name}")
+            check_precise_rss(load, expected["rss"], name)
             require(all(shutdown[key] == 0 for key in ("active_requests", "waiting_requests", "kv_allocated_blocks"))
                     and shutdown["allocation"] and not any(shutdown["allocation"].values()), f"live resources after {name}")
             rows[image] = {
