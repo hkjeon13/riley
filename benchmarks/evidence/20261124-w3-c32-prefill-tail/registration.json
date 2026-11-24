@@ -1,0 +1,37 @@
+{
+  "source_revision": "8a7c618c1882effcacd49107a0b41ea3fc29d22d",
+  "package_image_id": "sha256:01b5c9d4bedfc93284af6dfc9fbe747002327d2818f7164f8d4e77565eaa1a8c",
+  "package_cpu_report_sha256": "90cdff932840009027aad73e0e54dcbb8e98bd7ae7b652d1cc3882e2957b1e1b",
+  "mode_flag": "--prefill-aging-reserve-decode",
+  "schedules_sha256": "ae754da0ab4110576a4b0347dd39eb35292b20bc364e15c75f27d4fd87f509f5",
+  "holdout_requests_per_arm": 16,
+  "write_error_p95_limit_ms": 3,
+  "decode_tpot_p50_max_regression_pct_exclusive": 1,
+  "short_ttft_p50_max_regression_pct_exclusive": 2,
+  "short_throughput_max_drop_pct_exclusive": 2,
+  "short_start_target_s": 115,
+  "rag_start_target_s": 4,
+  "history_release_tolerance_s": 0.05,
+  "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-c32-prefill-tail-20261124.C7DHxpyN",
+  "dispatch_sha256": "6e3782944a0c320748f00b4def95357d191b7e8f1376e7169941539472241571",
+  "patch_sha256": "8fd36fd2f9d8051bfe2261c4ccb778dad5fcfdd163565a4ca3f8999fb6683b14",
+  "recent_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-c32-rag-history-20261124.sbjdwoF5",
+  "recent_archive_sha256": "ff581741fe545272ca87adf41d39b244579c52a50907f2152bee037e91e4ec35",
+  "previous_diagnostic_binary": "36d4d656fc9f382c04e9c027578ea1fa4403e406e95ad8a8f6864a08df58151a",
+  "build_pid": 480222,
+  "build_started_at": "2026-11-24T04:13:18Z",
+  "campaign_pid": 480229,
+  "campaign_started_at": "2026-11-24T04:13:18Z",
+  "prior_step_archive_sha256": "c9fae2ece976760b5d54e2de7d98d6ee976b3f15cfe560bcb2c942158ec63c5e",
+  "native_repeat_archive_sha256": "e387aabe99f2edc7983e1aaa54a3da16b0c948a33e59303bd2a0dc7cc7f6f51f",
+  "target_request_indexes": {
+    "6": [
+      210,
+      211
+    ],
+    "7": [
+      207,
+      219
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+build.sh: OK
+campaign.sh: OK
+prefill-tail.patch: OK
+parent-tail-sources.sha256: OK
+prefill-tail-sources.sha256: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-c32-rag-history-20261124.sbjdwoF5/dispatch.sha256: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-c32-rag-history-20261124.sbjdwoF5/runtime.sha256: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-c32-rag-history-20261124.sbjdwoF5/result.sha256: OK
+riley-diagnostic: OK
+dependencies.txt: OK
+toolchain.txt: OK
+prefill-tail-sources.sha256: OK
+arm.py: OK
+client.py: OK
+holdout.py: OK
+replay.py: OK
+holder.py: OK
+schedules.json: OK
+cpu-placement.json: OK
+tools/compare_runner.py: OK
+tools/holdout_load.py: OK
+tools/load.py: OK
+tools/profile_summary.py: OK
+tools/profile_workload.py: OK
+tools/run_profile.py: OK
+START gpu7 rag control 2026-11-24T04:15:53Z
+START gpu6 rag reserve 2026-11-24T04:15:53Z
+END gpu6 rag reserve 2026-11-24T04:21:17Z exit=0
+END gpu7 rag control 2026-11-24T04:21:18Z exit=0
+START gpu6 rag control 2026-11-24T04:21:18Z
+START gpu7 rag reserve 2026-11-24T04:21:18Z
+END gpu6 rag control 2026-11-24T04:26:42Z exit=0
+END gpu7 rag reserve 2026-11-24T04:26:45Z exit=0
