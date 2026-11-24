@@ -1,0 +1,1138 @@
+{
+  "trace_sha256": "779857b8f630698cf5e7bee48c9419684ba8d254c97bfd8627eb048f68d8e91b",
+  "accounting_sha256": "93622e1f6410051f27e7e618d6237feec435b6939c2ca5ca55fe7ff47d8be87b",
+  "gpus": {
+    "6": {
+      "control": {
+        "rag-c8-s1-vllm-arrivals": {
+          "p95_request_index": 30,
+          "p95_post_admission": {
+            "prefill_only": {
+              "steps": 0,
+              "ms": 0.0
+            },
+            "mixed": {
+              "steps": 13,
+              "ms": 1793.88041
+            },
+            "decode_only": {
+              "steps": 0,
+              "ms": 0.0
+            }
+          },
+          "p95_target_gap_ms": null,
+          "tail_requests": [
+            {
+              "request_index": 22,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 13,
+                  "ms": 1640.999669
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 31,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 13,
+                  "ms": 1646.422471
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 43,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1845.052033
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 30,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1866.150735
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 29,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1891.774529
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 11,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 15,
+                  "ms": 1975.294502
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 19,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 15,
+                  "ms": 2020.518561
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            }
+          ],
+          "tail_requests_with_prefill_only": 0
+        },
+        "rag-c8-s2-vllm-arrivals": {
+          "p95_request_index": 67,
+          "p95_post_admission": {
+            "prefill_only": {
+              "steps": 0,
+              "ms": 0.0
+            },
+            "mixed": {
+              "steps": 11,
+              "ms": 1502.811604
+            },
+            "decode_only": {
+              "steps": 0,
+              "ms": 0.0
+            }
+          },
+          "p95_target_gap_ms": null,
+          "tail_requests": [
+            {
+              "request_index": 52,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1509.132341
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 61,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1519.357149
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 13,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1522.997353
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 67,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1563.889336
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 18,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1614.107443
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 68,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 13,
+                  "ms": 1679.701352
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 69,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1868.095759
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            }
+          ],
+          "tail_requests_with_prefill_only": 0
+        }
+      },
+      "reserve": {
+        "rag-c8-s1-vllm-arrivals": {
+          "p95_request_index": 20,
+          "p95_post_admission": {
+            "prefill_only": {
+              "steps": 0,
+              "ms": 0.0
+            },
+            "mixed": {
+              "steps": 13,
+              "ms": 1786.167583
+            },
+            "decode_only": {
+              "steps": 0,
+              "ms": 0.0
+            }
+          },
+          "p95_target_gap_ms": null,
+          "tail_requests": [
+            {
+              "request_index": 19,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1639.679691
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 45,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 13,
+                  "ms": 1650.242294
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 31,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 13,
+                  "ms": 1681.511187
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 20,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1809.926744
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 30,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1897.679176
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 29,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1925.198816
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 11,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 15,
+                  "ms": 2002.147673
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            }
+          ],
+          "tail_requests_with_prefill_only": 0
+        },
+        "rag-c8-s2-vllm-arrivals": {
+          "p95_request_index": 43,
+          "p95_post_admission": {
+            "prefill_only": {
+              "steps": 0,
+              "ms": 0.0
+            },
+            "mixed": {
+              "steps": 11,
+              "ms": 1483.667016
+            },
+            "decode_only": {
+              "steps": 0,
+              "ms": 0.0
+            }
+          },
+          "p95_target_gap_ms": null,
+          "tail_requests": [
+            {
+              "request_index": 52,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1536.444967
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 13,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1539.826771
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 67,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1563.853394
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 43,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1577.339252
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 18,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1616.893113
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 68,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 13,
+                  "ms": 1677.053111
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 69,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1864.983376
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            }
+          ],
+          "tail_requests_with_prefill_only": 0
+        }
+      }
+    },
+    "7": {
+      "control": {
+        "rag-c8-s1-vllm-arrivals": {
+          "p95_request_index": 43,
+          "p95_post_admission": {
+            "prefill_only": {
+              "steps": 0,
+              "ms": 0.0
+            },
+            "mixed": {
+              "steps": 13,
+              "ms": 1789.330867
+            },
+            "decode_only": {
+              "steps": 0,
+              "ms": 0.0
+            }
+          },
+          "p95_target_gap_ms": 454.8233065754175,
+          "tail_requests": [
+            {
+              "request_index": 19,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 13,
+                  "ms": 1627.127429
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 31,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 13,
+                  "ms": 1693.571677
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 20,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1797.860609
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 43,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1847.885211
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 30,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1895.917997
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 29,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1920.679481
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 11,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 15,
+                  "ms": 2012.219556
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            }
+          ],
+          "tail_requests_with_prefill_only": 0
+        },
+        "rag-c8-s2-vllm-arrivals": {
+          "p95_request_index": 43,
+          "p95_post_admission": {
+            "prefill_only": {
+              "steps": 0,
+              "ms": 0.0
+            },
+            "mixed": {
+              "steps": 11,
+              "ms": 1459.871053
+            },
+            "decode_only": {
+              "steps": 0,
+              "ms": 0.0
+            }
+          },
+          "p95_target_gap_ms": 318.47602128982544,
+          "tail_requests": [
+            {
+              "request_index": 61,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1493.996644
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 13,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1518.095771
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 67,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1536.52458
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 43,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1558.275957
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 18,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 13,
+                  "ms": 1614.740788
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 68,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 13,
+                  "ms": 1649.051698
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 69,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1833.129245
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            }
+          ],
+          "tail_requests_with_prefill_only": 0
+        }
+      },
+      "reserve": {
+        "rag-c8-s1-vllm-arrivals": {
+          "p95_request_index": 43,
+          "p95_post_admission": {
+            "prefill_only": {
+              "steps": 0,
+              "ms": 0.0
+            },
+            "mixed": {
+              "steps": 13,
+              "ms": 1769.716191
+            },
+            "decode_only": {
+              "steps": 0,
+              "ms": 0.0
+            }
+          },
+          "p95_target_gap_ms": 416.82858653366566,
+          "tail_requests": [
+            {
+              "request_index": 19,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1595.486281
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 31,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 13,
+                  "ms": 1625.782462
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 20,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1757.471914
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 43,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1809.993463
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 30,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1846.842721
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 29,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1872.537526
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 11,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 15,
+                  "ms": 1954.851693
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            }
+          ],
+          "tail_requests_with_prefill_only": 0
+        },
+        "rag-c8-s2-vllm-arrivals": {
+          "p95_request_index": 43,
+          "p95_post_admission": {
+            "prefill_only": {
+              "steps": 0,
+              "ms": 0.0
+            },
+            "mixed": {
+              "steps": 11,
+              "ms": 1462.194143
+            },
+            "decode_only": {
+              "steps": 0,
+              "ms": 0.0
+            }
+          },
+          "p95_target_gap_ms": 311.2229034304619,
+          "tail_requests": [
+            {
+              "request_index": 13,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1511.816542
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 61,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1514.070806
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 67,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1538.323195
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 43,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 12,
+                  "ms": 1551.052485
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 18,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 13,
+                  "ms": 1605.360902
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 68,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 13,
+                  "ms": 1649.517326
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            },
+            {
+              "request_index": 69,
+              "submit_to_prefill_end": {
+                "prefill_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                },
+                "mixed": {
+                  "steps": 14,
+                  "ms": 1834.915015
+                },
+                "decode_only": {
+                  "steps": 0,
+                  "ms": 0.0
+                }
+              }
+            }
+          ],
+          "tail_requests_with_prefill_only": 0
+        }
+      }
+    }
+  }
+}
