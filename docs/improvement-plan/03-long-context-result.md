@@ -1238,6 +1238,17 @@ GPU 7번 RAG seed 1의 추적 요청 6개에서 120ms 이상인 서버 decode �
 
 GPU 6번의 seed 1 decode TPOT p50은 1% 회귀 기준을 넘었다. GPU 7번의 vLLM 시각표 C32 첫 토큰 p50도 2.40% 늘어 2% 기준을 초과했다. GPU 6번의 Riley 시각표 C32와 동시 유입은 송신 오차 p95 3.21ms·3.44ms로 성능 판정에서 제외했다. GPU 7번의 RAG 첫 토큰 p95는 저장된 vLLM 대비 1.362배·1.401배로 두 seed 모두 최종 1.15배 기준을 넘었다. 결합 설정의 채택은 보류하고 행 예약 단독의 일반 CUDA 서빙 진입점을 후속 검증 대상으로 삼았다. [세부 판정](../../benchmarks/evidence/20261124-w3-aged-fifo/verified.json.gz) · [재현 검사기 `--combined`](../../benchmarks/evidence/20261124-w3-aged-decode-reserve/verify.py)
 
+### 일반 CUDA 서빙의 decode 행 예약 옵션
+
+`8a7c618c1` 패키지 소스에 `--prefill-aging-reserve-decode` 후보 패치를 적용했다. CUDA 12.4의 일반 `server,cuda` 빌드를 만들고 기존 A100 이미지에서 Riley 실행 파일만 읽기 전용으로 교체했다. 두 설정의 차이는 `serve` 옵션 한 개였다. CPU에서 스케줄러 테스트 146건과 CLI 바이너리 테스트 43건을 통과했다. A100 6번은 예약 → 기준, 7번은 기준 → 예약 순으로 Coder-14B를 실행했다. 네 실행에서 요청 2,368건과 스텝 23,493개를 대조했다. 대응 출력 1,184쌍과 별도 장문 생성 ID 64건이 이전 진단 실행과도 일치했다. 두 GPU는 종료 뒤 기존 20GiB 예약으로 복귀했다. 재현할 때는 패치의 압축을 풀어 `build-dispatch.sha256`과 대조한다. [후보 패치](../../benchmarks/evidence/20261124-w3-aged-decode-native/aged-decode-option.patch.gz) · [실행 등록](../../benchmarks/evidence/20261124-w3-aged-decode-native/registration.json) · [원본](../../benchmarks/evidence/20261124-w3-aged-decode-native/raw-results.tar.gz)
+
+| RAG 시각표 | TTFT p95 변화 6번 / 7번 | Decode TPOT p50 변화 6번 / 7번 | 토큰 간격 p99 변화 6번 / 7번 |
+|---|---:|---:|---:|
+| Seed 1 | −1.10% / +0.29% | −8.85% / −8.31% | −46.08% / −46.25% |
+| Seed 2 | −0.40% / +0.59% | −4.27% / −5.20% | −46.27% / −46.51% |
+
+12개 비교 중 11개가 전송 오차와 해당 지연·처리량 기준을 충족했다. GPU 6번의 Riley C32 시각표는 원본 TTFT p50이 12.23% 늘었고 기준 실행의 송신 오차 p95도 3.012ms로 3ms 한도를 넘었다. 이 비교는 성능 판정에서 제외했다. 같은 바이너리에서 실행 순서를 바꾸고, 기존과 같이 RAG 두 시드를 실행한 뒤 이 C32 시각표를 다시 재생한다. GPU 7번에서 저장된 vLLM 대비 두 RAG 첫 토큰 p95는 각각 1.502배·1.429배로 최종 기준 1.15배를 넘었다. [지연과 출력 검산](../../benchmarks/evidence/20261124-w3-aged-decode-native/verified.json) · [CLI·API 대조 검사기](../../benchmarks/evidence/20261124-w3-aged-decode-native/verify.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

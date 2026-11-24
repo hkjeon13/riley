@@ -1,0 +1,42 @@
+build.sh: OK
+aged-decode-option.patch: OK
+parent-source.sha256: OK
+package-source.sha256: OK
+campaign.sh: OK
+configure.py: OK
+holdout.py: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-separated-client-20261124.QAxR7GdV/runtime.sha256: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-rag-admission-retry-20261124.OaUPAucl/runtime.sha256: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-chunk-pair-20261124.Tl1oBWmS/result.sha256: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-chunk-pair-20261124.Tl1oBWmS/cells.json: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w5-prefix-package-gpu-20261121.jBCeUWfR/harness/benchmarks/live/load.py: OK
+WAIT_FOR_BUILD pid=3510887 2026-11-24T00:46:11Z
+riley-diagnostic: OK
+dependencies.txt: OK
+toolchain.txt: OK
+patched-source.sha256: OK
+help.txt: OK
+arm.py: OK
+client.py: OK
+holder.py: OK
+replay.py: OK
+tools/compare_runner.py: OK
+tools/holdout_load.py: OK
+tools/load.py: OK
+tools/profile_summary.py: OK
+tools/profile_workload.py: OK
+tools/run_profile.py: OK
+schedules.json: OK
+cpu-placement.json: OK
+crates/riley-scheduler/src/scheduler.rs: OK
+crates/riley-scheduler/tests/aged_decode_reservation.rs: OK
+crates/riley-server/src/engine.rs: OK
+crates/riley-server/src/main.rs: OK
+START gpu6 reserve 2026-11-24T00:48:29Z
+START gpu7 control 2026-11-24T00:48:29Z
+END gpu6 reserve 2026-11-24T00:55:12Z exit=0
+END gpu7 control 2026-11-24T00:55:13Z exit=0
+START gpu6 control 2026-11-24T00:55:13Z
+START gpu7 reserve 2026-11-24T00:55:13Z
+END gpu6 control 2026-11-24T01:01:56Z exit=0
+END gpu7 reserve 2026-11-24T01:01:57Z exit=0
