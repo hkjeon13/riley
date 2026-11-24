@@ -26,6 +26,8 @@
 
 같은 바이너리의 기준 반복에서 C32 첫 토큰 중앙값은 11–12% 달랐다. GPU 7번의 RAG seed 1과 동시 유입에서 기준끼리의 decode 차이는 0.16% 이내였고, 후보는 두 기준 대비 2.38–3.08% 느려 미채택했다. 여섯 실행의 측정 응답 3,552건은 대응 출력이 모두 일치했다. [동일 바이너리 반복 결과](03-long-context-result.md#동일-바이너리의-기준-반복과-prefill-후보)
 
+후속 계측에서 출력 1,184쌍과 스텝 23,524개를 대조했다. 순서 변경으로 두 GPU의 RAG seed 1 첫 토큰 p95가 약 10% 줄었으나 일부 부하에서 decode 회귀 한도를 넘어 미채택했다. GPU 7번 기준의 seed 1에서 120ms 이상 decode 간격 94개 중 25개에는 prefill 1,023행과 decode 1행을 실행하는 별도 스텝이 있었다. CPU에서는 그 모양을 만드는 aging 경로에서 대기 중인 decode를 모두 예약하는 후보를 시험했다. [스텝별 결과](03-long-context-result.md#prefill-순서-변경에-따른-gpu-스텝과-decode-대기) · [행 예약 CPU 검증](03-long-context-result.md#오래-기다린-prefill의-decode-행-예약)
+
 요청별 prefill 조각을 512행으로 낮춘 후보는 832쌍의 출력을 보존했으나 네 RAG C8 비교에서 첫 토큰 p95가 2.74–14.39% 늘어 미채택했다. [W3 조각 크기 대조](03-long-context-result.md#coder-14b-요청별-prefill-조각-크기)
 
 W4 장문 답변의 같은 33개 문제를 채팅으로 보내자 Riley·vLLM 모두 정답만 출력하고 정상 종료한 경우가 0/33에서 22/33으로 늘었다. 두 채팅 형식에서 Riley의 동시성 1·8 결과는 각각 33/33 일치했고, 두 엔진 모두 한국어 산술은 0/11이었다. [장문 채팅 비교](04-long-accuracy-result.md#같은-장문-문제를-채팅-형식으로-재생)
@@ -200,6 +202,7 @@ W1은 manifest와 실패 판정을 제공한다. W4는 같은 입력 ID의 정�
 - [x] W3에서 짧은 입력만 512행 버스트를 허용했다. decode 8행 후보는 두 GPU에서 C32 TTFT p95를 5.15–9.78% 줄였고 984개 응답은 기준과 일치했다. GPU 6의 중앙값 회귀로 기본 적용을 보류했다. [512행 버스트 검증](03-long-context-result.md#짧은-입력-전용-512행-버스트)
 - [x] W3에서 512행 버스트의 입장 시각을 네 조합으로 검증했다. 출력 1,312건은 기준과 일치했다. 후속 요청의 대기 중앙값 증가는 전송 당시 실행 중이던 스텝의 남은 시간에 나타났다. 계측 켬·끔 및 앞선 반복에 따라 p50의 방향이 달라 기본 적용은 보류했다. [입장 구간 대조](03-long-context-result.md#512행-버스트의-엔진-입장-구간) · [스텝 경계 재검산](03-long-context-result.md#후속-64건과-실행-중인-스텝의-경계)
 - [x] W3에서 후속 64건의 도착을 12ms 늦춘 시각표를 두 GPU에서 교차했다. 2,624건의 출력은 기준과 일치했고 GPU 6번의 계측에서 큐 대기 차이의 방향이 바뀌었다. 계측을 끈 GPU 7번에서는 두 시각표 모두 TTFT p50이 회귀 한도를 넘었다. [도착 시각 교차 실행](03-long-context-result.md#후속-64건의-도착을-12ms-늦춘-교차-실행)
+- [x] W3: 두 A100에서 prefill 순서 변경의 GPU 스텝과 decode 커밋을 대조했다. 후보가 직접 바꾸지 않은 후속 혼합 스텝도 일부 요청의 decode 구간을 늘렸다. [GPU 스텝과 요청별 대기](03-long-context-result.md#prefill-순서-변경에-따른-gpu-스텝과-decode-대기)
 - [ ] W3: 1,024행 QKV 형상 공통 적용은 Coder-14B decode 회귀로 기각했다. Decode가 없는 512행 후보는 실행 순서를 바꿔도 GPU 6번의 C32 TTFT p50 회귀 기준을 넘었다. 일부 RAG의 TTFT 목표와 Coder-14B의 C32 목표는 현재 기본 경로에서 미달이다. [Coder-14B 결과](03-long-context-result.md#coder-14b의-1024행-후보-검증) · [512행 역순 대조](03-long-context-result.md#decode-0행-후보의-역순-대조) · [현재 적용 판정](03-long-context-and-scheduling.md#현재-적용-판정)
 - [x] W5: 대상 GPU에서 배포 이미지의 실제 추론과 cache-on·off 30분 부하 증거를 확보했다. [운영 결과와 판정](05-mixed-soak-result.md#배포-이미지의-혼합-부하)
 - [x] W5: 배포 이미지의 45초 smoke에서 2-KV-head GQA·Qwen3·MHA·14B의 API 계약, 혼합 부하·취소·종료 회수를 검증했다. [MHA·14B 결과](05-mixed-soak-result.md#배포-이미지의-mha와-14b-smoke) [대표 모델 결과](05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke)

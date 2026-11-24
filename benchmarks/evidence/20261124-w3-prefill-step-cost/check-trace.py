@@ -60,6 +60,23 @@ class MixedStepTraceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "whole-budget prefill cursor"):
             self.audit(False, lambda logs: [logs[0], logs[1].replace("1023 1023", "1024 1023"), *logs[2:]])
 
+    def test_decode_span_accounts_for_intervening_execution(self):
+        steps = [
+            Step(1, 1_000_000, 2_000_000, 3_000_000, 900_000, 2, 0, [(1, 1, 1), (2, 1, 1)]),
+            Step(2, 4_000_000, 6_000_000, 6_000_000, 1_900_000, 1024, 1, [(3, 1023, 1023)]),
+            Step(3, 7_000_000, 10_000_000, 10_000_000, 2_900_000, 1, 1, []),
+            Step(4, 11_000_000, 15_000_000, 16_000_000, 3_900_000, 1, 1, []),
+        ]
+        decodes = {2: [(2, 2)], 3: [(2, 3)], 4: [(1, 2)]}
+        _, focused = VERIFY["check_steps"](steps, {}, decodes, {1: 0, 2: 0, 3: 0}, {}, {}, False, (1,))
+        (decode,) = focused[1]["decode"]
+        self.assertEqual(decode["commit_gap_ms"], 13)
+        self.assertEqual(decode["intervening_prefill_execution_ms"], 2)
+        self.assertEqual(decode["intervening_decode_only_execution_ms"], 3)
+        self.assertEqual(decode["commit_step_execution_ms"], 4)
+        self.assertEqual(decode["outside_execution_ms"], 4)
+        self.assertEqual(decode["intervening_wide_single_decode_steps"], [2])
+
     def test_rejects_missing_and_uncommitted_records(self):
         with self.assertRaisesRegex(ValueError, "decode context coverage"):
             self.audit(True, lambda logs: logs[:-1])

@@ -76,7 +76,10 @@ def check_steps(steps, choices, decodes, admitted, requested, labels, enabled, f
     seen_decode = set()
     observed = []
     focused = {req: {"prefill": [], "decode": []} for req in focus}
+    elapsed_execution, elapsed_prefill = 0, 0
+    wide_single_decode = []
     for step in steps:
+        execution = step.end - step.start
         dec = decodes.pop(step.id, [])
         if (len(dec) != step.decode or len({req for req, _ in dec}) != step.decode
                 or {req for req, _ in dec} & {req for req, _, _ in step.prefill}):
@@ -87,14 +90,25 @@ def check_steps(steps, choices, decodes, admitted, requested, labels, enabled, f
             if (req not in last or target != cursor[req] + 1 or admitted[req] > step.start
                     or (req in requested and cursor[req] < requested[req]["prompt_tokens"])):
                 raise ValueError(f"discontinuous decode cursor at {step.id} for request {req}")
-            gap = step.commit - last[req]
+            previous_commit, previous_execution, previous_prefill, previous_wide = last[req]
+            gap = step.commit - previous_commit
             gaps.append(gap)
             if req in focused:
+                intervening = elapsed_execution - previous_execution
+                intervening_prefill = elapsed_prefill - previous_prefill
+                outside_execution = gap - intervening - execution
+                if not 0 <= intervening_prefill <= intervening or outside_execution < 0:
+                    raise ValueError(f"invalid decode span accounting at {step.id} for request {req}")
                 focused[req]["decode"].append({
                     "step": step.id, "kv_tokens": target, "decode_rows": step.decode,
                     "prefill_rows": step.rows - step.decode, "gpu_ms": step.gpu / 1e6,
                     "commit_gap_ms": gap / 1e6, "prefill_choice_available": choice is not None,
                     "prefill_choice_applied": choice is not None and enabled,
+                    "commit_step_execution_ms": execution / 1e6,
+                    "intervening_prefill_execution_ms": intervening_prefill / 1e6,
+                    "intervening_decode_only_execution_ms": (intervening - intervening_prefill) / 1e6,
+                    "outside_execution_ms": outside_execution / 1e6,
+                    "intervening_wide_single_decode_steps": wide_single_decode[previous_wide:],
                 })
         if choice is not None:
             picked, prefix = validate_choice(choice, step, cursor, requested, admitted, enabled)
@@ -116,6 +130,12 @@ def check_steps(steps, choices, decodes, admitted, requested, labels, enabled, f
                     for (req, length), gap in zip(dec, gaps, strict=True)
                 ],
             })
+        elapsed_execution += execution
+        if step.prefill:
+            elapsed_prefill += execution
+        if step.rows == 1024 and step.decode == 1:
+            wide_single_decode.append(step.id)
+        committed = step.commit, elapsed_execution, elapsed_prefill, len(wide_single_decode)
         for req, rows, target in step.prefill:
             if req in seen_decode or target != cursor[req] + rows:
                 raise ValueError(f"discontinuous prefill cursor at {step.id} for request {req}")
@@ -127,9 +147,9 @@ def check_steps(steps, choices, decodes, admitted, requested, labels, enabled, f
                     "prefill_choice_available": choice is not None,
                     "prefill_choice_applied": choice is not None and enabled,
                 })
-            cursor[req], last[req] = target, step.commit
+            cursor[req], last[req] = target, committed
         for req, target in dec:
-            cursor[req], last[req] = target, step.commit
+            cursor[req], last[req] = target, committed
             seen_decode.add(req)
     if choices or decodes:
         raise ValueError("choice or decode record missing its committed step")

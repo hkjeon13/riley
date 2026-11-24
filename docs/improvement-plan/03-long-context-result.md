@@ -1192,9 +1192,29 @@ RAG seed 1에서는 후보의 긴 간격 합계가 183.26초로 두 기준의 17
 
 이전 스케줄러 후보의 순서와 회귀 기준을 그대로 사용한다. 진단 빌드는 각 교체 가능 스텝에서 기준과 후보의 요청 ID, prefill 진행 위치와 할당 행을 기록한다. 같은 iteration ID에 실제 GPU 실행 시간과 모든 decode 요청의 KV 길이를 연결한다. 기준 실행에서도 교체 가능했던 선택을 기록한다. 로그는 요청을 처리하는 동안 메모리에 모아 종료 뒤 출력한다. 검산기는 각 스텝의 이전 커서를 재구성해 선택한 prefill과 실제 커밋을 대조하고, 동시 decode의 연속 커밋 사이 시간과 HTTP 측정값을 요청 ID에 연결한다. [계측 코드](../../benchmarks/evidence/20261124-w3-prefill-step-cost/instrument.py) · [검산기](../../benchmarks/evidence/20261124-w3-prefill-step-cost/verify.py)
 
-CPU에서 계측·후보 스위치의 네 조합을 통과했다. 검산기와 설정 검증 네 건에서 중복·누락·커서 불일치를 검사하고 기존 도착 시각표와 CPU 배치가 바이트 단위로 일치함을 확인했다. A100 전용 경로에서 빌드 스크립트와 재사용할 계측 입력의 체크섬을 확인했다. GPU 결과에는 계측을 켠 두 설정의 출력 일치와 앞선 계측 비활성 실행과의 비교를 함께 기록한다. A100 진단 실행은 W5 작업이 끝난 뒤 시작한다. [CPU 결과](../../benchmarks/evidence/20261124-w3-prefill-step-cost/cpu-tests.log) · [CPU 검산 코드](../../benchmarks/evidence/20261124-w3-prefill-step-cost/check-trace.py) · [고정 실행 조건](../../benchmarks/evidence/20261124-w3-prefill-step-cost/preflight.json)
+CPU에서 계측·후보 스위치의 네 조합을 통과했다. 검산기와 설정 검증 다섯 건에서 중복·누락·커서 불일치, decode 커밋 간 시간의 합계, 기존 도착 시각표와 CPU 배치의 일치를 확인했다. A100 전용 경로에서 빌드 스크립트와 재사용할 계측 입력의 체크섬을 대조했다. W5가 끝나 두 GPU가 기존 예약을 복구한 뒤 W3 진단 빌드와 실행을 시작했다. [CPU 실행 기록](../../benchmarks/evidence/20261124-w3-prefill-step-cost/cpu-tests.log) · [CPU 검산 코드](../../benchmarks/evidence/20261124-w3-prefill-step-cost/check-trace.py) · [실행 조건](../../benchmarks/evidence/20261124-w3-prefill-step-cost/registration.json)
 
 검산기는 선정한 GPU 7번 요청의 prefill 스텝과 모든 decode 커밋 간격을 클라이언트의 첫 토큰 지연 및 콘텐츠 수신 구간에 연결한다. 후보를 켠 상태와 기준 상태에서 각 스텝에 교체가 가능했는지, 실제로 교체했는지, 동시 prefill·decode 행 수가 각각 얼마였는지 기록한다. 앞서 첫 토큰을 추적했던 RAG seed 1의 20·30번과 seed 2의 43번도 같은 보고서에 포함한다. [선정한 요청 ID](../../benchmarks/evidence/20261124-w3-prefill-repeat/gap-audit.json) · [커밋과 HTTP 기록의 연결](../../benchmarks/evidence/20261124-w3-prefill-step-cost/verify.py)
+
+### Prefill 순서 변경에 따른 GPU 스텝과 decode 대기
+
+같은 진단 바이너리로 A100 6번은 후보 → 기준, 7번은 기준 → 후보 순으로 Coder-14B를 실행했다. 네 실행에서 측정 요청 2,368건, 생성 토큰 ID 검사 64건과 커밋된 스텝 23,524개를 대조했다. 기준과 후보의 대응 출력 1,184쌍이 일치했고 장문 토큰 ID도 네 실행에서 같았다. GPU 6번의 동시 유입은 후보의 실제 송신 오차 p95가 3.12ms여서 3ms 판정 한도를 넘었다. 나머지 11개 비교는 전송 기준을 통과했다. 두 GPU에서 종료 자원이 모두 회수됐고 기존 홀더의 20GiB 예약이 복구됐다. [실행 로그](../../benchmarks/evidence/20261124-w3-prefill-step-cost/campaign.log) · [검산 결과](../../benchmarks/evidence/20261124-w3-prefill-step-cost/verified.json.gz) · [원본](../../benchmarks/evidence/20261124-w3-prefill-step-cost/raw-results.tar.gz)
+
+| 고정 시각표 | TTFT p95 변화 6번 / 7번 | Decode TPOT p50 변화 6번 / 7번 |
+|---|---:|---:|
+| RAG seed 1 | −10.34% / −10.07% | +2.00% / −2.59% |
+| RAG seed 2 | −3.06% / −3.04% | −0.18% / +1.34% |
+| 동시 유입 | 전송 기준 미달 / +0.14% | 전송 기준 미달 / +2.79% |
+
+GPU 7번의 같은 도착 시각표에서 순서 변경 뒤 두 RAG seed의 첫 토큰 p95는 기존 vLLM의 1.338배·1.388배로 1단계 1.40배를 충족했고 최종 1.15배를 넘었다. 유효한 세 비교에서 decode 회귀 1% 한도를 넘었고, 짧은 C32의 TTFT p50도 GPU 6번의 vLLM 시각표에서 2.72%, 7번의 Riley 시각표에서 3.05% 늘었다. 후보는 기본 적용을 보류한다. [시각표별 성능 판정](../../benchmarks/evidence/20261124-w3-prefill-step-cost/verified.json.gz)
+
+후보가 실제 순서를 바꾼 53개 스텝은 모두 원래 선택보다 논리적 query–key 쌍이 많았다. 두 RAG seed에서 관측한 교체 가능 스텝의 GPU 시간 중앙값은 기준 대비 후보에서 4.81–7.42ms 높았다. 스텝별 prefill 시작 위치와 함께 처리한 decode의 KV 길이 합계도 달라, 이 차이를 query–key 쌍 수만의 효과로 확정할 수 없다. [선택 위치·KV·GPU 시간](../../benchmarks/evidence/20261124-w3-prefill-step-cost/verified.json.gz)
+
+GPU 7번의 동시 유입 24번 요청은 첫 토큰이 425.85ms 빨라졌고 이후 서버의 decode 커밋 구간은 347.57ms 길어졌다. 해당 요청이 decode를 받은 혼합 스텝은 2개에서 5개로 늘었고, 후보가 직접 교체한 스텝에는 그 요청의 decode가 없었다. 25번과 28번에서는 커밋 구간이 257.88ms·382.76ms 늘었고 다른 prefill 스텝이 사이에 끼어 있던 시간은 각각 142.60ms 늘었다. 이 세 요청에서는 순서 변경으로 시작 시점이 앞당겨지면서 뒤따르는 prefill과 겹치는 구간이 늘었다. [요청별 커밋·SSE 시간](../../benchmarks/evidence/20261124-w3-prefill-step-cost/verified.json.gz)
+
+### 오래 기다린 prefill의 decode 행 예약
+
+GPU 7번 RAG seed 1의 추적 요청 6개에서 120ms 이상인 서버 decode 간격은 기준 94개, 후보 91개였다. 그중 기준 25개와 후보 24개에 prefill 1,023행과 decode 1행을 실행한 별도 스텝이 있었다. 각 설정에서 해당한 실제 스텝은 중복을 빼면 14개였다. CPU에서 동일 예산의 aging 경로에 긴 prefill 하나와 이미 생성 중인 세 요청을 넣으면 기준은 decode 한 행만 예약했다. 시험 스위치를 켜면 prefill을 계속 진행하고 decode 세 행을 모두 배정한다. 전체 1,024행을 유지하고 일반 스텝, 512행 예산, 3,072토큰 미만 입력 및 atomic prefill의 기존 동작을 재현했다. 두 스위치 위치에서 스케줄러 검사 146건씩을 통과했다. GPU에서 출력 일치와 지연 기준을 확인한 뒤 채택 여부를 결정한다. [CPU 진단 변경](../../benchmarks/evidence/20261124-w3-prefill-step-cost/reserve-aged-decode.py) · [재현 테스트](../../benchmarks/evidence/20261124-w3-prefill-step-cost/aged-decode-reserve.rs) · [CPU 실행 기록](../../benchmarks/evidence/20261124-w3-prefill-step-cost/aged-decode-cpu.log)
 
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
