@@ -1,0 +1,29 @@
+{
+  "physical_gpus": [6, 7],
+  "orders": {
+    "6": ["control", "candidate"],
+    "7": ["candidate", "control"]
+  },
+  "schedules_sha256": "7921e63069ddd4b58736558af62590b5f340083ee129d25aa54eeefbdf78c116",
+  "measured_requests_per_arm": 592,
+  "holdout_requests_per_arm": 16,
+  "write_error_p95_limit_ms": 3,
+  "decode_tpot_p50_max_regression_pct_exclusive": 1,
+  "short_ttft_p50_max_regression_pct_exclusive": 2,
+  "short_throughput_max_drop_pct_exclusive": 2,
+  "rag_ttft_p95_vllm_phase_one_ratio": 1.4,
+  "rag_ttft_p95_vllm_final_ratio": 1.15,
+  "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-admission-fifo-20261124.hvRFaE7s",
+  "source_revision": "b7ca110fc36ff30a606c254eb87d3a898faa79ea",
+  "package_image_id": "sha256:67efe6fbdaebcc8a088eaa9626f1adb43cf1af3e673ccae2d9af076fa99bdd24",
+  "package_cpu_report_sha256": "8436c243060357615f9ac5499edd98ba404a079e44d55a8df0f76bcf9ce0b6d8",
+  "candidate_patch_sha256": "0aa6e5e0e5418e15a6158a100dd90591faaa65c83ab191c7e7d24944aa00399d",
+  "patched_scheduler_sha256": "681333b0dccb8b48891d263bfab4e8c10be2cc1cda029d994733ff448cc1593a",
+  "mode_env": "RILEY_EXPERIMENT_W3_ADMISSION_FIFO",
+  "build_dispatch_sha256": "eacab5cb26f24e1c77b35b873495f81839a75c8d0e8c9fee2c05f976339abb8b",
+  "build_pid": 1506604,
+  "build_started_at": "2026-11-24T07:12:28Z",
+  "campaign_dispatch_sha256": "e9a0e85d40ebdf408ccb0920c4f56fd1cd433decbe296b737c5b2904a18b999e",
+  "campaign_pid": 1520220,
+  "campaign_started_at": "2026-11-24T07:14:45Z"
+}
