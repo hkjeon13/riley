@@ -1,0 +1,21 @@
+{
+  "status": "passed",
+  "source_revision": "b7ca110fc36ff30a606c254eb87d3a898faa79ea",
+  "candidate_patch_sha256": "2e43ad2cd551cea9d8439a42bc83a0c2a52d035029bf3f3e2f7ff8ea69e067f5",
+  "compiler": "Apple clang version 21.0.0 (clang-2100.3.34.2)",
+  "case_count": 512,
+  "row_capacities": [
+    1024,
+    2048
+  ],
+  "scope": "host execution of the registered planner's index logic using simulated block scans and barriers",
+  "host_sanitizers": [
+    "address",
+    "undefined"
+  ],
+  "files": {
+    "check.py": "297624471fc547f7f124b9043e7194b2e6340b695f5a00ae4a6a6a4466d13357",
+    "replay.cpp": "e89fac55c1bb761c8ba09c04ce39e6de75341662c54bfb5d9c0196b65e06400e",
+    "result.log": "8498ff242c76dc0e9dd5d1fa556fe45c7470c7fab7c5c1ae946f91591bef4830"
+  }
+}

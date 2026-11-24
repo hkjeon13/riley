@@ -1,0 +1,56 @@
+{
+  "schedules_sha256": "ae754da0ab4110576a4b0347dd39eb35292b20bc364e15c75f27d4fd87f509f5",
+  "holdout_requests_per_arm": 16,
+  "write_error_p95_limit_ms": 3,
+  "decode_tpot_p50_max_regression_pct_exclusive": 1,
+  "short_ttft_p50_max_regression_pct_exclusive": 2,
+  "short_throughput_max_drop_pct_exclusive": 2,
+  "short_start_target_s": 115,
+  "rag_start_target_s": 4,
+  "history_release_tolerance_s": 0.05,
+  "native_repeat_archive_sha256": "e387aabe99f2edc7983e1aaa54a3da16b0c948a33e59303bd2a0dc7cc7f6f51f",
+  "orders": {
+    "6": [
+      "control",
+      "candidate",
+      "control"
+    ],
+    "7": [
+      "candidate",
+      "control",
+      "candidate"
+    ]
+  },
+  "source_revision": "b7ca110fc36ff30a606c254eb87d3a898faa79ea",
+  "package_image_id": "sha256:67efe6fbdaebcc8a088eaa9626f1adb43cf1af3e673ccae2d9af076fa99bdd24",
+  "package_cpu_report_sha256": "8436c243060357615f9ac5499edd98ba404a079e44d55a8df0f76bcf9ce0b6d8",
+  "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-wide-fixed-tile-20261124.retryXlbcVq6m",
+  "patch_sha256": "2e43ad2cd551cea9d8439a42bc83a0c2a52d035029bf3f3e2f7ff8ea69e067f5",
+  "build_dispatch_sha256": "7dc18c00d882f65f0905995c7b636b482098277d928cee34aff7508679e6dd20",
+  "campaign_dispatch_sha256": "65f604fe4d827d291291225795472eed3b7e245e43767eb39a840fa822b29c6e",
+  "build_wait_pid": 899144,
+  "build_wait_started_at": "2026-11-24T05:25:44Z",
+  "campaign_pid": 1259412,
+  "campaign_started_at": "2026-11-24T06:28:30Z",
+  "predecessor_campaign_pid": 787131,
+  "frozen_replay_archive_sha256": "21fd06e33fe9312d66397bb4298a023e7dfe67ac6248f9838ff10e5ee5bd0660",
+  "max_sequence_tokens": 4096,
+  "row_budgets": {
+    "control": 1024,
+    "candidate": 2048
+  },
+  "gpu_boundary_test": {
+    "gpu": 6,
+    "dense_rows": 2048,
+    "active_rows_per_layout": 2045,
+    "layouts": 2
+  },
+  "initial_campaign": {
+    "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-wide-fixed-tile-20261124.l71cBGh1",
+    "campaign_dispatch_sha256": "2b6018822a235ec6412e8afff5ac8f4cbfdd9495a5156cfe0c225f7f74e42c87",
+    "campaign_pid": 911285,
+    "campaign_started_at": "2026-11-24T05:27:56Z",
+    "status": "GPU test ignored; no serving comparison"
+  },
+  "build_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-wide-fixed-tile-20261124.l71cBGh1"
+}

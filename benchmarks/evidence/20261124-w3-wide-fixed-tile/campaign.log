@@ -1,0 +1,33 @@
+WAITING_FOR_BUILD 899144 2026-11-24T06:28:30Z
+CAMPAIGN_RELEASED 2026-11-24T06:28:30Z
+campaign.sh: OK
+prepare.py: OK
+wait-for-soak.sh: OK
+before.sha256: OK
+after.sha256: OK
+build.sh: OK
+wide-fixed-tile.patch: OK
+riley-diagnostic: OK
+flashinfer-attention-test: OK
+dependencies.txt: OK
+gpu-test-dependencies.txt: OK
+toolchain.txt: OK
+after.sha256: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-prefill-continuation-20261124.A2s5mCyZ/dispatch.sha256: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-prefill-continuation-20261124.A2s5mCyZ/runtime.sha256: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-prefill-continuation-20261124.A2s5mCyZ/result.sha256: OK
+/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w4-pointer-syntax-20261124.HgwYVqCf/cpu-evidence/report.json: OK
+START_KERNEL gpu6 2026-11-24T06:28:31Z
+END_KERNEL gpu6 2026-11-24T06:28:57Z exit=0
+START gpu6 1 control 2026-11-24T06:28:58Z
+START gpu7 1 candidate 2026-11-24T06:28:58Z
+END gpu6 1 control 2026-11-24T06:34:24Z exit=0
+END gpu7 1 candidate 2026-11-24T06:34:24Z exit=0
+START gpu6 2 candidate 2026-11-24T06:34:24Z
+START gpu7 2 control 2026-11-24T06:34:24Z
+END gpu7 2 control 2026-11-24T06:39:49Z exit=0
+END gpu6 2 candidate 2026-11-24T06:39:49Z exit=0
+START gpu6 3 control 2026-11-24T06:39:49Z
+START gpu7 3 candidate 2026-11-24T06:39:49Z
+END gpu7 3 candidate 2026-11-24T06:45:16Z exit=0
+END gpu6 3 control 2026-11-24T06:45:16Z exit=0
