@@ -1,0 +1,986 @@
+{
+  "binary_sha256": "2015548a5f174ec8f864aaa480fa98ae4e3ed5fe24ff4a45ddedb792c47d599b",
+  "source_revision": "2b58655f358ff80a885a4c97f9b6f5a0afd058b0",
+  "gpus": {
+    "6": {
+      "order": [
+        "control",
+        "candidate",
+        "control"
+      ],
+      "comparisons": {
+        "first": {
+          "first_pass": 1,
+          "second_pass": 2,
+          "first_mode": "control",
+          "second_mode": "candidate",
+          "server_age_matched": true,
+          "cells": {
+            "rag-c8-s1-vllm-arrivals": {
+              "requests": 64,
+              "abs_write_error_p95_ms": {
+                "between": 1.390904188156128,
+                "second": 1.7291753914339125,
+                "first": 1.8876646174774692
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": 0.21515313795970048,
+                "ttft_p95_ms": -1.7002744795627578,
+                "tpot_p50_ms": -1.297482863713717,
+                "itl_p99_ms": -1.4507794323368572,
+                "output_tok_s": 0.03251547892226814
+              },
+              "gates": {
+                "timing": true,
+                "output": true,
+                "decode": true
+              },
+              "second": {
+                "ttft_p50_ms": 936.437800526619,
+                "ttft_p95_ms": 1864.5823821425438,
+                "tpot_p50_ms": 46.90925747625471,
+                "itl_p99_ms": 273.61129969358444,
+                "output_tok_s": 171.95773081639447
+              },
+              "first": {
+                "ttft_p50_ms": 934.4273507595062,
+                "ttft_p95_ms": 1896.8337625265121,
+                "tpot_p50_ms": 47.52589785677242,
+                "itl_p99_ms": 277.6392325758934,
+                "output_tok_s": 171.90183611110677
+              }
+            },
+            "rag-c8-s2-vllm-arrivals": {
+              "requests": 64,
+              "abs_write_error_p95_ms": {
+                "between": 1.4116019010543823,
+                "second": 1.6785261116361028,
+                "first": 1.9439233065829953
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": 10.001064155861105,
+                "ttft_p95_ms": -0.9183162551608448,
+                "tpot_p50_ms": -0.2184755262893856,
+                "itl_p99_ms": 0.2441550452768837,
+                "output_tok_s": 0.038996866379559236
+              },
+              "gates": {
+                "timing": true,
+                "output": true,
+                "decode": true
+              },
+              "second": {
+                "ttft_p50_ms": 916.2610471248627,
+                "ttft_p95_ms": 1560.9299689531326,
+                "tpot_p50_ms": 44.15765123104486,
+                "itl_p99_ms": 276.3923704624176,
+                "output_tok_s": 177.3283160363868
+              },
+              "first": {
+                "ttft_p50_ms": 832.9565301537514,
+                "ttft_p95_ms": 1575.3970965743065,
+                "tpot_p50_ms": 44.25433612479939,
+                "itl_p99_ms": 275.71918815374374,
+                "output_tok_s": 177.25919050671942
+              }
+            },
+            "c32-riley-arrivals": {
+              "requests": 192,
+              "abs_write_error_p95_ms": {
+                "between": 1.558840274810791,
+                "second": 1.879096328338603,
+                "first": 1.7362612049827142
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": -6.202387143725819,
+                "ttft_p95_ms": -9.339513605775728,
+                "tpot_p50_ms": -0.09985548143347511,
+                "itl_p99_ms": -0.20055280082192928,
+                "output_tok_s": 0.07897495934101606
+              },
+              "gates": {
+                "timing": true,
+                "output": true,
+                "decode": true,
+                "short_ttft": true,
+                "short_throughput": true
+              },
+              "client_phases": {
+                "first": {
+                  "before_write_p50_ms": 0.4182383418083191,
+                  "before_write_p95_ms": 0.8688792586326599,
+                  "after_write_p50_ms": 67.31003522872925,
+                  "after_write_p95_ms": 120.52492052316666
+                },
+                "second": {
+                  "before_write_p50_ms": 0.4107430577278137,
+                  "before_write_p95_ms": 0.8984357118606567,
+                  "after_write_p50_ms": 63.13572824001312,
+                  "after_write_p95_ms": 109.17335003614426
+                }
+              },
+              "second": {
+                "ttft_p50_ms": 63.532374799251556,
+                "ttft_p95_ms": 110.07178574800491,
+                "tpot_p50_ms": 26.63768236599271,
+                "itl_p99_ms": 38.32145780324936,
+                "output_tok_s": 1130.5386637237925
+              },
+              "first": {
+                "ttft_p50_ms": 67.73346662521362,
+                "ttft_p95_ms": 121.41098082065582,
+                "tpot_p50_ms": 26.664308139256068,
+                "itl_p99_ms": 38.398467004299164,
+                "output_tok_s": 1129.6465258393137
+              }
+            }
+          }
+        },
+        "last": {
+          "first_pass": 3,
+          "second_pass": 2,
+          "first_mode": "control",
+          "second_mode": "candidate",
+          "server_age_matched": true,
+          "cells": {
+            "rag-c8-s1-vllm-arrivals": {
+              "requests": 64,
+              "abs_write_error_p95_ms": {
+                "between": 1.4645680785179138,
+                "second": 1.7291753914339125,
+                "first": 1.3751235944337026
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": 8.414153143688207,
+                "ttft_p95_ms": 0.29548573308801895,
+                "tpot_p50_ms": 0.0646633148376985,
+                "itl_p99_ms": -0.04479320926564778,
+                "output_tok_s": -0.00025917720587465
+              },
+              "gates": {
+                "timing": true,
+                "output": true,
+                "decode": true
+              },
+              "second": {
+                "ttft_p50_ms": 936.437800526619,
+                "ttft_p95_ms": 1864.5823821425438,
+                "tpot_p50_ms": 46.90925747625471,
+                "itl_p99_ms": 273.61129969358444,
+                "output_tok_s": 171.95773081639447
+              },
+              "first": {
+                "ttft_p50_ms": 863.759733736515,
+                "ttft_p95_ms": 1859.0890392661095,
+                "tpot_p50_ms": 46.878943997105274,
+                "itl_p99_ms": 273.733913898468,
+                "output_tok_s": 171.95817649279158
+              }
+            },
+            "rag-c8-s2-vllm-arrivals": {
+              "requests": 64,
+              "abs_write_error_p95_ms": {
+                "between": 1.1875033378601074,
+                "second": 1.6785261116361028,
+                "first": 1.6240921028867206
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": -0.3737222577114063,
+                "ttft_p95_ms": -0.9648872431794908,
+                "tpot_p50_ms": -0.010559058930370568,
+                "itl_p99_ms": 0.5213095359709374,
+                "output_tok_s": 0.02244339878672008
+              },
+              "gates": {
+                "timing": true,
+                "output": true,
+                "decode": true
+              },
+              "second": {
+                "ttft_p50_ms": 916.2610471248627,
+                "ttft_p95_ms": 1560.9299689531326,
+                "tpot_p50_ms": 44.15765123104486,
+                "itl_p99_ms": 276.3923704624176,
+                "output_tok_s": 177.3283160363868
+              },
+              "first": {
+                "ttft_p50_ms": 919.6981638669968,
+                "ttft_p95_ms": 1576.1379227042198,
+                "tpot_p50_ms": 44.16231435584271,
+                "itl_p99_ms": 274.9589830636978,
+                "output_tok_s": 177.28852646538908
+              }
+            },
+            "c32-riley-arrivals": {
+              "requests": 192,
+              "abs_write_error_p95_ms": {
+                "between": 1.1105909943580627,
+                "second": 1.879096328338603,
+                "first": 2.0890011939697084
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": 0.6170710482455544,
+                "ttft_p95_ms": -17.6443951880098,
+                "tpot_p50_ms": 0.06628460011277593,
+                "itl_p99_ms": 0.03845224744343234,
+                "output_tok_s": 0.1544079786777841
+              },
+              "gates": {
+                "timing": true,
+                "output": true,
+                "decode": true,
+                "short_ttft": true,
+                "short_throughput": true
+              },
+              "client_phases": {
+                "first": {
+                  "before_write_p50_ms": 0.4284977912902832,
+                  "before_write_p95_ms": 0.8760392665863037,
+                  "after_write_p50_ms": 62.80882656574249,
+                  "after_write_p95_ms": 132.77823477983475
+                },
+                "second": {
+                  "before_write_p50_ms": 0.4107430577278137,
+                  "before_write_p95_ms": 0.8984357118606567,
+                  "after_write_p50_ms": 63.13572824001312,
+                  "after_write_p95_ms": 109.17335003614426
+                }
+              },
+              "second": {
+                "ttft_p50_ms": 63.532374799251556,
+                "ttft_p95_ms": 110.07178574800491,
+                "tpot_p50_ms": 26.63768236599271,
+                "itl_p99_ms": 38.32145780324936,
+                "output_tok_s": 1130.5386637237925
+              },
+              "first": {
+                "ttft_p50_ms": 63.14273923635483,
+                "ttft_p95_ms": 133.65427404642105,
+                "tpot_p50_ms": 26.620037380665067,
+                "itl_p99_ms": 38.30672800540924,
+                "output_tok_s": 1128.7957130798245
+              }
+            }
+          }
+        },
+        "repeat": {
+          "first_pass": 1,
+          "second_pass": 3,
+          "first_mode": "control",
+          "second_mode": "control",
+          "server_age_matched": true,
+          "cells": {
+            "rag-c8-s1-vllm-arrivals": {
+              "requests": 64,
+              "abs_write_error_p95_ms": {
+                "between": 1.6070306301116943,
+                "second": 1.3751235944337026,
+                "first": 1.8876646174774692
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": -7.562665729502916,
+                "ttft_p95_ms": -1.9898803999633619,
+                "tpot_p50_ms": -1.3612659388715809,
+                "itl_p99_ms": -1.4066162916502978,
+                "output_tok_s": 0.0327747410727941
+              },
+              "gates": {
+                "timing": true,
+                "output": true
+              },
+              "second": {
+                "ttft_p50_ms": 863.759733736515,
+                "ttft_p95_ms": 1859.0890392661095,
+                "tpot_p50_ms": 46.878943997105274,
+                "itl_p99_ms": 273.733913898468,
+                "output_tok_s": 171.95817649279158
+              },
+              "first": {
+                "ttft_p50_ms": 934.4273507595062,
+                "ttft_p95_ms": 1896.8337625265121,
+                "tpot_p50_ms": 47.52589785677242,
+                "itl_p99_ms": 277.6392325758934,
+                "output_tok_s": 171.90183611110677
+              }
+            },
+            "rag-c8-s2-vllm-arrivals": {
+              "requests": 64,
+              "abs_write_error_p95_ms": {
+                "between": 1.6561374068260193,
+                "second": 1.6240921028867206,
+                "first": 1.9439233065829953
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": 10.413704746060892,
+                "ttft_p95_ms": 0.04702472357758225,
+                "tpot_p50_ms": -0.20793842369970506,
+                "itl_p99_ms": -0.27571715089412807,
+                "output_tok_s": 0.016549753265704403
+              },
+              "gates": {
+                "timing": true,
+                "output": true
+              },
+              "second": {
+                "ttft_p50_ms": 919.6981638669968,
+                "ttft_p95_ms": 1576.1379227042198,
+                "tpot_p50_ms": 44.16231435584271,
+                "itl_p99_ms": 274.9589830636978,
+                "output_tok_s": 177.28852646538908
+              },
+              "first": {
+                "ttft_p50_ms": 832.9565301537514,
+                "ttft_p95_ms": 1575.3970965743065,
+                "tpot_p50_ms": 44.25433612479939,
+                "itl_p99_ms": 275.71918815374374,
+                "output_tok_s": 177.25919050671942
+              }
+            },
+            "c32-riley-arrivals": {
+              "requests": 192,
+              "abs_write_error_p95_ms": {
+                "between": 1.0299906134605408,
+                "second": 2.0890011939697084,
+                "first": 1.7362612049827142
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": -6.77763536636985,
+                "ttft_p95_ms": 10.084172900184862,
+                "tpot_p50_ms": -0.16603002920531074,
+                "itl_p99_ms": -0.23891318077789991,
+                "output_tok_s": -0.07531672430515224
+              },
+              "gates": {
+                "timing": true,
+                "output": true
+              },
+              "client_phases": {
+                "first": {
+                  "before_write_p50_ms": 0.4182383418083191,
+                  "before_write_p95_ms": 0.8688792586326599,
+                  "after_write_p50_ms": 67.31003522872925,
+                  "after_write_p95_ms": 120.52492052316666
+                },
+                "second": {
+                  "before_write_p50_ms": 0.4284977912902832,
+                  "before_write_p95_ms": 0.8760392665863037,
+                  "after_write_p50_ms": 62.80882656574249,
+                  "after_write_p95_ms": 132.77823477983475
+                }
+              },
+              "second": {
+                "ttft_p50_ms": 63.14273923635483,
+                "ttft_p95_ms": 133.65427404642105,
+                "tpot_p50_ms": 26.620037380665067,
+                "itl_p99_ms": 38.30672800540924,
+                "output_tok_s": 1128.7957130798245
+              },
+              "first": {
+                "ttft_p50_ms": 67.73346662521362,
+                "ttft_p95_ms": 121.41098082065582,
+                "tpot_p50_ms": 26.664308139256068,
+                "itl_p99_ms": 38.398467004299164,
+                "output_tok_s": 1129.6465258393137
+              }
+            }
+          }
+        }
+      },
+      "arms": [
+        {
+          "mode": "control",
+          "history": {
+            "c32_release_s": 115.00564014911652,
+            "release_timed": true,
+            "rag_finish_s": 110.2388820797205
+          },
+          "batch_shapes": {
+            "total_steps": 3574,
+            "wide_1024_steps": 406,
+            "wide_1024_gpu_time_ms": 54916.245943
+          },
+          "changed_outputs_vs_reference": {
+            "rag-c8-s1-vllm-arrivals": [],
+            "rag-c8-s2-vllm-arrivals": [],
+            "c32-riley-arrivals": []
+          },
+          "token_ids_match_reference": true,
+          "token_ids_batch_invariant": true
+        },
+        {
+          "mode": "candidate",
+          "history": {
+            "c32_release_s": 115.00498424470425,
+            "release_timed": true,
+            "rag_finish_s": 110.16171530634165
+          },
+          "batch_shapes": {
+            "total_steps": 3582,
+            "wide_1024_steps": 406,
+            "wide_1024_gpu_time_ms": 54628.17834
+          },
+          "changed_outputs_vs_reference": {
+            "rag-c8-s1-vllm-arrivals": [],
+            "rag-c8-s2-vllm-arrivals": [],
+            "c32-riley-arrivals": []
+          },
+          "token_ids_match_reference": true,
+          "token_ids_batch_invariant": true
+        },
+        {
+          "mode": "control",
+          "history": {
+            "c32_release_s": 115.00469963252544,
+            "release_timed": true,
+            "rag_finish_s": 110.16108151525259
+          },
+          "batch_shapes": {
+            "total_steps": 3583,
+            "wide_1024_steps": 406,
+            "wide_1024_gpu_time_ms": 54661.099409
+          },
+          "changed_outputs_vs_reference": {
+            "rag-c8-s1-vllm-arrivals": [],
+            "rag-c8-s2-vllm-arrivals": [],
+            "c32-riley-arrivals": []
+          },
+          "token_ids_match_reference": true,
+          "token_ids_batch_invariant": true
+        }
+      ]
+    },
+    "7": {
+      "order": [
+        "candidate",
+        "control",
+        "candidate"
+      ],
+      "comparisons": {
+        "first": {
+          "first_pass": 2,
+          "second_pass": 1,
+          "first_mode": "control",
+          "second_mode": "candidate",
+          "server_age_matched": true,
+          "cells": {
+            "rag-c8-s1-vllm-arrivals": {
+              "requests": 64,
+              "abs_write_error_p95_ms": {
+                "between": 1.5863925218582153,
+                "second": 1.8606480257581381,
+                "first": 1.709453698669705
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": 2.0630554829108583,
+                "ttft_p95_ms": 2.6067776254054875,
+                "tpot_p50_ms": 2.4535312997449266,
+                "itl_p99_ms": 1.4067036614299866,
+                "output_tok_s": -0.04374700294187406
+              },
+              "gates": {
+                "timing": true,
+                "output": true,
+                "decode": false
+              },
+              "second": {
+                "ttft_p50_ms": 938.7275129556656,
+                "ttft_p95_ms": 1879.4710785150528,
+                "tpot_p50_ms": 47.83384584066436,
+                "itl_p99_ms": 275.3232792019844,
+                "output_tok_s": 172.9658084420387
+              },
+              "first": {
+                "ttft_p50_ms": 919.7525084018707,
+                "ttft_p95_ms": 1831.722155213356,
+                "tpot_p50_ms": 46.6883329777267,
+                "itl_p99_ms": 271.5040221810341,
+                "output_tok_s": 173.04150891603487
+              }
+            },
+            "rag-c8-s2-vllm-arrivals": {
+              "requests": 64,
+              "abs_write_error_p95_ms": {
+                "between": 1.471973955631256,
+                "second": 1.5839193601223656,
+                "first": 1.757509955936598
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": 2.8498655680534446,
+                "ttft_p95_ms": -0.0645546864848412,
+                "tpot_p50_ms": 1.7006219088625762,
+                "itl_p99_ms": 0.24051033341272454,
+                "output_tok_s": -0.001492048799522916
+              },
+              "gates": {
+                "timing": true,
+                "output": true,
+                "decode": false
+              },
+              "second": {
+                "ttft_p50_ms": 912.5391244888306,
+                "ttft_p95_ms": 1543.821282684803,
+                "tpot_p50_ms": 43.90525823737693,
+                "itl_p99_ms": 272.07151055336,
+                "output_tok_s": 178.30630657615492
+              },
+              "first": {
+                "ttft_p50_ms": 887.2535899281502,
+                "ttft_p95_ms": 1544.8185354471207,
+                "tpot_p50_ms": 43.17108136931743,
+                "itl_p99_ms": 271.4187204837799,
+                "output_tok_s": 178.30896703295699
+              }
+            },
+            "c32-riley-arrivals": {
+              "requests": 192,
+              "abs_write_error_p95_ms": {
+                "between": 1.1807233095169067,
+                "second": 1.7373929435606783,
+                "first": 1.659200080356582
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": 0.23629519302676982,
+                "ttft_p95_ms": 2.53832956999851,
+                "tpot_p50_ms": 0.0673684095932714,
+                "itl_p99_ms": -0.20113365887174384,
+                "output_tok_s": -0.0303832912948776
+              },
+              "gates": {
+                "timing": true,
+                "output": true,
+                "decode": true,
+                "short_ttft": true,
+                "short_throughput": true
+              },
+              "client_phases": {
+                "first": {
+                  "before_write_p50_ms": 0.4238933324813843,
+                  "before_write_p95_ms": 0.9963959455490112,
+                  "after_write_p50_ms": 67.23091006278992,
+                  "after_write_p95_ms": 77.25110650062561
+                },
+                "second": {
+                  "before_write_p50_ms": 0.4216879606246948,
+                  "before_write_p95_ms": 1.1390671133995056,
+                  "after_write_p50_ms": 67.40748882293701,
+                  "after_write_p95_ms": 79.25543189048767
+                }
+              },
+              "second": {
+                "ttft_p50_ms": 67.73652881383896,
+                "ttft_p95_ms": 79.71946895122528,
+                "tpot_p50_ms": 26.611522194885072,
+                "itl_p99_ms": 37.877850234508514,
+                "output_tok_s": 1120.3862894175588
+              },
+              "first": {
+                "ttft_p50_ms": 67.57684797048569,
+                "ttft_p95_ms": 77.74601876735687,
+                "tpot_p50_ms": 26.593606505129074,
+                "itl_p99_ms": 37.954188883304596,
+                "output_tok_s": 1120.7268031067665
+              }
+            }
+          }
+        },
+        "last": {
+          "first_pass": 2,
+          "second_pass": 3,
+          "first_mode": "control",
+          "second_mode": "candidate",
+          "server_age_matched": true,
+          "cells": {
+            "rag-c8-s1-vllm-arrivals": {
+              "requests": 64,
+              "abs_write_error_p95_ms": {
+                "between": 1.0463744401931763,
+                "second": 1.2401718989032418,
+                "first": 1.709453698669705
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": -0.23125129589930404,
+                "ttft_p95_ms": -0.07368407771083385,
+                "tpot_p50_ms": -0.7662483974920975,
+                "itl_p99_ms": -0.2841990784303472,
+                "output_tok_s": -0.0373554188803249
+              },
+              "gates": {
+                "timing": true,
+                "output": true,
+                "decode": true
+              },
+              "second": {
+                "ttft_p50_ms": 917.6255688071251,
+                "ttft_p95_ms": 1830.372467637062,
+                "tpot_p50_ms": 46.3305843744691,
+                "itl_p99_ms": 270.73241025209427,
+                "output_tok_s": 172.97686853554245
+              },
+              "first": {
+                "ttft_p50_ms": 919.7525084018707,
+                "ttft_p95_ms": 1831.722155213356,
+                "tpot_p50_ms": 46.6883329777267,
+                "itl_p99_ms": 271.5040221810341,
+                "output_tok_s": 173.04150891603487
+              }
+            },
+            "rag-c8-s2-vllm-arrivals": {
+              "requests": 64,
+              "abs_write_error_p95_ms": {
+                "between": 0.9348019957542419,
+                "second": 1.5565160859409843,
+                "first": 1.757509955936598
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": 0.65122219551772,
+                "ttft_p95_ms": -0.4253536935978963,
+                "tpot_p50_ms": 1.8746719417425561,
+                "itl_p99_ms": 0.24701610279489472,
+                "output_tok_s": -0.005037346985570235
+              },
+              "gates": {
+                "timing": true,
+                "output": true,
+                "decode": false
+              },
+              "second": {
+                "ttft_p50_ms": 893.03158223629,
+                "ttft_p95_ms": 1538.2475927472115,
+                "tpot_p50_ms": 43.98039751869487,
+                "itl_p99_ms": 272.0891684293747,
+                "output_tok_s": 178.29998499158114
+              },
+              "first": {
+                "ttft_p50_ms": 887.2535899281502,
+                "ttft_p95_ms": 1544.8185354471207,
+                "tpot_p50_ms": 43.17108136931743,
+                "itl_p99_ms": 271.4187204837799,
+                "output_tok_s": 178.30896703295699
+              }
+            },
+            "c32-riley-arrivals": {
+              "requests": 192,
+              "abs_write_error_p95_ms": {
+                "between": 1.3174265623092651,
+                "second": 1.7231400973312105,
+                "first": 1.659200080356582
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": -0.5908813120513279,
+                "ttft_p95_ms": 1.147764414281549,
+                "tpot_p50_ms": 0.027139921242769205,
+                "itl_p99_ms": -0.012779427281428557,
+                "output_tok_s": -0.0231541093135057
+              },
+              "gates": {
+                "timing": true,
+                "output": true,
+                "decode": true,
+                "short_ttft": true,
+                "short_throughput": true
+              },
+              "client_phases": {
+                "first": {
+                  "before_write_p50_ms": 0.4238933324813843,
+                  "before_write_p95_ms": 0.9963959455490112,
+                  "after_write_p50_ms": 67.23091006278992,
+                  "after_write_p95_ms": 77.25110650062561
+                },
+                "second": {
+                  "before_write_p50_ms": 0.4170462489128113,
+                  "before_write_p95_ms": 1.1508315801620483,
+                  "after_write_p50_ms": 66.7058452963829,
+                  "after_write_p95_ms": 78.15086841583252
+                }
+              },
+              "second": {
+                "ttft_p50_ms": 67.17754900455475,
+                "ttft_p95_ms": 78.63835990428925,
+                "tpot_p50_ms": 26.60082398899018,
+                "itl_p99_ms": 37.949338555336,
+                "output_tok_s": 1120.4673087976694
+              },
+              "first": {
+                "ttft_p50_ms": 67.57684797048569,
+                "ttft_p95_ms": 77.74601876735687,
+                "tpot_p50_ms": 26.593606505129074,
+                "itl_p99_ms": 37.954188883304596,
+                "output_tok_s": 1120.7268031067665
+              }
+            }
+          }
+        },
+        "repeat": {
+          "first_pass": 1,
+          "second_pass": 3,
+          "first_mode": "candidate",
+          "second_mode": "candidate",
+          "server_age_matched": true,
+          "cells": {
+            "rag-c8-s1-vllm-arrivals": {
+              "requests": 64,
+              "abs_write_error_p95_ms": {
+                "between": 1.1605024337768555,
+                "second": 1.2401718989032418,
+                "first": 1.8606480257581381
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": -2.247930720822189,
+                "ttft_p95_ms": -2.612363203629764,
+                "tpot_p50_ms": -3.1426732259886903,
+                "itl_p99_ms": -1.667446705994724,
+                "output_tok_s": 0.0063943814117672915
+              },
+              "gates": {
+                "timing": true,
+                "output": true
+              },
+              "second": {
+                "ttft_p50_ms": 917.6255688071251,
+                "ttft_p95_ms": 1830.372467637062,
+                "tpot_p50_ms": 46.3305843744691,
+                "itl_p99_ms": 270.73241025209427,
+                "output_tok_s": 172.97686853554245
+              },
+              "first": {
+                "ttft_p50_ms": 938.7275129556656,
+                "ttft_p95_ms": 1879.4710785150528,
+                "tpot_p50_ms": 47.83384584066436,
+                "itl_p99_ms": 275.3232792019844,
+                "output_tok_s": 172.9658084420387
+              }
+            },
+            "rag-c8-s2-vllm-arrivals": {
+              "requests": 64,
+              "abs_write_error_p95_ms": {
+                "between": 0.8652135729789734,
+                "second": 1.5565160859409843,
+                "first": 1.5839193601223656
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": -2.1377211923344075,
+                "ttft_p95_ms": -0.3610320702341019,
+                "tpot_p50_ms": 0.17113959542545132,
+                "itl_p99_ms": 0.006490159877015067,
+                "output_tok_s": -0.0035453510844218883
+              },
+              "gates": {
+                "timing": true,
+                "output": true
+              },
+              "second": {
+                "ttft_p50_ms": 893.03158223629,
+                "ttft_p95_ms": 1538.2475927472115,
+                "tpot_p50_ms": 43.98039751869487,
+                "itl_p99_ms": 272.0891684293747,
+                "output_tok_s": 178.29998499158114
+              },
+              "first": {
+                "ttft_p50_ms": 912.5391244888306,
+                "ttft_p95_ms": 1543.821282684803,
+                "tpot_p50_ms": 43.90525823737693,
+                "itl_p99_ms": 272.07151055336,
+                "output_tok_s": 178.30630657615492
+              }
+            },
+            "c32-riley-arrivals": {
+              "requests": 192,
+              "abs_write_error_p95_ms": {
+                "between": 1.1473894119262695,
+                "second": 1.7231400973312105,
+                "first": 1.7373929435606783
+              },
+              "changed_output_indexes": [],
+              "delta_percent": {
+                "ttft_p50_ms": -0.8252265344456333,
+                "ttft_p95_ms": -1.3561418072133513,
+                "tpot_p50_ms": -0.04020140530310856,
+                "itl_p99_ms": 0.18873383886595096,
+                "output_tok_s": 0.0072313791123379545
+              },
+              "gates": {
+                "timing": true,
+                "output": true
+              },
+              "client_phases": {
+                "first": {
+                  "before_write_p50_ms": 0.4216879606246948,
+                  "before_write_p95_ms": 1.1390671133995056,
+                  "after_write_p50_ms": 67.40748882293701,
+                  "after_write_p95_ms": 79.25543189048767
+                },
+                "second": {
+                  "before_write_p50_ms": 0.4170462489128113,
+                  "before_write_p95_ms": 1.1508315801620483,
+                  "after_write_p50_ms": 66.7058452963829,
+                  "after_write_p95_ms": 78.15086841583252
+                }
+              },
+              "second": {
+                "ttft_p50_ms": 67.17754900455475,
+                "ttft_p95_ms": 78.63835990428925,
+                "tpot_p50_ms": 26.60082398899018,
+                "itl_p99_ms": 37.949338555336,
+                "output_tok_s": 1120.4673087976694
+              },
+              "first": {
+                "ttft_p50_ms": 67.73652881383896,
+                "ttft_p95_ms": 79.71946895122528,
+                "tpot_p50_ms": 26.611522194885072,
+                "itl_p99_ms": 37.877850234508514,
+                "output_tok_s": 1120.3862894175588
+              }
+            }
+          }
+        }
+      },
+      "arms": [
+        {
+          "mode": "candidate",
+          "history": {
+            "c32_release_s": 115.00596236437559,
+            "release_timed": true,
+            "rag_finish_s": 109.67510329931974
+          },
+          "batch_shapes": {
+            "total_steps": 3576,
+            "wide_1024_steps": 406,
+            "wide_1024_gpu_time_ms": 54305.321955
+          },
+          "changed_outputs_vs_reference": {
+            "rag-c8-s1-vllm-arrivals": [],
+            "rag-c8-s2-vllm-arrivals": [],
+            "c32-riley-arrivals": []
+          },
+          "token_ids_match_reference": true,
+          "token_ids_batch_invariant": true
+        },
+        {
+          "mode": "control",
+          "history": {
+            "c32_release_s": 115.00636442750692,
+            "release_timed": true,
+            "rag_finish_s": 109.56619206815958
+          },
+          "batch_shapes": {
+            "total_steps": 3587,
+            "wide_1024_steps": 406,
+            "wide_1024_gpu_time_ms": 53974.523654
+          },
+          "changed_outputs_vs_reference": {
+            "rag-c8-s1-vllm-arrivals": [],
+            "rag-c8-s2-vllm-arrivals": [],
+            "c32-riley-arrivals": []
+          },
+          "token_ids_match_reference": true,
+          "token_ids_batch_invariant": true
+        },
+        {
+          "mode": "candidate",
+          "history": {
+            "c32_release_s": 115.00635130703449,
+            "release_timed": true,
+            "rag_finish_s": 109.5736795514822
+          },
+          "batch_shapes": {
+            "total_steps": 3583,
+            "wide_1024_steps": 406,
+            "wide_1024_gpu_time_ms": 54068.598504
+          },
+          "changed_outputs_vs_reference": {
+            "rag-c8-s1-vllm-arrivals": [],
+            "rag-c8-s2-vllm-arrivals": [],
+            "c32-riley-arrivals": []
+          },
+          "token_ids_match_reference": true,
+          "token_ids_batch_invariant": true
+        }
+      ],
+      "frozen_vllm": [
+        {
+          "rag-c8-s1-vllm-arrivals": {
+            "abs_write_error_p95_ms": {
+              "riley": 1.8606480257581381,
+              "vllm": 1.6897768523405077,
+              "between": 1.5025213360786438
+            },
+            "ttft_p95_ratio": 1.5450492467326933,
+            "phase_1_target_at_most_1_4": false,
+            "final_target_at_most_1_15": false
+          },
+          "rag-c8-s2-vllm-arrivals": {
+            "abs_write_error_p95_ms": {
+              "riley": 1.5839193601223656,
+              "vllm": 1.2474955114285535,
+              "between": 1.0934174060821533
+            },
+            "ttft_p95_ratio": 1.425669381065134,
+            "phase_1_target_at_most_1_4": false,
+            "final_target_at_most_1_15": false
+          }
+        },
+        {
+          "rag-c8-s1-vllm-arrivals": {
+            "abs_write_error_p95_ms": {
+              "riley": 1.709453698669705,
+              "vllm": 1.6897768523405077,
+              "between": 1.2228116393089294
+            },
+            "ttft_p95_ratio": 1.5057964809823035,
+            "phase_1_target_at_most_1_4": false,
+            "final_target_at_most_1_15": false
+          },
+          "rag-c8-s2-vllm-arrivals": {
+            "abs_write_error_p95_ms": {
+              "riley": 1.757509955936598,
+              "vllm": 1.2474955114285535,
+              "between": 1.1721029877662659
+            },
+            "ttft_p95_ratio": 1.4265903119684482,
+            "phase_1_target_at_most_1_4": false,
+            "final_target_at_most_1_15": false
+          }
+        },
+        {
+          "rag-c8-s1-vllm-arrivals": {
+            "abs_write_error_p95_ms": {
+              "riley": 1.2401718989032418,
+              "vllm": 1.6897768523405077,
+              "between": 0.8622556924819946
+            },
+            "ttft_p95_ratio": 1.5046869487330896,
+            "phase_1_target_at_most_1_4": false,
+            "final_target_at_most_1_15": false
+          },
+          "rag-c8-s2-vllm-arrivals": {
+            "abs_write_error_p95_ms": {
+              "riley": 1.5565160859409843,
+              "vllm": 1.2474955114285535,
+              "between": 1.3128295540809631
+            },
+            "ttft_p95_ratio": 1.4205222573839809,
+            "phase_1_target_at_most_1_4": false,
+            "final_target_at_most_1_15": false
+          }
+        }
+      ]
+    }
+  }
+}

@@ -36,7 +36,7 @@ def read(path):
     return json.loads(path.read_bytes())
 
 
-def check_archive(archive, root, reg):
+def check_archive(archive, root, reg, *, require_runtime_binary=False):
     with tarfile.open(archive, "r:gz") as bundle:
         members = bundle.getmembers()
         names = {member.name for member in members}
@@ -47,6 +47,7 @@ def check_archive(archive, root, reg):
         raise ValueError("remote dispatch does not match launch")
     expected = EXTRA | set(MANIFESTS)
     binary = None
+    runtime_binary = None
     for manifest in MANIFESTS:
         declared = set()
         for line in (root / manifest).read_text().splitlines():
@@ -59,11 +60,14 @@ def check_archive(archive, root, reg):
             declared.add(name)
             if (manifest, name) == ("build-result.sha256", "riley-diagnostic"):
                 binary = signature
+            elif require_runtime_binary and (manifest, name) == ("runtime.sha256", "riley-diagnostic"):
+                runtime_binary = signature
             else:
                 if digest(root / name) != signature:
                     raise ValueError(f"checksum mismatch: {name}")
                 expected.add(name)
-    if names != expected or not binary or binary == reg["previous_diagnostic_binary"]:
+    if (names != expected or not binary or binary == reg["previous_diagnostic_binary"]
+            or require_runtime_binary and runtime_binary != binary):
         raise ValueError("diagnostic binary or archive membership differs")
     for phase in ("build", "campaign"):
         if ((root / f"{phase}.exit").read_text().strip() != "0"

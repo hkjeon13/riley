@@ -1335,6 +1335,19 @@ GPU 6번의 211번은 두 설정에서 앞선 256행 혼합 스텝 두 개 후 �
 
 짧은 후보 요청만 있는 혼합 스텝에서 이미 시작한 prefill을 먼저 이어가는 방식을 CPU에서 대조했다. 같은 총 3행 예산에서 decode 1행을 유지하고, 나뉜 짧은 프롬프트의 남은 두 행을 다음 스텝에서 처리했다. 뒤의 대기 요청은 그다음 스텝에서 진행했고 긴 입력이 섞인 대조에서는 기존 선택 순서가 유지됐다. 스케줄러 테스트 146건이 통과했다. 실제 GPU 지연, 출력 및 긴 요청과의 교차 회귀 판정은 남아 있다. [CPU 후보 패치](../../benchmarks/evidence/20261124-w3-c32-prefill-tail/short-prefill-continuation.patch.gz) · [CPU 검사](../../benchmarks/evidence/20261124-w3-c32-prefill-tail/cpu-candidate.log.gz)
 
+### 짧은 prefill 이어서 처리하기의 교차 시험
+
+`2b58655f3` 이미지와 같은 소스에 짧은 prefill 후보를 적용해 일반 CUDA 시험 바이너리 하나로 빌드했다. 혼합 스텝에서 긴 입력이 없고 aging 우선 처리가 발동하지 않을 때 이미 시작한 짧은 prefill을 앞에 둔다. 행 예산과 decode 선택은 기준과 같다. A100 6번은 기준 → 후보 → 기준, 7번은 후보 → 기준 → 후보를 실행했다. 고정 RAG 두 시각표 뒤에 짧은 C32를 재생했다. [후보 패치](../../benchmarks/evidence/20261124-w3-short-prefill-continuation/candidate.patch.gz) · [실행 등록](../../benchmarks/evidence/20261124-w3-short-prefill-continuation/registration.json)
+
+여섯 실행의 요청 1,920건과 별도 장문 생성 토큰 ID 96건이 기존 기록과 일치했다. 설정을 바꾼 12개 비교 및 같은 설정 반복 6개가 모두 3ms 전송 오차 기준과 워밍업 시작 시각 기준을 충족했다. 종료 자원이 회수됐고 A100 6·7번의 동일 홀더가 각 회차 뒤 20GiB 예약으로 돌아왔다. [원본](../../benchmarks/evidence/20261124-w3-short-prefill-continuation/raw-results.tar.gz) · [비교 검산](../../benchmarks/evidence/20261124-w3-short-prefill-continuation/verified.json)
+
+| A100 | C32 TTFT p50 기준 대비 후보, 첫째 / 둘째 | C32 TTFT p95 기준 대비 후보, 첫째 / 둘째 | C32 TTFT p95 같은 설정의 첫째 대비 셋째 |
+|---|---:|---:|---:|
+| 6 | −6.20% / +0.62% | −9.34% / −17.64% | +10.08% |
+| 7 | +0.24% / −0.59% | +2.54% / +1.15% | −1.36% |
+
+짧은 C32의 TTFT p50·decode TPOT p50·처리량은 네 대조에서 기존 회귀 한도를 충족했다. RAG는 GPU 7번의 seed 1 첫째 대조에서 TPOT p50이 2.45%, seed 2 두 대조에서 각각 1.70%·1.88% 늘어 1% 한도를 초과했다. 저장 vLLM 대비 같은 시각표의 RAG TTFT p95는 GPU 7번에서 1.421–1.545배였다. 이 부하의 측정 RAG 입력은 1,755–3,528토큰으로 후보가 적용되는 짧은 입력보다 길었다. 관측된 RAG 회귀의 원인을 확인하려면 기준과 후보의 실제 선택 경로를 대조해야 한다. C32 p95 이득도 GPU별 방향이 달라 후보의 기본 적용을 보류한다. [재검산](../../benchmarks/evidence/20261124-w3-short-prefill-continuation/verify.py)
+
 ### RAG p95 요청의 스텝별 시간과 목표 격차
 
 같은 요청별 prefill 계측 네 번의 RAG C8 두 시각표에서 첫 토큰 p95를 결정한 요청을 각각 찾았다. 요청별 입력·출력 해시와 전송 시각표를 기존 기록에 대조했다. 엔진 입장 승인부터 마지막 prefill 실행 반환까지 자기 prefill이 포함된 CUDA 호출은 536.35–708.18ms, 자기 요청 없이 다른 prefill을 처리한 CUDA 호출은 923.30–1,237.19ms였다. 이 여덟 구간에 decode 전용 CUDA 호출은 없었고 CUDA 호출 바깥 시간은 1.10–1.67ms였다. 혼합 스텝에서 여러 요청을 처리하므로 자기 prefill 시간은 그 요청을 포함한 스텝 전체의 경과 시간이다. [스텝별 원본 검산](../../benchmarks/evidence/20261124-w3-rag-tail-accounting/verified.json)
