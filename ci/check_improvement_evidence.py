@@ -12,6 +12,7 @@ import re
 from statistics import fmean
 import subprocess
 import sys
+import tarfile
 import tomllib
 from urllib.parse import unquote, urlsplit
 
@@ -235,7 +236,7 @@ def check_structured_serving_package(root, candidate):
     return parent, smoke, stock
 
 
-def check_pattern_fix_package(root, candidate):
+def check_pattern_fix_package(root, candidate, *, require_raw_soaks=False):
     parent, smoke, stock = check_structured_serving_package(root, candidate)
     if candidate["allocator_experiment"]["matched_structured_cases"] != 16:
         raise ValueError("pattern-fix allocator must preserve all 16 structured reference responses")
@@ -245,7 +246,7 @@ def check_pattern_fix_package(root, candidate):
         drill = json.loads((root / entry["path"]).read_bytes(), object_pairs_hook=unique_object)
         check_prefix_metrics_recovery(drill, smoke, allocator)
     if "stock_soak_comparison" in candidate:
-        check_stock_soak_comparison(root, candidate, smoke, allocator)
+        check_stock_soak_comparison(root, candidate, smoke, allocator, require_raw=require_raw_soaks)
 
 
 def check_pattern_class_probes(root, candidate):
@@ -363,8 +364,9 @@ def check_pointer_syntax_probes(root, candidate):
         raise ValueError("JSON Pointer probes must prove valid escape resolution and named syntax rejections")
 
 
-def check_stock_soak_comparison(root, candidate, smoke, allocator):
-    entry = candidate["stock_soak_comparison"]["report"]
+def check_stock_soak_comparison(root, candidate, smoke, allocator, *, require_raw=False):
+    evidence = candidate["stock_soak_comparison"]
+    entry = evidence["report"]
     report = json.loads((root / entry["path"]).read_bytes(), object_pairs_hook=unique_object)
     parent_sha = candidate["evidence"]["a100_cpu"]["sha256"]
     allocator_sha = candidate["allocator_experiment"]["evidence"]["serving"]["sha256"]
@@ -395,6 +397,58 @@ def check_stock_soak_comparison(root, candidate, smoke, allocator):
                 change = (late / early - 1) * 100 if early and late else None
                 if change != measured:
                     raise ValueError(f"{mode} {label} comparison latency windows changed")
+
+    archives = [root / entry["path"] for entry in evidence.get("reproduction", ())
+                if Path(entry["path"]).name == "raw-results.tar.gz"]
+    if len(archives) > 1 or require_raw and not archives:
+        raise ValueError("the 30-minute crossover requires one raw results archive")
+    if archives:
+        check_raw_soak_comparison(archives[0], report, allocator)
+
+
+def check_raw_soak_comparison(path, report, allocator):
+    with tarfile.open(path, "r:gz") as archive:
+        members = {}
+        for member in archive:
+            if member.name in members:
+                raise ValueError(f"duplicate raw soak member: {member.name}")
+            members[member.name] = member
+
+        for label, summary in (("stock", report["stock_soaks"]), ("allocator", allocator["soaks"])):
+            for mode, arm in summary["modes"].items():
+                name = f"{label}/{mode}"
+                records = {}
+                for file in ("soak", "report", "shutdown"):
+                    member = members.get(f"{name}/{file}.json")
+                    if member is None or not member.isfile():
+                        raise ValueError(f"missing raw soak member: {name}/{file}.json")
+                    with archive.extractfile(member) as stream:
+                        raw = stream.read()
+                    if sha256(raw).hexdigest() != arm[f"{file}_sha256"]:
+                        raise ValueError(f"raw soak receipt differs: {name}/{file}.json")
+                    records[file] = json.loads(raw, object_pairs_hook=unique_object)
+                raw_soak, runtime, shutdown = (records[file] for file in ("soak", "report", "shutdown"))
+                comparison = report["comparisons"][mode]
+                if (raw_soak["mode"] != "mixed_soak" or runtime["mixed_soak"]["mode"] != mode
+                        or (raw_soak["seconds"], raw_soak["rate"]) != (1800, 8)
+                        or raw_soak["status"] != arm["status"]
+                        or raw_soak["counts"] != comparison[f"{label}_counts"]
+                        or raw_soak["latency_windows"] != comparison[f"{label}_latency_windows"]
+                        or raw_soak["client_dispatch_p95_ms"] != comparison[f"{label}_client_dispatch_p95_ms"]
+                        or raw_soak["problem_count"] != len(raw_soak["problems"])
+                        or raw_soak["problem_count"] != arm["problem_count"]
+                        or raw_soak["p95_change_percent"] != arm["p95_change_percent"]):
+                    raise ValueError(f"raw soak measurements differ: {name}")
+                halfway = next((sample for sample in raw_soak["rss_samples"]
+                                if sample["at_seconds"] >= raw_soak["seconds"] / 2), {})
+                precise = raw_soak["smaps_rollup_second_half"]
+                if (precise != arm["rss"] or precise["baseline"] != halfway.get("smaps_rollup")
+                        or precise["drain"] != raw_soak["final"].get("smaps_rollup")):
+                    raise ValueError(f"raw soak RSS samples differ: {name}")
+                if (runtime["shutdown_exit"] != 0
+                        or any(shutdown[key] for key in ("active_requests", "waiting_requests", "kv_allocated_blocks"))
+                        or not shutdown["allocation"] or any(shutdown["allocation"].values())):
+                    raise ValueError(f"raw soak shutdown retained resources: {name}")
 
 
 def check_prefix_metrics_serving(serving):
@@ -1088,7 +1142,7 @@ def main():
             latest = candidate
             latest_inputs = check_distribution_inputs(root, latest)
             if "allocator_experiment" in latest:
-                check_pattern_fix_package(root, latest)
+                check_pattern_fix_package(root, latest, require_raw_soaks=True)
             else:
                 if "stock_soak_comparison" in latest or "recovery_drill" in latest:
                     raise ValueError("pattern anchor or JSON Pointer recovery requires an allocator experiment")
@@ -1106,7 +1160,7 @@ def main():
         revision = None
         if args.distribution_revision is not None:
             revision = check_distribution_revision(root, latest, args.distribution_revision, historical=earlier)
-    except (OSError, EOFError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as error:
+    except (OSError, EOFError, ValueError, KeyError, TypeError, tarfile.TarError, subprocess.CalledProcessError) as error:
         print(f"improvement evidence check failed: {error}", file=sys.stderr)
         return 1
     print(f"improvement evidence verified: {files} file hashes, {inputs} baseline and {latest_inputs} latest Git inputs, "

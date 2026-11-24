@@ -65,6 +65,8 @@ README의 24개 성능 행을 A100 원본 요약과 대조하고 이번에 수�
 
 Production CPU의 Documentation 단계에서 개선 계획서의 상대 링크와 Markdown 제목, qualification manifest에 연결된 근거 파일의 SHA-256, 배포 입력을 대조한 두 Git 리비전의 객체를 검증한다. 로컬에서는 `python3.12 ci/check_improvement_evidence.py`를 실행한다. [검증 스크립트](../../ci/check_improvement_evidence.py) · [Production CPU 워크플로](../../.github/workflows/production-cpu.yml)
 
+30분 교차 시험의 원본 아카이브가 연결된 경우, CI는 부하·런타임·종료 기록의 해시를 실행 요약과 대조한다. 요청 수와 지연 구간, 후반 첫 정밀 RSS 표본과 drain 표본, 종료 뒤 요청·KV·GPU 할당 회수도 확인한다. 지연 변화율이 같아도 절대 p95가 원본과 다르면 검증에 실패한다. [원본 대조 코드](../../ci/check_improvement_evidence.py) · [회귀 검사](../../ci/tests/test_improvement_evidence.py)
+
 파생 할당기 시험은 패키징, API, 두 캐시 모드의 30분 부하, 장문 정확성, 기본 성능, 닫힌 RAG 확장 대조, 고정 도착 대조와 메트릭 조회 두 시험을 `current_allocator_trial`의 이미지 ID에 연결한다. CI에서 패키징 증명의 소스와 실행 파일, GPU 부하·정확성의 공통 증명, 지연 시험의 이미지·실행 인자·할당기 설정을 대조한다. 워밍업 재시험은 첫 시험의 검산 해시, 체크포인트 및 부하별 완료 건수와 맞아야 한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [릴리스 판정](06-candidate-qualification.md)
 
 같은 검사에서 README의 `Status` 버전을 Cargo 워크스페이스 버전과 맞추고, 10월 A100 동시성 32·고정 길이 표의 24개 모델을 보존된 표와 대조한다. 성능 요약은 동시성 8–32의 처리량·TPOT 각 144셀, TTFT 192셀, 단일 클라이언트 처리량 48셀에서 다시 계산한다. 당시 기록에 적힌 AWS 원본 경로는 이번 점검에서 확인되지 않아 성능 검사의 근거는 저장소에 보존된 모델별 측정 표다. [워크스페이스 버전](../../Cargo.toml) · [README 성능표](../../README.md#performance) · [보존된 측정값과 당시 실행 이름](../model-coverage-a100-perf-table.md#측정-출처)

@@ -368,6 +368,27 @@ class PackageFollowUpTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "cache-on allocator RSS difference changed"):
                 checker.check_stock_soak_comparison(ROOT, candidate, smoke, allocator)
 
+    def test_registered_soak_rejects_rescaled_latency_windows(self):
+        manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
+        candidate = manifest["distribution_with_pattern_anchor_fix"]
+        evidence = candidate["stock_soak_comparison"]
+        entry = evidence["report"]
+        smoke = json.loads((ROOT / candidate["evidence"]["a100_serving"]["path"]).read_bytes())
+        allocator_entry = candidate["allocator_experiment"]["evidence"]["serving"]
+        allocator = json.loads((ROOT / allocator_entry["path"]).read_bytes())
+        checker.check_stock_soak_comparison(ROOT, candidate, smoke, allocator, require_raw=True)
+
+        changed = json.loads((ROOT / entry["path"]).read_bytes())
+        for window in changed["comparisons"]["cache-on"]["stock_latency_windows"].values():
+            window["ttft_ms_p95"] *= 2
+        raw = json.dumps(changed).encode("utf-8")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "soak-comparison.json"
+            path.write_bytes(raw)
+            entry.update(path=str(path), sha256=sha256(raw).hexdigest())
+            with self.assertRaisesRegex(ValueError, "raw soak measurements differ: stock/cache-on"):
+                checker.check_stock_soak_comparison(ROOT, candidate, smoke, allocator, require_raw=True)
+
     def test_allocator_soaks_match_the_attested_runtime_settings(self):
         manifest = json.loads((ROOT / checker.MANIFEST).read_bytes())
         candidate = manifest["distribution_after_terminal_fix"]
