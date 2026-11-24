@@ -1335,6 +1335,12 @@ GPU 6번의 211번은 두 설정에서 앞선 256행 혼합 스텝 두 개 후 �
 
 짧은 후보 요청만 있는 혼합 스텝에서 이미 시작한 prefill을 먼저 이어가는 방식을 CPU에서 대조했다. 같은 총 3행 예산에서 decode 1행을 유지하고, 나뉜 짧은 프롬프트의 남은 두 행을 다음 스텝에서 처리했다. 뒤의 대기 요청은 그다음 스텝에서 진행했고 긴 입력이 섞인 대조에서는 기존 선택 순서가 유지됐다. 스케줄러 테스트 146건이 통과했다. 실제 GPU 지연, 출력 및 긴 요청과의 교차 회귀 판정은 남아 있다. [CPU 후보 패치](../../benchmarks/evidence/20261124-w3-c32-prefill-tail/short-prefill-continuation.patch.gz) · [CPU 검사](../../benchmarks/evidence/20261124-w3-c32-prefill-tail/cpu-candidate.log.gz)
 
+### RAG p95 요청의 스텝별 시간과 목표 격차
+
+같은 요청별 prefill 계측 네 번의 RAG C8 두 시각표에서 첫 토큰 p95를 결정한 요청을 각각 찾았다. 요청별 입력·출력 해시와 전송 시각표를 기존 기록에 대조했다. 엔진 입장 승인부터 마지막 prefill 실행 반환까지 자기 prefill이 포함된 CUDA 호출은 536.35–708.18ms, 자기 요청 없이 다른 prefill을 처리한 CUDA 호출은 923.30–1,237.19ms였다. 이 여덟 구간에 decode 전용 CUDA 호출은 없었고 CUDA 호출 바깥 시간은 1.10–1.67ms였다. 혼합 스텝에서 여러 요청을 처리하므로 자기 prefill 시간은 그 요청을 포함한 스텝 전체의 경과 시간이다. [스텝별 원본 검산](../../benchmarks/evidence/20261124-w3-rag-tail-accounting/verified.json)
+
+GPU 7번의 네 대조는 저장된 vLLM과 동일 입력·도착 시각표 및 전송 오차 기준을 충족했다. 적용 중인 최종 목표인 같은 시각표의 vLLM TTFT p95 × 1.15에 도달하려면 311.22–454.82ms가 줄어야 했다. 이 요청들이 기다린 개별 스텝의 최대 길이는 141.20–148.61ms였다. 다른 요청을 처리한 스텝을 긴 순서로 통째로 빼는 계산에서도 목표 차이를 채우는 데 각 사례에서 최소 3–4개가 필요했다. 이는 기존 시각표의 지연 규모를 보여주는 계산이다. 실제 순서 변경 뒤 각 요청의 첫 토큰 및 decode 지연은 같은 도착 시각표에서 다시 확인한다. [저장 vLLM 원본](../../benchmarks/evidence/20261124-w3-separated-client/initial-results.tar.gz) · [목표 격차 검산기](../../benchmarks/evidence/20261124-w3-rag-tail-accounting/verify.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
