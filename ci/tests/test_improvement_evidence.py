@@ -111,6 +111,34 @@ class DistributionServingTests(unittest.TestCase):
 
 
 class PackageFollowUpTests(unittest.TestCase):
+    def test_pointer_syntax_probes_require_the_exact_reference_value(self):
+        checks = []
+        for parameter in ("response_format", "tools"):
+            checks.append({
+                "case": "pointer-escaped-tilde-one", "parameter": parameter,
+                "status": 200, "output": {"value": 9},
+            })
+            for case in ("pointer-raw-unknown-escape", "pointer-encoded-unknown-escape", "pointer-dangling-tilde"):
+                checks.append({"case": case, "parameter": parameter, "status": 400, "error": {
+                    "type": "invalid_request_error", "param": parameter, "code": "invalid_schema",
+                    "message": "invalid JSON Pointer escape in local $ref",
+                }})
+        candidate = {"evidence": {
+            "a100_pointer_syntax": {"path": "probes.json"},
+            "a100_verified": {"path": "summary.json"},
+        }}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for expected in (9, 10):
+                checks[0]["output"]["value"] = expected
+                (root / "probes.json").write_text(json.dumps({"status": "passed", "checks": checks}))
+                (root / "summary.json").write_text(json.dumps({"pointer_syntax_checks": checks}))
+                if expected == 9:
+                    checker.check_pointer_syntax_probes(root, candidate)
+                else:
+                    with self.assertRaisesRegex(ValueError, "JSON Pointer probes must prove"):
+                        checker.check_pointer_syntax_probes(root, candidate)
+
     def test_package_follow_up_cannot_reuse_the_older_allocator_reports(self):
         path = ROOT / checker.MANIFEST
         read_bytes = Path.read_bytes

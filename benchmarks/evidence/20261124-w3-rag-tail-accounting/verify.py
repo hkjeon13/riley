@@ -20,7 +20,7 @@ def read(archive, name):
 def digest(path):
     return sha256(path.read_bytes()).hexdigest()
 
-def account(request, admissions, executions, prefill):
+def account(request, admissions, executions, prefill, row_budget):
     rid = int(request["response_id"].removeprefix("cmpl-"), 16)
     ack = admissions[rid][-1]
     own = [(span, prefill[start][rid])
@@ -36,6 +36,7 @@ def account(request, admissions, executions, prefill):
     own_starts = {span.start for span, _ in own}
     own_ns, other_prefill_ns, decode_only_ns = 0, 0, 0
     other_steps = []
+    other_prefill_rows = []
     for start, (span, rows, decode) in executions.items():
         if span.end <= ack or span.start >= final:
             continue
@@ -48,6 +49,7 @@ def account(request, admissions, executions, prefill):
                 decode_only_ns += during
             else:
                 other_prefill_ns += during
+                other_prefill_rows.append(rows)
     outside = final - ack - own_ns - other_prefill_ns - decode_only_ns
     if outside < 0:
         raise ValueError("overlapping attribution intervals")
@@ -58,6 +60,8 @@ def account(request, admissions, executions, prefill):
         "decode_only_execution_ms": decode_only_ns / 1e6,
         "outside_execution_ms": outside / 1e6,
         "largest_other_iteration_ms": max(other_steps, default=0) / 1e6,
+        "other_prefill_steps": len(other_prefill_rows),
+        "other_prefill_steps_at_row_budget": other_prefill_rows.count(row_budget),
     }, sorted(other_steps, reverse=True))
 
 def summarize(evidence):
@@ -79,6 +83,8 @@ def summarize(evidence):
             arms = {}
             for mode in ("control", "reserve"):
                 path = f"gpu{gpu}/rag/{mode}"
+                server = read(archive, f"{path}/plan.json")["server"]
+                row_budget = int(server[server.index("--batch-token-budget") + 1])
                 captures = {label: read(archive, f"{path}/{label}.json") for label in LABELS}
                 for label, capture in captures.items():
                     prior = read(golden, f"gpu{gpu}/rag/control/{label}.json")["measured"]
@@ -106,7 +112,7 @@ def summarize(evidence):
                     timing = next(row for row in observations[label] if row["request_index"] == idx)
                     queues = stages["reconcile"](normalized, observations[label])
                     queue = next(row for row in queues if row["request_index"] == idx)
-                    record, durations = account(tail, admissions, executions, prefill)
+                    record, durations = account(tail, admissions, executions, prefill, row_budget)
                     record.update(request_index=idx, prompt_tokens=tail["prompt_tokens"], ttft_ms=timing["ttft_ms"],
                                   command_queue_ms=queue["command_queue_ms"],
                                   admitted_to_first_content_ms=timing["admitted_to_first_visible_ms"])

@@ -1,6 +1,6 @@
 # Riley 0.1.0 후보 검증 근거와 릴리스 판정
 
-2026-11-24 KST에 `2b58655f3` 패키지의 A100 API, 장문 구조화 출력, 30분 교차 부하와 격리 복구를 검증했다. jemalloc 시험 이미지는 두 캐시 모드의 합성 부하 기준을 충족했다. 실제 운영 트래픽, 승인된 SLO 및 서비스 복구 검증이 남아 현재 판정은 **릴리스 보류**다. [30분 교차 대조](05-mixed-soak-result.md#정규식-분기-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#정규식-분기-수정-이미지의-격리-복구) · [후보별 원본 목록과 해시](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
+2026-11-24 KST에 `b7ca110fc`의 GitHub·A100 이미지 해시, A100 API, 장문 구조화 출력과 45초 부하를 검증했다. 가장 최근 30분 교차 부하와 격리 복구가 완료된 패키지는 `2b58655f3`이다. 새 패키지의 장시간 시험과 실제 운영 트래픽, 승인된 SLO 및 서비스 복구 검증이 남아 현재 판정은 **릴리스 보류**다. [새 패키지](04-structured-output-result.md#로컬-참조의-json-pointer-이스케이프-검증) · [후보별 원본 목록과 해시](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 
 ## 실행 파일과 소스 연결
 
@@ -25,8 +25,9 @@
 | 로컬 참조 수정 이미지의 jemalloc 파생 시험 | `8a7c618c1`의 실행 파일 | 이미지 `99cb3f14a6d2`에서 두 캐시 모드의 30분 기준과 장문 232건·스키마 및 도구 64건을 통과했다. 후반 RSS는 각각 1,016KiB와 312KiB 줄었고, 격리 복구는 110.26초에 완료됐다. [30분 교차 대조](05-mixed-soak-result.md#로컬-참조-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#로컬-참조-수정-이미지의-격리-복구) |
 | 정규식 분기 앵커 수정의 배포 이미지 | `2b58655f3` | GitHub와 A100 런타임 파일 21개 일치. 정규식 HTTP 10건, 두 GPU의 API 40건씩, 장문 스키마·도구 64건, 45초 혼합 부하와 종료 자원 회수 통과. [분기 앵커 검증](04-structured-output-result.md#pattern-선택-분기의-시작과-끝-조건) |
 | 정규식 분기 수정 이미지의 jemalloc 파생 시험 | `2b58655f3`의 실행 파일 | 이미지 `8a451f5b3875`의 두 30분 합성 부하, 장문 232건 및 스키마·도구 64건을 확인했다. 후반 RSS는 900KiB와 612KiB 줄었다. 격리 복구는 105.47초에 완료됐다. [30분 교차 대조](05-mixed-soak-result.md#정규식-분기-수정-이미지의-30분-교차-대조) · [격리 복구](05-mixed-soak-result.md#정규식-분기-수정-이미지의-격리-복구) |
+| JSON Pointer 이스케이프 수정의 배포 이미지 | `b7ca110fc` | GitHub와 A100 런타임 파일 21개 일치. 포인터 HTTP 8건, 두 GPU의 API 각 40건, 장문 스키마·도구 64건, 45초 혼합 부하와 종료 자원 회수 통과. [포인터 검증](04-structured-output-result.md#로컬-참조의-json-pointer-이스케이프-검증) |
 
-CI는 `distribution_with_pattern_anchor_fix`에서 같은 커밋의 Git 입력·패키지·A100 보고서, 정규식 HTTP 검사, 두 캐시 모드의 부하와 격리 복구를 연결한다. `--distribution-revision origin/main`으로 현재 배포 입력과 검증 근거를 대조한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [CI 검증기](../../ci/check_improvement_evidence.py)
+CI는 `distribution_with_pointer_syntax_fix`에서 같은 커밋의 Git 입력, GitHub·A100 패키지 및 실제 HTTP 결과를 연결한다. `--distribution-revision origin/main`으로 현재 배포 입력과 검증 근거를 대조한다. `distribution_with_pattern_anchor_fix`는 이전 이미지의 두 캐시 모드 부하와 격리 복구를 보존한다. [후보 매니페스트](../../benchmarks/evidence/20261119-improvement-qualification/manifest.json) · [CI 검증기](../../ci/check_improvement_evidence.py)
 
 초기 감사에서 `f7c956d3c` 네이티브 빌드와 `96c04dbe4` 배포 이미지의 프로그램 입력 Git 객체를 비교했다. 그 뒤 헤더·Rust 바인딩·서버 런타임을 보완해 배포 이미지의 Riley 실행 파일 해시가 갱신됐다. 네이티브 시험은 각 실행 파일로 계속 추적한다. [초기 네이티브 빌드](04-structured-output-result.md) · [이미지 빌드 이력](01-validation-result.md#현행-배포-이미지)
 

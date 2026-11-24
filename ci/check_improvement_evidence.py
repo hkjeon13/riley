@@ -339,6 +339,30 @@ def check_pattern_anchor_probes(root, candidate):
         raise ValueError("pattern anchor probes must prove matches and named schema rejections")
 
 
+def check_pointer_syntax_probes(root, candidate):
+    evidence = candidate["evidence"]
+    report, summary = (
+        json.loads((root / evidence[name]["path"]).read_bytes(), object_pairs_hook=unique_object)
+        for name in ("a100_pointer_syntax", "a100_verified")
+    )
+    checks = report["checks"]
+    if report["status"] != "passed" or checks != summary["pointer_syntax_checks"]:
+        raise ValueError("JSON Pointer HTTP probes differ from the A100 package summary")
+    rejected = ("pointer-raw-unknown-escape", "pointer-encoded-unknown-escape", "pointer-dangling-tilde")
+    expected = {}
+    for parameter in ("response_format", "tools"):
+        expected["pointer-escaped-tilde-one", parameter] = (200, {"value": 9}, None)
+        for case in rejected:
+            expected[case, parameter] = (400, None, {
+                "type": "invalid_request_error", "param": parameter, "code": "invalid_schema",
+                "message": "invalid JSON Pointer escape in local $ref",
+            })
+    observed = {(row["case"], row["parameter"]): (row["status"], row.get("output"), row.get("error"))
+                for row in checks}
+    if len(checks) != len(expected) or observed != expected:
+        raise ValueError("JSON Pointer probes must prove valid escape resolution and named syntax rejections")
+
+
 def check_stock_soak_comparison(root, candidate, smoke, allocator):
     entry = candidate["stock_soak_comparison"]["report"]
     report = json.loads((root / entry["path"]).read_bytes(), object_pairs_hook=unique_object)
@@ -1056,20 +1080,24 @@ def main():
                 check_structured_serving_package(root, latest)
             check_pattern_class_probes(root, latest)
             check_schema_reference_probes(root, latest, uri_fragments=True)
-        pattern_anchors = manifest.get("distribution_with_pattern_anchor_fix")
-        if pattern_anchors is not None:
+        for key in ("distribution_with_pattern_anchor_fix", "distribution_with_pointer_syntax_fix"):
+            candidate = manifest.get(key)
+            if candidate is None:
+                continue
             earlier.append(latest)
-            latest = pattern_anchors
+            latest = candidate
             latest_inputs = check_distribution_inputs(root, latest)
             if "allocator_experiment" in latest:
                 check_pattern_fix_package(root, latest)
             else:
                 if "stock_soak_comparison" in latest or "recovery_drill" in latest:
-                    raise ValueError("pattern anchor comparison or recovery requires an allocator experiment")
+                    raise ValueError("pattern anchor or JSON Pointer recovery requires an allocator experiment")
                 check_structured_serving_package(root, latest)
             check_pattern_class_probes(root, latest)
             check_schema_reference_probes(root, latest, uri_fragments=True)
             check_pattern_anchor_probes(root, latest)
+            if key == "distribution_with_pointer_syntax_fix":
+                check_pointer_syntax_probes(root, latest)
         allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],
                                                   manifest["current_distribution_candidate"])
         serving_models = check_distribution_serving(root, manifest["current_distribution_candidate"])

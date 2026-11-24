@@ -1,0 +1,87 @@
+{
+  "status": "passed",
+  "checks": [
+    {
+      "case": "pointer-raw-unknown-escape",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "invalid JSON Pointer escape in local $ref",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "pointer-raw-unknown-escape",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "invalid JSON Pointer escape in local $ref",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "pointer-encoded-unknown-escape",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "invalid JSON Pointer escape in local $ref",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "pointer-encoded-unknown-escape",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "invalid JSON Pointer escape in local $ref",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "pointer-dangling-tilde",
+      "parameter": "response_format",
+      "status": 400,
+      "error": {
+        "message": "invalid JSON Pointer escape in local $ref",
+        "type": "invalid_request_error",
+        "param": "response_format",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "pointer-dangling-tilde",
+      "parameter": "tools",
+      "status": 400,
+      "error": {
+        "message": "invalid JSON Pointer escape in local $ref",
+        "type": "invalid_request_error",
+        "param": "tools",
+        "code": "invalid_schema"
+      }
+    },
+    {
+      "case": "pointer-escaped-tilde-one",
+      "parameter": "response_format",
+      "status": 200,
+      "output": {
+        "value": 9
+      }
+    },
+    {
+      "case": "pointer-escaped-tilde-one",
+      "parameter": "tools",
+      "status": 200,
+      "output": {
+        "value": 9
+      }
+    }
+  ]
+}

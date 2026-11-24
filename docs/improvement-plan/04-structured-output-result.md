@@ -62,7 +62,9 @@ A100 6·7번의 API 검사는 각각 40건을 통과했다. 장문 스키마·�
 
 JSON Pointer에서 `~0`과 `~1`은 각각 물결표와 슬래시를 나타낸다. 기존 컴파일러는 같은 이름의 필드가 있으면 `~2`처럼 유효하지 않은 이스케이프도 참조로 받아들였다. URI 프래그먼트를 디코딩한 다음 포인터를 검사해 이 경우를 거부하도록 수정했다. `~01`이 필드 이름의 `~1`을 가리키는 동작은 유지했다. [RFC 6901 문법과 평가](https://www.rfc-editor.org/rfc/rfc6901.html#section-3)
 
-응답 스키마와 지정 도구 양쪽에서 잘못된 이스케이프를 거부하는 CPU 회귀 검사를 추가했다. 서버 라이브러리 전체 테스트에서 113건이 통과했고 기존 비활성 검사 1건이 남았다. 새 CUDA 패키지의 HTTP·추론 검증을 별도로 진행한다. [참조 컴파일러](../../crates/riley-server/src/structured.rs) · [응답·도구 정규화 검사](../../crates/riley-server/src/chat.rs)
+응답 스키마와 지정 도구 양쪽에서 잘못된 이스케이프를 거부하는 CPU 회귀 검사를 추가했다. 서버 라이브러리 전체 테스트에서 113건이 통과했고 기존 비활성 검사 1건이 남았다. [참조 컴파일러](../../crates/riley-server/src/structured.rs) · [응답·도구 정규화 검사](../../crates/riley-server/src/chat.rs)
+
+`b7ca110fc`의 GitHub와 A100 CUDA 12.4 이미지에서 런타임 파일 21개의 SHA-256이 일치했다. Qwen2.5-7B-Instruct의 실제 HTTP 검사에서 응답 스키마와 지정 도구는 유효한 참조 두 건에 정해진 값을 반환했고, 잘못된 이스케이프 여섯 건에 `400 invalid_schema`를 반환했다. A100 6·7번의 API는 각각 40건을 통과했고 장문 스키마·도구 64건은 동시성 1·8·32에서 대응 출력이 같았다. 45초 혼합 부하에서 338건을 정상 완료하고 21건의 의도적 연결 종료를 처리했다. 종료 뒤 자원과 A100 예약이 복구됐다. [실제 HTTP 결과](../../benchmarks/evidence/20261124-w4-pointer-syntax/a100/structured/pointer-syntax.json) · [패키지 검산](../../benchmarks/evidence/20261124-w4-pointer-syntax/verified.json) · [GitHub 이미지 검사](https://github.com/hkjeon13/riley/actions/runs/45329963969)
 
 ## 현행 배포 이미지의 장문 채팅 검증
 

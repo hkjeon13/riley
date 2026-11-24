@@ -1108,6 +1108,218 @@
       ]
     }
   },
+  "distribution_with_pointer_syntax_fix": {
+    "source_revision": "b7ca110fc36ff30a606c254eb87d3a898faa79ea",
+    "matching_distribution_input_git_objects": {
+      "Cargo.toml": "e75f6ce3a2ad13911f1a91fc2b982a410f9d32f2",
+      "Cargo.lock": "afa446f5b2f1ad1ba2070de2d16343cf7a7a0a70",
+      "rust-toolchain.toml": "67c827cf973f78b64274b37b54c5a99cff5ca055",
+      "crates": "a48ebe445c3e88679ec9271a10dfdd89e4f4f8c8",
+      "kernels": "7c3c0dfd2d7d04b694c8bd77c4e323081199f46f",
+      "third_party": "fcda977aec23d650259a7d1104d339f815d30e07",
+      "tools/riley-checkpoint": "375dc077ae7d32ba759b339d28f1ef8c370642b5",
+      ".dockerignore": "032839f0b4e1ab479f5a1069d69937ade5e44f7e",
+      ".github/workflows/distribution-image.yml": "8a4587aa0fccb0304fdc1c06333b4f138a503dab",
+      "deploy/docker": "4a585fa6e013d816c743760807ad422d270b404e",
+      "ci/check_distribution_image.py": "536a00bedb0675f19bf038395bf46e1996b82053",
+      "ci/check_serving_source_contract.py": "26abce96ca8eb573299613464e26bae94529a8ce",
+      "ci/serving-source-contract.json": "205b02603ad57d850071cb212c88fce965edd148",
+      "LICENSE": "1b4cfd2f88277e627300ec3a92f5c310807d125e"
+    },
+    "differing_runtime_files": [],
+    "a100_source_inventory": {
+      "source_objects_sha256": "8abb12795746e6b802dbc04dabb614368227bc38af3eca3f568fda25c22dfada",
+      "source_object_count": 1037
+    },
+    "evidence": {
+      "hosted_cpu": {
+        "path": "benchmarks/evidence/20261124-w4-pointer-syntax/hosted/report.json",
+        "sha256": "049a8028c8046aec42f70717b50923e0e96956e911d508bfc2249c7a20a8f07f"
+      },
+      "hosted_runtime": {
+        "path": "benchmarks/evidence/20261124-w4-pointer-syntax/hosted/runtime.sha256",
+        "sha256": "9e31525a1dea695662d5a98a5dc146bc164f2888675ebfc20fa4ca6710ab9fe0"
+      },
+      "a100_cpu": {
+        "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/cpu-evidence/report.json",
+        "sha256": "8436c243060357615f9ac5499edd98ba404a079e44d55a8df0f76bcf9ce0b6d8"
+      },
+      "a100_runtime": {
+        "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/cpu-evidence/runtime.sha256",
+        "sha256": "c8fd5f9179d32334ead5a039ab1296a92570b8f02c0eb7a7139cde21654f1788"
+      },
+      "a100_source_objects": {
+        "path": "benchmarks/evidence/20261124-w4-pointer-syntax/source-objects.tsv.gz",
+        "sha256": "e77a120c5106440b5854c1dd64b8b0f22a8b676acf4195e42f9425175bb9edb2"
+      },
+      "a100_structured": {
+        "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/structured/report.json",
+        "sha256": "f00d452a384ec8ca0674a98917c4ec5ce9f8020c5cd43009c11e929b6f0de023"
+      },
+      "a100_serving": {
+        "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/smoke/report.json",
+        "sha256": "4da887fbf480b8accef760bdb15122e474b7b87fcb8607f4d512056c256d3902"
+      },
+      "a100_pattern_classes": {
+        "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/structured/pattern-classes.json",
+        "sha256": "2408ab72d3f3cc62f8820d704479fcf5cd6f73a775974746a5c6584c43f5be1d"
+      },
+      "a100_schema_references": {
+        "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/structured/schema-references.json",
+        "sha256": "0c0e9e3a2903d2d2ef2d75acfa353a7ee099f46aa20a322a48d0dc7339d3e6c2"
+      },
+      "a100_pattern_anchors": {
+        "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/structured/pattern-anchors.json",
+        "sha256": "aaafa6fc8e1c542cbd12a02901c23491d11f1d4e0279dddbe694c3b78c6e2d54"
+      },
+      "a100_verified": {
+        "path": "benchmarks/evidence/20261124-w4-pointer-syntax/verified.json",
+        "sha256": "d26629564d4a1b48e8b46ce1f4476c5c1d080402c3b744665bee7f0bb3e5b3a2"
+      },
+      "reproduction": [
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/campaign.exit",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/campaign.log",
+          "sha256": "c0e959d5293c87270affe4408efb91605b9c202e26ef7d616c565c418b642eb3"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/campaign.pid",
+          "sha256": "a28f999ec95eb92425d85a6cda889d42fc134eb9f25fb21ab615006b1a17a437"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/campaign.started",
+          "sha256": "97de4c55b52afd47073c38661a79d90043f418f1cab07750ee33aa0181055aa3"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/gpu6-after.json",
+          "sha256": "63e83de1eb4f0134367c3b5a11dfc2ce2ad18007e52318917aa7ec778c1493aa"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/gpu6-before.json",
+          "sha256": "a90068546b1451ff04a592928707dfb16e9a32bb0938be2e13640059f1296f0d"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/gpu6-staged-start.json",
+          "sha256": "ca70f7579430523d6174bc2d0fb58225b71e7a11a44822325963ede66266e6c0"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/gpu7-after.json",
+          "sha256": "a5b4ffd61ea86caae7b19fac00d4f8025b4255978c7cddbecb7906daa7c4a97b"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/gpu7-before.json",
+          "sha256": "daf90e492b277903c41ea608e9c91aa65a0d4330b04d708a358f5ae039f20101"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/gpu7-staged-start.json",
+          "sha256": "7773380ff4ab73e2b6f8a552ff8af5c83e13b937b647992e74b862f294e7a435"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/image.id",
+          "sha256": "3cbc4bc9961b63379f77a8a5b0a697525819d44fa857ddf2b946bcb67fda7852"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/result.sha256",
+          "sha256": "ecb3f7b5293406f6e94eab0a107aecd24f156958dd2d364e66164463b78185a8"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/smoke/api.json",
+          "sha256": "d0cb96b75db70ea71f42272b4345b33b3bd8424ae63946c089bd266ba73034e5"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/smoke/shutdown.json",
+          "sha256": "c21f26d7b5ca5c34db37b34485263128c36225fefd43ee942cb6b31cbdae854d"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/smoke/smoke.json",
+          "sha256": "1bffa6fb9a45201f991ee1f2620d1985c75f7aa35766cc4ea9737e41182d35a0"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/source-revision.txt",
+          "sha256": "73b5c4e634467e869de158594f17da1ae1884d845c9fc295c6695f47d2e594b8"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/structured/api.json",
+          "sha256": "2d1d6f42d1771c19b6a7be7d037c46efc08283d654a0b9bda8aee36451ddc976"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/structured/shutdown.json",
+          "sha256": "950ddac0c794e1b8e479d82ed31ce365976a9af794954334991bbed993184e71"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/anchors_probe.py",
+          "sha256": "dd2cb154755b362089ecfb00bab7eb707d94d567ccb5ab203d75352aa156557b"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/build_inputs.py",
+          "sha256": "3a5326d0f283fd3dde516dcf380a5ecd4707ab00f7f67cc796f73f384902682b"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/campaign.sh",
+          "sha256": "cc3ec38936aa5457c4f88cc136f24dbf8d587c9248a586482c6ca086c17990e6"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/dispatch.sha256",
+          "sha256": "ef482f160db643b554feafa1dc68a23cd7ad9b993b81184a1b29f9d76cff70ae"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/fetch-a100.sh",
+          "sha256": "bbe192bfddb0205d2d76a54bd4f55d4b711c5229f04070c7316cd781334ee5ac"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/hosted/image.id",
+          "sha256": "f8868600d793a7b9716f9b09dfbf8463f7de16ae25b4d9472633ac72e759a496"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/hosted/source-archive.sha256",
+          "sha256": "b564db8405e025698e4bac065abc2b24aac28cf6deb30d7e96b401959dd7e671"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/pattern_probe.py",
+          "sha256": "be139e79f43ce0a369c6ca2042e4a1890a8308ba2db8ab7cdcca3bcb8cd40b42"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/reference_probe.py",
+          "sha256": "9e3eadf678d6e363bff21dcd950fa2eb582ca08f6b6b2e0fe3590ef7bd46e786"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/registration.json",
+          "sha256": "37ba14aa0d3a5a8d5b1f5777ca8f30d19638ed4325df8229f2e42dc3784f60be"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/run_checker.py",
+          "sha256": "9c01b46b7367f5210df7867dcf70bce888f16f5804534aacc34fd490fbc819ac"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/schema.patch.gz",
+          "sha256": "13af72a9d6c833b388034e01da791567ff7145a02e944dec07b7961f7221c8b5"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/source-revision.txt",
+          "sha256": "73b5c4e634467e869de158594f17da1ae1884d845c9fc295c6695f47d2e594b8"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/verify-a100.py",
+          "sha256": "642de995469a4e25ae698875fd7db391cf8bb7688600ce553dd08fb595409983"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/verify-package.py",
+          "sha256": "e66412628d46bcca07d79246994b0a1f3f7e269c6757adee1e3b7320a9dfab88"
+        },
+        {
+          "path": "benchmarks/evidence/20261124-w4-pointer-syntax/hosted/receipt.json",
+          "sha256": "38dcd7f8dd076477664133e2000ee4bc99492e1b9a8c705b58bef193ce8e6996"
+        }
+      ],
+      "a100_pointer_syntax": {
+        "path": "benchmarks/evidence/20261124-w4-pointer-syntax/a100/structured/pointer-syntax.json",
+        "sha256": "3d478b19c7a036e85302220ad34e8298b28018db74cf544775971fd6d625df1b"
+      }
+    }
+  },
   "other_evidence": {
     "coder14_native_aged_decode_short_retry": [
       {
@@ -1268,11 +1480,11 @@
     "coder14_rag_tail_accounting": [
       {
         "path": "benchmarks/evidence/20261124-w3-rag-tail-accounting/verified.json",
-        "sha256": "cf9d73790c52a1f76e7a3d2b7eb17dc90f23b7ee3d944050e0b8cfca9a2af42d"
+        "sha256": "93622e1f6410051f27e7e618d6237feec435b6939c2ca5ca55fe7ff47d8be87b"
       },
       {
         "path": "benchmarks/evidence/20261124-w3-rag-tail-accounting/verify.py",
-        "sha256": "a2b6676d70a23fd893f62c976798420651687f46f5f6657a16db5aff7d9b9cb3"
+        "sha256": "1468ad913b81c79dbffa9988957b9785d84532778498bf3217e59ee6bc1aaa55"
       }
     ],
     "coder14_c32_prefill_tail": [

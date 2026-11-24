@@ -1,0 +1,127 @@
+{
+  "schema_version": "riley.distribution-gpu-check.v1",
+  "status": "passed",
+  "image_id": "sha256:67efe6fbdaebcc8a088eaa9626f1adb43cf1af3e673ccae2d9af076fa99bdd24",
+  "source_revision": "b7ca110fc36ff30a606c254eb87d3a898faa79ea",
+  "source_archive_sha256": "4398f3e068a79f043270bc0ec2df638719f43e8834e5c2d290c52b6d2101384b",
+  "riley_binary_sha256": "a90085fa7f911380df2cf2f20d9304664c314484aa1a19970b8b677798a3265d",
+  "cpu_report_sha256": "8436c243060357615f9ac5499edd98ba404a079e44d55a8df0f76bcf9ce0b6d8",
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "checkpoint_source_model": "Qwen/Qwen2.5-7B-Instruct",
+  "checkpoint_source_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+  "gpu_uuid": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+  "gpu_name": "NVIDIA A100-SXM4-40GB",
+  "driver_version": "550.127.05",
+  "api_checks": 40,
+  "tool_checks_enabled": true,
+  "shutdown_exit": 0,
+  "artifacts_sha256": {
+    "api.json": "d0cb96b75db70ea71f42272b4345b33b3bd8424ae63946c089bd266ba73034e5",
+    "api.log": "2a4c2ffde4d255d0d9d561afea2d00445730d3e3c6252055c95e620b8a78af00",
+    "checkpoint-verify.log": "eed8898de5077938b6d79d57d936a05bda5ee0d99ac98f85b77c24d97bfe2a17",
+    "ready.json": "1be0c59a28723f92d577e7481f866234f76255f9ed64cfa9f920f48d42ee335b",
+    "server.log": "3df3d6c31e0d164255a13ff3e83a48664b66638aaa05b8126aff63b62117f8d1",
+    "shutdown.json": "c21f26d7b5ca5c34db37b34485263128c36225fefd43ee942cb6b31cbdae854d",
+    "smoke.json": "1bffa6fb9a45201f991ee1f2620d1985c75f7aa35766cc4ea9737e41182d35a0",
+    "smoke.log": "46a914248857dc7277d65ad6823e9e6fe9d2e36d8af889c4d63da0b290a5a6cb"
+  },
+  "serving_smoke": {
+    "seconds": 45.0,
+    "rate": 8.0,
+    "counts": {
+      "plain": {
+        "completed": 202
+      },
+      "schema": {
+        "completed": 42,
+        "stop": 42
+      },
+      "logprobs": {
+        "completed": 23
+      },
+      "tools": {
+        "completed": 23,
+        "tool_calls": 23
+      },
+      "long": {
+        "completed": 30
+      },
+      "reason": {
+        "completed": 18
+      },
+      "cancel": {
+        "disconnected": 21
+      }
+    },
+    "counter_changes": {
+      "cancellations": 21,
+      "disconnects": 21,
+      "overloads": 0,
+      "dropped_observations": 0
+    },
+    "checks": {
+      "no_unexpected_http_or_stream_error": true,
+      "completed_schema_and_tool_covered": true,
+      "disconnects_observed": true,
+      "idle_after_drain": true,
+      "native_allocation_plateau": true,
+      "workload_coverage": true,
+      "current_batch_shape_metrics": true,
+      "current_prefix_cache_metrics": true
+    },
+    "batch_shape_metrics": {
+      "status": "passed",
+      "snapshots": 3,
+      "slot_capacity": 24,
+      "configured_dense_rows": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        48,
+        64,
+        80,
+        96,
+        112,
+        128,
+        144,
+        160,
+        176,
+        192,
+        208,
+        224,
+        240,
+        256
+      ],
+      "committed_steps": 3886,
+      "gpu_execution_ns": 49439562749
+    },
+    "status": "passed",
+    "failed_checks": [],
+    "server_arguments": [
+      "--max-active-sequences",
+      "32",
+      "--max-sequence-tokens",
+      "8192",
+      "--max-output-tokens",
+      "512",
+      "--kv-blocks",
+      "16384",
+      "--prefix-cache-blocks",
+      "128"
+    ]
+  },
+  "prefix_cache_metrics": {
+    "status": "passed",
+    "snapshots": 3,
+    "capacity_blocks": 128,
+    "peak_sampled_retained_blocks": 128,
+    "hit_tokens_delta": 10720,
+    "evicted_blocks_delta": 2139,
+    "shutdown_hit_tokens": 17088,
+    "shutdown_evicted_blocks": 2139
+  }
+}
