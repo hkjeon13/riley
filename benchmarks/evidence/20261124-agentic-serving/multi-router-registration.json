@@ -1,0 +1,6 @@
+{
+  "scope": "Two independent workflow routers, eight concurrent synthetic sessions, two A100 replicas on one host, same native control binary as the isolated cross-router trial.",
+  "order": [["capacity", "observed-capacity"], ["observed-capacity", "capacity"]],
+  "fixtures": "In each block wave 0 uses seeds 761-764 and 781-784, wave 1 uses 771-774 and 791-794. Four sessions per client at 25ms spacing, history 100, alternating 2 or 96 document pairs. Start fresh services in block 2. Same initial inventory order. No proactive priming. One sampler per candidate client.",
+  "acceptance": "Require at least the control count of correctly completed and SLO-compliant workflows, higher correct SLO completions per shared pair GPU-hour, and at most 5 percent regression in p95 time to first and last final content and p95 across per-stream p95 final gaps, in BOTH matched waves. Existing 10s/18s/150ms workflow SLO. Include all submitted work in completeness and cost, report answer failures by seed and policy. Staging screen only."
+}

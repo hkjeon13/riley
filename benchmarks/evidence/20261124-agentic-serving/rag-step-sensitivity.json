@@ -1,0 +1,49 @@
+{
+  "source_sha256": "6754e045c9b92ba1500f44d7611607469a6f2f521ba7d57e8d29d1e0a11b4857",
+  "source_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+  "assumption": "Per-observation accounting on original execution spans. Frozen arrival, queue, batch membership and nonselected durations. Mixed steps include concurrent decode. Not an executable schedule or speed prediction.",
+  "cells": {
+    "rag-c8-s1-vllm-arrivals": {
+      "recorded_ms": 1804.5493513345718,
+      "target_ms": 1398.9144649356604,
+      "scenarios": {
+        "own_iteration": {
+          "fraction_removed_to_reach_target": 0.5144032446651181,
+          "p95_ms_if_10pct_removed": 1725.693922134572,
+          "p95_ms_if_fully_removed": 1059.5840719157295
+        },
+        "all_prefill_iterations": {
+          "fraction_removed_to_reach_target": 0.23376068601373845,
+          "p95_ms_if_10pct_removed": 1633.9040303986267,
+          "p95_ms_if_fully_removed": 127.76509722320941
+        },
+        "newer_only_foreign": {
+          "fraction_removed_to_reach_target": null,
+          "p95_ms_if_10pct_removed": 1763.8260547623147,
+          "p95_ms_if_fully_removed": 1422.6741723345717
+        }
+      }
+    },
+    "rag-c8-s2-vllm-arrivals": {
+      "recorded_ms": 1536.8426144123077,
+      "target_ms": 1245.3058883547783,
+      "scenarios": {
+        "own_iteration": {
+          "fraction_removed_to_reach_target": 0.42705221041251207,
+          "p95_ms_if_10pct_removed": 1483.2243600123077,
+          "p95_ms_if_fully_removed": 917.6593308924522
+        },
+        "all_prefill_iterations": {
+          "fraction_removed_to_reach_target": 0.19629712698588264,
+          "p95_ms_if_10pct_removed": 1388.3245334123078,
+          "p95_ms_if_fully_removed": 128.41552564781205
+        },
+        "newer_only_foreign": {
+          "fraction_removed_to_reach_target": 0.8378147227549562,
+          "p95_ms_if_10pct_removed": 1483.4885630123076,
+          "p95_ms_if_fully_removed": 1208.7866051204567
+        }
+      }
+    }
+  }
+}

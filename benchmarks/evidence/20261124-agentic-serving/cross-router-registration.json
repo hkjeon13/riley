@@ -1,0 +1,7 @@
+{
+  "model": "Qwen2.5-7B-Instruct BF16, A100, 8 active slots per replica",
+  "design": "Independent spawned process sends 192-token streams to a warm GPU. Placement process has no local outstanding work. Both policies wait 180ms after the last peer first-content event. Baseline uses local capacity. Candidate uses asynchronous readyz data only for saturation and readiness. Fresh early prompt tags per arm, fixed output budget of one for the isolated placement probe. Exchange GPU roles and reverse order in second block.",
+  "occupancies": [4, 7, 8],
+  "acceptance": "Verify exact overlap at submission and token lengths. At 8 require lower continuation TTFT in each block and an idle destination. At 4 and 7 keep warm and limit TTFT regression to 5 percent for each matched pair. Compare ongoing peer p95 content gaps against 5 percent for each pair. Keep failures in denominator. This trial cannot qualify a production routing default.",
+  "agent_replay": "Additionally run observed-capacity via the normal inventory entry point on the same 2 GPUs at 1, 2 and 4 submitted workflows. Report correctness and existing SLO counts; descriptive only."
+}

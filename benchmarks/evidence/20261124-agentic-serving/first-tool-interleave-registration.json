@@ -1,0 +1,4 @@
+{
+ "workload":"Two captured C16 cohorts, identical previews and finals to drained study. Ready final requests arrive after exactly 0, 4, 8 or 16 settled scheduler iterations of prefix preparation, or immediately after drain if it finishes sooner. Submit all finals in original order. Compare leaving outstanding preparation in queue versus canceling every unfinished preview just before submitting the real finals. Empty preparation is the control.",
+ "measure":"Count actual planned prefill token rows, cache hits on completed requests, computed rows discarded from cancelled requests (including any blocks later retained by cache), scheduler iterations from final availability to each synthetic one-token completion, and final drain. Keep replay iterations separate from latency, ticks do not cost equal time."
+}

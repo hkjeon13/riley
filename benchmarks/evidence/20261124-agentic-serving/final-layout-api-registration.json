@@ -1,0 +1,4 @@
+{
+ "design":"Serve an opt-in boolean include_tools_when_tool_choice_none. It selects the tools field already provided on the final turn for the template and leaves output tool parsing and forced-call grammar disabled. Compare the new field against explicit duplicate template tools using the same experimental binary on two fresh A100s. Validate all 60 inputs per arm, actual rendered token and generated token hashes, tool eligibility, cache adoption and valid natural stop.",
+ "promotion":"Only expose the opt-in in the checkout if actual new-field presentation matches the existing expression and the registered new-seed latency, prior correctness and peer protection tests pass. Document repeated wrong interpretations of p95 separately. Default layout unchanged."
+}

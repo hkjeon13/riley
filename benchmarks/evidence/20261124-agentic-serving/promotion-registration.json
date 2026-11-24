@@ -1,0 +1,19 @@
+{
+  "source": "candidate wide from stage 02, mixed steps keep a 256-row budget",
+  "candidate_decode": {
+    "gpu": 6,
+    "pairs_in_order": [["vllm","wide"],["wide","vllm"],["wide","vllm"],["vllm","wide"],["vllm","wide"]],
+    "fixed_sample_size": 5,
+    "primary": "Within each independently restarted pair take the maximum Riley/vLLM ratio over all four frozen-request cells and both predeclared latency metrics. For independent comparable paired starts, their maximum gives a one-sided nonparametric 96.875% upper bound on the median of this worst-cell ratio. Qualify only if the bound is at most 1.0. Report same-host dependence and no population extrapolation.",
+    "natural": "include both dependent 5-workflow history depths in every start; record failures"
+  },
+  "protected": {
+    "gpu": 7,
+    "checkpoint": "Qwen2.5-Coder-14B-Instruct",
+    "order": ["control","wide","wide","control"],
+    "archived_schedules_sha256": "7921e63069ddd4b58736558af62590b5f340083ee129d25aa54eeefbdf78c116",
+    "cells": ["rag-c8-s1-vllm-arrivals","c32-vllm-arrivals"],
+    "conditions": "archived input and scheduled arrivals, 32 active sequences, 2576 KV blocks, prefix cache disabled; short TTFT p50 regression <2%, throughput drop <2%, decode TPOT p50 regression <1%; show RAG p95 and input/output divergence, preserve historical 1.15x vLLM final target",
+    "arrival_error_p95_ms_max": 3
+  }
+}

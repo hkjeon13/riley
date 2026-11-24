@@ -1,0 +1,8 @@
+{
+ "seeds":{"X":3104,"Y":4104},
+ "order":{"pair-3-wide":[["X",false],["Y",true]],"pair-4-wide":[["X",true],["Y",false]],"pair-5-wide":[["Y",true],["X",false]]},
+ "scenarios":[["zero",1,0,20,false],["short",3,0.1,80,false],["long",5,0.5,450,false],["warm",5,0.5,450,false],["overlap",7,0.5,450,true],["early_return",11,0.05,450,false]],
+ "group_scope":"independently seeded fixtures on the same wide-config service; X/Y assignments cross on newly started servers. Measure actual credit and every invalid final or late preview.",
+ "policy":"pre-registered external wait forecasts in milliseconds, no access to actual delay for gating. Require forecast >=350ms and >=1024 observed prompt tokens; at most one speculative request per trust-domain replica instance and no duplicate successful prefetch within a 60s window (256 context revisions max).",
+ "decision":"report normal and wrong-hint cases separately. An early-return slowdown counts against the policy; single-device evidence cannot qualify a fleet."
+}

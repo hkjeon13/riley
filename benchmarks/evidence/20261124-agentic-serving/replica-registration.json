@@ -1,0 +1,9 @@
+{
+  "scope": "exploratory single host with two independent A100s, stock 256-row baseline, 4096 KV blocks and 1536 prefix-cache blocks on each GPU",
+  "policy_order": ["round-robin","session","cost","cost","session","round-robin"],
+  "reset": "fresh model processes and separate bearer tokens for each policy run",
+  "routing_inputs": "observed outstanding requests, message-prefix fingerprints, completed prompt length minus 16, byte/4 input estimate; cost in ms = 60 * active + 0.09 * estimated uncached tokens",
+  "routing_domain": "one trusted benchmark client can reach both replicas for the routing trial; separate credentials and KV address spaces for the two-tenant isolation trial",
+  "load": "waves of 1, 2, 4, 8 workflows submitted 25ms apart, 100 history entries, 2 versus 96 tool observations, 100ms delay per tool; identical seeds across policies",
+  "acceptance": "record all submitted, correctness, final first/last p95, streaming gap, SLO goodput and aggregate allocation time; at least two starts before any selection; no production target inferred"
+}

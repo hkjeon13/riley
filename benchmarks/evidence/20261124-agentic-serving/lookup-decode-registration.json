@@ -1,0 +1,48 @@
+{
+  "scope": "Offline decision screen for natural final-answer decode on Qwen2.5-7B-Instruct. Exact server-generated greedy token IDs only. Use four existing frozen identity requests, then independent natural termination cases. Record inputs and per-request state only; no cross-tenant or future-token lookup.",
+  "proposer": "At each decision, search the existing prompt and already verified output for the most recent prior occurrence of the longest 2..6 token suffix. Propose up to four known following tokens; do not rescore alternatives. The target supplies the token at first mismatch or one bonus token after all matches. With no proposal the target supplies a single token.",
+  "decision": "Report verified tokens per target pass, emitted length, comparison count, and an optimistic ceiling using observed time after first content if each target pass costs only one baseline decode. Test proposal unchanged on new seeds. Costs of actual verification or rollback require GPU implementation before any acceleration claim. Compare to the observed approximately 0.44s long-answer deficit, never infer a fleet SLO.",
+  "heldout_cases": [
+    [
+      8581,
+      0,
+      2
+    ],
+    [
+      8582,
+      200,
+      2
+    ],
+    [
+      8583,
+      0,
+      96
+    ],
+    [
+      8584,
+      200,
+      96
+    ],
+    [
+      8585,
+      100,
+      32
+    ],
+    [
+      8586,
+      200,
+      96
+    ],
+    [
+      8587,
+      50,
+      2
+    ],
+    [
+      8588,
+      200,
+      96
+    ]
+  ],
+  "heldout_scope": "Fresh distinct workflow seeds, natural stopping, single stock 256-row replica, 50ms tool waits. Frozen cases used the wide candidate. Shape dependent numerics may differ; validate prompt hash and returned target IDs independently. No end-to-end performance comparison between configs."
+}

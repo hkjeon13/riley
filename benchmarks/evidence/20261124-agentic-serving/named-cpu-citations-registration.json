@@ -1,0 +1,17 @@
+{
+  "checkpoint": "Qwen2.5-Coder-7B-Instruct",
+  "native_profiler": "chat-owned-render-20261125.XCBDIb4g/probe-candidate",
+  "jobs": [
+    [
+      17101,
+      200
+    ],
+    [
+      17104,
+      0
+    ]
+  ],
+  "delay_s": 0.5,
+  "scope": "Repeat both CPU reference cases with the exact previously tested final-turn citation instruction. Hold tools, model, sampling, history, data, arrival order and maximum output length fixed. Verify source IDs in the final answer separately from three numerical values, p95 meaning, exact word count and stop. No latency comparison.",
+  "explicit_citations": true
+}

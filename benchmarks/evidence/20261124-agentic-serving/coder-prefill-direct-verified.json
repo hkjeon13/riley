@@ -1,0 +1,372 @@
+{
+  "6": {
+    "natural": [
+      {
+        "seed": 761,
+        "ttft_ms": [
+          50.03927,
+          41.880767
+        ],
+        "gpu_prefill_ms": [
+          48.973312,
+          40.854081
+        ],
+        "valid": [
+          true,
+          true
+        ],
+        "natural_completion_ms": [
+          2043.001824,
+          2389.555175
+        ],
+        "tokens": [
+          99,
+          130
+        ],
+        "same_natural_text": false
+      },
+      {
+        "seed": 762,
+        "ttft_ms": [
+          397.167901,
+          310.903072
+        ],
+        "gpu_prefill_ms": [
+          393.330047,
+          307.957916
+        ],
+        "valid": [
+          true,
+          true
+        ],
+        "natural_completion_ms": [
+          2746.26536,
+          2640.874045
+        ],
+        "tokens": [
+          114,
+          114
+        ],
+        "same_natural_text": true
+      },
+      {
+        "seed": 833,
+        "ttft_ms": [
+          516.441686,
+          398.647824
+        ],
+        "gpu_prefill_ms": [
+          513.188798,
+          395.578598
+        ],
+        "valid": [
+          true,
+          true
+        ],
+        "natural_completion_ms": [
+          2839.425271,
+          2707.786233
+        ],
+        "tokens": [
+          112,
+          112
+        ],
+        "same_natural_text": true
+      },
+      {
+        "seed": 861,
+        "ttft_ms": [
+          519.39818,
+          398.445152
+        ],
+        "gpu_prefill_ms": [
+          513.335594,
+          395.437729
+        ],
+        "valid": [
+          true,
+          true
+        ],
+        "natural_completion_ms": [
+          2791.127838,
+          2656.337462
+        ],
+        "tokens": [
+          108,
+          108
+        ],
+        "same_natural_text": true
+      },
+      {
+        "seed": 902,
+        "ttft_ms": [
+          516.995651,
+          398.6174
+        ],
+        "gpu_prefill_ms": [
+          513.68621,
+          395.478752
+        ],
+        "valid": [
+          true,
+          true
+        ],
+        "natural_completion_ms": [
+          2984.450795,
+          2838.998652
+        ],
+        "tokens": [
+          123,
+          123
+        ],
+        "same_natural_text": true
+      },
+      {
+        "seed": 931,
+        "ttft_ms": [
+          396.197762,
+          311.743087
+        ],
+        "gpu_prefill_ms": [
+          392.845154,
+          308.758812
+        ],
+        "valid": [
+          true,
+          true
+        ],
+        "natural_completion_ms": [
+          2447.944431,
+          2368.786565
+        ],
+        "tokens": [
+          99,
+          99
+        ],
+        "same_natural_text": true
+      }
+    ],
+    "fixed": [
+      {
+        "history": 0,
+        "stream": "reader",
+        "tpot_ratio": 1.0242865637080094,
+        "gap_ratio": 0.9992061194369939,
+        "same_output_ids": true
+      },
+      {
+        "history": 0,
+        "stream": "long-tool-result",
+        "tpot_ratio": 0.9995431529077624,
+        "gap_ratio": 0.9986813913795524,
+        "same_output_ids": true
+      },
+      {
+        "history": 200,
+        "stream": "reader",
+        "tpot_ratio": 1.0490152110718334,
+        "gap_ratio": 0.9989757228061734,
+        "same_output_ids": false
+      },
+      {
+        "history": 200,
+        "stream": "long-tool-result",
+        "tpot_ratio": 1.000045684468131,
+        "gap_ratio": 0.9987861897131334,
+        "same_output_ids": true
+      }
+    ],
+    "gates": {
+      "lower_long_ttft_and_gpu": true,
+      "no_lost_correct": true,
+      "natural_completion_guard": false,
+      "fixed_decode_guard": true
+    },
+    "passed": false
+  },
+  "7": {
+    "natural": [
+      {
+        "seed": 761,
+        "ttft_ms": [
+          56.607285,
+          43.363574
+        ],
+        "gpu_prefill_ms": [
+          54.222882,
+          42.268511
+        ],
+        "valid": [
+          true,
+          true
+        ],
+        "natural_completion_ms": [
+          2063.917761,
+          2383.449814
+        ],
+        "tokens": [
+          99,
+          130
+        ],
+        "same_natural_text": false
+      },
+      {
+        "seed": 762,
+        "ttft_ms": [
+          395.627366,
+          310.325928
+        ],
+        "gpu_prefill_ms": [
+          392.629326,
+          307.344192
+        ],
+        "valid": [
+          true,
+          true
+        ],
+        "natural_completion_ms": [
+          2740.008458,
+          2647.98744
+        ],
+        "tokens": [
+          114,
+          114
+        ],
+        "same_natural_text": true
+      },
+      {
+        "seed": 833,
+        "ttft_ms": [
+          514.597441,
+          396.750116
+        ],
+        "gpu_prefill_ms": [
+          510.822075,
+          393.607354
+        ],
+        "valid": [
+          true,
+          true
+        ],
+        "natural_completion_ms": [
+          2834.268201,
+          2701.104934
+        ],
+        "tokens": [
+          112,
+          112
+        ],
+        "same_natural_text": true
+      },
+      {
+        "seed": 861,
+        "ttft_ms": [
+          514.688605,
+          397.021053
+        ],
+        "gpu_prefill_ms": [
+          511.560425,
+          394.016067
+        ],
+        "valid": [
+          true,
+          true
+        ],
+        "natural_completion_ms": [
+          2787.004901,
+          2664.355256
+        ],
+        "tokens": [
+          108,
+          108
+        ],
+        "same_natural_text": true
+      },
+      {
+        "seed": 902,
+        "ttft_ms": [
+          514.232247,
+          396.701793
+        ],
+        "gpu_prefill_ms": [
+          511.056114,
+          393.597305
+        ],
+        "valid": [
+          true,
+          true
+        ],
+        "natural_completion_ms": [
+          2994.200682,
+          2835.307303
+        ],
+        "tokens": [
+          123,
+          123
+        ],
+        "same_natural_text": true
+      },
+      {
+        "seed": 931,
+        "ttft_ms": [
+          395.98378,
+          310.987725
+        ],
+        "gpu_prefill_ms": [
+          392.166328,
+          308.067551
+        ],
+        "valid": [
+          true,
+          true
+        ],
+        "natural_completion_ms": [
+          2440.045435,
+          2372.125152
+        ],
+        "tokens": [
+          99,
+          99
+        ],
+        "same_natural_text": true
+      }
+    ],
+    "fixed": [
+      {
+        "history": 0,
+        "stream": "reader",
+        "tpot_ratio": 1.0239558900067138,
+        "gap_ratio": 1.0007525714176193,
+        "same_output_ids": true
+      },
+      {
+        "history": 0,
+        "stream": "long-tool-result",
+        "tpot_ratio": 1.000519861579418,
+        "gap_ratio": 1.0006862748693377,
+        "same_output_ids": true
+      },
+      {
+        "history": 200,
+        "stream": "reader",
+        "tpot_ratio": 1.0549486058155662,
+        "gap_ratio": 1.000210013135779,
+        "same_output_ids": false
+      },
+      {
+        "history": 200,
+        "stream": "long-tool-result",
+        "tpot_ratio": 1.000401570666773,
+        "gap_ratio": 1.0002871584925055,
+        "same_output_ids": true
+      }
+    ],
+    "gates": {
+      "lower_long_ttft_and_gpu": true,
+      "no_lost_correct": true,
+      "natural_completion_guard": false,
+      "fixed_decode_guard": false
+    },
+    "passed": false
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "reason": "First independent reference pair exposed an additional 218 prompt tokens from vLLM's default handling of tool_choice=none. Preserve those results separately.",
+  "gpu": 6,
+  "order": ["Riley baseline", "vLLM", "vLLM", "Riley baseline"],
+  "vllm": {"version": "0.27.1+cu129", "exclude_tools_when_tool_choice_none": true},
+  "frozen_input_source": "reference/riley-a/workflows-{0,200}.json, seed 761",
+  "decode_probe": "identical reconstructed final requests, 64 actual generated tokens per stream, two warm prompts offset by 200ms, three waves per history and server start",
+  "scope": "decode at a matched output length; full dependent workflows and cold/mixed prefill remain separate",
+  "guards": ["require overlapping streams", "report schedule drift", "check prompt lengths and identity probe evidence", "retain different completions", "two launches per engine only screen reproducibility; avoid a population-level confidence claim"]
+}

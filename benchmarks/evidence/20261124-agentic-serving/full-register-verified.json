@@ -1,0 +1,2373 @@
+{
+  "gpus": {
+    "6": {
+      "page": {
+        "lookup-541-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "length",
+          "prompt": 5988,
+          "output": 96,
+          "first_ms": 1683.156592,
+          "last_ms": 2886.189987,
+          "parsed": null
+        },
+        "lookup-541-records-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 5988,
+          "output": 37,
+          "first_ms": 1677.801308,
+          "last_ms": 2123.790481,
+          "parsed": {
+            "F541-0042": 42724,
+            "F541-0168": 83981
+          }
+        },
+        "lookup-541-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4530,
+          "output": 46,
+          "first_ms": 1155.976351,
+          "last_ms": 1698.450494,
+          "parsed": null
+        },
+        "lookup-541-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4530,
+          "output": 37,
+          "first_ms": 1155.955074,
+          "last_ms": 1593.714019,
+          "parsed": {
+            "F541-0042": 42722,
+            "F541-0168": 83981
+          }
+        },
+        "lookup-733-records-free": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 17468,
+          "output": 45,
+          "first_ms": 8321.950586,
+          "last_ms": 9040.105663,
+          "parsed": {
+            "F733-0124": 48247,
+            "F733-0496": 36660
+          }
+        },
+        "lookup-733-records-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 17468,
+          "output": 37,
+          "first_ms": 8328.446684,
+          "last_ms": 8913.308085,
+          "parsed": {
+            "F733-0124": 48247,
+            "F733-0496": 36660
+          }
+        },
+        "lookup-733-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "length",
+          "prompt": 13140,
+          "output": 96,
+          "first_ms": 5278.319027,
+          "last_ms": 6660.757348,
+          "parsed": null
+        },
+        "lookup-733-table-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13140,
+          "output": 37,
+          "first_ms": 5280.247441,
+          "last_ms": 5789.093564,
+          "parsed": {
+            "F733-0124": 48247,
+            "F733-0496": 36660
+          }
+        },
+        "lookup-862-records-free": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25028,
+          "output": 45,
+          "first_ms": 15214.232499,
+          "last_ms": 16043.720597,
+          "parsed": {
+            "F862-0712": 38401,
+            "F862-0178": 19602
+          }
+        },
+        "lookup-862-records-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25028,
+          "output": 37,
+          "first_ms": 15208.190952,
+          "last_ms": 15884.761352,
+          "parsed": {
+            "F862-0178": 19602,
+            "F862-0712": 38401
+          }
+        },
+        "lookup-862-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18810,
+          "output": 45,
+          "first_ms": 9393.259296,
+          "last_ms": 10131.74841,
+          "parsed": null
+        },
+        "lookup-862-table-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18810,
+          "output": 37,
+          "first_ms": 9391.966991,
+          "last_ms": 9992.998781,
+          "parsed": {
+            "F862-0178": 19602,
+            "F862-0712": 38401
+          }
+        },
+        "scan-9167-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6217,
+          "output": 77,
+          "first_ms": 1765.716552,
+          "last_ms": 2719.976238,
+          "parsed": {
+            "suspended": {
+              "source": "F9167-0198",
+              "approved": 66171
+            },
+            "restored": {
+              "source": "F9167-0163",
+              "approved": 65067
+            }
+          }
+        },
+        "scan-9167-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6217,
+          "output": 52,
+          "first_ms": 1765.653099,
+          "last_ms": 2418.967922,
+          "parsed": {
+            "suspended": {
+              "source": "F9167-0198",
+              "approved": 66171
+            },
+            "restored": {
+              "source": "F9117-0163",
+              "approved": 60052
+            }
+          }
+        },
+        "scan-9167-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4759,
+          "output": 78,
+          "first_ms": 1238.314647,
+          "last_ms": 2179.751665,
+          "parsed": null
+        },
+        "scan-9167-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4759,
+          "output": 59,
+          "first_ms": 1233.551044,
+          "last_ms": 1939.666423,
+          "parsed": {
+            "suspended": {
+              "source": "F9167-0198",
+              "approved": 66171
+            },
+            "restored": {
+              "source": "F9167-0163",
+              "approved": 65067
+            }
+          }
+        },
+        "scan-9323-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18107,
+          "output": 77,
+          "first_ms": 8819.953998,
+          "last_ms": 10089.700185,
+          "parsed": {
+            "suspended": {
+              "source": "F9323-0470",
+              "approved": 26978
+            },
+            "restored": {
+              "source": "F9323-0142",
+              "approved": 71209
+            }
+          }
+        },
+        "scan-9323-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18107,
+          "output": 49,
+          "first_ms": 8822.96218,
+          "last_ms": 9619.405747,
+          "parsed": {
+            "suspended": {
+              "source": " ",
+              "approved": 26978
+            },
+            "restored": {
+              "source": "F9323-0414",
+              "approved": 78309
+            }
+          }
+        },
+        "scan-9323-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13779,
+          "output": 78,
+          "first_ms": 5680.311943,
+          "last_ms": 6820.638267,
+          "parsed": null
+        },
+        "scan-9323-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13779,
+          "output": 59,
+          "first_ms": 5682.393044,
+          "last_ms": 6537.467818,
+          "parsed": {
+            "suspended": {
+              "source": "F9323-0460",
+              "approved": 26978
+            },
+            "restored": {
+              "source": "F9323-0010",
+              "approved": 71105
+            }
+          }
+        },
+        "scan-9451-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25937,
+          "output": 77,
+          "first_ms": 16176.531025,
+          "last_ms": 17646.783431,
+          "parsed": {
+            "suspended": {
+              "source": "F9451-0300",
+              "approved": 19170
+            },
+            "restored": {
+              "source": "F9451-0390",
+              "approved": 87268
+            }
+          }
+        },
+        "scan-9451-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25937,
+          "output": 60,
+          "first_ms": 16177.883112,
+          "last_ms": 17314.79035,
+          "parsed": {
+            "suspended": {
+              "source": "F9451-0300",
+              "approved": 19170
+            },
+            "restored": {
+              "source": "F94551-0390",
+              "approved": 87268
+            }
+          }
+        },
+        "scan-9451-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19719,
+          "output": 79,
+          "first_ms": 10171.23634,
+          "last_ms": 11517.636483,
+          "parsed": null
+        },
+        "scan-9451-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19719,
+          "output": 59,
+          "first_ms": 10165.844598,
+          "last_ms": 11162.167771,
+          "parsed": {
+            "suspended": {
+              "source": "F9451-0390",
+              "approved": 87268
+            },
+            "restored": {
+              "source": "F9451-0389",
+              "approved": 87268
+            }
+          }
+        },
+        "max-9689-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6201,
+          "output": 34,
+          "first_ms": 1760.077309,
+          "last_ms": 2166.870857,
+          "parsed": {
+            "source": "F9689-0208",
+            "approved": 89529
+          }
+        },
+        "max-9689-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6201,
+          "output": 26,
+          "first_ms": 1759.793234,
+          "last_ms": 2074.112797,
+          "parsed": {
+            "source": "F9689-0208",
+            "approved": 89529
+          }
+        },
+        "max-9689-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4743,
+          "output": 32,
+          "first_ms": 1238.004093,
+          "last_ms": 1607.48938,
+          "parsed": null
+        },
+        "max-9689-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4743,
+          "output": 26,
+          "first_ms": 1229.197644,
+          "last_ms": 1526.272651,
+          "parsed": {
+            "source": "F9689-0084",
+            "approved": 89565
+          }
+        },
+        "max-9769-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18091,
+          "output": 34,
+          "first_ms": 8808.627374,
+          "last_ms": 9349.744433,
+          "parsed": {
+            "source": "F9769-0388",
+            "approved": 86560
+          }
+        },
+        "max-9769-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18091,
+          "output": 26,
+          "first_ms": 8808.366777,
+          "last_ms": 9214.035472,
+          "parsed": {
+            "source": "F9769-0388",
+            "approved": 86565
+          }
+        },
+        "max-9769-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13763,
+          "output": 34,
+          "first_ms": 5669.970657,
+          "last_ms": 6148.928472,
+          "parsed": {
+            "source": "F9769-0044",
+            "approved": 88923
+          }
+        },
+        "max-9769-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13763,
+          "output": 26,
+          "first_ms": 5670.478224,
+          "last_ms": 6029.627058,
+          "parsed": {
+            "source": "F9760-0023",
+            "approved": 10733
+          }
+        },
+        "max-9829-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25921,
+          "output": 34,
+          "first_ms": 16161.072906,
+          "last_ms": 16788.031476,
+          "parsed": {
+            "source": "F9829-0466",
+            "approved": 88574
+          }
+        },
+        "max-9829-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25921,
+          "output": 26,
+          "first_ms": 16159.87497,
+          "last_ms": 16629.947655,
+          "parsed": {
+            "source": "F9829-0386",
+            "approved": 86724
+          }
+        },
+        "max-9829-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19703,
+          "output": 32,
+          "first_ms": 10136.767059,
+          "last_ms": 10660.584048,
+          "parsed": null
+        },
+        "max-9829-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19703,
+          "output": 26,
+          "first_ms": 10137.925492,
+          "last_ms": 10557.066276,
+          "parsed": {
+            "source": "F9829-0667",
+            "approved": 85342
+          }
+        }
+      },
+      "tile": {
+        "lookup-541-records-free": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 5988,
+          "output": 45,
+          "first_ms": 492.471469,
+          "last_ms": 1019.75373,
+          "parsed": {
+            "F541-0042": 42724,
+            "F541-0168": 83981
+          }
+        },
+        "lookup-541-records-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 5988,
+          "output": 37,
+          "first_ms": 488.102092,
+          "last_ms": 917.897388,
+          "parsed": {
+            "F541-0042": 42724,
+            "F541-0168": 83981
+          }
+        },
+        "lookup-541-table-free": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4530,
+          "output": 45,
+          "first_ms": 359.629714,
+          "last_ms": 882.831806,
+          "parsed": {
+            "F541-0042": 42724,
+            "F541-0168": 83981
+          }
+        },
+        "lookup-541-table-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4530,
+          "output": 37,
+          "first_ms": 358.611345,
+          "last_ms": 785.955843,
+          "parsed": {
+            "F541-0042": 42724,
+            "F541-0168": 83981
+          }
+        },
+        "lookup-733-records-free": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 17468,
+          "output": 45,
+          "first_ms": 1747.238334,
+          "last_ms": 2299.88489,
+          "parsed": {
+            "F733-0124": 48247,
+            "F733-0496": 36660
+          }
+        },
+        "lookup-733-records-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 17468,
+          "output": 37,
+          "first_ms": 1746.896562,
+          "last_ms": 2197.396726,
+          "parsed": {
+            "F733-0124": 48247,
+            "F733-0496": 36660
+          }
+        },
+        "lookup-733-table-free": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13140,
+          "output": 45,
+          "first_ms": 1219.623663,
+          "last_ms": 1759.897138,
+          "parsed": {
+            "F733-0124": 48247,
+            "F733-0496": 36660
+          }
+        },
+        "lookup-733-table-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13140,
+          "output": 37,
+          "first_ms": 1218.419541,
+          "last_ms": 1658.156697,
+          "parsed": {
+            "F733-0124": 48247,
+            "F733-0496": 36660
+          }
+        },
+        "lookup-862-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25028,
+          "output": 45,
+          "first_ms": 2815.001422,
+          "last_ms": 3390.019346,
+          "parsed": null
+        },
+        "lookup-862-records-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25028,
+          "output": 37,
+          "first_ms": 2810.878832,
+          "last_ms": 3279.744242,
+          "parsed": {
+            "F862-0178": 19602,
+            "F862-0712": 38401
+          }
+        },
+        "lookup-862-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18810,
+          "output": 26,
+          "first_ms": 1916.170509,
+          "last_ms": 2226.564074,
+          "parsed": {
+            "F862-0712": 38401
+          }
+        },
+        "lookup-862-table-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18810,
+          "output": 37,
+          "first_ms": 1919.254618,
+          "last_ms": 2372.371464,
+          "parsed": {
+            "F862-0178": 19602,
+            "F862-0712": 38401
+          }
+        },
+        "scan-9167-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6217,
+          "output": 77,
+          "first_ms": 509.387113,
+          "last_ms": 1430.110074,
+          "parsed": {
+            "suspended": {
+              "source": "F9167-0198",
+              "approved": 66171
+            },
+            "restored": {
+              "source": "F9167-0163",
+              "approved": 65067
+            }
+          }
+        },
+        "scan-9167-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6217,
+          "output": 59,
+          "first_ms": 508.912917,
+          "last_ms": 1226.386891,
+          "parsed": {
+            "suspended": {
+              "source": "F9167-0198",
+              "approved": 66171
+            },
+            "restored": {
+              "source": "F9167-0163",
+              "approved": 65067
+            }
+          }
+        },
+        "scan-9167-table-free": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4759,
+          "output": 77,
+          "first_ms": 382.120839,
+          "last_ms": 1298.251562,
+          "parsed": {
+            "suspended": {
+              "source": "F9167-0198",
+              "approved": 66171
+            },
+            "restored": {
+              "source": "F9167-0063",
+              "approved": 60052
+            }
+          }
+        },
+        "scan-9167-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4759,
+          "output": 59,
+          "first_ms": 378.409049,
+          "last_ms": 1074.68695,
+          "parsed": {
+            "suspended": {
+              "source": "F9167-0198",
+              "approved": 66171
+            },
+            "restored": {
+              "source": "F9167-0163",
+              "approved": 65067
+            }
+          }
+        },
+        "scan-9323-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18107,
+          "output": 77,
+          "first_ms": 1822.037814,
+          "last_ms": 2788.982664,
+          "parsed": {
+            "suspended": {
+              "source": "F9323-0470",
+              "approved": 26978
+            },
+            "restored": {
+              "source": "F9323-0142",
+              "approved": 79694
+            }
+          }
+        },
+        "scan-9323-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18107,
+          "output": 59,
+          "first_ms": 1823.627298,
+          "last_ms": 2558.540135,
+          "parsed": {
+            "suspended": {
+              "source": "F9323-0470",
+              "approved": 26978
+            },
+            "restored": {
+              "source": "F9323-0142",
+              "approved": 43436
+            }
+          }
+        },
+        "scan-9323-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13779,
+          "output": 77,
+          "first_ms": 1287.045185,
+          "last_ms": 2232.548388,
+          "parsed": {
+            "suspended": {
+              "source": "F9323-0460",
+              "approved": 26978
+            },
+            "restored": {
+              "source": "F9323-0148",
+              "approved": 71105
+            }
+          }
+        },
+        "scan-9323-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13779,
+          "output": 59,
+          "first_ms": 1286.10464,
+          "last_ms": 2004.899033,
+          "parsed": {
+            "suspended": {
+              "source": "F9323-0460",
+              "approved": 26978
+            },
+            "restored": {
+              "source": "F9323-0148",
+              "approved": 71105
+            }
+          }
+        },
+        "scan-9451-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25937,
+          "output": 77,
+          "first_ms": 2952.424245,
+          "last_ms": 3960.499224,
+          "parsed": {
+            "suspended": {
+              "source": "F9451-0300",
+              "approved": 19170
+            },
+            "restored": {
+              "source": "F9451-0390",
+              "approved": 87268
+            }
+          }
+        },
+        "scan-9451-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25937,
+          "output": 59,
+          "first_ms": 2950.91824,
+          "last_ms": 3717.212334,
+          "parsed": {
+            "suspended": {
+              "source": "F9451-0300",
+              "approved": 19170
+            },
+            "restored": {
+              "source": "F9451-0390",
+              "approved": 87268
+            }
+          }
+        },
+        "scan-9451-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19719,
+          "output": 77,
+          "first_ms": 2050.201011,
+          "last_ms": 3025.265803,
+          "parsed": {
+            "suspended": {
+              "source": "F9451-0390",
+              "approved": 87268
+            },
+            "restored": {
+              "source": "F9451-0399",
+              "approved": 72938
+            }
+          }
+        },
+        "scan-9451-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19719,
+          "output": 59,
+          "first_ms": 2041.844013,
+          "last_ms": 2783.010684,
+          "parsed": {
+            "suspended": {
+              "source": "F9451-0390",
+              "approved": 87268
+            },
+            "restored": {
+              "source": "F9451-0389",
+              "approved": 87268
+            }
+          }
+        },
+        "max-9689-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6201,
+          "output": 34,
+          "first_ms": 508.280896,
+          "last_ms": 901.311749,
+          "parsed": {
+            "source": "F9689-0208",
+            "approved": 89529
+          }
+        },
+        "max-9689-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6201,
+          "output": 26,
+          "first_ms": 508.886398,
+          "last_ms": 812.666503,
+          "parsed": {
+            "source": "F9689-0082",
+            "approved": 87384
+          }
+        },
+        "max-9689-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4743,
+          "output": 34,
+          "first_ms": 383.315936,
+          "last_ms": 774.254048,
+          "parsed": {
+            "source": "F9689-0186",
+            "approved": 85819
+          }
+        },
+        "max-9689-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4743,
+          "output": 26,
+          "first_ms": 379.000034,
+          "last_ms": 672.257877,
+          "parsed": {
+            "source": "F9689-0084",
+            "approved": 89529
+          }
+        },
+        "max-9769-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18091,
+          "output": 34,
+          "first_ms": 1819.336142,
+          "last_ms": 2232.214355,
+          "parsed": {
+            "source": "F9769-0183",
+            "approved": 78887
+          }
+        },
+        "max-9769-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18091,
+          "output": 26,
+          "first_ms": 1818.686521,
+          "last_ms": 2128.201919,
+          "parsed": {
+            "source": "F9769-0144",
+            "approved": 88923
+          }
+        },
+        "max-9769-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13763,
+          "output": 34,
+          "first_ms": 1284.628891,
+          "last_ms": 1687.933039,
+          "parsed": {
+            "source": "F9769-0044",
+            "approved": 88923
+          }
+        },
+        "max-9769-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13763,
+          "output": 26,
+          "first_ms": 1285.759961,
+          "last_ms": 1588.411454,
+          "parsed": {
+            "source": "F9769-0614",
+            "approved": 89126
+          }
+        },
+        "max-9829-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25921,
+          "output": 34,
+          "first_ms": 2949.838119,
+          "last_ms": 3380.036215,
+          "parsed": {
+            "source": "F9829-0360",
+            "approved": 87665
+          }
+        },
+        "max-9829-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25921,
+          "output": 26,
+          "first_ms": 2950.623283,
+          "last_ms": 3273.28772,
+          "parsed": {
+            "source": "F9829-0380",
+            "approved": 87665
+          }
+        },
+        "max-9829-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19703,
+          "output": 34,
+          "first_ms": 2030.735562,
+          "last_ms": 2446.829817,
+          "parsed": {
+            "source": "F9829-0667",
+            "approved": 85914
+          }
+        },
+        "max-9829-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19703,
+          "output": 26,
+          "first_ms": 2030.127397,
+          "last_ms": 2342.161038,
+          "parsed": {
+            "source": "F9829-0686",
+            "approved": 85914
+          }
+        }
+      }
+    },
+    "7": {
+      "tile": {
+        "lookup-541-table-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4530,
+          "output": 37,
+          "first_ms": 360.61848,
+          "last_ms": 788.056539,
+          "parsed": {
+            "F541-0042": 42724,
+            "F541-0168": 83981
+          }
+        },
+        "lookup-541-table-free": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4530,
+          "output": 45,
+          "first_ms": 357.138864,
+          "last_ms": 879.799208,
+          "parsed": {
+            "F541-0042": 42724,
+            "F541-0168": 83981
+          }
+        },
+        "lookup-541-records-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 5988,
+          "output": 37,
+          "first_ms": 484.381606,
+          "last_ms": 913.402069,
+          "parsed": {
+            "F541-0042": 42724,
+            "F541-0168": 83981
+          }
+        },
+        "lookup-541-records-free": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 5988,
+          "output": 45,
+          "first_ms": 482.991764,
+          "last_ms": 1010.020924,
+          "parsed": {
+            "F541-0042": 42724,
+            "F541-0168": 83981
+          }
+        },
+        "lookup-733-table-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13140,
+          "output": 37,
+          "first_ms": 1211.153322,
+          "last_ms": 1652.240869,
+          "parsed": {
+            "F733-0124": 48247,
+            "F733-0496": 36660
+          }
+        },
+        "lookup-733-table-free": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13140,
+          "output": 45,
+          "first_ms": 1212.792805,
+          "last_ms": 1753.827788,
+          "parsed": {
+            "F733-0124": 48247,
+            "F733-0496": 36660
+          }
+        },
+        "lookup-733-records-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 17468,
+          "output": 37,
+          "first_ms": 1740.814607,
+          "last_ms": 2192.854025,
+          "parsed": {
+            "F733-0124": 48247,
+            "F733-0496": 36660
+          }
+        },
+        "lookup-733-records-free": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 17468,
+          "output": 45,
+          "first_ms": 1746.583776,
+          "last_ms": 2300.424478,
+          "parsed": {
+            "F733-0124": 48247,
+            "F733-0496": 36660
+          }
+        },
+        "lookup-862-table-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18810,
+          "output": 37,
+          "first_ms": 1915.048669,
+          "last_ms": 2369.880121,
+          "parsed": {
+            "F862-0178": 19602,
+            "F862-0712": 38401
+          }
+        },
+        "lookup-862-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18810,
+          "output": 26,
+          "first_ms": 1920.099989,
+          "last_ms": 2231.301803,
+          "parsed": {
+            "F862-0712": 38401
+          }
+        },
+        "lookup-862-records-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25028,
+          "output": 37,
+          "first_ms": 2812.241361,
+          "last_ms": 3282.655482,
+          "parsed": {
+            "F862-0178": 19602,
+            "F862-0712": 38401
+          }
+        },
+        "lookup-862-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25028,
+          "output": 45,
+          "first_ms": 2809.521761,
+          "last_ms": 3387.099712,
+          "parsed": null
+        },
+        "scan-9167-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4759,
+          "output": 59,
+          "first_ms": 398.318357,
+          "last_ms": 1110.268983,
+          "parsed": {
+            "suspended": {
+              "source": "F9167-0198",
+              "approved": 66171
+            },
+            "restored": {
+              "source": "F9167-0163",
+              "approved": 65067
+            }
+          }
+        },
+        "scan-9167-table-free": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4759,
+          "output": 77,
+          "first_ms": 376.489883,
+          "last_ms": 1292.378972,
+          "parsed": {
+            "suspended": {
+              "source": "F9167-0198",
+              "approved": 66171
+            },
+            "restored": {
+              "source": "F9167-0063",
+              "approved": 60052
+            }
+          }
+        },
+        "scan-9167-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6217,
+          "output": 59,
+          "first_ms": 507.082751,
+          "last_ms": 1206.613727,
+          "parsed": {
+            "suspended": {
+              "source": "F9167-0198",
+              "approved": 66171
+            },
+            "restored": {
+              "source": "F9167-0163",
+              "approved": 65067
+            }
+          }
+        },
+        "scan-9167-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6217,
+          "output": 77,
+          "first_ms": 506.243755,
+          "last_ms": 1427.020939,
+          "parsed": {
+            "suspended": {
+              "source": "F9167-0198",
+              "approved": 66171
+            },
+            "restored": {
+              "source": "F9167-0163",
+              "approved": 65067
+            }
+          }
+        },
+        "scan-9323-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13779,
+          "output": 59,
+          "first_ms": 1281.61779,
+          "last_ms": 2000.923779,
+          "parsed": {
+            "suspended": {
+              "source": "F9323-0460",
+              "approved": 26978
+            },
+            "restored": {
+              "source": "F9323-0148",
+              "approved": 71105
+            }
+          }
+        },
+        "scan-9323-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13779,
+          "output": 77,
+          "first_ms": 1281.292059,
+          "last_ms": 2228.01148,
+          "parsed": {
+            "suspended": {
+              "source": "F9323-0460",
+              "approved": 26978
+            },
+            "restored": {
+              "source": "F9323-0148",
+              "approved": 71105
+            }
+          }
+        },
+        "scan-9323-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18107,
+          "output": 59,
+          "first_ms": 1818.327046,
+          "last_ms": 2554.842596,
+          "parsed": {
+            "suspended": {
+              "source": "F9323-0470",
+              "approved": 26978
+            },
+            "restored": {
+              "source": "F9323-0142",
+              "approved": 43436
+            }
+          }
+        },
+        "scan-9323-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18107,
+          "output": 77,
+          "first_ms": 1817.058639,
+          "last_ms": 2785.766164,
+          "parsed": {
+            "suspended": {
+              "source": "F9323-0470",
+              "approved": 26978
+            },
+            "restored": {
+              "source": "F9323-0142",
+              "approved": 79694
+            }
+          }
+        },
+        "scan-9451-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19719,
+          "output": 59,
+          "first_ms": 2044.821876,
+          "last_ms": 2788.017782,
+          "parsed": {
+            "suspended": {
+              "source": "F9451-0390",
+              "approved": 87268
+            },
+            "restored": {
+              "source": "F9451-0389",
+              "approved": 87268
+            }
+          }
+        },
+        "scan-9451-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19719,
+          "output": 77,
+          "first_ms": 2038.209827,
+          "last_ms": 3016.414289,
+          "parsed": {
+            "suspended": {
+              "source": "F9451-0390",
+              "approved": 87268
+            },
+            "restored": {
+              "source": "F9451-0399",
+              "approved": 72938
+            }
+          }
+        },
+        "scan-9451-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25937,
+          "output": 59,
+          "first_ms": 2946.795952,
+          "last_ms": 3716.625039,
+          "parsed": {
+            "suspended": {
+              "source": "F9451-0300",
+              "approved": 19170
+            },
+            "restored": {
+              "source": "F9451-0390",
+              "approved": 87268
+            }
+          }
+        },
+        "scan-9451-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25937,
+          "output": 77,
+          "first_ms": 2944.183572,
+          "last_ms": 3957.090364,
+          "parsed": {
+            "suspended": {
+              "source": "F9451-0300",
+              "approved": 19170
+            },
+            "restored": {
+              "source": "F9451-0390",
+              "approved": 87268
+            }
+          }
+        },
+        "max-9689-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4743,
+          "output": 26,
+          "first_ms": 381.348027,
+          "last_ms": 683.728844,
+          "parsed": {
+            "source": "F9689-0084",
+            "approved": 89529
+          }
+        },
+        "max-9689-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4743,
+          "output": 34,
+          "first_ms": 376.211636,
+          "last_ms": 766.84472,
+          "parsed": {
+            "source": "F9689-0186",
+            "approved": 85819
+          }
+        },
+        "max-9689-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6201,
+          "output": 26,
+          "first_ms": 505.293959,
+          "last_ms": 799.932487,
+          "parsed": {
+            "source": "F9689-0082",
+            "approved": 87384
+          }
+        },
+        "max-9689-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6201,
+          "output": 34,
+          "first_ms": 505.192548,
+          "last_ms": 897.930881,
+          "parsed": {
+            "source": "F9689-0208",
+            "approved": 89529
+          }
+        },
+        "max-9769-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13763,
+          "output": 26,
+          "first_ms": 1278.461234,
+          "last_ms": 1581.345199,
+          "parsed": {
+            "source": "F9769-0614",
+            "approved": 89126
+          }
+        },
+        "max-9769-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13763,
+          "output": 34,
+          "first_ms": 1278.837787,
+          "last_ms": 1682.716916,
+          "parsed": {
+            "source": "F9769-0044",
+            "approved": 88923
+          }
+        },
+        "max-9769-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18091,
+          "output": 26,
+          "first_ms": 1816.453261,
+          "last_ms": 2126.571435,
+          "parsed": {
+            "source": "F9769-0144",
+            "approved": 88923
+          }
+        },
+        "max-9769-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18091,
+          "output": 34,
+          "first_ms": 1816.283687,
+          "last_ms": 2229.826515,
+          "parsed": {
+            "source": "F9769-0183",
+            "approved": 78887
+          }
+        },
+        "max-9829-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19703,
+          "output": 26,
+          "first_ms": 2026.877632,
+          "last_ms": 2340.039145,
+          "parsed": {
+            "source": "F9829-0686",
+            "approved": 85914
+          }
+        },
+        "max-9829-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19703,
+          "output": 34,
+          "first_ms": 2026.926853,
+          "last_ms": 2444.13513,
+          "parsed": {
+            "source": "F9829-0667",
+            "approved": 85914
+          }
+        },
+        "max-9829-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25921,
+          "output": 26,
+          "first_ms": 2947.381437,
+          "last_ms": 3271.523082,
+          "parsed": {
+            "source": "F9829-0380",
+            "approved": 87665
+          }
+        },
+        "max-9829-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25921,
+          "output": 34,
+          "first_ms": 2948.947993,
+          "last_ms": 3381.169519,
+          "parsed": {
+            "source": "F9829-0360",
+            "approved": 87665
+          }
+        }
+      },
+      "page": {
+        "lookup-541-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4530,
+          "output": 37,
+          "first_ms": 1177.601695,
+          "last_ms": 1609.18436,
+          "parsed": {
+            "F541-0042": 42722,
+            "F541-0168": 83981
+          }
+        },
+        "lookup-541-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4530,
+          "output": 46,
+          "first_ms": 1156.108723,
+          "last_ms": 1698.220168,
+          "parsed": null
+        },
+        "lookup-541-records-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 5988,
+          "output": 37,
+          "first_ms": 1676.385165,
+          "last_ms": 2118.835447,
+          "parsed": {
+            "F541-0042": 42724,
+            "F541-0168": 83981
+          }
+        },
+        "lookup-541-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "length",
+          "prompt": 5988,
+          "output": 96,
+          "first_ms": 1675.93514,
+          "last_ms": 2877.824542,
+          "parsed": null
+        },
+        "lookup-733-table-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13140,
+          "output": 37,
+          "first_ms": 5281.566041,
+          "last_ms": 5790.096674,
+          "parsed": {
+            "F733-0124": 48247,
+            "F733-0496": 36660
+          }
+        },
+        "lookup-733-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "length",
+          "prompt": 13140,
+          "output": 96,
+          "first_ms": 5279.837059,
+          "last_ms": 6663.823717,
+          "parsed": null
+        },
+        "lookup-733-records-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 17468,
+          "output": 37,
+          "first_ms": 8322.419563,
+          "last_ms": 8906.620818,
+          "parsed": {
+            "F733-0124": 48247,
+            "F733-0496": 36660
+          }
+        },
+        "lookup-733-records-free": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 17468,
+          "output": 45,
+          "first_ms": 8322.183485,
+          "last_ms": 9039.973412,
+          "parsed": {
+            "F733-0124": 48247,
+            "F733-0496": 36660
+          }
+        },
+        "lookup-862-table-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18810,
+          "output": 37,
+          "first_ms": 9397.525901,
+          "last_ms": 9999.011073,
+          "parsed": {
+            "F862-0178": 19602,
+            "F862-0712": 38401
+          }
+        },
+        "lookup-862-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18810,
+          "output": 45,
+          "first_ms": 9396.24752,
+          "last_ms": 10134.198402,
+          "parsed": null
+        },
+        "lookup-862-records-schema": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25028,
+          "output": 37,
+          "first_ms": 15222.046918,
+          "last_ms": 15897.639706,
+          "parsed": {
+            "F862-0178": 19602,
+            "F862-0712": 38401
+          }
+        },
+        "lookup-862-records-free": {
+          "correct": true,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25028,
+          "output": 45,
+          "first_ms": 15212.576298,
+          "last_ms": 16042.305553,
+          "parsed": {
+            "F862-0712": 38401,
+            "F862-0178": 19602
+          }
+        },
+        "scan-9167-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4759,
+          "output": 59,
+          "first_ms": 1239.391423,
+          "last_ms": 1962.342366,
+          "parsed": {
+            "suspended": {
+              "source": "F9167-0198",
+              "approved": 66171
+            },
+            "restored": {
+              "source": "F9167-0163",
+              "approved": 65067
+            }
+          }
+        },
+        "scan-9167-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4759,
+          "output": 78,
+          "first_ms": 1233.705141,
+          "last_ms": 2174.341171,
+          "parsed": null
+        },
+        "scan-9167-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6217,
+          "output": 52,
+          "first_ms": 1766.821162,
+          "last_ms": 2402.447699,
+          "parsed": {
+            "suspended": {
+              "source": "F9167-0198",
+              "approved": 66171
+            },
+            "restored": {
+              "source": "F9117-0163",
+              "approved": 60052
+            }
+          }
+        },
+        "scan-9167-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6217,
+          "output": 77,
+          "first_ms": 1766.277764,
+          "last_ms": 2719.696551,
+          "parsed": {
+            "suspended": {
+              "source": "F9167-0198",
+              "approved": 66171
+            },
+            "restored": {
+              "source": "F9167-0163",
+              "approved": 65067
+            }
+          }
+        },
+        "scan-9323-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13779,
+          "output": 59,
+          "first_ms": 5684.63296,
+          "last_ms": 6540.770171,
+          "parsed": {
+            "suspended": {
+              "source": "F9323-0460",
+              "approved": 26978
+            },
+            "restored": {
+              "source": "F9323-0010",
+              "approved": 71105
+            }
+          }
+        },
+        "scan-9323-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13779,
+          "output": 78,
+          "first_ms": 5683.24615,
+          "last_ms": 6825.191917,
+          "parsed": null
+        },
+        "scan-9323-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18107,
+          "output": 49,
+          "first_ms": 8823.853431,
+          "last_ms": 9619.583562,
+          "parsed": {
+            "suspended": {
+              "source": " ",
+              "approved": 26978
+            },
+            "restored": {
+              "source": "F9323-0414",
+              "approved": 78309
+            }
+          }
+        },
+        "scan-9323-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18107,
+          "output": 77,
+          "first_ms": 8821.663277,
+          "last_ms": 10090.404833,
+          "parsed": {
+            "suspended": {
+              "source": "F9323-0470",
+              "approved": 26978
+            },
+            "restored": {
+              "source": "F9323-0142",
+              "approved": 71209
+            }
+          }
+        },
+        "scan-9451-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19719,
+          "output": 59,
+          "first_ms": 10174.102888,
+          "last_ms": 11169.544631,
+          "parsed": {
+            "suspended": {
+              "source": "F9451-0390",
+              "approved": 87268
+            },
+            "restored": {
+              "source": "F9451-0389",
+              "approved": 87268
+            }
+          }
+        },
+        "scan-9451-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19719,
+          "output": 79,
+          "first_ms": 10169.694716,
+          "last_ms": 11514.539297,
+          "parsed": null
+        },
+        "scan-9451-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25937,
+          "output": 60,
+          "first_ms": 16185.336272,
+          "last_ms": 17321.829499,
+          "parsed": {
+            "suspended": {
+              "source": "F9451-0300",
+              "approved": 19170
+            },
+            "restored": {
+              "source": "F94551-0390",
+              "approved": 87268
+            }
+          }
+        },
+        "scan-9451-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25937,
+          "output": 77,
+          "first_ms": 16184.73799,
+          "last_ms": 17654.42532,
+          "parsed": {
+            "suspended": {
+              "source": "F9451-0300",
+              "approved": 19170
+            },
+            "restored": {
+              "source": "F9451-0390",
+              "approved": 87268
+            }
+          }
+        },
+        "max-9689-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4743,
+          "output": 26,
+          "first_ms": 1236.858418,
+          "last_ms": 1542.750685,
+          "parsed": {
+            "source": "F9689-0084",
+            "approved": 89565
+          }
+        },
+        "max-9689-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 4743,
+          "output": 32,
+          "first_ms": 1228.85636,
+          "last_ms": 1599.763884,
+          "parsed": null
+        },
+        "max-9689-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6201,
+          "output": 26,
+          "first_ms": 1759.882891,
+          "last_ms": 2064.566901,
+          "parsed": {
+            "source": "F9689-0208",
+            "approved": 89529
+          }
+        },
+        "max-9689-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 6201,
+          "output": 34,
+          "first_ms": 1760.09573,
+          "last_ms": 2166.429024,
+          "parsed": {
+            "source": "F9689-0208",
+            "approved": 89529
+          }
+        },
+        "max-9769-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13763,
+          "output": 26,
+          "first_ms": 5670.559635,
+          "last_ms": 6030.252344,
+          "parsed": {
+            "source": "F9760-0023",
+            "approved": 10733
+          }
+        },
+        "max-9769-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 13763,
+          "output": 34,
+          "first_ms": 5670.169612,
+          "last_ms": 6149.969133,
+          "parsed": {
+            "source": "F9769-0044",
+            "approved": 88923
+          }
+        },
+        "max-9769-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18091,
+          "output": 26,
+          "first_ms": 8809.852752,
+          "last_ms": 9215.160796,
+          "parsed": {
+            "source": "F9769-0388",
+            "approved": 86565
+          }
+        },
+        "max-9769-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 18091,
+          "output": 34,
+          "first_ms": 8807.52836,
+          "last_ms": 9348.149204,
+          "parsed": {
+            "source": "F9769-0388",
+            "approved": 86560
+          }
+        },
+        "max-9829-table-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19703,
+          "output": 26,
+          "first_ms": 10137.578454,
+          "last_ms": 10556.123123,
+          "parsed": {
+            "source": "F9829-0667",
+            "approved": 85342
+          }
+        },
+        "max-9829-table-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 19703,
+          "output": 32,
+          "first_ms": 10136.729768,
+          "last_ms": 10659.967375,
+          "parsed": null
+        },
+        "max-9829-records-schema": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25921,
+          "output": 26,
+          "first_ms": 16159.970969,
+          "last_ms": 16629.710435,
+          "parsed": {
+            "source": "F9829-0386",
+            "approved": 86724
+          }
+        },
+        "max-9829-records-free": {
+          "correct": false,
+          "complete": true,
+          "error": null,
+          "finish": "stop",
+          "prompt": 25921,
+          "output": 34,
+          "first_ms": 16158.897459,
+          "last_ms": 16785.542758,
+          "parsed": {
+            "source": "F9829-0466",
+            "approved": 88574
+          }
+        }
+      }
+    }
+  },
+  "summary_against_page_records_free": {
+    "6": {
+      "page-records-free": {
+        "lookup": 2,
+        "scan": 0,
+        "max": 0,
+        "faster_first_and_last_all": false,
+        "original_correct_lookups_preserved": true,
+        "all_scan_max_correct": false,
+        "smaller_all": false
+      },
+      "page-records-schema": {
+        "lookup": 3,
+        "scan": 0,
+        "max": 0,
+        "faster_first_and_last_all": false,
+        "original_correct_lookups_preserved": true,
+        "all_scan_max_correct": false,
+        "smaller_all": false
+      },
+      "page-table-free": {
+        "lookup": 0,
+        "scan": 0,
+        "max": 0,
+        "faster_first_and_last_all": true,
+        "original_correct_lookups_preserved": false,
+        "all_scan_max_correct": false,
+        "smaller_all": true
+      },
+      "page-table-schema": {
+        "lookup": 2,
+        "scan": 0,
+        "max": 0,
+        "faster_first_and_last_all": true,
+        "original_correct_lookups_preserved": true,
+        "all_scan_max_correct": false,
+        "smaller_all": true
+      },
+      "tile-records-free": {
+        "lookup": 2,
+        "scan": 0,
+        "max": 0,
+        "faster_first_and_last_all": true,
+        "original_correct_lookups_preserved": false,
+        "all_scan_max_correct": false,
+        "smaller_all": false
+      },
+      "tile-records-schema": {
+        "lookup": 3,
+        "scan": 0,
+        "max": 0,
+        "faster_first_and_last_all": true,
+        "original_correct_lookups_preserved": true,
+        "all_scan_max_correct": false,
+        "smaller_all": false
+      },
+      "tile-table-free": {
+        "lookup": 2,
+        "scan": 1,
+        "max": 0,
+        "faster_first_and_last_all": true,
+        "original_correct_lookups_preserved": false,
+        "all_scan_max_correct": false,
+        "smaller_all": true
+      },
+      "tile-table-schema": {
+        "lookup": 3,
+        "scan": 0,
+        "max": 0,
+        "faster_first_and_last_all": true,
+        "original_correct_lookups_preserved": true,
+        "all_scan_max_correct": false,
+        "smaller_all": true
+      }
+    },
+    "7": {
+      "tile-records-free": {
+        "lookup": 2,
+        "scan": 0,
+        "max": 0,
+        "faster_first_and_last_all": true,
+        "original_correct_lookups_preserved": false,
+        "all_scan_max_correct": false,
+        "smaller_all": false
+      },
+      "tile-records-schema": {
+        "lookup": 3,
+        "scan": 0,
+        "max": 0,
+        "faster_first_and_last_all": true,
+        "original_correct_lookups_preserved": true,
+        "all_scan_max_correct": false,
+        "smaller_all": false
+      },
+      "tile-table-free": {
+        "lookup": 2,
+        "scan": 1,
+        "max": 0,
+        "faster_first_and_last_all": true,
+        "original_correct_lookups_preserved": false,
+        "all_scan_max_correct": false,
+        "smaller_all": true
+      },
+      "tile-table-schema": {
+        "lookup": 3,
+        "scan": 0,
+        "max": 0,
+        "faster_first_and_last_all": true,
+        "original_correct_lookups_preserved": true,
+        "all_scan_max_correct": false,
+        "smaller_all": true
+      },
+      "page-records-free": {
+        "lookup": 2,
+        "scan": 0,
+        "max": 0,
+        "faster_first_and_last_all": false,
+        "original_correct_lookups_preserved": true,
+        "all_scan_max_correct": false,
+        "smaller_all": false
+      },
+      "page-records-schema": {
+        "lookup": 3,
+        "scan": 0,
+        "max": 0,
+        "faster_first_and_last_all": false,
+        "original_correct_lookups_preserved": true,
+        "all_scan_max_correct": false,
+        "smaller_all": false
+      },
+      "page-table-free": {
+        "lookup": 0,
+        "scan": 0,
+        "max": 0,
+        "faster_first_and_last_all": true,
+        "original_correct_lookups_preserved": false,
+        "all_scan_max_correct": false,
+        "smaller_all": true
+      },
+      "page-table-schema": {
+        "lookup": 2,
+        "scan": 0,
+        "max": 0,
+        "faster_first_and_last_all": true,
+        "original_correct_lookups_preserved": true,
+        "all_scan_max_correct": false,
+        "smaller_all": true
+      }
+    }
+  },
+  "measured": 144
+}

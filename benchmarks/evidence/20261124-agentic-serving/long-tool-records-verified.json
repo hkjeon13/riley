@@ -1,0 +1,94 @@
+{
+  "physical_gpu": "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+  "binary_sha256": "c179249ff85526546c220b0606051bdfba152eb81133600f91b856831314643c",
+  "leases_idle_and_shutdown_zero": true,
+  "cases": [
+    {
+      "seed": 541,
+      "records": 210,
+      "expected": {
+        "F541-0042": 42724,
+        "F541-0168": 83981
+      },
+      "page": {
+        "valid": false,
+        "answer": "```json\n{\n{\n  \"F541-0042\": 42724,\n  \"F541-01668\": 83981\n}\n```\n\nNote: There seems to be a typo in the source ID \"F541-01668\" in the JSON output. It should be \"F541-0168\". Correcting the typo, the",
+        "error": null,
+        "input": 5988,
+        "output": 96,
+        "cache": 0,
+        "first_ms": 1717.135019,
+        "last_ms": 2917.4562
+      },
+      "tile": {
+        "valid": true,
+        "answer": "```json\n{\n  \"F541-0042\": 42724,\n  \"F541-0168\": 83981\n}\n```",
+        "error": null,
+        "input": 5988,
+        "output": 45,
+        "cache": 0,
+        "first_ms": 494.750442,
+        "last_ms": 1019.645377
+      },
+      "same_input_and_cache": true
+    },
+    {
+      "seed": 733,
+      "records": 620,
+      "expected": {
+        "F733-0124": 48247,
+        "F733-0496": 36660
+      },
+      "page": {
+        "valid": true,
+        "answer": "```json\n{\n    \"F733-0124\": 48247,\n    \"F733-0496\": 36660\n}\n```",
+        "error": null,
+        "input": 17468,
+        "output": 45,
+        "cache": 32,
+        "first_ms": 8320.718227,
+        "last_ms": 9038.482293
+      },
+      "tile": {
+        "valid": true,
+        "answer": "```json\n{\n    \"F733-0124\": 48247,\n    \"F733-0496\": 36660\n}\n```",
+        "error": null,
+        "input": 17468,
+        "output": 45,
+        "cache": 32,
+        "first_ms": 1724.923436,
+        "last_ms": 2277.385408
+      },
+      "same_input_and_cache": true
+    },
+    {
+      "seed": 862,
+      "records": 890,
+      "expected": {
+        "F862-0178": 19602,
+        "F862-0712": 38401
+      },
+      "page": {
+        "valid": true,
+        "answer": "```json\n{\n    \"F862-0712\": 38401,\n    \"F862-0178\": 19602\n}\n```",
+        "error": null,
+        "input": 25028,
+        "output": 45,
+        "cache": 32,
+        "first_ms": 15219.879305,
+        "last_ms": 16050.202324
+      },
+      "tile": {
+        "valid": false,
+        "answer": "```json\n{\n    \"F862-0712\": 38401,\n    \"F862-0712\": 38401\n}\n```",
+        "error": null,
+        "input": 25028,
+        "output": 45,
+        "cache": 32,
+        "first_ms": 2778.346334,
+        "last_ms": 3353.964114
+      },
+      "same_input_and_cache": true
+    }
+  ]
+}

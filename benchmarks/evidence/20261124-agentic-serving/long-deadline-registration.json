@@ -1,0 +1,6 @@
+{
+  "scope": "After first 112106-token shape ended in an SSE error frame and its older collector raised KeyError on id, preserve the failed run. An independent short-deadline trial explicitly checks an error frame and cancellation, then a separate trial uses 900000ms end-to-end generation deadline. Admission timeout stays independent. All rows including early EOS and errors retained.",
+  "control": "1000ms deadline: same two retrieval cases (209 and approximately 45k tokens).",
+  "candidate": "Same model and bounded D128 page configuration, 900000ms request deadline. Two retrieval checks plus all four previously frozen public cases. The longer deadline tests technical support; it is not an acceleration.",
+  "success": "Separate prompt count, output length, HTTP status, stream terminal and retrieval correctness; capture exact binary and idle leases."
+}

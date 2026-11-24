@@ -1,0 +1,7 @@
+{
+  "settings": {"pool_blocks":4096, "prefix_cache_blocks":1536, "max_active_sequences":8, "iteration_budget":1024, "chunk":1024, "steady_budget":256, "burst_decode_rows":0, "burst_prompt":512},
+  "workload": "Replay four captured gpu6/selected arrival cohorts with native Riley prompt IDs. Synthetic executor returns one terminal token per HTTP request to isolate prefill. Each wave starts cold, preparation drains before final arrivals, and finals are submitted in original order or its reverse. These are two interleavings of cache demand and no GPU timing.",
+  "policies":["none","full","budget"],
+  "budget": "Give preparation up to 1024 of 1536 retained blocks (512 blocks headroom). Divide by the known count of long targets in this cohort. Use the full first-tool request when it fits. Otherwise take a prefix of the application's long first history message at 512-character intervals, request no generation suffix, and select the longest text candidate whose independently rendered prompt fits each share. Finals are unchanged. No final data or future cache hits in the selection.",
+  "decision": "A useful candidate lowers committed final prefill rows against no preparation in both C16 arrival orders and reduces total committed prefill versus preparing every long target fully. Inspect per-request final misses, reader rows, cache eviction and total work versus baseline. Do not infer latency, goodput, multi-tenant isolation or production adoption from this replay."
+}

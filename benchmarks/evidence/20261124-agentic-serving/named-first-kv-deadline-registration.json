@@ -1,0 +1,20 @@
+{
+  "checkpoint": "Qwen2.5-Coder-7B-Instruct",
+  "native_profiler": "chat-owned-render-20261125.XCBDIb4g/probe-candidate",
+  "jobs": [
+    [
+      17101,
+      200
+    ]
+  ],
+  "delay_s": 2.5,
+  "first_tool_kv": {
+    "block": 16,
+    "chunk": 16,
+    "maximum_tokens": 256,
+    "history_bytes": 4096,
+    "wait_hint_ms": 5000,
+    "chunk_budget_ms": 2500
+  },
+  "scope": "After observing a 2.18 s first CPU chunk outlast the original 1 s tool window, repeat only the long-history case. The application declares 5000 ms of tool time before either result; each real tool waits 2500 ms. Budget 2500 ms per 16-token chunk including margin and charge initial rendering against the same deadline. Require at least one exact block committed before final send, no unfinished chunk at final POST, unchanged final input and generated IDs, suffix-only first forward and both tools in dependency order. No cross-window latency comparison or GPU claim."
+}

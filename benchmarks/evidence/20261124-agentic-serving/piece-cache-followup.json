@@ -1,0 +1,6 @@
+{
+  "reason": "Darwin initial candidate passed full ID equality, long history and JSON gates; no-reuse control median ratio 1.050017 exceeded the 1.05 guard. On a normalized plain span, stop probing if the first 128 distinct eligible pieces had no reuse. Keep original trial for comparison.",
+  "orders": [["candidate","baseline"],["baseline","candidate"],["baseline","candidate"],["candidate","baseline"]],
+  "repeats": 10,
+  "gate": "All token IDs equal on every observation and target median ratios <=0.90 on history and tool JSON. Require <=1.05 on existing controls and new short tool output, distinct words, and a mixed entropy-then-repeating payload. Report paired process ratios on both Darwin ARM64 and Linux x86_64. Apply no GPU latency or general availability claim."
+}

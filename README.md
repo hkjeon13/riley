@@ -460,6 +460,7 @@ Not supported yet: quantised weights, pipeline parallelism, multiple nodes.
 | [Per-model comparison](docs/model-coverage-a100-perf-by-model.md) | A100 charts and tables, Riley vs vLLM |
 | [Model coverage](docs/model-coverage-a100.md) | A100 qualification criteria, flags and evidence |
 | [Serving validation](docs/serving-validation.md) | Workloads, accuracy, API checks and stability |
+| [Agentic serving roadmap (한국어)](docs/agentic-serving/README.md) | Milestones, experiments and acceptance criteria for tool use, final answers and production serving |
 
 ## License
 

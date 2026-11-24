@@ -1,0 +1,403 @@
+{
+  "gpus": {
+    "6": {
+      "arms": {
+        "full": {
+          "first_p95_ms": 2252.655814,
+          "last_p95_ms": 3446.718376,
+          "reader_tpot_p50_ms": 28.367622949685533,
+          "reader_gap_p95_ms": 123.978403,
+          "prompt_tokens": [
+            1792,
+            2517
+          ],
+          "completion_tokens": [
+            47
+          ]
+        },
+        "selected": {
+          "first_p95_ms": 207.227465,
+          "last_p95_ms": 1192.239081,
+          "reader_tpot_p50_ms": 23.36884174842767,
+          "reader_gap_p95_ms": 23.900366,
+          "prompt_tokens": [
+            168
+          ],
+          "completion_tokens": [
+            43
+          ]
+        }
+      },
+      "gates": {
+        "accuracy": true,
+        "dispatch": true,
+        "first": true,
+        "last": true,
+        "reader_tpot": true,
+        "reader_gap": true
+      },
+      "waves": {
+        "returns-2-spacing-0-full": {
+          "correct": 2,
+          "full_reference_match": true,
+          "same_generated_as_full": 2,
+          "total": 2,
+          "worst_last_ms": 1670.781809,
+          "overlap": 2,
+          "reader_match": true,
+          "max_write_error_ms": 0.902331
+        },
+        "returns-2-spacing-0-selected": {
+          "correct": 2,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 2,
+          "worst_last_ms": 1054.89088,
+          "overlap": 2,
+          "reader_match": true,
+          "max_write_error_ms": 1.062173
+        },
+        "returns-3-spacing-0-selected": {
+          "correct": 3,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 3,
+          "worst_last_ms": 1055.294847,
+          "overlap": 3,
+          "reader_match": true,
+          "max_write_error_ms": 1.213733
+        },
+        "returns-3-spacing-0-full": {
+          "correct": 3,
+          "full_reference_match": true,
+          "same_generated_as_full": 3,
+          "total": 3,
+          "worst_last_ms": 1896.547992,
+          "overlap": 3,
+          "reader_match": true,
+          "max_write_error_ms": 1.095845
+        },
+        "returns-4-spacing-0-full": {
+          "correct": 4,
+          "full_reference_match": true,
+          "same_generated_as_full": 4,
+          "total": 4,
+          "worst_last_ms": 2254.523763,
+          "overlap": 4,
+          "reader_match": true,
+          "max_write_error_ms": 1.401296
+        },
+        "returns-4-spacing-0-selected": {
+          "correct": 4,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 4,
+          "worst_last_ms": 1098.45778,
+          "overlap": 4,
+          "reader_match": true,
+          "max_write_error_ms": 1.650002
+        },
+        "returns-8-spacing-0-selected": {
+          "correct": 8,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 8,
+          "worst_last_ms": 1216.079981,
+          "overlap": 8,
+          "reader_match": true,
+          "max_write_error_ms": 3.173756
+        },
+        "returns-8-spacing-0-full": {
+          "correct": 8,
+          "full_reference_match": true,
+          "same_generated_as_full": 8,
+          "total": 8,
+          "worst_last_ms": 3446.74032,
+          "overlap": 8,
+          "reader_match": true,
+          "max_write_error_ms": 2.714325
+        },
+        "returns-2-spacing-180-full": {
+          "correct": 2,
+          "full_reference_match": true,
+          "same_generated_as_full": 2,
+          "total": 2,
+          "worst_last_ms": 1625.669969,
+          "overlap": 2,
+          "reader_match": true,
+          "max_write_error_ms": 0.449322
+        },
+        "returns-2-spacing-180-selected": {
+          "correct": 2,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 2,
+          "worst_last_ms": 1022.716747,
+          "overlap": 2,
+          "reader_match": true,
+          "max_write_error_ms": 0.545851
+        },
+        "returns-3-spacing-180-selected": {
+          "correct": 3,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 3,
+          "worst_last_ms": 1034.133927,
+          "overlap": 3,
+          "reader_match": true,
+          "max_write_error_ms": 0.526019
+        },
+        "returns-3-spacing-180-full": {
+          "correct": 3,
+          "full_reference_match": true,
+          "same_generated_as_full": 3,
+          "total": 3,
+          "worst_last_ms": 1833.582457,
+          "overlap": 3,
+          "reader_match": true,
+          "max_write_error_ms": 0.528414
+        },
+        "returns-4-spacing-180-full": {
+          "correct": 4,
+          "full_reference_match": true,
+          "same_generated_as_full": 4,
+          "total": 4,
+          "worst_last_ms": 2186.527323,
+          "overlap": 4,
+          "reader_match": true,
+          "max_write_error_ms": 0.500045
+        },
+        "returns-4-spacing-180-selected": {
+          "correct": 4,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 4,
+          "worst_last_ms": 1045.960289,
+          "overlap": 4,
+          "reader_match": true,
+          "max_write_error_ms": 0.545027
+        },
+        "returns-8-spacing-180-selected": {
+          "correct": 8,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 8,
+          "worst_last_ms": 1067.104278,
+          "overlap": 8,
+          "reader_match": true,
+          "max_write_error_ms": 0.532267
+        },
+        "returns-8-spacing-180-full": {
+          "correct": 8,
+          "full_reference_match": true,
+          "same_generated_as_full": 8,
+          "total": 8,
+          "worst_last_ms": 3186.012784,
+          "overlap": 8,
+          "reader_match": true,
+          "max_write_error_ms": 0.48463
+        }
+      }
+    },
+    "7": {
+      "arms": {
+        "full": {
+          "first_p95_ms": 2238.830985,
+          "last_p95_ms": 3432.249445,
+          "reader_tpot_p50_ms": 28.297301289308173,
+          "reader_gap_p95_ms": 122.33299,
+          "prompt_tokens": [
+            1792,
+            2517
+          ],
+          "completion_tokens": [
+            47
+          ]
+        },
+        "selected": {
+          "first_p95_ms": 206.715929,
+          "last_p95_ms": 1191.257842,
+          "reader_tpot_p50_ms": 23.350081163522013,
+          "reader_gap_p95_ms": 23.893939,
+          "prompt_tokens": [
+            168
+          ],
+          "completion_tokens": [
+            43
+          ]
+        }
+      },
+      "gates": {
+        "accuracy": true,
+        "dispatch": true,
+        "first": true,
+        "last": true,
+        "reader_tpot": true,
+        "reader_gap": true
+      },
+      "waves": {
+        "returns-2-spacing-0-selected": {
+          "correct": 2,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 2,
+          "worst_last_ms": 1051.960997,
+          "overlap": 2,
+          "reader_match": true,
+          "max_write_error_ms": 0.963292
+        },
+        "returns-2-spacing-0-full": {
+          "correct": 2,
+          "full_reference_match": true,
+          "same_generated_as_full": 2,
+          "total": 2,
+          "worst_last_ms": 1666.048607,
+          "overlap": 2,
+          "reader_match": true,
+          "max_write_error_ms": 0.793737
+        },
+        "returns-3-spacing-0-full": {
+          "correct": 3,
+          "full_reference_match": true,
+          "same_generated_as_full": 3,
+          "total": 3,
+          "worst_last_ms": 1888.311122,
+          "overlap": 3,
+          "reader_match": true,
+          "max_write_error_ms": 1.067873
+        },
+        "returns-3-spacing-0-selected": {
+          "correct": 3,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 3,
+          "worst_last_ms": 1056.187234,
+          "overlap": 3,
+          "reader_match": true,
+          "max_write_error_ms": 1.25243
+        },
+        "returns-4-spacing-0-selected": {
+          "correct": 4,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 4,
+          "worst_last_ms": 1098.828457,
+          "overlap": 4,
+          "reader_match": true,
+          "max_write_error_ms": 1.611243
+        },
+        "returns-4-spacing-0-full": {
+          "correct": 4,
+          "full_reference_match": true,
+          "same_generated_as_full": 4,
+          "total": 4,
+          "worst_last_ms": 2245.878149,
+          "overlap": 4,
+          "reader_match": true,
+          "max_write_error_ms": 1.412326
+        },
+        "returns-8-spacing-0-full": {
+          "correct": 8,
+          "full_reference_match": true,
+          "same_generated_as_full": 8,
+          "total": 8,
+          "worst_last_ms": 3432.273933,
+          "overlap": 8,
+          "reader_match": true,
+          "max_write_error_ms": 2.809032
+        },
+        "returns-8-spacing-0-selected": {
+          "correct": 8,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 8,
+          "worst_last_ms": 1214.999813,
+          "overlap": 8,
+          "reader_match": true,
+          "max_write_error_ms": 3.171542
+        },
+        "returns-2-spacing-180-selected": {
+          "correct": 2,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 2,
+          "worst_last_ms": 1022.059027,
+          "overlap": 2,
+          "reader_match": true,
+          "max_write_error_ms": 0.537993
+        },
+        "returns-2-spacing-180-full": {
+          "correct": 2,
+          "full_reference_match": true,
+          "same_generated_as_full": 2,
+          "total": 2,
+          "worst_last_ms": 1617.365528,
+          "overlap": 2,
+          "reader_match": true,
+          "max_write_error_ms": 0.500099
+        },
+        "returns-3-spacing-180-full": {
+          "correct": 3,
+          "full_reference_match": true,
+          "same_generated_as_full": 3,
+          "total": 3,
+          "worst_last_ms": 1826.682973,
+          "overlap": 3,
+          "reader_match": true,
+          "max_write_error_ms": 0.481042
+        },
+        "returns-3-spacing-180-selected": {
+          "correct": 3,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 3,
+          "worst_last_ms": 1034.558819,
+          "overlap": 3,
+          "reader_match": true,
+          "max_write_error_ms": 0.544501
+        },
+        "returns-4-spacing-180-selected": {
+          "correct": 4,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 4,
+          "worst_last_ms": 1046.441965,
+          "overlap": 4,
+          "reader_match": true,
+          "max_write_error_ms": 0.53017
+        },
+        "returns-4-spacing-180-full": {
+          "correct": 4,
+          "full_reference_match": true,
+          "same_generated_as_full": 4,
+          "total": 4,
+          "worst_last_ms": 2172.675354,
+          "overlap": 4,
+          "reader_match": true,
+          "max_write_error_ms": 0.570071
+        },
+        "returns-8-spacing-180-full": {
+          "correct": 8,
+          "full_reference_match": true,
+          "same_generated_as_full": 8,
+          "total": 8,
+          "worst_last_ms": 3148.990273,
+          "overlap": 8,
+          "reader_match": true,
+          "max_write_error_ms": 0.474748
+        },
+        "returns-8-spacing-180-selected": {
+          "correct": 8,
+          "full_reference_match": null,
+          "same_generated_as_full": 0,
+          "total": 8,
+          "worst_last_ms": 1066.376751,
+          "overlap": 8,
+          "reader_match": true,
+          "max_write_error_ms": 0.550424
+        }
+      }
+    }
+  },
+  "all_pass": true
+}

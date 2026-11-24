@@ -1,0 +1,8 @@
+{
+  "checkpoint": "Qwen2.5-Coder-7B-Instruct",
+  "native_profiler": "chat-owned-render-20261125.XCBDIb4g/probe-candidate",
+  "jobs": [[17101,200],[17104,0]],
+  "delay_s": 0.5,
+  "first_tool_kv": {"block":16, "chunk":16, "maximum_tokens":256, "history_bytes":4096},
+  "scope": "CPU FP32 checkpoint reference. At the first caller-owned tool start, snapshot already available messages and its validated call, never the returned catalog. Skip short context. While both real 500 ms tool waits proceed, compute KV in bounded chunks. When final HTTP request arrives, stop preparation at the next chunk boundary. Reuse only matching complete blocks with at least one final prompt token remaining. Measure outstanding chunk wait, committed rows before final submission and first final model-forward rows. Compare exact final input IDs, output IDs, EOS, SSE text, tools and final answer quality to archived unprepared same-checkpoint cases. This fixture checks semantics and overlap, not GPU speed or cluster goodput."
+}

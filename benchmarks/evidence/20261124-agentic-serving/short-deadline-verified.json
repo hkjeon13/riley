@@ -1,0 +1,27 @@
+{
+  "binary_sha256": "3654ecf29793343f2355ad5d6f99b3c3adffd5de90ed51041e50263d1124a88b",
+  "scope": "isolated experimental page attention binary on Llama 3.1 8B, no production promotion",
+  "retrieval": [
+    {
+      "correct": true,
+      "status": 200,
+      "error": null,
+      "prompt_tokens": 209,
+      "completion_tokens": 13,
+      "first_ms": 107.546217,
+      "last_ms": 249.433091
+    },
+    {
+      "correct": false,
+      "status": 200,
+      "error": "server streaming error: {'message': 'the request timed out', 'type': 'server_error', 'param': None, 'code': 'timeout'}",
+      "stream_error": {
+        "message": "the request timed out",
+        "type": "server_error",
+        "param": null,
+        "code": "timeout"
+      }
+    }
+  ],
+  "shutdown_zero": true
+}

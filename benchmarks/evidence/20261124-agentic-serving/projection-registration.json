@@ -1,0 +1,6 @@
+{
+ "model": "Qwen 7B BF16, standard page attention, 32K / 256 rows, zero prefix retention for both conditions. Each reservation starts one fresh service, 6 on GPU6 and 6 on GPU7. Source binary from named-profile release with no experimental attention patches. GPUs use opposite orders per pair.",
+ "cohort": [[541,210],[733,620],[862,890]],
+ "treatment": "Each typed task asks for two public record IDs. Select only those complete records from the same local tool response using IDs extracted from that explicit request. The selector never receives the ground-truth amounts. Unknown, missing, duplicate and malformed keys fall back to the full result. Free-text analysis, aggregation and inferred relevance are outside scope.",
+ "gates": "Require two selected whole rows matching the original, full body digest and zero cached tokens, three correct JSON results per new service, earlier first AND last content in all six pairs including client preparation. Report full-result quality failures and projection preparation costs; industrial workload impact depends on the prevalence of explicit-key lookup."
+}

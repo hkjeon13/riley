@@ -1,0 +1,65 @@
+{
+  "engine": {
+    "torch": "2.13.0+cu129",
+    "transformers": "5.22.1",
+    "threads": 6,
+    "dtype": "torch.float32",
+    "device": "cpu"
+  },
+  "jobs": [
+    {
+      "seed": 17101,
+      "history": 200,
+      "tool_invocations": 2,
+      "model_requests": 1,
+      "valid": true,
+      "usage": {
+        "prompt_tokens": 3193,
+        "completion_tokens": 141,
+        "total_tokens": 3334
+      },
+      "finish": "stop",
+      "explanation_words": 122,
+      "visible_chunks": 111,
+      "application_prefix": "Before: 68 ms. After: 26 ms. Reduction: 42 ms.\n\nThe measured p95 changed from 68 ms (report-A) to 26 ms (report-B).",
+      "generated_suffix": " The p95, or 95th percentile, represents the time below which 95% of the data falls; it indicates that 95% of the service responses were faster than 26 ms, compared to 68 ms previously. This significant reduction suggests an improvement in the service's performance, particularly in handling peak loads or ensuring consistent responsiveness. However, these reports alone do not establish causality or provide comprehensive insights into the underlying factors contributing to the latency reduction. They also do not address other critical aspects such as error rates, throughput, or user experience metrics. Further analysis would be required to fully understand the impact of these changes on the overall system performance and reliability.",
+      "submission_to_first_generated_chunk_ms": 62249.011434,
+      "immediately_attributed": {
+        "report-A": true,
+        "report-B": true
+      },
+      "strict_opening": true,
+      "answer": "Before: 68 ms. After: 26 ms. Reduction: 42 ms.\n\nThe measured p95 changed from 68 ms (report-A) to 26 ms (report-B). The p95, or 95th percentile, represents the time below which 95% of the data falls; it indicates that 95% of the service responses were faster than 26 ms, compared to 68 ms previously. This significant reduction suggests an improvement in the service's performance, particularly in handling peak loads or ensuring consistent responsiveness. However, these reports alone do not establish causality or provide comprehensive insights into the underlying factors contributing to the latency reduction. They also do not address other critical aspects such as error rates, throughput, or user experience metrics. Further analysis would be required to fully understand the impact of these changes on the overall system performance and reliability.",
+      "all_three_values": true,
+      "both_sources": true,
+      "at_least_64_tokens": true
+    },
+    {
+      "seed": 17104,
+      "history": 0,
+      "tool_invocations": 2,
+      "model_requests": 1,
+      "valid": true,
+      "usage": {
+        "prompt_tokens": 429,
+        "completion_tokens": 168,
+        "total_tokens": 597
+      },
+      "finish": "stop",
+      "explanation_words": 143,
+      "visible_chunks": 132,
+      "application_prefix": "Before: 84 ms. After: 25 ms. Reduction: 59 ms.\n\nThe measured p95 changed from 84 ms (report-A) to 25 ms (report-B).",
+      "generated_suffix": " The 95th percentile (p95) represents the time below which 95% of the data falls; it is often used as a measure of performance because it indicates the maximum acceptable delay for most users. In this context, the reduction from 84 ms to 25 ms suggests a significant improvement in service response latency, indicating that the system now handles 95% of requests within 25 ms, compared to 84 ms previously. This substantial decrease could be attributed to various factors such as optimized code, improved infrastructure, or reduced load on the server. However, these reports do not establish whether the system can handle peak loads or if there are any potential bottlenecks at higher traffic levels. Additionally, they do not provide information on user satisfaction or other qualitative aspects of the service experience.",
+      "submission_to_first_generated_chunk_ms": 11328.973136,
+      "immediately_attributed": {
+        "report-A": true,
+        "report-B": true
+      },
+      "strict_opening": true,
+      "answer": "Before: 84 ms. After: 25 ms. Reduction: 59 ms.\n\nThe measured p95 changed from 84 ms (report-A) to 25 ms (report-B). The 95th percentile (p95) represents the time below which 95% of the data falls; it is often used as a measure of performance because it indicates the maximum acceptable delay for most users. In this context, the reduction from 84 ms to 25 ms suggests a significant improvement in service response latency, indicating that the system now handles 95% of requests within 25 ms, compared to 84 ms previously. This substantial decrease could be attributed to various factors such as optimized code, improved infrastructure, or reduced load on the server. However, these reports do not establish whether the system can handle peak loads or if there are any potential bottlenecks at higher traffic levels. Additionally, they do not provide information on user satisfaction or other qualitative aspects of the service experience.",
+      "all_three_values": true,
+      "both_sources": true,
+      "at_least_64_tokens": true
+    }
+  ]
+}

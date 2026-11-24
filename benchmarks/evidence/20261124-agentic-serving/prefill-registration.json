@@ -1,0 +1,12 @@
+{
+  "purpose": "Test whether wider prefill when no decode waits recovers workflow latency without delaying final-answer streaming",
+  "freeze": "registered after initial cache ABBA on seed 101, before candidate runs",
+  "hardware": "A100 GPU 7 holder",
+  "control": {"steady_rows": 256, "max_rows": 256},
+  "candidate": {"steady_rows": 256, "max_rows": 1024, "max_decode_rows_for_wide": 0, "min_long_prompt": 512},
+  "shared": {"kv_blocks": 4096, "prefix_cache_blocks": 1536, "context": 8192, "max_output": 384},
+  "order": ["control", "candidate", "candidate", "control"],
+  "scenarios": {"previous_history_entries": [0, 200], "new_document_pairs": [2, 96], "holdout_seed": 761},
+  "decision": "report all errors, require matched accurate finished answers and observed overlap; first and last final p95 must both improve repeatedly, TPOT and stream tail must meet frozen competitive bounds before promotion; otherwise retain stock",
+  "evidence_scope": "small synthetic screening; five workflows per cell cannot establish a production tail"
+}

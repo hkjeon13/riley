@@ -1,0 +1,59 @@
+{
+  "engine": {
+    "torch": "2.13.0+cu129",
+    "transformers": "5.22.1",
+    "threads": 6,
+    "dtype": "torch.float32",
+    "device": "cpu"
+  },
+  "jobs": [
+    {
+      "seed": 17101,
+      "history": 200,
+      "tool_invocations": 2,
+      "model_requests": 1,
+      "valid": false,
+      "usage": {
+        "prompt_tokens": 3072,
+        "completion_tokens": 88,
+        "total_tokens": 3160
+      },
+      "finish": "stop",
+      "explanation_words": 46,
+      "visible_chunks": 55,
+      "immediately_attributed": {
+        "report-A": false,
+        "report-B": false
+      },
+      "strict_opening": true,
+      "answer": "Before: 68 ms. After: 26 ms. Reduction: 42 ms.\n\nThe p95 value represents the 95th percentile of the data, indicating that 95% of the service response latencies were below or equal to 68 ms before the optimization and 26 ms after. This reduction suggests an improvement in the service's performance, particularly in handling high-latency requests.",
+      "all_three_values": true,
+      "both_sources": false,
+      "at_least_64_tokens": true
+    },
+    {
+      "seed": 17104,
+      "history": 0,
+      "tool_invocations": 2,
+      "model_requests": 1,
+      "valid": false,
+      "usage": {
+        "prompt_tokens": 308,
+        "completion_tokens": 109,
+        "total_tokens": 417
+      },
+      "finish": "stop",
+      "explanation_words": 68,
+      "visible_chunks": 77,
+      "immediately_attributed": {
+        "report-A": false,
+        "report-B": false
+      },
+      "strict_opening": true,
+      "answer": "Before: 84 ms. After: 25 ms. Reduction: 59 ms.\n\nThe reduction in latency from 84 ms to 25 ms is significant, indicating an improvement in service performance. The p95 value represents the 95th percentile of the data, meaning that 95% of the observed latencies were below this threshold. Both reports indicate that these values are within expected ranges for routine sampling, suggesting that the optimization efforts have been successful in reducing the maximum latency experienced by users.",
+      "all_three_values": true,
+      "both_sources": false,
+      "at_least_64_tokens": true
+    }
+  ]
+}

@@ -1,0 +1,129 @@
+{
+  "workflows": {
+    "drained": {
+      "seed": 761,
+      "workflow_ok": true,
+      "valid_tool_calls": 2,
+      "http": 200,
+      "chunks": 186,
+      "sse_done": true,
+      "finish": "stop",
+      "numeric_fields": {
+        "before": "59",
+        "after": "31",
+        "reduction": "28"
+      },
+      "missing_sources": []
+    },
+    "newly_routed": {
+      "seed": 762,
+      "workflow_ok": true,
+      "valid_tool_calls": 2,
+      "http": 200,
+      "chunks": 127,
+      "sse_done": true,
+      "finish": "stop",
+      "numeric_fields": {
+        "before": "68",
+        "after": "17",
+        "reduction": "51"
+      },
+      "missing_sources": []
+    },
+    "partial": {
+      "seed": 761,
+      "workflow_ok": false,
+      "valid_tool_calls": 2,
+      "http": 200,
+      "chunks": 8,
+      "sse_done": false,
+      "finish": null,
+      "numeric_fields": {},
+      "missing_sources": [
+        "report-A",
+        "report-B"
+      ]
+    },
+    "recovered": {
+      "seed": 761,
+      "workflow_ok": true,
+      "valid_tool_calls": 2,
+      "http": 200,
+      "chunks": 186,
+      "sse_done": true,
+      "finish": "stop",
+      "numeric_fields": {
+        "before": "59",
+        "after": "31",
+        "reduction": "28"
+      },
+      "missing_sources": []
+    },
+    "rollback_workflow": {
+      "seed": 762,
+      "workflow_ok": true,
+      "valid_tool_calls": 2,
+      "http": 200,
+      "chunks": 127,
+      "sse_done": true,
+      "finish": "stop",
+      "numeric_fields": {
+        "before": "68",
+        "after": "17",
+        "reduction": "51"
+      },
+      "missing_sources": []
+    }
+  },
+  "process_exit": 137,
+  "replacement_ready_s": 102.3841395676136,
+  "fresh_workflow_after_fault_s": 5.197729557752609,
+  "old_endpoint_closed": true,
+  "failed_endpoint_closed": true,
+  "committed_actions": [
+    {
+      "arguments": {},
+      "name": "list_reports"
+    },
+    {
+      "arguments": {
+        "first": "report-A",
+        "second": "report-B"
+      },
+      "name": "read_reports"
+    }
+  ],
+  "tool_attempts": [
+    {
+      "turn": 0,
+      "committed": true
+    },
+    {
+      "turn": 1,
+      "committed": true
+    },
+    {
+      "turn": 0,
+      "committed": false
+    },
+    {
+      "turn": 1,
+      "committed": false
+    }
+  ],
+  "shutdown_zero": {
+    "old": true,
+    "replacement": true
+  },
+  "engineering_checks": {
+    "active_stream_drained": true,
+    "new_route_completed": true,
+    "partial_stream_detected": true,
+    "recovered_after_loss": true,
+    "idempotent_tool_effects": true,
+    "original_configuration_serves": true
+  },
+  "durable_results_match_answer": true,
+  "turn_endpoints_match_generation": true,
+  "all_checks_passed": true
+}

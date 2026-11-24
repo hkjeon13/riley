@@ -1,0 +1,101 @@
+{
+  "baseline": {
+    "extended": {
+      "submitted": 8,
+      "status": {
+        "400": 8
+      },
+      "completed": 0,
+      "exact_input": 0,
+      "exact_output": 0,
+      "largest_input_accepted": null,
+      "stop_reasons": {},
+      "failures": [
+        {
+          "index": 16,
+          "error": "HTTP 400: b'{\"error\":{\"message\":\"max_tokens exceeds the server limit\",\"type\":\"invalid_request_error\",\"param\":\"max_tokens\",\"code\":\"request_too_large\"}}'"
+        },
+        {
+          "index": 17,
+          "error": "HTTP 400: b'{\"error\":{\"message\":\"max_tokens exceeds the server limit\",\"type\":\"invalid_request_error\",\"param\":\"max_tokens\",\"code\":\"request_too_large\"}}'"
+        },
+        {
+          "index": 18,
+          "error": "HTTP 400: b'{\"error\":{\"message\":\"max_tokens exceeds the server limit\",\"type\":\"invalid_request_error\",\"param\":\"max_tokens\",\"code\":\"request_too_large\"}}'"
+        },
+        {
+          "index": 19,
+          "error": "HTTP 400: b'{\"error\":{\"message\":\"the request is incompatible with the loaded model\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"invalid_request\"}}'"
+        },
+        {
+          "index": 20,
+          "error": "HTTP 400: b'{\"error\":{\"message\":\"the request is incompatible with the loaded model\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"invalid_request\"}}'"
+        },
+        {
+          "index": 21,
+          "error": "HTTP 400: b'{\"error\":{\"message\":\"max_tokens exceeds the server limit\",\"type\":\"invalid_request_error\",\"param\":\"max_tokens\",\"code\":\"request_too_large\"}}'"
+        },
+        {
+          "index": 22,
+          "error": "HTTP 400: b'{\"error\":{\"message\":\"the request is incompatible with the loaded model\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"invalid_request\"}}'"
+        },
+        {
+          "index": 23,
+          "error": "HTTP 400: b'{\"error\":{\"message\":\"the request is incompatible with the loaded model\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"invalid_request\"}}'"
+        }
+      ],
+      "completion_mismatches": []
+    },
+    "within_8k": {
+      "submitted": 16,
+      "status": {
+        "200": 16
+      },
+      "completed": 16,
+      "exact_input": 16,
+      "exact_output": 16,
+      "largest_input_accepted": 8071,
+      "stop_reasons": {
+        "length": 16
+      },
+      "failures": [],
+      "completion_mismatches": []
+    }
+  },
+  "extended": {
+    "startup_error": "riley: fixed-tile-unsplit-v1 requires an explicit context bound <=8192, batch budget <=1024 and at most 32 active sequences",
+    "submitted": 0
+  },
+  "page32": {
+    "extended": {
+      "submitted": 8,
+      "status": {
+        "200": 8
+      },
+      "completed": 8,
+      "exact_input": 8,
+      "exact_output": 8,
+      "largest_input_accepted": 30828,
+      "stop_reasons": {
+        "length": 8
+      },
+      "failures": [],
+      "completion_mismatches": []
+    },
+    "within_8k": {
+      "submitted": 16,
+      "status": {
+        "200": 16
+      },
+      "completed": 16,
+      "exact_input": 16,
+      "exact_output": 16,
+      "largest_input_accepted": 8071,
+      "stop_reasons": {
+        "length": 16
+      },
+      "failures": [],
+      "completion_mismatches": []
+    }
+  }
+}

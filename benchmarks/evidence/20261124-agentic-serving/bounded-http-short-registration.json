@@ -1,0 +1,13 @@
+{
+  "checkpoint": "Qwen2.5-Coder-7B-Instruct",
+  "native_profiler": "probe",
+  "http_budget": 256,
+  "jobs": [
+    [
+      17104,
+      0
+    ]
+  ],
+  "delay_s": 6,
+  "scope": "Complement the long partial-preview case with the registered short no-history case. Use the final line-oriented native profiler protocol. Expect a full known preview within 256 input tokens and independent complete final POST after two real 6 s waits. Check natural termination, cached rows and compare actual output IDs with the same seed without preparation. Report any numerical divergence."
+}

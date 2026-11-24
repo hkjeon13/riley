@@ -821,11 +821,62 @@ impl EngineBatchShapeBucketMetrics {
     }
 }
 
+/// Cumulative work from committed iterations of one scheduling phase.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
+pub struct IterationWork {
+    /// Number of committed iterations in this phase.
+    pub iterations: u64,
+    /// Prompt rows processed, excluding tokens adopted from the prefix cache.
+    pub prefill_tokens: u64,
+    /// Decode input rows processed.
+    pub decode_tokens: u64,
+    /// Sum of runtime-reported GPU execution time, in nanoseconds.
+    pub gpu_execution_ns: u64,
+}
+
+/// Mutually exclusive iteration groups. Mixed time covers the whole batch.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
+pub struct IterationWorkByPhase {
+    /// Iterations with only prefill input tokens.
+    pub prefill_only: IterationWork,
+    /// Iterations with only decode input tokens.
+    pub decode_only: IterationWork,
+    /// Iterations with both prefill and decode input tokens.
+    pub mixed: IterationWork,
+}
+
+#[cfg(any(feature = "cuda", test))]
+impl IterationWorkByPhase {
+    fn record(&mut self, sample: riley_scheduler::IterationMetricSample) -> Option<()> {
+        let phase = match (sample.prefill_tokens, sample.decode_tokens) {
+            (0, 0) => return None,
+            (_, 0) => &mut self.prefill_only,
+            (0, _) => &mut self.decode_only,
+            _ => &mut self.mixed,
+        };
+        *phase = IterationWork {
+            iterations: phase.iterations.checked_add(1)?,
+            prefill_tokens: phase
+                .prefill_tokens
+                .checked_add(u64::try_from(sample.prefill_tokens).ok()?)?,
+            decode_tokens: phase
+                .decode_tokens
+                .checked_add(u64::try_from(sample.decode_tokens).ok()?)?,
+            gpu_execution_ns: phase
+                .gpu_execution_ns
+                .checked_add(sample.gpu_execution_ns)?,
+        };
+        Some(())
+    }
+}
+
 /// Fixed-capacity batch-shape metrics collected on the exclusive CUDA worker.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EngineBatchShapeMetricsSnapshot {
     /// Sticky signal that a non-authoritative shape metric could not be updated.
     pub metrics_degraded: bool,
+    /// Committed input tokens and GPU time grouped by iteration phase.
+    pub by_phase: IterationWorkByPhase,
     /// Latest successfully committed iteration, or none before the first hit.
     pub last: Option<EngineBatchShapeObservation>,
     /// Number of valid entries in [`Self::buckets`].
@@ -838,6 +889,7 @@ impl Default for EngineBatchShapeMetricsSnapshot {
     fn default() -> Self {
         Self {
             metrics_degraded: false,
+            by_phase: IterationWorkByPhase::default(),
             last: None,
             bucket_count: 0,
             buckets: [EngineBatchShapeBucketMetrics::default(); ENGINE_BATCH_SHAPE_BUCKET_CAPACITY],
@@ -4410,11 +4462,12 @@ mod cuda_backend {
                     return Err(internal(detail));
                 }
             };
-            record_committed_batch_shape(
-                &mut self.batch_shapes,
-                staged_shape,
-                updates.iteration_metric().is_some(),
-            );
+            if let Some(sample) = updates.iteration_metric() {
+                record_committed_batch_shape(&mut self.batch_shapes, staged_shape, true);
+                if self.batch_shapes.by_phase.record(sample).is_none() {
+                    self.batch_shapes.metrics_degraded = true;
+                }
+            }
             self.record_committed_audit_tokens(updates.token_events())?;
             riley_runtime::host_trace::lap_here(riley_runtime::host_trace::COMMIT);
 
@@ -5023,6 +5076,44 @@ mod tests {
                 "shape hot path must not contain allocation primitive {forbidden}"
             );
         }
+    }
+
+    #[test]
+    fn committed_work_by_phase_counts_mixed_gpu_time_once_and_preserves_totals_on_overflow() {
+        let mut work = super::IterationWorkByPhase::default();
+        let sample = |prefill_tokens, decode_tokens, gpu_execution_ns| {
+            riley_scheduler::IterationMetricSample {
+                batch_size: 2,
+                prefill_tokens,
+                decode_tokens,
+                scheduler_cpu_ns: 0,
+                gpu_idle_gap_ns: 0,
+                gpu_execution_ns,
+            }
+        };
+        for s in [
+            sample(32, 0, 11),
+            sample(0, 2, 13),
+            sample(8, 1, 17),
+            sample(5, 2, 19),
+        ] {
+            assert!(work.record(s).is_some());
+        }
+        assert_eq!(work.prefill_only.gpu_execution_ns, 11);
+        assert_eq!(work.decode_only.gpu_execution_ns, 13);
+        assert_eq!(
+            work.mixed,
+            super::IterationWork {
+                iterations: 2,
+                prefill_tokens: 13,
+                decode_tokens: 3,
+                gpu_execution_ns: 36
+            }
+        );
+        let before = work;
+        assert!(work.record(sample(0, 0, 1)).is_none());
+        assert!(work.record(sample(1, 1, u64::MAX)).is_none());
+        assert_eq!(work, before);
     }
 
     #[test]

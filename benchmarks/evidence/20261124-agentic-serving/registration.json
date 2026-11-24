@@ -1,0 +1,21 @@
+{
+  "campaign": "agentic-workflow-baseline",
+  "source_checkout": "18cd37cef",
+  "distribution_revision": "b7ca110fc36ff30a606c254eb87d3a898faa79ea",
+  "distribution_image": "sha256:67efe6fbdaebcc8a088eaa9626f1adb43cf1af3e673ccae2d9af076fa99bdd24",
+  "model": "Qwen2.5-7B-Instruct",
+  "first_scenario": "sequential list and read tool calls followed by a streamed document comparison",
+  "calibration_seed": 101,
+  "holdout_seed": 761,
+  "short_document_pairs": 2,
+  "long_document_pairs": 96,
+  "final_min_tokens": 64,
+  "final_max_tokens": 384,
+  "engineering_slo_ms": {"workflow_first_final": 10000, "workflow_last_final": 18000, "final_content_gap_p95": 150},
+  "slo_scope": "synthetic single-user and small concurrent groups only; includes fixture tool time, not customer requirements",
+  "decode_ratio_upper_bound": 1.0,
+  "hardware": "aws-a100 physical GPU 7 through existing holder lease",
+  "ordering": "cold single, immediate second single, delayed resume, overlapping pair of independent sessions; compare cache off/on on fresh servers in ABBA order",
+  "kv_blocks": 4096,
+  "cache_blocks_off_on": [0, 1536]
+}

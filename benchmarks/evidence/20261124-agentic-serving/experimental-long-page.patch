@@ -1,0 +1,29 @@
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -2214,7 +2214,10 @@
+     }
+     // The bound is on the sequences the server admits, not on the checkpoint
+     // context: a longer-context model serves with --max-sequence-tokens.
+-    if !native_bf16_paged_split_gqa_d128_two_stage_context_supported(max_sequence_tokens) {
++    // Isolated experiment with the bounded D128 tensor-core page route.
++    let bounded_long_page = backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
++        && max_sequence_tokens <= 131_072;
++    if !native_bf16_paged_split_gqa_d128_two_stage_context_supported(max_sequence_tokens) && !bounded_long_page {
+         return Err(format!(
+             "{} requires --max-sequence-tokens at most {}; found {}",
+             backend.cli_id(),
+--- a/crates/riley-runtime/src/llama/executor/owner.rs
++++ b/crates/riley-runtime/src/llama/executor/owner.rs
+@@ -1299,7 +1299,11 @@
+             reason: "native D128 two-stage requires a batch token budget at most 1024",
+         });
+     }
+-    if maximum_sequence_tokens > NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS {
++    // Keep the qualified workspace product and require the small long-context geometry.
++    let bounded_long_page = config.d128_tensor_core_producer() && config.d128_global_merge()
++        && head_dimension == 128 && maximum_sequence_tokens <= 131_072
++        && bounds.max_input_tokens() <= 32;
++    if maximum_sequence_tokens > NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS && !bounded_long_page {
+         return Err(LlamaBatchExecutorError::InvalidConfiguration {
+             field: "max_sequence_tokens",
+             reason: "native D128 two-stage workspace is qualified through 32768 tokens",

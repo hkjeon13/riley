@@ -1,0 +1,6 @@
+{
+ "orders":{"6":["model","application"],"7":["application","model"]},
+ "waves":[[4,18100],[8,18200],[16,18300],[16,18400]],
+ "scope":"Single Coder-7B Riley replica, stock non-tracing binary (13b589df5c19a33c685ca1388398905f46a6cc566cbd1bed68f06b798080ca9f), wide, BF16, 8 sequences, 4096 total KV blocks. Fresh boot per arm, fixed 30ms arrivals, warm-up before measurement. Readers (one in four) always use model for both named tools. Targets always execute two 500ms tools and send the same two full records from a 64-row catalog. Only target ownership changes: model vs application when schema admits a single call. No auxiliary work or retries.",
+ "gates":"On both devices C16: more SLO jobs and higher warm SLO goodput, lower overall scheduled completion p95, no newly invalid inputs and reader first and stream gap p95 each <=1.05x baseline. Per-job original 5s/8s/80ms thresholds, citations, 3 values and natural termination. Report strict 90-word compliance separately. Check identity and order of calls and complete CPU-native final prompt IDs across arms. Inspect all admissions and errors, including failed work, and report shutdown/lease."
+}

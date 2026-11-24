@@ -1,0 +1,242 @@
+{
+  "submitted": 5,
+  "complete": 5,
+  "failed": 0,
+  "met_slo": 5,
+  "long_request_sent_during_final_answer": true,
+  "latency_ms": {
+    "first_final_ms": {
+      "p50": 648.394145,
+      "p95": 852.94205
+    },
+    "last_final_ms": {
+      "p50": 2350.632264,
+      "p95": 2620.695238
+    },
+    "final_gap_p95_ms": {
+      "p50": 11.798461,
+      "p95": 18.829797
+    },
+    "final_tpot_ms": {
+      "p50": 11.63685180597015,
+      "p95": 12.356470185430464
+    }
+  },
+  "cells": {
+    "cold": {
+      "ok": true,
+      "error": null,
+      "turns": [
+        {
+          "request_id": "cmpl-0000000000000019",
+          "tokens": {
+            "prompt_tokens": 332,
+            "completion_tokens": 16,
+            "total_tokens": 348
+          },
+          "finish": "tool_calls",
+          "submit_to_first_content_ms": null,
+          "previous_tool_to_call_ms": null
+        },
+        {
+          "request_id": "cmpl-000000000000001a",
+          "tokens": {
+            "prompt_tokens": 373,
+            "completion_tokens": 28,
+            "total_tokens": 401
+          },
+          "finish": "tool_calls",
+          "submit_to_first_content_ms": null,
+          "previous_tool_to_call_ms": 351.406291
+        },
+        {
+          "request_id": "cmpl-000000000000001b",
+          "tokens": {
+            "prompt_tokens": 306,
+            "completion_tokens": 135,
+            "total_tokens": 441
+          },
+          "finish": "stop",
+          "submit_to_first_content_ms": 31.664431,
+          "previous_tool_to_call_ms": null
+        }
+      ],
+      "first_final_ms": 604.317131,
+      "last_final_ms": 2163.444885,
+      "final_gap_p95_ms": 11.790067,
+      "final_tpot_ms": 11.635281746268657
+    },
+    "immediate": {
+      "ok": true,
+      "error": null,
+      "turns": [
+        {
+          "request_id": "cmpl-000000000000001c",
+          "tokens": {
+            "prompt_tokens": 332,
+            "completion_tokens": 16,
+            "total_tokens": 348
+          },
+          "finish": "tool_calls",
+          "submit_to_first_content_ms": null,
+          "previous_tool_to_call_ms": null
+        },
+        {
+          "request_id": "cmpl-000000000000001d",
+          "tokens": {
+            "prompt_tokens": 373,
+            "completion_tokens": 28,
+            "total_tokens": 401
+          },
+          "finish": "tool_calls",
+          "submit_to_first_content_ms": null,
+          "previous_tool_to_call_ms": 350.571122
+        },
+        {
+          "request_id": "cmpl-000000000000001e",
+          "tokens": {
+            "prompt_tokens": 306,
+            "completion_tokens": 135,
+            "total_tokens": 441
+          },
+          "finish": "stop",
+          "submit_to_first_content_ms": 31.692814,
+          "previous_tool_to_call_ms": null
+        }
+      ],
+      "first_final_ms": 593.276349,
+      "last_final_ms": 2151.964119,
+      "final_gap_p95_ms": 11.7926,
+      "final_tpot_ms": 11.631998283582089
+    },
+    "delayed": {
+      "ok": true,
+      "error": null,
+      "turns": [
+        {
+          "request_id": "cmpl-000000000000001f",
+          "tokens": {
+            "prompt_tokens": 332,
+            "completion_tokens": 16,
+            "total_tokens": 348
+          },
+          "finish": "tool_calls",
+          "submit_to_first_content_ms": null,
+          "previous_tool_to_call_ms": null
+        },
+        {
+          "request_id": "cmpl-0000000000000020",
+          "tokens": {
+            "prompt_tokens": 373,
+            "completion_tokens": 28,
+            "total_tokens": 401
+          },
+          "finish": "tool_calls",
+          "submit_to_first_content_ms": null,
+          "previous_tool_to_call_ms": 351.028197
+        },
+        {
+          "request_id": "cmpl-0000000000000021",
+          "tokens": {
+            "prompt_tokens": 306,
+            "completion_tokens": 135,
+            "total_tokens": 441
+          },
+          "finish": "stop",
+          "submit_to_first_content_ms": 31.392275,
+          "previous_tool_to_call_ms": null
+        }
+      ],
+      "first_final_ms": 791.294122,
+      "last_final_ms": 2350.632264,
+      "final_gap_p95_ms": 11.798461,
+      "final_tpot_ms": 11.63685180597015
+    },
+    "reader": {
+      "ok": true,
+      "error": null,
+      "turns": [
+        {
+          "request_id": "cmpl-0000000000000022",
+          "tokens": {
+            "prompt_tokens": 332,
+            "completion_tokens": 16,
+            "total_tokens": 348
+          },
+          "finish": "tool_calls",
+          "submit_to_first_content_ms": null,
+          "previous_tool_to_call_ms": null
+        },
+        {
+          "request_id": "cmpl-0000000000000025",
+          "tokens": {
+            "prompt_tokens": 373,
+            "completion_tokens": 28,
+            "total_tokens": 401
+          },
+          "finish": "tool_calls",
+          "submit_to_first_content_ms": null,
+          "previous_tool_to_call_ms": 374.052496
+        },
+        {
+          "request_id": "cmpl-0000000000000026",
+          "tokens": {
+            "prompt_tokens": 306,
+            "completion_tokens": 152,
+            "total_tokens": 458
+          },
+          "finish": "stop",
+          "submit_to_first_content_ms": 31.439075,
+          "previous_tool_to_call_ms": null
+        }
+      ],
+      "first_final_ms": 648.394145,
+      "last_final_ms": 2514.221143,
+      "final_gap_p95_ms": 18.829797,
+      "final_tpot_ms": 12.356470185430464
+    },
+    "long-tool-result": {
+      "ok": true,
+      "error": null,
+      "turns": [
+        {
+          "request_id": "cmpl-0000000000000023",
+          "tokens": {
+            "prompt_tokens": 332,
+            "completion_tokens": 16,
+            "total_tokens": 348
+          },
+          "finish": "tool_calls",
+          "submit_to_first_content_ms": null,
+          "previous_tool_to_call_ms": null
+        },
+        {
+          "request_id": "cmpl-0000000000000024",
+          "tokens": {
+            "prompt_tokens": 373,
+            "completion_tokens": 28,
+            "total_tokens": 401
+          },
+          "finish": "tool_calls",
+          "submit_to_first_content_ms": null,
+          "previous_tool_to_call_ms": 373.738314
+        },
+        {
+          "request_id": "cmpl-0000000000000027",
+          "tokens": {
+            "prompt_tokens": 2546,
+            "completion_tokens": 150,
+            "total_tokens": 2696
+          },
+          "finish": "stop",
+          "submit_to_first_content_ms": 205.249478,
+          "previous_tool_to_call_ms": null
+        }
+      ],
+      "first_final_ms": 852.94205,
+      "last_final_ms": 2620.695238,
+      "final_gap_p95_ms": 12.032791,
+      "final_tpot_ms": 11.864115355704698
+    }
+  }
+}

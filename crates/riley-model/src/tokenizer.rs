@@ -433,6 +433,11 @@ impl SmolLm2Tokenizer {
         };
         let mut work = BpeWork::default();
         let mut mapped = String::new();
+        // Long tool payloads and audit logs repeat field names and words. Offsets
+        // into this request's output stay valid even when the Vec reallocates.
+        let mut reuse_pieces = self.profile == TokenizerProfile::Qwen2 && input.len() >= 4096;
+        let mut saw_reuse = false;
+        let mut prior = HashMap::<&str, std::ops::Range<usize>>::new();
         for piece in pieces {
             // `ignore_merges`: a piece that is itself a vocabulary entry is
             // that token, whatever the merge table would build from it.
@@ -449,7 +454,24 @@ impl SmolLm2Tokenizer {
                     continue;
                 }
             }
-            self.bpe(piece.as_bytes(), &mut work, output)?;
+            if reuse_pieces && piece.len() >= 3 {
+                if let Some(range) = prior.get(piece) {
+                    saw_reuse = true;
+                    output.extend_from_within(range.clone());
+                    continue;
+                }
+                let start = output.len();
+                self.bpe(piece.as_bytes(), &mut work, output)?;
+                if prior.len() < 1024 {
+                    prior.insert(piece, start..output.len());
+                    // Unique identifiers pay for lookups without saving BPE work.
+                    if !saw_reuse && prior.len() == 128 {
+                        reuse_pieces = false;
+                    }
+                }
+            } else {
+                self.bpe(piece.as_bytes(), &mut work, output)?;
+            }
         }
         Ok(())
     }

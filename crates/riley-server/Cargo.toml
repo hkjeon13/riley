@@ -90,3 +90,11 @@ required-features = ["server", "cuda"]
 name = "batch_prepared_reference_gpu"
 path = "tests/batch_prepared_reference_gpu.rs"
 required-features = ["server", "cuda"]
+
+[[example]]
+name = "qwen_prompt_profile"
+required-features = ["server"]
+
+[[example]]
+name = "chat_stream_replay"
+required-features = ["server"]

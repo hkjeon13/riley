@@ -1,0 +1,30 @@
+{
+  "phase_deltas": {
+    "prefill_only": {
+      "iterations": 63,
+      "prefill_tokens": 34624,
+      "decode_tokens": 0,
+      "gpu_execution_ns": 2660882469
+    },
+    "decode_only": {
+      "iterations": 1676,
+      "prefill_tokens": 0,
+      "decode_tokens": 1950,
+      "gpu_execution_ns": 19946396960
+    },
+    "mixed": {
+      "iterations": 6,
+      "prefill_tokens": 54,
+      "decode_tokens": 6,
+      "gpu_execution_ns": 85043296
+    }
+  },
+  "committed_iterations": 1745,
+  "exact_phase_counter_matches": 12,
+  "existing_bucket_totals_match": true,
+  "shutdown_phase_counters_match": true,
+  "natural_workflows": 6,
+  "basic_valid_answers": 6,
+  "verified_tool_calls": 12,
+  "server_binary_sha256": "8db3d5c634bab3ef5a4d3178e680db0c3c67beb781ecd042067654f2871bd990"
+}

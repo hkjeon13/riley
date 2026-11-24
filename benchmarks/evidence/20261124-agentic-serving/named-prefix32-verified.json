@@ -1,0 +1,31 @@
+{
+  "server_args": [
+    "serve",
+    "--model",
+    "/models",
+    "--model-id",
+    "m",
+    "--inference-profile",
+    "native-bf16-prefix-32k-v1"
+  ],
+  "binary_sha256": "bdb7845238b7c9eb307eb24b023d562aba2454afdef7a7c3fdcc17aefb1c4ad2",
+  "rows": [
+    {
+      "case": 16,
+      "prompt_tokens": 19029,
+      "output_tokens": 505,
+      "cached": 7840,
+      "first_ms": 7156.997207,
+      "matches_observed_cache_and_answer": true
+    },
+    {
+      "case": 20,
+      "prompt_tokens": 30828,
+      "output_tokens": 150,
+      "cached": 30256,
+      "first_ms": 757.531048,
+      "matches_observed_cache_and_answer": true
+    }
+  ],
+  "all_checks_passed": true
+}

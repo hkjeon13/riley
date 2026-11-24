@@ -1,0 +1,17 @@
+{
+  "checkpoint": "Qwen2.5-Coder-7B-Instruct",
+  "native_profiler": "chat-owned-render-20261125.XCBDIb4g/probe-candidate",
+  "jobs": [
+    [
+      17101,
+      200
+    ],
+    [
+      17104,
+      0
+    ]
+  ],
+  "delay_s": 0.5,
+  "scope": "Repeat the two CPU reference sessions using the previously tested final-turn opening and citation paragraph instruction from multi_router_trial.with_layout. Hold model, tools, waits, output limit, greedy sampling and data fixed. Count natural stops, correct values, exact opening, both source IDs, immediate attribution and exactly 90 explanation words. No latency comparison.",
+  "layout_citations": true
+}

@@ -871,6 +871,21 @@ mod tests {
     }
 
     #[test]
+    fn long_repeated_tool_text_preserves_all_ids_across_added_tokens() {
+        let tokenizer = Qwen2Tokenizer::from_json_slice(tokenizer_fixture().as_bytes()).unwrap();
+        let unit = " state cafe\u{301} = 25 ms.\n";
+        let options = EncodeOptions::default();
+        let section = unit.repeat(256);
+        let input = format!("short<fim>{section}<|end|>{section}");
+        let mut expected = tokenizer.encode("short<fim>", options).unwrap();
+        let unit_ids = tokenizer.encode(unit, options).unwrap();
+        expected.extend(unit_ids.repeat(256));
+        expected.push(256);
+        expected.extend(unit_ids.repeat(256));
+        assert_eq!(tokenizer.encode(&input, options).unwrap(), expected);
+    }
+
+    #[test]
     fn qwen_added_tokens_extend_the_domain_and_decode_special_identity_strictly() {
         let tokenizer = Qwen2Tokenizer::from_json_slice(tokenizer_fixture().as_bytes()).unwrap();
         let ids = tokenizer

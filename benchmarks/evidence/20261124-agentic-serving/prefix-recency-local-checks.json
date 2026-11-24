@@ -1,0 +1,25 @@
+{
+  "source": "crates/riley-scheduler/src/prefix_cache.rs",
+  "source_sha256": "7a26a9d5fef0d8c2a3aea9a890b835043297a6ac2b1614cc7a1736d6b3f72078",
+  "base_blob": "45d7513d8c05d31177e701143b7ae7608a978bff",
+  "command": "cargo test --locked --offline -p riley-scheduler",
+  "tests_passed": 146,
+  "per_suite": [
+    37,
+    9,
+    22,
+    9,
+    3,
+    16,
+    11,
+    7,
+    6,
+    4,
+    21,
+    1
+  ],
+  "reference_order_operations": 3000,
+  "reference_order_test": "test prefix_cache::tests::recency_matches_individual_touches_across_branches_and_recycled_ids ... ok",
+  "clippy": "cargo clippy --offline --locked -p riley-scheduler --lib -- -D warnings",
+  "clippy_log": "Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.35s"
+}

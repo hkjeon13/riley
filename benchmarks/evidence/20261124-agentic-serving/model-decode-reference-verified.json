@@ -1,0 +1,116 @@
+{
+  "Qwen2.5-3B-Instruct": [
+    {
+      "history": 0,
+      "stream": "reader",
+      "riley_vllm_common_tokens": 25,
+      "riley_hf_common_tokens": 22,
+      "vllm_hf_common_tokens": 22,
+      "riley_matches_full_hf": false,
+      "vllm_matches_full_hf": false,
+      "reference_length": 64,
+      "full_forward_highest_scoring_arms_at_fork": [
+        "riley"
+      ],
+      "full_forward_riley_minus_vllm_logit": 0.125
+    },
+    {
+      "history": 0,
+      "stream": "long-tool-result",
+      "riley_vllm_common_tokens": 20,
+      "riley_hf_common_tokens": 20,
+      "vllm_hf_common_tokens": 26,
+      "riley_matches_full_hf": false,
+      "vllm_matches_full_hf": false,
+      "reference_length": 64,
+      "full_forward_highest_scoring_arms_at_fork": [
+        "vllm"
+      ],
+      "full_forward_riley_minus_vllm_logit": -0.5
+    },
+    {
+      "history": 200,
+      "stream": "reader",
+      "riley_vllm_common_tokens": 26,
+      "riley_hf_common_tokens": 21,
+      "vllm_hf_common_tokens": 21,
+      "riley_matches_full_hf": false,
+      "vllm_matches_full_hf": false,
+      "reference_length": 64,
+      "full_forward_highest_scoring_arms_at_fork": [
+        "riley"
+      ],
+      "full_forward_riley_minus_vllm_logit": 0.125
+    },
+    {
+      "history": 200,
+      "stream": "long-tool-result",
+      "riley_vllm_common_tokens": 37,
+      "riley_hf_common_tokens": 39,
+      "vllm_hf_common_tokens": 37,
+      "riley_matches_full_hf": false,
+      "vllm_matches_full_hf": false,
+      "reference_length": 64,
+      "full_forward_highest_scoring_arms_at_fork": [
+        "vllm"
+      ],
+      "full_forward_riley_minus_vllm_logit": -0.125
+    }
+  ],
+  "Qwen2.5-Coder-7B-Instruct": [
+    {
+      "history": 0,
+      "stream": "reader",
+      "riley_vllm_common_tokens": 46,
+      "riley_hf_common_tokens": 22,
+      "vllm_hf_common_tokens": 22,
+      "riley_matches_full_hf": false,
+      "vllm_matches_full_hf": false,
+      "reference_length": 64,
+      "full_forward_highest_scoring_arms_at_fork": [
+        "vllm"
+      ],
+      "full_forward_riley_minus_vllm_logit": -0.125
+    },
+    {
+      "history": 0,
+      "stream": "long-tool-result",
+      "riley_vllm_common_tokens": 64,
+      "riley_hf_common_tokens": 22,
+      "vllm_hf_common_tokens": 22,
+      "riley_matches_full_hf": false,
+      "vllm_matches_full_hf": false,
+      "reference_length": 64,
+      "full_forward_highest_scoring_arms_at_fork": null,
+      "full_forward_riley_minus_vllm_logit": null
+    },
+    {
+      "history": 200,
+      "stream": "reader",
+      "riley_vllm_common_tokens": 40,
+      "riley_hf_common_tokens": 25,
+      "vllm_hf_common_tokens": 25,
+      "riley_matches_full_hf": false,
+      "vllm_matches_full_hf": false,
+      "reference_length": 64,
+      "full_forward_highest_scoring_arms_at_fork": [
+        "vllm"
+      ],
+      "full_forward_riley_minus_vllm_logit": -0.125
+    },
+    {
+      "history": 200,
+      "stream": "long-tool-result",
+      "riley_vllm_common_tokens": 47,
+      "riley_hf_common_tokens": 21,
+      "vllm_hf_common_tokens": 21,
+      "riley_matches_full_hf": false,
+      "vllm_matches_full_hf": false,
+      "reference_length": 64,
+      "full_forward_highest_scoring_arms_at_fork": [
+        "vllm"
+      ],
+      "full_forward_riley_minus_vllm_logit": -0.125
+    }
+  ]
+}

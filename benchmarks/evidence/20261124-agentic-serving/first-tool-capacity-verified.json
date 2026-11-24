@@ -1,0 +1,1345 @@
+{
+  "kv_bytes_per_16_token_block": 917504,
+  "devices": {
+    "gpu6": [
+      {
+        "base": 15100,
+        "size": 4,
+        "pool_blocks": 4096,
+        "workers": 8,
+        "stage_capacity": [
+          {
+            "private_blocks": 543,
+            "distinct_blocks": 539,
+            "whole_prefixes_fit": 3,
+            "targets": 3,
+            "limit": 1536
+          },
+          {
+            "private_blocks": 552,
+            "distinct_blocks": 548,
+            "whole_prefixes_fit": 3,
+            "targets": 3,
+            "limit": 1536
+          }
+        ],
+        "jobs": [
+          {
+            "seed": 15100,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15101,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15102,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15103,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          }
+        ]
+      },
+      {
+        "base": 15200,
+        "size": 8,
+        "pool_blocks": 4096,
+        "workers": 8,
+        "stage_capacity": [
+          {
+            "private_blocks": 1086,
+            "distinct_blocks": 1076,
+            "whole_prefixes_fit": 6,
+            "targets": 6,
+            "limit": 1536
+          },
+          {
+            "private_blocks": 1104,
+            "distinct_blocks": 1094,
+            "whole_prefixes_fit": 6,
+            "targets": 6,
+            "limit": 1536
+          }
+        ],
+        "jobs": [
+          {
+            "seed": 15200,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15201,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15202,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15203,
+            "role": "target",
+            "final_tokens": 3072,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              176,
+              128
+            ]
+          },
+          {
+            "seed": 15204,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15205,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15206,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15207,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          }
+        ]
+      },
+      {
+        "base": 15300,
+        "size": 16,
+        "pool_blocks": 4096,
+        "workers": 8,
+        "stage_capacity": [
+          {
+            "private_blocks": 2172,
+            "distinct_blocks": 1806,
+            "whole_prefixes_fit": 10,
+            "targets": 12,
+            "limit": 1536
+          },
+          {
+            "private_blocks": 2208,
+            "distinct_blocks": 1842,
+            "whole_prefixes_fit": 10,
+            "targets": 12,
+            "limit": 1536
+          }
+        ],
+        "jobs": [
+          {
+            "seed": 15300,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15301,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15302,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15303,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15304,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15305,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15306,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15307,
+            "role": "target",
+            "final_tokens": 3072,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              176,
+              128
+            ]
+          },
+          {
+            "seed": 15308,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15309,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15310,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15311,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15312,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15313,
+            "role": "target",
+            "final_tokens": 3072,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              176,
+              128
+            ]
+          },
+          {
+            "seed": 15314,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15315,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          }
+        ]
+      },
+      {
+        "base": 15400,
+        "size": 16,
+        "pool_blocks": 4096,
+        "workers": 8,
+        "stage_capacity": [
+          {
+            "private_blocks": 2172,
+            "distinct_blocks": 1806,
+            "whole_prefixes_fit": 10,
+            "targets": 12,
+            "limit": 1536
+          },
+          {
+            "private_blocks": 2208,
+            "distinct_blocks": 1842,
+            "whole_prefixes_fit": 10,
+            "targets": 12,
+            "limit": 1536
+          }
+        ],
+        "jobs": [
+          {
+            "seed": 15400,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15401,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15402,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15403,
+            "role": "target",
+            "final_tokens": 3073,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              177,
+              129
+            ]
+          },
+          {
+            "seed": 15404,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15405,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15406,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15407,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15408,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15409,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15410,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15411,
+            "role": "target",
+            "final_tokens": 3072,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              176,
+              128
+            ]
+          },
+          {
+            "seed": 15412,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15413,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15414,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15415,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          }
+        ]
+      }
+    ],
+    "gpu7": [
+      {
+        "base": 15100,
+        "size": 4,
+        "pool_blocks": 4096,
+        "workers": 8,
+        "stage_capacity": [
+          {
+            "private_blocks": 543,
+            "distinct_blocks": 539,
+            "whole_prefixes_fit": 3,
+            "targets": 3,
+            "limit": 1536
+          },
+          {
+            "private_blocks": 552,
+            "distinct_blocks": 548,
+            "whole_prefixes_fit": 3,
+            "targets": 3,
+            "limit": 1536
+          }
+        ],
+        "jobs": [
+          {
+            "seed": 15100,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15101,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15102,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15103,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          }
+        ]
+      },
+      {
+        "base": 15200,
+        "size": 8,
+        "pool_blocks": 4096,
+        "workers": 8,
+        "stage_capacity": [
+          {
+            "private_blocks": 1086,
+            "distinct_blocks": 1076,
+            "whole_prefixes_fit": 6,
+            "targets": 6,
+            "limit": 1536
+          },
+          {
+            "private_blocks": 1104,
+            "distinct_blocks": 1094,
+            "whole_prefixes_fit": 6,
+            "targets": 6,
+            "limit": 1536
+          }
+        ],
+        "jobs": [
+          {
+            "seed": 15200,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15201,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15202,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15203,
+            "role": "target",
+            "final_tokens": 3072,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              176,
+              128
+            ]
+          },
+          {
+            "seed": 15204,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15205,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15206,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15207,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          }
+        ]
+      },
+      {
+        "base": 15300,
+        "size": 16,
+        "pool_blocks": 4096,
+        "workers": 8,
+        "stage_capacity": [
+          {
+            "private_blocks": 2172,
+            "distinct_blocks": 1806,
+            "whole_prefixes_fit": 10,
+            "targets": 12,
+            "limit": 1536
+          },
+          {
+            "private_blocks": 2208,
+            "distinct_blocks": 1842,
+            "whole_prefixes_fit": 10,
+            "targets": 12,
+            "limit": 1536
+          }
+        ],
+        "jobs": [
+          {
+            "seed": 15300,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15301,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15302,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15303,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15304,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15305,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15306,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15307,
+            "role": "target",
+            "final_tokens": 3072,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              176,
+              128
+            ]
+          },
+          {
+            "seed": 15308,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15309,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15310,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15311,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15312,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15313,
+            "role": "target",
+            "final_tokens": 3072,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              176,
+              128
+            ]
+          },
+          {
+            "seed": 15314,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15315,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          }
+        ]
+      },
+      {
+        "base": 15400,
+        "size": 16,
+        "pool_blocks": 4096,
+        "workers": 8,
+        "stage_capacity": [
+          {
+            "private_blocks": 2172,
+            "distinct_blocks": 1806,
+            "whole_prefixes_fit": 10,
+            "targets": 12,
+            "limit": 1536
+          },
+          {
+            "private_blocks": 2208,
+            "distinct_blocks": 1842,
+            "whole_prefixes_fit": 10,
+            "targets": 12,
+            "limit": 1536
+          }
+        ],
+        "jobs": [
+          {
+            "seed": 15400,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15401,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15402,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15403,
+            "role": "target",
+            "final_tokens": 3073,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              177,
+              129
+            ]
+          },
+          {
+            "seed": 15404,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15405,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15406,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15407,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15408,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15409,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15410,
+            "role": "target",
+            "final_tokens": 3071,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              175,
+              127
+            ]
+          },
+          {
+            "seed": 15411,
+            "role": "target",
+            "final_tokens": 3072,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              176,
+              128
+            ]
+          },
+          {
+            "seed": 15412,
+            "role": "reader",
+            "final_tokens": 308,
+            "prefix_tokens": [
+              128,
+              192
+            ],
+            "suffix_tokens": [
+              180,
+              116
+            ]
+          },
+          {
+            "seed": 15413,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15414,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          },
+          {
+            "seed": 15415,
+            "role": "target",
+            "final_tokens": 3074,
+            "prefix_tokens": [
+              2896,
+              2944
+            ],
+            "suffix_tokens": [
+              178,
+              130
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

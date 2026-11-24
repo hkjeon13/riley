@@ -1,0 +1,14 @@
+{
+  "checkpoint": "Qwen2.5-Coder-7B-Instruct",
+  "native_profiler": "probe",
+  "http_budget": 256,
+  "jobs": [
+    [
+      17101,
+      200
+    ]
+  ],
+  "delay_s": 6,
+  "scope": "Run the normal public first-fixed-tool workflow from Darwin to a separate Linux host over an SSH localhost forward with one real CPU Coder-7B model worker. Use the same long catalog case, two actual 6s waits, and at most 256 tokens per preview. Compare server-observed token IDs, full output IDs, complete SSE, 2 tool executions and client-scheduled time versus archived no-preparation inputs; no cross-host clock subtraction, GPU parity or multi-replica deployment claim.",
+  "external_client": true
+}

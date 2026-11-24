@@ -1,0 +1,25 @@
+{
+  "source_trace": "bf1869c1e9cd809657369736f0bb1d93bec8173e53484780e7d4321a23afe81a",
+  "steps": 492,
+  "upper_fraction_p50": 0.15034979736280532,
+  "upper_fraction_min": 0.10702905675305623,
+  "upper_fraction_max": 0.18849312465228124,
+  "median_other_observed_ms": {
+    "attention": 13.8895905,
+    "attention_merge": 2.596462,
+    "rms_norm": 2.4550095,
+    "silu": 2.840468,
+    "kv_write": 1.7127705
+  },
+  "separate_trace_sensitivity": {
+    "rag-c8-s1-vllm-arrivals": {
+      "fraction_needed_in_separate_fixed_timeline": 0.23376068601373845,
+      "wide_steps_whose_four_projection_headroom_reaches_fraction": 0
+    },
+    "rag-c8-s2-vllm-arrivals": {
+      "fraction_needed_in_separate_fixed_timeline": 0.19629712698588264,
+      "wide_steps_whose_four_projection_headroom_reaches_fraction": 0
+    }
+  },
+  "scope": "Original producer, numerics and 1024-row shapes at dense BF16 peak. Cross-trace comparison of scale only; no predicted service p95 or claim about other batch sizes."
+}

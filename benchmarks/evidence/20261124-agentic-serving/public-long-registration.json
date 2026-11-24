@@ -1,0 +1,6 @@
+{
+  "scope": "Supplementary analysis specified after observing 8K and 32K coverage. Reuse the prior deterministic ranking and pick 4 eligible public cases with 32768 < input plus output <= 131072 and completion <= 2048.",
+  "model": "Meta-Llama-3.1-8B-Instruct BF16, native 131072 context on one 40GB A100",
+  "input": "Use synthetic text encoded by the native renderer. Check prompt usage and output length separately. Submit once sequentially, record any startup, validation, admission or streaming failure. No claim of output semantics or full Copilot replay.",
+  "supplementary_candidate": "After fixed-tile startup rejection, test the stock 32K page route first. Isolated 128K D128 page candidate uses at most 32 rows, preserves the existing workspace-product limit, with 8192 physical KV blocks and no graph capture. Validate actual HTTP prompt lengths and explicit long-distance retrieval before claiming semantic support. Experimental patch only; public defaults unchanged."
+}

@@ -1,0 +1,236 @@
+{
+  "method": "Post-hoc exact phrase search on normalized whitespace. An unmatched answer is ungraded. Count explanation words after the three required labeled numbers only.",
+  "writer_outputs": 24,
+  "rows": [
+    {
+      "group": "200-761",
+      "arm": "gpu6-riley-hide",
+      "answer_sha256": "ec0a5e6814c4e4cbea2300f8eec797502a070bdbd671b35dc15301f966e11874",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [],
+      "explanation_whitespace_words": 108
+    },
+    {
+      "group": "200-761",
+      "arm": "gpu6-riley-keep",
+      "answer_sha256": "8dba386ffb34683556c32823be43b21da233de29b83c2384517dcad47957a0ef",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "the changes implemented have effectively reduced the latency for the majority of the service requests"
+      ],
+      "explanation_whitespace_words": 116
+    },
+    {
+      "group": "200-761",
+      "arm": "gpu6-vllm-keep",
+      "answer_sha256": "9734112cef2e8be243bddb60e8b656cccf08ddfef46b403874b2b11bfac157d1",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [],
+      "explanation_whitespace_words": 100
+    },
+    {
+      "group": "200-761",
+      "arm": "gpu6-vllm-hide",
+      "answer_sha256": "26c0754c22ef9662ba418df1e2a614899fa477670e651d05e50cf4922eb32b9e",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "95% of the service response times were 84 ms before the changes and 12 ms after the changes"
+      ],
+      "explanation_whitespace_words": 96
+    },
+    {
+      "group": "200-761",
+      "arm": "gpu7-vllm-hide",
+      "answer_sha256": "26c0754c22ef9662ba418df1e2a614899fa477670e651d05e50cf4922eb32b9e",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "95% of the service response times were 84 ms before the changes and 12 ms after the changes"
+      ],
+      "explanation_whitespace_words": 96
+    },
+    {
+      "group": "200-761",
+      "arm": "gpu7-vllm-keep",
+      "answer_sha256": "650cb50ba53c18a45b9f56632e774719c76a1d594a946b719768a5d64347c9bf",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "a notable decrease in the longest observed response times"
+      ],
+      "explanation_whitespace_words": 89
+    },
+    {
+      "group": "200-761",
+      "arm": "gpu7-riley-keep",
+      "answer_sha256": "8dba386ffb34683556c32823be43b21da233de29b83c2384517dcad47957a0ef",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "the changes implemented have effectively reduced the latency for the majority of the service requests"
+      ],
+      "explanation_whitespace_words": 116
+    },
+    {
+      "group": "200-761",
+      "arm": "gpu7-riley-hide",
+      "answer_sha256": "ec0a5e6814c4e4cbea2300f8eec797502a070bdbd671b35dc15301f966e11874",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [],
+      "explanation_whitespace_words": 108
+    },
+    {
+      "group": "200-18081",
+      "arm": "gpu6-riley-hide",
+      "answer_sha256": "68a1d3494340b6824440df10771e5d4d4daedf2cd2aa1262f845f7d88482b26e",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "effectively reduced the latency for the majority of service responses"
+      ],
+      "explanation_whitespace_words": 114
+    },
+    {
+      "group": "200-18081",
+      "arm": "gpu6-riley-keep",
+      "answer_sha256": "8337ba795eac8be08a09ef81b4b992e06163fd166b8f144c81ae0a531aaee4f1",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "95% of the service responses were faster in the after report compared to the before report"
+      ],
+      "explanation_whitespace_words": 88
+    },
+    {
+      "group": "200-18081",
+      "arm": "gpu6-vllm-keep",
+      "answer_sha256": "9ad8649f82264e0da748c51976f2e5b20305cbe4afd49a2e1a04fca33797fe83",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "95% of the service responses were faster in the after report compared to the before report"
+      ],
+      "explanation_whitespace_words": 90
+    },
+    {
+      "group": "200-18081",
+      "arm": "gpu6-vllm-hide",
+      "answer_sha256": "68a1d3494340b6824440df10771e5d4d4daedf2cd2aa1262f845f7d88482b26e",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "effectively reduced the latency for the majority of service responses"
+      ],
+      "explanation_whitespace_words": 114
+    },
+    {
+      "group": "200-18081",
+      "arm": "gpu7-vllm-hide",
+      "answer_sha256": "68a1d3494340b6824440df10771e5d4d4daedf2cd2aa1262f845f7d88482b26e",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "effectively reduced the latency for the majority of service responses"
+      ],
+      "explanation_whitespace_words": 114
+    },
+    {
+      "group": "200-18081",
+      "arm": "gpu7-vllm-keep",
+      "answer_sha256": "9ad8649f82264e0da748c51976f2e5b20305cbe4afd49a2e1a04fca33797fe83",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "95% of the service responses were faster in the after report compared to the before report"
+      ],
+      "explanation_whitespace_words": 90
+    },
+    {
+      "group": "200-18081",
+      "arm": "gpu7-riley-keep",
+      "answer_sha256": "8337ba795eac8be08a09ef81b4b992e06163fd166b8f144c81ae0a531aaee4f1",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "95% of the service responses were faster in the after report compared to the before report"
+      ],
+      "explanation_whitespace_words": 88
+    },
+    {
+      "group": "200-18081",
+      "arm": "gpu7-riley-hide",
+      "answer_sha256": "68a1d3494340b6824440df10771e5d4d4daedf2cd2aa1262f845f7d88482b26e",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "effectively reduced the latency for the majority of service responses"
+      ],
+      "explanation_whitespace_words": 114
+    },
+    {
+      "group": "200-19959",
+      "arm": "gpu6-riley-hide",
+      "answer_sha256": "5c01efb143a12aa188a9c38c3d790b6747b4ec58b276a338655fe72e67c0ce06",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [],
+      "explanation_whitespace_words": 110
+    },
+    {
+      "group": "200-19959",
+      "arm": "gpu6-riley-keep",
+      "answer_sha256": "8dee40b81a49ba30abc401d823717130882df7c00f622fb098b4dc5c9656c2c6",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "95% of the service responses are now faster",
+        "the longest 5% of responses being notably shorter"
+      ],
+      "explanation_whitespace_words": 79
+    },
+    {
+      "group": "200-19959",
+      "arm": "gpu6-vllm-keep",
+      "answer_sha256": "40f06a256e11d83127cf85b9845441223df763068a7143a37d4c92b3c4b52d95",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "95% of the service responses are now faster",
+        "the longest 5% of responses being notably shorter"
+      ],
+      "explanation_whitespace_words": 79
+    },
+    {
+      "group": "200-19959",
+      "arm": "gpu6-vllm-hide",
+      "answer_sha256": "75b9e4e8c0291d09b002d6eb75faae8986be0f2599e5f2d571859953f84999a2",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [],
+      "explanation_whitespace_words": 83
+    },
+    {
+      "group": "200-19959",
+      "arm": "gpu7-vllm-hide",
+      "answer_sha256": "75b9e4e8c0291d09b002d6eb75faae8986be0f2599e5f2d571859953f84999a2",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [],
+      "explanation_whitespace_words": 83
+    },
+    {
+      "group": "200-19959",
+      "arm": "gpu7-vllm-keep",
+      "answer_sha256": "40f06a256e11d83127cf85b9845441223df763068a7143a37d4c92b3c4b52d95",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "95% of the service responses are now faster",
+        "the longest 5% of responses being notably shorter"
+      ],
+      "explanation_whitespace_words": 79
+    },
+    {
+      "group": "200-19959",
+      "arm": "gpu7-riley-keep",
+      "answer_sha256": "8dee40b81a49ba30abc401d823717130882df7c00f622fb098b4dc5c9656c2c6",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [
+        "95% of the service responses are now faster",
+        "the longest 5% of responses being notably shorter"
+      ],
+      "explanation_whitespace_words": 79
+    },
+    {
+      "group": "200-19959",
+      "arm": "gpu7-riley-hide",
+      "answer_sha256": "5c01efb143a12aa188a9c38c3d790b6747b4ec58b276a338655fe72e67c0ce06",
+      "automatic_ok": true,
+      "matched_unsupported_claims": [],
+      "explanation_whitespace_words": 110
+    }
+  ]
+}

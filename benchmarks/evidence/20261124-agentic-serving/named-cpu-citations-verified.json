@@ -1,0 +1,59 @@
+{
+  "engine": {
+    "torch": "2.13.0+cu129",
+    "transformers": "5.22.1",
+    "threads": 6,
+    "dtype": "torch.float32",
+    "device": "cpu"
+  },
+  "jobs": [
+    {
+      "seed": 17101,
+      "history": 200,
+      "tool_invocations": 2,
+      "model_requests": 1,
+      "valid": true,
+      "usage": {
+        "prompt_tokens": 3105,
+        "completion_tokens": 94,
+        "total_tokens": 3199
+      },
+      "finish": "stop",
+      "explanation_words": 0,
+      "visible_chunks": 61,
+      "immediately_attributed": {
+        "report-A": false,
+        "report-B": false
+      },
+      "strict_opening": false,
+      "answer": "Before: 68 ms (report-A). After: 26 ms (report-B). Reduction: 42 ms (report-A - report-B). The reduction in latency indicates an improvement in service performance, as measured by the p95 statistic (the 95th percentile of response times), which now falls within expected parameters (report-B notes). This suggests that the optimization efforts have successfully reduced the longest response times, enhancing overall user experience.",
+      "all_three_values": true,
+      "both_sources": true,
+      "at_least_64_tokens": true
+    },
+    {
+      "seed": 17104,
+      "history": 0,
+      "tool_invocations": 2,
+      "model_requests": 1,
+      "valid": true,
+      "usage": {
+        "prompt_tokens": 341,
+        "completion_tokens": 135,
+        "total_tokens": 476
+      },
+      "finish": "stop",
+      "explanation_words": 73,
+      "visible_chunks": 86,
+      "immediately_attributed": {
+        "report-A": false,
+        "report-B": false
+      },
+      "strict_opening": false,
+      "answer": "Before: 84 ms (report-A). After: 25 ms (report-B). Reduction: 59 ms.\n\nThe reduction in latency from 84 ms to 25 ms is significant, indicating an improvement in service performance. The p95 value represents the 95th percentile of the data, which means that 95% of the observed latencies were below this threshold. This suggests that the majority of users experienced faster response times after the changes were implemented, as seen in report-B (p95 = 25 ms), compared to the previous baseline in report-A (p95 = 84 ms).",
+      "all_three_values": true,
+      "both_sources": true,
+      "at_least_64_tokens": true
+    }
+  ]
+}

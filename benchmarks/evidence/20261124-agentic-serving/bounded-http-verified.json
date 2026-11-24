@@ -1,0 +1,105 @@
+{
+  "cpu": {
+    "http_model_requests": 2,
+    "tool_invocations": 2,
+    "preview_budget": 256,
+    "preview_tokens": 164,
+    "shared_with_final": 161,
+    "reused": 160,
+    "final_tokens": 3072,
+    "first_final_forward_tokens": 2912,
+    "output_tokens_equal_to_control": 88,
+    "finish": "stop",
+    "both_sources": false,
+    "three_values": true,
+    "preview_completed_before_final_ms": 24588.643292
+  },
+  "catalog": [
+    {
+      "gpu": "gpu6",
+      "size": 4,
+      "base": 15100,
+      "cap": 5456,
+      "matched": 4,
+      "decisions": {
+        "full": 4
+      }
+    },
+    {
+      "gpu": "gpu6",
+      "size": 8,
+      "base": 15200,
+      "cap": 2720,
+      "matched": 8,
+      "decisions": {
+        "full": 2,
+        "partial": 6
+      }
+    },
+    {
+      "gpu": "gpu6",
+      "size": 16,
+      "base": 15300,
+      "cap": 1360,
+      "matched": 16,
+      "decisions": {
+        "full": 4,
+        "partial": 12
+      }
+    },
+    {
+      "gpu": "gpu6",
+      "size": 16,
+      "base": 15400,
+      "cap": 1360,
+      "matched": 16,
+      "decisions": {
+        "full": 4,
+        "partial": 12
+      }
+    },
+    {
+      "gpu": "gpu7",
+      "size": 4,
+      "base": 15100,
+      "cap": 5456,
+      "matched": 4,
+      "decisions": {
+        "full": 4
+      }
+    },
+    {
+      "gpu": "gpu7",
+      "size": 8,
+      "base": 15200,
+      "cap": 2720,
+      "matched": 8,
+      "decisions": {
+        "full": 2,
+        "partial": 6
+      }
+    },
+    {
+      "gpu": "gpu7",
+      "size": 16,
+      "base": 15300,
+      "cap": 1360,
+      "matched": 16,
+      "decisions": {
+        "full": 4,
+        "partial": 12
+      }
+    },
+    {
+      "gpu": "gpu7",
+      "size": 16,
+      "base": 15400,
+      "cap": 1360,
+      "matched": 16,
+      "decisions": {
+        "full": 4,
+        "partial": 12
+      }
+    }
+  ]
+}

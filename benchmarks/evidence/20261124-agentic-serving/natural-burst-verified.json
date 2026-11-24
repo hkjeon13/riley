@@ -1,0 +1,351 @@
+{
+  "runs": [
+    {
+      "seed": 761,
+      "answer_sha256": "62ff8f896d95a6f940eeb9fa18c1a5a679d62cfe511104ff42ffff279ca73eda",
+      "gpu": 6,
+      "burst": 16,
+      "policy": "observed-capacity",
+      "canonical_final_sha256": "40b41562c89dce9291b907c1b6399f3bfbe871c588fef6e7f03e4509bd0ece5f",
+      "preview_tokens": 2920,
+      "final_tokens_in": 5311,
+      "cached_tokens": 2912,
+      "final_tokens_out": 152,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 256.06875866651535
+      },
+      "replica": 0,
+      "hold_ms": 0,
+      "after_tool_return_first_ms": 5088.388335,
+      "after_tool_return_last_ms": 6894.329874,
+      "tool_wait_ms": 1546.701445,
+      "first_final_ms": 7417.545422,
+      "last_final_ms": 9223.486961,
+      "http": 200,
+      "correct": true,
+      "gap_p95_ms": 12.059169,
+      "error": null,
+      "slo": true,
+      "protected_gap_ms": 11.843998,
+      "protected_done_ms": 2269.589554,
+      "incumbent_gap_ms": 12.33475,
+      "burst_status": {
+        "200": 16
+      }
+    },
+    {
+      "seed": 18081,
+      "answer_sha256": "d8599859958404dbfc462a6955b62bb874a3dc3994d7116bf531fb4f2d7aa250",
+      "gpu": 7,
+      "burst": 160,
+      "policy": "defer-cold-prefill",
+      "canonical_final_sha256": "5aba1586055927827d52a77e385d29f47b032e91651209278384c9770894ef50",
+      "preview_tokens": 2922,
+      "final_tokens_in": 5313,
+      "cached_tokens": 32,
+      "final_tokens_out": 149,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 59.649497270584106
+      },
+      "replica": 1,
+      "hold_ms": 1102.0291894674301,
+      "after_tool_return_first_ms": 1527.091849,
+      "after_tool_return_last_ms": 3293.985427,
+      "tool_wait_ms": 1500.238227,
+      "first_final_ms": 3768.063422,
+      "last_final_ms": 5534.957,
+      "http": 200,
+      "correct": true,
+      "gap_p95_ms": 12.04703,
+      "error": null,
+      "slo": true,
+      "protected_gap_ms": 11.874563,
+      "protected_done_ms": 2205.369184,
+      "incumbent_gap_ms": 12.309855,
+      "burst_status": {
+        "200": 129,
+        "429": 31
+      }
+    },
+    {
+      "seed": 19959,
+      "answer_sha256": "4e5b5cc6207dc76eb04feccf34437e3a078f8df7cb034032aa37fc1dc165c2a5",
+      "gpu": 7,
+      "burst": 16,
+      "policy": "observed-capacity",
+      "canonical_final_sha256": "22cc437f1cf696cb3617a9dd092591c46a069afd371bdf2b1fa48ce4cae76a7a",
+      "preview_tokens": 2920,
+      "final_tokens_in": 5311,
+      "cached_tokens": 2912,
+      "final_tokens_out": 174,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 272.63186126947403
+      },
+      "replica": 0,
+      "hold_ms": 0,
+      "after_tool_return_first_ms": 5117.080474,
+      "after_tool_return_last_ms": 7186.377141,
+      "tool_wait_ms": 1455.960813,
+      "first_final_ms": 7313.924532,
+      "last_final_ms": 9383.221199,
+      "http": 200,
+      "correct": true,
+      "gap_p95_ms": 12.056263,
+      "error": null,
+      "slo": true,
+      "protected_gap_ms": 11.865973,
+      "protected_done_ms": 2193.519757,
+      "incumbent_gap_ms": 12.289372,
+      "burst_status": {
+        "200": 16
+      }
+    },
+    {
+      "seed": 762,
+      "answer_sha256": "b12ed458fa38723a4a8934e3b9b5b4165b6af81d7edd50a48cfdf67cfe058cf3",
+      "gpu": 6,
+      "burst": 160,
+      "policy": "defer-cold-prefill",
+      "canonical_final_sha256": "b11a726519b8570a0680161900dccab51261051ba73112a42df058496c221a10",
+      "preview_tokens": 2921,
+      "final_tokens_in": 5312,
+      "cached_tokens": 32,
+      "final_tokens_out": 139,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 2.7443543076515198
+      },
+      "replica": 1,
+      "hold_ms": 1051.8197044730186,
+      "after_tool_return_first_ms": 1477.653396,
+      "after_tool_return_last_ms": 3125.742505,
+      "tool_wait_ms": 1465.398844,
+      "first_final_ms": 3685.355819,
+      "last_final_ms": 5333.444928,
+      "http": 200,
+      "correct": true,
+      "gap_p95_ms": 12.057305,
+      "error": null,
+      "slo": true,
+      "protected_gap_ms": 11.848706,
+      "protected_done_ms": 2180.500494,
+      "incumbent_gap_ms": 12.326303,
+      "burst_status": {
+        "429": 31,
+        "200": 129
+      }
+    },
+    {
+      "seed": 761,
+      "answer_sha256": "62ff8f896d95a6f940eeb9fa18c1a5a679d62cfe511104ff42ffff279ca73eda",
+      "gpu": 6,
+      "burst": 16,
+      "policy": "defer-cold-prefill",
+      "canonical_final_sha256": "40b41562c89dce9291b907c1b6399f3bfbe871c588fef6e7f03e4509bd0ece5f",
+      "preview_tokens": 2920,
+      "final_tokens_in": 5311,
+      "cached_tokens": 288,
+      "final_tokens_out": 152,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 251.2788102030754
+      },
+      "replica": 1,
+      "hold_ms": 1202.4972066283226,
+      "after_tool_return_first_ms": 1607.124555,
+      "after_tool_return_last_ms": 3411.770056,
+      "tool_wait_ms": 1540.861399,
+      "first_final_ms": 3924.486077,
+      "last_final_ms": 5729.131578,
+      "http": 200,
+      "correct": true,
+      "gap_p95_ms": 12.061547,
+      "error": null,
+      "slo": true,
+      "protected_gap_ms": 11.856027,
+      "protected_done_ms": 2266.800774,
+      "incumbent_gap_ms": 12.365303,
+      "burst_status": {
+        "200": 16
+      }
+    },
+    {
+      "seed": 18081,
+      "answer_sha256": null,
+      "gpu": 7,
+      "burst": 160,
+      "policy": "observed-capacity",
+      "canonical_final_sha256": "5aba1586055927827d52a77e385d29f47b032e91651209278384c9770894ef50",
+      "preview_tokens": 2922,
+      "final_tokens_in": null,
+      "cached_tokens": null,
+      "final_tokens_out": null,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 77.13976502418518
+      },
+      "replica": 0,
+      "hold_ms": 0,
+      "after_tool_return_first_ms": null,
+      "after_tool_return_last_ms": null,
+      "tool_wait_ms": 1517.828793,
+      "first_final_ms": null,
+      "last_final_ms": null,
+      "http": 429,
+      "correct": false,
+      "gap_p95_ms": null,
+      "error": "HTTP 429: b'{\"error\":{\"message\":\"the server is at capacity; retry later\",\"type\":\"server_error\",\"param\":null,\"code\":\"overloaded\"}}'",
+      "slo": false,
+      "protected_gap_ms": 11.910708,
+      "protected_done_ms": 2224.877366,
+      "incumbent_gap_ms": 12.305821,
+      "burst_status": {
+        "200": 129,
+        "429": 31
+      }
+    },
+    {
+      "seed": 19959,
+      "answer_sha256": "4e5b5cc6207dc76eb04feccf34437e3a078f8df7cb034032aa37fc1dc165c2a5",
+      "gpu": 7,
+      "burst": 16,
+      "policy": "defer-cold-prefill",
+      "canonical_final_sha256": "22cc437f1cf696cb3617a9dd092591c46a069afd371bdf2b1fa48ce4cae76a7a",
+      "preview_tokens": 2920,
+      "final_tokens_in": 5311,
+      "cached_tokens": 32,
+      "final_tokens_out": 174,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 295.53820192813873
+      },
+      "replica": 1,
+      "hold_ms": 1152.0709171891212,
+      "after_tool_return_first_ms": 1574.318045,
+      "after_tool_return_last_ms": 3644.92602,
+      "tool_wait_ms": 1476.674089,
+      "first_final_ms": 3794.239434,
+      "last_final_ms": 5864.847409,
+      "http": 200,
+      "correct": true,
+      "gap_p95_ms": 12.067853,
+      "error": null,
+      "slo": true,
+      "protected_gap_ms": 11.886542,
+      "protected_done_ms": 2217.702073,
+      "incumbent_gap_ms": 12.299274,
+      "burst_status": {
+        "200": 16
+      }
+    },
+    {
+      "seed": 762,
+      "answer_sha256": null,
+      "gpu": 6,
+      "burst": 160,
+      "policy": "observed-capacity",
+      "canonical_final_sha256": "b11a726519b8570a0680161900dccab51261051ba73112a42df058496c221a10",
+      "preview_tokens": 2921,
+      "final_tokens_in": null,
+      "cached_tokens": null,
+      "final_tokens_out": null,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 100.1274585723877
+      },
+      "replica": 0,
+      "hold_ms": 0,
+      "after_tool_return_first_ms": null,
+      "after_tool_return_last_ms": null,
+      "tool_wait_ms": 1476.61944,
+      "first_final_ms": null,
+      "last_final_ms": null,
+      "http": 429,
+      "correct": false,
+      "gap_p95_ms": null,
+      "error": "HTTP 429: b'{\"error\":{\"message\":\"the server is at capacity; retry later\",\"type\":\"server_error\",\"param\":null,\"code\":\"overloaded\"}}'",
+      "slo": false,
+      "protected_gap_ms": 11.862483,
+      "protected_done_ms": 2182.568933,
+      "incumbent_gap_ms": 12.329214,
+      "burst_status": {
+        "200": 129,
+        "429": 31
+      }
+    }
+  ],
+  "gates": [
+    {
+      "seed": 761,
+      "peer_ratios": {
+        "protected_gap_ms": 1.001015619894566,
+        "protected_done_ms": 0.9987712403790874,
+        "incumbent_gap_ms": 1.0024769857516367
+      },
+      "target_gate": true,
+      "peer_gate": true,
+      "candidate_slo": true
+    },
+    {
+      "seed": 18081,
+      "peer_ratios": {
+        "protected_gap_ms": 0.9969653357298324,
+        "protected_done_ms": 0.9912317944808469,
+        "incumbent_gap_ms": 1.0003278123418178
+      },
+      "target_gate": true,
+      "peer_gate": true,
+      "candidate_slo": true
+    },
+    {
+      "seed": 19959,
+      "peer_ratios": {
+        "protected_gap_ms": 1.001733444025197,
+        "protected_done_ms": 1.0110244350080864,
+        "incumbent_gap_ms": 1.0008057368594587
+      },
+      "target_gate": true,
+      "peer_gate": true,
+      "candidate_slo": true
+    },
+    {
+      "seed": 762,
+      "peer_ratios": {
+        "protected_gap_ms": 0.9988386073977936,
+        "protected_done_ms": 0.9990522915593979,
+        "incumbent_gap_ms": 0.9997638941136069
+      },
+      "target_gate": true,
+      "peer_gate": true,
+      "candidate_slo": true
+    }
+  ],
+  "all_passed": true
+}

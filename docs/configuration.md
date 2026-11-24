@@ -13,8 +13,10 @@ listed under [Container defaults](#container-defaults).
 | `--bind ADDRESS` | `127.0.0.1:8080` | Listener address |
 | `--device ORDINAL` | 0 | CUDA device |
 | `--max-active-sequences N` | 8 | Requests generating at the same time |
+| `--http-workers N` | max(8, max-active-sequences) on native serving | Positive number of HTTP workers. Each active stream occupies a worker through delivery. The GPU active sequence limit is configured separately. |
 | `--max-waiting-requests N` | 64 | Queue length; further requests get 429 |
 | `--max-sequence-tokens N` | checkpoint maximum | Prompt plus output tokens per request |
+| `--request-timeout-ms MS` | 120,000 | Generation deadline after backend submission, from 1 to 3,600,000 milliseconds. Applies to both streaming and non-streaming requests. |
 | `--max-output-tokens N` | min(1024, context − 1) | Upper bound for `max_tokens` |
 | `--kv-blocks N` | enough for every active sequence | KV-cache size, in 16-token blocks |
 | `--max-weight-bytes N` | 2 GiB (8 GiB with the D128 backend) | Refuse checkpoints larger than this |
@@ -125,6 +127,14 @@ in the last bits:
 | `--decode-attention-producer` | `tensor-core-v1` | Compute attention pages with tensor-core arithmetic |
 
 The component reference path is scoped to its qualified attention geometry.
+For long conversations with Qwen2.5-7B-Instruct on a 40 GB A100, select
+`--inference-profile native-bf16-prefix-32k-v1`. It uses page attention, a
+32,768-token context, a 2,048-token output limit, eight active slots, 4,096
+physical KV blocks and up to 2,048 retained prefix blocks. The prefill and
+batch budgets are both 256 rows. Explicit CLI options override these values.
+Concurrent requests share the physical pool. The measured continuation cases
+used one active request at a time. [Agent continuation measurements](agentic-serving/02-prefill-and-reuse.md)
+
 The `native-bf16-varlen-v1` profile selects fixed-tile attention for supported
 64- and 128-dimensional heads. Explicit options take precedence over the
 profile values below. The direct CLI defaults to `immediate-v1` event
@@ -160,6 +170,16 @@ greedy requests before the server accepts connections. The default is
 `disabled`. Warmup adds to startup time, and the exercised shapes depend on the
 model and scheduler configuration. The `batch_shapes` counters in `/metrics`
 show which buckets have run.
+
+Within `batch_shapes.by_phase`, `prefill_only`, `decode_only`, and `mixed` each
+report `iterations`, `prefill_tokens`, `decode_tokens`, and `gpu_execution_ns`.
+These counters accumulate committed iterations over the life of the process.
+Prefill tokens count computed prompt rows and exclude cached rows. Decode
+tokens count input rows scheduled for generation. Each iteration contributes
+its runtime-reported GPU duration once. For a mixed iteration that duration
+covers the whole batch. Subtract two scrapes of the same process to measure
+work during an interval. Check `batch_shapes.metrics_degraded` before using
+the totals. The shutdown report includes the final counters.
 
 ## Prefix cache
 

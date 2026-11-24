@@ -1,0 +1,12 @@
+{
+  "setup": "two 256-row replica processes with equal limits, seed-specific long prompt warmed on GPU6 only; identical one-token probes start together on warm GPU6 and cold GPU7",
+  "occupancy": [
+    0,
+    4,
+    8
+  ],
+  "replicates": 2,
+  "release": "all target peer streams must have published visible content; verify all peers still span decision time and prompt token counts match",
+  "decision": "identify the tested occupancy where waiting at the warm replica outweighs recomputing the cold prefix, report actual cache credit and paired TTFT",
+  "overload": "16, 64 and 160 synchronized HTTP arrivals on tenant A after tenant B starts its final answer; report HTTP 429/other errors and recovery for every wave."
+}

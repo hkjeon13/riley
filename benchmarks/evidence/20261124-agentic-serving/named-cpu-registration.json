@@ -1,0 +1,6 @@
+{
+ "checkpoint":"Qwen2.5-Coder-7B-Instruct",
+ "native_profiler":"chat-owned-render-20261125.XCBDIb4g/probe-candidate",
+ "jobs":[[17101,200],[17104,0]],"delay_s":0.5,
+ "scope":"Two held-out examples. Actual loopback HTTP and streaming local checkpoint generation using CPU FP32 SDPA and Riley native input IDs. Both call two tools with 500ms waits and a 64-row authorized catalog, project to exactly two whole requested records and finish via the model. One history has 200 entries and the other is empty. Confirm exactly one HTTP model request per session, dependency order, matching tool results, native prompt IDs, natural stop, complete response and numerical/citation correctness. Exact 90-word instruction reported independently. No GPU latency or decode parity inference."
+}

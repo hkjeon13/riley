@@ -1,0 +1,8 @@
+{
+  "checkpoint": "Qwen2.5-Coder-7B-Instruct",
+  "native_profiler": "probe",
+  "http_budget": 256,
+  "jobs": [[17101,200]],
+  "delay_s": 15,
+  "scope": "One known long catalog case. Send a bounded preview via the public measure client as an actual HTTP POST, then the full independent final request after two real 15s waits. Time budget is chosen for reference CPU, not a service target. The endpoint renders each HTTP request independently using the same Riley source and performs real checkpoint forward passes. Compare whole final input and output IDs to the prior no-preview natural generation. Require preview usage <=256, at least one exact KV block adopted, and observe the uncached suffix in the final forward. Report missing citations and any quality differences. Tests of 1,360-token peak-wave planning and fleet load are separate."
+}

@@ -1,0 +1,12 @@
+{
+  "scope": "Follow-up after measuring cold Qwen 7B page32. Eight extended metadata cases, with actual preceding cache token counts reconstructed by native tokenizer; compute both warm-up overhead and time in the actual continuation. No original text, elapsed tool time or guaranteed cache residency inferred.",
+  "gpu": 7,
+  "sequence_limit": 32768,
+  "schedules": [
+    "cold1536",
+    "warm1536",
+    "warm2048"
+  ],
+  "controls": "separate server starts with identical stock image, checkpoint, prompts, output budgets and order. This is one sequential comparison per arm. No statistical promotion. Keep GPU6 cold results as secondary reference.",
+  "check": "compare input hash, exact prompt and completion lengths and actual cached tokens against attainable full 16-token blocks; show how increased retention affects continuations larger than 24576 reusable tokens."
+}

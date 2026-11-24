@@ -1,0 +1,7 @@
+{
+ "orders":{"6":["vllm","riley"],"7":["riley","vllm"]},
+ "waves":[[4,16100],[8,16200],[16,16300],[16,16400]],
+ "controls":"Qwen2.5-Coder-7B-Instruct same local weights, BF16, single A100, 8 active sequences, 8192-token context, prompt caching, total KV capacity 65536 tokens. Client uses whole selected records for both engines. Normal Riley binary with wide prefill; vLLM uses installed BF16 config with native batch-token default. Prefix retention/allocator/batching are engine-specific. Run cold restart then warm chain before timed waves. New held-out seeds.",
+ "decode":"After all natural waves, same frozen reader and 200-entry-history final prompts (indices 0 and 1 of first C16 wave from GPU7 selected diagnostic). Separate token-ID identity calls; verify rendered IDs and lengths, 64 generated, three paired timed streams 200ms apart with overlap. Per-device parity requires median TPOT and pooled visible gap p95 ratios <=1.05 for each role in both devices.",
+ "application":"Report natural scheduled first/last p95, valid and strict count, gap p95, warm SLO goodput and counts. Application parity requires equal or higher C16 SLO count and warm SLO goodput per device, scheduled last-content p95 no worse than 1.05x vLLM and preserving previously valid jobs. Natural output lengths may vary."
+}

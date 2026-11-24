@@ -1,0 +1,498 @@
+{
+  "Qwen2.5-3B-Instruct": {
+    "identity": [
+      {
+        "history": 0,
+        "name": "reader",
+        "matches_both_tile": [
+          false,
+          false
+        ],
+        "matches_vllm": [
+          false,
+          false
+        ],
+        "matches_hf": false,
+        "hf_common_tokens": 20,
+        "tile_common_tokens": 20
+      },
+      {
+        "history": 0,
+        "name": "long-tool-result",
+        "matches_both_tile": [
+          false,
+          false
+        ],
+        "matches_vllm": [
+          false,
+          false
+        ],
+        "matches_hf": false,
+        "hf_common_tokens": 26,
+        "tile_common_tokens": 20
+      },
+      {
+        "history": 200,
+        "name": "reader",
+        "matches_both_tile": [
+          false,
+          false
+        ],
+        "matches_vllm": [
+          false,
+          false
+        ],
+        "matches_hf": false,
+        "hf_common_tokens": 21,
+        "tile_common_tokens": 30
+      },
+      {
+        "history": 200,
+        "name": "long-tool-result",
+        "matches_both_tile": [
+          false,
+          false
+        ],
+        "matches_vllm": [
+          true,
+          true
+        ],
+        "matches_hf": false,
+        "hf_common_tokens": 37,
+        "tile_common_tokens": 37
+      }
+    ],
+    "historical_reference_comparisons": [
+      {
+        "riley": "source-page",
+        "vllm": "1-vllm",
+        "cells": [
+          {
+            "history": 0,
+            "stream": "reader",
+            "prompt_tokens": 306,
+            "identity_output_ids_equal": false,
+            "tpot_p50_ms_riley_vllm": [
+              6.427752666666667,
+              7.0549797142857145
+            ],
+            "tpot_ratio": 0.9110944222349827,
+            "content_gap_p95_ms_riley_vllm": [
+              6.673553,
+              7.239751
+            ],
+            "gap_ratio": 0.9217931666434385,
+            "largest_arrival_drift_ms": 0.126667320728302,
+            "same_reported_warm_cache": true
+          },
+          {
+            "history": 0,
+            "stream": "long-tool-result",
+            "prompt_tokens": 2546,
+            "identity_output_ids_equal": false,
+            "tpot_p50_ms_riley_vllm": [
+              6.591963365079366,
+              7.0450700317460315
+            ],
+            "tpot_ratio": 0.9356845759339643,
+            "content_gap_p95_ms_riley_vllm": [
+              6.668328,
+              7.259758
+            ],
+            "gap_ratio": 0.9185330971087466,
+            "largest_arrival_drift_ms": 0.3394290804862865,
+            "same_reported_warm_cache": true
+          },
+          {
+            "history": 200,
+            "stream": "reader",
+            "prompt_tokens": 3072,
+            "identity_output_ids_equal": false,
+            "tpot_p50_ms_riley_vllm": [
+              7.186800158730159,
+              7.252167269841269
+            ],
+            "tpot_ratio": 0.9909865411705346,
+            "content_gap_p95_ms_riley_vllm": [
+              7.579964,
+              7.375314
+            ],
+            "gap_ratio": 1.0277479711372288,
+            "largest_arrival_drift_ms": 0.15010684728622437,
+            "same_reported_warm_cache": true
+          },
+          {
+            "history": 200,
+            "stream": "long-tool-result",
+            "prompt_tokens": 5312,
+            "identity_output_ids_equal": true,
+            "tpot_p50_ms_riley_vllm": [
+              7.407328349206349,
+              7.146976222222222
+            ],
+            "tpot_ratio": 1.0364282906349414,
+            "content_gap_p95_ms_riley_vllm": [
+              7.568632,
+              7.300835
+            ],
+            "gap_ratio": 1.0366803249217384,
+            "largest_arrival_drift_ms": 0.3329843282699474,
+            "same_reported_warm_cache": true
+          }
+        ]
+      },
+      {
+        "riley": "source-page",
+        "vllm": "2-vllm",
+        "cells": [
+          {
+            "history": 0,
+            "stream": "reader",
+            "prompt_tokens": 306,
+            "identity_output_ids_equal": false,
+            "tpot_p50_ms_riley_vllm": [
+              6.427752666666667,
+              7.060467460317461
+            ],
+            "tpot_ratio": 0.9103862743923268,
+            "content_gap_p95_ms_riley_vllm": [
+              6.673553,
+              7.244214
+            ],
+            "gap_ratio": 0.9212252702639651,
+            "largest_arrival_drift_ms": 0.12593716382980347,
+            "same_reported_warm_cache": true
+          },
+          {
+            "history": 0,
+            "stream": "long-tool-result",
+            "prompt_tokens": 2546,
+            "identity_output_ids_equal": false,
+            "tpot_p50_ms_riley_vllm": [
+              6.591963365079366,
+              7.044238412698412
+            ],
+            "tpot_ratio": 0.9357950397017021,
+            "content_gap_p95_ms_riley_vllm": [
+              6.668328,
+              7.272577
+            ],
+            "gap_ratio": 0.91691404573647,
+            "largest_arrival_drift_ms": 0.35304874181746326,
+            "same_reported_warm_cache": true
+          },
+          {
+            "history": 200,
+            "stream": "reader",
+            "prompt_tokens": 3072,
+            "identity_output_ids_equal": false,
+            "tpot_p50_ms_riley_vllm": [
+              7.186800158730159,
+              7.225873952380952
+            ],
+            "tpot_ratio": 0.994592516571934,
+            "content_gap_p95_ms_riley_vllm": [
+              7.579964,
+              7.403437
+            ],
+            "gap_ratio": 1.0238439254632679,
+            "largest_arrival_drift_ms": 0.1651868224143982,
+            "same_reported_warm_cache": true
+          },
+          {
+            "history": 200,
+            "stream": "long-tool-result",
+            "prompt_tokens": 5312,
+            "identity_output_ids_equal": true,
+            "tpot_p50_ms_riley_vllm": [
+              7.407328349206349,
+              7.141498095238095
+            ],
+            "tpot_ratio": 1.037223317912177,
+            "content_gap_p95_ms_riley_vllm": [
+              7.568632,
+              7.30219
+            ],
+            "gap_ratio": 1.0364879577222723,
+            "largest_arrival_drift_ms": 0.3385201096534618,
+            "same_reported_warm_cache": true
+          }
+        ]
+      }
+    ],
+    "natural": [
+      {
+        "seed": 761,
+        "valid": true,
+        "verified_tool_calls": 2,
+        "error": null,
+        "before_final_submission_ms": 500.302593,
+        "final_submission_to_first_ms": 38.002881,
+        "final_stream_ms": 989.742793,
+        "first_final_ms": 538.305474,
+        "last_final_ms": 1528.048267,
+        "final_tokens": 161
+      },
+      {
+        "seed": 762,
+        "valid": true,
+        "verified_tool_calls": 2,
+        "error": null,
+        "before_final_submission_ms": 576.691184,
+        "final_submission_to_first_ms": 269.098959,
+        "final_stream_ms": 915.083895,
+        "first_final_ms": 845.790143,
+        "last_final_ms": 1760.874038,
+        "final_tokens": 135
+      }
+    ]
+  },
+  "Qwen2.5-Coder-7B-Instruct": {
+    "identity": [
+      {
+        "history": 0,
+        "name": "reader",
+        "matches_both_tile": [
+          false,
+          false
+        ],
+        "matches_vllm": [
+          true,
+          true
+        ],
+        "matches_hf": false,
+        "hf_common_tokens": 22,
+        "tile_common_tokens": 46
+      },
+      {
+        "history": 0,
+        "name": "long-tool-result",
+        "matches_both_tile": [
+          true,
+          true
+        ],
+        "matches_vllm": [
+          true,
+          true
+        ],
+        "matches_hf": false,
+        "hf_common_tokens": 22,
+        "tile_common_tokens": 64
+      },
+      {
+        "history": 200,
+        "name": "reader",
+        "matches_both_tile": [
+          false,
+          false
+        ],
+        "matches_vllm": [
+          false,
+          false
+        ],
+        "matches_hf": false,
+        "hf_common_tokens": 25,
+        "tile_common_tokens": 52
+      },
+      {
+        "history": 200,
+        "name": "long-tool-result",
+        "matches_both_tile": [
+          true,
+          true
+        ],
+        "matches_vllm": [
+          false,
+          false
+        ],
+        "matches_hf": false,
+        "hf_common_tokens": 21,
+        "tile_common_tokens": 64
+      }
+    ],
+    "historical_reference_comparisons": [
+      {
+        "riley": "source-page",
+        "vllm": "0-vllm",
+        "cells": [
+          {
+            "history": 0,
+            "stream": "reader",
+            "prompt_tokens": 306,
+            "identity_output_ids_equal": true,
+            "tpot_p50_ms_riley_vllm": [
+              11.842586984126985,
+              12.143318047619047
+            ],
+            "tpot_ratio": 0.9752348524256081,
+            "content_gap_p95_ms_riley_vllm": [
+              11.988344,
+              12.298834
+            ],
+            "gap_ratio": 0.9747545173794524,
+            "largest_arrival_drift_ms": 0.1580938696861267,
+            "same_reported_warm_cache": true
+          },
+          {
+            "history": 0,
+            "stream": "long-tool-result",
+            "prompt_tokens": 2546,
+            "identity_output_ids_equal": true,
+            "tpot_p50_ms_riley_vllm": [
+              11.929358936507937,
+              12.138973761904762
+            ],
+            "tpot_ratio": 0.9827320801981918,
+            "content_gap_p95_ms_riley_vllm": [
+              11.974832,
+              12.437196
+            ],
+            "gap_ratio": 0.9628240963638427,
+            "largest_arrival_drift_ms": 0.3684118390083202,
+            "same_reported_warm_cache": true
+          },
+          {
+            "history": 200,
+            "stream": "reader",
+            "prompt_tokens": 3072,
+            "identity_output_ids_equal": false,
+            "tpot_p50_ms_riley_vllm": [
+              12.626156111111111,
+              12.390202936507936
+            ],
+            "tpot_ratio": 1.0190435278431103,
+            "content_gap_p95_ms_riley_vllm": [
+              12.786209,
+              12.746715
+            ],
+            "gap_ratio": 1.003098366912573,
+            "largest_arrival_drift_ms": 0.15635788440704346,
+            "same_reported_warm_cache": true
+          },
+          {
+            "history": 200,
+            "stream": "long-tool-result",
+            "prompt_tokens": 5312,
+            "identity_output_ids_equal": false,
+            "tpot_p50_ms_riley_vllm": [
+              12.680488126984127,
+              12.349253492063491
+            ],
+            "tpot_ratio": 1.0268222395089315,
+            "content_gap_p95_ms_riley_vllm": [
+              12.775604,
+              12.551271
+            ],
+            "gap_ratio": 1.0178733293225841,
+            "largest_arrival_drift_ms": 0.3487795591354259,
+            "same_reported_warm_cache": true
+          }
+        ]
+      },
+      {
+        "riley": "source-page",
+        "vllm": "3-vllm",
+        "cells": [
+          {
+            "history": 0,
+            "stream": "reader",
+            "prompt_tokens": 306,
+            "identity_output_ids_equal": true,
+            "tpot_p50_ms_riley_vllm": [
+              11.842586984126985,
+              12.132062
+            ],
+            "tpot_ratio": 0.9761396689307213,
+            "content_gap_p95_ms_riley_vllm": [
+              11.988344,
+              12.329078
+            ],
+            "gap_ratio": 0.9723633835393043,
+            "largest_arrival_drift_ms": 0.14356523752212524,
+            "same_reported_warm_cache": true
+          },
+          {
+            "history": 0,
+            "stream": "long-tool-result",
+            "prompt_tokens": 2546,
+            "identity_output_ids_equal": true,
+            "tpot_p50_ms_riley_vllm": [
+              11.929358936507937,
+              12.133055952380952
+            ],
+            "tpot_ratio": 0.9832114006007661,
+            "content_gap_p95_ms_riley_vllm": [
+              11.974832,
+              12.394319
+            ],
+            "gap_ratio": 0.9661548972557508,
+            "largest_arrival_drift_ms": 0.3851681947708019,
+            "same_reported_warm_cache": true
+          },
+          {
+            "history": 200,
+            "stream": "reader",
+            "prompt_tokens": 3072,
+            "identity_output_ids_equal": false,
+            "tpot_p50_ms_riley_vllm": [
+              12.626156111111111,
+              12.38296211111111
+            ],
+            "tpot_ratio": 1.01963940435397,
+            "content_gap_p95_ms_riley_vllm": [
+              12.786209,
+              12.576696
+            ],
+            "gap_ratio": 1.0166588267697652,
+            "largest_arrival_drift_ms": 0.1550242304801941,
+            "same_reported_warm_cache": true
+          },
+          {
+            "history": 200,
+            "stream": "long-tool-result",
+            "prompt_tokens": 5312,
+            "identity_output_ids_equal": false,
+            "tpot_p50_ms_riley_vllm": [
+              12.680488126984127,
+              12.343403841269842
+            ],
+            "tpot_ratio": 1.0273088598614308,
+            "content_gap_p95_ms_riley_vllm": [
+              12.775604,
+              12.525669
+            ],
+            "gap_ratio": 1.019953824422472,
+            "largest_arrival_drift_ms": 0.3328353166580089,
+            "same_reported_warm_cache": true
+          }
+        ]
+      }
+    ],
+    "natural": [
+      {
+        "seed": 761,
+        "valid": true,
+        "verified_tool_calls": 2,
+        "error": null,
+        "before_final_submission_ms": 863.691402,
+        "final_submission_to_first_ms": 47.518053,
+        "final_stream_ms": 1117.570277,
+        "first_final_ms": 911.209455,
+        "last_final_ms": 2028.779732,
+        "final_tokens": 99
+      },
+      {
+        "seed": 762,
+        "valid": true,
+        "verified_tool_calls": 2,
+        "error": null,
+        "before_final_submission_ms": 979.407647,
+        "final_submission_to_first_ms": 395.956001,
+        "final_stream_ms": 1362.019734,
+        "first_final_ms": 1375.363648,
+        "last_final_ms": 2737.383382,
+        "final_tokens": 114
+      }
+    ]
+  }
+}

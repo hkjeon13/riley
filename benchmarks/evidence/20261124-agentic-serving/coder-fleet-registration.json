@@ -1,0 +1,7 @@
+{
+ "objective":"Test whether separating a burst of short streamed Coder-14B answers from concurrent long RAG prefills on equal total hardware protects the reader and sustains long-request latency. Same two A100 40GB GPUs in all arms. No inference from these trials to a single-GPU vLLM ratio.",
+ "corpus":"All 64 RAG requests and all 192 short C32 requests in protected-a/plan.json, with byte-identical model inputs and class-relative recorded arrival times. Start short burst 4 s after RAG origin. Zero retained prefix cache. One priming batch per replica before measurements. Never feed routing the original output or completion time.",
+ "arms":["round-robin","dedicated","elastic","elastic","dedicated","round-robin"],
+ "candidate":"Dedicated assigns one replica per class. Elastic reserves one replica for short requests during the observed short burst; long arrivals otherwise select least outstanding. A 250ms empty-short grace interval covers burst gaps. Mirror class homes for the second half.",
+ "guards":"Verify every output SHA, actual prompt and completion tokens and finish against the archived Riley reference, endpoints and actual overlap. Require both repeats short completion p95 at least 10% faster and long TTFT p95 no more than 5% slower than matched round robin, no class stream p95 gap regression over 5%, per-class arrival write error p95 <=5 ms. Count all failures, report per-class completion and usable capacity. Test on one host only."
+}

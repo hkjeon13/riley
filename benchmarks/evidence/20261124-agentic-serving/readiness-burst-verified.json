@@ -1,0 +1,1023 @@
+{
+  "waves": [
+    {
+      "gpu": 6,
+      "burst": 0,
+      "policy": "observed-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 0,
+      "burst_http": {},
+      "burst_completed": 0,
+      "burst_errors": {},
+      "last_arrival_ms": null,
+      "decision_offset_ms": 650.672099,
+      "polls_started_before_decision": [
+        {
+          "sample": 6
+        },
+        {
+          "sample": 6
+        }
+      ],
+      "busy_timeout_before_decision": 0,
+      "initial_busy_sample": {
+        "available": true,
+        "active": 8,
+        "waiting": 0,
+        "age_ms": 98.89445453882217
+      },
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 98.80809485912323
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.527742,
+      "dispatch_after_protected_last_ms": -1213.339947,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": {
+        "available": true,
+        "active": 8,
+        "waiting": 0,
+        "age_ms": 98.89445453882217
+      },
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 98.80809485912323
+      },
+      "destination": 1,
+      "http": 200,
+      "target_ok": true,
+      "ttft_ms": 503.709069,
+      "inclusive_ttft_ms": 504.28904,
+      "inclusive_end_ms": 504.41906,
+      "target_error": null,
+      "protected_gap_p95_ms": 21.83217,
+      "protected_done_ms": 2489.298138,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.28563,
+      "recovery_ttft_ms": 16.062871
+    },
+    {
+      "gpu": 6,
+      "burst": 0,
+      "policy": "fresh-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 0,
+      "burst_http": {},
+      "burst_completed": 0,
+      "burst_errors": {},
+      "last_arrival_ms": null,
+      "decision_offset_ms": 650.669275,
+      "polls_started_before_decision": [
+        {
+          "sample": 7
+        },
+        {
+          "sample": 7
+        }
+      ],
+      "busy_timeout_before_decision": 0,
+      "initial_busy_sample": {
+        "available": true,
+        "active": 8,
+        "waiting": 0,
+        "age_ms": 11.217199265956879
+      },
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 11.131435632705688
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.528034,
+      "dispatch_after_protected_last_ms": -1193.581883,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": {
+        "available": true,
+        "active": 8,
+        "waiting": 0,
+        "age_ms": 11.217199265956879
+      },
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 11.131435632705688
+      },
+      "destination": 1,
+      "http": 200,
+      "target_ok": true,
+      "ttft_ms": 483.844158,
+      "inclusive_ttft_ms": 484.40473,
+      "inclusive_end_ms": 484.530858,
+      "target_error": null,
+      "protected_gap_p95_ms": 21.663472,
+      "protected_done_ms": 2386.161031,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.298195,
+      "recovery_ttft_ms": 16.873987
+    },
+    {
+      "gpu": 6,
+      "burst": 16,
+      "policy": "observed-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 16,
+      "burst_http": {
+        "200": 16
+      },
+      "burst_completed": 16,
+      "burst_errors": {},
+      "last_arrival_ms": 2.62,
+      "decision_offset_ms": 650.677277,
+      "polls_started_before_decision": [
+        {
+          "timeout": 2
+        },
+        {
+          "sample": 2
+        }
+      ],
+      "busy_timeout_before_decision": 2,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 260.1844370365143
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.532188,
+      "dispatch_after_protected_last_ms": -992.761313,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": null,
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 260.1844370365143
+      },
+      "destination": 0,
+      "http": 200,
+      "target_ok": true,
+      "ttft_ms": 4951.363936,
+      "inclusive_ttft_ms": 4951.940467,
+      "inclusive_end_ms": 4952.136628,
+      "target_error": null,
+      "protected_gap_p95_ms": 11.85384,
+      "protected_done_ms": 2181.70063,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.315509,
+      "recovery_ttft_ms": 12.458865
+    },
+    {
+      "gpu": 6,
+      "burst": 16,
+      "policy": "fresh-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 16,
+      "burst_http": {
+        "200": 16
+      },
+      "burst_completed": 16,
+      "burst_errors": {},
+      "last_arrival_ms": 2.717195,
+      "decision_offset_ms": 650.67537,
+      "polls_started_before_decision": [
+        {
+          "timeout": 2
+        },
+        {
+          "sample": 2
+        }
+      ],
+      "busy_timeout_before_decision": 2,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 259.42251086235046
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.547967,
+      "dispatch_after_protected_last_ms": -1193.164862,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": null,
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 259.42251086235046
+      },
+      "destination": 1,
+      "http": 200,
+      "target_ok": true,
+      "ttft_ms": 483.587269,
+      "inclusive_ttft_ms": 484.194776,
+      "inclusive_end_ms": 484.304279,
+      "target_error": null,
+      "protected_gap_p95_ms": 21.584759,
+      "protected_done_ms": 2383.110799,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.306958,
+      "recovery_ttft_ms": 12.39216
+    },
+    {
+      "gpu": 6,
+      "burst": 64,
+      "policy": "observed-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 64,
+      "burst_http": {
+        "200": 64
+      },
+      "burst_completed": 64,
+      "burst_errors": {},
+      "last_arrival_ms": 12.185421,
+      "decision_offset_ms": 650.668164,
+      "polls_started_before_decision": [
+        {
+          "timeout": 2
+        },
+        {
+          "sample": 2
+        }
+      ],
+      "busy_timeout_before_decision": 2,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 258.4073096513748
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.558441,
+      "dispatch_after_protected_last_ms": -992.702327,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": null,
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 258.4073096513748
+      },
+      "destination": 0,
+      "http": 200,
+      "target_ok": true,
+      "ttft_ms": 9492.300111,
+      "inclusive_ttft_ms": 9492.919267,
+      "inclusive_end_ms": 9493.232116,
+      "target_error": null,
+      "protected_gap_p95_ms": 11.863962,
+      "protected_done_ms": 2181.728945,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.317862,
+      "recovery_ttft_ms": 12.329343
+    },
+    {
+      "gpu": 6,
+      "burst": 64,
+      "policy": "fresh-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 64,
+      "burst_http": {
+        "200": 64
+      },
+      "burst_completed": 64,
+      "burst_errors": {},
+      "last_arrival_ms": 12.778679,
+      "decision_offset_ms": 650.624308,
+      "polls_started_before_decision": [
+        {
+          "timeout": 2
+        },
+        {
+          "sample": 2
+        }
+      ],
+      "busy_timeout_before_decision": 2,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 258.4964632987976
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.539614,
+      "dispatch_after_protected_last_ms": -1190.656357,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": null,
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 258.4964632987976
+      },
+      "destination": 1,
+      "http": 200,
+      "target_ok": true,
+      "ttft_ms": 481.095082,
+      "inclusive_ttft_ms": 481.689802,
+      "inclusive_end_ms": 481.846861,
+      "target_error": null,
+      "protected_gap_p95_ms": 21.381308,
+      "protected_done_ms": 2379.339653,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.30341,
+      "recovery_ttft_ms": 12.429744
+    },
+    {
+      "gpu": 6,
+      "burst": 160,
+      "policy": "observed-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 160,
+      "burst_http": {
+        "200": 128,
+        "429": 32
+      },
+      "burst_completed": 128,
+      "burst_errors": {
+        "HTTP 429": 32
+      },
+      "last_arrival_ms": 30.670233,
+      "decision_offset_ms": 650.667079,
+      "polls_started_before_decision": [
+        {
+          "timeout": 1,
+          "http_error": 3
+        },
+        {
+          "sample": 4
+        }
+      ],
+      "busy_timeout_before_decision": 1,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 61.611078679561615
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.553692,
+      "dispatch_after_protected_last_ms": -992.723931,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": null,
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 61.611078679561615
+      },
+      "destination": 0,
+      "http": 429,
+      "target_ok": false,
+      "ttft_ms": null,
+      "inclusive_ttft_ms": null,
+      "inclusive_end_ms": 1.405536,
+      "target_error": "HTTP 429: b'{\"error\":{\"message\":\"the server is at capacity; retry later\",\"type\":\"server_error\",\"param\":null,\"code\":\"overloaded\"}}'",
+      "protected_gap_p95_ms": 11.856898,
+      "protected_done_ms": 2181.588059,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.293824,
+      "recovery_ttft_ms": 12.192153
+    },
+    {
+      "gpu": 6,
+      "burst": 160,
+      "policy": "fresh-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 160,
+      "burst_http": {
+        "200": 129,
+        "transport": 31
+      },
+      "burst_completed": 129,
+      "burst_errors": {
+        "[Errno 32] Broken pipe": 31
+      },
+      "last_arrival_ms": 33.02142,
+      "decision_offset_ms": 650.669563,
+      "polls_started_before_decision": [
+        {
+          "http_error": 7
+        },
+        {
+          "sample": 7
+        }
+      ],
+      "busy_timeout_before_decision": 0,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 8.310772478580475
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.550813,
+      "dispatch_after_protected_last_ms": -1190.84271,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": null,
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 8.310772478580475
+      },
+      "destination": 1,
+      "http": 200,
+      "target_ok": true,
+      "ttft_ms": 480.895625,
+      "inclusive_ttft_ms": 481.498005,
+      "inclusive_end_ms": 481.670279,
+      "target_error": null,
+      "protected_gap_p95_ms": 21.644236,
+      "protected_done_ms": 2380.00899,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.292454,
+      "recovery_ttft_ms": 12.371697
+    },
+    {
+      "gpu": 7,
+      "burst": 160,
+      "policy": "fresh-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 160,
+      "burst_http": {
+        "200": 129,
+        "429": 31
+      },
+      "burst_completed": 129,
+      "burst_errors": {
+        "HTTP 429": 31
+      },
+      "last_arrival_ms": 29.291694,
+      "decision_offset_ms": 650.682735,
+      "polls_started_before_decision": [
+        {
+          "http_error": 6
+        },
+        {
+          "sample": 6
+        }
+      ],
+      "busy_timeout_before_decision": 0,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 58.65160375833511
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.555041,
+      "dispatch_after_protected_last_ms": -1205.212315,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": null,
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 58.65160375833511
+      },
+      "destination": 1,
+      "http": 200,
+      "target_ok": true,
+      "ttft_ms": 494.734705,
+      "inclusive_ttft_ms": 495.339415,
+      "inclusive_end_ms": 495.480022,
+      "target_error": null,
+      "protected_gap_p95_ms": 21.766657,
+      "protected_done_ms": 2472.131948,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.305633,
+      "recovery_ttft_ms": 20.734477
+    },
+    {
+      "gpu": 7,
+      "burst": 160,
+      "policy": "observed-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 160,
+      "burst_http": {
+        "200": 129,
+        "transport": 31
+      },
+      "burst_completed": 129,
+      "burst_errors": {
+        "[Errno 32] Broken pipe": 31
+      },
+      "last_arrival_ms": 30.279022,
+      "decision_offset_ms": 650.6738,
+      "polls_started_before_decision": [
+        {
+          "http_error": 7
+        },
+        {
+          "sample": 7
+        }
+      ],
+      "busy_timeout_before_decision": 0,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 7.871478796005249
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.554735,
+      "dispatch_after_protected_last_ms": -993.328317,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": null,
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 7.871478796005249
+      },
+      "destination": 0,
+      "http": 429,
+      "target_ok": false,
+      "ttft_ms": null,
+      "inclusive_ttft_ms": null,
+      "inclusive_end_ms": 1.37541,
+      "target_error": "HTTP 429: b'{\"error\":{\"message\":\"the server is at capacity; retry later\",\"type\":\"server_error\",\"param\":null,\"code\":\"overloaded\"}}'",
+      "protected_gap_p95_ms": 11.862815,
+      "protected_done_ms": 2184.509142,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.335623,
+      "recovery_ttft_ms": 12.540462
+    },
+    {
+      "gpu": 7,
+      "burst": 64,
+      "policy": "fresh-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 64,
+      "burst_http": {
+        "200": 64
+      },
+      "burst_completed": 64,
+      "burst_errors": {},
+      "last_arrival_ms": 11.772515,
+      "decision_offset_ms": 650.669178,
+      "polls_started_before_decision": [
+        {
+          "timeout": 2
+        },
+        {
+          "sample": 2
+        }
+      ],
+      "busy_timeout_before_decision": 2,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 259.1809779405594
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.543918,
+      "dispatch_after_protected_last_ms": -1198.090609,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": null,
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 259.1809779405594
+      },
+      "destination": 1,
+      "http": 200,
+      "target_ok": true,
+      "ttft_ms": 488.001571,
+      "inclusive_ttft_ms": 488.594463,
+      "inclusive_end_ms": 488.7081,
+      "target_error": null,
+      "protected_gap_p95_ms": 21.755205,
+      "protected_done_ms": 2388.092176,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.287759,
+      "recovery_ttft_ms": 12.152352
+    },
+    {
+      "gpu": 7,
+      "burst": 64,
+      "policy": "observed-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 64,
+      "burst_http": {
+        "200": 64
+      },
+      "burst_completed": 64,
+      "burst_errors": {},
+      "last_arrival_ms": 13.445362,
+      "decision_offset_ms": 650.666382,
+      "polls_started_before_decision": [
+        {
+          "timeout": 2
+        },
+        {
+          "sample": 2
+        }
+      ],
+      "busy_timeout_before_decision": 2,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 258.72550904750824
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.537036,
+      "dispatch_after_protected_last_ms": -992.748652,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": null,
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 258.72550904750824
+      },
+      "destination": 0,
+      "http": 200,
+      "target_ok": true,
+      "ttft_ms": 9472.609296,
+      "inclusive_ttft_ms": 9473.197939,
+      "inclusive_end_ms": 9473.386311,
+      "target_error": null,
+      "protected_gap_p95_ms": 11.85493,
+      "protected_done_ms": 2181.608525,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.308244,
+      "recovery_ttft_ms": 12.33626
+    },
+    {
+      "gpu": 7,
+      "burst": 16,
+      "policy": "fresh-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 16,
+      "burst_http": {
+        "200": 16
+      },
+      "burst_completed": 16,
+      "burst_errors": {},
+      "last_arrival_ms": 2.496045,
+      "decision_offset_ms": 650.129455,
+      "polls_started_before_decision": [
+        {
+          "timeout": 2
+        },
+        {
+          "sample": 2
+        }
+      ],
+      "busy_timeout_before_decision": 2,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 258.1874802708626
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.853981,
+      "dispatch_after_protected_last_ms": -1197.60856,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": null,
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 258.1874802708626
+      },
+      "destination": 1,
+      "http": 200,
+      "target_ok": true,
+      "ttft_ms": 487.73231,
+      "inclusive_ttft_ms": 488.648936,
+      "inclusive_end_ms": 488.813061,
+      "target_error": null,
+      "protected_gap_p95_ms": 21.737882,
+      "protected_done_ms": 2386.589817,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.288984,
+      "recovery_ttft_ms": 12.274059
+    },
+    {
+      "gpu": 7,
+      "burst": 16,
+      "policy": "observed-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 16,
+      "burst_http": {
+        "200": 16
+      },
+      "burst_completed": 16,
+      "burst_errors": {},
+      "last_arrival_ms": 2.492549,
+      "decision_offset_ms": 650.677954,
+      "polls_started_before_decision": [
+        {
+          "timeout": 2
+        },
+        {
+          "sample": 2
+        }
+      ],
+      "busy_timeout_before_decision": 2,
+      "initial_busy_sample": null,
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 262.5349164009094
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.539369,
+      "dispatch_after_protected_last_ms": -993.129121,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": null,
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 262.5349164009094
+      },
+      "destination": 0,
+      "http": 200,
+      "target_ok": true,
+      "ttft_ms": 4931.058432,
+      "inclusive_ttft_ms": 4931.67159,
+      "inclusive_end_ms": 4931.783716,
+      "target_error": null,
+      "protected_gap_p95_ms": 11.860688,
+      "protected_done_ms": 2182.244706,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.29893,
+      "recovery_ttft_ms": 12.336495
+    },
+    {
+      "gpu": 7,
+      "burst": 0,
+      "policy": "fresh-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 0,
+      "burst_http": {},
+      "burst_completed": 0,
+      "burst_errors": {},
+      "last_arrival_ms": null,
+      "decision_offset_ms": 650.668705,
+      "polls_started_before_decision": [
+        {
+          "sample": 7
+        },
+        {
+          "sample": 7
+        }
+      ],
+      "busy_timeout_before_decision": 0,
+      "initial_busy_sample": {
+        "available": true,
+        "active": 8,
+        "waiting": 0,
+        "age_ms": 1.7299503087997437
+      },
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 1.5946626663208008
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.541644,
+      "dispatch_after_protected_last_ms": -1196.636733,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": {
+        "available": true,
+        "active": 8,
+        "waiting": 0,
+        "age_ms": 1.7299503087997437
+      },
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 1.5946626663208008
+      },
+      "destination": 1,
+      "http": 200,
+      "target_ok": true,
+      "ttft_ms": 486.862303,
+      "inclusive_ttft_ms": 487.453816,
+      "inclusive_end_ms": 487.563556,
+      "target_error": null,
+      "protected_gap_p95_ms": 21.711912,
+      "protected_done_ms": 2386.18395,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.306559,
+      "recovery_ttft_ms": 12.299926
+    },
+    {
+      "gpu": 7,
+      "burst": 0,
+      "policy": "observed-capacity",
+      "incumbents_at_release": 8,
+      "incumbents_at_decision": 8,
+      "burst_sent_before_decision": 0,
+      "burst_http": {},
+      "burst_completed": 0,
+      "burst_errors": {},
+      "last_arrival_ms": null,
+      "decision_offset_ms": 650.668801,
+      "polls_started_before_decision": [
+        {
+          "sample": 7
+        },
+        {
+          "sample": 7
+        }
+      ],
+      "busy_timeout_before_decision": 0,
+      "initial_busy_sample": {
+        "available": true,
+        "active": 8,
+        "waiting": 0,
+        "age_ms": 1.9461438059806824
+      },
+      "initial_other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 1.8407031893730164
+      },
+      "routing_hold_ms": 0,
+      "route_ms": 0.547727,
+      "dispatch_after_protected_last_ms": -1197.252302,
+      "incumbents_at_dispatch": 8,
+      "busy_sample": {
+        "available": true,
+        "active": 8,
+        "waiting": 0,
+        "age_ms": 1.9461438059806824
+      },
+      "other_sample": {
+        "available": true,
+        "active": 1,
+        "waiting": 0,
+        "age_ms": 1.8407031893730164
+      },
+      "destination": 1,
+      "http": 200,
+      "target_ok": true,
+      "ttft_ms": 487.451197,
+      "inclusive_ttft_ms": 488.04256,
+      "inclusive_end_ms": 488.226867,
+      "target_error": null,
+      "protected_gap_p95_ms": 21.736578,
+      "protected_done_ms": 2386.521247,
+      "protected_ok": true,
+      "incumbent_gap_p95_ms": 12.303713,
+      "recovery_ttft_ms": 12.182614
+    }
+  ],
+  "paired_gates": [
+    {
+      "gpu": 6,
+      "burst": 0,
+      "protected_ratios": {
+        "protected_gap_p95_ms": 0.9922729623303591,
+        "protected_done_ms": 0.9585677965103592,
+        "incumbent_gap_p95_ms": 1.0010227395746087
+      },
+      "measured_overlap": true,
+      "peer_gate": true,
+      "placement_gate": true,
+      "both_targets_completed": true
+    },
+    {
+      "gpu": 6,
+      "burst": 16,
+      "protected_ratios": {
+        "protected_gap_p95_ms": 1.8209085832101664,
+        "protected_done_ms": 1.092317968024788,
+        "incumbent_gap_p95_ms": 0.9993056722219114
+      },
+      "measured_overlap": true,
+      "peer_gate": false,
+      "placement_gate": true,
+      "both_targets_completed": true
+    },
+    {
+      "gpu": 6,
+      "burst": 64,
+      "protected_ratios": {
+        "protected_gap_p95_ms": 1.802206379285436,
+        "protected_done_ms": 1.090575279047783,
+        "incumbent_gap_p95_ms": 0.9988267444463982
+      },
+      "measured_overlap": true,
+      "peer_gate": false,
+      "placement_gate": true,
+      "both_targets_completed": true
+    },
+    {
+      "gpu": 6,
+      "burst": 160,
+      "protected_ratios": {
+        "protected_gap_p95_ms": 1.8254551907252639,
+        "protected_done_ms": 1.090952519739658,
+        "incumbent_gap_p95_ms": 0.9998885619315844
+      },
+      "measured_overlap": true,
+      "peer_gate": false,
+      "placement_gate": true,
+      "both_targets_completed": false
+    },
+    {
+      "gpu": 7,
+      "burst": 0,
+      "protected_ratios": {
+        "protected_gap_p95_ms": 0.9988652307644745,
+        "protected_done_ms": 0.9998586658298458,
+        "incumbent_gap_p95_ms": 1.0002313122875996
+      },
+      "measured_overlap": true,
+      "peer_gate": true,
+      "placement_gate": true,
+      "both_targets_completed": true
+    },
+    {
+      "gpu": 7,
+      "burst": 16,
+      "protected_ratios": {
+        "protected_gap_p95_ms": 1.8327673740342887,
+        "protected_done_ms": 1.093639870193366,
+        "incumbent_gap_p95_ms": 0.9991913117645193
+      },
+      "measured_overlap": true,
+      "peer_gate": false,
+      "placement_gate": true,
+      "both_targets_completed": true
+    },
+    {
+      "gpu": 7,
+      "burst": 64,
+      "protected_ratios": {
+        "protected_gap_p95_ms": 1.8351188071123155,
+        "protected_done_ms": 1.0946474349700297,
+        "incumbent_gap_p95_ms": 0.9983356683536659
+      },
+      "measured_overlap": true,
+      "peer_gate": false,
+      "placement_gate": true,
+      "both_targets_completed": true
+    },
+    {
+      "gpu": 7,
+      "burst": 160,
+      "protected_ratios": {
+        "protected_gap_p95_ms": 1.8348644061295738,
+        "protected_done_ms": 1.13166472983339,
+        "incumbent_gap_p95_ms": 0.9975688297218551
+      },
+      "measured_overlap": true,
+      "peer_gate": false,
+      "placement_gate": true,
+      "both_targets_completed": false
+    }
+  ],
+  "submitted_burst": 960,
+  "completed_burst": 835,
+  "protected_correct": 16,
+  "all_gates_passed": false
+}

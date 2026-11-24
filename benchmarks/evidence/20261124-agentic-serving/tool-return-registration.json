@@ -1,0 +1,10 @@
+{
+  "model": "Qwen2.5-Coder-14B-Instruct",
+  "workload": "After the first content of a distinct ongoing 160-token final answer, issue full unfiltered tool results, each asking for two exact source amounts. This isolates tool-return to last-content latency; the upstream API call and external tool time are excluded.",
+  "sizes": [2, 3, 4, 8],
+  "spacing_ms": [0, 180],
+  "records_per_return": [58, 83],
+  "seed_base": 9051,
+  "order": {"6": ["control", "candidate"], "7": ["candidate", "control"]},
+  "gates": "Every result has both correct source amounts, identical results and generated IDs under both policies, complete streams. All actual dispatch offsets from the trigger within 15ms on this thread-based client; at least one return overlaps the reference on every wave. Per GPU aggregate first and last visible content (p95 across 34 returns) must improve with candidate, ongoing final-answer TPOT median and p95 inter-content gap must not worsen by more than 5%. Report each wave including the worst return. Require both GPU directions. These small cohorts are directional diagnostics."
+}

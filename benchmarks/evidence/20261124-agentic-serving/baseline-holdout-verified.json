@@ -1,0 +1,156 @@
+{
+  "0": {
+    "profile/trace": {
+      "submitted": 5,
+      "complete": 5,
+      "failed": 0,
+      "met_slo": 5,
+      "long_request_sent_during_final_answer": true,
+      "latency_ms": {
+        "first_final_ms": {
+          "p50": 629.601146,
+          "p95": 843.181326
+        },
+        "last_final_ms": {
+          "p50": 2300.49384,
+          "p95": 2617.175802
+        },
+        "final_gap_p95_ms": {
+          "p50": 11.828367,
+          "p95": 19.043588
+        },
+        "final_tpot_ms": {
+          "p50": 11.694260029850746,
+          "p95": 12.791698218543047
+        }
+      }
+    },
+    "profile/stock": {
+      "submitted": 5,
+      "complete": 5,
+      "failed": 0,
+      "met_slo": 5,
+      "long_request_sent_during_final_answer": true,
+      "latency_ms": {
+        "first_final_ms": {
+          "p50": 594.745715,
+          "p95": 818.439055
+        },
+        "last_final_ms": {
+          "p50": 2294.81197,
+          "p95": 2587.711583
+        },
+        "final_gap_p95_ms": {
+          "p50": 11.811687,
+          "p95": 18.831517
+        },
+        "final_tpot_ms": {
+          "p50": 11.645650313432835,
+          "p95": 12.539146158940397
+        }
+      }
+    },
+    "prefill/control-a": {
+      "submitted": 5,
+      "complete": 5,
+      "failed": 0,
+      "met_slo": 5,
+      "long_request_sent_during_final_answer": true,
+      "latency_ms": {
+        "first_final_ms": {
+          "p50": 611.275071,
+          "p95": 830.675273
+        },
+        "last_final_ms": {
+          "p50": 2481.06111,
+          "p95": 2612.059824
+        },
+        "final_gap_p95_ms": {
+          "p50": 11.814914,
+          "p95": 19.369465
+        },
+        "final_tpot_ms": {
+          "p50": 11.672911503355705,
+          "p95": 12.436713433962264
+        }
+      }
+    }
+  },
+  "200": {
+    "profile/trace": {
+      "submitted": 5,
+      "complete": 5,
+      "failed": 0,
+      "met_slo": 5,
+      "long_request_sent_during_final_answer": true,
+      "latency_ms": {
+        "first_final_ms": {
+          "p50": 983.466256,
+          "p95": 1666.555859
+        },
+        "last_final_ms": {
+          "p50": 2617.731778,
+          "p95": 3792.166449
+        },
+        "final_gap_p95_ms": {
+          "p50": 11.999251,
+          "p95": 21.50514
+        },
+        "final_tpot_ms": {
+          "p50": 11.928945416058394,
+          "p95": 13.605582571428572
+        }
+      }
+    },
+    "profile/stock": {
+      "submitted": 5,
+      "complete": 5,
+      "failed": 0,
+      "met_slo": 5,
+      "long_request_sent_during_final_answer": true,
+      "latency_ms": {
+        "first_final_ms": {
+          "p50": 979.61615,
+          "p95": 1685.145812
+        },
+        "last_final_ms": {
+          "p50": 2604.72798,
+          "p95": 3811.094387
+        },
+        "final_gap_p95_ms": {
+          "p50": 11.970928,
+          "p95": 21.517522
+        },
+        "final_tpot_ms": {
+          "p50": 11.891551328467154,
+          "p95": 13.62584064661654
+        }
+      }
+    },
+    "prefill/control-a": {
+      "submitted": 5,
+      "complete": 5,
+      "failed": 0,
+      "met_slo": 5,
+      "long_request_sent_during_final_answer": true,
+      "latency_ms": {
+        "first_final_ms": {
+          "p50": 977.699044,
+          "p95": 1652.407619
+        },
+        "last_final_ms": {
+          "p50": 2446.394798,
+          "p95": 3889.581936
+        },
+        "final_gap_p95_ms": {
+          "p50": 11.992932,
+          "p95": 21.080213
+        },
+        "final_tpot_ms": {
+          "p50": 11.844320596774194,
+          "p95": 13.46744261971831
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,552 @@
+{
+  "pairs": [
+    {
+      "riley": "pair-1-wide",
+      "vllm": "pair-1-vllm",
+      "cells": [
+        {
+          "history": 0,
+          "stream": "reader",
+          "prompt_tokens": 306,
+          "identity_output_ids_equal": true,
+          "tpot_p50_ms_riley_vllm": [
+            11.896694126984126,
+            12.134513920634921
+          ],
+          "tpot_ratio": 0.9804013745250744,
+          "content_gap_p95_ms_riley_vllm": [
+            12.016258,
+            12.411051
+          ],
+          "gap_ratio": 0.9681902040367089,
+          "largest_arrival_drift_ms": 0.1386404037475586
+        },
+        {
+          "history": 0,
+          "stream": "long-tool-result",
+          "prompt_tokens": 2546,
+          "identity_output_ids_equal": true,
+          "tpot_p50_ms_riley_vllm": [
+            11.94468265079365,
+            12.136227476190475
+          ],
+          "tpot_ratio": 0.9842171032330592,
+          "content_gap_p95_ms_riley_vllm": [
+            12.016186,
+            12.47595
+          ],
+          "gap_ratio": 0.9631479767071847,
+          "largest_arrival_drift_ms": 0.33844560384749256
+        },
+        {
+          "history": 200,
+          "stream": "reader",
+          "prompt_tokens": 3072,
+          "identity_output_ids_equal": false,
+          "tpot_p50_ms_riley_vllm": [
+            12.26218753968254,
+            12.38633880952381
+          ],
+          "tpot_ratio": 0.9899767581243772,
+          "content_gap_p95_ms_riley_vllm": [
+            12.436769,
+            12.6135
+          ],
+          "gap_ratio": 0.9859887422206366,
+          "largest_arrival_drift_ms": 0.14188140630722046
+        },
+        {
+          "history": 200,
+          "stream": "long-tool-result",
+          "prompt_tokens": 5312,
+          "identity_output_ids_equal": false,
+          "tpot_p50_ms_riley_vllm": [
+            12.265931142857143,
+            12.343340857142858
+          ],
+          "tpot_ratio": 0.9937286254036387,
+          "content_gap_p95_ms_riley_vllm": [
+            12.425107,
+            12.584179
+          ],
+          "gap_ratio": 0.9873593660738614,
+          "largest_arrival_drift_ms": 0.338110327720631
+        }
+      ],
+      "worst_ratio": 0.9937286254036387,
+      "natural": {
+        "pair-1-wide": [
+          {
+            "history": 0,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 803.849575,
+            "last_p95_ms": 2585.547741
+          },
+          {
+            "history": 200,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1567.957016,
+            "last_p95_ms": 3813.504084
+          }
+        ],
+        "pair-1-vllm": [
+          {
+            "history": 0,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1398.137564,
+            "last_p95_ms": 3204.055539
+          },
+          {
+            "history": 200,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1509.090725,
+            "last_p95_ms": 3371.798935
+          }
+        ]
+      }
+    },
+    {
+      "riley": "pair-2-wide",
+      "vllm": "pair-2-vllm",
+      "cells": [
+        {
+          "history": 0,
+          "stream": "reader",
+          "prompt_tokens": 306,
+          "identity_output_ids_equal": true,
+          "tpot_p50_ms_riley_vllm": [
+            11.946311222222223,
+            12.147941952380952
+          ],
+          "tpot_ratio": 0.9834020667081628,
+          "content_gap_p95_ms_riley_vllm": [
+            12.016835,
+            12.297848
+          ],
+          "gap_ratio": 0.9771494167109562,
+          "largest_arrival_drift_ms": 0.1591816544532776
+        },
+        {
+          "history": 0,
+          "stream": "long-tool-result",
+          "prompt_tokens": 2546,
+          "identity_output_ids_equal": true,
+          "tpot_p50_ms_riley_vllm": [
+            11.951084761904761,
+            12.141060428571429
+          ],
+          "tpot_ratio": 0.9843526298395155,
+          "content_gap_p95_ms_riley_vllm": [
+            12.014366,
+            12.417065
+          ],
+          "gap_ratio": 0.9675689061787147,
+          "largest_arrival_drift_ms": 0.3678530454635509
+        },
+        {
+          "history": 200,
+          "stream": "reader",
+          "prompt_tokens": 3072,
+          "identity_output_ids_equal": false,
+          "tpot_p50_ms_riley_vllm": [
+            12.251186936507937,
+            12.383876698412697
+          ],
+          "tpot_ratio": 0.9892852807617369,
+          "content_gap_p95_ms_riley_vllm": [
+            12.400175,
+            12.563388
+          ],
+          "gap_ratio": 0.9870088386986059,
+          "largest_arrival_drift_ms": 0.14103949069976807
+        },
+        {
+          "history": 200,
+          "stream": "long-tool-result",
+          "prompt_tokens": 5312,
+          "identity_output_ids_equal": false,
+          "tpot_p50_ms_riley_vllm": [
+            12.259673142857144,
+            12.342910015873017
+          ],
+          "tpot_ratio": 0.9932563007500801,
+          "content_gap_p95_ms_riley_vllm": [
+            12.388702,
+            12.554807
+          ],
+          "gap_ratio": 0.9867696094412284,
+          "largest_arrival_drift_ms": 0.3919258713722118
+        }
+      ],
+      "worst_ratio": 0.9932563007500801,
+      "natural": {
+        "pair-2-wide": [
+          {
+            "history": 0,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 833.037762,
+            "last_p95_ms": 2617.588671
+          },
+          {
+            "history": 200,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1572.94506,
+            "last_p95_ms": 3811.019443
+          }
+        ],
+        "pair-2-vllm": [
+          {
+            "history": 0,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1255.097721,
+            "last_p95_ms": 3059.720166
+          },
+          {
+            "history": 200,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1508.666882,
+            "last_p95_ms": 3372.825285
+          }
+        ]
+      }
+    },
+    {
+      "riley": "pair-3-wide",
+      "vllm": "pair-3-vllm",
+      "cells": [
+        {
+          "history": 0,
+          "stream": "reader",
+          "prompt_tokens": 306,
+          "identity_output_ids_equal": true,
+          "tpot_p50_ms_riley_vllm": [
+            11.891400714285714,
+            12.129517015873017
+          ],
+          "tpot_ratio": 0.9803688554725059,
+          "content_gap_p95_ms_riley_vllm": [
+            12.016581,
+            12.31262
+          ],
+          "gap_ratio": 0.975956457683255,
+          "largest_arrival_drift_ms": 0.13537704944610596
+        },
+        {
+          "history": 0,
+          "stream": "long-tool-result",
+          "prompt_tokens": 2546,
+          "identity_output_ids_equal": true,
+          "tpot_p50_ms_riley_vllm": [
+            11.940794238095238,
+            12.130527317460317
+          ],
+          "tpot_ratio": 0.9843590410870282,
+          "content_gap_p95_ms_riley_vllm": [
+            11.998882,
+            12.37251
+          ],
+          "gap_ratio": 0.9698017621323402,
+          "largest_arrival_drift_ms": 0.3586962819099315
+        },
+        {
+          "history": 200,
+          "stream": "reader",
+          "prompt_tokens": 3072,
+          "identity_output_ids_equal": false,
+          "tpot_p50_ms_riley_vllm": [
+            12.244999984126983,
+            12.372068444444444
+          ],
+          "tpot_ratio": 0.9897294085554045,
+          "content_gap_p95_ms_riley_vllm": [
+            12.388429,
+            12.621542
+          ],
+          "gap_ratio": 0.9815305451584284,
+          "largest_arrival_drift_ms": 0.14165043830871582
+        },
+        {
+          "history": 200,
+          "stream": "long-tool-result",
+          "prompt_tokens": 5312,
+          "identity_output_ids_equal": false,
+          "tpot_p50_ms_riley_vllm": [
+            12.253685428571428,
+            12.309805777777779
+          ],
+          "tpot_ratio": 0.9954410044951593,
+          "content_gap_p95_ms_riley_vllm": [
+            12.372046,
+            12.551959
+          ],
+          "gap_ratio": 0.9856665401791066,
+          "largest_arrival_drift_ms": 0.3514692187309154
+        }
+      ],
+      "worst_ratio": 0.9954410044951593,
+      "natural": {
+        "pair-3-wide": [
+          {
+            "history": 0,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 795.20117,
+            "last_p95_ms": 2577.495098
+          },
+          {
+            "history": 200,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1572.757097,
+            "last_p95_ms": 3812.034348
+          }
+        ],
+        "pair-3-vllm": [
+          {
+            "history": 0,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1241.860828,
+            "last_p95_ms": 3045.735611
+          },
+          {
+            "history": 200,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1508.973755,
+            "last_p95_ms": 3370.802817
+          }
+        ]
+      }
+    },
+    {
+      "riley": "pair-4-wide",
+      "vllm": "pair-4-vllm",
+      "cells": [
+        {
+          "history": 0,
+          "stream": "reader",
+          "prompt_tokens": 306,
+          "identity_output_ids_equal": true,
+          "tpot_p50_ms_riley_vllm": [
+            11.891025174603175,
+            12.137989968253967
+          ],
+          "tpot_ratio": 0.9796535674937358,
+          "content_gap_p95_ms_riley_vllm": [
+            12.014664,
+            12.294377
+          ],
+          "gap_ratio": 0.9772487048347386,
+          "largest_arrival_drift_ms": 0.15048682689666748
+        },
+        {
+          "history": 0,
+          "stream": "long-tool-result",
+          "prompt_tokens": 2546,
+          "identity_output_ids_equal": true,
+          "tpot_p50_ms_riley_vllm": [
+            11.94220238095238,
+            12.134582079365078
+          ],
+          "tpot_ratio": 0.9841461620058725,
+          "content_gap_p95_ms_riley_vllm": [
+            11.99384,
+            12.383669
+          ],
+          "gap_ratio": 0.96852071869815,
+          "largest_arrival_drift_ms": 0.36036521196364246
+        },
+        {
+          "history": 200,
+          "stream": "reader",
+          "prompt_tokens": 3072,
+          "identity_output_ids_equal": false,
+          "tpot_p50_ms_riley_vllm": [
+            12.246888174603175,
+            12.390163000000001
+          ],
+          "tpot_ratio": 0.9884364051226101,
+          "content_gap_p95_ms_riley_vllm": [
+            12.396413,
+            12.626053
+          ],
+          "gap_ratio": 0.981812210039036,
+          "largest_arrival_drift_ms": 0.1610890030860901
+        },
+        {
+          "history": 200,
+          "stream": "long-tool-result",
+          "prompt_tokens": 5312,
+          "identity_output_ids_equal": false,
+          "tpot_p50_ms_riley_vllm": [
+            12.252873047619047,
+            12.347534936507937
+          ],
+          "tpot_ratio": 0.992333539497912,
+          "content_gap_p95_ms_riley_vllm": [
+            12.396193,
+            12.532476
+          ],
+          "gap_ratio": 0.9891256125286016,
+          "largest_arrival_drift_ms": 0.5865871906280407
+        }
+      ],
+      "worst_ratio": 0.992333539497912,
+      "natural": {
+        "pair-4-wide": [
+          {
+            "history": 0,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 793.206721,
+            "last_p95_ms": 2574.704713
+          },
+          {
+            "history": 200,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1570.646889,
+            "last_p95_ms": 3809.276585
+          }
+        ],
+        "pair-4-vllm": [
+          {
+            "history": 0,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1244.116039,
+            "last_p95_ms": 3051.598689
+          },
+          {
+            "history": 200,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1506.915793,
+            "last_p95_ms": 3369.793491
+          }
+        ]
+      }
+    },
+    {
+      "riley": "pair-5-wide",
+      "vllm": "pair-5-vllm",
+      "cells": [
+        {
+          "history": 0,
+          "stream": "reader",
+          "prompt_tokens": 306,
+          "identity_output_ids_equal": true,
+          "tpot_p50_ms_riley_vllm": [
+            11.889033650793651,
+            12.130974253968255
+          ],
+          "tpot_ratio": 0.9800559626861413,
+          "content_gap_p95_ms_riley_vllm": [
+            12.003731,
+            12.336275
+          ],
+          "gap_ratio": 0.9730434024857584,
+          "largest_arrival_drift_ms": 0.1483038067817688
+        },
+        {
+          "history": 0,
+          "stream": "long-tool-result",
+          "prompt_tokens": 2546,
+          "identity_output_ids_equal": true,
+          "tpot_p50_ms_riley_vllm": [
+            11.938758476190477,
+            12.135815873015874
+          ],
+          "tpot_ratio": 0.9837623280636981,
+          "content_gap_p95_ms_riley_vllm": [
+            12.000096,
+            12.43766
+          ],
+          "gap_ratio": 0.9648194274485715,
+          "largest_arrival_drift_ms": 0.3270834684371837
+        },
+        {
+          "history": 200,
+          "stream": "reader",
+          "prompt_tokens": 3072,
+          "identity_output_ids_equal": false,
+          "tpot_p50_ms_riley_vllm": [
+            12.24048138095238,
+            12.384765428571429
+          ],
+          "tpot_ratio": 0.9883498764307487,
+          "content_gap_p95_ms_riley_vllm": [
+            12.382274,
+            12.711087
+          ],
+          "gap_ratio": 0.9741317953374091,
+          "largest_arrival_drift_ms": 0.13633817434310913
+        },
+        {
+          "history": 200,
+          "stream": "long-tool-result",
+          "prompt_tokens": 5312,
+          "identity_output_ids_equal": false,
+          "tpot_p50_ms_riley_vllm": [
+            12.250881587301587,
+            12.34480215873016
+          ],
+          "tpot_ratio": 0.9923918933474237,
+          "content_gap_p95_ms_riley_vllm": [
+            12.37822,
+            12.598881
+          ],
+          "gap_ratio": 0.9824856667826294,
+          "largest_arrival_drift_ms": 0.34997910261153065
+        }
+      ],
+      "worst_ratio": 0.9923918933474237,
+      "natural": {
+        "pair-5-wide": [
+          {
+            "history": 0,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 796.229338,
+            "last_p95_ms": 2577.880582
+          },
+          {
+            "history": 200,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1576.955479,
+            "last_p95_ms": 3815.342939
+          }
+        ],
+        "pair-5-vllm": [
+          {
+            "history": 0,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1259.470644,
+            "last_p95_ms": 3064.193384
+          },
+          {
+            "history": 200,
+            "valid": 5,
+            "submitted": 5,
+            "first_p95_ms": 1507.257201,
+            "last_p95_ms": 3370.071366
+          }
+        ]
+      }
+    }
+  ],
+  "worst_cell_median_upper_bound": 0.9954410044951593,
+  "strict_decode_screen": true,
+  "scope": "five paired starts on one device, independent-launch assumption needed for the nominal one-sided median bound"
+}

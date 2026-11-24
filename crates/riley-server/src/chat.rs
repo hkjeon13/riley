@@ -14,13 +14,14 @@ use minijinja::value::Serde;
 use minijinja::{Environment, Error, ErrorKind};
 use riley_model::ChatTemplateSource;
 use riley_runtime::grammar::{Grammar, GrammarElement};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
-use crate::domain::{GenerationRequest, RequestLimits};
+use crate::domain::{GenerationEvent, GenerationRequest, RequestLimits};
 use crate::openai::{
-    CompletionRequest, CompletionStreamOptions, PromptInput, StopInput, ValidationError,
-    ValidationErrorCode, normalize_completion_request,
+    CompletionRequest, CompletionStreamOptions, PromptInput, SseEncodingError, SseStreamEncoder,
+    StopInput, ValidationError, ValidationErrorCode, normalize_completion_request,
+    serialize_sse_json,
 };
 use crate::structured::{SchemaCompiler, SchemaError, compile_json_object, compile_schema};
 
@@ -119,10 +120,24 @@ impl ChatTemplate {
         template_kwargs: &Map<String, Value>,
         tools: Option<&[Value]>,
     ) -> Result<String, String> {
-        let mut context = template_kwargs.clone();
-        context.insert("messages".to_owned(), Value::Array(messages.to_vec()));
+        self.render_owned(
+            messages.to_vec(),
+            add_generation_prompt,
+            template_kwargs.clone(),
+            tools.map(<[Value]>::to_vec),
+        )
+    }
+
+    fn render_owned(
+        &self,
+        messages: Vec<Value>,
+        add_generation_prompt: bool,
+        mut context: Map<String, Value>,
+        tools: Option<Vec<Value>>,
+    ) -> Result<String, String> {
+        context.insert("messages".to_owned(), Value::Array(messages));
         if let Some(tools) = tools {
-            context.insert("tools".to_owned(), Value::Array(tools.to_vec()));
+            context.insert("tools".to_owned(), Value::Array(tools));
         }
         context.insert(
             "add_generation_prompt".to_owned(),
@@ -300,6 +315,9 @@ pub struct ChatCompletionRequest {
     /// Appends the assistant turn header (default true).
     #[serde(default)]
     pub add_generation_prompt: Option<bool>,
+    /// Application-supplied beginning of the assistant's plain-text reply.
+    #[serde(default)]
+    pub riley_assistant_prefix: Option<String>,
     /// Extra template variables, e.g. Qwen3's `enable_thinking`.
     #[serde(default)]
     pub chat_template_kwargs: Option<Map<String, Value>>,
@@ -371,7 +389,7 @@ fn response_format_grammar(format: &Value) -> Result<Option<Arc<Grammar>>, ChatR
     }
 }
 
-fn tool_function(tool: &Value) -> Result<(&str, Value), ChatRequestError> {
+fn tool_function(tool: &Value) -> Result<(&str, &Value), ChatRequestError> {
     let function = tool
         .get("function")
         .filter(|_| tool.get("type").and_then(Value::as_str) == Some("function"))
@@ -381,11 +399,7 @@ fn tool_function(tool: &Value) -> Result<(&str, Value), ChatRequestError> {
         .and_then(Value::as_str)
         .filter(|name| !name.is_empty())
         .ok_or_else(|| invalid_value("tools", "each function needs a name"))?;
-    let parameters = function
-        .get("parameters")
-        .cloned()
-        .unwrap_or_else(|| json!({"type": "object", "properties": {}}));
-    Ok((name, parameters))
+    Ok((name, function))
 }
 
 fn literal(text: &str) -> Vec<GrammarElement> {
@@ -408,16 +422,16 @@ fn forced_tool_grammar(
     let mut compiler = SchemaCompiler::new(Value::Null);
     let call = compiler.rule();
     let mut matched = false;
+    let default_parameters = json!({"type": "object", "properties": {}});
     for tool in tools {
-        let (name, parameters) = tool_function(tool)?;
+        let (name, function) = tool_function(tool)?;
         if only.is_some_and(|only| only != name) {
             continue;
         }
         matched = true;
+        let parameters = function.get("parameters").unwrap_or(&default_parameters);
         compiler.set_root(parameters.clone());
-        let arguments = compiler
-            .schema(&parameters)
-            .map_err(schema_error("tools"))?;
+        let arguments = compiler.schema(parameters).map_err(schema_error("tools"))?;
         let head = json!(name).to_string();
         let mut elements = literal(&format!("{open}{{\"name\": {head}, \"{arguments_key}\": "));
         elements.push(GrammarElement::Rule(arguments));
@@ -521,14 +535,14 @@ pub fn normalize_chat_request(
             "top_logprobs requires logprobs",
         ));
     }
-    let tools = offered_tools(&request).map(<[Value]>::to_vec);
-    if tools.is_some() && template.tool_style.is_none() {
+    let has_tools = offered_tools(&request).is_some();
+    if has_tools && template.tool_style.is_none() {
         return Err(invalid(
             "tools",
             "this model's chat template does not support tools",
         ));
     }
-    let tool_grammar = match (template.tool_style, tools.is_some()) {
+    let tool_grammar = match (template.tool_style, has_tools) {
         (Some(style), true) => tool_grammar(&request, style)?,
         _ => None,
     };
@@ -556,14 +570,26 @@ pub fn normalize_chat_request(
         )));
     }
     let messages = template_messages(request.messages)?;
-    let prompt = template
-        .render(
-            &messages,
+    let mut prompt = template
+        .render_owned(
+            messages,
             request.add_generation_prompt.unwrap_or(true),
-            &request.chat_template_kwargs.unwrap_or_default(),
-            tools.as_deref(),
+            request.chat_template_kwargs.unwrap_or_default(),
+            if has_tools { request.tools } else { None },
         )
         .map_err(ChatRequestError::Template)?;
+    if let Some(prefix) = request
+        .riley_assistant_prefix
+        .filter(|text| !text.is_empty())
+    {
+        if has_tools || format_grammar.is_some() || request.add_generation_prompt == Some(false) {
+            return Err(invalid_value(
+                "riley_assistant_prefix",
+                "a reply prefix requires a generation prompt, plain text and disabled tool calling",
+            ));
+        }
+        prompt.push_str(&prefix);
+    }
 
     let max_tokens = request
         .max_completion_tokens
@@ -646,24 +672,24 @@ fn template_messages(input: Vec<ChatMessageInput>) -> Result<Vec<Value>, ChatReq
                 return Err(invalid("content must be a string or text parts"));
             }
         };
-        let mut rendered = json!({"role": message.role, "content": content});
-        if let Some(name) = message.unsupported_fields.get("name") {
-            rendered["name"] = name.clone();
+        let mut rendered = Map::new();
+        rendered.insert("role".to_owned(), Value::String(message.role));
+        rendered.insert("content".to_owned(), Value::String(content));
+        for (key, value) in message.unsupported_fields {
+            let value = if key == "tool_calls" {
+                template_tool_calls(value)
+            } else {
+                value
+            };
+            rendered.insert(key, value);
         }
-        if let Some(id) = message.unsupported_fields.get("tool_call_id") {
-            rendered["tool_call_id"] = id.clone();
-        }
-        if let Some(calls) = message.unsupported_fields.get("tool_calls") {
-            rendered["tool_calls"] = template_tool_calls(calls);
-        }
-        messages.push(rendered);
+        messages.push(Value::Object(rendered));
     }
     Ok(messages)
 }
 
 /// Clients send `arguments` as a JSON string; templates expect the object.
-fn template_tool_calls(calls: &Value) -> Value {
-    let mut calls = calls.clone();
+fn template_tool_calls(mut calls: Value) -> Value {
     for call in calls.as_array_mut().into_iter().flatten() {
         let arguments = call
             .get("function")
@@ -852,6 +878,31 @@ pub struct ChatChunkShaper {
     tools: Option<ToolStreamFilter>,
 }
 
+// Fixed text-delta schema. Field order matches the existing chat wire format.
+#[derive(Serialize)]
+struct ChatTextChunk<'a> {
+    id: &'a str,
+    object: &'static str,
+    created: u64,
+    model: &'a str,
+    choices: [ChatTextChoice<'a>; 1],
+}
+
+#[derive(Serialize)]
+struct ChatTextChoice<'a> {
+    finish_reason: (),
+    index: u32,
+    logprobs: (),
+    delta: ChatTextDelta<'a>,
+}
+
+#[derive(Serialize)]
+struct ChatTextDelta<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    role: Option<&'static str>,
+    content: &'a str,
+}
+
 impl ChatChunkShaper {
     /// Starts a shaper that parses tool calls in `style`, if given.
     #[must_use]
@@ -865,6 +916,46 @@ impl ChatChunkShaper {
                 content_seen: false,
             }),
         }
+    }
+
+    /// Encodes ordinary text directly as a chat delta. Token metadata and terminal
+    /// events use the completion encoder's full validation and framing.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same ordering, token validation and serialization errors as
+    /// the underlying SSE encoder.
+    pub fn encode_event(
+        &mut self,
+        encoder: &mut SseStreamEncoder,
+        event: &GenerationEvent,
+    ) -> Result<String, SseEncodingError> {
+        let GenerationEvent::TokenDelta { text } = event else {
+            return encoder
+                .encode_event(event)
+                .map(|frames| self.shape(&frames));
+        };
+        let metadata = encoder.text_delta_metadata()?;
+        let filtered = self.tools.as_mut().map(|filter| filter.push(text));
+        let delta = ChatTextDelta {
+            content: filtered.as_deref().unwrap_or(text),
+            role: (!self.role_sent).then_some("assistant"),
+        };
+        let frame = serialize_sse_json(&ChatTextChunk {
+            choices: [ChatTextChoice {
+                delta,
+                finish_reason: (),
+                index: 0,
+                logprobs: (),
+            }],
+            created: metadata.created_unix_seconds,
+            id: &metadata.request_id,
+            model: &metadata.model_id,
+            object: CHAT_CHUNK_OBJECT,
+        })
+        .map_err(SseEncodingError::Json)?;
+        self.role_sent = true;
+        Ok(frame)
     }
 
     /// Returns the chat form of one or more SSE frames; `[DONE]` and errors
@@ -1011,6 +1102,35 @@ mod tests {
                 normalize_chat_request(request(body), &template(CHATML), limits()),
                 Err(ChatRequestError::Invalid(_))
             ));
+        }
+    }
+
+    #[test]
+    fn application_prefix_is_exact_plain_text_in_the_prompt() {
+        let body = json!({"model": "m", "messages": [{"role": "user", "content": "measure"}]});
+        let normalize = |body| normalize_chat_request(request(body), &template(CHATML), limits());
+        let ordinary = normalize(body.clone()).unwrap();
+        for prefix in ["", "결과 24 ms.\n\n", "  下一行 "] {
+            let mut configured = body.clone();
+            configured["riley_assistant_prefix"] = json!(prefix);
+            configured["tools"] = weather();
+            configured["tool_choice"] = json!("none");
+            let generation = normalize(configured).unwrap();
+            assert_eq!(generation.prompt, format!("{}{prefix}", ordinary.prompt));
+            assert_eq!(generation.max_new_tokens, ordinary.max_new_tokens);
+        }
+        let mut too_long = body.clone();
+        too_long["riley_assistant_prefix"] = json!("x".repeat(limits().max_prompt_bytes));
+        assert!(normalize(too_long).is_err());
+        for (key, value) in [
+            ("add_generation_prompt", json!(false)),
+            ("response_format", json!({"type":"json_object"})),
+            ("tools", weather()),
+        ] {
+            let mut invalid = body.clone();
+            invalid[key] = value;
+            invalid["riley_assistant_prefix"] = json!("known");
+            assert!(normalize(invalid).is_err());
         }
     }
 
@@ -1353,6 +1473,68 @@ mod tests {
         .unwrap();
         assert_eq!(calls, [("a".to_owned(), "{\"x\":1}".to_owned())]);
         assert!(parse_tool_calls(ToolStyle::LlamaJson, "The answer is 4.").is_none());
+    }
+
+    #[test]
+    fn direct_chat_frames_preserve_stream_bytes_and_invalid_event_order() {
+        use crate::domain::{FinishReason, RequestMetadata, TokenUsage};
+
+        let meta = RequestMetadata::new("escaped-\"", "m", 5).unwrap();
+        for (style, pieces) in [
+            (None, vec!["", "한글😀\n", "\\"]),
+            (
+                Some(ToolStyle::Hermes),
+                vec![
+                    "prefix ",
+                    "<tool_",
+                    "call>{\"name\":\"read\",\"arguments\":{}}</tool_call>",
+                ],
+            ),
+            (
+                Some(ToolStyle::LlamaJson),
+                vec![
+                    " ",
+                    "<|python_tag|>",
+                    "{\"name\":\"read\",\"parameters\":{}}",
+                ],
+            ),
+        ] {
+            let mut direct = ChatChunkShaper::new(style);
+            let mut original = ChatChunkShaper::new(style);
+            let mut encoder =
+                SseStreamEncoder::new_with_options(meta.clone(), false, true, 64, 512);
+            let mut legacy = encoder.clone();
+            let mut events: Vec<_> = pieces
+                .iter()
+                .map(|piece| GenerationEvent::TokenDelta {
+                    text: (*piece).to_owned(),
+                })
+                .collect();
+            events.push(GenerationEvent::Finished {
+                reason: FinishReason::Stop,
+                usage: TokenUsage::new(1, pieces.len() as u64).unwrap(),
+            });
+            for event in &events {
+                assert_eq!(
+                    direct.encode_event(&mut encoder, event).unwrap(),
+                    original.shape(&legacy.encode_event(event).unwrap())
+                );
+            }
+            assert!(direct.encode_event(&mut encoder, &events[0]).is_err());
+            assert_eq!(
+                encoder.encode_done().unwrap(),
+                legacy.encode_done().unwrap()
+            );
+        }
+        let token = GenerationEvent::TokenDelta {
+            text: "unattributed".to_owned(),
+        };
+        let mut metadata_required = SseStreamEncoder::new_with_options(meta, true, true, 64, 512);
+        assert!(
+            ChatChunkShaper::default()
+                .encode_event(&mut metadata_required, &token)
+                .is_err()
+        );
     }
 
     fn frame(text: &str, finish: Option<&str>) -> String {

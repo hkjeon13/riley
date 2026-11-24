@@ -1,0 +1,52 @@
+--- a/crates/riley-runtime/src/llama/executor/dispatch.rs
++++ b/crates/riley-runtime/src/llama/executor/dispatch.rs
+@@ -1451,7 +1451,49 @@
+     if result.is_ok() {
+         check_staged_embedding_report(host_input)?;
+         if let Some(trace) = long_trace {
++            let directory = trace.directory.clone();
+             trace.save(&mut forward.io_staging)?;
++            // Snapshot only this single request's logical pages and only layer zero.
++            // Coalesce consecutive physical blocks without assuming their allocation order.
++            let blocks = packed.physical_block_ids();
++            let valid = packed.valid_tokens();
++            let stride = layout.block_stride_bytes();
++            for (name, pool) in [("key", key_cache), ("value", value_cache)] {
++                let mut data = std::fs::File::create(directory.join(format!("{name}.bf16")))
++                    .map_err(|_| long_trace_error())?;
++                let mut lo = 0;
++                while lo < blocks.len() {
++                    let mut hi = lo + 1;
++                    while hi < blocks.len() && blocks[hi - 1].checked_add(1) == Some(blocks[hi]) {
++                        hi += 1;
++                    }
++                    let mut bytes = vec![0; (hi - lo) * stride as usize];
++                    pool.download_to_slice(
++                        u64::from(blocks[lo]) * stride,
++                        &mut bytes,
++                        &mut forward.io_staging,
++                        stream,
++                    )
++                    .map_err(|source| {
++                        batch_cuda(ExecutionSite::global(LlamaOp::OutputGather), source)
++                    })?;
++                    data.write_all(&bytes).map_err(|_| long_trace_error())?;
++                    lo = hi;
++                }
++            }
++            let mut index = std::fs::File::create(directory.join("pages.tsv"))
++                .map_err(|_| long_trace_error())?;
++            writeln!(
++                index,
++                "# {} {} {}",
++                layout.block_size(),
++                layout.key_value_head_count(),
++                layout.head_dimension()
++            )
++            .map_err(|_| long_trace_error())?;
++            for (block, count) in blocks.iter().zip(valid) {
++                writeln!(index, "{block}\t{count}").map_err(|_| long_trace_error())?;
++            }
+         }
+     }
+     result

@@ -115,12 +115,23 @@ struct ObservationState {
 
 #[derive(Debug, Default)]
 struct ServiceMetrics {
+    http_worker_queue: Mutex<HttpWorkerQueueMetrics>,
     cancellations: AtomicU64,
     disconnects: AtomicU64,
     overloads: AtomicU64,
 }
 
 impl ServiceMetrics {
+    fn record_worker_wait(&self, wait_ns: u64) {
+        let mut queue = self
+            .http_worker_queue
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        queue.dequeued_connections = queue.dequeued_connections.saturating_add(1);
+        queue.wait_ns_total = queue.wait_ns_total.saturating_add(wait_ns);
+        queue.wait_ns_max = queue.wait_ns_max.max(wait_ns);
+    }
+
     fn record_overload(&self) {
         let _ = self
             .overloads
@@ -764,6 +775,7 @@ impl ConnectionRegistry {
 
 #[derive(Debug)]
 struct ConnectionJob {
+    enqueued_at: Instant,
     stream: TcpStream,
     registry_slot: usize,
 }
@@ -1179,6 +1191,7 @@ fn listener_loop(
                     continue;
                 };
                 match sender.try_send(ConnectionJob {
+                    enqueued_at: Instant::now(),
                     stream,
                     registry_slot,
                 }) {
@@ -1229,6 +1242,9 @@ fn worker_loop(
             .recv();
         match job_result {
             Ok(mut job) => {
+                let wait_ns =
+                    u64::try_from(job.enqueued_at.elapsed().as_nanos()).unwrap_or(u64::MAX);
+                metrics.record_worker_wait(wait_ns);
                 if stopping.load(Ordering::Acquire) {
                     let _ = write_api_error(&mut job.stream, &ApiError::ShuttingDown);
                     let _ = job.stream.shutdown(Shutdown::Both);
@@ -1492,6 +1508,8 @@ pub struct OperationalBatchShapeBucketMetrics {
 pub struct OperationalBatchShapeMetrics {
     /// Sticky signal that a non-authoritative shape metric could not be updated.
     pub metrics_degraded: bool,
+    /// Cumulative time and tokens for prefill-only, decode-only and mixed iterations.
+    pub by_phase: crate::engine::IterationWorkByPhase,
     /// Latest successfully committed iteration, or `null` before the first hit.
     pub last: Option<OperationalBatchShapeObservation>,
     /// Number of valid leading entries in [`Self::buckets`].
@@ -1504,12 +1522,24 @@ impl Default for OperationalBatchShapeMetrics {
     fn default() -> Self {
         Self {
             metrics_degraded: false,
+            by_phase: crate::engine::IterationWorkByPhase::default(),
             last: None,
             bucket_count: 0,
             buckets: [OperationalBatchShapeBucketMetrics::default();
                 ENGINE_BATCH_SHAPE_BUCKET_CAPACITY],
         }
     }
+}
+
+/// Time between submitting an accepted socket to the bounded queue and worker pickup.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+pub struct HttpWorkerQueueMetrics {
+    /// Connections picked up by an HTTP worker, including metrics scrapes.
+    pub dequeued_connections: u64,
+    /// Sum of connection queue waits in nanoseconds.
+    pub wait_ns_total: u64,
+    /// Longest connection queue wait in nanoseconds.
+    pub wait_ns_max: u64,
 }
 
 /// Monotonic service counters in the operational metrics response.
@@ -1528,6 +1558,8 @@ pub struct OperationalCounters {
 /// Fixed, prompt-free JSON contract used by release and soak gates.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
 pub struct OperationalMetricsSnapshot {
+    /// Accepted connection queue timing before the worker reads the request.
+    pub http_worker_queue: HttpWorkerQueueMetrics,
     /// Requests currently admitted to backend ownership.
     pub active_requests: u64,
     /// Requests waiting in bounded admission state.
@@ -1574,6 +1606,10 @@ fn operational_metrics_from_snapshot(
     let allocation = backend_metrics.allocation.unwrap_or_default();
     let batch_shapes = operational_batch_shapes(backend_metrics);
     OperationalMetricsSnapshot {
+        http_worker_queue: *metrics
+            .http_worker_queue
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
         active_requests: u64::try_from(status.active_requests).unwrap_or(u64::MAX),
         waiting_requests: u64::try_from(status.waiting_requests).unwrap_or(u64::MAX),
         kv_allocated_blocks,
@@ -1605,6 +1641,7 @@ fn operational_batch_shapes(
     let mut result = OperationalBatchShapeMetrics {
         metrics_degraded: engine.metrics_degraded
             || engine.bucket_count > ENGINE_BATCH_SHAPE_BUCKET_CAPACITY,
+        by_phase: engine.by_phase,
         last: engine.last.map(|last| OperationalBatchShapeObservation {
             active_rows: u64::try_from(last.active_rows).unwrap_or(u64::MAX),
             selected_dense_rows: u64::try_from(last.selected_dense_rows).unwrap_or(u64::MAX),
@@ -2276,7 +2313,11 @@ fn stream_completion(
                     ),
                     GenerationEvent::Failed { class } => (None, Some(*class), None),
                 };
-                let Ok(mut frame) = encoder.encode_event(&event) else {
+                let frame_result = match chat_shaper.as_mut() {
+                    Some(shaper) => shaper.encode_event(&mut encoder, &event),
+                    None => encoder.encode_event(&event),
+                };
+                let Ok(frame) = frame_result else {
                     let _ = write_stream_error(stream, &mut encoder, &ApiError::Internal);
                     tracker.finish(
                         backend,
@@ -2287,9 +2328,6 @@ fn stream_completion(
                     );
                     return;
                 };
-                if let Some(shaper) = chat_shaper.as_mut() {
-                    frame = shaper.shape(&frame);
-                }
                 // Preserve the historical visible-text observation. Raw-token
                 // arrival timing belongs to the opt-in HTTP client's clock.
                 if matches!(&event, GenerationEvent::TokenDelta { .. })
@@ -3564,12 +3602,62 @@ mod tests {
             assert_eq!(observation.status, RequestObservationStatus::Completed);
             assert_eq!(observation.error_class, None);
         }
+        let snapshot = server.shutdown_with_metrics().expect("final metrics");
+        assert_eq!(snapshot.http_worker_queue.dequeued_connections, 2);
+        assert!(snapshot.http_worker_queue.wait_ns_total >= snapshot.http_worker_queue.wait_ns_max);
         assert_eq!(
-            server
-                .shutdown_with_metrics()
-                .expect("graceful shutdown with final metrics"),
-            OperationalMetricsSnapshot::default()
+            snapshot,
+            OperationalMetricsSnapshot {
+                http_worker_queue: snapshot.http_worker_queue,
+                ..OperationalMetricsSnapshot::default()
+            }
         );
+    }
+
+    #[test]
+    fn disconnected_chat_preview_is_cancelled_before_first_token_and_final_still_serves() {
+        let backend = TestBackend::new([
+            Script::WaitForCancellation,
+            Script::Complete(vec!["final answer".to_owned()]),
+        ]);
+        let template = ChatTemplate::compile(&riley_model::ChatTemplateSource {
+            template: "{{ messages[0].content }}".to_owned(),
+            bos_token: None,
+            eos_token: None,
+        })
+        .expect("preview template");
+        let server = start_server_with_chat(
+            test_config(),
+            backend.clone(),
+            None,
+            false,
+            Some(Arc::new(template)),
+        )
+        .expect("server");
+        let body = |content: &str, limit: usize| {
+            post_body_to(
+                "/v1/chat/completions",
+                &serde_json::to_vec(&json!({
+                    "model":"fixture-model","messages":[{"role":"user","content":content}],
+                    "tool_choice":"none","stream":true,"max_tokens":limit
+                }))
+                .unwrap(),
+            )
+        };
+        let mut preview = TcpStream::connect(server.local_address()).unwrap();
+        preview.write_all(&body("known history", 1)).unwrap();
+        wait_until(|| backend.active.load(Ordering::Acquire) == 1);
+        preview.shutdown(Shutdown::Both).unwrap();
+        drop(preview);
+        let response = send_request(
+            server.local_address(),
+            &body("known history and tool result", 8),
+        );
+        assert_eq!(response_status(&response), 200);
+        assert!(String::from_utf8_lossy(&response).contains("final answer"));
+        assert!(String::from_utf8_lossy(&response).contains("[DONE]"));
+        wait_until(|| backend.cancellations() == 1 && backend.active.load(Ordering::Acquire) == 0);
+        server.shutdown().unwrap();
     }
 
     #[test]
@@ -3599,7 +3687,8 @@ mod tests {
             serde_json::to_vec(&json!({
                 "model": "fixture-model",
                 "messages": [{"role": "user", "content": "Capital of France?"}],
-                "stream": stream
+                "stream": stream,
+                "riley_assistant_prefix": stream.then_some("The capital is ")
             }))
             .expect("encode request")
         };
@@ -3647,10 +3736,10 @@ mod tests {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         assert_eq!(submitted.len(), 2);
-        for request in submitted.iter() {
-            assert_eq!(request.prompt, "<s><user>Capital of France?\n<assistant>");
-            assert!(!request.add_special_tokens);
-        }
+        let header = "<s><user>Capital of France?\n<assistant>";
+        assert_eq!(submitted[0].prompt, header);
+        assert_eq!(submitted[1].prompt, format!("{header}The capital is "));
+        assert!(submitted.iter().all(|request| !request.add_special_tokens));
         drop(submitted);
 
         let invalid = serde_json::to_vec(&json!({
@@ -3729,6 +3818,7 @@ mod tests {
                 "allocation",
                 "batch_shapes",
                 "counters",
+                "http_worker_queue",
                 "kv_allocated_blocks",
                 "prefix_cache",
                 "waiting_requests",
@@ -3756,9 +3846,18 @@ mod tests {
                 .len(),
             ENGINE_BATCH_SHAPE_BUCKET_CAPACITY
         );
+        let snapshot = server.metrics_snapshot().expect("snapshot");
+        assert_eq!(snapshot.http_worker_queue.dequeued_connections, 4);
         assert_eq!(
-            server.metrics_snapshot().expect("snapshot"),
-            OperationalMetricsSnapshot::default()
+            metrics_json["http_worker_queue"],
+            json!(snapshot.http_worker_queue)
+        );
+        assert_eq!(
+            snapshot,
+            OperationalMetricsSnapshot {
+                http_worker_queue: snapshot.http_worker_queue,
+                ..OperationalMetricsSnapshot::default()
+            }
         );
         let models = send_request(
             server.local_address(),
@@ -3920,6 +4019,7 @@ mod tests {
         };
         backend.set_engine_metrics(&EngineMetricsSnapshot {
             batch_shapes: Some(EngineBatchShapeMetricsSnapshot {
+                by_phase: crate::engine::IterationWorkByPhase::default(),
                 metrics_degraded: false,
                 last: Some(EngineBatchShapeObservation {
                     active_rows: 3,
@@ -4150,6 +4250,75 @@ mod tests {
         drop(first);
         drop(second);
         server.shutdown().expect("graceful shutdown");
+    }
+
+    #[test]
+    fn queue_wait_times_only_connections_picked_up_by_workers() {
+        let mut config = test_config();
+        config.worker_threads = 1;
+        config.connection_queue_capacity = 1;
+        config.read_timeout = TEST_TIMEOUT;
+        config.framing_timeout = TEST_TIMEOUT;
+        let server = start_server(config, TestBackend::new([])).expect("start server");
+        let first = TcpStream::connect(server.local_address()).expect("hold worker");
+        let deadline = Instant::now() + TEST_TIMEOUT;
+        while server
+            .metrics_snapshot()
+            .expect("metrics")
+            .http_worker_queue
+            .dequeued_connections
+            == 0
+        {
+            assert!(
+                Instant::now() < deadline,
+                "worker did not pick up first socket"
+            );
+            thread::yield_now();
+        }
+        let mut queued = TcpStream::connect(server.local_address()).expect("queued socket");
+        queued
+            .set_read_timeout(Some(TEST_TIMEOUT))
+            .expect("timeout");
+        queued
+            .write_all(b"GET /metrics HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .expect("write request");
+        while server
+            .connections
+            .slots
+            .lock()
+            .expect("slots")
+            .iter()
+            .flatten()
+            .count()
+            < 2
+        {
+            assert!(
+                Instant::now() < deadline,
+                "second socket was not registered"
+            );
+            thread::yield_now();
+        }
+        let excess = send_request(
+            server.local_address(),
+            b"GET /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        );
+        assert_eq!(response_status(&excess), 429);
+        thread::sleep(Duration::from_millis(20));
+        drop(first);
+        let mut response = Vec::new();
+        queued
+            .read_to_end(&mut response)
+            .expect("read queued metrics");
+        assert_eq!(response_status(&response), 200);
+        let live: Value = serde_json::from_slice(response_body(&response)).expect("metrics");
+        let queue = server
+            .shutdown_with_metrics()
+            .expect("shutdown")
+            .http_worker_queue;
+        assert_eq!(queue.dequeued_connections, 2);
+        assert!(queue.wait_ns_max >= 15_000_000);
+        assert!(queue.wait_ns_total >= queue.wait_ns_max);
+        assert_eq!(live["http_worker_queue"], json!(queue));
     }
 
     #[test]

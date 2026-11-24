@@ -1,0 +1,5 @@
+{
+  "purpose":"When the tool contract already specifies the full JSON answer, preserve the exact record-to-value binding by constructing that answer from the complete tool return. Reuse declared unique integer maximum and exact match operations. No generation or response repair. This is an explicit application finalization path; any absent contract, missing field, ambiguous value or tied maximum falls back.",
+  "new_cases":{"scan":[[14699,110],[14929,810],[15493,1100]],"max":[[15629,110],[15803,810],[16103,1100]]},
+  "gates":"On all previous 12 examples and six fresh examples require exact equality to an independently verified result, original source and amount pairs existing in the original register, identical serialized results on 25 warm in-process replays, no answer produced in ambiguity/type/fallback cases. Report actual CPU time from availability of the complete input bytes through materialized JSON output and include environment. No network, tool execution or model time in this CPU-only metric."
+}

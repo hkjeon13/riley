@@ -1,0 +1,6 @@
+{
+  "dimension":"gpu_slots",
+  "orders":{"6":[8,16],"7":[16,8]},
+  "load":"Both arms explicitly use 16 HTTP workers. Change max-active-sequences from 8 to 16. Reuse the exact HTTP worker study diagnostic binary. Four fresh boots, two A100s, 4/8/16/16 jobs per wave on the same 30ms grid with a new disjoint seed group. Keep 4096 physical KV blocks, the eight-slot arm's token budgets, preview off and model weights.",
+  "decision":"On both GPUs, require more C16 in-budget jobs and warm SLO goodput, no newly invalid seeds, and lower target final submit-to-first-content p95. Reader first p95, reader gap p95 and all-job last p95 must stay within 5%. Also require actual GPU iterations with more than eight participants to attribute an effect to opening slots. Report long workflow failures and results on 4/8 arrivals."
+}

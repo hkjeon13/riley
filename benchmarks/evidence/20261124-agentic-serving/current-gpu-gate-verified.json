@@ -1,0 +1,86 @@
+{
+  "riley_binary_sha256": "40a58069b66b2f76bfe20a0f3decc0bd1b4f7f2e2a3ae80d6fc519dc40690c7e",
+  "source_sha256": "10cc772b11a43c6e291774ee8afff41e34154235859cac77e92197fa8694fd6c",
+  "sm80_images": 15,
+  "version": "riley 0.1.0 (server=true, cuda=true, cuda_abi=1)",
+  "vllm_parsed": {
+    "version": "0.27.1+cu129",
+    "dtype": "bfloat16",
+    "model_length": 8192,
+    "active_sequences": 8,
+    "block_size": 16,
+    "kv_bytes": 3758096384,
+    "reservation": 0.75,
+    "prior_reservation": 0.92,
+    "historical_arguments_match_except_port_and_reservation": true
+  },
+  "admissions": [
+    {
+      "gpu": 6,
+      "phase": "idle",
+      "holder": "running",
+      "other": [
+        {
+          "pid": 2088429,
+          "memory_mib": 0.0,
+          "admitted": false
+        }
+      ],
+      "admissible": false
+    },
+    {
+      "gpu": 7,
+      "phase": "idle",
+      "holder": "running",
+      "other": [
+        {
+          "pid": 2088430,
+          "memory_mib": 0.0,
+          "admitted": false
+        }
+      ],
+      "admissible": false
+    }
+  ],
+  "attempts": {
+    "6": {
+      "first_arm": "vllm",
+      "controller_exit": 1,
+      "reason": "AssertionError: ('unadmitted process', {'pid': 2088429, 'memory_mib': 0.0})",
+      "model_launched": false
+    },
+    "7": {
+      "first_arm": "application",
+      "controller_exit": 1,
+      "reason": "AssertionError: ('unadmitted process', {'pid': 2088430, 'memory_mib': 0.0})",
+      "model_launched": false
+    }
+  },
+  "prior_windows": {
+    "bounded-http-lease-window.jsonl": {
+      "samples": {
+        "6": 24,
+        "7": 24
+      },
+      "from_unix": 1795557784.3699138,
+      "last_unix": 1795558144.333454
+    },
+    "answer-prefix-raw.tar.gz": {
+      "samples": {
+        "6": 24,
+        "7": 24
+      },
+      "from_unix": 1795558719.9052205,
+      "last_unix": 1795559079.8674693
+    },
+    "chat-stream-raw.tar.gz": {
+      "samples": {
+        "6": 24,
+        "7": 24
+      },
+      "from_unix": 1795559360.7338793,
+      "last_unix": 1795559720.698536
+    }
+  },
+  "completed_current_gpu_comparisons": 0
+}

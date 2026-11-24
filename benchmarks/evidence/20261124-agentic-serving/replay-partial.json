@@ -1,0 +1,52 @@
+{
+  "training_steps": 870,
+  "distinct_cost_cells": 20,
+  "heldout": [
+    {
+      "width": 512,
+      "correct_workflows": 4,
+      "observed_last_first_ms": 555.747705,
+      "observed_last_end_ms": 2727.515781,
+      "scenarios": {
+        "fifo": {
+          "last_first_ms": 548.5899435000001,
+          "last_end_ms": 2684.227837499995,
+          "max_decode_gap_ms": 40.856888000000026
+        },
+        "rotate": {
+          "last_first_ms": 530.6741335,
+          "last_end_ms": 2703.1471159999965,
+          "max_decode_gap_ms": 40.856888000000026
+        },
+        "deadline": {
+          "last_first_ms": 584.1978485,
+          "last_end_ms": 2715.040033499995,
+          "max_decode_gap_ms": 21.94135300000005
+        }
+      }
+    },
+    {
+      "width": 256,
+      "correct_workflows": 4,
+      "observed_last_first_ms": 588.781929,
+      "observed_last_end_ms": 2710.636423,
+      "scenarios": {
+        "fifo": {
+          "last_first_ms": 657.6404825000001,
+          "last_end_ms": 2668.8875060000014,
+          "max_decode_gap_ms": 30.144195999999965
+        },
+        "rotate": {
+          "last_first_ms": 636.7868475000002,
+          "last_end_ms": 2771.553052499999,
+          "max_decode_gap_ms": 30.144195999999965
+        },
+        "deadline": {
+          "last_first_ms": 625.410923,
+          "last_end_ms": 2649.1344465000006,
+          "max_decode_gap_ms": 21.94135300000005
+        }
+      }
+    }
+  ]
+}

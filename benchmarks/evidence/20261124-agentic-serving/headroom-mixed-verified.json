@@ -1,0 +1,147 @@
+{
+  "waves": [
+    {
+      "policy": "capacity",
+      "block": 0,
+      "wave": 0,
+      "submitted": 8,
+      "correct": 7,
+      "slo_completed": 7,
+      "shared_window_s": 4.514259658753872,
+      "slo_per_warm_gpu_hour": 2791.1553504829044,
+      "first_p95_ms": 2037.069055,
+      "last_p95_ms": 4476.447633,
+      "gap_p95_ms": 21.249334,
+      "arrival_origin_skew_ms": 0.033855438232421875,
+      "http_calls": 24,
+      "http_200": 24,
+      "http_429": 0,
+      "by_replica": [
+        12,
+        12
+      ],
+      "failures": [
+        {
+          "seed": 783,
+          "error": "final answer failed values, citations, length or finish: [80, 31, 49]",
+          "missing_source_ids": [
+            "report-A",
+            "report-B"
+          ]
+        }
+      ]
+    },
+    {
+      "policy": "observed-capacity",
+      "block": 0,
+      "wave": 1,
+      "submitted": 8,
+      "correct": 8,
+      "slo_completed": 8,
+      "shared_window_s": 4.5358507707715034,
+      "slo_per_warm_gpu_hour": 3174.707618864344,
+      "first_p95_ms": 2240.953338,
+      "last_p95_ms": 4498.050761,
+      "gap_p95_ms": 21.478183,
+      "arrival_origin_skew_ms": 0.0009611248970031738,
+      "http_calls": 24,
+      "http_200": 24,
+      "http_429": 0,
+      "by_replica": [
+        12,
+        12
+      ],
+      "failures": []
+    },
+    {
+      "policy": "observed-capacity",
+      "block": 1,
+      "wave": 0,
+      "submitted": 8,
+      "correct": 7,
+      "slo_completed": 7,
+      "shared_window_s": 4.592686705291271,
+      "slo_per_warm_gpu_hour": 2743.4921666839236,
+      "first_p95_ms": 2183.009377,
+      "last_p95_ms": 4554.236634,
+      "gap_p95_ms": 20.977763,
+      "arrival_origin_skew_ms": 0.6178319454193115,
+      "http_calls": 24,
+      "http_200": 24,
+      "http_429": 0,
+      "by_replica": [
+        12,
+        12
+      ],
+      "failures": [
+        {
+          "seed": 783,
+          "error": "final answer failed values, citations, length or finish: [80, 31, 49]",
+          "missing_source_ids": [
+            "report-A",
+            "report-B"
+          ]
+        }
+      ]
+    },
+    {
+      "policy": "capacity",
+      "block": 1,
+      "wave": 1,
+      "submitted": 8,
+      "correct": 8,
+      "slo_completed": 8,
+      "shared_window_s": 4.441683605313301,
+      "slo_per_warm_gpu_hour": 3242.0139027404393,
+      "first_p95_ms": 2153.221699,
+      "last_p95_ms": 4403.760684,
+      "gap_p95_ms": 21.506423,
+      "arrival_origin_skew_ms": 0.024959444999694824,
+      "http_calls": 24,
+      "http_200": 24,
+      "http_429": 0,
+      "by_replica": [
+        12,
+        12
+      ],
+      "failures": []
+    }
+  ],
+  "paired_gates": [
+    {
+      "wave": 0,
+      "candidate_over_control": {
+        "first_p95_ms": 1.071642304732767,
+        "last_p95_ms": 1.0173773955103476,
+        "gap_p95_ms": 0.9872197876884047,
+        "slo_per_warm_gpu_hour": 0.9829234930292452
+      },
+      "passed": false
+    },
+    {
+      "wave": 1,
+      "candidate_over_control": {
+        "first_p95_ms": 1.040744359505918,
+        "last_p95_ms": 1.0214112627288265,
+        "gap_p95_ms": 0.9986869039077303,
+        "slo_per_warm_gpu_hour": 0.9792393598870128
+      },
+      "passed": false
+    }
+  ],
+  "allocated": [
+    {
+      "block": 0,
+      "allocated_gpu_seconds": 242.47572825849056,
+      "slo_completed_per_allocated_gpu_hour": 222.70270260796352
+    },
+    {
+      "block": 1,
+      "allocated_gpu_seconds": 231.94859423488379,
+      "slo_completed_per_allocated_gpu_hour": 232.8102059774359
+    }
+  ],
+  "matched_sessions": 16,
+  "same_destinations_all_turns": 10,
+  "all_gates_passed": false
+}

@@ -1,0 +1,8 @@
+{
+  "purpose":"Compare the prior reusable client holding a shared speculative reservation until its original workflow ends to the corrected client releasing at actual preview completion. Exercise the uninstrumented Coder-7B server with concurrent calls to measure(), one policy shared per replica/trust domain. No simultaneous speculative GPU requests allowed. This is a resource-lifetime fix; speed is measured separately.",
+  "order":{"6":["legacy","updated"],"7":["updated","legacy"]},
+  "groups":[[6100,6200],[6300,6400]],
+  "sizes":[4,8],
+  "arrival_ms":300,
+  "protocol":"For each group run independent waves of 4 and 8 dependent chains, 200 history entries, two 500ms tool waits, a 500ms estimate and natural final answers. Same request fixture and schedule for a matched pair on different GPUs. Record preview span from sent to done and foreground workflow end. Require no intersecting preview spans for either version. Demonstrate on both GPUs that another preview can start after a previous one completed and before the prior foreground workflow ended. Record all answers, failures, counts, full completion p95 and SLO goodput, with 5s/8s/80ms thresholds as in the pressure run. Do not infer throughput improvement from increased preparation count."
+}

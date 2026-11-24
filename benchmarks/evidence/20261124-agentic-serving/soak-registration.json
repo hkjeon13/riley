@@ -1,0 +1,7 @@
+{
+ "scope":"single trusted synthetic agent workload on A100 7 with the baseline 256-row configuration",
+ "seconds":1800,"base_workflows_per_s":0.5,"peak_workflows_per_s":2,"peak_duration_s":20,"period_s":180,
+ "cases":"two tool calls and natural final answer, 0/50/200 history entries, short and long tool payloads, cancellations on fourth visible chunk, slow clients reading every 30ms",
+ "record":"all submitted and correct work, engineering SLO, actual dispatch lag, active KV versus retained cache, counters and allocation samples, early/late p95. Full memory release checked in shutdown receipt.",
+ "classification":"synthetic soak. Failures of generated answers remain in the denominator. No claim of customer SLO, multi-node traffic or tenant isolation from this run."
+}

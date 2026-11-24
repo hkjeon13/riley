@@ -1170,12 +1170,17 @@ impl SseStreamEncoder {
     /// serialization fails, or when raw token delivery requires
     /// [`Self::encode_event`] with committed metadata.
     pub fn encode_delta(&mut self, text: &str) -> Result<String, SseEncodingError> {
+        let metadata = self.text_delta_metadata()?;
+        serialize_sse_json(&CompletionChunk::delta(metadata, text.to_owned()))
+            .map_err(SseEncodingError::Json)
+    }
+
+    pub(crate) fn text_delta_metadata(&self) -> Result<&RequestMetadata, SseEncodingError> {
         self.require_phase("token delta", SseStreamPhase::Open)?;
         if self.tokens.enabled {
             return Err(SseEncodingError::TokenObservation(TokenObservationError));
         }
-        serialize_sse_json(&CompletionChunk::delta(&self.metadata, text.to_owned()))
-            .map_err(SseEncodingError::Json)
+        Ok(&self.metadata)
     }
 
     /// Encodes the successful finish chunk while the stream is open.

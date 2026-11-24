@@ -1,0 +1,146 @@
+diff --git a/crates/riley-server/src/chat.rs b/crates/riley-server/src/chat.rs
+index e204e0895..6833b1dd8 100644
+--- a/crates/riley-server/src/chat.rs
++++ b/crates/riley-server/src/chat.rs
+@@ -119,10 +119,24 @@ impl ChatTemplate {
+         template_kwargs: &Map<String, Value>,
+         tools: Option<&[Value]>,
+     ) -> Result<String, String> {
+-        let mut context = template_kwargs.clone();
+-        context.insert("messages".to_owned(), Value::Array(messages.to_vec()));
++        self.render_owned(
++            messages.to_vec(),
++            add_generation_prompt,
++            template_kwargs.clone(),
++            tools.map(<[Value]>::to_vec),
++        )
++    }
++
++    fn render_owned(
++        &self,
++        messages: Vec<Value>,
++        add_generation_prompt: bool,
++        mut context: Map<String, Value>,
++        tools: Option<Vec<Value>>,
++    ) -> Result<String, String> {
++        context.insert("messages".to_owned(), Value::Array(messages));
+         if let Some(tools) = tools {
+-            context.insert("tools".to_owned(), Value::Array(tools.to_vec()));
++            context.insert("tools".to_owned(), Value::Array(tools));
+         }
+         context.insert(
+             "add_generation_prompt".to_owned(),
+@@ -371,7 +385,7 @@ fn response_format_grammar(format: &Value) -> Result<Option<Arc<Grammar>>, ChatR
+     }
+ }
+ 
+-fn tool_function(tool: &Value) -> Result<(&str, Value), ChatRequestError> {
++fn tool_function(tool: &Value) -> Result<(&str, &Value), ChatRequestError> {
+     let function = tool
+         .get("function")
+         .filter(|_| tool.get("type").and_then(Value::as_str) == Some("function"))
+@@ -381,11 +395,7 @@ fn tool_function(tool: &Value) -> Result<(&str, Value), ChatRequestError> {
+         .and_then(Value::as_str)
+         .filter(|name| !name.is_empty())
+         .ok_or_else(|| invalid_value("tools", "each function needs a name"))?;
+-    let parameters = function
+-        .get("parameters")
+-        .cloned()
+-        .unwrap_or_else(|| json!({"type": "object", "properties": {}}));
+-    Ok((name, parameters))
++    Ok((name, function))
+ }
+ 
+ fn literal(text: &str) -> Vec<GrammarElement> {
+@@ -408,16 +418,16 @@ fn forced_tool_grammar(
+     let mut compiler = SchemaCompiler::new(Value::Null);
+     let call = compiler.rule();
+     let mut matched = false;
++    let default_parameters = json!({"type": "object", "properties": {}});
+     for tool in tools {
+-        let (name, parameters) = tool_function(tool)?;
++        let (name, function) = tool_function(tool)?;
+         if only.is_some_and(|only| only != name) {
+             continue;
+         }
+         matched = true;
++        let parameters = function.get("parameters").unwrap_or(&default_parameters);
+         compiler.set_root(parameters.clone());
+-        let arguments = compiler
+-            .schema(&parameters)
+-            .map_err(schema_error("tools"))?;
++        let arguments = compiler.schema(parameters).map_err(schema_error("tools"))?;
+         let head = json!(name).to_string();
+         let mut elements = literal(&format!("{open}{{\"name\": {head}, \"{arguments_key}\": "));
+         elements.push(GrammarElement::Rule(arguments));
+@@ -521,14 +531,14 @@ pub fn normalize_chat_request(
+             "top_logprobs requires logprobs",
+         ));
+     }
+-    let tools = offered_tools(&request).map(<[Value]>::to_vec);
+-    if tools.is_some() && template.tool_style.is_none() {
++    let has_tools = offered_tools(&request).is_some();
++    if has_tools && template.tool_style.is_none() {
+         return Err(invalid(
+             "tools",
+             "this model's chat template does not support tools",
+         ));
+     }
+-    let tool_grammar = match (template.tool_style, tools.is_some()) {
++    let tool_grammar = match (template.tool_style, has_tools) {
+         (Some(style), true) => tool_grammar(&request, style)?,
+         _ => None,
+     };
+@@ -557,11 +567,11 @@ pub fn normalize_chat_request(
+     }
+     let messages = template_messages(request.messages)?;
+     let prompt = template
+-        .render(
+-            &messages,
++        .render_owned(
++            messages,
+             request.add_generation_prompt.unwrap_or(true),
+-            &request.chat_template_kwargs.unwrap_or_default(),
+-            tools.as_deref(),
++            request.chat_template_kwargs.unwrap_or_default(),
++            if has_tools { request.tools } else { None },
+         )
+         .map_err(ChatRequestError::Template)?;
+ 
+@@ -646,24 +656,24 @@ fn template_messages(input: Vec<ChatMessageInput>) -> Result<Vec<Value>, ChatReq
+                 return Err(invalid("content must be a string or text parts"));
+             }
+         };
+-        let mut rendered = json!({"role": message.role, "content": content});
+-        if let Some(name) = message.unsupported_fields.get("name") {
+-            rendered["name"] = name.clone();
+-        }
+-        if let Some(id) = message.unsupported_fields.get("tool_call_id") {
+-            rendered["tool_call_id"] = id.clone();
+-        }
+-        if let Some(calls) = message.unsupported_fields.get("tool_calls") {
+-            rendered["tool_calls"] = template_tool_calls(calls);
++        let mut rendered = Map::new();
++        rendered.insert("role".to_owned(), Value::String(message.role));
++        rendered.insert("content".to_owned(), Value::String(content));
++        for (key, value) in message.unsupported_fields {
++            let value = if key == "tool_calls" {
++                template_tool_calls(value)
++            } else {
++                value
++            };
++            rendered.insert(key, value);
+         }
+-        messages.push(rendered);
++        messages.push(Value::Object(rendered));
+     }
+     Ok(messages)
+ }
+ 
+ /// Clients send `arguments` as a JSON string; templates expect the object.
+-fn template_tool_calls(calls: &Value) -> Value {
+-    let mut calls = calls.clone();
++fn template_tool_calls(mut calls: Value) -> Value {
+     for call in calls.as_array_mut().into_iter().flatten() {
+         let arguments = call
+             .get("function")

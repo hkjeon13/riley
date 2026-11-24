@@ -1,0 +1,154 @@
+{
+  "pairs": [
+    {
+      "riley": "riley-a",
+      "vllm": "vllm-b",
+      "cells": [
+        {
+          "history": 0,
+          "stream": "reader",
+          "prompt_tokens": 306,
+          "identity_output_ids_equal": true,
+          "tpot_p50_ms_riley_vllm": [
+            11.972894095238095,
+            12.130357396825397
+          ],
+          "tpot_ratio": 0.9870190715379489,
+          "content_gap_p95_ms_riley_vllm": [
+            12.005813,
+            12.339918
+          ],
+          "gap_ratio": 0.9729248606028014,
+          "largest_arrival_drift_ms": 0.19853562116622925
+        },
+        {
+          "history": 0,
+          "stream": "long-tool-result",
+          "prompt_tokens": 2546,
+          "identity_output_ids_equal": true,
+          "tpot_p50_ms_riley_vllm": [
+            11.933901317460318,
+            12.134127142857142
+          ],
+          "tpot_ratio": 0.9834989510955727,
+          "content_gap_p95_ms_riley_vllm": [
+            12.002639,
+            12.372174
+          ],
+          "gap_ratio": 0.9701317650398387,
+          "largest_arrival_drift_ms": 0.35270601511000477
+        },
+        {
+          "history": 200,
+          "stream": "reader",
+          "prompt_tokens": 3072,
+          "identity_output_ids_equal": false,
+          "tpot_p50_ms_riley_vllm": [
+            12.258080587301588,
+            12.38313619047619
+          ],
+          "tpot_ratio": 0.989901136412375,
+          "content_gap_p95_ms_riley_vllm": [
+            12.410527,
+            12.594503
+          ],
+          "gap_ratio": 0.9853923572847615,
+          "largest_arrival_drift_ms": 0.13760477304458618
+        },
+        {
+          "history": 200,
+          "stream": "long-tool-result",
+          "prompt_tokens": 5312,
+          "identity_output_ids_equal": false,
+          "tpot_p50_ms_riley_vllm": [
+            12.26555907936508,
+            12.345229714285713
+          ],
+          "tpot_ratio": 0.9935464437062326,
+          "content_gap_p95_ms_riley_vllm": [
+            12.416612,
+            12.585755
+          ],
+          "gap_ratio": 0.9865607585718934,
+          "largest_arrival_drift_ms": 0.34523308277129017
+        }
+      ]
+    },
+    {
+      "riley": "riley-d",
+      "vllm": "vllm-c",
+      "cells": [
+        {
+          "history": 0,
+          "stream": "reader",
+          "prompt_tokens": 306,
+          "identity_output_ids_equal": true,
+          "tpot_p50_ms_riley_vllm": [
+            11.901090222222223,
+            12.1319953015873
+          ],
+          "tpot_ratio": 0.9809672627111167,
+          "content_gap_p95_ms_riley_vllm": [
+            12.047824,
+            12.370104
+          ],
+          "gap_ratio": 0.9739468641492425,
+          "largest_arrival_drift_ms": 0.14515221118927002
+        },
+        {
+          "history": 0,
+          "stream": "long-tool-result",
+          "prompt_tokens": 2546,
+          "identity_output_ids_equal": true,
+          "tpot_p50_ms_riley_vllm": [
+            11.945047746031745,
+            12.136471174603175
+          ],
+          "tpot_ratio": 0.9842274227971635,
+          "content_gap_p95_ms_riley_vllm": [
+            12.040597,
+            12.449254
+          ],
+          "gap_ratio": 0.9671741776655854,
+          "largest_arrival_drift_ms": 0.37423819303511463
+        },
+        {
+          "history": 200,
+          "stream": "reader",
+          "prompt_tokens": 3072,
+          "identity_output_ids_equal": false,
+          "tpot_p50_ms_riley_vllm": [
+            12.25671034920635,
+            12.3897483015873
+          ],
+          "tpot_ratio": 0.9892622554435665,
+          "content_gap_p95_ms_riley_vllm": [
+            12.442579,
+            12.599574
+          ],
+          "gap_ratio": 0.9875396580868527,
+          "largest_arrival_drift_ms": 0.13564527034759521
+        },
+        {
+          "history": 200,
+          "stream": "long-tool-result",
+          "prompt_tokens": 5312,
+          "identity_output_ids_equal": false,
+          "tpot_p50_ms_riley_vllm": [
+            12.264078333333334,
+            12.3462156984127
+          ],
+          "tpot_ratio": 0.993347162637866,
+          "content_gap_p95_ms_riley_vllm": [
+            12.432809,
+            12.592682
+          ],
+          "gap_ratio": 0.9873042930806957,
+          "largest_arrival_drift_ms": 0.349651277065266
+        }
+      ]
+    }
+  ],
+  "independent_launch_pairs": 2,
+  "scope": "descriptive paired screen, 3 waves per launch; independent-launch population upper bound unestablished"
+}

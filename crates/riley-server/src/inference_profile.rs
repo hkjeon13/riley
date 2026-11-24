@@ -42,6 +42,23 @@ const NATIVE_BF16: &[(&str, &str)] = &[
     ("--prompt-attention", "dense-v1"),
 ];
 
+const PREFIX_32K: &[(&str, &str)] = &[
+    ("--max-sequence-tokens", "32768"),
+    ("--max-active-sequences", "8"),
+    ("--max-output-tokens", "2048"),
+    ("--kv-blocks", "4096"),
+    ("--prefix-cache-blocks", "2048"),
+];
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Profile {
+    Page,
+    FixedTile,
+    Prefix32k,
+}
+
+const PROFILE_ERROR: &str = "--inference-profile requires native-bf16-v1, native-bf16-varlen-v1 or native-bf16-prefix-32k-v1";
+
 pub(super) fn expand(
     arguments: impl IntoIterator<Item = OsString>,
 ) -> Result<Vec<OsString>, String> {
@@ -61,18 +78,12 @@ pub(super) fn expand(
             if selected.is_some() {
                 return Err("--inference-profile may occur only once".into());
             }
-            let value = source
-                .next()
-                .ok_or("--inference-profile requires native-bf16-v1 or native-bf16-varlen-v1")?;
+            let value = source.next().ok_or(PROFILE_ERROR)?;
             selected = Some(match value.to_str() {
-                Some("native-bf16-v1") => false,
-                Some("native-bf16-varlen-v1") => true,
-                _ => {
-                    return Err(
-                        "--inference-profile requires native-bf16-v1 or native-bf16-varlen-v1"
-                            .into(),
-                    );
-                }
+                Some("native-bf16-v1") => Profile::Page,
+                Some("native-bf16-varlen-v1") => Profile::FixedTile,
+                Some("native-bf16-prefix-32k-v1") => Profile::Prefix32k,
+                _ => return Err(PROFILE_ERROR.into()),
             });
             continue;
         }
@@ -90,18 +101,23 @@ pub(super) fn expand(
             }
         }
     }
-    if let Some(varlen) =
+    if let Some(profile) =
         selected.filter(|_| !explicit.contains("--help") && !explicit.contains("-h"))
     {
-        for &(flag, value) in NATIVE_BF16 {
-            if !explicit.contains(flag) {
+        let extra = if profile == Profile::Prefix32k {
+            PREFIX_32K
+        } else {
+            &[]
+        };
+        for &(flag, value) in extra.iter().chain(NATIVE_BF16) {
+            if explicit.insert(flag.to_owned()) {
                 result.extend([OsString::from(flag), OsString::from(value)]);
             }
         }
         if !explicit.contains("--native-attention-mode") {
             result.extend([
                 OsString::from("--native-attention-mode"),
-                OsString::from(if varlen {
+                OsString::from(if profile == Profile::FixedTile {
                     "fixed-tile-unsplit-v1"
                 } else {
                     "page-v1"

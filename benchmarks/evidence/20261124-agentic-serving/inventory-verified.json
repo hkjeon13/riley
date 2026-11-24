@@ -1,0 +1,228 @@
+{
+  "reported_topology": [
+    {
+      "node": "aws-a100",
+      "gpu_count": 1
+    },
+    {
+      "node": "aws-a100",
+      "gpu_count": 1
+    }
+  ],
+  "inventory_waves": [
+    {
+      "submitted": 1,
+      "correct": 1,
+      "slo_completed": 1,
+      "statuses": {
+        "200": 3
+      },
+      "nodes_used": [
+        0,
+        1
+      ]
+    },
+    {
+      "submitted": 2,
+      "correct": 2,
+      "slo_completed": 2,
+      "statuses": {
+        "200": 6
+      },
+      "nodes_used": [
+        0,
+        1
+      ]
+    },
+    {
+      "submitted": 4,
+      "correct": 3,
+      "slo_completed": 3,
+      "statuses": {
+        "200": 12
+      },
+      "nodes_used": [
+        0,
+        1
+      ]
+    }
+  ],
+  "capacity_trials": [
+    {
+      "trial": 6500,
+      "policy": "cost",
+      "occupancy": 4,
+      "actual_overlap": 4,
+      "load_at_decision": [
+        4,
+        0
+      ],
+      "eligible_estimate": [
+        5729,
+        0
+      ],
+      "scores": [
+        670.515,
+        946.125
+      ],
+      "selected_replica": 0,
+      "cache_tokens": 5744,
+      "prompt_tokens": 5745,
+      "first_ms": 23.814978
+    },
+    {
+      "trial": 6501,
+      "policy": "capacity",
+      "occupancy": 4,
+      "actual_overlap": 4,
+      "load_at_decision": [
+        4,
+        0
+      ],
+      "eligible_estimate": [
+        5729,
+        0
+      ],
+      "scores": [
+        670.515,
+        946.125
+      ],
+      "selected_replica": 0,
+      "cache_tokens": 5744,
+      "prompt_tokens": 5745,
+      "first_ms": 23.71874
+    },
+    {
+      "trial": 6502,
+      "policy": "capacity",
+      "occupancy": 8,
+      "actual_overlap": 8,
+      "load_at_decision": [
+        8,
+        0
+      ],
+      "eligible_estimate": [
+        5729,
+        0
+      ],
+      "scores": [
+        910.515,
+        946.125
+      ],
+      "selected_replica": 1,
+      "cache_tokens": 16,
+      "prompt_tokens": 5745,
+      "first_ms": 464.01551
+    },
+    {
+      "trial": 6503,
+      "policy": "cost",
+      "occupancy": 8,
+      "actual_overlap": 8,
+      "load_at_decision": [
+        8,
+        0
+      ],
+      "eligible_estimate": [
+        5729,
+        0
+      ],
+      "scores": [
+        910.515,
+        946.125
+      ],
+      "selected_replica": 0,
+      "cache_tokens": 5744,
+      "prompt_tokens": 5745,
+      "first_ms": 2286.106637
+    },
+    {
+      "trial": 6504,
+      "policy": "capacity",
+      "occupancy": 7,
+      "actual_overlap": 7,
+      "load_at_decision": [
+        7,
+        0
+      ],
+      "eligible_estimate": [
+        5729,
+        0
+      ],
+      "scores": [
+        850.515,
+        946.125
+      ],
+      "selected_replica": 0,
+      "cache_tokens": 5744,
+      "prompt_tokens": 5745,
+      "first_ms": 23.550215
+    },
+    {
+      "trial": 6505,
+      "policy": "cost",
+      "occupancy": 7,
+      "actual_overlap": 7,
+      "load_at_decision": [
+        7,
+        0
+      ],
+      "eligible_estimate": [
+        5729,
+        0
+      ],
+      "scores": [
+        850.515,
+        946.125
+      ],
+      "selected_replica": 0,
+      "cache_tokens": 5744,
+      "prompt_tokens": 5745,
+      "first_ms": 23.878837
+    },
+    {
+      "trial": 6506,
+      "policy": "cost",
+      "occupancy": 8,
+      "actual_overlap": 8,
+      "load_at_decision": [
+        8,
+        0
+      ],
+      "eligible_estimate": [
+        5729,
+        0
+      ],
+      "scores": [
+        910.515,
+        946.125
+      ],
+      "selected_replica": 0,
+      "cache_tokens": 5744,
+      "prompt_tokens": 5745,
+      "first_ms": 2285.131841
+    },
+    {
+      "trial": 6507,
+      "policy": "capacity",
+      "occupancy": 8,
+      "actual_overlap": 8,
+      "load_at_decision": [
+        8,
+        0
+      ],
+      "eligible_estimate": [
+        5729,
+        0
+      ],
+      "scores": [
+        910.515,
+        946.125
+      ],
+      "selected_replica": 1,
+      "cache_tokens": 16,
+      "prompt_tokens": 5745,
+      "first_ms": 458.64989
+    }
+  ]
+}

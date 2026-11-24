@@ -1,0 +1,106 @@
+{
+  "waves": [
+    {
+      "gpu": 6,
+      "policy": "control",
+      "output_limit": 16,
+      "submitted": 160,
+      "counts": {
+        "completed": 129,
+        "normal_http_429": 31
+      }
+    },
+    {
+      "gpu": 7,
+      "policy": "candidate",
+      "output_limit": 16,
+      "submitted": 160,
+      "counts": {
+        "completed": 129,
+        "normal_http_429": 31
+      }
+    },
+    {
+      "gpu": 6,
+      "policy": "candidate",
+      "output_limit": 16,
+      "submitted": 160,
+      "counts": {
+        "completed": 129,
+        "early_http_429": 31
+      }
+    },
+    {
+      "gpu": 7,
+      "policy": "control",
+      "output_limit": 16,
+      "submitted": 160,
+      "counts": {
+        "completed": 129,
+        "transport": 31,
+        "transport_BrokenPipeError": 31
+      }
+    },
+    {
+      "gpu": 6,
+      "policy": "control",
+      "output_limit": 64,
+      "submitted": 160,
+      "counts": {
+        "completed": 129,
+        "transport": 31,
+        "transport_BrokenPipeError": 31
+      }
+    },
+    {
+      "gpu": 7,
+      "policy": "candidate",
+      "output_limit": 64,
+      "submitted": 160,
+      "counts": {
+        "completed": 129,
+        "early_http_429": 31
+      }
+    },
+    {
+      "gpu": 6,
+      "policy": "candidate",
+      "output_limit": 64,
+      "submitted": 160,
+      "counts": {
+        "completed": 129,
+        "early_http_429": 31
+      }
+    },
+    {
+      "gpu": 7,
+      "policy": "control",
+      "output_limit": 64,
+      "submitted": 160,
+      "counts": {
+        "completed": 129,
+        "transport": 31,
+        "transport_BrokenPipeError": 31
+      }
+    }
+  ],
+  "totals": {
+    "control": {
+      "completed": 516,
+      "normal_http_429": 31,
+      "transport": 93,
+      "transport_BrokenPipeError": 93
+    },
+    "candidate": {
+      "completed": 516,
+      "normal_http_429": 31,
+      "early_http_429": 93
+    }
+  },
+  "requests_per_arm": 640,
+  "client_hashes": {
+    "original_agent_workflow.py": "3316c0fdd9bae253cdf56fb0584e0d11406defe932390cf50b9b70c67f57ad1f",
+    "agent_workflow.py": "2db9b4e6b4c26559e13de9e975f13a6574c57cf8a95b63512a6844b38908b459"
+  },
+  "early_http_recovered": 93
+}

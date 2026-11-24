@@ -1,0 +1,59 @@
+{
+  "engine": {
+    "torch": "2.13.0+cu129",
+    "transformers": "5.22.1",
+    "threads": 6,
+    "dtype": "torch.float32",
+    "device": "cpu"
+  },
+  "jobs": [
+    {
+      "seed": 17101,
+      "history": 200,
+      "tool_invocations": 2,
+      "model_requests": 1,
+      "valid": true,
+      "usage": {
+        "prompt_tokens": 3149,
+        "completion_tokens": 151,
+        "total_tokens": 3300
+      },
+      "finish": "stop",
+      "explanation_words": 79,
+      "visible_chunks": 90,
+      "immediately_attributed": {
+        "report-A": false,
+        "report-B": false
+      },
+      "strict_opening": false,
+      "answer": "Before: 68 ms. (report-A)  \nAfter: 26 ms. (report-B)  \nReduction: 42 ms.\n\nThe 95th percentile (p95) measures the latency at which 95% of the service responses occur. In report-A, the p95 latency was 68 ms., indicating that 95% of the responses took 68 milliseconds or less. In contrast, report-B showed a significantly reduced p95 latency of 26 ms., suggesting that 95% of the responses were faster than 26 milliseconds. This substantial reduction indicates an improvement in the overall performance of the service, as fewer responses now exceed the previously observed threshold.",
+      "all_three_values": true,
+      "both_sources": true,
+      "at_least_64_tokens": true
+    },
+    {
+      "seed": 17104,
+      "history": 0,
+      "tool_invocations": 2,
+      "model_requests": 1,
+      "valid": true,
+      "usage": {
+        "prompt_tokens": 385,
+        "completion_tokens": 124,
+        "total_tokens": 509
+      },
+      "finish": "stop",
+      "explanation_words": 62,
+      "visible_chunks": 76,
+      "immediately_attributed": {
+        "report-A": false,
+        "report-B": false
+      },
+      "strict_opening": false,
+      "answer": "Before: 84 ms. (report-A)  \nAfter: 25 ms. (report-B)  \nReduction: 59 ms. (report-A to report-B)\n\nThe 95th percentile (p95) is a statistical measure indicating that 95% of the observed data points fall below this value. In this context, it represents the maximum service response latency experienced by 95% of users during the observation period. The significant reduction from 84 ms to 25 ms suggests an improvement in overall service performance, as fewer users will experience longer delays.",
+      "all_three_values": true,
+      "both_sources": true,
+      "at_least_64_tokens": true
+    }
+  ]
+}

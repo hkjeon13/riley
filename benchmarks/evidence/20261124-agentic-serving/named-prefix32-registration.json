@@ -1,0 +1,13 @@
+{
+  "scope": "Package the verified 2048-block Qwen 7B 32K continuation configuration as a user-selectable server inference profile. Launch the stock container entrypoint with a release binary built from base source plus production CLI changes. Pass only model path, model ID and profile name.",
+  "cases": [
+    16,
+    20
+  ],
+  "criteria": [
+    "full parsed options equal the measured explicit configuration; explicit overrides win",
+    "two public derived shapes submit and complete with expected native prompt and output length",
+    "actual cache credit equals prior 2048-block run and complete text hash matches",
+    "ready and clean shutdown, all resources released; record actual entrypoint args and binary."
+  ]
+}

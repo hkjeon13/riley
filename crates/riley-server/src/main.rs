@@ -6,6 +6,7 @@ use native_attention::NativeAttentionMode;
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::{OsStr, OsString};
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process::ExitCode;
 #[cfg(all(any(feature = "cuda", test), unix))]
@@ -77,8 +78,8 @@ usage:
   riley serve --model PATH [options]
 
 serve options:
-  --inference-profile MODE       native-bf16-v1 | native-bf16-varlen-v1: opt-in BF16 defaults;
-                                 explicit options override
+  --inference-profile MODE       native-bf16-v1 | native-bf16-varlen-v1 | native-bf16-prefix-32k-v1
+                                 opt-in BF16 defaults; explicit options override
   --native-attention-mode MODE   page-v1 | fixed-tile-unsplit-v1 (D64/D128 tensor-core native route)
   --attention-kv-chunk-tokens N  fixed-tile context split, multiple of 16 (default: 512)
   --model-id ID                  public model ID (default: checkpoint source model)
@@ -87,7 +88,9 @@ serve options:
   --tensor-parallel-devices LIST tensor parallelism over 2..8 NVLink peer GPUs, CUDA ordinals in
                                  rank order (e.g. 4,5); excludes --device
   --max-active-sequences N       active scheduler capacity (default: 8)
+  --http-workers N               HTTP worker threads (native default: max(8, active sequences))
   --max-waiting-requests N       waiting scheduler capacity (default: 64)
+  --request-timeout-ms MS        generation deadline after submission, 1..3600000 (default: 120000)
   --admission-timeout-ms MS      bounded queue/command wait, 1..3600000 (default: 30000)
   --max-sequence-tokens N        context bound (default: checkpoint maximum)
   --max-output-tokens N          API output bound (default: min(1024, context-1))
@@ -232,6 +235,8 @@ struct ServeOptions {
     max_active_sequences: usize,
     max_waiting_requests: usize,
     admission_timeout_ms: u64,
+    request_timeout_ms: Option<u64>,
+    http_workers: Option<NonZeroUsize>,
     max_sequence_tokens: Option<usize>,
     max_output_tokens: Option<usize>,
     batch_token_budget: usize,
@@ -495,6 +500,8 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut max_active_sequences = None;
     let mut max_waiting_requests = None;
     let mut admission_timeout_ms = None;
+    let mut request_timeout_ms = None;
+    let mut http_workers = None;
     let mut max_sequence_tokens = None;
     let mut max_output_tokens = None;
     let mut batch_token_budget = None;
@@ -610,9 +617,19 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 )?,
                 "--max-active-sequences",
             )?,
+            "--http-workers" => set_once(
+                &mut http_workers,
+                parse_number(next_value(&mut arguments, "--http-workers")?, "--http-workers")?,
+                "--http-workers",
+            )?,
+            "--request-timeout-ms" => set_once(
+                &mut request_timeout_ms,
+                parse_timeout_ms(next_value(&mut arguments, "--request-timeout-ms")?, "--request-timeout-ms")?,
+                "--request-timeout-ms",
+            )?,
             "--admission-timeout-ms" => set_once(
                 &mut admission_timeout_ms,
-                parse_admission_timeout_ms(next_value(&mut arguments, "--admission-timeout-ms")?)?,
+                parse_timeout_ms(next_value(&mut arguments, "--admission-timeout-ms")?, "--admission-timeout-ms")?,
                 "--admission-timeout-ms",
             )?,
             "--max-waiting-requests" => set_once(
@@ -1745,6 +1762,8 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         max_active_sequences,
         max_waiting_requests: max_waiting_requests.unwrap_or(64),
         admission_timeout_ms: admission_timeout_ms.unwrap_or(30_000),
+        request_timeout_ms,
+        http_workers,
         max_sequence_tokens,
         max_output_tokens,
         batch_token_budget,
@@ -2122,10 +2141,10 @@ fn parse_utf8(value: OsString, option: &str) -> Result<String, String> {
         .map_err(|_| format!("{option} requires a UTF-8 value"))
 }
 
-fn parse_admission_timeout_ms(value: OsString) -> Result<u64, String> {
-    let milliseconds: u64 = parse_number(value, "--admission-timeout-ms")?;
+fn parse_timeout_ms(value: OsString, option: &str) -> Result<u64, String> {
+    let milliseconds: u64 = parse_number(value, option)?;
     if !(1..=3_600_000).contains(&milliseconds) {
-        return Err("--admission-timeout-ms must be between 1 and 3600000".to_owned());
+        return Err(format!("{option} must be between 1 and 3600000"));
     }
     Ok(milliseconds)
 }
@@ -2807,6 +2826,8 @@ fn run_serve(
             device_ordinal: options.device_ordinal,
             max_waiting_requests: options.max_waiting_requests,
             admission_timeout_ms: options.admission_timeout_ms,
+            request_timeout_ms: options.request_timeout_ms,
+            http_workers: options.http_workers,
             maximum_live_requests,
             max_output_tokens,
             bind_address,
@@ -3001,14 +3022,19 @@ fn run_serve(
         None => None,
     };
     let server_config = ServerConfig {
+        request_timeout: options.request_timeout_ms.map_or_else(
+            || ServerConfig::default().request_timeout,
+            Duration::from_millis,
+        ),
         api_key,
         bind_address,
         request_limits,
-        // A streaming response holds its worker for the whole generation, so
-        // fewer workers than active sequences would cap real concurrency.
-        worker_threads: options
-            .max_active_sequences
-            .max(ServerConfig::default().worker_threads),
+        worker_threads: options.http_workers.map_or(
+            options
+                .max_active_sequences
+                .max(ServerConfig::default().worker_threads),
+            NonZeroUsize::get,
+        ),
         ..ServerConfig::default()
     };
     let backend: Arc<dyn CompletionBackend> = engine;
@@ -3069,6 +3095,8 @@ struct HfExactServe {
     device_ordinal: u32,
     max_waiting_requests: usize,
     admission_timeout_ms: u64,
+    request_timeout_ms: Option<u64>,
+    http_workers: Option<NonZeroUsize>,
     maximum_live_requests: usize,
     max_output_tokens: usize,
     bind_address: std::net::SocketAddr,
@@ -3211,6 +3239,13 @@ fn run_serve_hf_exact(serve: HfExactServe) -> Result<(), String> {
         .map_err(|error| format!("inference engine startup failed: {error}"))?,
     );
     let server_config = ServerConfig {
+        request_timeout: serve.request_timeout_ms.map_or_else(
+            || ServerConfig::default().request_timeout,
+            Duration::from_millis,
+        ),
+        worker_threads: serve
+            .http_workers
+            .map_or(ServerConfig::default().worker_threads, NonZeroUsize::get),
         bind_address: serve.bind_address,
         request_limits: RequestLimits {
             max_output_tokens: serve.max_output_tokens,
@@ -5956,6 +5991,87 @@ mod tests {
     }
 
     #[test]
+    fn http_workers_are_positive_optional_and_independent_of_gpu_slots() {
+        let Ok(CliCommand::Serve(defaults)) = parse_arguments(args(&["serve", "--model", "/m"]))
+        else {
+            panic!("expected serve options");
+        };
+        assert!(defaults.http_workers.is_none());
+        let Ok(CliCommand::Serve(options)) =
+            parse_arguments(args(&["serve", "--model", "/m", "--http-workers", "16"]))
+        else {
+            panic!("expected explicit HTTP capacity");
+        };
+        assert_eq!(
+            options.http_workers.map(std::num::NonZeroUsize::get),
+            Some(16)
+        );
+        assert_eq!(options.max_active_sequences, 8);
+        for invalid in ["0", "-1", "1.5", "none"] {
+            assert!(
+                parse_arguments(args(&["serve", "--model", "/m", "--http-workers", invalid]))
+                    .is_err()
+            );
+        }
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/m",
+                "--http-workers",
+                "8",
+                "--http-workers",
+                "16"
+            ]))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn request_timeout_is_optional_and_independent_of_admission_timeout() {
+        let Ok(CliCommand::Serve(defaults)) = parse_arguments(args(&["serve", "--model", "/m"]))
+        else {
+            panic!("expected serve options")
+        };
+        assert_eq!(defaults.request_timeout_ms, None);
+        let Ok(CliCommand::Serve(options)) = parse_arguments(args(&[
+            "serve",
+            "--model",
+            "/m",
+            "--request-timeout-ms",
+            "900000",
+        ])) else {
+            panic!("expected explicit request deadline")
+        };
+        assert_eq!(options.request_timeout_ms, Some(900_000));
+        assert_eq!(options.admission_timeout_ms, 30_000);
+        for value in ["0", "3600001", "abc"] {
+            assert!(
+                parse_arguments(args(&[
+                    "serve",
+                    "--model",
+                    "/m",
+                    "--request-timeout-ms",
+                    value
+                ]))
+                .is_err()
+            );
+        }
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/m",
+                "--request-timeout-ms",
+                "100",
+                "--request-timeout-ms",
+                "200"
+            ]))
+            .is_err()
+        );
+    }
+
+    #[test]
     fn admission_timeout_cli_rejects_unbounded_invalid_and_duplicate_budgets() {
         for value in ["0", "-1", "1.5", "3600001", "18446744073709551616", "none"] {
             assert!(
@@ -6040,6 +6156,8 @@ mod tests {
                 max_active_sequences: 8,
                 max_waiting_requests: 64,
                 admission_timeout_ms: 30_000,
+                request_timeout_ms: None,
+                http_workers: None,
                 max_sequence_tokens: None,
                 max_output_tokens: None,
                 batch_token_budget: 512,
@@ -6461,6 +6579,8 @@ mod tests {
                 max_active_sequences: 4,
                 max_waiting_requests: 9,
                 admission_timeout_ms: 30_000,
+                request_timeout_ms: None,
+                http_workers: None,
                 max_sequence_tokens: Some(2048),
                 max_output_tokens: Some(128),
                 batch_token_budget: 64,
@@ -6752,6 +6872,8 @@ mod tests {
                 max_active_sequences: 8,
                 max_waiting_requests: 64,
                 admission_timeout_ms: 30_000,
+                request_timeout_ms: None,
+                http_workers: None,
                 max_sequence_tokens: None,
                 max_output_tokens: None,
                 batch_token_budget: 7,
@@ -7308,6 +7430,8 @@ mod tests {
                 max_active_sequences: 8,
                 max_waiting_requests: 64,
                 admission_timeout_ms: 30_000,
+                request_timeout_ms: None,
+                http_workers: None,
                 max_sequence_tokens: None,
                 max_output_tokens: None,
                 batch_token_budget: 512,
@@ -7773,6 +7897,52 @@ mod native_profile_cli_tests {
         a.extend_from_slice(extra);
         parse_arguments(a.into_iter().map(OsString::from))
     }
+    #[test]
+    fn prefix_32k_profile_reproduces_the_measured_configuration_and_allows_overrides() {
+        let named = [
+            "serve",
+            "--model",
+            "/m",
+            "--inference-profile",
+            "native-bf16-prefix-32k-v1",
+        ];
+        let measured = [
+            "serve",
+            "--model",
+            "/m",
+            "--inference-profile",
+            "native-bf16-varlen-v1",
+            "--native-attention-mode",
+            "page-v1",
+            "--max-sequence-tokens",
+            "32768",
+            "--max-output-tokens",
+            "2048",
+            "--max-active-sequences",
+            "8",
+            "--kv-blocks",
+            "4096",
+            "--prefix-cache-blocks",
+            "2048",
+            "--batch-token-budget",
+            "256",
+            "--prefill-chunk-tokens",
+            "256",
+        ];
+        assert_eq!(
+            parse_arguments(named.map(OsString::from)).unwrap(),
+            parse_arguments(measured.map(OsString::from)).unwrap()
+        );
+        let args = named
+            .into_iter()
+            .chain(["--prefix-cache-blocks", "1536"])
+            .map(OsString::from);
+        let CliCommand::Serve(options) = parse_arguments(args).unwrap() else {
+            panic!("expected serve")
+        };
+        assert_eq!(options.prefix_cache_blocks, Some(1536));
+    }
+
     #[test]
     fn native_profile_selects_the_measured_route_and_keeps_default_launch_unchanged() {
         let CliCommand::Serve(p) = parse(&[]).unwrap() else {

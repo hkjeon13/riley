@@ -1,0 +1,87 @@
+{
+  "control": {
+    "finals": 44,
+    "previews_by_replica": [
+      0,
+      0
+    ],
+    "all_http": 44,
+    "skips": 0,
+    "budgets": []
+  },
+  "bounded": {
+    "finals": 44,
+    "previews_by_replica": [
+      12,
+      12
+    ],
+    "all_http": 68,
+    "skips": 20,
+    "budgets": [
+      {
+        "blocks": 80,
+        "per_workflow_blocks": 40,
+        "peak_reserved": 80,
+        "remaining_after_drain": 80,
+        "tokenizer_mismatch": false
+      },
+      {
+        "blocks": 80,
+        "per_workflow_blocks": 40,
+        "peak_reserved": 80,
+        "remaining_after_drain": 80,
+        "tokenizer_mismatch": false
+      }
+    ]
+  },
+  "model": {
+    "finals": 2,
+    "previews_by_replica": [
+      1,
+      1
+    ],
+    "all_http": 8,
+    "skips": 0,
+    "budgets": [
+      {
+        "blocks": 80,
+        "per_workflow_blocks": 40,
+        "peak_reserved": 40,
+        "remaining_after_drain": 80,
+        "tokenizer_mismatch": false
+      },
+      {
+        "blocks": 80,
+        "per_workflow_blocks": 40,
+        "peak_reserved": 40,
+        "remaining_after_drain": 80,
+        "tokenizer_mismatch": false
+      }
+    ]
+  },
+  "drift": {
+    "finals": 4,
+    "previews_by_replica": [
+      1,
+      1
+    ],
+    "all_http": 6,
+    "skips": 2,
+    "budgets": [
+      {
+        "blocks": 80,
+        "per_workflow_blocks": 40,
+        "peak_reserved": 40,
+        "remaining_after_drain": 80,
+        "tokenizer_mismatch": true
+      },
+      {
+        "blocks": 80,
+        "per_workflow_blocks": 40,
+        "peak_reserved": 40,
+        "remaining_after_drain": 80,
+        "tokenizer_mismatch": true
+      }
+    ]
+  }
+}

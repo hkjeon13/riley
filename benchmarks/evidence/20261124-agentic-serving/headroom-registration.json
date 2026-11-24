@@ -1,0 +1,5 @@
+{
+  "reason": "With eight open generation streams the original eight HTTP workers cannot answer a readiness poll. Pre-saturation samples still looked available when the ninth client submitted its continuation.",
+  "change": "Use the original source tree and same native BF16 parameters. Build one experimental additional general HTTP worker. Eight model slots and two queued requests remain configured. Both routing policies use the same candidate binary for the repeated 12 placements. One more general worker does not reserve capacity for readiness under arbitrary overload.",
+  "gates": "Reapply all original 12-placement, warm-overlap, TTFT and protected-peer criteria. Verify each GPU's executable hash and actual readyz observation. Recheck default eight-worker failures independently. Do not promote from this test alone; concurrent over-capacity admission, larger mixed serving and multi-node require separate validation."
+}

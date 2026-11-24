@@ -1,0 +1,448 @@
+--- a/crates/riley-runtime/src/llama/executor/dispatch.rs
++++ b/crates/riley-runtime/src/llama/executor/dispatch.rs
+@@ -10,20 +10,21 @@
+ use riley_cuda::hf_pack_separate_qkv;
+ #[cfg(feature = "cuda-cublas-gemm-probe")]
+ use riley_cuda::{hugging_face_qwen_head128_rms_norm, qkv_split_bias_rope_hf_head128};
+-use std::mem;
++use std::{io::Write, mem, path::PathBuf};
+ 
+ use riley_cuda::{
+     AttentionReductionProfile, Bf16ArgmaxParams, Bf16ArgmaxTieSource, CudaBufferSpan,
+     CudaBufferSpanMut, CudaCommandStream, CudaDType, CudaDeviceBuffer, CudaExecutionStream,
+-    CudaStepGraph, CudaStream, DecodePartialReductionOrder, EmbeddingParams, GatedMultiplyParams,
+-    IndexedRopeParams, MergedGatedMultiplyParams, NativeBf16RaggedPagedSplitGqaD128TwoStageParams,
+-    PackedBatchHostV1, PackedBatchV1, QkvRopeParams, QkvSplitBiasParams,
+-    RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
+-    ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams, abort_step_capture,
+-    begin_step_capture, deterministic_bf16_argmax, deterministic_bf16_argmax_bounded,
+-    deterministic_bf16_argmax_fp32_ties, embedding, embedding_deferred_report, end_step_capture,
+-    fixed37_ragged_paged_attention, gated_multiply, grouped_ragged_paged_attention, indexed_rope,
+-    launch_step_graph, native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma,
++    CudaPinnedHostBuffer, CudaStepGraph, CudaStream, DecodePartialReductionOrder, EmbeddingParams,
++    GatedMultiplyParams, IndexedRopeParams, MergedGatedMultiplyParams,
++    NativeBf16RaggedPagedSplitGqaD128TwoStageParams, PackedBatchHostV1, PackedBatchV1,
++    QkvRopeParams, QkvSplitBiasParams, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams,
++    ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams,
++    abort_step_capture, begin_step_capture, deterministic_bf16_argmax,
++    deterministic_bf16_argmax_bounded, deterministic_bf16_argmax_fp32_ties, embedding,
++    embedding_deferred_report, end_step_capture, fixed37_ragged_paged_attention, gated_multiply,
++    grouped_ragged_paged_attention, indexed_rope, launch_step_graph,
++    native_bf16_ragged_paged_split_gqa_d128_global_merge_prompt_mma,
+     native_bf16_ragged_paged_split_gqa_d128_shared_kv_global_merge,
+     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge,
+     native_bf16_ragged_paged_split_gqa_d128_tensor_core_global_merge_prompt_mma,
+@@ -264,8 +265,152 @@
+         .map_err(|source| dispatch_cuda(site, source))?;
+     }
+     Ok(())
++}
++
++// Diagnostic patch only. A single resolved final prefill row is copied into
++// the ordinary pinned I/O buffer, whose contents are read after command completion.
++struct LongTrace {
++    directory: PathBuf,
++    position: u32,
++    token_id: u32,
++    row: usize,
++    active_rows: usize,
++    dense_rows: usize,
++    end: u64,
++    entries: Vec<(&'static str, Option<usize>, u64, u64)>,
++}
++
++fn long_trace_error() -> LlamaBatchExecutorError {
++    LlamaBatchExecutorError::InvalidConfiguration {
++        field: "W4 final prefill trace",
++        reason: "expected a single selected prefill row, an empty output directory, and a synchronous metadata command batch",
++    }
+ }
+ 
++impl LongTrace {
++    fn select(
++        packed: LlamaPackedBatchMetadata<'_>,
++        dense_rows: usize,
++        config: PreparedLlamaBatchExecutorConfig,
++        tensor_parallel: bool,
++    ) -> LlamaBatchExecutorResult<Option<Self>> {
++        let Some(directory) = std::env::var_os("RILEY_REGISTER_LAYER_TRACE") else {
++            return Ok(None);
++        };
++        let [row] = packed.output_token_indices() else {
++            return Ok(None);
++        };
++        let [sequence] = packed.output_row_indices() else {
++            return Ok(None);
++        };
++        let row = *row as usize;
++        let position = packed.position_ids()[row];
++        let token_id = packed.input_token_ids()[row];
++        let kind = packed.row_kind_codes()[*sequence as usize];
++        let target = match (position, token_id) {
++            (5987, _) if kind == LlamaBatchRowKind::Prefill.code() => "lookup-541-prefill",
++            (5991, 515) if kind == LlamaBatchRowKind::Decode.code() => "lookup-541-decode",
++            (25027, _) if kind == LlamaBatchRowKind::Prefill.code() => "lookup-862-prefill",
++            (25058, 15) if kind == LlamaBatchRowKind::Decode.code() => "lookup-862-decode",
++            _ => return Ok(None),
++        };
++        let active_rows = packed.total_input_tokens();
++        if tensor_parallel
++            || packed.row_kind_codes().len() != 1
++            || config.execution_completion_implementation()
++                != ExecutionCompletionImplementation::IterationBatch
++            || config.metadata_transport() != BatchMetadataTransport::Synchronous
++        {
++            return Err(long_trace_error());
++        }
++        let directory = PathBuf::from(directory).join(target);
++        if !directory.is_absolute() || !directory.is_dir() || directory.join("index.tsv").exists() {
++            return Err(long_trace_error());
++        }
++        Ok(Some(Self {
++            directory,
++            position,
++            token_id,
++            row,
++            active_rows,
++            dense_rows,
++            end: 0,
++            entries: Vec::with_capacity(385),
++        }))
++    }
++
++    fn save(self, staging: &mut CudaPinnedHostBuffer) -> LlamaBatchExecutorResult<()> {
++        let mut bytes = vec![0_u8; self.end as usize];
++        staging
++            .read(0, &mut bytes)
++            .map_err(|source| batch_cuda(ExecutionSite::global(LlamaOp::OutputGather), source))?;
++        self.write(&bytes).map_err(|error| {
++            eprintln!("W4 trace output failed: {error}");
++            long_trace_error()
++        })
++    }
++
++    fn write(&self, bytes: &[u8]) -> std::io::Result<()> {
++        let mut payload = std::fs::OpenOptions::new()
++            .write(true)
++            .create_new(true)
++            .open(self.directory.join("rows.bf16"))?;
++        payload.write_all(bytes)?;
++        let mut index = std::fs::OpenOptions::new()
++            .write(true)
++            .create_new(true)
++            .open(self.directory.join("index.tsv"))?;
++        writeln!(
++            index,
++            "# {} {} {} {} {}",
++            self.position, self.token_id, self.row, self.active_rows, self.dense_rows
++        )?;
++        for (stage, layer, offset, count) in &self.entries {
++            let layer = layer.map_or_else(|| "-".to_owned(), |number| number.to_string());
++            writeln!(index, "{stage}\t{layer}\t{offset}\t{count}")?;
++        }
++        Ok(())
++    }
++}
++
++fn trace_row<S: CudaExecutionStream + ?Sized>(
++    trace: &mut Option<(&mut LongTrace, &CudaPinnedHostBuffer)>,
++    stage: &'static str,
++    layer: Option<usize>,
++    buffer: &CudaDeviceBuffer,
++    width: u64,
++    gathered: bool,
++    stream: &mut S,
++) -> LlamaBatchExecutorResult<()> {
++    if !matches!(
++        stage,
++        "embedding"
++            | "input_norm"
++            | "query_rope"
++            | "attention_context"
++            | "attention_projection"
++            | "layer_residual"
++            | "final_norm"
++            | "logits"
++    ) {
++        return Ok(());
++    }
++    if let Some((trace, staging)) = trace {
++        let row = if gathered { 0 } else { trace.row as u64 };
++        let bytes = width * 2;
++        let offset = trace.end;
++        if offset + bytes > staging.byte_len() {
++            return Err(long_trace_error());
++        }
++        buffer
++            .copy_to_pinned_in_active_command_batch(row * bytes, staging, offset, bytes, stream)
++            .map_err(|source| batch_cuda(ExecutionSite::global(LlamaOp::OutputGather), source))?;
++        trace.entries.push((stage, layer, offset, bytes));
++        trace.end += bytes;
++    }
++    Ok(())
++}
++
+ #[allow(
+     clippy::too_many_arguments,
+     clippy::too_many_lines,
+@@ -298,6 +443,8 @@
+     let bounds = config.metadata();
+     let active = packed.total_input_tokens();
+     let tensor_parallel_group = forward.tensor_parallel_reduce();
++    let mut long_trace =
++        LongTrace::select(packed, dense_rows, config, tensor_parallel_group.is_some())?;
+     if dense_rows != forward.plan.sequence_length()
+         && !shape_variants
+             .iter()
+@@ -634,6 +781,7 @@
+             buffers,
+             captured_steps: maximum_captured_steps,
+             captured_step_budget,
++            io_staging,
+             owned_decode_segments: maximum_owned_segments,
+             ..
+         } = forward;
+@@ -740,7 +888,9 @@
+             }
+             (None, _, _) => None,
+         };
+-        if !(step_capture_eligible && in_command_batch && step_counts.is_some()) {
++        if long_trace.is_some()
++            || !(step_capture_eligible && in_command_batch && step_counts.is_some())
++        {
+             captured_steps = None;
+         }
+         // The recorded launch extents depend on the dense shape (this plan)
+@@ -977,6 +1127,7 @@
+             step_capture,
+             output_row_lm_head,
+             packed.output_count() != 0,
++            long_trace.as_mut().map(|trace| (trace, &*io_staging)),
+             tensor_parallel_group
+                 .as_ref()
+                 .map(|(group, rank)| (&**group, *rank)),
+@@ -1299,6 +1450,9 @@
+     };
+     if result.is_ok() {
+         check_staged_embedding_report(host_input)?;
++        if let Some(trace) = long_trace {
++            trace.save(&mut forward.io_staging)?;
++        }
+     }
+     result
+ }
+@@ -1505,6 +1659,7 @@
+     // False for a step whose rows request no token (a prompt chunk that does
+     // not reach the prompt's end): nothing reads its logits.
+     logits_read: bool,
++    mut long_trace: Option<(&mut LongTrace, &CudaPinnedHostBuffer)>,
+     tensor_parallel: Option<(&riley_cuda::CudaPeerAllReduceGroup, u32)>,
+     stream: &mut S,
+ ) -> LlamaBatchExecutorResult<()> {
+@@ -1650,6 +1805,16 @@
+                 .map_err(|source| batch_cuda(capture_site, source));
+         }
+     }
++
++    trace_row(
++        &mut long_trace,
++        "embedding",
++        None,
++        &buffers.hidden_current,
++        hidden,
++        false,
++        stream,
++    )?;
+ 
+     // Cache a whole decode body separately from the original layer segments.
+     // Embedding stays outside this body graph. Its report, dynamic metadata
+@@ -1787,6 +1952,18 @@
+                     .map_err(|source| batch_cuda(input_norm_site, source))?;
+                 }
+ 
++                trace_row(
++                    &mut long_trace,
++                    "input_norm",
++                    Some(layer_index),
++                    &buffers.hidden_norm,
++                    hidden,
++                    false,
++                    stream,
++                )?;
++                if long_trace.is_some() && gemms.merged_qkv_plan().is_none() {
++                    return Err(long_trace_error());
++                }
+                 let rope_in_split = fused_qkv_rope && gemms.merged_qkv_plan().is_some();
+                 if gemms.merged_qkv_plan().is_some() {
+                     // One GEMM over the concatenated Q|K|V weights. `gate_raw` is idle
+@@ -1944,6 +2121,15 @@
+                             )?;
+                         }
+                     }
++                    trace_row(
++                        &mut long_trace,
++                        "qkv_prebias",
++                        Some(layer_index),
++                        &buffers.gate_raw,
++                        query_width + 2 * key_value_width,
++                        false,
++                        stream,
++                    )?;
+                     let mut params = QkvSplitBiasParams {
+                         merged: span(&buffers.gate_raw, CudaDType::BF16, merged_bytes, query_site)?,
+                         query_bias,
+@@ -2360,6 +2546,15 @@
+ 
+                 Ok(())
+             })?;
++            trace_row(
++                &mut long_trace,
++                "query_rope",
++                Some(layer_index),
++                &buffers.hidden_rotary,
++                query_width,
++                false,
++                stream,
++            )?;
+             let attention_site = ExecutionSite::layer(layer_index, LlamaOp::RaggedPagedAttention);
+             let materialized_reference = native_d128_two_stage_workspace
+                 .as_ref()
+@@ -2904,6 +3099,15 @@
+             .map_err(|source| batch_cuda(attention_site, source))?;
+             }
+ 
++            trace_row(
++                &mut long_trace,
++                "attention_context",
++                Some(layer_index),
++                &buffers.hidden_context,
++                query_width,
++                false,
++                stream,
++            )?;
+             let post_segment = owned_segments
+                 .as_deref_mut()
+                 .map(|segments| &mut segments[ordinal * 2 + 1]);
+@@ -2938,6 +3142,15 @@
+                     stream,
+                     output_site,
+                 )?;
++                trace_row(
++                    &mut long_trace,
++                    "attention_projection",
++                    Some(layer_index),
++                    hidden_projection,
++                    hidden,
++                    false,
++                    stream,
++                )?;
+                 let attention_residual_site =
+                     ExecutionSite::layer(layer_index, LlamaOp::AttentionResidual);
+                 let post_norm_site = ExecutionSite::layer(layer_index, LlamaOp::PostAttentionNorm);
+@@ -3036,6 +3249,24 @@
+                             .map_err(|source| batch_cuda(post_norm_site, source))?;
+                     }
+                 }
++                trace_row(
++                    &mut long_trace,
++                    "attention_residual",
++                    Some(layer_index),
++                    &buffers.hidden_rotary,
++                    hidden,
++                    false,
++                    stream,
++                )?;
++                trace_row(
++                    &mut long_trace,
++                    "post_attention_norm",
++                    Some(layer_index),
++                    &buffers.hidden_norm,
++                    hidden,
++                    false,
++                    stream,
++                )?;
+                 #[cfg(feature = "cuda-cublas-gemm-probe")]
+                 let piecewise_rows = if owned_decode_batch == 10 && owned_mlp_graphs.is_some() {
+                     piecewise_active_rows
+@@ -3406,6 +3637,15 @@
+                     dense_rows * hidden,
+                     stream,
+                     ExecutionSite::layer(layer_index, LlamaOp::DownProjection),
++                )?;
++                trace_row(
++                    &mut long_trace,
++                    "mlp_down",
++                    Some(layer_index),
++                    hidden_current,
++                    hidden,
++                    false,
++                    stream,
+                 )?;
+                 let mlp_residual_site = ExecutionSite::layer(layer_index, LlamaOp::MlpResidual);
+                 if norm_after_mlp {
+@@ -3481,6 +3721,15 @@
+                     residual_add(&mut params, stream)
+                         .map_err(|source| batch_cuda(mlp_residual_site, source))?;
+                 }
++                trace_row(
++                    &mut long_trace,
++                    "layer_residual",
++                    Some(layer_index),
++                    hidden_projection,
++                    hidden,
++                    false,
++                    stream,
++                )?;
+                 Ok(())
+             })?;
+         }
+@@ -3521,7 +3770,17 @@
+             )
+             .map_err(|source| batch_cuda(final_norm_site, source))?;
+         }
++        trace_row(
++            &mut long_trace,
++            "final_norm",
++            None,
++            &buffers.hidden_norm,
++            hidden,
++            false,
++            stream,
++        )?;
+         let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
++        let vocabulary = plan.dimensions().vocabulary_size() as u64;
+         // No token is requested from this partial prefill: the next iteration
+         // consumes only KV. Batch-only storage deliberately has no dense logits,
+         // and a step without output rows skips the LM head (about 1 ms over 256
+@@ -3575,6 +3834,15 @@
+                 Some(gathered_rows as usize),
+                 owned_decode_batch,
+             )?;
++            trace_row(
++                &mut long_trace,
++                "logits",
++                None,
++                output_rows.gathered_logits,
++                vocabulary,
++                true,
++                stream,
++            )?;
+             return Ok(());
+         }
+         execute_gemm_with_row_groups(
+@@ -3589,6 +3857,15 @@
+             Some(batch.host().active_row_count() as usize),
+             owned_decode_batch,
+         )?;
++        trace_row(
++            &mut long_trace,
++            "logits",
++            None,
++            &buffers.logits,
++            vocabulary,
++            false,
++            stream,
++        )?;
+         Ok(())
+     })
+ }

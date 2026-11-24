@@ -1,0 +1,12 @@
+{
+  "purpose": "Qualify a shape-cost model of mixed prefill and decode, then select a policy from Riley timings",
+  "context": "three distinct tool-result continuations arrive on the first streamed content of a fourth session",
+  "source": "18cd37cef with isolated workflow-trace.patch",
+  "profile_widths": [128, 256, 512, 1024],
+  "session_history_entries": 160,
+  "tool_document_pairs_in_order": [2, 96, 48, 96],
+  "calibration_seeds": [101, 111],
+  "held_out_seed": 761,
+  "primary_checks": ["all 12 requests linked per cohort", "valid final answers and aligned tool inputs", "actual long submissions overlap the reader", "held-out failure and unsupported shapes retained"],
+  "scope": "diagnostic timings; only the ordinary packaged server qualifies a serving improvement"
+}

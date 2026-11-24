@@ -1,0 +1,26 @@
+{
+  "bd946003b531d04fc231e7a9f22e1bc0fa88b7426fc80c7f07593c88395fe76a": {
+    "unsupported_excerpt": "This improvement is consistent across multiple observations",
+    "reason": "원본에는 여러 시점의 수치 비교가 없으므로 개선의 반복성을 확인할 수 없다."
+  },
+  "7517ee3cc25972c1e9ea17b5e0cc56624f93c424e9a7d5839be34c617a058c9c": {
+    "unsupported_excerpt": "sustained improvement rather than a one-time anomaly",
+    "reason": "두 기간의 p95 한 쌍과 상태 메모로 지속성까지 확인할 수 없다."
+  },
+  "875ee0f9dff0161bc64bfc1fe7c44aef548dda8e0619a25ac56e731fa60c3d3d": {
+    "unsupported_excerpt": "the slowest 95% of requests",
+    "reason": "p95의 정의를 잘못 해석했고 최적화가 원인이라는 근거도 없다."
+  },
+  "8dba386ffb34683556c32823be43b21da233de29b83c2384517dcad47957a0ef": {
+    "unsupported_excerpt": "effectively reduced the latency for the majority of the service requests",
+    "reason": "과반 요청이 빨라졌는지와 변화 원인은 관측값에 없다."
+  },
+  "8337ba795eac8be08a09ef81b4b992e06163fd166b8f144c81ae0a531aaee4f1": {
+    "unsupported_excerpt": "95% of the service responses were faster in the after report compared to the before report",
+    "reason": "두 기간 p95 차이는 더 빨라진 개별 요청의 비율을 제공하지 않는다."
+  },
+  "8dee40b81a49ba30abc401d823717130882df7c00f622fb098b4dc5c9656c2c6": {
+    "unsupported_excerpt": "the longest 5% of responses being notably shorter",
+    "reason": "p95 두 값만으로 가장 느린 5% 전체가 얼마나 빨라졌는지 알 수 없다."
+  }
+}

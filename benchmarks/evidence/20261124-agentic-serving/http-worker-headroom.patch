@@ -1,0 +1,9 @@
+diff --git a/crates/riley-server/src/main.rs b/crates/riley-server/src/main.rs
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -3023,3 +3023,4 @@
+         worker_threads: options
+             .max_active_sequences
+-            .max(ServerConfig::default().worker_threads),
++            .max(ServerConfig::default().worker_threads)
++            .saturating_add(1),

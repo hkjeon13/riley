@@ -1,0 +1,18 @@
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -1613,10 +1613,13 @@
+     }
+     if native_attention_mode == Some(NativeAttentionMode::FixedTileUnsplit)
+         && (batch_token_budget > 1024
+-            || max_sequence_tokens.is_none_or(|n| n > 8192)
++            || max_sequence_tokens.is_none_or(|n| {
++                n > 8192 && !((n <= 32768 && batch_token_budget <= 256 && max_active_sequences <= 8)
++                    || (n <= 131072 && batch_token_budget <= 32 && max_active_sequences <= 2))
++            })
+             || max_active_sequences > 32)
+     {
+-        return Err("fixed-tile-unsplit-v1 requires an explicit context bound <=8192, batch budget <=1024 and at most 32 active sequences".into());
++        return Err("experimental fixed tile geometry exceeds the registered context, batch or slot limit".into());
+     }
+     if d128_global_merge
+         && decode_attention_backend

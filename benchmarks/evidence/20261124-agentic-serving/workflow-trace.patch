@@ -1,0 +1,141 @@
+--- a/crates/riley-server/src/engine.rs
++++ b/crates/riley-server/src/engine.rs
+@@ -41,6 +41,16 @@
+ const LIFECYCLE_DRAINING: u8 = 2;
+ const LIFECYCLE_STOPPED: u8 = 3;
+ const LIFECYCLE_FAILED: u8 = 4;
++
++
++/// Diagnostic epoch shared by every trace event; intervals use a monotonic clock.
++pub(crate) fn workflow_clock() -> u128 {
++    use std::sync::OnceLock;
++    use std::time::{Instant, SystemTime, UNIX_EPOCH};
++    static ORIGIN: OnceLock<(Instant, u128)> = OnceLock::new();
++    let (clock, epoch) = ORIGIN.get_or_init(|| (Instant::now(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
++    epoch + clock.elapsed().as_nanos()
++}
+ 
+ /// Stable worker-local request key.
+ #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+@@ -1378,6 +1388,7 @@
+         // so admission does not stall their decode rows; an idle engine encodes
+         // itself. A failure is left for admission to reproduce, so request
+         // validation order and errors are unchanged.
++        let submit_time = workflow_clock();
+         let engine_busy = self.inner.stats.active_requests.load(Ordering::Acquire) != 0;
+         let prompt_tokenizer = self.inner.prompt_tokenizer.get().filter(|_| engine_busy);
+         let prompt_token_ids = prompt_tokenizer.and_then(|tokenizer| {
+@@ -1390,6 +1401,8 @@
+                 )
+                 .ok()
+         });
++        let queued_time = workflow_clock();
++        eprintln!("AGENT_SUBMIT {} {submit_time} {queued_time} {}", request_id.get(), prompt_token_ids.is_some());
+         let command = Command::Submit {
+             request_id,
+             metadata: metadata.clone(),
+@@ -1995,12 +2008,14 @@
+         let _ = admitted.try_send(Err(EngineError::InvalidRequest));
+         return;
+     }
++    let received_time = workflow_clock();
+     let admission = match prompt_token_ids {
+         Some(ids) => backend.admit_tokenized(request_id, &metadata, &request, ids),
+         None => backend.admit(request_id, &metadata, &request),
+     };
+     match admission {
+         Ok(()) => {
++            eprintln!("AGENT_ADMIT {} {received_time} {}", request_id.get(), workflow_clock());
+             let replaced = requests.insert(
+                 request_id,
+                 RequestControl {
+@@ -4064,6 +4079,7 @@
+                     "requested output token count is outside server bounds",
+                 ));
+             }
++            let encode_start = super::workflow_clock();
+             let prompt_token_ids = self
+                 .model
+                 .tokenizer()
+@@ -4074,6 +4090,7 @@
+                     },
+                 )
+                 .map_err(|_| private_request_error("prompt tokenization failed"))?;
++            eprintln!("AGENT_ENCODE {} {encode_start} {}", request_id.get(), super::workflow_clock());
+             self.admit_tokenized(request_id, metadata, request, prompt_token_ids)
+         }
+ 
+@@ -4275,6 +4292,7 @@
+             let gpu_greedy = selection.selected_backend == C02SamplingBackend::GpuGreedy;
+             let expected_active_rows = plan.total_tokens();
+             riley_runtime::host_trace::lap_here(riley_runtime::host_trace::PLAN);
++            let execution_start = super::workflow_clock();
+             let (mut downloaded, timing, staged_shape) =
+                 if let Some(graph) = self.decode_graph.as_mut() {
+                     let execution = riley_scheduler::execute_llama_iteration_graph(
+@@ -4339,6 +4357,15 @@
+                         }
+                     }
+                 };
++            let execution_end = super::workflow_clock();
++            let mut members = Vec::new();
++            for (kind, items) in [("p", plan.prefill_items()), ("d", plan.decode_items())] {
++                for item in items {
++                    let i = self.request_index_by_scheduler(item.request_id()).expect("planned active request");
++                    members.push((self.requests[i].engine_id.get(), kind, item.input_tokens().len(), item.target_logical_length(), item.output_slot().is_some()));
++                }
++            }
++            eprintln!("AGENT_STEP {execution_start} {execution_end} {} {}", timing.gpu_execution_ns(), serde_json::to_string(&members).unwrap());
+             let sampling = self.sample_iteration(&plan, &downloaded, selection);
+             riley_runtime::host_trace::lap_here(riley_runtime::host_trace::SAMPLE);
+             if gpu_greedy {
+--- a/crates/riley-server/src/service.rs
++++ b/crates/riley-server/src/service.rs
+@@ -1900,6 +1900,7 @@
+             stopping,
+             include_usage,
+             chat: false,
++            render_times: None,
+             tool_style: None,
+         },
+     );
+@@ -1946,6 +1947,7 @@
+         .and_then(|options| options.include_usage)
+         .unwrap_or(false);
+     let tool_style = chat_template.tool_parsing(&request);
++    let render_begin = crate::engine::workflow_clock();
+     let request = match normalize_chat_request(request, chat_template, config.request_limits) {
+         Ok(request) => request,
+         Err(ChatRequestError::Invalid(error)) => {
+@@ -1972,6 +1974,7 @@
+             stopping,
+             include_usage,
+             chat: true,
++            render_times: Some((render_begin, crate::engine::workflow_clock())),
+             tool_style,
+         },
+     );
+@@ -1979,6 +1982,7 @@
+ 
+ /// Per-request delivery choices shared by both completion endpoints.
+ struct GenerationDelivery<'a> {
++    render_times: Option<(u128, u128)>,
+     stopping: &'a AtomicBool,
+     include_usage: bool,
+     chat: bool,
+@@ -1996,6 +2000,7 @@
+         stopping,
+         include_usage,
+         chat,
++        render_times,
+         tool_style,
+     }: GenerationDelivery<'_>,
+ ) {
+@@ -2060,6 +2065,7 @@
+         }
+     };
+     let queue_wait = admission_started.elapsed();
++    if let Some((begin, end)) = render_times { eprintln!("AGENT_RENDER {} {begin} {end}", submitted.metadata().request_id); }
+     let tracker = RequestTracker::new(
+         submitted.metadata().clone(),
+         queue_wait,

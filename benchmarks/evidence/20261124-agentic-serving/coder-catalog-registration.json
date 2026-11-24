@@ -1,0 +1,7 @@
+{
+  "orders":{"6":["full","selected"],"7":["selected","full"]},
+  "waves":[[4,15100],[8,15200],[16,15300],[16,15400]],
+  "server":"Qwen2.5-Coder-7B-Instruct, single A100 per arm, 8 active sequences and default 8 HTTP workers, 4096 KV blocks, 1536 cached, wide policy, same trace binary as engine-slots study. Each arm starts fresh. No speculative work.",
+  "work":"New exact-ID application workload. Each job runs list_reports, read_reports and a naturally stopping explanation. Long jobs have 200 history entries, 500ms per tool and a 64-row authorized backend catalog including the requested two reports. Reader jobs have no history/wait and always return only two reports. Each target report contains two notes. Full and selected arms use identical receipts at the tool source. A selected tool return contains both complete records, in source order. The previous 96-notes/two-report workload has no irrelevant records and must return identical content under exact-key selection.",
+  "gates":"Both devices: more C16 SLO jobs and more warm SLO jobs per GPU-hour, lower all-job p95 arrival-to-last-content, fewer final executed prefill rows, no previously valid input becomes invalid. Reader scheduled first and p95 of stream gap p95 must stay within 1.05x control. Qualification uses basic numeric/citation validity and 5s first, 8s last, 80ms gap p95. Report exact 90-word compliance independently. Retain rejected and failed jobs in denominator. Small waves descriptive."
+}

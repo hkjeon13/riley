@@ -1,0 +1,5 @@
+{
+ "model": "Qwen2.5-7B BF16 single reserved A100 GPU7, same new binary. Run page followed by fixed tile in fresh services in reverse order of the eight-case screen, with 2048 retained cache blocks as in the opt-in 32K shipping profile.",
+ "cases": ["192-token final survey alone", "cold ~12k two-value query", "genuine same-archive continuation with changed suffix", "cold ~27k two-value query sent after first visible content of another 192-token final survey"],
+ "gates": "Check request hashes, GPU and CLI equality apart from attention, same cache credit on paired inputs, exact two numbers on cold, continued and mixed requests, completed real overlapping streams, resource release. Report first and last content in every case, per-stream p95 gaps and maximum stall. Require quicker cold starts and no more than 5 percent longer mixed reader p95 gap, largest gap or last content before considering user-facing opt-in promotion. This small held-out test alone cannot qualify a default."
+}

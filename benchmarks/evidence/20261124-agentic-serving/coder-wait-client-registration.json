@@ -1,0 +1,7 @@
+{
+  "purpose":"Test the opt-in completed-call preparation through the reusable CLI on the existing uninstrumented Riley binary. Keep ToolWaitPolicy's 350ms and 1024 token thresholds. This follow-up uses different seeds, 200 history entries, and the same model. Each group runs at the same position on both GPUs; enabled arms swap by group. Use source/values, actual decision, preview hash, peer overlap, whole-job completion and final and peer stream intervals, including false positive wait estimates. Previous trace gates remain separate.",
+  "order":{"gpu6":[["first",false],["second",true]],"gpu7":[["first",true],["second",false]]},
+  "seeds":{"first":4111,"second":4201},
+  "scenarios":[["short-hint",0,0.1,100,false],["shorter-than-hint",1,0.1,500,false],["long-wait",2,0.5,500,false],["repeat",2,0.5,500,false],["overlap",3,0.5,500,true]],
+  "criteria":"The 100ms hint and completed repeat skip on enabled runs. Other enabled long hints submit once. Require 2 valid tool calls and basic natural answer on each target and reader, report literal format separately. Both long-wait and overlap groups must improve full completion vs control for both seed groups with peer visible-gap p95 within +5%. Report short-wait prediction penalties and differences in actual output."
+}

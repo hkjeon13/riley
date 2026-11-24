@@ -1,0 +1,3 @@
+RILEY_ATTENTION_KV_CHUNK prompt=512 generated=512
+RILEY_NATIVE_ATTENTION mode=fixed-tile-unsplit-v1
+riley: invalid prefill plateau, coalescing or prefix cache policy: invalid scheduler configuration prefix_cache.max_blocks: must be positive and within the physical KV pool

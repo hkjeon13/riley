@@ -1,0 +1,204 @@
+diff --git a/crates/riley-scheduler/src/prefix_cache.rs b/crates/riley-scheduler/src/prefix_cache.rs
+index 45d7513d8..df728da34 100644
+--- a/crates/riley-scheduler/src/prefix_cache.rs
++++ b/crates/riley-scheduler/src/prefix_cache.rs
+@@ -46,6 +46,8 @@ pub(crate) struct PrefixCache {
+     oldest: EntryId,
+     newest: EntryId,
+     length: usize,
++    // The last touched path is contiguous from its tip to its root in the LRU list.
++    recent_path: Option<(EntryId, EntryId)>,
+ }
+ 
+ fn key(parent: EntryId, tokens: &[u32]) -> SchedulerResult<Key> {
+@@ -89,6 +91,7 @@ impl PrefixCache {
+             oldest: NONE,
+             newest: NONE,
+             length: 0,
++            recent_path: None,
+         })
+     }
+ 
+@@ -128,7 +131,7 @@ impl PrefixCache {
+             older: NONE,
+             newer: NONE,
+         });
+-        self.link_newest(id)?;
++        self.link_newest(id, id)?;
+         self.index.insert(key, id);
+         self.length += 1;
+         Ok(id)
+@@ -141,11 +144,38 @@ impl PrefixCache {
+     /// Marks `id` and its ancestors as used, each ancestor newer than its
+     /// child, so that eviction reaches the entries without children first.
+     pub(crate) fn touch_path(&mut self, id: EntryId) -> SchedulerResult<()> {
++        if id == ROOT {
++            return Ok(());
++        }
++        let previous = self.recent_path.take();
+         let mut current = id;
+-        while current != ROOT {
+-            self.unlink(current)?;
+-            self.link_newest(current)?;
+-            current = self.entry(current)?.key.parent;
++        loop {
++            // Other sessions can leave part of this chain in the desired
++            // order too. Move the whole run once, including a saved suffix.
++            let mut last = current;
++            let parent = loop {
++                if let Some((tip, root)) = previous {
++                    if last == tip {
++                        last = root;
++                        break ROOT;
++                    }
++                }
++                let entry = self.entry(last)?;
++                let parent = entry.key.parent;
++                if parent == ROOT || entry.newer != parent {
++                    break parent;
++                }
++                last = parent;
++            };
++            if last != self.newest {
++                self.unlink(current, last)?;
++                self.link_newest(current, last)?;
++            }
++            if parent == ROOT {
++                self.recent_path = Some((id, last));
++                break;
++            }
++            current = parent;
+         }
+         Ok(())
+     }
+@@ -170,6 +200,7 @@ impl PrefixCache {
+     /// Unlists everything. Blocks that requests still hold live on until the
+     /// last holder releases them, but no later request can find them.
+     pub(crate) fn clear(&mut self, pool: &mut KvBlockPool) -> SchedulerResult<()> {
++        self.recent_path = None;
+         for index in 0..self.entries.len() {
+             if let Some(entry) = self.entries[index].take() {
+                 pool.release_shared_block(entry.block)?;
+@@ -190,7 +221,12 @@ impl PrefixCache {
+     }
+ 
+     fn remove(&mut self, id: EntryId, pool: &mut KvBlockPool) -> SchedulerResult<()> {
+-        self.unlink(id)?;
++        // Only leaves are evicted. The saved range cannot lose an ancestor
++        // while its tip survives, but its tip's entry ID can be recycled.
++        if self.recent_path.is_some_and(|(tip, _)| tip == id) {
++            self.recent_path = None;
++        }
++        self.unlink(id, id)?;
+         let entry = self.entries[id as usize]
+             .take()
+             .ok_or(SchedulerError::InvalidPlan {
+@@ -207,11 +243,9 @@ impl PrefixCache {
+         Ok(())
+     }
+ 
+-    fn unlink(&mut self, id: EntryId) -> SchedulerResult<()> {
+-        let (older, newer) = {
+-            let entry = self.entry(id)?;
+-            (entry.older, entry.newer)
+-        };
++    fn unlink(&mut self, first: EntryId, last: EntryId) -> SchedulerResult<()> {
++        let older = self.entry(first)?.older;
++        let newer = self.entry(last)?.newer;
+         if older == NONE {
+             self.oldest = newer;
+         } else {
+@@ -225,19 +259,16 @@ impl PrefixCache {
+         Ok(())
+     }
+ 
+-    fn link_newest(&mut self, id: EntryId) -> SchedulerResult<()> {
++    fn link_newest(&mut self, first: EntryId, last: EntryId) -> SchedulerResult<()> {
+         let previous = self.newest;
+-        {
+-            let entry = self.entry_mut(id)?;
+-            entry.older = previous;
+-            entry.newer = NONE;
+-        }
++        self.entry_mut(first)?.older = previous;
++        self.entry_mut(last)?.newer = NONE;
+         if previous == NONE {
+-            self.oldest = id;
++            self.oldest = first;
+         } else {
+-            self.entry_mut(previous)?.newer = id;
++            self.entry_mut(previous)?.newer = first;
+         }
+-        self.newest = id;
++        self.newest = last;
+         Ok(())
+     }
+ 
+@@ -334,6 +365,67 @@ mod tests {
+         assert!(cache.find(ROOT, &tokens(4)).unwrap().is_some());
+     }
+ 
++    #[test]
++    fn recency_matches_individual_touches_across_branches_and_recycled_ids() {
++        let mut pool = pool(32);
++        let mut cache = PrefixCache::new(32).unwrap();
++        let mut order = Vec::<EntryId>::new();
++        let mut parents = HashMap::new();
++        let mut random = 7_u32;
++        for step in 0_u32..3000 {
++            random = random.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
++            let pick = (random >> 8) as usize % order.len().max(1);
++            let mut tip = ROOT;
++            if step % 211 == 210 {
++                cache.clear(&mut pool).unwrap();
++                order.clear();
++                parents.clear();
++            } else if order.len() == 32 || (!order.is_empty() && random % 13 == 0) {
++                let oldest_leaf = order
++                    .iter()
++                    .position(|id| !parents.values().any(|p| p == id))
++                    .unwrap();
++                let removed = order.remove(oldest_leaf);
++                parents.remove(&removed);
++                assert!(cache.evict_one(&mut pool).unwrap());
++                assert!(cache.entries[removed as usize].is_none());
++            } else if order.is_empty() || random % 5 < 3 {
++                let parent = if order.is_empty() || random % 7 == 0 {
++                    ROOT
++                } else {
++                    order[pick]
++                };
++                let mut seq = written(&mut pool, 1);
++                let block = seq.share_next_block(&mut pool).unwrap();
++                let id = cache.insert(parent, &tokens(step), block).unwrap();
++                seq.close(&mut pool).unwrap();
++                parents.insert(id, parent);
++                order.push(id);
++                if random % 3 != 0 {
++                    tip = id;
++                }
++            } else {
++                tip = order[pick];
++            }
++            cache.touch_path(tip).unwrap();
++            while tip != ROOT {
++                order.retain(|&id| id != tip);
++                order.push(tip);
++                tip = parents[&tip];
++            }
++            let mut forward = cache.oldest;
++            let mut backward = cache.newest;
++            for (&first, &last) in order.iter().zip(order.iter().rev()) {
++                assert_eq!(forward, first);
++                assert_eq!(backward, last);
++                forward = cache.entry(forward).unwrap().newer;
++                backward = cache.entry(backward).unwrap().older;
++            }
++            assert_eq!((forward, backward), (NONE, NONE));
++            assert_eq!(cache.len(), order.len());
++        }
++    }
++
+     #[test]
+     fn clear_leaves_held_blocks_to_their_holders() {
+         let mut pool = pool(2);

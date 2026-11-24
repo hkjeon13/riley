@@ -1,0 +1,6 @@
+{
+ "cases":[["lookup",541,210],["lookup",733,620],["lookup",862,890],["scan",9451,890],["max",9829,890],["lookup",17609,330],["lookup",18143,840],["scan",18617,710],["max",19139,710]],
+ "decode_caps":[24,96],
+ "design":"Original fixed binary with the layer instrumentation inactive versus otherwise identical release with only D128 generated-row QK score rounding changed, both in page-v1, same 32K/256, no KV reuse. GPU6 baseline then candidate, GPU7 candidate then baseline. Cap 24 qualifies fixed-length TPOT only if every run actually emits 24 tokens. Cap 96 exercises natural stopping and exact source+amount verification; use full-original limit of 128 on scan/max. Compare five prior and four new prompt identities to independently generated HF-SDPA tokens.",
+ "gates":"Report every case. Require no loss of correct original answers; distinguish HF fidelity from task accuracy. For phase-specific proof require original absolute input/token placement, byte-identical last prefill and a reduced layer-zero decode error relative to unrounded reconstruction. For fixed-length throughput report candidate/control normalized TPOT on each GPU, flag any >2% median regression or unmatched length. No silent change to existing numerical contracts or fleet deployment."
+}

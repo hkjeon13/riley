@@ -1,0 +1,107 @@
+{
+  "plan_sha256": "9741e644fc85bbd3259ca527acf49fe869b09e83cf64de456f1fcfff30e4d979",
+  "allocated_kv_bytes_per_gpu": 8103395328,
+  "round_robin_comparisons": [
+    {
+      "short": {
+        "total": 192,
+        "complete_both": 192,
+        "matched_lengths": 192,
+        "identical_text": 87,
+        "metrics_for_equal_length_responses": {
+          "ttft": {
+            "riley_ms": 473.56656193733215,
+            "vllm_ms": 1237.4205365777016,
+            "ratio": 0.38270462461133997
+          },
+          "tpot": {
+            "riley_ms": 27.631609449310908,
+            "vllm_ms": 39.227697584364144,
+            "ratio": 0.7043902943802812
+          },
+          "e2e": {
+            "riley_ms": 2506.253518164158,
+            "vllm_ms": 3665.669582784176,
+            "ratio": 0.6837096092716
+          }
+        },
+        "identical_text_paired_tpot_ratio_median": 0.80864239796917
+      },
+      "rag": {
+        "total": 64,
+        "complete_both": 64,
+        "matched_lengths": 64,
+        "identical_text": 15,
+        "metrics_for_equal_length_responses": {
+          "ttft": {
+            "riley_ms": 1002.0217224955559,
+            "vllm_ms": 804.6839684247971,
+            "ratio": 1.245236343476627
+          },
+          "tpot": {
+            "riley_ms": 27.246197494934865,
+            "vllm_ms": 29.436739410941055,
+            "ratio": 0.9255847638073662
+          },
+          "e2e": {
+            "riley_ms": 4658.223532140255,
+            "vllm_ms": 5417.7117720246315,
+            "ratio": 0.8598138343560217
+          }
+        },
+        "identical_text_paired_tpot_ratio_median": 0.907358836106233
+      }
+    },
+    {
+      "short": {
+        "total": 192,
+        "complete_both": 192,
+        "matched_lengths": 192,
+        "identical_text": 86,
+        "metrics_for_equal_length_responses": {
+          "ttft": {
+            "riley_ms": 476.1403128504753,
+            "vllm_ms": 1240.3725013136864,
+            "ratio": 0.38386880743179336
+          },
+          "tpot": {
+            "riley_ms": 27.717948078163086,
+            "vllm_ms": 39.14135422498461,
+            "ratio": 0.7081499510425788
+          },
+          "e2e": {
+            "riley_ms": 2516.570493578911,
+            "vllm_ms": 3678.9062321186066,
+            "ratio": 0.6840539918109491
+          }
+        },
+        "identical_text_paired_tpot_ratio_median": 0.8085837825056544
+      },
+      "rag": {
+        "total": 64,
+        "complete_both": 64,
+        "matched_lengths": 64,
+        "identical_text": 15,
+        "metrics_for_equal_length_responses": {
+          "ttft": {
+            "riley_ms": 1002.7347579598427,
+            "vllm_ms": 822.7384686470032,
+            "ratio": 1.2187770429755693
+          },
+          "tpot": {
+            "riley_ms": 27.3084006910249,
+            "vllm_ms": 29.490128980846855,
+            "ratio": 0.926018353760374
+          },
+          "e2e": {
+            "riley_ms": 4670.06429284811,
+            "vllm_ms": 5435.122594237328,
+            "ratio": 0.8592380782357362
+          }
+        },
+        "identical_text_paired_tpot_ratio_median": 0.9104354592770856
+      }
+    }
+  ],
+  "scope": "Order Riley then vLLM, two warm waves per engine on one pair of physical GPUs. Per-wave summaries, no independent cold-launch confidence bound."
+}

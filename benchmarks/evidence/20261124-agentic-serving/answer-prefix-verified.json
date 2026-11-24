@@ -1,0 +1,65 @@
+{
+  "engine": {
+    "torch": "2.13.0+cu129",
+    "transformers": "5.22.1",
+    "threads": 6,
+    "dtype": "torch.float32",
+    "device": "cpu"
+  },
+  "jobs": [
+    {
+      "seed": 17101,
+      "history": 200,
+      "tool_invocations": 2,
+      "model_requests": 1,
+      "valid": false,
+      "usage": {
+        "prompt_tokens": 3117,
+        "completion_tokens": 35,
+        "total_tokens": 3152
+      },
+      "finish": "stop",
+      "explanation_words": 41,
+      "visible_chunks": 30,
+      "application_prefix": "Before: 68 ms. After: 26 ms. Reduction: 42 ms.\n\nThe measured p95 changed from 68 ms (report-A) to 26 ms (report-B).",
+      "generated_suffix": " This indicates that the service response latency has significantly reduced, which is expected during routine sampling according to report-B's notes. The reduction suggests an improvement in performance or efficiency.",
+      "submission_to_first_generated_chunk_ms": 61164.929429,
+      "immediately_attributed": {
+        "report-A": true,
+        "report-B": true
+      },
+      "strict_opening": true,
+      "answer": "Before: 68 ms. After: 26 ms. Reduction: 42 ms.\n\nThe measured p95 changed from 68 ms (report-A) to 26 ms (report-B). This indicates that the service response latency has significantly reduced, which is expected during routine sampling according to report-B's notes. The reduction suggests an improvement in performance or efficiency.",
+      "all_three_values": true,
+      "both_sources": true,
+      "at_least_64_tokens": false
+    },
+    {
+      "seed": 17104,
+      "history": 0,
+      "tool_invocations": 2,
+      "model_requests": 1,
+      "valid": false,
+      "usage": {
+        "prompt_tokens": 353,
+        "completion_tokens": 26,
+        "total_tokens": 379
+      },
+      "finish": "stop",
+      "explanation_words": 32,
+      "visible_chunks": 21,
+      "application_prefix": "Before: 84 ms. After: 25 ms. Reduction: 59 ms.\n\nThe measured p95 changed from 84 ms (report-A) to 25 ms (report-B).",
+      "generated_suffix": " This indicates that the 90th percentile of service response latency was significantly reduced, suggesting improved performance under high load conditions.",
+      "submission_to_first_generated_chunk_ms": 7752.934308,
+      "immediately_attributed": {
+        "report-A": true,
+        "report-B": true
+      },
+      "strict_opening": true,
+      "answer": "Before: 84 ms. After: 25 ms. Reduction: 59 ms.\n\nThe measured p95 changed from 84 ms (report-A) to 25 ms (report-B). This indicates that the 90th percentile of service response latency was significantly reduced, suggesting improved performance under high load conditions.",
+      "all_three_values": true,
+      "both_sources": true,
+      "at_least_64_tokens": false
+    }
+  ]
+}

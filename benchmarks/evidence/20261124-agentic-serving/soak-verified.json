@@ -1,0 +1,81 @@
+{
+  "submitted": 1200,
+  "correct": 1137,
+  "slo_completed": 1137,
+  "good_workflows_per_gpu_hour": 2273.035531685359,
+  "duration_s": 1800.763755314052,
+  "client_drops": 63,
+  "http_status": {
+    "200": 3600
+  },
+  "by_kind": {
+    "normal": {
+      "submitted": 1071,
+      "correct": 1071,
+      "slo_completed": 1071
+    },
+    "slow": {
+      "submitted": 66,
+      "correct": 66,
+      "slo_completed": 66
+    },
+    "cancel": {
+      "submitted": 63,
+      "correct": 0,
+      "slo_completed": 0
+    }
+  },
+  "failure_reasons": {
+    "scheduled client cancellation": 63
+  },
+  "windows": {
+    "start": {
+      "workflow_first_ms": 1409.296646,
+      "workflow_last_ms": 5148.981291,
+      "gap_p95_ms": 30.105384
+    },
+    "end": {
+      "workflow_first_ms": 1498.228665,
+      "workflow_last_ms": 4884.422336,
+      "gap_p95_ms": 30.100836
+    }
+  },
+  "dispatch_lag_p95_ms": 2.2314563393592834,
+  "samples": 181,
+  "device_live_bytes_sampled_range": [
+    19213989888,
+    19213989888
+  ],
+  "counter_changes": {
+    "cancellations": 63,
+    "disconnects": 63,
+    "overloads": 0,
+    "dropped_observations": 2576
+  },
+  "highest_waiting": 1,
+  "last_metrics": {
+    "elapsed_s": 1800.732119396329,
+    "active_requests": 0,
+    "waiting_requests": 0,
+    "kv_allocated_blocks": 0,
+    "prefix_cache": {
+      "retained_blocks": 1536,
+      "hit_tokens": 2100608,
+      "evicted_blocks": 255850,
+      "metrics_degraded": false
+    },
+    "allocation": {
+      "device_live_count": 291,
+      "device_live_bytes": 19213989888,
+      "pinned_live_count": 2,
+      "pinned_live_bytes": 4223192
+    },
+    "counters": {
+      "cancellations": 69,
+      "disconnects": 63,
+      "overloads": 0,
+      "dropped_observations": 2576
+    }
+  },
+  "shutdown_resources_zero": true
+}

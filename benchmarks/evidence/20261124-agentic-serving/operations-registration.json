@@ -1,0 +1,6 @@
+{
+  "scope":"single-host two-replica engineering qualification using the measured stock 256-row configuration; loopback client implements routing, independent authentication per replica, synthetic tools",
+  "cases":["withdraw old replica from routing while final answer is streaming, then retire it after drain","start a replacement on released GPU and admit only after readiness","interrupt the other owned replica during its final answer, reject the incomplete stream, recover with explicit new request","repeat the same logical tool operations with durable idempotency keys","route after rollback to the recovered original configuration"],
+  "gates":{"planned_stream_failures":0,"admissions_to_withdrawn_replica":0,"premature_admissions":0,"partial_sse_must_be_terminal_failure":true,"duplicate_committed_tool_actions":0,"recovered_workflow_correct":true,"recovery_seconds_upper_engineering":300},
+  "excluded":"node power/network fault, multi-node rollout and customer canary require a real target; measurements here are process failures"
+}

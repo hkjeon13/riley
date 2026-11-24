@@ -1,0 +1,8 @@
+{
+  "scope": "Qwen2.5-7B, stock wide pure-prefill configuration, four fresh Riley starts on A100 6, after all registered promotion timings",
+  "mode_order": ["off","on","on","off"],
+  "inputs": "200 history entries, 96 observation pairs; zero, 100ms, 500ms, 500ms exact repeat, and 500ms after peer begins reading. Both tools have the registered delay.",
+  "intervention": "after validating read_reports call, issue a one-token request in final-turn format using only history already known. Never wait for the probe before submitting or timing the final answer.",
+  "outcomes": "exact fixture and factual final answer, cached tokens, ready-to-first-visible latency, workflow first/last visible times, actual extra work, peer streaming gaps and correctness, retain failed and late probes",
+  "decision": "an exploratory feasibility test. Select a policy only after accounting for no-wait, already-warm, and busy-peer penalties and independently confirming gains."
+}

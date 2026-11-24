@@ -1,0 +1,17 @@
+--- a/kernels/src/batch_primitives.cu
++++ b/kernels/src/batch_primitives.cu
+@@ -4752,8 +4752,12 @@
+ #pragma unroll
+     for (uint32_t element = 0; element < 4; ++element) {
+       const bool present = (element < 2 ? group : group + 8) < token_count;
+-      score[element] = present ? staged_attention_score(dot[element], scale)
+-                               : -CUDART_INF_F;
++      // Isolated D128 generated-row experiment. Keep the QK score in FP32
++      // through scaling, before the per-page softmax.
++      score[element] = present
++                           ? (kHead == 128 ? dot[element] * scale
++                                           : staged_attention_score(dot[element], scale))
++                           : -CUDART_INF_F;
+     }
+     maximum0 = fmaxf(score[0], score[2]);
+     maximum1 = fmaxf(score[1], score[3]);

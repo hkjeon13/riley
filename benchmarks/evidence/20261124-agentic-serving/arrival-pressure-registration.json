@@ -1,0 +1,6 @@
+{
+ "rationale":"Existing admission FIFO met 1.15x in the frozen RAG trace but failed burst decode guards. The two-request cohort guard masked its benefit on staggered RAG. An earlier measured trace found zero eligible RAG steps and nearly all burst steps with four live long requests admitted within two consecutive planner iterations.",
+ "policy":"On wide all-long prefill retain admission order across chunks, preserving ordinary decode priority. Fall back to ordinary scheduling when at least four currently live long requests, including decoders, share one or two consecutive admission iterations. Use original Tensor Core BF16 stock source and the same candidate/control binary; no future arrivals or class labels.",
+ "hardware":"Two reserved A100 40GB. Original Coder-14B protected campaign, 1024 burst rows, steady 256, <=32 decode, >=512 prompt tokens. GPU6 control then candidate; GPU7 candidate then control. Identical arrivals and reciprocal independent process starts.",
+ "gates":"GPU7 two RAG seeds TTFT p95 <=1.15x paired frozen vLLM with <=3ms write alignment. Both physical GPUs all six cells preserve output hashes, decode TPOT median regression <1%, C32 TTFT median regression <2%, C32 throughput drop <2%, arrival alignment <=3ms. Retain all failures and ambiguous comparisons. No global default promotion from one campaign."
+}

@@ -1,0 +1,8 @@
+{
+  "orders": [["baseline", "candidate"], ["candidate", "baseline"], ["candidate", "baseline"], ["baseline", "candidate"]],
+  "repeats": 10,
+  "minimum_plain_bytes": 4096,
+  "entry_limit": 1024,
+  "scope": "Single-CPU-thread production Qwen tokenizer. Reuse BPE results only for identical pieces in one long normalized plain segment; no cross-session data, KV changes or latency estimate for GPU inference.",
+  "gate": "For both Coder final requests reproduced from actual sessions plus long tool JSON, source text, multilingual/decomposed text and high-entropy controls, require every prompt token ID to match baseline on all samples. Repeated history and tool JSON should improve by at least 10 percent in median paired process medians. Aim to keep short, code, multilingual and unique input regressions within 5 percent. Report failures and process ranges."
+}

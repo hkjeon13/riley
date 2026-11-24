@@ -1,0 +1,118 @@
+{
+  "completed_runs": 1,
+  "arms": [
+    {
+      "arm": "a",
+      "isolation_status": [
+        200,
+        200,
+        401,
+        200,
+        200
+      ],
+      "authorized_cached_tokens": [
+        0,
+        1424,
+        0,
+        1424
+      ],
+      "waves": [
+        {
+          "submitted": 1,
+          "correct": 1,
+          "slo_completed": 1,
+          "window_s": 3.2193406522274017,
+          "warm_goodput_per_gpu_hour": 559.1207003069444,
+          "first_p95_ms": 1105.335599,
+          "last_p95_ms": 3206.506798,
+          "fixture_hashes": [
+            "0ba079d3904dd55f2d7c02d8bca42b308d1cca5c93c8cc9264f0fda4c14e70d8"
+          ],
+          "errors": [],
+          "visible_gap_p95_ms": 11.919549
+        },
+        {
+          "submitted": 2,
+          "correct": 2,
+          "slo_completed": 2,
+          "window_s": 3.32444416731596,
+          "warm_goodput_per_gpu_hour": 1082.8877908051963,
+          "first_p95_ms": 1144.167194,
+          "last_p95_ms": 3286.385065,
+          "fixture_hashes": [
+            "3f58cca2510a0d65ed7313aac64c6c478006193de2d1029fc6a917614b4d255d",
+            "85b9da4b2c1209e4d6683d747433776517e51f3c99d4cad6b56decc57651fd8c"
+          ],
+          "errors": [],
+          "visible_gap_p95_ms": 12.007219
+        },
+        {
+          "submitted": 4,
+          "correct": 3,
+          "slo_completed": 3,
+          "window_s": 3.9369836151599884,
+          "warm_goodput_per_gpu_hour": 1371.6084515075022,
+          "first_p95_ms": 1468.690427,
+          "last_p95_ms": 3898.925873,
+          "fixture_hashes": [
+            "435c654d7ee31c006a9b1ef673c1f810b248cd528873cd3b5d2c7f3b5dfb5501",
+            "0b6ddbd6ae249886955098b21e25de471f1a335077c6a12487404226e4aeb18d",
+            "b462472116f76ab75075584f362bca3221c7da234908d42576a39246d854c63c",
+            "a87419c542e0f7219e998b1abdf80cd8711a624d163068225f62238ff37df2e3"
+          ],
+          "errors": [
+            {
+              "seed": 783,
+              "reason": "final answer failed values, citations, length or finish: [80, 31, 49]"
+            }
+          ],
+          "visible_gap_p95_ms": 12.383104
+        },
+        {
+          "submitted": 8,
+          "correct": 7,
+          "slo_completed": 7,
+          "window_s": 4.22842014580965,
+          "warm_goodput_per_gpu_hour": 2979.836337334301,
+          "first_p95_ms": 2010.745094,
+          "last_p95_ms": 4140.247286,
+          "fixture_hashes": [
+            "77793da5df06912975f5587e399ba0105671a1698563f9cea23faf8682710aad",
+            "0bfd6638650ab3eaf48313d1d0e2090f70570fc35c2351b49008cc00a660de9d",
+            "cd6e22854b79923e875d988bd4b90f305002d9135b5d6eb650b6a70188f60e88",
+            "0729f2f65c11f6010558ca326153130c69a6fa28235a8fe769de5929dd2f36b1",
+            "5402a472f26f55cedacccbed0ef4b7b284e4026d6720457a07a42f30730b99e0",
+            "82ab3fa21a89100cae12eed6aa418f06ff0c46ce152e570f503775787ab1842a",
+            "4148bdbc84041a9a3268b875b66e43bae0e1e896f57b71e4de9ebdb9ea5371ce",
+            "6668a4971defbb129918f0f9829464fd729a163c642c8d3d24f0100eb3fc6a48"
+          ],
+          "errors": [
+            {
+              "seed": 797,
+              "reason": "final answer failed values, citations, length or finish: [83, 24, 59]"
+            }
+          ],
+          "visible_gap_p95_ms": 21.632769
+        }
+      ],
+      "allocation_gpu_seconds": 256.1922416538,
+      "slo_workflows_per_allocated_gpu_hour": 182.67532107097213,
+      "burst": {
+        "statuses": {
+          "200": 17
+        },
+        "protected_correct": true,
+        "started_during_peer_stream": true,
+        "peer_gap_p95_ms": 11.926175,
+        "real_client_drops": 1,
+        "counter_delta": {
+          "cancellations": 1,
+          "disconnects": 1,
+          "overloads": 0,
+          "dropped_observations": 0
+        },
+        "idle_after": true
+      }
+    }
+  ]
+}

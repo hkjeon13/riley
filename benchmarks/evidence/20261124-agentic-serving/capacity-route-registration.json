@@ -1,0 +1,38 @@
+{
+  "scope": "Supplementary two-replica trial after observing the 8-slot latency cliff. Compare existing cost and capacity-aware cost for a different 4500-7900-token prompt. Warm GPU6, known pinned peers on GPU6, idle GPU7. Fresh seed per probe; verify comparison lengths, actual overlap and HTTP receipt.",
+  "order": [
+    [
+      4,
+      "cost"
+    ],
+    [
+      4,
+      "capacity"
+    ],
+    [
+      8,
+      "capacity"
+    ],
+    [
+      8,
+      "cost"
+    ],
+    [
+      7,
+      "capacity"
+    ],
+    [
+      7,
+      "cost"
+    ],
+    [
+      8,
+      "cost"
+    ],
+    [
+      8,
+      "capacity"
+    ]
+  ],
+  "decision": "Report route selected, continuation TTFT, overlap, cached tokens, and all errors. Single restart is a functional and mechanism test, not a fleet throughput promotion."
+}

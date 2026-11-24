@@ -1,0 +1,4 @@
+{
+ "arms":["round-robin","round-robin"],
+ "scope":"Two colocated vLLM 0.27.1+cu129 Coder-14B BF16 replicas; reproduce the prior protected deployment settings except loopback ports, execute the exact same combined arrivals, CPU masks, recordings and client as Riley. Keep independent warmup and 2 repeated round-robin waves. Compare same endpoint policies directly. Effective vLLM prefill budget 2048 and Riley 256 are the previously tested engine settings. This is a system-level comparison under the same GPU allocation and KV capacity, not a crossover of distinct initialization order."
+}

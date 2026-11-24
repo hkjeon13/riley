@@ -1,0 +1,98 @@
+{
+  "training_steps": 1834,
+  "distinct_cost_cells": 89,
+  "heldout": [
+    {
+      "width": 512,
+      "correct_workflows": 4,
+      "observed_last_first_ms": 555.747705,
+      "observed_last_end_ms": 2727.515781,
+      "scenarios": {
+        "fifo": {
+          "last_first_ms": 549.6044834999999,
+          "last_end_ms": 2684.883858499994,
+          "max_decode_gap_ms": 41.14136075000005
+        },
+        "rotate": {
+          "last_first_ms": 542.1884242499999,
+          "last_end_ms": 2714.2527742499938,
+          "max_decode_gap_ms": 41.42583349999995
+        },
+        "deadline": {
+          "last_first_ms": 586.0242634999998,
+          "last_end_ms": 2716.4353974999954,
+          "max_decode_gap_ms": 22.520673999999985
+        }
+      }
+    },
+    {
+      "width": 1024,
+      "correct_workflows": 4,
+      "observed_last_first_ms": 515.635348,
+      "observed_last_end_ms": 2724.713401,
+      "scenarios": {
+        "fifo": {
+          "last_first_ms": 503.48733849999996,
+          "last_end_ms": 2747.417691499995,
+          "max_decode_gap_ms": 76.10175400000003
+        },
+        "rotate": {
+          "last_first_ms": 489.00593749999996,
+          "last_end_ms": 2722.0148164999946,
+          "max_decode_gap_ms": 72.07442349999997
+        },
+        "deadline": {
+          "last_first_ms": 581.8344379999999,
+          "last_end_ms": 2821.313752999995,
+          "max_decode_gap_ms": 22.520673999999985
+        }
+      }
+    },
+    {
+      "width": 128,
+      "correct_workflows": 4,
+      "observed_last_first_ms": 895.388045,
+      "observed_last_end_ms": 3035.732824,
+      "scenarios": {
+        "fifo": {
+          "last_first_ms": 903.2320084999996,
+          "last_end_ms": 3131.7633414999937,
+          "max_decode_gap_ms": 16.857859500000018
+        },
+        "rotate": {
+          "last_first_ms": 894.9790614999997,
+          "last_end_ms": 3024.301297499989,
+          "max_decode_gap_ms": 16.974243500000057
+        },
+        "deadline": {
+          "last_first_ms": 593.7012079999998,
+          "last_end_ms": 2831.211442999996,
+          "max_decode_gap_ms": 22.520673999999985
+        }
+      }
+    },
+    {
+      "width": 256,
+      "correct_workflows": 4,
+      "observed_last_first_ms": 588.781929,
+      "observed_last_end_ms": 2710.636423,
+      "scenarios": {
+        "fifo": {
+          "last_first_ms": 602.3642124999998,
+          "last_end_ms": 2613.3613894999944,
+          "max_decode_gap_ms": 22.520673999999985
+        },
+        "rotate": {
+          "last_first_ms": 594.5301759999998,
+          "last_end_ms": 2729.0226689999927,
+          "max_decode_gap_ms": 22.520673999999985
+        },
+        "deadline": {
+          "last_first_ms": 587.0127679999998,
+          "last_end_ms": 2610.475902999994,
+          "max_decode_gap_ms": 22.520673999999985
+        }
+      }
+    }
+  ]
+}

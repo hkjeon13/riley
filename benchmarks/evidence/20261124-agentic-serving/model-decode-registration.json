@@ -1,0 +1,7 @@
+{
+ "models":{"6":"Qwen2.5-3B-Instruct","7":"Qwen2.5-Coder-7B-Instruct"},
+ "order":{"6":["riley","vllm","vllm","riley"],"7":["vllm","riley","riley","vllm"]},
+ "scope":"Two fresh pairs per model on the same physical device, weights and tokenizer. The Riley stock image and idle-prefill-wide configuration of the 7B study; installed vLLM default generation config, BF16, block size 16, cache opportunity on both, context 8192, eight slots. Allocate 4096 KV blocks worth of bytes for each model using 2*K/V_heads*head_dim*layers*2_bytes*16. Record actual block/hit differences.",
+ "protocol":"Freeze the four actual final-turn Riley-7B API bodies used in the prior crossover; no substitution of own generated calls. First collect prompt and generated IDs, then 3 measured paired waves for each of history 0/200 at offsets 0/200ms. Need actual temporal overlap and 64 generated tokens. Separate, post-measurement natural task chains at seeds 761 (0 history, 2 notes), 762 (100 history, 96 notes) record tool schemas, final numbers, citations, finish and latency without filtering errors.",
+ "decision":"Descriptive screen only. Require submitted input and rendered token fingerprint equality, length and warm cached tokens equality, under 3ms arrival drift, and both paired starts meeting TPOT p50 and pooled visible gap p95 ratios <=1.0 in all four cells. Report identity output differences independently. A failed or missing cell is not parity. Two starts cannot replace the five-pair qualification. Preserve any tool/quality errors separately."
+}

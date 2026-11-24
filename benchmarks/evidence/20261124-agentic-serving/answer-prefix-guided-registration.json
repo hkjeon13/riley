@@ -1,0 +1,18 @@
+{
+  "checkpoint": "Qwen2.5-Coder-7B-Instruct",
+  "native_profiler": "probe",
+  "report_prefix": true,
+  "jobs": [
+    [
+      17101,
+      200
+    ],
+    [
+      17104,
+      0
+    ]
+  ],
+  "delay_s": 0.5,
+  "scope": "Follow-up after seed 17101 generated 35 tokens without defining p95. Keep original request, checkpoint, source rows and supplied opening. Add one application instruction describing remaining word budget, percentile meaning, interpretation and limits. Recheck both original seeds on CPU. Record actual model words and natural stop; no change in acceptance criteria.",
+  "guide_continuation": true
+}

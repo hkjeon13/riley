@@ -1,0 +1,7 @@
+{
+ "scope":"Isolated single-host release rollback by local Docker image ID. Instantiate two immutable images with different actual Riley executables. No registry push, customer endpoint, or cluster change.",
+ "base":"sha256:67efe6fbdaebcc8a088eaa9626f1adb43cf1af3e673ccae2d9af076fa99bdd24",
+ "candidate":"Overlay only the already verified source release binary from named-prefix32 into a new stopped base container; commit it to a fresh local content-addressed image. Inherit base entrypoint. Verify local image ID, container inspected .Image and /proc/1/exe bytes, no mounts over the binary.",
+ "sequence":"Drain old base on GPU6, serve new traffic from candidate on GPU7, start a new base instance on GPU6, interrupt only the candidate during a real final stream, then replay explicitly to the ready base. Run original citation and durable side-effect checks through distinct actual container endpoints.",
+ "gates":"Both gracefully stopped base instances return all allocations, three leases idle, candidate-only deadline flag accepted, interrupted candidate really exits 137, both source IDs plus required numbers verified in recovered and post-rollback answers, exactly two committed effects in four attempts. No inference about lost-host detection time or production traffic."
+}

@@ -1,0 +1,6 @@
+{
+ "arms":["round-robin","round-robin"],
+ "objective":"Trade part of the observed stream gap margin for earlier long-input service, without dividing the replicas. Two same-device Coder-14B servers. Previous page of results shows Riley gap p95 ~43ms and vLLM RAG ~84ms, 1024-row projected work takes about 122ms, so choose 512 as the single intermediate candidate before observing results.",
+ "candidate":"512 token prefill/chunk only where a long input >=512 tokens is ready and at most 8 active decode rows are ready. Use the existing 256-row steady path otherwise. Same immutable stock binary and all other flags. Supplied explicit bucket list is the original 256 profile plus 512 only.",
+ "acceptance":"Both matched waves: every Riley output equals historical stock; admissions p95 error <=5ms for Riley and contemporaneous reference; RAG TTFT p95 <=1.15x same-two-GPU vLLM, at least 5% below same-two-GPU Riley 256; per-class gap p95 and completion p95 no worse than vLLM, short last p95 <=1.05x Riley 256. Report any reference or input-timing failures regardless of speed. Deferred customer or default promotion. Additionally replay the isolated single-GPU protected RAG and C32 schedules on each candidate GPU to check whether the original RAG 1.15x gate holds on its own terms."
+}

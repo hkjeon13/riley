@@ -1,0 +1,76 @@
+--- a/crates/riley-server/src/chat.rs
++++ b/crates/riley-server/src/chat.rs
+@@ -291,6 +291,9 @@
+     /// `none`, `auto`, `required`, or one named function.
+     #[serde(default)]
+     pub tool_choice: Option<Value>,
++    /// Keeps this request's declared tools in the template when calls are disabled.
++    #[serde(default)]
++    pub include_tools_when_tool_choice_none: bool,
+     /// Whether a forced `tool_choice` may produce several calls.
+     #[serde(default)]
+     pub parallel_tool_calls: Option<bool>,
+@@ -521,14 +524,24 @@
+             "top_logprobs requires logprobs",
+         ));
+     }
+-    let tools = offered_tools(&request).map(<[Value]>::to_vec);
+-    if tools.is_some() && template.tool_style.is_none() {
++    let calls_enabled = offered_tools(&request).is_some();
++    let rendered_tools = if calls_enabled || request.include_tools_when_tool_choice_none {
++        request.tools.as_deref().filter(|tools| !tools.is_empty())
++    } else {
++        None
++    };
++    if rendered_tools.is_some() && template.tool_style.is_none() {
+         return Err(invalid(
+             "tools",
+             "this model's chat template does not support tools",
+         ));
+     }
+-    let tool_grammar = match (template.tool_style, tools.is_some()) {
++    if !calls_enabled {
++        for tool in rendered_tools.unwrap_or_default() {
++            tool_function(tool)?;
++        }
++    }
++    let tool_grammar = match (template.tool_style, calls_enabled) {
+         (Some(style), true) => tool_grammar(&request, style)?,
+         _ => None,
+     };
+@@ -561,7 +574,7 @@
+             &messages,
+             request.add_generation_prompt.unwrap_or(true),
+             &request.chat_template_kwargs.unwrap_or_default(),
+-            tools.as_deref(),
++            rendered_tools,
+         )
+         .map_err(ChatRequestError::Template)?;
+ 
+@@ -1067,6 +1080,26 @@
+     }
+ 
+     #[test]
++    fn final_turn_can_keep_tool_descriptions_without_enabling_calls() {
++        let mut body = json!({"model":"m", "tools":weather(), "tool_choice":"none",
++            "messages":[{"role":"user","content":"Summarize the report."}]});
++        let tmpl = template(TOOLS);
++        let hidden = normalize_chat_request(request(body.clone()), &tmpl, limits()).unwrap();
++        body["include_tools_when_tool_choice_none"] = json!(true);
++        let parsed = request(body.clone());
++        assert_eq!(tmpl.tool_parsing(&parsed), None);
++        let kept = normalize_chat_request(parsed, &tmpl, limits()).unwrap();
++        assert!(kept.grammar.is_none());
++        assert_ne!(kept.prompt, hidden.prompt);
++        body["tool_choice"] = json!("auto");
++        let offered = normalize_chat_request(request(body.clone()), &tmpl, limits()).unwrap();
++        assert_eq!(kept.prompt, offered.prompt);
++        body["tool_choice"] = json!("none");
++        body["tools"] = json!([{"type":"function","function":{}}]);
++        assert!(normalize_chat_request(request(body), &tmpl, limits()).is_err());
++    }
++
++    #[test]
+     fn forced_tool_choice_compiles_a_grammar_and_rejects_unknown_functions() {
+         use riley_runtime::grammar::GrammarAutomaton;
+         let body = json!({"model": "m", "tools": weather(), "tool_choice": "required",

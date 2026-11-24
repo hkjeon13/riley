@@ -1,0 +1,389 @@
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -6,6 +6,7 @@
+ use std::collections::BTreeMap;
+ use std::env;
+ use std::ffi::{OsStr, OsString};
++use std::num::NonZeroUsize;
+ use std::path::PathBuf;
+ use std::process::ExitCode;
+ #[cfg(all(any(feature = "cuda", test), unix))]
+@@ -87,6 +88,7 @@
+   --tensor-parallel-devices LIST tensor parallelism over 2..8 NVLink peer GPUs, CUDA ordinals in
+                                  rank order (e.g. 4,5); excludes --device
+   --max-active-sequences N       active scheduler capacity (default: 8)
++  --http-workers N               HTTP worker threads (native default: max(8, active sequences))
+   --max-waiting-requests N       waiting scheduler capacity (default: 64)
+   --request-timeout-ms MS        generation deadline after submission, 1..3600000 (default: 120000)
+   --admission-timeout-ms MS      bounded queue/command wait, 1..3600000 (default: 30000)
+@@ -234,6 +236,7 @@
+     max_waiting_requests: usize,
+     admission_timeout_ms: u64,
+     request_timeout_ms: Option<u64>,
++    http_workers: Option<NonZeroUsize>,
+     max_sequence_tokens: Option<usize>,
+     max_output_tokens: Option<usize>,
+     batch_token_budget: usize,
+@@ -498,6 +501,7 @@
+     let mut max_waiting_requests = None;
+     let mut admission_timeout_ms = None;
+     let mut request_timeout_ms = None;
++    let mut http_workers = None;
+     let mut max_sequence_tokens = None;
+     let mut max_output_tokens = None;
+     let mut batch_token_budget = None;
+@@ -612,6 +616,11 @@
+                     "--max-active-sequences",
+                 )?,
+                 "--max-active-sequences",
++            )?,
++            "--http-workers" => set_once(
++                &mut http_workers,
++                parse_number(next_value(&mut arguments, "--http-workers")?, "--http-workers")?,
++                "--http-workers",
+             )?,
+             "--request-timeout-ms" => set_once(
+                 &mut request_timeout_ms,
+@@ -1754,6 +1763,7 @@
+         max_waiting_requests: max_waiting_requests.unwrap_or(64),
+         admission_timeout_ms: admission_timeout_ms.unwrap_or(30_000),
+         request_timeout_ms,
++        http_workers,
+         max_sequence_tokens,
+         max_output_tokens,
+         batch_token_budget,
+@@ -2817,6 +2827,7 @@
+             max_waiting_requests: options.max_waiting_requests,
+             admission_timeout_ms: options.admission_timeout_ms,
+             request_timeout_ms: options.request_timeout_ms,
++            http_workers: options.http_workers,
+             maximum_live_requests,
+             max_output_tokens,
+             bind_address,
+@@ -3018,11 +3029,12 @@
+         api_key,
+         bind_address,
+         request_limits,
+-        // A streaming response holds its worker for the whole generation, so
+-        // fewer workers than active sequences would cap real concurrency.
+-        worker_threads: options
+-            .max_active_sequences
+-            .max(ServerConfig::default().worker_threads),
++        worker_threads: options.http_workers.map_or(
++            options
++                .max_active_sequences
++                .max(ServerConfig::default().worker_threads),
++            NonZeroUsize::get,
++        ),
+         ..ServerConfig::default()
+     };
+     let backend: Arc<dyn CompletionBackend> = engine;
+@@ -3084,6 +3096,7 @@
+     max_waiting_requests: usize,
+     admission_timeout_ms: u64,
+     request_timeout_ms: Option<u64>,
++    http_workers: Option<NonZeroUsize>,
+     maximum_live_requests: usize,
+     max_output_tokens: usize,
+     bind_address: std::net::SocketAddr,
+@@ -3230,6 +3243,9 @@
+             || ServerConfig::default().request_timeout,
+             Duration::from_millis,
+         ),
++        worker_threads: serve
++            .http_workers
++            .map_or(ServerConfig::default().worker_threads, NonZeroUsize::get),
+         bind_address: serve.bind_address,
+         request_limits: RequestLimits {
+             max_output_tokens: serve.max_output_tokens,
+@@ -5975,6 +5991,43 @@
+     }
+ 
+     #[test]
++    fn http_workers_are_positive_optional_and_independent_of_gpu_slots() {
++        let Ok(CliCommand::Serve(defaults)) = parse_arguments(args(&["serve", "--model", "/m"]))
++        else {
++            panic!("expected serve options");
++        };
++        assert!(defaults.http_workers.is_none());
++        let Ok(CliCommand::Serve(options)) =
++            parse_arguments(args(&["serve", "--model", "/m", "--http-workers", "16"]))
++        else {
++            panic!("expected explicit HTTP capacity");
++        };
++        assert_eq!(
++            options.http_workers.map(std::num::NonZeroUsize::get),
++            Some(16)
++        );
++        assert_eq!(options.max_active_sequences, 8);
++        for invalid in ["0", "-1", "1.5", "none"] {
++            assert!(
++                parse_arguments(args(&["serve", "--model", "/m", "--http-workers", invalid]))
++                    .is_err()
++            );
++        }
++        assert!(
++            parse_arguments(args(&[
++                "serve",
++                "--model",
++                "/m",
++                "--http-workers",
++                "8",
++                "--http-workers",
++                "16"
++            ]))
++            .is_err()
++        );
++    }
++
++    #[test]
+     fn request_timeout_is_optional_and_independent_of_admission_timeout() {
+         let Ok(CliCommand::Serve(defaults)) = parse_arguments(args(&["serve", "--model", "/m"]))
+         else {
+@@ -6104,6 +6157,7 @@
+                 max_waiting_requests: 64,
+                 admission_timeout_ms: 30_000,
+                 request_timeout_ms: None,
++                http_workers: None,
+                 max_sequence_tokens: None,
+                 max_output_tokens: None,
+                 batch_token_budget: 512,
+@@ -6526,6 +6580,7 @@
+                 max_waiting_requests: 9,
+                 admission_timeout_ms: 30_000,
+                 request_timeout_ms: None,
++                http_workers: None,
+                 max_sequence_tokens: Some(2048),
+                 max_output_tokens: Some(128),
+                 batch_token_budget: 64,
+@@ -6818,6 +6873,7 @@
+                 max_waiting_requests: 64,
+                 admission_timeout_ms: 30_000,
+                 request_timeout_ms: None,
++                http_workers: None,
+                 max_sequence_tokens: None,
+                 max_output_tokens: None,
+                 batch_token_budget: 7,
+@@ -7375,6 +7431,7 @@
+                 max_waiting_requests: 64,
+                 admission_timeout_ms: 30_000,
+                 request_timeout_ms: None,
++                http_workers: None,
+                 max_sequence_tokens: None,
+                 max_output_tokens: None,
+                 batch_token_budget: 512,
+--- a/crates/riley-server/src/service.rs
++++ b/crates/riley-server/src/service.rs
+@@ -115,12 +115,23 @@
+ 
+ #[derive(Debug, Default)]
+ struct ServiceMetrics {
++    http_worker_queue: Mutex<HttpWorkerQueueMetrics>,
+     cancellations: AtomicU64,
+     disconnects: AtomicU64,
+     overloads: AtomicU64,
+ }
+ 
+ impl ServiceMetrics {
++    fn record_worker_wait(&self, wait_ns: u64) {
++        let mut queue = self
++            .http_worker_queue
++            .lock()
++            .unwrap_or_else(std::sync::PoisonError::into_inner);
++        queue.dequeued_connections = queue.dequeued_connections.saturating_add(1);
++        queue.wait_ns_total = queue.wait_ns_total.saturating_add(wait_ns);
++        queue.wait_ns_max = queue.wait_ns_max.max(wait_ns);
++    }
++
+     fn record_overload(&self) {
+         let _ = self
+             .overloads
+@@ -764,6 +775,7 @@
+ 
+ #[derive(Debug)]
+ struct ConnectionJob {
++    enqueued_at: Instant,
+     stream: TcpStream,
+     registry_slot: usize,
+ }
+@@ -1179,6 +1191,7 @@
+                     continue;
+                 };
+                 match sender.try_send(ConnectionJob {
++                    enqueued_at: Instant::now(),
+                     stream,
+                     registry_slot,
+                 }) {
+@@ -1229,6 +1242,9 @@
+             .recv();
+         match job_result {
+             Ok(mut job) => {
++                let wait_ns =
++                    u64::try_from(job.enqueued_at.elapsed().as_nanos()).unwrap_or(u64::MAX);
++                metrics.record_worker_wait(wait_ns);
+                 if stopping.load(Ordering::Acquire) {
+                     let _ = write_api_error(&mut job.stream, &ApiError::ShuttingDown);
+                     let _ = job.stream.shutdown(Shutdown::Both);
+@@ -1515,6 +1531,17 @@
+     }
+ }
+ 
++/// Time between submitting an accepted socket to the bounded queue and worker pickup.
++#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
++pub struct HttpWorkerQueueMetrics {
++    /// Connections picked up by an HTTP worker, including metrics scrapes.
++    pub dequeued_connections: u64,
++    /// Sum of connection queue waits in nanoseconds.
++    pub wait_ns_total: u64,
++    /// Longest connection queue wait in nanoseconds.
++    pub wait_ns_max: u64,
++}
++
+ /// Monotonic service counters in the operational metrics response.
+ #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+ pub struct OperationalCounters {
+@@ -1531,6 +1558,8 @@
+ /// Fixed, prompt-free JSON contract used by release and soak gates.
+ #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+ pub struct OperationalMetricsSnapshot {
++    /// Accepted connection queue timing before the worker reads the request.
++    pub http_worker_queue: HttpWorkerQueueMetrics,
+     /// Requests currently admitted to backend ownership.
+     pub active_requests: u64,
+     /// Requests waiting in bounded admission state.
+@@ -1577,6 +1606,10 @@
+     let allocation = backend_metrics.allocation.unwrap_or_default();
+     let batch_shapes = operational_batch_shapes(backend_metrics);
+     OperationalMetricsSnapshot {
++        http_worker_queue: *metrics
++            .http_worker_queue
++            .lock()
++            .unwrap_or_else(std::sync::PoisonError::into_inner),
+         active_requests: u64::try_from(status.active_requests).unwrap_or(u64::MAX),
+         waiting_requests: u64::try_from(status.waiting_requests).unwrap_or(u64::MAX),
+         kv_allocated_blocks,
+@@ -3568,11 +3601,15 @@
+             assert_eq!(observation.status, RequestObservationStatus::Completed);
+             assert_eq!(observation.error_class, None);
+         }
++        let snapshot = server.shutdown_with_metrics().expect("final metrics");
++        assert_eq!(snapshot.http_worker_queue.dequeued_connections, 2);
++        assert!(snapshot.http_worker_queue.wait_ns_total >= snapshot.http_worker_queue.wait_ns_max);
+         assert_eq!(
+-            server
+-                .shutdown_with_metrics()
+-                .expect("graceful shutdown with final metrics"),
+-            OperationalMetricsSnapshot::default()
++            snapshot,
++            OperationalMetricsSnapshot {
++                http_worker_queue: snapshot.http_worker_queue,
++                ..OperationalMetricsSnapshot::default()
++            }
+         );
+     }
+ 
+@@ -3733,6 +3770,7 @@
+                 "allocation",
+                 "batch_shapes",
+                 "counters",
++                "http_worker_queue",
+                 "kv_allocated_blocks",
+                 "prefix_cache",
+                 "waiting_requests",
+@@ -3760,9 +3798,18 @@
+                 .len(),
+             ENGINE_BATCH_SHAPE_BUCKET_CAPACITY
+         );
++        let snapshot = server.metrics_snapshot().expect("snapshot");
++        assert_eq!(snapshot.http_worker_queue.dequeued_connections, 4);
+         assert_eq!(
+-            server.metrics_snapshot().expect("snapshot"),
+-            OperationalMetricsSnapshot::default()
++            metrics_json["http_worker_queue"],
++            json!(snapshot.http_worker_queue)
++        );
++        assert_eq!(
++            snapshot,
++            OperationalMetricsSnapshot {
++                http_worker_queue: snapshot.http_worker_queue,
++                ..OperationalMetricsSnapshot::default()
++            }
+         );
+         let models = send_request(
+             server.local_address(),
+@@ -4158,6 +4205,75 @@
+     }
+ 
+     #[test]
++    fn queue_wait_times_only_connections_picked_up_by_workers() {
++        let mut config = test_config();
++        config.worker_threads = 1;
++        config.connection_queue_capacity = 1;
++        config.read_timeout = TEST_TIMEOUT;
++        config.framing_timeout = TEST_TIMEOUT;
++        let server = start_server(config, TestBackend::new([])).expect("start server");
++        let first = TcpStream::connect(server.local_address()).expect("hold worker");
++        let deadline = Instant::now() + TEST_TIMEOUT;
++        while server
++            .metrics_snapshot()
++            .expect("metrics")
++            .http_worker_queue
++            .dequeued_connections
++            == 0
++        {
++            assert!(
++                Instant::now() < deadline,
++                "worker did not pick up first socket"
++            );
++            thread::yield_now();
++        }
++        let mut queued = TcpStream::connect(server.local_address()).expect("queued socket");
++        queued
++            .set_read_timeout(Some(TEST_TIMEOUT))
++            .expect("timeout");
++        queued
++            .write_all(b"GET /metrics HTTP/1.1\r\nHost: localhost\r\n\r\n")
++            .expect("write request");
++        while server
++            .connections
++            .slots
++            .lock()
++            .expect("slots")
++            .iter()
++            .flatten()
++            .count()
++            < 2
++        {
++            assert!(
++                Instant::now() < deadline,
++                "second socket was not registered"
++            );
++            thread::yield_now();
++        }
++        let excess = send_request(
++            server.local_address(),
++            b"GET /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n",
++        );
++        assert_eq!(response_status(&excess), 429);
++        thread::sleep(Duration::from_millis(20));
++        drop(first);
++        let mut response = Vec::new();
++        queued
++            .read_to_end(&mut response)
++            .expect("read queued metrics");
++        assert_eq!(response_status(&response), 200);
++        let live: Value = serde_json::from_slice(response_body(&response)).expect("metrics");
++        let queue = server
++            .shutdown_with_metrics()
++            .expect("shutdown")
++            .http_worker_queue;
++        assert_eq!(queue.dequeued_connections, 2);
++        assert!(queue.wait_ns_max >= 15_000_000);
++        assert!(queue.wait_ns_total >= queue.wait_ns_max);
++        assert_eq!(live["http_worker_queue"], json!(queue));
++    }
++
++    #[test]
+     fn absolute_framing_deadline_rejects_trickle_and_releases_worker() {
+         let backend = TestBackend::new([]);
+         let backend_trait: Arc<dyn CompletionBackend> = backend.clone();

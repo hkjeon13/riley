@@ -1,0 +1,321 @@
+{
+  "server_sha256": "506b3e2519dd3c3dbb35c05f966b0fab339ae3326c5ecf21b0e8c118c1a015d6",
+  "placements": [
+    {
+      "warm_gpu": 6,
+      "policy": "capacity",
+      "external_streams": 4,
+      "input_tokens": 5745,
+      "selected_warm": true,
+      "readiness": null,
+      "cached_tokens": 5744,
+      "first_ms": 29.121783,
+      "done_ms": 29.194617,
+      "peer_pooled_gap_p95_ms": 11.952657,
+      "peer_worst_stream_gap_p95_ms": 11.958781
+    },
+    {
+      "warm_gpu": 6,
+      "policy": "observed-capacity",
+      "external_streams": 4,
+      "input_tokens": 5745,
+      "selected_warm": true,
+      "readiness": [
+        {
+          "available": true,
+          "active": 4,
+          "waiting": 0,
+          "age_ms": 24.765506386756897
+        },
+        {
+          "available": true,
+          "active": 0,
+          "waiting": 0,
+          "age_ms": 24.608612060546875
+        }
+      ],
+      "cached_tokens": 5744,
+      "first_ms": 30.019373,
+      "done_ms": 30.083944,
+      "peer_pooled_gap_p95_ms": 11.913078,
+      "peer_worst_stream_gap_p95_ms": 11.913931
+    },
+    {
+      "warm_gpu": 6,
+      "policy": "capacity",
+      "external_streams": 7,
+      "input_tokens": 5745,
+      "selected_warm": true,
+      "readiness": null,
+      "cached_tokens": 5744,
+      "first_ms": 19.293876,
+      "done_ms": 19.362143,
+      "peer_pooled_gap_p95_ms": 12.061218,
+      "peer_worst_stream_gap_p95_ms": 12.086584
+    },
+    {
+      "warm_gpu": 6,
+      "policy": "observed-capacity",
+      "external_streams": 7,
+      "input_tokens": 5745,
+      "selected_warm": true,
+      "readiness": [
+        {
+          "available": true,
+          "active": 7,
+          "waiting": 0,
+          "age_ms": 38.1845086812973
+        },
+        {
+          "available": true,
+          "active": 0,
+          "waiting": 0,
+          "age_ms": 38.03923726081848
+        }
+      ],
+      "cached_tokens": 5744,
+      "first_ms": 19.621552,
+      "done_ms": 19.676433,
+      "peer_pooled_gap_p95_ms": 12.071549,
+      "peer_worst_stream_gap_p95_ms": 12.084015
+    },
+    {
+      "warm_gpu": 6,
+      "policy": "capacity",
+      "external_streams": 8,
+      "input_tokens": 5745,
+      "selected_warm": true,
+      "readiness": null,
+      "cached_tokens": 5744,
+      "first_ms": 2096.477533,
+      "done_ms": 2096.561225,
+      "peer_pooled_gap_p95_ms": 12.122338,
+      "peer_worst_stream_gap_p95_ms": 12.132916
+    },
+    {
+      "warm_gpu": 6,
+      "policy": "observed-capacity",
+      "external_streams": 8,
+      "input_tokens": 5745,
+      "selected_warm": false,
+      "readiness": [
+        {
+          "available": true,
+          "active": 8,
+          "waiting": 0,
+          "age_ms": 35.3454053401947
+        },
+        {
+          "available": true,
+          "active": 0,
+          "waiting": 0,
+          "age_ms": 35.21876037120819
+        }
+      ],
+      "cached_tokens": null,
+      "first_ms": 463.295829,
+      "done_ms": 463.35898,
+      "peer_pooled_gap_p95_ms": 12.083365,
+      "peer_worst_stream_gap_p95_ms": 12.115947
+    },
+    {
+      "warm_gpu": 7,
+      "policy": "observed-capacity",
+      "external_streams": 8,
+      "input_tokens": 5745,
+      "selected_warm": false,
+      "readiness": [
+        {
+          "available": true,
+          "active": 8,
+          "waiting": 0,
+          "age_ms": 39.95928913354874
+        },
+        {
+          "available": true,
+          "active": 0,
+          "waiting": 0,
+          "age_ms": 39.81189429759979
+        }
+      ],
+      "cached_tokens": 16,
+      "first_ms": 462.75958,
+      "done_ms": 462.815668,
+      "peer_pooled_gap_p95_ms": 12.092644,
+      "peer_worst_stream_gap_p95_ms": 12.12818
+    },
+    {
+      "warm_gpu": 7,
+      "policy": "capacity",
+      "external_streams": 8,
+      "input_tokens": 5745,
+      "selected_warm": true,
+      "readiness": null,
+      "cached_tokens": 5744,
+      "first_ms": 2094.707431,
+      "done_ms": 2094.7918,
+      "peer_pooled_gap_p95_ms": 12.082725,
+      "peer_worst_stream_gap_p95_ms": 12.100694
+    },
+    {
+      "warm_gpu": 7,
+      "policy": "observed-capacity",
+      "external_streams": 7,
+      "input_tokens": 5745,
+      "selected_warm": true,
+      "readiness": [
+        {
+          "available": true,
+          "active": 7,
+          "waiting": 0,
+          "age_ms": 33.018939197063446
+        },
+        {
+          "available": true,
+          "active": 0,
+          "waiting": 0,
+          "age_ms": 32.9366996884346
+        }
+      ],
+      "cached_tokens": 5744,
+      "first_ms": 19.381355,
+      "done_ms": 19.428724,
+      "peer_pooled_gap_p95_ms": 12.077004,
+      "peer_worst_stream_gap_p95_ms": 12.090721
+    },
+    {
+      "warm_gpu": 7,
+      "policy": "capacity",
+      "external_streams": 7,
+      "input_tokens": 5745,
+      "selected_warm": true,
+      "readiness": null,
+      "cached_tokens": 5744,
+      "first_ms": 19.371353,
+      "done_ms": 19.436309,
+      "peer_pooled_gap_p95_ms": 12.064021,
+      "peer_worst_stream_gap_p95_ms": 12.098429
+    },
+    {
+      "warm_gpu": 7,
+      "policy": "observed-capacity",
+      "external_streams": 4,
+      "input_tokens": 5745,
+      "selected_warm": true,
+      "readiness": [
+        {
+          "available": true,
+          "active": 4,
+          "waiting": 0,
+          "age_ms": 30.924543738365173
+        },
+        {
+          "available": true,
+          "active": 0,
+          "waiting": 0,
+          "age_ms": 30.82069754600525
+        }
+      ],
+      "cached_tokens": 5744,
+      "first_ms": 17.836276,
+      "done_ms": 17.88821,
+      "peer_pooled_gap_p95_ms": 11.906499,
+      "peer_worst_stream_gap_p95_ms": 11.920978
+    },
+    {
+      "warm_gpu": 7,
+      "policy": "capacity",
+      "external_streams": 4,
+      "input_tokens": 5745,
+      "selected_warm": true,
+      "readiness": null,
+      "cached_tokens": 5744,
+      "first_ms": 17.834257,
+      "done_ms": 17.895398,
+      "peer_pooled_gap_p95_ms": 11.884376,
+      "peer_worst_stream_gap_p95_ms": 11.898779
+    }
+  ],
+  "paired_gates": [
+    {
+      "warm_gpu": 6,
+      "external_streams": 4,
+      "correct_destination": true,
+      "target_ttft_ratio": 1.030821945208506,
+      "target_passed": true,
+      "peer_gap_ratio": 0.9966886860385937,
+      "peer_passed": true
+    },
+    {
+      "warm_gpu": 6,
+      "external_streams": 7,
+      "correct_destination": true,
+      "target_ttft_ratio": 1.0169834200240533,
+      "target_passed": true,
+      "peer_gap_ratio": 1.000856546992186,
+      "peer_passed": true
+    },
+    {
+      "warm_gpu": 6,
+      "external_streams": 8,
+      "correct_destination": true,
+      "target_ttft_ratio": 0.22098773857930962,
+      "target_passed": true,
+      "peer_gap_ratio": 0.9967850261228487,
+      "peer_passed": true
+    },
+    {
+      "warm_gpu": 7,
+      "external_streams": 4,
+      "correct_destination": true,
+      "target_ttft_ratio": 1.000113209089675,
+      "target_passed": true,
+      "peer_gap_ratio": 1.001861519696112,
+      "peer_passed": true
+    },
+    {
+      "warm_gpu": 7,
+      "external_streams": 7,
+      "correct_destination": true,
+      "target_ttft_ratio": 1.0005163294479225,
+      "target_passed": true,
+      "peer_gap_ratio": 1.0010761751823873,
+      "peer_passed": true
+    },
+    {
+      "warm_gpu": 7,
+      "external_streams": 8,
+      "correct_destination": true,
+      "target_ttft_ratio": 0.2209184791878461,
+      "target_passed": true,
+      "peer_gap_ratio": 1.0008209240879025,
+      "peer_passed": true
+    }
+  ],
+  "replay": [
+    {
+      "submitted": 1,
+      "correct": 1,
+      "slo_completed": 1,
+      "first_p95_ms": 970.220874,
+      "last_p95_ms": 3072.997103
+    },
+    {
+      "submitted": 2,
+      "correct": 2,
+      "slo_completed": 2,
+      "first_p95_ms": 1137.738511,
+      "last_p95_ms": 3279.813872
+    },
+    {
+      "submitted": 4,
+      "correct": 3,
+      "slo_completed": 3,
+      "first_p95_ms": 1451.887299,
+      "last_p95_ms": 3880.341602
+    }
+  ],
+  "all_placement_and_peer_gates_passed": true,
+  "peer_stream_count": 76,
+  "observation_age_median_ms": 34.11884978413582
+}

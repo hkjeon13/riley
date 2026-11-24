@@ -1,0 +1,133 @@
+{
+  "physical_gpu": "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0",
+  "binary_sha256": "c179249ff85526546c220b0606051bdfba152eb81133600f91b856831314643c",
+  "cases": {
+    "final_solo": {
+      "page": {
+        "valid": true,
+        "input": 55,
+        "output": 192,
+        "cached": 0,
+        "first_ms": 73.184831,
+        "last_ms": 2299.604491,
+        "p95_content_gap_ms": 11.629134,
+        "max_content_gap_ms": 19.591131
+      },
+      "tile": {
+        "valid": true,
+        "input": 55,
+        "output": 192,
+        "cached": 0,
+        "first_ms": 18.617215,
+        "last_ms": 2228.772799,
+        "p95_content_gap_ms": 11.640009,
+        "max_content_gap_ms": 12.334221
+      },
+      "same_output_text": false
+    },
+    "cold": {
+      "page": {
+        "valid": false,
+        "input": 12185,
+        "output": 15,
+        "cached": 16,
+        "first_ms": 4730.352661,
+        "last_ms": 4912.534332,
+        "p95_content_gap_ms": 14.043996,
+        "max_content_gap_ms": 14.043996
+      },
+      "tile": {
+        "valid": true,
+        "input": 12185,
+        "output": 21,
+        "cached": 16,
+        "first_ms": 1121.714941,
+        "last_ms": 1361.153539,
+        "p95_content_gap_ms": 14.098685,
+        "max_content_gap_ms": 14.098685
+      },
+      "same_output_text": false
+    },
+    "continuation": {
+      "page": {
+        "valid": false,
+        "input": 12192,
+        "output": 40,
+        "cached": 12160,
+        "first_ms": 41.654742,
+        "last_ms": 588.654094,
+        "p95_content_gap_ms": 14.089695,
+        "max_content_gap_ms": 14.150994
+      },
+      "tile": {
+        "valid": true,
+        "input": 12192,
+        "output": 21,
+        "cached": 12160,
+        "first_ms": 23.898409,
+        "last_ms": 261.989572,
+        "p95_content_gap_ms": 12.567591,
+        "max_content_gap_ms": 12.567591
+      },
+      "same_output_text": false
+    },
+    "mixed_prefill": {
+      "page": {
+        "valid": false,
+        "input": 26785,
+        "output": 40,
+        "cached": 16,
+        "first_ms": 17233.19785,
+        "last_ms": 18014.918533,
+        "p95_content_gap_ms": 20.11745,
+        "max_content_gap_ms": 20.161324
+      },
+      "tile": {
+        "valid": false,
+        "input": 26785,
+        "output": 40,
+        "cached": 16,
+        "first_ms": 3123.606025,
+        "last_ms": 3653.204819,
+        "p95_content_gap_ms": 13.640354,
+        "max_content_gap_ms": 13.649596
+      },
+      "same_output_text": true
+    },
+    "final_mixed": {
+      "page": {
+        "valid": true,
+        "input": 55,
+        "output": 192,
+        "cached": 48,
+        "first_ms": 23.700762,
+        "last_ms": 18561.118221,
+        "p95_content_gap_ms": 261.331768,
+        "max_content_gap_ms": 280.789705
+      },
+      "tile": {
+        "valid": true,
+        "input": 55,
+        "output": 192,
+        "cached": 48,
+        "first_ms": 15.398292,
+        "last_ms": 4190.965708,
+        "p95_content_gap_ms": 38.884028,
+        "max_content_gap_ms": 40.711549
+      },
+      "same_output_text": false
+    }
+  },
+  "overlaps": {
+    "page": true,
+    "tile": true
+  },
+  "both_released": true,
+  "matched_inputs_and_cache": true,
+  "mixed_reader_tile_over_page": {
+    "p95_content_gap_ms": 0.14879181470199215,
+    "max_content_gap_ms": 0.14498946462442416,
+    "last_ms": 0.2257927382445284
+  },
+  "passed_registered_gates": false
+}

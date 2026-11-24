@@ -1,0 +1,115 @@
+{
+  "method": "Post-hoc exact phrase search for two observed incorrect interpretations of percentiles. Same inputs repeated; counts are lower bounds, not independent quality estimates.",
+  "evidence": {
+    "wide": {
+      "95% of the service responses are now faster by 28 ms on average": [
+        [
+          1,
+          200,
+          "cold"
+        ],
+        [
+          1,
+          200,
+          "immediate"
+        ],
+        [
+          1,
+          200,
+          "delayed"
+        ],
+        [
+          2,
+          200,
+          "cold"
+        ],
+        [
+          2,
+          200,
+          "immediate"
+        ],
+        [
+          2,
+          200,
+          "delayed"
+        ],
+        [
+          3,
+          200,
+          "cold"
+        ],
+        [
+          3,
+          200,
+          "immediate"
+        ],
+        [
+          3,
+          200,
+          "delayed"
+        ],
+        [
+          4,
+          200,
+          "cold"
+        ],
+        [
+          4,
+          200,
+          "immediate"
+        ],
+        [
+          4,
+          200,
+          "delayed"
+        ],
+        [
+          5,
+          200,
+          "cold"
+        ],
+        [
+          5,
+          200,
+          "immediate"
+        ],
+        [
+          5,
+          200,
+          "delayed"
+        ]
+      ],
+      "95% of the service response times were 84 ms before the changes and 12 ms after the changes": []
+    },
+    "vllm": {
+      "95% of the service responses are now faster by 28 ms on average": [],
+      "95% of the service response times were 84 ms before the changes and 12 ms after the changes": [
+        [
+          1,
+          200,
+          "long-tool-result"
+        ],
+        [
+          2,
+          200,
+          "long-tool-result"
+        ],
+        [
+          3,
+          200,
+          "long-tool-result"
+        ],
+        [
+          4,
+          200,
+          "long-tool-result"
+        ],
+        [
+          5,
+          200,
+          "long-tool-result"
+        ]
+      ]
+    }
+  }
+}

@@ -108,6 +108,16 @@ the completion path, so `max_tokens` (or `max_completion_tokens`, default
 - `content` is a string, `null`, or a list of `{"type": "text", "text": …}`
   parts; messages carry `role`, `content` and optionally `name`, and for tools
   `tool_calls` and `tool_call_id`.
+- `riley_assistant_prefix` optionally supplies the beginning of a plain-text answer.
+  Riley appends the exact text to the rendered assistant header before tokenization.
+  The client combines that text with the newly generated suffix returned by JSON or SSE.
+  Usage counts the prefix toward the prompt and only generated tokens toward
+  `completion_tokens` and `max_tokens`. For tool conversations, use `tool_choice: "none"`
+  on the final request. A nonempty prefix requires `add_generation_prompt: true`
+  (the default) and a plain-text response.
+  For example, an app that has already validated and displayed
+  `Measured latency was 24 ms. ` can pass
+  `{"riley_assistant_prefix": "Measured latency was 24 ms. "}` on the final chat call and stream the model's explanation immediately after it.
 - `chat_template_kwargs` adds template variables, e.g.
   `{"enable_thinking": false}` for Qwen3.
 - `logprobs: true` with `top_logprobs` 0 to 20 returns
@@ -250,6 +260,12 @@ A JSON object, free of prompt text:
 - `prefix_cache`: `retained_blocks`, `hit_tokens`, `evicted_blocks`,
   `metrics_degraded`
 - `counters`: `cancellations`, `disconnects`, `overloads`, `dropped_observations`
+- `http_worker_queue` reports accepted sockets picked up by HTTP workers.
+  `dequeued_connections` includes health and metrics requests. `wait_ns_total`
+  and `wait_ns_max` measure time from enqueue to pickup, before HTTP framing.
+  Immediately rejected sockets do not enter these counters. Divide the change in
+  total wait by the change in count for an interval mean. The maximum covers
+  the process lifetime. The shutdown snapshot includes these same fields.
 
 `prefix_cache.retained_blocks` counts cache entries in 16-token KV blocks
 and is excluded from `kv_allocated_blocks`. It can be positive after requests

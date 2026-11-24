@@ -1,0 +1,10 @@
+{
+  "source": "https://github.com/Azure/AzurePublicDataset/releases/download/ghcp-coding-agent-2026/date.2026-06-01.tar.gz",
+  "sha256": "cacad69f23d3c87ac54d788fec3f8e9c84df82c0cc9638d693340423c14e68e9",
+  "attribution": "Banruo Liu, Haoran Qiu, Iñigo Goiri, Rodrigo Fonseca, Ricardo Bianchini, Esha Choukse. Agentic Coding in the Wild: Characterizing GitHub Copilot Traces at Production Scale (2026). CC BY.",
+  "sampling": "all records in the first eight numbered June 1 shards, chosen before outcome inspection; report counts for missing or failed records. Use only June 1 UTC observations for temporal prediction.",
+  "representativeness": "non-enterprise GitHub Copilot agent telemetry, models anonymized; token counts belong to those models, no inference about a given customer",
+  "within_current_limits": "nonnegative known prompt and completion, completion <=384, prompt+completion <=8192",
+  "forecast": "tool batch shape defined by sorted lowercased tool names; train on batch timestamps before 12 UTC; heldout on timestamps from 12 UTC in the same day. Require 20 prior observations and lower-decile duration >=350ms to propose preparation. Report wrong positive forecasts and coverage, without claiming GPU speed from telemetry.",
+  "linkage": "Multiple calls can share message_id. Restrict tool-batch prediction analysis to matching prior message ID and unique consecutive call timestamps strictly bracketing the batch timestamp. This is temporal association within one turn, not proof of causality. Exclude potential noon-crossing calls from training."
+}

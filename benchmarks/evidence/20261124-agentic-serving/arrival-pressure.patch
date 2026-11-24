@@ -1,0 +1,300 @@
+--- a/crates/riley-scheduler/src/scheduler.rs
++++ b/crates/riley-scheduler/src/scheduler.rs
+@@ -445,6 +445,7 @@
+     descriptor: RequestDescriptor,
+     state: RequestState,
+     submitted_at_ns: u64,
++    admission_iteration: u64,
+     ready_since_ns: u64,
+     prefill_cursor: usize,
+     generated_token_ids: Vec<u32>,
+@@ -541,6 +542,7 @@
+     atomic_prefill_chunks: bool,
+     prefill_coalescing: Option<PrefillCoalescingPolicy>,
+     prefill_burst: Option<PrefillBurstPolicy>,
++    diagnostic_admission_order: bool,
+     prefix_cache: Option<PrefixCache>,
+     inflight: Option<InflightPlan>,
+     metrics: SchedulerMetrics,
+@@ -682,6 +684,8 @@
+             atomic_prefill_chunks: false,
+             prefill_coalescing: None,
+             prefill_burst: None,
++            diagnostic_admission_order: std::env::var("RILEY_EXPERIMENT_W3_ADMISSION_FIFO")
++                .is_ok_and(|value| value == "1"),
+             prefix_cache: None,
+             inflight: None,
+             metrics,
+@@ -937,6 +941,7 @@
+             descriptor,
+             state: RequestState::Waiting,
+             submitted_at_ns: now_ns,
++            admission_iteration: if can_admit { self.next_iteration_id } else { 0 },
+             ready_since_ns: now_ns,
+             prefill_cursor: 0,
+             generated_token_ids,
+@@ -1637,6 +1642,7 @@
+             let record = &mut self.requests[index];
+             transition(record, RequestState::Admitted)?;
+             record.sequence = Some(sequence);
++            record.admission_iteration = self.next_iteration_id;
+             record.ready_since_ns = now_ns;
+             observe_metric(
+                 &mut self.metrics_degraded,
+@@ -1762,6 +1768,7 @@
+                     if remaining != 0 {
+                         prefill.push(ReadyRequest {
+                             request_id: record.request_id,
++                            admission_iteration: record.admission_iteration,
+                             ready_since_ns: record.ready_since_ns,
+                             remaining_tokens: remaining,
+                             prompt_tokens: record.descriptor.prompt_token_ids.len(),
+@@ -1772,9 +1779,10 @@
+                 }
+                 RequestState::Decoding => decode.push(ReadyRequest {
+                     request_id: record.request_id,
++                    admission_iteration: record.admission_iteration,
+                     ready_since_ns: record.ready_since_ns,
+                     remaining_tokens: 1,
+-                    prompt_tokens: 0,
++                    prompt_tokens: record.descriptor.prompt_token_ids.len(),
+                     plateau_deferred: false,
+                     started: true,
+                 }),
+@@ -1784,7 +1792,6 @@
+                 | RequestState::Failed => {}
+             }
+         }
+-        prefill.sort_unstable_by_key(|item| (item.ready_since_ns, item.request_id));
+         decode.sort_unstable_by_key(|item| (item.ready_since_ns, item.request_id));
+ 
+         let mut selected = Vec::new();
+@@ -1802,8 +1809,36 @@
+             }
+             _ => self.config.iteration_token_budget,
+         };
++        // Keep long requests in admission order unless a group of long
++        // requests arrived together. Include readers that have already begun
++        // decoding so the protection spans the whole overlapping burst.
++        let admission_order = self.diagnostic_admission_order
++            && !self.atomic_prefill_chunks
++            && self.prefill_burst.is_some_and(|policy| {
++                policy.min_prompt_tokens > 0
++                    && budget > policy.steady_budget
++                    && prefill
++                        .iter()
++                        .all(|item| item.prompt_tokens >= policy.min_prompt_tokens)
++                    && !clustered_long_requests(
++                        prefill
++                            .iter()
++                            .chain(&decode)
++                            .filter(|item| item.prompt_tokens >= policy.min_prompt_tokens)
++                            .map(|item| item.admission_iteration),
++                    )
++            });
++        prefill.sort_unstable_by_key(|item| {
++            let priority = if admission_order {
++                0
++            } else {
++                item.ready_since_ns
++            };
++            (priority, item.request_id)
++        });
+         let mut aged_request = None;
+-        let can_override = !decode.is_empty() && !self.aging_override_last_iteration;
++        let can_override =
++            !admission_order && !decode.is_empty() && !self.aging_override_last_iteration;
+         if can_override {
+             aged_request = prefill.iter().find_map(|item| {
+                 (now_ns.saturating_sub(item.ready_since_ns) >= self.config.aging_threshold_ns)
+@@ -2925,9 +2960,22 @@
+     }
+ }
+ 
++// The iterator contains currently live, long requests only. Admission
++// iterations can be unordered because the request table reuses slots.
++fn clustered_long_requests(iterations: impl Iterator<Item = u64> + Clone) -> bool {
++    iterations.clone().any(|first| {
++        iterations
++            .clone()
++            .filter(|&step| step == first || step.checked_sub(1) == Some(first))
++            .nth(3)
++            .is_some()
++    })
++}
++
+ #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+ struct ReadyRequest {
+     request_id: RequestId,
++    admission_iteration: u64,
+     ready_since_ns: u64,
+     remaining_tokens: usize,
+     /// The whole prompt's length, for the burst's long-prompt test.
+@@ -3121,6 +3169,167 @@
+         assert_eq!(closed.final_metrics().gauges.promised_kv_blocks, 0);
+     }
+ 
++    #[test]
++    fn admission_order_preserves_decode_and_keeps_an_incomplete_long_prompt_first() {
++        use crate::{IterationPlan, PrefillBurstPolicy, WorkItem};
++
++        fn plan(scheduler: &mut Scheduler, now: u64) -> IterationPlan {
++            scheduler
++                .plan_iteration(now)
++                .unwrap()
++                .into_parts()
++                .0
++                .unwrap()
++        }
++
++        fn settle(scheduler: &mut Scheduler, plan: &IterationPlan, now: u64) {
++            let outputs = plan
++                .prefill_items()
++                .iter()
++                .chain(plan.decode_items())
++                .filter_map(WorkItem::output_slot)
++                .map(|slot| IterationOutput::new(slot, 7, false))
++                .collect();
++            let result = IterationResult::new(plan.iteration_id(), outputs, 1, 0).unwrap();
++            scheduler.complete_iteration(&result, now).unwrap();
++        }
++
++        for (enabled, second_length, atomic, step_time, expect_earliest, expect_decode_rows) in [
++            (false, 6, false, 5, false, 2),
++            (true, 6, false, 5, true, 2),
++            (false, 6, false, 15, false, 1),
++            (true, 6, false, 15, true, 2),
++            (true, 2, false, 5, false, 2),
++            (true, 2, false, 15, false, 2),
++            (true, 6, true, 5, false, 2),
++        ] {
++            let mut scheduler = test_scheduler_with_max_active_sequences(4);
++            scheduler.diagnostic_admission_order = enabled;
++            scheduler
++                .set_prefill_burst_policy(Some(PrefillBurstPolicy {
++                    steady_budget: 3,
++                    max_decode_rows: 2,
++                    min_prompt_tokens: 4,
++                }))
++                .unwrap();
++            let first_decode = scheduler
++                .submit(RequestDescriptor::new(vec![3], 8), 0)
++                .unwrap();
++            let second_decode = scheduler
++                .submit(RequestDescriptor::new(vec![4], 8), 0)
++                .unwrap();
++            let starting = plan(&mut scheduler, 0);
++            settle(&mut scheduler, &starting, 1);
++
++            let earliest = scheduler
++                .submit(RequestDescriptor::new(vec![5; 8], 2), 2)
++                .unwrap();
++            let partial = plan(&mut scheduler, 2);
++            assert_eq!(
++                partial.prefill_items()[0].request_id(),
++                earliest.request_id()
++            );
++            let later = scheduler
++                .submit(RequestDescriptor::new(vec![6; second_length], 2), 3)
++                .unwrap();
++            settle(&mut scheduler, &partial, 4);
++            scheduler.atomic_prefill_chunks = atomic;
++
++            let next = plan(&mut scheduler, step_time);
++            assert_eq!(next.decode_items().len(), expect_decode_rows);
++            assert_eq!(
++                next.decode_items()[0].request_id(),
++                first_decode.request_id()
++            );
++            if expect_decode_rows == 2 {
++                assert_eq!(
++                    next.decode_items()[1].request_id(),
++                    second_decode.request_id()
++                );
++            }
++            if atomic {
++                assert!(next.prefill_items().is_empty());
++            } else {
++                let expected = if expect_earliest { earliest } else { later };
++                assert_eq!(next.prefill_items()[0].request_id(), expected.request_id());
++            }
++        }
++    }
++
++    #[test]
++    fn two_long_prompts_keep_admission_order_across_chunks() {
++        use crate::{PrefillBurstPolicy, WorkItem};
++
++        for initially_waiting in [false, true] {
++            let max_active = if initially_waiting { 2 } else { 4 };
++            let mut scheduler = test_scheduler_with_max_active_sequences(max_active);
++            scheduler.diagnostic_admission_order = true;
++            scheduler
++                .set_prefill_burst_policy(Some(PrefillBurstPolicy {
++                    steady_budget: 3,
++                    max_decode_rows: 2,
++                    min_prompt_tokens: 4,
++                }))
++                .unwrap();
++            for token in [3, 4] {
++                scheduler
++                    .submit(RequestDescriptor::new(vec![token], 1), 0)
++                    .unwrap();
++            }
++            let starting = scheduler.plan_iteration(0).unwrap().into_parts().0.unwrap();
++            let earliest = scheduler
++                .submit(RequestDescriptor::new(vec![5; 8], 2), 1)
++                .unwrap();
++            let later = scheduler
++                .submit(RequestDescriptor::new(vec![6; 6], 2), 2)
++                .unwrap();
++            assert_eq!(
++                earliest.state(),
++                if initially_waiting {
++                    RequestState::Waiting
++                } else {
++                    RequestState::Admitted
++                }
++            );
++            assert_eq!(later.state(), earliest.state());
++            let outputs = starting
++                .prefill_items()
++                .iter()
++                .filter_map(WorkItem::output_slot)
++                .map(|slot| IterationOutput::new(slot, 7, false))
++                .collect();
++            let result = IterationResult::new(starting.iteration_id(), outputs, 1, 0).unwrap();
++            scheduler.complete_iteration(&result, 3).unwrap();
++
++            let first = scheduler.plan_iteration(3).unwrap().into_parts().0.unwrap();
++            assert_eq!(first.prefill_items()[0].request_id(), earliest.request_id());
++            let admission_iteration =
++                |id| scheduler.requests[scheduler.record_index(id).unwrap()].admission_iteration;
++            assert_eq!(
++                admission_iteration(earliest.request_id()),
++                admission_iteration(later.request_id())
++            );
++            let result = IterationResult::new(first.iteration_id(), vec![], 1, 0).unwrap();
++            scheduler.complete_iteration(&result, 4).unwrap();
++
++            let next = scheduler.plan_iteration(5).unwrap().into_parts().0.unwrap();
++            assert_eq!(next.prefill_items()[0].request_id(), earliest.request_id());
++        }
++    }
++
++    #[test]
++    fn cluster_requires_four_live_requests_in_two_adjacent_iterations() {
++        for (steps, expected) in [
++            (vec![9, 8, 9, 8], true),
++            (vec![5, 5, 5, 5], true),
++            (vec![8, 8, 9], false),
++            (vec![8, 9, 9, 10], false),
++            (vec![0, u64::MAX, 0, u64::MAX], false),
++        ] {
++            assert_eq!(super::clustered_long_requests(steps.into_iter()), expected);
++        }
++    }
++
+     fn test_scheduler() -> Scheduler {
+         test_scheduler_with_max_active_sequences(1)
+     }

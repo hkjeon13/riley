@@ -1,0 +1,85 @@
+{
+  "engine": "vllm",
+  "devices": [
+    "GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7",
+    "GPU-d9e89dc4-e4e2-00d2-8a22-9d696d5b9ff0"
+  ],
+  "order": [
+    "round-robin",
+    "round-robin"
+  ],
+  "arms": [
+    {
+      "classes": {
+        "rag": {
+          "n": 64,
+          "completed": 64,
+          "matches_reference": 21,
+          "replica_counts": {
+            "0": 32,
+            "1": 32
+          },
+          "arrival_error_p95_ms": 1.9059255719184875,
+          "ttft_p95_ms": 804.6839684247971,
+          "last_p95_ms": 5417.7117720246315,
+          "tpot_p50_ms": 29.436739410941055,
+          "request_gap_p95_across_requests_p95_ms": 83.62341672182083
+        },
+        "short": {
+          "n": 192,
+          "completed": 192,
+          "matches_reference": 111,
+          "replica_counts": {
+            "0": 96,
+            "1": 96
+          },
+          "arrival_error_p95_ms": 2.530418336391449,
+          "ttft_p95_ms": 1237.4205365777016,
+          "last_p95_ms": 3665.669582784176,
+          "tpot_p50_ms": 39.227697584364144,
+          "request_gap_p95_across_requests_p95_ms": 206.43159002065659
+        }
+      },
+      "long_requests_overlapping_short_window": 22,
+      "observed_seconds": 46.5907713919878,
+      "matched_completions_per_gpu_hour": 5099.722389246811,
+      "independently_resolved_routing_decisions": 256
+    },
+    {
+      "classes": {
+        "rag": {
+          "n": 64,
+          "completed": 64,
+          "matches_reference": 22,
+          "replica_counts": {
+            "0": 32,
+            "1": 32
+          },
+          "arrival_error_p95_ms": 2.224966883659363,
+          "ttft_p95_ms": 822.7384686470032,
+          "last_p95_ms": 5435.122594237328,
+          "tpot_p50_ms": 29.490128980846855,
+          "request_gap_p95_across_requests_p95_ms": 83.90065282583237
+        },
+        "short": {
+          "n": 192,
+          "completed": 192,
+          "matches_reference": 106,
+          "replica_counts": {
+            "0": 96,
+            "1": 96
+          },
+          "arrival_error_p95_ms": 5.556702613830566,
+          "ttft_p95_ms": 1240.3725013136864,
+          "last_p95_ms": 3678.9062321186066,
+          "tpot_p50_ms": 39.14135422498461,
+          "request_gap_p95_across_requests_p95_ms": 207.66756683588028
+        }
+      },
+      "long_requests_overlapping_short_window": 22,
+      "observed_seconds": 46.596708320081234,
+      "matched_completions_per_gpu_hour": 4944.555276680504,
+      "independently_resolved_routing_decisions": 256
+    }
+  ]
+}

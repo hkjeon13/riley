@@ -1,0 +1,5 @@
+{
+  "orders":{"6":[8,16],"7":[16,8]},
+  "load":"Replay coder-pressure-registration.json with mode off. Same device, weights, inputs, burst arrival times, eight GPU slots and binary. Four fresh boots across two A100s. Omit worker flag for baseline.",
+  "decision":"At both GPUs, the two C16 waves must reduce long final HTTP queue median and final submit-to-first-content p95, preserve previously valid jobs and improve both scheduled SLO count and warm SLO goodput. Reader scheduled-first and gap p95, and all-job scheduled completion p95 may grow at most 5%. All observed outcomes and smaller waves are reported."
+}

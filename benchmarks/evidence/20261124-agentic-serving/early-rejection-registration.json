@@ -1,0 +1,6 @@
+{
+ "problem": "In the first 960-request campaign 62 external arrivals failed with BrokenPipeError before the old client called getresponse. The server's full listener can reply with 429 before receiving the POST body.",
+ "change": "Only on BrokenPipeError, allow up to 250ms to read an already transmitted HTTP error from the same connection. Never retry a POST or treat a partial write as successful. If no rejection is readable, preserve the transport failure.",
+ "trial": "Same native nine-worker Riley binary on GPUs 6 and 7. Concurrent matched waves against both replicas, reverse client versions each wave. Eight incumbent 192-token streams then 160 one-shot submissions per replica. Output limits 16,16,64,64. Compare directly against archived original agent_workflow.py; record all outcomes and the original write-error indicator. Avoid inferring server status when it was not received.",
+ "criteria": "All 1280 intended burst submissions represented, no logical retry, every recovered early rejection backed by the real status on that same socket and no full-write timestamp; distinguish ordinary responses, recovered errors and unresolved transport failures. Count recovery even if arm totals vary due to scheduling; no claim to improve inference latency or admission throughput."
+}

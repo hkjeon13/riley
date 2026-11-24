@@ -1,0 +1,683 @@
+{
+  "completed_runs": 6,
+  "arms": [
+    {
+      "arm": "a",
+      "isolation_status": [
+        200,
+        200,
+        401,
+        200,
+        200
+      ],
+      "authorized_cached_tokens": [
+        0,
+        1424,
+        0,
+        1424
+      ],
+      "waves": [
+        {
+          "submitted": 1,
+          "correct": 1,
+          "slo_completed": 1,
+          "window_s": 3.2193406522274017,
+          "warm_goodput_per_gpu_hour": 559.1207003069444,
+          "first_p95_ms": 1105.335599,
+          "last_p95_ms": 3206.506798,
+          "fixture_hashes": [
+            "0ba079d3904dd55f2d7c02d8bca42b308d1cca5c93c8cc9264f0fda4c14e70d8"
+          ],
+          "errors": [],
+          "visible_gap_p95_ms": 11.919549
+        },
+        {
+          "submitted": 2,
+          "correct": 2,
+          "slo_completed": 2,
+          "window_s": 3.32444416731596,
+          "warm_goodput_per_gpu_hour": 1082.8877908051963,
+          "first_p95_ms": 1144.167194,
+          "last_p95_ms": 3286.385065,
+          "fixture_hashes": [
+            "3f58cca2510a0d65ed7313aac64c6c478006193de2d1029fc6a917614b4d255d",
+            "85b9da4b2c1209e4d6683d747433776517e51f3c99d4cad6b56decc57651fd8c"
+          ],
+          "errors": [],
+          "visible_gap_p95_ms": 12.007219
+        },
+        {
+          "submitted": 4,
+          "correct": 3,
+          "slo_completed": 3,
+          "window_s": 3.9369836151599884,
+          "warm_goodput_per_gpu_hour": 1371.6084515075022,
+          "first_p95_ms": 1468.690427,
+          "last_p95_ms": 3898.925873,
+          "fixture_hashes": [
+            "435c654d7ee31c006a9b1ef673c1f810b248cd528873cd3b5d2c7f3b5dfb5501",
+            "0b6ddbd6ae249886955098b21e25de471f1a335077c6a12487404226e4aeb18d",
+            "b462472116f76ab75075584f362bca3221c7da234908d42576a39246d854c63c",
+            "a87419c542e0f7219e998b1abdf80cd8711a624d163068225f62238ff37df2e3"
+          ],
+          "errors": [
+            {
+              "seed": 783,
+              "reason": "final answer failed values, citations, length or finish: [80, 31, 49]"
+            }
+          ],
+          "visible_gap_p95_ms": 12.383104
+        },
+        {
+          "submitted": 8,
+          "correct": 7,
+          "slo_completed": 7,
+          "window_s": 4.22842014580965,
+          "warm_goodput_per_gpu_hour": 2979.836337334301,
+          "first_p95_ms": 2010.745094,
+          "last_p95_ms": 4140.247286,
+          "fixture_hashes": [
+            "77793da5df06912975f5587e399ba0105671a1698563f9cea23faf8682710aad",
+            "0bfd6638650ab3eaf48313d1d0e2090f70570fc35c2351b49008cc00a660de9d",
+            "cd6e22854b79923e875d988bd4b90f305002d9135b5d6eb650b6a70188f60e88",
+            "0729f2f65c11f6010558ca326153130c69a6fa28235a8fe769de5929dd2f36b1",
+            "5402a472f26f55cedacccbed0ef4b7b284e4026d6720457a07a42f30730b99e0",
+            "82ab3fa21a89100cae12eed6aa418f06ff0c46ce152e570f503775787ab1842a",
+            "4148bdbc84041a9a3268b875b66e43bae0e1e896f57b71e4de9ebdb9ea5371ce",
+            "6668a4971defbb129918f0f9829464fd729a163c642c8d3d24f0100eb3fc6a48"
+          ],
+          "errors": [
+            {
+              "seed": 797,
+              "reason": "final answer failed values, citations, length or finish: [83, 24, 59]"
+            }
+          ],
+          "visible_gap_p95_ms": 21.632769
+        }
+      ],
+      "allocation_gpu_seconds": 256.1922416538,
+      "slo_workflows_per_allocated_gpu_hour": 182.67532107097213,
+      "burst": {
+        "statuses": {
+          "200": 17
+        },
+        "protected_correct": true,
+        "started_during_peer_stream": true,
+        "peer_gap_p95_ms": 11.926175,
+        "real_client_drops": 1,
+        "counter_delta": {
+          "cancellations": 1,
+          "disconnects": 1,
+          "overloads": 0,
+          "dropped_observations": 0
+        },
+        "idle_after": true
+      }
+    },
+    {
+      "arm": "b",
+      "isolation_status": [
+        200,
+        200,
+        401,
+        200,
+        200
+      ],
+      "authorized_cached_tokens": [
+        0,
+        1424,
+        0,
+        1424
+      ],
+      "waves": [
+        {
+          "submitted": 1,
+          "correct": 1,
+          "slo_completed": 1,
+          "window_s": 3.1017966121435165,
+          "warm_goodput_per_gpu_hour": 580.3088419637219,
+          "first_p95_ms": 984.898352,
+          "last_p95_ms": 3089.103935,
+          "fixture_hashes": [
+            "0ba079d3904dd55f2d7c02d8bca42b308d1cca5c93c8cc9264f0fda4c14e70d8"
+          ],
+          "errors": [],
+          "visible_gap_p95_ms": 11.897963
+        },
+        {
+          "submitted": 2,
+          "correct": 2,
+          "slo_completed": 2,
+          "window_s": 3.340525344014168,
+          "warm_goodput_per_gpu_hour": 1077.6748053867577,
+          "first_p95_ms": 1156.006694,
+          "last_p95_ms": 3302.573014,
+          "fixture_hashes": [
+            "3f58cca2510a0d65ed7313aac64c6c478006193de2d1029fc6a917614b4d255d",
+            "85b9da4b2c1209e4d6683d747433776517e51f3c99d4cad6b56decc57651fd8c"
+          ],
+          "errors": [],
+          "visible_gap_p95_ms": 12.010843
+        },
+        {
+          "submitted": 4,
+          "correct": 3,
+          "slo_completed": 3,
+          "window_s": 3.9303056597709656,
+          "warm_goodput_per_gpu_hour": 1373.9389420197613,
+          "first_p95_ms": 1459.072165,
+          "last_p95_ms": 3892.272314,
+          "fixture_hashes": [
+            "435c654d7ee31c006a9b1ef673c1f810b248cd528873cd3b5d2c7f3b5dfb5501",
+            "0b6ddbd6ae249886955098b21e25de471f1a335077c6a12487404226e4aeb18d",
+            "b462472116f76ab75075584f362bca3221c7da234908d42576a39246d854c63c",
+            "a87419c542e0f7219e998b1abdf80cd8711a624d163068225f62238ff37df2e3"
+          ],
+          "errors": [
+            {
+              "seed": 783,
+              "reason": "final answer failed values, citations, length or finish: [80, 31, 49]"
+            }
+          ],
+          "visible_gap_p95_ms": 12.342194
+        },
+        {
+          "submitted": 8,
+          "correct": 7,
+          "slo_completed": 7,
+          "window_s": 4.222751282155514,
+          "warm_goodput_per_gpu_hour": 2983.8366406387777,
+          "first_p95_ms": 2002.934616,
+          "last_p95_ms": 4134.458449,
+          "fixture_hashes": [
+            "77793da5df06912975f5587e399ba0105671a1698563f9cea23faf8682710aad",
+            "0bfd6638650ab3eaf48313d1d0e2090f70570fc35c2351b49008cc00a660de9d",
+            "cd6e22854b79923e875d988bd4b90f305002d9135b5d6eb650b6a70188f60e88",
+            "0729f2f65c11f6010558ca326153130c69a6fa28235a8fe769de5929dd2f36b1",
+            "5402a472f26f55cedacccbed0ef4b7b284e4026d6720457a07a42f30730b99e0",
+            "82ab3fa21a89100cae12eed6aa418f06ff0c46ce152e570f503775787ab1842a",
+            "4148bdbc84041a9a3268b875b66e43bae0e1e896f57b71e4de9ebdb9ea5371ce",
+            "6668a4971defbb129918f0f9829464fd729a163c642c8d3d24f0100eb3fc6a48"
+          ],
+          "errors": [
+            {
+              "seed": 797,
+              "reason": "final answer failed values, citations, length or finish: [83, 24, 59]"
+            }
+          ],
+          "visible_gap_p95_ms": 21.252897
+        }
+      ],
+      "allocation_gpu_seconds": 252.16268882155418,
+      "slo_workflows_per_allocated_gpu_hour": 185.59446767764504,
+      "burst": {
+        "statuses": {
+          "200": 17
+        },
+        "protected_correct": true,
+        "started_during_peer_stream": true,
+        "peer_gap_p95_ms": 11.901872,
+        "real_client_drops": 1,
+        "counter_delta": {
+          "cancellations": 1,
+          "disconnects": 1,
+          "overloads": 0,
+          "dropped_observations": 0
+        },
+        "idle_after": true
+      }
+    },
+    {
+      "arm": "c",
+      "isolation_status": [
+        200,
+        200,
+        401,
+        200,
+        200
+      ],
+      "authorized_cached_tokens": [
+        0,
+        1424,
+        0,
+        1424
+      ],
+      "waves": [
+        {
+          "submitted": 1,
+          "correct": 1,
+          "slo_completed": 1,
+          "window_s": 3.0984507128596306,
+          "warm_goodput_per_gpu_hour": 580.9354954491882,
+          "first_p95_ms": 983.540621,
+          "last_p95_ms": 3085.637886,
+          "fixture_hashes": [
+            "0ba079d3904dd55f2d7c02d8bca42b308d1cca5c93c8cc9264f0fda4c14e70d8"
+          ],
+          "errors": [],
+          "visible_gap_p95_ms": 11.911485
+        },
+        {
+          "submitted": 2,
+          "correct": 2,
+          "slo_completed": 2,
+          "window_s": 3.325822450220585,
+          "warm_goodput_per_gpu_hour": 1082.4390218910303,
+          "first_p95_ms": 1144.695519,
+          "last_p95_ms": 3287.792648,
+          "fixture_hashes": [
+            "3f58cca2510a0d65ed7313aac64c6c478006193de2d1029fc6a917614b4d255d",
+            "85b9da4b2c1209e4d6683d747433776517e51f3c99d4cad6b56decc57651fd8c"
+          ],
+          "errors": [],
+          "visible_gap_p95_ms": 12.005604
+        },
+        {
+          "submitted": 4,
+          "correct": 3,
+          "slo_completed": 3,
+          "window_s": 3.8556743040680885,
+          "warm_goodput_per_gpu_hour": 1400.5332333964275,
+          "first_p95_ms": 1404.062074,
+          "last_p95_ms": 3817.536374,
+          "fixture_hashes": [
+            "435c654d7ee31c006a9b1ef673c1f810b248cd528873cd3b5d2c7f3b5dfb5501",
+            "0b6ddbd6ae249886955098b21e25de471f1a335077c6a12487404226e4aeb18d",
+            "b462472116f76ab75075584f362bca3221c7da234908d42576a39246d854c63c",
+            "a87419c542e0f7219e998b1abdf80cd8711a624d163068225f62238ff37df2e3"
+          ],
+          "errors": [
+            {
+              "seed": 783,
+              "reason": "final answer failed values, citations, length or finish: [80, 31, 49]"
+            }
+          ],
+          "visible_gap_p95_ms": 12.360605
+        },
+        {
+          "submitted": 8,
+          "correct": 7,
+          "slo_completed": 7,
+          "window_s": 4.326140582561493,
+          "warm_goodput_per_gpu_hour": 2912.526710479571,
+          "first_p95_ms": 2109.351623,
+          "last_p95_ms": 4237.848749,
+          "fixture_hashes": [
+            "77793da5df06912975f5587e399ba0105671a1698563f9cea23faf8682710aad",
+            "0bfd6638650ab3eaf48313d1d0e2090f70570fc35c2351b49008cc00a660de9d",
+            "cd6e22854b79923e875d988bd4b90f305002d9135b5d6eb650b6a70188f60e88",
+            "0729f2f65c11f6010558ca326153130c69a6fa28235a8fe769de5929dd2f36b1",
+            "5402a472f26f55cedacccbed0ef4b7b284e4026d6720457a07a42f30730b99e0",
+            "82ab3fa21a89100cae12eed6aa418f06ff0c46ce152e570f503775787ab1842a",
+            "4148bdbc84041a9a3268b875b66e43bae0e1e896f57b71e4de9ebdb9ea5371ce",
+            "6668a4971defbb129918f0f9829464fd729a163c642c8d3d24f0100eb3fc6a48"
+          ],
+          "errors": [
+            {
+              "seed": 797,
+              "reason": "final answer failed values, citations, length or finish: [83, 24, 59]"
+            }
+          ],
+          "visible_gap_p95_ms": 21.407249
+        }
+      ],
+      "allocation_gpu_seconds": 257.1459063962102,
+      "slo_workflows_per_allocated_gpu_hour": 181.9978418318299,
+      "burst": {
+        "statuses": {
+          "200": 17
+        },
+        "protected_correct": true,
+        "started_during_peer_stream": true,
+        "peer_gap_p95_ms": 11.91118,
+        "real_client_drops": 1,
+        "counter_delta": {
+          "cancellations": 1,
+          "disconnects": 1,
+          "overloads": 0,
+          "dropped_observations": 0
+        },
+        "idle_after": true
+      }
+    },
+    {
+      "arm": "d",
+      "isolation_status": [
+        200,
+        200,
+        401,
+        200,
+        200
+      ],
+      "authorized_cached_tokens": [
+        0,
+        1424,
+        0,
+        1424
+      ],
+      "waves": [
+        {
+          "submitted": 1,
+          "correct": 1,
+          "slo_completed": 1,
+          "window_s": 3.115803837776184,
+          "warm_goodput_per_gpu_hour": 577.7000394494341,
+          "first_p95_ms": 988.115899,
+          "last_p95_ms": 3102.953671,
+          "fixture_hashes": [
+            "0ba079d3904dd55f2d7c02d8bca42b308d1cca5c93c8cc9264f0fda4c14e70d8"
+          ],
+          "errors": [],
+          "visible_gap_p95_ms": 11.927548
+        },
+        {
+          "submitted": 2,
+          "correct": 2,
+          "slo_completed": 2,
+          "window_s": 3.34030519425869,
+          "warm_goodput_per_gpu_hour": 1077.745831784375,
+          "first_p95_ms": 1145.118047,
+          "last_p95_ms": 3302.323378,
+          "fixture_hashes": [
+            "3f58cca2510a0d65ed7313aac64c6c478006193de2d1029fc6a917614b4d255d",
+            "85b9da4b2c1209e4d6683d747433776517e51f3c99d4cad6b56decc57651fd8c"
+          ],
+          "errors": [],
+          "visible_gap_p95_ms": 12.016664
+        },
+        {
+          "submitted": 4,
+          "correct": 3,
+          "slo_completed": 3,
+          "window_s": 3.737225405871868,
+          "warm_goodput_per_gpu_hour": 1444.9222119478284,
+          "first_p95_ms": 1320.893845,
+          "last_p95_ms": 3699.185806,
+          "fixture_hashes": [
+            "435c654d7ee31c006a9b1ef673c1f810b248cd528873cd3b5d2c7f3b5dfb5501",
+            "0b6ddbd6ae249886955098b21e25de471f1a335077c6a12487404226e4aeb18d",
+            "b462472116f76ab75075584f362bca3221c7da234908d42576a39246d854c63c",
+            "a87419c542e0f7219e998b1abdf80cd8711a624d163068225f62238ff37df2e3"
+          ],
+          "errors": [
+            {
+              "seed": 783,
+              "reason": "final answer failed values, citations, length or finish: [80, 31, 49]"
+            }
+          ],
+          "visible_gap_p95_ms": 20.040712
+        },
+        {
+          "submitted": 8,
+          "correct": 7,
+          "slo_completed": 7,
+          "window_s": 4.141014501452446,
+          "warm_goodput_per_gpu_hour": 3042.7326433125495,
+          "first_p95_ms": 1920.892433,
+          "last_p95_ms": 4052.649749,
+          "fixture_hashes": [
+            "77793da5df06912975f5587e399ba0105671a1698563f9cea23faf8682710aad",
+            "0bfd6638650ab3eaf48313d1d0e2090f70570fc35c2351b49008cc00a660de9d",
+            "cd6e22854b79923e875d988bd4b90f305002d9135b5d6eb650b6a70188f60e88",
+            "0729f2f65c11f6010558ca326153130c69a6fa28235a8fe769de5929dd2f36b1",
+            "5402a472f26f55cedacccbed0ef4b7b284e4026d6720457a07a42f30730b99e0",
+            "82ab3fa21a89100cae12eed6aa418f06ff0c46ce152e570f503775787ab1842a",
+            "4148bdbc84041a9a3268b875b66e43bae0e1e896f57b71e4de9ebdb9ea5371ce",
+            "6668a4971defbb129918f0f9829464fd729a163c642c8d3d24f0100eb3fc6a48"
+          ],
+          "errors": [
+            {
+              "seed": 797,
+              "reason": "final answer failed values, citations, length or finish: [83, 24, 59]"
+            }
+          ],
+          "visible_gap_p95_ms": 21.562423
+        }
+      ],
+      "allocation_gpu_seconds": 255.87425092607737,
+      "slo_workflows_per_allocated_gpu_hour": 182.90234296971374,
+      "burst": {
+        "statuses": {
+          "200": 17
+        },
+        "protected_correct": true,
+        "started_during_peer_stream": true,
+        "peer_gap_p95_ms": 11.919022,
+        "real_client_drops": 1,
+        "counter_delta": {
+          "cancellations": 1,
+          "disconnects": 1,
+          "overloads": 0,
+          "dropped_observations": 0
+        },
+        "idle_after": true
+      }
+    },
+    {
+      "arm": "e",
+      "isolation_status": [
+        200,
+        200,
+        401,
+        200,
+        200
+      ],
+      "authorized_cached_tokens": [
+        0,
+        1424,
+        0,
+        1424
+      ],
+      "waves": [
+        {
+          "submitted": 1,
+          "correct": 1,
+          "slo_completed": 1,
+          "window_s": 3.112685538828373,
+          "warm_goodput_per_gpu_hour": 578.2787813116281,
+          "first_p95_ms": 992.250189,
+          "last_p95_ms": 3099.839121,
+          "fixture_hashes": [
+            "0ba079d3904dd55f2d7c02d8bca42b308d1cca5c93c8cc9264f0fda4c14e70d8"
+          ],
+          "errors": [],
+          "visible_gap_p95_ms": 11.904845
+        },
+        {
+          "submitted": 2,
+          "correct": 2,
+          "slo_completed": 2,
+          "window_s": 3.3626266568899155,
+          "warm_goodput_per_gpu_hour": 1070.5916437745814,
+          "first_p95_ms": 1182.607779,
+          "last_p95_ms": 3324.557002,
+          "fixture_hashes": [
+            "3f58cca2510a0d65ed7313aac64c6c478006193de2d1029fc6a917614b4d255d",
+            "85b9da4b2c1209e4d6683d747433776517e51f3c99d4cad6b56decc57651fd8c"
+          ],
+          "errors": [],
+          "visible_gap_p95_ms": 11.999142
+        },
+        {
+          "submitted": 4,
+          "correct": 3,
+          "slo_completed": 3,
+          "window_s": 3.9151621758937836,
+          "warm_goodput_per_gpu_hour": 1379.2532103136305,
+          "first_p95_ms": 1449.18186,
+          "last_p95_ms": 3876.999791,
+          "fixture_hashes": [
+            "435c654d7ee31c006a9b1ef673c1f810b248cd528873cd3b5d2c7f3b5dfb5501",
+            "0b6ddbd6ae249886955098b21e25de471f1a335077c6a12487404226e4aeb18d",
+            "b462472116f76ab75075584f362bca3221c7da234908d42576a39246d854c63c",
+            "a87419c542e0f7219e998b1abdf80cd8711a624d163068225f62238ff37df2e3"
+          ],
+          "errors": [
+            {
+              "seed": 783,
+              "reason": "final answer failed values, citations, length or finish: [80, 31, 49]"
+            }
+          ],
+          "visible_gap_p95_ms": 12.358668
+        },
+        {
+          "submitted": 8,
+          "correct": 7,
+          "slo_completed": 7,
+          "window_s": 4.215599916875362,
+          "warm_goodput_per_gpu_hour": 2988.8984363912846,
+          "first_p95_ms": 1997.509864,
+          "last_p95_ms": 4127.326617,
+          "fixture_hashes": [
+            "77793da5df06912975f5587e399ba0105671a1698563f9cea23faf8682710aad",
+            "0bfd6638650ab3eaf48313d1d0e2090f70570fc35c2351b49008cc00a660de9d",
+            "cd6e22854b79923e875d988bd4b90f305002d9135b5d6eb650b6a70188f60e88",
+            "0729f2f65c11f6010558ca326153130c69a6fa28235a8fe769de5929dd2f36b1",
+            "5402a472f26f55cedacccbed0ef4b7b284e4026d6720457a07a42f30730b99e0",
+            "82ab3fa21a89100cae12eed6aa418f06ff0c46ce152e570f503775787ab1842a",
+            "4148bdbc84041a9a3268b875b66e43bae0e1e896f57b71e4de9ebdb9ea5371ce",
+            "6668a4971defbb129918f0f9829464fd729a163c642c8d3d24f0100eb3fc6a48"
+          ],
+          "errors": [
+            {
+              "seed": 797,
+              "reason": "final answer failed values, citations, length or finish: [83, 24, 59]"
+            }
+          ],
+          "visible_gap_p95_ms": 21.353797
+        }
+      ],
+      "allocation_gpu_seconds": 277.1555083319545,
+      "slo_workflows_per_allocated_gpu_hour": 168.85827123430914,
+      "burst": {
+        "statuses": {
+          "200": 17
+        },
+        "protected_correct": true,
+        "started_during_peer_stream": true,
+        "peer_gap_p95_ms": 11.929399,
+        "real_client_drops": 1,
+        "counter_delta": {
+          "cancellations": 1,
+          "disconnects": 1,
+          "overloads": 0,
+          "dropped_observations": 0
+        },
+        "idle_after": true
+      }
+    },
+    {
+      "arm": "f",
+      "isolation_status": [
+        200,
+        200,
+        401,
+        200,
+        200
+      ],
+      "authorized_cached_tokens": [
+        0,
+        1424,
+        0,
+        1424
+      ],
+      "waves": [
+        {
+          "submitted": 1,
+          "correct": 1,
+          "slo_completed": 1,
+          "window_s": 3.2133429050445557,
+          "warm_goodput_per_gpu_hour": 560.1643065152555,
+          "first_p95_ms": 1099.651308,
+          "last_p95_ms": 3200.521779,
+          "fixture_hashes": [
+            "0ba079d3904dd55f2d7c02d8bca42b308d1cca5c93c8cc9264f0fda4c14e70d8"
+          ],
+          "errors": [],
+          "visible_gap_p95_ms": 11.913729
+        },
+        {
+          "submitted": 2,
+          "correct": 2,
+          "slo_completed": 2,
+          "window_s": 3.3348016440868378,
+          "warm_goodput_per_gpu_hour": 1079.5244767806216,
+          "first_p95_ms": 1154.182468,
+          "last_p95_ms": 3296.782079,
+          "fixture_hashes": [
+            "3f58cca2510a0d65ed7313aac64c6c478006193de2d1029fc6a917614b4d255d",
+            "85b9da4b2c1209e4d6683d747433776517e51f3c99d4cad6b56decc57651fd8c"
+          ],
+          "errors": [],
+          "visible_gap_p95_ms": 11.994784
+        },
+        {
+          "submitted": 4,
+          "correct": 3,
+          "slo_completed": 3,
+          "window_s": 3.9306004270911217,
+          "warm_goodput_per_gpu_hour": 1373.8359062857787,
+          "first_p95_ms": 1457.276833,
+          "last_p95_ms": 3892.418758,
+          "fixture_hashes": [
+            "435c654d7ee31c006a9b1ef673c1f810b248cd528873cd3b5d2c7f3b5dfb5501",
+            "0b6ddbd6ae249886955098b21e25de471f1a335077c6a12487404226e4aeb18d",
+            "b462472116f76ab75075584f362bca3221c7da234908d42576a39246d854c63c",
+            "a87419c542e0f7219e998b1abdf80cd8711a624d163068225f62238ff37df2e3"
+          ],
+          "errors": [
+            {
+              "seed": 783,
+              "reason": "final answer failed values, citations, length or finish: [80, 31, 49]"
+            }
+          ],
+          "visible_gap_p95_ms": 12.367156
+        },
+        {
+          "submitted": 8,
+          "correct": 7,
+          "slo_completed": 7,
+          "window_s": 4.228908598423004,
+          "warm_goodput_per_gpu_hour": 2979.4921566048147,
+          "first_p95_ms": 2009.761649,
+          "last_p95_ms": 4140.610791,
+          "fixture_hashes": [
+            "77793da5df06912975f5587e399ba0105671a1698563f9cea23faf8682710aad",
+            "0bfd6638650ab3eaf48313d1d0e2090f70570fc35c2351b49008cc00a660de9d",
+            "cd6e22854b79923e875d988bd4b90f305002d9135b5d6eb650b6a70188f60e88",
+            "0729f2f65c11f6010558ca326153130c69a6fa28235a8fe769de5929dd2f36b1",
+            "5402a472f26f55cedacccbed0ef4b7b284e4026d6720457a07a42f30730b99e0",
+            "82ab3fa21a89100cae12eed6aa418f06ff0c46ce152e570f503775787ab1842a",
+            "4148bdbc84041a9a3268b875b66e43bae0e1e896f57b71e4de9ebdb9ea5371ce",
+            "6668a4971defbb129918f0f9829464fd729a163c642c8d3d24f0100eb3fc6a48"
+          ],
+          "errors": [
+            {
+              "seed": 797,
+              "reason": "final answer failed values, citations, length or finish: [83, 24, 59]"
+            }
+          ],
+          "visible_gap_p95_ms": 21.440026
+        }
+      ],
+      "allocation_gpu_seconds": 260.53033048659563,
+      "slo_workflows_per_allocated_gpu_hour": 179.63359549189946,
+      "burst": {
+        "statuses": {
+          "200": 17
+        },
+        "protected_correct": true,
+        "started_during_peer_stream": true,
+        "peer_gap_p95_ms": 11.921701,
+        "real_client_drops": 1,
+        "counter_delta": {
+          "cancellations": 1,
+          "disconnects": 1,
+          "overloads": 0,
+          "dropped_observations": 0
+        },
+        "idle_after": true
+      }
+    }
+  ]
+}

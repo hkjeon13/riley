@@ -1,0 +1,52 @@
+[
+  {
+    "workflow": "cold",
+    "history": 200,
+    "preview_tokens": 2920,
+    "final_prompt_tokens": 3071,
+    "actual_cached": 16,
+    "preview_eligible": 2912,
+    "additional_eligible": 2896,
+    "measured_tool_wait_ms": 0.034243
+  },
+  {
+    "workflow": "immediate",
+    "history": 200,
+    "preview_tokens": 2920,
+    "final_prompt_tokens": 3071,
+    "actual_cached": 3056,
+    "preview_eligible": 2912,
+    "additional_eligible": 0,
+    "measured_tool_wait_ms": 0.026389
+  },
+  {
+    "workflow": "delayed",
+    "history": 200,
+    "preview_tokens": 2920,
+    "final_prompt_tokens": 3071,
+    "actual_cached": 3056,
+    "preview_eligible": 2912,
+    "additional_eligible": 0,
+    "measured_tool_wait_ms": 100.152712
+  },
+  {
+    "workflow": "reader",
+    "history": 200,
+    "preview_tokens": 2921,
+    "final_prompt_tokens": 3072,
+    "actual_cached": 32,
+    "preview_eligible": 2912,
+    "additional_eligible": 2880,
+    "measured_tool_wait_ms": 0.022922
+  },
+  {
+    "workflow": "long-tool-result",
+    "history": 200,
+    "preview_tokens": 2921,
+    "final_prompt_tokens": 5312,
+    "actual_cached": 32,
+    "preview_eligible": 2912,
+    "additional_eligible": 2880,
+    "measured_tool_wait_ms": 0.087548
+  }
+]

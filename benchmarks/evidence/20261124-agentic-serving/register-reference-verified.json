@@ -1,0 +1,113 @@
+{
+  "checkpoint_sha256": "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f",
+  "torch": "2.13.0+cu129",
+  "transformers": "5.22.1",
+  "cases": {
+    "lookup-541": {
+      "tokens": 5988,
+      "correct": {
+        "page": false,
+        "tile": true,
+        "HF": true
+      },
+      "first_riley_difference": {
+        "index": 4,
+        "page": 515,
+        "tile": 220,
+        "reference_argmax": 220,
+        "page_gap": 32.3125,
+        "tile_gap": 0.0
+      },
+      "same_generated_ids_as_HF": {
+        "page": false,
+        "tile": true
+      },
+      "end_to_end_first_difference_as_HF": {
+        "page": 4,
+        "tile": null
+      }
+    },
+    "lookup-733": {
+      "tokens": 17468,
+      "correct": {
+        "page": true,
+        "tile": true,
+        "HF": true
+      },
+      "first_riley_difference": null,
+      "same_generated_ids_as_HF": {
+        "page": true,
+        "tile": true
+      },
+      "end_to_end_first_difference_as_HF": {
+        "page": null,
+        "tile": null
+      }
+    },
+    "lookup-862": {
+      "tokens": 25028,
+      "correct": {
+        "page": true,
+        "tile": false,
+        "HF": false
+      },
+      "first_riley_difference": {
+        "index": 31,
+        "page": 16,
+        "tile": 22,
+        "reference_argmax": 22,
+        "page_gap": 3.25,
+        "tile_gap": 0.0
+      },
+      "same_generated_ids_as_HF": {
+        "page": false,
+        "tile": true
+      },
+      "end_to_end_first_difference_as_HF": {
+        "page": 31,
+        "tile": null
+      }
+    },
+    "scan-9451": {
+      "tokens": 25937,
+      "correct": {
+        "page": false,
+        "tile": false,
+        "HF": false
+      },
+      "first_riley_difference": null,
+      "same_generated_ids_as_HF": {
+        "page": true,
+        "tile": true
+      },
+      "end_to_end_first_difference_as_HF": {
+        "page": null,
+        "tile": null
+      }
+    },
+    "max-9829": {
+      "tokens": 25921,
+      "correct": {
+        "page": false,
+        "tile": false,
+        "HF": false
+      },
+      "first_riley_difference": {
+        "index": 16,
+        "page": 19,
+        "tile": 18,
+        "reference_argmax": 18,
+        "page_gap": 1.0,
+        "tile_gap": 0.0
+      },
+      "same_generated_ids_as_HF": {
+        "page": false,
+        "tile": true
+      },
+      "end_to_end_first_difference_as_HF": {
+        "page": 16,
+        "tile": null
+      }
+    }
+  }
+}
