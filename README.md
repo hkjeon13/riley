@@ -13,8 +13,8 @@ cuBLASLt. There is no Python in the serving process.
 > greedy decoding, one GPU unless stated; they are model- and
 > workload-specific.
 
-The [November distribution qualification](docs/improvement-plan/06-candidate-qualification.md)
-records the tested image, A100 coverage, and outstanding release checks.
+See the [packaged serving checks](docs/model-support.md#packaged-serving-checks)
+for the tested CUDA image and A100 coverage.
 
 ## Performance
 
@@ -82,7 +82,9 @@ first-token latency relative to vLLM was 0.52–1.10× for `rag-c1` and 0.62–1
 for `rag6k-c1`. The heaviest `rag-c8` tail reached 1.44× at p95. In the separate
 64-token `closed-c1` remeasurement, TPOT across the 24 models was 0.882–1.015×.
 These figures refer to their respective workload settings. See the
-[current goal measurements](docs/goal.md) and [serving validation](docs/serving-validation.md).
+[long-context results](benchmarks/evidence/20261104-goal/stage1t16-table.md),
+[64-token results](benchmarks/evidence/20261104-goal/rest16-table.md) and
+[serving validation](docs/serving-validation.md).
 In the original qualification matrix, eighteen models were measured
 with the native profile shown under [Usage](#start-the-server); six
 Qwen2.5/SmolLM2 models used earlier flag sets, listed in the
@@ -107,7 +109,7 @@ TPOT target in both eight-client cells. The later 0.1.0 64-token `closed`
 remeasurement had TPOT ratios of 0.981, 1.008, 1.021 and 1.000 at C1/C8/C16/C32.
 All four landed within the ±3% tie band, with higher throughput and lower
 TTFT. Eight-cell qualification still uses the original fixed/natural matrix.
-[Tensor-parallel design](docs/tensor-parallel-design.md#status-2026-11-01) · [Remeasurement](docs/goal.md)
+[Two-GPU serving validation](docs/serving-validation.md#two-gpus)
 
 ### Shared prompts: the prefix cache
 
@@ -145,11 +147,8 @@ Qwen2.5-7B's attention logits exceeded
 The November 19 candidate recheck used identical prompt token IDs between
 Riley and vLLM for all 1,319 questions on each of Qwen2.5-3B, Qwen2.5-7B,
 Llama-3.2-3B and Qwen3-4B. All four met the −1.2 percentage-point quality
-threshold. The same report records the remaining long-prompt token differences
-against Hugging Face BF16 SDPA. [Candidate quality results](docs/improvement-plan/04-long-accuracy-result.md)
-
-Older campaigns (RTX 4090, Qwen3-4B kernel experiments, rejected candidates)
-are kept in the [performance experiment log](docs/performance-experiments.md).
+threshold. [GSM8K comparison records](benchmarks/evidence/20261119-w4-gsm8k/) ·
+[Long-context validation](docs/serving-validation.md#long-context)
 
 ## Highlights
 
@@ -360,7 +359,7 @@ The native profile needs a head dimension of 64 or 128, which every listed
 model has. Without `--inference-profile` the server uses its most conservative
 numerical path, which is much slower. These limits size the fixed device KV
 pool. Host RSS under load is measured separately in the
-[mixed-load results](docs/improvement-plan/05-mixed-soak-result.md#배포-이미지의-혼합-부하).
+[mixed-load measurements](benchmarks/evidence/20261124-w5-pointer-soak/verified.json).
 See `riley serve --help` and [Configuration](docs/configuration.md) for all options.
 
 Wait until the model is loaded:
@@ -460,8 +459,7 @@ Not supported yet: quantised weights, pipeline parallelism, multiple nodes.
 | [Architecture](docs/architecture.md) | Crates, request flow, KV cache, numerical guarantees |
 | [Per-model comparison](docs/model-coverage-a100-perf-by-model.md) | A100 charts and tables, Riley vs vLLM |
 | [Model coverage](docs/model-coverage-a100.md) | A100 qualification criteria, flags and evidence |
-| [Performance experiment log](docs/performance-experiments.md) | Dated campaigns and rejected candidates |
-| [History](docs/HISTORY.md) | How Riley was developed and what improved along the way |
+| [Serving validation](docs/serving-validation.md) | Workloads, accuracy, API checks and stability |
 
 ## License
 

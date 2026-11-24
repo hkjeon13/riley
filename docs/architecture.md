@@ -125,5 +125,4 @@ Riley treats three properties separately:
 | `tools/riley-checkpoint/` | Checkpoint preparation and verification |
 | `tools/python/reference/` | Python tools that produce reference outputs; never used by the server |
 | `benchmarks/`, `ci/` | Measurement and validation tooling |
-| `archive/` | Source of the small-model kernel branch, as a git bundle |
 | `docs/` | This documentation |

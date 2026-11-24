@@ -9,7 +9,7 @@ The first release. It covers the serving work since `0.1.0-rc2`, measured in
 [docs/serving-validation.md](docs/serving-validation.md). The release owner
 closed the remaining long-prompt gaps (first-token time on six 4–14B models,
 tail first-token time under long-prompt load) as limits of the current
-structure; see [docs/goal.md](docs/goal.md).
+structure. See the [long-context measurements](benchmarks/evidence/20261104-goal/stage1t16-table.md).
 
 - Qwen2.5-3B-Instruct support through a paged, two-stage attention backend,
   with tensor-core arithmetic for attention pages.
@@ -60,8 +60,7 @@ structure; see [docs/goal.md](docs/goal.md).
   steps (about 1 % off a long prompt's first token).
 - Benchmarks: `gsm8k.py`, `logprob_parity.py`, shared-prefix and closed c1/c16
   cells and `--tp` in `compare.py`, the `wide` mode of `gemm_anchor_search`.
-- Documentation rewritten for users; development records were removed from the
-  tree and summarised in [docs/HISTORY.md](docs/HISTORY.md).
+- Documentation rewritten for users.
 
 ## 0.1.0-rc2 — 2026-08-27
 

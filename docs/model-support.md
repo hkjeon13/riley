@@ -5,7 +5,7 @@ performance are separate stages. This page records the October 2026 native and
 owned-profile investigations on `aws-a100` physical GPUs 2 and 3, compiled for
 `sm_80` with CUDA 12.4. The later 24-model single-GPU performance results and
 the November candidate's verification are recorded in their own reports.
-[A100 performance qualification](model-coverage-a100-perf-table.md) · [November candidate verification](improvement-plan/06-candidate-qualification.md)
+[A100 performance qualification](model-coverage-a100-perf-table.md) · [Distribution verification manifest](../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
 
 | HF configuration family | Native path | October investigation evidence |
 |---|---|---|
@@ -21,7 +21,7 @@ On 2026-11-20, the CUDA 12.4 distribution was exercised on 40 GiB A100s using
 A100 image `0a907408ec73` (source `d3d8fe6e5`). Each row gives the API checks
 and workload exercised with the indicated checkpoint. The earlier single-GPU
 performance comparison and TP=2 performance matrix have their own qualification
-criteria. [Single-GPU performance](model-coverage-a100-perf-table.md) · [TP=2 performance](tensor-parallel-design.md#status-2026-11-01)
+criteria. [Single-GPU performance](model-coverage-a100-perf-table.md) · [Two-GPU serving validation](serving-validation.md#two-gpus)
 
 | Checkpoint | A100 GPUs | API checks | Serving exercise |
 |---|---:|---:|---|
@@ -35,7 +35,9 @@ criteria. [Single-GPU performance](model-coverage-a100-perf-table.md) · [TP=2 p
 The SmolLM2 checkpoint's chat template rejects tool requests with
 `unsupported_parameter`. The Qwen2.5-7B mixed iterations included both prefill
 and decode. The Qwen2.5-32B run used NVLink and compared concurrent responses
-with single-client responses across 11 fixed prompts. [Representative smoke runs](improvement-plan/05-mixed-soak-result.md#배포-이미지의-대표-모델-45초-smoke) · [MHA and 14B](improvement-plan/05-mixed-soak-result.md#배포-이미지의-mha와-14b-smoke) · [Mixed GPU iteration](improvement-plan/05-mixed-soak-result.md#배포-이미지의-커밋된-혼합-gpu-iteration) · [32B TP=2](improvement-plan/05-mixed-soak-result.md#배포-이미지의-32b-tp2-장문-검증)
+with single-client responses across 11 fixed prompts. The
+[distribution verification manifest](../benchmarks/evidence/20261119-improvement-qualification/manifest.json)
+links the individual reports.
 
 ## Mistral v0.3
 
@@ -276,8 +278,3 @@ with warmup excluded and at least five independent runs at C1/C8/C16/C32.
 Require throughput at least equal to vLLM and no TTFT/TPOT p50/p95/p99
 regression per required cell. Keep diagnostic screens, fixed-output workloads
 and natural-EOS results distinct. A single favorable aggregate is insufficient.
-
-
-## HF graph and native profile integration (2026-10-16)
-
-The validated v26 worktree changes have been integrated into the primary checkout, preserving the concurrent owned decode/bias work. See [native profile and measurements](hf-native-performance.md) and [owned MLP graph contracts](owned-hf-graphs.md). The unbuilt v27 wide residual-norm experiment is retained only under `artifacts/hf-worktree-integration-20261016/unfinished-worktree`; it is not enabled in the runtime. GPU validation has not been repeated for the combined checkout.

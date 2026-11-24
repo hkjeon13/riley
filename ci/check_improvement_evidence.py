@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify improvement-plan links, evidence digests, and recorded distribution inputs."""
+"""Verify published documentation, evidence digests, and recorded distribution inputs."""
 
 import argparse
 from decimal import Decimal
@@ -18,7 +18,6 @@ from urllib.parse import unquote, urlsplit
 
 
 MANIFEST = Path("benchmarks/evidence/20261119-improvement-qualification/manifest.json")
-PLANS = Path("docs/improvement-plan")
 INLINE_LINK = re.compile(r"\[[^\]\n]+\]\((<[^>]+>|[^\s)]+)\)")
 ATX_HEADING = re.compile(r"^ {0,3}#{1,6}[ \t]+(.+?)\s*#*\s*$")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
@@ -936,17 +935,21 @@ def markdown_anchors(path):
             yield f"{slug}-{ordinal}" if ordinal else slug
 
 
-def check_plan_links(root):
+def check_documentation_links(root):
     count = 0
     anchors = {}
-    for plan in sorted((root / PLANS).glob("*.md")):
-        for number, line in prose_lines(plan):
+    published = [root / "README.md", *sorted((root / "docs").glob("*.md"))]
+    for document in published:
+        for number, line in prose_lines(document):
             for href in INLINE_LINK.findall(line):
                 destination = urlsplit(href.strip("<>"))
                 if destination.scheme or destination.netloc:
                     continue
-                target = (plan.parent / unquote(destination.path)).resolve() if destination.path else plan
-                location = f"{plan.relative_to(root)}:{number}"
+                target = (
+                    (document.parent / unquote(destination.path)).resolve()
+                    if destination.path else document
+                )
+                location = f"{document.relative_to(root)}:{number}"
                 if not target.is_relative_to(root) or not target.exists():
                     raise ValueError(f"{location}: unresolved local link {href}")
                 if destination.fragment and target.suffix.lower() == ".md":
@@ -956,7 +959,7 @@ def check_plan_links(root):
                         raise ValueError(f"{location}: unresolved heading in {href}")
                 count += 1
     if count == 0:
-        raise ValueError("no local improvement-plan links checked")
+        raise ValueError("no local documentation links checked")
     return count
 
 
@@ -1155,7 +1158,7 @@ def main():
         allocator_reports = check_allocator_trial(root, manifest["current_allocator_trial"],
                                                   manifest["current_distribution_candidate"])
         serving_models = check_distribution_serving(root, manifest["current_distribution_candidate"])
-        links = check_plan_links(root)
+        links = check_documentation_links(root)
         models = check_readme(root)
         revision = None
         if args.distribution_revision is not None:

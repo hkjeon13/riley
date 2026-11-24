@@ -37,15 +37,12 @@ are rejected for this profile; there is no fallback to another numerical backend
 The explicit `--owned-decode-graph segments-v1` option reuses fixed decode
 segments around eager Attention with iteration-batch completion.
 `--owned-decode-batch grouped-v1` groups unchanged M=1 cuBLAS calls in native
-submission. These opt-ins have separate model/device qualification; see
-[Graph and batch validation](owned-graph-batch-optimization.md).
+submission. Qualification for these opt-ins is specific to the model and device.
 The default remains per-operation completion. Explicit
 `--execution-completion iteration-batch` retains the arithmetic and request-row
 geometry while keeping resources leased through one iteration completion.
 This also supports the admitted Qwen2.5 attention-bias projection path;
-owned MLP biases remain rejected. See
-[A100 completion measurements](inference-completion-optimization.md) for the
-qualified model, numerical controls and measurement scope.
+owned MLP biases remain rejected. See the [A100 model support notes](model-support.md#owned-completion-candidate).
 C02's older exact-change artifact schema is a separate contract and is not
 selected with this profile. `RILEY_NUMERICS` records the actual prepared
 attention, QKV, MLP, output, LM-head and normalization identifiers.

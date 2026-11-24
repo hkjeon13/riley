@@ -907,7 +907,7 @@ qual-nv 판정(`qual-nv-llama32-3b-attempt01`)에서 남은 미달은 c32-natura
 
 - 현상: 모든 판정에서 TTFT p50은 vLLM의 0.35–0.87배다. p95/p99는 c16·c32에서 vLLM보다 높다(예: SmolLM2-1.7B c32-natural p99 175.2 / 129.1 ms, Llama-3.2-1B 111.7 / 87.9 ms, Qwen3-1.7B 179.0 / 127.5 ms).
 - 원인은 2.7과 같다. native 프로필도 스텝당 prompt 토큰 예산이 256이라, 동시에 들어온 요청 묶음의 뒤쪽이 여러 prefill 스텝을 기다린다.
-- native 경로에서 시도한 레버(Qwen3-4B, [Phase 1](phase1-native-attention-and-burst-20261022.md)):
+- Qwen3-4B의 native 경로에서 시험한 행 예산과 버스트 설정:
 
   | 레버 | C32 TTFT p95 | 필수 기준 영향 | 처리 |
   |---|---|---|---|
@@ -1192,7 +1192,7 @@ GSM8K test 첫 200문항을 0-shot `Question: ...\nAnswer:`로, max 128토큰, g
 - 10-31 측정(`tp2-q25-32b-gemm4-attempt01`)의 C1·C8 차이(처리량 −1~−5 %, TPOT +4~5 %)는 all-reduce 지연이었다. 한 행에 호출당 14.2 µs, decode 한 step에 128번(64층 × 2)이라 step 29 ms 중 약 1.8 ms였다.
   - staging 복사와 barrier를 없앤 low-latency 경로를 넣었다. 데이터와 epoch를 함께 실은 16바이트 패킷을 peer 버퍼에 직접 쓴다.
   - 그 결과 호출당 3.1 µs(1행), 4.0 µs(8행)가 됐다. 합산 순서는 같아서 결과가 비트 단위로 같다.
-- 설계, 마이크로벤치 표, 기각한 시도는 [tensor-parallel 설계](tensor-parallel-design.md#status-2026-11-01)에 있다.
+- [두 GPU 서빙 검증](serving-validation.md#two-gpus)
 
 ### 6.6 Qwen2.5-7B 계열의 낮은 HF 일치: FlashInfer logit 범위 (2026-11-01)
 

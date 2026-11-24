@@ -94,7 +94,7 @@ attribute reuse to one request. See the [metrics contract](api.md#get-metrics).
 - **Only the prompt is cached.** A chat turn does not reuse the previous turn's
   generated tokens, because those blocks were written by decode.
 - **Endurance coverage.** Qwen2.5-7B passed a 30-minute synthetic mixed load on
-  A100 with 128 prefix blocks. The [soak results](improvement-plan/05-mixed-soak-result.md)
+  A100 with 128 prefix blocks. The [soak results](../benchmarks/evidence/20261124-w5-pointer-soak/verified.json)
   include request, cancellation and shutdown metrics. Device failure coverage
   comes from the scheduler simulation.
 

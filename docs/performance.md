@@ -74,10 +74,8 @@ returned. A 30-minute soak was not run on this exact build.
 
 ## SmolLM2-135M against vLLM
 
-The small-model results come from a separate kernel branch that is **not**
-part of `main`; its source is kept as a git bundle in
-[`archive/smollm2-batch14-source`](../archive/smollm2-batch14-source). Measured
-on 2026-10-11 on the same machine and workloads:
+The small-model results were measured on a separate experimental kernel branch
+on 2026-10-11, using the same machine and workloads.
 
 | | Riley / vLLM ratio across the 8 workloads |
 |---|---|
