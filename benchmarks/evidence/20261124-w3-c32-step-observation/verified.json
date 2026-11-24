@@ -314,6 +314,32 @@
         },
         "control_shape_count": 160,
         "reserve_shape_count": 160
+      },
+      "same_incumbent_shape": {
+        "requests": 189,
+        "paired_delta_p50_ms": {
+          "incumbent_cuda_start_offset_ms": 0.9509110000000014,
+          "incumbent_cuda_duration_ms": -0.01113900000000001
+        }
+      },
+      "c32_execution": {
+        "same_shape_sequence": true,
+        "arms": {
+          "control": {
+            "shape_sequence_sha256": "fc644c17e373123c0c101e97c018e54f0723efdb93e8960eba153a2eda21b17b",
+            "steps_with_warmup": 480,
+            "steps_started_after_first_measured_submission": 406,
+            "max_rows": 256,
+            "prefill_or_mixed_steps": 83
+          },
+          "reserve": {
+            "shape_sequence_sha256": "fc644c17e373123c0c101e97c018e54f0723efdb93e8960eba153a2eda21b17b",
+            "steps_with_warmup": 480,
+            "steps_started_after_first_measured_submission": 406,
+            "max_rows": 256,
+            "prefill_or_mixed_steps": 83
+          }
+        }
       }
     },
     "7": {
@@ -629,6 +655,32 @@
         },
         "control_shape_count": 160,
         "reserve_shape_count": 160
+      },
+      "same_incumbent_shape": {
+        "requests": 189,
+        "paired_delta_p50_ms": {
+          "incumbent_cuda_start_offset_ms": 0.059228999999999976,
+          "incumbent_cuda_duration_ms": 0.026692000000000604
+        }
+      },
+      "c32_execution": {
+        "same_shape_sequence": true,
+        "arms": {
+          "control": {
+            "shape_sequence_sha256": "c16557688636b4547b771b8edf2ff4875227fbae3ae48f7e2a2f339a06f07574",
+            "steps_with_warmup": 484,
+            "steps_started_after_first_measured_submission": 410,
+            "max_rows": 256,
+            "prefill_or_mixed_steps": 83
+          },
+          "reserve": {
+            "shape_sequence_sha256": "c16557688636b4547b771b8edf2ff4875227fbae3ae48f7e2a2f339a06f07574",
+            "steps_with_warmup": 484,
+            "steps_started_after_first_measured_submission": 410,
+            "max_rows": 256,
+            "prefill_or_mixed_steps": 83
+          }
+        }
       }
     }
   }

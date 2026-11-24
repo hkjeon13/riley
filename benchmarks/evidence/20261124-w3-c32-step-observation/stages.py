@@ -53,6 +53,28 @@ def overlap(span, start, end):
     return max(0, min(span.end, end) - max(span.start, start))
 
 
+def c32_execution_spans(log, capture, holdout_count):
+    admissions, _, _, executions = parse(log)
+    warmup = [int(request.removeprefix("cmpl-"), 16) for request in capture["warmup_response_ids"]]
+    measured = [int(row["response_id"].removeprefix("cmpl-"), 16) for row in capture["measured"]]
+    requests = sorted(warmup + measured)
+    if requests != list(range(requests[0], requests[-1] + 1)) or max(warmup) >= min(measured):
+        raise ValueError("C32 request IDs are not a contiguous phase after warmup")
+    holdout = sorted(request for request in admissions if request > requests[-1])
+    if holdout != list(range(requests[-1] + 1, requests[-1] + 1 + holdout_count)):
+        raise ValueError("C32 capture lacks the contiguous post-replay holdout")
+    start = min(admissions[request][0] for request in warmup)
+    measurement_start = min(admissions[request][0] for request in measured)
+    end = min(admissions[request][0] for request in holdout)
+    if not start < measurement_start < end:
+        raise ValueError("C32 phase timestamps are inconsistent")
+    selected = [(span, rows, decode) for span, rows, decode in executions.values()
+                if span.start >= start and span.end <= end]
+    if not selected or selected[0][0].start >= measurement_start:
+        raise ValueError("C32 CUDA execution trace lacks warmup")
+    return selected, measurement_start
+
+
 def reconcile(log, observations, *, expect_cuda=True):
     admissions, workers, starts, cuda = parse(log)
     if expect_cuda and not cuda:
@@ -73,7 +95,8 @@ def reconcile(log, observations, *, expect_cuda=True):
         unmeasured = expected - (ack - submit) / 1e6
         if unmeasured < -0.001:
             raise ValueError("engine timing does not fit inside service admission")
-        shape = None if incumbent not in cuda else cuda[incumbent][1:]
+        execution = cuda.get(incumbent)
+        shape = None if execution is None else execution[1:]
         result.append({
             "request_index": row["request_index"],
             "response_id": row["response_id"],
@@ -87,5 +110,7 @@ def reconcile(log, observations, *, expect_cuda=True):
             "dispatch_to_ack_ms": (ack - received) / 1e6,
             "admission_remainder_ms": unmeasured,
             "incumbent_shape": shape,
+            "incumbent_cuda_start_offset_ms": None if execution is None else (sent - execution[0].start) / 1e6,
+            "incumbent_cuda_duration_ms": None if execution is None else (execution[0].end - execution[0].start) / 1e6,
         })
     return result

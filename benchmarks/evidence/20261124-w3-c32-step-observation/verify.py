@@ -8,7 +8,7 @@ import runpy
 import tarfile
 from tempfile import TemporaryDirectory
 
-from stages import reconcile
+from stages import c32_execution_spans, reconcile
 
 
 HISTORY = "20261124-w3-c32-rag-history"
@@ -102,12 +102,36 @@ def compare(test, arms, baseline, reg):
     chosen = exact["reserve_p50_request"]["request_index"]
     (a,) = [row for row in parsed_before if row["request_index"] == chosen]
     (b,) = [row for row in parsed_after if row["request_index"] == chosen]
+    rank = baseline["percentile"]
+    same_shape = [(x, y) for x, y in zip(parsed_before, parsed_after, strict=True)
+                  if x["incumbent_shape"] is not None and x["incumbent_shape"] == y["incumbent_shape"]]
+    matched = {"requests": len(same_shape)}
+    if same_shape:
+        matched["paired_delta_p50_ms"] = {
+            field: rank([y[field] - x[field] for x, y in same_shape], .5)
+            for field in ("incumbent_cuda_start_offset_ms", "incumbent_cuda_duration_ms")
+        }
+    sequences = {}
+    execution = {}
+    for mode in MODES:
+        spans, measured_start = arms[mode][4]
+        shapes = [(rows, decode) for _, rows, decode in spans]
+        sequences[mode] = shapes
+        execution[mode] = {
+            "shape_sequence_sha256": sha256(json.dumps(shapes).encode()).hexdigest(),
+            "steps_with_warmup": len(spans),
+            "steps_started_after_first_measured_submission": sum(span.start >= measured_start for span, _, _ in spans),
+            "max_rows": max(rows for rows, _ in shapes),
+            "prefill_or_mixed_steps": sum(rows != decode for rows, decode in shapes),
+        }
     return {
         "cells": results, "arm_receipts": {mode: arms[mode][2] for mode in MODES},
         "c32_server_rank": exact, "c32_p50_request_engine_delta_ms": {key: b[key] - a[key] for key in FIELDS},
         "submission": stats(parsed_before, parsed_after),
         "first_32": stats(parsed_before[:32], parsed_after[:32]),
         "later_160": stats(parsed_before[32:], parsed_after[32:]),
+        "same_incumbent_shape": matched,
+        "c32_execution": {"same_shape_sequence": sequences["control"] == sequences["reserve"], "arms": execution},
     }
 
 
@@ -160,8 +184,10 @@ def verify(archive, registration, evidence, root):
                 samples, phases, summary = history["evaluate_arm"](
                     arm, previous, reg, "rag", mode, int(gpu) + 38, binary, baseline, native, observe,
                 )
-                stages = reconcile((arm / "server.log").read_text(), phases)
-                arms[mode] = samples, phases, summary, stages
+                log = (arm / "server.log").read_text()
+                stages = reconcile(log, phases)
+                spans = c32_execution_spans(log, read(arm / f"{SHORT}.json"), reg["holdout_requests_per_arm"])
+                arms[mode] = samples, phases, summary, stages, spans
             reports[gpu] = compare(observe, arms, baseline, reg)
     return {"binary_sha256": binary, "gpus": reports}
 

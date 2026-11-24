@@ -1,6 +1,6 @@
 import unittest
 
-from stages import reconcile
+from stages import c32_execution_spans, reconcile
 
 
 TRACE = """W3-ADMISSION-TRACE 5 0
@@ -32,6 +32,17 @@ class StageTests(unittest.TestCase):
     def test_requires_observed_admission(self):
         with self.assertRaises(KeyError):
             reconcile(TRACE, [{**OBSERVATIONS[0], "response_id": "cmpl-000000000000002b"}])
+
+    def test_bounds_the_c32_sequence_by_warmup_and_holdout(self):
+        log = TRACE.replace("5 0", "7 0").replace("42 99", "42 109") + (
+            "W3-ADMISSION 41 89 90 92 93\nW3-ADMISSION 43 248 249 250 251\n"
+        )
+        capture = {"warmup_response_ids": ["cmpl-0000000000000029"], "measured": OBSERVATIONS}
+        steps, first_measured = c32_execution_spans(log, capture, 1)
+        self.assertEqual(first_measured, 109)
+        self.assertEqual([step[1:] for step in steps], [(256, 15), (128, 10)])
+        with self.assertRaises(ValueError):
+            c32_execution_spans(log, capture, 2)
 
 
 if __name__ == "__main__":
