@@ -1249,6 +1249,19 @@ GPU 6번의 seed 1 decode TPOT p50은 1% 회귀 기준을 넘었다. GPU 7번의
 
 12개 비교 중 11개가 전송 오차와 해당 지연·처리량 기준을 충족했다. GPU 6번의 Riley C32 시각표는 원본 TTFT p50이 12.23% 늘었고 기준 실행의 송신 오차 p95도 3.012ms로 3ms 한도를 넘었다. 이 비교는 성능 판정에서 제외했다. 같은 바이너리에서 실행 순서를 바꾸고, 기존과 같이 RAG 두 시드를 실행한 뒤 이 C32 시각표를 다시 재생한다. GPU 7번에서 저장된 vLLM 대비 두 RAG 첫 토큰 p95는 각각 1.502배·1.429배로 최종 기준 1.15배를 넘었다. [지연과 출력 검산](../../benchmarks/evidence/20261124-w3-aged-decode-native/verified.json) · [CLI·API 대조 검사기](../../benchmarks/evidence/20261124-w3-aged-decode-native/verify.py)
 
+### 짧은 C32의 전송 기준 재시험
+
+일반 CUDA 빌드의 같은 바이너리에서 두 GPU의 실행 순서를 뒤집었다. 이전 시각표의 시작부터 문제의 C32 구간까지 입력과 순서를 유지해 두 RAG seed를 먼저 실행했다. 네 실행의 측정 요청 1,280건에서 대응 응답 640쌍과 장문 토큰 ID 64건이 이전 기준과 일치했다. 송신 오차 p95는 여섯 비교 모두 3ms 이내였다. 컨테이너 종료 자원을 회수하고 GPU 6·7번에서 기존 20GiB 예약의 복귀를 확인했다. [실행 등록](../../benchmarks/evidence/20261124-w3-aged-native-short/registration.json) · [재검산](../../benchmarks/evidence/20261124-w3-aged-native-short/verified.json) · [원본](../../benchmarks/evidence/20261124-w3-aged-native-short/raw-results.tar.gz)
+
+| GPU | C32 첫 토큰 p50 기준 → 예약 | 변화 | 송신 후 첫 토큰 p50 기준 → 예약 |
+|---|---:|---:|---:|
+| 6 | 74.55 → 76.73ms | +2.92% | 73.94 → 76.14ms |
+| 7 | 64.09 → 69.09ms | +7.81% | 63.62 → 68.68ms |
+
+두 GPU에서 C32의 첫 토큰 p50이 2% 회귀 한도를 넘었다. 측정한 C32 입력은 모두 70–77토큰이어서 3,072토큰 이상의 입력에만 발동하는 행 예약의 직접 적용 범위 밖이다. 송신 전 구간의 중앙값 변화는 두 GPU 모두 0.04ms 미만이었다. 이후 지연은 클라이언트 송신 뒤 구간에서 관측했다. 현재 기록으로는 엔진 입장 대기, 입장 후 첫 토큰 준비, 전송의 기여도를 판정할 수 없다. [클라이언트 구간 검산](../../benchmarks/evidence/20261124-w3-aged-native-short/verified.json)
+
+같은 재시험의 두 RAG seed에서 토큰 간격 p99는 46.13–47.00%, 토큰당 지연 중앙값은 5.17–9.41% 줄었다. 이 조건의 RAG 첫 토큰 p95는 −1.22%에서 +0.92% 사이였다. C32 회귀로 옵션의 코드 반영을 보류했다. 다음 진단은 같은 부하 순서에서 서버가 이미 기록하는 요청별 입장 대기와 입장 후 첫 토큰 시각을 종료 시 내보내, 클라이언트 응답과 대응시킨다. [지연 기준과 개별 결과](../../benchmarks/evidence/20261124-w3-aged-native-short/verified.json)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
