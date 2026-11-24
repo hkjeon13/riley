@@ -970,29 +970,18 @@ impl SchemaCompiler {
 
     /// A JSON Schema `pattern`: unanchored ends match any text, as in the spec.
     fn pattern(&mut self, pattern: &str) -> Result<u32, SchemaError> {
-        let body = pattern.strip_prefix('^');
-        let anchored_start = body.is_some();
-        let body = body.unwrap_or(pattern);
-        let stripped = body.strip_suffix('$').filter(|rest| !rest.ends_with('\\'));
-        let anchored_end = stripped.is_some();
-        let characters: Vec<char> = stripped.unwrap_or(body).chars().collect();
+        let characters: Vec<char> = pattern.chars().collect();
         let mut position = 0;
-        let matched = self.pattern_alternation(&characters, &mut position)?;
+        let free = self.string_char();
+        let padding = self.repetition(free, None, 0, None)?;
+        let matched = self.pattern_alternation(&characters, &mut position, Some(padding))?;
         if position != characters.len() {
             return Err(unsupported(format!(
                 "pattern {pattern:?}: unbalanced group"
             )));
         }
-        let free = self.string_char();
-        let any = self.repetition(free, None, 0, None)?;
         let mut elements = bytes("\"");
-        if !anchored_start {
-            elements.push(rule(any));
-        }
         elements.push(rule(matched));
-        if !anchored_end {
-            elements.push(rule(any));
-        }
         elements.extend(bytes("\""));
         let id = self.builder.rule();
         self.builder.alternative(id, elements);
@@ -1003,10 +992,28 @@ impl SchemaCompiler {
         &mut self,
         characters: &[char],
         position: &mut usize,
+        padding: Option<u32>,
     ) -> Result<u32, SchemaError> {
         let id = self.builder.rule();
         loop {
-            let sequence = self.pattern_sequence(characters, position)?;
+            // Only top-level alternatives may match a substring of the JSON value.
+            // Each alternative owns its anchors, so `^cat|dog$` has different padding on each side.
+            let anchored_start = padding.is_some() && characters.get(*position) == Some(&'^');
+            *position += usize::from(anchored_start);
+            let mut sequence = self.pattern_sequence(characters, position, padding.is_some())?;
+            if let Some(padding) = padding {
+                if !anchored_start {
+                    sequence.insert(0, rule(padding));
+                }
+                if characters.get(*position) == Some(&'$') {
+                    *position += 1;
+                    if !matches!(characters.get(*position), None | Some('|')) {
+                        return Err(unsupported("pattern operator $ in this position"));
+                    }
+                } else {
+                    sequence.push(rule(padding));
+                }
+            }
             self.builder.alternative(id, sequence);
             if characters.get(*position) != Some(&'|') {
                 return Ok(id);
@@ -1019,10 +1026,11 @@ impl SchemaCompiler {
         &mut self,
         characters: &[char],
         position: &mut usize,
+        allow_end_anchor: bool,
     ) -> Result<Vec<GrammarElement>, SchemaError> {
         let mut sequence = Vec::new();
         while let Some(&next) = characters.get(*position) {
-            if matches!(next, '|' | ')') {
+            if matches!(next, '|' | ')') || (allow_end_anchor && next == '$') {
                 break;
             }
             let atom = self.pattern_atom(characters, position)?;
@@ -1053,7 +1061,7 @@ impl SchemaCompiler {
                     }
                     *position += 2;
                 }
-                let group = self.pattern_alternation(characters, position)?;
+                let group = self.pattern_alternation(characters, position, None)?;
                 if characters.get(*position) != Some(&')') {
                     return Err(unsupported("pattern with an unclosed group"));
                 }

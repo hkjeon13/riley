@@ -1168,32 +1168,44 @@ mod tests {
     }
 
     #[test]
-    fn response_schema_and_forced_tools_enforce_the_dot_pattern() {
+    fn response_schema_and_forced_tools_enforce_string_patterns() {
         use riley_runtime::grammar::GrammarAutomaton;
 
-        let schema = json!({"type": "string", "pattern": "^.$"});
-        let messages = json!([{"role": "user", "content": "x"}]);
-        let format = json!({"model": "m", "messages": messages, "response_format": {
-            "type": "json_schema", "json_schema": {"name": "character", "schema": schema}
-        }});
-        let mut tools = weather();
-        tools[0]["function"]["parameters"]["properties"]["city"] = schema;
-        let forced = json!({"model": "m", "messages": messages, "tools": tools,
-            "tool_choice": {"type": "function", "function": {"name": "weather"}}});
-        let valid_tool =
-            "<tool_call>\n{\"name\": \"weather\", \"arguments\": {\"city\":\"한\"}}\n</tool_call>";
-        let invalid_tool = "<tool_call>\n{\"name\": \"weather\", \"arguments\": {\"city\":\"\\u2028\"}}\n</tool_call>";
-        for (body, valid, invalid) in [
-            (format, r#""한""#, r#""\n""#),
-            (forced, valid_tool, invalid_tool),
+        for (pattern, valid, invalid) in [
+            ("^.$", r#""한""#, r#""\u2028""#),
+            ("^cat|dog$", r#""catfish""#, r#""bobcat""#),
         ] {
-            let generation =
-                normalize_chat_request(request(body), &template(TOOLS), limits()).unwrap();
-            let mut automaton = GrammarAutomaton::new(generation.grammar.unwrap());
-            let mut cursor = automaton.start();
-            assert!(!automaton.advance(&mut cursor, invalid.as_bytes()));
-            assert!(automaton.advance(&mut cursor, valid.as_bytes()), "{valid}");
-            assert!(automaton.is_accepting(&mut cursor));
+            let schema = json!({"type": "string", "pattern": pattern});
+            let messages = json!([{"role": "user", "content": "x"}]);
+            let format = json!({"model": "m", "messages": messages, "response_format": {
+                "type": "json_schema", "json_schema": {"name": "match", "schema": schema}
+            }});
+            let mut tools = weather();
+            tools[0]["function"]["parameters"]["properties"]["city"] = schema;
+            let forced = json!({"model": "m", "messages": messages, "tools": tools,
+                "tool_choice": {"type": "function", "function": {"name": "weather"}}});
+            let tool_call = |value| {
+                format!(
+                    "<tool_call>\n{{\"name\": \"weather\", \"arguments\": {{\"city\":{value}}}}}\n</tool_call>"
+                )
+            };
+            for (body, valid, invalid) in [
+                (format, valid.to_owned(), invalid.to_owned()),
+                (forced, tool_call(valid), tool_call(invalid)),
+            ] {
+                let generation =
+                    normalize_chat_request(request(body), &template(TOOLS), limits()).unwrap();
+                let mut automaton = GrammarAutomaton::new(generation.grammar.unwrap());
+                let mut cursor = automaton.start();
+                assert!(
+                    !automaton.advance(&mut cursor, invalid.as_bytes())
+                        || !automaton.is_accepting(&mut cursor),
+                    "{invalid}"
+                );
+                let mut cursor = automaton.start();
+                assert!(automaton.advance(&mut cursor, valid.as_bytes()), "{valid}");
+                assert!(automaton.is_accepting(&mut cursor), "{valid}");
+            }
         }
     }
 

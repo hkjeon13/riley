@@ -48,6 +48,12 @@ Unicode 스칼라 1,112,064개를 각각 JSON 직렬화와 UTF-16 이스케이�
 
 GPU 6·7번의 기본 API 검사는 각각 40건을 통과했다. 장문 스키마·도구 64건에서 C8·C32의 출력이 C1과 일치했다. 45초 혼합 부하는 정상 완료 338건과 의도적 연결 종료 21건을 기록했다. 두 서버가 모든 자원을 회수하고 각 GPU가 기존 홀더의 20GiB 예약으로 돌아왔다. 재현 시 `schema.patch.gz`를 `schema.patch`로 풀어 `dispatch.sha256`으로 확인한다. [같은 이미지의 대조와 종료](../../benchmarks/evidence/20261124-w4-uri-reference-fix/verified.json)
 
+## Pattern 선택 분기의 시작과 끝 조건
+
+`^cat|dog$`를 이전 컴파일러에서 평가하면 `catfish`와 `sheepdog`를 거부했다. 전체 패턴의 처음과 끝 기호를 분리한 뒤 두 분기에 함께 적용했기 때문이다. 각 최상위 분기에서 자기 시작·끝 조건을 적용하도록 수정했다. `^cat$|dog|^eel$`처럼 가운데 분기만 부분 문자열과 일치하는 경우와, 그룹·이스케이프된 `$`·문자 클래스 속 `|`도 대조했다. [JSON Schema의 pattern 규칙](https://json-schema.org/draft/2020-12/json-schema-validation#name-pattern) · [ECMAScript의 분기 규칙](https://tc39.es/ecma262/multipage/text-processing.html#sec-compile-subpattern)
+
+추가한 13개 입력은 Node.js `RegExp`의 Unicode 모드와 일치했다. 독립 검증기 `jsonschema 4.23.0`은 공유 fixture 18개, 인스턴스 45개의 판정과 일치했다. 응답 스키마와 이름을 지정한 도구의 생성 문법을 포함한 CPU 서버 테스트는 111건 통과, 기존 비활성 검사 1건이었다. 새 CUDA 배포 이미지에서의 API 재검증이 남아 있다. [공유 fixture](../../crates/riley-server/tests/fixtures/structured_schema_oracle.json) · [응답·도구 회귀 검사](../../crates/riley-server/src/chat.rs)
+
 ## 현행 배포 이미지의 장문 채팅 검증
 
 Qwen2.5-7B-Instruct의 고정 입력에서 255·1,024·7,836·7,917토큰 사례를 선택했다. 각 입력을 채팅 메시지로 보내 `type`과 `enum`의 교집합 및 정수 `const`를 포함한 JSON 스키마를 검사했다. 같은 스키마를 이름이 지정된 도구의 인자로도 적용했다. 서버가 붙인 채팅 템플릿까지 포함한 입력 ID와 생성 ID·텍스트·도구 인자·종료 사유·사용량을 대조했다. 스키마와 도구 인자는 독립 Draft 2020-12 검증기로 검사했다. [고정 입력](../../benchmarks/evidence/20261119-w4-holdout/holdout.json.gz) · [검사기](../../benchmarks/live/structured_holdout_check.py)

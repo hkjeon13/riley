@@ -64,6 +64,18 @@
     "samples": [{"text": "3", "valid": true}, {"text": "2", "valid": false}]
   },
   {
+    "schema": {"type": "string", "pattern": "^cat|dog$"},
+    "samples": [{"text": "\"catfish\"", "valid": true}, {"text": "\"sheepdog\"", "valid": true}, {"text": "\"bobcat\"", "valid": false}, {"text": "\"dogfish\"", "valid": false}]
+  },
+  {
+    "schema": {"type": "string", "pattern": "^cat$|dog|^eel$"},
+    "samples": [{"text": "\"cat\"", "valid": true}, {"text": "\"hotdogs\"", "valid": true}, {"text": "\"eel\"", "valid": true}, {"text": "\"eels\"", "valid": false}, {"text": "\"bobcat\"", "valid": false}]
+  },
+  {
+    "schema": {"type": "string", "pattern": "^(cat|dog)$|\\$[|]"},
+    "samples": [{"text": "\"dog\"", "valid": true}, {"text": "\"a$|b\"", "valid": true}, {"text": "\"dogfish\"", "valid": false}, {"text": "\"a$b\"", "valid": false}]
+  },
+  {
     "schema": {"type": "object", "minProperties": 2},
     "reject_keyword": "minProperties",
     "samples": [{"text": "{\"a\":0,\"a\":1}", "valid": false}, {"text": "{\"a\":0,\"b\":1}", "valid": true}]
