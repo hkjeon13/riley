@@ -1,0 +1,86 @@
+{
+  "trace_sha256": "bf1869c1e9cd809657369736f0bb1d93bec8173e53484780e7d4321a23afe81a",
+  "step_times_sha256": "084c4731f8dc4573ed2662454c396e50e51b92415572cf91ff21b32df9ad3109",
+  "workload_sha256": "2b3c5d5cffec787d4e7184cbf772fde747824c6f8722c841a0ed61f38d80058c",
+  "measured_wide_steps": 492,
+  "measured_layers": 23616,
+  "median_step_ms": 131.2786185,
+  "median_projection_ms_per_step": {
+    "qkv": 19.466876,
+    "o": 10.4742775,
+    "gate_up": 50.9640105,
+    "down": 25.975021
+  },
+  "dense_peak_tflops": 312,
+  "dense_peak_source": "https://www.nvidia.com/en-us/data-center/a100/",
+  "ideal_projection_ms_per_step": {
+    "qkv": 11.563373489230768,
+    "o": 8.259552492307693,
+    "gate_up": 44.60158345846154,
+    "down": 22.30079172923077
+  },
+  "median_mlp_optimistic_savings_ms_per_step": 10.042226312307694,
+  "median_all_four_optimistic_savings_ms_per_step": 20.157590830769234,
+  "rag_c8_seed1_p95_request": {
+    "request_index": 46,
+    "ttft_ms": 1774.0261182188988,
+    "overlapping_wide_steps": 13,
+    "mlp_optimistic_savings_ms": 128.53947755999997,
+    "all_four_optimistic_savings_ms": 259.3875558000001
+  },
+  "rag_c8_seed1_slowest_seven": [
+    {
+      "request_index": 30,
+      "ttft_ms": 1513.1480172276497,
+      "overlapping_wide_steps": 11,
+      "mlp_optimistic_savings_ms": 107.1957649353846,
+      "all_four_optimistic_savings_ms": 217.20181213846163
+    },
+    {
+      "request_index": 15,
+      "ttft_ms": 1521.054819226265,
+      "overlapping_wide_steps": 11,
+      "mlp_optimistic_savings_ms": 107.4693639353846,
+      "all_four_optimistic_savings_ms": 217.7352901384616
+    },
+    {
+      "request_index": 11,
+      "ttft_ms": 1721.5200513601303,
+      "overlapping_wide_steps": 14,
+      "mlp_optimistic_savings_ms": 134.78908555999996,
+      "all_four_optimistic_savings_ms": 265.54867480000013
+    },
+    {
+      "request_index": 46,
+      "ttft_ms": 1774.0261182188988,
+      "overlapping_wide_steps": 13,
+      "mlp_optimistic_savings_ms": 128.53947755999997,
+      "all_four_optimistic_savings_ms": 259.3875558000001
+    },
+    {
+      "request_index": 42,
+      "ttft_ms": 1878.4622699022293,
+      "overlapping_wide_steps": 15,
+      "mlp_optimistic_savings_ms": 147.90165937230765,
+      "all_four_optimistic_savings_ms": 289.5332806307693
+    },
+    {
+      "request_index": 43,
+      "ttft_ms": 2017.467737197876,
+      "overlapping_wide_steps": 16,
+      "mlp_optimistic_savings_ms": 157.90419018461535,
+      "all_four_optimistic_savings_ms": 309.7215744615386
+    },
+    {
+      "request_index": 45,
+      "ttft_ms": 2047.8882417082787,
+      "overlapping_wide_steps": 16,
+      "mlp_optimistic_savings_ms": 156.70536818461534,
+      "all_four_optimistic_savings_ms": 308.38672546153856
+    }
+  ],
+  "rag_c8_seed1_optimistic_p95_ms": {
+    "mlp": 1645.4866406588988,
+    "all_four": 1514.6385624188988
+  }
+}

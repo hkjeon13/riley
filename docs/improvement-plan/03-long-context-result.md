@@ -1392,6 +1392,21 @@ GPU 7번의 네 대조는 저장된 vLLM과 동일 입력·도착 시각표 및 
 
 `--prefill-burst-max-decode-rows 0`은 스케줄러에 decode 대기열이 비어 있을 때 넓은 예산을 허용한다. 이번 추적의 꼬리 구간에는 직접 넓힐 스텝이 없어 이 설정의 GPU 재시험은 우선순위를 낮췄다. 앞선 요청 배정이 달라져 이후 도착의 지연이 변할 가능성은 이 기록에서 측정하지 않았다. [행 예산 결정 코드](../../crates/riley-scheduler/src/scheduler.rs#L1792) · [구간 검산기](../../benchmarks/evidence/20261124-w3-pure-prefill-window/verify.py)
 
+### 1,024행 행렬곱의 스텝당 시간과 개선 여지
+
+2026-11-19 A100 7번의 Coder-14B Nsight 원본을 SHA-256으로 검증한 뒤 1,024행 스텝 492개와 각 스텝의 48개 레이어를 다시 분류했다. CUDA 그리드, 커널 전체 심볼, RMSNorm·KV 쓰기·attention·SiLU의 실행 순서가 모두 맞는지 확인했다. 첫 RMSNorm부터 마지막 down까지 스텝 길이 중앙값은 131.28ms였다. 표의 실측은 각 스텝의 48회 실행 시간을 합산한 뒤 구한 중앙값이다. [원본 위치와 해시](../../benchmarks/evidence/20261119-w3-rag-profile/coder14-profile/trace-files.json) · [연산 순서 검산기](../../benchmarks/evidence/20261124-w3-wide-projection-profile/summarize.py) · [스텝별 집계](../../benchmarks/evidence/20261124-w3-wide-projection-profile/step-times.json.gz)
+
+| 행렬곱 | 실측 중앙값 (ms) | BF16 dense 312 TFLOPS 가정 (ms) |
+| --- | ---: | ---: |
+| QKV | 19.47 | 11.56 |
+| Attention 출력 투영 | 10.47 | 8.26 |
+| Gate/up | 50.96 | 44.60 |
+| Down | 25.98 | 22.30 |
+
+각 행렬곱이 A100의 dense BF16 공시 최대치에 도달한다고 놓으면 스텝당 감소 여지의 중앙값은 gate/up·down 합계 **10.04ms**, 네 행렬곱 합계 **20.16ms**다. 행렬곱 시간이 서로 겹쳐도 차감량을 합산하고, 요청 구간 일부와만 겹친 스텝에도 해당 구간 길이까지 그 차이를 전부 적용한 낙관적 계산이다. 같은 RAG C8 시드 1의 64건에서 첫 토큰 p95는 실측 1,774.03ms에서 이 계산으로 각각 **1,645.49ms**, **1,514.64ms**였다. 당시 별도 폐쇄형 부하의 vLLM 기준에 1.15를 곱한 값은 1,407.89ms였다. 이 비교는 기존 스텝 순서와 형상을 고정한 계산이며, 새 바이너리의 서빙 성능은 측정하지 않았다. [NVIDIA A100 명세](https://www.nvidia.com/en-us/data-center/a100/) · [기존 vLLM 측정](../../benchmarks/evidence/20261119-w3-rag-profile/coder14-comparison.json) · [계산 결과](../../benchmarks/evidence/20261124-w3-wide-projection-profile/verified.json)
+
+현행 프로파일은 128행 기준 알고리즘 선택에 16MiB 상한을 적용하고, 1,024행 실행에는 이미 최대 64MiB를 허용한다. 현행 재생에서 RAG 목표까지 311.22–454.82ms가 남았고, 위 과거 계측은 같은 스케줄에서 두 MLP 행렬곱만 바꾸는 접근의 개선 여지가 제한적임을 보여 준다. 후속 비교는 꼬리 요청이 기다리는 1,024행 혼합 스텝 수를 줄이는 방법에 우선순위를 둔다. [형상별 작업 메모리 코드](../../crates/riley-runtime/src/llama/forward.rs#L6647) · [현행 재생 목표 격차](../../benchmarks/evidence/20261124-w3-rag-tail-accounting/verified.json)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.
