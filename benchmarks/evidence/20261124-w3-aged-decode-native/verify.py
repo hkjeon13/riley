@@ -29,22 +29,24 @@ def digest(path):
     return sha256(path.read_bytes()).hexdigest()
 
 
-def check_flag(plan, old_plan, stage, image, mode, flag):
+def check_flag(plan, old_plan, stage, image, mode, flag, *, observations=False):
     expected_server = old_plan["server"] + ([flag] if mode == "reserve" else [])
     if plan["server"] != expected_server or any(plan[name] != old_plan[name]
                                                  for name in ("cells", "server_cpu_affinity")):
         raise ValueError(f"serving arguments or frozen replay changed in {mode}")
     command = plan["docker"]
     mount = f"type=bind,source={stage}/riley-diagnostic,target=/opt/riley/bin/riley,readonly"
+    expected_trace = ["RILEY_W3_EXPORT_OBSERVATIONS=1"] if observations else []
     if (command[-(len(expected_server) + 1):] != [image, *expected_server]
             or command.count(mount) != 1 or "127.0.0.1::8080" not in command
-            or any(arg.startswith("RILEY_W3_") for arg in command)):
+            or [arg for arg in command if arg.startswith("RILEY_W3_")] != expected_trace):
         raise ValueError(f"native package, mounted binary or argv differs in {mode}")
 
 
-def verify_arm(path, old_plan, old_receipt, reg, binary, mode, client_cpu, baseline):
+def verify_arm(path, old_plan, old_receipt, reg, binary, mode, client_cpu, baseline, *, observations=False):
     plan, receipt = (read(path / f"{file}.json") for file in ("plan", "receipt"))
-    check_flag(plan, old_plan, reg["stage"], reg["package_image_id"], mode, reg["mode_flag"])
+    check_flag(plan, old_plan, reg["stage"], reg["package_image_id"], mode, reg["mode_flag"],
+               observations=observations)
     changed = {
         "riley_binary_sha256": binary, "source_revision": reg["source_revision"],
         "image_id": reg["package_image_id"], "cpu_report_sha256": reg["package_cpu_report_sha256"],

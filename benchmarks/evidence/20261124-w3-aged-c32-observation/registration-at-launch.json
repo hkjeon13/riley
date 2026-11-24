@@ -1,0 +1,44 @@
+{
+  "physical_gpus": [
+    6,
+    7
+  ],
+  "orders": {
+    "6": [
+      "control",
+      "reserve"
+    ],
+    "7": [
+      "reserve",
+      "control"
+    ]
+  },
+  "schedules_sha256": "ae754da0ab4110576a4b0347dd39eb35292b20bc364e15c75f27d4fd87f509f5",
+  "measured_requests_per_arm": 320,
+  "holdout_requests_per_arm": 16,
+  "write_error_p95_limit_ms": 3,
+  "decode_tpot_p50_max_regression_pct_exclusive": 1,
+  "short_ttft_p50_max_regression_pct_exclusive": 2,
+  "short_throughput_max_drop_pct_exclusive": 2,
+  "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-aged-c32-observation-20261124.qylMVsKz",
+  "source_revision": "8a7c618c1882effcacd49107a0b41ea3fc29d22d",
+  "package_image_id": "sha256:01b5c9d4bedfc93284af6dfc9fbe747002327d2818f7164f8d4e77565eaa1a8c",
+  "package_cpu_report_sha256": "90cdff932840009027aad73e0e54dcbb8e98bd7ae7b652d1cc3882e2957b1e1b",
+  "candidate_patch_sha256": "07dd755e1857acda37970ecd1de86e5303f749ab47eeab08e50da228d2b17c44",
+  "mode_flag": "--prefill-aging-reserve-decode",
+  "build_dispatch_sha256": "afb0024300241d9fad739525bfc31aa82049388a5414ce6b3ea5995934869f54",
+  "build_pid": 3703466,
+  "build_started_at": "2026-11-24T01:19:11Z",
+  "campaign_dispatch_sha256": "ac9f6557671d1571973853e0432a23f9989001e3644462cd4d8f02163ecba588",
+  "campaign_pid": 3703473,
+  "campaign_started_at": "2026-11-24T01:19:11Z",
+  "parent_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-aged-native-short-20261124.DbM7JcgV",
+  "parent_schedules_sha256": "7921e63069ddd4b58736558af62590b5f340083ee129d25aa54eeefbdf78c116",
+  "cells": [
+    "rag-c8-s1-vllm-arrivals",
+    "rag-c8-s2-vllm-arrivals",
+    "c32-riley-arrivals"
+  ],
+  "parent_build_result_sha256": "026b8ffba2192133d5941d95bb7a52c196fe0a94174e57dc4832cba2e89caaf9",
+  "export_observations_sha256": "7bdf373429fa1538f2856e3d99c5d875d5e0a4dccb0c3be4f92dca84a00f73df"
+}
