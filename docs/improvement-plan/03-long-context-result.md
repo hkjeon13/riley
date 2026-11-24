@@ -1422,6 +1422,21 @@ GPU 7번의 네 대조는 저장된 vLLM과 동일 입력·도착 시각표 및 
 
 이전 접수 순서 후보는 aging이 다른 행을 배정한 뒤 남은 prefill에만 순서를 적용했다. 이번 진단 후보는 긴 입력만 대기하면서 넓은 행 예산을 쓰는 스텝에서 기존 decode 순서로 행을 먼저 배정하고, 다음 스텝에서도 접수가 빠른 prefill을 우선한다. 로컬 스케줄러 검사 146건과 엄격한 Clippy를 통과했다. 같은 CUDA 12.4 진단 바이너리의 스위치 한 개로 두 GPU에서 순서를 뒤집어 두 RAG 시드, 두 C32 시각표, 동시 유입과 50ms 간격 유입을 비교한다. 소스·빌드·시험 진입점과 실행 PID를 등록했다. [진단 패치](../../benchmarks/evidence/20261124-w3-prefill-deadline-capacity/prefill-admission-fifo.patch.gz) · [GPU 검증 등록](../../benchmarks/evidence/20261124-w3-prefill-deadline-capacity/registration.json) · [교차 시험](../../benchmarks/evidence/20261124-w3-prefill-deadline-capacity/campaign.sh)
 
+#### 장문 접수 순서의 CUDA 교차 결과
+
+두 GPU에서 각각 반대 순서로 실행했다. 네 실행의 측정 요청 2,368건은 모두 완료됐고 대응 입출력 1,184쌍 및 별도 장문 토큰 ID 64건이 기존 기준과 일치했다. 송신 오차 p95는 12개 비교에서 모두 3ms 이하였다. 두 GPU의 종료 자원을 회수했고, 회차 경계와 최종 종료 뒤 같은 홀더가 20GiB 예약으로 돌아왔다. [실행 원본](../../benchmarks/evidence/20261124-w3-prefill-deadline-capacity/raw-results.tar.gz) · [독립 검산](../../benchmarks/evidence/20261124-w3-prefill-deadline-capacity/gpu-verified.json)
+
+| 부하 | 후보의 TTFT p95 변화 GPU 6 / 7 | 후보의 TPOT p50 변화 GPU 6 / 7 |
+| --- | ---: | ---: |
+| RAG C8 시드 1 | −31.04% / −31.10% | −8.91% / −9.94% |
+| RAG C8 시드 2 | −20.61% / −20.39% | −7.41% / −8.76% |
+| 동시 유입 | +1.65% / +2.00% | +19.42% / +19.62% |
+| 50ms 간격 유입 | −3.07% / −2.90% | +10.07% / +13.23% |
+
+GPU 7번의 저장 vLLM 대비 RAG 첫 토큰 p95는 시드 1에서 **1.479→1.019배**, 시드 2에서 **1.416→1.127배**로 줄어 두 시드 모두 최종 1.15배 기준을 충족했다. 동시 유입에서는 첫 토큰이 빨라진 대응 요청이 두 GPU 합계 57건이었다. 이 57건의 첫 토큰 이후 구간은 모두 길어졌고 마지막 토큰은 모두 빨라졌다. 같은 부하의 전체 완료 p95는 GPU 6번에서 9.87ms, 7번에서 19.30ms 늘었다. 동시·50ms 유입 네 대조의 decode 회귀가 1% 기준을 넘었다. 짧은 C32의 Riley 시각표 첫 토큰 p50은 GPU 6번에서 37.66% 늘고 GPU 7번에서 24.62% 줄었다. 이 C32 입력은 70–77토큰으로 장문 조건 512토큰 밖이었고 두 실행의 차이 원인은 확정하지 않았다. 전체 부하에 대한 기본값 적용은 보류한다. [부하 및 요청별 구간 판정](../../benchmarks/evidence/20261124-w3-prefill-deadline-capacity/gpu-verified.json)
+
+이전 기준 계측에서 다른 측정 요청과 처음 가능한 GPU 스텝을 공유한 요청은 RAG 각 시드의 64건 중 8–10건, 동시 유입의 40건 중 40건, 50ms 유입의 40건 중 34–35건이었다. 입장 시각과 첫 실행 가능 스텝을 대조한 분포다. 이후에는 같은 스텝에 들어온 긴 요청 묶음에서 기존 순환을 유지하는 선택으로 RAG의 이득과 동시 유입의 decode 기준을 함께 확인한다. [입장 묶음 검산](../../benchmarks/evidence/20261124-w3-prefill-deadline-capacity/trace-arrival-batches.json)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

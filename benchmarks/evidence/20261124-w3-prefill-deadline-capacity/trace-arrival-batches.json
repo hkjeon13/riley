@@ -1,0 +1,49 @@
+{
+  "source_sha256": "e7fdf13a5d246dd3c154ba0d12cde6550cdfb6a0c2804cb6f5dd27415de6ebd3",
+  "gpus": {
+    "6": {
+      "rag-c8-s1-vllm-arrivals": {
+        "admitted_alone": 54,
+        "admitted_with_other_measured_requests": 10,
+        "largest_cohort": 2
+      },
+      "rag-c8-s2-vllm-arrivals": {
+        "admitted_alone": 56,
+        "admitted_with_other_measured_requests": 8,
+        "largest_cohort": 2
+      },
+      "wave-sync": {
+        "admitted_alone": 0,
+        "admitted_with_other_measured_requests": 40,
+        "largest_cohort": 8
+      },
+      "wave-50ms": {
+        "admitted_alone": 5,
+        "admitted_with_other_measured_requests": 35,
+        "largest_cohort": 3
+      }
+    },
+    "7": {
+      "rag-c8-s1-vllm-arrivals": {
+        "admitted_alone": 56,
+        "admitted_with_other_measured_requests": 8,
+        "largest_cohort": 2
+      },
+      "rag-c8-s2-vllm-arrivals": {
+        "admitted_alone": 56,
+        "admitted_with_other_measured_requests": 8,
+        "largest_cohort": 2
+      },
+      "wave-sync": {
+        "admitted_alone": 0,
+        "admitted_with_other_measured_requests": 40,
+        "largest_cohort": 8
+      },
+      "wave-50ms": {
+        "admitted_alone": 6,
+        "admitted_with_other_measured_requests": 34,
+        "largest_cohort": 3
+      }
+    }
+  }
+}

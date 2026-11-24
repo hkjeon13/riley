@@ -63,6 +63,23 @@ def check_manifests(stage, reg, package):
     return binary
 
 
+def paired_latency(control, candidate, percentile):
+    """Describe how much work remains after the earlier first-token boundary."""
+    deltas = [(b["ttft"] - a["ttft"], (b["e2e"] - b["ttft"]) - (a["e2e"] - a["ttft"]),
+               b["e2e"] - a["e2e"]) for a, b in zip(control, candidate, strict=True)]
+    return {
+        "faster_first_token_requests": sum(first < 0 for first, _, _ in deltas),
+        "faster_first_token_and_longer_generation_requests": sum(
+            first < 0 and decode > 0 for first, decode, _ in deltas
+        ),
+        "faster_first_token_and_later_completion_requests": sum(
+            first < 0 and complete > 0 for first, _, complete in deltas
+        ),
+        "complete_p95_ms": {name: percentile([row["e2e"] * 1e3 for row in rows], .95)
+                            for name, rows in (("control", control), ("candidate", candidate))},
+    }
+
+
 def summary(stage, registration=HERE / "registration.json"):
     reg = read(registration)
     package = read(PACKAGE)
@@ -123,11 +140,16 @@ def summary(stage, registration=HERE / "registration.json"):
                               for a, b in zip(captures[mode][label][0], previous, strict=True))
                     for mode in order
                 }
+                cell["paired_latency"] = paired_latency(control[0], candidate[0], baseline["percentile"])
                 if gpu == "7" and label.startswith("rag-"):
                     vllm = json.load(reference.extractfile(f"gpu7/coder14-vllm/{label}.json"))
                     ratios = {}
                     for mode in order:
                         rows, stats = captures[mode][label]
+                        identity = ("request_index", "input_sha256", "prompt_tokens", "scheduled_write_ns")
+                        expect(all(all(a[k] == b[k] for k in identity)
+                                   for a, b in zip(rows, vllm["measured"], strict=True)),
+                               f"historical vLLM inputs changed in {label}")
                         error = baseline["percentile"]([
                             abs(a["write_error_ms"] - b["write_error_ms"])
                             for a, b in zip(rows, vllm["measured"], strict=True)
