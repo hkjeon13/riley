@@ -1,0 +1,68 @@
+{
+  "source_revision": "6ae0e9276cabc2ac6df1d19a0687fea4a8c70c41",
+  "trace_source_revision": "8a7c618c1882effcacd49107a0b41ea3fc29d22d",
+  "trace_sha256": "779857b8f630698cf5e7bee48c9419684ba8d254c97bfd8627eb048f68d8e91b",
+  "trace_runs": 4,
+  "query_heads": 40,
+  "key_value_heads": 8,
+  "head_dimension": 128,
+  "page_tokens": 16,
+  "kv_chunk_tokens": 512,
+  "fixed_tile_planner_threads": 1024,
+  "maximum_runtime_row_tokens": 8388608,
+  "replay_requests": {
+    "rag_c8": {
+      "request_count": 128,
+      "maximum_kv_tokens": 3655,
+      "requests_above_4096_kv_tokens": 0
+    },
+    "short_c32": {
+      "request_count": 192,
+      "maximum_kv_tokens": 140,
+      "requests_above_4096_kv_tokens": 0
+    },
+    "holdout": {
+      "request_count": 16,
+      "maximum_kv_tokens": 3769,
+      "requests_above_4096_kv_tokens": 0
+    }
+  },
+  "workspace_layouts": [
+    {
+      "rows": 1024,
+      "context_tokens": 8192,
+      "row_tokens": 8388608,
+      "within_runtime_row_token_product": true,
+      "within_runtime_row_limit": true,
+      "fixed_tile_partial_state_bytes": 172745072,
+      "page_v1_partial_state_bytes": 10905190400
+    },
+    {
+      "rows": 1024,
+      "context_tokens": 4096,
+      "row_tokens": 4194304,
+      "within_runtime_row_token_product": true,
+      "within_runtime_row_limit": true,
+      "fixed_tile_partial_state_bytes": 86384880,
+      "page_v1_partial_state_bytes": 5452595200
+    },
+    {
+      "rows": 2048,
+      "context_tokens": 4096,
+      "row_tokens": 8388608,
+      "within_runtime_row_token_product": true,
+      "within_runtime_row_limit": false,
+      "fixed_tile_partial_state_bytes": 172769648,
+      "page_v1_partial_state_bytes": 10905190400
+    },
+    {
+      "rows": 2048,
+      "context_tokens": 8192,
+      "row_tokens": 16777216,
+      "within_runtime_row_token_product": false,
+      "within_runtime_row_limit": false,
+      "fixed_tile_partial_state_bytes": 345490032,
+      "page_v1_partial_state_bytes": 21810380800
+    }
+  ]
+}
