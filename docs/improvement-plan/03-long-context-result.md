@@ -1216,6 +1216,17 @@ GPU 7번의 동시 유입 24번 요청은 첫 토큰이 425.85ms 빨라졌고 �
 
 GPU 7번 RAG seed 1의 추적 요청 6개에서 120ms 이상인 서버 decode 간격은 기준 94개, 후보 91개였다. 그중 기준 25개와 후보 24개에 prefill 1,023행과 decode 1행을 실행한 별도 스텝이 있었다. 각 설정에서 해당한 실제 스텝은 중복을 빼면 14개였다. CPU에서 동일 예산의 aging 경로에 긴 prefill 하나와 이미 생성 중인 세 요청을 넣으면 기준은 decode 한 행만 예약했다. 시험 스위치를 켜면 prefill을 계속 진행하고 decode 세 행을 모두 배정한다. 전체 1,024행을 유지하고 일반 스텝, 512행 예산, 3,072토큰 미만 입력 및 atomic prefill의 기존 동작을 재현했다. 두 스위치 위치에서 스케줄러 검사 146건씩을 통과했다. GPU에서 출력 일치와 지연 기준을 확인한 뒤 채택 여부를 결정한다. [CPU 진단 변경](../../benchmarks/evidence/20261124-w3-prefill-step-cost/reserve-aged-decode.py) · [재현 테스트](../../benchmarks/evidence/20261124-w3-prefill-step-cost/aged-decode-reserve.rs) · [CPU 실행 기록](../../benchmarks/evidence/20261124-w3-prefill-step-cost/aged-decode-cpu.log)
 
+이후 Coder-14B의 같은 1,024행 진단 설정에서 예약만 바꿔 A100 6번은 후보 → 기준, A100 7번은 기준 → 후보 순으로 실행했다. 네 실행의 요청 2,368건과 커밋된 스텝 23,447개를 대조했다. 대응 출력 1,184쌍과 별도 장문 생성 토큰 ID 64건은 기존 기준과 일치했다. 12개 비교가 모두 송신 오차 p95 3ms와 decode TPOT p50 회귀 1% 기준을 통과했다. 짧은 C32 4개 비교의 TTFT p50과 처리량도 각각 2% 회귀 한도를 통과했다. 두 GPU는 종료 자원을 회수하고 기존 20GiB 예약으로 복귀했다. [등록](../../benchmarks/evidence/20261124-w3-aged-decode-reserve/registration.json) · [검산](../../benchmarks/evidence/20261124-w3-aged-decode-reserve/verified.json.gz) · [원본](../../benchmarks/evidence/20261124-w3-aged-decode-reserve/raw-results.tar.gz)
+
+| RAG 시각표 | TTFT p95 변화 6번 / 7번 | Decode TPOT p50 변화 6번 / 7번 | 토큰 간격 p99 변화 6번 / 7번 |
+|---|---:|---:|---:|
+| Seed 1 | −3.73% / +0.18% | −6.88% / −13.54% | −46.01% / −47.55% |
+| Seed 2 | +0.74% / −0.77% | −3.46% / −7.39% | −45.67% / −47.37% |
+
+두 기준 실행의 기록된 aging 스텝 255개에서 준비된 decode 1,552행 중 972행의 실행이 뒤로 밀렸다. 두 후보 실행의 aging 스텝 260개에서는 준비된 decode 1,360행을 모두 같은 스텝에서 실행했다. GPU 7번의 RAG seed 1 추적 요청에서는 120ms 이상인 서버 토큰 간격 중 prefill 1,023행·decode 1행 스텝이 사이에 낀 경우가 33건에서 7건으로 줄었다. 추적한 6개 요청에서 토큰 생성 시작 이후 서버 커밋 구간은 각각 465–1,115ms 줄었다. [준비 행·실행 행과 요청별 기록](../../benchmarks/evidence/20261124-w3-aged-decode-reserve/verified.json.gz)
+
+두 RAG seed의 GPU 7번 첫 토큰 p95는 기존 vLLM 대비 1.527배·1.437배로 최종 기준 1.15배를 넘었다. 예약은 decode 꼬리 지연을 줄인 진단 후보로 유지한다. 첫 토큰 지연을 줄인 기존 prefill 순서 변경과 같은 바이너리에서 함께 검증하며, 기본값 적용 전에는 다른 영향 모델과 출력 불변성도 확인한다. [판정 기준](03-long-context-and-scheduling.md#2-기존-목표와-범위) · [독립 원본 검산](../../benchmarks/evidence/20261124-w3-aged-decode-reserve/verify.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

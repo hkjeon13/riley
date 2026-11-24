@@ -28,6 +28,8 @@
 
 후속 계측에서 출력 1,184쌍과 스텝 23,524개를 대조했다. 순서 변경으로 두 GPU의 RAG seed 1 첫 토큰 p95가 약 10% 줄었으나 일부 부하에서 decode 회귀 한도를 넘어 미채택했다. GPU 7번 기준의 seed 1에서 120ms 이상 decode 간격 94개 중 25개에는 prefill 1,023행과 decode 1행을 실행하는 별도 스텝이 있었다. CPU에서는 그 모양을 만드는 aging 경로에서 대기 중인 decode를 모두 예약하는 후보를 시험했다. [스텝별 결과](03-long-context-result.md#prefill-순서-변경에-따른-gpu-스텝과-decode-대기) · [행 예약 CPU 검증](03-long-context-result.md#오래-기다린-prefill의-decode-행-예약)
 
+같은 Coder-14B의 후속 교차 실험에서 decode 행 예약은 두 GPU의 RAG 토큰 간격 p99를 45.67–47.55%, TPOT p50을 3.46–13.54% 줄였다. 대응 출력 1,184쌍이 일치했고 12개 비교가 모두 송신 오차·decode 회귀 기준을 충족했다. GPU 7번에서 vLLM 대비 RAG 첫 토큰 p95는 1.437–1.527배여서 최종 목표가 남아 있다. [행 예약 교차 결과](03-long-context-result.md#오래-기다린-prefill의-decode-행-예약)
+
 요청별 prefill 조각을 512행으로 낮춘 후보는 832쌍의 출력을 보존했으나 네 RAG C8 비교에서 첫 토큰 p95가 2.74–14.39% 늘어 미채택했다. [W3 조각 크기 대조](03-long-context-result.md#coder-14b-요청별-prefill-조각-크기)
 
 W4 장문 답변의 같은 33개 문제를 채팅으로 보내자 Riley·vLLM 모두 정답만 출력하고 정상 종료한 경우가 0/33에서 22/33으로 늘었다. 두 채팅 형식에서 Riley의 동시성 1·8 결과는 각각 33/33 일치했고, 두 엔진 모두 한국어 산술은 0/11이었다. [장문 채팅 비교](04-long-accuracy-result.md#같은-장문-문제를-채팅-형식으로-재생)
