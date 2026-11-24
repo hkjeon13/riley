@@ -1227,6 +1227,17 @@ GPU 7번 RAG seed 1의 추적 요청 6개에서 120ms 이상인 서버 decode �
 
 두 RAG seed의 GPU 7번 첫 토큰 p95는 기존 vLLM 대비 1.527배·1.437배로 최종 기준 1.15배를 넘었다. 예약은 decode 꼬리 지연을 줄인 진단 후보로 유지한다. 첫 토큰 지연을 줄인 기존 prefill 순서 변경과 같은 바이너리에서 함께 검증하며, 기본값 적용 전에는 다른 영향 모델과 출력 불변성도 확인한다. [판정 기준](03-long-context-and-scheduling.md#2-기존-목표와-범위) · [독립 원본 검산](../../benchmarks/evidence/20261124-w3-aged-decode-reserve/verify.py)
 
+### 행 예약과 prefill 순서 변경의 결합 대조
+
+행 예약을 켠 같은 바이너리를 재사용하고 prefill 순서 변경만 바꿨다. A100 6번은 결합 → 예약 단독, 7번은 예약 단독 → 결합 순으로 실행했다. 요청 2,368건의 대응 출력 1,184쌍과 장문 생성 토큰 ID 64건이 일치했다. 네 묶음에서 커밋된 스텝 23,475개를 대조했고, 기록된 aging 스텝 516개에서 준비된 decode가 다음 스텝으로 밀린 경우는 없었다. 결합 설정이 prefill을 바꾼 59개 스텝은 모두 논리적 attention 쌍 수가 늘어나는 선택이었다. 종료 뒤 두 GPU가 기존 20GiB 예약으로 복귀했다. [실행 등록](../../benchmarks/evidence/20261124-w3-aged-fifo/registration.json) · [검산 결과](../../benchmarks/evidence/20261124-w3-aged-fifo/verified.json.gz) · [원본 측정](../../benchmarks/evidence/20261124-w3-aged-fifo/raw-results.tar.gz)
+
+| RAG 시각표 | TTFT p95 변화 6번 / 7번 | Decode TPOT p50 변화 6번 / 7번 | 토큰 간격 p99 변화 6번 / 7번 |
+|---|---:|---:|---:|
+| Seed 1 | −10.48% / −11.79% | +1.06% / −1.70% | +0.06% / −0.79% |
+| Seed 2 | −2.14% / −3.90% | +0.28% / +0.03% | +0.32% / −0.74% |
+
+GPU 6번의 seed 1 decode TPOT p50은 1% 회귀 기준을 넘었다. GPU 7번의 vLLM 시각표 C32 첫 토큰 p50도 2.40% 늘어 2% 기준을 초과했다. GPU 6번의 Riley 시각표 C32와 동시 유입은 송신 오차 p95 3.21ms·3.44ms로 성능 판정에서 제외했다. GPU 7번의 RAG 첫 토큰 p95는 저장된 vLLM 대비 1.362배·1.401배로 두 seed 모두 최종 1.15배 기준을 넘었다. 결합 설정의 채택은 보류하고 행 예약 단독의 일반 CUDA 서빙 진입점을 후속 검증 대상으로 삼았다. [세부 판정](../../benchmarks/evidence/20261124-w3-aged-fifo/verified.json.gz) · [재현 검사기 `--combined`](../../benchmarks/evidence/20261124-w3-aged-decode-reserve/verify.py)
+
 ## W2 이벤트 발행과 묶음 정책의 상호작용
 
 W4·W5에 쓴 `f7c956d3c` CUDA 바이너리와 Qwen2.5-0.5B에서 이벤트 발행 `immediate-v1`·`after-submit-v1`과 wide prefill 허용 상한 32·2 decode 행을 교차한다. 현행 프로파일의 이벤트 발행은 `after-submit-v1`이며, 이전 W3 측정과 같은 burst 설정과 네 부하 `closed-c32`, `rag-c1`, `rag-c8`, `rag-r3`를 사용한다. 두 seed는 실행 순서를 뒤집는다. 각 조건은 별도 서버에서 측정한 뒤 8개 동일 입력의 C1·C8 생성 토큰 ID, 텍스트, 종료 사유와 usage도 확인한다.

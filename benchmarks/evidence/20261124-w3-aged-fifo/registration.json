@@ -1,0 +1,54 @@
+{
+  "base_revision": "0511b9280f62c3ee87c7a1344444423d8b4623c4",
+  "schedules_sha256": "7921e63069ddd4b58736558af62590b5f340083ee129d25aa54eeefbdf78c116",
+  "physical_gpus": [
+    6,
+    7
+  ],
+  "measured_requests_per_arm": 592,
+  "holdout_requests_per_arm": 16,
+  "write_error_p95_limit_ms": 3,
+  "decode_tpot_p50_max_regression_pct_exclusive": 1,
+  "short_ttft_p50_max_regression_pct_exclusive": 2,
+  "short_throughput_max_drop_pct_exclusive": 2,
+  "stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-aged-fifo-20261124.gTyQmoge",
+  "parent_stage": "/mnt/efs/nlp/psyche/riley-gap-20261102/evidence/w3-aged-decode-reserve-20261124.UbReV73C",
+  "parent_binary_sha256": "dfde6c45db22cc9b2e9b175fdfe5b1f98ec80eae489aedecccbe92f1be91679f",
+  "orders": {
+    "6": [
+      "combined",
+      "reserve"
+    ],
+    "7": [
+      "reserve",
+      "combined"
+    ]
+  },
+  "focus_gpu7": {
+    "rag-c8-s1-vllm-arrivals": [
+      13,
+      19,
+      20,
+      21,
+      22,
+      30
+    ],
+    "wave-sync": [
+      24,
+      25,
+      28,
+      40,
+      43
+    ],
+    "rag-c8-s2-vllm-arrivals": [
+      43
+    ]
+  },
+  "build_dispatch_sha256": "c4443a096196e22a0e144e9600c8f8b8dd5042f2e012d0085dcd9fe653c2fee3",
+  "build_pid": 3423736,
+  "build_started_at": "2026-11-24T00:31:10Z",
+  "campaign_dispatch_sha256": "0adec6dcafea2c3dfe53a78a2d0e4f352e92c46bbaa6e76f65e4b39edc6ae70a",
+  "campaign_pid": 3423742,
+  "campaign_started_at": "2026-11-24T00:31:10Z",
+  "build_result_sha256": "fb3a8d0d7f7412ad6639cdd4460ebb3f4c8a8dda10884ff9cf0e406269871d04"
+}
