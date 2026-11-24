@@ -170,6 +170,8 @@ trace가 없으면 "production 검증" 대신 "관측 분포를 가정한 합성
 
 연결된 Gmail에서 Riley 저장소 또는 서버 이름과 운영 대시보드·승인 SLO를 함께 검색한 두 조회는 각각 0건이었다. 로컬 프로젝트의 배포 설정 검색에서도 이 서비스에 연결되는 설정은 확인되지 않았다.
 
+2026-11-24에 GitHub 공개 API로 확인한 배포와 환경은 각각 0건이었다. 공개 릴리스에는 8월 27일의 `riley-0.1.0-rc2` 사전 릴리스 한 건이 있었다. 연결된 Linear에서 `riley-server`와 `Riley`·`SLO`를 검색한 결과도 각각 0건이었다. 이 조회 범위에서 검증 대상 서비스와 승인 SLO의 위치는 미확인 상태다. [공개 사전 릴리스](https://github.com/hkjeon13/riley/releases/tag/riley-0.1.0-rc2) · [GitHub 배포 목록](https://api.github.com/repos/hkjeon13/riley/deployments) · [GitHub 환경 목록](https://api.github.com/repos/hkjeon13/riley/environments)
+
 운영 자료가 확인되면 아래 항목으로 부하를 구성하고 릴리스 판정에 사용한 출처와 측정 기간을 남긴다.
 
 | 운영 자료 | 재현과 판정에 사용하는 값 |

@@ -78,6 +78,16 @@ def check_recovery(archive, allocator, parent):
 
 
 def verify(archive, registration, parent_path):
+    names = set()
+    for entry in archive.getmembers():
+        path = PurePosixPath(entry.name)
+        require(entry.isfile() and entry.name == path.as_posix() and not path.is_absolute()
+                and ".." not in path.parts and entry.name not in names,
+                f"invalid or duplicate W5 archive entry: {entry.name}")
+        names.add(entry.name)
+    require(int(member(archive, "campaign.pid").decode().strip()) == registration["campaign_pid"]
+            and member(archive, "campaign.started").decode().strip() == registration["campaign_started_at"],
+            "W5 campaign identity differs from registration")
     parent = json.loads(parent_path.read_bytes())
     require(parent["source_revision"] == registration["source_revision"]
             and parent["image_id"] == registration["parent_image_id"]
