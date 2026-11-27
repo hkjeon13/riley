@@ -1,0 +1,171 @@
+{
+  "registration": {
+    "scope": "Heterogeneous functional only. Separate AWS A100 6 and RTX 4090 on ai-assistant, same Qwen2.5-Coder-7B-Instruct BF16 files and Riley binary. Each server and data SSH forward binds only loopback. User approved RTX as routing and failure only. Document A100 scale qualification separately as open.",
+    "physical_hosts": [
+      "ldccai-a100-02",
+      "psyche-MS-7D91"
+    ],
+    "gpu_labels": [
+      "AWS A100 GPU6",
+      "ai-assistant RTX 4090 GPU0"
+    ],
+    "reference_binary_sha256": "13b589df5c19a33c685ca1388398905f46a6cc566cbd1bed68f06b798080ca9f",
+    "load": {
+      "purpose": "Exercise increasing synthetic arrivals and verify periodic round robin on real independent GPUs. Functional correctness only.",
+      "waves": [
+        2,
+        4,
+        8,
+        2,
+        4,
+        8
+      ],
+      "wave_spacing_ms": 70,
+      "cases": "The same three tool/final turn pattern and explicit citations. Target path uses app-direct named tools and long history; reader path uses model tools."
+    },
+    "faults": {
+      "boundaries": [
+        "before-final-content",
+        "partial-final-content",
+        "completed-tool-call"
+      ],
+      "node_order": [
+        "aws",
+        "rtx",
+        "aws"
+      ],
+      "injection": "Terminate only the owned SSH data tunnel for the target route. Management and server process remain available for independent readiness and PID confirmation. No host-wide outage.",
+      "criterion": "On readiness failure withdraw route. Never transparently splice a partial stream. Re-execute logical ID on surviving node, confirm saved tool effects reused, restore tunnel, verify readiness before re-admission and complete one workflow via each node after return.",
+      "health_observe_max_s": 10,
+      "survivor_correct_max_s": 30,
+      "both_runtime_paths_correct_after_reopen_max_s": 60
+    },
+    "excluded": "Homogeneous scaling, throughput and cost evaluation, physical power-off and host network changes, production deployment, customer canary."
+  },
+  "hosts": {
+    "aws": {
+      "physical_host": "ldccai-a100-02",
+      "boot_identity_digest": "65748eacd47cc3f7d3a4fb8c7eca017e2fc4b3dc2b084d0604a4e717fca3eaea",
+      "device": "6, GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7, NVIDIA A100-SXM4-40GB, 40960 MiB, 550.127.05",
+      "foreign_compute_pids": [],
+      "startup_through_ready_s": 131.181316569
+    },
+    "rtx": {
+      "physical_host": "psyche-MS-7D91",
+      "boot_identity_digest": "a80acd776cad85f39628187dd25f9cf7f4e885757a650decbfb2c3185b315e85",
+      "device": "0, GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, NVIDIA GeForce RTX 4090, 24564 MiB, 580.178.04",
+      "foreign_compute_pids": [],
+      "startup_through_ready_s": 81.963245201
+    }
+  },
+  "routing": {
+    "all_http_requests_by_node": {
+      "aws": 28,
+      "rtx": 33
+    },
+    "excluded_or_unready_admissions": 0
+  },
+  "healthy_wave_requests_by_node": {
+    "aws": 21,
+    "rtx": 21
+  },
+  "healthy_waves": [
+    {
+      "size": 2,
+      "correct": 2
+    },
+    {
+      "size": 4,
+      "correct": 4
+    },
+    {
+      "size": 8,
+      "correct": 8
+    },
+    {
+      "size": 2,
+      "correct": 2
+    },
+    {
+      "size": 4,
+      "correct": 4
+    },
+    {
+      "size": 8,
+      "correct": 8
+    }
+  ],
+  "faults": [
+    {
+      "case": "before-final-content",
+      "interrupted_node": "aws",
+      "chunks_in_interrupted_turn": 0,
+      "sse_done": false,
+      "interrupted_turn": 2,
+      "connection_loss_observed_s": 0.004802625,
+      "workflow_recovered_on_peer_s": 2.252443791,
+      "ready_and_readmitted_after_reopen_s": 4.067768,
+      "both_nodes_final_response_after_reopen_s": 8.163284125,
+      "recorded_effects": 2,
+      "checks": {
+        "observed_requested_boundary": true,
+        "data_path_detected_and_excluded": true,
+        "survivor_success_before_rejoin": true,
+        "management_path_and_same_server_alive": true,
+        "restored_only_after_ready_on_both_nodes": true,
+        "durable_exact_results_no_duplicate_effect": true
+      },
+      "passed": true
+    },
+    {
+      "case": "partial-final-content",
+      "interrupted_node": "rtx",
+      "chunks_in_interrupted_turn": 6,
+      "sse_done": false,
+      "interrupted_turn": 2,
+      "connection_loss_observed_s": 0.001758833,
+      "workflow_recovered_on_peer_s": 2.764501792,
+      "ready_and_readmitted_after_reopen_s": 1.431273625,
+      "both_nodes_final_response_after_reopen_s": 5.8355955,
+      "recorded_effects": 2,
+      "checks": {
+        "observed_requested_boundary": true,
+        "data_path_detected_and_excluded": true,
+        "survivor_success_before_rejoin": true,
+        "management_path_and_same_server_alive": true,
+        "restored_only_after_ready_on_both_nodes": true,
+        "durable_exact_results_no_duplicate_effect": true
+      },
+      "passed": true
+    },
+    {
+      "case": "completed-tool-call",
+      "interrupted_node": "aws",
+      "chunks_in_interrupted_turn": 0,
+      "sse_done": true,
+      "interrupted_turn": 0,
+      "connection_loss_observed_s": 0.00458375,
+      "workflow_recovered_on_peer_s": 3.889804875,
+      "ready_and_readmitted_after_reopen_s": 4.092794917,
+      "both_nodes_final_response_after_reopen_s": 8.190530375,
+      "recorded_effects": 2,
+      "checks": {
+        "observed_requested_boundary": true,
+        "data_path_detected_and_excluded": true,
+        "survivor_success_before_rejoin": true,
+        "management_path_and_same_server_alive": true,
+        "restored_only_after_ready_on_both_nodes": true,
+        "durable_exact_results_no_duplicate_effect": true
+      },
+      "passed": true
+    }
+  ],
+  "checks": {
+    "healthy_routing_workflow_correctness": true,
+    "separate_authenticated_endpoints": true,
+    "scoped_data_path_failure_recovered": true,
+    "all_effects_accounted_for": true,
+    "gpu_cleanup_no_foreign_processes": true
+  },
+  "passed": true
+}

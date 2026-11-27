@@ -1,0 +1,1566 @@
+{
+  "device": "6, GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7, NVIDIA A100-SXM4-40GB, 550.127.05",
+  "identity_sha256": [
+    "c179249ff85526546c220b0606051bdfba152eb81133600f91b856831314643c  /mnt/efs/nlp/psyche/riley-gap-20261102/evidence/agent-workflow-20261124.5qtoVRPa/long-tile/target/release/riley",
+    "655b7c01c2f3548a6aa35e0dbc9e7d97068f6d1f7e8e1ffa2bcb931e67f9e96f  /mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-7B-Instruct/riley-checkpoint.json"
+  ],
+  "matched_prompt_pairs": 48,
+  "summaries": {
+    "page": {
+      "whole": {
+        "attempted": 24,
+        "stream_done": 24,
+        "correct": 12,
+        "correct_citation_whitespace_normalized": 12,
+        "matching_amounts": 23,
+        "all_sources_cited": 12,
+        "omitted_source_queries": 12,
+        "omitted_source_queries_whitespace_normalized": 12,
+        "source_id_absent_even_outside_citations_queries": 11,
+        "strictly_missing_citation_but_literal_ids_present_queries": 1,
+        "omitted_source_count": 18,
+        "duplicate_source_queries": 0,
+        "bad_binding_queries": 0,
+        "all_relevant_sources_sent": 24,
+        "first_content_p95_ms": 12001.509859,
+        "complete_p95_ms": 12984.494395,
+        "last_content_p95_ms": 12966.236503,
+        "prep_p95_ms": 0.000511,
+        "prompt_tokens_min": 5704,
+        "prompt_tokens_max": 21770,
+        "prompt_tokens_p50": 14532,
+        "completion_tokens_p50": 33
+      },
+      "ranked": {
+        "attempted": 24,
+        "stream_done": 24,
+        "correct": 21,
+        "correct_citation_whitespace_normalized": 23,
+        "matching_amounts": 24,
+        "all_sources_cited": 21,
+        "omitted_source_queries": 3,
+        "omitted_source_queries_whitespace_normalized": 1,
+        "source_id_absent_even_outside_citations_queries": 1,
+        "strictly_missing_citation_but_literal_ids_present_queries": 2,
+        "omitted_source_count": 3,
+        "duplicate_source_queries": 0,
+        "bad_binding_queries": 0,
+        "all_relevant_sources_sent": 24,
+        "first_content_p95_ms": 81.352669,
+        "complete_p95_ms": 767.753142,
+        "last_content_p95_ms": 756.114034,
+        "prep_p95_ms": 6.317305,
+        "prompt_tokens_min": 350,
+        "prompt_tokens_max": 378,
+        "prompt_tokens_p50": 363,
+        "completion_tokens_p50": 34
+      }
+    },
+    "fixed": {
+      "whole": {
+        "attempted": 24,
+        "stream_done": 24,
+        "correct": 15,
+        "correct_citation_whitespace_normalized": 15,
+        "matching_amounts": 23,
+        "all_sources_cited": 15,
+        "omitted_source_queries": 9,
+        "omitted_source_queries_whitespace_normalized": 9,
+        "source_id_absent_even_outside_citations_queries": 9,
+        "strictly_missing_citation_but_literal_ids_present_queries": 0,
+        "omitted_source_count": 13,
+        "duplicate_source_queries": 0,
+        "bad_binding_queries": 0,
+        "all_relevant_sources_sent": 24,
+        "first_content_p95_ms": 2310.097926,
+        "complete_p95_ms": 3019.514528,
+        "last_content_p95_ms": 3006.370845,
+        "prep_p95_ms": 0.000577,
+        "prompt_tokens_min": 5704,
+        "prompt_tokens_max": 21770,
+        "prompt_tokens_p50": 14532,
+        "completion_tokens_p50": 33
+      },
+      "ranked": {
+        "attempted": 24,
+        "stream_done": 24,
+        "correct": 24,
+        "correct_citation_whitespace_normalized": 24,
+        "matching_amounts": 24,
+        "all_sources_cited": 24,
+        "omitted_source_queries": 0,
+        "omitted_source_queries_whitespace_normalized": 0,
+        "source_id_absent_even_outside_citations_queries": 0,
+        "strictly_missing_citation_but_literal_ids_present_queries": 0,
+        "omitted_source_count": 0,
+        "duplicate_source_queries": 0,
+        "bad_binding_queries": 0,
+        "all_relevant_sources_sent": 24,
+        "first_content_p95_ms": 39.096893,
+        "complete_p95_ms": 734.958706,
+        "last_content_p95_ms": 723.12042,
+        "prep_p95_ms": 6.53081,
+        "prompt_tokens_min": 350,
+        "prompt_tokens_max": 378,
+        "prompt_tokens_p50": 363,
+        "completion_tokens_p50": 34
+      }
+    }
+  },
+  "legacy": {
+    "river-24000": {
+      "page": {
+        "answer": "The river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river",
+        "correct": false,
+        "prompt_tokens": 24083,
+        "finish": "length",
+        "complete_ms": 15011.999497
+      },
+      "fixed": {
+        "answer": "The river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river river",
+        "correct": false,
+        "prompt_tokens": 24083,
+        "finish": "length",
+        "complete_ms": 3151.638279
+      }
+    },
+    "river-0": {
+      "page": {
+        "answer": "736251 914603",
+        "correct": true,
+        "prompt_tokens": 83,
+        "finish": "stop",
+        "complete_ms": 174.651249
+      },
+      "fixed": {
+        "answer": "736251 914603",
+        "correct": true,
+        "prompt_tokens": 83,
+        "finish": "stop",
+        "complete_ms": 164.087021
+      }
+    },
+    "record-whole": {
+      "page": {
+        "answer": "```json\n{\n    \"F862-0712\": 38401,\n    \"F862-0178\": 19602\n}\n```",
+        "correct": true,
+        "prompt_tokens": 25028,
+        "finish": "stop",
+        "complete_ms": 16069.766928
+      },
+      "fixed": {
+        "answer": "```json\n{\n    \"F862-0712\": 38401,\n    \"F862-0712\": 38401\n}\n```",
+        "correct": false,
+        "prompt_tokens": 25028,
+        "finish": "stop",
+        "complete_ms": 3374.338262
+      }
+    },
+    "record-gold": {
+      "page": {
+        "answer": "```json\n{\n    \"F862-0178\": 19602,\n    \"F862-0712\": 38401\n}\n```",
+        "correct": true,
+        "prompt_tokens": 164,
+        "finish": "stop",
+        "complete_ms": 546.789875
+      },
+      "fixed": {
+        "answer": "```json\n{\"F862-0178\": 19602, \"F862-0712\": 38401}\n```",
+        "correct": true,
+        "prompt_tokens": 164,
+        "finish": "stop",
+        "complete_ms": 482.855539
+      }
+    }
+  },
+  "per_case": {
+    "search-192-31653": {
+      "whole": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-192-42701": {
+      "whole": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "ra6cd-001f"
+            ],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "ra6cd-001f",
+                43379
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-192-47593": {
+      "whole": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-192-50023": {
+      "whole": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "rc367-0037",
+              "rc367-00a7"
+            ],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "rc367-0037",
+                31580
+              ],
+              [
+                "rc367-00a7",
+                67593
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-192-52567": {
+      "whole": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-192-55609": {
+      "whole": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "rd939-0021"
+            ],
+            "unexpected_sources": [
+              "rd939-0011"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "rd939-0021",
+                51280
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-192-58391": {
+      "whole": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-192-60943": {
+      "whole": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-480-31653": {
+      "whole": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-480-42701": {
+      "whole": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-480-47593": {
+      "whole": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "rb9e9-00c9",
+              "rb9e9-018d"
+            ],
+            "unexpected_sources": [
+              "rb9e9-008d",
+              "rb9e9-0099"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "rb9e9-00c9",
+                62782
+              ],
+              [
+                "rb9e9-018d",
+                38068
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "rb9e9-00c9",
+              "rb9e9-018d"
+            ],
+            "unexpected_sources": [
+              "rb9e9-008d",
+              "rb9e9-0099"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "rb9e9-00c9",
+                62782
+              ],
+              [
+                "rb9e9-018d",
+                38068
+              ]
+            ]
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-480-50023": {
+      "whole": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "rc367-0185"
+            ],
+            "unexpected_sources": [
+              "rc367-005e"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "rc367-007a",
+                19156
+              ],
+              [
+                "rc367-0185",
+                19478
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "rc367-0185"
+            ],
+            "unexpected_sources": [
+              "rc367-005e"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "rc367-0185",
+                19478
+              ]
+            ]
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-480-52567": {
+      "whole": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "rcd57-0043"
+            ],
+            "unexpected_sources": [
+              "rcd57-003d"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "rcd57-0043",
+                73760
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-480-55609": {
+      "whole": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-480-58391": {
+      "whole": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "re417-0116",
+              "re417-019e"
+            ],
+            "unexpected_sources": [
+              "re417-0016",
+              "re417-009e"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "re417-0116",
+                61694
+              ],
+              [
+                "re417-019e",
+                48989
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "re417-0116",
+              "re417-019e"
+            ],
+            "unexpected_sources": [
+              "re417-0016",
+              "re417-009e"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "re417-0116",
+                61694
+              ],
+              [
+                "re417-019e",
+                48989
+              ]
+            ]
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "re417-0116"
+            ],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "re417-0116",
+                61694
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-480-60943": {
+      "whole": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "ree0f-0067",
+              "ree0f-015e"
+            ],
+            "unexpected_sources": [
+              "ree0f-0015",
+              "ree0f-0077"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "ree0f-0067",
+                48880
+              ],
+              [
+                "ree0f-015e",
+                76825
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "ree0f-0067",
+              "ree0f-015e"
+            ],
+            "unexpected_sources": [
+              "ree0f-005e",
+              "ree0f-0077"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "ree0f-0067",
+                48880
+              ],
+              [
+                "ree0f-015e",
+                76825
+              ]
+            ]
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-720-31653": {
+      "whole": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-720-42701": {
+      "whole": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "ra6cd-00ae"
+            ],
+            "unexpected_sources": [
+              "ra6cd-0151"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "ra6cd-00ae",
+                30173
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "ra6cd-00ae"
+            ],
+            "unexpected_sources": [
+              "ra6cd-0151"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "ra6cd-00ae",
+                30173
+              ]
+            ]
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "ra6cd-00ae"
+            ],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "ra6cd-00ae",
+                30173
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-720-47593": {
+      "whole": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "rb9e9-0155",
+              "rb9e9-0225"
+            ],
+            "unexpected_sources": [
+              "rb9e9-0055",
+              "rb9e9-005f"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "rb9e9-0155",
+                12269
+              ],
+              [
+                "rb9e9-0225",
+                50178
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "rb9e9-0225"
+            ],
+            "unexpected_sources": [
+              "rb9e9-0055"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "rb9e9-0225",
+                50178
+              ]
+            ]
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-720-50023": {
+      "whole": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-720-52567": {
+      "whole": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-720-55609": {
+      "whole": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [
+              66473
+            ],
+            "missing_sources": [
+              "rd939-0052"
+            ],
+            "unexpected_sources": [
+              "rd939-0019"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "rd939-0052",
+                66473
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": false,
+          "problems": {
+            "missing_values": [
+              66473
+            ],
+            "missing_sources": [
+              "rd939-0052"
+            ],
+            "unexpected_sources": [
+              "rd939-0214"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "rd939-0052",
+                66473
+              ]
+            ]
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-720-58391": {
+      "whole": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "re417-0163",
+              "re417-0245"
+            ],
+            "unexpected_sources": [
+              "re417-0033",
+              "re417-0055"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "re417-0163",
+                13110
+              ],
+              [
+                "re417-0245",
+                71185
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "re417-0163"
+            ],
+            "unexpected_sources": [
+              "re417-0133"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "re417-0163",
+                13110
+              ]
+            ]
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    },
+    "search-720-60943": {
+      "whole": {
+        "page": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "ree0f-00d3"
+            ],
+            "unexpected_sources": [
+              "ree0f-0033"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "ree0f-00d3",
+                91308
+              ],
+              [
+                "ree0f-0225",
+                40973
+              ]
+            ]
+          }
+        },
+        "fixed": {
+          "correct": false,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [
+              "ree0f-00d3",
+              "ree0f-0225"
+            ],
+            "unexpected_sources": [
+              "ree0f-0025",
+              "ree0f-0033"
+            ],
+            "duplicate_sources": 0,
+            "missing_pairs": [
+              [
+                "ree0f-00d3",
+                91308
+              ],
+              [
+                "ree0f-0225",
+                40973
+              ]
+            ]
+          }
+        }
+      },
+      "ranked": {
+        "page": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        },
+        "fixed": {
+          "correct": true,
+          "problems": {
+            "missing_values": [],
+            "missing_sources": [],
+            "unexpected_sources": [],
+            "duplicate_sources": 0,
+            "missing_pairs": []
+          }
+        }
+      }
+    }
+  },
+  "gpu_samples": {
+    "page": 150,
+    "fixed": 79
+  },
+  "lease_restored": true
+}

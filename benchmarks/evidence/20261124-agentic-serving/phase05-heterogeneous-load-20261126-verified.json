@@ -1,0 +1,1762 @@
+{
+  "registration": {
+    "scope": "Authorized heterogeneous performance cell: AWS A100 GPU 6 plus RTX 4090 GPU 0 on a different host. Same stock Riley and Qwen2.5-Coder-7B-Instruct BF16. Client-side test SSH forwarding on each node; elapsed latencies include their network paths. No extrapolation to homogeneous A100.",
+    "soak": {
+      "seconds": 1800,
+      "base_rate": 0.5,
+      "burst_rate": 2,
+      "period_s": 180,
+      "burst_start_s": 120,
+      "burst_duration_s": 20,
+      "paired_first_and_last_jobs": 360,
+      "late_start_index": 840,
+      "paired_window_s": 540,
+      "submitted": 1200,
+      "scheduled_cancel": 63,
+      "max_late_over_early_p95": 1.2
+    },
+    "capacity": {
+      "arms": [
+        {
+          "label": "aws-only",
+          "nodes": [
+            "aws"
+          ],
+          "seed": 8200
+        },
+        {
+          "label": "dual",
+          "nodes": [
+            "aws",
+            "rtx"
+          ],
+          "seed": 8200
+        },
+        {
+          "label": "dual",
+          "nodes": [
+            "aws",
+            "rtx"
+          ],
+          "seed": 9200
+        },
+        {
+          "label": "rtx-only",
+          "nodes": [
+            "rtx"
+          ],
+          "seed": 9200
+        }
+      ],
+      "rates": [
+        2,
+        4,
+        8
+      ],
+      "seconds_per_rate": 20,
+      "min_slo_fraction": 0.95,
+      "max_reject_fraction": 0.05
+    },
+    "criteria": {
+      "first_ms": 10000,
+      "last_ms": 18000,
+      "gap_ms": 150
+    },
+    "ordering": "Thirty-minute dual soak starts on fresh processes, then short capacity crossover on the same retained processes. Record active routing GPU-hours and full entitlement separately.",
+    "workload": "Identical tenant assignments, per-shape seeds, tool mix, connected-client pause and logical arrivals as the earlier paired soak. Same fixture shape for short stages with no planned cancellation. Baseline evidence is compared separately by topology.",
+    "unmeasured": "A100 homogeneous capacity, host-wide power or network outage, customer canary."
+  },
+  "hosts": {
+    "aws": {
+      "physical_host": "ldccai-a100-02",
+      "boot_identity_digest": "65748eacd47cc3f7d3a4fb8c7eca017e2fc4b3dc2b084d0604a4e717fca3eaea",
+      "device": "6, GPU-031a7f9d-5789-04b8-c9d6-63f55ee1e6a7, NVIDIA A100-SXM4-40GB, 40960 MiB, 550.127.05",
+      "foreign_compute_pids": [],
+      "startup_through_ready_s": 109.078949953
+    },
+    "rtx": {
+      "physical_host": "psyche-MS-7D91",
+      "boot_identity_digest": "a80acd776cad85f39628187dd25f9cf7f4e885757a650decbfb2c3185b315e85",
+      "device": "0, GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, NVIDIA GeForce RTX 4090, 24564 MiB, 580.178.04",
+      "foreign_compute_pids": [],
+      "startup_through_ready_s": 149.526924066
+    }
+  },
+  "allocation_s_by_host": {
+    "aws": 2415.979012487,
+    "rtx": 2598.722577477
+  },
+  "cleanup_passed": true,
+  "cleanup_control_receipt": {
+    "recovered": {
+      "original_runner_exit": 1,
+      "when": "after all rate and soak inputs had drained",
+      "rtx_finish_command_timeout_s": 20,
+      "failure": "automated SSH finish marker timed out",
+      "recovery": "validated the owned server PID and wrote the finish marker over a fresh management SSH connection"
+    }
+  },
+  "requests_by_node_total": {
+    "aws": 1740,
+    "rtx": 1740
+  },
+  "unready_or_disabled_admissions": 0,
+  "full_run_slo_per_allocated_gpu_hour": 1379.0651100436958,
+  "soak": {
+    "counts": {
+      "overall": {
+        "submitted": 1200,
+        "correct": 1137,
+        "slo": 1137,
+        "cancelled": 63,
+        "rejected": 0,
+        "p95_first_ms": 3709.518875,
+        "p95_last_ms": 5367.376875,
+        "p95_gap_ms": 104.385625
+      },
+      "by_tenant": {
+        "primary": {
+          "submitted": 960,
+          "correct": 910,
+          "slo": 910,
+          "cancelled": 50,
+          "rejected": 0,
+          "p95_first_ms": 3649.888542,
+          "p95_last_ms": 5421.518167,
+          "p95_gap_ms": 104.232958
+        },
+        "secondary": {
+          "submitted": 240,
+          "correct": 227,
+          "slo": 227,
+          "cancelled": 13,
+          "rejected": 0,
+          "p95_first_ms": 3766.531083,
+          "p95_last_ms": 5289.831125,
+          "p95_gap_ms": 104.603833
+        }
+      },
+      "by_final_target": {
+        "aws": {
+          "submitted": 622,
+          "correct": 592,
+          "slo": 592,
+          "cancelled": 30,
+          "rejected": 0,
+          "p95_first_ms": 3785.269458,
+          "p95_last_ms": 5821.095792,
+          "p95_gap_ms": 102.801416
+        },
+        "rtx": {
+          "submitted": 578,
+          "correct": 545,
+          "slo": 545,
+          "cancelled": 33,
+          "rejected": 0,
+          "p95_first_ms": 1967.5615,
+          "p95_last_ms": 4553.083125,
+          "p95_gap_ms": 105.480042
+        }
+      },
+      "status_by_node": {
+        "aws": {
+          "200": 900
+        },
+        "rtx": {
+          "200": 900
+        }
+      },
+      "unexpected": [],
+      "intended_cancellations_by_node": {
+        "rtx": 33,
+        "aws": 30
+      },
+      "metrics": {
+        "aws": {
+          "missed_samples": 0,
+          "peak": {
+            "active_requests": 2,
+            "waiting_requests": 1,
+            "kv_allocated_blocks": 8
+          },
+          "after": {
+            "active_requests": 0,
+            "waiting_requests": 0,
+            "kv_allocated_blocks": 0
+          },
+          "device_bytes": [
+            19874299968
+          ],
+          "retained_prefix_blocks_after": 1536,
+          "counters_delta": {
+            "cancellations": 30,
+            "disconnects": 30,
+            "overloads": 0
+          }
+        },
+        "rtx": {
+          "missed_samples": 0,
+          "peak": {
+            "active_requests": 3,
+            "waiting_requests": 0,
+            "kv_allocated_blocks": 13
+          },
+          "after": {
+            "active_requests": 0,
+            "waiting_requests": 0,
+            "kv_allocated_blocks": 0
+          },
+          "device_bytes": [
+            19860668480
+          ],
+          "retained_prefix_blocks_after": 1536,
+          "counters_delta": {
+            "cancellations": 33,
+            "disconnects": 33,
+            "overloads": 0
+          }
+        }
+      },
+      "observed_s": 1801.241703458,
+      "scheduled_utc_ns": 1795696101956192375,
+      "dispatch_lag_p95_ms": 11.190625,
+      "slo_goodput_per_s": 0.6312312211166343,
+      "slo_goodput_per_routed_gpu_hour": 1136.2161980099418,
+      "slo_goodput_per_reserved_gpu_hour": 1136.2161980099418
+    },
+    "paired_tenants": {
+      "primary": [
+        {
+          "submitted": 288,
+          "correct": 273,
+          "slo": 273,
+          "cancelled": 15,
+          "rejected": 0,
+          "p95_first_ms": 3673.984625,
+          "p95_last_ms": 5372.236708,
+          "p95_gap_ms": 102.959459
+        },
+        {
+          "submitted": 288,
+          "correct": 273,
+          "slo": 273,
+          "cancelled": 15,
+          "rejected": 0,
+          "p95_first_ms": 3610.496958,
+          "p95_last_ms": 5584.818125,
+          "p95_gap_ms": 105.371
+        }
+      ],
+      "secondary": [
+        {
+          "submitted": 72,
+          "correct": 68,
+          "slo": 68,
+          "cancelled": 4,
+          "rejected": 0,
+          "p95_first_ms": 3771.174833,
+          "p95_last_ms": 5225.86175,
+          "p95_gap_ms": 102.858083
+        },
+        {
+          "submitted": 72,
+          "correct": 68,
+          "slo": 68,
+          "cancelled": 4,
+          "rejected": 0,
+          "p95_first_ms": 3750.487083,
+          "p95_last_ms": 5325.408708,
+          "p95_gap_ms": 105.9215
+        }
+      ]
+    },
+    "p95_late_over_early": {
+      "primary": 1.0395703742322888,
+      "secondary": 1.0190489076753704
+    },
+    "checks": {
+      "registered_duration_and_count": true,
+      "all_noncancelled_correct_and_slo": true,
+      "all_planned_cancels_no_http_reject": true,
+      "reported_cancel_and_disconnect_delta_matches": true,
+      "each_tenant_under_p95_growth_limit": true,
+      "steady_device_bytes_and_post_soak_request_resources": true,
+      "dispatch_lag_within_50_ms_p95": true
+    },
+    "passed": true
+  },
+  "capacity": {
+    "highest_pass_per_configuration_tested": {
+      "aws-only": 4,
+      "dual": 4,
+      "rtx-only": 2
+    },
+    "rates_passing": {
+      "aws-only": [
+        2,
+        4
+      ],
+      "dual": [
+        2,
+        4
+      ],
+      "rtx-only": [
+        2
+      ]
+    },
+    "cells": [
+      {
+        "overall": {
+          "submitted": 40,
+          "correct": 40,
+          "slo": 40,
+          "cancelled": 0,
+          "rejected": 0,
+          "p95_first_ms": 4096.159792,
+          "p95_last_ms": 5803.569375,
+          "p95_gap_ms": 100.714333
+        },
+        "by_tenant": {
+          "primary": {
+            "submitted": 32,
+            "correct": 32,
+            "slo": 32,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 4296.800959,
+            "p95_last_ms": 5996.434459,
+            "p95_gap_ms": 101.107125
+          },
+          "secondary": {
+            "submitted": 8,
+            "correct": 8,
+            "slo": 8,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 3286.12775,
+            "p95_last_ms": 4822.369542,
+            "p95_gap_ms": 100.323334
+          }
+        },
+        "by_final_target": {
+          "aws": {
+            "submitted": 40,
+            "correct": 40,
+            "slo": 40,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 4096.159792,
+            "p95_last_ms": 5803.569375,
+            "p95_gap_ms": 100.714333
+          },
+          "rtx": {
+            "submitted": 0,
+            "correct": 0,
+            "slo": 0,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": null,
+            "p95_last_ms": null,
+            "p95_gap_ms": null
+          }
+        },
+        "status_by_node": {
+          "aws": {
+            "200": 60
+          },
+          "rtx": {}
+        },
+        "unexpected": [],
+        "intended_cancellations_by_node": {},
+        "metrics": {
+          "aws": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 5,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 27
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19874299968
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          },
+          "rtx": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19860668480
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          }
+        },
+        "observed_s": 23.04926475,
+        "scheduled_utc_ns": 1795697906169891250,
+        "dispatch_lag_p95_ms": 11.110459,
+        "slo_goodput_per_s": 1.7354132738659267,
+        "slo_goodput_per_routed_gpu_hour": 6247.487785917337,
+        "slo_goodput_per_reserved_gpu_hour": 3123.7438929586683,
+        "passes": true,
+        "arm": 0,
+        "label": "aws-only",
+        "rate": 2
+      },
+      {
+        "overall": {
+          "submitted": 80,
+          "correct": 80,
+          "slo": 76,
+          "cancelled": 0,
+          "rejected": 0,
+          "p95_first_ms": 9369.475125,
+          "p95_last_ms": 12012.253333,
+          "p95_gap_ms": 101.753666
+        },
+        "by_tenant": {
+          "primary": {
+            "submitted": 64,
+            "correct": 64,
+            "slo": 61,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 9369.475125,
+            "p95_last_ms": 10905.883958,
+            "p95_gap_ms": 101.753666
+          },
+          "secondary": {
+            "submitted": 16,
+            "correct": 16,
+            "slo": 15,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 10677.415666,
+            "p95_last_ms": 14180.89475,
+            "p95_gap_ms": 102.047125
+          }
+        },
+        "by_final_target": {
+          "aws": {
+            "submitted": 80,
+            "correct": 80,
+            "slo": 76,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 9369.475125,
+            "p95_last_ms": 12012.253333,
+            "p95_gap_ms": 101.753666
+          },
+          "rtx": {
+            "submitted": 0,
+            "correct": 0,
+            "slo": 0,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": null,
+            "p95_last_ms": null,
+            "p95_gap_ms": null
+          }
+        },
+        "status_by_node": {
+          "aws": {
+            "200": 120
+          },
+          "rtx": {}
+        },
+        "unexpected": [],
+        "intended_cancellations_by_node": {},
+        "metrics": {
+          "aws": {
+            "missed_samples": 1,
+            "peak": {
+              "active_requests": 7,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 72
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19874299968
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          },
+          "rtx": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19860668480
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          }
+        },
+        "observed_s": 29.989026833,
+        "scheduled_utc_ns": 1795697932825255917,
+        "dispatch_lag_p95_ms": 11.015458,
+        "slo_goodput_per_s": 2.534260295381423,
+        "slo_goodput_per_routed_gpu_hour": 9123.337063373123,
+        "slo_goodput_per_reserved_gpu_hour": 4561.668531686561,
+        "passes": true,
+        "arm": 0,
+        "label": "aws-only",
+        "rate": 4
+      },
+      {
+        "overall": {
+          "submitted": 160,
+          "correct": 160,
+          "slo": 53,
+          "cancelled": 0,
+          "rejected": 0,
+          "p95_first_ms": 36590.276167,
+          "p95_last_ms": 38445.177334,
+          "p95_gap_ms": 102.254
+        },
+        "by_tenant": {
+          "primary": {
+            "submitted": 128,
+            "correct": 128,
+            "slo": 42,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 36706.12625,
+            "p95_last_ms": 38445.177334,
+            "p95_gap_ms": 102.328708
+          },
+          "secondary": {
+            "submitted": 32,
+            "correct": 32,
+            "slo": 11,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 36495.44825,
+            "p95_last_ms": 38627.910334,
+            "p95_gap_ms": 102.019459
+          }
+        },
+        "by_final_target": {
+          "aws": {
+            "submitted": 160,
+            "correct": 160,
+            "slo": 53,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 36590.276167,
+            "p95_last_ms": 38445.177334,
+            "p95_gap_ms": 102.254
+          },
+          "rtx": {
+            "submitted": 0,
+            "correct": 0,
+            "slo": 0,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": null,
+            "p95_last_ms": null,
+            "p95_gap_ms": null
+          }
+        },
+        "status_by_node": {
+          "aws": {
+            "200": 240
+          },
+          "rtx": {}
+        },
+        "unexpected": [],
+        "intended_cancellations_by_node": {},
+        "metrics": {
+          "aws": {
+            "missed_samples": 14,
+            "peak": {
+              "active_requests": 7,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 40
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19874299968
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          },
+          "rtx": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19860668480
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          }
+        },
+        "observed_s": 54.179499375,
+        "scheduled_utc_ns": 1795697965872241541,
+        "dispatch_lag_p95_ms": 11.072542,
+        "slo_goodput_per_s": 0.9782297845383147,
+        "slo_goodput_per_routed_gpu_hour": 3521.6272243379326,
+        "slo_goodput_per_reserved_gpu_hour": 1760.8136121689663,
+        "passes": false,
+        "arm": 0,
+        "label": "aws-only",
+        "rate": 8
+      },
+      {
+        "overall": {
+          "submitted": 40,
+          "correct": 40,
+          "slo": 40,
+          "cancelled": 0,
+          "rejected": 0,
+          "p95_first_ms": 3842.667333,
+          "p95_last_ms": 6556.851958,
+          "p95_gap_ms": 102.85
+        },
+        "by_tenant": {
+          "primary": {
+            "submitted": 32,
+            "correct": 32,
+            "slo": 32,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 4195.255792,
+            "p95_last_ms": 6793.685875,
+            "p95_gap_ms": 103.036708
+          },
+          "secondary": {
+            "submitted": 8,
+            "correct": 8,
+            "slo": 8,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 3078.4225,
+            "p95_last_ms": 4347.04225,
+            "p95_gap_ms": 102.103459
+          }
+        },
+        "by_final_target": {
+          "aws": {
+            "submitted": 19,
+            "correct": 19,
+            "slo": 19,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 3842.667333,
+            "p95_last_ms": 6828.598458,
+            "p95_gap_ms": 102.103459
+          },
+          "rtx": {
+            "submitted": 21,
+            "correct": 21,
+            "slo": 21,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 4195.255792,
+            "p95_last_ms": 6556.851958,
+            "p95_gap_ms": 103.036708
+          }
+        },
+        "status_by_node": {
+          "aws": {
+            "200": 30
+          },
+          "rtx": {
+            "200": 30
+          }
+        },
+        "unexpected": [],
+        "intended_cancellations_by_node": {},
+        "metrics": {
+          "aws": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 3,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 14
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19874299968
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          },
+          "rtx": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 4,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 23
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19860668480
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          }
+        },
+        "observed_s": 22.84388525,
+        "scheduled_utc_ns": 1795698023316880333,
+        "dispatch_lag_p95_ms": 11.079708,
+        "slo_goodput_per_s": 1.75101562462979,
+        "slo_goodput_per_routed_gpu_hour": 3151.8281243336223,
+        "slo_goodput_per_reserved_gpu_hour": 3151.8281243336223,
+        "passes": true,
+        "arm": 1,
+        "label": "dual",
+        "rate": 2
+      },
+      {
+        "overall": {
+          "submitted": 80,
+          "correct": 80,
+          "slo": 80,
+          "cancelled": 0,
+          "rejected": 0,
+          "p95_first_ms": 3818.383542,
+          "p95_last_ms": 6579.369917,
+          "p95_gap_ms": 102.633375
+        },
+        "by_tenant": {
+          "primary": {
+            "submitted": 64,
+            "correct": 64,
+            "slo": 64,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 3818.383542,
+            "p95_last_ms": 6579.369917,
+            "p95_gap_ms": 102.633375
+          },
+          "secondary": {
+            "submitted": 16,
+            "correct": 16,
+            "slo": 16,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 4412.436334,
+            "p95_last_ms": 8318.588084,
+            "p95_gap_ms": 102.930417
+          }
+        },
+        "by_final_target": {
+          "aws": {
+            "submitted": 39,
+            "correct": 39,
+            "slo": 39,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 4412.436334,
+            "p95_last_ms": 6675.436875,
+            "p95_gap_ms": 102.930417
+          },
+          "rtx": {
+            "submitted": 41,
+            "correct": 41,
+            "slo": 41,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 3542.376084,
+            "p95_last_ms": 6203.865792,
+            "p95_gap_ms": 102.279958
+          }
+        },
+        "status_by_node": {
+          "aws": {
+            "200": 60
+          },
+          "rtx": {
+            "200": 60
+          }
+        },
+        "unexpected": [],
+        "intended_cancellations_by_node": {},
+        "metrics": {
+          "aws": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 6,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 26
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19874299968
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          },
+          "rtx": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 7,
+              "waiting_requests": 1,
+              "kv_allocated_blocks": 29
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19860668480
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          }
+        },
+        "observed_s": 24.894128667,
+        "scheduled_utc_ns": 1795698049323575291,
+        "dispatch_lag_p95_ms": 11.050625,
+        "slo_goodput_per_s": 3.213609163434955,
+        "slo_goodput_per_routed_gpu_hour": 5784.4964941829185,
+        "slo_goodput_per_reserved_gpu_hour": 5784.4964941829185,
+        "passes": true,
+        "arm": 1,
+        "label": "dual",
+        "rate": 4
+      },
+      {
+        "overall": {
+          "submitted": 160,
+          "correct": 160,
+          "slo": 126,
+          "cancelled": 0,
+          "rejected": 0,
+          "p95_first_ms": 17271.746959,
+          "p95_last_ms": 20548.116334,
+          "p95_gap_ms": 102.217458
+        },
+        "by_tenant": {
+          "primary": {
+            "submitted": 128,
+            "correct": 128,
+            "slo": 101,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 17271.746959,
+            "p95_last_ms": 20761.419542,
+            "p95_gap_ms": 102.003291
+          },
+          "secondary": {
+            "submitted": 32,
+            "correct": 32,
+            "slo": 25,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 19313.220959,
+            "p95_last_ms": 20548.116334,
+            "p95_gap_ms": 102.63125
+          }
+        },
+        "by_final_target": {
+          "aws": {
+            "submitted": 83,
+            "correct": 83,
+            "slo": 71,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 14175.763792,
+            "p95_last_ms": 15770.999,
+            "p95_gap_ms": 102.859917
+          },
+          "rtx": {
+            "submitted": 77,
+            "correct": 77,
+            "slo": 55,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 19055.621584,
+            "p95_last_ms": 22013.770584,
+            "p95_gap_ms": 101.96575
+          }
+        },
+        "status_by_node": {
+          "aws": {
+            "200": 120
+          },
+          "rtx": {
+            "200": 120
+          }
+        },
+        "unexpected": [],
+        "intended_cancellations_by_node": {},
+        "metrics": {
+          "aws": {
+            "missed_samples": 1,
+            "peak": {
+              "active_requests": 8,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 232
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19874299968
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          },
+          "rtx": {
+            "missed_samples": 5,
+            "peak": {
+              "active_requests": 7,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 176
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19860668480
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          }
+        },
+        "observed_s": 38.957204917,
+        "scheduled_utc_ns": 1795698076766420333,
+        "dispatch_lag_p95_ms": 11.175,
+        "slo_goodput_per_s": 3.2343182799805175,
+        "slo_goodput_per_routed_gpu_hour": 5821.772903964932,
+        "slo_goodput_per_reserved_gpu_hour": 5821.772903964932,
+        "passes": false,
+        "arm": 1,
+        "label": "dual",
+        "rate": 8
+      },
+      {
+        "overall": {
+          "submitted": 40,
+          "correct": 40,
+          "slo": 40,
+          "cancelled": 0,
+          "rejected": 0,
+          "p95_first_ms": 3821.112625,
+          "p95_last_ms": 5213.765084,
+          "p95_gap_ms": 102.610167
+        },
+        "by_tenant": {
+          "primary": {
+            "submitted": 32,
+            "correct": 32,
+            "slo": 32,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 3843.505042,
+            "p95_last_ms": 5460.881,
+            "p95_gap_ms": 102.780958
+          },
+          "secondary": {
+            "submitted": 8,
+            "correct": 8,
+            "slo": 8,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 2990.118292,
+            "p95_last_ms": 4219.55325,
+            "p95_gap_ms": 102.610167
+          }
+        },
+        "by_final_target": {
+          "aws": {
+            "submitted": 22,
+            "correct": 22,
+            "slo": 22,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 3843.505042,
+            "p95_last_ms": 5460.881,
+            "p95_gap_ms": 102.301666
+          },
+          "rtx": {
+            "submitted": 18,
+            "correct": 18,
+            "slo": 18,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 2008.6875,
+            "p95_last_ms": 4060.220459,
+            "p95_gap_ms": 102.851792
+          }
+        },
+        "status_by_node": {
+          "aws": {
+            "200": 30
+          },
+          "rtx": {
+            "200": 30
+          }
+        },
+        "unexpected": [],
+        "intended_cancellations_by_node": {},
+        "metrics": {
+          "aws": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 4,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 17
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19874299968
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          },
+          "rtx": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 4,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 16
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19860668480
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          }
+        },
+        "observed_s": 22.754856584,
+        "scheduled_utc_ns": 1795698118245011083,
+        "dispatch_lag_p95_ms": 11.11275,
+        "slo_goodput_per_s": 1.7578664955474106,
+        "slo_goodput_per_routed_gpu_hour": 3164.159691985339,
+        "slo_goodput_per_reserved_gpu_hour": 3164.159691985339,
+        "passes": true,
+        "arm": 2,
+        "label": "dual",
+        "rate": 2
+      },
+      {
+        "overall": {
+          "submitted": 80,
+          "correct": 80,
+          "slo": 80,
+          "cancelled": 0,
+          "rejected": 0,
+          "p95_first_ms": 3763.472416,
+          "p95_last_ms": 6172.948833,
+          "p95_gap_ms": 101.596416
+        },
+        "by_tenant": {
+          "primary": {
+            "submitted": 64,
+            "correct": 64,
+            "slo": 64,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 3455.323583,
+            "p95_last_ms": 5873.684458,
+            "p95_gap_ms": 101.726875
+          },
+          "secondary": {
+            "submitted": 16,
+            "correct": 16,
+            "slo": 16,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 4053.690416,
+            "p95_last_ms": 6202.291458,
+            "p95_gap_ms": 101.571417
+          }
+        },
+        "by_final_target": {
+          "aws": {
+            "submitted": 38,
+            "correct": 38,
+            "slo": 38,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 3455.323583,
+            "p95_last_ms": 6861.701125,
+            "p95_gap_ms": 101.844167
+          },
+          "rtx": {
+            "submitted": 42,
+            "correct": 42,
+            "slo": 42,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 4002.425708,
+            "p95_last_ms": 6172.948833,
+            "p95_gap_ms": 101.571417
+          }
+        },
+        "status_by_node": {
+          "aws": {
+            "200": 60
+          },
+          "rtx": {
+            "200": 60
+          }
+        },
+        "unexpected": [],
+        "intended_cancellations_by_node": {},
+        "metrics": {
+          "aws": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 6,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 33
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19874299968
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          },
+          "rtx": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 7,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 39
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19860668480
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          }
+        },
+        "observed_s": 25.299266125,
+        "scheduled_utc_ns": 1795698143844878750,
+        "dispatch_lag_p95_ms": 11.084916,
+        "slo_goodput_per_s": 3.1621470601056814,
+        "slo_goodput_per_routed_gpu_hour": 5691.864708190226,
+        "slo_goodput_per_reserved_gpu_hour": 5691.864708190226,
+        "passes": true,
+        "arm": 2,
+        "label": "dual",
+        "rate": 4
+      },
+      {
+        "overall": {
+          "submitted": 160,
+          "correct": 160,
+          "slo": 123,
+          "cancelled": 0,
+          "rejected": 0,
+          "p95_first_ms": 16913.670125,
+          "p95_last_ms": 19473.942625,
+          "p95_gap_ms": 103.289
+        },
+        "by_tenant": {
+          "primary": {
+            "submitted": 128,
+            "correct": 128,
+            "slo": 101,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 17351.996167,
+            "p95_last_ms": 19534.250458,
+            "p95_gap_ms": 103.163209
+          },
+          "secondary": {
+            "submitted": 32,
+            "correct": 32,
+            "slo": 22,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 12539.060792,
+            "p95_last_ms": 14486.073833,
+            "p95_gap_ms": 203.337709
+          }
+        },
+        "by_final_target": {
+          "aws": {
+            "submitted": 79,
+            "correct": 79,
+            "slo": 66,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 12391.473208,
+            "p95_last_ms": 14194.623417,
+            "p95_gap_ms": 105.094125
+          },
+          "rtx": {
+            "submitted": 81,
+            "correct": 81,
+            "slo": 57,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 18902.946542,
+            "p95_last_ms": 21140.84425,
+            "p95_gap_ms": 103.150167
+          }
+        },
+        "status_by_node": {
+          "aws": {
+            "200": 120
+          },
+          "rtx": {
+            "200": 120
+          }
+        },
+        "unexpected": [],
+        "intended_cancellations_by_node": {},
+        "metrics": {
+          "aws": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 7,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 32
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19874299968
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          },
+          "rtx": {
+            "missed_samples": 4,
+            "peak": {
+              "active_requests": 7,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 26
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19860668480
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          }
+        },
+        "observed_s": 38.876942792,
+        "scheduled_utc_ns": 1795698173225783292,
+        "dispatch_lag_p95_ms": 11.143875,
+        "slo_goodput_per_s": 3.16382902477894,
+        "slo_goodput_per_routed_gpu_hour": 5694.8922446020915,
+        "slo_goodput_per_reserved_gpu_hour": 5694.8922446020915,
+        "passes": false,
+        "arm": 2,
+        "label": "dual",
+        "rate": 8
+      },
+      {
+        "overall": {
+          "submitted": 40,
+          "correct": 40,
+          "slo": 40,
+          "cancelled": 0,
+          "rejected": 0,
+          "p95_first_ms": 3411.833083,
+          "p95_last_ms": 5634.595083,
+          "p95_gap_ms": 102.669125
+        },
+        "by_tenant": {
+          "primary": {
+            "submitted": 32,
+            "correct": 32,
+            "slo": 32,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 3435.32775,
+            "p95_last_ms": 6590.661375,
+            "p95_gap_ms": 102.669125
+          },
+          "secondary": {
+            "submitted": 8,
+            "correct": 8,
+            "slo": 8,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 3115.547375,
+            "p95_last_ms": 5569.060583,
+            "p95_gap_ms": 102.863292
+          }
+        },
+        "by_final_target": {
+          "aws": {
+            "submitted": 0,
+            "correct": 0,
+            "slo": 0,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": null,
+            "p95_last_ms": null,
+            "p95_gap_ms": null
+          },
+          "rtx": {
+            "submitted": 40,
+            "correct": 40,
+            "slo": 40,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 3411.833083,
+            "p95_last_ms": 5634.595083,
+            "p95_gap_ms": 102.669125
+          }
+        },
+        "status_by_node": {
+          "aws": {},
+          "rtx": {
+            "200": 60
+          }
+        },
+        "unexpected": [],
+        "intended_cancellations_by_node": {},
+        "metrics": {
+          "aws": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19874299968
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          },
+          "rtx": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 7,
+              "waiting_requests": 1,
+              "kv_allocated_blocks": 35
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19860668480
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          }
+        },
+        "observed_s": 23.255392708,
+        "scheduled_utc_ns": 1795698214909358208,
+        "dispatch_lag_p95_ms": 10.968167,
+        "slo_goodput_per_s": 1.7200311558806638,
+        "slo_goodput_per_routed_gpu_hour": 6192.11216117039,
+        "slo_goodput_per_reserved_gpu_hour": 3096.056080585195,
+        "passes": true,
+        "arm": 3,
+        "label": "rtx-only",
+        "rate": 2
+      },
+      {
+        "overall": {
+          "submitted": 80,
+          "correct": 80,
+          "slo": 55,
+          "cancelled": 0,
+          "rejected": 0,
+          "p95_first_ms": 21290.7745,
+          "p95_last_ms": 23748.458542,
+          "p95_gap_ms": 103.195167
+        },
+        "by_tenant": {
+          "primary": {
+            "submitted": 64,
+            "correct": 64,
+            "slo": 44,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 21290.7745,
+            "p95_last_ms": 23748.458542,
+            "p95_gap_ms": 103.195167
+          },
+          "secondary": {
+            "submitted": 16,
+            "correct": 16,
+            "slo": 11,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 22158.187542,
+            "p95_last_ms": 25727.140875,
+            "p95_gap_ms": 103.319333
+          }
+        },
+        "by_final_target": {
+          "aws": {
+            "submitted": 0,
+            "correct": 0,
+            "slo": 0,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": null,
+            "p95_last_ms": null,
+            "p95_gap_ms": null
+          },
+          "rtx": {
+            "submitted": 80,
+            "correct": 80,
+            "slo": 55,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 21290.7745,
+            "p95_last_ms": 23748.458542,
+            "p95_gap_ms": 103.195167
+          }
+        },
+        "status_by_node": {
+          "aws": {},
+          "rtx": {
+            "200": 120
+          }
+        },
+        "unexpected": [],
+        "intended_cancellations_by_node": {},
+        "metrics": {
+          "aws": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19874299968
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          },
+          "rtx": {
+            "missed_samples": 6,
+            "peak": {
+              "active_requests": 7,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 41
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19860668480
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          }
+        },
+        "observed_s": 38.919939584,
+        "scheduled_utc_ns": 1795698240816205791,
+        "dispatch_lag_p95_ms": 11.291417,
+        "slo_goodput_per_s": 1.4131573837953881,
+        "slo_goodput_per_routed_gpu_hour": 5087.366581663397,
+        "slo_goodput_per_reserved_gpu_hour": 2543.6832908316983,
+        "passes": false,
+        "arm": 3,
+        "label": "rtx-only",
+        "rate": 4
+      },
+      {
+        "overall": {
+          "submitted": 160,
+          "correct": 160,
+          "slo": 31,
+          "cancelled": 0,
+          "rejected": 0,
+          "p95_first_ms": 54005.351333,
+          "p95_last_ms": 56733.771333,
+          "p95_gap_ms": 103.301792
+        },
+        "by_tenant": {
+          "primary": {
+            "submitted": 128,
+            "correct": 128,
+            "slo": 24,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 54105.890125,
+            "p95_last_ms": 56782.449417,
+            "p95_gap_ms": 103.32425
+          },
+          "secondary": {
+            "submitted": 32,
+            "correct": 32,
+            "slo": 7,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 53967.97025,
+            "p95_last_ms": 56716.029208,
+            "p95_gap_ms": 103.301792
+          }
+        },
+        "by_final_target": {
+          "aws": {
+            "submitted": 0,
+            "correct": 0,
+            "slo": 0,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": null,
+            "p95_last_ms": null,
+            "p95_gap_ms": null
+          },
+          "rtx": {
+            "submitted": 160,
+            "correct": 160,
+            "slo": 31,
+            "cancelled": 0,
+            "rejected": 0,
+            "p95_first_ms": 54005.351333,
+            "p95_last_ms": 56733.771333,
+            "p95_gap_ms": 103.301792
+          }
+        },
+        "status_by_node": {
+          "aws": {},
+          "rtx": {
+            "200": 240
+          }
+        },
+        "unexpected": [],
+        "intended_cancellations_by_node": {},
+        "metrics": {
+          "aws": {
+            "missed_samples": 0,
+            "peak": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19874299968
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          },
+          "rtx": {
+            "missed_samples": 17,
+            "peak": {
+              "active_requests": 7,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 34
+            },
+            "after": {
+              "active_requests": 0,
+              "waiting_requests": 0,
+              "kv_allocated_blocks": 0
+            },
+            "device_bytes": [
+              19860668480
+            ],
+            "retained_prefix_blocks_after": 1536,
+            "counters_delta": {
+              "cancellations": 0,
+              "disconnects": 0,
+              "overloads": 0
+            }
+          }
+        },
+        "observed_s": 74.665511292,
+        "scheduled_utc_ns": 1795698282487078333,
+        "dispatch_lag_p95_ms": 10.990167,
+        "slo_goodput_per_s": 0.4151849959048158,
+        "slo_goodput_per_routed_gpu_hour": 1494.6659852573368,
+        "slo_goodput_per_reserved_gpu_hour": 747.3329926286684,
+        "passes": false,
+        "arm": 3,
+        "label": "rtx-only",
+        "rate": 8
+      }
+    ]
+  }
+}

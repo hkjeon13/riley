@@ -1,0 +1,946 @@
+{
+  "date": "2026-11-26",
+  "model": {
+    "source": "Qwen/Qwen2.5-Coder-7B-Instruct",
+    "revision": "c03e6d358207e414f1eca0bb1891e29f1db0e242",
+    "dtype": "bf16",
+    "manifest_sha256": "a5072e2c72a5dd11be98192bfbc725841efe92e5b9c5ac88299eac2e6cfb6542"
+  },
+  "riley_sha256": "40a58069b66b2f76bfe20a0f3decc0bd1b4f7f2e2a3ae80d6fc519dc40690c7e",
+  "devices": {
+    "4": {
+      "order": [
+        "vllm",
+        "riley"
+      ],
+      "gpu_uuid": "GPU-f54a172d-524d-3893-d116-a06d9a0abb53",
+      "isolation": {
+        "samples": 236,
+        "managed_pids": [
+          827766,
+          851684
+        ],
+        "unexplained_pids": []
+      },
+      "arms": {
+        "vllm": {
+          "high": {
+            "jobs": 32,
+            "long_stage_medians_ms": {
+              "before_final_submission_ms": 5122.194418,
+              "ttft_ms": 3398.9250115,
+              "stream_ms": 6841.179529499999,
+              "tool_model_ms_0": 1847.6638464999999,
+              "tool_wall_ms_0": 500.5697375,
+              "tool_model_ms_1": 2258.6417845,
+              "tool_wall_ms_1": 500.9860265
+            },
+            "long_submitted_after_first_deadline": 12,
+            "long_answer_checks": {
+              "all_three_values": 24,
+              "both_sources": 24,
+              "at_least_64_tokens": 24
+            },
+            "valid": 32,
+            "failed_basic": [],
+            "completed": 32,
+            "slo": 0,
+            "slo_readers": 0,
+            "strict90": 0,
+            "first_p95_ms": 13239.530161,
+            "last_p95_ms": 20353.983364,
+            "reader_sse_gap_p95_ms": 101.700216,
+            "output_tokens": 4028,
+            "warm_slo_per_gpu_hour": 0.0
+          },
+          "by_wave": [
+            {
+              "jobs": 4,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 4287.013581,
+                "ttft_ms": 501.936067,
+                "stream_ms": 6638.148084,
+                "tool_model_ms_0": 1569.785284,
+                "tool_wall_ms_0": 500.55543,
+                "tool_model_ms_1": 1714.058916,
+                "tool_wall_ms_1": 500.824494
+              },
+              "long_submitted_after_first_deadline": 0,
+              "long_answer_checks": {
+                "all_three_values": 3,
+                "both_sources": 3,
+                "at_least_64_tokens": 3
+              },
+              "valid": 4,
+              "failed_basic": [],
+              "completed": 4,
+              "slo": 0,
+              "slo_readers": 0,
+              "strict90": 0,
+              "first_p95_ms": 4931.20087,
+              "last_p95_ms": 11974.437826,
+              "reader_sse_gap_p95_ms": 99.542334,
+              "output_tokens": 492,
+              "warm_slo_per_gpu_hour": 0.0
+            },
+            {
+              "jobs": 8,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 4317.819753,
+                "ttft_ms": 506.9464885,
+                "stream_ms": 6134.7653775,
+                "tool_model_ms_0": 1527.348787,
+                "tool_wall_ms_0": 500.574705,
+                "tool_model_ms_1": 1811.3572225,
+                "tool_wall_ms_1": 501.1111175
+              },
+              "long_submitted_after_first_deadline": 0,
+              "long_answer_checks": {
+                "all_three_values": 6,
+                "both_sources": 6,
+                "at_least_64_tokens": 6
+              },
+              "valid": 8,
+              "failed_basic": [],
+              "completed": 8,
+              "slo": 0,
+              "slo_readers": 0,
+              "strict90": 1,
+              "first_p95_ms": 4929.499035,
+              "last_p95_ms": 12414.232168,
+              "reader_sse_gap_p95_ms": 100.06637,
+              "output_tokens": 963,
+              "warm_slo_per_gpu_hour": 0.0
+            },
+            {
+              "jobs": 16,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 5182.382016,
+                "ttft_ms": 3480.997766,
+                "stream_ms": 6993.6675655,
+                "tool_model_ms_0": 1847.6638464999999,
+                "tool_wall_ms_0": 500.5737565,
+                "tool_model_ms_1": 2300.0441565,
+                "tool_wall_ms_1": 500.9662565
+              },
+              "long_submitted_after_first_deadline": 6,
+              "long_answer_checks": {
+                "all_three_values": 12,
+                "both_sources": 12,
+                "at_least_64_tokens": 12
+              },
+              "valid": 16,
+              "failed_basic": [],
+              "completed": 16,
+              "slo": 0,
+              "slo_readers": 0,
+              "strict90": 0,
+              "first_p95_ms": 14246.179525,
+              "last_p95_ms": 22400.504356,
+              "reader_sse_gap_p95_ms": 99.559405,
+              "output_tokens": 1997,
+              "warm_slo_per_gpu_hour": 0.0
+            },
+            {
+              "jobs": 16,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 5047.68377,
+                "ttft_ms": 3324.1897705,
+                "stream_ms": 6697.2096595,
+                "tool_model_ms_0": 1873.477956,
+                "tool_wall_ms_0": 500.558172,
+                "tool_model_ms_1": 2258.6417845,
+                "tool_wall_ms_1": 501.0730045
+              },
+              "long_submitted_after_first_deadline": 6,
+              "long_answer_checks": {
+                "all_three_values": 12,
+                "both_sources": 12,
+                "at_least_64_tokens": 12
+              },
+              "valid": 16,
+              "failed_basic": [],
+              "completed": 16,
+              "slo": 0,
+              "slo_readers": 0,
+              "strict90": 0,
+              "first_p95_ms": 13239.530161,
+              "last_p95_ms": 19782.426382,
+              "reader_sse_gap_p95_ms": 101.700216,
+              "output_tokens": 2031,
+              "warm_slo_per_gpu_hour": 0.0
+            }
+          ],
+          "fixed": {
+            "reader": {
+              "tokens": 308,
+              "prompt_ids": "d493945267130ae87d42a3c20d4cff8299177405ff3ea10bfe7a9422f1bd3ec3",
+              "output_ids_hash": "c9b2258a74a61b18fb1be4feeb0f5607bec6df4e7b96c153714b42bd954b746b",
+              "median_tpot_ms": 49.587121396825395,
+              "gap_p95_ms": 99.058922,
+              "max_arrival_drift_ms": 0.29822438955307007,
+              "timed_cached_tokens": [
+                304,
+                304,
+                304
+              ]
+            },
+            "long": {
+              "tokens": 3071,
+              "prompt_ids": "f7e121004ece4edb60c2885259024c906afdf5873bca804f74f4f196a43e593e",
+              "output_ids_hash": "5bf970229d04e17c2c2cf0916e8a6733ed56134f3ad0aff06e9f3e79e9e7ed93",
+              "median_tpot_ms": 49.497304888888884,
+              "gap_p95_ms": 99.160326,
+              "max_arrival_drift_ms": 0.49688220024107776,
+              "timed_cached_tokens": [
+                3056,
+                3056,
+                3056
+              ]
+            }
+          },
+          "launch": [
+            "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/vllm-venv/bin/vllm",
+            "serve",
+            "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-Coder-7B-Instruct",
+            "--served-model-name",
+            "m",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "58033",
+            "--max-model-len",
+            "8192",
+            "--max-num-seqs",
+            "8",
+            "--dtype",
+            "bfloat16",
+            "--block-size",
+            "16",
+            "--kv-cache-memory-bytes",
+            "3758096384",
+            "--enable-prefix-caching",
+            "--generation-config",
+            "vllm",
+            "--enable-auto-tool-choice",
+            "--tool-call-parser",
+            "hermes",
+            "--exclude-tools-when-tool-choice-none",
+            "--gpu-memory-utilization",
+            "0.75",
+            "--enable-prompt-tokens-details"
+          ]
+        },
+        "riley": {
+          "high": {
+            "jobs": 32,
+            "long_stage_medians_ms": {
+              "before_final_submission_ms": 4394.5747025,
+              "ttft_ms": 1928.6700605,
+              "stream_ms": 1950.065064,
+              "tool_model_ms_0": 1921.580927,
+              "tool_wall_ms_0": 500.57519349999995,
+              "tool_model_ms_1": 1435.9523575,
+              "tool_wall_ms_1": 500.969015
+            },
+            "long_submitted_after_first_deadline": 3,
+            "long_answer_checks": {
+              "all_three_values": 24,
+              "both_sources": 24,
+              "at_least_64_tokens": 24
+            },
+            "valid": 32,
+            "failed_basic": [],
+            "completed": 32,
+            "slo": 9,
+            "slo_readers": 8,
+            "strict90": 0,
+            "first_p95_ms": 7812.997514,
+            "last_p95_ms": 9405.405308,
+            "reader_sse_gap_p95_ms": 25.100306,
+            "output_tokens": 4149,
+            "warm_slo_per_gpu_hour": 1621.2811146115994
+          },
+          "by_wave": [
+            {
+              "jobs": 4,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 2338.606474,
+                "ttft_ms": 554.214705,
+                "stream_ms": 1659.345238,
+                "tool_model_ms_0": 889.228869,
+                "tool_wall_ms_0": 501.684756,
+                "tool_model_ms_1": 444.069838,
+                "tool_wall_ms_1": 505.803371
+              },
+              "long_submitted_after_first_deadline": 0,
+              "long_answer_checks": {
+                "all_three_values": 3,
+                "both_sources": 3,
+                "at_least_64_tokens": 3
+              },
+              "valid": 4,
+              "failed_basic": [],
+              "completed": 4,
+              "slo": 4,
+              "slo_readers": 1,
+              "strict90": 0,
+              "first_p95_ms": 2940.544426,
+              "last_p95_ms": 4716.457467,
+              "reader_sse_gap_p95_ms": 16.502907,
+              "output_tokens": 495,
+              "warm_slo_per_gpu_hour": 2987.7884430362787
+            },
+            {
+              "jobs": 8,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 2197.2821734999998,
+                "ttft_ms": 479.4647255,
+                "stream_ms": 1539.831746,
+                "tool_model_ms_0": 747.4848105,
+                "tool_wall_ms_0": 500.59700050000004,
+                "tool_model_ms_1": 441.0106985,
+                "tool_wall_ms_1": 500.957996
+              },
+              "long_submitted_after_first_deadline": 0,
+              "long_answer_checks": {
+                "all_three_values": 6,
+                "both_sources": 6,
+                "at_least_64_tokens": 6
+              },
+              "valid": 8,
+              "failed_basic": [],
+              "completed": 8,
+              "slo": 8,
+              "slo_readers": 2,
+              "strict90": 1,
+              "first_p95_ms": 3148.391647,
+              "last_p95_ms": 4535.533698,
+              "reader_sse_gap_p95_ms": 21.42114,
+              "output_tokens": 897,
+              "warm_slo_per_gpu_hour": 6129.438287902074
+            },
+            {
+              "jobs": 16,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 4270.297592000001,
+                "ttft_ms": 1791.4641325,
+                "stream_ms": 1980.1379415,
+                "tool_model_ms_0": 1843.625353,
+                "tool_wall_ms_0": 500.59343750000005,
+                "tool_model_ms_1": 1450.9057115,
+                "tool_wall_ms_1": 500.965589
+              },
+              "long_submitted_after_first_deadline": 1,
+              "long_answer_checks": {
+                "all_three_values": 12,
+                "both_sources": 12,
+                "at_least_64_tokens": 12
+              },
+              "valid": 16,
+              "failed_basic": [],
+              "completed": 16,
+              "slo": 5,
+              "slo_readers": 4,
+              "strict90": 0,
+              "first_p95_ms": 7703.574979,
+              "last_p95_ms": 9405.405308,
+              "reader_sse_gap_p95_ms": 24.984118,
+              "output_tokens": 2159,
+              "warm_slo_per_gpu_hour": 1836.6625177259682
+            },
+            {
+              "jobs": 16,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 4461.906572,
+                "ttft_ms": 1946.159109,
+                "stream_ms": 1927.8759295,
+                "tool_model_ms_0": 2013.182461,
+                "tool_wall_ms_0": 500.5310585,
+                "tool_model_ms_1": 1420.095363,
+                "tool_wall_ms_1": 500.984801
+              },
+              "long_submitted_after_first_deadline": 2,
+              "long_answer_checks": {
+                "all_three_values": 12,
+                "both_sources": 12,
+                "at_least_64_tokens": 12
+              },
+              "valid": 16,
+              "failed_basic": [],
+              "completed": 16,
+              "slo": 4,
+              "slo_readers": 4,
+              "strict90": 0,
+              "first_p95_ms": 7977.899664,
+              "last_p95_ms": 9779.483094,
+              "reader_sse_gap_p95_ms": 25.100306,
+              "output_tokens": 1990,
+              "warm_slo_per_gpu_hour": 1414.008938663201
+            }
+          ],
+          "fixed": {
+            "reader": {
+              "tokens": 308,
+              "prompt_ids": "d493945267130ae87d42a3c20d4cff8299177405ff3ea10bfe7a9422f1bd3ec3",
+              "output_ids_hash": "6283d71bfcb24c6b46079910a2499a67e20fa9cfa16f33bc3a955faf32c6f7b1",
+              "median_tpot_ms": 12.286327285714286,
+              "gap_p95_ms": 15.019803,
+              "max_arrival_drift_ms": 0.4422292113304138,
+              "timed_cached_tokens": [
+                304,
+                304,
+                304
+              ]
+            },
+            "long": {
+              "tokens": 3071,
+              "prompt_ids": "f7e121004ece4edb60c2885259024c906afdf5873bca804f74f4f196a43e593e",
+              "output_ids_hash": "5bf970229d04e17c2c2cf0916e8a6733ed56134f3ad0aff06e9f3e79e9e7ed93",
+              "median_tpot_ms": 12.167558396825397,
+              "gap_p95_ms": 15.549899,
+              "max_arrival_drift_ms": 2.972576022148121,
+              "timed_cached_tokens": [
+                3056,
+                3056,
+                3056
+              ]
+            }
+          },
+          "launch": [
+            "serve",
+            "--model",
+            "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-Coder-7B-Instruct",
+            "--model-id",
+            "m",
+            "--inference-profile",
+            "native-bf16-varlen-v1",
+            "--max-sequence-tokens",
+            "8192",
+            "--max-output-tokens",
+            "384",
+            "--max-active-sequences",
+            "8",
+            "--kv-blocks",
+            "4096",
+            "--prefix-cache-blocks",
+            "1536",
+            "--batch-token-budget",
+            "1024",
+            "--prefill-chunk-tokens",
+            "1024",
+            "--batch-shape-buckets",
+            "1,2,4,8,16,24,32,48,64,80,96,112,128,144,160,176,192,208,224,240,256,512,1024",
+            "--prefill-burst-steady-budget",
+            "256",
+            "--prefill-burst-max-decode-rows",
+            "0",
+            "--prefill-burst-min-prompt-tokens",
+            "512",
+            "--bind",
+            "127.0.0.1:0",
+            "--max-weight-bytes",
+            "68719476736"
+          ]
+        }
+      },
+      "natural_gates": {
+        "slo_count": true,
+        "goodput": true,
+        "last_p95": true,
+        "preserved_valid": true
+      },
+      "decode": {
+        "reader": {
+          "same_prompt_ids": true,
+          "matched_warm_cache": true,
+          "comparable": true,
+          "ratios_riley_vllm": {
+            "median_tpot_ms": 0.24777254536297535,
+            "gap_p95_ms": 0.1516249389429051
+          },
+          "passes_registered_1_05": true,
+          "same_generated_ids": false
+        },
+        "long": {
+          "same_prompt_ids": true,
+          "matched_warm_cache": true,
+          "comparable": true,
+          "ratios_riley_vllm": {
+            "median_tpot_ms": 0.2458226447710441,
+            "gap_p95_ms": 0.15681573092044898
+          },
+          "passes_registered_1_05": true,
+          "same_generated_ids": true
+        }
+      }
+    },
+    "5": {
+      "order": [
+        "riley",
+        "vllm"
+      ],
+      "gpu_uuid": "GPU-73fc52fd-c417-684a-2fea-acf98cb889dc",
+      "isolation": {
+        "samples": 192,
+        "managed_pids": [
+          819537,
+          841964
+        ],
+        "unexplained_pids": []
+      },
+      "arms": {
+        "riley": {
+          "high": {
+            "jobs": 32,
+            "long_stage_medians_ms": {
+              "before_final_submission_ms": 4229.0601345,
+              "ttft_ms": 1965.3158625,
+              "stream_ms": 1992.4349425,
+              "tool_model_ms_0": 1933.499634,
+              "tool_wall_ms_0": 500.5496555,
+              "tool_model_ms_1": 1406.4513665,
+              "tool_wall_ms_1": 500.835821
+            },
+            "long_submitted_after_first_deadline": 4,
+            "long_answer_checks": {
+              "all_three_values": 24,
+              "both_sources": 24,
+              "at_least_64_tokens": 24
+            },
+            "valid": 32,
+            "failed_basic": [],
+            "completed": 32,
+            "slo": 11,
+            "slo_readers": 8,
+            "strict90": 0,
+            "first_p95_ms": 7795.855407,
+            "last_p95_ms": 9492.43913,
+            "reader_sse_gap_p95_ms": 22.187027,
+            "output_tokens": 4149,
+            "warm_slo_per_gpu_hour": 1989.125534387422
+          },
+          "by_wave": [
+            {
+              "jobs": 4,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 2279.312206,
+                "ttft_ms": 600.53356,
+                "stream_ms": 1623.950937,
+                "tool_model_ms_0": 860.842153,
+                "tool_wall_ms_0": 500.554001,
+                "tool_model_ms_1": 416.392476,
+                "tool_wall_ms_1": 500.849857
+              },
+              "long_submitted_after_first_deadline": 0,
+              "long_answer_checks": {
+                "all_three_values": 3,
+                "both_sources": 3,
+                "at_least_64_tokens": 3
+              },
+              "valid": 4,
+              "failed_basic": [],
+              "completed": 4,
+              "slo": 4,
+              "slo_readers": 1,
+              "strict90": 0,
+              "first_p95_ms": 2922.302135,
+              "last_p95_ms": 4683.527958,
+              "reader_sse_gap_p95_ms": 12.861302,
+              "output_tokens": 495,
+              "warm_slo_per_gpu_hour": 3008.639170736407
+            },
+            {
+              "jobs": 8,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 2163.429861,
+                "ttft_ms": 515.2309425,
+                "stream_ms": 1509.0477525000001,
+                "tool_model_ms_0": 721.974449,
+                "tool_wall_ms_0": 500.54254549999996,
+                "tool_model_ms_1": 428.88754400000005,
+                "tool_wall_ms_1": 500.799539
+              },
+              "long_submitted_after_first_deadline": 0,
+              "long_answer_checks": {
+                "all_three_values": 6,
+                "both_sources": 6,
+                "at_least_64_tokens": 6
+              },
+              "valid": 8,
+              "failed_basic": [],
+              "completed": 8,
+              "slo": 8,
+              "slo_readers": 2,
+              "strict90": 1,
+              "first_p95_ms": 3108.885608,
+              "last_p95_ms": 4471.022551,
+              "reader_sse_gap_p95_ms": 20.886221,
+              "output_tokens": 897,
+              "warm_slo_per_gpu_hour": 6215.304364981603
+            },
+            {
+              "jobs": 16,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 4100.958801,
+                "ttft_ms": 1813.5040239999998,
+                "stream_ms": 1992.4349425,
+                "tool_model_ms_0": 1821.3325795,
+                "tool_wall_ms_0": 500.553908,
+                "tool_model_ms_1": 1433.690051,
+                "tool_wall_ms_1": 500.835821
+              },
+              "long_submitted_after_first_deadline": 1,
+              "long_answer_checks": {
+                "all_three_values": 12,
+                "both_sources": 12,
+                "at_least_64_tokens": 12
+              },
+              "valid": 16,
+              "failed_basic": [],
+              "completed": 16,
+              "slo": 6,
+              "slo_readers": 4,
+              "strict90": 0,
+              "first_p95_ms": 7616.835698,
+              "last_p95_ms": 9394.892551,
+              "reader_sse_gap_p95_ms": 22.079281,
+              "output_tokens": 2159,
+              "warm_slo_per_gpu_hour": 2218.192541144888
+            },
+            {
+              "jobs": 16,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 4350.2493015,
+                "ttft_ms": 1965.3158625,
+                "stream_ms": 1960.9561865,
+                "tool_model_ms_0": 1992.242927,
+                "tool_wall_ms_0": 500.548902,
+                "tool_model_ms_1": 1406.4513665,
+                "tool_wall_ms_1": 500.8387565
+              },
+              "long_submitted_after_first_deadline": 3,
+              "long_answer_checks": {
+                "all_three_values": 12,
+                "both_sources": 12,
+                "at_least_64_tokens": 12
+              },
+              "valid": 16,
+              "failed_basic": [],
+              "completed": 16,
+              "slo": 5,
+              "slo_readers": 4,
+              "strict90": 0,
+              "first_p95_ms": 8000.160357,
+              "last_p95_ms": 9767.606686,
+              "reader_sse_gap_p95_ms": 22.187027,
+              "output_tokens": 1990,
+              "warm_slo_per_gpu_hour": 1769.8091927472747
+            }
+          ],
+          "fixed": {
+            "reader": {
+              "tokens": 308,
+              "prompt_ids": "d493945267130ae87d42a3c20d4cff8299177405ff3ea10bfe7a9422f1bd3ec3",
+              "output_ids_hash": "6283d71bfcb24c6b46079910a2499a67e20fa9cfa16f33bc3a955faf32c6f7b1",
+              "median_tpot_ms": 11.910640253968253,
+              "gap_p95_ms": 12.020301,
+              "max_arrival_drift_ms": 0.19801408052444458,
+              "timed_cached_tokens": [
+                304,
+                304,
+                304
+              ]
+            },
+            "long": {
+              "tokens": 3071,
+              "prompt_ids": "f7e121004ece4edb60c2885259024c906afdf5873bca804f74f4f196a43e593e",
+              "output_ids_hash": "5bf970229d04e17c2c2cf0916e8a6733ed56134f3ad0aff06e9f3e79e9e7ed93",
+              "median_tpot_ms": 11.964680126984128,
+              "gap_p95_ms": 12.027682,
+              "max_arrival_drift_ms": 0.38646459579466663,
+              "timed_cached_tokens": [
+                3056,
+                3056,
+                3056
+              ]
+            }
+          },
+          "launch": [
+            "serve",
+            "--model",
+            "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-Coder-7B-Instruct",
+            "--model-id",
+            "m",
+            "--inference-profile",
+            "native-bf16-varlen-v1",
+            "--max-sequence-tokens",
+            "8192",
+            "--max-output-tokens",
+            "384",
+            "--max-active-sequences",
+            "8",
+            "--kv-blocks",
+            "4096",
+            "--prefix-cache-blocks",
+            "1536",
+            "--batch-token-budget",
+            "1024",
+            "--prefill-chunk-tokens",
+            "1024",
+            "--batch-shape-buckets",
+            "1,2,4,8,16,24,32,48,64,80,96,112,128,144,160,176,192,208,224,240,256,512,1024",
+            "--prefill-burst-steady-budget",
+            "256",
+            "--prefill-burst-max-decode-rows",
+            "0",
+            "--prefill-burst-min-prompt-tokens",
+            "512",
+            "--bind",
+            "127.0.0.1:0",
+            "--max-weight-bytes",
+            "68719476736"
+          ]
+        },
+        "vllm": {
+          "high": {
+            "jobs": 32,
+            "long_stage_medians_ms": {
+              "before_final_submission_ms": 4310.9759775,
+              "ttft_ms": 3175.027579,
+              "stream_ms": 6415.6523290000005,
+              "tool_model_ms_0": 1434.742143,
+              "tool_wall_ms_0": 500.9587725,
+              "tool_model_ms_1": 1879.1083485,
+              "tool_wall_ms_1": 501.4736795
+            },
+            "long_submitted_after_first_deadline": 6,
+            "long_answer_checks": {
+              "all_three_values": 24,
+              "both_sources": 24,
+              "at_least_64_tokens": 24
+            },
+            "valid": 32,
+            "failed_basic": [],
+            "completed": 32,
+            "slo": 0,
+            "slo_readers": 0,
+            "strict90": 0,
+            "first_p95_ms": 12826.500322,
+            "last_p95_ms": 20792.082447,
+            "reader_sse_gap_p95_ms": 109.504928,
+            "output_tokens": 4032,
+            "warm_slo_per_gpu_hour": 0.0
+          },
+          "by_wave": [
+            {
+              "jobs": 4,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 4284.384815,
+                "ttft_ms": 500.349401,
+                "stream_ms": 6743.510929,
+                "tool_model_ms_0": 1569.363144,
+                "tool_wall_ms_0": 500.602825,
+                "tool_model_ms_1": 1710.668366,
+                "tool_wall_ms_1": 501.950733
+              },
+              "long_submitted_after_first_deadline": 0,
+              "long_answer_checks": {
+                "all_three_values": 3,
+                "both_sources": 3,
+                "at_least_64_tokens": 3
+              },
+              "valid": 4,
+              "failed_basic": [],
+              "completed": 4,
+              "slo": 0,
+              "slo_readers": 0,
+              "strict90": 0,
+              "first_p95_ms": 4928.613199,
+              "last_p95_ms": 12071.317492,
+              "reader_sse_gap_p95_ms": 99.741367,
+              "output_tokens": 492,
+              "warm_slo_per_gpu_hour": 0.0
+            },
+            {
+              "jobs": 8,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 4056.8698160000004,
+                "ttft_ms": 710.7280085,
+                "stream_ms": 5683.4388995,
+                "tool_model_ms_0": 1465.662508,
+                "tool_wall_ms_0": 500.53264249999995,
+                "tool_model_ms_1": 1610.1058360000002,
+                "tool_wall_ms_1": 501.08365000000003
+              },
+              "long_submitted_after_first_deadline": 0,
+              "long_answer_checks": {
+                "all_three_values": 6,
+                "both_sources": 6,
+                "at_least_64_tokens": 6
+              },
+              "valid": 8,
+              "failed_basic": [],
+              "completed": 8,
+              "slo": 0,
+              "slo_readers": 0,
+              "strict90": 1,
+              "first_p95_ms": 4832.547105,
+              "last_p95_ms": 12315.183975,
+              "reader_sse_gap_p95_ms": 100.018952,
+              "output_tokens": 937,
+              "warm_slo_per_gpu_hour": 0.0
+            },
+            {
+              "jobs": 16,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 4870.808559,
+                "ttft_ms": 3376.2095955,
+                "stream_ms": 6938.2853195,
+                "tool_model_ms_0": 1718.153226,
+                "tool_wall_ms_0": 500.749818,
+                "tool_model_ms_1": 2131.058572,
+                "tool_wall_ms_1": 501.38190799999995
+              },
+              "long_submitted_after_first_deadline": 6,
+              "long_answer_checks": {
+                "all_three_values": 12,
+                "both_sources": 12,
+                "at_least_64_tokens": 12
+              },
+              "valid": 16,
+              "failed_basic": [],
+              "completed": 16,
+              "slo": 0,
+              "slo_readers": 0,
+              "strict90": 0,
+              "first_p95_ms": 14205.919839,
+              "last_p95_ms": 21373.195944,
+              "reader_sse_gap_p95_ms": 99.514575,
+              "output_tokens": 2051,
+              "warm_slo_per_gpu_hour": 0.0
+            },
+            {
+              "jobs": 16,
+              "long_stage_medians_ms": {
+                "before_final_submission_ms": 3941.230351,
+                "ttft_ms": 2897.7138635,
+                "stream_ms": 5971.742837,
+                "tool_model_ms_0": 1215.066214,
+                "tool_wall_ms_0": 501.548331,
+                "tool_model_ms_1": 1794.7894615,
+                "tool_wall_ms_1": 501.65695100000005
+              },
+              "long_submitted_after_first_deadline": 0,
+              "long_answer_checks": {
+                "all_three_values": 12,
+                "both_sources": 12,
+                "at_least_64_tokens": 12
+              },
+              "valid": 16,
+              "failed_basic": [],
+              "completed": 16,
+              "slo": 0,
+              "slo_readers": 0,
+              "strict90": 0,
+              "first_p95_ms": 11127.811882,
+              "last_p95_ms": 17947.912741,
+              "reader_sse_gap_p95_ms": 109.504928,
+              "output_tokens": 1981,
+              "warm_slo_per_gpu_hour": 0.0
+            }
+          ],
+          "fixed": {
+            "reader": {
+              "tokens": 308,
+              "prompt_ids": "d493945267130ae87d42a3c20d4cff8299177405ff3ea10bfe7a9422f1bd3ec3",
+              "output_ids_hash": "c9b2258a74a61b18fb1be4feeb0f5607bec6df4e7b96c153714b42bd954b746b",
+              "median_tpot_ms": 47.15696582539683,
+              "gap_p95_ms": 105.502031,
+              "max_arrival_drift_ms": 2.139732241630554,
+              "timed_cached_tokens": [
+                304,
+                304,
+                304
+              ]
+            },
+            "long": {
+              "tokens": 3071,
+              "prompt_ids": "f7e121004ece4edb60c2885259024c906afdf5873bca804f74f4f196a43e593e",
+              "output_ids_hash": "5bf970229d04e17c2c2cf0916e8a6733ed56134f3ad0aff06e9f3e79e9e7ed93",
+              "median_tpot_ms": 46.08315004761905,
+              "gap_p95_ms": 104.93552,
+              "max_arrival_drift_ms": 3.393779695034016,
+              "timed_cached_tokens": [
+                3056,
+                3056,
+                3056
+              ]
+            }
+          },
+          "launch": [
+            "/mnt/efs/nlp/psyche/riley-gap-20261102/tools/vllm-venv/bin/vllm",
+            "serve",
+            "/mnt/efs/nlp/psyche/riley-gap-20261102/models/Qwen2.5-Coder-7B-Instruct",
+            "--served-model-name",
+            "m",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "41245",
+            "--max-model-len",
+            "8192",
+            "--max-num-seqs",
+            "8",
+            "--dtype",
+            "bfloat16",
+            "--block-size",
+            "16",
+            "--kv-cache-memory-bytes",
+            "3758096384",
+            "--enable-prefix-caching",
+            "--generation-config",
+            "vllm",
+            "--enable-auto-tool-choice",
+            "--tool-call-parser",
+            "hermes",
+            "--exclude-tools-when-tool-choice-none",
+            "--gpu-memory-utilization",
+            "0.75",
+            "--enable-prompt-tokens-details"
+          ]
+        }
+      },
+      "natural_gates": {
+        "slo_count": true,
+        "goodput": true,
+        "last_p95": true,
+        "preserved_valid": true
+      },
+      "decode": {
+        "reader": {
+          "same_prompt_ids": true,
+          "matched_warm_cache": true,
+          "comparable": true,
+          "ratios_riley_vllm": {
+            "median_tpot_ms": 0.25257435556962116,
+            "gap_p95_ms": 0.11393430899922675
+          },
+          "passes_registered_1_05": true,
+          "same_generated_ids": false
+        },
+        "long": {
+          "same_prompt_ids": true,
+          "matched_warm_cache": true,
+          "comparable": true,
+          "ratios_riley_vllm": {
+            "median_tpot_ms": 0.2596324277880457,
+            "gap_p95_ms": 0.11461973981736595
+          },
+          "passes_registered_1_05": true,
+          "same_generated_ids": true
+        }
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # A100 에이전트 워크플로 검증
 
-계획은 [종합 이정표](../../../docs/agentic-serving/README.md)에 있다. 모든 모델 호출은 aws-a100의 별도 시험 프로세스와 루프백 HTTP 연결에서 실행했다. 서버 이미지와 모델 경로, GPU 예약, 입력과 출력 지문은 각 원본에 들어 있다.
+계획은 [종합 이정표](../../../docs/agentic-serving/README.md)에 있다. 초기 단일 호스트 시험은 aws-a100의 별도 프로세스와 루프백 HTTP 연결을 사용했다. 05단계의 두 호스트 기능 시험은 aws-a100과 ai-assistant의 전용 시험 연결을 사용했다. 서버 이미지와 모델 경로, GPU 예약, 입력과 출력 지문은 각 원본에 들어 있다.
 
 | 파일 | 재현하는 결과 |
 |---|---|
@@ -9,6 +9,7 @@
 | [baseline-holdout.tar.gz](baseline-holdout.tar.gz) | GPU 6 배포 이미지의 대응 결과와 GPU 7 보류 시드의 기준 결과 |
 | [prefill-raw.tar.gz](prefill-raw.tar.gz) | GPU 7, 같은 배포 바이너리의 256행 기준·넓은 prefill 후보 교차 실행 |
 | [prefill-verified.json](prefill-verified.json) | 원본에서 재집계한 완료 지연·스트리밍 간격·토큰당 시간·넓은 스텝 실행 횟수 |
+| [phase05-multinode-routing-fault-20261126-raw.tar.gz](phase05-multinode-routing-fault-20261126-raw.tar.gz) · [검산](phase05-multinode-routing-fault-20261126-verified.json) | 서로 다른 GPU 호스트의 순차 분배 28개 작업과 시험 데이터 연결 장애 3개, 라우팅·SQLite·GPU 반환 원본 |
 
 저장소 루트에서 아래 명령으로 prefill 후보 결과를 독립 재계산할 수 있다.
 

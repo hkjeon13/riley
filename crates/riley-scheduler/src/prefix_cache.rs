@@ -34,6 +34,9 @@ struct Entry {
     children: u32,
     older: EntryId,
     newer: EntryId,
+    root: EntryId,
+    // On roots, the last touched path is contiguous from this tip to the root.
+    recent_tip: EntryId,
 }
 
 /// Bounded recency-ordered index; all containers are sized at construction.
@@ -46,8 +49,6 @@ pub(crate) struct PrefixCache {
     oldest: EntryId,
     newest: EntryId,
     length: usize,
-    // The last touched path is contiguous from its tip to its root in the LRU list.
-    recent_path: Option<(EntryId, EntryId)>,
 }
 
 fn key(parent: EntryId, tokens: &[u32]) -> SchedulerResult<Key> {
@@ -91,7 +92,6 @@ impl PrefixCache {
             oldest: NONE,
             newest: NONE,
             length: 0,
-            recent_path: None,
         })
     }
 
@@ -121,15 +121,21 @@ impl PrefixCache {
             field: "prefix cache",
             reason: "insert without a free entry",
         })?;
-        if parent != ROOT {
-            self.entry_mut(parent)?.children += 1;
-        }
+        let root = if parent == ROOT {
+            id
+        } else {
+            let parent = self.entry_mut(parent)?;
+            parent.children += 1;
+            parent.root
+        };
         self.entries[id as usize] = Some(Entry {
             key,
             block,
             children: 0,
             older: NONE,
             newer: NONE,
+            root,
+            recent_tip: NONE,
         });
         self.link_newest(id, id)?;
         self.index.insert(key, id);
@@ -147,18 +153,19 @@ impl PrefixCache {
         if id == ROOT {
             return Ok(());
         }
-        let previous = self.recent_path.take();
+        let root = self.entry(id)?.root;
+        // Touching a path under another root can move this range in the LRU
+        // list, but cannot change the links between its entries.
+        let previous = std::mem::replace(&mut self.entry_mut(root)?.recent_tip, NONE);
         let mut current = id;
         loop {
             // Other sessions can leave part of this chain in the desired
             // order too. Move the whole run once, including a saved suffix.
             let mut last = current;
             let parent = loop {
-                if let Some((tip, root)) = previous {
-                    if last == tip {
-                        last = root;
-                        break ROOT;
-                    }
+                if last == previous {
+                    last = root;
+                    break ROOT;
                 }
                 let entry = self.entry(last)?;
                 let parent = entry.key.parent;
@@ -172,7 +179,7 @@ impl PrefixCache {
                 self.link_newest(current, last)?;
             }
             if parent == ROOT {
-                self.recent_path = Some((id, last));
+                self.entry_mut(root)?.recent_tip = id;
                 break;
             }
             current = parent;
@@ -200,7 +207,6 @@ impl PrefixCache {
     /// Unlists everything. Blocks that requests still hold live on until the
     /// last holder releases them, but no later request can find them.
     pub(crate) fn clear(&mut self, pool: &mut KvBlockPool) -> SchedulerResult<()> {
-        self.recent_path = None;
         for index in 0..self.entries.len() {
             if let Some(entry) = self.entries[index].take() {
                 pool.release_shared_block(entry.block)?;
@@ -221,10 +227,15 @@ impl PrefixCache {
     }
 
     fn remove(&mut self, id: EntryId, pool: &mut KvBlockPool) -> SchedulerResult<()> {
-        // Only leaves are evicted. The saved range cannot lose an ancestor
-        // while its tip survives, but its tip's entry ID can be recycled.
-        if self.recent_path.is_some_and(|(tip, _)| tip == id) {
-            self.recent_path = None;
+        let entry = self.entry(id)?;
+        let (root, parent) = (entry.root, entry.key.parent);
+        // Eviction removes a leaf. If it was the remembered tip, its parent
+        // still starts a contiguous range. An evicted root loses its hint.
+        if root != id {
+            let root = self.entry_mut(root)?;
+            if root.recent_tip == id {
+                root.recent_tip = parent;
+            }
         }
         self.unlink(id, id)?;
         let entry = self.entries[id as usize]
@@ -424,6 +435,48 @@ mod tests {
             assert_eq!((forward, backward), (NONE, NONE));
             assert_eq!(cache.len(), order.len());
         }
+    }
+
+    #[test]
+    fn alternating_roots_keep_their_ranges_after_tip_eviction_and_branching() {
+        let mut pool = pool(6);
+        let mut cache = PrefixCache::new(6).unwrap();
+        let insert = |cache: &mut PrefixCache, pool: &mut KvBlockPool, parent| {
+            let mut seq = written(pool, 1);
+            let block = seq.share_next_block(pool).unwrap();
+            let value = u32::try_from(cache.len()).unwrap();
+            let id = cache.insert(parent, &tokens(value), block).unwrap();
+            seq.close(pool).unwrap();
+            id
+        };
+
+        let a = insert(&mut cache, &mut pool, ROOT);
+        let a1 = insert(&mut cache, &mut pool, a);
+        cache.touch_path(a1).unwrap();
+        let b = insert(&mut cache, &mut pool, ROOT);
+        let b1 = insert(&mut cache, &mut pool, b);
+        cache.touch_path(b1).unwrap();
+        let a2 = insert(&mut cache, &mut pool, a1);
+        cache.touch_path(a2).unwrap();
+
+        assert_eq!(cache.entry(a).unwrap().recent_tip, a2);
+        assert_eq!(cache.entry(b).unwrap().recent_tip, b1);
+        assert_eq!(cache.oldest, b1);
+        assert!(cache.evict_one(&mut pool).unwrap());
+        assert_eq!(cache.entry(b).unwrap().recent_tip, b);
+        let b2 = insert(&mut cache, &mut pool, b);
+        assert_eq!(b2, b1);
+        cache.touch_path(b2).unwrap();
+
+        let a3 = insert(&mut cache, &mut pool, a);
+        cache.touch_path(a3).unwrap();
+        cache.touch_path(a2).unwrap();
+        let mut id = cache.oldest;
+        for expected in [b2, b, a3, a2, a1, a] {
+            assert_eq!(id, expected);
+            id = cache.entry(id).unwrap().newer;
+        }
+        assert_eq!(id, NONE);
     }
 
     #[test]

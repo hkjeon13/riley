@@ -1,0 +1,12 @@
+{
+  "physical_gpu": "aws-a100 GPU 6, NVIDIA A100-SXM4-40GB",
+  "run_order": ["a1", "b1", "b2", "a2"],
+  "a": "HTTP app requests two constrained model tool calls and forwards the authorized full tool result",
+  "b": "Same HTTP app dispatches the two app-owned tools and forwards only complete exact-ID records",
+  "model": "Qwen2.5-Coder-7B-Instruct BF16, same server binary and wide serving configuration as the previous named-tool crossover",
+  "arrival": "Fresh Riley and app processes per arm, one identical warm-up, waves 4/8/16/16, stagger 30ms, 1 of 4 short readers always uses model tools and a two-row catalog",
+  "tool": "Same read-only local SQLite catalog snapshot and two actual lookups in both arms. Configured 500ms service delay per tool in the long workload; 64 authorized catalog records with two explicit IDs. No delay for short readers.",
+  "primary": "C16 nearest-rank p95 from planned HTTP application arrival to last visible final delta among completed streams, plus count of qualifying workflows out of all 32 attempts",
+  "qualifying": "First final <= 5 s, last final <= 8 s, within-workflow SSE gap p95 <= 80 ms, correct three numeric labels and both IDs, natural stop, >= 64 output tokens, actual dispatch and source/result receipts verified",
+  "comparison": "Pair a1/b1 and a2/b2. Each pair must have identical request hashes, source data hashes, schedule and reader result fingerprints. For qualification require lower p95, more qualifying workflows, no newly invalid inputs, and both reader first/delta-gap p95s <= 1.05 times baseline. Inspect planned versus actual sends and GPU process samples."
+}

@@ -1,0 +1,545 @@
+{
+  "provenance": {
+    "scope": "Single host, independent AWS A100 SXM4 40GB replicas on GPU 6 and 7. Stock Qwen2.5-Coder-7B-Instruct BF16 and exact phase-04 server launch. Loopback authenticated HTTP. Synthetic fixture tenants share a test pool and are attribution labels.",
+    "policy": "Per model HTTP request round robin over ready, admitted replicas; keep established streams on the accepted generation, no transparent stream retries.",
+    "riley": "riley 0.1.0 (server=true, cuda=true, cuda_abi=1)",
+    "binary_sha256": "13b589df5c19a33c685ca1388398905f46a6cc566cbd1bed68f06b798080ca9f",
+    "model": "Qwen/Qwen2.5-Coder-7B-Instruct",
+    "model_revision": "c03e6d358207e414f1eca0bb1891e29f1db0e242",
+    "checkpoint_files_verified": 9
+  },
+  "soak": {
+    "checks": {
+      "registered_schedule_complete": true,
+      "all_noncancel_correct_and_slo": false,
+      "all_scheduled_cancels_observed": true,
+      "no_http_or_scheduler_rejects": true,
+      "counter_deltas_match_cancelled": true,
+      "device_bytes_steady": true,
+      "resource_gauges_returned_to_zero": true,
+      "holders_restored": true,
+      "dispatch_lag_p95_within_limit": true,
+      "late_tenant_completion_p95_within_limit": true,
+      "no_external_gpu_apps_in_samples": true
+    },
+    "passed": false,
+    "outcomes": {
+      "all": {
+        "all": {
+          "submitted": 1200,
+          "correct": 1136,
+          "cancelled": 63,
+          "slo": 1136,
+          "first_ms": 1459.628401,
+          "last_ms": 3490.645482,
+          "gap_ms": 30.119941
+        },
+        "early": {
+          "submitted": 390,
+          "correct": 370,
+          "cancelled": 20,
+          "slo": 370,
+          "first_ms": 1482.531688,
+          "last_ms": 3535.052944,
+          "gap_ms": 30.118263
+        },
+        "late": {
+          "submitted": 420,
+          "correct": 397,
+          "cancelled": 22,
+          "slo": 397,
+          "first_ms": 1457.602628,
+          "last_ms": 3715.850884,
+          "gap_ms": 30.119941
+        }
+      },
+      "primary": {
+        "all": {
+          "submitted": 960,
+          "correct": 909,
+          "cancelled": 50,
+          "slo": 909,
+          "first_ms": 1456.203661,
+          "last_ms": 3490.645482,
+          "gap_ms": 30.119215
+        },
+        "early": {
+          "submitted": 312,
+          "correct": 296,
+          "cancelled": 16,
+          "slo": 296,
+          "first_ms": 1482.531688,
+          "last_ms": 3582.389119,
+          "gap_ms": 30.119215
+        },
+        "late": {
+          "submitted": 336,
+          "correct": 318,
+          "cancelled": 17,
+          "slo": 318,
+          "first_ms": 1455.10416,
+          "last_ms": 3715.850884,
+          "gap_ms": 30.110634
+        }
+      },
+      "secondary": {
+        "all": {
+          "submitted": 240,
+          "correct": 227,
+          "cancelled": 13,
+          "slo": 227,
+          "first_ms": 1551.034252,
+          "last_ms": 3375.447944,
+          "gap_ms": 30.121535
+        },
+        "early": {
+          "submitted": 78,
+          "correct": 74,
+          "cancelled": 4,
+          "slo": 74,
+          "first_ms": 1544.37786,
+          "last_ms": 3535.052944,
+          "gap_ms": 30.114883
+        },
+        "late": {
+          "submitted": 84,
+          "correct": 79,
+          "cancelled": 5,
+          "slo": 79,
+          "first_ms": 1554.49784,
+          "last_ms": 4099.212651,
+          "gap_ms": 30.124682
+        }
+      }
+    },
+    "by_client": {
+      "normal": {
+        "submitted": 1071,
+        "correct": 1070,
+        "cancelled": 0,
+        "slo": 1070,
+        "first_ms": 1459.628401,
+        "last_ms": 3109.858853,
+        "gap_ms": 21.673463
+      },
+      "slow": {
+        "submitted": 66,
+        "correct": 66,
+        "cancelled": 0,
+        "slo": 66,
+        "first_ms": 1456.203661,
+        "last_ms": 5659.741063,
+        "gap_ms": 32.684826
+      },
+      "cancel": {
+        "submitted": 63,
+        "correct": 0,
+        "cancelled": 63,
+        "slo": 0,
+        "first_ms": null,
+        "last_ms": null,
+        "gap_ms": null
+      }
+    },
+    "by_load": {
+      "baseline": {
+        "submitted": 800,
+        "correct": 756,
+        "cancelled": 43,
+        "slo": 756,
+        "first_ms": 1449.973066,
+        "last_ms": 3412.078055,
+        "gap_ms": 30.127123
+      },
+      "burst": {
+        "submitted": 400,
+        "correct": 380,
+        "cancelled": 20,
+        "slo": 380,
+        "first_ms": 1482.531688,
+        "last_ms": 3490.645482,
+        "gap_ms": 30.112553
+      }
+    },
+    "non_slo_noncancel_jobs": [
+      {
+        "index": 843,
+        "tenant": "primary",
+        "kind": "normal",
+        "seed": 6143,
+        "correct": false,
+        "error": "final answer failed values, citations, length or finish: [70, 31, 39]",
+        "outcome": {
+          "tenant": "primary",
+          "kind": "normal",
+          "offset": 1266.0,
+          "cancelled": false,
+          "correct": false,
+          "lag_ms": 2.397355,
+          "slo": false
+        }
+      }
+    ],
+    "dispatch_lag_p95_ms": 10.697368,
+    "route": {
+      "model_requests": 1800,
+      "requests_by_gpu": {
+        "6": 900,
+        "7": 900
+      },
+      "admissions_by_generation": {
+        "soak-gpu6": 900,
+        "soak-gpu7": 900
+      },
+      "withdrawn_or_unready_admissions": 0
+    },
+    "http_statuses": {
+      "200": 1800
+    },
+    "workflows_by_tool_path": {
+      "model": 300,
+      "app": 900
+    },
+    "successful_final_input_tokens": [
+      307,
+      5313
+    ],
+    "successful_final_output_tokens": [
+      83,
+      187
+    ],
+    "peak_client_workflows_in_flight": 8,
+    "late_over_early_last_p95": {
+      "all": 1.0511443372600306,
+      "primary": 1.0372549604653933,
+      "secondary": 1.159590171897578
+    },
+    "observed_s": 1800.265963812,
+    "sample_count": 183,
+    "scheduled_epoch_ns": 1795676026877409671,
+    "max_sample_gap_s": 10.646291194,
+    "replica_observations": {
+      "soak-gpu6": {
+        "peaks": {
+          "active_requests": 4,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 17
+        },
+        "after_drain": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 0
+        },
+        "retained_prefix_blocks_after_drain": 1536,
+        "retained_prefix_blocks_peak": 1536,
+        "allocation_bytes_observed": [
+          19874299968
+        ],
+        "pinned_bytes_observed": [
+          4235480
+        ],
+        "host_rss_kib_median_first_minute": 15433868.0,
+        "host_rss_kib_median_last_minute": 15464588.0,
+        "host_rss_kib_max": 15464588,
+        "counter_deltas": {
+          "cancellations": 37,
+          "disconnects": 37,
+          "overloads": 0,
+          "dropped_observations": 0
+        }
+      },
+      "soak-gpu7": {
+        "peaks": {
+          "active_requests": 2,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 7
+        },
+        "after_drain": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 0
+        },
+        "retained_prefix_blocks_after_drain": 1536,
+        "retained_prefix_blocks_peak": 1536,
+        "allocation_bytes_observed": [
+          19874299968
+        ],
+        "pinned_bytes_observed": [
+          4235480
+        ],
+        "host_rss_kib_median_first_minute": 15436812.0,
+        "host_rss_kib_median_last_minute": 15450636.0,
+        "host_rss_kib_max": 15450636,
+        "counter_deltas": {
+          "cancellations": 26,
+          "disconnects": 26,
+          "overloads": 0,
+          "dropped_observations": 0
+        }
+      }
+    },
+    "foreign_compute_receipts": [],
+    "release": {
+      "leases_restored": true,
+      "lease_after_each_generation": {
+        "soak-gpu6": true,
+        "soak-gpu7": true
+      },
+      "normal_shutdown_reclaimed": {
+        "soak-gpu6": true,
+        "soak-gpu7": true
+      },
+      "assigned_s": {
+        "soak-gpu6": 1962.3133404925466,
+        "soak-gpu7": 1961.7168690040708
+      }
+    },
+    "all_assigned_gpu_seconds": 3924.0302094966173,
+    "all_assigned_gpu_seconds_per_success": 3.4542519449794167,
+    "all_assigned_slo_goodput_per_gpu_hour": 1042.1938113785884,
+    "warm_slo_goodput_per_gpu_hour": 1135.832172080956
+  },
+  "operations": {
+    "checks": {
+      "planned": true,
+      "three_fault_boundaries": true,
+      "all_committed_effects_accounted_for": true,
+      "all_alignment_workflows_correct": true,
+      "holders_restored": true,
+      "all_normal_shutdowns_reclaimed": true,
+      "no_external_gpu_apps_in_samples": true
+    },
+    "passed": true,
+    "route": {
+      "model_requests": 24,
+      "requests_by_gpu": {
+        "6": 14,
+        "7": 10
+      },
+      "admissions_by_generation": {
+        "old-6": 1,
+        "peer-7": 4,
+        "replacement-6": 5,
+        "fault-1-restart-7": 5,
+        "fault-2-restart-6": 8,
+        "fault-3-restart-7": 1
+      },
+      "withdrawn_or_unready_admissions": 0
+    },
+    "planned": {
+      "checks": {
+        "in_flight_completed_after_withdrawal": true,
+        "withdrawn_replica_retired": true,
+        "new_requests_routed_to_peer_only_during_drain_and_load": true,
+        "dual_capacity_restored": true,
+        "replacement_ready_within_limit": true
+      },
+      "active_streams_drained": 1,
+      "replacement_ready_s": 120.071140974,
+      "withdrawal_to_final_sse_done_s": 1.350845945,
+      "withdrawal_to_two_replica_probe_success_s": 125.664756932,
+      "partial_or_lost_streams": 0
+    },
+    "faults": [
+      {
+        "scenario": "before-content",
+        "fault_gpu": 7,
+        "exit_code": 137,
+        "cut_content_chunks": 0,
+        "cut_sse_done": false,
+        "cut_turn": 2,
+        "cut_http_status": 200,
+        "client_failure": "incomplete stream, finish reason or usage",
+        "completion_recovery_s": 3.561351263,
+        "replacement_ready_s": 121.487585816,
+        "full_capacity_ready_s": 123.140127593,
+        "full_capacity_proven_s": 125.810866629,
+        "tool_attempts_and_commits": [
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            0
+          ]
+        ],
+        "checks": {
+          "fault_really_stopped_process": true,
+          "fault_boundary_and_failed_attempt": true,
+          "correct_workflow_on_healthy_peer_before_rejoin": true,
+          "tool_results_committed_once_and_reused": true,
+          "full_capacity_restored": true
+        },
+        "passed": true
+      },
+      {
+        "scenario": "partial-content",
+        "fault_gpu": 6,
+        "exit_code": 137,
+        "cut_content_chunks": 6,
+        "cut_sse_done": false,
+        "cut_turn": 2,
+        "cut_http_status": 200,
+        "client_failure": "incomplete stream, finish reason or usage",
+        "completion_recovery_s": 3.645995961,
+        "replacement_ready_s": 122.415368116,
+        "full_capacity_ready_s": 124.113555599,
+        "full_capacity_proven_s": 126.757601422,
+        "tool_attempts_and_commits": [
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            0
+          ]
+        ],
+        "checks": {
+          "fault_really_stopped_process": true,
+          "fault_boundary_and_failed_attempt": true,
+          "correct_workflow_on_healthy_peer_before_rejoin": true,
+          "tool_results_committed_once_and_reused": true,
+          "full_capacity_restored": true
+        },
+        "passed": true
+      },
+      {
+        "scenario": "completed-tool-call",
+        "fault_gpu": 7,
+        "exit_code": 137,
+        "cut_content_chunks": 0,
+        "cut_sse_done": true,
+        "cut_turn": 0,
+        "cut_http_status": 200,
+        "client_failure": "replica fault after validated tool call, before executing effect",
+        "completion_recovery_s": 4.422058756,
+        "replacement_ready_s": 139.540959744,
+        "full_capacity_ready_s": 141.626123751,
+        "full_capacity_proven_s": 144.29340314,
+        "tool_attempts_and_commits": [
+          [
+            0,
+            0
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            0
+          ]
+        ],
+        "checks": {
+          "fault_really_stopped_process": true,
+          "fault_boundary_and_failed_attempt": true,
+          "correct_workflow_on_healthy_peer_before_rejoin": true,
+          "tool_results_committed_once_and_reused": true,
+          "full_capacity_restored": true
+        },
+        "passed": true
+      }
+    ],
+    "durable_tool_effects": 6,
+    "monitor_samples_by_gpu": {
+      "6": 311,
+      "7": 311
+    },
+    "foreign_compute_receipts": [],
+    "release": {
+      "leases_restored": true,
+      "lease_after_each_generation": {
+        "old-6": true,
+        "peer-7": true,
+        "replacement-6": true,
+        "fault-1-restart-7": true,
+        "fault-2-restart-6": true,
+        "fault-3-restart-7": true
+      },
+      "normal_shutdown_reclaimed": {
+        "old-6": true,
+        "fault-2-restart-6": true,
+        "fault-3-restart-7": true
+      },
+      "assigned_s": {
+        "old-6": 122.4238710552454,
+        "peer-7": 247.15586918592453,
+        "replacement-6": 251.23989231139421,
+        "fault-1-restart-7": 254.0768604874611,
+        "fault-2-restart-6": 272.92631170898676,
+        "fault-3-restart-7": 145.01749676465988
+      }
+    }
+  },
+  "citation_diagnostic": {
+    "base_input_sha256": "56072cd810ffea54b826180c49e556be4db953dbf1fd958d5c12464456741954",
+    "results": [
+      {
+        "variant": "original",
+        "correct": false,
+        "http": 200,
+        "done": true,
+        "missing_citations": [
+          "report-A",
+          "report-B"
+        ]
+      },
+      {
+        "variant": "explicit",
+        "correct": true,
+        "http": 200,
+        "done": true,
+        "missing_citations": []
+      },
+      {
+        "variant": "explicit",
+        "correct": true,
+        "http": 200,
+        "done": true,
+        "missing_citations": []
+      },
+      {
+        "variant": "original",
+        "correct": false,
+        "http": 200,
+        "done": true,
+        "missing_citations": [
+          "report-A",
+          "report-B"
+        ]
+      }
+    ],
+    "routes": {
+      "model_requests": 4,
+      "requests_by_gpu": {
+        "7": 4
+      },
+      "admissions_by_generation": {
+        "citation-gpu7": 4
+      },
+      "withdrawn_or_unready_admissions": 0
+    },
+    "release": {
+      "leases_restored": true,
+      "lease_after_each_generation": {
+        "citation-gpu7": true
+      },
+      "normal_shutdown_reclaimed": {
+        "citation-gpu7": true
+      },
+      "assigned_s": {
+        "citation-gpu7": 122.03750453144312
+      }
+    }
+  }
+}

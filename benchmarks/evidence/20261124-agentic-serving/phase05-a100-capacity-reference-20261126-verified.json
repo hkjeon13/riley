@@ -1,0 +1,921 @@
+{
+  "registration": {
+    "scope": "Supplemental same-host functional capacity reference for later homogeneous multi-node comparison. Two A100 SXM4-40GB GPUs at AWS physical 6 and 7. Exact phase04 stock server args and binary, direct loopback RR.",
+    "arms": [
+      {
+        "topology": "single",
+        "gpus": [
+          6
+        ],
+        "seed": 8200
+      },
+      {
+        "topology": "dual",
+        "gpus": [
+          6,
+          7
+        ],
+        "seed": 8200
+      },
+      {
+        "topology": "dual",
+        "gpus": [
+          6,
+          7
+        ],
+        "seed": 9200
+      },
+      {
+        "topology": "single",
+        "gpus": [
+          7
+        ],
+        "seed": 9200
+      }
+    ],
+    "rates": [
+      2,
+      4,
+      8
+    ],
+    "seconds_per_rate": 20,
+    "gates": {
+      "max_reject_fraction": 0.05,
+      "min_slo_fraction": 0.95,
+      "first_ms": 10000,
+      "last_ms": 18000,
+      "gap_ms": 150,
+      "unexpected_failures": 0
+    },
+    "workload": "75% app-executed exact named tools and 25% model-dispatched pair. Explicit citations. Three history/document shapes as phase05, 30ms slow readers, no intentional client cancellations. Matched scheduled offsets and fixtures inside each adjacent pair. Process boots shared, caches retained between cells, both arms reported separately. The other booted GPU is excluded from routing in single cells; document warm active GPU denominators and full reservation cost separately."
+  },
+  "cells": [
+    {
+      "arm": 0,
+      "topology": "single",
+      "gpus": [
+        6
+      ],
+      "arrival_rate": 2,
+      "wall_s": 21.450821407,
+      "counts": {
+        "all": {
+          "submitted": 40,
+          "correct": 40,
+          "slo": 40,
+          "rejected": 0,
+          "p95_first_ms": 1492.883446,
+          "p95_last_ms": 3702.815287,
+          "p95_gap_ms": 22.731947
+        },
+        "primary": {
+          "submitted": 32,
+          "correct": 32,
+          "slo": 32,
+          "rejected": 0,
+          "p95_first_ms": 1511.840017,
+          "p95_last_ms": 4101.081352,
+          "p95_gap_ms": 30.1588
+        },
+        "secondary": {
+          "submitted": 8,
+          "correct": 8,
+          "slo": 8,
+          "rejected": 0,
+          "p95_first_ms": 1484.831192,
+          "p95_last_ms": 2908.382924,
+          "p95_gap_ms": 22.54723
+        }
+      },
+      "http_status": {
+        "200": 60
+      },
+      "client_p95_dispatch_lag_ms": 1.186311,
+      "unexpected_failures": [],
+      "slo_goodput_per_s": 1.8647304567529004,
+      "slo_goodput_per_hour_per_routed_gpu": 6713.029644310441,
+      "replica_gauge_peaks": {
+        "gpu6": {
+          "active_requests": 5,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 30
+        },
+        "gpu7": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 0
+        }
+      },
+      "replica_metrics_missed_samples": {
+        "gpu6": 0,
+        "gpu7": 0
+      },
+      "cached_prompt_tokens_histogram": {
+        "16": 15,
+        "32": 23,
+        "496": 1,
+        "512": 1
+      },
+      "passes_rate": true
+    },
+    {
+      "arm": 0,
+      "topology": "single",
+      "gpus": [
+        6
+      ],
+      "arrival_rate": 4,
+      "wall_s": 26.410001626,
+      "counts": {
+        "all": {
+          "submitted": 80,
+          "correct": 80,
+          "slo": 80,
+          "rejected": 0,
+          "p95_first_ms": 8159.405766,
+          "p95_last_ms": 9829.672662,
+          "p95_gap_ms": 30.093928
+        },
+        "primary": {
+          "submitted": 64,
+          "correct": 64,
+          "slo": 64,
+          "rejected": 0,
+          "p95_first_ms": 8159.405766,
+          "p95_last_ms": 9732.946039,
+          "p95_gap_ms": 30.093928
+        },
+        "secondary": {
+          "submitted": 16,
+          "correct": 16,
+          "slo": 16,
+          "rejected": 0,
+          "p95_first_ms": 9131.632943,
+          "p95_last_ms": 10656.100046,
+          "p95_gap_ms": 30.111384
+        }
+      },
+      "http_status": {
+        "200": 120
+      },
+      "client_p95_dispatch_lag_ms": 0.963595,
+      "unexpected_failures": [],
+      "slo_goodput_per_s": 3.029155436372331,
+      "slo_goodput_per_hour_per_routed_gpu": 10904.959570940391,
+      "replica_gauge_peaks": {
+        "gpu6": {
+          "active_requests": 7,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 30
+        },
+        "gpu7": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 0
+        }
+      },
+      "replica_metrics_missed_samples": {
+        "gpu6": 0,
+        "gpu7": 0
+      },
+      "cached_prompt_tokens_histogram": {
+        "16": 26,
+        "32": 39,
+        "672": 15
+      },
+      "passes_rate": true
+    },
+    {
+      "arm": 0,
+      "topology": "single",
+      "gpus": [
+        6
+      ],
+      "arrival_rate": 8,
+      "wall_s": 52.048839653,
+      "counts": {
+        "all": {
+          "submitted": 160,
+          "correct": 160,
+          "slo": 58,
+          "rejected": 0,
+          "p95_first_ms": 35689.589602,
+          "p95_last_ms": 37417.46532,
+          "p95_gap_ms": 30.103554
+        },
+        "primary": {
+          "submitted": 128,
+          "correct": 128,
+          "slo": 46,
+          "rejected": 0,
+          "p95_first_ms": 35708.904691,
+          "p95_last_ms": 37413.029495,
+          "p95_gap_ms": 30.103554
+        },
+        "secondary": {
+          "submitted": 32,
+          "correct": 32,
+          "slo": 12,
+          "rejected": 0,
+          "p95_first_ms": 35675.863125,
+          "p95_last_ms": 38019.589687,
+          "p95_gap_ms": 30.109674
+        }
+      },
+      "http_status": {
+        "200": 240
+      },
+      "client_p95_dispatch_lag_ms": 0.764831,
+      "unexpected_failures": [],
+      "slo_goodput_per_s": 1.1143380022816125,
+      "slo_goodput_per_hour_per_routed_gpu": 4011.616808213805,
+      "replica_gauge_peaks": {
+        "gpu6": {
+          "active_requests": 7,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 41
+        },
+        "gpu7": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 0
+        }
+      },
+      "replica_metrics_missed_samples": {
+        "gpu6": 5,
+        "gpu7": 0
+      },
+      "cached_prompt_tokens_histogram": {
+        "16": 54,
+        "32": 73,
+        "672": 30,
+        "704": 1,
+        "2032": 1,
+        "2784": 1
+      },
+      "passes_rate": false
+    },
+    {
+      "arm": 1,
+      "topology": "dual",
+      "gpus": [
+        6,
+        7
+      ],
+      "arrival_rate": 2,
+      "wall_s": 21.406099642,
+      "counts": {
+        "all": {
+          "submitted": 40,
+          "correct": 40,
+          "slo": 40,
+          "rejected": 0,
+          "p95_first_ms": 1446.325633,
+          "p95_last_ms": 3291.310805,
+          "p95_gap_ms": 22.228073
+        },
+        "primary": {
+          "submitted": 32,
+          "correct": 32,
+          "slo": 32,
+          "rejected": 0,
+          "p95_first_ms": 1450.122463,
+          "p95_last_ms": 3855.103916,
+          "p95_gap_ms": 30.111751
+        },
+        "secondary": {
+          "submitted": 8,
+          "correct": 8,
+          "slo": 8,
+          "rejected": 0,
+          "p95_first_ms": 1443.899756,
+          "p95_last_ms": 2683.89674,
+          "p95_gap_ms": 21.765264
+        }
+      },
+      "http_status": {
+        "200": 60
+      },
+      "client_p95_dispatch_lag_ms": 0.888427,
+      "unexpected_failures": [],
+      "slo_goodput_per_s": 1.8686262639606561,
+      "slo_goodput_per_hour_per_routed_gpu": 3363.527275129181,
+      "replica_gauge_peaks": {
+        "gpu6": {
+          "active_requests": 3,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 19
+        },
+        "gpu7": {
+          "active_requests": 2,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 12
+        }
+      },
+      "replica_metrics_missed_samples": {
+        "gpu6": 0,
+        "gpu7": 0
+      },
+      "cached_prompt_tokens_histogram": {
+        "16": 15,
+        "32": 19,
+        "672": 6
+      },
+      "passes_rate": true
+    },
+    {
+      "arm": 1,
+      "topology": "dual",
+      "gpus": [
+        6,
+        7
+      ],
+      "arrival_rate": 4,
+      "wall_s": 22.473198845,
+      "counts": {
+        "all": {
+          "submitted": 80,
+          "correct": 80,
+          "slo": 80,
+          "rejected": 0,
+          "p95_first_ms": 1702.240833,
+          "p95_last_ms": 3900.934259,
+          "p95_gap_ms": 30.118972
+        },
+        "primary": {
+          "submitted": 64,
+          "correct": 64,
+          "slo": 64,
+          "rejected": 0,
+          "p95_first_ms": 1702.240833,
+          "p95_last_ms": 3900.934259,
+          "p95_gap_ms": 30.118972
+        },
+        "secondary": {
+          "submitted": 16,
+          "correct": 16,
+          "slo": 16,
+          "rejected": 0,
+          "p95_first_ms": 1948.107265,
+          "p95_last_ms": 5290.601329,
+          "p95_gap_ms": 30.123532
+        }
+      },
+      "http_status": {
+        "200": 120
+      },
+      "client_p95_dispatch_lag_ms": 0.838634,
+      "unexpected_failures": [],
+      "slo_goodput_per_s": 3.5597958506827783,
+      "slo_goodput_per_hour_per_routed_gpu": 6407.632531229001,
+      "replica_gauge_peaks": {
+        "gpu6": {
+          "active_requests": 6,
+          "waiting_requests": 1,
+          "kv_allocated_blocks": 26
+        },
+        "gpu7": {
+          "active_requests": 6,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 22
+        }
+      },
+      "replica_metrics_missed_samples": {
+        "gpu6": 0,
+        "gpu7": 0
+      },
+      "cached_prompt_tokens_histogram": {
+        "16": 26,
+        "32": 42,
+        "672": 12
+      },
+      "passes_rate": true
+    },
+    {
+      "arm": 1,
+      "topology": "dual",
+      "gpus": [
+        6,
+        7
+      ],
+      "arrival_rate": 8,
+      "wall_s": 28.275570403,
+      "counts": {
+        "all": {
+          "submitted": 160,
+          "correct": 160,
+          "slo": 158,
+          "rejected": 0,
+          "p95_first_ms": 7164.228755,
+          "p95_last_ms": 9341.750644,
+          "p95_gap_ms": 30.104386
+        },
+        "primary": {
+          "submitted": 128,
+          "correct": 128,
+          "slo": 126,
+          "rejected": 0,
+          "p95_first_ms": 7303.467884,
+          "p95_last_ms": 9341.750644,
+          "p95_gap_ms": 30.104386
+        },
+        "secondary": {
+          "submitted": 32,
+          "correct": 32,
+          "slo": 32,
+          "rejected": 0,
+          "p95_first_ms": 7164.228755,
+          "p95_last_ms": 9353.71467,
+          "p95_gap_ms": 30.129806
+        }
+      },
+      "http_status": {
+        "200": 240
+      },
+      "client_p95_dispatch_lag_ms": 0.748811,
+      "unexpected_failures": [],
+      "slo_goodput_per_s": 5.58786251693923,
+      "slo_goodput_per_hour_per_routed_gpu": 10058.152530490615,
+      "replica_gauge_peaks": {
+        "gpu6": {
+          "active_requests": 7,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 35
+        },
+        "gpu7": {
+          "active_requests": 7,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 29
+        }
+      },
+      "replica_metrics_missed_samples": {
+        "gpu6": 0,
+        "gpu7": 0
+      },
+      "cached_prompt_tokens_histogram": {
+        "16": 54,
+        "32": 71,
+        "528": 1,
+        "672": 27,
+        "704": 3,
+        "2784": 4
+      },
+      "passes_rate": true
+    },
+    {
+      "arm": 2,
+      "topology": "dual",
+      "gpus": [
+        6,
+        7
+      ],
+      "arrival_rate": 2,
+      "wall_s": 21.391309767,
+      "counts": {
+        "all": {
+          "submitted": 40,
+          "correct": 40,
+          "slo": 40,
+          "rejected": 0,
+          "p95_first_ms": 1450.322618,
+          "p95_last_ms": 3252.783379,
+          "p95_gap_ms": 22.340922
+        },
+        "primary": {
+          "submitted": 32,
+          "correct": 32,
+          "slo": 32,
+          "rejected": 0,
+          "p95_first_ms": 1450.322618,
+          "p95_last_ms": 3722.831303,
+          "p95_gap_ms": 30.126345
+        },
+        "secondary": {
+          "submitted": 8,
+          "correct": 8,
+          "slo": 8,
+          "rejected": 0,
+          "p95_first_ms": 1456.034049,
+          "p95_last_ms": 2803.747941,
+          "p95_gap_ms": 21.803095
+        }
+      },
+      "http_status": {
+        "200": 60
+      },
+      "client_p95_dispatch_lag_ms": 0.955651,
+      "unexpected_failures": [],
+      "slo_goodput_per_s": 1.8699182254705742,
+      "slo_goodput_per_hour_per_routed_gpu": 3365.8528058470333,
+      "replica_gauge_peaks": {
+        "gpu6": {
+          "active_requests": 4,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 15
+        },
+        "gpu7": {
+          "active_requests": 2,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 12
+        }
+      },
+      "replica_metrics_missed_samples": {
+        "gpu6": 0,
+        "gpu7": 0
+      },
+      "cached_prompt_tokens_histogram": {
+        "16": 14,
+        "32": 17,
+        "320": 1,
+        "672": 7,
+        "704": 1
+      },
+      "passes_rate": true
+    },
+    {
+      "arm": 2,
+      "topology": "dual",
+      "gpus": [
+        6,
+        7
+      ],
+      "arrival_rate": 4,
+      "wall_s": 22.661488095,
+      "counts": {
+        "all": {
+          "submitted": 80,
+          "correct": 80,
+          "slo": 80,
+          "rejected": 0,
+          "p95_first_ms": 1703.426878,
+          "p95_last_ms": 4109.722884,
+          "p95_gap_ms": 30.112724
+        },
+        "primary": {
+          "submitted": 64,
+          "correct": 64,
+          "slo": 64,
+          "rejected": 0,
+          "p95_first_ms": 1703.426878,
+          "p95_last_ms": 4109.722884,
+          "p95_gap_ms": 30.112724
+        },
+        "secondary": {
+          "submitted": 16,
+          "correct": 16,
+          "slo": 16,
+          "rejected": 0,
+          "p95_first_ms": 1950.207336,
+          "p95_last_ms": 4355.716755,
+          "p95_gap_ms": 30.113177
+        }
+      },
+      "http_status": {
+        "200": 120
+      },
+      "client_p95_dispatch_lag_ms": 0.807758,
+      "unexpected_failures": [],
+      "slo_goodput_per_s": 3.5302183009619346,
+      "slo_goodput_per_hour_per_routed_gpu": 6354.392941731482,
+      "replica_gauge_peaks": {
+        "gpu6": {
+          "active_requests": 6,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 26
+        },
+        "gpu7": {
+          "active_requests": 6,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 21
+        }
+      },
+      "replica_metrics_missed_samples": {
+        "gpu6": 0,
+        "gpu7": 0
+      },
+      "cached_prompt_tokens_histogram": {
+        "16": 26,
+        "32": 42,
+        "672": 12
+      },
+      "passes_rate": true
+    },
+    {
+      "arm": 2,
+      "topology": "dual",
+      "gpus": [
+        6,
+        7
+      ],
+      "arrival_rate": 8,
+      "wall_s": 27.375522628,
+      "counts": {
+        "all": {
+          "submitted": 160,
+          "correct": 160,
+          "slo": 158,
+          "rejected": 0,
+          "p95_first_ms": 7621.740059,
+          "p95_last_ms": 9194.230587,
+          "p95_gap_ms": 30.112564
+        },
+        "primary": {
+          "submitted": 128,
+          "correct": 128,
+          "slo": 126,
+          "rejected": 0,
+          "p95_first_ms": 7894.926467,
+          "p95_last_ms": 10178.260286,
+          "p95_gap_ms": 30.112564
+        },
+        "secondary": {
+          "submitted": 32,
+          "correct": 32,
+          "slo": 32,
+          "rejected": 0,
+          "p95_first_ms": 7621.740059,
+          "p95_last_ms": 9194.230587,
+          "p95_gap_ms": 30.26409
+        }
+      },
+      "http_status": {
+        "200": 240
+      },
+      "client_p95_dispatch_lag_ms": 0.864779,
+      "unexpected_failures": [],
+      "slo_goodput_per_s": 5.771579309992635,
+      "slo_goodput_per_hour_per_routed_gpu": 10388.842757986744,
+      "replica_gauge_peaks": {
+        "gpu6": {
+          "active_requests": 7,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 250
+        },
+        "gpu7": {
+          "active_requests": 7,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 40
+        }
+      },
+      "replica_metrics_missed_samples": {
+        "gpu6": 0,
+        "gpu7": 0
+      },
+      "cached_prompt_tokens_histogram": {
+        "16": 54,
+        "32": 75,
+        "672": 26,
+        "704": 2,
+        "2784": 3
+      },
+      "passes_rate": true
+    },
+    {
+      "arm": 3,
+      "topology": "single",
+      "gpus": [
+        7
+      ],
+      "arrival_rate": 2,
+      "wall_s": 21.465577745,
+      "counts": {
+        "all": {
+          "submitted": 40,
+          "correct": 40,
+          "slo": 40,
+          "rejected": 0,
+          "p95_first_ms": 1495.759769,
+          "p95_last_ms": 3790.588734,
+          "p95_gap_ms": 22.806298
+        },
+        "primary": {
+          "submitted": 32,
+          "correct": 32,
+          "slo": 32,
+          "rejected": 0,
+          "p95_first_ms": 1501.362058,
+          "p95_last_ms": 3965.905201,
+          "p95_gap_ms": 30.322471
+        },
+        "secondary": {
+          "submitted": 8,
+          "correct": 8,
+          "slo": 8,
+          "rejected": 0,
+          "p95_first_ms": 1492.248641,
+          "p95_last_ms": 3027.837703,
+          "p95_gap_ms": 22.637847
+        }
+      },
+      "http_status": {
+        "200": 60
+      },
+      "client_p95_dispatch_lag_ms": 1.364758,
+      "unexpected_failures": [],
+      "slo_goodput_per_s": 1.8634485628655972,
+      "slo_goodput_per_hour_per_routed_gpu": 6708.4148263161505,
+      "replica_gauge_peaks": {
+        "gpu6": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 0
+        },
+        "gpu7": {
+          "active_requests": 5,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 24
+        }
+      },
+      "replica_metrics_missed_samples": {
+        "gpu6": 0,
+        "gpu7": 0
+      },
+      "cached_prompt_tokens_histogram": {
+        "16": 14,
+        "32": 22,
+        "496": 2,
+        "672": 1,
+        "2784": 1
+      },
+      "passes_rate": true
+    },
+    {
+      "arm": 3,
+      "topology": "single",
+      "gpus": [
+        7
+      ],
+      "arrival_rate": 4,
+      "wall_s": 26.557505426,
+      "counts": {
+        "all": {
+          "submitted": 80,
+          "correct": 80,
+          "slo": 80,
+          "rejected": 0,
+          "p95_first_ms": 7301.937156,
+          "p95_last_ms": 9670.559662,
+          "p95_gap_ms": 30.108733
+        },
+        "primary": {
+          "submitted": 64,
+          "correct": 64,
+          "slo": 64,
+          "rejected": 0,
+          "p95_first_ms": 7301.937156,
+          "p95_last_ms": 9670.559662,
+          "p95_gap_ms": 30.108733
+        },
+        "secondary": {
+          "submitted": 16,
+          "correct": 16,
+          "slo": 16,
+          "rejected": 0,
+          "p95_first_ms": 8738.17137,
+          "p95_last_ms": 10335.803978,
+          "p95_gap_ms": 30.161123
+        }
+      },
+      "http_status": {
+        "200": 120
+      },
+      "client_p95_dispatch_lag_ms": 1.329825,
+      "unexpected_failures": [],
+      "slo_goodput_per_s": 3.0123311175785132,
+      "slo_goodput_per_hour_per_routed_gpu": 10844.392023282648,
+      "replica_gauge_peaks": {
+        "gpu6": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 0
+        },
+        "gpu7": {
+          "active_requests": 7,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 29
+        }
+      },
+      "replica_metrics_missed_samples": {
+        "gpu6": 0,
+        "gpu7": 0
+      },
+      "cached_prompt_tokens_histogram": {
+        "16": 26,
+        "32": 39,
+        "128": 1,
+        "368": 1,
+        "672": 13
+      },
+      "passes_rate": true
+    },
+    {
+      "arm": 3,
+      "topology": "single",
+      "gpus": [
+        7
+      ],
+      "arrival_rate": 8,
+      "wall_s": 51.907858407,
+      "counts": {
+        "all": {
+          "submitted": 160,
+          "correct": 160,
+          "slo": 57,
+          "rejected": 0,
+          "p95_first_ms": 35497.599175,
+          "p95_last_ms": 37357.087508,
+          "p95_gap_ms": 30.105407
+        },
+        "primary": {
+          "submitted": 128,
+          "correct": 128,
+          "slo": 45,
+          "rejected": 0,
+          "p95_first_ms": 35497.823173,
+          "p95_last_ms": 37467.772024,
+          "p95_gap_ms": 30.105407
+        },
+        "secondary": {
+          "submitted": 32,
+          "correct": 32,
+          "slo": 12,
+          "rejected": 0,
+          "p95_first_ms": 35497.599175,
+          "p95_last_ms": 37338.07245,
+          "p95_gap_ms": 30.124206
+        }
+      },
+      "http_status": {
+        "200": 240
+      },
+      "client_p95_dispatch_lag_ms": 0.798362,
+      "unexpected_failures": [],
+      "slo_goodput_per_s": 1.0980996278650808,
+      "slo_goodput_per_hour_per_routed_gpu": 3953.1586603142905,
+      "replica_gauge_peaks": {
+        "gpu6": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 0
+        },
+        "gpu7": {
+          "active_requests": 7,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 34
+        }
+      },
+      "replica_metrics_missed_samples": {
+        "gpu6": 0,
+        "gpu7": 5
+      },
+      "cached_prompt_tokens_histogram": {
+        "16": 54,
+        "32": 74,
+        "672": 28,
+        "704": 1,
+        "2784": 3
+      },
+      "passes_rate": false
+    }
+  ],
+  "both_arms_rates_meeting_gates": {
+    "single": [
+      2,
+      4
+    ],
+    "dual": [
+      2,
+      4,
+      8
+    ]
+  },
+  "route": {
+    "model_requests": 1680,
+    "requests_by_gpu": {
+      "6": 840,
+      "7": 840
+    },
+    "admissions_by_generation": {
+      "gpu6": 840,
+      "gpu7": 840
+    },
+    "withdrawn_or_unready_admissions": 0
+  },
+  "cleanup": {
+    "leases_restored": true,
+    "lease_after_each_generation": {
+      "gpu6": true,
+      "gpu7": true
+    },
+    "normal_shutdown_reclaimed": {
+      "gpu6": true,
+      "gpu7": true
+    },
+    "assigned_s": {
+      "gpu6": 518.3382716029882,
+      "gpu7": 518.3871360197663
+    }
+  },
+  "foreign_gpu_samples": [],
+  "full_run_goodput_per_allocated_gpu_hour": 3163.4220362364135
+}

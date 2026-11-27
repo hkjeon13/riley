@@ -190,6 +190,7 @@ def stream(
     *,
     bearer=None,
     on_content=None,
+    on_text=None,
     timeout_s=90,
     cancellation=None,
 ):
@@ -278,6 +279,8 @@ def stream(
                 if delta.get("content"):
                     fragments.append(delta["content"])
                     event_times.append(now)
+                    if on_text is not None:
+                        on_text(delta["content"])
                     if on_content is not None:
                         on_content(len(event_times))
                     if len(event_times) == 1 and first_visible:

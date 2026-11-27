@@ -1,0 +1,447 @@
+{
+  "registration": {
+    "baseline_raw_sha256": "c5e191307e0de67f5aa046ad18e300323e7dbd76545bd37a2cb92430e778f2eb",
+    "baseline_verified_sha256": "68f442f0e95e43a7cb5046ea8680daa555500fc4fc9f937037786ddbc8aeaa8e",
+    "change": "Append exactly one final-turn user instruction to every workload route, keeping both tool turns, tool results, and prior final messages intact.",
+    "final_instruction": "Cite each report in the explanation using its exact id from the tool result. Place each id in parentheses immediately after the measurement it supports.",
+    "arrival_seconds": 1800,
+    "workflow_count": 1200,
+    "expected_cancellations": 63,
+    "expected_correct_and_slo": 1137,
+    "expected_http_rejections": 0,
+    "iterations": 1,
+    "unchanged": "Phase-05 registered open-loop schedule and seed list, workload mix and tool waits, per-model-call round robin, independent replica keys, hardware, exact launcher arguments and checkpoint; gates from phase05-registration.json unchanged. True startup caches and post-load state must be recorded. Routing decisions can interleave differently with changed completion times.",
+    "gate": "Every non-cancelled job must satisfy numbers, both exact report IDs, natural terminal and static engineering SLO of <=10s first content, <=18s final content and <=150ms per-job content-gap p95. Record position-specific conformance separately, without modifying the existing correctness gate."
+  },
+  "provenance": {
+    "scope": "Single host, independent AWS A100 SXM4 40GB replicas on GPU 6 and 7. Stock Qwen2.5-Coder-7B-Instruct BF16 and exact phase-04 server launch. Loopback authenticated HTTP. Synthetic fixture tenants share a test pool and are attribution labels.",
+    "policy": "Per model HTTP request round robin over ready, admitted replicas; keep established streams on the accepted generation, no transparent stream retries.",
+    "riley": "riley 0.1.0 (server=true, cuda=true, cuda_abi=1)",
+    "binary_sha256": "13b589df5c19a33c685ca1388398905f46a6cc566cbd1bed68f06b798080ca9f",
+    "model": "Qwen/Qwen2.5-Coder-7B-Instruct",
+    "model_revision": "c03e6d358207e414f1eca0bb1891e29f1db0e242",
+    "checkpoint_files_verified": 9
+  },
+  "matched_request_checks": {
+    "final_requests_with_exact_instruction": 1200,
+    "unchanged_model_tool_requests": 600,
+    "unchanged_app_tool_workflows": 900,
+    "right_before_and_after_ids_in_parentheses_adjacent_to_measurements": 1137,
+    "workflow_results_by_tool_path": {
+      "app": {
+        "submitted": 900,
+        "correct": 852
+      },
+      "model": {
+        "submitted": 300,
+        "correct": 285
+      }
+    },
+    "prior_failure_seed_rule": [
+      {
+        "seed": 6143,
+        "correct": true,
+        "both_ids_after_measurements": true,
+        "gpu": 7,
+        "answer": "Before: 70 ms (report-A). After: 31 ms (report-B). Reduction: 39 ms. The p95 latency, which represents the 95th percentile of the latency distribution, decreased from 70 ms in report-A to 31 ms in report-B, indicating a significant improvement in service response time."
+      }
+    ]
+  },
+  "request_coverage_passed": true,
+  "baseline_outcomes": {
+    "all": {
+      "all": {
+        "submitted": 1200,
+        "correct": 1136,
+        "cancelled": 63,
+        "slo": 1136,
+        "first_ms": 1459.628401,
+        "last_ms": 3490.645482,
+        "gap_ms": 30.119941
+      },
+      "early": {
+        "submitted": 390,
+        "correct": 370,
+        "cancelled": 20,
+        "slo": 370,
+        "first_ms": 1482.531688,
+        "last_ms": 3535.052944,
+        "gap_ms": 30.118263
+      },
+      "late": {
+        "submitted": 420,
+        "correct": 397,
+        "cancelled": 22,
+        "slo": 397,
+        "first_ms": 1457.602628,
+        "last_ms": 3715.850884,
+        "gap_ms": 30.119941
+      }
+    },
+    "primary": {
+      "all": {
+        "submitted": 960,
+        "correct": 909,
+        "cancelled": 50,
+        "slo": 909,
+        "first_ms": 1456.203661,
+        "last_ms": 3490.645482,
+        "gap_ms": 30.119215
+      },
+      "early": {
+        "submitted": 312,
+        "correct": 296,
+        "cancelled": 16,
+        "slo": 296,
+        "first_ms": 1482.531688,
+        "last_ms": 3582.389119,
+        "gap_ms": 30.119215
+      },
+      "late": {
+        "submitted": 336,
+        "correct": 318,
+        "cancelled": 17,
+        "slo": 318,
+        "first_ms": 1455.10416,
+        "last_ms": 3715.850884,
+        "gap_ms": 30.110634
+      }
+    },
+    "secondary": {
+      "all": {
+        "submitted": 240,
+        "correct": 227,
+        "cancelled": 13,
+        "slo": 227,
+        "first_ms": 1551.034252,
+        "last_ms": 3375.447944,
+        "gap_ms": 30.121535
+      },
+      "early": {
+        "submitted": 78,
+        "correct": 74,
+        "cancelled": 4,
+        "slo": 74,
+        "first_ms": 1544.37786,
+        "last_ms": 3535.052944,
+        "gap_ms": 30.114883
+      },
+      "late": {
+        "submitted": 84,
+        "correct": 79,
+        "cancelled": 5,
+        "slo": 79,
+        "first_ms": 1554.49784,
+        "last_ms": 4099.212651,
+        "gap_ms": 30.124682
+      }
+    }
+  },
+  "baseline_slo_failure_seeds": [
+    6143
+  ],
+  "soak": {
+    "checks": {
+      "registered_schedule_complete": true,
+      "all_noncancel_correct_and_slo": true,
+      "all_scheduled_cancels_observed": true,
+      "no_http_or_scheduler_rejects": true,
+      "counter_deltas_match_cancelled": true,
+      "device_bytes_steady": true,
+      "resource_gauges_returned_to_zero": true,
+      "holders_restored": true,
+      "dispatch_lag_p95_within_limit": true,
+      "late_tenant_completion_p95_within_limit": false,
+      "no_external_gpu_apps_in_samples": true
+    },
+    "passed": false,
+    "outcomes": {
+      "all": {
+        "all": {
+          "submitted": 1200,
+          "correct": 1137,
+          "cancelled": 63,
+          "slo": 1137,
+          "first_ms": 1458.902199,
+          "last_ms": 3489.729733,
+          "gap_ms": 30.134125
+        },
+        "early": {
+          "submitted": 390,
+          "correct": 370,
+          "cancelled": 20,
+          "slo": 370,
+          "first_ms": 1452.363926,
+          "last_ms": 3635.01627,
+          "gap_ms": 30.156881
+        },
+        "late": {
+          "submitted": 420,
+          "correct": 398,
+          "cancelled": 22,
+          "slo": 398,
+          "first_ms": 1463.522819,
+          "last_ms": 3489.729733,
+          "gap_ms": 30.162427
+        }
+      },
+      "primary": {
+        "all": {
+          "submitted": 960,
+          "correct": 910,
+          "cancelled": 50,
+          "slo": 910,
+          "first_ms": 1452.087789,
+          "last_ms": 3508.974704,
+          "gap_ms": 30.134125
+        },
+        "early": {
+          "submitted": 312,
+          "correct": 296,
+          "cancelled": 16,
+          "slo": 296,
+          "first_ms": 1449.85634,
+          "last_ms": 3815.488515,
+          "gap_ms": 30.156881
+        },
+        "late": {
+          "submitted": 336,
+          "correct": 319,
+          "cancelled": 17,
+          "slo": 319,
+          "first_ms": 1459.770671,
+          "last_ms": 3489.729733,
+          "gap_ms": 30.162427
+        }
+      },
+      "secondary": {
+        "all": {
+          "submitted": 240,
+          "correct": 227,
+          "cancelled": 13,
+          "slo": 227,
+          "first_ms": 1561.335204,
+          "last_ms": 3324.341385,
+          "gap_ms": 30.132188
+        },
+        "early": {
+          "submitted": 78,
+          "correct": 74,
+          "cancelled": 4,
+          "slo": 74,
+          "first_ms": 1561.335204,
+          "last_ms": 3326.486458,
+          "gap_ms": 30.211341
+        },
+        "late": {
+          "submitted": 84,
+          "correct": 79,
+          "cancelled": 5,
+          "slo": 79,
+          "first_ms": 1612.566984,
+          "last_ms": 4041.94341,
+          "gap_ms": 30.205165
+        }
+      }
+    },
+    "by_client": {
+      "normal": {
+        "submitted": 1071,
+        "correct": 1071,
+        "cancelled": 0,
+        "slo": 1071,
+        "first_ms": 1458.902199,
+        "last_ms": 2893.088203,
+        "gap_ms": 21.833314
+      },
+      "slow": {
+        "submitted": 66,
+        "correct": 66,
+        "cancelled": 0,
+        "slo": 66,
+        "first_ms": 1454.317795,
+        "last_ms": 5228.196663,
+        "gap_ms": 32.537688
+      },
+      "cancel": {
+        "submitted": 63,
+        "correct": 0,
+        "cancelled": 63,
+        "slo": 0,
+        "first_ms": null,
+        "last_ms": null,
+        "gap_ms": null
+      }
+    },
+    "by_load": {
+      "baseline": {
+        "submitted": 800,
+        "correct": 757,
+        "cancelled": 43,
+        "slo": 757,
+        "first_ms": 1434.025332,
+        "last_ms": 3324.341385,
+        "gap_ms": 30.135518
+      },
+      "burst": {
+        "submitted": 400,
+        "correct": 380,
+        "cancelled": 20,
+        "slo": 380,
+        "first_ms": 1462.960019,
+        "last_ms": 3528.557455,
+        "gap_ms": 30.128166
+      }
+    },
+    "non_slo_noncancel_jobs": [],
+    "dispatch_lag_p95_ms": 10.524815,
+    "route": {
+      "model_requests": 1800,
+      "requests_by_gpu": {
+        "6": 900,
+        "7": 900
+      },
+      "admissions_by_generation": {
+        "soak-gpu6": 900,
+        "soak-gpu7": 900
+      },
+      "withdrawn_or_unready_admissions": 0
+    },
+    "http_statuses": {
+      "200": 1800
+    },
+    "workflows_by_tool_path": {
+      "model": 300,
+      "app": 900
+    },
+    "successful_final_input_tokens": [
+      340,
+      5346
+    ],
+    "successful_final_output_tokens": [
+      73,
+      153
+    ],
+    "peak_client_workflows_in_flight": 7,
+    "late_over_early_last_p95": {
+      "all": 0.9600313929268878,
+      "primary": 0.914621999065302,
+      "secondary": 1.215078871065105
+    },
+    "observed_s": 1800.270511633,
+    "sample_count": 183,
+    "scheduled_epoch_ns": 1795679157677627582,
+    "max_sample_gap_s": 10.260901024,
+    "replica_observations": {
+      "soak-gpu6": {
+        "peaks": {
+          "active_requests": 3,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 12
+        },
+        "after_drain": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 0
+        },
+        "retained_prefix_blocks_after_drain": 1536,
+        "retained_prefix_blocks_peak": 1536,
+        "allocation_bytes_observed": [
+          19874299968
+        ],
+        "pinned_bytes_observed": [
+          4235480
+        ],
+        "host_rss_kib_median_first_minute": 15453628.0,
+        "host_rss_kib_median_last_minute": 15473596.0,
+        "host_rss_kib_max": 15473596,
+        "counter_deltas": {
+          "cancellations": 37,
+          "disconnects": 37,
+          "overloads": 0,
+          "dropped_observations": 0
+        }
+      },
+      "soak-gpu7": {
+        "peaks": {
+          "active_requests": 2,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 7
+        },
+        "after_drain": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "kv_allocated_blocks": 0
+        },
+        "retained_prefix_blocks_after_drain": 1536,
+        "retained_prefix_blocks_peak": 1536,
+        "allocation_bytes_observed": [
+          19874299968
+        ],
+        "pinned_bytes_observed": [
+          4235480
+        ],
+        "host_rss_kib_median_first_minute": 15459440.0,
+        "host_rss_kib_median_last_minute": 15473264.0,
+        "host_rss_kib_max": 15473264,
+        "counter_deltas": {
+          "cancellations": 26,
+          "disconnects": 26,
+          "overloads": 0,
+          "dropped_observations": 0
+        }
+      }
+    },
+    "foreign_compute_receipts": [],
+    "release": {
+      "leases_restored": true,
+      "lease_after_each_generation": {
+        "soak-gpu6": true,
+        "soak-gpu7": true
+      },
+      "normal_shutdown_reclaimed": {
+        "soak-gpu6": true,
+        "soak-gpu7": true
+      },
+      "assigned_s": {
+        "soak-gpu6": 1926.8956427052617,
+        "soak-gpu7": 1927.0299708023667
+      }
+    },
+    "all_assigned_gpu_seconds": 3853.9256135076284,
+    "all_assigned_gpu_seconds_per_success": 3.3895563883092596,
+    "all_assigned_slo_goodput_per_gpu_hour": 1062.085886051806,
+    "warm_slo_goodput_per_gpu_hour": 1136.829152494176
+  },
+  "secondary_p95_observations": {
+    "early": {
+      "valid": 74,
+      "slow_reads": 4,
+      "p95_requests": [
+        {
+          "index": 335,
+          "client": "slow",
+          "last_ms": 3326.486458
+        }
+      ]
+    },
+    "late": {
+      "valid": 79,
+      "slow_reads": 5,
+      "p95_requests": [
+        {
+          "index": 930,
+          "client": "slow",
+          "last_ms": 4041.94341
+        }
+      ]
+    }
+  },
+  "change": {
+    "slo_completed_count": 1,
+    "first_p95_ms": -0.7262019999998302,
+    "last_p95_ms": -0.9157489999997779,
+    "gap_p95_ms": 0.014184000000000196
+  },
+  "passed": false
+}
